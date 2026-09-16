@@ -1,0 +1,83 @@
+<script setup lang="ts">
+/**
+ * L'impasse assumée — **la fiche d'une personne vivante hors de ce que le
+ * lecteur peut consulter.**
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **Ce n'est pas une panne, et l'écran doit le dire au lieu de le subir.**
+ *
+ * Le serveur rend `200` avec **sept clés** : `id`, `displayName`, `sex`,
+ * `generation`, `branch`, `vivant`, `visibilite` (§ 11.1). C'est la **seule
+ * exception** à la règle « une ressource qu'on n'a pas le droit de voir rend
+ * `404` » — et elle existe pour une raison précise : « son nœud est visible dans
+ * le graphe et il faut pouvoir cliquer dessus » (§ 7.4, § 5.1). Le cercle masque
+ * des **champs**, pas des **nœuds** : un arbre dont on retire des nœuds n'est
+ * plus un arbre, « les branches flottent, les fratries sont fausses, le calcul
+ * de parenté est faux » (ADR 0003).
+ *
+ * Cet écran sera donc vu souvent — une fois par clic sur chacune des personnes
+ * vivantes hors cercle du lecteur. Il doit rendre trois choses, et rien d'autre :
+ * un **nom**, une **raison**, et une **sortie**. Ni écran d'erreur, ni chargement
+ * qui ne finit pas, ni case vide qu'on prendrait pour un bogue.
+ *
+ * **Le front ne filtre rien et n'a rien à filtrer.** Les champs manquants ne
+ * sont pas cachés ici : ils ne sont pas arrivés. C'est la différence que le
+ * § 11 tient à rendre indiscutable — « il suffit d'ouvrir l'onglet réseau du
+ * navigateur pour voir que filtrer à l'affichage n'en serait pas une
+ * implémentation acceptable ».
+ * ────────────────────────────────────────────────────────────────────
+ *
+ * La seule chose que cet écran lit de la session est le **régime**, et
+ * uniquement pour ne pas écrire une phrase fausse : dire « cette personne n'est
+ * pas dans votre cercle » à un compte en attente de validation serait doublement
+ * inexact — il n'a **pas** de cercle (§ 12), et *aucune* personne vivante ne lui
+ * est accessible, pas même celle à laquelle il prétend se rattacher. La donnée
+ * affichée, elle, ne dépend pas du lecteur : elle est identique dans les deux cas.
+ */
+import { useSession } from '@/composables/useSession'
+import type { FichePersonneRestreinte } from '@/lib/api'
+import PanneauBase from '@/components/base/PanneauBase.vue'
+import IdentiteFiche from './IdentiteFiche.vue'
+
+defineProps<{ fiche: FichePersonneRestreinte }>()
+
+const { regime } = useSession()
+</script>
+
+<template>
+  <PanneauBase titre="Fiche à diffusion restreinte" class="mb-4">
+    <p class="text-sm leading-relaxed">
+      <strong class="font-semibold">Cette personne est vivante.</strong>
+      <template v-if="regime === 'en_attente'">
+        Tant que votre rattachement n’est pas validé, aucune personne vivante ne vous est
+        accessible — y compris celle à laquelle vous vous rattachez.
+      </template>
+      <template v-else>
+        Elle ne fait pas partie de votre cercle de visibilité : ni dates, ni lieux, ni sources,
+        ni photos, ni parenté ne vous sont communiqués.
+      </template>
+    </p>
+
+    <p class="mt-2 text-sm leading-relaxed text-attenue">
+      Ces informations ne sont pas masquées à l’écran : le serveur ne les a pas envoyées. Sa
+      place dans l’arbre, elle, reste visible — c’est pour cela que vous avez pu arriver ici.
+    </p>
+
+    <!-- Les trois champs que les sept clés permettent d'écrire. Aucun n'est
+         choisi ici : `construireLignes()` les tire de la charge utile. -->
+    <div class="mt-4">
+      <IdentiteFiche :fiche="fiche" />
+    </div>
+
+    <template #pied>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+        <RouterLink :to="{ name: 'arbre' }" class="font-semibold text-accent underline">
+          Revenir à l’arbre
+        </RouterLink>
+        <span class="text-xs text-attenue">
+          Le cercle se règle par un administrateur ; il ne s’ouvre pas depuis cet écran.
+        </span>
+      </div>
+    </template>
+  </PanneauBase>
+</template>

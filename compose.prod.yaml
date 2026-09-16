@@ -1,0 +1,503 @@
+# =============================================================================
+#  Heritage — surcouche de production
+# =============================================================================
+#
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+#
+# Ce fichier ne se suffit pas à lui-même : il se superpose à compose.yaml, dont
+# il hérite les services, les volumes et le réseau. Lancé seul, il ne décrit rien.
+#
+# -----------------------------------------------------------------------------
+#  CE QUI RESTE À FAIRE À LA MAIN LE JOUR DU DÉPLOIEMENT
+# -----------------------------------------------------------------------------
+#
+# Rien de ce qui suit n'est automatisable depuis ce fichier, et rien de ce qui
+# suit n'est facultatif. Un `up -d` sans ces étapes donne une pile qui démarre et
+# qui est dangereuse — d'où le service `garde-secrets` plus bas, qui interrompt
+# le démarrage tant que les points 1 à 4 ne sont pas faits. Ne le désactivez pas
+# pour « voir si ça marche » : c'est précisément le moment où ça marche mal.
+#
+#  1. SECRETS — créer un fichier `.env` à la racine (il est déjà dans le
+#     .gitignore) à partir de `.env.example`, et y définir au minimum :
+#        APP_SECRET         32 octets aléatoires, ex. `openssl rand -hex 32`
+#        POSTGRES_PASSWORD  mot de passe long, propre à cette machine
+#        MAILER_DSN         le SMTP réel qui portera les invitations
+#        MAILER_EXPEDITEUR  l'adresse `From:` des invitations, AU DOMAINE, ex.
+#                           'Heritage <invitations@heritage.exemple.fr>'
+#        DEFAULT_URI        l'URL publique en https, ex. https://heritage.exemple.fr
+#        HERITAGE_URL_PUBLIQUE
+#                           la MÊME URL, lue par `Core\Service\UrlPublique` pour
+#                           bâtir les liens d'invitation
+#        HERITAGE_DOMAINE_PUBLIC
+#                           le domaine seul, sans schéma, ex. heritage.exemple.fr
+#        HERITAGE_HOTES_AUTORISES
+#                           les seuls `Host` que l'API accepte de servir, en
+#                           expressions régulières ANCRÉES séparées par des
+#                           virgules, ex. '^heritage\.exemple\.fr$'
+#     Ces valeurs ne se recopient pas d'une machine à l'autre et ne se collent
+#     nulle part ailleurs que dans ce fichier `.env`.
+#
+#     Sur `MAILER_EXPEDITEUR` : sans elle, `app.membership.expediteur_par_defaut`
+#     vaut `heritage@localhost` (api/config/services/membership.yaml) et les
+#     invitations partent avec un `From:` qu'aucun relais sérieux n'accepte —
+#     rejet pur et simple, ou classement en indésirable. Le courriel ne revient
+#     pas et l'administrateur ne l'apprend pas : l'invitation semble partie.
+#
+#     Sur `HERITAGE_URL_PUBLIQUE` : c'est ELLE qui fabrique les liens
+#     d'invitation, pas `DEFAULT_URI`. `Core\Service\UrlPublique` la lit et LÈVE
+#     si elle est absente — mais elle n'est jamais absente, parce que `api/.env`
+#     en porte une valeur de développement (`http://localhost:8080`) qui est
+#     COPIÉE DANS L'IMAGE. Le défaut est donc muet par construction : la pile
+#     démarre, le garde-fou dit « configuration vérifiée », et chaque lien part
+#     vers localhost. Le destinataire clique, rien ne répond — et le jeton est à
+#     usage unique, l'invitation est brûlée. Elle est vérifiée plus bas au même
+#     titre qu'`APP_SECRET`, et pour cette raison précise.
+#
+#     Sur la dernière : sans elle, l'API retombe sur la liste blanche de
+#     DÉVELOPPEMENT de `config/packages/framework.yaml` — localhost et la boucle
+#     locale —, qui refuserait le domaine réel, donc toutes les requêtes. Le
+#     `garde-secrets` l'exige pour cette raison, au même titre qu'`APP_SECRET`.
+#     Les ancres `^` et `$` ne sont pas décoratives et ne sont pas ajoutées pour
+#     vous : `heritage\.exemple\.fr` sans ancres accepte
+#     `heritage.exemple.fr.attaquant.test`, c'est-à-dire exactement le trou que
+#     cette liste est censée fermer. Le garde-fou refuse une valeur non ancrée.
+#
+#  2. NOM DE DOMAINE — faire pointer un enregistrement A/AAAA vers le VPS. Le
+#     domaine doit être celui de `DEFAULT_URI` : c'est lui qu'on retrouvera dans
+#     les liens d'invitation envoyés par courriel, et un lien d'invitation est à
+#     usage unique. Un domaine erroné brûle l'invitation.
+#
+#     LE MÊME DOMAINE SE POSE À QUATRE ENDROITS, et l'oublier à l'un des quatre
+#     donne une panne franche, pas une dégradation :
+#        HERITAGE_URL_PUBLIQUE     les liens d'invitation (point 1)
+#        DEFAULT_URI               les URL absolues du routeur Symfony (point 1)
+#        HERITAGE_HOTES_AUTORISES  la liste blanche de l'API (point 1), qui rend
+#                                  sinon 400 sur tout
+#        HERITAGE_DOMAINE_PUBLIC   le `server_name` du bloc applicatif du front,
+#                                  qui ferme sinon toutes les connexions en 444
+#     LES QUATRE SONT DÉSORMAIS VÉRIFIÉES ENSEMBLE par le `garde-secrets` : il
+#     refuse de démarrer si elles ne désignent pas le même domaine. Une seule
+#     valeur à écrire correctement ; trois occasions de se tromper, fermées.
+#
+#     Le quatrième n'est plus à éditer à la main avant la construction :
+#     `app/nginx.conf` est devenu un GABARIT, monté dans `/etc/nginx/templates/`
+#     par le service `app` de ce fichier et substitué au démarrage du conteneur.
+#     Le domaine est une donnée de la machine, plus une donnée du dépôt — un
+#     `git reset --hard` de déploiement ne peut donc plus l'effacer.
+#
+#     Le bloc par défaut d'app/nginx.conf ferme tout ce qu'aucun `server_name` ne
+#     nomme — c'est ce qui protège du `Host` falsifié, et c'est aussi ce qui ne
+#     pardonne pas l'oubli. Mesure de contrôle après déploiement, depuis le VPS
+#     (`5511` est le port attribué à heritage sur ce serveur, cf. `APP_PORT`) :
+#        curl -sS -o /dev/null -w '%{http_code}\n' -H 'Host: heritage.exemple.fr' \
+#             http://127.0.0.1:5511/         → 200
+#        curl -sS -H 'Host: evil.attaquant.test' http://127.0.0.1:5511/
+#             → « Empty reply from server », la connexion est fermée
+#
+#  3. CERTIFICAT ET REVERSE PROXY — le TLS n'est PAS géré ici. La pile ne publie
+#     qu'un port HTTP sur la boucle locale (127.0.0.1:8080) ; c'est un nginx,
+#     un Caddy ou un Traefik installé sur l'hôte qui termine le TLS et relaie
+#     vers ce port. Ce proxy amont doit impérativement :
+#        - poser `X-Forwarded-Proto: https`. Sans cet en-tête, Symfony se croit
+#          en clair : `cookie_secure: auto` n'active pas le drapeau Secure sur le
+#          cookie de session, et les URL absolues générées sortent en http.
+#          `config/packages/framework.yaml` fait déjà confiance aux plages
+#          privées (`trusted_proxies: private_ranges`) et lit cet en-tête.
+#        - poser `X-Forwarded-For` et `Host` (journal d'audit et liens).
+#        - autoriser un corps de requête d'au moins 25 Mo, sinon le téléversement
+#          d'une photo d'acte échoue en 413 avant même d'atteindre nginx, qui
+#          lui est déjà réglé sur 25 Mo (app/nginx.conf).
+#        - servir en HTTP/2 et rediriger 80 → 443.
+#
+#  4. COURRIEL — vérifier SPF, DKIM et DMARC du domaine expéditeur. Une
+#     invitation classée en indésirable n'est pas récupérable par le destinataire,
+#     et l'administrateur ne le saura pas. Le repli reste la copie manuelle du
+#     lien depuis l'administration : garder ce chemin praticable.
+#
+#  5. SAUVEGARDES — le service `sauvegarde` écrit dans `${BACKUP_DIR}` sur le
+#     disque du VPS. Une sauvegarde qui dort sur la machine qu'elle sauvegarde
+#     n'est pas une sauvegarde : prévoir une copie hors site (rsync, rclone,
+#     snapshot du fournisseur) et, une fois, faire une VRAIE restauration d'essai
+#     — la procédure est écrite au-dessus du service.
+#
+#  6. DONNÉES RÉELLES — l'import du GEDCOM est une commande locale, jamais une
+#     fixture, et le fichier ne monte pas sur le serveur par le dépôt :
+#        docker compose -f compose.yaml -f compose.prod.yaml cp arbre.ged api:/tmp/
+#        docker compose -f compose.yaml -f compose.prod.yaml exec api \
+#            php bin/console heritage:import-gedcom /tmp/arbre.ged
+#     Supprimer le fichier du conteneur ensuite.
+#
+#  7. MISES À JOUR — figer `IMAGE_TAG` sur une version (`IMAGE_TAG=2026-09-15`)
+#     plutôt que de laisser `prod` flotter : on veut pouvoir revenir en arrière
+#     sans reconstruire.
+#
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Garde-fou de démarrage
+  # ---------------------------------------------------------------------------
+  #
+  # Un fichier de production qui démarre sans broncher avec les identifiants de
+  # développement est un piège : tout a l'air de fonctionner, et la base de
+  # l'arbre familial est ouverte avec un mot de passe écrit dans un dépôt Git.
+  # Ce conteneur s'exécute une fois, avant la base et l'API, et sort en erreur
+  # tant que les valeurs sensibles n'ont pas été remplacées. Il ne contacte rien
+  # et ne vit que quelques centièmes de seconde.
+  #
+  # `$$` échappe le dollar : Compose substitue ses propres variables dans ce
+  # bloc, `$$VAR` lui dit de laisser passer la variable du shell.
+  garde-secrets:
+    image: alpine:3.21
+    restart: "no"
+    environment:
+      APP_SECRET: ${APP_SECRET:-d3v3l0ppement_secret_local_jetable}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-heritage_dev}
+      MAILER_DSN: ${MAILER_DSN:-smtp://mailpit:1025}
+      DEFAULT_URI: ${DEFAULT_URI:-http://localhost:8080}
+      # Les quatre suivantes n'ont AUCUN repli, et c'est la différence avec les
+      # lignes au-dessus : il n'existe aucune valeur de développement plausible
+      # pour une liste blanche d'hôtes de production, pour un domaine public, pour
+      # l'adresse des liens d'invitation ni pour un expéditeur de courriel. Vides,
+      # les vérifications plus bas arrêtent le démarrage.
+      #
+      # Piège pour `HERITAGE_URL_PUBLIQUE` en particulier : un repli ici ne serait
+      # pas seulement inutile, il serait NUISIBLE. L'API, elle, n'est jamais
+      # « non configurée » — `api/.env` est copié dans l'image avec une valeur de
+      # développement. Ce garde-fou est donc le SEUL endroit où l'absence peut
+      # encore se voir ; lui donner un repli reviendrait à l'aveugler.
+      HERITAGE_HOTES_AUTORISES: ${HERITAGE_HOTES_AUTORISES:-}
+      HERITAGE_URL_PUBLIQUE: ${HERITAGE_URL_PUBLIQUE:-}
+      HERITAGE_DOMAINE_PUBLIC: ${HERITAGE_DOMAINE_PUBLIC:-}
+      MAILER_EXPEDITEUR: ${MAILER_EXPEDITEUR:-}
+    entrypoint: ["/bin/sh", "-c"]
+    # Liste d'un seul élément, et non chaîne multiligne : Compose découpe une
+    # chaîne `command` sur les espaces comme le ferait un shell, ce qui réduirait
+    # ce script à ses cinq premiers mots. Un élément de liste passe tel quel.
+    command:
+      - |
+        manquants=""
+        case "$$APP_SECRET" in
+          ""|d3v3l0ppement_secret_local_jetable|*ChangeMe*)
+            manquants="$$manquants\n  APP_SECRET est encore celui du developpement." ;;
+          *) [ "$${#APP_SECRET}" -ge 32 ] || manquants="$$manquants\n  APP_SECRET fait moins de 32 caracteres." ;;
+        esac
+        case "$$POSTGRES_PASSWORD" in
+          ""|heritage_dev|postgres|*ChangeMe*)
+            manquants="$$manquants\n  POSTGRES_PASSWORD est encore celui du developpement." ;;
+          *) [ "$${#POSTGRES_PASSWORD}" -ge 16 ] || manquants="$$manquants\n  POSTGRES_PASSWORD fait moins de 16 caracteres." ;;
+        esac
+        case "$$MAILER_DSN" in
+          null://*|*mailpit*|*mailer:1025*|"")
+            manquants="$$manquants\n  MAILER_DSN ne designe aucun SMTP reel (Mailpit ou null)." ;;
+        esac
+        case "$$DEFAULT_URI" in
+          https://*localhost*|https://*.invalid*|https://*exemple*)
+            manquants="$$manquants\n  DEFAULT_URI n'a pas ete remplace par le domaine reel." ;;
+          https://*) ;;
+          *) manquants="$$manquants\n  DEFAULT_URI doit etre une URL https du domaine public." ;;
+        esac
+        case "$$HERITAGE_HOTES_AUTORISES" in
+          "") manquants="$$manquants\n  HERITAGE_HOTES_AUTORISES est vide : l'API retomberait sur la liste blanche de developpement et refuserait le domaine reel." ;;
+          ".*"|*localhost*|*127.0.0.1*)
+            manquants="$$manquants\n  HERITAGE_HOTES_AUTORISES est encore celle du developpement." ;;
+          "^"*"$$") ;;
+          *) manquants="$$manquants\n  HERITAGE_HOTES_AUTORISES doit etre ancree : ^...$$ (sinon heritage.example.net.attaquant.test passe)." ;;
+        esac
+        case "$$HERITAGE_URL_PUBLIQUE" in
+          "") manquants="$$manquants\n  HERITAGE_URL_PUBLIQUE est vide : les liens d invitation partiraient vers la valeur de developpement figee dans l image (http://localhost:8080). Le jeton est a usage unique : le destinataire clique, rien ne repond, l invitation est brulee." ;;
+          https://*localhost*|https://*.invalid*|https://*exemple*)
+            manquants="$$manquants\n  HERITAGE_URL_PUBLIQUE n a pas ete remplacee par le domaine reel." ;;
+          https://*) ;;
+          *) manquants="$$manquants\n  HERITAGE_URL_PUBLIQUE doit etre une URL https du domaine public (c est la base des liens d invitation)." ;;
+        esac
+        case "$$HERITAGE_DOMAINE_PUBLIC" in
+          "") manquants="$$manquants\n  HERITAGE_DOMAINE_PUBLIC est vide : le server_name du front ne nommerait que localhost, et toute requete portant le domaine reel serait fermee en 444, sans reponse." ;;
+          *://*|*/*) manquants="$$manquants\n  HERITAGE_DOMAINE_PUBLIC doit etre le domaine SEUL, sans schema ni chemin (ex. heritage.exemple.fr)." ;;
+          *localhost*|127.0.0.1|*exemple*)
+            manquants="$$manquants\n  HERITAGE_DOMAINE_PUBLIC est encore celui du developpement." ;;
+          *.*) ;;
+          *) manquants="$$manquants\n  HERITAGE_DOMAINE_PUBLIC ne ressemble pas a un nom de domaine." ;;
+        esac
+        case "$$MAILER_EXPEDITEUR" in
+          "") manquants="$$manquants\n  MAILER_EXPEDITEUR est vide : les invitations partiraient en From: heritage@localhost, qu aucun relais serieux n accepte. Le courriel est rejete ou classe en indesirable, et personne ne l apprend." ;;
+          *@localhost*|*exemple*)
+            manquants="$$manquants\n  MAILER_EXPEDITEUR n a pas ete remplace par une adresse du domaine reel." ;;
+          *@*.*) ;;
+          *) manquants="$$manquants\n  MAILER_EXPEDITEUR doit etre une adresse de courriel, eventuellement avec un libelle : 'Heritage <invitations@heritage.exemple.fr>'." ;;
+        esac
+        # ---------------------------------------------------------------------
+        # COHERENCE — un seul domaine, quatre variables.
+        #
+        # Chacune des quatre peut etre juste isolement et fausse ensemble : une
+        # URL publique sur l ancien domaine, une liste blanche sur le nouveau, et
+        # la pile demarre en annoncant « verifiee ». C est le defaut qui ne se
+        # voit pas, parce que chaque ligne, lue seule, a l air correcte.
+        #
+        # On ne DEDUIT pas les trois autres de la premiere, volontairement : une
+        # deduction masque la faute de frappe au lieu de la dire, et le jour ou
+        # l une des quatre doit legitimement differer, il n y a plus de porte.
+        # ---------------------------------------------------------------------
+        hote_url="$${HERITAGE_URL_PUBLIQUE#https://}"
+        hote_url="$${hote_url%%/*}"
+        hote_defaut="$${DEFAULT_URI#https://}"
+        hote_defaut="$${hote_defaut%%/*}"
+        if [ -n "$$HERITAGE_DOMAINE_PUBLIC" ] && [ -n "$$hote_url" ] && [ "$$hote_url" != "$$HERITAGE_DOMAINE_PUBLIC" ]; then
+          manquants="$$manquants\n  HERITAGE_URL_PUBLIQUE designe $$hote_url et HERITAGE_DOMAINE_PUBLIC designe $$HERITAGE_DOMAINE_PUBLIC : ce n est pas le meme domaine."
+        fi
+        if [ -n "$$hote_defaut" ] && [ -n "$$hote_url" ] && [ "$$hote_defaut" != "$$hote_url" ]; then
+          manquants="$$manquants\n  DEFAULT_URI designe $$hote_defaut et HERITAGE_URL_PUBLIQUE designe $$hote_url : ce n est pas le meme domaine."
+        fi
+        if [ -n "$$HERITAGE_DOMAINE_PUBLIC" ]; then
+          # Les points sont echappes dans la liste blanche (`^heritage\.exemple\.fr$$`) :
+          # on retire les contre-obliques avant de comparer, sinon la recherche du
+          # domaine litteral echouerait toujours.
+          hotes_nus=$$(printf '%s' "$$HERITAGE_HOTES_AUTORISES" | tr -d '\\')
+          case "$$hotes_nus" in
+            *"$$HERITAGE_DOMAINE_PUBLIC"*) ;;
+            *) manquants="$$manquants\n  HERITAGE_HOTES_AUTORISES ne contient pas $$HERITAGE_DOMAINE_PUBLIC : l API rendrait 400 sur le domaine reel." ;;
+          esac
+        fi
+        if [ -n "$$manquants" ]; then
+          printf '\n[heritage] DEMARRAGE INTERROMPU — configuration de production incomplete :%b\n\n' "$$manquants" >&2
+          printf '[heritage] Renseignez ces variables dans le fichier .env a la racine,\n' >&2
+          printf '[heritage] puis relancez. Voir l en-tete de compose.prod.yaml, point 1.\n\n' >&2
+          exit 1
+        fi
+        # Le domaine est IMPRIME. « Configuration verifiee » sans dire de quoi ne
+        # prouve rien et se lit distraitement ; le domaine dans le journal de
+        # demarrage est ce qui permet, six mois plus tard, de dater un changement
+        # de domaine sans rien d autre que `docker compose logs garde-secrets`.
+        printf '[heritage] configuration de production verifiee — domaine public : %s\n' "$$HERITAGE_DOMAINE_PUBLIC"
+
+  # ---------------------------------------------------------------------------
+  # Base de données
+  # ---------------------------------------------------------------------------
+  db:
+    restart: unless-stopped
+    depends_on:
+      garde-secrets:
+        condition: service_completed_successfully
+    # `!reset` supprime la liste héritée de compose.yaml au lieu de s'y ajouter :
+    # les listes de Compose fusionnent par concaténation, sans cette marque le
+    # port 5432 du fichier de développement resterait publié sur le VPS. La base
+    # n'est joignable que depuis le réseau interne de la pile.
+    ports: !reset []
+
+  # ---------------------------------------------------------------------------
+  # API
+  # ---------------------------------------------------------------------------
+  api:
+    restart: unless-stopped
+    image: ${IMAGE_PREFIX:-heritage}/api:${IMAGE_TAG:-prod}
+    # `target: prod` déclaré ici, et pas seulement hérité.
+    #
+    # Sans cette ligne, cette surcouche reprend le `build:` de compose.yaml et la
+    # cible construite est celle que Docker choisit faute de mieux : le DERNIER
+    # étage de api/Dockerfile. La production dépendrait donc de l'ordre des
+    # `FROM` dans un fichier tenu par quelqu'un d'autre, et un réordonnancement
+    # anodin y expédierait maker-bundle, phpunit et php-cs-fixer sans que
+    # personne ne l'ait décidé ni ne le voie passer.
+    #
+    # C'est la même nature de défaut que le port 8080 face à `proxy_pass
+    # http://api:8000` et que la sonde héritée pointée sur un point
+    # d'administration désactivé : un contrat implicite entre deux fichiers de
+    # deux mains différentes. On l'écrit des deux côtés. La redondance est le
+    # prix de la relecture.
+    build:
+      target: prod
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: 0
+      # Sans cette ligne, le `garde-secrets` exigerait une variable que l'API ne
+      # verrait jamais, et la pile démarrerait « vérifiée » en refusant le domaine
+      # réel sur toutes les requêtes. C'est le piège déjà payé sur GEDCOM_FILE et
+      # MEDIA_RACINE (voir compose.yaml) : Compose lit une variable du `.env` de la
+      # racine sans jamais l'injecter dans un conteneur qui ne la déclare pas. Les
+      # `environment:` fusionnent par clé entre les deux fichiers, la déclarer ici
+      # suffit — et c'est sa place, la production étant le seul cas où elle doit
+      # être renseignée.
+      HERITAGE_HOTES_AUTORISES: ${HERITAGE_HOTES_AUTORISES:-}
+
+      # LES DEUX LIGNES QUI SUIVENT SONT LA CORRECTION D'UNE PANNE SILENCIEUSE.
+      #
+      # `HERITAGE_URL_PUBLIQUE` n'était injectée NULLE PART en production. Ni ici,
+      # ni dans compose.yaml. Le conteneur la trouvait quand même — dans `api/.env`,
+      # copié dans l'image, où elle vaut `http://localhost:8080`. Le résultat est le
+      # pire des trois possibles :
+      #   - si elle avait manqué, `Core\Service\UrlPublique` aurait LEVÉ, et la
+      #     première invitation aurait échoué bruyamment ;
+      #   - si elle avait été fausse et visible, quelqu'un l'aurait corrigée ;
+      #   - elle était fausse et INVISIBLE : la pile démarrait, le garde-fou
+      #     annonçait « configuration vérifiée », et chaque lien d'invitation
+      #     partait vers `http://localhost:8080/inscription/<jeton>`. Le
+      #     destinataire ouvre un lien qui ne mène nulle part — chez lui,
+      #     `localhost` est sa propre machine — et le jeton, à usage unique, est
+      #     consommé ou expire. L'invitation ne se rejoue pas.
+      #
+      # `MAILER_EXPEDITEUR` : même nature. Absente, le paramètre
+      # `app.membership.expediteur_par_defaut` vaut `heritage@localhost`
+      # (api/config/services/membership.yaml), et `EnvoiDInvitation` pose ce
+      # `From:`. Un domaine `localhost` est rejeté par tout relais qui vérifie
+      # quelque chose, et classé en indésirable par les autres. Le courriel ne
+      # revient pas : l'administrateur voit « invitation envoyée ».
+      #
+      # Les deux sont exigées par le `garde-secrets` au même titre qu'`APP_SECRET`,
+      # parce qu'aucune des deux ne se signale toute seule.
+      HERITAGE_URL_PUBLIQUE: ${HERITAGE_URL_PUBLIQUE:-}
+      MAILER_EXPEDITEUR: ${MAILER_EXPEDITEUR:-}
+    # `!override` remplace la carte héritée : Mailpit n'existe pas en production
+    # (voir plus bas), la dépendance vers lui doit disparaître avec lui.
+    depends_on: !override
+      garde-secrets:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    # Rien à publier : seul nginx parle à l'API, par le réseau interne.
+    ports: !reset []
+
+  # ---------------------------------------------------------------------------
+  # Front
+  # ---------------------------------------------------------------------------
+  app:
+    restart: unless-stopped
+    image: ${IMAGE_PREFIX:-heritage}/app:${IMAGE_TAG:-prod}
+    environment:
+      # LE DOMAINE PUBLIC ENTRE DANS `server_name` PAR ICI, ET NULLE PART AILLEURS.
+      #
+      # `app/nginx.conf` est un gabarit : il porte `${HERITAGE_DOMAINE_PUBLIC}` sur
+      # sa ligne `server_name`, et le script `/docker-entrypoint.d/20-envsubst-on-
+      # templates.sh` de l'image nginx officielle y substitue cette valeur au
+      # démarrage, AVANT de lancer nginx. Voir le montage plus bas.
+      #
+      # Ce qui se passait avant : le fichier ne nommait que `localhost` et
+      # `127.0.0.1`, le premier bloc du fichier est un `return 444`, et toute
+      # requête portant le domaine réel y tombait — connexion fermée sans un octet
+      # de réponse. Le front était injoignable et le journal muet. On corrigeait en
+      # éditant la ligne avant de construire l'image ; le premier `git reset --hard`
+      # d'un déploiement effaçait la correction.
+      HERITAGE_DOMAINE_PUBLIC: ${HERITAGE_DOMAINE_PUBLIC:-}
+      # INDISPENSABLE, et pas une optimisation. Sans ce filtre, `envsubst` reçoit
+      # la liste de TOUS les noms présents dans l'environnement du conteneur et
+      # substitue ceux qu'il trouve dans le fichier. Les variables de nginx
+      # (`$uri`, `$host`, `$scheme`…) n'y survivent aujourd'hui que parce qu'aucune
+      # variable d'environnement ne porte ces noms-là — coïncidence de casse, pas
+      # garantie. Mesuré : avec une variable nommée `uri` dans l'environnement, le
+      # repli SPA devient `try_files CASSE CASSE/ /index.html;`, et la
+      # configuration passe `nginx -t` sans broncher. Le filtre rend la
+      # substitution déterministe : seuls les noms en `HERITAGE_` sont touchés.
+      NGINX_ENVSUBST_FILTER: "^HERITAGE_"
+    volumes:
+      # Le gabarit, monté LÀ OÙ L'ENTRYPOINT LE CHERCHE. La sortie substituée
+      # s'appelle `/etc/nginx/conf.d/default.conf` et écrase la copie figée par le
+      # `COPY` d'app/Dockerfile — c'est le comportement documenté du script, et
+      # c'est ce qui permet de ne pas toucher au Dockerfile.
+      #
+      # POURQUOI UN MONTAGE PLUTÔT QU'UNE LIGNE DE DOCKERFILE. `app/Dockerfile`
+      # appartient à un autre lot. La ligne qui rendrait ce montage inutile est
+      # celle-ci, et elle est à poser un jour :
+      #     COPY nginx.conf /etc/nginx/templates/default.conf.template
+      # en remplacement du `COPY nginx.conf /etc/nginx/conf.d/default.conf`.
+      # Tant qu'elle n'est pas là, ce montage est ce qui tient le mécanisme.
+      # Ne le retirez pas sans l'avoir posée : le front repartirait en 444.
+      #
+      # `:ro` : le conteneur n'a aucune raison d'écrire dans le dépôt cloné.
+      # Chemin relatif au fichier compose, donc à la racine du clone sur le VPS.
+      #
+      # CONSÉQUENCE À CONNAÎTRE : la configuration du front n'est plus figée dans
+      # l'image, elle suit le dépôt. Un `git reset --hard` qui modifie
+      # `app/nginx.conf` change donc la configuration SANS reconstruction — mais il
+      # faut redémarrer le conteneur pour que la substitution soit rejouée. Le flux
+      # de déploiement fait `up -d`, qui recrée le conteneur quand l'image ou la
+      # définition changent ; en cas de doute, `restart app` suffit.
+      - ./app/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+    # 127.0.0.1 en dur, et non `${BIND_ADDR}` : la surcouche de production ne
+    # doit pas hériter d'un `BIND_ADDR=0.0.0.0` laissé dans un .env de poste de
+    # travail. Le seul client légitime est le reverse proxy de l'hôte, qui est
+    # sur la même machine. Exposer ce port au monde court-circuiterait le TLS.
+    ports: !override
+      - "127.0.0.1:${APP_PORT:-8080}:80"
+
+  # ---------------------------------------------------------------------------
+  # Mailpit — absent de la production
+  # ---------------------------------------------------------------------------
+  #
+  # Une surcouche ne peut pas supprimer un service hérité. On l'affecte donc à un
+  # profil qui n'est jamais activé : Compose ne le démarre plus, et le laisser
+  # tourner par mégarde reviendrait à ouvrir sur le VPS une boîte aux lettres
+  # sans authentification contenant les liens d'invitation en clair.
+  mailpit:
+    profiles: ["jamais-en-production"]
+    ports: !reset []
+
+  # ---------------------------------------------------------------------------
+  # Sauvegarde de la base et des téléversements
+  # ---------------------------------------------------------------------------
+  #
+  # Boucle simple plutôt que cron : un conteneur, pas de démon à surveiller, et
+  # les erreurs partent sur la sortie d'erreur donc dans `docker compose logs`.
+  # Deux artefacts par passage, avec le même horodatage pour qu'un couple base +
+  # téléversements se restaure de façon cohérente.
+  #
+  # RESTAURATION — la procédure, à avoir essayée AVANT d'en avoir besoin :
+  #
+  #   1. Arrêter l'API pour qu'elle n'écrive plus :
+  #        docker compose -f compose.yaml -f compose.prod.yaml stop api app
+  #   2. Restaurer la base (--clean recrée les objets existants) :
+  #        docker compose -f compose.yaml -f compose.prod.yaml exec -T db \
+  #          pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  #          < backups/base-AAAAMMJJ-HHMMSS.dump
+  #   3. Restaurer les téléversements dans le volume :
+  #        docker compose -f compose.yaml -f compose.prod.yaml run --rm \
+  #          -v "$PWD/backups:/src:ro" --entrypoint sh sauvegarde -c \
+  #          'rm -rf /uploads/* && tar -xzf /src/televersements-AAAAMMJJ-HHMMSS.tar.gz -C /uploads'
+  #      (ce `run` a besoin du volume en écriture : retirer le `:ro` du montage
+  #       ci-dessous le temps de l'opération, puis le remettre)
+  #   4. Redémarrer : `up -d`. L'entrypoint rejouera les migrations manquantes.
+  sauvegarde:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-heritage}
+      PGDATABASE: ${POSTGRES_DB:-heritage}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-heritage_dev}
+      INTERVALLE: ${BACKUP_INTERVAL:-86400}
+      RETENTION_JOURS: ${BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      # Lecture seule : ce service sauvegarde les preuves et les portraits, il
+      # n'a aucune raison de pouvoir les altérer.
+      - televersements:/uploads:ro
+      # Montage d'hôte volontaire, contrairement aux autres : une sauvegarde
+      # enfermée dans un volume Docker est illisible depuis le VPS et ne part
+      # nulle part. `backups/` est déjà couvert par le .gitignore.
+      - ${BACKUP_DIR:-./backups}:/sauvegardes
+    entrypoint: ["/bin/sh", "-c"]
+    # Liste d'un seul élément : voir la note du service `garde-secrets`.
+    # Pas de `set -e` dans la boucle : une passe qui échoue ne doit pas tuer le
+    # conteneur, sinon `restart: unless-stopped` le relance en boucle serrée et
+    # la sauvegarde suivante n'a jamais lieu. On journalise et on continue.
+    command:
+      - |
+        mkdir -p /sauvegardes
+        while true; do
+          horodatage=$$(date +%Y%m%d-%H%M%S)
+          echo "[sauvegarde] $$horodatage — debut"
+          if pg_dump --format=custom --file="/sauvegardes/base-$$horodatage.dump"; then
+            echo "[sauvegarde] base : base-$$horodatage.dump"
+          else
+            echo "[sauvegarde] ECHEC du pg_dump — aucune sauvegarde de base pour $$horodatage" >&2
+          fi
+          if tar -czf "/sauvegardes/televersements-$$horodatage.tar.gz" -C /uploads .; then
+            echo "[sauvegarde] televersements : televersements-$$horodatage.tar.gz"
+          else
+            echo "[sauvegarde] ECHEC de l archivage des televersements pour $$horodatage" >&2
+          fi
+          find /sauvegardes -maxdepth 1 -name 'base-*.dump' -mtime +$$RETENTION_JOURS -exec rm -f {} +
+          find /sauvegardes -maxdepth 1 -name 'televersements-*.tar.gz' -mtime +$$RETENTION_JOURS -exec rm -f {} +
+          sleep "$$INTERVALLE"
+        done

@@ -1,0 +1,190 @@
+<script setup lang="ts">
+/**
+ * La saisie d'une date généalogique — **et la raison pour laquelle ce n'est pas
+ * un `<input type="date">`**.
+ *
+ * Un champ de date du navigateur ne sait exprimer qu'un **point**. Sur ce
+ * corpus, le point est l'exception : `BET 1901 AND 1909`, `ABT 1889`,
+ * `BEF 1931`. Le brancher ici obligerait le contributeur à inventer un jour et
+ * un mois qu'aucune source ne donne — et cette invention deviendrait une
+ * donnée, indiscernable d'une date réellement connue. « Ne jamais aplatir une
+ * fourchette en date ferme : ni en base, ni à l'écran » (§ 4 du dossier).
+ *
+ * D'où la forme retenue : **une nature, une ou deux bornes, un lieu**. Celui qui
+ * ne connaît que l'année écrit l'année, et rien ne lui réclame davantage.
+ *
+ * L'aperçu sous le champ n'est pas décoratif. Il montre la fourchette obtenue
+ * avant l'envoi, parce que « avant 1920 » n'inclut pas 1920 et que personne ne
+ * devine cette borne exclue. Il ne remplace pas `texte`, qui vient du serveur et
+ * fait foi à l'affichage (§ 14.4) : ici, aucun serveur n'a encore parlé.
+ *
+ * Toute la logique — analyse des bornes, calcul de `min`/`max`, composition de
+ * `raw` — vit dans `dates.ts`, testée sans monter de composant. Ce fichier ne
+ * fait que relier des champs à cet état.
+ */
+import { computed, useId } from 'vue'
+import {
+  AIDES_FORME,
+  LIBELLES_FORME,
+  apercuDeValeur,
+  relectureFidele,
+  valeurAEnvoyer,
+  type FormeDate,
+  type SaisieDate,
+} from './dates'
+
+const { etiquette, erreur = '', aide = '' } = defineProps<{
+  etiquette: string
+  /** Message d'erreur venu de la validation locale ou de `champs` du § 15.1. */
+  erreur?: string
+  aide?: string
+}>()
+
+const saisie = defineModel<SaisieDate>({ required: true })
+
+const identifiant = useId()
+const idAide = computed(() => `${identifiant}-aide`)
+const idErreur = computed(() => `${identifiant}-erreur`)
+const idApercu = computed(() => `${identifiant}-apercu`)
+
+const FORMES: readonly FormeDate[] = ['connue', 'environ', 'entre', 'avant', 'apres', 'inconnue']
+
+/** Deux bornes pour « entre », une pour les autres, aucune pour « inconnue ». */
+const bornes = computed<0 | 1 | 2>(() => {
+  if (saisie.value.forme === 'inconnue') return 0
+  return saisie.value.forme === 'entre' ? 2 : 1
+})
+
+function modifier(champ: keyof SaisieDate, valeur: string): void {
+  saisie.value = { ...saisie.value, [champ]: valeur }
+}
+
+/**
+ * Passer à « Inconnue » **n'efface pas les bornes saisies**.
+ *
+ * Elles restent dans l'état sans partir dans la requête : un contributeur qui
+ * change de nature pour comparer retrouve ce qu'il avait tapé. Effacer serait
+ * puni celui qui explore.
+ */
+function changerForme(valeur: string): void {
+  saisie.value = { ...saisie.value, forme: valeur as FormeDate }
+}
+
+/**
+ * **Cette date se rouvre-t-elle sans risque ?**
+ *
+ * Certaines formes que l'import produit — les `FROM` et `TO` du GEDCOM — ne se
+ * laissent pas exprimer par ce champ. Les afficher quand même les viderait, et
+ * un champ vide se compose en « aucune date », c'est-à-dire en **proposition de
+ * suppression** d'une date sourcée que personne n'a demandé d'effacer.
+ *
+ * Le champ se verrouille donc de lui-même, plutôt que d'attendre qu'un appelant
+ * pense à lui passer une option : un garde-fou qu'on peut oublier de brancher
+ * n'en est pas un. La valeur d'origine repart alors intacte, `valeurAEnvoyer()`
+ * s'en charge, et aucun op n'est produit pour ce champ.
+ */
+const verrouille = computed(() => !relectureFidele(saisie.value.origine))
+
+/** Ce que la saisie produira, ou le motif du refus. Recalculé à chaque frappe :
+ *  c'est ce qui rend la borne exclue visible avant l'envoi et non après. */
+const resultat = computed(() => valeurAEnvoyer(saisie.value))
+const apercu = computed(() =>
+  resultat.value.valide ? apercuDeValeur(resultat.value.valeur) : resultat.value.message,
+)
+const enDefaut = computed(() => erreur.length > 0 || !resultat.value.valide)
+
+const classeChamp = computed(() => [
+  'rounded-champ border bg-fond px-2.5 py-1.5 text-sm text-texte transition-colors',
+  enDefaut.value ? 'border-alerte' : 'border-ligne',
+])
+</script>
+
+<template>
+  <fieldset class="flex flex-col gap-1.5">
+    <legend class="mb-1 text-sm font-medium">{{ etiquette }}</legend>
+
+    <!-- Verrouillé : on montre la date telle qu'elle est, et on explique. La
+         vider ici en ferait une suppression que personne n'a demandée. -->
+    <template v-if="verrouille">
+      <p class="rounded-champ border border-ligne bg-panneau px-2.5 py-1.5 text-sm">
+        <span class="font-mono tnum">{{ saisie.origine?.raw ?? apercuDeValeur(saisie.origine) }}</span>
+        <span v-if="saisie.origine?.place" class="text-attenue"> — {{ saisie.origine.place }}</span>
+      </p>
+      <p class="text-xs text-attenue">
+        Cette date est écrite sous une forme que ce formulaire ne sait pas encore rééditer.
+        Elle est laissée intacte : votre proposition ne la touchera pas. Signalez-la à un
+        administrateur si elle doit changer.
+      </p>
+    </template>
+
+    <!-- `flex-wrap` plutôt qu'une grille : à 400 px, la nature prend une ligne
+         et chaque borne la sienne, sans qu'aucune règle de média ne l'impose. -->
+    <div v-else class="flex flex-wrap items-end gap-2">
+      <label class="flex min-w-[9.5rem] flex-1 flex-col gap-1">
+        <span class="text-xs text-attenue">Nature</span>
+        <select
+          :value="saisie.forme"
+          :class="classeChamp"
+          :aria-describedby="idApercu"
+          @change="changerForme(($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="forme in FORMES" :key="forme" :value="forme">
+            {{ LIBELLES_FORME[forme] }}
+          </option>
+        </select>
+      </label>
+
+      <label v-if="bornes >= 1" class="flex min-w-[7.5rem] flex-1 flex-col gap-1">
+        <span class="text-xs text-attenue">{{ bornes === 2 ? 'De' : 'Date' }}</span>
+        <input
+          :value="saisie.debut"
+          type="text"
+          inputmode="numeric"
+          placeholder="1901, 03/1930 ou 11/03/1930"
+          :class="[...classeChamp, 'font-mono tnum']"
+          :aria-describedby="idApercu"
+          @input="modifier('debut', ($event.target as HTMLInputElement).value)"
+        />
+      </label>
+
+      <label v-if="bornes === 2" class="flex min-w-[7.5rem] flex-1 flex-col gap-1">
+        <span class="text-xs text-attenue">À</span>
+        <input
+          :value="saisie.fin"
+          type="text"
+          inputmode="numeric"
+          placeholder="1909"
+          :class="[...classeChamp, 'font-mono tnum']"
+          :aria-describedby="idApercu"
+          @input="modifier('fin', ($event.target as HTMLInputElement).value)"
+        />
+      </label>
+    </div>
+
+    <!-- Le lieu reste saisissable même sans date : « né à Saule, date
+         inconnue » est le cas courant ici, et le perdre perdrait une donnée. -->
+    <label v-if="!verrouille" class="flex flex-col gap-1">
+      <span class="text-xs text-attenue">Lieu</span>
+      <input
+        :value="saisie.lieu"
+        type="text"
+        placeholder="Saule, Ombrage, Sylvanie"
+        class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
+        @input="modifier('lieu', ($event.target as HTMLInputElement).value)"
+      />
+    </label>
+
+    <p
+      v-if="!verrouille"
+      :id="idApercu"
+      class="text-xs"
+      :class="resultat.valide ? 'text-attenue' : 'text-alerte'"
+    >
+      {{ apercu }}
+    </p>
+    <p v-if="!verrouille" :id="idAide" class="text-xs text-attenue">
+      {{ aide.length > 0 ? aide : AIDES_FORME[saisie.forme] }}
+    </p>
+    <p v-if="erreur.length > 0" :id="idErreur" class="text-xs text-alerte">{{ erreur }}</p>
+  </fieldset>
+</template>

@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=../../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
+
+# ATTENTION AU NOM DE CE FICHIER : LE PRÉFIXE « _ » N'EST PAS DÉCORATIF.
+#
+# Il porte l'ordre de chargement. `config/services.yaml` importe `services/*.yaml`,
+# et le glob est trié par ordre alphabétique : « _ » (0x5F) passe avant toutes les
+# minuscules (0x61 et au-delà). Ce fichier est donc chargé AVANT `core.yaml`,
+# `media.yaml` et les autres — c'est ce qui permet aux fichiers de module de
+# l'emporter sur le prototype déclaré ici.
+#
+# Le renommer en `autoload.yaml`, `0-autoload.yaml` ou quoi que ce soit qui trie
+# après un nom de module réintroduit un écrasement SILENCIEUX : les `arguments`,
+# `tags` et `_instanceof` des modules seraient perdus sans le moindre message,
+# et l'on obtiendrait des erreurs d'autowiring sur des services pourtant
+# explicitement configurés. C'est exactement le défaut que ce fichier corrige.
+#
+# Pourquoi cet ordre compte, en une phrase : `YamlFileLoader::loadContent()`
+# traite TOUJOURS `parseImports()` avant `parseDefinitions()` — l'ordre est imposé
+# par le loader, pas par la position dans le fichier — et le prototype `App\:`
+# appelle `setDefinition()` sans condition, donc il écrase ce qui précède. Tant
+# que le prototype vivait dans `services.yaml`, il passait forcément en dernier.
+#
+# MIEUX QUE CE FICHIER : LA CONFIGURATION PAR ATTRIBUT.
+#
+# Ce correctif rend l'échec visible au lieu d'être silencieux ; il ne fait pas du
+# YAML par module la voie recommandée. Il remplace un ordre implicite par un autre.
+# La règle du projet reste de configurer À CÔTÉ DE LA CLASSE, avec `#[Autowire]`,
+# `#[AutoconfigureTag]`, `#[AsAlias]`, `#[AutowireIterator]` : colocalisé, lisible
+# depuis la classe elle-même, et sans aucune dépendance à un ordre de chargement.
+# Le YAML de module reste là pour ce qu'un attribut ne sait pas exprimer.
+
+services:
+    # Configuration par défaut des services de *ce* fichier.
+    _defaults:
+        autowire: true      # Injecte automatiquement les dépendances dans les services.
+        autoconfigure: true # Enregistre automatiquement les services comme commandes, abonnés d'événements, etc.
+
+    # Rend les classes de src/ disponibles comme services : un service par classe,
+    # dont l'identifiant est le nom de classe pleinement qualifié.
+    App\:
+        resource: '../../src/'
+        exclude:
+            - '../../src/Kernel.php'
+            # Les entités Doctrine sont hydratées par l'ORM, jamais par le conteneur.
+            - '../../src/Module/*/Entity/'

@@ -1,0 +1,148 @@
+# Contrat : ce fichier est celui du module Proposal (demandes de modification, diff, validation/refus, révisions).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services.yaml couvre déjà toutes les classes de
+# src/Module/Proposal/. On ne déclare ici que ce que le conteneur ne peut pas deviner :
+# argument scalaire, alias d'interface, tag, paramètre propre au module.
+#
+# ─────────────────────────────────────────────────────────────────────────────────
+# PIÈGE D'ORDRE DE CHARGEMENT — à connaître avant d'ajouter une ligne ici.
+#
+# `config/services.yaml` déclare `imports: services/*.yaml` PUIS le prototype
+# `App\: resource: '../src/'`. Or Symfony traite **toujours** les imports avant les
+# définitions du fichier qui les porte (`YamlFileLoader::loadContent`), et
+# `FileLoader::registerClasses()` écrase sans condition toute définition de même
+# identifiant. Conséquence : une définition de service **concret** écrite ici est
+# silencieusement remplacée par celle du prototype, et ses `arguments` sont perdus —
+# ce qui se manifeste par un « Cannot autowire … you should configure its value
+# explicitly » portant sur un argument qu'on vient pourtant de configurer.
+#
+# Ce module n'y est donc pas exposé : tout ce qui relève d'un service concret est posé
+# en **attribut**, dans la classe — `#[Autowire(param: …)]`, `#[AutowireIterator(…)]`,
+# `#[AutoconfigureTag(…)]` —, ce qui est de toute façon plus lisible et vit là où on le
+# cherche. Les `parameters` et les **alias d'interface** ci-dessous survivent, eux : le
+# prototype enregistre les interfaces sous un identifiant préfixé `.abstract.`, et ne
+# touche donc pas aux alias.
+#
+# Signalé à l'orchestration : le correctif de fond appartient à `config/services.yaml`,
+# hors périmètre de cette tâche.
+# ─────────────────────────────────────────────────────────────────────────────────
+
+# Ce fichier a porté un temps un paramètre `app.proposal.cle_vue_comme_membre`, censé
+# nommer la clé de session de la bascule « voir comme un membre ». Il valait
+# `core.vue_comme_membre` ; la vraie clé est `core.voir_comme.member_id`. Le garde-fou
+# qui la lisait compilait, était testé, et **ne s'est jamais déclenché** : il
+# interrogeait une valeur que personne n'écrit, et répondait donc toujours « rien à
+# signaler ».
+#
+# La clé n'est plus nommée nulle part dans ce module : `FabriqueDeLecteur` appelle
+# `Core\Service\BasculeVoirComme::memberEmprunte()`. **Une clé de session appartient au
+# module qui l'écrit**, et se lit par sa méthode — jamais par son nom recopié dans un
+# paramètre, où rien ne vient contredire une faute de frappe.
+
+services:
+    # ── Les trois ports, et leurs implémentations de repli ───────────────────────
+    #
+    # `Proposal` référence quatre autres modules (ADR 0002 : « Proposal référence à peu
+    # près tout »), et n'a le droit d'en importer aucun : la règle 3 met `Core` seul en
+    # liste blanche, et un contrôle d'intégration continue vérifie les `use`
+    # inter-modules. Chaque besoin sortant est donc une **interface déclarée dans le
+    # module et implémentée ailleurs**.
+    #
+    # Les trois alias ci-dessous sont les seules lignes à modifier quand les modules
+    # correspondants livrent. Aucun fichier PHP de `Proposal` n'a à changer.
+
+    # ⇢ `Tree` : lire une ligne, appliquer des champs, calculer l'empreinte de l'arbre.
+    #    **Branché.** Le repli `ArbreNonBranche` reste en place — il lève volontairement,
+    #    et il documente ce qu'il faut rebrancher si l'implémentation venait à disparaître.
+    App\Module\Proposal\Service\Port\PortArbre:
+        alias: App\Module\Tree\Service\EcritureDeLArbrePourProposal
+
+    # ⇢ `Core` : notifier l'auteur et les administrateurs. **Branché.**
+    #
+    #    L'adaptateur vit dans `Proposal` et non dans `Core`, contrairement à ce que
+    #    l'en-tête du port annonçait : il nomme `ChangeRequest` dans ses quatre
+    #    signatures, et une classe de `Core` qui la nommerait ferait référencer `Proposal`
+    #    par le noyau (§ 2.6 du modèle). La dépendance va donc dans le bon sens — il
+    #    appelle `Core\Service\NotificationService`, qui ignore jusqu'à l'existence des
+    #    demandes.
+    #
+    #    `NotificateurSilencieux` reste : il sert de double dans les tests qui ne
+    #    s'intéressent pas aux notifications.
+    App\Module\Proposal\Service\Port\NotificateurDeDemandes:
+        alias: App\Module\Proposal\Service\Port\NotificateurParNotifications
+
+    # ⇢ `Tree`, `Media`, `Timeline` : le calque « en attente » et les nœuds proposés.
+    #
+    #    Alias YAML et non `#[AsAlias]`, et l'ordre de chargement est ici la raison :
+    #    `Core` déclare un repli fermé dans `config/services/core.yaml`, et les attributs
+    #    sont traités avec `_autoload.yaml`, chargé **avant**. Un `#[AsAlias]` serait donc
+    #    écrasé par le repli, et l'application tournerait sans calque, sans erreur et sans
+    #    test rouge. `proposal.yaml` passant après `core.yaml`, cet alias-ci l'emporte.
+    App\Module\Core\Contract\CalqueEnAttenteInterface:
+        alias: App\Module\Proposal\Service\LectureDesPropositions
+
+    # ⇢ `Media` : les médias joints à une personne encore proposée (§ 6.6). **Branché** —
+    #    mais par **décoration**, et l'alias ci-dessous doit donc rester.
+    #
+    #    `Media\Service\Proposition\MediasDeBrouillon` porte `#[AsDecorator(PortMedias)]`
+    #    et reçoit le service décoré en argument. Retirer cet alias ne « libère » pas le
+    #    port : il supprime le service que le décorateur enveloppe, et le conteneur
+    #    refuse de compiler avec « a dependency on a non-existent service ». Je l'ai
+    #    retiré une fois en croyant faire le ménage ; c'est ainsi qu'on l'apprend.
+    #
+    #    L'agent des médias avait d'abord essayé `#[AsAlias]`, par analogie avec
+    #    l'enregistrement automatique de `src/` qui écrase bien les définitions
+    #    importées — et c'est ce repli-ci qui l'emportait. **L'ordre de précédence du
+    #    conteneur ne se déduit pas, il se constate** : `debug:container` tranche, deux
+    #    mécanismes qui devraient se comporter pareil ne le font pas.
+    App\Module\Proposal\Service\Port\PortMedias:
+        alias: App\Module\Proposal\Service\Port\MediasNonBranches
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LE HARNAIS DE TEST PASSE PAR LE CONTENEUR, ET C'EST UNE CORRECTION.
+#
+# Les tests de ce module construisaient leurs services à la main, avec un tableau
+# littéral d'applicateurs et de constructeurs. Ils ne testaient donc pas le **mécanisme
+# de greffe** : ils testaient un câblage qui lui ressemblait. Un module qui se greffait
+# pour de bon restait invisible d'eux, et un point de greffe que le moteur n'appelait
+# jamais l'est resté aussi — c'est ainsi qu'un applicateur d'op publié, documenté et
+# jamais consulté a survécu à plusieurs livraisons.
+#
+# Les doubles sont donc déclarés **ici**, en environnement de test, et remplacent les
+# deux ports qu'un test ne peut pas laisser branchés : l'arbre, dont le repli lève, et
+# le notificateur, qu'on veut inspecter. Tout le reste — les tags, les itérateurs, les
+# alias — est celui de la production. Un greffon qui apparaît dans le conteneur apparaît
+# désormais dans les tests, sans qu'une liste écrite à la main ait à être tenue à jour.
+# ═══════════════════════════════════════════════════════════════════════════════
+when@test:
+    services:
+        _defaults:
+            autowire: true
+            autoconfigure: true
+            public: true
+
+        App\Tests\Proposal\Double\ArbreEnMemoire: ~
+        App\Tests\Proposal\Double\NotificateurEnMemoire: ~
+
+        App\Module\Proposal\Service\Port\PortArbre:
+            alias: App\Tests\Proposal\Double\ArbreEnMemoire
+            public: true
+
+        App\Module\Proposal\Service\Port\NotificateurDeDemandes:
+            alias: App\Tests\Proposal\Double\NotificateurEnMemoire
+            public: true
+
+        # Les services que le harnais récupère. `public` parce que le conteneur de test
+        # ne les expose sinon que s'ils sont référencés ailleurs — et l'un d'eux ne le
+        # serait plus le jour où on retirerait son contrôleur.
+        App\Module\Proposal\Service\DepotDeDemande: ~
+        App\Module\Proposal\Service\ValidationDeDemande: ~
+        App\Module\Proposal\Service\RefusDeDemande: ~
+        App\Module\Proposal\Service\RefaireDemande: ~
+        App\Module\Proposal\Service\AnalyseDeDemande: ~
+        App\Module\Proposal\Service\CalqueEnAttente: ~
+        App\Module\Proposal\Service\SerialiseurDeDemande: ~
+        App\Module\Proposal\Service\LectureDesPropositions: ~
+        App\Module\Proposal\Service\NormaliseurDeValeur: ~
+        App\Module\Proposal\Service\SurfaceEditable: ~

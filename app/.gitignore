@@ -1,0 +1,21 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# Journaux
+logs
+*.log
+npm-debug.log*
+
+# Variables d'environnement : seul .env.example est versionné (§ 9).
+.env
+.env.*
+!.env.example
+
+# Éditeurs
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.sw?

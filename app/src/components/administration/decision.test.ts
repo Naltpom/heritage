@@ -1,0 +1,257 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { describe, expect, it } from 'vitest'
+import { ErreurApi, analyserErreur, type ResultatValidation } from '@/lib/api'
+import { actionValidation, annonceValidation, erreurMotifRefus, peutRefuser } from './decision'
+
+/**
+ * Ce que ces tests protègent, dans l'ordre où ça coûte cher :
+ *
+ *  1. **Un refus sans motif ne part pas.** Exigence explicite du commanditaire :
+ *     l'auteur reçoit le motif en notification, et une demande refusée reste
+ *     consultable avec lui. La contrainte `ck_prp_request_motif_refus` refuse la
+ *     ligne en base de toute façon — mais un refus parti sans motif reviendrait
+ *     en `422` après que l'administrateur a cru avoir tranché.
+ *
+ *  2. **Les deux `409` donnent deux conseils opposés.** `verrou_concurrent` :
+ *     rien n'a été écrit, réessayer. `demande_caduque` : la demande est morte,
+ *     surtout pas réessayer. Un front qui proposerait « Réessayer » sur les deux
+ *     ferait boucler l'administrateur sur une demande caduque.
+ *
+ *  3. **Un rejeu automatique se voit.** C'est une écriture qu'aucun humain n'a
+ *     réexaminée ; le journal la distingue, l'écran doit la distinguer aussi.
+ */
+
+/* ------------------------------------------------------------------ */
+/* 1. Le motif de refus                                                */
+/* ------------------------------------------------------------------ */
+
+describe('le motif de refus est obligatoire', () => {
+  it('refuse un motif vide', () => {
+    expect(peutRefuser('')).toBe(false)
+    expect(erreurMotifRefus('')).not.toBeNull()
+  })
+
+  it('refuse un motif fait d’espaces — le serveur `btrim` aussi', () => {
+    // Une règle front plus laxiste enverrait une requête vouée au 422.
+    expect(peutRefuser('   ')).toBe(false)
+    expect(peutRefuser('\n\t ')).toBe(false)
+  })
+
+  it('accepte un motif court mais réel', () => {
+    // Pas de longueur minimale inventée : le serveur n'en impose pas, et en
+    // ajouter une refuserait un « doublon » parfaitement clair.
+    expect(peutRefuser('doublon')).toBe(true)
+    expect(erreurMotifRefus('doublon')).toBeNull()
+  })
+
+  it('dit que le motif partira à l’auteur', () => {
+    // Le message explique la conséquence, pas seulement la contrainte : c'est
+    // ce qui fait écrire une phrase utile plutôt qu'un point.
+    expect(erreurMotifRefus('')).toMatch(/auteur/i)
+  })
+})
+
+describe('l’écran applique la garde avant d’appeler l’API', () => {
+  /**
+   * Le **code** de l'écran, commentaires retirés.
+   *
+   * Le dépouillement n'est pas une précaution de style : sans lui, ce test passe
+   * alors que la garde a disparu. Le commentaire de tête de `DecisionDemande.vue`
+   * explique que « la garde `peutRefuser()` passe avant l'appel » — la chaîne
+   * `peutRefuser(` y figure donc, avant l'appel, et l'ordre est vérifié sur une
+   * phrase de documentation plutôt que sur du code. Vérifié par mutation : en
+   * supprimant la ligne de garde, ce test doit échouer, et il échoue.
+   */
+  const SOURCE = readFileSync(fileURLToPath(new URL('./DecisionDemande.vue', import.meta.url)), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('vérifie `peutRefuser` avant `refuserDemande`', () => {
+    // Écrit en ordre de lecture du fichier : la seule façon de vérifier « avant
+    // l'envoi » sans monter un navigateur.
+    const garde = SOURCE.indexOf('peutRefuser(motif.value)')
+    const appel = SOURCE.indexOf('await refuserDemande(')
+
+    expect(garde).toBeGreaterThan(-1)
+    expect(appel).toBeGreaterThan(-1)
+    expect(garde).toBeLessThan(appel)
+  })
+
+  it('n’a pas de second chemin d’appel qui contournerait la garde', () => {
+    // Un seul appel à `refuserDemande` dans le code : deux chemins, et l'un des
+    // deux finira par oublier la garde.
+    const occurrences = SOURCE.split('refuserDemande(').length - 1
+    // L'import compte pour une occurrence, l'appel pour la seconde.
+    expect(occurrences).toBeLessThanOrEqual(2)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 2. Les deux 409                                                     */
+/* ------------------------------------------------------------------ */
+
+describe('les deux 409 de la validation', () => {
+  /** § 6.8, issue 5 — deux transactions concurrentes. Rien n'a été écrit. */
+  const VERROU = new ErreurApi(
+    409,
+    'verrou_concurrent',
+    "Une autre écriture a touché cette fiche pendant la validation. Rien n'a été écrit.",
+    null,
+    { demandeId: 14, statut: 'en_attente', rejouable: true },
+  )
+
+  /** § 6.8, issue 3 — **une 409 qui écrit** : la demande passe `caduque`. */
+  const CADUQUE = new ErreurApi(
+    409,
+    'demande_caduque',
+    'La demande est devenue caduque : la fiche a changé depuis son dépôt.',
+    null,
+    { demandeId: 14, statut: 'caduque', rejouable: false, champs: [] },
+  )
+
+  it('conduisent à deux conduites différentes', () => {
+    expect(analyserErreur(VERROU).conduite).toBe('reessayer')
+    expect(analyserErreur(CADUQUE).conduite).toBe('refaire')
+  })
+
+  it('proposent deux libellés différents, et jamais le même', () => {
+    const verrou = analyserErreur(VERROU).libelleAction
+    const caduque = analyserErreur(CADUQUE).libelleAction
+
+    expect(verrou).toBe('Réessayer')
+    expect(caduque).toBe('Refaire cette demande')
+    expect(caduque).not.toBe(verrou)
+  })
+
+  it('ne proposent jamais « Réessayer » sur une demande morte', () => {
+    // C'est l'assertion qui compte : elle interdit la boucle infinie sur une
+    // demande caduque, qui est le mode de défaillance nommé par le contrat.
+    expect(analyserErreur(CADUQUE).libelleAction).not.toMatch(/réessayer/i)
+    expect(analyserErreur(CADUQUE).rejouable).toBe(false)
+  })
+
+  it('portent le même statut HTTP — c’est le code qui les sépare', () => {
+    // Un écran qui brancherait sur le statut 409 les confondrait toutes les
+    // deux. C'est pour cela qu'elles ont deux codes.
+    expect(VERROU.statut).toBe(CADUQUE.statut)
+    expect(VERROU.code).not.toBe(CADUQUE.code)
+  })
+})
+
+describe('l’écran de décision ne retraite pas les codes d’erreur', () => {
+  const FICHIERS = ['./DecisionDemande.vue', '../../views/DemandeView.vue'] as const
+
+  function code(chemin: string): string {
+    return readFileSync(fileURLToPath(new URL(chemin, import.meta.url)), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1')
+  }
+
+  it('ne teste aucun des deux codes à la main', () => {
+    for (const chemin of FICHIERS) {
+      const source = code(chemin)
+      // Le socle les distingue dans `erreurs.ts`. Les retester ici, c'est créer
+      // un second endroit où l'un des deux sera oublié le jour où le contrat en
+      // ajoute un troisième.
+      expect(source).not.toMatch(/demande_caduque/)
+      expect(source).not.toMatch(/verrou_concurrent/)
+    }
+  })
+
+  it('n’écrit pas non plus les libellés d’action en dur', () => {
+    for (const chemin of FICHIERS) {
+      const source = code(chemin)
+      expect(source).not.toMatch(/'Réessayer'|"Réessayer"/)
+      expect(source).not.toMatch(/Refaire cette demande/)
+    }
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 3. resolutionPrevue, et le rejeu                                    */
+/* ------------------------------------------------------------------ */
+
+describe('ce que propose le bouton « Valider »', () => {
+  it('sur `application` : valider, sans commentaire', () => {
+    const action = actionValidation('application')
+    expect(action.desactive).toBe(false)
+    expect(action.libelle).toBe('Valider')
+    expect(action.explication).toBeNull()
+  })
+
+  it('sur `rejeu` : valider, en annonçant le rejeu', () => {
+    const action = actionValidation('rejeu')
+    expect(action.desactive).toBe(false)
+    expect(action.libelle).toMatch(/rejouée/i)
+    expect(action.explication).not.toBeNull()
+  })
+
+  it('sur `caducite` : le bouton est éteint, et on dit pourquoi', () => {
+    // Sans ce calcul, l'administrateur découvre la caducité en cliquant — ce qui
+    // la rend indistinguable d'une panne.
+    const action = actionValidation('caducite')
+    expect(action.desactive).toBe(true)
+    expect(action.libelle).not.toMatch(/^Valider$/)
+    expect(action.explication).toMatch(/écraserait|refaite/i)
+  })
+
+  it('sans `resolutionPrevue` : défaut fermé', () => {
+    // La charge de l'auteur (§ 6.5) ne porte pas ce champ. Ne rien savoir de
+    // l'état de la cible n'autorise pas à promettre une validation.
+    const action = actionValidation(undefined)
+    expect(action.desactive).toBe(true)
+    expect(action.explication).not.toBeNull()
+  })
+})
+
+describe('un rejeu automatique se voit', () => {
+  const base = {
+    demande: { id: 14, status: 'validee' },
+    revisions: [],
+  } as unknown as ResultatValidation
+
+  it('une validation ordinaire se dit simplement', () => {
+    const annonce = annonceValidation({ ...base, resultat: 'validee' })
+
+    expect(annonce.rejoue).toBe(false)
+    expect(annonce.titre).toBe('Demande validée')
+  })
+
+  it('un rejeu se distingue d’une validation ordinaire', () => {
+    const annonce = annonceValidation({
+      ...base,
+      resultat: 'rejouee',
+      rejeu: {
+        motif: 'version_modifiee',
+        versionALaSoumission: 7,
+        versionAppliquee: 8,
+        champsVerifies: ['birth'],
+      },
+    })
+
+    expect(annonce.rejoue).toBe(true)
+    expect(annonce.titre).not.toBe('Demande validée')
+    expect(annonce.titre).toMatch(/rejeu/i)
+  })
+
+  it('dit qu’aucun humain n’a réexaminé l’écriture', () => {
+    // C'est la raison d'être de la distinction, et elle est tracée au journal
+    // pour la même raison : une écriture non réexaminée doit se voir.
+    const annonce = annonceValidation({
+      ...base,
+      resultat: 'rejouee',
+      rejeu: {
+        motif: 'version_modifiee',
+        versionALaSoumission: 7,
+        versionAppliquee: 8,
+        champsVerifies: ['birth'],
+      },
+    })
+
+    expect(annonce.detail).toMatch(/réexamin/i)
+    expect(annonce.detail).toContain('birth')
+  })
+})

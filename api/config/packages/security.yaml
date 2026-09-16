@@ -1,0 +1,93 @@
+# Sécurité — § 1.6 et § 2 du contrat d'API, § 2 et § 8 du dossier de mission.
+#
+# L'application contient des données de personnes vivantes qui n'ont pas demandé à y
+# figurer. Trois principes gouvernent ce fichier, et aucun n'est négociable :
+#
+#   1. Tout est fermé par défaut. La dernière règle d'`access_control` couvre `^/api`
+#      entier ; une route nouvelle est protégée avant d'être écrite.
+#   2. Aucune redirection HTML. Une API rend du JSON, y compris pour dire « non ».
+#   3. Aucune inscription ouverte. Il n'existe pas de route publique de création de
+#      compte : on n'entre que par un lien d'invitation, et `^/api/inscription` répond
+#      `404` sans jeton valide plutôt que `403` (§ 6.1 du dossier).
+security:
+    password_hashers:
+        # `auto` = le meilleur standard courant du composant Security (aujourd'hui
+        # Argon2id, demain son successeur) et la migration transparente des empreintes
+        # existantes. Ne jamais figer un algorithme ici : ce serait s'engager à le
+        # maintenir soi-même.
+        Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
+
+    # Deux rôles, et rien de plus (§ 1.6 du contrat). `ROLE_MEMBER` n'existe pas : la
+    # distinction « membre actif » / « compte en attente » est un **régime**, porté par
+    # `core_user.status` et lu par `Core\Security\RegimeVoter`. Un rôle qu'on retire à
+    # l'activation serait une seconde source de vérité à côté du statut, et les deux
+    # finiraient par diverger.
+    role_hierarchy:
+        ROLE_ADMIN: [ROLE_USER]
+
+    providers:
+        entity_utilisateurs:
+            entity:
+                class: App\Module\Core\Entity\User
+                property: email
+
+    firewalls:
+        dev:
+            pattern: ^/(_profiler|_wdt|assets|build)/
+            security: false
+
+        main:
+            lazy: true
+            provider: entity_utilisateurs
+            # Refuse la connexion d'un compte suspendu — après vérification du mot de
+            # passe, pour ne pas faire de la route un oracle (voir la classe).
+            user_checker: App\Module\Core\Security\UserChecker
+            # Sans point d'entrée explicite, Symfony redirige vers un formulaire et le
+            # front reçoit du HTML là où il attend `{"erreur": {...}}`.
+            entry_point: App\Module\Core\Security\JsonAuthenticationEntryPoint
+
+            json_login:
+                check_path: core_connexion
+                # Les clés du corps sont fixées ici. Elles se trouvent être aussi des noms
+                # de propriété (§ 1.2) : la cohérence est heureuse, il ne faut pas la
+                # « franciser ».
+                username_path: email
+                password_path: password
+                success_handler: App\Module\Core\Security\AuthenticationSuccessHandler
+                failure_handler: App\Module\Core\Security\AuthenticationFailureHandler
+
+            # Anti-force brute : 5 tentatives par couple identifiant+IP sur 15 minutes,
+            # compteur remis à zéro à chaque connexion réussie. Symfony double la mesure
+            # d'un limiteur par IP seule, à 5 × le plafond, qui attrape le balayage sur
+            # plusieurs adresses. Le dépassement passe par le `failure_handler` ci-dessus
+            # et ressort en `429 trop_de_tentatives` avec `Retry-After` (§ 1.9).
+            login_throttling:
+                max_attempts: 5
+                interval: '15 minutes'
+
+            logout:
+                path: core_deconnexion
+
+    # Seule la *première* règle qui correspond est appliquée : l'ordre porte le sens.
+    access_control:
+        # Les seuls chemins sans session. `^/api/inscription` est public parce qu'on n'a
+        # pas encore de compte quand on s'y présente ; sa protection est le jeton, et son
+        # refus est un `404` (§ 4).
+        - { path: ^/api/connexion, roles: PUBLIC_ACCESS }
+        - { path: ^/api/inscription, roles: PUBLIC_ACCESS }
+        # Avant `^/api`, faute de quoi cette règle ne serait jamais atteinte. Le journal
+        # d'audit, les réglages, la bascule « voir comme un membre » et la gestion des
+        # comptes vivent tous derrière.
+        - { path: ^/api/administration, roles: ROLE_ADMIN }
+        # Le filet : toute route `/api` non nommée ci-dessus exige une session.
+        - { path: ^/api, roles: ROLE_USER }
+
+when@test:
+    security:
+        password_hashers:
+            # Le hachage est coûteux par construction ; en test on abaisse le coût.
+            Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface:
+                algorithm: auto
+                cost: 4
+                time_cost: 3
+                memory_cost: 10

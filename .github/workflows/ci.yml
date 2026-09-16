@@ -1,0 +1,249 @@
+# =============================================================================
+#  Intégration continue — Heritage
+# =============================================================================
+#
+# Quatre portes bloquantes, plus la construction des images :
+#
+#   1. phpstan niveau 6, zéro erreur          (travail « api »)
+#   2. phpunit                                 (travail « api »)
+#   3. vue-tsc --noEmit                        (travail « app »)
+#   4. npm run build                           (travail « app »)
+#   5. docker compose build, les deux images   (travail « docker »)
+#   6. la chaîne de déploiement se tient       (travail « deploiement »)
+#
+# Regroupées en trois travaux et non cinq : chaque travail supplémentaire coûte
+# un démarrage de machine et une réinstallation de dépendances, et les minutes
+# d'un dépôt privé sont comptées. Les étapes restent nommées une par une, donc
+# une porte qui tombe se lit directement dans la liste des vérifications de la
+# demande de fusion.
+#
+# Le style de code (php-cs-fixer) n'est délibérément PAS une porte : c'est une
+# question de mise en forme, pas de correction, et un échec de CI sur un espace
+# manquant apprend à ignorer la CI. Il se lance à la main :
+#   php vendor/bin/php-cs-fixer fix
+#
+# Épinglage des actions : à la version majeure, comme le dépôt de référence.
+# Le cran au-dessus, si la chaîne d'approvisionnement devient une préoccupation,
+# est d'épingler au SHA de commit — une étiquette peut être redéplacée, pas un SHA.
+# =============================================================================
+
+name: CI
+
+on:
+  # `push` restreint à `main` : une branche de travail est couverte par
+  # `pull_request`, et sans cette restriction chaque poussée sur une branche
+  # ouverte déclencherait deux fois la même CI, pour deux fois les minutes.
+  push:
+    branches: [main]
+  pull_request:
+
+# Rien à écrire dans le dépôt : ni commentaire, ni étiquette, ni publication
+# d'image. Le jeton n'a donc besoin que de la lecture.
+permissions:
+  contents: read
+
+# Une poussée rapide sur une branche annule l'exécution précédente, qui ne
+# concerne plus l'état courant. Économie directe de minutes sur dépôt privé.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  api:
+    name: API — phpstan + phpunit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          # intl et gd sont exigées par composer.json (tri des noms accentués,
+          # vignettes et purge EXIF). pdo_sqlite parce que api/.env.test bascule
+          # la base de test sur SQLite : la CI ne monte aucun service PostgreSQL,
+          # les tests doivent tourner sans base externe.
+          extensions: intl, zip, gd, exif, pdo_sqlite
+          coverage: none
+
+      - name: Cache des dépendances Composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ hashFiles('api/composer.lock') }}
+          restore-keys: composer-
+
+      - name: Installer les dépendances
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      # Porte 1. `--level=6` en ligne de commande et non seulement dans
+      # phpstan.neon : la CI est le contrat, elle ne doit pas pouvoir être
+      # assouplie en abaissant le niveau dans le fichier de configuration.
+      - name: Porte 1 — analyse statique (phpstan, niveau 6, zéro erreur)
+        run: php vendor/bin/phpstan analyse --level=6 --no-progress --memory-limit=1G
+
+      # Porte 2.
+      - name: Porte 2 — tests (phpunit)
+        run: php vendor/bin/phpunit
+
+  app:
+    name: Front — vue-tsc + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci --no-audit --no-fund
+
+      # Porte 3. `vue-tsc --noEmit` et non `tsc` : seul vue-tsc comprend les
+      # blocs `<script setup lang="ts">` des composants.
+      - name: Porte 3 — vérification des types (vue-tsc --noEmit)
+        run: npm run typecheck
+
+      # Porte 4. Le typage peut passer alors que le build casse (import d'un
+      # actif absent, plugin Vite mal configuré) : ce sont deux portes, pas une.
+      - name: Porte 4 — build de production (vite build)
+        run: npm run build
+
+  docker:
+    name: Docker — compose + build des deux images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Après les portes de qualité : reconstruire deux images pour du code qui ne
+    # compile pas est du temps de machine dépensé pour rien.
+    needs: [api, app]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Les deux fichiers doivent se rendre sans substitution manquante. Sans
+      # `.env` sur le runner : c'est aussi la vérification que tous les replis de
+      # développement sont bien en place dans compose.yaml.
+      - name: Validation des fichiers Compose (développement et production)
+        run: |
+          docker compose config --quiet
+          docker compose -f compose.yaml -f compose.prod.yaml config --quiet
+
+      # Porte 5. La seule vérification qui exerce réellement les deux
+      # Dockerfile : installation des extensions PHP et de Composer d'un côté,
+      # `npm ci` puis `vite build` puis copie dans nginx de l'autre.
+      - name: Porte 5 — construction des deux images
+        run: docker compose build
+
+  # ---------------------------------------------------------------------------
+  # Porte 6 — la chaîne de déploiement se tient
+  # ---------------------------------------------------------------------------
+  #
+  # POURQUOI CETTE PORTE EXISTE. Le flux de déploiement ne part que si CETTE CI
+  # est verte. Tout ce qui est vérifié ici est donc vérifié AVANT toute mise en
+  # production — et, plus important, ne peut plus être défait en silence par un
+  # autre chantier. Chaque contrôle correspond à une panne muette déjà identifiée,
+  # dont la réparation tient à une ligne qu'un « nettoyage » bien intentionné
+  # supprimerait sans y penser.
+  #
+  # Aucune dépendance, aucun `needs:` : ce sont des greps et un shellcheck, une
+  # trentaine de secondes, et rien ne sert à les faire attendre.
+  deploiement:
+    name: Déploiement — script, gabarit et garde-fous
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # Le script tourne sur le VPS, sous `set -euo pipefail`, et manipule un
+      # `git reset --hard`. Une faute de quotation y est bien plus coûteuse
+      # qu'ailleurs. shellcheck est préinstallé sur le runner.
+      - name: Le script de déploiement est syntaxiquement sain
+        run: |
+          set -euo pipefail
+          for script in .github/scripts/*.sh; do
+            echo "── $script"
+            bash -n "$script"
+            shellcheck "$script"
+          done
+
+      # certbot relit le vhost pour y écrire la moitié TLS et le REJETTE s'il
+      # n'est pas décodable. Un seul commentaire accentué suffit à faire échouer
+      # l'émission du certificat — et l'échec se produit sur le serveur, trois
+      # semaines plus tard, chez quelqu'un qui n'a pas écrit la ligne.
+      - name: Le vhost de l'hôte est en ASCII pur
+        run: |
+          set -euo pipefail
+          fichier=docs/deploiement/heritage.naltpom.fr.conf
+          if LC_ALL=C grep -n '[^ -~\t]' "$fichier"; then
+            echo "::error file=$fichier::Octets non-ASCII ci-dessus. certbot refusera ce fichier."
+            exit 1
+          fi
+          echo "$fichier : ASCII pur."
+
+      # Le gabarit. Si ce jeton disparaît, le `server_name` ne nomme plus que
+      # localhost : le premier bloc du fichier est un `return 444`, et TOUTE
+      # requête portant le domaine réel se fait fermer la connexion au nez, sans
+      # un octet de réponse et sans une ligne de journal. C'est la panne la plus
+      # silencieuse de tout le projet, et elle tient à ces vingt-cinq caractères.
+      - name: app/nginx.conf nomme toujours le domaine par variable
+        run: |
+          set -euo pipefail
+          if ! grep -qE '^\s*server_name .*\$\{HERITAGE_DOMAINE_PUBLIC\};' app/nginx.conf; then
+            echo "::error file=app/nginx.conf::La ligne server_name du bloc applicatif ne porte plus \${HERITAGE_DOMAINE_PUBLIC}."
+            echo "Sans elle, le front ferme en 444 toute requête portant le domaine réel."
+            exit 1
+          fi
+          if ! grep -q 'location = /sante.php' app/nginx.conf; then
+            echo "::error file=app/nginx.conf::La sonde /sante.php n'est plus relayée : le déploiement ne peut plus vérifier ce qu'il déploie."
+            exit 1
+          fi
+          echo "Gabarit et sonde en place."
+
+      # Les quatre variables qui portent le domaine, et les deux qui portent les
+      # invitations. Chacune a un repli MUET quelque part (api/.env copié dans
+      # l'image, paramètre de service, liste blanche de développement) : absente
+      # de l'orchestration, la pile démarre en annonçant « configuration
+      # vérifiée » et se trompe en silence. Le `garde-secrets` est ce qui rend ces
+      # absences bruyantes ; cette porte est ce qui empêche de le vider.
+      - name: compose.prod.yaml injecte et vérifie les variables muettes
+        run: |
+          set -euo pipefail
+          manquantes=""
+          for cle in HERITAGE_URL_PUBLIQUE MAILER_EXPEDITEUR HERITAGE_DOMAINE_PUBLIC HERITAGE_HOTES_AUTORISES; do
+            # Deux occurrences au moins : une dans le `garde-secrets` qui la
+            # contrôle, une dans le service qui la consomme. Une seule signifie
+            # qu'on contrôle une variable que personne ne reçoit — le défaut
+            # exact déjà payé sur HERITAGE_HOTES_AUTORISES.
+            n="$(grep -c "^      $cle:" compose.prod.yaml || true)"
+            echo "$cle : $n déclaration(s) dans compose.prod.yaml"
+            [ "$n" -ge 2 ] || manquantes="$manquantes $cle"
+          done
+          if [ -n "$manquantes" ]; then
+            echo "::error file=compose.prod.yaml::Déclarées moins de deux fois :$manquantes"
+            echo "Chacune doit être à la fois contrôlée par garde-secrets et injectée dans le service qui la lit."
+            exit 1
+          fi
+          # Le modèle doit documenter ce que la production exige, sinon le
+          # `.env` du serveur s'écrit de mémoire.
+          for cle in HERITAGE_URL_PUBLIQUE MAILER_EXPEDITEUR HERITAGE_DOMAINE_PUBLIC HERITAGE_HOTES_AUTORISES; do
+            grep -q "^$cle=" .env.example || {
+              echo "::error file=.env.example::$cle absente du modèle."
+              exit 1
+            }
+          done
+          echo "Modèle .env.example complet."
+
+      - name: Les deux fichiers Compose se rendent avec le gabarit monté
+        run: |
+          set -euo pipefail
+          docker compose -f compose.yaml -f compose.prod.yaml config --quiet
+          echo "compose.yaml + compose.prod.yaml : rendu sans substitution manquante."

@@ -1,0 +1,112 @@
+# Référence : https://symfony.com/doc/current/reference/configuration/framework.html
+parameters:
+    # Le repli de `framework.trusted_hosts` quand `HERITAGE_HOTES_AUTORISES` n'est pas
+    # renseignée : **la liste blanche du développement local**, et non `.*`.
+    #
+    # Ce repli valait `.*` — tout hôte — et le raisonnement d'alors se tenait : il
+    # n'existe pas de façon sûre d'exprimer « liste vide » par une variable
+    # d'environnement, une expression régulière **vide** ne correspond à aucun hôte, et
+    # l'application aurait rendu `400` sur toutes les requêtes, développement compris.
+    # Entre un garde-fou inactif et une panne totale, on avait choisi le premier.
+    #
+    # Le choix était faussé parce qu'il n'avait que deux termes. Le troisième est
+    # celui-ci : un repli **non vide et permissif pour le développement seul**. Rien ne
+    # tombe en local — `localhost`, `127.0.0.1` et `[::1]` sont acceptés —, et un `Host`
+    # étranger est refusé dès la première requête, donc le garde-fou est mesurable.
+    # Mesure de départ, avant ce changement :
+    #     curl -H 'Host: evil.attaquant.test' -H 'Cookie: PHPSESSID=<session admin>' \
+    #          http://127.0.0.1:8000/api/session
+    # rendait `200` avec la charge de session complète de l'administrateur.
+    # (Le cookie doit être forcé par `-H` : `curl` ne sort pas celui de son bocal quand
+    # on écrase `Host`, et l'on mesurerait un `401` qui ne prouve rien.)
+    #
+    # Ce que ce repli ACCEPTE, et pourquoi chaque entrée y est :
+    #   localhost   — le navigateur, le proxy Vite, et la sonde de l'image
+    #                 (`HEALTHCHECK … http://localhost:8000/sante.php`, api/Dockerfile).
+    #   127.0.0.1   — le front publié par compose (`127.0.0.1:8080`) et les appels
+    #                 directs à l'API (`127.0.0.1:8000`).
+    #   [::1]       — la même chose en IPv6 ; `getHost()` conserve les crochets.
+    #   api         — le nom de service compose, pour un appel depuis le réseau interne
+    #                 (`docker compose exec app curl http://api:8000/…`). nginx, lui,
+    #                 transmet le `Host` du navigateur (`proxy_set_header Host
+    #                 $http_host`), il ne passe donc jamais par cette entrée.
+    #
+    # Le port n'a pas à être listé : `Request::getHost()` le retire avant de comparer
+    # (`preg_replace('/:\d+$/', '', …)`). Le `(:\d+)?` final est donc une ceinture, pas
+    # une nécessité — on le garde parce qu'il rend la ligne lisible pour qui vient de
+    # taper `127.0.0.1:8080`.
+    #
+    # CE QUE CE REPLI REFUSE, ET QUI EST DU DÉVELOPPEMENT LÉGITIME : ouvrir l'écran
+    # depuis un téléphone du réseau local, c'est-à-dire `BIND_ADDR=0.0.0.0` et un `Host`
+    # du genre `192.168.1.24:8080`. Ce n'est pas un oubli : `BIND_ADDR` est déjà une
+    # décision prise et non un défaut subi (voir compose.yaml), et celui qui la prend
+    # pose la variable avec :
+    #     HERITAGE_HOTES_AUTORISES='^(localhost|127\.0\.0\.1|192\.168\.1\.24)(:\d+)?$'
+    #
+    # EN PRODUCTION, ce repli ne doit JAMAIS servir : il refuserait le domaine réel,
+    # donc toutes les requêtes. C'est voulu, et c'est pour cela que le service
+    # `garde-secrets` de compose.prod.yaml exige désormais `HERITAGE_HOTES_AUTORISES`
+    # au même titre qu'`APP_SECRET`, et refuse de démarrer la pile sans elle. Le défaut
+    # ne peut donc pas être subi par une production : il est intercepté avant le premier
+    # démarrage, pas découvert par un `400`.
+    app.hotes_autorises_defaut: '^(localhost|127\.0\.0\.1|\[::1\]|api)(:\d+)?$'
+
+framework:
+    secret: '%env(APP_SECRET)%'
+
+    # La session n'est démarrée que si on la lit ou l'écrit.
+    # Durcissement explicite du cookie : l'authentification est par session, le
+    # cookie ne doit être lisible ni par JavaScript ni depuis un autre site.
+    session:
+        cookie_secure: auto
+        cookie_samesite: lax
+        cookie_httponly: true
+
+    # DÉFENSE EN PROFONDEUR contre la falsification du `Host`.
+    #
+    # L'en-tête `Host` et les `X-Forwarded-*` viennent du client, et `trusted_proxies`
+    # ci-dessous nous les fait croire. Une requête portant un `Host` falsifié faisait
+    # fabriquer par l'API un lien d'invitation vers un domaine attaquant — expédié dans
+    # un courriel authentique, depuis notre adresse, à une personne réelle de la famille.
+    #
+    # **Le correctif de fond n'est pas ici** : l'adresse publique est désormais
+    # *configurée* (`HERITAGE_URL_PUBLIQUE`, lue par `Core\Service\UrlPublique`) et plus
+    # jamais déduite de la requête. La falsification est donc impossible par
+    # construction. Cette liste blanche est le second verrou, pour les usages du `Host`
+    # qu'on n'aurait pas vus.
+    #
+    # Ce sont des **expressions régulières**, et elles sont désormais ACTIVES par défaut :
+    # variable absente ou vide, on retombe sur la liste blanche du développement local
+    # déclarée en tête de fichier, plus sur `.*`. Un `Host` étranger rend donc `400`
+    # (`SuspiciousOperationException` levée par `Request::getHost()`, convertie en
+    # `BadRequestHttpException` par `RouterListener`), en développement comme ailleurs.
+    #
+    # DEUX PIÈGES, tous deux vérifiés sur cette version de Symfony :
+    #
+    # 1. La liste ne compte qu'UN élément, et ce n'est pas `%env(csv:…)%`. La séparation
+    #    par virgules existe quand même, mais elle est faite plus bas, par
+    #    `Kernel::boot()` : un seul élément est passé comme chaîne au paramètre
+    #    `kernel.trusted_hosts`, que le noyau redécoupe sur les virgules hors accolades.
+    #    Une valeur `'^a\.test$,^b\.test$'` donne donc bien deux motifs — mais une
+    #    virgule à l'intérieur d'un quantificateur `{2,3}` serait, elle, protégée par les
+    #    accolades. C'est le seul endroit où la virgule est significative.
+    #
+    # 2. Les ancres `^` et `$` ne sont pas posées pour nous. `Request::setTrustedHosts()`
+    #    se borne à envelopper chaque motif dans `{…}i` ; un motif sans ancre comme
+    #    `heritage\.example\.net` accepterait `heritage.example.net.attaquant.test`, ce
+    #    qui est exactement le trou qu'on croit fermer. Le `garde-secrets` de
+    #    compose.prod.yaml refuse pour cette raison une valeur non ancrée.
+    trusted_hosts: ['%env(default:app.hotes_autorises_defaut:HERITAGE_HOTES_AUTORISES)%']
+
+when@prod:
+    framework:
+        # Derrière le reverse proxy nginx : restaure l'IP client réelle pour le
+        # journal d'audit, sans faire confiance à un proxy externe.
+        trusted_proxies: 'private_ranges'
+        trusted_headers: ['x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-port']
+
+when@test:
+    framework:
+        test: true
+        session:
+            storage_factory_id: session.storage.factory.mock_file

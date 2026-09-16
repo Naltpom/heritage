@@ -1,0 +1,9 @@
+framework:
+    router:
+        # Génération d'URL hors contexte HTTP (commandes CLI, courriels d'invitation).
+        default_uri: '%env(DEFAULT_URI)%'
+
+when@prod:
+    framework:
+        router:
+            strict_requirements: null

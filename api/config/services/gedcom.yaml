@@ -1,0 +1,31 @@
+# Contrat : ce fichier est celui du module Gedcom (import et export GEDCOM).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services.yaml couvre déjà toutes les classes de
+# src/Module/Gedcom/. On ne déclare ici que ce que le conteneur ne peut pas deviner :
+# argument scalaire, alias d'interface, tag, paramètre propre au module.
+#
+# `_defaults` n'est pas hérité d'un fichier à l'autre : à décommenter avec le
+# premier service déclaré, sinon celui-ci ne serait ni autowiré ni autoconfiguré.
+
+parameters:
+    # Chemin du GEDCOM à importer, quand la commande est lancée sans argument.
+    #
+    # **Un réglage, jamais un chemin en dur.** Le fichier vit dans l'atelier
+    # généalogique (`C:\www\myHeritage`), qui est hors dépôt : sur une autre machine il
+    # sera ailleurs, ou il n'existera pas. Écrire son chemin dans le code rendrait la
+    # commande inutilisable partout sauf sur un poste.
+    #
+    # `default::` rend `null` quand la variable n'est pas définie — ce qui est le cas
+    # normal en CI et sur un poste sans atelier. La commande le dit alors clairement au
+    # lieu d'échouer sur un `file_get_contents` de chaîne vide.
+    #
+    # À poser dans `api/.env.local`, qui n'est pas versionné :
+    #     GEDCOM_FILE=C:/www/myHeritage/arbre-romarin-v5.ged
+    app.gedcom.fichier: '%env(default::GEDCOM_FILE)%'
+
+# Aucun service concret déclaré ici, et c'est délibéré : le prototype
+# `App\: resource: '../src/'` de `config/services.yaml` est appliqué APRÈS les imports
+# de ce dossier, et il écrase en silence toute définition concrète qu'on poserait.
+# Le câblage se fait donc par attribut `#[Autowire]` sur le constructeur — voir
+# `ImportGedcomCommand`. Les `parameters:` ci-dessus, eux, survivent.

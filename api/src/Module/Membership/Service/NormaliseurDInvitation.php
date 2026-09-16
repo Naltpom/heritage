@@ -1,0 +1,120 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Module\Membership\Service;
+
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
+use App\Module\Membership\Entity\Invitation;
+
+/**
+ * La forme JSON d'une invitation — § 3.2 et § 3.3 du contrat d'API.
+ *
+ * ## La porte de sortie n° 8 est ici
+ *
+ * `mbr_invitation.person_label` est l'une des neuf colonnes `*_label` qui stockent le nom
+ * d'une personne potentiellement vivante **sans jamais traverser le normaliseur de
+ * `Tree\Person`** (§ 0.4 du modèle, § 11.3 du contrat, ADR 0003). C'est la porte
+ * « qu'aucun des deux corpus n'avait comptée », et la règle est sans exception :
+ *
+ * > **Toute clé `*Label` désignant une personne est filtrée comme la personne elle-même** —
+ * > et la clé `…Id` qui l'accompagne l'est aussi.
+ *
+ * En pratique cette file est réservée aux administrateurs, donc le risque est contenu.
+ * « En pratique » n'est pas une garantie : la bascule « voir comme un membre » (§ 10.4)
+ * remplace précisément le cercle de l'administrateur par celui d'un membre, et c'est ce
+ * jour-là que le filtre sert.
+ *
+ * ## `lien` n'apparaît que dans la réponse de création
+ *
+ * {@see self::creation()} le porte, {@see self::ligne()} ne le porte pas — **absent, pas
+ * `null`** (§ 1.3). Le serveur n'a que `hash(jeton)` : il n'existe aucune route « renvoyer
+ * l'invitation », et c'est le piège le plus probable de ce module, « la route paraît
+ * manquante alors qu'elle est impossible » (§ 3.2).
+ */
+final readonly class NormaliseurDInvitation
+{
+    public function __construct(private CercleDeVisibiliteInterface $cercle)
+    {
+    }
+
+    /**
+     * La réponse `201` du § 3.2 — le seul moment où le jeton existe.
+     *
+     * @return array<string, mixed>
+     */
+    public function creation(InvitationCreee $resultat): array
+    {
+        $invitation = $resultat->invitation;
+
+        return [
+            'id' => $invitation->getId(),
+            'tokenPrefix' => $invitation->getTokenPrefix(),
+            'lien' => $resultat->lien,
+            'courrielEnvoye' => $resultat->courrielEnvoye,
+            ...$this->personne($invitation),
+            'email' => $invitation->getEmail(),
+            'status' => $invitation->getStatus()->value,
+            'expiresAt' => $invitation->getExpiresAt()->format(\DateTimeInterface::ATOM),
+            'createdByEmail' => $invitation->getCreatedByEmail(),
+            'createdAt' => $invitation->getCreatedAt()->format(\DateTimeInterface::ATOM),
+            'note' => $invitation->getNote(),
+            'avertissements' => $resultat->avertissements,
+        ];
+    }
+
+    /**
+     * Une ligne de la liste d'administration — § 3.3.
+     *
+     * @return array<string, mixed>
+     */
+    public function ligne(Invitation $invitation, int $tentatives): array
+    {
+        return [
+            'id' => $invitation->getId(),
+            'tokenPrefix' => $invitation->getTokenPrefix(),
+            ...$this->personne($invitation),
+            'email' => $invitation->getEmail(),
+            'status' => $invitation->getStatus()->value,
+            'expiresAt' => $invitation->getExpiresAt()->format(\DateTimeInterface::ATOM),
+            'usedAt' => $invitation->getUsedAt()?->format(\DateTimeInterface::ATOM),
+            'usedByEmail' => $invitation->getUsedByEmail(),
+            'revokedAt' => $invitation->getRevokedAt()?->format(\DateTimeInterface::ATOM),
+            'revokedByEmail' => $invitation->getRevokedByEmail(),
+            'createdByEmail' => $invitation->getCreatedByEmail(),
+            'createdAt' => $invitation->getCreatedAt()->format(\DateTimeInterface::ATOM),
+            'note' => $invitation->getNote(),
+            // Le décompte des tentatives de l'heure : c'est ce qui permet de voir qu'un
+            // lien est en train d'être sondé. Les **critères** soumis ne sont jamais
+            // rendus — `query_hash` est une empreinte, pas un texte (§ 4.3, § 16).
+            'tentatives' => $tentatives,
+        ];
+    }
+
+    /**
+     * `personId` et `personLabel`, **ou ni l'un ni l'autre**.
+     *
+     * Les deux clés se posent ensemble ou pas du tout. Rendre `personId` seul serait la
+     * moitié de la fuite : un identifiant de personne vivante est le point de départ d'une
+     * énumération par incrémentation, c'est le motif exact de la divergence 2 du § 17.1.
+     *
+     * @return array<string, mixed>
+     */
+    private function personne(Invitation $invitation): array
+    {
+        $personId = $invitation->getPersonId();
+
+        if (null === $personId) {
+            // Invitation sans pré-lien : les clés existent, à `null`. Ce n'est pas un
+            // masquage, c'est une absence de donnée — la nuance « absent contre null » du
+            // § 1.3 dit précisément qu'il ne faut pas confondre les deux.
+            return ['personId' => null, 'personLabel' => null];
+        }
+
+        if (!$this->cercle->voitPersonne($personId)) {
+            return [];
+        }
+
+        return ['personId' => $personId, 'personLabel' => $invitation->getPersonLabel()];
+    }
+}

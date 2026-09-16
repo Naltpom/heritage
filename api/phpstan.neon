@@ -1,0 +1,26 @@
+parameters:
+    level: 6
+    paths:
+        - src
+        - tests
+    excludePaths:
+        # Code du squelette Symfony, laissé tel quel.
+        - src/Kernel.php
+
+    treatPhpDocTypesAsCertain: false
+
+    # Les entités sont posées : un motif qui ne correspond plus à rien est désormais une
+    # erreur, et c'est ce qu'on veut — une exception qu'on oublie de retirer finit par
+    # masquer une vraie régression.
+    reportUnmatchedIgnoredErrors: true
+
+    ignoreErrors:
+        # Faux positif Doctrine : `$id` n'est jamais écrit par le code, il est assigné
+        # par réflexion à l'insertion. PHPStan en conclut que le type nullable est inutile.
+        #
+        # `property.onlyWritten` a été retiré de cette liste : il ne correspondait plus à
+        # rien depuis que les entités exposent des accesseurs pour toutes leurs colonnes.
+        -
+            identifier: property.unusedType
+            paths:
+                - src/Module/*/Entity/*

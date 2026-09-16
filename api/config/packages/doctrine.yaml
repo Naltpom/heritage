@@ -1,0 +1,97 @@
+doctrine:
+    dbal:
+        url: '%env(resolve:DATABASE_URL)%'
+        profiling_collect_backtrace: '%kernel.debug%'
+
+    orm:
+        validate_xml_mapping: true
+        naming_strategy: doctrine.orm.naming_strategy.underscore
+        identity_generation_preferences:
+            Doctrine\DBAL\Platforms\PostgreSQLPlatform: identity
+        auto_mapping: true
+
+        # Un espace de noms de mapping par module. Chaque module possède ses tables,
+        # préfixées par son nom (core_, tree_, mbr_, prp_, med_, tml_, ged_), et
+        # n'ouvre aucune relation Doctrine vers un autre module : on référence par
+        # identifiant et on dénormalise le libellé utile. Cette frontière est ce qui
+        # permet de faire évoluer un module sans casser les six autres.
+        mappings:
+            Core:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Core/Entity'
+                prefix: 'App\Module\Core\Entity'
+                alias: Core
+            # `UncertainDate` est un `#[ORM\Embeddable]`, pas une entité : il vit dans
+            # `Core\ValueObject` (§ 2.8 et § 9.1 du modèle de données) parce que quatre
+            # modules l'incrustent. Doctrine ne découvre que les dossiers déclarés ici —
+            # sans cette entrée, tout bloc date lève « class not found in the chain
+            # configured namespaces ». Entrée distincte plutôt qu'un `dir` élargi à
+            # `src/Module/Core` : on ne fait pas balayer Service/ et Controller/ au
+            # pilote de mapping pour une seule classe.
+            CoreValueObject:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Core/ValueObject'
+                prefix: 'App\Module\Core\ValueObject'
+                alias: CoreValueObject
+            Tree:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Tree/Entity'
+                prefix: 'App\Module\Tree\Entity'
+                alias: Tree
+            Membership:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Membership/Entity'
+                prefix: 'App\Module\Membership\Entity'
+                alias: Membership
+            Proposal:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Proposal/Entity'
+                prefix: 'App\Module\Proposal\Entity'
+                alias: Proposal
+            Media:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Media/Entity'
+                prefix: 'App\Module\Media\Entity'
+                alias: Media
+            Timeline:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Timeline/Entity'
+                prefix: 'App\Module\Timeline\Entity'
+                alias: Timeline
+            Gedcom:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Gedcom/Entity'
+                prefix: 'App\Module\Gedcom\Entity'
+                alias: Gedcom
+
+when@test:
+    doctrine:
+        dbal:
+            # "TEST_TOKEN" est posé par ParaTest le cas échéant.
+            dbname_suffix: '_test%env(default::TEST_TOKEN)%'
+
+when@prod:
+    doctrine:
+        orm:
+            query_cache_driver:
+                type: pool
+                pool: doctrine.system_cache_pool
+            result_cache_driver:
+                type: pool
+                pool: doctrine.result_cache_pool
+
+    framework:
+        cache:
+            pools:
+                doctrine.result_cache_pool:
+                    adapter: cache.app
+                doctrine.system_cache_pool:
+                    adapter: cache.system

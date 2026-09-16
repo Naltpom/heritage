@@ -1,0 +1,151 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Module\Proposal\Service;
+
+use App\Module\Core\Enum\SubjectKind;
+use App\Module\Proposal\Enum\ValueKind;
+
+/**
+ * La liste, **close**, des champs qu'une demande a le droit de viser.
+ *
+ * C'est la table de correspondance explicite exigée par le § 9.4 du modèle de données
+ * et le § 6.2 du contrat d'API : « `field` est borné par une table de correspondance
+ * explicite côté service, **jamais résolu par réflexion**. »
+ *
+ * **Pourquoi jamais par réflexion.** Un `field` vient d'une requête HTTP. Le résoudre
+ * en `set`.ucfirst($field) laisserait atteindre n'importe quel mutateur de l'entité —
+ * `setVersion()`, `setSearchKey()`, `setBranch()` — c'est-à-dire une vulnérabilité
+ * d'affectation de masse, sur les colonnes précisément dérivées dont dépendent le
+ * placement et le cercle de visibilité. Un champ absent de cette table n'est pas
+ * modifiable par une demande, et la demande **n'est pas créée** : `422`.
+ *
+ * ── Ce qui est exclu, et pourquoi ────────────────────────────────────────────────
+ *
+ * Ni `branch`, ni `generation`, ni `rank`, ni `bestQuay`, ni `citationCount`, ni
+ * `displayName`, ni `searchKey`, ni `version` : ce sont des **colonnes dérivées**,
+ * écrites par un service de `Tree` après toute écriture structurante (§ 3.1 du
+ * modèle). Une demande qui les vise est un malentendu, pas une contribution.
+ *
+ * ── La correspondance avec `Tree` ────────────────────────────────────────────────
+ *
+ * Cette table dit **ce qui est proposable** ; la table `field → callable` du service de
+ * `Tree` dit **comment l'appliquer**. Les deux doivent couvrir exactement le même
+ * ensemble — un champ proposable que `Tree` ne sait pas appliquer produirait une
+ * demande qu'on peut déposer et pas valider, ce qui est la pire des deux moitiés. Un
+ * test croisé le vérifiera dès que `Tree` aura livré son implémentation de
+ * {@see Port\PortArbre}.
+ */
+final class SurfaceEditable
+{
+    /**
+     * La surface d'une personne, **exhaustive** au § 6.2 du contrat d'API.
+     *
+     * `birth` et `death` sont des **blocs** : un op, cinq valeurs solidaires. Le
+     * `field` est le nom du bloc, jamais `birthMin`.
+     */
+    private const array PERSONNE = [
+        'givenNames' => ValueKind::Texte,
+        'surname' => ValueKind::Texte,
+        'marriedName' => ValueKind::Texte,
+        'nickname' => ValueKind::Texte,
+        'sex' => ValueKind::Enum,
+        'deceased' => ValueKind::Booleen,
+        'birth' => ValueKind::DateIncertaine,
+        'death' => ValueKind::DateIncertaine,
+        'forcePrivacy' => ValueKind::Booleen,
+        'privacyNote' => ValueKind::Texte,
+    ];
+
+    /**
+     * La surface d'une union : les dates et le fait du divorce.
+     *
+     * Ni `husband`, ni `wife` : changer la composition d'un couple n'est pas une
+     * modification de champ, c'est un lien — donc une demande `ajout_lien`, qui passe
+     * par `prp_draft_link` et par le résolveur de familles (§ 9.5).
+     */
+    private const array FAMILLE = [
+        'marriage' => ValueKind::DateIncertaine,
+        'divorced' => ValueKind::Booleen,
+        'divorce' => ValueKind::DateIncertaine,
+    ];
+
+    /**
+     * La surface d'une citation : « page, `QUAY`, transcription » (§ 5.7 du modèle).
+     *
+     * Ni `source`, ni `person`, ni `family` : rattacher une citation ailleurs n'est pas
+     * une correction de citation, c'est un lien.
+     *
+     * `quay` traverse le port en **chaîne** — c'est une énumération de `Tree`, que
+     * `Proposal` n'a pas le droit de nommer (règle 3 de l'ADR 0002).
+     */
+    private const array CITATION = [
+        'page' => ValueKind::Texte,
+        'quay' => ValueKind::Enum,
+        'dataText' => ValueKind::Texte,
+    ];
+
+    /**
+     * Les libellés français du diff : « **Naissance** : 1987 → entre 1901 et 1909 ».
+     *
+     * Ils vivent ici plutôt que dans le sérialiseur parce qu'ils sont indissociables de
+     * la liste : ajouter un champ éditable sans son libellé produirait une ligne de
+     * diff intitulée par un nom de propriété Doctrine, en anglais, dans une interface
+     * en français.
+     */
+    private const array LIBELLES = [
+        'givenNames' => 'Prénoms',
+        'surname' => 'Nom',
+        'marriedName' => 'Nom d\'usage',
+        'nickname' => 'Surnom',
+        'sex' => 'Sexe',
+        'deceased' => 'Personne décédée',
+        'birth' => 'Naissance',
+        'death' => 'Décès',
+        'forcePrivacy' => 'Confidentialité forcée',
+        'privacyNote' => 'Motif de confidentialité',
+        'marriage' => 'Mariage',
+        'divorced' => 'Divorce prononcé',
+        'divorce' => 'Rupture',
+        'page' => 'Page',
+        'quay' => 'Qualité de la source',
+        'dataText' => 'Transcription',
+    ];
+
+    /**
+     * Les champs proposables pour une portée donnée.
+     *
+     * `media` rend `[]` : dans cette livraison, aucun champ de média n'est modifiable
+     * par un op de champ. Un média se joint (`ajout_media`, un op de nature
+     * `ajout_media` dont le `field` est `null`), il ne se réécrit pas.
+     *
+     * @return array<string, ValueKind>
+     */
+    public function champs(SubjectKind $kind): array
+    {
+        return match ($kind) {
+            SubjectKind::Personne => self::PERSONNE,
+            SubjectKind::Famille => self::FAMILLE,
+            SubjectKind::Citation => self::CITATION,
+            SubjectKind::Media, SubjectKind::Note, SubjectKind::Fait => [],
+        };
+    }
+
+    public function accepte(SubjectKind $kind, string $field): bool
+    {
+        return \array_key_exists($field, $this->champs($kind));
+    }
+
+    /** Le `ValueKind` qu'un champ impose — le client ne choisit pas le sien. */
+    public function natureDe(SubjectKind $kind, string $field): ?ValueKind
+    {
+        return $this->champs($kind)[$field] ?? null;
+    }
+
+    /** Le libellé français d'un champ ; à défaut, le nom de propriété, pour ne jamais rendre une chaîne vide. */
+    public function libelle(string $field): string
+    {
+        return self::LIBELLES[$field] ?? $field;
+    }
+}

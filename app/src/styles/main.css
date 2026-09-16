@@ -1,0 +1,222 @@
+/**
+ * Charte graphique de « Heritage ».
+ *
+ * **Reprise de `arbre.html`, pas réinventée.** Le commanditaire connaît ce rendu
+ * et l'aime : la palette, les teintes de sexe, les couleurs de branche et le
+ * mode sombre ci-dessous sont copiés des 198 premières lignes du viewer actuel,
+ * `arbre.html`, qui vit dans l'atelier généalogique hors dépôt et se lit en
+ * lecture seule. Les valeurs hexadécimales ne sont pas des choix à réexaminer —
+ * ce sont des constantes du produit.
+ *
+ * Trois principes d'organisation, pour que ce fichier reste lisible à trente
+ * écrans :
+ *
+ * 1. **Les couleurs sont des variables CSS brutes**, redéfinies sous
+ *    `prefers-color-scheme: dark`. Elles sont exposées à Tailwind par
+ *    `@theme inline`, qui fait pointer les utilitaires (`bg-panneau`,
+ *    `text-attenue`…) sur la variable plutôt que sur sa valeur. Sans `inline`,
+ *    Tailwind recopierait la couleur claire dans l'utilitaire et le mode sombre
+ *    ne prendrait pas.
+ * 2. **Aucun nom de couleur ne décrit une teinte** (`--color-brun-42`), tous
+ *    décrivent un rôle (`--color-accent`). C'est ce qui permet au thème sombre
+ *    d'inverser sans renommer.
+ * 3. **Aucune URL distante.** La CSP servie par `nginx.conf` est stricte et
+ *    entièrement same-origin (`font-src 'self'`, `style-src 'self'`) : un
+ *    `@import` vers Google Fonts ne produirait aucune erreur visible, la police
+ *    ne chargerait simplement pas. On change de police en ajoutant un paquet
+ *    `@fontsource`.
+ */
+
+@import 'tailwindcss';
+
+/* Polices auto-hébergées — voir le troisième principe ci-dessus. */
+@import '@fontsource-variable/inter';
+@import '@fontsource/ibm-plex-mono';
+
+@import './canevas.css';
+
+/* ------------------------------------------------------------------ */
+/* Palette — valeurs reprises de `arbre.html`                          */
+/* ------------------------------------------------------------------ */
+
+:root {
+  /* Fonds et texte */
+  --h-fond: #f4f2ef;
+  --h-texte: #1b1b1b;
+  --h-panneau: #fffefc;
+  --h-ligne: #dcd7ce;
+  --h-attenue: #6b6560;
+
+  /* Accent : le brun des liens, des pastilles et de la sélection. */
+  --h-accent: #8a5a2b;
+  --h-accent-doux: #f0e3d4;
+
+  /* États. `--h-alerte` sert au divorce et aux fiches sans source ;
+     `--h-ok` aux fiches appuyées sur un acte (QUAY ≥ 2). */
+  --h-alerte: #a8501e;
+  --h-ok: #3f6b4a;
+
+  /* Teintes de fiche par sexe — `h` homme, `f` femme, `x` inconnu dans
+     `arbre.html`. Les bords (`-bord`) sont les `stroke`. */
+  --h-homme: #dbe6f2;
+  --h-homme-bord: #8ba9c9;
+  --h-femme: #f3dfe2;
+  --h-femme-bord: #cf9aa4;
+  --h-inconnu: #e8e6e2;
+  --h-inconnu-bord: #b5b0a8;
+
+  /* Liserés de branche : le quart d'ascendance dont la personne relève.
+     Ces cinq couleurs ne changent pas avec le thème — ce sont des étiquettes
+     de donnée, pas des éléments d'interface, et les inverser rendrait deux
+     captures d'écran incomparables. */
+  --h-branche-pp: #d9a066; /* Romarin   — paternelle du père */
+  --h-branche-pm: #4f9d8c; /* Bourrache — maternelle du père */
+  --h-branche-mp: #8a7bc8; /* Chardon   — paternelle de la mère */
+  --h-branche-mm: #7fa855; /* Tilleul   — maternelle de la mère */
+  --h-branche-tr: var(--h-attenue); /* tronc : l'ego, sa fratrie, ses parents */
+
+  /* Fonds translucides dérivés, pour les bandeaux et les pastilles. Le
+     `color-mix` évite d'inventer douze hexadécimaux qui dériveraient du reste
+     de la palette à la première retouche. */
+  --h-alerte-doux: color-mix(in srgb, var(--h-alerte) 13%, transparent);
+  --h-alerte-bord: color-mix(in srgb, var(--h-alerte) 35%, transparent);
+  --h-ok-doux: color-mix(in srgb, var(--h-ok) 13%, transparent);
+  --h-ok-bord: color-mix(in srgb, var(--h-ok) 35%, transparent);
+
+  --h-ombre-panneau: 0 6px 22px rgb(0 0 0 / 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --h-fond: #141517;
+    --h-texte: #e8e6e2;
+    --h-panneau: #1d1f22;
+    --h-ligne: #33363b;
+    --h-attenue: #9a948c;
+
+    --h-accent: #d9a066;
+    --h-accent-doux: #3a2c1d;
+
+    --h-alerte: #e08a5a;
+    --h-ok: #7db38c;
+
+    --h-homme: #24354a;
+    --h-homme-bord: #4a6b90;
+    --h-femme: #432b31;
+    --h-femme-bord: #8e5b66;
+    --h-inconnu: #2a2c30;
+    --h-inconnu-bord: #55585e;
+
+    --h-ombre-panneau: 0 6px 22px rgb(0 0 0 / 0.4);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Exposition à Tailwind                                               */
+/* ------------------------------------------------------------------ */
+
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Chasse fixe pour tout ce qui s'aligne en colonne : années, fourchettes de
+     dates, identifiants GEDCOM (@I500001@), empreintes. */
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-fond: var(--h-fond);
+  --color-texte: var(--h-texte);
+  --color-panneau: var(--h-panneau);
+  --color-ligne: var(--h-ligne);
+  --color-attenue: var(--h-attenue);
+  --color-accent: var(--h-accent);
+  --color-accent-doux: var(--h-accent-doux);
+  --color-alerte: var(--h-alerte);
+  --color-alerte-doux: var(--h-alerte-doux);
+  --color-alerte-bord: var(--h-alerte-bord);
+  --color-ok: var(--h-ok);
+  --color-ok-doux: var(--h-ok-doux);
+  --color-ok-bord: var(--h-ok-bord);
+
+  --color-homme: var(--h-homme);
+  --color-homme-bord: var(--h-homme-bord);
+  --color-femme: var(--h-femme);
+  --color-femme-bord: var(--h-femme-bord);
+  --color-inconnu: var(--h-inconnu);
+  --color-inconnu-bord: var(--h-inconnu-bord);
+
+  --color-branche-pp: var(--h-branche-pp);
+  --color-branche-pm: var(--h-branche-pm);
+  --color-branche-mp: var(--h-branche-mp);
+  --color-branche-mm: var(--h-branche-mm);
+  --color-branche-tr: var(--h-branche-tr);
+
+  /* Rayons repris du viewer : 7px pour un champ, 10px pour un panneau,
+     99px pour une pastille. */
+  --radius-champ: 7px;
+  --radius-panneau: 10px;
+  --radius-pastille: 99px;
+
+  --shadow-panneau: var(--h-ombre-panneau);
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    /* Le navigateur peint ses propres éléments (barres de défilement, champs
+       natifs) dans le bon thème. Sans cela, une barre de défilement claire
+       borde un arbre sombre. */
+    color-scheme: light dark;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-fond);
+    color: var(--color-texte);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Contour de focus visible sur toute la charte. Il est ici et non dans chaque
+     composant : un composant qui l'oublie devient inutilisable au clavier, et
+     c'est le genre d'oubli qu'aucune relecture ne rattrape. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: var(--color-accent-doux);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Utilitaires propres au projet                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Chiffres de largeur constante. Les années et les fourchettes se comparent à
+ * l'œil, en colonne : « 1901 » et « 1909 » doivent s'aligner.
+ */
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * Texte réservé aux lecteurs d'écran. Employé pour les libellés que le rendu
+ * visuel porte autrement (une pastille colorée, une icône).
+ */
+@utility lecteur-ecran {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

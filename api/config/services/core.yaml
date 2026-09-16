@@ -1,0 +1,83 @@
+# Contrat : ce fichier est celui du module Core (comptes, sécurité, rôles, journal d'audit, notifications, réglages).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services/_autoload.yaml couvre déjà toutes les classes
+# de src/Module/Core/. On ne déclare ici que ce que le conteneur ne peut pas deviner :
+# argument scalaire, alias d'interface, tag, paramètre propre au module.
+#
+# ------------------------------------------------------------------------------
+# Rien à déclarer pour la sécurité, le journal d'audit ni les réglages, et c'est
+# volontaire. Tout ce que le conteneur a besoin de savoir est porté par des attributs,
+# au plus près de la classe qui les demande :
+#
+#   - `#[AsDoctrineListener]`  → AuditDoctrineSubscriber (journal automatique)
+#   - `#[AsEventListener]`     → LogoutResponseListener
+#   - `#[AutoconfigureTag]`    → Contract\SessionPayloadContributorInterface, la couture
+#                                par laquelle `Membership` complète la charge de session
+#   - `#[AutowireIterator]`    → Service\SessionPayloadBuilder, qui collecte ce tag
+#   - `#[Autowire('%kernel.debug%')]` → ApiExceptionSubscriber
+#
+# Les souscripteurs d'événements, les voters et les commandes sont autoconfigurés.
+# Les points d'entrée, gestionnaires d'authentification et `user_checker` sont référencés
+# par leur nom de classe depuis `config/packages/security.yaml` ; l'autowiring suffit.
+#
+# ------------------------------------------------------------------------------
+# Si tu ajoutes une définition explicite ici, vérifie-la.
+#
+# Le prototype `App\: resource: '../src/'` écrasait autrefois toute définition de
+# module, en silence : il vivait dans `config/services.yaml`, dont les `imports:` sont
+# traités avant les `services:` par le loader. Le correctif est
+# `config/services/_autoload.yaml`, dont le préfixe « _ » porte l'ordre du glob — lire
+# son en-tête avant de le renommer.
+#
+# Le correctif rend l'ordre correct, il ne le rend pas évident. La règle du projet
+# reste de configurer **à côté de la classe** — `#[Autowire]`, `#[AutoconfigureTag]`,
+# `#[AsAlias]`, `#[AutowireIterator]` —, ce que fait ce module de bout en bout. En cas
+# de doute sur une définition YAML : `bin/console debug:container <classe>`.
+
+services:
+    # Le contrat de confidentialité partagé par Media, Tree, Timeline et Proposal.
+    #
+    # Il pointe sur l'implémentation FERMÉE tant que `Membership` n'a pas branché la
+    # sienne. Lire l'en-tête de `Core\Security\CercleFerme` avant d'y toucher : ce n'est
+    # pas un bouchon, c'est le comportement de référence quand le câblage a sauté. Un
+    # défaut ouvert transformerait une erreur de configuration en fuite silencieuse de
+    # données de personnes vivantes ; un défaut fermé la transforme en fiches vides.
+    #
+    # `Membership` prend la main en redéclarant cet alias dans
+    # `config/services/membership.yaml` :
+    #
+    #     services:
+    #         App\Module\Core\Security\CercleDeVisibiliteInterface:
+    #             alias: App\Module\Membership\Security\<son implémentation>
+    #
+    # Cela fonctionne parce que le glob `services/*.yaml` est trié alphabétiquement et
+    # que `membership` passe après `core`. Si cet ordre changeait un jour, l'alias
+    # resterait sur `CercleFerme` — donc l'application se refermerait au lieu de s'ouvrir,
+    # et la panne serait visible. Vérification : `bin/console debug:container
+    # App\\Module\\Core\\Security\\CercleDeVisibiliteInterface`.
+    App\Module\Core\Security\CercleDeVisibiliteInterface:
+        alias: App\Module\Core\Security\CercleFerme
+
+    # Même principe, même défaut fermé : `Core` tient les comptes, `Membership` tient le
+    # rattachement à l'arbre. Sans adaptateur, la bascule « voir comme un membre » rend
+    # `404` et la charge d'administration ne porte pas de `membre` — des écrans
+    # incomplets, jamais une identité inventée.
+    App\Module\Core\Contract\AnnuaireDesMembresInterface:
+        alias: App\Module\Core\Contract\AnnuaireVide
+
+    # Le calque « en attente » et les nœuds proposés — implémenté par `Proposal`, consommé
+    # par `Tree`. Repli **fermé** : aucun calque, aucun nœud proposé. Ici l'enjeu n'est pas
+    # une fuite mais une fonctionnalité qui disparaît (le demandeur ne voit plus sa
+    # modification avant validation) — visible, gênant, et infiniment préférable au défaut
+    # inverse, qui montrerait à un membre les propositions d'un autre.
+    #
+    # `Proposal` reprend la main dans `config/services/proposal.yaml`, chargé après
+    # celui-ci. **C'est pour cela que son implémentation n'utilise pas `#[AsAlias]`** : les
+    # attributs sont traités avec `_autoload.yaml`, chargé en premier, donc un attribut
+    # serait écrasé par le repli ci-dessous — en silence.
+    App\Module\Core\Contract\CalqueEnAttenteInterface:
+        alias: App\Module\Core\Contract\CalqueFerme
+
+#parameters:
+#    app.core.exemple: 42

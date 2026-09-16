@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
+
+# Point d'entrée de la configuration des services de l'application.
+#
+# CE FICHIER NE DOIT PLUS DÉCLARER DE SERVICES. Tout est dans `config/services/` :
+#
+#   - `services/_autoload.yaml` : le prototype `App\:` qui enregistre les classes
+#     de `src/`. Son préfixe « _ » porte l'ordre de chargement — lire l'en-tête du
+#     fichier avant d'y toucher ou de le renommer.
+#   - `services/<module>.yaml`  : un fichier par module, propriété exclusive de
+#     l'agent du module. C'est ce qui permet d'écrire à plusieurs sans collision.
+#
+# POURQUOI LE PROTOTYPE N'EST PLUS ICI — la raison est contre-intuitive et a coûté
+# un conteneur mort à cinq modules à la fois :
+#
+# `YamlFileLoader::loadContent()` traite TOUJOURS `parseImports()` avant
+# `parseDefinitions()`. L'ordre est imposé par le loader, pas par la position des
+# clés dans le fichier. Un `imports:` écrit au-dessus d'un `services:` n'y change
+# rien : les fichiers importés sont chargés d'abord, les définitions de CE fichier
+# ensuite. Et `FileLoader::registerClasses()` appelle `setDefinition()` sans
+# condition. Le prototype `App\:` écrasait donc toute définition concrète venue
+# d'un fichier de module — `arguments`, `tags`, `_instanceof` perdus EN SILENCE,
+# seuls les `parameters` et les alias d'interface survivaient. Le symptôme était
+# une erreur d'autowiring sur un service pourtant explicitement configuré.
+#
+# En sortant le prototype dans `services/_autoload.yaml`, il devient le premier
+# fichier du glob, et les modules l'emportent — ce que leurs auteurs attendent.
+imports:
+    - { resource: 'services/*.yaml' }
+
+parameters:

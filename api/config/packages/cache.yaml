@@ -1,0 +1,33 @@
+framework:
+    cache:
+        # Le cache « app » écrit sur le système de fichiers. Pas de Redis : le dossier
+        # de mission écarte toute dépendance qui ne sert pas, et 274 personnes ne le
+        # justifient pas.
+        #
+        # Les compteurs de `login_throttling` et des limiteurs de débit vivent ici.
+
+when@test:
+    parameters:
+        # Repli quand TEST_CACHE_DIR n'est pas posé — un `bin/console --env=test`
+        # lancé à la main ne passe pas par `tests/bootstrap.php`.
+        app.cache_test_repli: '%kernel.cache_dir%/pools-partages'
+
+    framework:
+        cache:
+            # UN RÉPERTOIRE DE POOLS PAR PROCESSUS.
+            #
+            # `tests/bootstrap.php` pose TEST_CACHE_DIR avec le numéro de processus,
+            # pour la même raison qu'il pose une base SQLite par processus : plusieurs
+            # suites tournent en même temps sur la machine de développement, une par
+            # agent. Sans séparation, les compteurs de tentatives de connexion d'une
+            # suite comptent dans le plafond de l'autre, et un test « blocage après 5
+            # essais » passe ou échoue selon le voisinage — le pire genre de test,
+            # celui qui ment dans les deux sens.
+            #
+            # Vider le pool au démarrage d'un test ne suffit pas : un autre processus
+            # le repeuple entre deux requêtes. Il faut séparer les répertoires.
+            #
+            # L'argument est un caractère de remplacement d'environnement, donc résolu
+            # à l'EXÉCUTION : le conteneur compilé reste partagé et valable, seul le
+            # chemin change d'un processus à l'autre.
+            directory: '%env(default:app.cache_test_repli:TEST_CACHE_DIR)%'

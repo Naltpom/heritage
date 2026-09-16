@@ -1,0 +1,302 @@
+# =============================================================================
+#  Déploiement — le bouton
+# =============================================================================
+#
+# `workflow_dispatch` SEUL. Aucun push, aucune étiquette, aucun cron ne déclenche
+# un déploiement : il se demande, à la main, depuis l'onglet Actions du dépôt
+# (ou `gh workflow run deploy.yml -f mode=production`). Une mise en production
+# qui part toute seule est une mise en production que personne ne regarde.
+#
+# TROIS ÉTAPES, DANS CET ORDRE, ET CHACUNE PEUT TOUT ARRÊTER :
+#
+#   1. porte-ci         la CI est-elle VERTE sur ce commit précis ?
+#   2. deploiement      SSH vers le VPS, construction, démarrage, et retour
+#                       arrière automatique si la nouvelle version ne répond pas
+#                       ou ne sert pas le bon code
+#   3. controle-public  depuis l'extérieur, par le vrai domaine et le vrai
+#                       certificat : https://<domaine>/sante.php répond-il, et
+#                       sert-il l'empreinte du commit demandé ?
+#
+# L'étape 3 n'est pas une redite de l'étape 2. L'étape 2 sonde `127.0.0.1:5511`
+# depuis le VPS : elle prouve que la pile va bien. L'étape 3 traverse le DNS, le
+# certificat et le nginx de l'hôte : elle prouve que le PUBLIC voit cette pile.
+# Les deux pannes qu'elle attrape — un vhost qui pointe ailleurs, un certificat
+# mort — ne se voient pas du tout depuis l'intérieur.
+#
+# -----------------------------------------------------------------------------
+#  SECRETS ET VARIABLES ATTENDUS (Settings → Secrets and variables → Actions)
+# -----------------------------------------------------------------------------
+#
+#   SSH_HOST   secret   l'adresse du VPS
+#   SSH_USER   secret   le compte de déploiement sur le VPS
+#   SSH_KEY    secret   la CLÉ PRIVÉE OpenSSH dédiée au déploiement, en entier,
+#                       « -----BEGIN … » et « -----END … » compris, avec le saut
+#                       de ligne final. C'est la seule valeur réellement sensible
+#                       de cette liste.
+#   SSH_PORT   secret   le port SSH
+#   APP_DIR    secret   le chemin du clone sur le VPS (ex. /home/…/apps/heritage)
+#
+#   DOMAINE_PUBLIC  variable (pas secret)  le domaine servi. Un domaine public
+#                   n'est pas un secret : le mettre dans un secret le rendrait
+#                   illisible dans les journaux au moment précis où on cherche
+#                   pourquoi le contrôle échoue. Sa valeur par défaut ci-dessous
+#                   sert tant que la variable n'est pas créée.
+#
+# Les valeurs ne sont écrites NULLE PART dans ce dépôt. Voir
+# `docs/deploiement/premiere-mise-en-ligne.md`, § « Les gestes du commanditaire ».
+#
+# Épinglage des actions : à la version majeure, comme `ci.yml` et comme les autres
+# dépôts de ce serveur.
+# =============================================================================
+
+name: Déploiement
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: >-
+          production = déployer le commit choisi ·
+          retour-arriere = remettre en service le déploiement précédent
+        type: choice
+        options:
+          - production
+          - retour-arriere
+        default: production
+        required: true
+
+# Lecture seule sur le dépôt. `actions: read` en plus : la porte ci-dessous
+# interroge l'API des exécutions de flux pour savoir si la CI est verte.
+permissions:
+  contents: read
+  actions: read
+
+# `cancel-in-progress: false`, à l'inverse de la CI. Annuler un déploiement en
+# cours laisserait le VPS dans un état intermédiaire — images à demi construites,
+# pile à demi montée — que personne ne saurait décrire ensuite. Un déploiement
+# attend son tour ; il ne coupe pas la parole.
+concurrency:
+  group: deploiement-vps
+  cancel-in-progress: false
+
+env:
+  DOMAINE_PUBLIC: ${{ vars.DOMAINE_PUBLIC || 'heritage.naltpom.fr' }}
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # 1. La porte
+  # ---------------------------------------------------------------------------
+  porte-ci:
+    name: Porte — la CI est-elle verte sur ce commit ?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Le retour arrière ne passe PAS par cette porte, et c'est délibéré : il
+      # remet en service un commit qui a déjà été déployé, donc qui a déjà passé
+      # la porte une fois. Exiger une CI verte pour revenir en arrière
+      # interdirait le retour arrière au moment où l'on en a le plus besoin —
+      # quand quelque chose vient de casser.
+      - name: Vérifier la CI du commit visé
+        if: inputs.mode == 'production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPOT: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # On interroge les exécutions de ci.yml POUR CE SHA, et non l'état
+          # global des « checks » du commit. La différence n'est pas théorique :
+          # l'exécution en cours de CE flux crée elle aussi des « checks » sur ce
+          # même commit, et ils sont « in_progress ». Un contrôle naïf sur
+          # l'ensemble des checks se bloquerait donc sur lui-même, à chaque fois.
+          reponse="$(gh api "repos/$DEPOT/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=50")"
+
+          nombre="$(printf '%s' "$reponse" | jq '.workflow_runs | length')"
+          if [ "$nombre" -eq 0 ]; then
+            echo "::error::Aucune exécution de la CI pour le commit $SHA."
+            echo "La CI se déclenche sur push vers main et sur pull request. Un commit"
+            echo "qui n'a jamais été poussé sur une branche suivie n'a pas de CI, et"
+            echo "ne se déploie donc pas."
+            exit 1
+          fi
+
+          derniere="$(printf '%s' "$reponse" | jq -c '.workflow_runs | sort_by(.run_started_at) | last')"
+          etat="$(printf '%s' "$derniere" | jq -r '.status')"
+          conclusion="$(printf '%s' "$derniere" | jq -r '.conclusion // "aucune"')"
+          lien="$(printf '%s' "$derniere" | jq -r '.html_url')"
+
+          echo "Dernière exécution de la CI pour $SHA : état=$etat conclusion=$conclusion"
+          echo "  $lien"
+
+          if [ "$etat" != "completed" ]; then
+            echo "::error::La CI n'est pas terminée ($etat). Attendez-la, puis relancez ce flux."
+            exit 1
+          fi
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::La CI a conclu « $conclusion » sur ce commit. Rien ne part en production."
+            exit 1
+          fi
+          echo "Porte franchie."
+
+      - name: Retour arrière — porte volontairement non appliquée
+        if: inputs.mode == 'retour-arriere'
+        run: |
+          echo "Mode « retour-arriere » : la porte CI ne s'applique pas."
+          echo "Le commit visé est celui du déploiement précédent, qui l'a déjà franchie."
+
+  # ---------------------------------------------------------------------------
+  # 2. Le déploiement
+  # ---------------------------------------------------------------------------
+  deploiement:
+    name: Déploiement sur le VPS
+    needs: porte-ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # Un « environment » nommé donne trois choses gratuitement : un historique de
+    # déploiements lisible sur la page du dépôt, un endroit où le commanditaire
+    # peut exiger une approbation manuelle (Settings → Environments → production
+    # → Required reviewers), et un endroit où ranger les secrets s'il veut les
+    # séparer de ceux du dépôt. Rien de tout cela n'est imposé ici.
+    environment: production
+    steps:
+
+      # Un secret absent se manifesterait autrement par un échec SSH obscur
+      # (« ssh: handshake failed »), qu'on mettrait vingt minutes à rattacher à
+      # un secret oublié. On le dit tout de suite, et par son nom.
+      #
+      # On ne teste QUE la présence, jamais la valeur, et rien n'est imprimé.
+      - name: Les cinq secrets sont-ils posés ?
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          APP_DIR: ${{ secrets.APP_DIR }}
+        run: |
+          set -eu
+          # Un test par nom, sans `eval` ni indirection : cette boucle manipule
+          # des secrets, ce n'est pas l'endroit où être astucieux.
+          manquants=""
+          [ -n "${SSH_HOST:-}" ] || manquants="$manquants SSH_HOST"
+          [ -n "${SSH_USER:-}" ] || manquants="$manquants SSH_USER"
+          [ -n "${SSH_KEY:-}" ]  || manquants="$manquants SSH_KEY"
+          [ -n "${SSH_PORT:-}" ] || manquants="$manquants SSH_PORT"
+          [ -n "${APP_DIR:-}" ]  || manquants="$manquants APP_DIR"
+          if [ -n "$manquants" ]; then
+            echo "::error::Secrets absents ou vides :$manquants"
+            echo "Settings → Secrets and variables → Actions → New repository secret."
+            exit 1
+          fi
+          echo "Les cinq secrets sont présents."
+
+      - name: Déployer
+        uses: appleboy/ssh-action@v1
+        env:
+          MODE: ${{ inputs.mode }}
+          SHA: ${{ github.sha }}
+          APP_DIR: ${{ secrets.APP_DIR }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          envs: MODE,SHA,APP_DIR
+          # La construction des deux images sur un VPS sans swap est le poste
+          # long. 35 minutes couvrent une construction complète sans cache ; le
+          # `timeout-minutes` du travail, à 40, reste la borne extérieure.
+          command_timeout: 35m
+          script_stop: true
+          script: |
+            set -eu
+            cd "$APP_DIR"
+
+            if [ "$MODE" = "retour-arriere" ]; then
+              bash .github/scripts/deployer-sur-le-vps.sh retour-arriere
+              exit $?
+            fi
+
+            # Le SHA d'AVANT se relève ICI, avant le `git reset --hard` : après,
+            # « git rev-parse HEAD » rend déjà la nouvelle valeur et la cible du
+            # retour arrière serait le commit qu'on est en train de déployer.
+            mkdir -p .deploiement
+            PRECEDENT="$(git rev-parse HEAD)"
+            echo "[flux] commit avant déploiement : $PRECEDENT"
+
+            git fetch --prune origin
+            git reset --hard "$SHA"
+
+            bash .github/scripts/deployer-sur-le-vps.sh production "$SHA" "$PRECEDENT"
+
+  # ---------------------------------------------------------------------------
+  # 3. Le contrôle public
+  # ---------------------------------------------------------------------------
+  controle-public:
+    name: Contrôle public — le domaine sert-il bien ce commit ?
+    needs: deploiement
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # L'empreinte est recalculée ICI, sur le dépôt, par le MÊME script que
+      # celui qui l'a gravée dans l'image. Trois calculs indépendants doivent
+      # donner la même valeur : celui de la construction, celui du VPS, celui-ci.
+      # C'est ce qui rend le contrôle utile — une valeur recopiée d'un endroit à
+      # l'autre ne prouverait que la recopie.
+      - name: Empreinte attendue, calculée sur le dépôt
+        id: empreinte
+        run: |
+          set -euo pipefail
+          valeur="$(cd api && sh docker/empreinte.sh)"
+          echo "attendue=$valeur" >> "$GITHUB_OUTPUT"
+          echo "Empreinte du commit ${{ github.sha }} : $valeur"
+
+      - name: Interroger ${{ env.DOMAINE_PUBLIC }}/sante.php
+        id: sonde
+        run: |
+          set -euo pipefail
+          # `--retry` : le conteneur vient de redémarrer et le nginx de l'hôte
+          # garde des connexions en amont. Cinq tentatives espacées de cinq
+          # secondes coûtent une demi-minute au pire et évitent un faux rouge.
+          corps="$(curl -fsS --max-time 20 --retry 5 --retry-delay 5 --retry-connrefused \
+                    "https://$DOMAINE_PUBLIC/sante.php")"
+          echo "Réponse : $corps"
+          servie="$(printf '%s' "$corps" | jq -r '.empreinte')"
+          construite="$(printf '%s' "$corps" | jq -r '.construite_le')"
+          echo "servie=$servie" >> "$GITHUB_OUTPUT"
+          echo "construite=$construite" >> "$GITHUB_OUTPUT"
+
+      - name: L'empreinte servie est-elle celle du commit déployé ?
+        if: inputs.mode == 'production'
+        env:
+          ATTENDUE: ${{ steps.empreinte.outputs.attendue }}
+          SERVIE: ${{ steps.sonde.outputs.servie }}
+        run: |
+          set -eu
+          if [ "$SERVIE" != "$ATTENDUE" ]; then
+            echo "::error::Le domaine sert l'empreinte « $SERVIE » et non « $ATTENDUE »."
+            echo "La pile du VPS a pourtant validé son propre contrôle : c'est donc que le"
+            echo "domaine ne mène pas à cette pile. À regarder, dans cet ordre :"
+            echo "  - le vhost /etc/nginx/sites-available/$DOMAINE_PUBLIC et son lien dans sites-enabled ;"
+            echo "  - le port de son « proxy_pass » (doit être celui d'APP_PORT dans le .env du VPS) ;"
+            echo "  - un autre vhost qui nommerait le même domaine plus tôt dans l'ordre de chargement."
+            exit 1
+          fi
+          echo "Le domaine public sert bien l'empreinte $SERVIE."
+
+      - name: Résumé
+        if: always()
+        run: |
+          {
+            echo "### Déploiement — ${{ inputs.mode }}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Domaine | https://$DOMAINE_PUBLIC |"
+            echo "| Empreinte attendue | \`${{ steps.empreinte.outputs.attendue }}\` |"
+            echo "| Empreinte servie | \`${{ steps.sonde.outputs.servie }}\` |"
+            echo "| Image construite le | ${{ steps.sonde.outputs.construite }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

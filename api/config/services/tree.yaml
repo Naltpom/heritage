@@ -1,0 +1,70 @@
+# Contrat : ce fichier est celui du module Tree (personnes, familles, sources, citations, moteur de placement).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services.yaml couvre déjà toutes les classes de
+# src/Module/Tree/. On ne déclare ici que ce que le conteneur ne peut pas deviner :
+# argument scalaire, alias d'interface, tag, paramètre propre au module.
+
+framework:
+    cache:
+        pools:
+            # Le pool de l'étage 1 du moteur de placement (ADR 0005, § 9.9 du modèle
+            # de données). Il est déclaré ici, avec le module qui le possède, plutôt
+            # que dans config/packages/cache.yaml : c'est la même règle qu'ailleurs,
+            # un fichier par module pour que plusieurs agents écrivent en parallèle.
+            #
+            # Adaptateur système de fichiers : pas de Redis dans la première livraison,
+            # le cache Symfony sur disque suffit pour 274 personnes.
+            #
+            # `default_lifetime` double le TTL posé à l'écriture par PlacementPartage.
+            # Ce n'est pas une durée de fraîcheur — la fraîcheur est garantie par
+            # l'empreinte contenue dans la clé — c'est le délai au bout duquel une
+            # entrée devenue inatteignable est ramassée. On ne supprime jamais une clé
+            # de cache à la main : un balayage n'est pas atomique sur un adaptateur
+            # système de fichiers.
+            cache.arbre:
+                adapter: cache.adapter.filesystem
+                default_lifetime: 86400
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    # Le pool n'est pas déductible du type seul : plusieurs pools implémentent
+    # CacheInterface. On le lie par nom d'argument, pour ce module uniquement.
+    App\Module\Tree\Service\PlacementPartage:
+        arguments:
+            $cacheArbre: '@cache.arbre'
+
+    # Les deux contrats du module et leur implémentation. Le conteneur ne peut pas
+    # deviner l'association : c'est tout l'intérêt d'avoir des interfaces ici — le
+    # moteur et son fournisseur restent testables sans base (ADR 0005).
+    App\Module\Tree\Service\FournisseurDeJeuDePlacement:
+        alias: App\Module\Tree\Service\JeuDePlacementDoctrine
+
+    App\Module\Tree\Service\ReglagesDeLArbre:
+        alias: App\Module\Tree\Service\ReglagesDeLArbreParSettings
+
+# ─────────────────────────────────────────────────────────────────────────────
+when@test:
+    services:
+        # `_defaults` n'est hérité ni d'un fichier à l'autre, ni d'un bloc `when@` au
+        # bloc principal : sans ces deux lignes, la définition ci-dessous **remplace**
+        # celle du prototype et le service se construit sans aucun argument. L'erreur ne
+        # se voit qu'à l'appel — « Too few arguments to __construct() ».
+        _defaults:
+            autowire: true
+            autoconfigure: true
+
+        # Rendu public pour un seul test : celui qui éprouve l'écriture de l'arbre par
+        # une proposition validée, avec la vraie implémentation et une vraie base.
+        #
+        # Pourquoi il le faut : `config/services/proposal.yaml` remplace `PortArbre` par
+        # un double en mémoire pour tout l'environnement de test. C'est le bon choix pour
+        # la suite de `Proposal`, qui éprouve sa logique de validation sans traîner un
+        # schéma — mais cela veut dire qu'**aucun** test de cette suite ne touche
+        # réellement `tree_person`. Le test de `Tree` réinjecte l'implémentation réelle
+        # dans son propre conteneur pour combler exactement ce trou.
+        App\Module\Tree\Service\EcritureDeLArbrePourProposal:
+            public: true

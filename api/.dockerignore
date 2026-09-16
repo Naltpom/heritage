@@ -1,0 +1,11 @@
+vendor/
+var/
+tests/
+.env.local
+.env.*.local
+.git/
+Dockerfile
+.dockerignore
+phpunit.dist.xml
+phpstan.neon
+.php-cs-fixer.dist.php

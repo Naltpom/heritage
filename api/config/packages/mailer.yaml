@@ -1,0 +1,7 @@
+# Le projet envoie des invitations par courriel. Le DSN vient de l'environnement :
+# Mailpit en développement, SMTP réel en production, `null://null` si aucun SMTP
+# n'est configuré — l'invitation reste alors récupérable par copie manuelle du
+# lien côté administration, les deux chemins doivent exister.
+framework:
+    mailer:
+        dsn: '%env(MAILER_DSN)%'

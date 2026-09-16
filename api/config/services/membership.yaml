@@ -1,0 +1,111 @@
+# Contrat : ce fichier est celui du module Membership (invitations, inscription, rattachement compte↔personne, cercle de visibilité).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services/_autoload.yaml couvre déjà toutes les classes
+# de src/Module/Membership/. On ne déclare ici que ce que le conteneur ne peut pas
+# deviner : paramètre propre au module, et **alias d'interface**.
+#
+# ─────────────────────────────────────────────────────────────────────────────────
+# PIÈGE D'ORDRE DE CHARGEMENT — à connaître avant d'ajouter une ligne ici.
+#
+# `config/services.yaml` importe `services/*.yaml`, et Symfony traite TOUJOURS les
+# imports avant les définitions du fichier qui les porte. Le prototype `App\:` vit dans
+# `services/_autoload.yaml`, dont le préfixe « _ » le place en tête du glob : les
+# fichiers de module l'emportent donc sur lui. Mais `FileLoader::registerClasses()`
+# appelle `setDefinition()` sans condition, ce qui veut dire qu'une définition de
+# service **concret** posée ici serait écrasée en silence si l'ordre changeait.
+#
+# Ce module n'y est pas exposé : tout ce qui relève d'un service concret est posé en
+# **attribut**, dans la classe — `#[Autowire(param: …)]`, `#[Autowire(service: …)]`.
+# Les `parameters` et les **alias d'interface** ci-dessous survivent, eux : le prototype
+# enregistre les interfaces sous un identifiant préfixé `.abstract.` et ne touche pas
+# aux alias.
+# ─────────────────────────────────────────────────────────────────────────────────
+
+parameters:
+    # Expéditeur des courriels d'invitation. Surchargeable par MAILER_EXPEDITEUR — un VPS
+    # aura un domaine réel, et un relais SMTP refuse en général une adresse qu'il ne
+    # connaît pas. Le défaut vaut pour `docker compose up` comme pour Mailpit, sans rien
+    # à configurer.
+    app.membership.expediteur_par_defaut: 'heritage@localhost'
+    app.membership.expediteur: '%env(default:app.membership.expediteur_par_defaut:MAILER_EXPEDITEUR)%'
+
+services:
+    # ── Le cercle de visibilité ────────────────────────────────────────────────────
+    #
+    # CET ALIAS EST LE CÂBLAGE DE LA RÈGLE DE CONFIDENTIALITÉ DU PRODUIT.
+    #
+    # `config/services/core.yaml` fait pointer le contrat sur `Core\Security\CercleFerme`,
+    # qui refuse tout. On le reprend ici parce que le glob `services/*.yaml` est trié et
+    # que `membership` passe après `core`.
+    #
+    # Si cet ordre changeait un jour, l'alias resterait sur `CercleFerme` : l'application
+    # se **refermerait** au lieu de s'ouvrir, et la panne serait visible tout de suite —
+    # des fiches muettes, pas une fuite silencieuse. C'est le bon sens de l'échec, et
+    # c'est pour cela que le branchement passe par un alias YAML et non par un
+    # `#[AsAlias]`, qui serait traité par le prototype de `_autoload.yaml`, donc AVANT
+    # `core.yaml`, donc écrasé.
+    #
+    # Vérification : bin/console debug:container App\\Module\\Core\\Security\\CercleDeVisibiliteInterface
+    App\Module\Core\Security\CercleDeVisibiliteInterface:
+        alias: App\Module\Membership\Service\CercleDeVisibilite
+
+    # ── L'annuaire des membres, demandé par `Core` ─────────────────────────────────
+    #
+    # `Core` tient les comptes, pas le rattachement à l'arbre : deux de ses routes
+    # d'administration — la bascule « voir comme un membre » et la liste des utilisateurs —
+    # ont besoin de `mbr_member` sans avoir le droit de le lire (ADR 0002). Il publie donc
+    # deux questions, et `Membership` y répond.
+    #
+    # `core.yaml` fait pointer ce contrat sur `Core\Contract\AnnuaireVide`, qui rend `null`
+    # à tout ; comme pour le cercle, le glob trié fait que cet alias-ci l'emporte.
+    App\Module\Core\Contract\AnnuaireDesMembresInterface:
+        alias: App\Module\Membership\Service\AnnuaireDesMembres
+
+    # ── Les réglages d'administration ──────────────────────────────────────────────
+    #
+    # `cercle.generations`, `invitation.ttl_jours`, `invitation.tentatives_par_heure`,
+    # `invitation.candidats_max` — lus dans `core_setting`, bornés à la lecture.
+    App\Module\Membership\Service\ReglagesDeMembership:
+        alias: App\Module\Membership\Service\ReglagesParSettings
+
+    # ── Le port vers `Tree` ────────────────────────────────────────────────────────
+    #
+    # COUTURE À BRANCHER PAR L'AGENT `Tree`.
+    #
+    # `ArbreNonBranche` rend un arbre **vide** : aucune personne vivante n'est visible de
+    # personne, la recherche de rattachement ne rend aucun candidat, et une invitation
+    # pré-liée est refusée en 422. C'est volontaire — un module dont la dépendance de
+    # sécurité n'est pas câblée doit échouer fermé, jamais permissif.
+    #
+    # Le contrat à respecter est écrit en entier sur l'interface. Tout existe déjà côté
+    # `Tree` : `FournisseurDeJeuDePlacement` pour les personnes et les familles dans
+    # l'ordre, `ReglePersonneVivante` pour la carte des vivants, `TreeFingerprint` pour
+    # l'empreinte (§ 2.3 du modèle : « `Membership` l'appelle pour composer sa clé de
+    # cercle »). L'adaptateur est une traduction, pas un calcul.
+    #
+    #     App\Module\Membership\Service\Port\PortArbre:
+    #         alias: App\Module\Tree\Service\<son adaptateur>
+    App\Module\Membership\Service\Port\PortArbre:
+        alias: App\Module\Tree\Service\VueDeLArbrePourMembership
+
+when@test:
+    services:
+        # Public **en test seulement**, et pour la même raison que le bloc équivalent de
+        # `core.yaml` : les tests de la règle la plus sensible du produit vérifient le
+        # câblage réel, pas un double, et le conteneur optimisé supprime un alias que
+        # personne n'injecte encore.
+        App\Module\Core\Security\CercleDeVisibiliteInterface:
+            alias: App\Module\Membership\Service\CercleDeVisibilite
+            public: true
+
+        # Le port vers `Tree`, joué par un arbre en mémoire que chaque test peuple en
+        # quelques lignes. C'est ce qui rend écrivables les tests du cercle et de la
+        # recherche de rattachement **sans base de données de l'arbre** : `tests/` ne
+        # charge aucune table `tree_*`, et n'a pas à savoir qu'elles existent.
+        App\Tests\Membership\Double\ArbreEnMemoire:
+            public: true
+
+        App\Module\Membership\Service\Port\PortArbre:
+            alias: App\Tests\Membership\Double\ArbreEnMemoire
+            public: true

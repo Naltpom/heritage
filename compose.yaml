@@ -1,0 +1,469 @@
+# =============================================================================
+#  Heritage — pile de développement
+# =============================================================================
+#
+#   docker compose up --build     puis  http://127.0.0.1:8080
+#   (courriels : http://127.0.0.1:8025)
+#
+# -----------------------------------------------------------------------------
+#  AVANT DE MONTER UNE PILE JETABLE — à lire ici, maintenant
+# -----------------------------------------------------------------------------
+#
+# Le 15 septembre 2026 à 21 h 03, la pile de travail a été détruite par un
+# `docker compose down` qui visait une pile jetable. Le journal du démon est sans
+# appel : les quatre conteneurs du projet `heritage` arrêtés puis supprimés dans
+# l'ordre des dépendances, aucun autre projet touché. Rien n'avait mal tourné —
+# la commande a fait exactement ce qu'on lui demandait.
+#
+# Parce qu'un nom de projet tu, est un nom de projet déduit du répertoire. Lancé
+# depuis la racine, `docker compose down` signifie TOUJOURS « démonte heritage »,
+# quoi qu'on ait cru démonter. Et le `-p` posé sur le `up` ne protège pas le
+# `down` : il faut le retaper — c'est justement celui-là qu'on oublie.
+#
+# Donc : LE NOM NE SE PASSE PAS EN DRAPEAU, IL SE POSE DANS LE SHELL.
+#
+#     $env:COMPOSE_PROJECT_NAME = 'heritage-<votre-sujet>'   # PowerShell
+#     export COMPOSE_PROJECT_NAME=heritage-<votre-sujet>     # sh
+#
+#     docker compose up -d       # monte la pile jetable
+#     docker compose down -v     # démonte CELLE-LÀ, et elle seule
+#
+# Une variable posée une fois couvre toute la vie de la pile, `down` compris.
+# C'est toute la différence : un drapeau se rétracte à chaque commande, une
+# variable d'environnement reste. Elle est aussi vérifiable d'un coup d'œil, et
+# ce coup d'œil est le dernier geste avant tout `down` :
+#
+#     docker compose config | Select-String '^name:'
+#
+# Prenez aussi des ports à vous, sinon le `up` échoue sur ceux de la pile de
+# travail (5432, 8000, 8080, 8025) :
+#
+#     $env:DB_PORT='5433'; $env:API_PORT='8001'
+#     $env:APP_PORT='8081'; $env:MAILPIT_UI_PORT='8026'
+#
+# Et détruisez les volumes en partant (`down -v`) : une pile jetable qui laisse
+# ses volumes derrière elle n'était pas jetable.
+#
+# -----------------------------------------------------------------------------
+#  UN CONTENEUR MONTÉ À LA MAIN DOIT SE VOIR COMME TEL
+# -----------------------------------------------------------------------------
+#
+# Le soir de l'accident, un `docker run --name heritage-schema-dev` tournait à
+# côté de la pile. Il n'y était pour rien — il a été détruit trois minutes APRÈS
+# elle —, mais il a fallu relire le journal d'événements du démon pour l'établir,
+# parce que rien, dans `docker ps`, ne distingue un conteneur de pile d'un
+# conteneur posé à la main. Un nom qui commence par `heritage-` ne prouve rien.
+#
+# Ce qui le prouve, c'est l'étiquette de projet, que Compose pose et qu'un
+# `docker run` ne pose pas. Elle se lit d'un coup d'œil :
+#
+#     docker ps -a --format 'table {{.Names}}\t{{.Label "com.docker.compose.project"}}\t{{.Status}}'
+#
+#     NAMES                 project     STATUS
+#     heritage-schema-dev               Up 31 minutes      ← colonne vide : hors pile
+#     heritage-api-1        heritage    Up 42 minutes
+#
+# Colonne vide = monté à la main, n'appartient à aucune pile, aucun `compose
+# down` ne le retirera. Pour ne lister que ceux-là :
+#
+#     docker ps -a --format '{{.Names}}|{{.Label "com.docker.compose.project"}}' |
+#       Where-Object { ($_ -split '\|')[1] -eq '' }
+#
+# Alors si vous montez un conteneur hors pile, rendez-le lisible : dites à qui il
+# est et pourquoi il existe, puisque Compose ne le dira pas pour vous.
+#
+#     docker run -d --name heritage-hm-<sujet> --label heritage.hors-pile='<à qui, pourquoi>' …
+#     docker ps -a --filter label=heritage.hors-pile --format 'table {{.Names}}\t{{.Label "heritage.hors-pile"}}'
+#
+# Et retirez-le vous-même (`docker rm -f`) : personne d'autre ne le fera, et il
+# gardera son port occupé jusque-là.
+#
+# -----------------------------------------------------------------------------
+#  COMPTES DE LA PILE DE DÉVELOPPEMENT — un par personne, jamais partagé
+# -----------------------------------------------------------------------------
+#
+# Une base neuve n'a aucun compte : on entre par la console, jamais par une
+# route (§ 6.1). Créez LE VÔTRE, ne reprenez pas celui d'un autre :
+#
+#     docker compose exec -T api sh -c \
+#       'printf "%s\n" "<motdepasse 12 car. min>" | \
+#        php bin/console heritage:creer-administrateur <vous>@heritage.test "<libellé>"'
+#
+# Un tube suffit, la commande n'exige pas de terminal.
+#
+# POURQUOI « UN PAR PERSONNE » n'est pas une coquetterie : le 15 septembre 2026,
+# trois intervenants sondaient l'API avec le même compte `amorcage@heritage.test`.
+# L'un d'eux en a changé le mot de passe par un UPDATE SQL direct — qui contourne
+# le cycle de vie Doctrine et le souscripteur d'audit, donc sans toucher
+# `updated_at` ni laisser d'entrée `modification`. Les deux autres ont reçu des
+# `401 identifiants_invalides` sans rien comprendre, et ont diagnostiqué une
+# panne d'authentification qui n'existait pas.
+#
+# Le coût réel s'est révélé plus tard : `core_audit_log` ne distingue pas trois
+# agents derrière une même adresse. Quand il a fallu dater précisément qui avait
+# fait quoi, les lignes `connexion` étaient inexploitables. **Un compte partagé
+# n'est pas seulement fragile, il rend le journal d'audit muet sur l'auteur.**
+#
+# ⚠ LES MOTS DE PASSE NE SONT PLUS DANS CE FICHIER — ils sont dans `.env.local`
+# À LA RACINE, qui est ignoré par Git (`git check-ignore -v .env.local` rend
+# `.gitignore:72:.env.local`). Ce fichier-ci est versionné et n'est pas encore
+# poussé ; un mot de passe qui y entre n'en sort plus, puisque l'historique Git
+# garde le fichier même supprimé au commit suivant. C'était réparable maintenant
+# et plus après.
+#
+#     grep MEMBRE_MDP .env.local          # PowerShell : Select-String MEMBRE_MDP .env.local
+#
+# `.env.local` n'est lu par AUCUN programme — ni Compose (qui lit `.env`), ni
+# Symfony (qui lit `api/.env*`), ni Vite (`app/.env*`). C'est un fichier de
+# notes, pas une source de configuration : le modifier ne peut pas casser un
+# démarrage.
+#
+# Ce qui reste ici est ce qu'aucun `.env.local` ne doit porter : les ADRESSES,
+# les RÔLES, et surtout l'ÉTAT que ces comptes portent. Une adresse n'est pas un
+# secret ; l'état de `membre@` et `attente@`, lui, est la seule chose de cette
+# section qu'aucune commande ne sait refabriquer.
+#
+# COMPTES DE SONDAGE — un par agent, mot de passe distinct. Identifiants de
+# développement, jetables, sans aucune valeur hors de ce poste.
+#
+#     connexion@heritage.test         viewer@heritage.test
+#     fiche@heritage.test             propositions@heritage.test
+#     chronologie@heritage.test       verification@heritage.test  (intégration / pile)
+#
+# Tous `ROLE_ADMIN`, statut `actif`. Prenez CELUI DE VOTRE RÔLE et ne touchez pas
+# aux autres — c'est toute la règle.
+#
+# COMPTE D'AMORÇAGE — ÉTAT CONNU, PERSONNE N'Y TOUCHE :
+#
+#     amorcage@heritage.test
+#
+# Il a été écrasé deux fois en une heure par des agents qui s'en servaient chacun
+# de leur côté. S'il vous faut un compte, créez le vôtre (commande ci-dessus) ;
+# celui-ci est la porte de secours et doit rester prévisible.
+#
+# DEUX COMPTES QUI PORTENT UN ÉTAT QU'AUCUN AUTRE NE DONNE — ne les supprimez pas,
+# plusieurs vérifications n'ont pas d'autre moyen de les obtenir :
+#
+#     membre@heritage.test
+#         `ROLE_USER`, membre ACTIF rattaché à la personne 3 (Lignite Romarin),
+#         `match_kind = pre_lie`. Son cercle de visibilité vaut 49 — un cercle
+#         réellement calculé, à comparer aux 274 que voit un administrateur.
+#         C'est le seul membre actif de la base : sans lui, la bascule
+#         « voir comme un membre » (§ 10.4) et son `409 vue_comme_membre_active`
+#         ne sont exerçables par personne.
+#
+#     attente@heritage.test
+#         `ROLE_USER`, statut `en_attente`, membre `en_attente`,
+#         `match_kind = recherche_confirmee`, cercle `{"regime":"aucun"}`.
+#         L'autre moitié du § 4 : le compte qui a fini l'inscription mais attend
+#         la confirmation d'un administrateur.
+#
+# Les deux ont été créés par le PARCOURS D'INVITATION complet, jamais en SQL —
+# `POST /api/administration/invitations`, puis `/api/inscription/rattachement`,
+# puis `/api/inscription/compte`. Refaites-les de la même façon si vous devez les
+# recréer : une ligne `mbr_member` écrite à la main a déjà mis `GET
+# /api/administration/membres` en `500` pour tout le monde, avec un `match_kind`
+# inventé que l'énumération ne connaît pas.
+#
+# ⚠ IL N'EXISTE AUCUNE ROUTE POUR RÉINITIALISER LE MOT DE PASSE D'UN AUTRE COMPTE.
+# `PATCH /api/administration/utilisateurs/{id}` ne porte que `roles`, `status` et
+# `displayName`. Toute réinitialisation passe donc par un `UPDATE` SQL, qui
+# contourne le cycle de vie Doctrine et le souscripteur d'audit : ni `updated_at`
+# ni `core_audit_log` n'en gardent trace. C'est la raison pour laquelle les
+# écrasements de mot de passe de cette soirée ont été invisibles, et c'est
+# pourquoi on ne partage pas un compte.
+#
+# `docs/securite-comptes.md` documente aussi le compte d'amorçage : les deux
+# fichiers sont à tenir ensemble.
+#
+# SI VOUS ÊTES BLOQUÉ PAR LE LIMITEUR DE CONNEXION — « Trop d'essais successifs,
+# réessayez dans N minutes ». Cinq essais ratés par quart d'heure, et il compte
+# aussi ceux d'avant la création de votre compte. Pour remettre le compteur à
+# zéro sans toucher au reste :
+#
+#     docker compose exec -T api php bin/console cache:pool:clear cache.rate_limiter
+#
+# Ce pool-là, et pas `cache:clear` : un vidage global recompilerait le conteneur
+# de services de toute la pile, et on a déjà passé une soirée à démêler qui avait
+# vidé quoi. `cache:pool:list` donne le nom exact si la configuration change.
+# Vérifiez ensuite par une connexion VALIDE — un essai raté recharge le compteur.
+#
+# Le `name:` déclaré plus bas fixe l'identité de la pile de TRAVAIL, qui ne
+# dépend donc plus du nom du répertoire. Précédence vérifiée sur cette machine,
+# du plus fort au plus faible :
+#
+#     -p  >  COMPOSE_PROJECT_NAME  >  `name:` de ce fichier  >  nom du répertoire
+#
+# COMPOSE_PROJECT_NAME l'emporte bien sur le `name:` ci-dessous : c'est ce qui
+# rend la consigne du dessus applicable sans toucher à ce fichier.
+#
+# Quatre services :
+#   db       PostgreSQL 17
+#   api      l'API Symfony servie par FrankenPHP
+#   app      nginx : sert la SPA compilée et relaie /api vers `api`
+#   mailpit  boîte aux lettres locale
+#
+# -----------------------------------------------------------------------------
+#  Quatre contrats à ne pas casser
+# -----------------------------------------------------------------------------
+#
+# 1. Le service de l'API doit s'appeler `api`. `app/nginx.conf` écrit
+#    `proxy_pass http://api:8000` en dur, et `app/.env.example` pointe le proxy
+#    du serveur Vite sur `http://api:8000`. Dans un réseau Compose, le nom du
+#    service EST le nom d'hôte DNS : le renommer coupe le relais /api, donc
+#    l'origine unique, donc tout ce qui en dépend (cookie SameSite=Lax sans
+#    exception, CSP `connect-src 'self'`, aucune configuration CORS côté Symfony).
+#
+#    Le port 8000 est tenu par l'image elle-même (`EXPOSE 8000` et
+#    `CMD ... --listen :8000` dans api/Dockerfile), et non plus par une surcharge
+#    d'ici : ce fichier n'a donc aucun `command:` à déclarer. Si un jour l'image
+#    changeait de port, c'est elle qu'il faudrait corriger, pas ce compose — le
+#    front est câblé sur 8000 à deux endroits.
+#
+# 2. `api/docker/entrypoint.sh` joint la base par `DATABASE_URL`, jamais par un
+#    nom d'hôte en dur. C'est donc ici, et seulement ici, qu'on décide que la
+#    base s'appelle `db`. Renommer le service oblige à corriger `DATABASE_URL`
+#    dans le même mouvement.
+#
+# 3. Ce même entrypoint joue les migrations AVANT de démarrer le serveur. Sans
+#    `condition: service_healthy` sur la base, il part pendant que PostgreSQL
+#    initialise son cluster, épuise ses 30 tentatives espacées de 2 s et le
+#    conteneur meurt. Le `healthcheck` de `db` n'est pas décoratif.
+#
+# 4. L'étage d'image visé est déclaré EXPLICITEMENT (`target:`), des deux côtés,
+#    alors que `prod` est déjà le dernier étage du Dockerfile donc la cible par
+#    défaut. C'est volontairement redondant : sans `target:`, la cible construite
+#    dépend de l'ordre des `FROM` dans un fichier tenu par quelqu'un d'autre.
+#    Réordonner ces étages — geste anodin — enverrait silencieusement
+#    maker-bundle, phpunit et php-cs-fixer en production. Une dépendance
+#    implicite entre deux fichiers de deux mains différentes est exactement ce
+#    qui a produit les défauts de port et de sonde corrigés depuis.
+#
+# -----------------------------------------------------------------------------
+#  Exposition réseau
+# -----------------------------------------------------------------------------
+#
+# Tous les ports sont bindés sur 127.0.0.1. L'application porte les noms, les
+# dates de naissance et les filiations de 18 personnes vivantes : elle n'a rien
+# à faire sur le réseau d'un logement, d'un bureau ou d'un café. `BIND_ADDR`
+# permet de déroger (0.0.0.0 pour ouvrir l'écran depuis un téléphone du réseau
+# local, ou pour un VPS derrière un proxy), mais c'est alors une décision prise,
+# pas un défaut subi.
+#
+# -----------------------------------------------------------------------------
+#  Secrets
+# -----------------------------------------------------------------------------
+#
+# Aucune valeur en dur : tout passe par `${VAR:-repli}`, et les replis sont des
+# identifiants de DÉVELOPPEMENT, jetables et publics. Voir .env.example.
+# compose.prod.yaml, lui, refuse de démarrer tant qu'ils n'ont pas été remplacés.
+# =============================================================================
+
+# Identité de la pile de TRAVAIL, déclarée et non déduite. Sans cette ligne, le
+# nom du projet est le nom du répertoire : renommer `C:\www\heritage` en
+# `heritage-2` suffirait à créer une seconde pile muette à côté de la première,
+# avec ses propres volumes, et à faire croire à une base vidée.
+# Une pile jetable ne modifie PAS cette ligne : elle pose COMPOSE_PROJECT_NAME
+# dans son shell, qui l'emporte (voir l'en-tête).
+name: heritage
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Base de données
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-heritage}
+      POSTGRES_USER: ${POSTGRES_USER:-heritage}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-heritage_dev}
+      # Collation française dès l'initialisation du cluster : les noms de famille
+      # se trient avec leurs accents (Nécu avant Nedos, Élan avec les E). On ne
+      # peut plus changer ces réglages après coup sans recréer la base, d'où le
+      # choix à la première seconde.
+      # Fournisseur ICU et non `libc` : l'image est bâtie sur Alpine, dont la
+      # musl n'embarque aucune locale système — `fr_FR.UTF-8` y serait refusée.
+      # `initdb` émet au passage « no usable system locales were found » : c'est
+      # attendu et sans conséquence, le classement vient d'ICU, pas du système.
+      POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=fr-FR --encoding=UTF8"
+    healthcheck:
+      # `pg_isready` seul répond « prêt » pendant l'initialisation du cluster,
+      # alors que la base applicative n'existe pas encore : on nomme donc
+      # explicitement l'utilisateur et la base attendus.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-heritage} -d ${POSTGRES_DB:-heritage}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    volumes:
+      - base-de-donnees:/var/lib/postgresql/data
+    ports:
+      # Publié pour les clients SQL du poste (psql, DBeaver, DataGrip). Rien
+      # dans la pile n'en a besoin : les conteneurs se parlent par le réseau
+      # interne.
+      - "${BIND_ADDR:-127.0.0.1}:${DB_PORT:-5432}:5432"
+
+  # ---------------------------------------------------------------------------
+  # API Symfony
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ./api
+      # Contrat n° 4 : la cible est nommée, jamais déduite de l'ordre des étages.
+      #
+      # `prod` et non `dev`, y compris pour la pile de développement, parce que
+      # l'étage `dev` n'apporte ici presque rien : le `.dockerignore` de l'API
+      # exclut `tests/`, `phpunit.dist.xml` et `phpstan.neon` du contexte de
+      # construction, donc les binaires de test sont dans l'image mais pas les
+      # fichiers de test — la suite se lance depuis l'hôte, où le vendor complet
+      # est déjà installé. Reste maker-bundle, que personne n'appelle dans cette
+      # pile.
+      #
+      # Deux besoins distincts, à ne pas confondre :
+      #   - des pages d'erreur détaillées au lieu du « Internal Server Error »
+      #     opaque du mode production : `API_APP_ENV=dev` dans le .env SUFFIT, et
+      #     sans reconstruire. C'est possible depuis que config/bundles.php garde
+      #     MakerBundle derrière un `class_exists()` — vérifié sur cette image :
+      #     `Symfony v8.1.7 (env: dev, debug: true)`.
+      #   - les OUTILS de développement dans le conteneur (maker-bundle, phpstan,
+      #     phpunit) : là il faut `target: dev` ici, donc une reconstruction, et
+      #     `API_APP_ENV=dev` avec, sinon on obtient l'image de développement
+      #     tournant en mode production.
+      target: prod
+    image: ${IMAGE_PREFIX:-heritage}/api:${IMAGE_TAG:-dev}
+    environment:
+      # Ces trois-là sont de VRAIES variables d'environnement du conteneur, et
+      # non des lignes de api/.env : Symfony fait gagner l'environnement réel
+      # sur ses fichiers .env, c'est ce qui permet d'imposer la base, le SMTP et
+      # le secret depuis l'orchestration sans jamais les écrire dans le dépôt.
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-heritage}:${POSTGRES_PASSWORD:-heritage_dev}@db:5432/${POSTGRES_DB:-heritage}?serverVersion=17&charset=utf8"
+      MAILER_DSN: ${MAILER_DSN:-smtp://mailpit:1025}
+      APP_SECRET: ${APP_SECRET:-d3v3l0ppement_secret_local_jetable}
+      # `prod` par défaut, en accord avec la cible construite au-dessus. Ce n'est
+      # plus une contrainte subie : `config/bundles.php` enregistre désormais
+      # DoctrineFixturesBundle en 'all', donc `doctrine:fixtures:load` existe
+      # dans ce conteneur et la pile est garnie dès le premier démarrage — ce que
+      # demande le § 10 du dossier de mission.
+      APP_ENV: ${API_APP_ENV:-prod}
+      # Base des URL construites hors contexte HTTP — les liens d'invitation en
+      # particulier. Doit désigner le FRONT (qui relaie /api), pas l'API : c'est
+      # dans un navigateur que le lien sera ouvert. À ajuster si APP_PORT change.
+      DEFAULT_URI: ${DEFAULT_URI:-http://localhost:8080}
+      # Vides par défaut, et transmises quand même : sans ces deux lignes, les
+      # renseigner dans le .env de la racine ne ferait rien du tout — Compose
+      # lirait la valeur sans jamais l'injecter dans le conteneur, et on
+      # chercherait longtemps pourquoi.
+      #
+      # GEDCOM_FILE : chemin DANS le conteneur, pas sur l'hôte (voir .env.example).
+      #   La commande refuse proprement la chaîne vide comme l'absence de valeur.
+      # MEDIA_RACINE : vide = l'API retombe sur %kernel.project_dir%/uploads,
+      #   c'est-à-dire /app/uploads, où est monté le volume `televersements`.
+      #   À ne renseigner que si ce volume est monté ailleurs.
+      GEDCOM_FILE: ${GEDCOM_FILE:-}
+      MEDIA_RACINE: ${MEDIA_RACINE:-}
+      # Le compte administrateur d'amorçage, relu par `heritage:amorcer-comptes`
+      # et par la fixture du groupe `amorcage`.
+      #
+      # MÊME PIÈGE QUE LES DEUX LIGNES AU-DESSUS, et il a coûté une passe : ces
+      # valeurs vivent dans `api/.env.local`, que le `.dockerignore` de l'API
+      # EXCLUT du contexte de construction — à raison, un secret n'a rien à faire
+      # dans une image. Le conteneur ne voit donc jamais ce fichier, et la commande
+      # répond « HERITAGE_ADMIN_EMAIL ou HERITAGE_ADMIN_PASSWORD absent » quoi qu'on
+      # écrive dedans. Les valeurs doivent donc être ICI, c'est-à-dire dans le .env
+      # de la racine, qui est lu par Compose et injecté dans l'environnement réel.
+      #
+      # `HERITAGE_ADMIN_PERSONNE_XREF` porte une RÉFÉRENCE GEDCOM (`@I500001@`) et
+      # jamais un `tree_person.id`. Mesuré le 15 septembre 2026 : après un réimport,
+      # les identifiants ont glissé de 1–274 à 275–548. Un rattachement numérique
+      # aurait désigné quelqu'un d'autre sans que rien ne le signale ; la référence
+      # GEDCOM, elle, porte une contrainte d'unicité et suit la personne.
+      HERITAGE_ADMIN_EMAIL: ${HERITAGE_ADMIN_EMAIL:-}
+      HERITAGE_ADMIN_PASSWORD: ${HERITAGE_ADMIN_PASSWORD:-}
+      HERITAGE_ADMIN_NOM: ${HERITAGE_ADMIN_NOM:-}
+      HERITAGE_ADMIN_PERSONNE_XREF: ${HERITAGE_ADMIN_PERSONNE_XREF:-}
+    # Aucune sonde déclarée ici : l'image en porte désormais une juste
+    # (`HEALTHCHECK` dans api/Dockerfile, sur http://localhost:8000/). C'est sa
+    # place — une image doit être correcte seule, pas seulement sous un
+    # compose.yaml particulier. C'est elle qui rend possible le
+    # `condition: service_healthy` du service `app` plus bas.
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    volumes:
+      # Portraits et preuves. Volume nommé et non montage d'hôte : ce sont des
+      # photos d'actes et de famille, elles ne doivent pas se retrouver dans
+      # l'arborescence du dépôt où un `git add .` distrait les emporterait.
+      # Le chemin correspond au `mkdir -p var uploads` du Dockerfile, relatif au
+      # WORKDIR /app, et au défaut `app.media.racine_par_defaut` du module Media.
+      - televersements:/app/uploads
+      # Atelier généalogique, pour l'import du GEDCOM réel. Décommenter et
+      # ajuster le chemin de gauche selon la machine, puis poser
+      # `GEDCOM_FILE=/atelier/arbre-romarin-v5.ged` dans le .env.
+      # `:ro` non négociable : l'atelier est la source de vérité des données
+      # généalogiques et vit hors du dépôt ; rien dans cette application n'a le
+      # droit d'y écrire. L'alternative sans montage est `docker compose cp`.
+      # - C:/www/myHeritage:/atelier:ro
+    ports:
+      # Confort de mise au point : joindre l'API sans passer par nginx (curl,
+      # client REST), et surtout faire fonctionner `npm run dev` lancé hors
+      # conteneur — app/.env.example vise déjà http://127.0.0.1:8000.
+      # Le parcours normal du navigateur reste le front, en origine unique.
+      - "${BIND_ADDR:-127.0.0.1}:${API_PORT:-8000}:8000"
+
+  # ---------------------------------------------------------------------------
+  # Front
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: ./app
+      # Pas de `target:` ici, contrairement à l'API, et ce n'est pas un oubli :
+      # l'étage final de app/Dockerfile (`FROM nginx:1.27-alpine`) n'est pas
+      # nommé, il n'y a donc rien à viser. Le seul étage nommé est `build`, qui
+      # est l'étage intermédiaire de compilation Vite — le viser produirait une
+      # image contenant node et les sources, sans nginx. Le jour où cet étage
+      # final recevrait un nom, on le déclarerait ici comme pour l'API.
+    image: ${IMAGE_PREFIX:-heritage}/app:${IMAGE_TAG:-dev}
+    depends_on:
+      # Possible grâce à la sonde portée par l'image de l'API : nginx ne démarre
+      # qu'une fois l'API répondante. Sans cela, l'écran est servi pendant que
+      # les migrations tournent encore et le premier appel /api rend un 502 —
+      # que rien ne distingue, côté navigateur, d'une panne réelle.
+      api:
+        condition: service_healthy
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${APP_PORT:-8080}:80"
+
+  # ---------------------------------------------------------------------------
+  # Boîte aux lettres de développement
+  # ---------------------------------------------------------------------------
+  #
+  # Mailpit n'est pas un agrément : sans lui, `MAILER_DSN` retomberait soit sur
+  # `null://null` (les invitations disparaissent en silence, on croit le circuit
+  # cassé), soit sur un vrai SMTP (un courriel d'invitation part réellement vers
+  # une adresse de la famille pendant un essai). Il capte tout et n'envoie rien.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    environment:
+      MP_MAX_MESSAGES: 500
+      # Le dev n'a ni compte ni TLS : on accepte toute authentification et le
+      # texte clair, sinon Symfony échoue à négocier la connexion.
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    networks:
+      default:
+        aliases:
+          # api/.env.dev propose `smtp://mailer:1025` en ligne commentée. Cet
+          # alias fait que les deux noms résolvent, pour que ce repli fonctionne
+          # aussi si quelqu'un le décommente.
+          - mailer
+    ports:
+      # 8025 : l'interface de consultation. 1025 (SMTP) n'est pas publié, seuls
+      # les conteneurs ont à l'atteindre.
+      - "${BIND_ADDR:-127.0.0.1}:${MAILPIT_UI_PORT:-8025}:8025"
+
+volumes:
+  base-de-donnees:
+  televersements:

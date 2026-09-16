@@ -1,0 +1,92 @@
+# Journalisation.
+#
+# Ce fichier n'a pas été ajouté par confort. Sans lui, `LoggerInterface` retombait sur
+# le logger de secours de Symfony (`HttpKernel\Log\Logger`), sans niveau configurable,
+# sans contexte et sans destination maîtrisée — et cinq `500` sous /api n'ont laissé
+# AUCUNE trace exploitable. Il a fallu comparer deux schémas à la main pour retrouver
+# ce que le journal aurait dû dire. Une soirée.
+#
+# Le principe posé au § 16.1 du contrat : **muet pour le client, bavard pour
+# l'exploitant**. La réponse ne dit rien de la panne ; le journal dit tout — trace,
+# classe, message d'origine, requête SQL fautive. Le seul recouvrement est la liste des
+# secrets : mots de passe, secrets TOTP, jetons et chemins de disque ne vont NI dans la
+# réponse NI dans le journal.
+monolog:
+    channels:
+        - deprecation
+
+when@dev:
+    monolog:
+        handlers:
+            # En développement, tout va au fichier, sans tampon : on veut voir les 404
+            # et les 422 pendant qu'on écrit le front, pas seulement les pannes.
+            main:
+                type: stream
+                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                level: debug
+                channels: ["!event"]
+                include_stacktraces: true
+            console:
+                type: console
+                process_psr_3_messages: false
+                channels: ["!event", "!doctrine", "!console"]
+
+when@test:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: error
+                handler: nested
+                excluded_http_codes: [404, 405]
+                channels: ["!event"]
+            nested:
+                type: stream
+                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                level: debug
+
+when@prod:
+    monolog:
+        handlers:
+            # `fingers_crossed` : on met en tampon et on n'écrit RIEN tant qu'il ne se
+            # passe rien de grave. Dès qu'un enregistrement atteint `error` — nos `500`
+            # partent en `critical` —, tout le tampon est vidé, y compris les lignes de
+            # débogage qui PRÉCÈDENT la panne. C'est exactement ce qu'on veut : le
+            # contexte de la requête fautive, et le silence le reste du temps.
+            #
+            # `excluded_http_codes` : une 404 ou une 405 ne déclenche pas la vidange.
+            # Ce sont des erreurs de client, pas des pannes de serveur ; sans cette
+            # ligne, le moindre scan d'URL ferait écrire un journal complet. À NE PAS
+            # confondre avec « les 404 ne sont pas journalisées » : elles sont dans le
+            # tampon, et elles sortiront avec le reste si une vraie panne suit.
+            main:
+                type: fingers_crossed
+                action_level: error
+                handler: nested
+                excluded_http_codes: [404, 405]
+                channels: ["!deprecation"]
+                buffer_size: 50
+            # Destination : la sortie d'erreur, pas un fichier. En conteneur, c'est ce
+            # que `docker compose logs api` montre et ce qu'un collecteur ramasse ; un
+            # fichier dans le conteneur se perdrait au premier redémarrage. Format JSON
+            # pour rester lisible par une machine.
+            nested:
+                type: stream
+                path: php://stderr
+                level: debug
+                formatter: monolog.formatter.json
+                # La TRACE, explicitement. Le formateur JSON de Monolog ne la sérialise
+                # pas par défaut : sans cette ligne, la ligne de journal donne la classe
+                # et le message de l'exception, mais pas l'endroit où elle a été levée —
+                # soit précisément ce qu'on cherche quand on remonte une `500`. Le § 16.1
+                # demande « trace, classe, message d'origine, requête SQL fautive ».
+                include_stacktraces: true
+            console:
+                type: console
+                process_psr_3_messages: false
+                channels: ["!event", "!doctrine"]
+            deprecation:
+                type: stream
+                channels: [deprecation]
+                path: php://stderr
+                formatter: monolog.formatter.json

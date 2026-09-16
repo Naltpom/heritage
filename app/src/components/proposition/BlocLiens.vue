@@ -1,0 +1,243 @@
+<script setup lang="ts">
+/**
+ * Les liens d'une personne proposée — parents, conjoints, enfants.
+ *
+ * « On sélectionne les parents et/ou enfant et/ou conjoints (date de mariage si
+ * on a, ou de rupture, etc.) » : c'est la demande du commanditaire, et c'est
+ * l'écran le plus dense des deux formulaires. Trois règles de fond le
+ * gouvernent, toutes déjà tenues par `creation.ts` — ce composant ne fait que
+ * ne pas les contredire à l'écran :
+ *
+ * - **Au moins un lien pour soumettre**, « sinon la personne flotterait hors de
+ *   l'arbre ». Le compte est rappelé en pied de bloc, sans jamais bloquer
+ *   l'enregistrement d'un brouillon incomplet.
+ * - **Deux parents au plus, et pas deux fois le même.** Le second parent est
+ *   `other2PersonId` sur **le même lien**, pas un second lien : c'est ce que le
+ *   modèle appelle « le second parent ».
+ * - **Les dates n'existent que sur une union.** Un enfant n'a ni date de
+ *   mariage ni date de rupture, et le gabarit n'en propose pas : ce n'est pas
+ *   une omission, c'est `ck_prp_link_dates_union`.
+ *
+ * **Une union sans date reste une union, une rupture sans date reste une
+ * rupture.** Les champs de date sont donc facultatifs partout, et la case
+ * « union rompue » est indépendante de la date de rupture — sur un arbre ancien,
+ * on sait souvent qu'il y a eu séparation sans savoir quand.
+ *
+ * Au téléphone, chaque lien occupe sa propre carte et chaque champ sa propre
+ * ligne : quatre blocs de liens mis côte à côte deviennent illisibles sous
+ * 400 px, et rien ici ne force une largeur qui déborderait.
+ */
+import { computed } from 'vue'
+import BoutonBase from '@/components/base/BoutonBase.vue'
+import PanneauBase from '@/components/base/PanneauBase.vue'
+import ChampDateIncertaine from './ChampDateIncertaine.vue'
+import SelecteurPersonne from './SelecteurPersonne.vue'
+import { nombreDeLiens, unionVide, type PersonneChoisie, type SaisieCreation } from './creation'
+
+const { erreurs = {} } = defineProps<{
+  /** Messages indexés par `filiation`, `liens`, `unions.<n>.mariage`… */
+  erreurs?: Record<string, string>
+}>()
+
+const saisie = defineModel<SaisieCreation>({ required: true })
+
+/** Toutes les personnes déjà désignées : le sélecteur les affiche quand même —
+ *  masquer un résultat serait cacher ce que le serveur a rendu — mais éteint
+ *  leur bouton. */
+const dejaChoisis = computed(() => [
+  ...saisie.value.filiation.parents.map((parent) => parent.personId),
+  ...saisie.value.unions.map((union) => union.personne.personId),
+  ...saisie.value.enfants.map((enfant) => enfant.personne.personId),
+])
+
+const total = computed(() => nombreDeLiens(saisie.value))
+
+function ajouterParent(personne: PersonneChoisie): void {
+  if (saisie.value.filiation.parents.length >= 2) return
+  saisie.value.filiation.parents.push(personne)
+}
+
+function retirerParent(index: number): void {
+  saisie.value.filiation.parents.splice(index, 1)
+}
+
+function retirerFamille(): void {
+  saisie.value.filiation.famille = null
+}
+
+function ajouterUnion(personne: PersonneChoisie): void {
+  saisie.value.unions.push(unionVide(personne))
+}
+
+function retirerUnion(index: number): void {
+  saisie.value.unions.splice(index, 1)
+}
+
+function ajouterEnfant(personne: PersonneChoisie): void {
+  saisie.value.enfants.push({ personne, rangFratrie: null })
+}
+
+function retirerEnfant(index: number): void {
+  saisie.value.enfants.splice(index, 1)
+}
+
+/** Un rang vide vaut `null` — « à la fin », et non zéro, qui voudrait dire
+ *  « l'aîné ». La nuance a un sens généalogique. */
+function poserRang(index: number, brut: string): void {
+  const propre = brut.trim()
+  const enfant = saisie.value.enfants[index]
+  if (enfant === undefined) return
+  enfant.rangFratrie = propre.length === 0 ? null : Number(propre)
+}
+</script>
+
+<template>
+  <div class="flex flex-col gap-4">
+    <!-- ── Parents ────────────────────────────────────────────────── -->
+    <PanneauBase titre="Parents">
+      <div class="flex flex-col gap-3">
+        <p v-if="saisie.filiation.famille !== null" class="flex flex-wrap items-center gap-2 text-sm">
+          <span class="rounded-pastille border border-ligne px-2 py-0.5">
+            Couple désigné : {{ saisie.filiation.famille.libelle }}
+          </span>
+          <BoutonBase variante="discret" @click="retirerFamille">Retirer</BoutonBase>
+        </p>
+
+        <ul v-if="saisie.filiation.parents.length > 0" class="flex flex-col gap-1.5">
+          <li
+            v-for="(parent, index) in saisie.filiation.parents"
+            :key="parent.personId"
+            class="flex flex-wrap items-center justify-between gap-2 rounded-champ border border-ligne px-2.5 py-1.5"
+          >
+            <span class="text-sm font-medium">{{ parent.libelle }}</span>
+            <BoutonBase variante="discret" @click="retirerParent(index)">Retirer</BoutonBase>
+          </li>
+        </ul>
+
+        <SelecteurPersonne
+          v-if="saisie.filiation.famille === null && saisie.filiation.parents.length < 2"
+          etiquette="Ajouter un parent"
+          aide="Un ou deux parents. Le service rapprochera le couple — ou le créera — au moment de la validation."
+          :deja-choisis="dejaChoisis"
+          @choisir="ajouterParent"
+        />
+
+        <p v-if="erreurs['filiation']" class="text-xs text-alerte">{{ erreurs['filiation'] }}</p>
+      </div>
+    </PanneauBase>
+
+    <!-- ── Conjoints ──────────────────────────────────────────────── -->
+    <PanneauBase titre="Conjoints">
+      <div class="flex flex-col gap-4">
+        <article
+          v-for="(union, index) in saisie.unions"
+          :key="union.personne.personId"
+          class="flex flex-col gap-3 rounded-champ border border-ligne px-3 py-3"
+        >
+          <header class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-sm font-semibold">{{ union.personne.libelle }}</h3>
+            <BoutonBase variante="discret" @click="retirerUnion(index)">Retirer</BoutonBase>
+          </header>
+
+          <ChampDateIncertaine
+            v-model="union.mariage"
+            etiquette="Mariage"
+            :erreur="erreurs[`unions.${index}.mariage`] ?? ''"
+            aide="Facultatif : une union sans date reste une union."
+          />
+
+          <label class="flex items-start gap-2">
+            <input
+              v-model="union.rompue"
+              type="checkbox"
+              class="mt-0.5 size-4 accent-[var(--color-accent)]"
+            />
+            <span class="text-sm">
+              Union rompue
+              <span class="block text-xs text-attenue">
+                Divorce ou séparation. La date peut rester inconnue.
+              </span>
+            </span>
+          </label>
+
+          <ChampDateIncertaine
+            v-if="union.rompue"
+            v-model="union.rupture"
+            etiquette="Rupture"
+            :erreur="erreurs[`unions.${index}.rupture`] ?? ''"
+          />
+          <p v-else-if="erreurs[`unions.${index}.rupture`]" class="text-xs text-alerte">
+            {{ erreurs[`unions.${index}.rupture`] }}
+          </p>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-sm font-medium">Ce qui vous fait dire cela</span>
+            <textarea
+              v-model="union.note"
+              rows="2"
+              placeholder="Livret de famille, acte de mariage, souvenir de famille…"
+              class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
+            />
+          </label>
+        </article>
+
+        <SelecteurPersonne
+          etiquette="Ajouter un conjoint"
+          :deja-choisis="dejaChoisis"
+          @choisir="ajouterUnion"
+        />
+      </div>
+    </PanneauBase>
+
+    <!-- ── Enfants ────────────────────────────────────────────────── -->
+    <PanneauBase titre="Enfants">
+      <div class="flex flex-col gap-3">
+        <article
+          v-for="(enfant, index) in saisie.enfants"
+          :key="enfant.personne.personId"
+          class="flex flex-wrap items-end justify-between gap-2 rounded-champ border border-ligne px-3 py-2.5"
+        >
+          <span class="text-sm font-medium">{{ enfant.personne.libelle }}</span>
+
+          <div class="flex items-end gap-2">
+            <label class="flex flex-col gap-1">
+              <span class="text-xs text-attenue">Rang dans la fratrie</span>
+              <input
+                :value="enfant.rangFratrie ?? ''"
+                type="number"
+                min="0"
+                inputmode="numeric"
+                placeholder="—"
+                class="w-20 rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte font-mono tnum"
+                @input="poserRang(index, ($event.target as HTMLInputElement).value)"
+              />
+            </label>
+            <BoutonBase variante="discret" @click="retirerEnfant(index)">Retirer</BoutonBase>
+          </div>
+        </article>
+
+        <SelecteurPersonne
+          etiquette="Ajouter un enfant"
+          aide="Le rang est facultatif : sans lui, l’enfant est rattaché à la fin de la fratrie."
+          :deja-choisis="dejaChoisis"
+          @choisir="ajouterEnfant"
+        />
+      </div>
+    </PanneauBase>
+
+    <!-- Le compte ne bloque rien : il rappelle la règle de la soumission. -->
+    <p
+      class="text-sm"
+      :class="erreurs['liens'] ? 'text-alerte' : 'text-attenue'"
+      role="status"
+    >
+      <template v-if="erreurs['liens']">{{ erreurs['liens'] }}</template>
+      <template v-else-if="total === 0">
+        Aucun lien pour l’instant. Il en faudra au moins un pour soumettre la demande.
+      </template>
+      <template v-else>
+        {{ total }} lien{{ total > 1 ? 's' : '' }} — la personne sera rattachée à l’arbre.
+      </template>
+    </p>
+  </div>
+</template>

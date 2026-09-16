@@ -1,0 +1,42 @@
+# Fins de ligne — règle du dépôt, pas de la machine
+#
+# Le code est écrit sous Windows mais exécuté dans des conteneurs Linux, et les
+# sources y arrivent par montage : le conteneur lit exactement l'octet présent
+# dans la copie de travail. Un `docker/entrypoint.sh` en CRLF donne alors
+# « /bin/sh^M: bad interpreter: No such file or directory », erreur coûteuse à
+# diagnostiquer parce qu'elle ne se voit pas à l'écran.
+#
+# `eol=lf` l'emporte sur le `core.autocrlf` local : la normalisation est donc
+# garantie même sur une machine mal configurée, et même sans configuration du
+# tout. C'est la raison d'être de ce fichier — ne pas dépendre du poste.
+* text=auto eol=lf
+
+# Fichiers qui ne sont jamais du texte : aucune conversion, aucun diff bruité.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.avif   binary
+*.ico    binary
+*.pdf    binary
+*.zip    binary
+*.gz     binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.eot    binary
+*.otf    binary
+*.phar   binary
+
+# Le SVG est du texte (icônes de l'interface, rendu de l'arbre) : on le veut
+# lisible en diff, donc soumis à la règle LF ci-dessus.
+*.svg    text eol=lf
+
+# Seules exceptions : les scripts que seul Windows exécute. `cmd.exe` refuse un
+# fichier de commandes en LF.
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+
+# Les fichiers d'environnement sont lus par le shell du conteneur : LF impératif.
+.env*    text eol=lf

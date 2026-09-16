@@ -1,0 +1,123 @@
+# Contrat : ce fichier est celui du module Media (portraits et preuves, téléversement, vignettes).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services.yaml couvre déjà toutes les classes de
+# src/Module/Media/. On ne déclare ici que ce que le conteneur ne peut pas deviner :
+# argument scalaire, alias d'interface, tag, paramètre propre au module.
+#
+# `_defaults` n'est pas hérité d'un fichier à l'autre : il est donc redéclaré ci-dessous,
+# sinon les services de ce fichier ne seraient ni autowirés ni autoconfigurés.
+
+parameters:
+    # Racine du stockage des médias. **Hors racine web**, et hors du dépôt : le
+    # compose.yaml y monte un volume nommé (`televersements:/app/uploads`) plutôt qu'un
+    # montage d'hôte, précisément pour que des photos d'actes et de famille ne se
+    # retrouvent pas dans l'arborescence versionnée.
+    #
+    # Surchargeable par MEDIA_RACINE — utile pour un VPS où le volume est ailleurs. Le
+    # défaut vaut pour `docker compose up` comme pour un `php -S` local, sans rien à
+    # configurer.
+    app.media.racine_par_defaut: '%kernel.project_dir%/uploads'
+    app.media.racine: '%env(default:app.media.racine_par_defaut:MEDIA_RACINE)%'
+
+    # Le ré-encodage écrit un fichier temporaire avant de le déposer. `var/` et non le
+    # temporaire du système : en conteneur, /tmp est souvent minuscule, et un acte
+    # numérisé de 18 Mio y échouerait sans message utile.
+    app.media.temporaire: '%kernel.project_dir%/var'
+
+# ATTENTION, PIÈGE PAYÉ ICI : les deux paramètres ci-dessus sont injectés dans
+# `StockageMedia` et `PurgeDesMetadonnees` par un attribut `#[Autowire(param: …)]`, PAS
+# par une définition `arguments:` dans ce fichier. La raison est l'ordre de chargement :
+# `config/services.yaml` importe `services/*.yaml` **avant** de déclarer sa ressource
+# `App\: ../src/`, laquelle réenregistre ensuite chaque classe de `src/` et écrase toute
+# définition de même identifiant posée par un module. Une définition explicite ici serait
+# perdue en silence, et le conteneur répondrait « Cannot autowire argument $racine ».
+#
+# Ce fichier reste donc le bon endroit pour les **paramètres**, les **alias** et les
+# services à identifiant propre (voir le limiteur plus bas) — mais pas pour reconfigurer
+# une classe de `src/Module/Media/`.
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    # --- Le cercle de visibilité --------------------------------------------------
+    #
+    # Le port local de ce module est servi par son adaptateur, et par lui seul :
+    # `VisibiliteParLeCercle` traduit « sujet de média » en identifiants de personnes,
+    # puis transmet la question à `Core\Security\CercleDeVisibiliteInterface`. C'est le
+    # seul fichier de `Media` à connaître le contrat du noyau.
+    #
+    # Rien à brancher ici pour le cercle lui-même : c'est l'alias de
+    # `Core\Security\CercleDeVisibiliteInterface` que `Membership` remplacera, dans SON
+    # fichier. Tant qu'il ne l'a pas fait, `Core\Security\CercleFerme` refuse tout et ce
+    # module devient inerte — c'est voulu, voir tests/Media/DefautFermeTest.php.
+    App\Module\Media\Security\VisibiliteDesSujetsInterface:
+        alias: App\Module\Media\Security\VisibiliteParLeCercle
+
+    # --- La résolution des sujets ---------------------------------------------------
+    #
+    # COUTURE À BRANCHER PAR L'AGENT `Tree`.
+    #
+    # Trois questions, aucune de confidentialité : cette ligne existe-t-elle, sous quel
+    # libellé, et **de quelles personnes sa visibilité dépend-elle** (une union suit ses
+    # deux époux). Remplacer l'alias ci-dessous :
+    #
+    #     App\Module\Media\Security\ResolutionDuSujetInterface:
+    #         alias: App\Module\Tree\Service\<la classe de Tree>
+    #
+    # Le contrat à respecter est écrit en entier sur l'interface. Par défaut,
+    # `SujetNonResolu` rend `null` pour tout : aucun dépôt n'aboutit, aucun octet ne sort.
+    App\Module\Media\Security\ResolutionDuSujetInterface:
+        alias: App\Module\Tree\Service\ResolutionDesSujetsMedia
+
+    # --- Réglages -------------------------------------------------------------------
+    #
+    # Lit `media.taille_max_octets` et `media.mimes_autorises` dans `core_setting`, avec
+    # repli sur les valeurs de la migration initiale. À réaliaser sur le service de
+    # réglages de `Core` quand il existera (§ 10.2 du contrat).
+    App\Module\Media\Service\ReglagesMediaInterface:
+        alias: App\Module\Media\Service\ReglagesMedia
+
+    # --- Limitation de débit ---------------------------------------------------------
+    #
+    # 20 téléversements par heure et par compte (§ 1.9 du contrat).
+    #
+    # Déclaré ici et non sous `framework.rate_limiter` dans framework.yaml : la règle 1
+    # de l'ADR 0002 veut qu'un module configure ce qui lui appartient dans SON fichier.
+    # Si le socle finit par déclarer `framework.rate_limiter.media_televersement`, c'est
+    # ces deux services-ci qu'il faut retirer — pas les deux définitions qui cohabitent.
+    #
+    # Le compteur vit dans le cache système de fichiers : pas de Redis, pas de table
+    # (§ 3 du dossier — « ne pas ajouter de dépendance qui ne sert pas »).
+    media.stockage_limiteur:
+        class: Symfony\Component\RateLimiter\Storage\CacheStorage
+        arguments: ['@cache.app']
+
+    media.limiteur_televersement:
+        class: Symfony\Component\RateLimiter\RateLimiterFactory
+        arguments:
+            -   id: 'media_televersement'
+                # Fenêtre glissante et non fixe : une fenêtre fixe autorise 40 dépôts en
+                # deux minutes à cheval sur l'heure ronde, ce qui vide le plafond de son
+                # sens le jour où quelqu'un s'en aperçoit.
+                policy: 'sliding_window'
+                limit: 20
+                interval: '1 hour'
+            - '@media.stockage_limiteur'
+
+    # --- Le port des médias vu par `Tree` --------------------------------------------
+    #
+    # `Tree\Serializer\PortDesMedias` : le portrait d'une fiche, ses preuves, celles de
+    # ses citations, et le filtre « Avec image » du graphe. Sans cet alias, `Tree` reste
+    # sur son repli `MediasNonBranches` et **aucune personne n'a d'image** — le bouton
+    # « Avec image » rend zéro sur 274 fiches, sans erreur et sans rien dans les journaux.
+    #
+    # Déclaré ici et non dans `tree.yaml` : c'est `Media` qui fournit l'implémentation,
+    # et `services.yaml` importe les fichiers de module dans l'ordre alphabétique —
+    # `media` avant `tree`. Un alias posé ici serait donc écrasé par celui de `tree.yaml`
+    # s'il en déclarait un ; à vérifier au `debug:container` à chaque changement, jamais
+    # en le lisant.
+    App\Module\Tree\Serializer\PortDesMedias:
+        alias: App\Module\Media\Service\Arbre\PortDesMediasDeLArbre

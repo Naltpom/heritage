@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=../vendor/symfony/routing/Loader/schema/routing.schema.json
+
+# Ce fichier reste volontairement vide.
+#
+# Dix agents écrivent dans ce projet en parallèle : un `routes.yaml` unique serait
+# la première source de conflits de fusion. Chaque module déclare donc ses routes
+# dans son propre fichier `config/routes/<module>.yaml`, chargé automatiquement
+# par le noyau (`config/routes/*.yaml`).
+#
+# Pour lister les routes effectivement enregistrées : `bin/console debug:router`.

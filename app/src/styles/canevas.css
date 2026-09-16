@@ -1,0 +1,489 @@
+/**
+ * Le canevas SVG — arbre et chronologie.
+ *
+ * **Pourquoi ces règles sont dans une feuille globale et non dans un `<style
+ * scoped>` de composant.** Les 377 nœuds sont construits **impérativement**,
+ * par manipulation directe du DOM (§ 7.2 du dossier de mission, règle 3) : ils
+ * ne passent pas par le compilateur de template de Vue, donc ils ne portent pas
+ * l'attribut `data-v-…` qu'un style *scoped* exige. Un style *scoped* ne les
+ * atteindrait tout simplement pas. Ce n'est pas une facilité, c'est la
+ * conséquence directe du mode de rendu.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * TROIS RÈGLES DÉJÀ PAYÉES SUR CE PROJET. Les enfreindre fera revenir la
+ * lenteur, et elle ne se verra qu'à l'échelle réelle — jamais sur dix nœuds.
+ *
+ * 1. **Le zoom passe par le `viewBox`, jamais par `transform: scale()`.** Avec
+ *    `scale()`, le navigateur rastérise les 15 824 unités entières à l'échelle
+ *    demandée. Avec le `viewBox`, seul le visible est dessiné. Aucune règle de
+ *    ce fichier ne pose de `transform` sur `#canevas` ou sur un groupe qui le
+ *    contient, et il ne faut pas en ajouter.
+ *
+ * 2. **Jamais `opacity` sur un élément SVG pour mettre en retrait.** La
+ *    propriété crée un contexte d'empilement, donc **une couche de composition
+ *    par arête** : à 377 arêtes, la frappe dans la recherche devient saccadée.
+ *    On emploie `fill-opacity` et `stroke-opacity`, qui ne coûtent qu'un
+ *    repaint. Toutes les mises en retrait ci-dessous les utilisent — c'est
+ *    délibéré, ce n'est pas un style d'écriture.
+ *
+ * 3. **Le canevas est piloté impérativement**, hors de la réactivité de Vue.
+ *    Les classes ci-dessous sont posées et retirées par `classList`, sur des
+ *    éléments obtenus par `ref` : aucun `v-for` réactif sur les nœuds.
+ * ────────────────────────────────────────────────────────────────────
+ *
+ * **Ce qui a été retiré de `arbre.html`, et ne doit pas revenir.** La règle
+ *
+ *     .ar.long { stroke-opacity: .16; stroke-dasharray: 2 5 }
+ *
+ * est supprimée sur demande explicite du commanditaire : « les lignes pointillées
+ * à retirer et mettre en normal, ça sert à rien si c'est pour dire c'est loin »
+ * (§ 7.3 du dossier, ADR 0007). L'API n'émet d'ailleurs ni `long`, ni `distance`,
+ * ni `portee` : il n'y a aucune donnée ici pour réintroduire la distinction.
+ *
+ * **Ce qui est conservé** : `.ar.divorce` (pointillé et couleur d'alerte) et
+ * `.fiche.prive` (contour en tirets). Ce ne sont pas des distances, ce sont des
+ * informations.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Cadre                                                               */
+/* ------------------------------------------------------------------ */
+
+.canevas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+
+.canevas.deplacement {
+  cursor: grabbing;
+}
+
+/* ------------------------------------------------------------------ */
+/* Fiches                                                              */
+/* ------------------------------------------------------------------ */
+
+.fiche {
+  cursor: pointer;
+}
+
+.fiche rect:not(.br) {
+  stroke-width: 1.2;
+}
+
+.fiche:hover rect:not(.br) {
+  stroke-width: 2.4;
+}
+
+.fiche .nm {
+  font: 600 11.5px var(--font-sans);
+  text-anchor: middle;
+  fill: var(--color-texte);
+}
+
+.fiche .dt {
+  font: 10px var(--font-sans);
+  text-anchor: middle;
+  fill: var(--color-attenue);
+}
+
+/* Teinte par sexe : `h` masculin, `f` féminin, `x` inconnu. */
+.fiche.h rect:not(.br) {
+  fill: var(--color-homme);
+  stroke: var(--color-homme-bord);
+}
+
+.fiche.f rect:not(.br) {
+  fill: var(--color-femme);
+  stroke: var(--color-femme-bord);
+}
+
+.fiche.x rect:not(.br) {
+  fill: var(--color-inconnu);
+  stroke: var(--color-inconnu-bord);
+}
+
+/* Conservé (§ 7.3) : le contour en tirets dit « donnée privée », pas « loin ». */
+.fiche.prive rect:not(.br) {
+  stroke-dasharray: 4 3;
+}
+
+.fiche.ego rect:not(.br) {
+  stroke: var(--color-accent);
+  stroke-width: 2.6;
+}
+
+.fiche.remarie rect:not(.br) {
+  stroke-width: 2.2;
+}
+
+/**
+ * Nœud « en attente » — une personne proposée mais non validée (§ 13.4).
+ * Visible de son seul auteur et des administrateurs, l'API ne l'envoyant à
+ * personne d'autre. Traitement distinct : contour d'accent en tirets longs, et
+ * un remplissage plus clair obtenu par `fill-opacity` — surtout pas `opacity`.
+ */
+.fiche.attente rect:not(.br) {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  stroke-dasharray: 7 4;
+  fill-opacity: 0.55;
+}
+
+/**
+ * Liseré de branche : le quart d'ascendance dont la personne relève.
+ *
+ * **Pourquoi les règles du cadre portent toutes `rect:not(.br)`.** Le liseré est
+ * un `rect` **dans** le groupe de la fiche, exactement comme le cadre. Sans
+ * cette exclusion, `.fiche.h rect` — deux classes et un type, (0-2-1) — le
+ * peignait de la teinte du sexe et l'emportait sur `.b-pm`, qui ne pèse que
+ * (0-1-0) : les cinq couleurs de branche n'étaient peintes sur **aucune** fiche.
+ * Le défaut vient de `arbre.html` et il y est invisible, parce que la légende
+ * dessine ses pastilles **hors** d'une fiche, où `.b-pp` s'applique sans
+ * concurrence — le fichier se contredisait sans que rien ne cloche à la lecture.
+ *
+ * On aurait pu remonter la spécificité du liseré au-dessus de celle du cadre.
+ * C'était une course, et elle se serait rejouée : une règle en
+ * `.fiche.prive.h rect` ou `.fiche.h.ego rect` pèserait (0-3-1) et reprendrait
+ * silencieusement le dessus — liseré gris de nouveau, sans que rien ne casse.
+ * Les deux sélecteurs sont plausibles : le § 7.3 impose de conserver
+ * `.fiche.prive`, et `.ego` existe déjà. `:not(.br)` supprime la course au lieu
+ * de la gagner d'un point, et protège du même coup le liseré des contours
+ * d'accent de `.ego`, `.sel` et `.lien`, qui l'encadraient jusqu'ici.
+ *
+ * Corollaire pour qui ajoutera une règle de cadre : elle doit porter
+ * `rect:not(.br)`. Une règle nue en `.fiche… rect` reprendrait le liseré.
+ */
+.br {
+  fill-opacity: 0.9;
+}
+
+.b-pp { fill: var(--color-branche-pp); }
+.b-pm { fill: var(--color-branche-pm); }
+.b-mp { fill: var(--color-branche-mp); }
+.b-mm { fill: var(--color-branche-mm); }
+.b-tr { fill: var(--color-branche-tr); }
+
+
+/* ------------------------------------------------------------------ */
+/* Familles — losange 22 × 14, pas un cercle                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Le nœud de famille est un **losange 22 × 14**, et non le petit cercle que
+ * décrivaient les premiers documents de conception : ils déduisaient le moteur
+ * de sa sortie, faute d'avoir son code. La lecture de `graphe.py` les a
+ * corrigés (§ 7.1 du dossier). Le sélecteur porte donc sur `polygon`.
+ */
+.fam polygon {
+  fill: var(--color-panneau);
+  stroke: var(--color-attenue);
+  stroke-width: 1.3;
+}
+
+.fam.div polygon {
+  stroke: var(--color-alerte);
+}
+
+.fam .barre {
+  stroke: var(--color-alerte);
+  stroke-width: 1.8;
+}
+
+.fam .lm {
+  font: 9.5px var(--font-sans);
+  fill: var(--color-attenue);
+}
+
+/* ------------------------------------------------------------------ */
+/* Arêtes                                                              */
+/* ------------------------------------------------------------------ */
+
+.ar {
+  fill: none;
+  stroke: var(--color-texte);
+  stroke-opacity: 0.42;
+  stroke-width: 1.1;
+}
+
+.ar.union {
+  stroke-width: 1.4;
+  stroke-opacity: 0.5;
+}
+
+/* Conservé (§ 7.3) : un divorce est une information, pas une distance. */
+.ar.divorce {
+  stroke: var(--color-alerte);
+  stroke-opacity: 0.6;
+  stroke-dasharray: 5 4;
+}
+
+.ar.attente {
+  stroke: var(--color-accent);
+  stroke-opacity: 0.7;
+  stroke-dasharray: 7 4;
+}
+
+/* Il n'y a volontairement PAS de `.ar.long` ici. Voir l'en-tête du fichier. */
+
+/* ------------------------------------------------------------------ */
+/* Mises en retrait — recherche et focus                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * `fill-opacity` / `stroke-opacity` uniquement, sur chaque propriété peinte.
+ * C'est plus verbeux qu'un seul `opacity` sur le groupe parent, et c'est
+ * exactement le point : `opacity` créerait une couche de composition par
+ * élément et figerait le rendu (règle 2 de l'en-tête).
+ *
+ * Les classes sont posées sur le conteneur du canevas (`.canevas`) et non sur
+ * `body` : plusieurs canevas peuvent coexister (arbre, chronologie), et une
+ * classe sur `body` les mettrait tous en retrait ensemble.
+ */
+.canevas.recherche .fiche rect:not(.br) { fill-opacity: 0.09; stroke-opacity: 0.09; }
+.canevas.recherche .fiche text { fill-opacity: 0.11; }
+.canevas.recherche .fiche .br { fill-opacity: 0.09; }
+.canevas.recherche .fam polygon,
+.canevas.recherche .fam .barre { stroke-opacity: 0.07; fill-opacity: 0.07; }
+.canevas.recherche .fam .lm { fill-opacity: 0.07; }
+.canevas.recherche .ar { stroke-opacity: 0.05; }
+
+.canevas.recherche .fiche.trouve rect {
+  fill-opacity: 1;
+  stroke-opacity: 1;
+  stroke: var(--color-accent);
+  stroke-width: 2.6;
+}
+.canevas.recherche .fiche.trouve text { fill-opacity: 1; }
+.canevas.recherche .fiche.trouve .br { fill-opacity: 1; }
+
+.canevas.focus .fiche rect:not(.br) { fill-opacity: 0.12; stroke-opacity: 0.12; }
+.canevas.focus .fiche text { fill-opacity: 0.14; }
+/* Le liseré a besoin de sa propre règle depuis que `:not(.br)` l'a sorti de la
+   précédente — sinon il resterait en pleine couleur sur un graphe mis en
+   retrait, et les quatre branches sauteraient aux yeux au moment précis où l'on
+   veut ne voir qu'une chaîne de parenté. La recherche a déjà la sienne. */
+.canevas.focus .fiche .br { fill-opacity: 0.12; }
+.canevas.focus .fam polygon,
+.canevas.focus .fam .barre { stroke-opacity: 0.1; fill-opacity: 0.1; }
+.canevas.focus .fam .lm { fill-opacity: 0.1; }
+.canevas.focus .ar { stroke-opacity: 0.06; }
+
+.canevas.focus .on rect,
+.canevas.focus .on polygon { fill-opacity: 1; stroke-opacity: 1; }
+.canevas.focus .on text { fill-opacity: 1; }
+.canevas.focus .on .barre { stroke-opacity: 1; }
+.canevas.focus .ar.on { stroke-opacity: 0.75; }
+
+.fiche.sel rect:not(.br) {
+  stroke: var(--color-accent) !important;
+  stroke-width: 3 !important;
+}
+
+.fiche.lien rect:not(.br) {
+  stroke: var(--color-accent) !important;
+  stroke-width: 2 !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Chronologie — § 9 du contrat, § 7.4 du dossier                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Le canevas de la chronologie porte `canevas chrono` : `canevas` lui donne sa
+ * taille et son curseur, `chrono` sa peinture. Les échantillons de la légende
+ * portent `chrono` **sans** `canevas` — ils ont leur propre taille, et les
+ * règles ci-dessous doivent quand même les atteindre.
+ *
+ * Les trois règles de l'en-tête de ce fichier valent ici mot pour mot : zoom par
+ * `viewBox`, mise en retrait par `fill-opacity` / `stroke-opacity`, canevas
+ * piloté impérativement. Aucune règle ci-dessous n'emploie `opacity` ni
+ * `transform`.
+ */
+
+/* Bandes de N années : une sur deux est teintée, très légèrement. C'est le
+   découpage **du serveur** qu'on peint, jamais un découpage recalculé ici. */
+.chrono .bande {
+  fill: var(--color-texte);
+}
+
+.chrono .bande.paire {
+  fill-opacity: 0.045;
+}
+
+.chrono .bande.impaire {
+  fill-opacity: 0;
+}
+
+.chrono .filet {
+  stroke: var(--color-ligne);
+  stroke-width: 0.8;
+}
+
+.chrono .etiquette-bande {
+  font: 9.5px var(--font-sans);
+  /* Les années se comparent en colonne : « 1901 » et « 1909 » doivent
+     s'aligner. */
+  font-variant-numeric: tabular-nums;
+  fill: var(--color-attenue);
+}
+
+.chrono .entete-branche {
+  font: 700 10.5px var(--font-sans);
+  letter-spacing: 0.06em;
+  fill: var(--color-attenue);
+}
+
+/* ---- Barres ---- */
+
+.chrono .barre {
+  cursor: pointer;
+}
+
+.chrono .barre .corps {
+  stroke: var(--color-texte);
+  stroke-opacity: 0.25;
+  stroke-width: 0.6;
+  fill-opacity: 0.88;
+}
+
+.chrono .barre:hover .corps {
+  stroke-opacity: 0.85;
+  stroke-width: 1.4;
+}
+
+/**
+ * La couleur de branche, posée explicitement sur le corps de la barre.
+ *
+ * Les `.b-*` nues pèsent (0-1-0) et suffiraient tant que rien d'autre ne peint
+ * `fill` sur `.corps` — mais c'est exactement le pari que l'arbre a perdu : le
+ * liseré de branche y prenait la teinte du sexe parce qu'une règle plus lourde
+ * posait `fill` sur le même élément, et la légende annonçait cinq couleurs
+ * qu'aucune fiche ne montrait. On ne recommence pas.
+ */
+.chrono .barre .corps.b-pp { fill: var(--color-branche-pp); }
+.chrono .barre .corps.b-pm { fill: var(--color-branche-pm); }
+.chrono .barre .corps.b-mp { fill: var(--color-branche-mp); }
+.chrono .barre .corps.b-mm { fill: var(--color-branche-mm); }
+.chrono .barre .corps.b-tr { fill: var(--color-branche-tr); }
+
+/**
+ * **Ce que la donnée ne sait pas se voit aussi.**
+ *
+ * `sans-fin` : personne décédée dont on ignore la **date** du décès — 53 barres
+ * sur les 235 de la charge réelle. Sa barre s'arrête à ce qu'on sait (sa
+ * fourchette de naissance) et son bord de fin est en tirets : il ne prétend pas
+ * être une date. On ne la prolonge **pas** jusqu'à l'année courante, ce qui
+ * dirait « vivante » — exactement ce que la donnée dit ne pas savoir.
+ *
+ * `sans-debut` : personne dont on n'a que le décès. Même traitement, de l'autre
+ * côté. Le contour en tirets s'applique au corps entier faute de pouvoir ne
+ * viser qu'un bord en SVG ; c'est le prix d'un rendu qui ne ment pas.
+ */
+.chrono .barre.sans-fin .corps,
+.chrono .barre.sans-debut .corps {
+  stroke-dasharray: 3 2.5;
+  stroke-opacity: 0.6;
+}
+
+/* La pointe d'une barre ouverte : même couleur, plus pâle — la vie continue,
+   on ne sait pas jusqu'où. */
+.chrono .barre .pointe {
+  fill-opacity: 0.5;
+}
+
+.chrono .barre .pointe.b-pp { fill: var(--color-branche-pp); }
+.chrono .barre .pointe.b-pm { fill: var(--color-branche-pm); }
+.chrono .barre .pointe.b-mp { fill: var(--color-branche-mp); }
+.chrono .barre .pointe.b-mm { fill: var(--color-branche-mm); }
+.chrono .barre .pointe.b-tr { fill: var(--color-branche-tr); }
+
+.chrono .barre .nom {
+  font: 9px var(--font-sans);
+  fill: var(--color-texte);
+  fill-opacity: 0.92;
+  /* Le nom est posé dans sa barre : il ne doit pas capter le clic à la place
+     d'elle, ni afficher un curseur de sélection de texte. */
+  pointer-events: none;
+}
+
+/**
+ * **La hachure des dates incertaines** — exigence du § 7.4 du dossier, pas une
+ * finition. Elle couvre toute la fourchette `min → max` de l'extrémité, et le
+ * motif est défini dans le `<defs>` du canevas sous l'identifiant
+ * `chrono-hachure` (voir `canevas.ts`). C'est **ici** qu'on le référence : le
+ * fichier de construction ne pose aucune propriété de peinture.
+ *
+ * Si l'un des deux identifiants change sans l'autre, la hachure disparaît sans
+ * erreur — d'où le test qui vérifie que le motif est bien créé.
+ */
+.chrono .hachure {
+  fill: url(#chrono-hachure);
+  stroke: var(--color-texte);
+  stroke-opacity: 0.4;
+  stroke-width: 0.7;
+}
+
+/* L'échantillon de la légende a son propre motif : celui du canevas ne vit que
+   tant que le canevas est monté. */
+.chrono .hachure-legende {
+  fill: url(#chrono-hachure-legende);
+  stroke: var(--color-texte);
+  stroke-opacity: 0.4;
+  stroke-width: 0.7;
+}
+
+.chrono .trait {
+  fill: none;
+  stroke: var(--color-texte);
+  stroke-opacity: 0.8;
+  stroke-width: 1.4;
+}
+
+.chrono .jalon {
+  fill: var(--color-panneau);
+  stroke: var(--color-texte);
+  stroke-opacity: 0.55;
+  stroke-width: 0.9;
+}
+
+/**
+ * **Le trait de rattachement d'un jalon à sa barre.**
+ *
+ * Un fait daté qui tombe hors de l'étendue dessinée de sa barre — le cas d'une
+ * donnée qui se contredit, un acte antérieur à une naissance connue — resterait
+ * posé sur la piste, donc **attribuable à la barre voisine**. « Recensement
+ * 1906 » lu sur la ligne de quelqu'un d'autre est une information fausse donnée
+ * pour un fait : pire qu'absente. Le trait lève l'ambiguïté sans masquer la
+ * donnée — la date est vraie, c'est la barre qui est courte.
+ */
+.chrono .attache {
+  stroke: var(--color-texte);
+  stroke-opacity: 0.4;
+  stroke-width: 0.8;
+  stroke-dasharray: 2 2;
+}
+
+/* ---- Sélection : mise en retrait par propriétés de peinture ---- */
+
+.chrono.selection .barre .corps {
+  fill-opacity: 0.2;
+  stroke-opacity: 0.08;
+}
+
+.chrono.selection .barre .pointe { fill-opacity: 0.12; }
+.chrono.selection .barre .hachure { fill-opacity: 0.16; stroke-opacity: 0.08; }
+.chrono.selection .barre .nom { fill-opacity: 0.18; }
+
+.chrono.selection .barre.sel .corps {
+  fill-opacity: 1;
+  stroke: var(--color-accent);
+  stroke-opacity: 1;
+  stroke-width: 2;
+}
+
+.chrono.selection .barre.sel .pointe { fill-opacity: 0.6; }
+.chrono.selection .barre.sel .hachure { fill-opacity: 1; stroke-opacity: 0.4; }
+.chrono.selection .barre.sel .nom { fill-opacity: 1; }

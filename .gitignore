@@ -1,0 +1,211 @@
+# =============================================================================
+#  DONNÉES GÉNÉALOGIQUES RÉELLES — NE JAMAIS VERSIONNER
+# =============================================================================
+#
+# Ce dossier contient l'arbre réel d'une famille, 18 personnes vivantes
+# comprises : noms, dates et lieux de naissance, filiations, actes d'état civil
+# numérisés. Rien de tout cela n'a à se trouver sur un serveur tiers, fût-il
+# privé — un dépôt privé change de main, se partage, se clone sur un portable.
+#
+# Une fuite ici est irréversible : l'historique Git garde le fichier même
+# supprimé au commit suivant. D'où la règle : on n'ajoute jamais un chemin de ce
+# dossier sans avoir vérifié qu'il est bien couvert ci-dessous, et on n'utilise
+# ni `git add -A` ni `git add .` tant que la racine héberge ces fichiers.
+#
+# Le projet reste démarrable sans eux : les fixtures anonymisées à graine fixe
+# reproduisent la même topologie d'arbre (cf. dossier de mission § 9).
+
+# --- GEDCOM : la source de vérité, sous toutes ses versions et sauvegardes ----
+# Motif volontairement non ancré ET sans nom de fichier : un .ged déposé
+# n'importe où, sous n'importe quel nom, reste de la donnée réelle. `*.ged`
+# couvre donc tout — l'arbre de travail quel que soit son nom, *-gardien.ged,
+# *.backup.ged et l'export MyHeritage d'origine (nee649_…_A.ged). Ne jamais
+# remplacer ce motif par un nom particulier : le fichier sur le poste ne porte
+# pas forcément le nom écrit dans la documentation, et un motif nommé qui rate
+# publierait la donnée elle-même.
+*.ged
+*.ged.bak
+*.gedcom
+
+# Seule exception, nommée et ancrée : les fixtures de test. Elles sont
+# synthétiques (en-tête « Fixture écrite à la main », « Collection d'essai,
+# sans valeur documentaire ») et deux tests les lisent —
+# api/tests/Gedcom/AnalyseurGedcomTest.php et ImportGedcomCommandTest.php.
+# Sans cette ré-inclusion elles ne sont dans aucun clone et l'intégration
+# continue échoue dès sa première exécution. L'ancrage sur ce seul répertoire
+# est ce qui empêche l'exception de rattraper un .ged réel posé ailleurs :
+# contre-épreuve à rejouer, `git check-ignore -v arbre-romarin-v5.ged` doit
+# continuer de rendre le code 0.
+!/api/tests/Gedcom/fixtures/*.ged
+
+# --- Sorties du chantier généalogique (racine du dépôt) ----------------------
+# Graphes Graphviz et rendus SVG de l'arbre. Ancrés à la racine : l'interface
+# Vue aura ses propres SVG d'icônes dans app/, qui eux se versionnent.
+/*.gv
+/*.svg
+
+# Viewers HTML pré-calculés : arbre.html embarque `const D`, soit l'intégralité
+# des 274 fiches en clair. Le motif large couvre les variantes à venir, les
+# noms explicites documentent ce qui existe aujourd'hui.
+/arbre*.html
+/arbre.html
+/arbre-complet.html
+/arbre-interactif.html
+
+# Jeux de données intermédiaires du chantier.
+/graphe.json
+/arbre-data.json
+/rendu-parts.json
+/chantier.json
+/journal-fusion.json
+/normalisation.json
+
+# Dépouillement INSEE (fichier des décès) : état civil de personnes nommées.
+/insee-brut.json
+/insee-urls.json
+/resultats-insee.json
+/candidats-insee.json
+/communes.json
+
+# Rapports de fusion, de vérification et d'enquête : ils citent les personnes.
+/rapport-*.md
+
+# --- Dossiers de travail généalogique ----------------------------------------
+# recherche/ : actes numérisés et notes d'enquête (32 fichiers)
+# vignettes/ : miniatures JPEG de ces actes
+# data/      : données de l'instance webtrees, GEDCOM inclus
+/recherche/
+/vignettes/
+/data/
+
+# =============================================================================
+#  SECRETS
+# =============================================================================
+# Convention Symfony : `.env.example` et `.env.test` se versionnent (ils ne
+# portent que des valeurs factices), tout le reste non.
+.env
+.env.local
+.env.*.local
+.env.local.php
+.env.dev
+.env.prod
+#
+# ATTENTION, LES LIGNES `.env` ET `.env.dev` NE S'APPLIQUENT PAS À `api/` : `api/.gitignore`
+# lignes 38-39 réinclut délibérément `api/.env` et `api/.env.dev` (`!/.env`, `!/.env.dev`),
+# un .gitignore plus proche l'emportant sur celui-ci. C'est voulu — convention Symfony,
+# ce sont les valeurs par défaut sans secret, et `Dotenv::bootEnv()` en a besoin pour
+# qu'un clone neuf démarre. Ces deux fichiers SONT donc dans le dépôt : n'y écrivez
+# jamais de secret réel. Vérification : `git check-ignore -v --no-index api/.env.dev`
+# nomme la règle gagnante ; `git ls-files api/.env*` dit ce qui est suivi.
+# Les règles ci-dessus restent utiles partout ailleurs (tout autre répertoire du dépôt).
+/config/secrets/prod/prod.decrypt.private.php
+# Vidages de pile laisses par un binaire msys/cygwin qui s'interrompt (grep, sort...).
+# Sans nom fixe et sans interet : ils apparaissent a la racine au pire moment.
+*.stackdump
+*.pem
+*.key
+*.p12
+
+# =============================================================================
+#  DÉPENDANCES ET ARTEFACTS DE BUILD
+# =============================================================================
+# Non ancrés : ils apparaîtront sous api/ et app/, pas à la racine.
+vendor/
+node_modules/
+dist/
+dist-ssr/
+build/
+.pnpm-store/
+.yarn/
+!.yarn/patches
+!.yarn/releases
+.vite/
+vite.config.*.timestamp-*
+*.tsbuildinfo
+
+# =============================================================================
+#  SYMFONY
+# =============================================================================
+var/
+/public/bundles/
+/public/build/
+.php-version
+composer.phar
+symfony.lock.bak
+
+# =============================================================================
+#  TÉLÉVERSEMENTS ET SAUVEGARDES — données personnelles en production
+# =============================================================================
+# Portraits et preuves déposés par les membres, dumps de base : même nature de
+# donnée que la section du haut.
+uploads/
+backups/
+*.sql
+*.sql.gz
+*.dump
+
+# =============================================================================
+#  QUALITÉ ET TESTS
+# =============================================================================
+.phpunit.cache/
+.phpunit.result.cache
+/api/phpunit.xml
+/phpunit.xml
+.phpstan.cache/
+.phpstan-cache/
+phpstan.neon.local
+.php-cs-fixer.cache
+.php-cs-fixer.php
+coverage/
+/api/var/coverage/
+*.lcov
+.nyc_output/
+
+# =============================================================================
+#  OUTILS ET SYSTÈME
+# =============================================================================
+# JetBrains (PhpStorm, WebStorm)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code — on garde extensions.json, utile à l'équipe
+.vscode/*
+!.vscode/extensions.json
+
+# Divers
+.fleet/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+*.log
+
+# Surcharges locales de Docker Compose : propres à une machine.
+compose.override.yaml
+compose.override.yml
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# =============================================================================
+#  Bytecode Python — artefacts dérivés, JAMAIS versionnés
+# =============================================================================
+#
+#  LA RAISON, et non la convention : un `.pyc` **fige la source au moment de sa
+#  compilation**. Il survit donc aux corrections qu'on applique au `.py`, et il
+#  continue de porter ce que la source a perdu.
+#
+#  Mesuré le 16/09/2026 : `docs/moteur-retrouve/__pycache__/graphe.cpython-312.pyc`
+#  était suivi et portait encore une date de naissance réelle et deux cotes
+#  d'archives réelles — retirées du `.py` quelques minutes plus tôt. Aucune règle
+#  ne couvrait `__pycache__`, et un balayage qui ne lit que le texte ne pouvait pas
+#  les voir : ils ne sont pas lisibles en UTF-8.
+#
+#  Même défaut que `app/dist/` (voir `app/.gitignore`) : un artefact dérivé n'est
+#  jamais corrigé par la correction de sa source. La procédure est dans
+#  `docs/controle-donnees-reelles.md`.
+__pycache__/
+*.pyc
+*.pyo

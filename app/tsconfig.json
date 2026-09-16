@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    /* "node" est là pour `vite.config.ts` (process.env, node:url), qui fait
+       partie du périmètre vérifié par `npm run typecheck`. */
+    "types": ["vite/client", "node"],
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    /* La donnée généalogique est pleine de champs absents (an_deces, lieu_nais,
+       quay…). Sans cette option, `personne.lieu_nais` se typerait `string` alors
+       qu'il vaut `undefined` une fois sur deux : on veut que le typeur l'impose. */
+    "exactOptionalPropertyTypes": true,
+    /* `noUncheckedIndexedAccess` est volontairement laissé à false : le canevas de
+       l'arbre est du code impératif qui indexe des tableaux de 377 entrées en
+       boucle (§ 7.2), et l'option y ajouterait un `undefined` à chaque accès sans
+       rien attraper de réel. */
+
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts", "vite.config.ts"]
+}

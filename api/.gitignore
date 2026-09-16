@@ -1,0 +1,40 @@
+
+###> symfony/framework-bundle ###
+/.env.local
+/.env.local.php
+/.env.*.local
+/config/secrets/prod/prod.decrypt.private.php
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+###< phpunit/phpunit ###
+
+###> friendsofphp/php-cs-fixer ###
+/.php-cs-fixer.php
+/.php-cs-fixer.cache
+###< friendsofphp/php-cs-fixer ###
+
+###> heritage ###
+# Téléversements : documents et portraits de personnes vivantes, stockés hors
+# racine web et hors dépôt. Voir § 9 du dossier de mission.
+/uploads/
+###< heritage ###
+
+###> heritage — réintégration des .env du squelette Symfony ###
+# Le .gitignore de la racine exclut `.env` et `.env.dev` : c'est juste pour le
+# `.env` du chantier généalogique, qui porte des chemins et des jetons de travail.
+#
+# Côté Symfony, ces deux fichiers n'ont pas le même rôle : ce sont les *valeurs par
+# défaut versionnées*, sans aucun secret (§ 4 du dossier de mission : « le .env
+# versionné ne contient que des valeurs de développement inoffensives »). Sans eux
+# dans le dépôt, `Dotenv::bootEnv()` ne trouve pas de fichier à charger et l'API
+# refuse de démarrer sur un clone neuf. Les surcharges réelles restent dans
+# `.env.local` / `.env.*.local`, qui eux restent ignorés.
+!/.env
+!/.env.dev
+###< heritage ###
