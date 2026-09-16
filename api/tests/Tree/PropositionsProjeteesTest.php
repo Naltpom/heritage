@@ -9,6 +9,7 @@ use App\Module\Core\Contract\NoeudPropose;
 use App\Module\Core\Contract\ProjectionEnAttente;
 use App\Module\Core\Enum\Branch;
 use App\Module\Core\Enum\Sex;
+use App\Module\Tree\Serializer\NoeudProposeEcarte;
 use App\Module\Tree\Serializer\PropositionsProjetees;
 use App\Module\Tree\Service\MesureDeFiche;
 use App\Module\Tree\Service\MoteurDePlacement;
@@ -67,12 +68,24 @@ final class PropositionsProjeteesTest extends TestCase
     /**
      * @param array<int, array{displayName: string, branch: string|null}> $branches
      *
-     * @return array{noeuds: list<\App\Module\Tree\Serializer\NoeudProposePlacable>, renommage: array<string, string>}
+     * @return array{noeuds: list<\App\Module\Tree\Serializer\NoeudProposePlacable>, renommage: array<string, string>, ecartes: list<NoeudProposeEcarte>}
      */
     private function preparer(NoeudPropose $noeud, AncragePropose $ancrage, array $branches = []): array
     {
+        return $this->preparerPlusieurs([$noeud], [$ancrage], $branches);
+    }
+
+    /**
+     * @param list<NoeudPropose>                                          $noeuds
+     * @param list<AncragePropose>                                        $ancrages
+     * @param array<int, array{displayName: string, branch: string|null}> $branches
+     *
+     * @return array{noeuds: list<\App\Module\Tree\Serializer\NoeudProposePlacable>, renommage: array<string, string>, ecartes: list<NoeudProposeEcarte>}
+     */
+    private function preparerPlusieurs(array $noeuds, array $ancrages, array $branches = []): array
+    {
         return (new PropositionsProjetees())->preparer(
-            new ProjectionEnAttente([12], [$noeud], [$ancrage]),
+            new ProjectionEnAttente([12], $noeuds, $ancrages),
             $this->placement(),
             $branches,
         );
@@ -80,13 +93,18 @@ final class PropositionsProjeteesTest extends TestCase
 
     private function noeud(string $ligneDates, bool $decede = true): NoeudPropose
     {
+        return $this->noeudNomme('#12/p1', 'Tourmaline', 'Muguet', $ligneDates, $decede);
+    }
+
+    private function noeudNomme(string $noeudId, string $prenom, string $nom, string $ligneDates = '1889-1972', bool $decede = true): NoeudPropose
+    {
         return new NoeudPropose(
-            noeudId: '#12/p1',
+            noeudId: $noeudId,
             demandeId: 12,
-            brouillonRef: 'p1',
-            displayName: 'Tourmaline Muguet',
-            givenNames: 'Tourmaline',
-            surname: 'Muguet',
+            brouillonRef: ltrim(strstr($noeudId, '/') ?: '/p1', '/'),
+            displayName: $prenom.' '.$nom,
+            givenNames: $prenom,
+            surname: $nom,
             marriedName: null,
             sex: Sex::Feminin->value,
             deceased: $decede,
@@ -97,7 +115,12 @@ final class PropositionsProjeteesTest extends TestCase
 
     private function ancrage(string $kind, ?string $autre, ?int $familleId = null, ?string $familleProvisoire = null): AncragePropose
     {
-        return new AncragePropose(12, 0, $kind, '#12/p1', $autre, null, $familleId, $familleProvisoire, false);
+        return $this->ancrageDe('#12/p1', $kind, $autre, $familleId, $familleProvisoire);
+    }
+
+    private function ancrageDe(string $sujet, string $kind, ?string $autre, ?int $familleId = null, ?string $familleProvisoire = null): AncragePropose
+    {
+        return new AncragePropose(12, 0, $kind, $sujet, $autre, null, $familleId, $familleProvisoire, false);
     }
 
     /**
@@ -224,6 +247,10 @@ final class PropositionsProjeteesTest extends TestCase
     /**
      * Une personne proposée dont l'ancre a disparu entre le dépôt et l'affichage est
      * **omise**, jamais posée à `x = 0` — où elle se superposerait à l'ego.
+     *
+     * L'omission reste la bonne réponse. Ce que le second bloc d'assertions protège,
+     * c'est qu'elle ne soit plus **muette** : la fiche omise sort dans `ecartes`, nommée,
+     * avec la raison de son absence.
      */
     public function testUnAncrageIntrouvableOmetLeNoeudPlutotQueDeLePoserSurLEgo(): void
     {
@@ -231,5 +258,110 @@ final class PropositionsProjeteesTest extends TestCase
 
         self::assertSame([], $prepare['noeuds']);
         self::assertSame([], $prepare['renommage']);
+
+        self::assertCount(1, $prepare['ecartes'], 'Le nœud omis est compté, pas perdu.');
+        self::assertSame('#12/p1', $prepare['ecartes'][0]->source->noeudId);
+        self::assertSame('Tourmaline Muguet', $prepare['ecartes'][0]->source->displayName);
+        self::assertSame(NoeudProposeEcarte::ANCRE_ABSENTE, $prepare['ecartes'][0]->raison);
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     *  LE CAS MESURÉ : UNE BRANCHE PROPOSÉE EN BLOC, DONT UNE SEULE FICHE SE POSE.
+     * ═══════════════════════════════════════════════════════════════════════════.
+     *
+     * Cinq demandes ont déposé une branche de vingt-deux personnes ; **cinq nœuds ont
+     * été placés et dix-sept écartés**, et le calque annonçait `actif: true` sur les cinq
+     * demandes sans un mot sur l'écart. Aucun test ne l'a vu, parce qu'aucun n'assertait
+     * la **taille** de l'ensemble qu'il parcourait : un test qui vérifie que les nœuds
+     * rendus sont bien placés reste vert quand il n'en reste qu'un sur quatre.
+     *
+     * Le mécanisme est ici, en réduction : seule la fiche rattachée à une personne de
+     * l'arbre validé se place. Tout ce qui pend derrière elle — l'enfant d'un parent
+     * lui-même proposé — a pour ancre `#12/p1`, qui n'est dans aucun placement partagé,
+     * puisque celui-ci ne contient que l'arbre validé.
+     *
+     * **Ce n'est pas le comportement qui est corrigé, c'est le silence.** Les mêmes nœuds
+     * sont placés, les mêmes sont omis ; l'invariant ci-dessous est la seule chose qui
+     * change, et c'est lui qui permet à l'écran de dire ce qu'il ne montre pas.
+     */
+    public function testUneBrancheProposeeEnBlocNePlaceQueSaRacineEtCompteLeReste(): void
+    {
+        $prepare = $this->preparerPlusieurs(
+            [
+                $this->noeudNomme('#12/p1', 'Girolle', 'Chanterelle'),
+                $this->noeudNomme('#12/p2', 'Morille', 'Chanterelle'),
+                $this->noeudNomme('#12/p3', 'Cèpe', 'Chanterelle'),
+                $this->noeudNomme('#12/p4', 'Russule', 'Chanterelle'),
+            ],
+            [
+                // La racine de la branche : rattachée à `p2`, qui existe dans l'arbre validé.
+                $this->ancrageDe('#12/p1', 'conjoint_de', 'p2', familleProvisoire: '#12/f1'),
+                // Les trois autres pendent à des fiches de la même demande.
+                $this->ancrageDe('#12/p2', 'enfant_de', '#12/p1'),
+                $this->ancrageDe('#12/p3', 'enfant_de', '#12/p1'),
+                $this->ancrageDe('#12/p4', 'conjoint_de', '#12/p2'),
+            ],
+            [2 => ['displayName' => 'Cresson', 'branch' => Branch::Pm->value]],
+        );
+
+        // ───── L'assertion qui manquait : la taille de l'ensemble parcouru.
+        self::assertCount(1, $prepare['noeuds'], 'Seule la fiche rattachée à l’arbre validé se place.');
+        self::assertCount(3, $prepare['ecartes'], 'Les trois autres sont écartées, et comptées.');
+        self::assertCount(
+            4,
+            [...$prepare['noeuds'], ...$prepare['ecartes']],
+            'Tout nœud proposé est soit placé, soit écarté : aucun ne disparaît entre les deux.',
+        );
+
+        self::assertSame('#12/p1', $prepare['noeuds'][0]->id());
+
+        $ecartes = [];
+        foreach ($prepare['ecartes'] as $ecarte) {
+            $ecartes[$ecarte->source->noeudId] = $ecarte->raison;
+        }
+
+        self::assertSame(
+            [
+                '#12/p2' => NoeudProposeEcarte::ENCHAINEMENT,
+                '#12/p3' => NoeudProposeEcarte::ENCHAINEMENT,
+                '#12/p4' => NoeudProposeEcarte::ENCHAINEMENT,
+            ],
+            $ecartes,
+            'La raison distingue l’enchaînement — la forme normale d’une branche proposée — d’une cible disparue.',
+        );
+    }
+
+    /**
+     * Une fiche proposée que **aucun lien ne porte** : le § 6.4 du dossier l'interdit à
+     * la saisie, mais si le cas survient, elle est écartée sous son propre motif — et
+     * non confondue avec une ancre disparue, qui appellerait un tout autre geste.
+     */
+    public function testUneFicheSansAucunLienEstEcarteeSousSonPropreMotif(): void
+    {
+        $prepare = $this->preparerPlusieurs([$this->noeud('1889-1972')], []);
+
+        self::assertSame([], $prepare['noeuds']);
+        self::assertCount(1, $prepare['ecartes']);
+        self::assertSame(NoeudProposeEcarte::SANS_LIEN, $prepare['ecartes'][0]->raison);
+    }
+
+    /**
+     * « Enfant de » désignant un **seul parent qui n'a aucun couple** dans l'arbre : le
+     * projecteur ne sait ancrer un enfant que sous un losange, et il n'y en a pas.
+     *
+     * Le distinguer d'une ancre disparue n'est pas un raffinement : la validation, elle,
+     * **créerait** ce couple. Dire « introuvable » d'un parent bien présent enverrait
+     * l'administrateur chercher une fiche qui n'a jamais manqué.
+     */
+    public function testUnEnfantDUnParentSansCoupleEstEcarteSousSonPropreMotif(): void
+    {
+        // `p1` est l'ego du placement de ce fichier : il est enfant de `f9`, et n'est
+        // l'époux de personne.
+        $prepare = $this->preparer($this->noeud('2001-'), $this->ancrage('enfant_de', 'p1'));
+
+        self::assertSame([], $prepare['noeuds']);
+        self::assertCount(1, $prepare['ecartes']);
+        self::assertSame(NoeudProposeEcarte::SANS_COUPLE, $prepare['ecartes'][0]->raison);
     }
 }

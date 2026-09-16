@@ -99,10 +99,37 @@ function nomComplet(brouillon: BrouillonDemande): string {
           :key="lien.seq"
           class="rounded-champ border border-ligne bg-fond px-3 py-2 text-sm"
         >
-          <span class="text-attenue">{{ lien.nature }}</span>
-          <span class="font-medium"> {{ lien.autre }}</span>
-          <span v-if="lien.union !== null" class="text-attenue"> — {{ lien.union }}</span>
-          <span v-if="lien.rupture !== null" class="text-attenue"> — {{ lien.rupture }}</span>
+          <!--
+            **Les espaces sont dans les interpolations, pas entre les balises.**
+
+            Le compilateur de gabarit replie les blancs : un espace posé entre
+            deux éléments disparaît, et l'écran affichait « Conjoint·e deJargon
+            Sarriette », deux mots collés. Une gouttière CSS ferait illusion sans
+            réparer la chaîne — un lecteur d'écran lirait toujours un seul mot, et
+            une copie du texte resterait fausse. La valeur d'une interpolation,
+            elle, n'est jamais rognée.
+          -->
+          <!--
+            Le **sujet** ouvre la ligne, et c'est le correctif qui compte ici.
+            Sans lui, une demande portant plusieurs fiches rend une liste de
+            « Enfant de X » dont rien ne dit qui est l'enfant : sur une branche
+            de vingt-deux personnes, il fallait relever la référence provisoire
+            du lien et la retrouver à la main dans la liste des brouillons.
+          -->
+          <span class="font-medium">{{ lien.sujet }}</span>
+          <span class="text-attenue">{{ ` — ${lien.nature} ` }}</span>
+          <span class="font-medium">{{ lien.autre }}</span>
+          <!--
+            Le second parent porte le même poids que le premier : une filiation
+            à deux parents nommés dit à elle seule de quel couple l'enfant est
+            issu, et c'est ce que l'administrateur juge.
+          -->
+          <template v-if="lien.secondParent !== null">
+            <span class="text-attenue">{{ ' et ' }}</span>
+            <span class="font-medium">{{ lien.secondParent }}</span>
+          </template>
+          <span v-if="lien.union !== null" class="text-attenue">{{ ` — ${lien.union}` }}</span>
+          <span v-if="lien.rupture !== null" class="text-attenue">{{ ` — ${lien.rupture}` }}</span>
           <p v-if="lien.note !== null" class="mt-1 text-xs text-attenue">{{ lien.note }}</p>
         </li>
       </ul>

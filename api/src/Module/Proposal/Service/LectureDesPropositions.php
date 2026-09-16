@@ -142,7 +142,7 @@ final readonly class LectureDesPropositions implements CalqueEnAttenteInterface
             $this->noeudDeBrouillon($demandeId, $brouillon->getLocalRef()),
             $demandeId,
             $reference,
-            $this->displayName($brouillon),
+            $brouillon->nomPropose(),
             $brouillon->getGivenNames(),
             $brouillon->getSurname(),
             $brouillon->getMarriedName(),
@@ -225,15 +225,4 @@ final readonly class LectureDesPropositions implements CalqueEnAttenteInterface
         return '#'.$demandeId.'/'.ltrim($localRef, '#');
     }
 
-    /**
-     * Un libellé de repli, **jamais la vérité** : `tree_person.display_name` est une
-     * colonne dérivée que `Tree` compose selon sa propre règle, et c'est elle qui doit
-     * s'appliquer pour qu'un nœud proposé soit nommé comme ses voisins.
-     */
-    private function displayName(DraftPerson $brouillon): string
-    {
-        $parties = array_filter([$brouillon->getGivenNames(), $brouillon->getSurname()], static fn (string $part): bool => '' !== trim($part));
-
-        return '' === ($nom = implode(' ', $parties)) ? '(sans nom)' : $nom;
-    }
 }

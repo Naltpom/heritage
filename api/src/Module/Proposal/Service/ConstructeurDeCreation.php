@@ -81,8 +81,8 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
     {
         $creation = RequestKind::CreationPersonne === $demande->getKind();
 
-        $references = $this->construireLesBrouillons($demande, $corps, $creation);
-        $this->construireLesLiens($demande, $corps, $references, $creation);
+        $brouillons = $this->construireLesBrouillons($demande, $corps, $creation);
+        $this->construireLesLiens($demande, $corps, $brouillons, $creation);
     }
 
     /**
@@ -172,7 +172,10 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
     /**
      * @param array<string, mixed> $corps
      *
-     * @return list<string> les références provisoires déclarées, pour valider les liens
+     * @return array<string, DraftPerson> les fiches déclarées, **indexées par leur
+     *                                    référence provisoire** : les liens s'y
+     *                                    rapportent, et ils ont besoin du nom autant que
+     *                                    de la référence
      */
     private function construireLesBrouillons(ChangeRequest $demande, array $corps, bool $creation): array
     {
@@ -196,20 +199,21 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             throw DonneesInvalides::pourChamp('brouillons', 'Une création décrit au moins une personne.');
         }
 
-        $references = [];
+        $brouillons = [];
 
         foreach (array_values($brut) as $index => $fiche) {
             if (!\is_array($fiche)) {
                 throw DonneesInvalides::pourChamp("brouillons[$index]", 'Chaque brouillon est un objet.');
             }
 
-            $reference = $this->reference($fiche, $index, $references);
-            $references[] = $reference;
+            $reference = $this->reference($fiche, $index, array_keys($brouillons));
+            $construit = $this->brouillon($demande, $reference, $fiche, $index);
 
-            $this->em->persist($this->brouillon($demande, $reference, $fiche, $index));
+            $brouillons[$reference] = $construit;
+            $this->em->persist($construit);
         }
 
-        return $references;
+        return $brouillons;
     }
 
     /**
@@ -260,10 +264,10 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
     }
 
     /**
-     * @param array<string, mixed> $corps
-     * @param list<string>         $references
+     * @param array<string, mixed>       $corps
+     * @param array<string, DraftPerson> $brouillons indexés par référence provisoire
      */
-    private function construireLesLiens(ChangeRequest $demande, array $corps, array $references, bool $creation): void
+    private function construireLesLiens(ChangeRequest $demande, array $corps, array $brouillons, bool $creation): void
     {
         $brut = $corps['liens'] ?? [];
 
@@ -283,7 +287,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
                 throw DonneesInvalides::pourChamp("liens[$index]", 'Chaque lien est un objet.');
             }
 
-            $construit = $this->lien($demande, $lien, $index, $references, $creation);
+            $construit = $this->lien($demande, $lien, $index, $brouillons, $creation);
 
             if (\in_array($construit->getSeq(), $rangs, true)) {
                 throw DonneesInvalides::pourChamp("liens[$index].seq", 'Deux liens ne peuvent pas porter le même rang.');
@@ -306,10 +310,10 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
     }
 
     /**
-     * @param array<string, mixed> $brut
-     * @param list<string>         $references
+     * @param array<string, mixed>       $brut
+     * @param array<string, DraftPerson> $brouillons indexés par référence provisoire
      */
-    private function lien(ChangeRequest $demande, array $brut, int $index, array $references, bool $creation): DraftLink
+    private function lien(ChangeRequest $demande, array $brut, int $index, array $brouillons, bool $creation): DraftLink
     {
         $chemin = "liens[$index]";
 
@@ -328,7 +332,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             $brut,
             'subject',
             $chemin,
-            $references,
+            $brouillons,
             $creation,
             obligatoire: true,
         );
@@ -341,7 +345,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             $lien->viserSujetBrouillon((string) $sujetRef);
         }
 
-        $this->designerLAutreExtremite($lien, $brut, $chemin, $references, $creation, $nature);
+        $this->designerLAutreExtremite($lien, $brut, $chemin, $brouillons, $creation, $nature);
         $this->porterLesDatesDUnion($lien, $brut, $chemin, $nature);
 
         $rang = $brut['siblingOrder'] ?? null;
@@ -359,14 +363,14 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
      * Jamais les deux — `ck_prp_link_famille_filiation` l'impose en base, et « le
      * service ne saurait pas laquelle des deux intentions respecter ».
      *
-     * @param array<string, mixed> $brut
-     * @param list<string>         $references
+     * @param array<string, mixed>       $brut
+     * @param array<string, DraftPerson> $brouillons indexés par référence provisoire
      */
     private function designerLAutreExtremite(
         DraftLink $lien,
         array $brut,
         string $chemin,
-        array $references,
+        array $brouillons,
         bool $creation,
         LinkKind $nature,
     ): void {
@@ -396,7 +400,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             return;
         }
 
-        [$autreId, $autreRef, $autreLibelle] = $this->extremite($brut, 'other', $chemin, $references, $creation, obligatoire: true);
+        [$autreId, $autreRef, $autreLibelle] = $this->extremite($brut, 'other', $chemin, $brouillons, $creation, obligatoire: true);
         $lien->designerAutre($autreId, $autreRef, $autreLibelle);
 
         // Le second parent n'a de sens que pour une filiation
@@ -409,7 +413,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             throw DonneesInvalides::pourChamp("$chemin.other2PersonId", 'Un second parent ne se désigne que sur une filiation.');
         }
 
-        [$deuxiemeId, $deuxiemeRef, $deuxiemeLibelle] = $this->extremite($brut, 'other2', $chemin, $references, $creation, obligatoire: true);
+        [$deuxiemeId, $deuxiemeRef, $deuxiemeLibelle] = $this->extremite($brut, 'other2', $chemin, $brouillons, $creation, obligatoire: true);
         $lien->designerSecondParent($deuxiemeId, $deuxiemeRef, $deuxiemeLibelle);
     }
 
@@ -422,8 +426,31 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
      * dénormalisé : « aucun identifiant n'entre en base sans être passé par son
      * propriétaire » (ADR 0002, compensation 1).
      *
-     * @param array<string, mixed> $brut
-     * @param list<string>         $references
+     * ── Le libellé d'un brouillon est son nom, et il l'est depuis le dépôt ──────────
+     *
+     * Il a longtemps valu `'Personne proposée '.$reference`, au motif écrit que « le
+     * libellé d'un brouillon n'est connu qu'après sa construction ». **C'était faux** :
+     * {@see construire()} appelle {@see construireLesBrouillons()} avant
+     * {@see construireLesLiens()}, les fiches sont donc toutes bâties quand le premier
+     * lien se construit. La seule chose qui manquait, c'est que la première méthode ne
+     * rendait que les références et jetait les objets.
+     *
+     * Le coût était payé à l'écran de validation : une branche de vingt-deux personnes
+     * dont les liens ne nommaient personne — pour savoir de qui un enfant était le fils,
+     * il fallait relever `#p1` dans le lien et le retrouver à la main dans les
+     * brouillons. Le second motif écrit — « la validation le remplacera par le
+     * `display_name` réel » — était faux aussi : **rien** ne réécrit ces colonnes, et
+     * `ApplicateurDeCreation::libelleDuLien()` les recopie telles quelles dans
+     * `prp_revision.subject_label`, où « Personne proposée #p1 » reste pour de bon.
+     *
+     * Ce que le motif d'origine avait de juste reste vrai et n'est pas contourné : un
+     * libellé dénormalisé « n'est jamais une source de vérité ; il sert à l'affichage et
+     * au tri, jamais à une décision » (ADR 0002, compensation 3). C'est pourquoi
+     * {@see SerialiseurDeDemande} ne s'en contente pas et relit le nom sur la fiche à
+     * chaque rendu : les liens déjà en base, eux, portent encore l'ancienne forme.
+     *
+     * @param array<string, mixed>       $brut
+     * @param array<string, DraftPerson> $brouillons indexés par référence provisoire
      *
      * @return array{int|null, string|null, string}
      */
@@ -431,7 +458,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         array $brut,
         string $prefixe,
         string $chemin,
-        array $references,
+        array $brouillons,
         bool $creation,
         bool $obligatoire,
     ): array {
@@ -464,11 +491,14 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
                 throw DonneesInvalides::pourChamp("$chemin.$cleRef", 'Un ajout de lien relie deux personnes existantes.');
             }
 
-            if (!\is_string($ref) || !\in_array($ref, $references, true)) {
+            if (!\is_string($ref) || !isset($brouillons[$ref])) {
                 throw DonneesInvalides::pourChamp("$chemin.$cleRef", 'Cette référence provisoire ne correspond à aucun brouillon de cette demande.');
             }
 
-            return [null, $ref, $this->libelleDeBrouillon($ref)];
+            // Le libellé dénormalisé porte le **nom** de la fiche proposée, pas sa
+            // référence. Les deux boucles de `construire()` sont ordonnées pour cela :
+            // les brouillons sont construits d'abord, et les liens les reçoivent.
+            return [null, $ref, $brouillons[$ref]->nomPropose()];
         }
 
         if ($obligatoire) {
@@ -506,15 +536,6 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         $lien->setMarriage($this->date($brut, 'marriage', $chemin));
         $lien->setDivorced($this->booleen($brut, 'divorced', $chemin));
         $lien->setDivorce($this->date($brut, 'divorce', $chemin));
-    }
-
-    private function libelleDeBrouillon(string $reference): string
-    {
-        // Le libellé d'un brouillon n'est connu qu'après sa construction ; on pose la
-        // référence en attendant, et la validation le remplacera par le `display_name`
-        // réel. Un libellé dénormalisé « n'est jamais une source de vérité : il sert à
-        // l'affichage et au tri, jamais à une décision » (ADR 0002, compensation 3).
-        return 'Personne proposée '.$reference;
     }
 
     /** @param array<string, mixed> $source */

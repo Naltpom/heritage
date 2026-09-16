@@ -923,7 +923,17 @@ proposée, famille provisoire, et l'ego.
   "empreinte": "9f2c4a1e7b0d5c83a6f1e2d9c4b7a0e5f3d8c1b6a9e4f7d2c5b8a1e6f3d0c9b2",
   "ego": "p1",
   "boite": { "x": -7770, "y": -1730, "w": 15824, "h": 1810 },
-  "calque": { "actif": true, "demandes": [12] },
+  "calque": {
+    "actif": true,
+    "demandes": [12],
+    "proposes": 4,
+    "places": 1,
+    "nonPlaces": [
+      { "noeudId": "#12/p2", "demandeId": 12, "brouillonRef": "p2", "displayName": "Morille Chanterelle", "raison": "enchainement" },
+      { "noeudId": "#12/p3", "demandeId": 12, "brouillonRef": "p3", "displayName": "Cèpe Chanterelle", "raison": "enchainement" },
+      { "noeudId": "#12/p4", "demandeId": 12, "brouillonRef": "p4", "displayName": "Russule Chanterelle", "raison": "enchainement" }
+    ]
+  },
   "noeuds": [
     {
       "id": "p1",
@@ -1049,6 +1059,50 @@ Lecture, point par point :
 - **`calque.actif`** dit au front s'il doit afficher la légende « en attente ».
   `calque.demandes` liste les demandes incorporées : celles du lecteur, ou **toutes** pour un
   administrateur (§ 9.5).
+- **`calque.proposes`, `calque.places` et `calque.nonPlaces`** disent ce que `actif` taisait.
+
+  > **`actif` ne dit pas « complet ».** Il dit qu'il y a quelque chose en attente, et rien
+  > de plus.
+
+  Mesuré sur un cas réel : cinq demandes portant vingt-deux personnes ont rendu
+  `actif: true`, `demandes: [1,2,3,4,5]` et **cinq nœuds sur vingt-deux**. Rien dans la
+  charge ne signalait l'écart ; le lecteur avait sous les yeux un calque qui se déclarait
+  actif sur cinq demandes en ayant écarté les trois quarts de ce qu'elles proposaient.
+
+  **L'omission reste le bon comportement** et ne change pas : le placement partagé ne
+  contient que l'arbre **validé**, une fiche rattachée à une autre fiche de la même demande
+  n'a nulle part où s'accrocher, et la poser faute de mieux la mettrait à `x = 0`,
+  c'est-à-dire sur l'ego. Dix-sept fiches empilées là seraient pires qu'absentes. Ce qui
+  change, c'est que l'écart se lise.
+
+  Les trois clés sont **toujours présentes**, à zéro quand il n'y a rien : un compteur
+  absent se lit `undefined` côté client, et `undefined > 0` est faux — l'avertissement ne
+  s'afficherait jamais, exactement comme avant.
+
+  `proposes === places + nonPlaces.length`, **par construction et non par accord** : le
+  serveur mesure les deux sur la même sortie, en confrontant ce que `Proposal` publie au
+  placement final. Additionner les écarts que chaque étage déclare laisserait passer ceux
+  qu'aucun ne déclare — et il y a deux endroits qui écartent, la traduction et la pose.
+
+  `raison` prend l'une des valeurs suivantes. Elle est en français comme toute clé qui n'est
+  pas une colonne (§ 1.2), et sa valeur l'est aussi :
+
+  | `raison` | ce qu'elle dit |
+  |---|---|
+  | `enchainement` | l'ancre est une **autre fiche proposée**, qui n'est dans aucun placement partagé. C'est la forme normale d'une branche déposée en bloc, et le cas qui domine. |
+  | `ancre_absente` | l'ancre désigne une personne ou une famille **validée** qui n'est pas dans le graphe — une cible disparue depuis le dépôt. |
+  | `sans_couple` | « enfant de » avec un seul parent nommé, et ce parent n'a aucun couple dans l'arbre. La validation en créerait un ; le rendu ne devine pas. |
+  | `sans_lien` | aucun lien ne porte cette fiche. Le § 6.4 du dossier l'interdit à la saisie. |
+  | `generation_indeterminee` | l'ancre est là, mais sa rangée ne se lit pas. |
+  | `placement_refuse` | traduite, puis refusée par le moteur de placement. |
+
+  `demandeId` et `brouillonRef` sont servis pour que l'écran puisse **ouvrir la fiche** : elle
+  reste consultable par `GET /api/demandes/{id}/brouillons/{ref}` (§ 6.6) même quand le
+  canevas ne sait pas la dessiner. Un avertissement qui annonce un manque sans offrir le
+  moindre geste transforme une information en frustration.
+
+  Ce n'est pas une fuite : la projection est **déjà** bornée aux demandes que ce lecteur a le
+  droit de voir (§ 13.3), et `displayName` serait sur le nœud si le nœud avait été placé.
 - **`visibilite`** vaut `"complete"` ou `"restreinte"`. Sur un nœud `"restreinte"`,
   **quatre clés sont absentes** — pas à `null` (§ 1.3) : `etiquetteDates`, `bestQuay`,
   `citationCount`, `avecImage`. `etiquetteNom`, elle, reste (§ 11.2 explique l'asymétrie).
@@ -1765,6 +1819,7 @@ demande le désigne :
       "deceased": true,
       "birth": { "raw": "ABT 1889", "qualifier": "environ", "min": "1889-01-01", "max": "1889-12-31", "place": "Saule, Ombrage, Sylvanie", "texte": "vers 1889" },
       "death": { "raw": "1972", "qualifier": "annee", "min": "1972-01-01", "max": "1972-12-31", "place": null, "texte": "1972" },
+      "note": "Livret de famille en ma possession, photographié.",
       "resolvedPersonId": null
     }
   ],
@@ -1773,12 +1828,20 @@ demande le désigne :
       "seq": 1,
       "kind": "conjoint_de",
       "subjectDraftRef": "#p1",
-      "subjectLabel": "Tourmaline Muguet",
+      "subjectLabel": "Tourmaline Muguet (proposée)",
       "otherPersonId": 55,
+      "otherDraftRef": null,
       "otherLabel": "Jargon Sarriette",
+      "other2PersonId": null,
+      "other2DraftRef": null,
+      "other2Label": null,
+      "familyId": null,
+      "familyLabel": null,
       "marriage": { "raw": "23 SEP 1927", "qualifier": "exacte", "min": "1927-09-23", "max": "1927-09-23", "place": "Saule, Ombrage, Sylvanie", "texte": "23 septembre 1927" },
       "divorced": false,
       "divorce": null,
+      "siblingOrder": null,
+      "note": "Union relevée sur le registre paroissial.",
       "resolvedFamilyId": null
     }
   ],
@@ -1789,6 +1852,38 @@ demande le désigne :
 `noeudId` est ajouté par l'API sur chaque brouillon : c'est **l'identifiant que ce brouillon
 porte dans le graphe** (§ 5.2). Le front ne le fabrique pas par concaténation ; il le lit ici
 et dans le nœud, et les deux coïncident par construction.
+
+#### Les libellés d'un lien nomment les fiches proposées
+
+> **Une extrémité qui désigne un brouillon de la même demande porte son nom, suivi de
+> « (proposée) ».** Jamais sa référence provisoire.
+
+Elle a porté « Personne proposée #p1 », et ce n'était pas un détail de présentation. Mesuré
+sur un cas réel : une branche de vingt-deux personnes déposée en cinq demandes a été validée
+**sans que sa parenté ait pu se lire** — pour savoir de qui un enfant était le fils, il
+fallait relever `#p1` dans le lien et le retrouver à la main dans la liste des brouillons,
+vingt-deux fois.
+
+Trois conséquences de forme, toutes vérifiables sur la charge ci-dessus :
+
+- **Le nom est recomposé à la sérialisation**, depuis la fiche elle-même. Il ne vient pas de
+  la colonne dénormalisée : les liens déjà en base portent la forme d'avant, et un correctif
+  qui ne vaudrait que pour les demandes à venir ne réparerait pas l'écran sur lequel le
+  défaut a été constaté.
+- **La mention « (proposée) » n'est pas stockée.** `prp_revision.subject_label` recopie ces
+  colonnes **au moment même où la personne cesse d'être proposée** : l'historique dirait
+  « (proposée) » d'une fiche validée.
+- **`*DraftRef` reste servi à côté du libellé** — `otherDraftRef`, `other2DraftRef` — pour
+  qu'un lecteur puisse distinguer les deux natures d'extrémité sans lire le texte.
+
+`familyLabel` accompagne `familyId` pour la même raison : une filiation vers un couple
+existant affichait « rattaché à la famille 28 », c'est-à-dire un identifiant de ligne, quand
+la base porte le nom des deux époux.
+
+`note` est servi sur **les brouillons et sur les liens**. Ces deux colonnes portent les
+justifications écrites fiche par fiche — une homonymie père/fils signalée, une déduction
+marquée comme supposition. Elles sont exactement ce sur quoi l'administrateur tranche, et
+elles ne quittaient pas la base : seul le `message` global de la demande arrivait à l'écran.
 
 Après décision, `revisions` porte ce que la validation a réellement produit — une création en
 génère plusieurs (la personne, la famille, les filiations) :

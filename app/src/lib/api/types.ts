@@ -422,14 +422,62 @@ export interface BoiteGraphe {
   h: number
 }
 
+/**
+ * Une fiche proposée que le graphe **n'a pas su placer**.
+ *
+ * Le placement partagé ne porte que l'arbre **validé** : une fiche rattachée à
+ * une autre fiche de la même demande — un enfant dont le parent est lui-même
+ * proposé — n'a nulle part où s'accrocher. Elle est omise du graphe, et ce doit
+ * rester ainsi : la poser faute de mieux la mettrait à `x = 0`, c'est-à-dire sur
+ * l'ego.
+ *
+ * Ce qui est nouveau, c'est qu'elle soit **dite**. `demandeId` et
+ * `brouillonRef` sont là pour que l'écran puisse l'ouvrir : la fiche reste
+ * consultable même quand le canevas ne sait pas la dessiner.
+ */
+export interface NoeudNonPlace {
+  noeudId: IdentifiantNoeud
+  demandeId: number
+  /** La référence **sans dièse**, pour l'URL de détail. Jamais découpée ici. */
+  brouillonRef: string
+  displayName: string
+  /** `enchainement`, `ancre_absente`, `sans_couple`, `sans_lien`… */
+  raison: string
+}
+
+/**
+ * Le calque du graphe.
+ *
+ * > **`actif` ne dit pas « complet ».** Il dit qu'il y a quelque chose en
+ * > attente, et rien de plus.
+ *
+ * Les trois clés suivantes disent ce que `actif` taisait. Mesuré sur un cas
+ * réel : cinq demandes portant vingt-deux personnes ont rendu `actif: true`,
+ * `demandes: [1,2,3,4,5]` et **cinq nœuds sur vingt-deux**. Rien dans la charge
+ * ne signalait l'écart, et le lecteur croyait voir la branche entière.
+ *
+ * `proposes === places + nonPlaces.length`, toujours : le serveur mesure les
+ * deux sur la même sortie. Les trois clés sont **toujours présentes**, à zéro
+ * quand il n'y a rien — un compteur absent se lit `undefined`, et
+ * `undefined > 0` est faux, ce qui éteindrait l'avertissement en silence.
+ */
+export interface CalqueDuGraphe {
+  actif: boolean
+  demandes: number[]
+  /** Nombre de fiches proposées que le serveur a reçues pour ce lecteur. */
+  proposes: number
+  /** Combien d'entre elles sont réellement dans `noeuds`. */
+  places: number
+  nonPlaces: NoeudNonPlace[]
+}
+
 export interface Graphe {
   /** Empreinte de l'arbre, 64 hexadécimaux. Sert au diagnostic ; ce n'est
    *  **pas** l'`ETag`, qui incorpore aussi les demandes du lecteur (§ 5.2). */
   empreinte: string
   ego: IdentifiantNoeud
   boite: BoiteGraphe
-  /** `actif` dit au front s'il doit afficher la légende « en attente ». */
-  calque: { actif: boolean; demandes: number[] }
+  calque: CalqueDuGraphe
   noeuds: NoeudGraphe[]
   aretes: AreteGraphe[]
 }

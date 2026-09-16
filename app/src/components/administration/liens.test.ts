@@ -16,6 +16,7 @@ const BASE: LienDemande = {
   seq: 1,
   kind: 'conjoint_de',
   subjectDraftRef: '#p1',
+  subjectLabel: 'Tourmaline Muguet (proposée)',
   otherPersonId: 55,
   otherLabel: 'Jargon Sarriette',
 }
@@ -135,5 +136,107 @@ describe('la personne à l’autre bout', () => {
 
     expect(lien.autre).not.toContain('55')
     expect(lien.autre).toMatch(/ne nomme pas/i)
+  })
+})
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LE LIEN DIT DE QUI IL PARLE.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Mesuré sur un cas réel : une branche de vingt-deux personnes déposée en cinq
+ * demandes, validée sans que sa parenté ait pu se lire. Une demande qui ne
+ * propose qu'une personne n'a pas besoin de nommer le sujet de ses liens — c'est
+ * elle, forcément. Une branche en a une trentaine, et « Enfant de X » répété
+ * trente fois ne dit jamais qui est l'enfant.
+ */
+describe('le sujet du lien', () => {
+  it('est nommé, pour qu’une liste de liens se lise sans compter les lignes', () => {
+    expect(lienLisible(BASE).sujet).toBe('Tourmaline Muguet (proposée)')
+  })
+
+  it('ne rend jamais la référence provisoire du brouillon', () => {
+    // C'est le défaut exact : `subjectLabel` valait « Personne proposée #p1 »,
+    // et il fallait retrouver `#p1` à la main dans la liste des brouillons.
+    const lien = lienLisible(BASE)
+
+    expect(lien.sujet).not.toContain('#p1')
+    expect(lien.sujet).not.toMatch(/Personne proposée #/)
+  })
+
+  it('se dit en mots quand la charge ne le nomme pas', () => {
+    const lien = lienLisible({ ...BASE, subjectLabel: null })
+
+    expect(lien.sujet).toMatch(/ne nomme pas/i)
+  })
+})
+
+describe('le couple existant désigné par une filiation', () => {
+  /**
+   * Une filiation désigne **soit** un couple existant, **soit** un ou deux
+   * parents — jamais les deux (`ck_prp_link_cible`). Le premier cas n'a pas
+   * d'`otherLabel`, et l'écran affichait donc « une personne que cette charge ne
+   * nomme pas » alors que la base porte le nom des deux époux.
+   */
+  it('est nommé par son libellé, pas par son numéro', () => {
+    const lien = lienLisible({
+      seq: 4,
+      kind: 'enfant_de',
+      subjectDraftRef: '#p3',
+      subjectLabel: 'Cèpe Chanterelle (proposée)',
+      familyId: 28,
+      familyLabel: 'Mica Chanterelle × Ocre Chanterelle',
+    })
+
+    expect(lien.autre).toBe('Mica Chanterelle × Ocre Chanterelle')
+    expect(lien.autre).not.toContain('28')
+  })
+
+  it('reste muet plutôt que d’afficher l’identifiant quand le libellé manque', () => {
+    const lien = lienLisible({
+      seq: 4,
+      kind: 'enfant_de',
+      subjectDraftRef: '#p3',
+      subjectLabel: 'Cèpe Chanterelle (proposée)',
+      familyId: 28,
+    })
+
+    expect(lien.autre).not.toContain('28')
+    expect(lien.autre).toMatch(/ne nomme pas/i)
+  })
+})
+
+describe('le second parent d’une filiation', () => {
+  it('est rendu quand le demandeur en a désigné deux', () => {
+    const lien = lienLisible({
+      ...BASE,
+      kind: 'enfant_de',
+      other2DraftRef: '#p1',
+      other2Label: 'Girolle Chanterelle (proposée)',
+    })
+
+    expect(lien.secondParent).toBe('Girolle Chanterelle (proposée)')
+  })
+
+  it('vaut null quand un seul parent est nommé — le cas courant, pas un manque', () => {
+    expect(lienLisible({ ...BASE, kind: 'enfant_de' }).secondParent).toBeNull()
+  })
+})
+
+describe('la note du lien', () => {
+  /**
+   * `prp_draft_link.note` est stockée depuis toujours et n'était **rendue nulle
+   * part** : la justification écrite lien par lien — « déduit du registre
+   * paroissial, pas d'acte retrouvé » — ne quittait pas la base, et
+   * l'administrateur décidait sur le seul message global de la demande.
+   */
+  it('est rendue telle quelle', () => {
+    const lien = lienLisible({ ...BASE, note: 'Déduit du registre, pas d’acte retrouvé.' })
+
+    expect(lien.note).toBe('Déduit du registre, pas d’acte retrouvé.')
+  })
+
+  it('ne transforme pas une chaîne vide en note', () => {
+    expect(lienLisible({ ...BASE, note: '' }).note).toBeNull()
   })
 })

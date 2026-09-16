@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Tree\Serializer;
 
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
+use App\Module\Core\Contract\ProjectionEnAttente;
 use App\Module\Core\Enum\Branch;
 use App\Module\Tree\Service\FournisseurDeJeuDePlacement;
 use App\Module\Tree\Service\MesureDeFiche;
@@ -117,7 +118,7 @@ final readonly class NormaliseurDeGraphe
         // chaque personne validée. Aucun des deux ne remplace l'autre.
         $projection = $this->calque->projection($lecteur->pourLeCalque());
 
-        ['noeuds' => $proposes, 'renommage' => $renommage] = $this->traduction->preparer(
+        ['noeuds' => $proposes, 'renommage' => $renommage, 'ecartes' => $ecartes] = $this->traduction->preparer(
             $projection,
             $partage,
             $libelles['personnes'],
@@ -141,6 +142,7 @@ final readonly class NormaliseurDeGraphe
         $avecImage = $this->medias->personnesAvecMedia(array_keys($libelles['personnes']), $lecteur);
 
         $demandes = $projection->demandes;
+        $nonPlaces = $this->nonPlaces($projection, $placement, $ecartes);
 
         return [
             'empreinte' => $this->empreinte->empreinte(),
@@ -160,10 +162,76 @@ final readonly class NormaliseurDeGraphe
                 // dessiner, donc une légende à allumer.
                 'actif' => !$projection->estVide(),
                 'demandes' => $demandes,
+                // **`actif` ne dit pas « complet ».** Ces trois clés le disent, et elles
+                // ont été ajoutées après un cas mesuré où le calque s'annonçait actif sur
+                // cinq demandes en ayant écarté dix-sept nœuds sur vingt-deux — voir
+                // {@see NoeudProposeEcarte}.
+                'proposes' => \count($projection->noeuds),
+                'places' => \count($projection->noeuds) - \count($nonPlaces),
+                'nonPlaces' => $nonPlaces,
             ],
             'noeuds' => $this->noeuds($placement, $placables, $proposesParId, $libelles, $renommage, $cercle, $avecImage),
             'aretes' => $this->aretes($placement, $renommage),
         ];
+    }
+
+    /**
+     * Les nœuds proposés que le rendu **n'a pas placés**, chacun avec sa raison.
+     *
+     * ── Mesurée sur la sortie, jamais sur l'intention ───────────────────────────────
+     *
+     * La liste se bâtit en confrontant `$projection->noeuds` — tout ce que `Proposal`
+     * publie pour ce lecteur — au `Placement` **final**, celui dont `noeuds` sort. C'est
+     * délibérément la seule source : additionner les écarts que chaque étage déclare
+     * laisserait passer ceux qu'aucun ne déclare, et il y en a deux —
+     * {@see PropositionsProjetees} écarte à la traduction,
+     * {@see \App\Module\Tree\Service\ProjecteurDePlacement::pose()} écarte à la pose. Un
+     * compte tenu à part dériverait du jour où un troisième apparaîtrait.
+     *
+     * De là découle l'invariant que le contrat publie et qu'un test tient :
+     * `proposes === places + count(nonPlaces)`, par construction et non par accord.
+     *
+     * Les raisons, elles, viennent bien des étages, parce qu'eux seuls les connaissent ;
+     * un nœud tombé à la pose n'en a aucune et prend `placement_refuse`.
+     *
+     * ── Ce que la liste peut nommer, et pourquoi ce n'est pas une fuite ─────────────
+     *
+     * `displayName` y figure. La projection est déjà bornée aux demandes que ce lecteur a
+     * le droit de voir — les siennes, ou toutes s'il est administrateur (§ 13.3) —, et ce
+     * nom serait sur le nœud si le nœud avait été placé. Dire « Morille Chanterelle n'a pas
+     * pu être placé » ne divulgue rien de plus que l'aurait fait son affichage.
+     *
+     * @param list<NoeudProposeEcarte> $ecartes
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function nonPlaces(ProjectionEnAttente $projection, Placement $placement, array $ecartes): array
+    {
+        $raisons = [];
+        foreach ($ecartes as $ecarte) {
+            $raisons[$ecarte->source->noeudId] = $ecarte->raison;
+        }
+
+        $nonPlaces = [];
+
+        foreach ($projection->noeuds as $source) {
+            if (isset($placement->noeuds[$source->noeudId])) {
+                continue;
+            }
+
+            $nonPlaces[] = [
+                'noeudId' => $source->noeudId,
+                'demandeId' => $source->demandeId,
+                // Les deux clés que le § 5.2 impose pour ouvrir le détail d'un brouillon
+                // sans concaténer : `#` est un séparateur de fragment, tout ce qui le
+                // suit ne quitterait jamais le navigateur.
+                'brouillonRef' => $source->brouillonRef,
+                'displayName' => $source->displayName,
+                'raison' => $raisons[$source->noeudId] ?? NoeudProposeEcarte::PLACEMENT_REFUSE,
+            ];
+        }
+
+        return $nonPlaces;
     }
 
     /**

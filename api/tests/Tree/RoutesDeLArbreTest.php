@@ -220,7 +220,15 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
         self::assertSame(['empreinte', 'ego', 'boite', 'calque', 'noeuds', 'aretes'], array_keys($charge));
         self::assertSame('p'.$this->idDe('ego'), $charge['ego'], 'L’ego est le nœud de `tree.personne_racine_id`, à x = 0 par construction.');
         self::assertSame(['x', 'y', 'w', 'h'], array_keys($charge['boite']), 'La boîte alimente directement le `viewBox` initial et n’est jamais recalculée côté client.');
-        self::assertSame(['actif' => false, 'demandes' => []], $charge['calque'], 'Aucune demande en cours : la légende « en attente » reste éteinte.');
+        // Les trois compteurs sont **toujours** là, y compris à zéro : `actif` dit s'il y
+        // a quelque chose en attente, il ne dit pas que le calque est complet — et c'est
+        // la confusion des deux qui a laissé un calque écarter dix-sept nœuds sur
+        // vingt-deux sans le dire ({@see CalqueIncompletTest}).
+        self::assertSame(
+            ['actif' => false, 'demandes' => [], 'proposes' => 0, 'places' => 0, 'nonPlaces' => []],
+            $charge['calque'],
+            'Aucune demande en cours : la légende « en attente » reste éteinte, et les compteurs sont à zéro plutôt qu’absents.',
+        );
 
         $this->client->request('GET', '/api/arbre/graphe', server: [
             'HTTP_ACCEPT' => 'application/json',

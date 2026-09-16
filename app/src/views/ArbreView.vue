@@ -142,6 +142,7 @@ import BarreOutilsArbre from '@/components/arbre/BarreOutilsArbre.vue'
 import CanevasArbre from '@/components/arbre/CanevasArbre.vue'
 import LegendeArbre from '@/components/arbre/LegendeArbre.vue'
 import PanneauFiche from '@/components/arbre/PanneauFiche.vue'
+import { avertissementDuCalque, ponctuationApres } from '@/components/arbre/calque'
 import {
   FILTRES,
   ensembleAEclairer,
@@ -185,6 +186,30 @@ async function revaliderGraphe(): Promise<void> {
 
 const calqueActif = computed(() => graphe.value?.calque.actif === true)
 const demandesDuCalque = computed(() => graphe.value?.calque.demandes ?? [])
+
+/**
+ * **Ce que le calque n'a pas pu dessiner.**
+ *
+ * `actif` dit qu'il y a quelque chose en attente ; il ne dit pas que tout est
+ * là. Mesuré sur un cas réel : cinq demandes portant vingt-deux personnes ont
+ * rendu un calque actif avec **cinq nœuds sur vingt-deux**, sans que rien ne le
+ * signale. Le lecteur croyait voir la branche entière.
+ *
+ * L'omission est la bonne réponse du serveur — une fiche sans ancre serait posée
+ * sur l'ego — mais elle doit se lire. On nomme les trois premières et on compte
+ * le reste : la liste entière d'une branche de dix-sept fiches ferait un bandeau
+ * plus haut que l'arbre.
+ */
+const ecartDuCalque = computed(() =>
+  avertissementDuCalque(graphe.value?.calque.nonPlaces ?? []),
+)
+
+/** La ponctuation qui suit chaque nom, composée par `calque.ts` où elle est éprouvée. */
+function ponctuation(rang: number): string {
+  const avertissement = ecartDuCalque.value
+
+  return avertissement === null ? '' : ponctuationApres(avertissement, rang)
+}
 
 /* ------------------------------------------------------------------ */
 /* Filtres                                                             */
@@ -508,6 +533,47 @@ onBeforeUnmount(() => {
       {{ demandesDuCalque.length }} demande<template v-if="demandesDuCalque.length > 1">s</template>
       en attente de validation. Les fiches proposées sont entourées de tirets : elles ne sont
       visibles que de vous et des administrateurs.
+    </p>
+
+    <!--
+      **Le bandeau qui manquait.** Un calque qui ne peut pas tout montrer et qui
+      ne le dit pas laisse croire que la branche affichée est complète — c'est
+      arrivé sur vingt-deux fiches proposées dont cinq seulement étaient
+      dessinées. On le dit ici, avec des noms, et on renvoie à la file où les
+      fiches restent lisibles une par une.
+    -->
+    <p
+      v-if="ecartDuCalque !== null"
+      class="flex flex-wrap items-center gap-x-1.5 border-b border-alerte-bord bg-alerte-doux px-4 py-1.5 text-xs text-texte"
+      role="status"
+    >
+      <strong class="font-semibold">{{ ecartDuCalque.phrase }}</strong>
+      <!--
+        Chaque nom mène à sa demande : la fiche reste lisible une par une même
+        quand le canevas ne sait pas la dessiner. Sans ce lien, le bandeau
+        annoncerait un manque sans offrir le moindre geste.
+      -->
+      <!--
+        La ponctuation est **dans le même élément** que le nom qu'elle suit : le
+        bandeau est une rangée `flex` à gouttière, et une virgule posée à côté
+        reçoit la gouttière comme les autres — « Morille Chanterelle , Cèpe
+        Chanterelle . Elles se rattachent… ». Elle appartient au nom, pas à la
+        rangée.
+      -->
+      <span v-for="(absent, rang) in ecartDuCalque.nommes" :key="absent.noeudId">
+        <RouterLink
+          :to="{ name: 'demande.detail', params: { id: absent.demandeId } }"
+          class="text-accent underline"
+          >{{ absent.displayName }}</RouterLink
+        >{{ ponctuation(rang) }}
+      </span>
+      <span v-if="ecartDuCalque.enPlus > 0">
+        et {{ ecartDuCalque.enPlus }} autre<template v-if="ecartDuCalque.enPlus > 1">s</template>.
+      </span>
+      <span>
+        Elles se rattachent à une fiche elle-même proposée, qui n’est pas encore dans l’arbre
+        validé : elles resteront invisibles ici jusqu’à la validation.
+      </span>
     </p>
 
     <!--

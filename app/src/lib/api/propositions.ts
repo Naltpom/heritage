@@ -125,12 +125,33 @@ export interface LienDemande {
   kind: NatureLien
   subjectDraftRef?: string | null
   subjectPersonId?: number | null
+  /**
+   * Le sujet du lien, nommé. Pour une fiche de la même demande, le serveur rend
+   * son nom suivi de « (proposée) » — il rendait sa **référence**, « Personne
+   * proposée #p1 », et c'est ce qui a rendu illisible la parenté d'une branche
+   * de vingt-deux personnes : pour savoir de qui un enfant était le fils, il
+   * fallait relever `#p1` dans le lien et le retrouver dans les brouillons.
+   */
   subjectLabel?: string | null
   otherPersonId?: number | null
+  /** Renseigné quand l'autre extrémité est une fiche de la même demande. */
+  otherDraftRef?: string | null
   otherLabel?: string | null
   other2PersonId?: number | null
+  /**
+   * Le **second parent** d'une filiation, quand c'est une fiche de la même
+   * demande. Sans cette clé, les deux cas rendaient la même forme — un
+   * `other2Label` seul, dont rien ne disait s'il désignait quelqu'un qui existe.
+   */
+  other2DraftRef?: string | null
   other2Label?: string | null
   familyId?: number | null
+  /**
+   * Le couple désigné, **nommé**. `familyId` seul affichait « rattaché à la
+   * famille 2 », un identifiant de ligne, alors que la base porte le nom des
+   * deux époux.
+   */
+  familyLabel?: string | null
   marriage?: BlocDate | null
   divorced?: boolean | null
   divorce?: BlocDate | null

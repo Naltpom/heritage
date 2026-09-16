@@ -108,7 +108,7 @@ function grapheFactice(): Graphe {
     empreinte: '0'.repeat(64),
     ego: 'p1',
     boite: { x: 0, y: 0, w: 100, h: 100 },
-    calque: { actif: false, demandes: [] },
+    calque: { actif: false, demandes: [], proposes: 0, places: 0, nonPlaces: [] },
     noeuds: [personne('p1', 1, 'Amarante Sureau'), personne('p2', 2, 'Basalte Romarin')],
     aretes: [],
   }

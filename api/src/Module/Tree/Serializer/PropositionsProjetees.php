@@ -48,6 +48,19 @@ use App\Module\Tree\ValueObject\Placement;
  * `w` est mesurée sur le texte effectivement envoyé — un nœud en attente dont l'étiquette
  * déborde de sa boîte détonnerait dans sa fratrie.
  *
+ * ## Ce qu'elle ne peut pas placer, elle le **nomme**
+ *
+ * Un nœud dont l'ancre n'est pas dans le placement partagé est **omis**, et il doit
+ * l'être : le poser à `x = 0` le mettrait sur l'ego. Mais l'omission était muette, et
+ * c'est ce qui a coûté — une branche de vingt-deux personnes déposée en cinq demandes a
+ * rendu cinq nœuds placés, dix-sept écartés, et un calque annonçant `actif: true` sur les
+ * cinq demandes sans un mot sur l'écart.
+ *
+ * `preparer()` rend donc une troisième liste, `ecartes`, avec la raison de chaque
+ * absence ({@see NoeudProposeEcarte}). **Le comportement ne change pas** : les mêmes
+ * nœuds sont placés, les mêmes sont omis, et le placement partagé reste identique au
+ * millième. Seul le silence est levé.
+ *
  * ## Le losange provisoire garde le numéro de `Proposal`
  *
  * Le projecteur nomme son losange interne `#12/p1#union` ; le contrat expose `#12/f1`,
@@ -60,7 +73,7 @@ final readonly class PropositionsProjetees
     /**
      * @param array<int, array{displayName: string, branch: string|null}> $branchesDesPersonnes indexé par `tree_person.id`
      *
-     * @return array{noeuds: list<NoeudProposePlacable>, renommage: array<string, string>}
+     * @return array{noeuds: list<NoeudProposePlacable>, renommage: array<string, string>, ecartes: list<NoeudProposeEcarte>}
      */
     public function preparer(ProjectionEnAttente $projection, Placement $partage, array $branchesDesPersonnes): array
     {
@@ -74,6 +87,7 @@ final readonly class PropositionsProjetees
 
         $noeuds = [];
         $renommage = [];
+        $ecartes = [];
 
         foreach ($projection->noeuds as $source) {
             $ancrage = $ancrages[$source->noeudId] ?? null;
@@ -82,12 +96,19 @@ final readonly class PropositionsProjetees
                 // Une personne proposée sans lien flotterait hors de l'arbre : le § 6.4 du
                 // dossier l'interdit à la saisie. Si le cas survient malgré tout, on omet
                 // le nœud plutôt que de le poser à `x = 0`, où il recouvrirait l'ego.
+                $ecartes[] = new NoeudProposeEcarte($source, NoeudProposeEcarte::SANS_LIEN);
+
                 continue;
             }
 
             $prepare = $this->traduire($source, $ancrage, $partage, $branchesDesPersonnes);
 
-            if (null === $prepare) {
+            if (\is_string($prepare)) {
+                // **L'omission reste la bonne réponse ; le silence ne l'était pas.** La
+                // raison remonte jusqu'au calque, qui la publie — voir
+                // {@see NoeudProposeEcarte}.
+                $ecartes[] = new NoeudProposeEcarte($source, $prepare);
+
                 continue;
             }
 
@@ -98,22 +119,27 @@ final readonly class PropositionsProjetees
             }
         }
 
-        return ['noeuds' => $noeuds, 'renommage' => $renommage];
+        return ['noeuds' => $noeuds, 'renommage' => $renommage, 'ecartes' => $ecartes];
     }
 
     /**
+     * Le nœud traduit, **ou la raison de son absence** — jamais `null` : un `null` est ce
+     * qui a laissé dix-sept nœuds disparaître sans que rien ne puisse le dire.
+     *
      * @param array<int, array{displayName: string, branch: string|null}> $branches
+     *
+     * @return NoeudProposePlacable|string
      */
     private function traduire(
         NoeudPropose $source,
         AncragePropose $ancrage,
         Placement $partage,
         array $branches,
-    ): ?NoeudProposePlacable {
+    ): NoeudProposePlacable|string {
         $traduit = $this->ancrage($ancrage, $partage);
 
         if (null === $traduit) {
-            return null;
+            return $this->raisonDAncrage($ancrage, $partage);
         }
 
         [$ancre, $cibleId] = $traduit;
@@ -121,7 +147,7 @@ final readonly class PropositionsProjetees
         $generation = $this->generationDepuisLAncre($ancrage->kind, $cibleId, $partage);
 
         if (null === $generation) {
-            return null;
+            return NoeudProposeEcarte::GENERATION_INDETERMINEE;
         }
 
         [$nais, $deces] = $this->decouperLaLigneDeDates($source->ligneDates);
@@ -152,6 +178,38 @@ final readonly class PropositionsProjetees
             $this->brancheDeLAncre($cibleId, $partage, $branches),
             $ancrage->familleProvisoire,
         );
+    }
+
+    /**
+     * Pourquoi {@see ancrage()} n'a rien rendu — lu sur l'ancrage, pas deviné.
+     *
+     * La distinction qui compte est celle entre `enchainement` et `ancre_absente` : la
+     * première est la forme normale d'une branche proposée en bloc et elle en écarte la
+     * majeure partie ; la seconde est une cible qui a disparu de l'arbre. Les confondre
+     * ferait passer un fonctionnement attendu pour une anomalie, et l'inverse.
+     */
+    private function raisonDAncrage(AncragePropose $ancrage, Placement $partage): string
+    {
+        if (null !== $ancrage->familleId) {
+            return NoeudProposeEcarte::ANCRE_ABSENTE;
+        }
+
+        $autre = $ancrage->autreNoeudId;
+
+        if (null === $autre) {
+            return NoeudProposeEcarte::ANCRE_ABSENTE;
+        }
+
+        if (IdentifiantDeNoeud::estProvisoire($autre)) {
+            return NoeudProposeEcarte::ENCHAINEMENT;
+        }
+
+        // L'autre extrémité est une personne validée, et elle est bien dans le graphe :
+        // l'ancrage a donc échoué plus loin, et il ne reste qu'un cas — `enfant_de` n'a
+        // trouvé aucun losange sous ce parent.
+        return isset($partage->noeuds[$autre]) && 'enfant_de' === $ancrage->kind
+            ? NoeudProposeEcarte::SANS_COUPLE
+            : NoeudProposeEcarte::ANCRE_ABSENTE;
     }
 
     /**

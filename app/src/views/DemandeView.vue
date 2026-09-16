@@ -105,9 +105,41 @@ const libellePastille = computed(() =>
   etatPastille.value === 'neutre' ? (LIBELLES_HORS_PASTILLE[demande.value?.status ?? ''] ?? '') : '',
 )
 
-const creation = computed(
-  () => demande.value !== null && demande.value.brouillons.length > 0,
+/**
+ * Le bloc des fiches et des liens proposés.
+ *
+ * > **La condition porte sur les liens autant que sur les fiches.**
+ *
+ * Elle ne regardait que `brouillons`, et une demande `ajout_lien` — « ils étaient frère
+ * et sœur », « elle s'est remariée avec lui » — n'en porte aucun : elle décrit des liens
+ * entre deux personnes qui **existent déjà**. Elle n'a pas non plus d'`ops`. Cet écran
+ * lui rendait donc **aucun bloc de contenu** : un en-tête, un message, et deux boutons de
+ * décision sur du vide. Constaté en relisant la condition, pas par un test — c'est le
+ * genre de page qu'on ne visite qu'une fois la nature déjà déposée.
+ */
+const proposeUneParente = computed(
+  () =>
+    demande.value !== null &&
+    (demande.value.brouillons.length > 0 || demande.value.liens.length > 0),
 )
+
+/**
+ * Le titre du bloc, accordé sur ce que la demande porte réellement.
+ *
+ * Trois cas, et aucun n'est décoratif. **Zéro fiche** : un `ajout_lien`, dont le
+ * bloc ne contient que des liens — le titrer « Lien proposé » juste au-dessus du
+ * sous-titre « Liens proposés » se répétait bêtement. **Une** fiche : le cas
+ * d'hier, et le singulier était juste. **Plusieurs** : le cas d'aujourd'hui —
+ * une branche entière se dépose en un seul geste, et annoncer « Personne
+ * proposée » au-dessus de vingt-trois fiches sous-entend qu'on n'en juge qu'une.
+ */
+const titreDeLaParente = computed(() => {
+  const fiches = demande.value?.brouillons.length ?? 0
+
+  if (fiches === 0) return 'Ce qui est proposé'
+
+  return fiches === 1 ? 'Personne proposée' : `${fiches} personnes proposées`
+})
 const doublons = computed(() => demande.value?.doublonsProbables ?? [])
 const concurrentes = computed(() => demande.value?.demandesConcurrentes ?? [])
 /** Présent uniquement sur la charge d'administration : on teste la clé. */
@@ -198,7 +230,7 @@ function dateLisible(valeur: string | null | undefined): string {
         {{ cible.version }}. Les valeurs concernées sont signalées ci-dessous.
       </p>
 
-      <PanneauBase v-if="creation" titre="Personne proposée" class="mb-4">
+      <PanneauBase v-if="proposeUneParente" :titre="titreDeLaParente" class="mb-4">
         <FicheProposee :brouillons="demande.brouillons" :liens="demande.liens" />
       </PanneauBase>
 

@@ -143,6 +143,28 @@ jobs:
       - name: Porte 5 — construction des deux images
         run: docker compose build
 
+      # Porte 5 bis. L'image CONSTRUITE applique-t-elle les limites du dépôt ?
+      #
+      # Ni la porte 5 ni l'empreinte ne peuvent répondre à ça. La porte 5 prouve
+      # que le Dockerfile se construit, pas qu'il configure quoi que ce soit ; et
+      # `docker/empreinte.sh` ne hache que composer.lock et les *.php / *.yaml de
+      # src, config et public — une image reconstruite avec un autre php.ini rend
+      # LA MÊME empreinte.
+      #
+      # L'image de base n'active aucun php.ini : sans ce contrôle, l'API repart
+      # en silence sur les défauts compilés de PHP — memory_limit 128M,
+      # upload_max_filesize 2M, post_max_size 8M — état dans lequel quatre dépôts
+      # de preuves sur dix échouaient en 500. Le seul témoin recevable est PHP
+      # lui-même, interrogé DANS le conteneur.
+      #
+      # `--no-deps` : ni base ni boîte aux lettres, on ne démarre rien.
+      # `--entrypoint php` : l'entrypoint de l'image attend PostgreSQL et joue les
+      # migrations ; on veut PHP, pas la pile.
+      - name: Porte 5 bis — le conteneur applique-t-il les limites PHP du dépôt ?
+        run: |
+          bash .github/scripts/verifier-les-limites-php.sh \
+            docker compose run --rm --no-deps --entrypoint php api -i
+
   # ---------------------------------------------------------------------------
   # Porte 6 — la chaîne de déploiement se tient
   # ---------------------------------------------------------------------------

@@ -55,6 +55,23 @@ final class IdentifiantDeNoeud
     }
 
     /**
+     * « Un identifiant de nœud qui commence par `#` est provisoire » — la règle du § 5.2,
+     * énoncée une fois ici plutôt que par un `str_starts_with` dispersé chez les
+     * appelants.
+     *
+     * Elle sert à nommer la raison pour laquelle un nœud proposé n'a pas pu être placé :
+     * une ancre provisoire n'est **jamais** dans le placement partagé, qui ne porte que
+     * l'arbre validé. C'est le cas d'une branche proposée en bloc — un enfant rattaché à
+     * un parent lui-même proposé —, et le distinguer d'une cible disparue est ce qui
+     * permet à l'écran de dire « rattaché à une fiche de la même demande » au lieu de
+     * « introuvable ».
+     */
+    public static function estProvisoire(string $identifiant): bool
+    {
+        return str_starts_with($identifiant, '#');
+    }
+
+    /**
      * L'identifiant de base derrière un identifiant de nœud, ou `null` si le nœud n'en a
      * pas — c'est le cas d'un nœud **en attente**, dont la personne n'existe pas encore
      * dans `tree_person` (§ 6.4 du dossier de mission).

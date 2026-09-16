@@ -35,6 +35,29 @@ RUN install-php-extensions \
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+# LES LIMITES DE PHP, ÉCRITES PLUTÔT QUE SUBIES.
+#
+# L'image de base n'active aucun php.ini : elle livre `php.ini-development` et
+# `php.ini-production` sans en choisir un. Relevé dans le conteneur en service,
+# le 16 septembre 2026 : « Loaded Configuration File => (none) », memory_limit
+# 128M, upload_max_filesize 2M, post_max_size 8M — les valeurs COMPILÉES de PHP,
+# que personne n'a décidées. Quatre dépôts de preuves sur dix échouaient en 500.
+#
+# Le fichier va dans le répertoire additionnel que PHP balaie
+# (`/usr/local/etc/php/conf.d`), sous un nom qui passe APRÈS les
+# `docker-php-ext-*.ini` déjà présents : le balayage est alphabétique, et le
+# dernier lu gagne.
+#
+# Dans `base`, donc dans `dev` ET dans `prod` : un défaut de limite qui ne se
+# reproduit pas en développement est un défaut qu'on ne diagnostique qu'en
+# production.
+#
+# Ce fichier n'entre PAS dans `docker/empreinte.sh` (qui ne hache que
+# composer.lock et les *.php / *.yaml de src, config et public). Le seul contrôle
+# qui vaille est donc d'interroger `php -i` dans le conteneur :
+# `.github/scripts/verifier-les-limites-php.sh`.
+COPY docker/php.ini /usr/local/etc/php/conf.d/zz-heritage.ini
+
 WORKDIR /app
 
 COPY docker/entrypoint.sh /usr/local/bin/heritage-entrypoint

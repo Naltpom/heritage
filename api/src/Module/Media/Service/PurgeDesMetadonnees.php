@@ -64,15 +64,57 @@ final class PurgeDesMetadonnees
     /**
      * Plafond de surface, en pixels.
      *
-     * GD alloue quatre octets par pixel : sans ce plafond, un PNG de 50 Ko déclarant
-     * 30 000 × 30 000 pixels demande 3,6 Gio à la première ligne de décodage et emporte
-     * le processus. Le plafond de taille en octets (§ 7.1) ne protège pas de ça — c'est
-     * tout l'intérêt d'une bombe de décompression que d'être petite sur le réseau.
+     * Sans ce plafond, un PNG de 50 Ko déclarant 30 000 × 30 000 pixels demande
+     * plusieurs gibioctets à la première ligne de décodage et emporte le processus. Le
+     * plafond de taille en octets (§ 7.1) ne protège pas de ça — c'est tout l'intérêt
+     * d'une bombe de décompression que d'être petite sur le réseau.
      *
-     * 40 Mpx laisse passer très large : les images d'archives du projet montent à
-     * 3 000 px de large, soit moins de 10 Mpx.
+     * ── LE CALCUL. Un seuil sans son raisonnement se re-dérègle ─────────────────────
+     *
+     * Le coût n'est pas de 4 octets par pixel mais de **8** : {@see purgerImage()} tient
+     * DEUX images GD vivantes en même temps — la source décodée et la toile neuve —, en
+     * couleurs vraies, donc 4 octets par pixel chacune. Mesuré sur PHP 8.4 + GD, en
+     * isolant la séquence exacte de cette méthode :
+     *
+     *     1 000 000 px →  8 388 608 octets → 8,39 o/px
+     *     2 000 000 px → 16 777 216 octets → 8,39 o/px
+     *     4 000 000 px → 31 457 280 octets → 7,86 o/px
+     *     6 000 000 px → 48 234 496 octets → 8,04 o/px
+     *
+     * (Les écarts autour de 8,00 sont l'arrondi de `memory_get_usage(true)` à la taille
+     * de bloc de l'allocateur. La valeur théorique 4 + 4 est confirmée.)
+     *
+     * D'où la répartition, à partir du `memory_limit` que `docker/php.ini` pose :
+     *
+     *     512 Mio   memory_limit de l'image
+     *   − 256 Mio   réservés à tout ce qui n'est pas l'image : noyau Symfony (6 Mio
+     *               mesurés au seul démarrage), Doctrine et son unité de travail,
+     *               l'écriture du journal d'audit, le tampon d'encodage de sortie, et
+     *               la marge qui fait qu'un garde-fou garde
+     *   = 256 Mio   budget réel de l'image
+     *   ÷ 8 o/px    = 33 554 432 pixels
+     *
+     * Arrondi EN DESSOUS : **32 Mpx**. Jamais au-dessus du budget.
+     *
+     * ── CE QUE VALAIT CE SEUIL AVANT, ET POURQUOI ON ÉCRIT LE CALCUL ────────────────
+     *
+     * Il valait 40 Mpx, c'est-à-dire ~320 Mo demandés, contre un `memory_limit` qui
+     * était alors le défaut compilé de PHP — 128 Mio, dont ~64 Mio disponibles pour
+     * l'image par le même partage. **Le garde-fou promettait cinq fois ce qu'il pouvait
+     * tenir** : entre 8 et 40 Mpx, il laissait passer une image que le processus ne
+     * survivait pas à décoder. L'utilisateur n'obtenait donc pas le 422 que cette classe
+     * existe pour rendre, mais un 500 — un garde-fou qui, dans sa plage la plus utile,
+     * transforme un refus propre en panne.
+     *
+     * Le nombre est lié à `docker/php.ini` et le lien est assertionné :
+     * {@see \App\Tests\Media\PlafondDePixelsTest} relit le `memory_limit` du fichier
+     * livré dans l'image et refait la division. Baisser la limite ou monter le seuil
+     * sans toucher à l'autre fait rougir la CI.
+     *
+     * Marge réelle pour ce projet : les images d'archives montent à 3 000 px de large,
+     * soit moins de 10 Mpx. 32 Mpx reste trois fois au-dessus du besoin constaté.
      */
-    private const int PIXELS_MAX = 40_000_000;
+    private const int PIXELS_MAX = 32_000_000;
 
     /** Qualité de ré-encodage. Assez haut pour un acte d'état civil lu à l'écran. */
     private const int QUALITE_JPEG = 88;

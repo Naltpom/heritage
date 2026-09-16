@@ -64,15 +64,33 @@ function texteDeDate(bloc: LienDemande['marriage']): string | null {
 
 export interface LienLisible {
   seq: number
+  /**
+   * **De qui parle ce lien.** Une demande qui ne propose qu'une personne n'en a
+   * pas besoin — c'est elle, forcément. Une branche de vingt-deux personnes en a
+   * une trentaine, et une liste de « Enfant de X » sans sujet ne dit pas qui est
+   * l'enfant : c'est précisément ce qu'un commanditaire a eu sous les yeux.
+   */
+  sujet: string
   /** « Conjoint·e de », « Enfant de »… ou la valeur brute si elle est inconnue. */
   nature: string
   /** La personne à l'autre bout, telle que le serveur la nomme. */
   autre: string
+  /**
+   * Le **second parent** d'une filiation, quand le demandeur en a désigné deux
+   * plutôt qu'un couple existant. `null` sinon — et non une chaîne vide : un
+   * lien à un seul parent est le cas courant, pas une donnée manquante.
+   */
+  secondParent: string | null
   /** « mariés le 23 septembre 1927 », ou `null`. */
   union: string | null
   /** « séparés en 1943 », « séparés (date inconnue) », ou `null`. */
   rupture: string | null
   note: string | null
+}
+
+/** Un libellé non vide, ou `null`. Jamais une chaîne vide, qui s'affiche comme un trou. */
+function nomOuRien(valeur: string | null | undefined): string | null {
+  return typeof valeur === 'string' && valeur.length > 0 ? valeur : null
 }
 
 /**
@@ -83,6 +101,11 @@ export interface LienLisible {
  * d'afficher un identifiant : un numéro de ligne ne veut rien dire pour la
  * personne qui décide, et l'exposer irait contre la règle qui veut que le front
  * ne mette pas d'identifiant de personne sous les yeux du lecteur.
+ *
+ * **Une filiation désigne soit un couple existant, soit un ou deux parents.**
+ * Jamais les deux — la base l'impose (`ck_prp_link_cible`). Le premier cas rend
+ * `familyId` et `familyLabel`, le second `otherLabel` : on prend celui qui est
+ * là, dans cet ordre, et on ne montre `familyId` sous aucun prétexte.
  */
 export function lienLisible(lien: LienDemande): LienLisible {
   // Le `??` est un garde-fou d'exécution, pas une béance de typage : la table
@@ -91,9 +114,9 @@ export function lienLisible(lien: LienDemande): LienLisible {
   // qu'un blanc — un libellé vide sur l'écran de décision serait pire.
   const nature = NATURES[lien.kind] ?? lien.kind
   const autre =
-    typeof lien.otherLabel === 'string' && lien.otherLabel.length > 0
-      ? lien.otherLabel
-      : 'une personne que cette charge ne nomme pas'
+    nomOuRien(lien.otherLabel) ??
+    nomOuRien(lien.familyLabel) ??
+    'une personne que cette charge ne nomme pas'
 
   const dateUnion = texteDeDate(lien.marriage)
   const dateRupture = texteDeDate(lien.divorce)
@@ -110,11 +133,13 @@ export function lienLisible(lien: LienDemande): LienLisible {
 
   return {
     seq: lien.seq,
+    sujet: nomOuRien(lien.subjectLabel) ?? 'une personne que cette charge ne nomme pas',
     nature,
     autre,
+    secondParent: nomOuRien(lien.other2Label),
     union: dateUnion === null ? null : `mariés ${dateUnion}`,
     rupture,
-    note: typeof lien.note === 'string' && lien.note.length > 0 ? lien.note : null,
+    note: nomOuRien(lien.note),
   }
 }
 

@@ -230,6 +230,39 @@ class DraftPerson
         return $this;
     }
 
+    /**
+     * Le nom de cette fiche proposée — **la seule composition**, et elle est ici parce
+     * que trois services en avaient besoin.
+     *
+     * `ConstructeurDeCreation` la pose dans les libellés dénormalisés des liens,
+     * `SerialiseurDeDemande` la rend à l'écran de validation, `LectureDesPropositions`
+     * la met sur le nœud du graphe. Elle était écrite deux fois et absente de la
+     * troisième : les liens portaient « Personne proposée #p1 », c'est-à-dire un numéro
+     * de ligne là où l'administrateur devait lire un nom pour décider.
+     *
+     * **C'est un repli, jamais la vérité.** `tree_person.display_name` est une colonne
+     * dérivée que `Tree` compose selon sa propre règle ; celle-ci ne vaut que tant que la
+     * personne n'existe pas. Elle ne porte donc **pas** la mention « proposée » : un
+     * libellé stocké est relu par l'applicateur au moment même où la personne cesse de
+     * l'être, et l'historique dirait « Girolle Chanterelle (proposée) » d'une fiche validée.
+     * La mention est posée à la sérialisation, là où elle est vraie.
+     *
+     * `'(sans nom)'` est inatteignable pour une fiche déposée aujourd'hui — le
+     * constructeur exige un nom ou un prénom, et `ck_prp_draft_person_nom` le redit en
+     * base. Le repli reste pour les quatre individus sans `NAME` qu'un import GEDCOM
+     * pourrait un jour faire passer par ici : une ligne vide à l'écran de décision serait
+     * pire qu'une mention explicite.
+     */
+    public function nomPropose(): string
+    {
+        $parties = array_filter(
+            [$this->givenNames, $this->surname],
+            static fn (string $partie): bool => '' !== trim($partie),
+        );
+
+        return '' === ($nom = implode(' ', $parties)) ? '(sans nom)' : $nom;
+    }
+
     public function getResolvedPersonId(): ?int
     {
         return $this->resolvedPersonId;

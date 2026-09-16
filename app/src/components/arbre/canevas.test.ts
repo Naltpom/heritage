@@ -207,7 +207,7 @@ function grapheEssai(): Graphe {
     empreinte: '0'.repeat(64),
     ego: 'p1',
     boite: { x: -600, y: -300, w: 1200, h: 400 },
-    calque: { actif: false, demandes: [] },
+    calque: { actif: false, demandes: [], proposes: 0, places: 0, nonPlaces: [] },
     noeuds,
     aretes,
   }

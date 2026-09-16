@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Module\Proposal\Service;
 
 use App\Module\Proposal\Entity\ChangeRequest;
-use App\Module\Proposal\Entity\DraftLink;
 use App\Module\Proposal\Entity\DraftPerson;
 use App\Module\Proposal\Entity\Revision;
 use App\Module\Proposal\Repository\ChangeRequestOpRepository;
@@ -184,7 +183,7 @@ final readonly class SerialiseurDeDemande
             'death' => $this->normaliseur->dateAvecTexte($brouillon->getDeath()),
             'ligneDates' => $this->normaliseur->ligneDates($brouillon->getBirth(), $brouillon->getDeath()),
             'note' => $brouillon->getNote(),
-            'liens' => array_map($this->lienDeBrouillon(...), $this->liens->pourDemande($demande)),
+            'liens' => $this->liensDuBrouillon($demande),
             'medias' => $this->medias->mediasDeBrouillon($demandeId, $brouillon->getLocalRef()),
             // Après validation, il porte l'identifiant réel et le front redirige vers
             // `/api/arbre/personnes/{id}` — c'est la raison d'être de cette colonne.
@@ -374,6 +373,13 @@ final readonly class SerialiseurDeDemande
                 'deceased' => $brouillon->isDeceased(),
                 'birth' => $this->normaliseur->dateAvecTexte($brouillon->getBirth()),
                 'death' => $this->normaliseur->dateAvecTexte($brouillon->getDeath()),
+                // La justification écrite fiche par fiche — une homonymie père/fils
+                // signalée, une déduction marquée comme supposition. Elle est stockée
+                // depuis toujours et n'était **rendue nulle part** : l'administrateur
+                // décidait sur le seul `message` global de la demande, et les notes de
+                // détail, qui portent précisément ce sur quoi il doit trancher, ne
+                // quittaient pas la base.
+                'note' => $brouillon->getNote(),
                 'resolvedPersonId' => $brouillon->getResolvedPersonId(),
             ];
         }
@@ -384,6 +390,7 @@ final readonly class SerialiseurDeDemande
     /** @return list<array<string, mixed>> */
     private function liens(ChangeRequest $demande): array
     {
+        $noms = $this->nomsDesBrouillons($demande);
         $rendus = [];
 
         foreach ($this->liens->pourDemande($demande) as $lien) {
@@ -392,19 +399,29 @@ final readonly class SerialiseurDeDemande
                 'kind' => $lien->getKind()->value,
                 'subjectPersonId' => $lien->getSubjectPersonId(),
                 'subjectDraftRef' => $lien->getSubjectDraftRef(),
-                'subjectLabel' => $lien->getSubjectLabel(),
+                'subjectLabel' => $this->nommerLExtremite($lien->getSubjectDraftRef(), $lien->getSubjectLabel(), $noms),
                 'otherPersonId' => $lien->getOtherPersonId(),
                 'otherDraftRef' => $lien->getOtherDraftRef(),
-                'otherLabel' => $lien->getOtherLabel(),
+                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms),
                 'other2PersonId' => $lien->getOther2PersonId(),
-                'other2Label' => $lien->getOther2Label(),
+                // Sans cette clé, le second parent d'une filiation n'était lisible que
+                // par `other2Label` : rien ne disait s'il désignait une personne de
+                // l'arbre ou une autre fiche de la même demande.
+                'other2DraftRef' => $lien->getOther2DraftRef(),
+                'other2Label' => $this->nommerLExtremite($lien->getOther2DraftRef(), $lien->getOther2Label(), $noms),
                 'familyId' => $lien->getFamilyId(),
+                // Le couple d'ancrage est stocké avec son libellé depuis
+                // `designerCoupleExistant()`. Ne rendre que `familyId` affichait un
+                // entier nu — « rattaché à la famille 2 » — là où la base porte le nom
+                // des deux époux.
+                'familyLabel' => $lien->getFamilyLabel(),
                 'marriage' => $this->normaliseur->dateAvecTexte($lien->getMarriage()),
                 'divorced' => $lien->isDivorced(),
                 'divorce' => $lien->getDivorce()->isKnown()
                     ? $this->normaliseur->dateAvecTexte($lien->getDivorce())
                     : null,
                 'siblingOrder' => $lien->getSiblingOrder(),
+                'note' => $lien->getNote(),
                 'resolvedFamilyId' => $lien->getResolvedFamilyId(),
             ];
         }
@@ -412,15 +429,91 @@ final readonly class SerialiseurDeDemande
         return $rendus;
     }
 
-    /** @return array<string, mixed> */
-    private function lienDeBrouillon(DraftLink $lien): array
+    /**
+     * Les liens tels que le détail d'un nœud en attente les montre (§ 6.6).
+     *
+     * L'index des noms est bâti **une fois pour la demande** et non par lien : le rendu
+     * en fait autant qu'il y a de liens, et une branche de vingt-deux personnes en
+     * compte une trentaine.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function liensDuBrouillon(ChangeRequest $demande): array
     {
-        return [
-            'seq' => $lien->getSeq(),
-            'kind' => $lien->getKind()->value,
-            'otherPersonId' => $lien->getOtherPersonId(),
-            'otherLabel' => $lien->getOtherLabel(),
-        ];
+        $noms = $this->nomsDesBrouillons($demande);
+        $rendus = [];
+
+        foreach ($this->liens->pourDemande($demande) as $lien) {
+            $rendus[] = [
+                'seq' => $lien->getSeq(),
+                'kind' => $lien->getKind()->value,
+                'otherPersonId' => $lien->getOtherPersonId(),
+                'otherDraftRef' => $lien->getOtherDraftRef(),
+                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms),
+                'note' => $lien->getNote(),
+            ];
+        }
+
+        return $rendus;
+    }
+
+    /**
+     * Le nom de chaque fiche proposée de la demande, **suffixé de sa condition**, indexé
+     * par référence provisoire.
+     *
+     * ── Pourquoi relire plutôt que se fier au libellé stocké ────────────────────────
+     *
+     * `subject_label` et consorts sont dénormalisés au dépôt, et
+     * {@see ConstructeurDeCreation} y écrit désormais le nom. Mais les liens **déjà en
+     * base** portent la forme d'avant — `'Personne proposée #p1'` —, et c'est
+     * exactement le cas qui a été mesuré : vingt-deux fiches validées sans que leur
+     * parenté ait été lisible. Un correctif qui ne vaudrait que pour les demandes à
+     * venir ne réparerait pas l'écran sur lequel le défaut a été constaté.
+     *
+     * Relire la fiche à chaque rendu a un second mérite, celui-là permanent : un libellé
+     * dénormalisé est une photographie, et « il n'est jamais une source de vérité »
+     * (ADR 0002, compensation 3). Ici la source est à un `getRepository` de distance et
+     * ne peut pas dater.
+     *
+     * ── Pourquoi la mention « (proposée) » est ajoutée ici et pas stockée ───────────
+     *
+     * Un lecteur qui ne regarde pas `subjectDraftRef` doit pouvoir distinguer, dans une
+     * liste de liens, la personne de l'arbre de celle que la demande invente. Mais la
+     * mention serait fausse en base : {@see ApplicateurDeCreation::libelleDuLien()}
+     * recopie ces colonnes dans `prp_revision.subject_label` **au moment même où la
+     * personne cesse d'être proposée**, et l'historique dirait « (proposée) » d'une
+     * fiche validée. Elle appartient donc au rendu, jamais à la colonne.
+     *
+     * @return array<string, string>
+     */
+    private function nomsDesBrouillons(ChangeRequest $demande): array
+    {
+        $noms = [];
+
+        foreach ($this->brouillons->pourDemande($demande) as $brouillon) {
+            $noms[$brouillon->getLocalRef()] = $brouillon->nomPropose().' (proposée)';
+        }
+
+        return $noms;
+    }
+
+    /**
+     * Le nom d'une extrémité de lien : celui de la fiche proposée si elle en est une, le
+     * libellé stocké sinon.
+     *
+     * `$stocke` est le repli et non l'inverse : une extrémité qui désigne une personne
+     * de l'arbre n'a pas de `draftRef`, et son libellé est filtré comme la personne
+     * (§ 0.4) — le relire ici court-circuiterait ce filtre.
+     *
+     * @param array<string, string> $noms
+     */
+    private function nommerLExtremite(?string $draftRef, ?string $stocke, array $noms): ?string
+    {
+        if (null === $draftRef) {
+            return $stocke;
+        }
+
+        return $noms[$draftRef] ?? $stocke;
     }
 
     /**

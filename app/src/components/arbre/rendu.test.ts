@@ -65,7 +65,7 @@ function grapheEssai(): Graphe {
     empreinte: '0'.repeat(64),
     ego: 'p1',
     boite: { x: -600, y: -300, w: 1200, h: 400 },
-    calque: { actif: false, demandes: [] },
+    calque: { actif: false, demandes: [], proposes: 0, places: 0, nonPlaces: [] },
     noeuds,
     aretes,
   }
@@ -158,7 +158,10 @@ describe('les nœuds du calque', () => {
   /** Les identifiants provisoires du § 5.2, repris tels quels — jamais découpés. */
   function grapheAvecCalque(): Graphe {
     const graphe = grapheEssai()
-    graphe.calque = { actif: true, demandes: [12] }
+    // Une fiche proposée, et elle est placée : `places` vaut 1 et `nonPlaces`
+    // est vide. Les trois compteurs sont toujours servis — `actif` dit qu'il y a
+    // quelque chose en attente, eux disent si tout est là.
+    graphe.calque = { actif: true, demandes: [12], proposes: 1, places: 1, nonPlaces: [] }
     graphe.noeuds.push(
       {
         id: '#12/p1',
