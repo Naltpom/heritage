@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Serializer;
 
-use App\Module\Core\Contract\AnnuaireDesMembresInterface;
 use App\Module\Tree\Service\CalculParente;
 use App\Module\Tree\Service\FournisseurDeJeuDePlacement;
 use App\Module\Tree\ValueObject\IdentifiantDeNoeud;
@@ -33,6 +32,11 @@ use App\Module\Tree\ValueObject\JeuDePlacement;
  * On rebâtit donc le jeu **avec le lecteur pour ego**, ce qui ne coûte rien : le jeu est
  * un objet valeur, et seul son `egoId` change.
  *
+ * Le choix de cet ego ne se décide pas ici : il vient de {@see PersonneDuLecteur}, qui
+ * le sert aussi à la mise en page du graphe. Deux chemins qui en décideraient chacun de
+ * leur côté finiraient par n'en décider qu'un — on servirait la parenté d'un lecteur sur
+ * la mise en page d'un autre, et rien dans la charge ne le dirait.
+ *
  * ## Quand on rend `null`, et pourquoi c'est la bonne réponse
  *
  * - **Compte en attente de validation** : il n'a pas de rattachement établi, donc pas de
@@ -57,7 +61,7 @@ final class ParenteDuLecteur
 
     public function __construct(
         private readonly CalculParente $calcul,
-        private readonly AnnuaireDesMembresInterface $annuaire,
+        private readonly PersonneDuLecteur $pointDeVue,
         private readonly FournisseurDeJeuDePlacement $fournisseur,
     ) {
     }
@@ -68,39 +72,13 @@ final class ParenteDuLecteur
             return null;
         }
 
-        $egoDuLecteur = $this->personneDuLecteur($lecteur);
+        $egoDuLecteur = $this->pointDeVue->pour($lecteur);
 
         if (null === $egoDuLecteur) {
             return null;
         }
 
         return $this->libelles($egoDuLecteur)[IdentifiantDeNoeud::personne($personneId)] ?? null;
-    }
-
-    /**
-     * La personne depuis laquelle on regarde — celle du lecteur, ou celle du membre
-     * emprunté quand la bascule est active.
-     *
-     * `identiteEffective()` porte les deux cas **et** le cas de repli : elle rend `null`
-     * sous une bascule dont le compte n'a pas pu être résolu, et l'on ferme alors plutôt
-     * que de servir la parenté de l'administrateur. Une seule source pour cette décision,
-     * partagée avec le calque : deux endroits qui en décideraient finiraient par n'en
-     * décider qu'un.
-     *
-     * On ne demande jamais le rattachement d'un compte **tiers** : `personneDuCompte()` ne
-     * filtre rien et ne doit rien filtrer. Apprendre le sien n'apprend rien — il est déjà
-     * dans la charge de session du lecteur (§ 2.2) ; apprendre celui d'un autre serait
-     * lire un rattachement sans passer par le cercle.
-     */
-    private function personneDuLecteur(LecteurDeLArbre $lecteur): ?int
-    {
-        if ($lecteur->enRegimeDAttente()) {
-            return null;
-        }
-
-        $compte = $lecteur->identiteEffective();
-
-        return null === $compte ? null : $this->annuaire->personneDuCompte($compte);
     }
 
     /**

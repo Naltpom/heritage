@@ -9,13 +9,37 @@ use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
 
 /**
- * **L'étage 1 du cache** : le placement commun à tous les lecteurs (ADR 0005, § 9.9 du
- * modèle de données).
+ * **L'étage 1 du cache** : le placement, calculé sur l'arbre validé complet et **sans
+ * aucun filtre de confidentialité** (ADR 0005, § 9.9 du modèle de données).
  *
- * Un seul objet en cache pour toute l'application, calculé sur l'arbre validé complet,
- * **sans aucun filtre de confidentialité**. Le « sans filtre » se justifie en une
- * phrase : le cercle de visibilité masque des champs, pas des nœuds (ADR 0003). Le
- * placement ne dépend donc pas du lecteur.
+ * Le « sans filtre » se justifie en une phrase : le cercle de visibilité masque des
+ * champs, pas des nœuds (ADR 0003). Le placement ne dépend donc **pas du cercle** — et
+ * c'est bien ce mot-là qui compte, pas « pas du lecteur ».
+ *
+ * ## Une entrée par état de l'arbre **et par point de vue**
+ *
+ * Il n'y en avait qu'une, pour tout le monde, bâtie sur `tree.personne_racine_id`. Or la
+ * mise en page en découle entièrement : `génération 0` est la rangée de cette personne,
+ * la récursion d'ascendance part d'elle, et les quatre couleurs de branche veulent dire
+ * « le quart d'ascendance **de cette personne** ». La servir à tout le monde était juste
+ * pour un compte et faux pour tous les autres — exactement l'argument que
+ * {@see \App\Module\Tree\Serializer\ParenteDuLecteur} tient déjà pour les libellés de
+ * parenté, appliqué aux positions.
+ *
+ * L'ego entre donc dans la clé. Ce n'est **pas** l'objection que cette classe écartait
+ * auparavant : celle-là visait une clé par *lecteur*, qui aurait été fausse parce qu'elle
+ * ne changeait pas au dépôt d'un brouillon — l'auteur n'aurait jamais vu son propre nœud
+ * en attente. Ici rien de tel : cet étage ne contient **aucun** nœud en attente, c'est la
+ * projection qui les ajoute et elle n'est jamais mise en cache. La clé ne dépend que de
+ * deux choses, l'état de l'arbre et le point de vue, et toutes deux y figurent.
+ *
+ * Le nombre d'entrées est borné par le nombre de comptes rattachés à une personne — une
+ * famille, pas un public.
+ *
+ * **Le moteur, lui, ne change pas d'une ligne.** Il reçoit un `egoId` dans son jeu, comme
+ * avant ; seul cet identifiant varie. Le fichier de référence des 377 nœuds reste donc
+ * valable tel quel, sur l'ego par défaut — la preuve du portage de `graphe.py` est
+ * intacte.
  *
  * **Corollaire à ne jamais perdre de vue : cet objet ne sort jamais tel quel de l'API.**
  * C'est une structure interne, servie uniquement à travers {@see ProjecteurDePlacement}.
@@ -47,36 +71,34 @@ final class PlacementPartage
     public const string PREFIXE_CLE = 'placement.';
 
     /**
-     * `$fournisseur` est optionnel **le temps qu'une implémentation existe**, et pas par
-     * confort : charger l'arbre depuis Doctrine suppose deux règles que d'autres tâches
-     * possèdent — le rendu compact des dates incertaines (§ 9.1) et le calcul « personne
-     * vivante » (§ 9.2, réglage `tree.seuil_vivant_annees`). Les deux entrent dans la
-     * **largeur des fiches** : les deviner ici déplacerait silencieusement les 377 nœuds.
-     *
-     * Tant qu'aucun service n'implémente {@see FournisseurDeJeuDePlacement}, l'appel à
-     * {@see self::placement()} échoue avec un message actionnable plutôt que le conteneur
-     * au démarrage.
+     * Le chargement de l'arbre n'est plus ici : il vit dans {@see ArbreVuDepuis}, qui sait
+     * aussi le relire depuis un autre point de vue. Cette classe ne fait plus que deux
+     * choses — la clé, et le cache.
      */
     public function __construct(
         private readonly MoteurDePlacement $moteur,
         private readonly TreeFingerprint $empreinte,
         private readonly CacheInterface $cacheArbre,
-        private readonly ?FournisseurDeJeuDePlacement $fournisseur = null,
+        private readonly ArbreVuDepuis $arbre,
     ) {
     }
 
     /**
-     * Le placement partagé, calculé au plus une fois par état de l'arbre.
+     * Le placement, calculé au plus une fois par état de l'arbre et par point de vue.
      *
      * Sur les données réelles, le calcul complet tient largement sous la seconde ; c'est
      * le cache qui évite de le refaire à chaque affichage, pas une optimisation de
      * l'algorithme — qu'il ne faut surtout pas toucher (voir {@see MoteurDePlacement}).
+     *
+     * @param int|null $egoPersonneId la personne depuis laquelle ce lecteur regarde,
+     *                                `null` pour la racine de l'arbre — voir
+     *                                {@see \App\Module\Tree\Serializer\PersonneDuLecteur}
      */
-    public function placement(): Placement
+    public function placement(?int $egoPersonneId = null): Placement
     {
         $resultat = $this->cacheArbre->get(
-            $this->cle(),
-            fn (ItemInterface $entree): Placement => $this->calcule($entree),
+            $this->cle($egoPersonneId),
+            fn (ItemInterface $entree): Placement => $this->calcule($entree, $egoPersonneId),
         );
 
         \assert($resultat instanceof Placement);
@@ -85,26 +107,27 @@ final class PlacementPartage
     }
 
     /**
-     * `placement.{empreinte}` — **aucun identifiant de lecteur dans cette clé**.
+     * `placement.{empreinte}` pour la racine, `placement.{empreinte}.p{N}` pour un lecteur
+     * rattaché à une personne.
      *
-     * Une clé `placement.{empreinte}.{lecteurId}` ne serait pas seulement coûteuse, elle
-     * serait fausse : elle ne changerait qu'à une modification *validée* de l'arbre, or
-     * déposer un brouillon n'en est pas une. L'auteur d'une proposition ne verrait jamais
-     * son propre nœud en attente. L'arbitrage est journalisé dans `docs/arbitrages.md`.
+     * La forme sans suffixe est conservée pour la racine, et ce n'est pas qu'une commodité
+     * d'écriture : c'est l'entrée que le placement de référence décrit, et la garder telle
+     * quelle évite de laisser croire qu'elle a changé de contenu. Elle n'a pas changé.
      */
-    public function cle(): string
+    public function cle(?int $egoPersonneId = null): string
     {
-        return self::PREFIXE_CLE.$this->empreinte->empreinte();
+        $base = self::PREFIXE_CLE.$this->empreinte->empreinte();
+
+        return null === $egoPersonneId ? $base : $base.'.p'.$egoPersonneId;
     }
 
-    private function calcule(ItemInterface $entree): Placement
+    private function calcule(ItemInterface $entree, ?int $egoPersonneId): Placement
     {
-        if (null === $this->fournisseur) {
-            throw new \LogicException(\sprintf('Aucun service n\'implémente %s : le placement ne peut pas être chargé depuis la base. Déclarer une implémentation dans config/services/tree.yaml.', FournisseurDeJeuDePlacement::class));
-        }
-
         $entree->expiresAfter(self::TTL);
 
-        return $this->moteur->calcule($this->fournisseur->jeuComplet());
+        // L'arbre vu depuis ce point de vue — mêmes fiches, mêmes largeurs, générations
+        // recalculées. Le moteur, lui, ne sait rien de tout cela : il reçoit un jeu et son
+        // ego, comme toujours. Voir {@see ArbreVuDepuis}.
+        return $this->moteur->calcule($this->arbre->jeu($egoPersonneId));
     }
 }

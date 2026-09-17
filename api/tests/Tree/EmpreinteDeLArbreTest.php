@@ -168,21 +168,22 @@ final class EmpreinteDeLArbreTest extends TestCase
     }
 
     /**
-     * L'`ETag` porte le lecteur, la clé de cache non (§ 9.9). Et il le porte par **deux**
-     * composantes, pas une : le cercle effectif et les demandes en cours (§ 5.2).
+     * L'`ETag` porte le lecteur, la clé de cache de l'arbre non (§ 9.9). Et il le porte
+     * par **trois** composantes : le cercle effectif, les demandes en cours (§ 5.2), et
+     * depuis que la mise en page est calculée par lecteur, son point de vue.
      *
      * La formule est **recopiée ici en toutes lettres** et comparée au résultat : c'est
      * le seul moyen qu'un remaniement de l'ordre des composantes — ou l'oubli d'un
      * séparateur — fasse rougir quelque chose plutôt que de changer silencieusement tous
      * les `ETag` servis.
      *
-     * > Les deux composantes ne peuvent pas se confondre entre elles : celle du cercle
-     * > est **toujours** un condensat hexadécimal de 64 caractères
+     * > Les composantes ne peuvent pas se confondre entre elles : celle du cercle est
+     * > **toujours** un condensat hexadécimal de 64 caractères
      * > ({@see \App\Module\Tree\Serializer\CercleDuLecteur::empreinte()}), donc de
      * > longueur fixe et sans `:`. C'est ce qui rend la concaténation lisible dans un
      * > seul sens, et non le choix du séparateur.
      */
-    public function testLEtagDistingueLeCercleEffectifEtLesDemandesEnAttente(): void
+    public function testLEtagDistingueLeCercleLesDemandesEtLePointDeVue(): void
     {
         $this->personne('Dupont');
 
@@ -191,12 +192,14 @@ final class EmpreinteDeLArbreTest extends TestCase
         self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $neutre);
         self::assertNotSame($neutre, $this->empreinte->etag('', 'demande-12'), 'Déposer une demande doit changer l’`ETag` : sinon l’auteur ne voit jamais son propre nœud en attente.');
         self::assertNotSame($neutre, $this->empreinte->etag('cercle-du-membre', ''), 'Deux cercles différents doivent donner deux `ETag` différents (§ 5.2, § 17.5).');
-        self::assertSame($neutre, $this->empreinte->etag('', ''), 'À cercle et demandes égaux, l’`ETag` est stable : c’est ce qui rend la revalidation possible.');
+        self::assertNotSame($neutre, $this->empreinte->etag('', '', 'p100'), 'Deux points de vue différents donnent deux mises en page, donc deux `ETag`.');
+        self::assertNotSame($this->empreinte->etag('', '', 'p100'), $this->empreinte->etag('', '', 'p200'));
+        self::assertSame($neutre, $this->empreinte->etag('', ''), 'À cercle, demandes et point de vue égaux, l’`ETag` est stable : c’est ce qui rend la revalidation possible.');
 
         self::assertSame(
-            hash('sha256', $this->empreinte->empreinte().':cercle-du-membre:demande-12'),
-            $this->empreinte->etag('cercle-du-membre', 'demande-12'),
-            'La formule du § 5.2 : sha256( empreinte || ":" || cercle effectif || ":" || demandes ).',
+            hash('sha256', $this->empreinte->empreinte().':cercle-du-membre:demande-12:p100'),
+            $this->empreinte->etag('cercle-du-membre', 'demande-12', 'p100'),
+            'La formule : sha256( empreinte || ":" || cercle effectif || ":" || demandes || ":" || point de vue ).',
         );
     }
 

@@ -13,7 +13,8 @@ use App\Module\Tree\Service\TreeFingerprint;
  * ```
  * ETag = "sha256( empreinte_de_l_arbre                     -- § 2.3, identique pour tous
  *         || ':' || empreinte_du_cercle_effectif_du_lecteur
- *         || ':' || empreinte_des_demandes_du_lecteur )"   -- '' s'il n'en a aucune
+ *         || ':' || empreinte_des_demandes_du_lecteur      -- '' s'il n'en a aucune
+ *         || ':' || point_de_vue_du_lecteur )"             -- '' s'il n'est rattaché à personne
  * ```
  *
  * ── La règle, en une ligne ───────────────────────────────────────────────────────
@@ -75,6 +76,19 @@ use App\Module\Tree\Service\TreeFingerprint;
  *    empreinte différente — le cas se ferme tout seul, et c'est la raison pour laquelle
  *    on hache le cercle **résolu** plutôt que les réglages qui le produisent.
  *
+ * ── La quatrième composante : le point de vue ────────────────────────────────────
+ *
+ * Depuis que la mise en page est calculée **par lecteur** ({@see PlacementPartage}), deux
+ * comptes de même cercle et sans demande — deux administrateurs, par exemple — reçoivent
+ * des charges dont **toutes les coordonnées diffèrent**, et ne différaient par aucune des
+ * trois autres composantes. C'est le même défaut que celui mesuré plus haut, sur une autre
+ * dimension : un `ETag` identique pour deux charges différentes.
+ *
+ * On ajoute donc le point de vue, et il n'y a rien de plus à en dire — c'est l'application
+ * directe de la règle en tête de ce fichier. `''` quand le lecteur n'est rattaché à
+ * personne : il regarde alors depuis la racine, comme tous ceux qui sont dans son cas, et
+ * ils peuvent partager une entrée.
+ *
  * ── La composante des demandes reste nécessaire ──────────────────────────────────
  *
  * Déposer un brouillon ne touche aucune table `tree_*`, donc ne change pas l'empreinte —
@@ -110,15 +124,19 @@ final readonly class EtagDuGraphe
         private CalqueEnAttenteInterface $calque,
         private FabriqueDuCercle $cercles,
         private PopulationDeLArbre $population,
+        private PersonneDuLecteur $pointDeVue,
     ) {
     }
 
     /** Avec ses guillemets : c'est la valeur d'en-tête, pas un condensat nu. */
     public function pour(LecteurDeLArbre $lecteur): string
     {
+        $pointDeVue = $this->pointDeVue->pour($lecteur);
+
         return '"'.$this->empreinte->etag(
             $this->empreinteDuCercleEffectif($lecteur),
             $this->calque->empreinteDesDemandes($lecteur->pourLeCalque()),
+            null === $pointDeVue ? '' : 'p'.$pointDeVue,
         ).'"';
     }
 
