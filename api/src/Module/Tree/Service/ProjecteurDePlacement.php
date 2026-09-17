@@ -7,6 +7,7 @@ namespace App\Module\Tree\Service;
 use App\Module\Tree\ValueObject\AncrageEnAttente;
 use App\Module\Tree\ValueObject\AreteDePlacement;
 use App\Module\Tree\ValueObject\BoiteEnglobante;
+use App\Module\Tree\ValueObject\IdentifiantDeNoeud;
 use App\Module\Tree\ValueObject\NoeudEnAttente;
 use App\Module\Tree\ValueObject\NoeudPlace;
 use App\Module\Tree\ValueObject\Placement;
@@ -111,7 +112,7 @@ final class ProjecteurDePlacement
         [$vise, $aretes, $poseLosange] = match ($attente->ancrage->genre) {
             AncrageEnAttente::ENFANT_DE_FAMILLE => $this->ancreCommeEnfant($noeuds, $aretesConnues, $attente, $cible, $largeur),
             AncrageEnAttente::ENFANT_DE_PARENT => $this->ancreCommeEnfantDUnParent($noeuds, $aretesConnues, $attente, $cible, $largeur),
-            AncrageEnAttente::CONJOINT_DE => $this->ancreCommeConjoint($attente, $cible, $largeur),
+            AncrageEnAttente::CONJOINT_DE => $this->ancreCommeConjoint($noeuds, $aretesConnues, $attente, $cible, $largeur),
             AncrageEnAttente::PARENT_DE => $this->ancreCommeParent($noeuds, $aretesConnues, $attente, $cible, $largeur, $y),
         };
 
@@ -228,11 +229,49 @@ final class ProjecteurDePlacement
      * personne → personne dans ce graphe, et en introduire une pour les seuls nœuds en
      * attente obligerait le viewer à connaître deux modèles d'arête.
      *
+     * ── Sauf si le conjoint en a déjà un, tout neuf et seul dedans ─────────────
+     *
+     * La forme la plus courante de la file dépose les deux parents d'une même personne :
+     * `#p1` se pose d'abord comme parent de l'enfant, ce qui lui crée un losange avec la
+     * filiation dessous ; `#p2` arrive ensuite comme conjointe de `#p1`. En lui créant
+     * son propre losange, le couple en portait **deux** — l'un les joignant, l'autre
+     * tenant l'enfant sous un seul parent. C'est-à-dire deux unions dessinées là où il
+     * n'y en a qu'une.
+     *
+     * On rejoint donc le losange existant, sous deux conditions strictes : il est
+     * **inventé par cette projection**, pas une famille validée de l'arbre, et il
+     * n'a **qu'un** époux. Un remariage ne doit pas absorber la nouvelle conjointe dans
+     * l'ancien couple, et un losange validé n'appartient pas à cette projection.
+     *
+     * @param array<string, NoeudPlace> $noeuds
+     * @param list<AreteDePlacement>    $aretesConnues
+     *
      * @return array{0: float, 1: list<AreteDePlacement>, 2: (\Closure(float): NoeudPlace)|null}
      */
-    private function ancreCommeConjoint(NoeudEnAttente $attente, NoeudPlace $conjoint, int $largeur): array
+    private function ancreCommeConjoint(array $noeuds, array $aretesConnues, NoeudEnAttente $attente, NoeudPlace $conjoint, int $largeur): array
     {
         $x = $conjoint->x + $conjoint->w / 2 + MoteurDePlacement::ESPACE + $largeur / 2;
+
+        foreach ($aretesConnues as $arete) {
+            if (AreteDePlacement::GENRE_UNION !== $arete->genre || $arete->de !== $conjoint->id) {
+                continue;
+            }
+
+            // « Pas une famille validée » plutôt que « provisoire » : `estFamille()` reconnaît
+            // la forme `f<N>`, celle des losanges de l'arbre. Tout le reste a nécessairement
+            // été inventé par cette projection, quelle que soit la convention de nommage des
+            // fiches proposées — c'est la question qu'on veut poser, et elle ne dépend
+            // d'aucun préfixe que `Proposal` pourrait changer.
+            if (IdentifiantDeNoeud::estFamille($arete->vers) || !isset($noeuds[$arete->vers])) {
+                continue;
+            }
+
+            if (1 !== \count($this->epouxDe($aretesConnues, $arete->vers))) {
+                continue;
+            }
+
+            return [$x, [AreteDePlacement::union($attente->id(), $arete->vers, false)], null];
+        }
 
         return [
             $x,
