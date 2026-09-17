@@ -319,6 +319,7 @@ final class ResolutionDesLieuxTest extends ArbreWebTestCase
             "# nom;departement;region;lat;lon;population;rang\n".implode("\n", $communes)."\n",
         );
         file_put_contents($this->dossier.'/villes-monde.csv', "# nom;pays_iso2;lat;lon;population\nOran;DZ;35.69;-0.64;850000\n");
+        file_put_contents($this->dossier.'/villes-canada.csv', "# nom;pays_iso2;lat;lon;population\nTrochu;CA;51.83;-113.21;1000\n");
         file_put_contents($this->dossier.'/departements.csv', "# code;nom\n18;Cher\n58;Nièvre\n99;Zzz\n");
         file_put_contents($this->dossier.'/regions.csv', "# code;nom\n24;Centre-Val de Loire\n27;Bourgogne-Franche-Comté\n99;Zzz\n");
     }

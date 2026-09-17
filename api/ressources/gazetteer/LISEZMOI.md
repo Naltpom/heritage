@@ -27,6 +27,7 @@ règle, un gazetteer rangé là disparaîtrait de tous les clones **en silence**
 |---|---|---|
 | `communes-fr.csv` | 114 838 | `nom;departement;region;lat;lon;population;rang` — `rang` vaut 0 pour une commune (GeoNames `ADM4`, 34 742 lignes) et 1 pour un lieu habité (`PPL*` : hameaux et lieux-dits). Les hameaux sont là **exprès** : un `PLAC` de GEDCOM en nomme souvent un. |
 | `villes-monde.csv` | 34 145 | `nom;pays_iso2;lat;lon;population` — villes de plus de 15 000 habitants. |
+| `villes-canada.csv` | 25 086 | **Même forme, fondu dans le même index** au chargement. Voir ci-dessous. |
 | `departements.csv` | 109 | `code;nom` — pour rapprocher « Dordogne » du code `24`. |
 | `regions.csv` | 26 | `code;nom` — idem pour les régions. |
 
@@ -40,11 +41,30 @@ un nom a été remplacé par `,` à la capture.
 
 ## Licences — à ne pas perdre
 
-- **GeoNames** (`communes-fr.csv`, `villes-monde.csv`) — **CC BY 4.0**. L'attribution
+- **GeoNames** (`communes-fr.csv`, `villes-monde.csv`, `villes-canada.csv`) — **CC BY 4.0**. L'attribution
   est **obligatoire** : « © GeoNames » figure dans l'en-tête de chaque fichier, et doit
   rester lisible quelque part si ces données venaient à être affichées telles quelles.
 - **Etalab `@etalab/decoupage-administratif` 6.0.0** (`departements.csv`, `regions.csv`)
   — **Licence Ouverte 2.0**.
+
+## Pourquoi un fichier pays entier pour le Canada
+
+Parce que **cet arbre a une branche canadienne**, et que le fichier mondial ne la voit
+pas. `villes-monde.csv` s'arrête à 15 000 habitants ; les naissances de cet arbre sont
+à **Castor** (Alberta, ~900 habitants) et autour de **Trochu** (Alberta, ~1 000).
+
+Vérifié, et c'est ce qui a tranché : Castor et Trochu sont absents de `cities15000`
+**et** de `cities500`. Seul le fichier pays les porte — et il pèse **six fois moins**
+que `cities500`, qui ne les aurait pas eus.
+
+C'est exactement la même logique que pour la France, dont on prend `FR.txt` entier et
+non les seules grandes villes : une généalogie se passe dans des villages.
+
+**Le jour où l'arbre gagne une branche dans un autre pays**, c'est le même geste :
+`<ISO2>.zip` chez GeoNames, la même commande `awk`, le même en-tête, et une ligne dans
+`AppariementDesLieux::charger()`. Le fichier porte `;CA;` en deuxième colonne comme le
+fichier mondial porte son ISO2 : rien d'autre à changer, la passe « ville du monde »
+filtre déjà là-dessus.
 
 ## La limite connue : `villes-monde.csv` est en anglais
 
@@ -65,7 +85,8 @@ valent la peine.
 ```bash
 curl -O https://download.geonames.org/export/dump/FR.zip           # sha256 6440bc7ec69c7c76549ade2cbf38a22f249debc8dbaf4d5e410aed3049310750
 curl -O https://download.geonames.org/export/dump/cities15000.zip  # sha256 41ab6152eed8d36c4a0ce033bef9a03c97d8edb1f4ee5898e942c2b83059f734
-unzip FR.zip cities15000.zip
+curl -O https://download.geonames.org/export/dump/CA.zip           # sha256 e70ca11115a1585abb37d17447ab0bf52b31568b490da4ceea27c352030ff945
+unzip FR.zip cities15000.zip CA.zip
 npm pack @etalab/decoupage-administratif && tar -xzf etalab-*.tgz package/data/
 
 # communes et lieux habités : nom;dept;region;lat;lon;pop;rang
@@ -77,6 +98,9 @@ awk -F'\t' '
 
 # villes du monde : nom;pays;lat;lon;pop
 awk -F'\t' '$5!="" && $6!="" { n=$2; gsub(/;/,",",n); printf "%s;%s;%.5f;%.5f;%s\n", n, $9, $5, $6, ($15==""?0:$15) }' cities15000.txt
+
+# lieux habités du Canada : la MÊME forme, pays forcé à CA
+awk -F'\t' '($7=="P"||$8=="ADM3"||$8=="ADM2") && $5!="" && $6!="" { n=$2; gsub(/;/,",",n); printf "%s;CA;%.5f;%.5f;%s\n", n, $5, $6, ($15==""?0:$15) }' CA.txt | sort -u
 ```
 
 Remettre ensuite les en-têtes `#` (provenance, licence, date, SHA-256 de l'archive

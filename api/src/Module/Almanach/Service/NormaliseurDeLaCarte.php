@@ -30,9 +30,7 @@ use App\Module\Core\ValueObject\UncertainDate;
  * ── CE QUI EST RENDU, ET CE QUI EST SEULEMENT COMPTÉ ─────────────────────────────
  *
  * Une bulle a besoin d'une position **et** d'une année : la carte les répartit dans
- * l'espace et les filtre dans le temps. Un événement qui manque de l'un des deux ne peut
- * pas être dessiné — et **le taire serait pire que l'omettre**. Il est donc compté, et les
- * trois compteurs disent lequel des trois manques l'a écarté :
+ * l'espace et les filtre dans le temps. Trois compteurs disent ce qui manque :
  *
  * | compteur | ce qu'il compte |
  * |---|---|
@@ -45,8 +43,18 @@ use App\Module\Core\ValueObject\UncertainDate;
  * me manque-t-il ? », « combien de lieux dois-je corriger ? », « combien de dates
  * dois-je chercher ? »), et un total qui les additionnerait ne répondrait à aucune.
  *
- * `annee` n'est donc **jamais `null`** dans cette charge : un événement sans année n'y
- * figure pas.
+ * **Mais un compteur ne remplace pas la chose comptée.** Un événement dont le `PLAC` est
+ * écrit et non résolu **figure dans `evenements`**, avec `placeId: null` et sa graphie
+ * brute : il ne fait pas de bulle, mais l'écran peut le nommer, et le lecteur voit quels
+ * lieux le référentiel n'a pas su placer. Le premier jet les écartait — mesuré en
+ * production le 17/09/2026, **77 sur 396 disparaissaient derrière un nombre que rien ne
+ * permettait d'ouvrir**. C'est très exactement la disparition silencieuse que cette
+ * mécanique existait pour empêcher, reproduite par la mécanique elle-même.
+ *
+ * Un événement **sans aucun `PLAC`** reste hors de `evenements` : il n'a rien à montrer.
+ *
+ * `annee` n'est **jamais `null`** dans cette charge : un événement sans année n'y figure
+ * pas, de quelque côté que ce soit.
  *
  * ── `lieux` NE PORTE QUE LES LIEUX EFFECTIVEMENT EMPLOYÉS ────────────────────────
  *
@@ -125,24 +133,45 @@ final class NormaliseurDeLaCarte
                 ++$sansDate;
             }
 
-            if (null === $annee || null === $lieu) {
+            // ── CE QUI EST RENDU MALGRÉ TOUT, ET POURQUOI ────────────────────────────
+            //
+            // Un événement dont le `PLAC` est **écrit mais non résolu** est rendu, avec
+            // `placeId: null` et sa graphie brute. Il ne fait pas de bulle — il n'a pas de
+            // position — mais l'écran peut alors le **nommer** : « 77 sans lieu situé »
+            // s'ouvre sur la liste de ce qui manque, et le lecteur voit quels lieux le
+            // référentiel n'a pas su placer.
+            //
+            // Le taire n'aurait pas été « pire que l'omettre », comme dit plus haut : ç'eût
+            // été l'omettre en prétendant l'avoir compté. Mesuré en production le
+            // 17/09/2026 : 77 événements sur 396 — un cinquième — devenaient un nombre que
+            // rien ne permettait d'ouvrir.
+            //
+            // Un événement **sans aucun `PLAC`** reste écarté : il n'a rien à montrer, et le
+            // faire entrer ici gonflerait la liste des « non situés » de 198 lignes vides.
+            // C'est la distinction que portent les deux compteurs.
+            if (null === $annee || (null === $lieu && (null === $brut || '' === trim($brut)))) {
                 continue;
             }
 
             $annees[] = $annee;
             ++$parGenre[$evenement->genre()->value];
-            $employes[$lieu->cle] = $lieu;
+            if (null !== $lieu) {
+                $employes[$lieu->cle] = $lieu;
+            }
 
             $evenements[] = [
                 'cle' => $evenement->cle,
                 'genre' => $evenement->genre()->value,
                 'type' => $evenement->type->value,
-                'placeId' => $lieu->placeId,
+                // `null` quand le `PLAC` est écrit mais que rien ne l'a situé. Le front
+                // range alors l'événement dans « sans lieu situé » au lieu d'en faire une
+                // bulle à des coordonnées inventées.
+                'placeId' => $lieu?->placeId,
                 // La chaîne `PLAC` **verbatim**, toujours présente à côté de l'identifiant :
                 // une bulle montre ce que la donnée dit, et non le libellé que
                 // l'appariement a retenu. C'est ce qui rend une résolution douteuse visible
                 // au lecteur plutôt qu'invisible sous un beau nom.
-                'place' => $brut,
+                'place' => $brut ?? '',
                 'annee' => $annee,
                 'texte' => $evenement->date->format(),
                 'qualifier' => $evenement->date->getQualifier()->value,
