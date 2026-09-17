@@ -118,9 +118,9 @@ final class PropositionsProjeteesTest extends TestCase
         return $this->ancrageDe('#12/p1', $kind, $autre, $familleId, $familleProvisoire);
     }
 
-    private function ancrageDe(string $sujet, string $kind, ?string $autre, ?int $familleId = null, ?string $familleProvisoire = null): AncragePropose
+    private function ancrageDe(string $sujet, string $kind, ?string $autre, ?int $familleId = null, ?string $familleProvisoire = null, ?string $autre2 = null): AncragePropose
     {
-        return new AncragePropose(12, 0, $kind, $sujet, $autre, null, $familleId, $familleProvisoire, false);
+        return new AncragePropose(12, 0, $kind, $sujet, $autre, $autre2, $familleId, $familleProvisoire, false);
     }
 
     /**
@@ -417,13 +417,13 @@ final class PropositionsProjeteesTest extends TestCase
     }
 
     /**
-     * Le sens direct l'emporte sur le sens déduit.
+     * Le sens direct est **essayé** avant le sens déduit.
      *
      * Une fiche peut être le sujet d'un lien **et** l'autre bout d'un autre. Ce qu'un lien
      * dit d'elle en la prenant pour sujet est direct ; ce qu'on tire d'un lien où elle est
-     * l'autre bout est une déduction. À égalité, on garde ce qui est dit.
+     * l'autre bout est une déduction. Les deux se posant, on garde ce qui est dit.
      */
-    public function testLeLienDontLaFicheEstSujetLEmporteSurLInverse(): void
+    public function testLeLienDontLaFicheEstSujetEstEssayeAvantLInverse(): void
     {
         $prepare = $this->preparerPlusieurs(
             [$this->noeudNomme('#12/p1', 'Girolle', 'Chanterelle')],
@@ -439,6 +439,57 @@ final class PropositionsProjeteesTest extends TestCase
 
         self::assertSame(AncrageEnAttente::CONJOINT_DE, $place->ancrage->genre);
         self::assertSame('p2', $place->ancrage->cibleId);
+    }
+
+    /**
+     * ════════════════════════════════════════════════════════════════════════════
+     *  LA FORME LA PLUS COURANTE DE LA FILE : « J'AJOUTE LES DEUX PARENTS ».
+     * ═══════════════════════════════════════════════════════════════════════════.
+     *
+     * Relevée telle quelle en production, sur huit des neuf demandes en attente :
+     *
+     * ```
+     * seq 1 : conjoint_de(sujet: #p2, autre: #p1)             les deux proposés
+     * seq 2 : enfant_de(sujet: p1, autre: #p1, autre2: #p2)   p1 est l'enfant des deux
+     * ```
+     *
+     * **Le piège est le premier lien.** Il rattache les deux fiches proposées l'une à
+     * l'autre, et rien d'autre. Ne garder qu'un rattachement par fiche — la simplification
+     * d'avant les vagues — faisait que `#p1` ne connaissait que `#p2` et réciproquement :
+     * un couple qui s'attend lui-même, que ni les vagues ni quoi que ce soit ne pouvait
+     * dénouer. Les deux sortaient en `enchainement`, c'est-à-dire invisibles.
+     *
+     * Le second lien les rattache pourtant tous les deux à une personne réelle. Il faut
+     * donc garder **tous** les candidats et les essayer, au lieu de choisir avant de
+     * savoir lequel se pose.
+     */
+    public function testLesDeuxParentsProposesDUneMemePersonneSePlacent(): void
+    {
+        $prepare = $this->preparerPlusieurs(
+            [
+                $this->noeudNomme('#12/p1', 'Pierre', 'Soulage'),
+                $this->noeudNomme('#12/p2', 'Marie', 'Antignac'),
+            ],
+            [
+                $this->ancrageDe('#12/p2', 'conjoint_de', '#12/p1', familleProvisoire: '#12/f1'),
+                // `p1` est l'ego du placement de ce fichier, sur la rangée 0.
+                $this->ancrageDe('p1', 'enfant_de', '#12/p1', autre2: '#12/p2'),
+            ],
+        );
+
+        self::assertSame([], $prepare['ecartes'], 'Aucun des deux parents n’est laissé de côté.');
+        self::assertCount(2, $prepare['noeuds']);
+
+        $rangees = [];
+        foreach ($prepare['noeuds'] as $noeud) {
+            $rangees[$noeud->id()] = $noeud->mesure->generation;
+        }
+
+        self::assertSame(
+            ['#12/p1' => -1, '#12/p2' => -1],
+            $rangees,
+            'Les parents de l’ego sont une rangée au-dessus de lui, tous les deux.',
+        );
     }
 
     /**
