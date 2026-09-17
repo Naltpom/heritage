@@ -82,7 +82,10 @@ final class MediaController extends AbstractController
         private readonly NormaliseurMedia $normaliseur,
         private readonly StockageMedia $stockage,
         /**
-         * 20 dépôts par heure et par compte (§ 1.9 du contrat).
+         * 20 dépôts par heure et par compte (§ 1.9 du contrat) — **sauf pour un
+         * administrateur**, qui en est exempté depuis le 17 septembre 2026. La décision,
+         * sa portée exacte et ce qu'il reste de freins sont sur {@see self::limiter()} :
+         * les lire avant de raisonner sur ce plafond.
          *
          * Le limiteur est déclaré dans `config/services/media.yaml` plutôt que sous
          * `framework.rate_limiter` : un module configure ce qui lui appartient dans SON
@@ -138,9 +141,9 @@ final class MediaController extends AbstractController
                 subjectKind: $this->enumObligatoire(MediaSubject::class, $requete->request->get('subjectKind'), 'subjectKind'),
                 subjectId: $this->entier($requete->request->get('subjectId'), 'subjectId'),
                 demandeId: $this->entier($requete->request->get('demandeId'), 'demandeId'),
-                brouillonRef: $this->chaine($requete->request->get('brouillonRef')),
-                caption: $this->chaine($requete->request->get('caption')),
-                taken: BlocDate::depuisJson($this->chaine($requete->request->get('taken'))),
+                brouillonRef: $this->chaine($requete->request->get('brouillonRef'), 'brouillonRef'),
+                caption: $this->chaine($requete->request->get('caption'), 'caption'),
+                taken: BlocDate::depuisJson($this->chaine($requete->request->get('taken'), 'taken')),
             ),
             $lecteur,
         );
@@ -290,9 +293,58 @@ final class MediaController extends AbstractController
     /**
      * Le plafond par compte, et non par IP : une famille derrière la même connexion
      * partage son adresse, et un plafond par IP punirait le second déposant.
+     *
+     * ## L'administrateur en est exempté — décision du commanditaire, 17 septembre 2026
+     *
+     * **Ce n'est pas un oubli, et ce n'est pas un principe extensible.** Le cas d'usage
+     * qui l'a motivée est nommé : l'import d'un lot documenté de **76 pages d'actes
+     * notariés** passe par le compte d'administration, et les 20 dépôts par heure du
+     * § 1.9 le bloquaient **sur son propre arbre** pendant que l'import tournait — le
+     * `429` ne tombait pas sur l'import, il tombait sur tout ce que le commanditaire
+     * tentait de faire d'autre dans l'heure suivante. Le plafond, écrit contre un abus,
+     * n'atteignait ici que le seul usage légitime qui en approche le volume.
+     *
+     * L'exemption est donc **bornée à `ROLE_ADMIN`** : ni « tout compte authentifié », ni
+     * « le propriétaire du sujet ». Un membre ordinaire reste plafonné exactement comme
+     * avant, et c'est lui que le § 1.9 protège — ce sont les membres de la famille qui
+     * useront de l'application au quotidien, et eux dont un compte volé remplirait le
+     * disque. Élargir cette condition, c'est supprimer le plafond.
+     *
+     * ## Ce qui borne encore un administrateur, et ce qui ne le borne plus
+     *
+     * À lire avant de supposer qu'un autre garde-fou prend le relais : **il n'en prend
+     * aucun sur le nombre**. Vérifié sur `src/Module/Media/` le 17 septembre 2026 — le
+     * module n'a **ni garde d'espace disque, ni quota par compte, ni quota global**. Le
+     * limiteur était le seul frein au *nombre* de dépôts ; pour un administrateur, il
+     * n'en reste plus.
+     *
+     * Ce qui subsiste ne borne que le *fichier*, un par un :
+     *
+     * - la **taille** — `ReglagesMediaInterface::tailleMaxOctets()` (20 Mio par défaut),
+     *   doublée en amont par `upload_max_filesize`/`post_max_size` de `docker/php.ini` et
+     *   le `client_max_body_size` de nginx ;
+     * - la **surface** — `PurgeDesMetadonnees::PIXELS_MAX`, 32 000 000 pixels, qui garde
+     *   la mémoire de GD et non le disque.
+     *
+     * Multiplier le premier par un nombre de dépôts désormais non borné donne la seule
+     * mesure honnête du risque accepté ici. Si un quota d'espace apparaît un jour, c'est
+     * ce paragraphe qu'il faut corriger en même temps.
+     *
+     * ## D'où vient le rôle
+     *
+     * De `LecteurMedia::$administrateur`, que {@see FabriqueDeLecteur} tient de
+     * `Core\Entity\User::getRoles()` — la source de vérité du projet. Ne pas redemander
+     * `isGranted('ROLE_ADMIN')` ici : ce serait une seconde lecture du rôle à côté de
+     * celle qui décide déjà de la file de validation et des champs privilégiés du § 7.2,
+     * et c'est exactement la divergence que {@see FabriqueDeLecteur} raconte avoir payée
+     * sur le régime.
      */
     private function limiter(LecteurMedia $lecteur): void
     {
+        if ($lecteur->administrateur) {
+            return;
+        }
+
         $limite = $this->limiteur->create((string) $lecteur->userId)->consume();
 
         if (!$limite->isAccepted()) {
@@ -476,10 +528,67 @@ final class MediaController extends AbstractController
         return $entier;
     }
 
-    private function chaine(mixed $valeur): ?string
+    /**
+     * Le texte libre d'un champ **multipart**, ou `null` s'il est vide.
+     *
+     * ## L'encodage est vérifié ici, et c'est un défaut du serveur qu'on corrige
+     *
+     * Une légende envoyée en Latin-1 — `0xC9 0x6C` pour « Él » — traversait ce
+     * contrôleur sans être regardée, puis cassait chez PostgreSQL, qui n'accepte que
+     * de l'UTF-8 : `invalid byte sequence for encoding "UTF8"`. L'API rendait **500**
+     * (incidents `6ade9d62220a8fcd` puis `1c65c7044967e174`, reproduit le 17 septembre
+     * 2026 sur la pile de développement).
+     *
+     * **Le 500 n'était pas la faute du client.** Un serveur qui reçoit une entrée qu'il
+     * ne sait pas stocker doit la refuser en le disant ; s'effondrer dessus transforme
+     * une erreur de saisie en panne, et une panne ne s'explique à personne — le
+     * déposant voit « Erreur interne » sur une photo parfaitement valide, et rien ne
+     * lui indique que c'est sa légende qui est en cause.
+     *
+     * ## Pourquoi ce garde-fou est au module Media et **pas** à un point commun
+     *
+     * Parce que c'est la seule entrée qui en manquait. Recensé sur toute l'API le
+     * 17 septembre 2026, et mesuré route par route :
+     *
+     * - les **corps JSON** sont déjà couverts — `json_decode()` refuse par norme
+     *   l'UTF-8 invalide et rend `null`, que les contrôleurs traduisent en `422`
+     *   (mesuré sur `POST /api/session/mot-de-passe` : `donnees_invalides`) ;
+     * - la **chaîne de requête** l'est aussi, incidemment : le terme de
+     *   `GET /api/arbre/recherche` passe par la normalisation de clé de
+     *   {@see \App\Module\Tree\Serializer\NormaliseurDeRequete::mots()}, qui écarte
+     *   l'octet fautif (mesuré : `200`, aucun résultat) ;
+     * - le **nom de fichier** client est assaini avant d'arriver ici (mesuré : stocké
+     *   `acte-L?lise.jpg`, `201`) ;
+     * - les **champs multipart** ne sont lus nulle part ailleurs : `request->get()`
+     *   n'apparaît dans aucun autre module, et `UploadedFile` non plus — `POST
+     *   /api/medias` est la seule route multipart de l'API.
+     *
+     * Un garde-fou global sur « toutes les entrées texte » n'aurait donc rien couvert
+     * de plus, et aurait ajouté un second contrôle là où `json_decode()` en fait déjà
+     * un. Si une deuxième route multipart apparaît un jour, c'est à ce moment-là que la
+     * question d'un point commun se posera — et ce sera une décision à prendre, pas un
+     * réflexe.
+     *
+     * ## On refuse, on ne répare pas
+     *
+     * `mb_check_encoding()` et non `iconv()` ni `mb_convert_encoding()` : deviner
+     * l'encodage d'une légende pour la réécrire, c'est modifier le texte que quelqu'un
+     * a saisi sans le lui dire, et se tromper en silence sur les rares cas ambigus. Le
+     * client sait quel encodage il a employé ; le serveur, non. On lui rend donc le
+     * champ fautif et la raison, et il renvoie de l'UTF-8.
+     *
+     * La vérification porte sur les **trois** champs libres — `caption`,
+     * `brouillonRef`, `taken` — parce qu'ils finissent tous en colonne texte, et non
+     * sur le seul qui a provoqué l'incident.
+     */
+    private function chaine(mixed $valeur, string $champ): ?string
     {
         if (!\is_string($valeur) || '' === trim($valeur)) {
             return null;
+        }
+
+        if (!mb_check_encoding($valeur, 'UTF-8')) {
+            throw new ValidationException([$champ => 'Le texte doit être encodé en UTF-8.']);
         }
 
         return trim($valeur);

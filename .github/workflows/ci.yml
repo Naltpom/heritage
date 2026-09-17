@@ -147,9 +147,10 @@ jobs:
       #
       # Ni la porte 5 ni l'empreinte ne peuvent répondre à ça. La porte 5 prouve
       # que le Dockerfile se construit, pas qu'il configure quoi que ce soit ; et
-      # `docker/empreinte.sh` ne hache que composer.lock et les *.php / *.yaml de
-      # src, config et public — une image reconstruite avec un autre php.ini rend
-      # LA MÊME empreinte.
+      # `docker/empreinte.sh`, qui hache bien `docker/php.ini` depuis le
+      # 17 septembre 2026, atteste que ces octets sont PARTIS dans l'image — pas
+      # que PHP les a LUS. Chemin de copie, ordre de balayage de `conf.d`,
+      # directive écrasée plus loin : l'empreinte concorde, les limites non.
       #
       # L'image de base n'active aucun php.ini : sans ce contrôle, l'API repart
       # en silence sur les défauts compilés de PHP — memory_limit 128M,

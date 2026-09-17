@@ -30,9 +30,12 @@
 # c'est même l'état dans lequel ce contrôle a été écrit : memory_limit 128M,
 # upload_max_filesize 2M, post_max_size 8M, « Loaded Configuration File => (none) ».
 #
-# Et `docker/empreinte.sh` ne rattrape pas ça : il ne hache que composer.lock et
-# les *.php / *.yaml de src, config et public. Une image reconstruite avec un
-# php.ini différent rend LA MÊME empreinte. Le seul témoin est PHP lui-même.
+# Et `docker/empreinte.sh` ne rattrape pas ça — même depuis qu'il hache
+# `docker/php.ini` (17 septembre 2026). L'empreinte atteste que ces OCTETS-LÀ
+# sont partis dans l'image ; elle ne dit rien de ce que PHP en a fait. Un fichier
+# copié au mauvais chemin, un `conf.d` balayé dans un ordre inattendu, une
+# directive écrasée plus loin : l'empreinte concorde et les limites sont fausses.
+# Le seul témoin de ce que PHP APPLIQUE est PHP lui-même.
 #
 # -----------------------------------------------------------------------------
 #  CE QUI EST VÉRIFIÉ — DEUX CHOSES DISTINCTES

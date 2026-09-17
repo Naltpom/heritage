@@ -84,6 +84,14 @@ services:
     #
     # 20 téléversements par heure et par compte (§ 1.9 du contrat).
     #
+    # Le plafond ci-dessous est celui d'un membre ordinaire. **Un administrateur n'est
+    # pas compté** : `MediaController::limiter()` rend la main avant de consommer un
+    # jeton, sur décision du commanditaire du 17 septembre 2026 (import en volume par le
+    # compte d'administration). Baisser `limit` ici ne le contraint donc pas, et le
+    # monter ne détend rien pour lui. La portée de l'exemption et ce qu'il reste comme
+    # freins — aucun sur le nombre — sont écrits sur cette méthode ; c'est là qu'il faut
+    # lire avant de toucher à ces valeurs.
+    #
     # Déclaré ici et non sous `framework.rate_limiter` dans framework.yaml : la règle 1
     # de l'ADR 0002 veut qu'un module configure ce qui lui appartient dans SON fichier.
     # Si le socle finit par déclarer `framework.rate_limiter.media_televersement`, c'est

@@ -52,10 +52,12 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 # reproduit pas en développement est un défaut qu'on ne diagnostique qu'en
 # production.
 #
-# Ce fichier n'entre PAS dans `docker/empreinte.sh` (qui ne hache que
-# composer.lock et les *.php / *.yaml de src, config et public). Le seul contrôle
-# qui vaille est donc d'interroger `php -i` dans le conteneur :
-# `.github/scripts/verifier-les-limites-php.sh`.
+# Ce fichier entre dans `docker/empreinte.sh` depuis le 17 septembre 2026 : une
+# image reconstruite avec d'autres limites PHP ne peut plus rendre la même
+# empreinte. Cela prouve que ces octets sont partis dans l'image — pas que PHP
+# les a lus. Le contrôle qui l'atteste, lui, interroge `php -i` dans le
+# conteneur : `.github/scripts/verifier-les-limites-php.sh`. Les deux sont
+# nécessaires, et ils ne répondent pas à la même question.
 COPY docker/php.ini /usr/local/etc/php/conf.d/zz-heritage.ini
 
 WORKDIR /app
