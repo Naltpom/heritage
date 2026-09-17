@@ -7,7 +7,7 @@ import {
   type RepriseModification,
 } from './reprise'
 import type { StatutDemande } from '@/lib/api'
-import { corpsCreationPersonne } from './creation'
+import { corpsCreationPersonne, estFicheProposee, type ChoixDePersonne } from './creation'
 import { relectureFidele, valeurAEnvoyer } from './dates'
 
 /**
@@ -116,6 +116,19 @@ function creation(): RepriseCreation {
   return reprise
 }
 
+/**
+ * L'identifiant de personne d'un choix, ou `null` si c'est une fiche proposée.
+ *
+ * Une extrémité a **trois** formes depuis qu'une demande peut désigner la fiche
+ * proposée par une autre : `personId` n'existe donc plus sur toutes. Le test
+ * rétrécit ici plutôt que de caster — un `as PersonneChoisie` ferait passer au
+ * vert un jour où la relecture rendrait la mauvaise forme.
+ */
+function idDe(choix: ChoixDePersonne | undefined): number | null {
+  if (choix === undefined || estFicheProposee(choix)) return null
+  return choix.personId
+}
+
 describe('reprendre une modification', () => {
   it('ne reprend que la valeur proposée, jamais l’ancienne ni la version', () => {
     // `oldValue` et `baseVersion` sont reconstruits depuis la fiche que
@@ -169,14 +182,14 @@ describe('reprendre une création', () => {
     // reprise suivante.
     const parents = creation().saisie.filiation.parents
 
-    expect(parents.map((parent) => parent.personId)).toEqual([61, 62])
+    expect(parents.map(idDe)).toEqual([61, 62])
     expect(creation().saisie.filiation.famille).toBeNull()
   })
 
   it('remet l’union avec sa date et sa note', () => {
     const [union] = creation().saisie.unions
 
-    expect(union?.personne.personId).toBe(55)
+    expect(idDe(union?.personne)).toBe(55)
     expect(union?.mariage.forme).toBe('connue')
     expect(union?.mariage.debut).toBe('23/09/1927')
     expect(union?.rompue).toBe(false)
@@ -184,7 +197,7 @@ describe('reprendre une création', () => {
   })
 
   it('remet l’enfant avec son rang', () => {
-    expect(creation().saisie.enfants[0]?.personne.personId).toBe(63)
+    expect(idDe(creation().saisie.enfants[0]?.personne)).toBe(63)
     expect(creation().saisie.enfants[0]?.rangFratrie).toBe(0)
   })
 

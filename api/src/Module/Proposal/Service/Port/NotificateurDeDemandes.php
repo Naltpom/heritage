@@ -118,9 +118,9 @@ interface NotificateurDeDemandes
      * fait qu'un membre ne dépose pas de seconde contribution.
      *
      * @param list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}> $dependances
-     *                                                                                                        Les fiches proposées ailleurs que cette demande désignait, et l'état de
-     *                                                                                                        chacune. Forme identique à `erreur.details.dependances` du § 6.8, pour que
-     *                                                                                                        la notification et l'écran disent exactement la même chose.
+     *                                                                                                         Les fiches proposées ailleurs que cette demande désignait, et l'état de
+     *                                                                                                         chacune. Forme identique à `erreur.details.dependances` du § 6.8, pour que
+     *                                                                                                         la notification et l'écran disent exactement la même chose.
      */
     public function demandeCaduqueParDependance(ChangeRequest $demande, array $dependances): void;
 }

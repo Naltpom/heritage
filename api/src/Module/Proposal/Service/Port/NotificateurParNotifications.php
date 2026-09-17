@@ -159,7 +159,7 @@ final readonly class NotificateurParNotifications implements NotificateurDeDeman
 
     /**
      * « Vous la rattachiez à Girolle Chanterelle, proposée par la demande n° 12, qui
-     * n'a pas abouti. »
+     * n'a pas abouti. ».
      *
      * Le libellé peut manquer — la fiche a pu être effacée avec sa demande —, et la
      * phrase se replie alors sur « une personne proposée » plutôt que sur un numéro de

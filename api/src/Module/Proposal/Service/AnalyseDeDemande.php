@@ -136,7 +136,7 @@ final readonly class AnalyseDeDemande
      * enverrait l'administrateur attendre une autre demande pour découvrir ensuite que
      * celle-ci était morte depuis le début.
      *
-     * @param list<array{kind: string, id: int}>                                          $disparues
+     * @param list<array{kind: string, id: int}>                                                  $disparues
      * @param list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}> $dependances
      */
     private function trancherAvecLesLiens(
@@ -440,7 +440,7 @@ final readonly class AnalyseDeDemande
             return null;
         }
 
-        /** @var array<string, mixed> $stocke */
+        /* @var array<string, mixed> $stocke */
         return InventaireDeSuppression::depuisJson($stocke)->versJson();
     }
 

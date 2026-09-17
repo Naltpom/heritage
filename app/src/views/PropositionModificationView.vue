@@ -293,6 +293,20 @@ function refaire(demandeId: number | null): void {
           Votre proposition part en validation ; rien n’est modifié dans l’arbre avant l’accord
           d’un administrateur. Vous, vous verrez votre changement signalé sur la fiche en attendant.
         </p>
+        <!-- Le geste que ce formulaire ne sait pas faire, dit là où on le
+             cherche. Une demande porte **une** nature : les champs et la
+             parenté ne se déposent pas ensemble, et un écran qui laisserait
+             croire le contraire déposerait deux demandes sous un bouton. -->
+        <p class="mt-1.5 text-sm text-attenue">
+          Ce formulaire corrige les <strong class="font-semibold">champs</strong> de la fiche.
+          Pour rattacher des parents, des frères et sœurs, un conjoint ou des enfants, c’est
+          <RouterLink
+            :to="{ name: 'proposition.liens', params: { id: identifiant } }"
+            class="underline"
+          >
+            l’écran des liens de parenté
+          </RouterLink>.
+        </p>
       </header>
 
       <!-- La bascule « voir comme un membre » suspend toute écriture. On le dit

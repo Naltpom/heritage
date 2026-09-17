@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * Le point d'entrée « proposer une modification ».
+ * Les points d'entrée « proposer » d'une fiche : **une modification, ou des
+ * liens de parenté**.
  *
  * ────────────────────────────────────────────────────────────────────
  * ## Un lien, et rien d'autre — surtout pas un état transmis
@@ -39,6 +40,19 @@
  * Masquer le lien n'est pas une mesure de sécurité — la garde de route le double
  * et l'API double les deux. C'est éviter de proposer un geste voué au refus.
  *
+ * ## Deux liens, parce qu'une demande porte **une** nature
+ *
+ * « Quand je demande une modification je peux pas ajouter les parents les frères
+ * et sœur ni les enfants » : c'était exact, et la cause n'est pas dans cet
+ * écran. `modification_personne` ne porte que des **ops de champ**, et la
+ * parenté n'est pas un champ de `tree_person` — c'est une ligne de `tree_child`
+ * ou de `tree_family`. Elle se propose par la nature `ajout_lien`, donc par une
+ * autre demande, donc par un autre formulaire.
+ *
+ * Les deux liens sont donc côte à côte, et le second dit ce qu'il fait : un
+ * contributeur qui cherche « ajouter le père » ne doit pas avoir à deviner qu'il
+ * le trouvera ailleurs que derrière « proposer une modification ».
+ *
  * ## Une fiche réduite n'arrive jamais ici
  *
  * Le type l'impose : `FichePersonneComplete`. Sur une fiche réduite, `version`
@@ -66,12 +80,19 @@ const ouvert = computed(() => rattache.value && vueEmpruntee.value === null)
       refuse. En attendant, vous seul la voyez appliquée sur cette fiche.
     </p>
 
-    <p class="m-0">
+    <p class="m-0 flex flex-wrap items-center gap-2">
       <RouterLink
         :to="{ name: 'proposition.modification', params: { id: fiche.id } }"
         class="inline-flex items-center rounded-champ border border-accent bg-accent px-3.5 py-1.5 text-sm font-semibold text-fond transition-opacity hover:opacity-90"
       >
         Proposer une modification
+      </RouterLink>
+
+      <RouterLink
+        :to="{ name: 'proposition.liens', params: { id: fiche.id } }"
+        class="inline-flex items-center rounded-champ border border-ligne px-3.5 py-1.5 text-sm font-semibold transition-colors hover:border-accent"
+      >
+        Ajouter parents, fratrie, conjoints ou enfants
       </RouterLink>
     </p>
   </div>

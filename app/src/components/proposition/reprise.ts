@@ -34,6 +34,7 @@
  */
 
 import {
+  lireFicheProposee,
   lireFichePersonne,
   lireRepriseDemande,
   type NatureDemande,
@@ -48,7 +49,10 @@ import { designeUneDate, saisieDepuisBloc, type SaisieDate } from './dates'
 import {
   brouillonVide,
   creationVide,
+  estFicheProposee,
   unionVide,
+  type ChoixDePersonne,
+  type FicheProposeeChoisie,
   type PersonneChoisie,
   type SaisieCreation,
 } from './creation'
@@ -208,8 +212,17 @@ export interface RepriseCreation {
   message: string
   origine: OrigineReprise | null
   saisie: SaisieCreation
-  /** Les personnes à nommer : le corps ne porte que des identifiants. */
+  /** Les personnes de l'arbre à nommer : le corps ne porte que des identifiants. */
   aResoudre: number[]
+  /**
+   * Les **fiches proposées** à nommer, par identifiant de ligne.
+   *
+   * Séparées des précédentes parce qu'elles se lisent ailleurs — une fiche
+   * proposée n'est pas dans l'arbre — et qu'une liste commune ferait chercher
+   * une personne n° 7 qui n'existe pas, pour afficher « personne introuvable »
+   * sur un lien parfaitement valide.
+   */
+  brouillonsAResoudre: number[]
   avertissements: Avertissement[]
 }
 
@@ -295,11 +308,37 @@ export function analyserReprise(brut: unknown): Reprise | null {
       }
     }
 
+    const brouillonsAResoudre: number[] = []
+
+    /**
+     * Une extrémité, dans l'une de ses **deux** formes repostables — et l'inscrit
+     * dans la bonne liste à résoudre.
+     *
+     * Les deux formes se lisent sur le même lien parce que le serveur reprend
+     * les colonnes telles quelles : c'est lui qui, au dépôt suivant, refusera
+     * une demande morte et résoudra en personne réelle une demande validée
+     * depuis. Le front n'a pas à trancher ce que le constructeur tranche mieux.
+     */
+    const extremite = (bloc: Record<string, unknown>, prefixe: string): ChoixDePersonne | null => {
+      const personId = nombre(bloc[`${prefixe}PersonId`])
+      if (personId !== null) {
+        aResoudre.push(personId)
+        return reference(personId)
+      }
+
+      const draftPersonId = nombre(bloc[`${prefixe}DraftPersonId`])
+      if (draftPersonId !== null) {
+        brouillonsAResoudre.push(draftPersonId)
+        return referenceProposee(draftPersonId)
+      }
+
+      return null
+    }
+
     for (const lien of tableau(corps['liens'])) {
       const bloc = objet(lien)
       if (bloc === null) continue
       const nature = chaine(bloc['kind'])
-      const autre = nombre(bloc['otherPersonId'])
 
       if (nature === 'enfant_de') {
         const familyId = nombre(bloc['familyId'])
@@ -310,34 +349,32 @@ export function analyserReprise(brut: unknown): Reprise | null {
           saisie.filiation.famille = { familyId, libelle: `couple n° ${familyId}` }
           continue
         }
-        for (const parent of [autre, nombre(bloc['other2PersonId'])]) {
-          if (parent === null) continue
-          saisie.filiation.parents.push(reference(parent))
-          aResoudre.push(parent)
+        for (const prefixe of ['other', 'other2']) {
+          const parent = extremite(bloc, prefixe)
+          if (parent !== null) saisie.filiation.parents.push(parent)
         }
         continue
       }
 
+      const autre = extremite(bloc, 'other')
       if (autre === null) continue
 
       if (nature === 'conjoint_de') {
-        const union = unionVide(reference(autre))
+        const union = unionVide(autre)
         union.mariage = saisieDepuisBloc(blocDeSaisie(bloc['marriage']))
         union.rompue = bloc['divorced'] === true
         union.rupture = saisieDepuisBloc(blocDeSaisie(bloc['divorce']))
         union.note = chaine(bloc['note'])
         saisie.unions.push(union)
-        aResoudre.push(autre)
         continue
       }
 
       if (nature === 'parent_de') {
-        saisie.enfants.push({ personne: reference(autre), rangFratrie: nombre(bloc['siblingOrder']) })
-        aResoudre.push(autre)
+        saisie.enfants.push({ personne: autre, rangFratrie: nombre(bloc['siblingOrder']) })
       }
     }
 
-    return { kind, message, origine, saisie, aResoudre, avertissements }
+    return { kind, message, origine, saisie, aResoudre, brouillonsAResoudre, avertissements }
   }
 
   return null
@@ -347,6 +384,18 @@ export function analyserReprise(brut: unknown): Reprise | null {
  *  affiché tel quel dans le cas nominal — c'est un garde-fou, pas un rendu. */
 function reference(personId: number): PersonneChoisie {
   return { personId, libelle: '…' }
+}
+
+/**
+ * Le même, pour une fiche proposée.
+ *
+ * `demandeId` vaut `0` jusqu'à la lecture : le corps de reprise ne porte que
+ * l'identifiant de ligne, et la demande qui propose cette fiche n'est connue
+ * qu'après {@see resoudreLibelles}. C'est un état d'attente, pas une valeur —
+ * l'écran n'affiche le numéro qu'avec le nom, et le nom arrive avec lui.
+ */
+function referenceProposee(draftPersonId: number): FicheProposeeChoisie {
+  return { draftPersonId, demandeId: 0, libelle: '…' }
 }
 
 /* ------------------------------------------------------------------ */
@@ -366,9 +415,10 @@ function reference(personId: number): PersonneChoisie {
  */
 export async function resoudreLibelles(reprise: RepriseCreation): Promise<void> {
   const noms = new Map<number, string>()
+  const proposees = new Map<number, { libelle: string; demandeId: number }>()
 
-  await Promise.all(
-    [...new Set(reprise.aResoudre)].map(async (personId) => {
+  await Promise.all([
+    ...[...new Set(reprise.aResoudre)].map(async (personId) => {
       try {
         const fiche = await lireFichePersonne(personId)
         noms.set(personId, fiche.displayName)
@@ -376,9 +426,38 @@ export async function resoudreLibelles(reprise: RepriseCreation): Promise<void> 
         noms.set(personId, 'personne introuvable')
       }
     }),
-  )
+    // Une fiche proposée se lit sur sa propre route : elle n'est pas dans
+    // l'arbre, et `lireFichePersonne` rendrait `404` sur un identifiant de ligne
+    // qui, par malchance, désigne une autre personne.
+    ...[...new Set(reprise.brouillonsAResoudre)].map(async (draftPersonId) => {
+      try {
+        const fiche = await lireFicheProposee(draftPersonId)
+        proposees.set(draftPersonId, {
+          libelle: fiche.displayName,
+          demandeId: fiche.demandeId,
+        })
+      } catch {
+        // La demande qui la proposait a pu être refusée ou retirée depuis. On le
+        // dit plutôt que de laisser « … » : le contributeur doit savoir qu'il
+        // faut redésigner quelqu'un avant de redéposer.
+        proposees.set(draftPersonId, {
+          libelle: 'proposition introuvable',
+          demandeId: 0,
+        })
+      }
+    }),
+  ])
 
-  const nommer = (personne: PersonneChoisie): void => {
+  const nommer = (personne: ChoixDePersonne): void => {
+    if (estFicheProposee(personne)) {
+      const trouvee = proposees.get(personne.draftPersonId)
+      if (trouvee !== undefined) {
+        personne.libelle = trouvee.libelle
+        personne.demandeId = trouvee.demandeId
+      }
+      return
+    }
+
     const nom = noms.get(personne.personId)
     if (nom !== undefined) personne.libelle = nom
   }

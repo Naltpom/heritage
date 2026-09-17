@@ -1450,13 +1450,16 @@ pas de schéma, parce qu'elle porte sur le nombre de lignes filles.
 | `seq` | `SMALLINT` | non | — | Ordre de traitement, comme pour les ops. |
 | `kind` | `VARCHAR(16)` | non | — | Énum `LinkKind` : `enfant_de`, `parent_de`, `conjoint_de`. Les trois natures du § 6.4 du dossier, ni plus ni moins. |
 | `subject_person_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Tree\Person`). Le sujet du lien, quand c'est une personne existante. |
-| `subject_draft_ref` | `VARCHAR(8)` | oui | `NULL` | Le sujet, quand c'est un brouillon de cette demande. Exactement un des deux. |
+| `subject_draft_ref` | `VARCHAR(8)` | oui | `NULL` | Le sujet, quand c'est un brouillon de cette demande. Exactement un des **trois**. |
+| `subject_draft_person_id` | `INT` | oui | `NULL` | Le sujet, quand c'est une fiche proposée par **une autre demande en attente** — l'identifiant de la ligne `prp_draft_person`. Voir l'encart ci-dessous. |
 | `subject_label` | `VARCHAR(255)` | non | — | Libellé dénormalisé, pour afficher le lien sans rien charger. |
 | `other_person_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Tree\Person`). L'autre extrémité. |
-| `other_draft_ref` | `VARCHAR(8)` | oui | `NULL` | L'autre extrémité, si c'est un brouillon. |
+| `other_draft_ref` | `VARCHAR(8)` | oui | `NULL` | L'autre extrémité, si c'est un brouillon de cette demande. |
+| `other_draft_person_id` | `INT` | oui | `NULL` | L'autre extrémité, si c'est une fiche proposée par une autre demande en attente. |
 | `other_label` | `VARCHAR(255)` | oui | `NULL` | Libellé dénormalisé. |
 | `other2_person_id` | `INT` | oui | `NULL` | **⇢ inter-module**. Le **second parent**, quand `kind = 'enfant_de'` et que le demandeur a désigné deux parents plutôt qu'une famille. |
-| `other2_draft_ref` | `VARCHAR(8)` | oui | `NULL` | Idem, en brouillon. |
+| `other2_draft_ref` | `VARCHAR(8)` | oui | `NULL` | Idem, en brouillon de cette demande. |
+| `other2_draft_person_id` | `INT` | oui | `NULL` | Idem, en fiche proposée ailleurs. |
 | `other2_label` | `VARCHAR(255)` | oui | `NULL` | Libellé dénormalisé. |
 | `family_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Tree\Family`). Renseigné quand le demandeur a désigné **un couple existant** au lieu d'un ou deux parents. Exclusif avec `other_*`. |
 | `family_label` | `VARCHAR(255)` | oui | `NULL` | Libellé dénormalisé du couple. |
@@ -1477,20 +1480,45 @@ pas de schéma, parce qu'elle porte sur le nombre de lignes filles.
 | `idx_prp_draft_link_request` | `(request_id, seq)` | Chargement des liens d'une demande, dans l'ordre — à l'affichage et au rejeu. |
 | `idx_prp_draft_link_other` | `(other_person_id)` partiel `WHERE other_person_id IS NOT NULL` | « Y a-t-il une demande en attente qui propose de me rattacher quelqu'un ? » — sert le calque « en attente » côté personnes **existantes** : le graphe d'un lecteur doit montrer le nœud proposé relié à sa parenté, donc il faut savoir, pour une personne donnée, quels brouillons la citent. |
 
+**Une extrémité a trois formes, et la troisième n'a pas de clé étrangère**
+
+`Version20260917190000`. Le besoin est celui-ci, dans les mots du commanditaire : « si je
+propose une personne, puis que j'en propose une autre, le père que j'ai proposé juste avant ne
+m'est pas proposé ». Une fiche proposée n'a pas d'identifiant de personne, et `*_draft_ref` ne
+vaut que **dans sa demande** (`uniq_prp_draft_person_ref`) : décrire une branche exigeait donc
+de tout saisir en une seule demande, d'attendre une validation, ou de ressaisir la même
+personne — c'est-à-dire de fabriquer le doublon que le § 9.5 écarte. Les trois colonnes
+`*_draft_person_id` désignent la **ligne** `prp_draft_person`, qui est unique en base, elle.
+
+**Aucune clé étrangère, et c'est une décision.** `prp_draft_person.request_id` est en
+`ON DELETE CASCADE` : une cascade depuis `prp_draft_link` emporterait le lien d'une **autre**
+demande, c'est-à-dire l'amputerait en silence, et la demande survivante décrirait une parenté
+dont une extrémité a disparu sans que personne ne l'ait décidé. `ON DELETE SET NULL` serait
+pire : il laisserait un lien sans sujet, ce que `ck_prp_link_sujet_unique` refuse. La référence
+est donc vérifiée **au point d'entrée** — seule la fiche d'une demande `en_attente` que le
+lecteur a le droit de voir entre — et **relue au contrôle préalable**, où une ligne disparue
+devient une caducité, exactement comme une personne supprimée entre le dépôt et la validation.
+
+**Aucun index non plus.** La question « quelles demandes citent ce brouillon ? » porterait sur
+trois colonnes à la fois, donc en `OR`, donc sans qu'un index simple serve — et elle se pose
+sur une file de quelques dizaines de demandes, pas sur les 274 personnes de l'arbre.
+
 **Contraintes**
 
 ```sql
 CONSTRAINT ck_prp_link_sujet_unique
-  CHECK (num_nonnulls(subject_person_id, subject_draft_ref) = 1),
+  CHECK (num_nonnulls(subject_person_id, subject_draft_ref, subject_draft_person_id) = 1),
 
 -- Soit on désigne une famille existante, soit on désigne un ou deux parents. Jamais les
 -- deux : le service ne saurait pas laquelle des deux intentions respecter.
 CONSTRAINT ck_prp_link_cible
   CHECK (
     (family_id IS NOT NULL AND other_person_id IS NULL AND other_draft_ref IS NULL
-                           AND other2_person_id IS NULL AND other2_draft_ref IS NULL)
+                           AND other_draft_person_id IS NULL
+                           AND other2_person_id IS NULL AND other2_draft_ref IS NULL
+                           AND other2_draft_person_id IS NULL)
     OR
-    (family_id IS NULL AND num_nonnulls(other_person_id, other_draft_ref) = 1)
+    (family_id IS NULL AND num_nonnulls(other_person_id, other_draft_ref, other_draft_person_id) = 1)
   ),
 
 -- Un couple existant ne se désigne que pour une filiation.
@@ -1499,10 +1527,11 @@ CONSTRAINT ck_prp_link_famille_filiation
 
 -- Un second parent n'a de sens que pour une filiation.
 CONSTRAINT ck_prp_link_second_parent
-  CHECK (num_nonnulls(other2_person_id, other2_draft_ref) = 0 OR kind = 'enfant_de'),
+  CHECK (num_nonnulls(other2_person_id, other2_draft_ref, other2_draft_person_id) = 0
+         OR kind = 'enfant_de'),
 
 CONSTRAINT ck_prp_link_second_parent_unique
-  CHECK (num_nonnulls(other2_person_id, other2_draft_ref) <= 1),
+  CHECK (num_nonnulls(other2_person_id, other2_draft_ref, other2_draft_person_id) <= 1),
 
 -- Les dates d'union ne concernent que les unions.
 CONSTRAINT ck_prp_link_dates_union
@@ -2431,9 +2460,9 @@ composite :
 | Table | Paire | Contrainte |
 |---|---|---|
 | `prp_change_op` | `subject_id` / `subject_draft_ref` | `ck_prp_op_sujet_unique` |
-| `prp_draft_link` | `subject_person_id` / `subject_draft_ref` | `ck_prp_link_sujet_unique` |
-| `prp_draft_link` | `other_person_id` / `other_draft_ref` | `ck_prp_link_cible` |
-| `prp_draft_link` | `other2_person_id` / `other2_draft_ref` | `ck_prp_link_second_parent_unique` |
+| `prp_draft_link` | `subject_person_id` / `subject_draft_ref` / `subject_draft_person_id` | `ck_prp_link_sujet_unique` |
+| `prp_draft_link` | `other_person_id` / `other_draft_ref` / `other_draft_person_id` | `ck_prp_link_cible` |
+| `prp_draft_link` | `other2_person_id` / `other2_draft_ref` / `other2_draft_person_id` | `ck_prp_link_second_parent_unique` |
 | `med_media` | `subject_id` / `subject_draft_ref` | `ck_med_media_sujet_unique` |
 
 *Pourquoi une paire et pas une chaîne `"personne:42"` / `"brouillon:#p1"`.* Une chaîne
@@ -2478,11 +2507,22 @@ cartefam = {}       // clé de couple -> id réel de tree_family
 1. CONTRÔLE PRÉALABLE (aucune écriture)
    - toute référence réelle (other_person_id, family_id, subject_id) existe encore ;
    - toute référence provisoire correspond à un prp_draft_person de CETTE demande ;
+   - toute référence *_draft_person_id — la fiche proposée par une AUTRE demande —
+     est résolue, c'est-à-dire que cette autre demande a été validée et que la
+     fiche porte son resolved_person_id ;
    - les base_version des ops concordent, ou la demande est rejouable (§ 9.6) ;
    - au moins un prp_draft_link existe si kind = creation_personne.
    Si un contrôle échoue : status = caduque, notification, sortie. Rien n'est écrit.
    Une référence réelle disparue — la personne visée a été supprimée ou fusionnée —
    est une caducité, pas un refus : personne n'a refusé, le monde a bougé (ADR 0004).
+
+   Deux issues propres à la troisième forme de référence :
+     - l'autre demande est encore EN ATTENTE -> 409 dependance_en_attente. Ce n'est
+       PAS une caducité : rien n'est écrit, pas même le statut, et la demande se
+       validera telle quelle après l'autre. Il y a un ordre, pas un refus ;
+     - l'autre demande est refusée, retirée, caduque, ou sa fiche a disparu ->
+       409 dependance_morte, status = caduque : la personne désignée ne naîtra
+       jamais, et l'auteur est notifié en ces termes.
 
 2. PERSONNES                                   [appels à Tree\PersonService]
    Pour chaque prp_draft_person, dans l'ordre de local_ref :
@@ -2493,7 +2533,10 @@ cartefam = {}       // clé de couple -> id réel de tree_family
      - écrire une prp_revision (operation = creation).
 
 3. RÉSOLUTION DES EXTRÉMITÉS
-   Pour chaque prp_draft_link, remplacer chaque *_draft_ref par carte[ref].
+   Pour chaque prp_draft_link, remplacer chaque *_draft_ref par carte[ref], et
+   chaque *_draft_person_id par le resolved_person_id de la fiche citée — celui
+   qu'une validation antérieure, celle d'une AUTRE demande, a écrit. Il est
+   nécessairement là : la passe 1 refuse de valider sans lui.
    À partir d'ici, tous les liens ne parlent plus que d'identifiants réels.
 
 4. FAMILLES                                    [appels à Tree\FamilyService]

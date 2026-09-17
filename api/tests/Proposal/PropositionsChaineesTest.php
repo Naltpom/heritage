@@ -69,7 +69,7 @@ final class PropositionsChaineesTest extends BaseDeDemandes
     // ---------------------------------------------------------------------------------
 
     /**
-     * **La moitié « il ne m'est pas proposé » du défaut.**
+     * **La moitié « il ne m'est pas proposé » du défaut.**.
      *
      * La recherche rend la fiche à son auteur et à l'administrateur, et **rien** à un
      * autre membre. C'est mot pour mot la règle du calque (§ 13.3), et elle est testée
@@ -182,7 +182,7 @@ final class PropositionsChaineesTest extends BaseDeDemandes
     }
 
     /**
-     * **Le nœud proposé se rattache au nœud proposé.**
+     * **Le nœud proposé se rattache au nœud proposé.**.
      *
      * Les deux demandes se dessinent dans le même graphe, et l'arête se referme parce
      * que la fiche citée est nommée `#<sa demande>/p1` des deux côtés — pas
@@ -259,7 +259,7 @@ final class PropositionsChaineesTest extends BaseDeDemandes
     // ---------------------------------------------------------------------------------
 
     /**
-     * **La seule `409` qui n'écrit rien du tout, pas même un statut.**
+     * **La seule `409` qui n'écrit rien du tout, pas même un statut.**.
      *
      * B s'appuie sur A, qui n'est pas tranchée : il y a un ordre à respecter, pas une
      * demande à condamner. B reste `en_attente` et se validera telle quelle après A.
@@ -298,12 +298,12 @@ final class PropositionsChaineesTest extends BaseDeDemandes
     }
 
     /**
-     * **Le cas qui devait marcher, et qui est tout l'objet de la tâche.**
+     * **Le cas qui devait marcher, et qui est tout l'objet de la tâche.**.
      *
      * A validée, puis B : Céleste est créée, et elle est rattachée à la famille de la
      * **vraie** fiche de Barnabé — celle que la validation de A vient d'écrire.
      */
-    public function testValidees_dansLOrdre_lesDeuxPropositionsSeRejoignent(): void
+    public function testValideesDansLOrdreLesDeuxPropositionsSeRejoignent(): void
     {
         $barnabe = $this->proposerBarnabe(self::OPALE);
         $celeste = $this->proposerCeleste(self::OPALE, $this->ficheDe($barnabe));
@@ -433,7 +433,7 @@ final class PropositionsChaineesTest extends BaseDeDemandes
     // ---------------------------------------------------------------------------------
 
     /**
-     * **La cible annoncée l'emporte, si les liens la désignent.**
+     * **La cible annoncée l'emporte, si les liens la désignent.**.
      *
      * « Ajouter un frère à Jargon » s'écrit « ce frère est enfant du couple de ses
      * parents » : le **sujet** du lien est le frère, pas Jargon. Sans `targetId`, la

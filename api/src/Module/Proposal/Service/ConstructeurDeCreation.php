@@ -739,10 +739,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         }
 
         if (RequestStatus::EnAttente !== $brouillon->getRequest()->getStatus()) {
-            throw DonneesInvalides::pourChamp($chemin, \sprintf(
-                'La demande n° %d n\'est plus en attente : cette fiche ne deviendra pas une personne de l\'arbre.',
-                $brouillon->getRequest()->getId() ?? 0,
-            ));
+            throw DonneesInvalides::pourChamp($chemin, \sprintf('La demande n° %d n\'est plus en attente : cette fiche ne deviendra pas une personne de l\'arbre.', $brouillon->getRequest()->getId() ?? 0));
         }
 
         return [null, null, $brouillon->nomPropose(), $brouillonId];

@@ -117,7 +117,7 @@ final class Conflit extends ErreurDeDemande
 
     /**
      * La demande sur laquelle celle-ci s'appuyait a été refusée, retirée ou rendue
-     * caduque — ou sa fiche a disparu. **La personne désignée ne naîtra jamais.**
+     * caduque — ou sa fiche a disparu. **La personne désignée ne naîtra jamais.**.
      *
      * C'est une caducité de la même nature que `cible_disparue`, et elle écrit comme
      * elle : la demande passe en `caduque`, l'auteur est notifié, et le bouton

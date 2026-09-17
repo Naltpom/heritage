@@ -14,7 +14,12 @@
  *
  * 2. **`resolutionPrevue` décide de ce que propose le bouton.** Sans lui,
  *    l'administrateur découvre la caducité **en cliquant**, ce qui la rend
- *    indistinguable d'une panne (§ 6.7).
+ *    indistinguable d'une panne (§ 6.7). Le `switch` est **exhaustif sur
+ *    l'union**, et c'est le typeur qui le vérifie : une valeur que le serveur
+ *    rend et que l'union ignore ne tombe dans aucun cas, la fonction rend
+ *    `undefined`, et l'écran de décision plante — c'est exactement ce qui est
+ *    arrivé à `cible_disparue`, absente de l'union alors que le serveur la
+ *    rendait depuis toujours.
  *
  * 3. **Un rejeu automatique doit se voir.** `resultat: "rejouee"` est un succès,
  *    mais c'est « une écriture qu'aucun humain n'a réexaminée » (§ 2.7) :
@@ -103,6 +108,38 @@ export function actionValidation(resolution: ResolutionPrevue | undefined): Acti
         desactive: true,
         explication:
           'Une des valeurs que cette demande remplace a été modifiée depuis son dépôt. La valider écraserait ce changement : elle doit être refaite sur les valeurs actuelles.',
+      }
+
+    case 'cible_disparue':
+      // **Ce cas manquait**, et son absence n'était pas une omission
+      // d'affichage : la valeur n'était pas dans l'union `ResolutionPrevue`,
+      // donc elle ne tombait dans aucun `case`, donc cette fonction rendait
+      // `undefined` — sur la seule demande qu'il fallait surtout ne pas
+      // valider. L'écran plantait à l'ouverture.
+      return {
+        libelle: 'Validation impossible',
+        desactive: true,
+        explication:
+          'La fiche visée par cette demande n’existe plus : elle a été supprimée ou fusionnée depuis le dépôt. Il n’y a plus rien à modifier.',
+      }
+
+    case 'dependance_en_attente':
+      // Ni un succès ni une fin : **un ordre**. On n'éteint donc pas le bouton
+      // comme sur une caducité, on dit ce qu'il faut faire d'abord — et la
+      // demande se validera telle quelle ensuite, sans être refaite.
+      return {
+        libelle: 'À valider après l’autre demande',
+        desactive: true,
+        explication:
+          'Cette demande rattache une personne à une fiche qui est elle-même encore proposée. Validez d’abord la demande qui la propose : celle-ci s’appliquera ensuite telle quelle, sans que son auteur ait à la refaire.',
+      }
+
+    case 'dependance_morte':
+      return {
+        libelle: 'Validation impossible',
+        desactive: true,
+        explication:
+          'La demande sur laquelle celle-ci s’appuyait n’aboutira pas : la personne qu’elle désignait n’existera jamais. Son auteur peut la refaire en désignant quelqu’un d’autre.',
       }
 
     case undefined:

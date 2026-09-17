@@ -52,6 +52,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * | `GET /api/demandes/{id}/refaire` | **non** | — |
  * | `GET /api/demandes/{id}/brouillons/{ref}` | non | — |
  * | `GET /api/demandes/brouillons/recherche` | non | — |
+ * | `GET /api/demandes/brouillons/{brouillonId}` | non | — |
  * | `GET /api/demandes/historique/{kind}/{id}` | non | — |
  *
  * `refaire` mérite sa ligne : c'est la seule route dont le nom suggère une écriture et
@@ -225,10 +226,7 @@ final class DemandeController extends AbstractController
         $terme = trim($requete->query->getString('q'));
 
         if (mb_strlen($terme) < RechercheDeBrouillons::LONGUEUR_MINIMALE) {
-            throw DonneesInvalides::pourChamp('q', \sprintf(
-                'La recherche demande au moins %d caractères.',
-                RechercheDeBrouillons::LONGUEUR_MINIMALE,
-            ));
+            throw DonneesInvalides::pourChamp('q', \sprintf('La recherche demande au moins %d caractères.', RechercheDeBrouillons::LONGUEUR_MINIMALE));
         }
 
         $resultat = $recherche->resultats(
@@ -244,6 +242,48 @@ final class DemandeController extends AbstractController
             // propositions on ne montre pas.
             'tronque' => $resultat['tronque'],
         ]);
+    }
+
+    /**
+     * Une fiche proposée **par l'identifiant de sa ligne** (§ 6.6 bis).
+     *
+     * ## Pourquoi elle existe à côté de `/{id}/brouillons/{ref}`
+     *
+     * Cette dernière exige de connaître la demande **et** la référence provisoire. Or ce
+     * qu'un corps de lien transporte est l'identifiant de la ligne, et lui seul : c'est
+     * la seule désignation qui vaille hors de sa demande. Un front qui tient un
+     * `otherDraftPersonId` — une reprise de demande, par exemple — n'a donc aucune façon
+     * de nommer la personne qu'il désigne, et afficherait « personne n° 7 » là où tout le
+     * reste du produit s'interdit de mettre un identifiant sous les yeux du lecteur.
+     *
+     * Elle rend la **ligne de recherche** et rien de plus : de quoi nommer, pas de quoi
+     * consulter. Le détail d'un nœud en attente reste sur l'autre route, avec ses liens,
+     * ses médias et sa note.
+     *
+     * `404` sur la fiche d'un autre membre, jamais `403` — même règle qu'à la recherche.
+     */
+    #[Route(
+        '/brouillons/{brouillonId}',
+        name: 'proposal_demande_fiche_proposee',
+        requirements: ['brouillonId' => '\d+'],
+        methods: ['GET'],
+    )]
+    public function ficheProposee(int $brouillonId, DraftPersonRepository $brouillons): JsonResponse
+    {
+        $lecteur = $this->lecteurs->courant();
+
+        // Le régime `ATTENTE` ne dépose pas de demande : il n'a donc aucune fiche
+        // proposée à nommer, et surtout pas celle d'un autre (§ 13.3, § 16.3).
+        $brouillon = $lecteur->regimeEnAttente ? null : $brouillons->visiblePourLecteur(
+            $brouillonId,
+            $lecteur->voitToutesLesDemandes() ? null : $lecteur->identiteEffective(),
+        );
+
+        if (null === $brouillon) {
+            throw Introuvable::brouillonPropose($brouillonId);
+        }
+
+        return $this->charge($this->serialiseur->resultatDeRecherche($brouillon));
     }
 
     /**
