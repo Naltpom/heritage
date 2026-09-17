@@ -48,6 +48,8 @@ import DecisionDemande from '@/components/administration/DecisionDemande.vue'
 import DiffDemande from '@/components/administration/DiffDemande.vue'
 import DoublonsProbables from '@/components/administration/DoublonsProbables.vue'
 import FicheProposee from '@/components/administration/FicheProposee.vue'
+import LoupeMedia from '@/components/medias/LoupeMedia.vue'
+import type { CibleLoupe } from '@/components/medias/medias'
 
 const route = useRoute()
 const { administrateur } = useSession()
@@ -57,6 +59,11 @@ const erreur = ref<unknown>(null)
 const chargement = ref(false)
 
 const identifiant = computed(() => Number(route.params['id']))
+
+/** Le document d'un `ajout_media` en grand. Tenu ici, et non dans le diff : une
+ *  seule image d'origine décodée à la fois, quel que soit le nombre de pièces
+ *  que la demande propose. */
+const loupe = ref<CibleLoupe | null>(null)
 
 async function charger(): Promise<void> {
   chargement.value = true
@@ -253,7 +260,7 @@ function dateLisible(valeur: string | null | undefined): string {
       </PanneauBase>
 
       <PanneauBase v-if="demande.ops.length > 0" titre="Ce qui changerait" class="mb-4">
-        <DiffDemande :ops="demande.ops" />
+        <DiffDemande :ops="demande.ops" @agrandir="loupe = $event" />
       </PanneauBase>
 
       <PanneauBase v-if="doublons.length > 0" titre="Doublons probables" class="mb-4">
@@ -329,4 +336,6 @@ function dateLisible(valeur: string | null | undefined): string {
       <DecisionDemande v-if="decidable" :demande="demande" @decidee="charger" />
     </template>
   </div>
+
+  <LoupeMedia :cible="loupe" @fermer="loupe = null" />
 </template>

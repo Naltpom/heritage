@@ -281,6 +281,122 @@ describe('une note et une citation ne sont pas des dates', () => {
   })
 })
 
+describe('un document se voit, et pas seulement son nom', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * LE DÉFAUT. `ajout_media` est la seule nature de demande dont la valeur
+   * **est** le contenu : une photo, un acte scanné. L'écran de diff n'en
+   * montrait rien — ni vignette, ni légende. On approuvait une pièce sans
+   * jamais la regarder, ce qui est la seule chose que cet écran existe pour
+   * permettre.
+   *
+   * Deux règles tiennent ici. La première : ce qui s'écrit en toutes lettres
+   * est ce qui se **relit** — une légende, à défaut un genre. Jamais une
+   * empreinte sha256, jamais un identifiant nu : ni l'un ni l'autre n'apprend à
+   * un lecteur ce qu'il s'apprête à valider.
+   *
+   * La seconde : l'`op` ne porte **aucune URL**, seulement un `mediaId`. La
+   * ligne le transporte pour que le composant charge le média et lise son
+   * adresse. Recomposer une URL côté client marcherait jusqu'au jour où la
+   * route change — et donnerait alors une image cassée là où l'absence de clé
+   * n'aurait rien produit du tout.
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  const OP_MEDIA: OpDemande = {
+    seq: 4,
+    opKind: 'ajout_media',
+    subjectKind: 'personne',
+    subjectId: 17,
+    field: 'media',
+    valueKind: 'objet',
+    oldValue: null,
+    newValue: {
+      mediaId: 88,
+      kind: 'photo',
+      caption: 'Acte de naissance, vue 12',
+      sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    },
+    baseVersion: null,
+  } as never
+
+  it('affiche la légende du document', () => {
+    expect(formaterValeur(OP_MEDIA.newValue)).toBe('Acte de naissance, vue 12')
+  })
+
+  it('nomme le genre quand la légende manque : « Document » seul n’apprend rien', () => {
+    expect(formaterValeur({ mediaId: 88, kind: 'photo', caption: null } as never)).toBe(
+      'Document (photo)',
+    )
+  })
+
+  it('ne remonte ni l’empreinte ni l’identifiant : ni l’un ni l’autre ne se relit', () => {
+    const rendu = formaterValeur(OP_MEDIA.newValue)
+
+    expect(rendu).not.toContain('e3b0c442')
+    expect(rendu).not.toContain('88')
+  })
+
+  it('transporte le `mediaId` sur la ligne, pour que l’écran charge l’image', () => {
+    expect(ligneDeDiff(OP_MEDIA).mediaId).toBe(88)
+  })
+
+  it('laisse `mediaId` à `null` sur tout op qui n’en porte pas', () => {
+    /* `null` et non `0` : `0` est un identifiant possible, et la ligne serait
+       rendue comme portant un document qui n'existe pas. */
+    expect(ligneDeDiff(OP_AUTEUR).mediaId).toBeNull()
+  })
+
+  it('rend la vignette dans le diff, sans fabriquer d’URL', async () => {
+    const html = await renderToString(
+      createSSRApp({ render: () => h(DiffDemande, { ops: [OP_MEDIA] }) }),
+    )
+
+    // Le composant charge au montage : sous SSR il n'y a pas de montage, donc
+    // pas d'image — mais le point de chargement doit être là, et il ne doit
+    // porter aucune adresse devinée.
+    expect(html).toContain('Acte de naissance, vue 12')
+    expect(html).not.toContain('/api/medias/88')
+  })
+
+  /*
+   * Les trois gardes ci-dessous lisent le source. Le composant ne rend rien hors
+   * navigateur — il charge dans `onMounted` —, mais ce qu'il ne doit *pas* faire
+   * se lit très bien dans son texte.
+   */
+  const source = readFileSync(
+    fileURLToPath(new URL('./DocumentPropose.vue', import.meta.url)),
+    'utf8',
+  )
+
+  it('ne recompose jamais l’adresse du fichier de tête', () => {
+    /* Un média interdit rend `404` (§ 7.4). Une URL devinée donnerait donc une
+       image cassée là où l'absence de la clé ne produit rien du tout. */
+    expect(source).not.toMatch(/\/api\/medias\//)
+    expect(source).toContain('lireMedia(')
+  })
+
+  it('passe par la loupe de la maison, et lui donne le type réel du fichier', () => {
+    /*
+     * Un acte scanné est très souvent un **PDF**, et un PDF ne s'affiche pas
+     * dans une `<img>`. `LoupeMedia` sait l'ouvrir dans un onglet — à condition
+     * qu'on lui dise `estImage`, calculé sur le `mimeType` de la charge et non
+     * sur l'extension ni sur le `kind` de l'op.
+     */
+    expect(source).toContain('estImage(media.value.mimeType)')
+    expect(source).toContain("mode: 'direct'")
+  })
+
+  it('remonte la loupe à la vue au lieu d’en ouvrir une par vignette', () => {
+    /* « Une seule image d'origine décodée à la fois » : c'est `DemandeView` qui
+       tient la loupe, comme `PersonneView` la tient pour la galerie. Le
+       commentaire du composant a le droit de la nommer ; ni son import ni son
+       gabarit ne l'ont. */
+    expect(source).not.toMatch(/import .*LoupeMedia/)
+    expect(source).not.toMatch(/<LoupeMedia/)
+    expect(source).toContain("emit('agrandir'")
+  })
+})
+
 describe('le nom du champ, pour quelqu’un qui n’est pas technicien', () => {
   it('laisse la main au libellé du serveur quand il existe', () => {
     // Il porte le contexte et les valeurs déjà formatées : le front ne réécrit

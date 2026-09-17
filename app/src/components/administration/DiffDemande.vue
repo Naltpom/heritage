@@ -20,9 +20,15 @@
  */
 import { computed } from 'vue'
 import type { OpDemande } from '@/lib/api'
+import type { CibleLoupe } from '@/components/medias/medias'
 import { lignesDeDiff, porteLEtatActuel } from './diff'
+import DocumentPropose from './DocumentPropose.vue'
 
 const { ops } = defineProps<{ ops: OpDemande[] }>()
+
+/** La loupe est tenue par la vue, jamais ici : « une seule image d'origine
+ *  décodée à la fois », et une demande peut porter plusieurs documents. */
+const emit = defineEmits<{ agrandir: [cible: CibleLoupe] }>()
 
 const lignes = computed(() => lignesDeDiff(ops))
 /** Une seule décision pour tout le tableau : la charge compare, ou elle ne
@@ -51,7 +57,14 @@ const avecEtatActuel = computed(() => porteLEtatActuel(lignes.value))
         </template>
 
         <dt class="text-attenue">Valeur proposée</dt>
-        <dd class="font-semibold">{{ ligne.proposee }}</dd>
+        <dd class="font-semibold">
+          {{ ligne.proposee }}
+          <DocumentPropose
+            v-if="ligne.mediaId !== null"
+            :media-id="ligne.mediaId"
+            @agrandir="emit('agrandir', $event)"
+          />
+        </dd>
       </dl>
 
       <p v-if="ligne.aBouge === true" class="mt-2 text-xs font-semibold text-alerte">
