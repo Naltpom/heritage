@@ -16,9 +16,11 @@ use App\Module\Tree\Serializer\LectureDeLArbre;
 use App\Module\Tree\Serializer\MediasNonBranches;
 use App\Module\Tree\Serializer\NormaliseurDeDate;
 use App\Module\Tree\Serializer\NormaliseurDeFamille;
+use App\Module\Tree\Serializer\AppuiDUneCitation;
 use App\Module\Tree\Serializer\NormaliseurDePersonne;
 use App\Module\Tree\Serializer\NormaliseurDeRecherche;
 use App\Module\Tree\Serializer\NormaliseurDeRequete;
+use App\Module\Tree\Service\AdressesDArbresEnLigne;
 use App\Module\Tree\Serializer\ParenteDuLecteur;
 use App\Tests\Tree\Double\CalqueEnMemoire;
 
@@ -364,6 +366,10 @@ final class ListeBlancheDeSerialisationTest extends ArbreWebTestCase
             new MediasNonBranches(),
             $parente,
             $propositions ?? new CalqueFerme(),
+            // Construits à la main comme le reste de ce gréement : ils sont sans état et
+            // sans dépendance, et ce test a besoin de contrôler ce qu'il injecte.
+            new AppuiDUneCitation(),
+            new AdressesDArbresEnLigne(),
         );
     }
 

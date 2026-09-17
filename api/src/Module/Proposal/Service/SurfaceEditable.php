@@ -77,12 +77,38 @@ final class SurfaceEditable
      * Ni `source`, ni `person`, ni `family` : rattacher une citation ailleurs n'est pas
      * une correction de citation, c'est un lien.
      *
-     * `quay` traverse le port en **chaîne** — c'est une énumération de `Tree`, que
-     * `Proposal` n'a pas le droit de nommer (règle 3 de l'ADR 0002).
+     * ── `quay` est un `Entier`, et ce fut longtemps un `Enum` qui ne marchait pas ──────
+     *
+     * Le champ était **inatteignable par tous les chemins**, par deux causes distinctes
+     * qui avaient la même racine : `ValueKind::Enum` est documenté « scalaire JSON
+     * **string** » et passe par `NormaliseurDeValeur::texte()`, alors que
+     * `CitationQuality` est la seule énumération du projet adossée à `int` — l'exception
+     * assumée du § 2.7 — et que le port rend donc un entier.
+     *
+     * Les deux symptômes étaient assez différents pour que personne ne rapproche les
+     * moitiés :
+     *
+     * - poster `"quay": 2` passait le dépôt, et c'est la **validation** qui levait un
+     *   `422 « Cette valeur doit être une chaîne ou null »` **dans sa transaction** ;
+     * - poster `"quay": "2"` s'écrivait — mais la valeur courante était l'entier `2` et
+     *   l'`old_value` la chaîne `"2"`. La comparaison de caducité est un `!==`, donc
+     *   `2 !== "2"` était vrai, et la demande mourait **caduque, systématiquement**.
+     *
+     * `Entier` aligne tout : `versPhp()` rend un `int`, `Tree::qualite()` accepte déjà
+     * `string|int` et borne à 0-3, `EtatCible::valeurs` rend déjà un `int`, et la
+     * comparaison devient entier contre entier.
+     *
+     * **Aucune op à migrer** : mesuré en base avant d'écrire cette ligne, `prp_change_op`
+     * ne porte **aucune** op visant `quay`, sous aucun `value_kind` — et n'en porte
+     * d'ailleurs aucune en `enum` tout court. Le champ n'a jamais été atteint, ce qui est
+     * la confirmation empirique de son inatteignabilité plutôt qu'une chance.
+     *
+     * *(`ValueKind::Enum` reste dans l'énumération, et reste juste : il décrit une
+     * énumération adossée à `string`. C'est `quay` qui n'en était pas une.)*
      */
     private const array CITATION = [
         'page' => ValueKind::Texte,
-        'quay' => ValueKind::Enum,
+        'quay' => ValueKind::Entier,
         'dataText' => ValueKind::Texte,
     ];
 

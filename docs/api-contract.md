@@ -1367,6 +1367,8 @@ la référence de forme.
       "scope": "naissance",
       "quay": 2,
       "quayLabel": "acte ou registre",
+      "appui": "index",
+      "appuiLabel": "tenu par un index ou un relevé",
       "page": "Saule, registre des naissances 1901-1909, cote 6 M 12, vue 41",
       "evenContext": "record",
       "url": "https://archives.example/…",
@@ -1375,7 +1377,8 @@ la référence de forme.
         "id": 4,
         "title": "Dénombrements de population de la Fougerie",
         "author": null,
-        "sourceKind": "recensement"
+        "sourceKind": "recensement",
+        "sourceKindLabel": "Recensement"
       },
       "medias": [
         { "mediaId": 120, "kind": "preuve", "vignetteUrl": "/api/medias/120/vignette" }
@@ -1419,6 +1422,79 @@ Notes de forme :
 - `quayLabel` reprend les libellés déjà retenus (§ 3.9) pour que l'interface ne change pas de
   vocabulaire : `recopie non vérifiée`, `index ou déduction`, `acte ou registre`,
   `preuve directe`.
+- **`appui` dit sur quoi la citation repose réellement** — voir ci-dessous. C'est **cette**
+  clé que l'écran affiche, et non `quay`.
+
+#### `appui` — trois niveaux, composés de deux colonnes
+
+Le commanditaire voulait voir d'un coup d'œil, sur ses 483 citations, lesquelles sont tenues
+par un acte. Environ **deux sur cinq** ne le sont pas.
+
+| `appui` | `appuiLabel` | ce qui le tient |
+|---|---|---|
+| `acte` | tenu par un acte | acte d'état civil, acte notarié, registre |
+| `index` | tenu par un index ou un relevé | table décennale, relevé d'association, recensement |
+| `arbre` | tenu par un arbre en ligne | Geneanet, Filae, MyHeritage, site familial |
+
+**Trois niveaux et non deux**, et la nuance est celle du commanditaire : un index se trompe,
+mais il a été dressé par quelqu'un qui tenait le registre. Les fondre ferait disparaître
+exactement l'information qui dit s'il faut aller vérifier.
+
+Le niveau est **le plus bas** de ce que disent les deux colonnes qui le portent :
+
+- `tree_source.source_kind` qualifie le **fonds** — ce document est-il un acte, un
+  recensement, l'arbre d'un autre utilisateur ?
+- `tree_citation.quay` qualifie **cet usage-ci** — ai-je vérifié, sur ce fait précis ?
+
+Elles peuvent diverger, et dans les deux sens. Citer un acte sans l'avoir vérifié se dit
+`quay = 0` sur une source `acte_etat_civil`, et la fiche repose alors sur une recopie quoi
+qu'en dise le fonds. À l'inverse, un arbre en ligne « tenu par un acte » est une
+contradiction que rien n'empêchait d'écrire.
+
+*État mesuré au 17/09/2026 : les **194** citations d'arbres en ligne de l'arbre sont
+**toutes à `QUAY 0`**. L'import les avait bien cotées ; ce qui manquait était l'affichage.
+La composition n'est donc pas une réparation mais un garde-fou — d'autant que `quay`
+redevient modifiable par le même lot, et qu'une correction maladroite suffirait.*
+
+Retenir le plus bas est la seule règle sûre : **une fiche ne doit jamais paraître mieux tenue
+qu'elle ne l'est.** C'est le même raisonnement que le défaut fermé du cercle de visibilité.
+Un `quay` absent vaut `arbre` pour la même raison : la citation n'a jamais été évaluée.
+
+`quay` et `quayLabel` restent rendus tels quels — on ne réécrit pas ce que le contributeur a
+déclaré —, mais ils décrivent une déclaration, là où `appui` décrit ce qu'elle vaut.
+
+#### Les adresses d'arbres en ligne ne sortent pas
+
+> « MyHeritage, retire tous les liens vers ces URL, ça sert à rien — ou du moins ne les
+> affiche pas aux utilisateurs, **garde-les en DB uniquement pour l'IA**. »
+
+Les deux moitiés de la phrase comptent. `page`, `dataText` et `url` sont rendus **débarrassés
+des adresses d'arbres en ligne** ; `tree_citation` et `tree_source` ne sont pas modifiées. Le
+masquage vit à la sérialisation, et une relecture de la base rend tout.
+
+**Le retrait vise une liste fermée de domaines d'arbres, jamais toute adresse.** Les 109 URL
+du fonds se répartissent en 103 d'arbres en ligne — `myheritage.fr`, `sites-cf.mhcache.com`
+qui héberge les « sites web de famille », `filae.com` — et 6 de **visionneuses d'archives**,
+`archives.dordogne.fr` et `recherche.archives.finistere.fr`. Ces six-là sont exactement ce
+qu'on veut montrer : le point d'entrée du registre numérisé où le chercheur suivant ira lire
+l'acte. Masquer « tout `http` » les emporterait.
+
+`page` porte aussi les **cotes d'archives** — « 5 E 341/7, vue 1/6 » — dans le même champ que
+l'adresse, sur 39 lignes. Le retrait découpe l'adresse et recoud le texte ; il ne vide jamais
+le champ. Un champ qui ne portait **que** l'adresse rend `null`, et non `""` : c'est la
+distinction absent/vide du § 1.3, et elle décide de ce que l'écran dessine.
+
+FamilySearch n'est **pas** dans la liste, et c'est une décision : le site héberge à la fois un
+arbre collaboratif et des millions de registres numérisés, les distinguer demanderait de lire
+le chemin de l'URL plutôt que son domaine, et l'arbre n'en compte qu'une citation.
+
+#### `heritage:reclasser-les-arbres-tiers`
+
+Une commande d'administration, **en simulation par défaut**, qui classe en `arbre_tiers` les
+sources dont une adresse prouve qu'elles en sont. Elle existe parce que 41 citations de ce
+fonds reposent sur des sources classées `autre` qui sont des sites familiaux hébergés par
+MyHeritage — reconnaissables à leur hébergeur, pas à leur titre. Elle ne touche **ni les
+`QUAY`, ni les adresses** : une seule colonne, et la sérialisation fait le reste.
 - `enAttente` est **toujours présent**, à `{}` quand il n'y a rien — voir § 13.
 - `version` est là pour que le formulaire de proposition puisse le renvoyer en
   `baseVersion` (§ 6.1). Sans lui, le verrou optimiste inter-requêtes du § 9.6 n'a pas de
@@ -1845,7 +1921,7 @@ sait déjà manipuler, pour que création et correction parlent le même langage
 |---|:-:|---|
 | `sourceId` | **oui** | une ligne `tree_source` existante ⇒ `422 ops[n].newValue.sourceId` sinon |
 | `page` | non | le `PAGE` : de quoi **retrouver** la pièce |
-| `quay` | non | `0` à `3` de la norme GEDCOM, ou `null` — `null` n'est pas `0` |
+| `quay` | non | `0` à `3` de la norme GEDCOM, ou `null` — `null` n'est pas `0`. En `modification_citation`, son `valueKind` est **`entier`** |
 | `dataText` | non | la transcription |
 | `scope` | non | ce que la source étaye ; `generale` par défaut |
 
@@ -1863,22 +1939,31 @@ disparition de la fiche reste couverte et rend `409 cible_disparue`, comme parto
 **`quay` et `scope` sont validés au dépôt**, contre le vocabulaire que `Tree` déclare — et
 non à la validation, où l'erreur tomberait chez l'administrateur et non chez l'auteur.
 
-> **`quay` n'est pas modifiable par `modification_citation`, et ce n'est pas un choix.**
-> Mesuré le 17/09/2026, sur une citation de `quay = 1` qu'on essaie de porter à `2` :
-> `oldValue` en entier rend `422 donnees_invalides`, `oldValue` en chaîne rend
-> `409 conflit` « la fiche a changé pendant la saisie » — alors que rien n'a changé. Les
-> deux seules formes possibles échouent, donc le champ est inatteignable.
+> **`quay` se corrige par `modification_citation`, et son `valueKind` est `entier`.**
 >
-> La cause : la surface éditable déclare `quay` en `valueKind: enum`, dont le contrat de
-> port est `string | null` ; or l'état lu rend un **entier**, `CitationQuality` étant la
-> seule énumération du projet adossée à `int` (§ 2.7 du modèle). La comparaison stricte
-> d'`oldValue` à la valeur courante oppose alors `"1"` à `1` et ne peut jamais réussir.
+> Il ne l'était pas. Le champ a été **inatteignable par tous les chemins** jusqu'au
+> 17/09/2026, par deux causes distinctes qui avaient la même racine : la surface éditable
+> le déclarait `valueKind: enum`, dont le contrat de port est `string | null`, alors que
+> l'état lu rend un **entier** — `CitationQuality` étant la seule énumération du projet
+> adossée à `int` (§ 2.7 du modèle).
 >
-> `ajout_citation` **ne passe pas par là** : sa valeur est un `valueKind: citation`, où
-> `quay` voyage en entier. Le défaut est donc contourné pour la création et **reste
-> entier pour la correction** — il se solde du côté de `modification_citation`, et c'est
-> une décision à prendre, pas un geste : corriger la lecture d'une valeur de port se
-> répercute sur la détection de caducité.
+> Les deux symptômes ne se ressemblaient pas, et c'est pourquoi le diagnostic a tardé :
+> poster `"quay": 2` passait le dépôt puis faisait lever la **validation, dans sa
+> transaction**, sur un `422` « cette valeur doit être une chaîne » ; poster `"quay": "2"`
+> s'écrivait, mais opposait ensuite `"2"` à `2` dans une comparaison stricte et rendait la
+> demande **caduque, systématiquement**. Chacun ne voyait qu'une moitié.
+>
+> La correction est d'une ligne — `quay` passe à `ValueKind::Entier` — et **aucune op
+> n'était à migrer** : mesuré avant d'écrire, `prp_change_op` ne portait aucune op visant
+> `quay`, sous aucun `value_kind`, et n'en portait d'ailleurs aucune en `enum` tout court.
+> Le champ n'avait jamais été atteint, ce qui confirme le diagnostic par la mesure.
+>
+> `ajout_citation` **ne passait pas par là** : sa valeur est un `valueKind: citation`, où
+> `quay` voyageait déjà en entier. Le défaut ne portait que sur la correction.
+>
+> ⚠️ **Aucun écran ne dépose encore de `modification_citation`.** Le chemin d'API est
+> ouvert et éprouvé de bout en bout, mais le formulaire manque — même lacune que pour
+> `ajout_citation` et `ajout_note`, et même chantier.
 
 **Ce qui n'est pas accepté**, et qui rend `422 ops[n].subjectDraftRef` : une citation sur une
 personne créée par la **même** demande (`#p1`). La validation applique les ops avant de
@@ -3771,11 +3856,13 @@ exclu »). Deux lecteurs, la même route `GET /api/arbre/personnes/202`, le mêm
       "scope": "naissance",
       "quay": 1,
       "quayLabel": "index ou déduction",
+      "appui": "index",
+      "appuiLabel": "tenu par un index ou un relevé",
       "page": "Sorbière, table décennale 1930-1939",
       "evenContext": "record",
       "url": null,
       "dataText": null,
-      "source": { "id": 11, "title": "Archives départementales de la Fougerie", "author": null, "sourceKind": "acte_etat_civil" },
+      "source": { "id": 11, "title": "Archives départementales de la Fougerie", "author": null, "sourceKind": "acte_etat_civil", "sourceKindLabel": "Acte d'état civil" },
       "medias": []
     }
   ],

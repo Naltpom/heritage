@@ -79,7 +79,11 @@ export interface SourceDeCitation {
   id: number
   title: string
   author: string | null
+  /** Valeur du modèle : `acte_etat_civil`, `arbre_tiers`, `recensement`… */
   sourceKind: string
+  /** Le même, en français. Rendu par le serveur pour que l'écran ne tienne pas
+   *  sa propre table de traduction (§ 5.3). */
+  sourceKindLabel: string
 }
 
 export interface MediaDeCitation {
@@ -96,6 +100,28 @@ export interface CitationDeFiche {
   /** Libellé déjà rendu par le serveur : `acte ou registre`, `recopie non
    *  vérifiée`… On l'affiche, on ne le recompose pas (§ 5.3). */
   quayLabel: string | null
+  /**
+   * **Sur quoi la citation repose réellement** — `acte`, `index` ou `arbre`.
+   *
+   * Composé par le serveur à partir de **deux** colonnes : la nature du fonds
+   * (`source.sourceKind`) et le `QUAY` de cette lecture-ci, en retenant **le plus
+   * bas des deux**. Une fiche ne doit jamais paraître mieux tenue qu'elle ne
+   * l'est — et dans les deux sens : citer un acte sans l'avoir vérifié reste une
+   * recopie, et un `quay` absent n'a jamais été évalué.
+   *
+   * C'est **cette** clé qu'on affiche, et non `quay` : `quay` dit ce que le
+   * contributeur a déclaré, `appui` ce que ça vaut.
+   */
+  appui: 'acte' | 'index' | 'arbre'
+  /** Le libellé du niveau, rendu par le serveur : « tenu par un acte »… */
+  appuiLabel: string
+  /**
+   * La cote ou la page, **débarrassée des adresses d'arbres en ligne**.
+   *
+   * Le retrait est fait au serveur et la base garde tout — « garde-les en DB
+   * uniquement pour l'IA ». Les cotes d'archives que ce champ porte à côté,
+   * « 5 E 341/7, vue 1/6 », sont intactes, et les liens de visionneuses aussi.
+   */
   page: string | null
   evenContext: string | null
   url: string | null

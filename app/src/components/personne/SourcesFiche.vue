@@ -2,13 +2,32 @@
 /**
  * Ce qui appuie la fiche : les faits, les sources, les notes.
  *
- * **Les citations sont triées par `quay` décroissant.** `QUAY` dit *ce qui
- * étaye*, pas *combien on est sûr* : `2` veut dire « acte ou registre », `1`
- * « index ou déduction », `0` « recopie non vérifiée ». Sur cet arbre, 177
- * citations sont à `2` et 242 à `0` — mettre les actes en tête, c'est montrer
- * d'abord ce qui tient. Le **libellé** (`quayLabel`) vient du serveur : on
- * l'affiche, on ne le recompose pas, « pour que l'interface ne change pas de
- * vocabulaire » (§ 5.3).
+ * **Les citations sont triées par `appui` décroissant, et non par `quay`.**
+ *
+ * `quay` dit ce que le contributeur a **déclaré** ; `appui` dit ce que ça **vaut**.
+ * Le serveur compose le second à partir de deux colonnes — la nature du fonds et
+ * le `QUAY` de cette lecture-ci — en retenant **le plus bas des deux**, parce
+ * qu'une fiche ne doit jamais paraître mieux tenue qu'elle ne l'est — et dans les
+ * deux sens : citer un acte sans l'avoir vérifié reste une recopie.
+ *
+ * Trois niveaux, validés par le commanditaire : **tenu par un acte**, **tenu par
+ * un index ou un relevé**, **tenu par un arbre en ligne**. La distinction entre
+ * les deux premiers compte — un index se trompe, mais il a été dressé par
+ * quelqu'un qui tenait le registre — et c'est pour cela qu'il y en a trois.
+ *
+ * **194 citations sur 483 sont au troisième niveau**, et elles étaient déjà cotées
+ * `0` en base : l'information existait, rien ne la montrait. La pastille disait
+ * « recopie non vérifiée » dans la même couleur que tout le reste, et la nature du
+ * fonds n'était affichée nulle part. Mettre
+ * les actes en tête, c'est montrer d'abord ce qui tient. Les **libellés**
+ * (`appuiLabel`, `quayLabel`) viennent du serveur : on les affiche, on ne les
+ * recompose pas, « pour que l'interface ne change pas de vocabulaire » (§ 5.3).
+ *
+ * **Les adresses d'arbres en ligne n'arrivent pas jusqu'ici.** Le serveur les
+ * retire de `page`, de `dataText` et d'`url` — « retire tous les liens vers ces
+ * URL » — **sans rien effacer en base**, « garde-les en DB uniquement pour
+ * l'IA ». Cet écran n'a donc rien à filtrer, et ne doit surtout pas s'y mettre :
+ * les liens qui restent sont ceux des visionneuses d'archives, qu'on veut voir.
  *
  * **Les images d'archive attachées à une citation n'arrivent qu'en vignette.**
  * La fiche rend `{ mediaId, kind, vignetteUrl }` et rien de plus (§ 5.3) : pas
@@ -21,7 +40,7 @@
  * recomposition depuis `min` et `max` (§ 14).
  */
 import { computed } from 'vue'
-import type { FichePersonneComplete } from '@/lib/api'
+import type { CitationDeFiche, FichePersonneComplete } from '@/lib/api'
 import type { CibleLoupe } from '@/components/medias/medias'
 import { rendreDate } from './champs'
 
@@ -29,14 +48,27 @@ const { fiche } = defineProps<{ fiche: FichePersonneComplete }>()
 
 const emit = defineEmits<{ agrandir: [cible: CibleLoupe] }>()
 
-const citations = computed(() => [...fiche.citations].sort((a, b) => (b.quay ?? -1) - (a.quay ?? -1)))
+/** Le rang d'affichage des trois niveaux — ce qui tient en premier. */
+const RANG: Record<CitationDeFiche['appui'], number> = { acte: 2, index: 1, arbre: 0 }
 
-/** Le liseré : vert pour un acte, accent pour un index, alerte pour une
- *  recopie. Même code couleur que le viewer d'origine. */
-function lisere(quay: number | null): string {
-  if ((quay ?? 0) >= 2) return 'border-ok'
-  if ((quay ?? 0) >= 1) return 'border-accent'
-  return 'border-alerte'
+const citations = computed(() =>
+  [...fiche.citations].sort((a, b) => RANG[b.appui] - RANG[a.appui]),
+)
+
+/** Le liseré : vert pour un acte, accent pour un index, alerte pour un arbre en
+ *  ligne. Même code couleur que le viewer d'origine, sur le niveau composé. */
+const LISERE: Record<CitationDeFiche['appui'], string> = {
+  acte: 'border-ok',
+  index: 'border-accent',
+  arbre: 'border-alerte',
+}
+
+/** La pastille : neutre pour ce qui tient, alerte pour ce qui ne tient pas. Une
+ *  citation d'arbre en ligne doit se repérer sans lire, c'est la demande. */
+const PASTILLE: Record<CitationDeFiche['appui'], string> = {
+  acte: 'bg-accent-doux text-accent',
+  index: 'bg-accent-doux text-accent',
+  arbre: 'bg-alerte-doux text-alerte',
 }
 </script>
 
@@ -69,7 +101,7 @@ function lisere(quay: number | null): string {
         v-for="citation in citations"
         :key="citation.id"
         class="mb-2.5 border-l-[3px] pl-3"
-        :class="lisere(citation.quay)"
+        :class="LISERE[citation.appui]"
       >
         <p class="m-0 font-semibold">{{ citation.source?.title ?? 'Source non nommée' }}</p>
         <p v-if="citation.source?.author" class="m-0 text-xs text-attenue">
@@ -80,11 +112,24 @@ function lisere(quay: number | null): string {
           {{ citation.dataText }}
         </p>
 
+        <!-- Le niveau composé par le serveur, et lui seul en évidence : c'est la
+             réponse à « lesquelles de mes citations sont tenues par un acte ». -->
         <span
-          v-if="citation.quayLabel"
-          class="mt-1 inline-block rounded-pastille bg-accent-doux px-1.5 py-px text-[10.5px] font-semibold text-accent"
+          class="mt-1 inline-block rounded-pastille px-1.5 py-px text-[10.5px] font-semibold"
+          :class="PASTILLE[citation.appui]"
         >
-          {{ citation.quayLabel }}
+          {{ citation.appuiLabel }}
+        </span>
+
+        <!-- Le fonds, en second et en gris : « Arbre d'un autre utilisateur » dit
+             **d'où** ça vient, là où la pastille dit ce que ça vaut. Les deux se
+             lisent ensemble sur une citation d'arbre en ligne, et la seconde est
+             muette quand le fonds n'apprend rien de plus. -->
+        <span
+          v-if="citation.appui === 'arbre' && citation.source"
+          class="mt-1 ml-1 inline-block text-[10.5px] text-attenue"
+        >
+          {{ citation.source.sourceKindLabel }}
         </span>
 
         <p v-if="citation.url" class="m-0 mt-0.5">

@@ -12,6 +12,7 @@ use App\Module\Tree\Entity\Fact;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Note;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Service\AdressesDArbresEnLigne;
 
 /**
  * La fiche d'une personne — § 5.3 du contrat pour la forme complète, § 11.1 pour la
@@ -60,6 +61,8 @@ final readonly class NormaliseurDePersonne
         private PortDesMedias $medias,
         private ParenteDuLecteur $parente,
         private CalqueEnAttenteInterface $calque,
+        private AppuiDUneCitation $appui,
+        private AdressesDArbresEnLigne $adresses,
     ) {
     }
 
@@ -339,6 +342,10 @@ final readonly class NormaliseurDePersonne
             $source = $citation->getSource();
             $quay = $citation->getQuay();
 
+            $fonds = $source->getSourceKind();
+            $niveau = $this->appui->niveau($fonds, $quay);
+            $urlCitation = $citation->getUrl();
+
             $sortie[] = [
                 'id' => $id,
                 'scope' => $citation->getScope()->value,
@@ -346,15 +353,27 @@ final readonly class NormaliseurDePersonne
                 // Le libellé reprend le vocabulaire déjà retenu (§ 3.9 du modèle) pour que
                 // l'interface ne change pas de mots entre deux écrans.
                 'quayLabel' => $quay?->label(),
-                'page' => $citation->getPage(),
+                // Sur quoi la citation repose réellement — le plus bas du fonds et de
+                // l'usage. C'est ce que le commanditaire voulait voir d'un coup d'œil, et
+                // c'est composé ici parce que trois écrans le montrent.
+                'appui' => $niveau,
+                'appuiLabel' => $this->appui->libelle($niveau),
+                // **Les adresses d'arbres en ligne sont retirées du rendu, jamais de la
+                // base** : « garde-les en DB uniquement pour l'IA ». Les cotes d'archives
+                // que `page` porte à côté — « 5 E 341/7, vue 1/6 » — restent intactes,
+                // et les liens de visionneuses aussi. Voir `AdressesDArbresEnLigne`.
+                'page' => $this->adresses->nettoyer($citation->getPage()),
                 'evenContext' => $citation->getEvenContext()?->value,
-                'url' => $citation->getUrl(),
-                'dataText' => $citation->getDataText(),
+                'url' => null !== $urlCitation && $this->adresses->estUnArbreEnLigne($urlCitation) ? null : $urlCitation,
+                'dataText' => $this->adresses->nettoyer($citation->getDataText()),
                 'source' => [
                     'id' => $source->getId(),
                     'title' => $source->getTitle(),
                     'author' => $source->getAuthor(),
-                    'sourceKind' => $source->getSourceKind()->value,
+                    'sourceKind' => $fonds->value,
+                    // Le libellé du fonds, pour que l'écran nomme « Arbre d'un autre
+                    // utilisateur » sans tenir sa propre table de traduction.
+                    'sourceKindLabel' => $fonds->label(),
                 ],
                 'medias' => null !== $id ? ($mediasParCitation[$id] ?? []) : [],
             ];
