@@ -16,7 +16,15 @@
  * refermer avant.
  * ────────────────────────────────────────────────────────────────────
  */
-import { computed, readonly, ref, type ComputedRef, type Ref } from 'vue'
+import {
+  computed,
+  onBeforeUnmount,
+  onMounted,
+  readonly,
+  ref,
+  type ComputedRef,
+  type Ref,
+} from 'vue'
 import {
   REQUETE_MOBILE,
   basculer,
@@ -100,4 +108,31 @@ export function reinitialiserTiroirs(): void {
   detacher?.()
   detacher = null
   synchroniser()
+}
+
+/**
+ * La largeur courante, sous forme réactive — `true` en deçà du seuil mobile.
+ *
+ * Elle emploie `REQUETE_MOBILE`, donc **la chaîne exacte** que Tailwind compile
+ * pour `max-md:` : CSS et JavaScript ne peuvent pas diverger, y compris sous
+ * zoom texte où `48rem` ne vaut plus 768 px.
+ *
+ * `false` hors navigateur, ce qui est le bon défaut : les composants de ce
+ * produit sont rendus côté serveur dans les tests, et un rendu SSR doit donner
+ * la forme large — celle qui ne déplace rien.
+ */
+export function useEstMobile(): Readonly<Ref<boolean>> {
+  const estMobile = ref(false)
+
+  onMounted(() => {
+    if (typeof globalThis.matchMedia !== 'function') return
+    const liste = globalThis.matchMedia(REQUETE_MOBILE)
+    estMobile.value = liste.matches
+    const detacherCelui = surveillerLargeur(liste, (mobile) => {
+      estMobile.value = mobile
+    })
+    onBeforeUnmount(detacherCelui)
+  })
+
+  return readonly(estMobile)
 }

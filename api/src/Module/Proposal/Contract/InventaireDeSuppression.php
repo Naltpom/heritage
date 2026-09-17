@@ -71,26 +71,26 @@ namespace App\Module\Proposal\Contract;
 final readonly class InventaireDeSuppression
 {
     /**
-     * @param string                                                             $displayName  le nom de la fiche, recopié pour que l'inventaire se
-     *                                                                                         relise seul dans `prp_revision.changes`
-     * @param int                                                                $notes        `tree_note` rattachées à la personne
-     * @param int                                                                $citations    `tree_citation` rattachées à la personne
-     * @param int                                                                $faits        `tree_fact` rattachés à la personne
-     * @param int                                                                $filiations   `tree_child` où la personne est **l'enfant** — sa propre
-     *                                                                                         filiation, qui disparaît avec elle
-     * @param list<array{familleId: int, libelle: string, enfants: int, supprimee: bool}> $unions les unions où elle est un époux. `supprimee` vaut `true`
-     *                                                                                         quand elle en est le **seul** époux :
-     *                                                                                         `ck_tree_family_au_moins_un_epoux` interdit alors le
-     *                                                                                         `SET NULL`, et la ligne part avec elle
-     * @param list<array{personneId: int, displayName: string}>                  $descendants  les **enfants directs** qui seraient détachés, nommés.
-     *                                                                                         **Non vide interdit.**
-     * @param int                                                                $descendanceTotale le nombre de fiches qui descendent de celle-ci,
-     *                                                                                         **toutes générations confondues**. Voir l'en-tête.
-     * @param int                                                                $medias       `med_media` visant la personne. **Non nul interdit.**
-     * @param int|null                                                           $membreId     le rattachement `mbr_member` dont cette fiche est la
-     *                                                                                         racine. **Non nul interdit.**
-     * @param int                                                                $invitationsActives invitations en attente désignant cette fiche.
-     *                                                                                         **Non nul interdit.**
+     * @param string                                                                      $displayName        le nom de la fiche, recopié pour que l'inventaire se
+     *                                                                                                        relise seul dans `prp_revision.changes`
+     * @param int                                                                         $notes              `tree_note` rattachées à la personne
+     * @param int                                                                         $citations          `tree_citation` rattachées à la personne
+     * @param int                                                                         $faits              `tree_fact` rattachés à la personne
+     * @param int                                                                         $filiations         `tree_child` où la personne est **l'enfant** — sa propre
+     *                                                                                                        filiation, qui disparaît avec elle
+     * @param list<array{familleId: int, libelle: string, enfants: int, supprimee: bool}> $unions             les unions où elle est un époux. `supprimee` vaut `true`
+     *                                                                                                        quand elle en est le **seul** époux :
+     *                                                                                                        `ck_tree_family_au_moins_un_epoux` interdit alors le
+     *                                                                                                        `SET NULL`, et la ligne part avec elle
+     * @param list<array{personneId: int, displayName: string}>                           $descendants        les **enfants directs** qui seraient détachés, nommés.
+     *                                                                                                        **Non vide interdit.**
+     * @param int                                                                         $descendanceTotale  le nombre de fiches qui descendent de celle-ci,
+     *                                                                                                        **toutes générations confondues**. Voir l'en-tête.
+     * @param int                                                                         $medias             `med_media` visant la personne. **Non nul interdit.**
+     * @param int|null                                                                    $membreId           le rattachement `mbr_member` dont cette fiche est la
+     *                                                                                                        racine. **Non nul interdit.**
+     * @param int                                                                         $invitationsActives invitations en attente désignant cette fiche.
+     *                                                                                                        **Non nul interdit.**
      */
     public function __construct(
         public int $personneId,

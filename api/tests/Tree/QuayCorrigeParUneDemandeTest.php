@@ -99,7 +99,7 @@ final class QuayCorrigeParUneDemandeTest extends BaseDeDemandeSurArbreReel
 
     /**
      * ═══════════════════════════════════════════════════════════════════════════
-     * **LA CADUCITÉ FONCTIONNE — dans le bon sens.**
+     * **LA CADUCITÉ FONCTIONNE — dans le bon sens.**.
      *
      * C'est l'autre moitié du défaut : la comparaison entier-contre-chaîne rendait *toute*
      * demande caduque. Maintenant qu'elle compare deux entiers, elle ne doit se déclencher

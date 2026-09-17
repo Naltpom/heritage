@@ -217,7 +217,7 @@ final class CitationsDArbresTiersTest extends ArbreWebTestCase
     }
 
     /**
-     * **`monheritage.fr` n'est pas `myheritage.fr`.**
+     * **`monheritage.fr` n'est pas `myheritage.fr`.**.
      *
      * Le point exigé devant le suffixe est ce qui l'empêche : un `str_ends_with` nu
      * attraperait tout domaine finissant par ces lettres, et masquerait le site d'un
@@ -322,6 +322,7 @@ final class CitationsDArbresTiersTest extends ArbreWebTestCase
             (new AdressesDArbresEnLigne())->designeUneFicheDArbre('https://sites-cf.mhcache.com/site-42/notre-famille'),
         );
     }
+
     /**
      * ═══════════════════════════════════════════════════════════════════════════
      * **LA COUTURE SUR UN TEXTE MULTI-LIGNES** — la ligne que 1 077 tests verts

@@ -8,6 +8,7 @@ use App\Module\Core\Contract\CalqueEnAttenteInterface;
 use App\Module\Core\Contract\CalqueFerme;
 use App\Module\Core\Enum\Regime;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Tree\Serializer\AppuiDUneCitation;
 use App\Module\Tree\Serializer\CercleDuLecteur;
 use App\Module\Tree\Serializer\EtatVivant;
 use App\Module\Tree\Serializer\FabriqueDuCercle;
@@ -16,12 +17,11 @@ use App\Module\Tree\Serializer\LectureDeLArbre;
 use App\Module\Tree\Serializer\MediasNonBranches;
 use App\Module\Tree\Serializer\NormaliseurDeDate;
 use App\Module\Tree\Serializer\NormaliseurDeFamille;
-use App\Module\Tree\Serializer\AppuiDUneCitation;
 use App\Module\Tree\Serializer\NormaliseurDePersonne;
 use App\Module\Tree\Serializer\NormaliseurDeRecherche;
 use App\Module\Tree\Serializer\NormaliseurDeRequete;
-use App\Module\Tree\Service\AdressesDArbresEnLigne;
 use App\Module\Tree\Serializer\ParenteDuLecteur;
+use App\Module\Tree\Service\AdressesDArbresEnLigne;
 use App\Tests\Tree\Double\CalqueEnMemoire;
 
 /**

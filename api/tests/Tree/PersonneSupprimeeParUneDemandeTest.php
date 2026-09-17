@@ -6,16 +6,16 @@ namespace App\Tests\Tree;
 
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
-use App\Module\Proposal\Entity\ChangeRequest;
-use App\Module\Proposal\Enum\RequestStatus;
-use App\Module\Proposal\Enum\RevisionOperation;
 use App\Module\Media\Entity\Media;
+use App\Module\Media\Enum\MediaKind;
+use App\Module\Media\Enum\MediaSubject;
 use App\Module\Membership\Entity\Invitation;
 use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Enum\MatchKind;
 use App\Module\Membership\Enum\MemberStatus;
-use App\Module\Media\Enum\MediaKind;
-use App\Module\Media\Enum\MediaSubject;
+use App\Module\Proposal\Entity\ChangeRequest;
+use App\Module\Proposal\Enum\RequestStatus;
+use App\Module\Proposal\Enum\RevisionOperation;
 use App\Module\Proposal\Exception\DonneesInvalides;
 use App\Module\Tree\Entity\Child;
 use App\Module\Tree\Entity\Citation;
@@ -164,7 +164,7 @@ final class PersonneSupprimeeParUneDemandeTest extends BaseDeDemandeSurArbreReel
     }
 
     /**
-     * **L'union d'un couple survit, amputée de l'époux effacé.**
+     * **L'union d'un couple survit, amputée de l'époux effacé.**.
      *
      * C'est l'autre moitié de la règle, et elle compte autant : le conjoint restant garde
      * son union, ses dates de mariage et ses propres rattachements. Effacer la famille
@@ -465,6 +465,7 @@ final class PersonneSupprimeeParUneDemandeTest extends BaseDeDemandeSurArbreReel
         $this->em()->persist(new Child($famille, $enfant, 1));
         $this->em()->flush();
     }
+
     /**
      * ═══════════════════════════════════════════════════════════════════════════
      * **UN COMPTE MEMBRE RATTACHÉ BLOQUE LA SUPPRESSION** — le cas le plus silencieux

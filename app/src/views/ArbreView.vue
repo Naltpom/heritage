@@ -231,6 +231,12 @@ const question = ref('')
 const resultats = shallowRef<Set<string>>(new Set())
 const texteResultat = ref('')
 const tronque = ref(false)
+
+/** Recadrer la vue sur les fiches trouvées dès qu'une recherche aboutit.
+ *  Cochée par défaut : sans cela, la recherche marque des fiches que le lecteur
+ *  ne voit pas — sur 377 nœuds étalés sur 15 824 unités, elles sont presque
+ *  toujours hors écran — et il faut un second geste pour les atteindre. */
+const recadrageAuto = ref(true)
 const chargementRecherche = ref(false)
 
 /** Deux caractères minimum, sinon le serveur rend `422` (§ 5.5). On ne
@@ -282,6 +288,19 @@ async function lancerRecherche(q: string): Promise<void> {
     filtreActif.value = null
     pilote.toutAfficher()
     pilote.marquerTrouves(ids)
+
+    // ── LE RECADRAGE AUTOMATIQUE ───────────────────────────────────────────
+    //
+    // Marquer les fiches trouvées ne sert à rien si elles sont hors de l'écran,
+    // et sur 377 nœuds étalés sur 15 824 unités, elles le sont presque toujours.
+    // Il fallait donc chercher, puis penser à appuyer sur « Cadrer » — deux
+    // gestes pour une intention.
+    //
+    // La case reste **offerte et cochée** plutôt que le geste supprimé : un
+    // recadrage déplace la vue, et quelqu'un qui explore une branche en cherchant
+    // des noms au passage veut parfois garder son cadrage. Le bouton « Cadrer »
+    // demeure pour ceux qui décochent.
+    if (recadrageAuto.value) cadrerSurResultats()
   } catch {
     if (controleur.signal.aborted) return
     resultats.value = new Set()
@@ -505,10 +524,18 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="racine" class="flex flex-col" :style="{ height: hauteurCadre }">
+    <!--
+      La destination du champ de recherche sur téléphone. Elle est **avant** la
+      barre d'outils dans le gabarit : la cible d'un téléportage doit exister au
+      montage de ce qui s'y téléporte. Vide et sans boîte au-delà du seuil.
+    -->
+    <div id="recherche-arbre-mobile" class="order-last md:hidden" />
+
     <TiroirOutils titre="Filtres de l’arbre">
       <BarreOutilsArbre
         ref="barre"
         v-model="question"
+        v-model:recadrage-auto="recadrageAuto"
         :filtres="FILTRES"
         :disponibles="disponibles"
         :actif="filtreActif"

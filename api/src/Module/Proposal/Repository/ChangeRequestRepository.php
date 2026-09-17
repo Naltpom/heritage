@@ -160,6 +160,7 @@ class ChangeRequestRepository extends ServiceEntityRepository
         ?int $targetId,
         int $page,
         int $parPage,
+        ?int $auteurUserId = null,
     ): array {
         $qb = $this->createQueryBuilder('d')
             ->addOrderBy('d.submittedAt', 'ASC')
@@ -177,7 +178,36 @@ class ChangeRequestRepository extends ServiceEntityRepository
             $qb->andWhere('d.targetId = :cible')->setParameter('cible', $targetId);
         }
 
+        if (null !== $auteurUserId) {
+            $qb->andWhere('d.authorUserId = :auteur')->setParameter('auteur', $auteurUserId);
+        }
+
         return $this->paginer($qb, $page, $parPage);
+    }
+
+    /**
+     * Les auteurs qui ont réellement déposé quelque chose, pour peupler le filtre.
+     *
+     * **La liste des utilisateurs ne conviendrait pas.** Elle porte tous les comptes,
+     * y compris ceux qui n'ont jamais rien proposé : un sélecteur où presque toutes
+     * les entrées ne donnent aucun résultat est un sélecteur qu'on n'ouvre plus.
+     *
+     * Elle n'est **pas** restreinte au statut couramment filtré, et c'est voulu :
+     * changer de statut ne doit pas faire disparaître sous le doigt l'auteur qu'on
+     * venait de choisir.
+     *
+     * @return list<array{userId: int, libelle: string}>
+     */
+    public function auteursDeLaFile(): array
+    {
+        /** @var list<array{userId: int, libelle: string}> $lignes */
+        $lignes = $this->createQueryBuilder('d')
+            ->select('DISTINCT d.authorUserId AS userId', 'd.authorLabel AS libelle')
+            ->addOrderBy('d.authorLabel', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        return $lignes;
     }
 
     /**

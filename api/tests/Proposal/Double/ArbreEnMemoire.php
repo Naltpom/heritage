@@ -78,7 +78,7 @@ final class ArbreEnMemoire implements PortArbre
      */
     private static array $notesCreees = [];
 
-    /** @var list<int> les personnes effacées par une validation — le pendant de {@see $personnesCreees} */
+    /** @var list<int> les personnes effacées par une validation — le pendant de {@see} */
     private static array $personnesSupprimees = [];
 
     private static int $prochainIdentifiant = 1000;
