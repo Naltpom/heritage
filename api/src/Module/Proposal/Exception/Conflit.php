@@ -87,6 +87,63 @@ final class Conflit extends ErreurDeDemande
     }
 
     /**
+     * **Une `409` qui n'écrit rien du tout** — pas même le statut.
+     *
+     * Cette demande désigne une fiche proposée par une autre demande, et cette autre
+     * demande n'est pas tranchée : il y a un **ordre** à respecter, pas une erreur à
+     * signaler. La demande reste `en_attente`, l'auteur n'est pas notifié — il n'a rien
+     * à corriger —, et l'administrateur reçoit la liste des demandes à valider d'abord.
+     *
+     * `rejouable` vaut `true`, comme pour `verrou_concurrent` et pour la même raison :
+     * le geste refusé redeviendra possible tel quel. Ce qui change, c'est **quand** —
+     * d'où les dépendances nommées dans `details`, pour que le front dise « validez
+     * d'abord la demande n° 12 » plutôt que « réessayez » sans dire quand.
+     *
+     * @param list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}> $dependances
+     */
+    public static function dependanceEnAttente(int $demandeId, array $dependances): self
+    {
+        return new self(
+            'dependance_en_attente',
+            'Cette demande s\'appuie sur une personne proposée par une demande encore en attente : validez celle-là d\'abord.',
+            [
+                'demandeId' => $demandeId,
+                'statut' => RequestStatus::EnAttente->value,
+                'rejouable' => true,
+                'dependances' => $dependances,
+            ],
+        );
+    }
+
+    /**
+     * La demande sur laquelle celle-ci s'appuyait a été refusée, retirée ou rendue
+     * caduque — ou sa fiche a disparu. **La personne désignée ne naîtra jamais.**
+     *
+     * C'est une caducité de la même nature que `cible_disparue`, et elle écrit comme
+     * elle : la demande passe en `caduque`, l'auteur est notifié, et le bouton
+     * « refaire » lui permet de désigner quelqu'un d'autre. Confondre les deux codes
+     * serait tentant — les deux disent « la référence ne vaut plus » — mais l'auteur
+     * n'a pas le même geste à faire : une cible disparue se remplace par une autre
+     * personne de l'arbre, une dépendance morte se remplace par une autre proposition,
+     * ou attend d'être reproposée.
+     *
+     * @param list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}> $dependances
+     */
+    public static function dependanceMorte(int $demandeId, array $dependances): self
+    {
+        return new self(
+            'dependance_morte',
+            'La demande sur laquelle celle-ci s\'appuyait n\'aboutira pas : la personne désignée n\'existera jamais.',
+            [
+                'demandeId' => $demandeId,
+                'statut' => RequestStatus::Caduque->value,
+                'rejouable' => false,
+                'dependances' => $dependances,
+            ],
+        );
+    }
+
+    /**
      * L'`OptimisticLockException` du verrou n° 1 : deux transactions **concurrentes**
      * — deux administrateurs, ou une validation qui croise un import. **Rien n'a été
      * écrit, la demande reste `en_attente`, et réessayer est la bonne action**.

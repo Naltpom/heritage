@@ -49,6 +49,11 @@ final readonly class NotificateurSilencieux implements NotificateurDeDemandes
         $this->tracer('demande_caduque', $demande);
     }
 
+    public function demandeCaduqueParDependance(ChangeRequest $demande, array $dependances): void
+    {
+        $this->tracer('demande_caduque_dependance', $demande);
+    }
+
     private function tracer(string $evenement, ChangeRequest $demande): void
     {
         $this->journal->info('Notification non émise : aucun module de notification n\'est branché.', [

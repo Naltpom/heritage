@@ -43,8 +43,34 @@ enum ResolutionPrevue: string
     /** La ligne visée n'existe plus — supprimée ou fusionnée. C'est une caducité aussi. */
     case CibleDisparue = 'cible_disparue';
 
+    /**
+     * Cette demande s'appuie sur une fiche proposée par **une autre demande encore en
+     * attente** : il n'y a rien à condamner, il y a un ordre à respecter.
+     *
+     * Le front affiche « À valider après la demande n° 12 » et **éteint** le bouton sans
+     * le griser comme une caducité : les deux états n'appellent pas la même action. Une
+     * caducité se refait ; celle-ci s'attend, et elle se débloque toute seule dès que
+     * l'autre demande est tranchée.
+     *
+     * C'est la seule résolution qui ne soit ni un succès ni une fin : la demande reste
+     * `en_attente`, et rien n'est écrit — pas même son statut.
+     */
+    case DependanceEnAttente = 'dependance_en_attente';
+
+    /**
+     * La demande sur laquelle celle-ci s'appuyait a été **refusée, retirée ou rendue
+     * caduque** — ou sa fiche a disparu. La personne désignée ne naîtra donc jamais.
+     *
+     * C'est une caducité, et de la même nature que `cible_disparue` : personne n'a
+     * refusé **celle-ci**, mais elle ne peut plus s'appliquer. L'auteur est notifié et
+     * peut la refaire en désignant quelqu'un d'autre.
+     */
+    case DependanceMorte = 'dependance_morte';
+
     public function estCaduque(): bool
     {
-        return self::Caducite === $this || self::CibleDisparue === $this;
+        return self::Caducite === $this
+            || self::CibleDisparue === $this
+            || self::DependanceMorte === $this;
     }
 }

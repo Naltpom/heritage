@@ -35,6 +35,8 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
  * | **rejouée**          | `200` | oui                 | `validee`            | le dire                 |
  * | **caduque**          | `409` | **non**             | **`caduque`**        | « Refaire cette demande »|
  * | cible disparue       | `409` | non                 | **`caduque`**        | « Refaire cette demande »|
+ * | dépendance morte     | `409` | non                 | **`caduque`**        | « Refaire cette demande »|
+ * | dépendance en attente| `409` | non                 | **`en_attente`**     | « Valider d'abord la n° X »|
  * | **verrou concurrent**| `409` | non                 | **`en_attente`**     | **« Réessayer »**       |
  * | déjà décidée         | `409` | non                 | inchangé             | recharger               |
  *
@@ -101,6 +103,14 @@ final readonly class ValidationDeDemande
             $this->consigner($demande, $plan);
         }
 
+        // **La seule `409` qui n'écrit rien, pas même un statut.** Cette demande
+        // s'appuie sur une personne proposée par une autre demande encore en attente :
+        // il y a un ordre à respecter, pas une demande à condamner. Elle reste dans la
+        // file, telle quelle, et se validera dès que l'autre sera tranchée.
+        if (ResolutionPrevue::DependanceEnAttente === $plan->resolution) {
+            throw Conflit::dependanceEnAttente($demande->getId() ?? 0, $plan->dependancesEnAttente());
+        }
+
         return $this->appliquer($demande, $plan, $lecteur);
     }
 
@@ -117,10 +127,20 @@ final readonly class ValidationDeDemande
         $demande->setStatus(RequestStatus::Caduque)->toucher();
         $this->em->flush();
 
+        $id = $demande->getId() ?? 0;
+
+        // La dépendance morte se notifie **autrement** : rien n'a bougé sur aucune
+        // fiche, et le diff champ par champ de la caducité ordinaire n'a donc rien à
+        // raconter. Ce qui est arrivé, c'est que la personne désignée ne naîtra jamais.
+        if (ResolutionPrevue::DependanceMorte === $plan->resolution) {
+            $dependances = $plan->dependancesMortes();
+            $this->notificateur->demandeCaduqueParDependance($demande, $dependances);
+
+            throw Conflit::dependanceMorte($id, $dependances);
+        }
+
         $champs = $plan->champsEnConflit($this->normaliseur);
         $this->notificateur->demandeCaduque($demande, $champs);
-
-        $id = $demande->getId() ?? 0;
 
         if (ResolutionPrevue::CibleDisparue === $plan->resolution) {
             $disparue = $plan->disparues[0] ?? ['kind' => SubjectKind::Personne->value, 'id' => 0];

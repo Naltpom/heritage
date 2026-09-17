@@ -6,6 +6,7 @@ namespace App\Module\Proposal\Repository;
 
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\DraftPerson;
+use App\Module\Proposal\Enum\RequestStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -47,5 +48,69 @@ class DraftPersonRepository extends ServiceEntityRepository
     public function parReference(ChangeRequest $demande, string $localRef): ?DraftPerson
     {
         return $this->findOneBy(['request' => $demande, 'localRef' => $localRef]);
+    }
+
+    /**
+     * Les fiches proposées par les demandes **encore en attente** que ce lecteur a le
+     * droit de voir.
+     *
+     * `$auteurUserId` à `null` veut dire « toutes », et n'est passé que pour un
+     * administrateur hors bascule « voir comme un membre ». C'est la règle du § 13.3,
+     * la même qu'au calque et à la projection, et le paramètre est **obligatoire à
+     * l'appel** plutôt que nullable par défaut : un appelant qui l'oublierait
+     * montrerait à n'importe quel membre les propositions des autres.
+     *
+     * Seules les `en_attente` : un brouillon non soumis n'est pas une proposition —
+     * son auteur n'a pas encore dit qu'il la voulait —, et une demande tranchée n'a
+     * plus rien à offrir, soit qu'elle ait produit une personne réelle, soit qu'elle
+     * ait été refusée.
+     *
+     * @return list<DraftPerson>
+     */
+    public function enAttenteVisibles(?int $auteurUserId): array
+    {
+        $qb = $this->createQueryBuilder('b')
+            ->join('b.request', 'd')
+            ->andWhere('d.status = :statut')
+            ->setParameter('statut', RequestStatus::EnAttente)
+            ->addOrderBy('d.submittedAt', 'ASC')
+            ->addOrderBy('d.id', 'ASC')
+            ->addOrderBy('b.localRef', 'ASC');
+
+        if (null !== $auteurUserId) {
+            $qb->andWhere('d.authorUserId = :auteur')->setParameter('auteur', $auteurUserId);
+        }
+
+        /** @var list<DraftPerson> $lignes */
+        $lignes = $qb->getQuery()->getResult();
+
+        return $lignes;
+    }
+
+    /**
+     * Une fiche proposée par son identifiant de ligne, **si ce lecteur a le droit de la
+     * voir** — le reste du monde reçoit `null`, c'est-à-dire un `404`.
+     *
+     * Le statut n'est **pas** filtré ici, et c'est voulu : entre la recherche et le
+     * dépôt, la demande citée a pu être validée. Le brouillon porte alors son
+     * `resolved_person_id`, et l'appelant désigne la personne réelle plutôt que de
+     * refuser une référence qui vient justement d'aboutir. C'est au point d'entrée de
+     * trancher — voir {@see \App\Module\Proposal\Service\ConstructeurDeCreation} —,
+     * parce que lui seul sait quoi faire de chaque cas.
+     */
+    public function visiblePourLecteur(int $id, ?int $auteurUserId): ?DraftPerson
+    {
+        $qb = $this->createQueryBuilder('b')
+            ->join('b.request', 'd')
+            ->andWhere('b.id = :id')
+            ->setParameter('id', $id);
+
+        if (null !== $auteurUserId) {
+            $qb->andWhere('d.authorUserId = :auteur')->setParameter('auteur', $auteurUserId);
+        }
+
+        $ligne = $qb->getQuery()->getOneOrNullResult();
+
+        return $ligne instanceof DraftPerson ? $ligne : null;
     }
 }

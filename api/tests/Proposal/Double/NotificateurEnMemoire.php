@@ -49,6 +49,16 @@ final class NotificateurEnMemoire implements NotificateurDeDemandes
         $this->enregistrer('demande_caduque', $demande, champs: $champsEnConflit);
     }
 
+    /**
+     * Enregistré sous **son propre nom** d'événement, et non sous `demande_caduque` :
+     * un test qui vérifie qu'une caducité de dépendance notifie l'auteur ne doit pas
+     * passer au vert parce qu'une caducité de champ est partie à sa place.
+     */
+    public function demandeCaduqueParDependance(ChangeRequest $demande, array $dependances): void
+    {
+        $this->enregistrer('demande_caduque_dependance', $demande, champs: $dependances);
+    }
+
     /** @return list<array{evenement: string, demande: int|null, message: string|null, rejouee: bool, champs: list<array<string, mixed>>}> */
     public function de(string $evenement): array
     {

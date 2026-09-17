@@ -71,8 +71,8 @@ final class FileEtDiffEnHttpTest extends CasDeTestDemandesHttp
         'id', 'kind', 'status', 'authorUserId', 'authorLabel', 'targetKind', 'targetId',
         'targetLabel', 'message', 'decisionMessage', 'decidedByLabel', 'decidedAt',
         'autoValidated', 'duplicateOfId', 'submittedAt', 'createdAt', 'ops', 'brouillons',
-        'liens', 'revisions', 'cible', 'resolutionPrevue', 'demandesConcurrentes',
-        'doublonsProbables',
+        'liens', 'revisions', 'cible', 'resolutionPrevue', 'dependances',
+        'demandesConcurrentes', 'doublonsProbables',
     ];
 
     // ---------------------------------------------------------------------------------

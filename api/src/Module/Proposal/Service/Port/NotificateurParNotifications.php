@@ -111,6 +111,22 @@ final readonly class NotificateurParNotifications implements NotificateurDeDeman
         );
     }
 
+    public function demandeCaduqueParDependance(ChangeRequest $demande, array $dependances): void
+    {
+        $this->notifications->notifier(
+            $demande->getAuthorUserId(),
+            // **Le même `NotificationKind` que la caducité ordinaire, et c'est voulu** :
+            // ce qui arrive à l'auteur est identique — sa demande est morte sans que
+            // personne ne l'ait refusée —, seule la raison diffère. Un cas
+            // d'énumération de plus coûterait une migration pour une phrase.
+            NotificationKind::DemandeCaduque,
+            \sprintf('Votre demande%s est devenue caduque.', $this->sur($demande)),
+            $this->raconterLesDependances($dependances),
+            'demande.refaire',
+            ['id' => $demande->getId()],
+        );
+    }
+
     /** « sur Marne Dolomite Sureau », ou rien si la demande ne nomme pas sa cible. */
     private function sur(ChangeRequest $demande): string
     {
@@ -139,6 +155,40 @@ final readonly class NotificateurParNotifications implements NotificateurDeDeman
         }
 
         return implode(' ', $phrases).' Vous pouvez refaire cette demande à partir des valeurs actuelles.';
+    }
+
+    /**
+     * « Vous la rattachiez à Girolle Chanterelle, proposée par la demande n° 12, qui
+     * n'a pas abouti. »
+     *
+     * Le libellé peut manquer — la fiche a pu être effacée avec sa demande —, et la
+     * phrase se replie alors sur « une personne proposée » plutôt que sur un numéro de
+     * ligne interne, qui n'apprendrait rien à l'auteur.
+     *
+     * @param list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}> $dependances
+     */
+    private function raconterLesDependances(array $dependances): ?string
+    {
+        if ([] === $dependances) {
+            return null;
+        }
+
+        $phrases = [];
+
+        foreach ($dependances as $dependance) {
+            $qui = '' === $dependance['libelle'] ? 'une personne proposée' : $dependance['libelle'];
+            $demandeId = $dependance['demandeId'];
+
+            $phrases[] = null === $demandeId
+                ? \sprintf('Vous la rattachiez à %s, qui n\'est plus proposée.', $qui)
+                : \sprintf(
+                    'Vous la rattachiez à %s, proposée par la demande n° %d, qui n\'a pas abouti.',
+                    $qui,
+                    $demandeId,
+                );
+        }
+
+        return implode(' ', $phrases).' Vous pouvez refaire cette demande en désignant quelqu\'un d\'autre.';
     }
 
     private function lisible(mixed $valeur): string

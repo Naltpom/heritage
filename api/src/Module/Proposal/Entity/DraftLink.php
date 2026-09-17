@@ -18,9 +18,33 @@ use Doctrine\ORM\Mapping as ORM;
  * l'arbre » ; c'est une règle de service et non de schéma, parce qu'elle porte sur le
  * nombre de lignes filles.
  *
- * Chaque extrémité est soit une personne existante (`*PersonId`), soit un brouillon de
- * la même demande (`*DraftRef`) — jamais les deux, et les contraintes `CHECK` de la
- * migration l'imposent. Pour une filiation, on désigne **soit** un couple existant
+ * Chaque extrémité est l'une de **trois** choses, et d'une seule : une personne
+ * existante (`*PersonId`), un brouillon de la **même** demande (`*DraftRef`), ou une
+ * fiche proposée par une **autre demande encore en attente** (`*DraftPersonId`). Les
+ * contraintes `CHECK` de la migration imposent l'exclusivité.
+ *
+ * ── La troisième forme, et le problème qu'elle résout ────────────────────────────
+ *
+ * « Je propose un père, puis je propose son fils, et le père que je viens de proposer
+ * ne m'est pas offert. » Sans cette colonne, un contributeur ne peut décrire une
+ * branche qu'en une seule demande : dès la deuxième, la personne de la première n'a
+ * toujours pas d'identifiant, et `*DraftRef` ne porte que **dans** sa demande
+ * (`uniq_prp_draft_person_ref`). Il ne reste alors qu'à attendre une validation, ou à
+ * ressaisir la même personne — c'est-à-dire à fabriquer le doublon que le § 9.5 passe
+ * son temps à écarter.
+ *
+ * `*DraftPersonId` désigne donc la **ligne** `prp_draft_person`, qui est unique en
+ * base, elle. Ce n'est pas une clé étrangère : une demande supprimée emporterait
+ * sinon, par cascade, un lien d'une **autre** demande — c'est-à-dire qu'elle
+ * l'amputerait en silence. La référence est vérifiée au point d'entrée
+ * ({@see \App\Module\Proposal\Service\ConstructeurDeCreation}) et **relue au
+ * contrôle préalable** ({@see \App\Module\Proposal\Service\AnalyseDeDemande}), où
+ * une ligne disparue devient une caducité — le même traitement qu'une personne
+ * supprimée entre le dépôt et la validation.
+ *
+ * Une demande qui s'appuie sur une autre ne se valide pas avant elle : c'est
+ * `ResolutionPrevue::DependanceEnAttente`, et c'est le contrôle préalable qui le dit,
+ * avant le premier clic. Pour une filiation, on désigne **soit** un couple existant
  * (`familyId`), **soit** un ou deux parents : jamais les deux, parce que le service ne
  * saurait pas laquelle des deux intentions respecter.
  */
@@ -63,9 +87,18 @@ class DraftLink
     #[ORM\Column(nullable: true)]
     private ?int $subjectPersonId = null;
 
-    /** Le sujet, quand c'est un brouillon de cette demande. Exactement un des deux. */
+    /** Le sujet, quand c'est un brouillon de cette demande. Exactement un des trois. */
     #[ORM\Column(length: 8, nullable: true)]
     private ?string $subjectDraftRef = null;
+
+    /**
+     * Le sujet, quand c'est une fiche proposée par une **autre** demande en attente.
+     *
+     * C'est un identifiant de `prp_draft_person`, pas une référence provisoire : celles-ci
+     * ne valent que dans leur demande.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?int $subjectDraftPersonId = null;
 
     /** Libellé dénormalisé, pour afficher le lien sans rien charger. Filtré comme la personne (§ 0.4). */
     #[ORM\Column(length: 255)]
@@ -77,6 +110,10 @@ class DraftLink
 
     #[ORM\Column(length: 8, nullable: true)]
     private ?string $otherDraftRef = null;
+
+    /** L'autre extrémité, quand c'est une fiche proposée par une autre demande en attente. */
+    #[ORM\Column(nullable: true)]
+    private ?int $otherDraftPersonId = null;
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $otherLabel = null;
@@ -90,6 +127,10 @@ class DraftLink
 
     #[ORM\Column(length: 8, nullable: true)]
     private ?string $other2DraftRef = null;
+
+    /** Le second parent, quand c'est une fiche proposée par une autre demande en attente. */
+    #[ORM\Column(nullable: true)]
+    private ?int $other2DraftPersonId = null;
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $other2Label = null;
@@ -190,10 +231,16 @@ class DraftLink
         return $this;
     }
 
+    public function getSubjectDraftPersonId(): ?int
+    {
+        return $this->subjectDraftPersonId;
+    }
+
     public function viserSujetExistant(int $personId): self
     {
         $this->subjectPersonId = $personId;
         $this->subjectDraftRef = null;
+        $this->subjectDraftPersonId = null;
 
         return $this;
     }
@@ -202,6 +249,17 @@ class DraftLink
     {
         $this->subjectDraftRef = $draftRef;
         $this->subjectPersonId = null;
+        $this->subjectDraftPersonId = null;
+
+        return $this;
+    }
+
+    /** Le sujet est une fiche proposée par une **autre** demande, encore en attente. */
+    public function viserSujetProposeAilleurs(int $draftPersonId): self
+    {
+        $this->subjectDraftPersonId = $draftPersonId;
+        $this->subjectPersonId = null;
+        $this->subjectDraftRef = null;
 
         return $this;
     }
@@ -216,6 +274,11 @@ class DraftLink
         return $this->otherDraftRef;
     }
 
+    public function getOtherDraftPersonId(): ?int
+    {
+        return $this->otherDraftPersonId;
+    }
+
     public function getOtherLabel(): ?string
     {
         return $this->otherLabel;
@@ -226,10 +289,15 @@ class DraftLink
      * Vide du même geste la désignation d'un couple existant, avec laquelle elle est
      * exclusive (`ck_prp_link_cible`).
      */
-    public function designerAutre(?int $personId, ?string $draftRef, ?string $label): self
-    {
+    public function designerAutre(
+        ?int $personId,
+        ?string $draftRef,
+        ?string $label,
+        ?int $draftPersonId = null,
+    ): self {
         $this->otherPersonId = $personId;
         $this->otherDraftRef = $draftRef;
+        $this->otherDraftPersonId = $draftPersonId;
         $this->otherLabel = $label;
         $this->familyId = null;
         $this->familyLabel = null;
@@ -247,16 +315,26 @@ class DraftLink
         return $this->other2DraftRef;
     }
 
+    public function getOther2DraftPersonId(): ?int
+    {
+        return $this->other2DraftPersonId;
+    }
+
     public function getOther2Label(): ?string
     {
         return $this->other2Label;
     }
 
     /** Le second parent n'a de sens que pour une filiation (`ck_prp_link_second_parent`). */
-    public function designerSecondParent(?int $personId, ?string $draftRef, ?string $label): self
-    {
+    public function designerSecondParent(
+        ?int $personId,
+        ?string $draftRef,
+        ?string $label,
+        ?int $draftPersonId = null,
+    ): self {
         $this->other2PersonId = $personId;
         $this->other2DraftRef = $draftRef;
+        $this->other2DraftPersonId = $draftPersonId;
         $this->other2Label = $label;
 
         return $this;
@@ -279,9 +357,11 @@ class DraftLink
         $this->familyLabel = $familyLabel;
         $this->otherPersonId = null;
         $this->otherDraftRef = null;
+        $this->otherDraftPersonId = null;
         $this->otherLabel = null;
         $this->other2PersonId = null;
         $this->other2DraftRef = null;
+        $this->other2DraftPersonId = null;
         $this->other2Label = null;
 
         return $this;

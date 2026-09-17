@@ -19,6 +19,7 @@ use App\Module\Proposal\Security\DemandeVoter;
 use App\Module\Proposal\Service\DepotDeDemande;
 use App\Module\Proposal\Service\FabriqueDeLecteur;
 use App\Module\Proposal\Service\InventaireDeLaSuppression;
+use App\Module\Proposal\Service\RechercheDeBrouillons;
 use App\Module\Proposal\Service\RefaireDemande;
 use App\Module\Proposal\Service\SerialiseurDeDemande;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -50,6 +51,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * | `POST /api/demandes/{id}/retirer` | oui | **oui** |
  * | `GET /api/demandes/{id}/refaire` | **non** | — |
  * | `GET /api/demandes/{id}/brouillons/{ref}` | non | — |
+ * | `GET /api/demandes/brouillons/recherche` | non | — |
  * | `GET /api/demandes/historique/{kind}/{id}` | non | — |
  *
  * `refaire` mérite sa ligne : c'est la seule route dont le nom suggère une écriture et
@@ -192,6 +194,56 @@ final class DemandeController extends AbstractController
         }
 
         return $this->charge($this->serialiseur->brouillon($brouillon));
+    }
+
+    /**
+     * Chercher parmi les personnes **proposées et non encore validées** (§ 6.6 bis).
+     *
+     * ## Pourquoi cette route existe
+     *
+     * `GET /api/arbre/recherche` cherche dans l'arbre **validé** : une fiche sans
+     * identifiant n'y figure pas, et son auteur ne pouvait donc pas la désigner dans une
+     * seconde demande. Décrire une branche exigeait de tout saisir d'un trait, ou
+     * d'attendre une validation, ou de ressaisir la même personne — c'est-à-dire de
+     * fabriquer le doublon que le § 9.5 passe son temps à écarter.
+     *
+     * ## Ce qu'elle ne fait pas
+     *
+     * Aucune écriture, donc aucun `refuserSiActive()` : sous la bascule « voir comme un
+     * membre », un administrateur doit pouvoir **lire** ce que le membre trouverait — et
+     * c'est justement ce que `voitToutesLesDemandes()` lui rend, ni plus ni moins.
+     *
+     * Elle n'applique pas non plus le cercle de visibilité, et il n'y a rien à
+     * appliquer : une fiche proposée n'est pas dans l'arbre, elle n'a pas de cercle. Ce
+     * qui la protège est la règle du § 13.3, la même qu'au calque — auteur et
+     * administrateurs, personne d'autre —, et elle est portée par le service.
+     */
+    #[Route('/brouillons/recherche', name: 'proposal_demande_chercher_brouillons', methods: ['GET'])]
+    public function chercherDesBrouillons(Request $requete, RechercheDeBrouillons $recherche): JsonResponse
+    {
+        $lecteur = $this->lecteurs->courant();
+        $terme = trim($requete->query->getString('q'));
+
+        if (mb_strlen($terme) < RechercheDeBrouillons::LONGUEUR_MINIMALE) {
+            throw DonneesInvalides::pourChamp('q', \sprintf(
+                'La recherche demande au moins %d caractères.',
+                RechercheDeBrouillons::LONGUEUR_MINIMALE,
+            ));
+        }
+
+        $resultat = $recherche->resultats(
+            $terme,
+            $recherche->limite($requete->query->get('limite')),
+            $lecteur,
+        );
+
+        return $this->charge([
+            'elements' => array_map($this->serialiseur->resultatDeRecherche(...), $resultat['elements']),
+            // Pas de `total`, comme au § 5.5 : « une recherche qui se pagine est une
+            // énumération déguisée », et un compte avant filtrage dirait combien de
+            // propositions on ne montre pas.
+            'tronque' => $resultat['tronque'],
+        ]);
     }
 
     /**

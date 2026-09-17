@@ -13,7 +13,7 @@ use App\Module\Proposal\Entity\ChangeRequest;
  * `Proposal` ne sait pas notifier et n'a pas à l'apprendre : les notifications sont
  * une table et un écran de `Core` (`core_notification`, § 2.5 du modèle de données).
  * Cette interface est **la totalité** de ce que `Proposal` demande au module de
- * notification. Elle est volontairement minuscule : quatre événements, aucun retour,
+ * notification. Elle est volontairement minuscule : cinq événements, aucun retour,
  * aucune exception attendue.
  *
  * **Ce que l'agent « notifications » a à faire**, et rien d'autre :
@@ -21,7 +21,11 @@ use App\Module\Proposal\Entity\ChangeRequest;
  * 1. écrire une classe de `Core` qui implémente cette interface et qui insère un
  *    `core_notification` par destinataire, avec le `NotificationKind` correspondant :
  *    `demande_soumise`, `demande_validee`, `demande_refusee`, `demande_caduque` —
- *    les quatre valeurs existent déjà dans `Core\Enum\NotificationKind` ;
+ *    les quatre valeurs existent déjà dans `Core\Enum\NotificationKind`. Le cinquième
+ *    événement, {@see demandeCaduqueParDependance()}, **réutilise `demande_caduque`** :
+ *    c'est la même chose qui arrive à l'auteur, pour une raison qu'il ne pouvait pas
+ *    prévoir. Seul le corps du message change, et un cas d'énumération de plus
+ *    coûterait une migration pour une phrase ;
  * 2. faire pointer sur elle l'alias déclaré dans `config/services/proposal.yaml`.
  *    Ce fichier ne dit pas sur quoi il pointe à cet instant : une description d'état
  *    se périme sans prévenir, et `debug:container` répond mieux que n'importe quel
@@ -97,4 +101,26 @@ interface NotificateurDeDemandes
      *                                                                                                                       et l'écran disent exactement la même chose.
      */
     public function demandeCaduque(ChangeRequest $demande, array $champsEnConflit): void;
+
+    /**
+     * Une demande est devenue caduque parce que **celle sur laquelle elle s'appuyait**
+     * a été refusée, retirée ou rendue caduque — ou parce que sa fiche a disparu.
+     *
+     * Destinataire : **l'auteur**, avec le même lien « refaire cette demande ».
+     *
+     * ── Pourquoi ce n'est pas {@see demandeCaduque()} avec un tableau vide ──────────
+     *
+     * Parce que le diff de `demandeCaduque()` raconte « vous proposiez X pour ce champ,
+     * la fiche porte désormais Y », et qu'ici **rien n'a bougé sur aucune fiche** : la
+     * personne que l'auteur désignait n'existera simplement jamais. Passer une liste de
+     * champs vide produirait une notification au corps `null` — « votre demande est
+     * devenue caduque », sans un mot de plus —, c'est-à-dire exactement le message qui
+     * fait qu'un membre ne dépose pas de seconde contribution.
+     *
+     * @param list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}> $dependances
+     *                                                                                                        Les fiches proposées ailleurs que cette demande désignait, et l'état de
+     *                                                                                                        chacune. Forme identique à `erreur.details.dependances` du § 6.8, pour que
+     *                                                                                                        la notification et l'écran disent exactement la même chose.
+     */
+    public function demandeCaduqueParDependance(ChangeRequest $demande, array $dependances): void;
 }

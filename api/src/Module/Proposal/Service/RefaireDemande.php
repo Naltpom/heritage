@@ -156,6 +156,14 @@ final readonly class RefaireDemande
      * déduira de nouveau la famille au moment de valider — sur l'état réel de l'arbre,
      * qui a pu changer.
      *
+     * ── Une référence à une fiche proposée ailleurs est reprise **telle quelle** ────
+     *
+     * Et c'est le point de passage obligé : elle sera **revérifiée au dépôt** par
+     * {@see ConstructeurDeCreation}, qui refusera une demande morte et **résoudra en
+     * personne réelle** une demande validée depuis. Filtrer ici ce que le constructeur
+     * sait mieux trancher là-bas ferait deux règles pour un cas — et la reprise
+     * retirerait silencieusement une extrémité que le dépôt aurait acceptée.
+     *
      * @return list<array<string, mixed>>
      */
     private function liensRefaits(ChangeRequest $demande): array
@@ -168,10 +176,13 @@ final readonly class RefaireDemande
                 'kind' => $lien->getKind()->value,
                 'subjectPersonId' => $lien->getSubjectPersonId(),
                 'subjectDraftRef' => $lien->getSubjectDraftRef(),
+                'subjectDraftPersonId' => $lien->getSubjectDraftPersonId(),
                 'otherPersonId' => $lien->getOtherPersonId(),
                 'otherDraftRef' => $lien->getOtherDraftRef(),
+                'otherDraftPersonId' => $lien->getOtherDraftPersonId(),
                 'other2PersonId' => $lien->getOther2PersonId(),
                 'other2DraftRef' => $lien->getOther2DraftRef(),
+                'other2DraftPersonId' => $lien->getOther2DraftPersonId(),
                 'familyId' => $lien->getFamilyId(),
                 'siblingOrder' => $lien->getSiblingOrder(),
                 'note' => $lien->getNote(),

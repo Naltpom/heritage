@@ -136,6 +136,12 @@ final readonly class SerialiseurDeDemande
         }
 
         $charge['resolutionPrevue'] = $plan->resolution->value;
+        // **Toujours un tableau**, vide quand la demande ne s'appuie sur personne : un
+        // écran qui doit tester la présence de la clé avant son contenu finira par
+        // écrire le second test sans le premier (§ 13.1, même raisonnement que le
+        // calque). Les dépendances résolues y figurent aussi — « s'appuie sur la
+        // demande n° 12, validée » est un contexte utile à qui décide.
+        $charge['dependances'] = $plan->dependances;
         $charge['demandesConcurrentes'] = array_map(
             $this->demandeConcurrente(...),
             $this->demandes->concurrentesDe($demande),
@@ -188,6 +194,45 @@ final readonly class SerialiseurDeDemande
             // Après validation, il porte l'identifiant réel et le front redirige vers
             // `/api/arbre/personnes/{id}` — c'est la raison d'être de cette colonne.
             'resolvedPersonId' => $brouillon->getResolvedPersonId(),
+        ];
+    }
+
+    /**
+     * Une fiche proposée telle qu'une **recherche** la rend (§ 6.6 bis).
+     *
+     * Volontairement **maigre** : de quoi nommer la personne dans une liste de choix et
+     * la désigner ensuite, rien de plus. Pas de liens, pas de médias, pas de note — le
+     * détail se lit sur `GET /api/demandes/{id}/brouillons/{ref}`, et une recherche qui
+     * transporterait tout cela ferait dix jointures pour un bouton « Choisir ».
+     *
+     * `draftPersonId` est **l'identifiant de la ligne** `prp_draft_person`, et c'est la
+     * seule chose qu'un client puisse reposter pour désigner cette fiche : `localRef` ne
+     * vaut que dans sa demande. Les deux sont rendus quand même, parce que l'écran
+     * affiche « proposée dans la demande n° 12 » et que le nœud du graphe se nomme
+     * `#12/p1`.
+     *
+     * @return array<string, mixed>
+     */
+    public function resultatDeRecherche(DraftPerson $brouillon): array
+    {
+        $demande = $brouillon->getRequest();
+        $demandeId = $demande->getId() ?? 0;
+
+        return [
+            'draftPersonId' => $brouillon->getId(),
+            'demandeId' => $demandeId,
+            'localRef' => $brouillon->getLocalRef(),
+            'noeudId' => $this->noeudId($demandeId, $brouillon->getLocalRef()),
+            'displayName' => $brouillon->nomPropose(),
+            'sex' => $brouillon->getSex()->value,
+            'deceased' => $brouillon->isDeceased(),
+            'ligneDates' => $this->normaliseur->ligneDates($brouillon->getBirth(), $brouillon->getDeath()),
+            'authorLabel' => $demande->getAuthorLabel(),
+            // Toujours `true` sur cette route — elle ne rend que des demandes en attente
+            // —, et rendu quand même : le front pose la même pastille que sur un nœud du
+            // graphe, et il la pose sur ce que la charge dit, pas sur ce qu'il déduit de
+            // la route qu'il a appelée.
+            'enAttente' => true,
         ];
     }
 
@@ -399,16 +444,22 @@ final readonly class SerialiseurDeDemande
                 'kind' => $lien->getKind()->value,
                 'subjectPersonId' => $lien->getSubjectPersonId(),
                 'subjectDraftRef' => $lien->getSubjectDraftRef(),
-                'subjectLabel' => $this->nommerLExtremite($lien->getSubjectDraftRef(), $lien->getSubjectLabel(), $noms),
+                'subjectLabel' => $this->nommerLExtremite($lien->getSubjectDraftRef(), $lien->getSubjectLabel(), $noms, $lien->getSubjectDraftPersonId()),
+                'subjectDraftPersonId' => $lien->getSubjectDraftPersonId(),
                 'otherPersonId' => $lien->getOtherPersonId(),
                 'otherDraftRef' => $lien->getOtherDraftRef(),
-                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms),
+                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms, $lien->getOtherDraftPersonId()),
+                // La fiche proposée par une **autre** demande. Sans cette clé, elle se
+                // lisait comme une personne de l'arbre dont l'identifiant manquait — et
+                // le front n'avait aucun moyen de dire « proposée par la demande n° 12 ».
+                'otherDraftPersonId' => $lien->getOtherDraftPersonId(),
                 'other2PersonId' => $lien->getOther2PersonId(),
                 // Sans cette clé, le second parent d'une filiation n'était lisible que
                 // par `other2Label` : rien ne disait s'il désignait une personne de
                 // l'arbre ou une autre fiche de la même demande.
                 'other2DraftRef' => $lien->getOther2DraftRef(),
-                'other2Label' => $this->nommerLExtremite($lien->getOther2DraftRef(), $lien->getOther2Label(), $noms),
+                'other2DraftPersonId' => $lien->getOther2DraftPersonId(),
+                'other2Label' => $this->nommerLExtremite($lien->getOther2DraftRef(), $lien->getOther2Label(), $noms, $lien->getOther2DraftPersonId()),
                 'familyId' => $lien->getFamilyId(),
                 // Le couple d'ancrage est stocké avec son libellé depuis
                 // `designerCoupleExistant()`. Ne rendre que `familyId` affichait un
@@ -449,7 +500,8 @@ final readonly class SerialiseurDeDemande
                 'kind' => $lien->getKind()->value,
                 'otherPersonId' => $lien->getOtherPersonId(),
                 'otherDraftRef' => $lien->getOtherDraftRef(),
-                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms),
+                'otherDraftPersonId' => $lien->getOtherDraftPersonId(),
+                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms, $lien->getOtherDraftPersonId()),
                 'note' => $lien->getNote(),
             ];
         }
@@ -505,15 +557,32 @@ final readonly class SerialiseurDeDemande
      * de l'arbre n'a pas de `draftRef`, et son libellé est filtré comme la personne
      * (§ 0.4) — le relire ici court-circuiterait ce filtre.
      *
+     * ── Une fiche proposée **ailleurs** se relit aussi ─────────────────────────────
+     *
+     * Et pour la même raison : le libellé stocké est une photographie du dépôt, or la
+     * fiche citée vit dans une demande que son auteur peut avoir modifiée depuis. La
+     * relire coûte un `find` par extrémité citée — quelques-uns par demande — et évite
+     * qu'un écran de décision affiche un nom que plus personne ne propose.
+     *
      * @param array<string, string> $noms
      */
-    private function nommerLExtremite(?string $draftRef, ?string $stocke, array $noms): ?string
-    {
-        if (null === $draftRef) {
+    private function nommerLExtremite(
+        ?string $draftRef,
+        ?string $stocke,
+        array $noms,
+        ?int $draftPersonId = null,
+    ): ?string {
+        if (null !== $draftRef) {
+            return $noms[$draftRef] ?? $stocke;
+        }
+
+        if (null === $draftPersonId) {
             return $stocke;
         }
 
-        return $noms[$draftRef] ?? $stocke;
+        $brouillon = $this->brouillons->find($draftPersonId);
+
+        return null === $brouillon ? $stocke : $brouillon->nomPropose().' (proposée)';
     }
 
     /**

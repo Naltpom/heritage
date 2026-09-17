@@ -36,7 +36,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * | Passe | Ce qui se passe |
  * |---|---|
  * | 2 | chaque brouillon devient une `tree_person` ; `carte["#p1"] = 312` |
- * | 3 | chaque extrémité de lien `*_draft_ref` est remplacée par `carte[ref]` |
+ * | 3 | chaque extrémité de lien `*_draft_ref` est remplacée par `carte[ref]`, et chaque `*_draft_person_id` par le `resolved_person_id` de la fiche citée |
  * | 4 | chaque lien détermine son couple ; `Tree` trouve **ou** crée la famille |
  * | 5 | dates d'union portées, filiations rattachées |
  * | 6 | **les médias joints aux brouillons passent sur la personne créée** ({@see PortMedias::resoudreLesBrouillons()}) |
@@ -48,6 +48,19 @@ use Doctrine\ORM\EntityManagerInterface;
  * Après la passe 3, **plus aucun lien ne parle d'autre chose que d'identifiants
  * réels** : les passes 4 et 5 n'ont plus de cas particulier. C'est l'inverse — résoudre
  * au fil de l'eau — qui produirait des branches partout.
+ *
+ * ── Les fiches proposées par une **autre** demande ──────────────────────────────
+ *
+ * Une extrémité peut désigner la fiche d'une autre demande (`*_draft_person_id`,
+ * `Version20260917190000`). Sa résolution ne passe pas par `carte` — cette demande-ci
+ * n'a pas créé cette personne — mais par le `resolved_person_id` que la validation de
+ * **l'autre** demande a écrit.
+ *
+ * **Il est nécessairement là.** Le contrôle préalable refuse de valider tant qu'une
+ * dépendance n'est pas résolue : c'est `dependance_en_attente`, et c'est prononcé avant
+ * la première écriture ({@see AnalyseDeDemande}). Le `??` du code n'est donc pas un cas
+ * à traiter mais un filet : si la garde disparaissait un jour, un lien sans extrémité
+ * vaudrait mieux qu'une famille rattachée à `0`.
  *
  * La passe 1, le contrôle préalable, n'est pas ici : elle est faite **avant toute
  * écriture** par {@see AnalyseDeDemande}, avec le reste. C'est ce qui rend la validation
@@ -131,16 +144,22 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
         // ── Passes 3 à 5 : les liens ────────────────────────────────────────────
         $liens = $this->liens->pourDemande($demande);
 
+        // La résolution des fiches proposées **ailleurs**, lue une fois pour toutes.
+        // Elle joue le même rôle que `carte` pour les brouillons de cette demande-ci, et
+        // elle est séparée parce que sa source est différente : l'une naît des personnes
+        // qu'on vient de créer, l'autre de celles qu'une autre demande a créées avant.
+        $resolus = $this->brouillonsResolus($liens);
+
         // Les conjoints déclarés, résolus **avant** la boucle. C'est ce qui fait que
         // « conjoint de Jargon » puis « parent de ces deux enfants » ne produit qu'une
         // famille, quel que soit l'ordre des liens — un `parent_de` lu en premier ne
         // peut pas deviner le conjoint qu'un lien suivant désignera.
-        $conjoints = $this->conjointsDeclares($liens, $carte);
+        $conjoints = $this->conjointsDeclares($liens, $carte, $resolus);
 
         $famillesParCouple = [];
 
         foreach ($liens as $lien) {
-            $famille = $this->resoudreLaFamille($lien, $carte, $conjoints, $famillesParCouple, $ecritures);
+            $famille = $this->resoudreLaFamille($lien, $carte, $resolus, $conjoints, $famillesParCouple, $ecritures);
 
             if (null === $famille) {
                 continue;
@@ -148,7 +167,7 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
 
             $lien->setResolvedFamilyId($famille);
 
-            $ecritures[] = $this->porterLeLien($lien, $carte, $famille);
+            $ecritures[] = $this->porterLeLien($lien, $carte, $resolus, $famille);
         }
 
         // ── Passe 6 : les médias ────────────────────────────────────────────────
@@ -191,6 +210,7 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
      * couple retrouvent la même famille.
      *
      * @param array<string, int>       $carte
+     * @param array<int, int>          $resolus
      * @param array<int, int>          $conjoints
      * @param array<string, int>       $famillesParCouple
      * @param list<EcritureDeRevision> $ecritures
@@ -198,6 +218,7 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
     private function resoudreLaFamille(
         DraftLink $lien,
         array $carte,
+        array $resolus,
         array $conjoints,
         array &$famillesParCouple,
         array &$ecritures,
@@ -208,7 +229,7 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
             return $lien->getFamilyId();
         }
 
-        [$a, $b] = $this->couple($lien, $carte, $conjoints);
+        [$a, $b] = $this->couple($lien, $carte, $resolus, $conjoints);
 
         if (null === $a && null === $b) {
             return null;
@@ -243,8 +264,9 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
      * Passe 5 : ce que le lien fait à la famille — une union, ou une filiation.
      *
      * @param array<string, int> $carte
+     * @param array<int, int>    $resolus
      */
-    private function porterLeLien(DraftLink $lien, array $carte, int $famille): EcritureDeRevision
+    private function porterLeLien(DraftLink $lien, array $carte, array $resolus, int $famille): EcritureDeRevision
     {
         if (LinkKind::ConjointDe === $lien->getKind()) {
             $this->arbre->porterUnion($famille, $lien->getMarriage(), $lien->isDivorced(), $lien->getDivorce());
@@ -265,8 +287,8 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
         // l'**autre**. Les deux disent la même arête, dans les deux sens — et le
         // demandeur a le droit de la décrire dans celui qui lui vient.
         $enfant = LinkKind::EnfantDe === $lien->getKind()
-            ? $this->extremite($lien->getSubjectPersonId(), $lien->getSubjectDraftRef(), $carte)
-            : $this->extremite($lien->getOtherPersonId(), $lien->getOtherDraftRef(), $carte);
+            ? $this->sujet($lien, $carte, $resolus)
+            : $this->autre($lien, $carte, $resolus);
 
         if (null !== $enfant) {
             $this->arbre->rattacherEnfant($famille, $enfant, $lien->getSiblingOrder());
@@ -289,10 +311,11 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
      *
      * @param list<DraftLink>    $liens
      * @param array<string, int> $carte
+     * @param array<int, int>    $resolus
      *
      * @return array<int, int>
      */
-    private function conjointsDeclares(array $liens, array $carte): array
+    private function conjointsDeclares(array $liens, array $carte, array $resolus): array
     {
         $conjoints = [];
 
@@ -301,8 +324,8 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
                 continue;
             }
 
-            $sujet = $this->extremite($lien->getSubjectPersonId(), $lien->getSubjectDraftRef(), $carte);
-            $autre = $this->extremite($lien->getOtherPersonId(), $lien->getOtherDraftRef(), $carte);
+            $sujet = $this->sujet($lien, $carte, $resolus);
+            $autre = $this->autre($lien, $carte, $resolus);
 
             if (null !== $sujet && null !== $autre) {
                 $conjoints[$sujet] = $autre;
@@ -323,15 +346,22 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
      * famille et non deux.
      *
      * @param array<string, int> $carte
+     * @param array<int, int>    $resolus
      * @param array<int, int>    $conjoints
      *
      * @return array{int|null, int|null}
      */
-    private function couple(DraftLink $lien, array $carte, array $conjoints): array
+    private function couple(DraftLink $lien, array $carte, array $resolus, array $conjoints): array
     {
-        $sujet = $this->extremite($lien->getSubjectPersonId(), $lien->getSubjectDraftRef(), $carte);
-        $autre = $this->extremite($lien->getOtherPersonId(), $lien->getOtherDraftRef(), $carte);
-        $second = $this->extremite($lien->getOther2PersonId(), $lien->getOther2DraftRef(), $carte);
+        $sujet = $this->sujet($lien, $carte, $resolus);
+        $autre = $this->autre($lien, $carte, $resolus);
+        $second = $this->extremite(
+            $lien->getOther2PersonId(),
+            $lien->getOther2DraftRef(),
+            $lien->getOther2DraftPersonId(),
+            $carte,
+            $resolus,
+        );
 
         return match ($lien->getKind()) {
             LinkKind::ConjointDe => [$sujet, $autre],
@@ -355,14 +385,107 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
         return implode(':', $identifiants);
     }
 
-    /** @param array<string, int> $carte */
-    private function extremite(?int $personneId, ?string $reference, array $carte): ?int
+    /**
+     * Le sujet du lien, en identifiant réel.
+     *
+     * Nommé plutôt qu'appelé avec trois getters à chaque fois : la même extrémité était
+     * lue à quatre endroits, et il suffisait d'en oublier un pour qu'une des trois
+     * formes cesse d'être résolue — sans que rien ne tombe, le lien se contentant de ne
+     * rattacher personne.
+     *
+     * @param array<string, int> $carte
+     * @param array<int, int>    $resolus
+     */
+    private function sujet(DraftLink $lien, array $carte, array $resolus): ?int
     {
+        return $this->extremite(
+            $lien->getSubjectPersonId(),
+            $lien->getSubjectDraftRef(),
+            $lien->getSubjectDraftPersonId(),
+            $carte,
+            $resolus,
+        );
+    }
+
+    /**
+     * @param array<string, int> $carte
+     * @param array<int, int>    $resolus
+     */
+    private function autre(DraftLink $lien, array $carte, array $resolus): ?int
+    {
+        return $this->extremite(
+            $lien->getOtherPersonId(),
+            $lien->getOtherDraftRef(),
+            $lien->getOtherDraftPersonId(),
+            $carte,
+            $resolus,
+        );
+    }
+
+    /**
+     * Les trois formes d'une extrémité, ramenées à un identifiant de personne.
+     *
+     * @param array<string, int> $carte   `#p1 → 312`, pour les brouillons de cette demande
+     * @param array<int, int>    $resolus `7 → 312`, pour les fiches proposées ailleurs
+     */
+    private function extremite(
+        ?int $personneId,
+        ?string $reference,
+        ?int $brouillonId,
+        array $carte,
+        array $resolus,
+    ): ?int {
         if (null !== $personneId) {
             return $personneId;
         }
 
-        return null === $reference ? null : ($carte[$reference] ?? null);
+        if (null !== $reference) {
+            return $carte[$reference] ?? null;
+        }
+
+        return null === $brouillonId ? null : ($resolus[$brouillonId] ?? null);
+    }
+
+    /**
+     * `prp_draft_person.id → tree_person.id`, pour les fiches que ces liens désignent
+     * dans **d'autres** demandes.
+     *
+     * Une fiche non résolue n'entre pas dans la carte, et son extrémité vaudra donc
+     * `null`. Ce n'est pas un cas atteignable — le contrôle préalable l'aurait arrêtée
+     * en `dependance_en_attente` —, mais c'est le repli sûr : un lien sans extrémité ne
+     * rattache personne, là où un `0` rattacherait à une ligne qui n'existe pas.
+     *
+     * @param list<DraftLink> $liens
+     *
+     * @return array<int, int>
+     */
+    private function brouillonsResolus(array $liens): array
+    {
+        $identifiants = [];
+
+        foreach ($liens as $lien) {
+            foreach ([
+                $lien->getSubjectDraftPersonId(),
+                $lien->getOtherDraftPersonId(),
+                $lien->getOther2DraftPersonId(),
+            ] as $id) {
+                if (null !== $id) {
+                    $identifiants[$id] = true;
+                }
+            }
+        }
+
+        $resolus = [];
+
+        foreach (array_keys($identifiants) as $id) {
+            $resolue = $this->brouillons->find($id)?->getResolvedPersonId();
+
+            if (null !== $resolue) {
+                $resolus[$id] = $resolue;
+            }
+        }
+
+        return $resolus;
     }
 
     private function fiche(DraftPerson $brouillon): PersonneAcreer

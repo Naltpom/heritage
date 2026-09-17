@@ -13,6 +13,7 @@ use App\Module\Proposal\Entity\DraftLink;
 use App\Module\Proposal\Entity\DraftPerson;
 use App\Module\Proposal\Enum\LinkKind;
 use App\Module\Proposal\Enum\RequestKind;
+use App\Module\Proposal\Enum\RequestStatus;
 use App\Module\Proposal\Enum\ValueKind;
 use App\Module\Proposal\Exception\DonneesInvalides;
 use App\Module\Proposal\Exception\Introuvable;
@@ -54,8 +55,41 @@ use Doctrine\ORM\EntityManagerInterface;
  * ── `ajout_lien` est la même chose sans fiche ──────────────────────────────────
  *
  * « Ils étaient frère et sœur », « elle s'est remariée avec lui » : mêmes liens, mêmes
- * contrôles, sans `brouillons`, et les deux extrémités sont des personnes existantes.
- * Le traiter ici plutôt que dans un troisième fichier est la même décision qu'au-dessus.
+ * contrôles, sans `brouillons`. Le traiter ici plutôt que dans un troisième fichier est
+ * la même décision qu'au-dessus.
+ *
+ * ── Une extrémité a **trois** formes, pas deux ──────────────────────────────────
+ *
+ * | Clé | Ce qu'elle désigne | Portée |
+ * |---|---|---|
+ * | `*PersonId` | une personne de l'arbre validé | globale |
+ * | `*DraftRef` | `#p1`, `#p2`… | **cette demande seulement** |
+ * | `*DraftPersonId` | une fiche proposée par une **autre** demande en attente | globale |
+ *
+ * La troisième répond au défaut signalé mot pour mot par le commanditaire : « si je
+ * propose une personne puis que j'en propose une autre, le père que j'ai proposé juste
+ * avant ne m'est pas offert ». Sans elle, une branche ne se décrit qu'en une seule
+ * demande, et le contributeur qui revient le lendemain n'a le choix qu'entre attendre
+ * une validation et ressaisir la même personne — le doublon que le § 9.5 écarte.
+ *
+ * Trois contrôles la gardent, et chacun attrape une chose différente :
+ *
+ * 1. **le lecteur doit avoir le droit de la voir** — ses propres demandes, ou toutes
+ *    s'il est administrateur (§ 13.3). Sinon `404`, jamais `403` : un `403` apprendrait
+ *    que la ligne existe ;
+ * 2. **la demande citée doit être `en_attente`** — sauf si elle vient d'être validée,
+ *    auquel cas la fiche porte son `resolved_person_id` et le lien désigne la
+ *    **personne réelle**. C'est le cas d'une validation qui tombe entre la recherche et
+ *    le dépôt, et le refuser ferait échouer une demande que la réalité vient de
+ *    conforter ;
+ * 3. **elle ne doit pas appartenir à la demande en cours** — dans sa propre demande, une
+ *    fiche se désigne par `*DraftRef`, et laisser les deux formes cohabiter donnerait
+ *    deux façons de dire la même chose, dont une que l'applicateur résout par une carte
+ *    et l'autre par une relecture. Ce troisième contrôle est aujourd'hui **un filet et
+ *    non un cas** : une demande naît vide, ses brouillons n'ont pas encore
+ *    d'identifiant au moment où ses liens se construisent, et rien ne peut donc les
+ *    citer. Il est écrit pour le jour où une demande déjà enregistrée se modifierait —
+ *    l'unique chemin par lequel la forme deviendrait atteignable.
  */
 final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
 {
@@ -82,7 +116,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         $creation = RequestKind::CreationPersonne === $demande->getKind();
 
         $brouillons = $this->construireLesBrouillons($demande, $corps, $creation);
-        $this->construireLesLiens($demande, $corps, $brouillons, $creation);
+        $this->construireLesLiens($demande, $corps, $brouillons, $creation, $lecteur);
     }
 
     /**
@@ -267,8 +301,13 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
      * @param array<string, mixed>       $corps
      * @param array<string, DraftPerson> $brouillons indexés par référence provisoire
      */
-    private function construireLesLiens(ChangeRequest $demande, array $corps, array $brouillons, bool $creation): void
-    {
+    private function construireLesLiens(
+        ChangeRequest $demande,
+        array $corps,
+        array $brouillons,
+        bool $creation,
+        Lecteur $lecteur,
+    ): void {
         $brut = $corps['liens'] ?? [];
 
         if (!\is_array($brut)) {
@@ -287,7 +326,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
                 throw DonneesInvalides::pourChamp("liens[$index]", 'Chaque lien est un objet.');
             }
 
-            $construit = $this->lien($demande, $lien, $index, $brouillons, $creation);
+            $construit = $this->lien($demande, $lien, $index, $brouillons, $creation, $lecteur);
 
             if (\in_array($construit->getSeq(), $rangs, true)) {
                 throw DonneesInvalides::pourChamp("liens[$index].seq", 'Deux liens ne peuvent pas porter le même rang.');
@@ -303,18 +342,113 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         // `null`, et c'est légal — `ck_prp_request_cible` n'exige que leur cohérence
         // mutuelle. Un `ajout_lien`, lui, porte sur une personne de l'arbre : le dire
         // permet à la file de grouper par fiche sans jointure (§ 5.1).
-        if (!$creation && null !== $premierSujetReel) {
-            $cible = $this->arbre->chargerCible(SubjectKind::Personne, $premierSujetReel);
-            $demande->setTarget(SubjectKind::Personne, $premierSujetReel, $cible?->libelle);
+        if ($creation) {
+            return;
         }
+
+        // **La cible annoncée l'emporte, si elle est bien une extrémité des liens.**
+        //
+        // Le repli — le sujet du premier lien — se trompe précisément dans le cas qui a
+        // motivé l'écran des liens de parenté : « ajouter un frère à Untel » s'écrit
+        // « ce frère est enfant du couple de ses parents », dont le **sujet est le
+        // frère**. La file afficherait alors la demande sur la fiche du frère, alors
+        // que le contributeur travaillait sur celle d'Untel, et l'administrateur
+        // chercherait longtemps.
+        //
+        // Le contrôle d'appartenance n'est pas décoratif : sans lui, `targetId` serait
+        // un champ libre permettant de faire apparaître n'importe quelle demande sur
+        // n'importe quelle fiche de la file.
+        $annoncee = $this->cibleAnnoncee($corps, $this->personnesCitees($brut));
+
+        $sujet = $annoncee ?? $premierSujetReel;
+
+        if (null !== $sujet) {
+            $cible = $this->arbre->chargerCible(SubjectKind::Personne, $sujet);
+            $demande->setTarget(SubjectKind::Personne, $sujet, $cible?->libelle);
+        }
+    }
+
+    /**
+     * `targetId` du corps, **s'il désigne une personne que les liens citent**.
+     *
+     * `targetKind` est refusé s'il vaut autre chose que `personne` : un `ajout_lien` ne
+     * relie que des personnes, et laisser passer une autre portée écrirait dans la file
+     * une cible qu'aucun écran ne sait ouvrir.
+     *
+     * @param array<string, mixed> $corps
+     * @param list<int>            $citees
+     */
+    private function cibleAnnoncee(array $corps, array $citees): ?int
+    {
+        $kind = $corps['targetKind'] ?? null;
+
+        if (null !== $kind && SubjectKind::Personne->value !== $kind) {
+            throw DonneesInvalides::pourChamp('targetKind', 'Un ajout de lien ne vise qu\'une personne.');
+        }
+
+        $id = $corps['targetId'] ?? null;
+
+        if (null === $id) {
+            return null;
+        }
+
+        if (!\is_int($id)) {
+            throw DonneesInvalides::pourChamp('targetId', 'L\'identifiant de la cible est un entier.');
+        }
+
+        if (!\in_array($id, $citees, true)) {
+            throw DonneesInvalides::pourChamp('targetId', 'La cible annoncée n\'est pas une des personnes que ces liens désignent.');
+        }
+
+        return $id;
+    }
+
+    /**
+     * Les personnes **de l'arbre** que ce corps de liens désigne, toutes extrémités
+     * confondues.
+     *
+     * Lu sur le corps et non sur les entités construites : le contrôle porte sur ce que
+     * l'appelant a écrit, et c'est la seule chose dont il soit comptable. Les valeurs
+     * qui ne sont pas des entiers sont ignorées ici — elles ont déjà été refusées, une
+     * par une, par {@see extremite()}.
+     *
+     * @param array<mixed> $liens
+     *
+     * @return list<int>
+     */
+    private function personnesCitees(array $liens): array
+    {
+        $citees = [];
+
+        foreach ($liens as $lien) {
+            if (!\is_array($lien)) {
+                continue;
+            }
+
+            foreach (['subjectPersonId', 'otherPersonId', 'other2PersonId'] as $cle) {
+                $valeur = $lien[$cle] ?? null;
+
+                if (\is_int($valeur)) {
+                    $citees[] = $valeur;
+                }
+            }
+        }
+
+        return array_values(array_unique($citees));
     }
 
     /**
      * @param array<string, mixed>       $brut
      * @param array<string, DraftPerson> $brouillons indexés par référence provisoire
      */
-    private function lien(ChangeRequest $demande, array $brut, int $index, array $brouillons, bool $creation): DraftLink
-    {
+    private function lien(
+        ChangeRequest $demande,
+        array $brut,
+        int $index,
+        array $brouillons,
+        bool $creation,
+        Lecteur $lecteur,
+    ): DraftLink {
         $chemin = "liens[$index]";
 
         $seq = $brut['seq'] ?? null;
@@ -328,12 +462,14 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             throw DonneesInvalides::pourChamp("$chemin.kind", 'Nature de lien inconnue : enfant_de, parent_de ou conjoint_de.');
         }
 
-        [$sujetId, $sujetRef, $sujetLibelle] = $this->extremite(
+        [$sujetId, $sujetRef, $sujetLibelle, $sujetBrouillonId] = $this->extremite(
             $brut,
             'subject',
             $chemin,
             $brouillons,
             $creation,
+            $demande,
+            $lecteur,
             obligatoire: true,
         );
 
@@ -341,11 +477,13 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
 
         if (null !== $sujetId) {
             $lien->viserSujetExistant($sujetId);
+        } elseif (null !== $sujetBrouillonId) {
+            $lien->viserSujetProposeAilleurs($sujetBrouillonId);
         } else {
             $lien->viserSujetBrouillon((string) $sujetRef);
         }
 
-        $this->designerLAutreExtremite($lien, $brut, $chemin, $brouillons, $creation, $nature);
+        $this->designerLAutreExtremite($lien, $brut, $chemin, $brouillons, $creation, $nature, $demande, $lecteur);
         $this->porterLesDatesDUnion($lien, $brut, $chemin, $nature);
 
         $rang = $brut['siblingOrder'] ?? null;
@@ -373,6 +511,8 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         array $brouillons,
         bool $creation,
         LinkKind $nature,
+        ChangeRequest $demande,
+        Lecteur $lecteur,
     ): void {
         $familleId = $brut['familyId'] ?? null;
 
@@ -385,7 +525,10 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
                 throw DonneesInvalides::pourChamp("$chemin.familyId", 'Seule une filiation peut désigner un couple existant.');
             }
 
-            if (null !== ($brut['otherPersonId'] ?? null) || null !== ($brut['otherDraftRef'] ?? null)) {
+            if (null !== ($brut['otherPersonId'] ?? null)
+                || null !== ($brut['otherDraftRef'] ?? null)
+                || null !== ($brut['otherDraftPersonId'] ?? null)
+            ) {
                 throw DonneesInvalides::pourChamp("$chemin.familyId", 'On désigne soit un couple existant, soit un ou deux parents, jamais les deux.');
             }
 
@@ -400,12 +543,24 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             return;
         }
 
-        [$autreId, $autreRef, $autreLibelle] = $this->extremite($brut, 'other', $chemin, $brouillons, $creation, obligatoire: true);
-        $lien->designerAutre($autreId, $autreRef, $autreLibelle);
+        [$autreId, $autreRef, $autreLibelle, $autreBrouillonId] = $this->extremite(
+            $brut,
+            'other',
+            $chemin,
+            $brouillons,
+            $creation,
+            $demande,
+            $lecteur,
+            obligatoire: true,
+        );
+        $lien->designerAutre($autreId, $autreRef, $autreLibelle, $autreBrouillonId);
 
         // Le second parent n'a de sens que pour une filiation
         // (`ck_prp_link_second_parent`).
-        if (null === ($brut['other2PersonId'] ?? null) && null === ($brut['other2DraftRef'] ?? null)) {
+        if (null === ($brut['other2PersonId'] ?? null)
+            && null === ($brut['other2DraftRef'] ?? null)
+            && null === ($brut['other2DraftPersonId'] ?? null)
+        ) {
             return;
         }
 
@@ -413,8 +568,17 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             throw DonneesInvalides::pourChamp("$chemin.other2PersonId", 'Un second parent ne se désigne que sur une filiation.');
         }
 
-        [$deuxiemeId, $deuxiemeRef, $deuxiemeLibelle] = $this->extremite($brut, 'other2', $chemin, $brouillons, $creation, obligatoire: true);
-        $lien->designerSecondParent($deuxiemeId, $deuxiemeRef, $deuxiemeLibelle);
+        [$deuxiemeId, $deuxiemeRef, $deuxiemeLibelle, $deuxiemeBrouillonId] = $this->extremite(
+            $brut,
+            'other2',
+            $chemin,
+            $brouillons,
+            $creation,
+            $demande,
+            $lecteur,
+            obligatoire: true,
+        );
+        $lien->designerSecondParent($deuxiemeId, $deuxiemeRef, $deuxiemeLibelle, $deuxiemeBrouillonId);
     }
 
     /**
@@ -452,7 +616,10 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
      * @param array<string, mixed>       $brut
      * @param array<string, DraftPerson> $brouillons indexés par référence provisoire
      *
-     * @return array{int|null, string|null, string}
+     * @return array{int|null, string|null, string, int|null} identifiant réel, référence
+     *                                                        provisoire, libellé, ligne
+     *                                                        `prp_draft_person` d'une
+     *                                                        autre demande
      */
     private function extremite(
         array $brut,
@@ -460,16 +627,22 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         string $chemin,
         array $brouillons,
         bool $creation,
+        ChangeRequest $demande,
+        Lecteur $lecteur,
         bool $obligatoire,
     ): array {
         $cleId = $prefixe.'PersonId';
         $cleRef = $prefixe.'DraftRef';
+        $cleBrouillon = $prefixe.'DraftPersonId';
 
         $id = $brut[$cleId] ?? null;
         $ref = $brut[$cleRef] ?? null;
+        $brouillonId = $brut[$cleBrouillon] ?? null;
 
-        if (null !== $id && null !== $ref) {
-            throw DonneesInvalides::pourChamp("$chemin.$cleId", 'Une extrémité désigne une personne existante ou un brouillon, jamais les deux.');
+        $formes = \count(array_filter([$id, $ref, $brouillonId], static fn (mixed $v): bool => null !== $v));
+
+        if ($formes > 1) {
+            throw DonneesInvalides::pourChamp("$chemin.$cleId", 'Une extrémité désigne une personne existante, un brouillon de cette demande ou une fiche proposée ailleurs — une seule des trois.');
         }
 
         if (null !== $id) {
@@ -483,12 +656,12 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
                 throw Introuvable::cible(SubjectKind::Personne->value, $id);
             }
 
-            return [$id, null, $cible->libelle];
+            return [$id, null, $cible->libelle, null];
         }
 
         if (null !== $ref) {
             if (!$creation) {
-                throw DonneesInvalides::pourChamp("$chemin.$cleRef", 'Un ajout de lien relie deux personnes existantes.');
+                throw DonneesInvalides::pourChamp("$chemin.$cleRef", 'Un ajout de lien ne crée aucune fiche : désignez une personne de l\'arbre, ou une fiche proposée par une autre demande.');
             }
 
             if (!\is_string($ref) || !isset($brouillons[$ref])) {
@@ -498,14 +671,81 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             // Le libellé dénormalisé porte le **nom** de la fiche proposée, pas sa
             // référence. Les deux boucles de `construire()` sont ordonnées pour cela :
             // les brouillons sont construits d'abord, et les liens les reçoivent.
-            return [null, $ref, $brouillons[$ref]->nomPropose()];
+            return [null, $ref, $brouillons[$ref]->nomPropose(), null];
+        }
+
+        if (null !== $brouillonId) {
+            return $this->ficheProposeeAilleurs($brouillonId, "$chemin.$cleBrouillon", $demande, $lecteur);
         }
 
         if ($obligatoire) {
             throw DonneesInvalides::pourChamp("$chemin.$cleId", 'Cette extrémité est obligatoire.');
         }
 
-        return [null, null, ''];
+        return [null, null, '', null];
+    }
+
+    /**
+     * Une extrémité qui désigne la fiche proposée par **une autre demande**.
+     *
+     * Les trois contrôles de l'en-tête, dans l'ordre où ils coûtent le moins cher, et un
+     * quatrième cas qui n'est pas un contrôle mais une **résolution** : si la demande
+     * citée a été validée entre la recherche et le dépôt, la fiche porte son
+     * `resolved_person_id` et le lien désigne désormais la personne réelle. Refuser
+     * serait faire échouer une demande que la réalité vient de conforter ; garder la
+     * référence au brouillon serait pire — le lien pointerait sur une ligne dont plus
+     * rien ne doit être créé.
+     *
+     * @return array{int|null, string|null, string, int|null}
+     */
+    private function ficheProposeeAilleurs(
+        mixed $brouillonId,
+        string $chemin,
+        ChangeRequest $demande,
+        Lecteur $lecteur,
+    ): array {
+        if (!\is_int($brouillonId)) {
+            throw DonneesInvalides::pourChamp($chemin, 'Un identifiant de fiche proposée est un entier.');
+        }
+
+        // `404` et jamais `403` : la fiche proposée d'un autre membre ne doit pas
+        // s'annoncer par le code de retour (§ 15.2, § 13.3).
+        $brouillon = $this->brouillons->visiblePourLecteur(
+            $brouillonId,
+            $lecteur->voitToutesLesDemandes() ? null : $lecteur->identiteEffective(),
+        );
+
+        if (null === $brouillon) {
+            throw Introuvable::brouillonPropose($brouillonId);
+        }
+
+        // Le filet du point 3 de l'en-tête : inatteignable tant qu'une demande naît vide,
+        // conservé parce que c'est la seule ligne qui empêcherait deux résolutions
+        // concurrentes de la même fiche le jour où une demande enregistrée se modifierait.
+        if ($brouillon->getRequest() === $demande) {
+            throw DonneesInvalides::pourChamp($chemin, 'Cette fiche appartient à la demande en cours : désignez-la par sa référence provisoire.');
+        }
+
+        $resolue = $brouillon->getResolvedPersonId();
+
+        if (null !== $resolue) {
+            $cible = $this->arbre->chargerCible(SubjectKind::Personne, $resolue);
+
+            if (null === $cible) {
+                throw Introuvable::cible(SubjectKind::Personne->value, $resolue);
+            }
+
+            return [$resolue, null, $cible->libelle, null];
+        }
+
+        if (RequestStatus::EnAttente !== $brouillon->getRequest()->getStatus()) {
+            throw DonneesInvalides::pourChamp($chemin, \sprintf(
+                'La demande n° %d n\'est plus en attente : cette fiche ne deviendra pas une personne de l\'arbre.',
+                $brouillon->getRequest()->getId() ?? 0,
+            ));
+        }
+
+        return [null, null, $brouillon->nomPropose(), $brouillonId];
     }
 
     /**
