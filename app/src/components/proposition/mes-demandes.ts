@@ -50,6 +50,8 @@ export const LIBELLES_NATURE: Record<NatureDemande, string> = {
   creation_personne: 'Ajout d’une personne',
   ajout_lien: 'Ajout d’un lien',
   ajout_media: 'Ajout d’un document',
+  ajout_citation: 'Ajout d’une source',
+  ajout_note: 'Ajout d’une note',
 }
 
 /** Les états que `PastilleEtat` sait colorer, plus le repli neutre. */

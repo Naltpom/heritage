@@ -175,6 +175,8 @@ describe('refaire une demande — ou dire honnêtement qu’on ne peut pas', () 
     ['ajout_media', 'ajout_media'],
     ['modification_famille', 'modification_famille'],
     ['modification_citation', 'modification_citation'],
+    ['ajout_citation', 'ajout_citation'],
+    ['ajout_note', 'ajout_note'],
   ] as const)('ne propose rien sur « %s », qui n’a pas de formulaire', (_nom, kind) => {
     expect(lienDeReprise(resume({ id: 8, status: 'refusee', kind }))).toBeNull()
   })
@@ -192,11 +194,11 @@ describe('refaire une demande — ou dire honnêtement qu’on ne peut pas', () 
 })
 
 describe('les libellés, et l’exhaustivité qui les tient', () => {
-  it('nomme les six natures du contrat', () => {
+  it('nomme les huit natures du contrat', () => {
     // `Record<NatureDemande, string>` fait échouer la **compilation** le jour où
     // le contrat en ajoute une : ce test garde le compte, le typeur garde la
     // liste.
-    expect(Object.keys(LIBELLES_NATURE)).toHaveLength(6)
+    expect(Object.keys(LIBELLES_NATURE)).toHaveLength(8)
     expect(LIBELLES_NATURE.creation_personne).toBe('Ajout d’une personne')
   })
 

@@ -6,6 +6,10 @@ namespace App\Module\Proposal\Service\Port;
 
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
+use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\NoteAcreer;
+use App\Module\Proposal\Contract\SourceCitable;
+use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 
 /**
  * Implémentation de repli de {@see PortArbre}, tant que `Tree` n'a pas posé la sienne.
@@ -38,6 +42,33 @@ final readonly class ArbreNonBranche implements PortArbre
     }
 
     public function creerPersonne(PersonneAcreer $fiche): LigneCreee
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    /**
+     * Elle lève, alors que le contrat autorise `null` pour « source inexistante ».
+     *
+     * Rendre `null` ferait refuser en `422` toute source réellement présente — « cette
+     * source n'existe pas » —, et l'auteur corrigerait un identifiant juste jusqu'à
+     * renoncer. Le repli doit nommer ce qui manque, pas accuser la saisie.
+     */
+    public function chargerSource(int $id): ?SourceCitable
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    public function vocabulaireDAnnotation(): VocabulaireDAnnotation
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    public function creerCitation(CitationAcreer $citation): LigneCreee
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    public function creerNote(NoteAcreer $note): LigneCreee
     {
         throw new \LogicException(self::MESSAGE);
     }

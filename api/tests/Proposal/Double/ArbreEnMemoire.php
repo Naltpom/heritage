@@ -6,6 +6,10 @@ namespace App\Tests\Proposal\Double;
 
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
+use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\NoteAcreer;
+use App\Module\Proposal\Contract\SourceCitable;
+use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 use App\Module\Proposal\Service\Port\EcritureAppliquee;
 use App\Module\Proposal\Service\Port\EtatCible;
 use App\Module\Proposal\Service\Port\LigneCreee;
@@ -48,6 +52,30 @@ final class ArbreEnMemoire implements PortArbre
 
     /** @var array<int, array<int, int|null>> famille → enfant → rang dans la fratrie */
     private static array $filiations = [];
+
+    /** @var array<int, string> les sources que le test a posées : identifiant => titre */
+    private static array $sources = [];
+
+    /**
+     * Les citations créées par une validation, dans l'ordre.
+     *
+     * C'est le pendant de {@see $personnesCreees} pour `tree_citation`, et c'est ce
+     * qui permet à un test de `Proposal` d'affirmer **ce qui a été écrit** — la
+     * personne visée, la source, la page, le `QUAY` — sans monter de schéma.
+     *
+     * @var list<array{id: int, personneId: int, sourceId: int, page: string|null, quay: int|null, dataText: string|null, scope: string}>
+     */
+    private static array $citationsCreees = [];
+
+    /**
+     * Les notes créées par une validation, dans l'ordre.
+     *
+     * `auteurUserId` y est enregistré exprès : c'est la seule façon, côté `Proposal`,
+     * de vérifier que la note porte le **demandeur** et non l'administrateur qui valide.
+     *
+     * @var list<array{id: int, personneId: int, corps: string, scope: string, auteurUserId: int|null, auteurLabel: string|null}>
+     */
+    private static array $notesCreees = [];
 
     private static int $prochainIdentifiant = 1000;
 
@@ -107,6 +135,9 @@ final class ArbreEnMemoire implements PortArbre
         self::$famillesCreees = [];
         self::$ecritures = 0;
         self::$verrouConcurrent = false;
+        self::$sources = [];
+        self::$citationsCreees = [];
+        self::$notesCreees = [];
         self::$prochainIdentifiant = 1000;
     }
 
@@ -278,12 +309,149 @@ final class ArbreEnMemoire implements PortArbre
         return array_keys(self::$filiations[$familleId] ?? []);
     }
 
+    /** Pose une source dans l'arbre du double, comme l'import en pose. */
+    public function poserSource(int $id, string $titre): self
+    {
+        self::$sources[$id] = $titre;
+
+        return $this;
+    }
+
+    /**
+     * Les citations qu'une validation a créées, dans l'ordre.
+     *
+     * @return list<array{id: int, personneId: int, sourceId: int, page: string|null, quay: int|null, dataText: string|null, scope: string}>
+     */
+    public function citationsCreees(): array
+    {
+        return self::$citationsCreees;
+    }
+
+    /**
+     * Les notes qu'une validation a créées, dans l'ordre.
+     *
+     * @return list<array{id: int, personneId: int, corps: string, scope: string, auteurUserId: int|null, auteurLabel: string|null}>
+     */
+    public function notesCreees(): array
+    {
+        return self::$notesCreees;
+    }
+
+    public function creerNote(NoteAcreer $note): LigneCreee
+    {
+        ++self::$ecritures;
+
+        if (null === $this->chargerCible(SubjectKind::Personne, $note->personneId)) {
+            throw new \RuntimeException(\sprintf('La personne %d a disparu pendant la validation.', $note->personneId));
+        }
+
+        $id = $this->prochainId(SubjectKind::Note);
+
+        self::$notesCreees[] = [
+            'id' => $id,
+            'personneId' => $note->personneId,
+            'corps' => $note->corps,
+            'scope' => $note->scope,
+            'auteurUserId' => $note->auteurUserId,
+            'auteurLabel' => $note->auteurLabel,
+        ];
+
+        // Le libellé du double reprend la règle du port réel — la première ligne —,
+        // parce qu'un test de `Proposal` affirme sur ce libellé et qu'un double plus
+        // simple ferait passer au vert une troncature que la production ne fait pas.
+        $premiere = trim((string) (preg_split('/\R/u', $note->corps, 2) ?: [''])[0]);
+
+        return new LigneCreee($id, mb_strlen($premiere) > 120 ? mb_substr($premiere, 0, 119).'…' : $premiere);
+    }
+
+    public function chargerSource(int $id): ?SourceCitable
+    {
+        $titre = self::$sources[$id] ?? null;
+
+        return null === $titre ? null : new SourceCitable($id, $titre);
+    }
+
+    /**
+     * Le vocabulaire **recopié**, et c'est la seule copie assumée du double.
+     *
+     * `Tree` le construit depuis `NoteScope::cases()` et `CitationQuality::cases()` ; ce
+     * double ne peut pas les nommer — il vit dans les tests de `Proposal`, où la règle 3
+     * de l'ADR 0002 s'applique comme ailleurs. Les valeurs sont donc écrites ici, et
+     * `tests/Tree` vérifie séparément que les deux listes coïncident : un double qui
+     * accepterait une portée que l'arbre refuse ferait passer au vert un dépôt que la
+     * production rejette.
+     */
+    public function vocabulaireDAnnotation(): VocabulaireDAnnotation
+    {
+        return new VocabulaireDAnnotation(
+            ['generale', 'naissance', 'deces', 'mariage', 'divorce', 'source'],
+            [0, 1, 2, 3],
+        );
+    }
+
+    public function creerCitation(CitationAcreer $citation): LigneCreee
+    {
+        ++self::$ecritures;
+
+        // Les deux mêmes refus que l'implémentation réelle : une ligne disparue entre le
+        // dépôt et la validation lève, elle ne rend pas une citation muette. Un double
+        // plus permissif que la production ferait passer au vert un chemin qui échoue.
+        if (null === $this->chargerCible(SubjectKind::Personne, $citation->personneId)) {
+            throw new \RuntimeException(\sprintf('La personne %d a disparu pendant la validation.', $citation->personneId));
+        }
+
+        if (!isset(self::$sources[$citation->sourceId])) {
+            throw new \RuntimeException(\sprintf('La source %d a disparu pendant la validation.', $citation->sourceId));
+        }
+
+        $id = $this->prochainId(SubjectKind::Citation);
+
+        $this->poser(SubjectKind::Citation, $id, self::$sources[$citation->sourceId], 1, [
+            'page' => $citation->page,
+            'quay' => $citation->quay,
+            'dataText' => $citation->dataText,
+        ]);
+
+        self::$citationsCreees[] = [
+            'id' => $id,
+            'personneId' => $citation->personneId,
+            'sourceId' => $citation->sourceId,
+            'page' => $citation->page,
+            'quay' => $citation->quay,
+            'dataText' => $citation->dataText,
+            'scope' => $citation->scope,
+        ];
+
+        return new LigneCreee($id, self::$sources[$citation->sourceId]);
+    }
+
+    /**
+     * Une empreinte **dérivée de la donnée**, et dont le périmètre est celui de l'ADR 0005.
+     *
+     * ── Ce double a menti, et voici sur quoi ────────────────────────────────────────
+     *
+     * Il hachait **toutes** ses lignes. Un test de `Proposal` a donc pu affirmer, et voir
+     * passer au vert, qu'ajouter une citation changeait l'empreinte de l'arbre. C'est
+     * faux en production : `TreeFingerprint` ne couvre que `tree_person`, `tree_family`
+     * et `tree_child` — « ni `med_media`, ni `tree_citation`, ni `tree_source`, ni
+     * `tree_fact`, ni `tree_note` : rien de tout cela ne déplace un nœud ni ne modifie
+     * une parenté ». Élargir l'empreinte ferait recalculer le placement des 377 nœuds et
+     * tous les cercles de visibilité pour un graphe rigoureusement identique.
+     *
+     * Le double se restreint donc aux mêmes portées structurantes. Un double plus large
+     * que la production ne rend pas les tests plus sévères : il les rend faux dans la
+     * direction rassurante.
+     */
     public function empreinteDeLArbre(): string
     {
-        // Une empreinte **dérivée de la donnée** : elle change d'elle-même à chaque
-        // écriture, exactement comme celle du § 2.3 du modèle, et il n'y a rien à
-        // incrémenter.
-        return hash('sha256', serialize([self::$lignes, self::$filiations]));
+        $structurantes = array_filter(
+            self::$lignes,
+            static fn (string $cle): bool => str_starts_with($cle, SubjectKind::Personne->value.':')
+                || str_starts_with($cle, SubjectKind::Famille->value.':'),
+            \ARRAY_FILTER_USE_KEY,
+        );
+
+        return hash('sha256', serialize([$structurantes, self::$filiations]));
     }
 
     /**

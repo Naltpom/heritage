@@ -56,10 +56,14 @@ final class NormaliseurDeValeur
             ValueKind::Booleen => $this->booleen($json, $chemin),
             ValueKind::Enum => $this->texte($json, $chemin),
             ValueKind::DateIncertaine => $this->blocDate($json, $chemin),
-            // Les quatre formes composées (référence, lien, média) ne sont pas
-            // appliquées par un op de champ : elles passent par leur applicateur
+            // Les cinq formes composées (référence, lien, média, citation, note) ne sont
+            // pas appliquées par un op de champ : elles passent par leur applicateur
             // dédié, qui connaît leur forme. Voir ApplicateurDOperation.
-            ValueKind::Reference, ValueKind::Lien, ValueKind::Media => $json,
+            //
+            // L'en-tête annonçait « quatre » alors que la liste en portait trois : ce
+            // n'était pas une faute d'accord, c'était la place de la citation, vide
+            // depuis le premier jour. Elle est occupée.
+            ValueKind::Reference, ValueKind::Lien, ValueKind::Media, ValueKind::Citation, ValueKind::Note => $json,
         };
     }
 

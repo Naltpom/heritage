@@ -474,12 +474,20 @@ final readonly class ValidationDeDemande
     }
 
     /**
-     * Le point de greffe des natures d'op à venir — un lien, un média, une citation.
+     * Le point de greffe des natures d'op — un lien, un média, une citation.
      *
-     * Aucun applicateur n'est encore enregistré : la nature `champ` est traitée en
-     * ligne, parce qu'elle seule se regroupe par ligne visée. Les autres viendront avec
-     * leur module, et le message dit lequel manque plutôt que de laisser passer une
-     * validation qui n'écrirait rien.
+     * La nature `champ` est traitée en ligne, parce qu'elle seule se regroupe par ligne
+     * visée. Les autres passent par ici, découvertes par le tag. **Deux sont branchées** :
+     * `ajout_media`, par `Media\Service\Proposition\ApplicateurDOperationMedia`, et
+     * `ajout_citation`, par {@see ApplicateurDOperationCitation}. Les cinq restantes —
+     * `ajout_lien`, `retrait_lien`, `retrait_media`, `retrait_citation`, `ajout_note` —
+     * viendront avec leur module. *(`ajout_lien` est branchée comme **nature de
+     * demande**, par `ApplicateurDeCreation` ; comme nature d'**op**, elle ne l'est pas.)*
+     *
+     * Le message nomme celle qui manque, plutôt que de laisser passer une validation qui
+     * n'écrirait rien. **Ne pas remplacer cette levée par un `continue`** : c'est la
+     * seule chose qui distingue « pas encore branché » de « appliqué », et la confusion
+     * entre les deux est le défaut le plus coûteux qu'ait porté ce module.
      */
     private function applicateurPour(OpKind $kind): ApplicateurDOperation
     {

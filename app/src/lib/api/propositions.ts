@@ -29,7 +29,7 @@ import type { BlocDate, BlocDateOp, ListePaginee, Sexe } from './types'
 /* Les types du § 6                                                    */
 /* ------------------------------------------------------------------ */
 
-/** § 5.7 — les six natures de `RequestKind`. Valeurs du modèle, non traduites. */
+/** § 5.7 — les huit natures de `RequestKind`. Valeurs du modèle, non traduites. */
 export type NatureDemande =
   | 'modification_personne'
   | 'modification_famille'
@@ -37,6 +37,25 @@ export type NatureDemande =
   | 'creation_personne'
   | 'ajout_lien'
   | 'ajout_media'
+  /**
+   * La **création** d'une citation (§ 6.4 bis du contrat). `modification_citation`
+   * ne savait que corriger celles qui existaient déjà.
+   *
+   * L'API l'accepte ; **aucun écran ne la dépose encore**. Elle est nommée ici pour
+   * que « mes demandes » et la file d'administration sachent l'afficher — une nature
+   * que le back renvoie et que le type ignore se lit en `snake_case` sous les yeux
+   * d'un contributeur, ou pas du tout.
+   */
+  | 'ajout_citation'
+  /**
+   * La création d'une **note** sur une fiche existante (§ 6.4 ter du contrat).
+   *
+   * On savait déjà donner une note à une personne qu'on crée — le formulaire de
+   * création porte son champ `note` — mais pas à une personne qui existe.
+   *
+   * L'API l'accepte ; **aucun écran ne la dépose encore**.
+   */
+  | 'ajout_note'
 
 /**
  * `caduque` n'est **pas** `refusee` : personne n'a refusé, le monde a bougé

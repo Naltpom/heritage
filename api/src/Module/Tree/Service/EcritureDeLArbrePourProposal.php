@@ -7,6 +7,10 @@ namespace App\Module\Tree\Service;
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
+use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\NoteAcreer;
+use App\Module\Proposal\Contract\SourceCitable;
+use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 use App\Module\Proposal\Service\Port\EcritureAppliquee;
 use App\Module\Proposal\Service\Port\EtatCible;
 use App\Module\Proposal\Service\Port\LigneCreee;
@@ -17,7 +21,9 @@ use App\Module\Tree\Entity\Citation;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Note;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Entity\Source;
 use App\Module\Tree\Enum\CitationQuality;
+use App\Module\Tree\Enum\NoteScope;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -161,6 +167,101 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         return new LigneCreee($id, $personne->getDisplayName());
     }
 
+    public function chargerSource(int $id): ?SourceCitable
+    {
+        $source = $this->em->find(Source::class, $id);
+
+        // `null` et non une exception : l'appelant valide un formulaire, et un
+        // identifiant de source faux est une faute de saisie, pas une panne. Même forme
+        // que `chargerCible()`, pour la même raison.
+        return $source instanceof Source ? new SourceCitable($id, $source->getTitle()) : null;
+    }
+
+    public function vocabulaireDAnnotation(): VocabulaireDAnnotation
+    {
+        // Construits depuis les deux énumérations, jamais recopiés : une valeur ajoutée
+        // à `NoteScope` ou à `CitationQuality` devient proposable sans qu'aucun autre
+        // fichier ne bouge, et une valeur retirée cesse de l'être. C'est le seul endroit
+        // du projet qui a le droit de les nommer.
+        return new VocabulaireDAnnotation(
+            array_map(static fn (NoteScope $portee): string => $portee->value, NoteScope::cases()),
+            array_map(static fn (CitationQuality $quay): int => $quay->value, CitationQuality::cases()),
+        );
+    }
+
+    public function creerCitation(CitationAcreer $citation): LigneCreee
+    {
+        $personne = $this->em->find(Person::class, $citation->personneId);
+        $source = $this->em->find(Source::class, $citation->sourceId);
+
+        // **On lève, on ne rend pas une ligne vide.** Les deux absences ont déjà été
+        // écartées en amont — la personne par `AnalyseDeDemande`, qui en fait un
+        // `cible_disparue`, la source par le constructeur de la demande — et arriver ici
+        // sur l'une d'elles signifie qu'une ligne a disparu **pendant** la validation.
+        // Continuer en silence marquerait l'op appliquée et la demande validée sans
+        // qu'aucune citation n'existe : c'est le défaut exact que l'en-tête de
+        // `Proposal\Contract\ApplicateurDOperation` raconte, et on ne le rejoue pas.
+        if (!$personne instanceof Person) {
+            throw new \RuntimeException(\sprintf('La personne %d a disparu pendant la validation : aucune citation ne peut y être rattachée.', $citation->personneId));
+        }
+
+        if (!$source instanceof Source) {
+            throw new \RuntimeException(\sprintf('La source %d a disparu pendant la validation : une citation sans source ne retrouve rien.', $citation->sourceId));
+        }
+
+        $ligne = new Citation($source, $this->portee($citation->scope));
+        $ligne
+            ->setPerson($personne)
+            ->setPage($citation->page)
+            ->setQuay($this->qualite($citation->quay))
+            ->setDataText($citation->dataText);
+
+        $this->em->persist($ligne);
+        $this->em->flush();
+
+        $id = $ligne->getId();
+        \assert(null !== $id);
+
+        // **Après le `flush`, jamais avant** — même raison qu'à `appliquerChamps()` : les
+        // agrégats se relisent par une requête, et la citation doit déjà être en base
+        // pour y être comptée. Avant, `citation_count` resterait à sa valeur d'hier et la
+        // fiche afficherait « aucune source » alors qu'elle vient d'en recevoir une.
+        $this->rafraichirLesAgregats($personne);
+        $this->em->flush();
+
+        return new LigneCreee($id, $source->getTitle());
+    }
+
+    public function creerNote(NoteAcreer $note): LigneCreee
+    {
+        $personne = $this->em->find(Person::class, $note->personneId);
+
+        if (!$personne instanceof Person) {
+            // Même refus que `creerCitation()` : une ligne disparue pendant la validation
+            // fait échouer bruyamment plutôt que d'écrire à côté ou de ne rien écrire.
+            throw new \RuntimeException(\sprintf('La personne %d a disparu pendant la validation : aucune note ne peut y être rattachée.', $note->personneId));
+        }
+
+        $ligne = new Note($note->corps, $this->portee($note->scope));
+        $ligne
+            ->setPerson($personne)
+            // L'auteur de la **demande**, pas celui qui valide : c'est lui que la fiche
+            // affichera sous la note, et `null` y voudrait dire « importée du GEDCOM ».
+            ->setAuthor($note->auteurUserId, $note->auteurLabel);
+
+        $this->em->persist($ligne);
+        $this->em->flush();
+
+        $id = $ligne->getId();
+        \assert(null !== $id);
+
+        // **Aucun agrégat, et aucun second `flush`.** `tree_note` n'alimente ni
+        // `best_quay` ni `citation_count` — une note documente, elle n'étaye pas. Les
+        // rafraîchir ici ferait passer une fiche pour sourcée parce qu'on a écrit une
+        // phrase à son sujet, ce qui est l'inverse exact de ce que le § 9.7 cherche.
+        return new LigneCreee($id, $this->libelleDeNote($ligne));
+    }
+
     public function trouverOuCreerFamille(?int $personneA, ?int $personneB): LigneCreee
     {
         [$mari, $femme] = $this->rangerLeCouple($personneA, $personneB);
@@ -276,6 +377,30 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             $ligne instanceof Family => $this->libelleDuCouple($ligne),
             default => $ligne->getSource()->getTitle(),
         };
+    }
+
+    /**
+     * Le libellé d'une note dans l'historique : sa **première ligne**, tronquée.
+     *
+     * `prp_revision.subject_label` est du `VARCHAR(255)` et se relit longtemps, alors
+     * qu'une note de recherche fait parfois plusieurs paragraphes. On prend la première
+     * ligne parce que c'est là que la note dit de quoi elle parle, et on marque la coupe
+     * plutôt que de laisser croire que la note s'arrête là.
+     */
+    private function libelleDeNote(Note $note): string
+    {
+        // Ni `strtok`, qui porte un état global d'un appel à l'autre, ni un découpage sur
+        // « \n » seul : l'import recolle les `CONT` du GEDCOM, et un corps saisi au
+        // navigateur arrive en « \r\n ». Les deux formes doivent donner la même première
+        // ligne, sinon le même texte produirait deux libellés selon sa provenance.
+        $lignes = preg_split('/\R/u', $note->getBody(), 2) ?: [];
+        $premiere = trim((string) ($lignes[0] ?? ''));
+
+        if ('' === $premiere) {
+            return 'Note n° '.(int) $note->getId();
+        }
+
+        return mb_strlen($premiere) > 120 ? mb_substr($premiere, 0, 119).'…' : $premiere;
     }
 
     private function libelleDuCouple(Family $famille): string
@@ -622,6 +747,21 @@ final class EcritureDeLArbrePourProposal implements PortArbre
     {
         return Sex::tryFrom($valeur)
             ?? throw new \InvalidArgumentException(\sprintf('Sexe « %s » inconnu.', $valeur));
+    }
+
+    /**
+     * La portée d'une citation — « cette source étaye la *naissance* » (§ 3.9).
+     *
+     * Elle traverse le port en chaîne, comme toute énumération : `NoteScope` appartient
+     * à `Tree`, et c'est ici, au seul endroit qui a le droit de la nommer, que la chaîne
+     * redevient un cas. Une valeur hors énumération lève — laisser retomber sur
+     * `Generale` transformerait une faute de saisie en citation mal classée, que
+     * personne ne retrouverait sous la portée qu'il a demandée.
+     */
+    private function portee(string $valeur): NoteScope
+    {
+        return NoteScope::tryFrom($valeur)
+            ?? throw new \InvalidArgumentException(\sprintf('Portée de citation « %s » inconnue.', $valeur));
     }
 
     private function qualite(mixed $valeur): ?CitationQuality

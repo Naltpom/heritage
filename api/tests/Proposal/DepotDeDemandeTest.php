@@ -257,7 +257,7 @@ final class DepotDeDemandeTest extends BaseDeDemandes
     }
 
     /**
-     * **Les six natures de `RequestKind` ont toutes un constructeur**, et le harnais le
+     * **Les sept natures de `RequestKind` ont toutes un constructeur**, et le harnais le
      * voit parce qu'il lit le conteneur.
      *
      * Ce test remplace un `testLaSeuleNatureNonBrancheeLeDitClairement` qui affirmait

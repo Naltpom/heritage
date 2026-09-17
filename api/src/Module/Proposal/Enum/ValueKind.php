@@ -19,7 +19,18 @@ namespace App\Module\Proposal\Enum;
  *   `{"raw":…, "qualifier":…, "min":…, "max":…, "place":…}` ;
  * - `Reference` : `{kind, id, draftRef, label}`, un seul des deux parmi `id`/`draftRef` ;
  * - `Lien` : la forme sérialisée de `prp_draft_link` ;
- * - `Media` : `{mediaId, kind, caption, sha256}`.
+ * - `Media` : `{mediaId, kind, caption, sha256}` ;
+ * - `Citation` : `{sourceId, sourceTitle, page, quay, dataText, scope}` ;
+ * - `Note` : `{body, scope}`.
+ *
+ * **Pourquoi `Citation` n'est pas un `Reference` sur la source.** Une citation n'est pas
+ * un lien vers une source : c'est **l'usage** d'une source sur un fait précis, avec sa
+ * page et son `QUAY` (§ 3.7 du modèle). Les quatre valeurs qui la qualifient sont
+ * solidaires — une page sans sa source ne retrouve rien, un `QUAY` sans sa page ne se
+ * vérifie pas — et la même raison qui rend un bloc date atomique la rend atomique : un
+ * administrateur qui pourrait en valider la moitié fabriquerait une citation qu'aucune
+ * main n'a écrite. `sourceTitle` est **en lecture seule**, recopié depuis la ligne au
+ * dépôt : il sert à afficher le diff sans jointure, jamais à décider (§ 0.4 du modèle).
  *
  * **Une date incertaine est un seul op, pas cinq.** Découper `raw`, `qualifier`, `min`,
  * `max` et `place` permettrait à un administrateur d'en valider trois sur cinq et de
@@ -37,4 +48,6 @@ enum ValueKind: string
     case Reference = 'reference';
     case Lien = 'lien';
     case Media = 'media';
+    case Citation = 'citation';
+    case Note = 'note';
 }

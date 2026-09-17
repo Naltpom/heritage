@@ -57,8 +57,12 @@ when@test:
             autowire: true
             autoconfigure: true
 
-        # Rendu public pour un seul test : celui qui éprouve l'écriture de l'arbre par
-        # une proposition validée, avec la vraie implémentation et une vraie base.
+        # Rendu public pour les tests qui éprouvent l'écriture de l'arbre par une
+        # proposition validée, avec la vraie implémentation et une vraie base :
+        # `EcritureDeLArbrePourProposalTest`, qui appelle le port directement, et
+        # `CitationCreeeParUneDemandeTest`, qui le **réinjecte dans le conteneur** à la
+        # place du double pour faire passer une demande entière — du dépôt à la ligne
+        # `tree_citation`.
         #
         # Pourquoi il le faut : `config/services/proposal.yaml` remplace `PortArbre` par
         # un double en mémoire pour tout l'environnement de test. C'est le bon choix pour

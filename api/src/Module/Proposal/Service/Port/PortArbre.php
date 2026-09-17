@@ -6,6 +6,10 @@ namespace App\Module\Proposal\Service\Port;
 
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
+use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\NoteAcreer;
+use App\Module\Proposal\Contract\SourceCitable;
+use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -115,6 +119,86 @@ interface PortArbre
      * que « tout ou rien » empêche.
      */
     public function creerPersonne(PersonneAcreer $fiche): LigneCreee;
+
+    /**
+     * Lit une source de l'arbre — **aucune écriture**, appelée au dépôt.
+     *
+     * Rend `null` quand la source n'existe pas, et c'est un `422` sur le chemin de l'op,
+     * jamais une exception : on valide un formulaire, et un identifiant de source faux
+     * est une erreur de saisie, pas une panne. Même forme que `chargerCible()`, pour la
+     * même raison — un port qui lèverait sur l'absence ferait passer pour un incident un
+     * cas que le contrat nomme.
+     */
+    public function chargerSource(int $id): ?SourceCitable;
+
+    /**
+     * Les deux vocabulaires fermés d'une citation — **aucune écriture**, appelée au dépôt.
+     *
+     * Elle existe pour que la `422` sur un `QUAY` hors norme ou une portée inconnue tombe
+     * devant celui qui saisit, et non trois jours plus tard sur la validation d'un autre.
+     * Le raisonnement complet, et le défaut qu'elle évite de rejouer, sont en tête de
+     * {@see VocabulaireDAnnotation}.
+     */
+    public function vocabulaireDAnnotation(): VocabulaireDAnnotation;
+
+    /**
+     * Insère une citation proposée sur une personne existante, et rend son identifiant
+     * réel — le pendant `création` de {@see appliquerChamps()} sur une citation.
+     *
+     * ── Ce que `Tree` fait ici et que `Proposal` ne peut pas faire ───────────────────
+     *
+     * Il retrouve les deux lignes, convertit le `QUAY` en `CitationQuality` et le `scope`
+     * en `NoteScope` — deux énumérations de `Tree` que `Proposal` n'a pas le droit de
+     * nommer (règle 3 de l'ADR 0002) —, puis **rafraîchit `best_quay` et
+     * `citation_count` sur la personne**. Ces deux colonnes dérivées sont ce qui fait
+     * basculer une fiche entre « appuyée sur un acte » et « recopie non vérifiée » :
+     * les oublier laisserait une fiche nouvellement sourcée du mauvais côté de tous les
+     * filtres, sans que rien ne le signale — exactement le mode de défaillance que
+     * `appliquerChamps()` documente déjà pour la modification d'un `QUAY`.
+     *
+     * ── Les deux absences qui sont des erreurs, et non des caducités ─────────────────
+     *
+     * Appelée **dans la transaction** du validateur, après le contrôle préalable. La
+     * disparition de la personne a donc déjà été tranchée par `AnalyseDeDemande`, qui en
+     * fait un `cible_disparue` avant qu'on arrive ici ; celle de la source n'a pas de
+     * pré-contrôle possible, aucune route ne supprimant de source. L'implémentation
+     * **lève** dans les deux cas plutôt que de ne rien écrire : une validation qui
+     * réussit sans écrire est le défaut que tout ce circuit a déjà payé une fois.
+     *
+     * `LigneCreee::$creee` vaut toujours `true` : une citation n'est jamais « retrouvée »
+     * — deux contributeurs qui citent la même page du même registre sur la même fiche
+     * font deux citations, et c'est juste, ils l'ont lue chacun.
+     *
+     * @throws \RuntimeException si la personne ou la source a disparu depuis le dépôt
+     */
+    public function creerCitation(CitationAcreer $citation): LigneCreee;
+
+    /**
+     * Insère une note de recherche proposée sur une personne existante.
+     *
+     * La moitié qui manquait : `creerPersonne()` sait poser la note d'un brouillon, et
+     * rien ne savait en poser une sur une fiche déjà là. Les notes sont pourtant « les
+     * lignes les plus précieuses du fichier » (§ 3.5 du modèle), et les 337 fiches déjà
+     * en base n'avaient aucun moyen d'en recevoir.
+     *
+     * ── Ce qu'elle ne fait pas, et c'est une différence avec la citation ────────────
+     *
+     * **Aucun agrégat à rafraîchir.** `tree_note` n'alimente ni `best_quay` ni
+     * `citation_count` : une note documente, elle n'étaye pas. Une fiche qui reçoit dix
+     * notes n'est pas mieux sourcée pour autant, et faire croire le contraire serait
+     * exactement l'inverse du but du § 9.7.
+     *
+     * **Aucun verrou optimiste non plus** — `tree_note` ne porte pas de `#[ORM\Version]`,
+     * n'étant pas une cible de `ChangeRequest` (§ 9.6). Documenter une fiche ne peut donc
+     * pas entrer en conflit avec sa correction.
+     *
+     * Appelée **dans la transaction** du validateur. L'absence de la personne a déjà été
+     * tranchée par le contrôle préalable ; l'implémentation **lève** si elle a disparu
+     * depuis, plutôt que de laisser une validation réussir sans écrire.
+     *
+     * @throws \RuntimeException si la personne a disparu depuis le dépôt
+     */
+    public function creerNote(NoteAcreer $note): LigneCreee;
 
     /**
      * Trouve **ou** crée la famille d'un couple — passe 4 du § 9.5.

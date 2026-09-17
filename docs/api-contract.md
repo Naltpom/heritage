@@ -1786,6 +1786,174 @@ demande le désigne :
 
 `field` est `null` pour tout `opKind` autre que `champ` (`ck_prp_op_champ`).
 
+### 6.4 bis `kind = ajout_citation` — la source d'une fiche
+
+Le pendant **création** du § 6.2 sur une citation : `modification_citation` savait corriger
+page, `QUAY` et transcription d'une citation existante, rien ne savait en poser une. La règle
+*chaque fiche porte sa source* n'avait donc aucun chemin dans le circuit — une cote relevée
+ne pouvait être consignée que dans la note en prose d'une demande, où l'onglet « sources » ne
+la voit pas et où `citationCount` reste à zéro.
+
+La citation se rattache à une **personne existante**. La source est désignée par son
+identifiant, et les trois autres champs sont exactement ceux que `modification_citation`
+sait déjà manipuler, pour que création et correction parlent le même langage :
+
+```json
+{
+  "kind": "ajout_citation",
+  "message": "relevé aux archives départementales",
+  "soumettre": true,
+  "targetKind": "personne",
+  "targetId": 17,
+  "ops": [
+    {
+      "seq": 1,
+      "opKind": "ajout_citation",
+      "subjectKind": "personne",
+      "subjectId": 17,
+      "field": null,
+      "valueKind": "citation",
+      "oldValue": null,
+      "newValue": {
+        "sourceId": 204,
+        "page": "AD Sylvanie, 5 MI 118, vue 12",
+        "quay": 2,
+        "dataText": "Le douze frimaire an IX, devant nous…",
+        "scope": "naissance"
+      }
+    }
+  ]
+}
+```
+
+| Clé | Obligatoire | Ce qu'elle porte |
+|---|:-:|---|
+| `sourceId` | **oui** | une ligne `tree_source` existante ⇒ `422 ops[n].newValue.sourceId` sinon |
+| `page` | non | le `PAGE` : de quoi **retrouver** la pièce |
+| `quay` | non | `0` à `3` de la norme GEDCOM, ou `null` — `null` n'est pas `0` |
+| `dataText` | non | la transcription |
+| `scope` | non | ce que la source étaye ; `generale` par défaut |
+
+**Les trois facultatifs ne le sont pas tous à la fois** : `page`, `quay` et `dataText` nuls
+ensemble rendent `422 ops[n].newValue`. Une citation qui ne dit ni où retrouver la pièce, ni
+ce qu'elle dit, ni quelle confiance lui accorder ne fait que faire *passer* la fiche pour
+sourcée.
+
+**`baseVersion` est absent, et c'est voulu.** Le sujet de l'op est la personne, mais la
+citation s'écrit à côté d'elle, sans toucher une seule de ses colonnes éditables. Aucun
+verrou optimiste ne s'exerce donc : sourcer une naissance pendant qu'un cousin corrige un
+prénom ne produit ni caducité ni `verrou_concurrent`, et les deux demandes passent. La
+disparition de la fiche reste couverte et rend `409 cible_disparue`, comme partout.
+
+**`quay` et `scope` sont validés au dépôt**, contre le vocabulaire que `Tree` déclare — et
+non à la validation, où l'erreur tomberait chez l'administrateur et non chez l'auteur.
+
+> **`quay` n'est pas modifiable par `modification_citation`, et ce n'est pas un choix.**
+> Mesuré le 17/09/2026, sur une citation de `quay = 1` qu'on essaie de porter à `2` :
+> `oldValue` en entier rend `422 donnees_invalides`, `oldValue` en chaîne rend
+> `409 conflit` « la fiche a changé pendant la saisie » — alors que rien n'a changé. Les
+> deux seules formes possibles échouent, donc le champ est inatteignable.
+>
+> La cause : la surface éditable déclare `quay` en `valueKind: enum`, dont le contrat de
+> port est `string | null` ; or l'état lu rend un **entier**, `CitationQuality` étant la
+> seule énumération du projet adossée à `int` (§ 2.7 du modèle). La comparaison stricte
+> d'`oldValue` à la valeur courante oppose alors `"1"` à `1` et ne peut jamais réussir.
+>
+> `ajout_citation` **ne passe pas par là** : sa valeur est un `valueKind: citation`, où
+> `quay` voyage en entier. Le défaut est donc contourné pour la création et **reste
+> entier pour la correction** — il se solde du côté de `modification_citation`, et c'est
+> une décision à prendre, pas un geste : corriger la lecture d'une valeur de port se
+> répercute sur la détection de caducité.
+
+**Ce qui n'est pas accepté**, et qui rend `422 ops[n].subjectDraftRef` : une citation sur une
+personne créée par la **même** demande (`#p1`). La validation applique les ops avant de
+résoudre les brouillons ; à cet instant la fiche n'a pas d'identifiant. On dépose donc la
+création, puis la source sur la fiche obtenue.
+
+**Ce que ce circuit ne sait pas encore poser** : une citation sur une **union** ou sur un
+**fait**. Le modèle les autorise (`ck_tree_citation_sujet_unique`), `subjectKind` autre que
+`personne` rend `422`.
+
+**Ce qui bouge, et ce qui ne bouge pas, à la validation.** `citationCount` et `bestQuay`
+de la fiche sont **recalculés** : ce sont eux qui la font passer de « aucune source » à
+« appuyée sur un acte », et c'est tout l'objet de la demande. L'empreinte de l'arbre, en
+revanche, **ne change pas** : `tree_citation` en est exclu par l'ADR 0005 — « rien de tout
+cela ne déplace un nœud ni ne modifie une parenté » —, parce que l'inclure ferait
+recalculer le placement des 377 nœuds et tous les cercles de visibilité pour un graphe
+rigoureusement identique. Seul `GET /api/arbre/graphe` est revalidé par cette empreinte, et
+la fiche ne l'est pas : elle ne peut donc pas être servie périmée.
+
+### 6.4 ter `kind = ajout_note` — documenter une fiche existante
+
+**Le résultat absurde que cette nature supprime :** on savait créer une personne avec sa
+note — le § 6.3 porte un champ `note` par brouillon —, et on ne savait pas documenter une
+personne qui existe. `prp_draft_person.note` était l'unique chemin par lequel une
+`tree_note` entrait dans l'arbre après l'import, et il ne sert qu'à la création. Toute la
+matière d'archives portant sur les fiches déjà en base n'avait donc aucun moyen d'entrer :
+une transcription d'acte, une clôture de fratrie déclarée devant notaire, la correction
+d'une cote fausse qui enverra le prochain chercheur dans le mauvais fonds.
+
+Même forme que le § 6.4 bis, avec une valeur plus simple :
+
+```json
+{
+  "kind": "ajout_note",
+  "message": "relevé dans l’acte notarié",
+  "soumettre": true,
+  "targetKind": "personne",
+  "targetId": 17,
+  "ops": [
+    {
+      "seq": 1,
+      "opKind": "ajout_note",
+      "subjectKind": "personne",
+      "subjectId": 17,
+      "field": null,
+      "valueKind": "note",
+      "oldValue": null,
+      "newValue": {
+        "body": "Acte notarié du 12 frimaire an IX…
+La cote portée jusqu’ici était fausse.",
+        "scope": "naissance"
+      }
+    }
+  ]
+}
+```
+
+| Clé | Obligatoire | Ce qu'elle porte |
+|---|:-:|---|
+| `body` | **oui** | le texte ⇒ `422 ops[n].newValue.body` s'il manque, est vide ou n'est qu'espaces |
+| `scope` | non | ce que la note documente ; `generale` par défaut |
+
+**Les fins de ligne sont normalisées** (`
+` → `
+`) et le texte est `trim`é au dépôt :
+le même texte saisi au navigateur et recopié depuis un fichier doit produire la même note,
+sinon deux envois identiques cesseraient d'être reconnus comme des doublons et le libellé
+de l'historique dépendrait du système de l'auteur.
+
+**Une note de vingt-trois pages passe.** `tree_note.body` est un `TEXT` sans borne ; la
+limite de dépôt est à 200 000 caractères, très au-dessus de ce qu'on veut recevoir, et
+elle n'existe que pour écarter un corps qui ne serait pas une note du tout.
+
+**L'auteur inscrit sur la note est le demandeur, jamais l'administrateur qui valide.**
+`tree_note.author_label` est rendu sur la fiche, et pour cette colonne `null` signifie
+« importée du GEDCOM » (§ 3.5) : la laisser vide ferait passer la contribution d'un membre
+pour un artefact d'import, et y mettre le valideur effacerait celui qui a fait le travail.
+
+**Ce qui n'est pas accepté** : `subjectDraftRef` ⇒ `422`, avec un message qui renvoie au
+champ `note` du formulaire de création, lequel sait déjà le faire. `subjectKind` autre que
+`personne` ⇒ `422` : les notes d'union et de fait, que le modèle autorise, ne passent pas
+encore par une demande.
+
+**Ce qui ne bouge pas, et c'est voulu** : ni `citationCount` ni `bestQuay`. Une note
+documente, elle n'étaye pas — dix notes ne rendent pas une fiche mieux sourcée. Ni
+l'empreinte de l'arbre : `tree_note` en est exclu par l'ADR 0005, au même titre que
+`tree_citation`, parce qu'une note ne déplace aucun nœud. Seul `GET /api/arbre/graphe`
+est revalidé par cette empreinte, et la fiche — le seul écran où une note s'affiche — ne
+l'est pas : elle ne peut donc pas être servie périmée.
+
 ### 6.5 Une demande vue par son auteur
 
 `GET /api/demandes/12` :
