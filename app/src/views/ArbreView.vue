@@ -525,11 +525,22 @@ onBeforeUnmount(() => {
 <template>
   <div ref="racine" class="flex flex-col" :style="{ height: hauteurCadre }">
     <!--
-      La destination du champ de recherche sur téléphone. Elle est **avant** la
-      barre d'outils dans le gabarit : la cible d'un téléportage doit exister au
-      montage de ce qui s'y téléporte. Vide et sans boîte au-delà du seuil.
+      La destination du champ de recherche sur téléphone : un pied de page **fixe**,
+      visible en permanence, hors du tiroir.
+
+      Elle est **avant** la barre d'outils dans le gabarit, parce que la cible d'un
+      téléportage doit exister au montage de ce qui s'y téléporte — et **avant le
+      bloc du canevas**, pour que la fiche en plein écran, qui porte le même
+      `z-index`, passe par-dessus elle en étant plus loin dans le document.
+
+      `fixed` et non un élément de la colonne : dans le flux, cette barre prenait de
+      la hauteur au canevas, qui est mesuré — c'est-à-dire qu'elle rétrécissait
+      l'arbre au lieu de flotter au-dessus.
     -->
-    <div id="recherche-arbre-mobile" class="order-last md:hidden" />
+    <div
+      id="recherche-arbre-mobile"
+      class="fixed inset-x-0 bottom-0 z-30 border-t border-ligne bg-panneau shadow-panneau empty:hidden md:hidden"
+    />
 
     <TiroirOutils titre="Filtres de l’arbre">
       <BarreOutilsArbre

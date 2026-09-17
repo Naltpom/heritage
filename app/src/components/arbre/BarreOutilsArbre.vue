@@ -93,12 +93,10 @@ defineExpose({ focusRecherche })
 <template>
   <div
     class="flex flex-wrap items-center gap-3 border-b border-ligne bg-panneau px-4 py-2 max-md:flex-col max-md:items-stretch max-md:gap-2 max-md:border-b-0 max-md:bg-transparent max-md:px-0 max-md:py-0"
-    role="group"
-    aria-label="Filtres de l’arbre"
   >
     <Teleport to="#recherche-arbre-mobile" :disabled="!estMobile">
       <div
-        class="flex items-center gap-2 max-md:w-full max-md:border-t max-md:border-ligne max-md:bg-panneau max-md:px-4 max-md:py-2 md:contents"
+        class="flex items-center gap-2 max-md:w-full max-md:px-4 max-md:py-2 md:contents"
         role="search"
       >
         <label class="lecteur-ecran" for="arbre-recherche">Chercher une personne</label>
