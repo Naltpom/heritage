@@ -185,7 +185,7 @@ final readonly class NormaliseurDeGraphe
      * délibérément la seule source : additionner les écarts que chaque étage déclare
      * laisserait passer ceux qu'aucun ne déclare, et il y en a deux —
      * {@see PropositionsProjetees} écarte à la traduction,
-     * {@see \App\Module\Tree\Service\ProjecteurDePlacement::pose()} écarte à la pose. Un
+     * {@see ProjecteurDePlacement::pose()} écarte à la pose. Un
      * compte tenu à part dériverait du jour où un troisième apparaîtrait.
      *
      * De là découle l'invariant que le contrat publie et qu'un test tient :

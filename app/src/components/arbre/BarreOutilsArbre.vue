@@ -57,7 +57,7 @@ defineExpose({ focusRecherche })
 
 <template>
   <div
-    class="flex flex-wrap items-center gap-3 border-b border-ligne bg-panneau px-4 py-2"
+    class="flex flex-wrap items-center gap-3 border-b border-ligne bg-panneau px-4 py-2 max-md:flex-col max-md:items-stretch max-md:gap-2 max-md:border-b-0 max-md:bg-transparent max-md:px-0 max-md:py-0"
     role="search"
   >
     <label class="lecteur-ecran" for="arbre-recherche">Chercher une personne</label>
@@ -110,7 +110,7 @@ defineExpose({ focusRecherche })
       <span v-if="tronque" class="font-normal text-attenue"> (liste plafonnée)</span>
     </span>
 
-    <span class="flex-auto"></span>
+    <span class="flex-auto max-md:hidden"></span>
 
     <p class="hidden whitespace-nowrap text-xs text-attenue lg:block">
       <b>clic sur une fiche</b> ·

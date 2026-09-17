@@ -150,7 +150,7 @@ final class CalqueIncompletTest extends ArbreWebTestCase
     }
 
     /**
-     * **Un lecteur sans demande reçoit un calque éteint et des compteurs à zéro.**
+     * **Un lecteur sans demande reçoit un calque éteint et des compteurs à zéro.**.
      *
      * Pas de clé absente : « un front qui doit tester `"nonPlaces" in calque` avant de
      * tester son contenu écrira un jour le second test sans le premier » (§ 13.1). Un

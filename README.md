@@ -378,7 +378,8 @@ heritage/
   compose.prod.yaml       surcouche de production (ne se suffit pas à elle-même)
   .env.example            modèle versionné des variables d'orchestration
   .github/workflows/      CI : 5 portes bloquantes
-  api/                    Symfony 8 — 7 modules sous src/Module/
+  api/                    Symfony 8 — 8 modules sous src/Module/
+    Almanach/             carte des lieux et anniversaires — lecture seule
     Core/                 comptes, audit, erreurs, URL publiques
     Gedcom/               analyse et import GEDCOM
     Media/                portraits, preuves, vignettes, purge EXIF
@@ -389,6 +390,7 @@ heritage/
   app/                    Vue 3 — voir app/README.md
   docs/
     adr/                  les décisions d'architecture
+    deploiement/          la mise en ligne, pas à pas
     modele-donnees.md     tables, colonnes, index
     api-contract.md       le contrat HTTP
     arbitrages.md         les 35 arbitrages

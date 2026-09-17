@@ -94,7 +94,7 @@ onBeforeUnmount(() => clearTimeout(minuterie))
 </script>
 
 <template>
-  <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-ligne bg-panneau px-4 py-2">
+  <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-ligne bg-panneau px-4 py-2 max-md:flex-col max-md:items-stretch max-md:gap-2 max-md:border-b-0 max-md:bg-transparent max-md:px-0 max-md:py-0">
     <!-- Bande ------------------------------------------------------- -->
     <div class="flex min-w-0 flex-wrap items-center gap-1.5">
       <span class="text-xs font-semibold text-attenue">Une bande par</span>
@@ -130,7 +130,7 @@ onBeforeUnmount(() => clearTimeout(minuterie))
       <span class="text-xs text-attenue">années</span>
     </div>
 
-    <span class="hidden h-5 w-px bg-ligne sm:block" aria-hidden="true" />
+    <span class="hidden h-5 w-px bg-ligne md:block" aria-hidden="true" />
 
     <!-- Orientation ------------------------------------------------- -->
     <div class="flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label="Sens de lecture">
@@ -164,7 +164,7 @@ onBeforeUnmount(() => clearTimeout(minuterie))
       </button>
     </div>
 
-    <span class="hidden h-5 w-px bg-ligne sm:block" aria-hidden="true" />
+    <span class="hidden h-5 w-px bg-ligne md:block" aria-hidden="true" />
 
     <!-- Branches ---------------------------------------------------- -->
     <div class="flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label="Branches affichées">
@@ -191,7 +191,7 @@ onBeforeUnmount(() => clearTimeout(minuterie))
       </button>
     </div>
 
-    <span class="hidden h-5 w-px bg-ligne sm:block" aria-hidden="true" />
+    <span class="hidden h-5 w-px bg-ligne md:block" aria-hidden="true" />
 
     <!-- Incertitude ------------------------------------------------- -->
     <label class="flex cursor-pointer items-center gap-1.5 text-xs text-attenue">
@@ -204,7 +204,7 @@ onBeforeUnmount(() => clearTimeout(minuterie))
       Hachurer les dates incertaines
     </label>
 
-    <span class="flex-auto"></span>
+    <span class="flex-auto max-md:hidden"></span>
 
     <span v-if="chargement" class="text-xs font-semibold text-accent" aria-live="polite">…</span>
 

@@ -34,6 +34,9 @@ export * from './arbre'
 export * from './inscription'
 /* Module `Timeline` : la vue chronologique et sa préférence (§ 9). */
 export * from './chronologie'
+/* Module `Almanach` : la carte des lieux et les anniversaires (§ 19, § 20). Une
+   seule charge par écran — les filtres et les mois sont des réglages de rendu. */
+export * from './evenements'
 /* Module `Proposal` : la file, le diff, valider et refuser (§ 6). */
 export * from './propositions'
 /* Module `Media` : portraits et preuves — téléverser, lister, servir, supprimer

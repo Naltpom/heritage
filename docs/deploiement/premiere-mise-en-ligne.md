@@ -477,7 +477,40 @@ vps$ docker compose … exec api rm -f /tmp/arbre.ged
 vps$ rm -f /tmp/arbre.ged
 ```
 
-### 10.4 Rattacher l'administrateur à sa personne
+### 10.4 Situer les lieux — sinon la carte est vide
+
+**C'est l'étape qu'on oublie, et son symptôme est un écran vide sans erreur.**
+
+```
+vps$ docker compose … exec api \
+       php bin/console heritage:resoudre-les-lieux --dry-run
+vps$ docker compose … exec api \
+       php bin/console heritage:resoudre-les-lieux
+```
+
+La carte des lieux (§ 19 du contrat) a besoin de coordonnées. Les lieux de
+l'arbre sont du texte GEDCOM brut — `Saint-Ronce-de-Verçay, Fougerie, Florie` —
+et c'est cette commande qui les rapproche du référentiel versionné dans
+`api/ressources/gazetteer/` pour remplir `tree_place`.
+
+Pourquoi ce n'est pas dans une migration : **une migration ne peut pas lire un
+fichier de référence**, et surtout les 104 chaînes de lieux n'existent que sur ce
+serveur — le dépôt ne porte aucune donnée réelle (ADR 0006). Même raison que
+`heritage:recalculer-les-cles-de-recherche`.
+
+Le `--dry-run` annonce **deux nombres** : ce qui a été résolu et ce qui ne l'a pas
+pu, avec les lieux restants par nombre d'occurrences. Un lieu non résolu n'est pas
+une panne — c'est une bulle en moins, comptée à part dans l'interface. Un nom de
+commune porté par plusieurs communes n'est **jamais** résolu au hasard : la
+commande l'imprime, et un humain tranche en écrivant la ligne à la main
+(`source = 'manuel'`, que la commande ne réécrit plus jamais, même avec
+`--forcer`).
+
+> **À rejouer après chaque import GEDCOM.** Un réimport peut introduire de
+> nouvelles graphies de lieu, et rien d'autre ne s'en aperçoit : la carte se
+> contentera de les compter comme « non situées ».
+
+### 10.5 Rattacher l'administrateur à sa personne
 
 Le rattachement se fait par **référence GEDCOM** (`@I500001@`), jamais par un
 `tree_person.id`. Mesuré le 15 septembre 2026 : après un réimport, les

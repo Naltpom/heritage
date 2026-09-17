@@ -26,6 +26,23 @@ Exclus par `.gitignore` : `*.ged`, `graphe.json`, `arbre-data.json`, `rendu-part
 - Les seules données du dépôt sont des **fixtures anonymisées, générées par Faker à graine
   fixe**. `docker compose up --build` doit suffire à obtenir une application fonctionnelle et
   peuplée.
+- **Une exception nommée, et elle va dans l'autre sens :
+  `api/ressources/gazetteer/`.** Ce dossier porte de la **donnée publique de
+  référence** — les communes et lieux-dits de France et les villes du monde, avec
+  leurs coordonnées (GeoNames, CC BY 4.0 ; codes des départements et des régions,
+  Etalab, Licence Ouverte 2.0). Elle est **délibérément versionnée**, et elle ne
+  nomme personne.
+
+  La raison tient en une phrase : **c'est ce qui permet à la carte des lieux de
+  ne rien envoyer à personne.** L'alternative — appeler un service de géocodage —
+  reviendrait à transmettre à un tiers les communes de naissance et de décès de
+  la famille, c'est-à-dire exactement ce que cette ADR refuse. Le référentiel
+  étant dans le dépôt, donc dans l'image de production, la commande
+  `heritage:resoudre-les-lieux` tourne sur le VPS **sans réseau**.
+
+  Corollaire : **ne le supprimez pas par réflexe de prudence.** Il ressemble à de
+  la donnée volumineuse commitée, ce que cette ADR proscrit ; il est le contraire.
+  Sans lui, la carte est vide.
 - L'import des vraies données est une **commande locale** — `bin/console heritage:import-gedcom`
   — jamais une fixture, jamais une étape de démarrage.
 - `.env.example` est versionné, complet et commenté, sans aucune valeur secrète.

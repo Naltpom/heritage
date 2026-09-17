@@ -75,14 +75,20 @@ final class InvariantsDuContratTest extends TestCase
      * muet au lieu de le faire tomber — et un contrôle muet est pire qu'absent,
      * puisqu'il occupe la place.
      *
-     * Valeurs constatées au 2026-09-15 ; ce sont des planchers, pas des égalités,
-     * pour qu'ajouter un exemple ne casse pas le test. Les abaisser demande de
-     * dire pourquoi.
+     * Valeurs constatées au 2026-09-17, après l'ajout des § 19 et § 20 ; ce sont
+     * des planchers, pas des égalités, pour qu'ajouter un exemple ne casse pas le
+     * test. Les abaisser demande de dire pourquoi.
+     *
+     * **Et les relever fait partie du travail.** Laissés aux valeurs du
+     * 2026-09-15 — 55, 4, 8, 20 — ils n'auraient plus rien gardé : le document
+     * porte désormais 63 blocs, 12 étiquettes et 33 blocs date, si bien qu'un
+     * extracteur cassé aurait pu en perdre la moitié sans que ce test ne bronche.
+     * C'est l'argument même de ce fichier, retourné contre ses propres nombres.
      */
-    private const MINIMUM_BLOCS_JSON = 55;
+    private const MINIMUM_BLOCS_JSON = 63;
     private const MINIMUM_NŒUDS_PERSONNE = 4;
-    private const MINIMUM_ETIQUETTES = 8;
-    private const MINIMUM_BLOCS_DATE = 20;
+    private const MINIMUM_ETIQUETTES = 12;
+    private const MINIMUM_BLOCS_DATE = 33;
 
     /** Constantes du moteur de placement — `docs/moteur-retrouve/graphe.py`, ADR 0005. */
     private const LARG_CAR = 6.6;

@@ -3,6 +3,27 @@
  * Le panneau latéral : la fiche de la personne sélectionnée.
  *
  * ────────────────────────────────────────────────────────────────────
+ * **SUR TÉLÉPHONE, IL N'EST PAS LATÉRAL.** En deçà de `md`, un bandeau de
+ * 340 px recouvrait 88 % de l'écran et laissait une bande d'arbre inutilisable
+ * derrière lui. Il occupe donc toute la largeur, par quatre variantes `max-md:`
+ * et rien d'autre : au-delà du seuil, la chaîne de classes est celle d'avant,
+ * jeton pour jeton.
+ *
+ * **Il reste `absolute`, et ce choix compte.** Un `fixed` recouvrirait aussi
+ * l'en-tête — donc le burger, donc le seul moyen de naviguer — et poserait en
+ * prime la question de savoir si un ancêtre en `overflow-clip` le rogne, à
+ * laquelle les navigateurs ne répondent pas tous pareil. En restant `absolute`,
+ * il remplit le bloc rogné : tout ce qui est sous l'en-tête, de bord à bord. Et
+ * fermé, son `translate-x-[102%]` reste rogné par ce même bloc, donc **le
+ * débordement horizontal ne peut pas revenir** — ce que quatre tests de
+ * `arbre-revalidation.test.ts` tiennent.
+ *
+ * Une conséquence à dire à voix haute : `max-md:max-w-none` neutralise
+ * `max-w-[88vw]` sous le seuil. L'assertion qui cherche `max-w-[88vw]` ne veut
+ * donc plus dire sur mobile ce que son commentaire raconte — mais la propriété
+ * qu'elle protège réellement, « le panneau s'arrête au bord droit du bloc »,
+ * reste vraie à 388 px comme à 1524.
+ * ────────────────────────────────────────────────────────────────────
  * **Une fiche partielle n'est pas une fiche cassée.** Une personne vivante hors
  * du cercle du lecteur rend `200` avec **sept clés** (§ 11.1) : le serveur
  * n'envoie ni date, ni lieu, ni source, ni média, ni parenté. Le front ne
@@ -183,14 +204,14 @@ watch(
 
 <template>
   <aside
-    class="absolute inset-y-0 right-0 z-20 w-[340px] max-w-[88vw] overflow-y-auto border-l border-ligne bg-panneau px-4 pb-8 pt-4 transition-transform duration-200"
+    class="absolute inset-y-0 right-0 z-20 w-[340px] max-w-[88vw] overflow-y-auto border-l border-ligne bg-panneau px-4 pb-8 pt-4 transition-transform duration-200 max-md:left-0 max-md:z-30 max-md:w-full max-md:max-w-none max-md:border-l-0"
     :class="ouvert ? 'translate-x-0' : 'translate-x-[102%]'"
     :aria-hidden="!ouvert"
     :inert="!ouvert || undefined"
   >
     <button
       type="button"
-      class="absolute right-3 top-3 cursor-pointer border-0 bg-transparent px-1.5 text-xl leading-none text-attenue hover:text-texte"
+      class="absolute right-3 top-3 cursor-pointer border-0 bg-transparent px-1.5 text-xl leading-none text-attenue hover:text-texte max-md:px-3 max-md:py-1.5 max-md:text-2xl"
       aria-label="Fermer le panneau"
       @click="emit('fermer')"
     >

@@ -224,5 +224,4 @@ final readonly class LectureDesPropositions implements CalqueEnAttenteInterface
     {
         return '#'.$demandeId.'/'.ltrim($localRef, '#');
     }
-
 }

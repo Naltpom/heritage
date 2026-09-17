@@ -14,7 +14,7 @@
 > dossier » renvoie à `brief-mission.md`. « ADR 0003 » renvoie à `docs/adr/`. La mention
 > « du dossier » n'est jamais omise.
 >
-> **54 routes**, sept modules.
+> **58 routes**, huit modules.
 >
 > **Les exemples de ce fichier sont tenus par un test.**
 > `api/tests/Contrat/InvariantsDuContratTest.php` relit ce document, extrait ses blocs
@@ -62,6 +62,8 @@
 | 16 | Ce qui n'est jamais renvoyé |
 | 17 | Le test des trois routes — ce qu'il a révélé |
 | 18 | Ce que le modèle ne tranche pas — points signalés |
+| 19 | Carte des lieux |
+| 20 | Anniversaires |
 
 ---
 
@@ -275,6 +277,7 @@ Chaque module déclare ses routes dans **son** fichier `config/routes/<module>.y
 | `/api/demandes` | `Proposal` |
 | `/api/medias` | `Media` |
 | `/api/chronologie` | `Timeline` |
+| `/api/carte`, `/api/anniversaires` | `Almanach` |
 | `/api/administration/**` | **le troisième segment désigne le propriétaire** — voir ci-dessous |
 
 `/api/administration` est le seul préfixe partagé, parce que « administration » est un
@@ -293,7 +296,7 @@ public, pas un domaine. Le troisième segment tranche, sans ambiguïté possible
 
 | Régime | Routes | `Cache-Control` | `ETag` | `Vary` |
 |---|---|---|---|---|
-| **A — rien n'est gardé** | toutes les routes JSON, **sauf le graphe** | `no-store` | aucun | aucun |
+| **A — rien n'est gardé** | toutes les routes JSON, **sauf le graphe** | `private, no-store` | aucun | `Cookie` |
 | **B — revalidation** | `GET /api/arbre/graphe` | `private, no-cache` | `"<64 hex>"` **fort** (§ 5.2) | `Cookie` |
 | **C — revalidation d'octets** | `GET /api/medias/{id}/fichier` et `/vignette` | `private, no-cache` | `"<sha256 du fichier>"` **fort** | `Cookie` |
 
@@ -301,6 +304,18 @@ public, pas un domaine. Le troisième segment tranche, sans ambiguïté possible
 |---|---|---|
 | `Retry-After` | toute `429` **sauf** `POST /api/inscription/rattachement` (§ 4.2) | secondes |
 | `Content-Disposition` | `GET /api/medias/{id}/fichier` | `inline; filename="<original_name assaini>"` |
+
+> **Corrigé le 17/09/2026 : le régime A porte `private, no-store` et `Vary: Cookie`.**
+> Cette table disait `no-store` seul et « `Vary` : aucun » ; le code écrit
+> `private, no-store` + `Vary: Cookie` depuis `ChronologieController`, et c'est
+> lui qui a raison. Ces charges dépendent du **lecteur** — le cercle de
+> visibilité s'applique à la sérialisation —, et une réponse qui varie selon le
+> cookie sans le déclarer est une réponse qu'un cache partagé peut servir à
+> quelqu'un d'autre. `private` le dit au cache, `Vary` dit sur quoi.
+>
+> La divergence était sans conséquence tant qu'aucun cache partagé ne se trouvait
+> sur le chemin. Elle est réconciliée plutôt que propagée aux deux routes
+> d'`Almanach`.
 
 **`no-store` et `no-cache` ne sont pas deux intensités de la même chose**, et les confondre
 donne soit une fuite, soit une application lente :
@@ -4504,6 +4519,10 @@ document a retenu **en attendant** une correction de la source.
 | 13 | Chemin du GEDCOM à l'import | Le **§ 0 du dossier** impose une variable de configuration, « jamais un chemin en dur », et l'atelier est en lecture seule | le corps porte une **clé de source** déclarée dans `.env`, jamais un chemin de système de fichiers (§ 10.6) — un chemin libre serait une lecture de fichier arbitraire | — |
 | 15 | **L'étiquette de nom mesurée n'a pas de nom** | Le moteur mesure `(nickname ?? givenNames)` réduit à son **premier mot** + `surname` ; **rien dans le modèle ni dans l'ADR 0005 ne nomme cette chaîne**, et `display_name` (§ 3.1) est une autre composition — tous les prénoms. Mesuré : **220 fiches sur 274 débordent** si le canevas dessine `displayName`, jusqu'à 169 unités sur une boîte de 149 | clé **`etiquetteNom`** sur le nœud, servie par `MesureDeFiche::etiquetteNom()` (§ 5.2). Non dérivable côté client : un nom de famille peut contenir des espaces | ADR 0005 — la nommer dans le résumé de l'algorithme, à côté de `ligne_dates()` |
 | 14 | **Chaînage d'une reprise** | Aucune colonne n'enregistre qu'une demande en refait une autre, ni que les médias d'une demande caduque sont partis vers sa reprise (§ 6.10). `duplicate_of_id` ne convient pas : il porte le rapprochement de doublons **entre deux auteurs**, et lui donner un second sens rendrait les deux illisibles | `origine` est écrit en texte dans `message` ; les médias suivent et la demande d'origine ne les liste plus | **à trancher par le commanditaire** : veut-il lire « votre demande n° 12 a été refaite en n° 21 » ? Si oui, c'est une colonne `reprise_de_id` sur `prp_change_request`, et ce n'est pas à ce document de la décider |
+| 16 | **Les anniversaires contre « pas de liste, pas d'export »** | L'ADR 0003 refuse l'énumération ; or la page des anniversaires **est** une liste de personnes et de dates, triée, filtrable, et l'année entière tient en une requête | **absents, jamais réduits** — la décision du § 9.1 reprise mot pour mot. L'ensemble résiduel ne couvre que les défunts et les vivants déjà dans le cercle du lecteur, dont il lit les dates sur `/api/chronologie`. Vérifié par un test de **sous-ensemble** entre les deux routes (§ 20.5) | **à confirmer par le commanditaire** : l'ensemble n'est pas plus large, mais il est mieux trié et moins cher à parcourir qu'un SVG |
+| 17 | **Le 29 février dans un mois qui n'en a pas** | Rien ne dit ce que devient un anniversaire du 29 février les trois années sur quatre où la date n'existe pas | le serveur l'émet **tel quel** (`{"mois": 2, "jour": 29}`) et ne le déplace jamais ; le client l'affiche en case les années bissextiles et le liste sous la grille sinon. Reporter au 28 ou au 1ᵉʳ mars inventerait une date | **à confirmer** — c'est la seule décision de ce lot qu'un lecteur pourrait vouloir renverser |
+| 18 | **La journalisation promise par l'ADR 0003 n'existe nulle part** | L'ADR compense l'énumération en la rendant « coûteuse et **visible** — l'accès au graphe est journalisé ». Or `Tree\Controller\ArbreController` n'écrit aucune entrée d'audit, et `AuditDoctrineSubscriber` est piloté par les **écritures** Doctrine : aucune route de lecture n'est journalisée, graphe compris | **rien ajouté.** Journaliser `/api/anniversaires` en ferait la seule route de lecture tracée du produit — une asymétrie qui se lit comme une suspicion portée sur cet écran-là. Le manque est signalé ici plutôt que comblé de travers | **à trancher** : soit l'ADR décrit une compensation qui n'a jamais été implémentée, soit elle doit l'être pour **toutes** les lectures, pas pour une |
+| 19 | **`tree_place` sans `place_id`** | `docs/modele-donnees.md` § 0.6 pré-autorisait « `tree_place` et une colonne `place_id` à côté des colonnes `*_place` » | la table existe, **la colonne non** : la jointure se fait par la chaîne brute repliée. Trois raisons — Doctrine interdit une association dans un `Embeddable` ; `place_id` y aurait imposé un `use` de `Tree` dans `Core` ; et `Person` porte un `#[ORM\Version]`, donc réécrire une personne **périmerait les demandes en attente qui la visent** (§ 9.6) | — décision prise et documentée dans `modele-donnees.md` § 0.6, qui garde le raisonnement d'origine |
 
 Rappel, parce que les deux touchent ce contrat : **`docs/arbitrages.md` § 3 laisse deux points
 à l'arbitrage du commanditaire.** Le premier — ce qu'un compte en attente a le droit de lire —
@@ -4511,3 +4530,259 @@ est celui du § 12 de ce document ; le renverser (« ne rien montrer avant activ
 `GET /api/inscription/etat`, le graphe et la recherche pour ce régime, et rien d'autre. Le
 second — `Member` contre `Account` — n'a aucun effet sur les chemins d'URL, qui sont en
 français, mais il en a sur `membre.id`, qui est un `mbr_member.id`.
+
+---
+
+## 19. Carte des lieux
+
+Module **`Almanach`**. Une bulle par lieu situé : où la famille a vécu ses événements.
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/carte` | `attente` | — | `200` | `401` |
+
+**Aucun paramètre, et c'est une décision.** Les filtres de genre et la bascule du
+dégradé sont des **réglages de rendu** : ils ne changent pas ce que le serveur
+calcule. À l'échelle de cet arbre — environ 500 événements datés après le cercle,
+une trentaine de kilo-octets — une charge unique coûte moins qu'un aller-retour
+par bascule, et rend le geste instantané. C'est ce qui distingue cette route de
+`GET /api/chronologie`, dont `bande` et `branches` changent réellement le calcul.
+
+Régime de cache **A** : `Cache-Control: private, no-store`, `Vary: Cookie`, pas d'`ETag`.
+
+### 19.1 La charge
+
+```json
+{
+  "lieux": [
+    {
+      "placeId": 17,
+      "libelle": "Saule",
+      "lat": 46.1234,
+      "lon": 2.5678,
+      "precision": "commune",
+      "confiance": 100,
+      "source": "communes-fr",
+      "brut": ["Saule, Ombrage, Sylvanie", "SAULE (Ombrage)"]
+    }
+  ],
+  "evenements": [
+    {
+      "cle": "naissance:412",
+      "genre": "naissance",
+      "type": "naissance",
+      "placeId": 17,
+      "place": "Saule, Ombrage, Sylvanie",
+      "annee": 1887,
+      "texte": "14 mars 1887",
+      "qualifier": "exacte",
+      "certain": true,
+      "sujets": [
+        { "personId": 412, "displayName": "Marne Dolomite Sureau", "sex": "feminin", "vivant": false }
+      ],
+      "familyId": null
+    }
+  ],
+  "resume": {
+    "parGenre": { "naissance": 224, "deces": 171, "union": 64, "bapteme": 3, "autre": 30 },
+    "sansLieu": 118,
+    "lieuNonResolu": 14,
+    "sansDate": 37,
+    "bornes": { "min": 1657, "max": 1994 }
+  }
+}
+```
+
+### 19.2 Les deux vocabulaires
+
+`type` porte **onze** valeurs — `naissance`, `deces`, `mariage`, `divorce`, puis
+les sept de `FactType` reprises **verbatim** : `profession`, `residence`,
+`inhumation`, `recensement`, `bapteme_religieux`, `bapteme`, `autre`.
+
+> **Les quatre premières n'existent pas dans `FactType`, et l'en-tête de cette
+> énumération interdit de les y ajouter** : naissance, décès, mariage et divorce
+> sont des **colonnes**, sur `tree_person` et `tree_family`. Un fait dupliqué est
+> une divergence qui attend son heure. `Almanach\Contract\TypeDEvenement` est le
+> seul endroit où les onze coexistent, et elles n'y coexistent qu'à la
+> sérialisation.
+
+`genre` porte **cinq** valeurs, le vocabulaire des pastilles :
+`naissance`, `deces`, `union` (mariage + divorce), `bapteme` (les deux baptêmes),
+`autre`. Un lecteur cherche « les unions », pas « les mariages, et aussi les
+divorces ».
+
+### 19.3 Ce qu'il faut savoir avant de dessiner
+
+**`placeId` est la clé de regroupement ; `place` est la provenance.** Le front ne
+fait aucun rapprochement de chaînes : deux graphies d'une commune doivent
+s'effondrer sur une bulle, et c'est le serveur qui l'a décidé, en base. `brut`
+porte les graphies qui ont abouti là — c'est ce qui rend **visible un mauvais
+géocodage** au lieu de l'enterrer sous un beau libellé.
+
+**`place` est présent même quand `placeId` est `null`.** C'est ce qui rend
+« 14 événements sans lieu situé » énumérable plutôt qu'un nombre nu.
+
+**`annee` n'est jamais `null` dans cette charge.** Un événement sans année
+utilisable est **omis** et compté dans `resume.sansDate`. L'aplatissement est
+`getMin() ?? getMax()`, écrit en clair au point d'appel — la borne basse d'abord,
+parce qu'une date bornée à droite (`BEF 1920`) ne porte son information que dans
+`max`. Ce n'est **pas** un `getYear()` sur `UncertainDate`, que le § 14 refuse.
+
+**`certain` veut dire « désigne un jour unique », pas « fiable ».** C'est
+l'inverse de `isRange()`.
+
+**Trois seaux, et un invariant de conservation :**
+
+> `evenements` + `resume.sansLieu` + `resume.sansDate` = les événements visibles.
+
+`sansLieu` compte ceux dont le lieu n'est pas écrit — un trou dans la donnée.
+`lieuNonResolu` compte ceux dont le lieu **est** écrit mais n'a pas de
+coordonnées — un trou que `heritage:resoudre-les-lieux` peut combler. **Les
+fusionner rendrait invisible la couverture du référentiel**, qui est le seul
+chiffre disant s'il vaut la peine de rejouer la commande.
+
+**`resume.parGenre` compte avant tout filtre du client, et après le cercle.**
+Sans ces totaux, un filtre qui ne trouve légitimement rien est indistinguable
+d'un filtre dont la donnée n'est jamais arrivée — le défaut que la barre d'outils
+de l'arbre documente déjà.
+
+**`bornes` n'est jamais `null`.** Sur une charge sans aucune année, les deux
+bornes valent l'année courante. Le signal de vacuité est `evenements: []`, jamais
+`bornes`. Même doctrine, mêmes mots, qu'au § 9.1.
+
+---
+
+## 20. Anniversaires
+
+Module **`Almanach`**. Le calendrier des dates qui reviennent.
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/anniversaires` | `attente` | — | `200` | `401` |
+
+**L'année entière, en une fois, et sans paramètre.** Naviguer de mois en mois ne
+redemande donc rien — ce qui est tout l'intérêt des deux flèches.
+
+Régime de cache **A**.
+
+### 20.1 La charge
+
+`jours` est **creux** : seuls les jours pourvus y figurent, et le client construit
+la grille.
+
+```json
+{
+  "jours": [
+    {
+      "mois": 3,
+      "jour": 14,
+      "evenements": [
+        {
+          "cle": "naissance:412",
+          "genre": "naissance",
+          "type": "naissance",
+          "annee": 1887,
+          "texte": "14 mars 1887",
+          "lieu": "Saule, Ombrage, Sylvanie",
+          "sujets": [
+            { "personId": 412, "displayName": "Marne Dolomite Sureau", "sex": "feminin", "vivant": false }
+          ],
+          "familyId": null
+        }
+      ]
+    }
+  ],
+  "resume": {
+    "parGenre": { "naissance": 168, "deces": 121, "union": 71, "bapteme": 3, "autre": 44 },
+    "sansJour": { "naissance": 93, "deces": 82, "union": 25, "bapteme": 0, "autre": 40 }
+  }
+}
+```
+
+### 20.2 Un anniversaire exige un jour ET un mois — `exacte`, et elle seule
+
+**C'est la pièce maîtresse de cette section, et personne ne la re-dérivera.**
+
+| `DateQualifier` | `min` | `max` | Jour + mois ? | Pourquoi |
+|---|---|---|:-:|---|
+| `exacte` | le jour | **le même jour** | **OUI** | la valeur **est** le jour |
+| `annee` | `AAAA-01-01` | `AAAA-12-31` | non | le 1ᵉʳ janvier est un **artefact d'encodage** |
+| `mois` | `AAAA-MM-01` | dernier du mois | non | le jour est inconnu par construction |
+| `environ` | — | — | non | `ABT 1934` porte sur une **année** |
+| `avant` | `null` | une borne | non | une borne n'est pas une occurrence |
+| `apres` | une borne | `null` | non | idem, côté bas |
+| `entre` | `j1` | `j2`, `j1 ≠ j2` | non | une fourchette ; `ck_*_intervalle` interdit même `min = max` |
+| `depuis` | un jour | `null` | non | début d'une période |
+| `jusqu_a` | `null` | un jour | non | fin d'une période |
+| `inconnue` | `null` | `null` | non | — |
+
+> **Le défaut que cette table empêche.** Une lecture naïve de `min` poserait les
+> **119 dates `annee` de l'arbre au 1ᵉʳ janvier**, sur 620 — le Nouvel An
+> deviendrait le jour le plus chargé de l'histoire de la famille. Plausible,
+> muet, et faux. Les 5 dates `mois` feraient la même chose au 1ᵉʳ du mois.
+>
+> Sur la répartition mesurée (454 `exacte`, 119 `annee`, 23 `environ`, 12
+> `entre`, 6 `avant`, 5 `mois`, 1 `depuis`), **454 sur 620 passent la porte**.
+
+**`resume.sansJour` porte les autres, par genre**, calculé après le cercle et
+indépendant du mois affiché. Sans ce compte, un lecteur voit 31 naissances en
+septembre et n'apprend jamais qu'il en existe 166 de plus dont personne n'a noté
+le jour. **Par événement : rien.** Jamais placé sur un jour deviné, jamais au
+1ᵉʳ janvier, jamais au 1ᵉʳ du mois.
+
+**Le 29 février est émis tel quel** — `{"mois": 2, "jour": 29}`. Le serveur ne le
+déplace pas : le reporter au 28 ou au 1ᵉʳ mars inventerait une date. C'est le
+client qui décide, puisque lui seul sait quelle année il affiche.
+
+### 20.3 Les unions n'ont pas de `personId`, et n'en reçoivent pas
+
+Un mariage porte `familyId` et **un ou deux** `sujets` — `tree_family` admet un
+époux unique. Sa `cle` est tirée de sa propre ligne (`mariage:42`), jamais d'une
+personne : « lui en inventer un — le premier époux, par exemple — serait
+attribuer à quelqu'un un événement qui ne le nomme pas » (§ 9.1).
+
+> **Règle ET : un événement n'est rendu que si TOUS ses sujets sont visibles**, et
+> s'il en a au moins un.
+>
+> Le § 16.2 ferme, pour un vivant hors cercle, « toute date, toute borne de date »
+> et « tout lieu, **y compris un lieu de fait ou d'union** » — or la date d'un
+> mariage est la date des **deux** époux. Rendre la ligne en ne nommant que
+> l'époux visible publierait quand même la date de noces de l'autre, que les
+> arêtes du graphe suffisent à rapprocher. Et surtout : **ET ne peut pas se
+> tromper dans le sens permissif.** Un époux décédé ne doit jamais déverrouiller
+> un vivant.
+>
+> `sujets: []` ⇒ absent. Échec fermé.
+
+### 20.4 Le filtrage a lieu une fois, et une seule
+
+`Almanach\Service\FluxVisible` est la **seule** classe du module qui nomme
+`CercleDeVisibiliteInterface` — un test l'exige, en comptant les occurrences. Elle
+appelle le port une fois, `filtrerPersonnes()` une fois, et rend le flux filtré.
+Les deux normaliseurs sont sans confidentialité **par construction**.
+
+Le port, lui, rend l'arbre validé **complet et sans filtre** : « deux filtres
+valent moins qu'un — celui qu'on oublie de corriger est toujours le second ».
+
+**Aucun total « sur N » n'existe dans ces deux charges.** Il dirait par
+soustraction combien de personnes le lecteur ne voit pas. Les compteurs de
+`resume` sont tous calculés **après** le cercle, et chacun a son test.
+
+### 20.5 Ce que ces deux écrans doivent au § 18
+
+La page des anniversaires **est** une liste de personnes et de dates, triée. C'est
+ce que l'ADR 0003 appelle une **énumération**, et le § 9.1 a déjà employé ce mot
+pour retirer les vivants hors cercle des barres de la chronologie.
+
+La réponse est la même, mot pour mot : **un vivant hors cercle est absent, jamais
+réduit**. L'ensemble résiduel ne couvre alors que (a) les défunts — « un fait
+historique, visible de tout compte connecté » — et (b) les vivants **déjà dans le
+cercle du lecteur**, dont il lit les dates sur `/api/chronologie`. Aucun fait
+nouveau n'en devient déductible.
+
+Et cela se vérifie mécaniquement : pour un lecteur donné, l'ensemble des
+`personId` de `/api/anniversaires` doit être un **sous-ensemble** de celui des
+`barres` de `/api/chronologie`.
+
+La carte, elle, est hors de cette question : elle ne sert que des agrégats et
+n'ouvre aucune bulle sur une liste nominative.

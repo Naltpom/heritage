@@ -16,11 +16,14 @@ import {
   centrerSur,
   deplacer,
   echelle,
+  pincer,
   versContenu,
   viewBoxEnTexte,
   zoomer,
+  zoomerRatio,
   type Boite,
   type CadreEcran,
+  type Pince,
 } from './geometrie'
 
 const BOITE: Boite = { x: -7770.4, y: -1730, w: 15824, h: 1810 }
@@ -217,5 +220,93 @@ describe('cadrer', () => {
     if (vb === null) return
     expect(vb.x + vb.w / 2).toBeCloseTo(0, 6)
     expect(vb.y + vb.h / 2).toBeCloseTo(-300, 6)
+  })
+})
+
+describe('zoomerRatio', () => {
+  it('rapproche quand les doigts s’écartent, éloigne quand ils se rapprochent', () => {
+    /* Le sens est la première chose qu'on inverse sans s'en apercevoir : un
+       rapport supérieur à 1 veut dire « le dessin grandit », donc le `viewBox`
+       RÉTRÉCIT. Les deux assertions se contredisent si le signe est faux. */
+    expect(zoomerRatio(BOITE, BOITE, CADRE, 800, 446, 2).w).toBeLessThan(BOITE.w)
+    expect(zoomerRatio(BOITE, BOITE, CADRE, 800, 446, 0.5).w).toBeGreaterThan(BOITE.w)
+  })
+
+  it('garde immobile le point sous le milieu des doigts', () => {
+    const avant = versContenu(BOITE, CADRE, 1200, 300)
+    const apres = zoomerRatio(BOITE, BOITE, CADRE, 1200, 300, 1.8)
+    const point = versContenu(apres, CADRE, 1200, 300)
+    expect(point.x).toBeCloseTo(avant.x, 4)
+    expect(point.y).toBeCloseTo(avant.y, 4)
+  })
+
+  it('bute aux deux mêmes limites que la molette', () => {
+    let dezoom = BOITE
+    for (let i = 0; i < 60; i++) dezoom = zoomerRatio(dezoom, BOITE, CADRE, 800, 446, 0.6)
+    expect(dezoom.w).toBeCloseTo(BOITE.w * 2.5, 6)
+
+    let zoom = BOITE
+    for (let i = 0; i < 120; i++) zoom = zoomerRatio(zoom, BOITE, CADRE, 800, 446, 1.6)
+    expect(zoom.w).toBeCloseTo(BOITE.w / 500, 6)
+  })
+
+  it('conserve le rapport largeur/hauteur', () => {
+    const vb = zoomerRatio(BOITE, BOITE, CADRE, 900, 300, 1.4)
+    expect(vb.w / vb.h).toBeCloseTo(BOITE.w / BOITE.h, 9)
+  })
+
+  it('rend le viewBox inchangé sur un rapport nul, négatif, infini ou NaN', () => {
+    /*
+     * LE DÉFAUT. Deux doigts peuvent se poser sur le même pixel : l'écartement
+     * vaut 0 et le rapport devient `Infinity` ou `NaN`. Un `NaN` dans l'attribut
+     * `viewBox` ne lève aucune erreur — il efface le graphe entier, en silence.
+     */
+    for (const mauvais of [0, -1, Number.POSITIVE_INFINITY, Number.NaN]) {
+      expect(zoomerRatio(BOITE, BOITE, CADRE, 800, 446, mauvais)).toBe(BOITE)
+    }
+  })
+
+  it('donne exactement ce que rend la molette pour le rapport correspondant', () => {
+    /* La preuve que `zoomer` délègue sans rien perdre : un cran de molette de
+       −120 vaut le rapport exp(120 × 0,0016). Si les deux formules divergeaient
+       d'un signe, le pincement et la molette zoomeraient en sens contraire. */
+    const parLaMolette = zoomer(BOITE, BOITE, CADRE, 900, 400, -120)
+    const parLeRapport = zoomerRatio(BOITE, BOITE, CADRE, 900, 400, Math.exp(120 * 0.0016))
+    expect(parLeRapport.w).toBeCloseTo(parLaMolette.w, 9)
+    expect(parLeRapport.x).toBeCloseTo(parLaMolette.x, 9)
+    expect(parLeRapport.y).toBeCloseTo(parLaMolette.y, 9)
+  })
+})
+
+describe('pincer', () => {
+  const ECART = (a: Pince, b: Pince): number => a.d / b.d
+
+  it('suit le milieu des doigts en plus de leur écartement', () => {
+    /*
+     * Un pincement fait DEUX choses : les doigts s'écartent et glissent. Ne
+     * traiter que l'écartement laisse le dessin fuir sous la main. On le tient
+     * en comparant au même pincement sans glissement : seules les coordonnées
+     * doivent différer, la largeur doit être la même.
+     */
+    const avant: Pince = { x: 800, y: 400, d: 200 }
+    const glisse: Pince = { x: 950, y: 460, d: 300 }
+    const surPlace: Pince = { x: 800, y: 400, d: 300 }
+
+    const avecGlissement = pincer(BOITE, BOITE, CADRE, avant, glisse)
+    const sansGlissement = pincer(BOITE, BOITE, CADRE, avant, surPlace)
+
+    expect(ECART(glisse, avant)).toBe(ECART(surPlace, avant))
+    expect(avecGlissement.w).toBeCloseTo(sansGlissement.w, 9)
+    expect(avecGlissement.x).not.toBeCloseTo(sansGlissement.x, 3)
+  })
+
+  it('grandit le dessin quand l’écartement augmente', () => {
+    const vb = pincer(BOITE, BOITE, CADRE, { x: 800, y: 400, d: 100 }, { x: 800, y: 400, d: 260 })
+    expect(vb.w).toBeLessThan(BOITE.w)
+  })
+
+  it('ne fait rien quand l’écartement de départ est nul', () => {
+    const vb = pincer(BOITE, BOITE, CADRE, { x: 800, y: 400, d: 0 }, { x: 820, y: 410, d: 180 })
+    expect(vb).toBe(BOITE)
   })
 })

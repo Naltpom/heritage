@@ -368,7 +368,7 @@ final class ChronologieTest extends CasDeTestTimeline
     }
 
     /**
-     * **`bornes` n'est jamais `null` ; `bandes: []` est l'unique signal de vacuité.**
+     * **`bornes` n'est jamais `null` ; `bandes: []` est l'unique signal de vacuité.**.
      *
      * C'est un contrat avec le front, qui type `bornes` **non nullable** et déclenche son
      * état vide sur `bandes: []`. Un `bornes: null` n'aurait menti que pour un compte qui
