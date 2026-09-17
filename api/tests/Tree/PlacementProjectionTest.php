@@ -9,6 +9,7 @@ use App\Module\Tree\Service\MoteurDePlacement;
 use App\Module\Tree\Service\ProjecteurDePlacement;
 use App\Module\Tree\ValueObject\AncrageEnAttente;
 use App\Module\Tree\ValueObject\AreteDePlacement;
+use App\Module\Tree\ValueObject\BoiteEnglobante;
 use App\Module\Tree\ValueObject\NoeudEnAttente;
 use App\Module\Tree\ValueObject\NoeudPlace;
 use App\Module\Tree\ValueObject\PersonnePlacable;
@@ -215,6 +216,101 @@ final class PlacementProjectionTest extends TestCase
         self::assertNull($projete->noeud('brouillon-1'));
         self::assertCount(\count($this->partage->noeuds), $projete->noeuds);
         self::assertCount(\count($this->partage->aretes), $projete->aretes);
+    }
+
+    /**
+     * ════════════════════════════════════════════════════════════════════════════
+     *  DEUX PARENTS PROPOSÉS POUR LE MÊME ENFANT : **UN SEUL LOSANGE**.
+     * ═══════════════════════════════════════════════════════════════════════════.
+     *
+     * C'est la forme la plus courante de la file : « j'ajoute le père et la mère de
+     * quelqu'un ». Le premier se pose comme parent de l'enfant — ce qui lui crée un
+     * losange, avec la filiation dessous —, la seconde arrive comme sa conjointe.
+     *
+     * En lui créant son propre losange, le couple en portait **deux** : l'un les joignant,
+     * l'autre tenant l'enfant sous un seul parent. Deux unions dessinées là où il n'y en a
+     * qu'une, et un enfant qui n'a l'air d'avoir qu'un parent.
+     *
+     * `P-gm-mat` est choisie parce qu'elle n'a **pas** de parents dans l'arbre
+     * synthétique : c'est la condition du cas, et c'est aussi celle du cas réel — on
+     * ajoute des parents à qui n'en a pas.
+     */
+    public function testLaConjointeProposeeRejointLeLosangeQueSonConjointVientDeCreer(): void
+    {
+        $pere = $this->enAttente('#12/p1', -3, AncrageEnAttente::parentDe('P-gm-mat'));
+        $mere = $this->enAttente('#12/p2', -3, AncrageEnAttente::conjointDe('#12/p1'));
+
+        $projete = (new ProjecteurDePlacement())->projette($this->partage, [$pere, $mere]);
+
+        $losanges = [];
+        foreach ($projete->aretes as $arete) {
+            if (AreteDePlacement::GENRE_UNION === $arete->genre
+                && \in_array($arete->de, ['#12/p1', '#12/p2'], true)
+            ) {
+                $losanges[$arete->vers] = true;
+            }
+        }
+
+        self::assertCount(1, $losanges, 'Le couple proposé partage un losange, il n’en porte pas deux.');
+
+        $losange = array_key_first($losanges);
+        self::assertIsString($losange);
+
+        // … et l'enfant pend bien à ce losange-là, pas à un second.
+        $filiations = [];
+        foreach ($projete->aretes as $arete) {
+            if (AreteDePlacement::GENRE_FILIATION === $arete->genre && 'P-gm-mat' === $arete->vers) {
+                $filiations[] = $arete->de;
+            }
+        }
+
+        self::assertSame([$losange], $filiations, 'L’enfant pend au losange du couple, et à lui seul.');
+    }
+
+    /**
+     * La garde du cas précédent : **une famille validée ne se laisse pas rejoindre**,
+     * même quand elle n'a qu'un époux connu.
+     *
+     * Un remariage proposé absorberait sinon la nouvelle conjointe dans l'ancien couple —
+     * et lui donnerait par la même occasion les enfants du premier lit. Seul un losange
+     * inventé par cette projection se partage : il n'existe nulle part ailleurs, et
+     * personne d'autre ne le regarde.
+     *
+     * Le placement est écrit à la main plutôt que pris de l'arbre synthétique : il faut
+     * une famille à **un seul** époux, portée par un identifiant de la forme `f<N>` —
+     * celle que `estFamille()` reconnaît, et donc celle que la garde interroge.
+     */
+    public function testUnConjointProposeNeRejointPasUneFamilleValideeAUnSeulEpoux(): void
+    {
+        $partage = new Placement(
+            [
+                'p1' => new NoeudPlace('p1', 0.0, 0.0, 120, MoteurDePlacement::H_FICHE),
+                'p2' => new NoeudPlace('p2', 300.0, 150.0, 120, MoteurDePlacement::H_FICHE),
+                'f9' => new NoeudPlace('f9', 0.0, 46.0, MoteurDePlacement::LOSANGE_L, MoteurDePlacement::LOSANGE_H),
+            ],
+            [
+                AreteDePlacement::union('p1', 'f9', false),
+                AreteDePlacement::filiation('f9', 'p2'),
+            ],
+            new BoiteEnglobante(-400.0, -260.0, 800.0, 400.0),
+            'p1',
+        );
+
+        $projete = (new ProjecteurDePlacement())->projette(
+            $partage,
+            [$this->enAttente('#12/p9', 0, AncrageEnAttente::conjointDe('p1'))],
+        );
+
+        $losanges = [];
+        foreach ($projete->aretes as $arete) {
+            if (AreteDePlacement::GENRE_UNION === $arete->genre && '#12/p9' === $arete->de) {
+                $losanges[] = $arete->vers;
+            }
+        }
+
+        self::assertCount(1, $losanges);
+        self::assertNotSame('f9', $losanges[0], 'La conjointe proposée n’entre pas dans le mariage validé.');
+        self::assertArrayNotHasKey($losanges[0], $partage->noeuds, 'Son losange est neuf.');
     }
 
     /** L'objet de l'étage 1 est partagé : la projection ne doit jamais le modifier. */
