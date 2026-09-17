@@ -317,6 +317,133 @@ final class AppariementDesLieuxTest extends TestCase
         (new AppariementDesLieux())->apparier('Saule, Cher');
     }
 
+    // ── La passe G : reculer d'un cran ───────────────────────────────────────────
+
+    /**
+     * **Le défaut mesuré sur l'arbre réel.** Les six premières passes lisent le premier
+     * morceau comme le nom du lieu. C'est faux de tout ce qui nomme d'abord un lieu-dit —
+     * un hameau, un cimetière, un arrondissement —, et ce premier morceau n'est dans aucun
+     * référentiel ni ne le sera jamais : personne ne publie la liste des cimetières.
+     *
+     * Onze lieux, vingt occurrences, tombaient en passe F pour cette seule raison.
+     */
+    public function testUnHameauEstSitueDansLaCommuneQuiLeSuit(): void
+    {
+        $resultat = $this->appariement(['Rampieux;24;75;44.71;0.81;180;0'])
+            ->apparier('Village du Colombier, Rampieux, Dordogne, France');
+
+        self::assertSame(44.71, $resultat['lat']);
+        self::assertSame('Rampieux', $resultat['commune']);
+    }
+
+    /**
+     * **Le libellé reste celui que le GEDCOM écrit.** On a situé le contenant, pas le lieu
+     * nommé : afficher « Rampieux » là où l'acte dit « Village du Colombier » effacerait ce
+     * que la source porte, et personne ne saurait plus quoi corriger.
+     */
+    public function testLeLibelleResteCeluiQueLaSourceEcrit(): void
+    {
+        $resultat = $this->appariement(['Rampieux;24;75;44.71;0.81;180;0'])
+            ->apparier('Village du Colombier, Rampieux, Dordogne, France');
+
+        self::assertSame('Village du Colombier', $resultat['libelle']);
+    }
+
+    /**
+     * **La confiance baisse, et c'est exact.** Le Colombier est *à* Rampieux, il n'*est*
+     * pas Rampieux. La colonne `confiance` existe pour dire cette nuance ; la taire
+     * rendrait un rapprochement approximatif indistinguable d'un rapprochement exact.
+     */
+    public function testReculerDUnCranCouteDixPointsDeConfiance(): void
+    {
+        $appariement = $this->appariement(['Rampieux;24;75;44.71;0.81;180;0']);
+
+        $direct = $appariement->apparier('Rampieux, Dordogne');
+        $recule = $appariement->apparier('Village du Colombier, Rampieux, Dordogne');
+
+        self::assertSame($direct['confiance'] - 10, $recule['confiance']);
+    }
+
+    /**
+     * **L'ordre est la garantie.** On ne recule que faute de mieux : si le premier morceau
+     * se rapproche, il gagne, même quand un morceau suivant se rapprocherait aussi. Sans
+     * cela, « Saule, Cher » pourrait se retrouver situé sur le département.
+     */
+    public function testUnRapprochementSurLePremierMorceauLEmporteToujours(): void
+    {
+        $appariement = $this->appariement([
+            'Saule;18;24;46.12;2.56;540;0',
+            'Rampieux;24;75;44.71;0.81;180;0',
+        ]);
+
+        $resultat = $appariement->apparier('Saule, Rampieux');
+
+        self::assertSame(46.12, $resultat['lat'], 'Le premier morceau gagne.');
+        self::assertSame(
+            $appariement->apparier('Saule')['confiance'],
+            $resultat['confiance'],
+            'Et il ne paie aucune décote : la décote ne frappe que ce qu’on a dû aller chercher plus loin.',
+        );
+    }
+
+    /**
+     * **Une ambiguïté n'arrête pas la recherche.** Mieux vaut une commune située qu'une
+     * liste d'homonymes : si un morceau suivant tranche, on le prend. L'ambiguïté n'est
+     * rendue que si rien ne suit.
+     */
+    public function testUnMorceauSuivantTrancheUneAmbiguiteDuPremier(): void
+    {
+        $resultat = $this->appariement([
+            'Sainte-Colombe;18;24;47.10;2.90;300;0',
+            'Sainte-Colombe;58;27;47.30;3.50;280;0',
+            'Rampieux;24;75;44.71;0.81;180;0',
+        ])->apparier('Sainte-Colombe, Rampieux');
+
+        self::assertSame(44.71, $resultat['lat'], 'Faute de trancher, on situe sur ce qui suit.');
+    }
+
+    /**
+     * Et quand rien ne suit, l'ambiguïté est bien celle du morceau le plus précis — celui
+     * qui nomme le lieu réellement cherché, et non un contenant.
+     */
+    public function testSansRecoursLAmbiguiteDuPremierMorceauEstRendue(): void
+    {
+        $resultat = $this->appariement([
+            'Sainte-Colombe;18;24;47.10;2.90;300;0',
+            'Sainte-Colombe;58;27;47.30;3.50;280;0',
+        ])->apparier('Sainte-Colombe, Nulle-Part');
+
+        self::assertSame(AppariementDesLieux::PASSE_AMBIGU, $resultat['passe']);
+        self::assertCount(2, $resultat['candidats']);
+    }
+
+    // ── Le Canada ────────────────────────────────────────────────────────────────
+
+    /**
+     * **Pourquoi un fichier pays entier pour le Canada.** Cet arbre porte douze naissances
+     * au Canada, dont huit à Castor (Alberta) et sept autour de Trochu — moins de mille
+     * habitants chacun. Vérifié : absents de `cities15000` **et** de `cities500`. Le
+     * fichier pays les a, et pèse six fois moins que `cities500`.
+     */
+    public function testUnVillageCanadienSousLeSeuilDesGrandesVillesEstSitue(): void
+    {
+        $resultat = $this->appariement()->apparier('Trochu, Alberta, Canada');
+
+        self::assertSame(51.83, $resultat['lat']);
+        self::assertSame('CA', $resultat['pays']);
+    }
+
+    /** Et le cimetière canadien se situe sur la ville qui le suit — les deux passes
+     *  ensemble, sur le cas qui les a fait écrire. */
+    public function testUnCimetiereCanadienEstSitueSurSaVille(): void
+    {
+        $resultat = $this->appariement()
+            ->apparier('St. Anne of the Prairies Catholic Cemetery, Trochu, Alberta, Canada');
+
+        self::assertSame(51.83, $resultat['lat']);
+        self::assertSame('St. Anne of the Prairies Catholic Cemetery', $resultat['libelle']);
+    }
+
     /**
      * Monte les quatre fichiers et rend un appariement prêt à l'emploi.
      *
@@ -324,15 +451,18 @@ final class AppariementDesLieuxTest extends TestCase
      * @param list<string> $villes
      * @param list<string> $departements
      * @param list<string> $regions
+     * @param list<string> $canada
      */
     private function appariement(
         array $communes = ['Saule;18;24;46.12;2.56;540;0'],
         array $villes = ['Oran;DZ;35.69;-0.64;850000'],
         array $departements = ['18;Cher'],
         array $regions = ['24;Centre-Val de Loire'],
+        array $canada = ['Trochu;CA;51.83;-113.21;1000'],
     ): AppariementDesLieux {
         $this->ecrire('communes-fr.csv', $communes, '# nom;departement;region;lat;lon;population;rang');
         $this->ecrire('villes-monde.csv', $villes, '# nom;pays_iso2;lat;lon;population');
+        $this->ecrire('villes-canada.csv', $canada, '# nom;pays_iso2;lat;lon;population');
         $this->ecrire('departements.csv', $departements, '# code;nom');
         $this->ecrire('regions.csv', $regions, '# code;nom');
 

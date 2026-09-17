@@ -206,6 +206,24 @@ final class AppariementDesLieux
         $this->communes = $this->indexerParNom($fichierCommunes, 'communes', 7);
         $this->villes = $this->indexerParNom($fichierVilles, 'villes du monde', 5);
 
+        // ── LE CANADA SE LIT À CÔTÉ, ET SE FOND DANS LE MÊME INDEX ──────────────────
+        //
+        // `villes-canada.csv` porte exactement les cinq mêmes colonnes, pays compris :
+        // rien à changer à la passe E, qui filtre sur le code pays de la 2ᵉ colonne.
+        //
+        // Pourquoi un fichier pays entier alors qu'il existe un fichier mondial : le
+        // fichier mondial s'arrête à 15 000 habitants. Cet arbre porte **12 naissances au
+        // Canada**, dont huit à Castor (Alberta) et sept autour de Trochu (Alberta) —
+        // moins de mille habitants chacun. Vérifié : ils sont absents de `cities15000`
+        // **et** de `cities500`. Le fichier pays les a, et pèse six fois moins que
+        // `cities500`.
+        //
+        // C'est la même logique que pour la France, dont on prend `FR.txt` entier et non
+        // les seules grandes villes : une généalogie se passe dans des villages.
+        foreach ($this->indexerParNom($dossier.'/villes-canada.csv', 'villes du Canada', 5) as $nom => $lignes) {
+            $this->villes[$nom] = array_merge($this->villes[$nom] ?? [], $lignes);
+        }
+
         [$this->departements, $this->codesDeDepartement] = $this->lireLesCodes($dossier.'/departements.csv', 'départements');
         [$this->regions, $this->codesDeRegion] = $this->lireLesCodes($dossier.'/regions.csv', 'régions');
 
@@ -254,8 +272,80 @@ final class AppariementDesLieux
             return $this->echec('', self::PASSE_INCONNU);
         }
 
-        $nom = $this->cles->replier($morceaux[0]);
-        $autres = \array_slice($morceaux, 1);
+        // ── LA PASSE G : ON RECULE D'UN CRAN ────────────────────────────────────────
+        //
+        // Les six passes lisent le **premier** morceau comme le nom du lieu. C'est vrai de
+        // « Bourges, Cher » et faux de tout ce qui nomme d'abord un lieu-dit :
+        //
+        //     Village du Colombier, Rampieux, Dordogne, France
+        //     St. Mary's Cemetery, Calgary, Alberta, Canada
+        //     Paris 7e Arrondissement, Paris, France
+        //
+        // La commune y est au deuxième morceau, et le premier n'est dans aucun
+        // référentiel — ni ne le sera jamais : personne ne publie la liste des cimetières.
+        // Mesuré sur l'arbre réel : **11 lieux, 20 occurrences** tombaient en passe F pour
+        // cette seule raison, dont les deux cimetières canadiens et quatre arrondissements
+        // de Paris.
+        //
+        // On réessaie donc depuis chaque morceau, dans l'ordre. **L'ordre est la garantie**
+        // : un rapprochement sur le morceau 0 l'emporte toujours, et on ne recule que
+        // faute de mieux. Ce qui est trouvé plus loin situe le **contenant** et non le lieu
+        // nommé — le Colombier est *à* Rampieux —, donc la confiance baisse de dix points
+        // par cran. C'est exact, et c'est ce que `confiance` sert à dire.
+        //
+        // Une ambiguïté rencontrée en chemin est **mise de côté et non rendue tout de
+        // suite** : un morceau suivant peut trancher sans ambiguïté, et mieux vaut une
+        // commune située qu'une liste d'homonymes. Si rien ne suit, on rend l'ambiguïté du
+        // morceau le plus précis — celle qui nomme le vrai lieu cherché.
+        $ambigu = null;
+
+        foreach (array_keys($morceaux) as $depart) {
+            $resultat = $this->apparierDepuis($morceaux, $depart);
+
+            if (null === $resultat) {
+                continue;
+            }
+
+            if (self::PASSE_AMBIGU === $resultat['passe']) {
+                $ambigu ??= $resultat;
+
+                continue;
+            }
+
+            if (0 === $depart) {
+                return $resultat;
+            }
+
+            $resultat['confiance'] = max(30, $resultat['confiance'] - 10 * $depart);
+            $resultat['libelle'] = $morceaux[0];
+
+            return $resultat;
+        }
+
+        return $ambigu ?? $this->echec($morceaux[0], self::PASSE_INCONNU);
+    }
+
+    /**
+     * Les six passes, appliquées en prenant le morceau `$depart` pour nom du lieu.
+     *
+     * Rend `null` quand aucune ne dit rien de ce morceau-là — c'est ce qui autorise
+     * {@see apparier()} à reculer d'un cran sans distinguer « rien trouvé » de « trouvé
+     * puis écarté ».
+     *
+     * @param list<string> $morceaux
+     *
+     * @return array<string, mixed>|null
+     */
+    private function apparierDepuis(array $morceaux, int $depart): ?array
+    {
+        $morceau = $morceaux[$depart] ?? null;
+
+        if (null === $morceau) {
+            return null;
+        }
+
+        $nom = $this->cles->replier($morceau);
+        $autres = \array_slice($morceaux, $depart + 1);
 
         // Les candidats français, rang 0 d'abord : une commune l'emporte sur un hameau.
         $candidats = $this->candidatsFrancais($nom);
@@ -274,15 +364,13 @@ final class AppariementDesLieux
             }
 
             return $this->echec(
-                $morceaux[0],
+                $morceau,
                 self::PASSE_AMBIGU,
                 array_map($this->decrireUneCommune(...), $candidats),
             );
         }
 
-        $resultat = $this->passeVilleDuMonde($nom, $morceaux);
-
-        return $resultat ?? $this->echec($morceaux[0], self::PASSE_INCONNU);
+        return $this->passeVilleDuMonde($nom, \array_slice($morceaux, $depart));
     }
 
     /**

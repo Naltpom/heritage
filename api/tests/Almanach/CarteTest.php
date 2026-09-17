@@ -186,14 +186,31 @@ final class CarteTest extends CasDeTestAlmanach
     // ── Les lieux ────────────────────────────────────────────────────────────────
 
     /**
-     * **Un lieu non résolu n'est pas dans `lieux`, et il est compté à part**.
+     * **Un lieu non résolu ne fait pas de bulle, mais il reste énumérable**.
      *
-     * Le taire donnerait une carte qui paraît complète alors qu'il lui manque des bulles.
-     * Le compter à part — et non avec `sansLieu` — dit **quel geste** il appelle : un lieu
-     * écrit mais non résolu se corrige dans `tree_place`, un lieu absent se cherche dans les
-     * actes. Deux questions différentes, deux compteurs.
+     * Le compter à part de `sansLieu` dit **quel geste** il appelle : un lieu écrit mais non
+     * résolu se corrige dans `tree_place`, un lieu absent se cherche dans les actes. Deux
+     * questions différentes, deux compteurs.
+     *
+     * ── CE CAS A CHANGÉ D'AVIS, ET IL FAUT DIRE POURQUOI ─────────────────────────────
+     *
+     * Il affirmait : « Seul l'événement au lieu résolu est rendu. » C'était le comportement
+     * du premier jet, et **c'était un défaut** — trouvé en production le 17/09/2026, pas
+     * ici. Sur le vrai arbre, **77 événements sur 396** portaient un lieu écrit que le
+     * référentiel ne savait pas placer. Ils sortaient de `evenements`, ne laissaient qu'un
+     * nombre dans `lieuNonResolu`, et l'écran — dont le bouton « N sans lieu situé » se
+     * nourrit des événements à `placeId: null` — n'en recevait aucun. Le bouton ne
+     * paraissait donc jamais, et un cinquième des lieux de l'arbre était invisible **sans
+     * qu'aucun écran ne dise qu'il existait**.
+     *
+     * C'est la disparition silencieuse que ces trois compteurs existaient pour empêcher,
+     * reproduite par les compteurs eux-mêmes : **compter une chose n'est pas la montrer.**
+     *
+     * L'événement est donc rendu, avec `placeId: null` et sa graphie brute. Un événement
+     * **sans aucun lieu écrit** reste dehors : il n'a rien à montrer, et l'y faire entrer
+     * gonflerait la liste des non situés de lignes vides — 198 sur le vrai arbre.
      */
-    public function testUnLieuNonResoluNEstPasDansLesLieuxEtEstCompteAPart(): void
+    public function testUnLieuNonResoluResteEnumerableEtNeFaitPasDeBulle(): void
     {
         $this->poserEvenement(self::SUREAU, TypeDEvenement::Naissance, '1887', 'Saule, Ombrage, Sylvanie');
         $this->poserEvenement(self::SUREAU, TypeDEvenement::Deces, '1987', 'Hameau introuvable, Nulle-Part');
@@ -205,14 +222,27 @@ final class CarteTest extends CasDeTestAlmanach
         $evenements = $this->evenementsDeLaCarte();
         $resume = $this->resume();
 
-        self::assertSame(['naissance:'.self::SUREAU], array_keys($evenements), 'Seul l’événement au lieu résolu est rendu.');
+        self::assertSame(
+            ['naissance:'.self::SUREAU, 'deces:'.self::SUREAU],
+            array_keys($evenements),
+            'Le lieu résolu et le lieu non résolu sont tous deux rendus ; le lieu absent, non.',
+        );
+
+        self::assertSame(1, $evenements['naissance:'.self::SUREAU]['placeId'], 'Le lieu résolu porte son identifiant.');
+        self::assertNull($evenements['deces:'.self::SUREAU]['placeId'], 'Le lieu non résolu n’en a pas — donc pas de bulle.');
+        self::assertSame(
+            'Hameau introuvable, Nulle-Part',
+            $evenements['deces:'.self::SUREAU]['place'],
+            'Il porte sa graphie brute : c’est elle qui permet au lecteur de corriger.',
+        );
+
         self::assertSame(1, $resume['lieuNonResolu'], 'Le lieu écrit mais non résolu est compté.');
         self::assertSame(1, $resume['sansLieu'], 'Le lieu absent est compté séparément.');
 
         self::assertSame(
             [1],
             array_column($this->charge()['lieux'], 'placeId'),
-            'Les lieux ne portent que ce qu’un événement rendu emploie.',
+            'Les lieux ne portent que ce qu’une bulle emploie : un non résolu n’y entre pas.',
         );
     }
 
