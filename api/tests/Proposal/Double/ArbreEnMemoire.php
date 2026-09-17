@@ -289,6 +289,54 @@ final class ArbreEnMemoire implements PortArbre
         return new LigneCreee($id, $libelle);
     }
 
+    /**
+     * Les époux d'une famille, lus à l'envers de la carte des couples.
+     *
+     * Le double n'a pas de colonnes `husband_id` / `wife_id` : il tient un index
+     * `couple normalisé → identifiant`, qui suffit à répondre. Une famille posée par
+     * {@see poser()} sans passer par {@see poserCouple()} rend donc un tableau vide —
+     * c'est le cas d'un décor qui ne s'intéresse pas aux époux, pas un défaut.
+     *
+     * @return list<int>
+     */
+    public function epouxDeFamille(int $familleId): array
+    {
+        foreach (self::$couples as $cle => $id) {
+            if ($id !== $familleId) {
+                continue;
+            }
+
+            return array_values(array_map(
+                static fn (string $membre): int => (int) $membre,
+                array_filter(explode(':', $cle), static fn (string $membre): bool => '' !== $membre),
+            ));
+        }
+
+        return [];
+    }
+
+    /**
+     * Pose une famille **avec ses époux**, comme l'import en pose.
+     *
+     * {@see poser()} ne prend pas d'époux : elle écrit une ligne et ses valeurs, et le
+     * couple n'en est pas une. Cette méthode-ci nourrit en plus l'index des couples, ce
+     * qui rend la famille reconnaissable par {@see epouxDeFamille()} et retrouvable par
+     * {@see trouverOuCreerFamille()} — le décor d'un test qui désigne un couple existant.
+     */
+    public function poserCouple(int $familleId, string $libelle, int ...$epoux): self
+    {
+        $membres = array_values($epoux);
+        sort($membres);
+
+        self::$couples[implode(':', $membres)] = $familleId;
+
+        return $this->poser(SubjectKind::Famille, $familleId, $libelle, 1, [
+            'marriage' => UncertainDate::inconnue(),
+            'divorced' => false,
+            'divorce' => UncertainDate::inconnue(),
+        ]);
+    }
+
     public function porterUnion(int $familleId, UncertainDate $mariage, bool $divorce, UncertainDate $rupture): void
     {
         ++self::$ecritures;

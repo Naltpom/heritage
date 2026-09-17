@@ -470,6 +470,59 @@ final class PropositionsChaineesTest extends BaseDeDemandes
     }
 
     /**
+     * **Le geste « ajouter un frère ou une sœur ».**.
+     *
+     * Il s'écrit « ce frère est enfant du couple de ses parents » : le sujet est le
+     * frère, l'autre extrémité est une `family_id`, et la fiche d'où vient le
+     * contributeur n'apparaît **nulle part** dans le corps. C'est pourtant elle qu'il
+     * faut annoncer en cible, et c'est ce que `epouxDeFamille()` permet de reconnaître.
+     *
+     * Sans cette lecture, le contrôle d'appartenance interdirait le seul cas pour lequel
+     * `targetId` a été ajouté.
+     */
+    public function testUnFrereSeRattacheAuCoupleEtLaDemandePorteSurLaFicheDOrigine(): void
+    {
+        $frere = 41;
+        $this->arbre->poser(
+            SubjectKind::Personne,
+            $frere,
+            'Cobalt Sarriette',
+            2,
+            $this->champsDUnePersonne('Cobalt', 'Sarriette'),
+        );
+        // Le couple des parents de Jargon : c'est lui que la fratrie désigne.
+        $this->arbre->poserCouple(90, 'Argile Sarriette × Sanguine Verveine', self::JARGON, $frere);
+
+        $demande = $this->depot->deposer([
+            'kind' => 'ajout_lien',
+            'soumettre' => true,
+            'targetKind' => 'personne',
+            'targetId' => self::JARGON,
+            'liens' => [[
+                'seq' => 1,
+                'kind' => 'enfant_de',
+                'subjectPersonId' => $frere,
+                'familyId' => 90,
+                'siblingOrder' => 2,
+            ]],
+        ], $this->lecteur(self::OPALE));
+
+        $rechargee = $this->recharger($demande);
+        self::assertSame(
+            self::JARGON,
+            $rechargee->getTargetId(),
+            'La demande porte sur la fiche d\'origine, pas sur celle du frère.',
+        );
+
+        // Et elle s'applique : le frère rejoint le couple, sans qu'aucune famille ne
+        // soit créée — elle existait.
+        $this->validation->valider($rechargee, $this->admin());
+
+        self::assertSame([], $this->arbre->famillesCreees(), 'Le couple existait déjà.');
+        self::assertSame([$frere], $this->arbre->enfantsDe(90));
+    }
+
+    /**
      * Une cible annoncée que les liens ne citent pas est refusée.
      *
      * Sans ce contrôle, `targetId` serait un champ libre : il suffirait de le poser pour

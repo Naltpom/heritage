@@ -275,6 +275,31 @@ interface PortArbre
     public function trouverOuCreerFamille(?int $personneA, ?int $personneB): LigneCreee;
 
     /**
+     * Les époux d'une famille, en identifiants — **au plus deux, parfois un seul**.
+     *
+     * Trois familles réelles de cet arbre n'ont qu'une `WIFE` : ce n'est pas une donnée
+     * manquante, c'est l'état du travail généalogique. Une famille disparue rend un
+     * tableau vide, jamais `null` — l'appelant boucle dessus, il n'a pas à tester.
+     *
+     * ── Pourquoi `Proposal` a besoin de cette lecture ──────────────────────────────
+     *
+     * Pour un seul contrôle, et il est réel. Une demande `ajout_lien` annonce la fiche
+     * sur laquelle elle porte (`targetId`, § 6.4 du contrat), et cette cible doit être
+     * **une personne que la demande touche** — sans quoi `targetId` serait un champ
+     * libre permettant de faire apparaître n'importe quelle demande sur n'importe quelle
+     * fiche de la file d'administration.
+     *
+     * Or le geste « ajouter un frère ou une sœur à Untel » ne cite pas Untel : une
+     * fratrie s'écrit « enfant du même couple », donc `enfant_de` + `family_id`, dont le
+     * sujet est **le frère**. La seule façon de reconnaître Untel dans ce corps est de
+     * savoir qui compose la famille désignée — et c'est `Tree` qui le sait, parce que
+     * c'est lui qui range `(husband_id, wife_id)` selon le sexe.
+     *
+     * @return list<int>
+     */
+    public function epouxDeFamille(int $familleId): array;
+
+    /**
      * Porte les dates d'union sur une famille — passe 5 du § 9.5.
      *
      * **Toutes facultatives : une union sans date reste une union** (§ 6.4 du dossier).
