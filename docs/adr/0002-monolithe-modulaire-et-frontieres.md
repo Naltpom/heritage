@@ -29,6 +29,7 @@ traiter en face plutôt que découvrir à l'implémentation.
 | `Media` | portraits et preuves, téléversement, vignettes | `med_` |
 | `Timeline` | vue chronologique | `tml_` (une seule table : `tml_preference`) |
 | `Gedcom` | import / export GEDCOM | `ged_` |
+| `Almanach` | carte des lieux, anniversaires | `alm_` (réservé — **aucune table dans cette livraison**) |
 
 Règles de frontière :
 

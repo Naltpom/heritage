@@ -25,6 +25,7 @@ import { regimeDeSession, resoudreAcces, routeParDefaut } from './acces'
 // La table vit dans `routes.ts` : elle y est importable par un test, alors
 // que ce fichier-ci appelle `createWebHistory()` dès son chargement.
 import { routes } from './routes'
+import { useTiroirs } from '@/composables/useTiroirs'
 
 export { routes }
 
@@ -51,9 +52,18 @@ routeur.beforeEach(async (vers) => {
   return decision.autorise ? true : decision.redirection
 })
 
+const { fermerTiroirs: fermerLesTiroirs } = useTiroirs()
+
 routeur.afterEach((vers) => {
   const titre = typeof vers.meta.titre === 'string' ? vers.meta.titre : ''
   document.title = titre.length > 0 ? `${titre} — Heritage` : 'Heritage'
+
+  // Les tiroirs du mobile se referment en changeant de page. C'est ici et non
+  // dans l'en-tête : `entete-creation.test.ts` simule `vue-router` en n'en
+  // exportant que `useRouter`, et un `useRoute()` dans l'en-tête ferait lever
+  // ses dix cas d'un coup. C'est aussi le bon endroit — refermer un tiroir
+  // parce qu'on a navigué est une affaire de navigation.
+  fermerLesTiroirs()
 })
 
 export default routeur

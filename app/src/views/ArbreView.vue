@@ -1,14 +1,18 @@
 <script lang="ts">
 /**
- * Les deux décisions de cet écran qui se prouvent **sans navigateur**.
+ * La décision de cet écran qui se prouve **sans navigateur**.
  *
- * Elles sont ici, dans un bloc `<script>` ordinaire, et non dans le
+ * Elle est ici, dans un bloc `<script>` ordinaire, et non dans le
  * `<script setup>` ci-dessous, pour une raison mécanique : le `<script setup>`
  * se compile en une fermeture sur l'état du composant, que rien ne peut appeler
- * du dehors. Or ces deux règles-là se sont cassées **en silence** — un écran
- * vide sans message, une page qui déborde — et une règle qui se casse en
- * silence a besoin d'un test qui la tient. Elles sont exportées ; leur suite est
- * `arbre-revalidation.test.ts`.
+ * du dehors. Or cette règle-là s'est cassée **en silence** — un écran vide, sans
+ * message — et une règle qui se casse en silence a besoin d'un test qui la
+ * tient. Elle est exportée ; sa suite est `arbre-revalidation.test.ts`.
+ *
+ * La seconde décision qui vivait ici, `hauteurDuCadre()`, a déménagé dans
+ * `views/cadre.ts` : la chronologie en gardait une copie qui portait encore les
+ * trois défauts que celle-ci corrige, et deux écrans de plus allaient en faire
+ * une troisième. Sa suite est `cadre.test.ts`.
  */
 import { invaliderGraphe, type Graphe, type ResultatRevalide } from '@/lib/api'
 
@@ -61,42 +65,6 @@ export async function grapheApresRevalidation(
   return resultat.donnees
 }
 
-/**
- * La hauteur à poser sur le cadre de l'arbre, sachant à quelle hauteur son haut
- * se trouve — c'est-à-dire ce que l'en-tête applicatif lui a déjà pris.
- *
- * ────────────────────────────────────────────────────────────────────
- * **Trois décisions, et chacune a coûté un pixel de défilement.**
- *
- * 1. **`document.documentElement.clientHeight`, pas `window.innerHeight`.**
- *    `innerHeight` compte la bande d'une barre de défilement horizontale ;
- *    `clientHeight` est la hauteur de **mise en page**, qui l'exclut. Douze
- *    pixels d'écart, mesurés. Prendre `innerHeight` posait le cadre 12 px trop
- *    bas et faisait naître une barre verticale sur une page qui n'avait rien de
- *    plus à montrer — une barre causée par la mesure qui la subissait.
- *
- * 2. **Arrondi vers le bas.** Le haut du cadre est fractionnaire — 54,40 px
- *    pour un en-tête à 1,25 dpr. `Math.round(617,6)` rend 618 : le bas du cadre
- *    dépasse de 0,40 px, et 0,40 px de trop font un pixel de défilement.
- *
- * 3. **Aucun plancher.** Un `Math.max(320, …)` garantissait mathématiquement le
- *    débordement dès que la place restante passait sous 320 px — 164 px de trop
- *    sur un écran de 400 px, où l'en-tête s'enroule sur quatre rangs. Un
- *    plancher ne peut pas coexister avec « la page ne défile pas ». Et la
- *    garantie qu'il prétendait donner — « un canevas qui s'effondre à zéro ne
- *    se voit qu'à l'exécution » — est déjà portée par la chaîne flex
- *    (`min-h-0` / `flex-1`) du gabarit : le nombre magique n'y ajoutait qu'un
- *    débordement.
- *
- * Reste `Math.max(0, …)`, qui n'est pas un plancher de confort : une hauteur
- * négative n'est pas une longueur CSS, et le cadre garderait alors la dernière
- * valeur valide.
- * ────────────────────────────────────────────────────────────────────
- */
-export function hauteurDuCadre(hautDuCadre: number): string {
-  const disponible = document.documentElement.clientHeight - hautDuCadre
-  return `${Math.max(0, Math.floor(disponible))}px`
-}
 </script>
 
 <script setup lang="ts">
@@ -136,11 +104,14 @@ export function hauteurDuCadre(hautDuCadre: number): string {
  * `personId` que le serveur a déjà accepté de nommer.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { hauteurDuCadre } from '@/views/cadre'
+import { useTiroirs } from '@/composables/useTiroirs'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import BarreOutilsArbre from '@/components/arbre/BarreOutilsArbre.vue'
 import CanevasArbre from '@/components/arbre/CanevasArbre.vue'
 import LegendeArbre from '@/components/arbre/LegendeArbre.vue'
+import TiroirOutils from '@/components/mise-en-page/TiroirOutils.vue'
 import PanneauFiche from '@/components/arbre/PanneauFiche.vue'
 import { avertissementDuCalque, ponctuationApres } from '@/components/arbre/calque'
 import {
@@ -172,6 +143,7 @@ import {
 const graphe = shallowRef<Graphe | null>(null)
 const canevas = ref<InstanceType<typeof CanevasArbre> | null>(null)
 const barre = ref<InstanceType<typeof BarreOutilsArbre> | null>(null)
+const { ouvert: tiroirOuvert, unTiroirEstOuvert } = useTiroirs()
 const racine = ref<HTMLElement | null>(null)
 
 const {
@@ -354,6 +326,21 @@ function fermerPanneau(): void {
   abandonFiche = null
 }
 
+/*
+ * Sur téléphone, la fiche est en plein écran et le tiroir des filtres l'est
+ * presque : les deux ouverts en même temps, on ne voit plus l'arbre du tout et
+ * il faut deux gestes pour y revenir. Ouvrir les filtres referme donc la fiche
+ * — « le dernier geste gagne », la règle que la recherche et les filtres
+ * appliquent déjà entre eux plus haut dans ce fichier.
+ *
+ * Aucune garde de largeur ici : sur grand écran, ouvrir un tiroir est
+ * impossible, son bouton étant `md:hidden`. Une condition de plus serait une
+ * condition de plus à maintenir vraie.
+ */
+watch(tiroirOuvert, (etat) => {
+  if (etat === 'outils') fermerPanneau()
+})
+
 async function chargerDetail(noeud: NoeudGraphe): Promise<void> {
   if (noeud.type !== 'personne') return
 
@@ -453,6 +440,13 @@ function surToucheGlobale(ev: KeyboardEvent): void {
   const cible = ev.target
   // Le champ de recherche gère ses propres touches (Échap, Entrée).
   if (cible instanceof HTMLInputElement || cible instanceof HTMLTextAreaElement) return
+  // Un tiroir ouvert prend la main sur toutes ces touches — et il se ferme
+  // lui-même, par le `keydown.escape` de l'en-tête et du tiroir. Sans cette
+  // ligne, Échap fermerait le tiroir ET désélectionnerait derrière lui, c'est-
+  // à-dire deux choses pour un geste. L'ordre est explicite ici plutôt que
+  // remis à deux écouteurs de `window` qui se disputeraient la priorité selon
+  // leur ordre d'enregistrement.
+  if (unTiroirEstOuvert()) return
   if (ev.key === '/') {
     ev.preventDefault()
     barre.value?.focusRecherche()
@@ -511,19 +505,24 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="racine" class="flex flex-col" :style="{ height: hauteurCadre }">
-    <BarreOutilsArbre
-      ref="barre"
-      v-model="question"
-      :filtres="FILTRES"
-      :disponibles="disponibles"
-      :actif="filtreActif"
-      :resultat="texteResultat"
-      :tronque="tronque"
-      :chargement="chargementRecherche"
-      @filtre="basculerFiltre"
-      @tout="toutAfficher"
-      @cadrer="cadrerSurResultats"
-    />
+    <TiroirOutils titre="Filtres de l’arbre">
+      <BarreOutilsArbre
+        ref="barre"
+        v-model="question"
+        :filtres="FILTRES"
+        :disponibles="disponibles"
+        :actif="filtreActif"
+        :resultat="texteResultat"
+        :tronque="tronque"
+        :chargement="chargementRecherche"
+        @filtre="basculerFiltre"
+        @tout="toutAfficher"
+        @cadrer="cadrerSurResultats"
+      />
+      <template #legende>
+        <LegendeArbre v-if="graphe !== null" :calque-actif="calqueActif" en-tiroir />
+      </template>
+    </TiroirOutils>
 
     <p
       v-if="calqueActif"

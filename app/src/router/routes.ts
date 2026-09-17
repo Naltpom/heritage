@@ -119,6 +119,24 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/views/ChronologieView.vue'),
     meta: { acces: 'attente', titre: 'Chronologie' },
   },
+  {
+    // `attente` pour une raison mécanique, et non par analogie avec ses
+    // voisines : ces deux écrans sont bâtis sur des **événements datés**, et
+    // une personne vivante hors cercle n'en fournit aucun. Un compte en attente
+    // de validation y voit donc un écran plein — les 256 défunts de l'arbre,
+    // leurs lieux et leurs dates. Exiger `membre` verrouillerait exactement le
+    // public qui a le plus à voir pendant qu'il patiente.
+    path: '/carte',
+    name: 'carte',
+    component: () => import('@/views/CarteView.vue'),
+    meta: { acces: 'attente', titre: 'Carte' },
+  },
+  {
+    path: '/anniversaires',
+    name: 'anniversaires',
+    component: () => import('@/views/AnniversairesView.vue'),
+    meta: { acces: 'attente', titre: 'Anniversaires' },
+  },
 
   /* --- Contribution : rattachement validé exigé (§ 12.1) ---------- */
   {

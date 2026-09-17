@@ -1,0 +1,149 @@
+/*
+ * La carte des lieux — les couleurs de Leaflet, reprises par le thème.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **Cette feuille est globale, et ce n'est pas un oubli.** Leaflet construit son
+ * DOM impérativement : ses éléments ne portent aucun attribut `data-v-…`, et une
+ * feuille `scoped` ne les atteindrait jamais. Même raison que `canevas.css`,
+ * même en-tête.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **LE PIÈGE DE SPÉCIFICITÉ, À CONNAÎTRE AVANT DE TOUCHER À CE FICHIER.**
+ *
+ * `leaflet.css` est importé par `CarteLeaflet.vue`, qui est chargé
+ * paresseusement : il arrive donc dans le morceau de `/carte`, **après** cette
+ * feuille-ci, qui voyage avec `main.css` dans le bundle principal. À spécificité
+ * égale, c'est le dernier déclaré qui gagne — donc Leaflet.
+ *
+ * Toute reprise s'écrit par conséquent **classe + classe**
+ * (`.carte.leaflet-container`, `.carte .leaflet-bar a`), jamais par une classe
+ * seule. Une règle qui « ne s'applique pas » dans ce fichier est presque
+ * toujours cela, et pas une faute de sélecteur.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **Aucun hexadécimal.** Leaflet en écrit une dizaine en dur — `#ddd` pour le
+ * fond, `#0078A8` pour les liens, `#fff` pour les contrôles, `#333` pour les
+ * infobulles. Aucun ne suit le thème sombre : laissés tels quels, ils donnent
+ * une carte claire dans une application sombre. On les reprend tous ci-dessous,
+ * et ce qui manquerait se verrait immédiatement en basculant le thème du
+ * système.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Le cadre                                                            */
+/* ------------------------------------------------------------------ */
+
+.carte.leaflet-container {
+  /* La mer. `#ddd` par défaut chez Leaflet. */
+  background: var(--color-fond);
+  font: inherit;
+  /* Le geste appartient à Leaflet, qui sait déjà pincer : contrairement au
+     canevas de l'arbre, on ne lui reprend pas `touch-action`. */
+  outline-offset: 0;
+}
+
+.carte.leaflet-container a {
+  color: var(--color-accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Le fond vectoriel                                                   */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Les terres et les côtes. Le langage panneau-sur-fond de l'application,
+ * appliqué à une carte : elle se lit comme une partie du produit, et non comme
+ * un composant rapporté.
+ *
+ * `fill` et `stroke` sont ici parce que `optionsPays()` n'en passe aucun —
+ * Leaflet les écrirait en attributs, que ces règles battraient de toute façon.
+ */
+.carte .pays {
+  fill: var(--color-panneau);
+  stroke: var(--color-ligne);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+}
+
+/* ------------------------------------------------------------------ */
+/* Les bulles                                                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * **On ne déclare surtout PAS `fill` ici.** Le dégradé arrive par `fillColor`,
+ * que Leaflet écrit en attribut `fill` ; une règle CSS de même nom le battrait
+ * et toutes les bulles deviendraient de la même couleur — sans erreur, sans
+ * rien dans la console. `fill-opacity` et `stroke-opacity` sont posés par
+ * Leaflet à partir de `fillOpacity` / `opacity`, ce qui est bien la forme que
+ * l'ADR 0007 prescrit.
+ */
+.carte .bulle {
+  cursor: pointer;
+  transition: stroke-width 120ms ease-out;
+}
+
+.carte .bulle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Les contrôles de Leaflet                                            */
+/* ------------------------------------------------------------------ */
+
+.carte .leaflet-bar {
+  border: 1px solid var(--color-ligne);
+  box-shadow: var(--shadow-panneau);
+}
+
+.carte .leaflet-bar a,
+.carte .leaflet-bar a:hover {
+  background: var(--color-panneau);
+  border-bottom-color: var(--color-ligne);
+  color: var(--color-texte);
+}
+
+.carte .leaflet-bar a:hover,
+.carte .leaflet-bar a:focus {
+  background: var(--color-accent-doux);
+}
+
+.carte .leaflet-bar a.leaflet-disabled {
+  background: var(--color-panneau);
+  color: var(--color-attenue);
+}
+
+.carte .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--color-panneau) 85%, transparent);
+  color: var(--color-attenue);
+  font-size: 11px;
+}
+
+.carte .leaflet-control-attribution a {
+  color: var(--color-accent);
+}
+
+.carte .leaflet-control-scale-line {
+  border-color: var(--color-ligne);
+  color: var(--color-attenue);
+  background: color-mix(in srgb, var(--color-panneau) 85%, transparent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Infobulles et fenêtres                                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Nous n'ouvrons aucune `L.popup` — le détail d'un lieu s'affiche dans un
+ * `PanneauBase`, comme la carte flottante de la chronologie. Ces règles sont là
+ * pour que le jour où quelqu'un en ouvrira une, elle ne soit pas blanche sur
+ * fond sombre.
+ */
+.carte .leaflet-popup-content-wrapper,
+.carte .leaflet-popup-tip,
+.carte .leaflet-tooltip {
+  background: var(--color-panneau);
+  color: var(--color-texte);
+  border-color: var(--color-ligne);
+  box-shadow: var(--shadow-panneau);
+}

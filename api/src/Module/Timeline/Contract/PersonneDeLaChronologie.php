@@ -63,19 +63,19 @@ use App\Module\Core\ValueObject\UncertainDate;
 final readonly class PersonneDeLaChronologie
 {
     /**
-     * @param int           $id          `tree_person.id`
-     * @param string        $displayName le nom d'affichage de la fiche
-     * @param Branch|null   $branch      le quart d'ascendance ; `null` n'est pas plaçable
-     *                                   dans une colonne de branche
-     * @param int|null      $generation  `gen` du GEDCOM, de 0 à -11
-     * @param Sex           $sex         pour la couleur de la barre
-     * @param bool          $vivant      la propriété calculée du § 9.2, calculée par `Tree`
-     * @param UncertainDate $birth       **jamais aplatie** : c'est le cas Sureau
-     * @param UncertainDate $death       idem ; `inconnue()` pour une personne vivante
+     * @param int           $id                 `tree_person.id`
+     * @param string        $displayName        le nom d'affichage de la fiche
+     * @param Branch|null   $branch             le quart d'ascendance ; `null` n'est pas plaçable
+     *                                          dans une colonne de branche
+     * @param int|null      $generation         `gen` du GEDCOM, de 0 à -11
+     * @param Sex           $sex                pour la couleur de la barre
+     * @param bool          $vivant             la propriété calculée du § 9.2, calculée par `Tree`
+     * @param UncertainDate $birth              **jamais aplatie** : c'est le cas Sureau
+     * @param UncertainDate $death              idem ; `inconnue()` pour une personne vivante
      * @param string        $etiquetteNaissance la forme **compacte** du § 14.4 — `1901-1909`,
-     *                                   `26.9.2012`, `~1889`, `<1920` —, chaîne vide si la
-     *                                   date est inconnue
-     * @param string        $etiquetteDeces idem pour le décès
+     *                                          `26.9.2012`, `~1889`, `<1920` —, chaîne vide si la
+     *                                          date est inconnue
+     * @param string        $etiquetteDeces     idem pour le décès
      */
     public function __construct(
         public int $id,

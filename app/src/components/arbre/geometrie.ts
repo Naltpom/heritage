@@ -104,22 +104,37 @@ export function versContenu(
 }
 
 /**
- * Un cran de molette : on zoome **autour du curseur**, pas autour du centre.
+ * Un zoom autour d'un point, exprimé par un **rapport de grandissement**.
+ *
+ * `rapport > 1` grandit le dessin — donc **rétrécit** le `viewBox`. C'est la
+ * forme que produit naturellement un pincement : le rapport des écartements
+ * entre les doigts. La molette, elle, donne un `deltaY`, et {@see zoomer} s'en
+ * charge en le convertissant.
  *
  * `initiale` est la boîte du graphe telle que l'API l'a rendue (`boite`), qui
  * fixe les deux butées. Elle n'est **jamais recalculée côté client**.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **La garde de la première ligne n'est pas de la prudence décorative.** Deux
+ * doigts peuvent se poser sur le même pixel, et l'écartement vaut alors zéro :
+ * le rapport devient `Infinity` ou `NaN`. Un `NaN` qui atteint l'attribut
+ * `viewBox` n'y provoque aucune erreur — il **efface le graphe entier**, en
+ * silence, et il faut relancer la page pour comprendre. C'est très exactement la
+ * panne muette que ce fichier existe pour rendre impossible.
+ * ────────────────────────────────────────────────────────────────────
  */
-export function zoomer(
+export function zoomerRatio(
   vb: Boite,
   initiale: Boite,
   cadre: CadreEcran,
   clientX: number,
   clientY: number,
-  deltaY: number,
+  rapport: number,
 ): Boite {
+  if (!Number.isFinite(rapport) || rapport <= 0) return vb
+
   const p = versContenu(vb, cadre, clientX, clientY)
-  const f = Math.exp(deltaY * SENSIBILITE_MOLETTE)
-  const nw = Math.min(initiale.w * DEZOOM_MAX, Math.max(initiale.w / ZOOM_MAX, vb.w * f))
+  const nw = Math.min(initiale.w * DEZOOM_MAX, Math.max(initiale.w / ZOOM_MAX, vb.w / rapport))
   const k = nw / vb.w
   return {
     x: p.x - (p.x - vb.x) * k,
@@ -129,10 +144,67 @@ export function zoomer(
   }
 }
 
+/**
+ * Un cran de molette : on zoome **autour du curseur**, pas autour du centre.
+ *
+ * Une molette négative rapproche. Le facteur appliqué à la largeur du `viewBox`
+ * est `exp(deltaY × SENSIBILITE_MOLETTE)`, donc le rapport de grandissement —
+ * ce que prend {@see zoomerRatio} — en est l'inverse, `exp(−deltaY × …)`.
+ *
+ * Cette fonction ne calcule plus rien elle-même : c'est **délibéré**, et c'est
+ * ce qui garantit que le pincement et la molette ne peuvent pas diverger. Les
+ * six tests de `zoomer` d'origine tiennent la délégation — s'ils restent verts
+ * sans avoir été touchés, c'est qu'elle est exacte.
+ */
+export function zoomer(
+  vb: Boite,
+  initiale: Boite,
+  cadre: CadreEcran,
+  clientX: number,
+  clientY: number,
+  deltaY: number,
+): Boite {
+  return zoomerRatio(vb, initiale, cadre, clientX, clientY, Math.exp(-deltaY * SENSIBILITE_MOLETTE))
+}
+
 /** Un déplacement à la souris : `dx`/`dy` sont des pixels d'écran. */
 export function deplacer(vb: Boite, cadre: CadreEcran, dxEcran: number, dyEcran: number): Boite {
   const k = echelle(vb, cadre)
   return { x: vb.x - dxEcran / k, y: vb.y - dyEcran / k, w: vb.w, h: vb.h }
+}
+
+/** Deux doigts, réduits à ce qui suffit pour en tirer un geste : le **milieu**
+ *  du segment qu'ils forment, en coordonnées client, et leur **écartement**. */
+export interface Pince {
+  x: number
+  y: number
+  d: number
+}
+
+/**
+ * Une image de pincement : ce que deux doigts ont fait entre deux instants.
+ *
+ * Un pincement fait **deux** choses à la fois, et les traiter séparément se
+ * voit : les doigts s'écartent tout en glissant. On compose donc dans cet ordre
+ * — d'abord le déplacement du milieu, ensuite le grandissement autour de la
+ * position d'arrivée de ce milieu. L'ordre inverse ferait tourner le zoom autour
+ * d'un point que les doigts ont déjà quitté, et le dessin fuirait sous la main.
+ *
+ * Écartement de départ nul : on ne rend rien plutôt que d'inventer un rapport.
+ * {@see zoomerRatio} le refuserait de toute façon, mais l'écrire ici évite de
+ * déplacer la vue pour un geste dont la moitié est indéfinie.
+ */
+export function pincer(
+  vb: Boite,
+  initiale: Boite,
+  cadre: CadreEcran,
+  avant: Pince,
+  apres: Pince,
+): Boite {
+  if (avant.d <= 0) return vb
+
+  const deplace = deplacer(vb, cadre, apres.x - avant.x, apres.y - avant.y)
+  return zoomerRatio(deplace, initiale, cadre, apres.x, apres.y, apres.d / avant.d)
 }
 
 /**

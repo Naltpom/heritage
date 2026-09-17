@@ -127,8 +127,6 @@ final readonly class PropositionsProjetees
      * qui a laissé dix-sept nœuds disparaître sans que rien ne puisse le dire.
      *
      * @param array<int, array{displayName: string, branch: string|null}> $branches
-     *
-     * @return NoeudProposePlacable|string
      */
     private function traduire(
         NoeudPropose $source,

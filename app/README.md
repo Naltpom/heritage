@@ -3,9 +3,10 @@
 Vue 3 + TypeScript strict + Vite + Tailwind 4 + `vue-router` + Vitest. Node 22.
 
 Le **socle** est posé : routeur et gardes d'accès, charte graphique, client
-d'API, gestion de session, composants de base. Les **écrans** ne le sont pas —
-chaque vue de `src/views/` rend pour l'instant un `<EcranAPoser>` qui dit ce qui
-doit venir là et quelles routes d'API le nourrissent.
+d'API, gestion de session, composants de base. Les **écrans** le sont aussi —
+arbre, fiche, chronologie, carte, anniversaires, propositions, médias,
+administration. Plus aucune vue ne rend d'`<EcranAPoser>` ; s'il en reparaît un,
+c'est qu'un écran manque.
 
 > **Si vous ouvrez ce fichier pour poser un écran**, allez directement à
 > « [Conventions du socle](#conventions-du-socle) ». Les quatre questions y sont
@@ -62,7 +63,7 @@ directive par directive — le lire avant de le modifier.
 
 ---
 
-## Deux règles qui ne se devinent pas
+## Trois règles qui ne se devinent pas
 
 ### Les polices sont auto-hébergées, et ce n'est pas négociable
 
@@ -103,6 +104,41 @@ sélection) passent par des écritures directes dans le DOM — pas par des
 `ref()`/`computed()` liés au template. Les 377 nœuds ne doivent **jamais**
 figurer dans un `v-for` réactif.
 
+### Le mobile s'écrit en `max-md:`, et jamais autrement
+
+En deçà de `md` (48 rem), l'en-tête passe dans un tiroir à gauche et les barres
+d'outils dans un tiroir à droite ; la fiche d'une personne couvre toute la
+largeur ; les canevas acceptent le pincement à deux doigts. Au-delà, **rien ne
+change** — et ce n'est pas une promesse, c'est une propriété :
+
+> **Toute déclaration mobile s'écrit `max-md:*`, ou vit sur un élément portant
+> `md:hidden`.** `max-md:` compile en `@media not all and (min-width: 48rem)` :
+> elle *ne peut pas* s'appliquer à un écran large. Aucune classe non préfixée
+> existante n'est modifiée pour obtenir un effet mobile.
+
+La porte qui le vérifie : construire la feuille avant et après, retirer de la
+nouvelle le bloc `@media not all and (min-width:48rem)` accolades appariées, et
+vérifier que **chaque règle d'origine s'y retrouve, sélecteur et corps
+identiques**. Au dernier passage : 508 règles sur 509, la 509ᵉ étant le bloc
+`:root` qui n'avait fait que **gagner** un jeton, et 43 sélecteurs dans le bloc
+mobile, tous `max-md:`.
+
+Trois choses à savoir avant d'y toucher :
+
+1. **`md:contents` est ce qui rend le grand écran immobile.** Au-delà du seuil,
+   le conteneur d'un tiroir ne génère aucune boîte : ses enfants redeviennent
+   enfants flex directs, dans le même ordre et avec les mêmes gouttières.
+2. **Un tiroir est un `<div>`, jamais un `<aside>`.**
+   `views/arbre-revalidation.test.ts` localise le bloc qui rogne le panneau de
+   fiche par le **premier `<aside>` du document**, et `PanneauFiche` se trouve
+   être le seul de toute l'application. Un second `<aside>` rendu avant lui
+   repointerait trois de ces quatre cas sur le mauvais élément, sans rien dire.
+3. **L'en-tête n'appelle pas `useRoute()`.** `entete-creation.test.ts` simule
+   `vue-router` en n'exportant que `useRouter` ; la fermeture des tiroirs à la
+   navigation vit donc dans `router/index.ts`. Et le burger est `v-if="connecte"`
+   parce que ce même fichier vérifie qu'un visiteur anonyme ne reçoit **aucun**
+   `<button>`.
+
 ---
 
 ## Arborescence
@@ -123,10 +159,16 @@ app/
     assets/           images et ressources importées par le bundler
     components/
       base/           bouton, champ, panneau, pastille, erreur, squelette
-      mise-en-page/   en-tête, bandeaux de régime, EcranAPoser
+      mise-en-page/   en-tête (+ burger), bandeaux de régime, TiroirOutils
+      evenements/     filtres de genre, partagés carte + anniversaires
+      carte/          Leaflet, agrégation par lieu, les deux échelles
+      anniversaires/  grille du mois, navigation, regroupement par jour
     composables/
       useSession.ts   état de session (singleton) + rattrapage 401
       useAppelApi.ts  triplet chargement / erreur / données
+      tiroirs.ts      les deux tiroirs du mobile, en fonctions pures
+      useTiroirs.ts   leur état partagé (portée module) + le seuil
+      useGestesCanevas.ts  molette, déplacement et pincement à deux doigts
     lib/
       api/
         types.ts        types du contrat (§ 1 à § 16)
@@ -138,11 +180,14 @@ app/
       notifications.ts  linkRoute → route du front, sans casser sur l'inconnu
     router/
       acces.ts        les trois régimes + la garde, en fonctions pures
-      index.ts        table des routes + garde globale
+      routes.ts       la table des routes — pure donnée, sans `window`
+      index.ts        l'instance, les deux gardes, la fermeture des tiroirs
     styles/
       main.css        palette, thème sombre, base, utilitaires
       canevas.css     styles SVG de l'arbre et de la chronologie
+      carte.css       reprise des couleurs de Leaflet par le thème
     views/            écrans, un par route
+      cadre.ts        la hauteur mesurée d'un écran à canevas — une seule fois
 ```
 
 ### Notes de configuration
@@ -225,8 +270,12 @@ const { regime, connecte, rattache, administrateur, vueEmpruntee } = useSession(
 
 ### 2. Ajouter une route
 
-Tout se passe dans `src/router/index.ts`. Une entrée porte **quatre** choses, et
-`acces` comme `titre` sont obligatoires (le typage de `RouteMeta` les impose) :
+Tout se passe dans `src/router/routes.ts` — la **table** des routes, séparée de
+l'instance pour une raison mécanique : `createWebHistory()` lit
+`window.location` au chargement du module, donc tout ce qui vit dans `index.ts`
+est hors de portée d'un test, alors que la table est précisément ce qu'il faut
+pouvoir vérifier. Une entrée porte **quatre** choses, et `acces` comme `titre`
+sont obligatoires (le typage de `RouteMeta` les impose) :
 
 ```ts
 {

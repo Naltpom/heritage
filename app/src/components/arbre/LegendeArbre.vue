@@ -12,9 +12,22 @@
  * règles correspondantes sont préfixées par `.canevas`, et cette légende n'est
  * pas dans le canevas.
  */
-const { calqueActif } = defineProps<{
+/**
+ * **`enTiroir` : la même légende, à l'autre endroit.** Sur téléphone, la forme
+ * flottante était simplement `hidden` — la légende n'existait pas, sans rien
+ * pour la remplacer, et les cinq couleurs de branche devenaient indéchiffrables.
+ * Elle passe donc dans le tiroir des filtres, où il y a de la place.
+ *
+ * À `false`, la chaîne de classes est celle d'avant, **caractère pour
+ * caractère** : un écran large ne peut pas changer. Et exactement une des deux
+ * formes est visible à toute largeur — celle-ci est `md:block`, l'autre vit dans
+ * un conteneur `md:hidden`.
+ */
+const { calqueActif, enTiroir = false } = defineProps<{
   /** Le lecteur a des nœuds « en attente » dans son graphe (§ 5.2). */
   calqueActif: boolean
+  /** Rendue dans le tiroir des filtres du mobile, et non en flottant. */
+  enTiroir?: boolean
 }>()
 
 const BRANCHES = [
@@ -34,7 +47,11 @@ const SEXES = [
 
 <template>
   <details
-    class="absolute bottom-3.5 left-3.5 z-10 hidden max-w-[280px] overflow-hidden rounded-panneau border border-ligne bg-panneau text-xs shadow-panneau md:block"
+    :class="
+      enTiroir
+        ? 'w-full overflow-hidden rounded-panneau border border-ligne bg-panneau text-xs'
+        : 'absolute bottom-3.5 left-3.5 z-10 hidden max-w-[280px] overflow-hidden rounded-panneau border border-ligne bg-panneau text-xs shadow-panneau md:block'
+    "
   >
     <summary class="cursor-pointer select-none px-3 py-2 font-semibold text-attenue">
       Légende

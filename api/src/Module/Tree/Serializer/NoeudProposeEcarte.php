@@ -56,7 +56,7 @@ final readonly class NoeudProposeEcarte
 
     /**
      * Traduit, puis refusé par le moteur : l'ancre a disparu entre les deux passes.
-     * Posé par {@see \App\Module\Tree\Serializer\NormaliseurDeGraphe}, seul à voir le
+     * Posé par {@see NormaliseurDeGraphe}, seul à voir le
      * placement final.
      */
     public const string PLACEMENT_REFUSE = 'placement_refuse';

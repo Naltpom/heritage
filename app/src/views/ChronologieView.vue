@@ -35,12 +35,15 @@
  * qu'on n'a pas le droit de voir.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { hauteurDuCadre } from '@/views/cadre'
+import { useTiroirs } from '@/composables/useTiroirs'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import BarreOutilsChronologie from '@/components/chronologie/BarreOutilsChronologie.vue'
 import CanevasChronologie from '@/components/chronologie/CanevasChronologie.vue'
 import LegendeChronologie from '@/components/chronologie/LegendeChronologie.vue'
+import TiroirOutils from '@/components/mise-en-page/TiroirOutils.vue'
 import { DESCRIPTIONS_BRANCHE, estVide } from '@/components/chronologie/disposition'
 import {
   chargerChronologie,
@@ -247,19 +250,33 @@ const vide = computed(() => vue.value !== null && estVide(vue.value))
  * **mesurée** et non déduite d'une chaîne de `height: 100%` : le cadre peut
  * porter un bandeau de régime dont la hauteur n'est pas connue d'ici, et un
  * canevas qui s'effondre à zéro ne se voit qu'à l'exécution.
+ *
+ * La formule est dans `views/cadre.ts`, et cet écran en portait une copie qui
+ * réunissait les trois défauts que `hauteurDuCadre()` documente : la hauteur de
+ * la **fenêtre** au lieu de celle de la **mise en page**, un arrondi au plus
+ * proche au lieu du plancher, et un minimum de 320 px qui garantit le
+ * débordement dès qu'il reste moins que cela. Sur un téléphone, cette page
+ * débordait donc, six mois après que l'arbre eut corrigé et documenté exactement
+ * ces trois-là. Personne ne l'a vu parce qu'aucun test ne lisait ce fichier ;
+ * `cadre.test.ts` en lit désormais le source — et il refuserait ce commentaire
+ * s'il recopiait la formule fautive au lieu de la décrire.
  */
 const hauteurCadre = ref('70vh')
 
 function mesurerHauteur(): void {
   const element = racine.value
   if (element === null) return
-  const haut = element.getBoundingClientRect().top
-  hauteurCadre.value = `${Math.max(320, Math.round(window.innerHeight - haut))}px`
+  hauteurCadre.value = hauteurDuCadre(element.getBoundingClientRect().top)
 }
+
+const { unTiroirEstOuvert } = useTiroirs()
 
 function surToucheGlobale(ev: KeyboardEvent): void {
   const cible = ev.target
   if (cible instanceof HTMLInputElement || cible instanceof HTMLTextAreaElement) return
+  // Un tiroir ouvert prend la main : il se ferme lui-même, et Échap ne doit pas
+  // faire deux choses d'un seul geste. Même raison que dans `ArbreView`.
+  if (unTiroirEstOuvert()) return
   if (ev.key === '0') recadrer()
   else if (ev.key === 'Escape') selection.value = null
 }
@@ -281,22 +298,27 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="racine" class="flex flex-col" :style="{ height: hauteurCadre }">
-    <BarreOutilsChronologie
-      v-if="reglages !== null"
-      :bande="reglages.bande"
-      :orientation="reglages.orientation"
-      :branches="reglages.branches"
-      :montrer-incertitude="reglages.montrerIncertitude"
-      :chargement="chargement"
-      :preference-a-jour="preferenceAJour"
-      :enregistrement="enregistrement"
-      @bande="changerBande"
-      @orientation="changerOrientation"
-      @branche="basculerBranche"
-      @incertitude="changerIncertitude"
-      @enregistrer="enregistrer"
-      @recadrer="recadrer"
-    />
+    <TiroirOutils titre="Réglages de la chronologie">
+      <BarreOutilsChronologie
+        v-if="reglages !== null"
+        :bande="reglages.bande"
+        :orientation="reglages.orientation"
+        :branches="reglages.branches"
+        :montrer-incertitude="reglages.montrerIncertitude"
+        :chargement="chargement"
+        :preference-a-jour="preferenceAJour"
+        :enregistrement="enregistrement"
+        @bande="changerBande"
+        @orientation="changerOrientation"
+        @branche="basculerBranche"
+        @incertitude="changerIncertitude"
+        @enregistrer="enregistrer"
+        @recadrer="recadrer"
+      />
+      <template #legende>
+        <LegendeChronologie v-if="vue !== null && !vide" en-tiroir />
+      </template>
+    </TiroirOutils>
 
     <!--
       Une demande refusée ne vide pas le canevas : la chronologie affichée reste

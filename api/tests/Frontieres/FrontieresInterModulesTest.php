@@ -103,7 +103,7 @@ final class FrontieresInterModulesTest extends TestCase
      *
      * Trois planchers, et une correspondance croisée : les modules trouvés sur
      * le disque doivent être exactement ceux qui ont un fichier de services. On
-     * évite ainsi de recopier ici la liste des sept modules — une liste recopiée
+     * évite ainsi de recopier ici la liste des huit modules — une liste recopiée
      * ne prévient jamais qu'elle a vieilli. Ajouter un dossier de module sans
      * son `config/services/<module>.yaml`, ou l'inverse, fait rougir ce test.
      */
@@ -172,7 +172,10 @@ final class FrontieresInterModulesTest extends TestCase
             .'Config : '.implode(', ', $modulesConfigures),
         );
 
-        self::assertGreaterThanOrEqual(7, \count($modulesSurLeDisque), 'Les sept modules sont un contrat entre agents.');
+        // Huit depuis le 2026-09-17 : `Almanach` (carte des lieux, anniversaires) rejoint
+        // les sept d'origine. Le plancher monte avec eux — il n'a d'intérêt que s'il dit
+        // le compte réel, et un plancher qu'on laisse en dessous ne garde plus rien.
+        self::assertGreaterThanOrEqual(8, \count($modulesSurLeDisque), 'Les huit modules sont un contrat entre agents.');
     }
 
     /**

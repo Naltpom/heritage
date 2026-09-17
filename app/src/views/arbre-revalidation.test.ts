@@ -28,11 +28,11 @@
  * navigateur, et cela a été mesuré à part.
  * ────────────────────────────────────────────────────────────────────
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSSRApp, defineComponent, h } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { chargerGraphe, oublierEtag, type Graphe, type NoeudPersonne } from '@/lib/api'
-import ArbreView, { grapheApresRevalidation, hauteurDuCadre } from './ArbreView.vue'
+import ArbreView, { grapheApresRevalidation } from './ArbreView.vue'
 
 /* ==================================================================== */
 /* Le serveur factice — `GET /api/arbre/graphe` et son ETag             */
@@ -265,89 +265,15 @@ describe('l’ETag garde son emploi là où il en a un', () => {
 /* ==================================================================== */
 
 /**
- * Deux défauts distincts dans le même fichier, et trois termes de cause. Ce
- * qu'on isole ici, un terme à la fois, c'est ce que la vue **décide** : quelle
- * hauteur elle pose, et quel bloc rogne son débordement. Ce que produit
- * réellement la peinture — 347 px de page en trop, 13 px de défilement
- * vertical — a été mesuré dans un navigateur, et ne peut pas l'être ici.
+ * Ce qui reste ici : le bloc qui rogne le débordement du panneau de fiche.
+ *
+ * L'autre moitié de ce fichier — la hauteur posée sur le cadre — a déménagé dans
+ * `cadre.test.ts` avec la fonction qu'elle tient, `hauteurDuCadre()`, parce que
+ * la chronologie en gardait une copie non testée. Ce qu'on isole ici, c'est donc
+ * la seule décision de mise en page qui reste propre à cet écran. Ce que produit
+ * réellement la peinture — 347 px de page en trop — a été mesuré dans un
+ * navigateur, et ne peut pas l'être ici.
  */
-
-/** Les deux hauteurs du navigateur, qui ne sont pas la même chose :
- *  `window.innerHeight` **inclut** la bande d'une barre de défilement
- *  horizontale, `document.documentElement.clientHeight` l'exclut. Douze pixels
- *  d'écart, mesurés dans Chrome à 1,25 dpr. */
-function poserFenetre(innerHeight: number, clientHeight: number): void {
-  Object.defineProperty(globalThis, 'window', {
-    value: { innerHeight },
-    configurable: true,
-    writable: true,
-  })
-  Object.defineProperty(globalThis, 'document', {
-    value: { documentElement: { clientHeight } },
-    configurable: true,
-    writable: true,
-  })
-}
-
-afterEach(() => {
-  Reflect.deleteProperty(globalThis, 'window')
-  Reflect.deleteProperty(globalThis, 'document')
-})
-
-describe('la hauteur posée sur le cadre de l’arbre', () => {
-  it('se mesure sur la hauteur de mise en page, pas sur celle de la fenêtre', () => {
-    /*
-     * TERME (2a). `window.innerHeight` compte la bande de la barre de défilement
-     * horizontale ; `clientHeight` ne la compte pas. Le cadre était donc posé
-     * 12 px trop bas, ce qui faisait apparaître une barre verticale sur une page
-     * qui n'avait rien de plus à montrer.
-     *
-     * Les deux nombres sont choisis pour que l'arrondi ne puisse pas expliquer
-     * l'écart : seule la source lue distingue 638 de 650.
-     */
-    poserFenetre(700, 688)
-    expect(hauteurDuCadre(50)).toBe('638px')
-  })
-
-  it('arrondit vers le bas : un en-tête ne tombe pas sur un pixel entier', () => {
-    /*
-     * TERME (2a bis). Le haut du cadre est fractionnaire — 54,40 px pour un
-     * en-tête à 1,25 dpr. `Math.round(617,6)` rendait 618, soit 0,40 px de trop,
-     * et 0,40 px de trop font un pixel de défilement. Ici les deux hauteurs sont
-     * égales : seul le sens de l'arrondi distingue 617 de 618.
-     */
-    poserFenetre(672, 672)
-    expect(hauteurDuCadre(54.4)).toBe('617px')
-  })
-
-  it('n’impose aucun plancher : sur un téléphone, il n’y a pas 320 px à donner', () => {
-    /*
-     * TERME (2b), indépendant du précédent et dominant en fenêtre courte.
-     * `Math.max(320, …)` garantissait mathématiquement le débordement dès que la
-     * place restante tombait sous 320 px — mesuré : 164 px de trop en 400×348,
-     * où l'en-tête applicatif s'enroule sur quatre rangs et prend 192 px.
-     *
-     * Le plancher ne peut pas coexister avec « jamais de défilement vertical de
-     * page ». La garantie anti-effondrement qu'il prétendait donner est déjà
-     * portée par la chaîne flex (`min-h-0` / `flex-1`) du gabarit.
-     */
-    poserFenetre(348, 348)
-    expect(hauteurDuCadre(192)).toBe('156px')
-  })
-
-  it('ne rend jamais une hauteur négative quand il ne reste rien', () => {
-    poserFenetre(200, 200)
-    expect(hauteurDuCadre(260)).toBe('0px')
-  })
-
-  it('cumule les deux termes dans la fenêtre large où le défaut a été mesuré', () => {
-    /* L'état livré : 1524×684, barre horizontale présente (donc clientHeight
-       672), en-tête à 54,40. L'ancienne formule posait 630px, et le bas du cadre
-       tombait à 684,40 pour 672 de place — 13 px de défilement vertical. */
-    poserFenetre(684, 672)
-    expect(hauteurDuCadre(54.4)).toBe('617px')
-  })
-})
 
 /* ------------------------------------------------------------------ */
 /* Le rognage du bloc qui porte le panneau                             */
@@ -485,5 +411,53 @@ describe('le bloc qui porte le panneau de fiche', () => {
     // Pas de `\b` après un crochet fermant : il n'y a pas de frontière de mot
     // entre `]` et l'espace qui suit, et l'assertion ne se déclencherait jamais.
     expect(aside).toContain('max-w-[88vw]')
+  })
+
+  it('couvre toute la largeur du bloc sur un téléphone, sans sortir du rognage', async () => {
+    /*
+     * POURQUOI CE CAS EXISTE, ALORS QUE LES QUATRE AU-DESSUS SONT VERTS. Ils le
+     * sont **par accident** : leurs expressions régulières reconnaissent aussi
+     * bien `right-0` qu'une forme préfixée, parce que le deux-points est une
+     * frontière de mot. Ils continueraient donc de passer sur un panneau dont la
+     * branche mobile aurait été supprimée, et n'assureraient plus rien de ce
+     * qu'on vient d'écrire.
+     *
+     * Ce que celui-ci tient : sous le seuil, le panneau prend toute la largeur
+     * du bloc — et il reste `absolute`, donc son état fermé reste rogné par le
+     * même `overflow-clip`, et les 347 px de débordement ne peuvent pas revenir
+     * par la porte du mobile.
+     */
+    const aside = /<aside class="([^"]*)"/.exec(await rendreLaVue())?.[1] ?? ''
+
+    // Découpe en jetons plutôt qu'expressions régulières : une classe est un
+    // mot dans une liste séparée par des espaces, et `toContain` sur le
+    // tableau dit exactement cela — sans dépendre d'une frontière de mot, qui
+    // se comporte mal au voisinage d'un deux-points et d'un crochet.
+    const jetons = aside.split(/\s+/)
+
+    expect(jetons).toContain('max-md:left-0')
+    expect(jetons).toContain('max-md:w-full')
+    expect(jetons).toContain('max-md:max-w-none')
+    expect(jetons).toContain('translate-x-[102%]')
+    // `absolute` et non `fixed` : voir l'en-tête de `PanneauFiche`.
+    expect(jetons).toContain('absolute')
+    expect(jetons).not.toContain('fixed')
+  })
+
+  it('n’a toujours qu’un seul `aside` dans l’écran : le panneau de fiche', async () => {
+    /*
+     * LA GARDE DU SCANNER. `classesDuParentDe()` rend le parent du **premier**
+     * `<aside>` dans l'ordre du document. Trois des quatre cas ci-dessus en
+     * dépendent entièrement, et `PanneauFiche` est aujourd'hui le seul `<aside>`
+     * de toute l'application — ce qui n'est écrit nulle part et que personne
+     * n'irait vérifier avant d'en ajouter un.
+     *
+     * Le tiroir de filtres mobile en a été un candidat évident. S'il avait été
+     * rendu en `<aside>`, il se serait glissé **avant** le panneau, et ces trois
+     * cas auraient mesuré les classes d'un autre bloc sans que rien ne le dise.
+     */
+    const html = await rendreLaVue()
+
+    expect((html.match(/<aside/g) ?? []).length).toBe(1)
   })
 })

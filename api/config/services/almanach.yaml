@@ -1,0 +1,82 @@
+# Contrat : ce fichier est celui du module Almanach (carte des lieux, anniversaires).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services/_autoload.yaml couvre déjà toutes les classes
+# de src/Module/Almanach/. On ne déclare ici que ce que le conteneur ne peut pas
+# deviner : **alias d'interface**.
+#
+# ─────────────────────────────────────────────────────────────────────────────────
+# PIÈGE D'ORDRE DE CHARGEMENT — à connaître avant d'ajouter une ligne ici.
+#
+# `config/services.yaml` importe `services/*.yaml`, et Symfony traite TOUJOURS les
+# imports avant les définitions du fichier qui les porte. Le prototype `App\:` vit dans
+# `services/_autoload.yaml`, dont le préfixe « _ » le place en tête du glob : les
+# fichiers de module l'emportent donc sur lui. Mais `FileLoader::registerClasses()`
+# appelle `setDefinition()` sans condition, ce qui veut dire qu'une définition de
+# service **concret** posée ici serait écrasée en silence si l'ordre changeait.
+#
+# Ce module n'y est pas exposé : il ne déclare que des alias d'interface, que le
+# prototype ne touche pas. Tout ce qui relèverait d'un service concret se pose en
+# **attribut**, dans la classe. Et l'on vérifie ce qu'on obtient réellement :
+#
+#     bin/console debug:container App\\Module\\Almanach\\Contract\\PortEvenementsArbre
+#
+# Un `#[AsAlias]` ne conviendrait pas : il est traité par le prototype de
+# `_autoload.yaml`, donc AVANT ce fichier, donc écrasé. C'est le même arbitrage que
+# `config/services/timeline.yaml` et `config/services/membership.yaml` ont déjà tranché.
+# ─────────────────────────────────────────────────────────────────────────────────
+
+services:
+    # ── Le port vers `Tree` ────────────────────────────────────────────────────────
+    #
+    # `FluxNonBranche` rend un flux **vide** : les deux routes répondent 200 avec leurs
+    # résumés à zéro, mais aucun lieu et aucun événement. C'est volontaire — un module
+    # dont la dépendance de sécurité n'est pas câblée doit échouer fermé, jamais
+    # permissif. Un flux partiel rendu sans cercle serait exactement la fuite qu'on ferme
+    # ici : des dates et des lieux de naissance de personnes vivantes.
+    #
+    # Le contrat à respecter est écrit en entier sur l'interface. Les quatre règles que
+    # l'adaptateur n'a pas le droit d'assouplir : le flux est COMPLET et non filtré ; un
+    # événement de famille porte SES DEUX époux (un `innerJoin` sur `f.person` recopié de
+    # la chronologie les ferait disparaître en silence) ; les dates traversent en
+    # `UncertainDate` ; l'état vivant vient de `ReglePersonneVivante`, jamais de
+    # `tree_person.deceased`.
+    App\Module\Almanach\Contract\PortEvenementsArbre:
+        alias: App\Module\Tree\Service\VueDeLArbrePourAlmanach
+
+when@test:
+    services:
+        # Le port vers `Tree`, joué par un flux en mémoire que chaque test peuple en
+        # quelques lignes. C'est ce qui rend écrivables les tests du cercle, du 29 février
+        # et des compteurs **sans base de l'arbre** : `tests/Almanach/` ne charge aucune
+        # table `tree_*` et n'a pas à savoir qu'elles existent.
+        #
+        # Ce double ne remplace pas la vérification sur la vraie base : `Tree` a son
+        # propre test d'adaptateur (`tests/Tree/AdaptateursPourLesAutresModulesTest.php`),
+        # qui est l'endroit où l'on prouve que la traduction lit bien les vraies tables —
+        # et notamment qu'un fait de famille traverse avec ses deux époux.
+        App\Tests\Almanach\Double\FluxDEvenementsEnMemoire:
+            public: true
+
+        App\Module\Almanach\Contract\PortEvenementsArbre:
+            alias: App\Tests\Almanach\Double\FluxDEvenementsEnMemoire
+            public: true
+
+        # ⚠ NE PAS AJOUTER ICI DE SERVICE DE `src/` POUR LE RENDRE PUBLIC.
+        #
+        # `_defaults` n'est **pas hérité d'un fichier à l'autre**. Une ligne
+        #
+        #     App\Module\Almanach\Service\NormaliseurDeLaCarte: { public: true }
+        #
+        # ne rend pas le service public : elle le **redéfinit**, sans `autowire`, et
+        # écrase la définition autowirée du prototype `App\:` — qui est chargé AVANT ce
+        # fichier. Le conteneur se compile, `lint:container` reste vert, et l'on obtient
+        # au premier appel un `ArgumentCountError: 0 passed, exactly 2 expected`.
+        # Le module `Timeline` a payé ce piège en écrivant le sien : deux lignes de
+        # confort, vingt-cinq tests rouges.
+        #
+        # Les services de ce module se testent par leurs routes ou en les instanciant
+        # directement — `JourAnniversaire` est statique et sans dépendance, les deux
+        # normaliseurs se construisent avec un `FluxVisible` monté à la main.
+        # S'il en fallait vraiment un public un jour, il faudrait rouvrir un bloc
+        # `_defaults: { autowire: true, autoconfigure: true }` ici.

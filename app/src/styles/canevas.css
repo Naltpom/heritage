@@ -49,6 +49,23 @@
 /* Cadre                                                               */
 /* ------------------------------------------------------------------ */
 
+/*
+ * `touch-action: none` sur les DEUX : le cadre porte les gestionnaires de
+ * pointeur, le `<svg>` occupe toute sa surface. Le `<svg>` seul suffisait tant
+ * qu'il recouvrait exactement son cadre — c'est-à-dire tant que personne n'y
+ * ajoutait une marge, un bandeau ou une légende en flux. La règle appartient à
+ * l'élément qui reçoit le geste.
+ *
+ * Et elle reste : le navigateur ne doit pas interpréter le pincement, parce que
+ * c'est `composables/useGestesCanevas` qui le fait — en déplaçant le `viewBox`,
+ * jamais par un `transform` (règle n° 1). Le retirer rendrait le zoom natif au
+ * navigateur, qui agrandirait les pixels du SVG au lieu d'en redessiner le
+ * contenu.
+ */
+.cadre-canevas {
+  touch-action: none;
+}
+
 .canevas {
   display: block;
   width: 100%;
@@ -57,6 +74,7 @@
   cursor: grab;
 }
 
+.cadre-canevas.deplacement,
 .canevas.deplacement {
   cursor: grabbing;
 }

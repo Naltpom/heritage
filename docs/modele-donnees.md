@@ -149,15 +149,49 @@ fourchette dégénérée en point. Si un jour quelqu'un écrit `qualifier = 'ent
 
 Décisions d'exclusion, pour que personne ne les reprenne à zéro dans six mois.
 
-- **Pas de table `tree_place`.** 104 lieux distincts pour 315 occurrences, et aucune
-  exigence du dossier de mission ne demande de parcourir l'arbre par lieu. Le lieu est
-  stocké en `TEXT` brut, tel que le GEDCOM l'écrit
-  (`Saint-Ronce-de-Verçay, Fougerie, Florie`). Normaliser coûterait une table, deux clés
-  étrangères par événement, un écran d'administration et une campagne de
-  dédoublonnage — pour rien à ce stade. *Chemin de reprise* : si la recherche par
-  commune devient une exigence, on ajoute `tree_place` et une colonne `place_id` à côté
-  des colonnes `*_place` existantes, qu'on garde comme texte d'origine. Le texte brut
-  n'est jamais un cul-de-sac ; une normalisation prématurée, si.
+- ~~**Pas de table `tree_place`.**~~ **Reprise effectuée — la table existe.** Le
+  raisonnement d'origine est conservé ci-dessous, parce que c'est l'objet de ce
+  paragraphe : dire ce qui a été pesé, pour que personne ne le repèse à zéro.
+
+  > *Décision initiale.* 104 lieux distincts pour 315 occurrences, et aucune
+  > exigence du dossier de mission ne demande de parcourir l'arbre par lieu. Le
+  > lieu est stocké en `TEXT` brut, tel que le GEDCOM l'écrit
+  > (`Saint-Ronce-de-Verçay, Fougerie, Florie`). Normaliser coûterait une table,
+  > deux clés étrangères par événement, un écran d'administration et une campagne
+  > de dédoublonnage — pour rien à ce stade. *Chemin de reprise* : si la recherche
+  > par commune devient une exigence, on ajoute `tree_place` et une colonne
+  > `place_id` à côté des colonnes `*_place` existantes, qu'on garde comme texte
+  > d'origine. Le texte brut n'est jamais un cul-de-sac ; une normalisation
+  > prématurée, si.
+
+  L'exigence est venue : une **carte des lieux** (§ 19 du contrat d'API). Le
+  chemin de reprise a été pris, **avec un écart qu'il faut connaître** :
+
+  **aucune colonne `place_id` n'a été ajoutée.** `tree_place` est une table de
+  **résolution indexée par la chaîne brute** (`raw_key`, la clé repliée par
+  `CleDeRecherche`), jointe en PHP sur une centaine d'entrées. Trois raisons
+  indépendantes, dont la troisième est la plus coûteuse à découvrir après coup :
+
+  1. Doctrine ne supporte **aucune association dans un `#[ORM\Embeddable]`**, et
+     `place_id` aurait dû vivre dans `UncertainDate`. Le mapping n'aurait pas
+     validé.
+  2. `targetEntity: Place::class` y aurait imposé un `use App\Module\Tree\…` dans
+     `App\Module\Core` — ce que `FrontieresInterModulesTest::testLeNoyauNeReferenceAucunModule()`
+     interdit, et l'ADR 0002 avec lui.
+  3. **`Person` porte un `#[ORM\Version]`.** Réécrire une ligne de personne
+     incrémente sa version, **donc périme les demandes en attente qui la
+     visaient** (§ 9.6). Une table de résolution ne réécrit aucune personne :
+     aucune demande ne meurt pour que la carte existe.
+
+  Rayon d'explosion évité au passage : `UncertainDate` est embarqué à **dix
+  endroits, sur cinq entités, dans trois modules** (`Tree`, `Media`, `Proposal`)
+  — `med_media` et `prp_draft_*` auraient reçu une colonne dont ils n'ont que
+  faire.
+
+  Les cinq colonnes `*_place` sont **intactes**, et le texte brut reste la
+  provenance. La table est remplie par `heritage:resoudre-les-lieux`, jamais par
+  une migration : une migration ne peut pas lire un référentiel, et les 104
+  chaînes n'existent que sur le serveur.
 - **Pas de table pour le résultat du moteur de placement.** Voir § 9.9.
 - **Pas de table pour le cercle de visibilité.** Voir § 9.3.
 - **Pas de table, ni de colonne, ni de compteur d'invalidation de cache.** Les clés de

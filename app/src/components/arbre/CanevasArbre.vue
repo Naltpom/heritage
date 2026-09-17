@@ -19,15 +19,9 @@
  */
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { Graphe, NoeudGraphe } from '@/lib/api'
+import { useGestesCanevas } from '@/composables/useGestesCanevas'
 import { construireCanevas, type PiloteCanevas } from './canevas'
-import {
-  cadrer,
-  centrerSur,
-  deplacer,
-  zoomer,
-  type Boite,
-  type CadreEcran,
-} from './geometrie'
+import { cadrer, centrerSur, type Boite, type CadreEcran } from './geometrie'
 
 const { graphe } = defineProps<{
   /** `null` tant que le premier chargement n'a pas abouti. */
@@ -85,69 +79,32 @@ function construire(): void {
 /* Gestes                                                              */
 /* ------------------------------------------------------------------ */
 
-function surMolette(ev: WheelEvent): void {
-  if (pilote.value === null) return
-  ev.preventDefault()
-  vb = zoomer(vb, boiteInitiale, mesurerCadre(), ev.clientX, ev.clientY, ev.deltaY)
-  appliquer()
-}
-
-let px = 0
-let py = 0
-let enfonce = false
-let bouge = false
-let pointeur: number | null = null
-
-function surPointeurBas(ev: PointerEvent): void {
-  enfonce = true
-  bouge = false
-  px = ev.clientX
-  py = ev.clientY
-  pointeur = ev.pointerId
-}
-
-function surPointeurDeplace(ev: PointerEvent): void {
-  if (!enfonce || pilote.value === null) return
-  if (!bouge) {
-    // Trois pixels de tolérance : sans ce seuil, un clic un peu tremblant sur
-    // une fiche est compté comme un déplacement et n'ouvre jamais le panneau.
-    if (Math.abs(ev.clientX - px) + Math.abs(ev.clientY - py) <= 3) return
-    bouge = true
-    cadreRef.value?.classList.add('deplacement')
-    svgRef.value?.classList.add('deplacement')
-    if (pointeur !== null) {
-      try {
-        cadreRef.value?.setPointerCapture(pointeur)
-      } catch {
-        // Capture refusée (pointeur déjà relâché) : le déplacement fonctionne
-        // quand même, il s'arrête simplement en sortant du cadre.
-      }
-    }
-  }
-  vb = deplacer(vb, mesurerCadre(), ev.clientX - px, ev.clientY - py)
-  px = ev.clientX
-  py = ev.clientY
-  appliquer()
-}
-
-function surPointeurFin(): void {
-  enfonce = false
-  cadreRef.value?.classList.remove('deplacement')
-  svgRef.value?.classList.remove('deplacement')
-  if (pointeur !== null) {
-    try {
-      cadreRef.value?.releasePointerCapture(pointeur)
-    } catch {
-      /* déjà relâché */
-    }
-    pointeur = null
-  }
-}
+/**
+ * Molette, déplacement et **pincement à deux doigts** vivent dans un composable
+ * partagé avec la chronologie : les deux canevas portaient jusqu'ici le même
+ * bloc, et le zoom à deux doigts manquait dans les deux.
+ *
+ * Seul `surClic` reste ici, parce que les deux canevas n'y font pas la même
+ * chose : sur une fiche il ouvre le panneau, sur une barre il sélectionne.
+ */
+const gestes = useGestesCanevas({
+  cadre: cadreRef,
+  svg: svgRef,
+  actif: () => pilote.value !== null,
+  lireVb: () => vb,
+  ecrireVb: (boite) => {
+    vb = boite
+  },
+  boiteInitiale: () => boiteInitiale,
+  mesurerCadre,
+  appliquer,
+})
 
 function surClic(ev: MouseEvent): void {
-  // Un déplacement se termine par un `click` : sans ce garde-fou, déplacer
-  // l'arbre ouvrirait la fiche qui se trouve sous le doigt à l'arrivée.
-  if (bouge || pilote.value === null) return
+  // Un déplacement — ou un pincement — se termine par un `click` : sans ce
+  // garde-fou, déplacer l'arbre ouvrirait la fiche qui se trouve sous le doigt
+  // à l'arrivée.
+  if (gestes.aBouge() || pilote.value === null) return
   const noeud = pilote.value.noeudSousLeCurseur(ev.target)
   if (noeud === null) emit('fond')
   else emit('selection', noeud)
@@ -194,14 +151,12 @@ defineExpose({
 /* ------------------------------------------------------------------ */
 
 onMounted(() => {
-  // Enregistré à la main, et non par `@wheel.prevent` : il faut
-  // `passive: false` pour avoir le droit d'empêcher le défilement de la page.
-  cadreRef.value?.addEventListener('wheel', surMolette, { passive: false })
+  // L'écoute de la molette appartient au composable : il lui faut
+  // `passive: false` pour empêcher le défilement de la page, et il la retire.
   construire()
 })
 
 onBeforeUnmount(() => {
-  cadreRef.value?.removeEventListener('wheel', surMolette)
   pilote.value?.detruire()
   pilote.value = null
 })
@@ -219,11 +174,11 @@ watch(
 <template>
   <div
     ref="cadreRef"
-    class="relative h-full w-full overflow-hidden"
-    @pointerdown="surPointeurBas"
-    @pointermove="surPointeurDeplace"
-    @pointerup="surPointeurFin"
-    @pointercancel="surPointeurFin"
+    class="cadre-canevas relative h-full w-full overflow-hidden"
+    @pointerdown="gestes.surPointeurBas"
+    @pointermove="gestes.surPointeurDeplace"
+    @pointerup="gestes.surPointeurFin"
+    @pointercancel="gestes.surPointeurFin"
     @click="surClic"
   >
     <!--

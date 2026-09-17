@@ -13,11 +13,27 @@
  * une légende qui pointe vers un motif disparu ne montre rien — sans erreur.
  */
 import { DESCRIPTIONS_BRANCHE, ORDRE_BRANCHES } from './disposition'
+
+/**
+ * **`enTiroir` : la même légende, à l'autre endroit.** Sur téléphone, la forme
+ * flottante était simplement `hidden` — la légende n'existait pas, sans rien
+ * pour la remplacer. Elle passe dans le tiroir des filtres, où il y a de la
+ * place. À `false`, la chaîne de classes est celle d'avant, caractère pour
+ * caractère.
+ */
+const { enTiroir = false } = defineProps<{
+  /** Rendue dans le tiroir des filtres du mobile, et non en flottant. */
+  enTiroir?: boolean
+}>()
 </script>
 
 <template>
   <details
-    class="absolute bottom-3.5 left-3.5 z-10 hidden max-w-[300px] overflow-hidden rounded-panneau border border-ligne bg-panneau text-xs shadow-panneau md:block"
+    :class="
+      enTiroir
+        ? 'w-full overflow-hidden rounded-panneau border border-ligne bg-panneau text-xs'
+        : 'absolute bottom-3.5 left-3.5 z-10 hidden max-w-[300px] overflow-hidden rounded-panneau border border-ligne bg-panneau text-xs shadow-panneau md:block'
+    "
   >
     <summary class="cursor-pointer select-none px-3 py-2 font-semibold text-attenue">
       Légende

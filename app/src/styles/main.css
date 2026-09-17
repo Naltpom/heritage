@@ -34,6 +34,10 @@
 @import '@fontsource/ibm-plex-mono';
 
 @import './canevas.css';
+/* La carte des lieux. Elle voyage dans le bundle principal alors que
+   `leaflet.css` arrive dans le morceau paresseux de `/carte`, donc APRÈS :
+   toutes ses reprises sont écrites classe+classe. Voir son en-tête. */
+@import './carte.css';
 
 /* ------------------------------------------------------------------ */
 /* Palette — valeurs reprises de `arbre.html`                          */

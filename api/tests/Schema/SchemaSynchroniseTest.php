@@ -48,11 +48,18 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 final class SchemaSynchroniseTest extends KernelTestCase
 {
     /**
-     * Le § 1 du modèle de données en prévoit 23, et le § 11 les énumère dans leur ordre
+     * Le § 1 du modèle de données en prévoyait 23, et le § 11 les énumère dans leur ordre
      * de création. Un écart est soit un oubli, soit une décision — dans les deux cas il
      * doit se voir ici avant de se voir en production.
+     *
+     * **24 depuis le 2026-09-17** : `tree_place` (module `Tree`,
+     * `migrations/Version20260917143000.php`) porte la résolution des chaînes `PLAC` en
+     * coordonnées. C'est une **décision**, et elle est écrite en entier dans l'en-tête de
+     * {@see \App\Module\Tree\Entity\Place} : la table de correspondance existe précisément
+     * pour qu'aucune colonne ne s'ajoute aux cinq tables qui portent déjà un lieu — dont
+     * deux sont versionnées, et dont une réécriture périmerait les demandes en attente.
      */
-    private const int NOMBRE_DE_TABLES = 23;
+    private const int NOMBRE_DE_TABLES = 24;
 
     public function testLeMappingEstValide(): void
     {
