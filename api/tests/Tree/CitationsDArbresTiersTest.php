@@ -322,6 +322,190 @@ final class CitationsDArbresTiersTest extends ArbreWebTestCase
             (new AdressesDArbresEnLigne())->designeUneFicheDArbre('https://sites-cf.mhcache.com/site-42/notre-famille'),
         );
     }
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     * **LA COUTURE SUR UN TEXTE MULTI-LIGNES** — la ligne que 1 077 tests verts
+     * n'auraient pas sauvée.
+     *
+     * Le cas monoligne était couvert ; celui-ci ne l'était pas, et c'est lui qui exerce le
+     * second `preg_replace()` de `recoudre()` sur ce pour quoi il existe : un séparateur
+     * resté **en tête d'une ligne suivante**, après qu'une adresse a été coupée en fin de
+     * la précédente.
+     *
+     * ## Ce que ce test n'aurait pas attrapé, et ce qu'il faut savoir
+     *
+     * Ce défaut n'était pas une absence de couverture : le motif **était** exécuté par le
+     * cas monoligne. Il était exécuté sur une **PCRE qui pardonne**. La forme d'abord
+     * écrite — `(?<=^|\R)` — est une assertion arrière dont les branches n'ont pas la même
+     * longueur ; PCRE2 ne l'accepte que depuis la 10.43. La machine de développement porte
+     * la 10.44 et compilait ; l'intégration continue porte une version antérieure et
+     * refusait. `phpstan` était vert des deux côtés — ce n'est pas l'analyseur qui diffère,
+     * c'est la bibliothèque.
+     *
+     * Aucun test PHP ne peut donc garantir ce point sur une seule machine. Ce qui le
+     * garantit est {@see testTousLesMotifsDuLotSeCompilent()} : un motif se fait
+     * **compiler**, et une compilation refusée y devient un échec nommé plutôt qu'un
+     * `null` silencieux.
+     */
+    public function testLaCoutureFonctionneSurUnTexteMultiLignes(): void
+    {
+        $adresses = new AdressesDArbresEnLigne();
+
+        $propre = $adresses->nettoyer("Sorbière, 5 E 341/7\nRelevé sur https://www.myheritage.fr/x\n— vue 3");
+
+        // L'espace que l'adresse laissait derrière elle **reste**, en fin de ligne, et
+        // c'est assumé : elle est invisible à l'écran, et la retirer demanderait un
+        // troisième motif dont le seul effet serait cosmétique. Ce qui compte est que
+        // l'adresse soit partie et que le tiret orphelin de la ligne suivante soit recousu.
+        self::assertSame("Sorbière, 5 E 341/7\nRelevé sur \nvue 3", $propre);
+        self::assertStringNotContainsString('myheritage', (string) $propre);
+        self::assertStringNotContainsString('— vue', (string) $propre, 'Le tiret orphelin en tête de ligne est recousu.');
+        self::assertSame(3, substr_count((string) $propre, "\n") + 1, 'Les trois lignes survivent : on recoud, on ne recolle pas.');
+    }
+
+    /** Les fins de ligne Windows passent la couture comme les autres. */
+    public function testLaCoutureSupporteLesFinsDeLigneWindows(): void
+    {
+        $propre = (new AdressesDArbresEnLigne())->nettoyer("Acte\r\n; https://www.myheritage.fr/x\r\nsuite");
+
+        self::assertStringNotContainsString('myheritage', (string) $propre);
+        self::assertStringNotContainsString('; ', (string) $propre);
+        self::assertStringContainsString('suite', (string) $propre);
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     * **CHAQUE MOTIF DU LOT SE COMPILE** — et c'est le seul contrôle qui vaille.
+     *
+     * Un motif se fait **compiler**, pas seulement analyser. `phpstan` lit la chaîne ;
+     * PCRE la compile, et les deux ne répondent pas à la même question. Un motif que la
+     * bibliothèque refuse fait rendre `null` à `preg_replace()` — et comme tout ce lot
+     * écrit `?? $texte` derrière, le texte ressortirait **sans sa couture**, sans erreur,
+     * sur la ligne même qui retire les adresses.
+     *
+     * Ce test compile les motifs sur la machine qui l'exécute. Il ne prouve donc rien
+     * d'une autre machine — c'est précisément pour cela qu'il **affiche la version de
+     * PCRE en cas d'échec** : le jour où l'intégration continue en refusera un, le
+     * message dira laquelle des deux bibliothèques diverge, plutôt que de laisser
+     * chercher.
+     */
+    public function testTousLesMotifsDuLotSeCompilent(): void
+    {
+        $motifs = [
+            'adresse dans du texte' => '~https?://[^\s<>"\']+~i',
+            'séparateur en fin de ligne' => '~[ \t]*[—–\-:;,]+[ \t]*(?=$|\R)~u',
+            'séparateur en tête de ligne' => '~^[ \t]*[—–\-:;,]+[ \t]*~mu',
+            'espaces doublés' => '~[ \t]{2,}~',
+            'parenthèse restée vide' => '~\(\s*\)~',
+        ];
+
+        foreach ($motifs as $role => $motif) {
+            $erreur = null;
+            set_error_handler(static function (int $niveau, string $message) use (&$erreur): bool {
+                $erreur = $message;
+
+                return true;
+            });
+
+            $resultat = preg_match($motif, 'essai');
+
+            restore_error_handler();
+
+            self::assertNotFalse(
+                $resultat,
+                \sprintf('Le motif « %s » ne se compile pas sur PCRE %s : %s', $role, \PCRE_VERSION, (string) $erreur),
+            );
+            self::assertNull($erreur, \sprintf('Le motif « %s » compile en avertissant sur PCRE %s : %s', $role, \PCRE_VERSION, (string) $erreur));
+        }
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     * **CE QUE LE MOTIF RETENU PRODUIT**, figé sur les huit formes réelles du fonds.
+     *
+     * ## Ce test a d'abord été écrit autrement, et cette version-là était piégée
+     *
+     * Il comparait la sortie du motif retenu à celle de la forme interdite, `(?<=^|\R)`,
+     * pour **prouver** qu'ils coïncident. L'intention était bonne : nommer la forme
+     * piégée pour qu'on ne la réintroduise pas. Elle portait un garde d'exécution qui
+     * sautait le test là où PCRE refuse de la compiler.
+     *
+     * **Ce garde protégeait phpunit et pas phpstan.** `api/phpstan.neon` analyse `tests`
+     * autant que `src`, sa règle `regexp.pattern` lit les motifs **littéralement**, elle
+     * résout la variable, et l'arobase ne la concerne pas. Un test qui documente un motif
+     * illégal **en l'écrivant** le remet donc sous les yeux de l'analyseur, et fait tomber
+     * la porte 1 exactement là où le correctif venait de la relever.
+     *
+     * > **Le vaccin portait la maladie.**
+     *
+     * ## Pourquoi figer les sorties plutôt que masquer la règle
+     *
+     * Trois issues existaient. Construire le motif de façon illisible pour que l'analyseur
+     * ne le résolve pas — c'est le tromper, en moins visible qu'une directive d'exemption,
+     * et le procédé se recopierait. Poser une exemption locale — c'est faire taire, au seul
+     * endroit où elle a servi, la règle qui a attrapé deux défauts réels le même soir.
+     *
+     * Reste celle-ci, et elle n'est pas le moindre mal : **la comparaison dynamique ne
+     * prouvait déjà plus rien là où ça compte.** Elle ne peut tourner que sur une PCRE
+     * ≥ 10.43, c'est-à-dire précisément là où le défaut ne se reproduit pas ; sur
+     * l'intégration continue et sur l'image de production, elle se serait sautée. Son
+     * apport permanent était nul, et son coût une porte rouge.
+     *
+     * L'équivalence, elle, a bien été mesurée — sur ces huit formes, terminaisons `\r\n`
+     * comprises, zéro écart — **au moment d'écrire le correctif**, sur la machine où les
+     * deux compilent. C'était une vérification de conception, pas un invariant à
+     * surveiller ; elle est consignée ici et dans l'en-tête du service.
+     *
+     * Ce qui se surveille, en revanche, c'est le **comportement** : les huit couples
+     * ci-dessous tournent partout, et ils attrapent la réécriture qui changerait ce que la
+     * couture produit — ce qui était le vrai risque du correctif.
+     *
+     * ## Avertissement daté — ce que ce fichier ne sait plus faire
+     *
+     * Un test d'équivalence a vécu ici jusqu'au **17 septembre 2026**. Il comparait deux
+     * formes du même motif et disait si elles rendaient la même chose. Il a été retiré
+     * parce que, pour comparer, il devait **écrire la forme interdite** — et un motif
+     * illégal ne peut pas vivre dans le dépôt : « l'analyseur ne le voit plus » et « le
+     * motif n'y est plus » ne sont pas la même propriété, et seule la seconde résiste à
+     * quelqu'un qui recopiera la ligne ailleurs. Un motif présent dans un test que
+     * l'intégration continue accepte est un motif qui a l'air d'avoir passé la revue.
+     *
+     * **À lire avant de retoucher `recoudre()` :** il n'existe plus de comparaison
+     * automatique entre la forme d'avant et la vôtre. Les huit couples ci-dessous disent
+     * ce que la couture **doit rendre** ; ils ne diront pas si votre réécriture coïncide
+     * avec celle d'hier. Si vous avez besoin de cette réponse-là, mesurez-la hors du
+     * dépôt et consignez le résultat ici — ne réintroduisez pas la forme pour l'obtenir.
+     *
+     * Le prix est borné, et il faut le dire aussi : cette preuve n'avait de valeur que le
+     * jour de la substitution, pour établir que la nouvelle forme faisait ce que faisait
+     * l'ancienne. Cette question-là ne se repose plus ; après, elle devient inerte. Et ce
+     * qui protège l'utilisateur reste en place — `\r\n`, tiret seul, virgule doublée,
+     * chaîne vide sont testés à travers `nettoyer()`, sur la forme retenue.
+     */
+    public function testLeMotifRetenuProduitExactementCesSorties(): void
+    {
+        $retenue = '~^[ \t]*[—–\-:;,]+[ \t]*~mu';
+
+        $attendus = [
+            '— vue 3' => 'vue 3',
+            '  ; reste' => 'reste',
+            "ligne une\n— vue 3" => "ligne une\nvue 3",
+            "ligne une\r\n— vue 3" => "ligne une\r\nvue 3",
+            "a\n  ,  b\n- c" => "a\nb\nc",
+            "— début\nmilieu\n; fin" => "début\nmilieu\nfin",
+            // Un tiret **au milieu** d'une ligne n'est pas une cicatrice : il reste.
+            'Sorbière, 5 E 341/7, vue 1/6 — relevé' => 'Sorbière, 5 E 341/7, vue 1/6 — relevé',
+            '' => '',
+        ];
+
+        foreach ($attendus as $entree => $attendu) {
+            self::assertSame(
+                $attendu,
+                preg_replace($retenue, '', (string) $entree),
+                \sprintf('La couture doit rendre « %s » sur « %s ».', addcslashes($attendu, "\r\n"), addcslashes((string) $entree, "\r\n")),
+            );
+        }
+    }
     // ────────────────────────────────────────────────────────────── le gréement
 
     /**

@@ -1488,6 +1488,14 @@ FamilySearch n'est **pas** dans la liste, et c'est une décision : le site hébe
 arbre collaboratif et des millions de registres numérisés, les distinguer demanderait de lire
 le chemin de l'URL plutôt que son domaine, et l'arbre n'en compte qu'une citation.
 
+**`source.note` et `source.text` ne sont pas rendus par la fiche ; les adresses qu'ils portent
+ne sont donc pas masquées.** `citations()` ne rend de la source que `id`, `title`, `author` et
+`sourceKind`. Les **7 adresses** de ces deux colonnes — 6 dans `note`, 1 dans `text` —
+n'atteignent aucun écran aujourd'hui, et c'est **la seule raison** pour laquelle elles échappent
+au retrait : ce n'est pas une exemption, c'est une absence de route. **Toute route qui les
+exposerait devra appliquer le même nettoyage**, et rien ne l'en avertira — le champ « marche »
+déjà partout ailleurs.
+
 #### `heritage:reclasser-les-arbres-tiers`
 
 Une commande d'administration, **en simulation par défaut**, qui classe en `arbre_tiers` les

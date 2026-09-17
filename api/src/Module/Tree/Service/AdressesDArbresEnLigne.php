@@ -57,6 +57,22 @@ namespace App\Module\Tree\Service;
  * qu'un site change sans prévenir. L'arbre en compte **une seule citation** : on la laisse
  * visible et on le dit, plutôt que de masquer à l'aveugle une adresse qui mène peut-être à
  * un acte.
+ *
+ * ## Deux colonnes portent des adresses et ne passent par aucun masquage
+ *
+ * `tree_source.note` (6 adresses) et `tree_source.text` (1) ne sont **pas sérialisés vers la
+ * fiche** : `NormaliseurDePersonne::citations()` ne rend de la source que `id`, `title`,
+ * `author` et `sourceKind`. Ces sept adresses n'atteignent donc aucun écran aujourd'hui, et
+ * **c'est la seule raison pour laquelle elles ne sont pas masquées** — pas une décision.
+ *
+ * Le jour où une route exposera ces colonnes — un écran de sources, une fiche de fonds — elle
+ * exposera sept adresses d'un coup, et **rien ne l'en avertira** : le champ « marche » déjà
+ * partout ailleurs. Ce nettoyage devra alors être appliqué au même endroit que pour `page` et
+ * `dataText`.
+ *
+ * Les six de `note` sont, aujourd'hui, des adresses de **visionneuses d'archives** — celles
+ * qu'on veut voir. La liste fermée les laisse passer. Mais l'écran qui les exposera devra
+ * quand même passer par ici, sans quoi la septième adresse déposée demain ne sera pas filtrée.
  */
 final class AdressesDArbresEnLigne
 {
@@ -248,9 +264,30 @@ final class AdressesDArbresEnLigne
      */
     private function recoudre(string $texte): string
     {
-        // Un séparateur laissé en tête de ce qui reste, ou en fin de ligne.
+        // Un séparateur laissé en fin de ligne, puis un séparateur laissé en tête.
         $propre = preg_replace('~[ \t]*[—–\-:;,]+[ \t]*(?=$|\R)~u', '', $texte) ?? $texte;
-        $propre = preg_replace('~(?<=^|\R)[ \t]*[—–\-:;,]+[ \t]*~u', '', $propre) ?? $propre;
+
+        // ── `^` avec `/m`, et surtout **pas** `(?<=^|\R)` ─────────────────────────────
+        //
+        // La forme évidente — une assertion arrière disant « début de chaîne **ou** après
+        // un saut de ligne » — est **illégale en PCRE** : ses deux branches n'ont pas la
+        // même longueur, `^` étant de largeur nulle et `\R` valant un ou deux caractères.
+        // PCRE2 ne l'accepte que depuis la 10.43 ; en deçà, `preg_replace` refuse de
+        // compiler, émet un avertissement et rend **`null`**.
+        //
+        // Et `null` ici ne serait pas une panne visible : `?? $propre` le rattraperait, le
+        // texte ressortirait sans sa couture, et l'adresse aurait quand même été retirée.
+        // Un défaut silencieux sur la ligne même qui masque les adresses.
+        //
+        // **Ce n'est pas une hypothèse.** La version écrite d'abord compilait ici — PCRE
+        // 10.44 — et a été refusée par l'intégration continue, dont la bibliothèque est
+        // antérieure. Même code, même analyseur, même niveau : `phpstan` était vert des
+        // deux côtés. C'est la bibliothèque qui diffère, et elle ne se voit pas.
+        //
+        // `^` avec le modificateur `/m` dit exactement la même chose — début de chaîne ou
+        // après un saut de ligne, sans rien consommer —, se compile partout, et a été
+        // vérifié équivalent sur les dix formes de ce fonds, terminaisons `\r\n` comprises.
+        $propre = preg_replace('~^[ \t]*[—–\-:;,]+[ \t]*~mu', '', $propre) ?? $propre;
         // Deux espaces là où l'adresse en séparait deux mots.
         $propre = preg_replace('~[ \t]{2,}~', ' ', $propre) ?? $propre;
         // Une parenthèse restée seule autour de ce qui était l'adresse.
