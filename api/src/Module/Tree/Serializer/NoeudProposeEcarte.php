@@ -23,15 +23,32 @@ use App\Module\Core\Contract\NoeudPropose;
  * pas est précisément le défaut que ce projet traque : le lecteur croyait voir la branche
  * entière.
  *
- * ── Le cas qui domine, et pourquoi il n'est pas un accident ─────────────────────
+ * ── Le cas qui dominait, et qui ne se produit plus ──────────────────────────────
  *
- * `enchainement` n'est pas une cible disparue mais la forme normale d'une branche
- * proposée : « Morille, fille de Girolle » où Girolle est elle-même une fiche de la même
- * demande. L'ancre vaut alors `#1/p1`, qui n'est dans aucun placement partagé — celui-ci
- * ne contient que l'arbre validé. Seules les personnes rattachées à quelqu'un qui existe
- * déjà se placent ; tout ce qui pend derrière elles tombe. C'est pour cela que le compte
- * doit être rendu au lieu d'être déduit : rien, dans `demandes`, ne laisse deviner que la
- * moitié d'une demande manque.
+ * `enchainement` désignait la forme **normale** d'une branche proposée : « Morille, fille
+ * de Girolle » où Girolle est elle-même une fiche de la même demande. L'ancre valait
+ * `#1/p1`, qui n'est dans aucun placement partagé — celui-ci ne contient que l'arbre
+ * validé —, et tout ce qui pendait derrière la racine tombait. C'était la majorité des
+ * absents.
+ *
+ * Ce n'était pas une fatalité, c'était une seule passe de résolution.
+ * {@see PropositionsProjetees} résout désormais les ancrages **par vagues** : ce qui
+ * s'ancre au validé se pose d'abord, puis ce qui s'ancre à ce qui vient d'être posé. Une
+ * branche enchaînée se place en entier.
+ *
+ * `enchainement` reste, pour ce qu'aucune vague ne rattrape : une ancre proposée qui n'est
+ * elle-même jamais posée, ou un cycle. C'est devenu rare, et c'est exactement pour cela
+ * qu'il faut continuer à le dire — rien, dans `demandes`, ne laisse deviner qu'une fiche
+ * manque.
+ *
+ * ── Un motif retiré : `sans_couple` ─────────────────────────────────────────────
+ *
+ * Il nommait « enfant d'un parent qui n'a aucun couple » : le rendu ne savait ancrer un
+ * enfant que sous un losange, et il n'y en avait pas. Le constat était exact, la
+ * conclusion non — la validation, elle, **crée** cette famille (§ 6.4), et ce calque
+ * existe pour montrer ce que la validation ferait. Le losange provisoire se pose donc
+ * sous le parent, et le motif n'a plus d'objet. Il n'est pas laissé en place vide : une
+ * constante que plus rien n'émet finit par être réemployée pour autre chose.
  */
 final readonly class NoeudProposeEcarte
 {
@@ -42,13 +59,15 @@ final readonly class NoeudProposeEcarte
     public const string ANCRE_ABSENTE = 'ancre_absente';
 
     /**
-     * « Enfant de » avec un seul parent nommé, et ce parent n'a **aucun couple** dans
-     * l'arbre : le projecteur ne sait ancrer un enfant que sous un losange, et il n'y en
-     * a pas. La validation en créerait un ; le rendu, lui, ne devine pas.
+     * Aucun lien ne porte cette fiche, **dans un sens ni dans l'autre** : elle flotterait
+     * hors de l'arbre (§ 6.4 du dossier).
+     *
+     * « Dans un sens ni dans l'autre » n'est pas une précision de style. Ce motif sortait
+     * autrefois sur des fiches parfaitement rattachées, parce que les liens n'étaient lus
+     * que par leur sujet — et l'écran qui ajoute un parent ou un conjoint met en sujet la
+     * fiche qu'on complète, pas celle qu'on ajoute. Voir
+     * {@see PropositionsProjetees::rattachements()}.
      */
-    public const string SANS_COUPLE = 'sans_couple';
-
-    /** Aucun lien ne porte cette fiche : elle flotterait hors de l'arbre (§ 6.4 du dossier). */
     public const string SANS_LIEN = 'sans_lien';
 
     /** L'ancre est là, mais sa rangée ne se lit pas — le nœud tomberait sur celle de l'ego. */

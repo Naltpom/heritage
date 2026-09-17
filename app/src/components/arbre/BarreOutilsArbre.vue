@@ -14,6 +14,7 @@
  */
 import { ref } from 'vue'
 import { useEstMobile } from '@/composables/useTiroirs'
+import ChampRechercheArbre from './ChampRechercheArbre.vue'
 import type { DefinitionFiltre, IdFiltre } from './graphe'
 
 const { filtres, disponibles, actif, resultat, tronque, chargement } = defineProps<{
@@ -50,41 +51,29 @@ const question = defineModel<string>({ required: true })
  */
 const recadrageAuto = defineModel<boolean>('recadrageAuto', { required: true })
 
-const champ = ref<HTMLInputElement | null>(null)
+const champ = ref<InstanceType<typeof ChampRechercheArbre> | null>(null)
 
 /**
- * Sur téléphone, le champ de recherche **sort du tiroir**.
+ * Sur téléphone, le champ de recherche **n'est pas ici** : il est monté par la
+ * vue, dans un pied de page fixe, hors du tiroir.
  *
- * Un tiroir fermé est en `display: none` : le CSS seul ne peut donc pas en faire
- * sortir quoi que ce soit, il faut déplacer l'élément dans le DOM, et c'est
- * exactement ce que fait `<Teleport>`. Le champ est **rendu une seule fois** —
- * deux champs auraient deux valeurs, deux fois le même `id`, et
- * `focusRecherche()` ne saurait plus lequel viser.
+ * Chercher est le geste qu'on répète et qu'on veut voir ; filtrer sur
+ * « vérifiées » ou « sans source » se fait une fois, et peut attendre dans le
+ * tiroir. Le champ en sort donc, et les pastilles y restent.
  *
- * Pourquoi lui et pas les pastilles : chercher est le geste qu'on répète, et
- * qu'on veut voir. Filtrer sur « vérifiées » ou « sans source » se fait une
- * fois, et peut attendre dans le tiroir.
+ * **Deux `v-if` mutuellement exclusifs, et non un `<Teleport>`.** Le téléportage
+ * déplaçait le champ après le montage, à travers la frontière `display: none`
+ * du tiroir fermé ; en production, sur la largeur même qu'il visait, la bascule
+ * cassait le rendu de Vue. Voir l'en-tête de {@link ChampRechercheArbre}. Un seul
+ * exemplaire est monté à la fois — donc un seul `id`, un seul état — et rien
+ * n'est déplacé.
  *
- * `disabled` à l'inverse d'`estMobile` : hors téléphone le téléportage ne
- * s'applique pas et le champ reste à sa place d'origine, dans la barre. Un rendu
- * SSR donne `false`, donc la forme large — celle qui ne déplace rien.
+ * Un rendu SSR donne `false`, donc la forme large : celle où le champ est ici.
  */
 const estMobile = useEstMobile()
 
 function focusRecherche(): void {
   champ.value?.focus()
-  champ.value?.select()
-}
-
-function surTouche(ev: KeyboardEvent): void {
-  if (ev.key === 'Escape') {
-    question.value = ''
-    champ.value?.blur()
-  }
-  if (ev.key === 'Enter') {
-    ev.preventDefault()
-    emit('cadrer')
-  }
 }
 
 defineExpose({ focusRecherche })
@@ -94,33 +83,16 @@ defineExpose({ focusRecherche })
   <div
     class="flex flex-wrap items-center gap-3 border-b border-ligne bg-panneau px-4 py-2 max-md:flex-col max-md:items-stretch max-md:gap-2 max-md:border-b-0 max-md:bg-transparent max-md:px-0 max-md:py-0"
   >
-    <Teleport to="#recherche-arbre-mobile" :disabled="!estMobile">
-      <div
-        class="flex items-center gap-2 max-md:w-full max-md:px-4 max-md:py-2 md:contents"
-        role="search"
-      >
-        <label class="lecteur-ecran" for="arbre-recherche">Chercher une personne</label>
-        <input
-          id="arbre-recherche"
-          ref="champ"
-          v-model="question"
-          type="search"
-          class="min-w-[150px] flex-[0_1_250px] rounded-champ border border-ligne bg-fond px-2.5 py-1 text-[13px] text-texte max-md:min-w-0 max-md:flex-1 max-md:py-2"
-          placeholder="Chercher un nom, une date, un lieu…"
-          autocomplete="off"
-          spellcheck="false"
-          @keydown="surTouche"
-        />
-        <span
-          v-if="estMobile"
-          class="min-w-[74px] text-right text-xs font-semibold text-accent"
-          aria-live="polite"
-        >
-          <template v-if="chargement">…</template>
-          <template v-else>{{ resultat }}</template>
-        </span>
-      </div>
-    </Teleport>
+    <ChampRechercheArbre
+      v-if="!estMobile"
+      ref="champ"
+      v-model="question"
+      :resultat="resultat"
+      :tronque="tronque"
+      :chargement="chargement"
+      :compact="false"
+      @cadrer="emit('cadrer')"
+    />
 
     <button
       v-for="f in filtres"
@@ -152,12 +124,6 @@ defineExpose({ focusRecherche })
     >
       Tout afficher
     </button>
-
-    <span class="min-w-[74px] text-xs font-semibold text-accent max-md:hidden" aria-live="polite">
-      <template v-if="chargement">…</template>
-      <template v-else>{{ resultat }}</template>
-      <span v-if="tronque" class="font-normal text-attenue"> (liste plafonnée)</span>
-    </span>
 
     <label
       class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-attenue hover:text-texte"

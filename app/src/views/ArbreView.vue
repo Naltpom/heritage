@@ -105,10 +105,11 @@ export async function grapheApresRevalidation(
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { hauteurDuCadre } from '@/views/cadre'
-import { useTiroirs } from '@/composables/useTiroirs'
+import { useEstMobile, useTiroirs } from '@/composables/useTiroirs'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import BarreOutilsArbre from '@/components/arbre/BarreOutilsArbre.vue'
+import ChampRechercheArbre from '@/components/arbre/ChampRechercheArbre.vue'
 import CanevasArbre from '@/components/arbre/CanevasArbre.vue'
 import LegendeArbre from '@/components/arbre/LegendeArbre.vue'
 import TiroirOutils from '@/components/mise-en-page/TiroirOutils.vue'
@@ -143,6 +144,11 @@ import {
 const graphe = shallowRef<Graphe | null>(null)
 const canevas = ref<InstanceType<typeof CanevasArbre> | null>(null)
 const barre = ref<InstanceType<typeof BarreOutilsArbre> | null>(null)
+/** Le champ du pied de page. Exactement un des deux exemplaires est monté —
+ *  celui-ci sur téléphone, celui de la barre d'outils au large —, et c'est ce
+ *  qui garantit un seul `id="arbre-recherche"` dans le document. */
+const champMobile = ref<InstanceType<typeof ChampRechercheArbre> | null>(null)
+const estMobile = useEstMobile()
 const { ouvert: tiroirOuvert, unTiroirEstOuvert } = useTiroirs()
 const racine = ref<HTMLElement | null>(null)
 
@@ -468,6 +474,9 @@ function surToucheGlobale(ev: KeyboardEvent): void {
   if (unTiroirEstOuvert()) return
   if (ev.key === '/') {
     ev.preventDefault()
+    // `/` vise celui des deux qui est monté. L'ordre n'a pas d'importance :
+    // l'autre est `null`.
+    champMobile.value?.focus()
     barre.value?.focusRecherche()
   } else if (ev.key === '0') {
     canevas.value?.recadrer()
@@ -525,22 +534,39 @@ onBeforeUnmount(() => {
 <template>
   <div ref="racine" class="flex flex-col" :style="{ height: hauteurCadre }">
     <!--
-      La destination du champ de recherche sur téléphone : un pied de page **fixe**,
-      visible en permanence, hors du tiroir.
+      Le champ de recherche sur téléphone : un pied de page **fixe**, visible en
+      permanence, hors du tiroir.
 
-      Elle est **avant** la barre d'outils dans le gabarit, parce que la cible d'un
-      téléportage doit exister au montage de ce qui s'y téléporte — et **avant le
-      bloc du canevas**, pour que la fiche en plein écran, qui porte le même
-      `z-index`, passe par-dessus elle en étant plus loin dans le document.
+      Il est monté ici, et non déplacé depuis la barre d'outils. Le téléportage —
+      la première version — devait faire sortir un sous-arbre vivant d'un ancêtre
+      en `display: none` après le montage, et cassait le rendu de Vue en
+      production sur la largeur même qu'il visait. Voir l'en-tête de
+      `ChampRechercheArbre`. Un seul exemplaire du champ est monté à la fois,
+      celui-ci ou celui de la barre, jamais les deux.
+
+      Déclaré **avant le bloc du canevas**, pour que la fiche en plein écran, qui
+      porte le même `z-index`, passe par-dessus lui en étant plus loin dans le
+      document.
 
       `fixed` et non un élément de la colonne : dans le flux, cette barre prenait de
       la hauteur au canevas, qui est mesuré — c'est-à-dire qu'elle rétrécissait
       l'arbre au lieu de flotter au-dessus.
     -->
     <div
+      v-if="estMobile"
       id="recherche-arbre-mobile"
-      class="fixed inset-x-0 bottom-0 z-30 border-t border-ligne bg-panneau shadow-panneau empty:hidden md:hidden"
-    />
+      class="fixed inset-x-0 bottom-0 z-30 flex border-t border-ligne bg-panneau shadow-panneau md:hidden"
+    >
+      <ChampRechercheArbre
+        ref="champMobile"
+        v-model="question"
+        :resultat="texteResultat"
+        :tronque="tronque"
+        :chargement="chargementRecherche"
+        :compact="true"
+        @cadrer="cadrerSurResultats"
+      />
+    </div>
 
     <TiroirOutils titre="Filtres de l’arbre">
       <BarreOutilsArbre

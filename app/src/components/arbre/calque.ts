@@ -15,11 +15,18 @@
  *
  * ── Pourquoi l'omission est la bonne réponse, et le silence la mauvaise ──────
  *
- * Le placement partagé ne contient que l'arbre **validé**. Une fiche rattachée à
- * une autre fiche de la même demande n'a nulle part où s'accrocher, et la poser
- * faute de mieux la mettrait à `x = 0` — sur l'ego. Dix-sept fiches empilées là
- * seraient pires qu'absentes. Le serveur a donc raison de les omettre ; ce qui
- * manquait, c'est de le dire.
+ * Une fiche sans ancre posée faute de mieux atterrirait à `x = 0` — sur l'ego.
+ * Dix-sept fiches empilées là seraient pires qu'absentes. Le serveur a donc
+ * raison de les omettre ; ce qui manquait, c'est de le dire.
+ *
+ * ── Ce que ce bandeau annonce aujourd'hui ────────────────────────────────
+ *
+ * Beaucoup moins de choses, et c'est voulu. Les dix-sept absents venaient d'une
+ * seule cause : le serveur ne cherchait les ancres qu'une fois, et seulement dans
+ * l'arbre validé — tout ce qui pendait derrière la racine tombait. Il résout
+ * désormais par vagues, et une branche proposée en bloc se place entièrement. Le
+ * bandeau reste : il dit ce qu'aucune vague ne rattrape, et le fait qu'il soit
+ * devenu rare est exactement ce qui le rend utile quand il paraît.
  *
  * ── Trois noms, puis un compte ───────────────────────────────────────────────
  *
