@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Proposal\Contract\InventaireDeSuppression;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
 use App\Module\Proposal\Entity\DraftLink;
@@ -58,6 +59,7 @@ final readonly class AnalyseDeDemande
         private PortArbre $arbre,
         private NormaliseurDeValeur $normaliseur,
         private SurfaceEditable $surface,
+        private InventaireDeLaSuppression $inventaire,
     ) {
     }
 
@@ -174,8 +176,7 @@ final readonly class AnalyseDeDemande
             $uneVersionABouge = $uneVersionABouge || $versionABouge;
 
             $valeurCourante = $this->valeurCourante($op, $cible);
-            $aBouge = OpKind::Champ === $op->getOpKind()
-                && $valeurCourante !== $this->normaliserStocke($op);
+            $aBouge = $this->aBouge($op, $valeurCourante);
 
             $uneValeurABouge = $uneValeurABouge || $aBouge;
 
@@ -217,6 +218,19 @@ final readonly class AnalyseDeDemande
      */
     private function valeurCourante(ChangeRequestOp $op, EtatCible $cible): mixed
     {
+        if (OpKind::SuppressionPersonne === $op->getOpKind()) {
+            // L'inventaire **d'aujourd'hui**, relu à chaque lecture : c'est exactement ce
+            // que `valeurCourante` veut dire partout ailleurs dans ce fichier, et c'est ce
+            // que l'écran d'administration affiche à côté de l'inventaire du dépôt.
+            //
+            // `null` est impossible ici : une fiche disparue a déjà été tranchée en
+            // `cible_disparue` par l'appelant, qui n'arrive pas jusqu'ici. Le `?->` est le
+            // filet, pas le cas.
+            $sujet = $op->getSubjectId();
+
+            return null === $sujet ? null : $this->inventaire->de($sujet)?->versJson();
+        }
+
         $champ = $op->getField();
 
         if (OpKind::Champ !== $op->getOpKind() || null === $champ) {
@@ -228,6 +242,56 @@ final readonly class AnalyseDeDemande
         }
 
         return $this->normaliseur->versJson($op->getValueKind(), $cible->valeurs[$champ]);
+    }
+
+    /**
+     * La valeur de cet op a-t-elle bougé sous les pieds de son auteur ?
+     *
+     * ── Deux natures d'op se comparent, et pas les six autres ────────────────────────
+     *
+     * `champ` se compare parce que c'est tout ce qu'elle est : une ancienne valeur et une
+     * nouvelle. `suppression_personne` se compare pour une raison différente et plus
+     * forte — **l'inventaire de ce qu'elle emporte est une promesse faite à celui qui
+     * valide**. Une note, une citation ou une preuve ajoutée entre le dépôt et la
+     * validation ferait effacer une ligne que personne ne lui a montrée, et c'est
+     * exactement ce que la règle « rien ne part en silence » interdit.
+     *
+     * Le prix est assumé : documenter une fiche pendant qu'une demande de suppression
+     * l'attend rend cette demande **caduque**, et son auteur devra la refaire. C'est le
+     * bon sens de l'erreur — une suppression qu'on redemande coûte un clic, une
+     * suppression qui emporte une ligne non annoncée coûte la ligne.
+     *
+     * Les six autres natures ne se comparent pas : elles **ajoutent**, et ce qu'elles
+     * ajoutent n'existe pas encore. Il n'y a rien à confronter à l'état courant.
+     */
+    private function aBouge(ChangeRequestOp $op, mixed $valeurCourante): bool
+    {
+        return match ($op->getOpKind()) {
+            OpKind::Champ => $valeurCourante !== $this->normaliserStocke($op),
+            OpKind::SuppressionPersonne => $valeurCourante !== $this->inventaireStocke($op),
+            default => false,
+        };
+    }
+
+    /**
+     * L'inventaire du dépôt, repassé par son propre constructeur.
+     *
+     * Le détour a la même raison que celui de {@see normaliserStocke()} : `JSONB` rend
+     * des tableaux dont **PostgreSQL** a choisi l'ordre des clés, et SQLite celui de
+     * l'écriture. Comparer les deux formes brutes rendrait caduque une demande que rien ne
+     * contredit, et le message ne pourrait nommer aucun champ en conflit — le pire des
+     * deux mondes.
+     */
+    private function inventaireStocke(ChangeRequestOp $op): mixed
+    {
+        $stocke = $op->getOldValue();
+
+        if (!\is_array($stocke)) {
+            return null;
+        }
+
+        /** @var array<string, mixed> $stocke */
+        return InventaireDeSuppression::depuisJson($stocke)->versJson();
     }
 
     /**
@@ -254,6 +318,20 @@ final readonly class AnalyseDeDemande
     /** « Naissance : 1987 → entre 1901 et 1909 » (§ 6.7). */
     private function libelle(ChangeRequestOp $op, mixed $valeurCourante): string
     {
+        if (OpKind::SuppressionPersonne === $op->getOpKind()) {
+            // La phrase que l'administrateur lit avant de cliquer : « Suppression de la
+            // fiche « Untel » : emporte 3 notes, 2 citations ». Elle est composée depuis
+            // l'inventaire **courant** quand il est là, et depuis celui du dépôt sinon —
+            // la même phrase sera journalisée après, par l'applicateur.
+            $courant = \is_array($valeurCourante) ? $valeurCourante : null;
+            $stocke = \is_array($op->getOldValue()) ? $op->getOldValue() : [];
+
+            /** @var array<string, mixed> $source */
+            $source = $courant ?? $stocke;
+
+            return InventaireDeSuppression::depuisJson($source)->enUneLigne();
+        }
+
         $champ = $op->getField();
 
         if (null === $champ) {

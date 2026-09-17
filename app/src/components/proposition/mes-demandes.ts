@@ -52,6 +52,7 @@ export const LIBELLES_NATURE: Record<NatureDemande, string> = {
   ajout_media: 'Ajout d’un document',
   ajout_citation: 'Ajout d’une source',
   ajout_note: 'Ajout d’une note',
+  suppression_personne: 'Suppression d’une fiche',
 }
 
 /** Les états que `PastilleEtat` sait colorer, plus le repli neutre. */
@@ -194,6 +195,20 @@ export function lienDeReprise(demande: ResumeDemande): RouteLocationRaw | null {
       params: { id: demande.targetId },
       query: { refaire },
     }
+  }
+
+  // Une suppression se refait **sans `?refaire`**, et c'est la seule nature dans
+  // ce cas. Les trois autres écrans pré-remplissent un formulaire depuis la
+  // demande morte ; celui-ci n'a rien à pré-remplir qu'il ne doive relire.
+  //
+  // C'est le fond de la chose, pas une commodité : une suppression devient
+  // caduque **précisément parce que ce qu'elle emportait a changé** — une note,
+  // une citation, une preuve est arrivée depuis le dépôt. Recopier l'inventaire
+  // d'alors, ou le motif écrit en le regardant, remettrait sous les yeux de
+  // l'auteur l'état périmé qui a tué la première demande. L'écran relit, montre
+  // ce qu'il en est maintenant, et redemande un motif.
+  if (demande.kind === 'suppression_personne' && demande.targetId !== null) {
+    return { name: 'proposition.suppression', params: { id: demande.targetId } }
   }
 
   return null

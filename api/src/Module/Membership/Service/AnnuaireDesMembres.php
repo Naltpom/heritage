@@ -6,6 +6,7 @@ namespace App\Module\Membership\Service;
 
 use App\Module\Core\Contract\AnnuaireDesMembresInterface;
 use App\Module\Membership\Enum\MemberStatus;
+use App\Module\Membership\Repository\InvitationRepository;
 use App\Module\Membership\Repository\MemberRepository;
 
 /**
@@ -34,8 +35,10 @@ use App\Module\Membership\Repository\MemberRepository;
  */
 final readonly class AnnuaireDesMembres implements AnnuaireDesMembresInterface
 {
-    public function __construct(private MemberRepository $membres)
-    {
+    public function __construct(
+        private MemberRepository $membres,
+        private InvitationRepository $invitations,
+    ) {
     }
 
     public function libelleDuMembre(int $memberId): ?string
@@ -95,5 +98,45 @@ final readonly class AnnuaireDesMembres implements AnnuaireDesMembresInterface
         return null !== $membre && MemberStatus::Actif === $membre->getStatus()
             ? $membre->getPersonId()
             : null;
+    }
+
+    /**
+     * Ce qui, côté comptes, dépend d'une fiche — la question que `Proposal` pose avant
+     * d'accepter une demande de suppression.
+     *
+     * ## **Tous** les statuts de rattachement comptent, et c'est l'inverse de
+     * {@see personneDuCompte()}
+     *
+     * Celle-ci ne rend la racine que d'un membre `actif` : une parenté calculée depuis un
+     * rattachement non validé serait une affirmation que personne n'a approuvée.
+     *
+     * Ici, la question n'est pas « que puis-je affirmer » mais « qu'est-ce que je
+     * casserais », et un rattachement `en_attente` se casse aussi bien qu'un autre — mieux,
+     * même : son titulaire n'a pas encore de cercle, il ne verrait donc **rien** et n'aurait
+     * aucun moyen de comprendre pourquoi. Un `suspendu` compte pour la même raison : une
+     * suspension se lève, une fiche effacée ne revient pas.
+     *
+     * `uniq_mbr_member_person` garantit qu'il y en a **au plus un**.
+     *
+     * ## L'invitation, elle, doit être `active`
+     *
+     * Une invitation `utilisee` a déjà produit son membre — lequel est couvert par la
+     * ligne ci-dessus. Une `expiree` ou une `revoquee` ne produira plus rien. Seule une
+     * `active` créerait un compte sans racine à son acceptation, c'est-à-dire après la
+     * suppression et loin d'elle.
+     *
+     * @return array{membreId: int|null, membreLibelle: string|null, invitationsActives: int}
+     */
+    public function rattachementsDeLaPersonne(int $personneId): array
+    {
+        $membre = $this->membres->pourPersonne($personneId);
+
+        return [
+            'membreId' => $membre?->getId(),
+            // Le libellé de la **fiche**, jamais l'adresse du compte : cette méthode est la
+            // seule du contrat à être appelée hors d'un écran `ROLE_ADMIN`. Voir l'interface.
+            'membreLibelle' => $membre?->getPersonLabel(),
+            'invitationsActives' => null === $this->invitations->activePourPersonne($personneId) ? 0 : 1,
+        ];
     }
 }

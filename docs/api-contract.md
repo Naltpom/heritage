@@ -1569,8 +1569,8 @@ où oublier le message obligatoire au refus** (ADR 0004).
 
 | Champ | Rôle |
 |---|---|
-| `kind` | Une des six valeurs de `RequestKind` (§ 5.7). |
-| `message` | Le mot du demandeur. Facultatif. |
+| `kind` | Une des neuf valeurs de `RequestKind` (§ 5.7). |
+| `message` | Le mot du demandeur. Facultatif — **sauf pour `suppression_personne`**, où il est obligatoire et où il n'a pas d'autre place (§ 6.4 quater). |
 | `soumettre` | `true` ⇒ la demande naît en `en_attente` (`submitted_at` posé, notification à l'administrateur). `false` ⇒ `brouillon`, visible de son seul auteur, absent de la file. Défaut `true`. |
 
 La réponse est la demande sérialisée (§ 6.5), en `201`.
@@ -1968,6 +1968,245 @@ l'empreinte de l'arbre : `tree_note` en est exclu par l'ADR 0005, au même titre
 `tree_citation`, parce qu'une note ne déplace aucun nœud. Seul `GET /api/arbre/graphe`
 est revalidé par cette empreinte, et la fiche — le seul écran où une note s'affiche — ne
 l'est pas : elle ne peut donc pas être servie périmée.
+
+### 6.4 quater `kind = suppression_personne` — effacer une fiche
+
+**Le chemin qui n'existait pas.** Le circuit des demandes ne savait ni fusionner ni
+supprimer. Un doublon dans un arbre généalogique se réparait donc **à la main en base** :
+un `DELETE` écrit dans un client SQL, sans demande, sans motif, sans révision et sans
+relecture. C'était le seul chemin d'écriture qui contournait le mécanisme — ce que
+l'ADR 0004 interdit —, et deux doublons ont déjà été traités ainsi sur ce projet, dont un
+qui avait détaché six générations.
+
+C'est la **neuvième** nature, et la première qui retire au lieu d'ajouter. Trois règles la
+distinguent des huit autres, et toutes trois se voient dans le corps.
+
+```json
+{
+  "kind": "suppression_personne",
+  "message": "Doublon de la fiche 42 : même homme, même acte de naissance, celle-ci est vide.",
+  "soumettre": true,
+  "targetKind": "personne",
+  "targetId": 17
+}
+```
+
+| Clé | Obligatoire | Ce qu'elle porte |
+|---|:-:|---|
+| `targetKind` | non | `personne`, et rien d'autre ⇒ `422 targetKind` |
+| `targetId` | **oui** | la fiche à supprimer ⇒ `404` si elle n'existe pas |
+| `message` | **oui** | le motif, **10 caractères au minimum** ⇒ `422 message` |
+
+**Le corps ne porte aucun `ops`.** La demande dit ce qu'elle vise ; c'est le serveur qui
+mesure ce qu'elle emporte, et qui écrit l'inventaire dans l'op qu'il fabrique. Un
+inventaire envoyé par le client serait une seconde source de vérité pour la seule
+opération du produit qui détruit.
+
+#### Règle 1 — le motif est obligatoire, et il n'a pas d'autre place
+
+C'est la seule nature où `message` l'est. La raison n'est pas l'insistance : **`POST
+/api/demandes/{id}/valider` ne lit aucun corps de requête** (§ 6.8). Seul un refus porte un
+motif ; une validation n'en laisse aucun. Un motif demandé au moment de valider n'existerait
+donc nulle part, et l'administrateur de l'an prochain lirait « fiche 42 supprimée » sans
+savoir pourquoi.
+
+Le plancher de dix caractères est arbitraire et assumé : il écarte « ok », « doublon » et
+« à supprimer », trois motifs qui ne disent pas **de quelle autre fiche** il s'agit, ce qui
+est la seule chose dont l'administrateur ait besoin pour trancher. « doublon de 42 » passe.
+
+#### Règle 2 — une suppression qui détacherait des descendants est refusée
+
+Deux fiches du même homme, l'une portant six générations et l'autre vide : supprimer la
+mauvaise est trivial, supprimer la bonne serait une catastrophe silencieuse — la branche
+quitte l'arbre, et rien ne le signale avant que quelqu'un ne l'ouvre.
+
+Le refus est prononcé **au dépôt**, en `422 targetId`, et le message **nomme les enfants** :
+
+```json
+{
+  "erreur": {
+    "code": "donnees_invalides",
+    "message": "Cette fiche ne peut pas être supprimée en l’état.",
+    "champs": {
+      "targetId": "23 fiches descendent de celle-ci, toutes générations confondues : la supprimer détacherait cette branche de l’arbre. Elle est le parent de Cobalt Sureau. S’il s’agit d’un doublon, c’est l’autre fiche — celle qui ne porte pas la descendance — qu’il faut supprimer."
+    }
+  }
+}
+```
+
+L'erreur porte sur `targetId` et non sur un champ de formulaire : **il n'y a rien à
+corriger dans la saisie**, c'est la fiche choisie qui n'est pas la bonne.
+
+**Deux nombres, et il en faut deux.** `descendants` ne porte que les enfants **directs**,
+nommés ; `descendanceTotale` porte la branche entière, toutes générations confondues. Le
+premier seul dirait « parent de Cobalt Sureau » — exact, et sans poids : un enfant, on
+l'efface sans y penser. Le second seul dirait « 23 fiches » — du poids, mais sans dire
+**laquelle des deux fiches du doublon** on tient. Le message met donc le total en tête et
+les noms derrière, et c'est dans cet ordre que l'écran les affiche.
+
+Le total ne sert **qu'au message** : c'est la présence d'un seul enfant direct qui bloque.
+Faire dépendre une règle de sûreté d'un parcours de graphe, ce serait la faire dépendre de
+sa terminaison, là où une ligne de `tree_child` suffit.
+
+*Être l'enfant de quelqu'un ne bloque pas* — c'est le champ `filiations` de l'inventaire, et
+il part avec la fiche. Seul le fait d'être **parent** bloque : l'autre extrémité du lien
+reste dans l'arbre.
+
+**Trois autres choses bloquent, et aucune n'est protégée par une clé étrangère.**
+
+**Une preuve rattachée.** `med_media.subject_id` est une référence polymorphe, que
+PostgreSQL ne peut pas contraindre : effacer la fiche y laisserait des lignes pendantes et
+des octets sur le disque, sans plus aucun écran pour y mener. On ne supprime pas la preuve
+à la place de l'opérateur — `DELETE /api/medias/{id}` existe pour cela (§ 7.6), et c'est un
+geste qu'il aura vu.
+
+**Un compte membre dont la fiche est la racine.** `mbr_member.person_id` porte un
+`uniq_mbr_member_person` et aucune clé étrangère — le § 2.6 du modèle interdit la jointure
+qui la poserait. **Le cercle de visibilité d'un membre et son champ `parente` se calculent
+depuis cette racine** : une racine absente ne lève pas, elle produit un calcul sur rien,
+c'est-à-dire un compte qui ne voit plus rien ou qui voit tout. Le membre le découvre en se
+connectant, des jours plus tard, sans pouvoir relier ce qu'il voit au geste qui l'a causé.
+**Tous les statuts de rattachement comptent**, `en_attente` compris — son titulaire n'a pas
+encore de cercle, il ne verrait donc *rien*.
+
+**Une invitation en attente qui désigne la fiche.** Le même défaut, **en différé** : rien ne
+casse aujourd'hui, un compte sans racine apparaît le jour où quelqu'un accepte. Seule une
+invitation `active` compte ; une `utilisee` a déjà produit son membre, une `expiree` ou
+`revoquee` ne produira plus rien.
+
+`membreId` nomme le rattachement **par son numéro et jamais par l'adresse du compte** :
+cette route est ouverte à tout membre, et le libellé d'un compte est la huitième porte de
+sortie de l'ADR 0003. Le numéro suffit à le retrouver dans `GET
+/api/administration/utilisateurs`, qui est le seul endroit où on peut le rattacher ailleurs.
+`invitationsActives` est un compte, pour la même raison.
+
+#### Règle 3 — rien ne part en silence
+
+L'op fabriquée porte `old_value` = **l'inventaire de ce que la suppression emporte** au
+moment du dépôt, et `new_value` = `null` : après une suppression, il n'y a rien. C'est
+l'exact miroir d'une création, où `avant` vaut `null` partout.
+
+```json
+{
+  "personneId": 17,
+  "displayName": "Marne Dolomite Sureau",
+  "notes": 3,
+  "citations": 2,
+  "faits": 1,
+  "filiations": 1,
+  "unions": [
+    { "familleId": 4, "libelle": "Cobalt Sureau × Marne Dolomite Sureau", "enfants": 0, "supprimee": false }
+  ],
+  "descendants": [],
+  "descendanceTotale": 0,
+  "medias": 0,
+  "membreId": null,
+  "invitationsActives": 0
+}
+```
+
+**L'ordre des clés est un contrat**, au même titre que celui d'un bloc date (§ 14.1) : la
+comparaison porte sur le tableau entier, et `JSONB` ne préserve pas l'ordre d'écriture.
+
+À la lecture d'administration (§ 6.7), l'op porte en plus `valeurCourante` — l'inventaire
+**d'aujourd'hui** — et `libelleDiff`, la phrase prête à afficher :
+« Suppression de la fiche « Marne Dolomite Sureau » : emporte 3 notes, 2 citations, 1 union. »
+
+**Si les deux inventaires diffèrent, `resolutionPrevue` vaut `caducite`** et la validation
+rend `409 demande_caduque`. Une note, une citation ou une preuve ajoutée entre le dépôt et
+la validation ferait sinon effacer une ligne que personne n'a montrée à celui qui valide.
+Le prix est assumé : documenter une fiche pendant qu'une demande de suppression l'attend
+coûte un clic à son auteur, qui la refait (§ 6.10). L'erreur inverse coûterait la ligne.
+
+`champs[].field` vaut alors `"suppression_personne"` — la nature de l'op, puisqu'une
+suppression ne nomme aucune colonne (`ck_prp_op_champ`).
+
+#### Ce que la validation écrit
+
+`base_version` **est** posée sur l'op, contrairement à une note ou à une citation :
+supprimer une fiche est une écriture **sur cette fiche**. Une correction validée entre-temps
+fait donc rejouer la suppression sur la version courante (`resolutionPrevue: "rejeu"`), au
+lieu de passer inaperçue.
+
+La révision porte `operation: "suppression"`, `subjectKind: "personne"`, `subjectId` =
+l'identifiant de la fiche effacée, `versionBefore` = sa dernière version, `versionAfter` =
+`null`. **`prp_revision` n'a aucune clé étrangère vers `tree_person`** : `subject_id` est un
+entier nu, délibérément, et c'est ce qui permet à l'historique de survivre à son sujet.
+`changes` porte l'inventaire mesuré **dans la transaction**, clé par clé, `avant` renseigné
+et `apres` à `null`, plus une clé `resume` qui reprend la phrase montrée à l'administrateur.
+
+Ce qu'il advient de chaque référence à la fiche :
+
+| Ce qui pointe sur elle | Sort |
+|---|---|
+| `tree_note.person_id`, `tree_citation.person_id`, `tree_fact.person_id` | **emportés**, comptés d'avance — y compris les notes et citations rattachées à ses **faits** |
+| `tree_child.person_id` (elle est l'enfant) | **emporté** : sa propre filiation n'a plus d'objet |
+| `tree_child` d'une union où elle est **parent** | **bloque** la suppression (règle 2) |
+| `tree_family.husband_id` / `wife_id` | mis à `NULL` si l'autre époux existe ; l'union est **effacée** dans deux cas, et l'inventaire les annonce par `unions[].supprimee` — voir ci-dessous |
+| `tree_source` | **intacte** : `ON DELETE RESTRICT`, la citation part, le registre reste |
+| `med_media` | **bloque** la suppression (règle 2) |
+| `prp_draft_link`, `prp_change_op`, `prp_change_request` d'autres demandes | **laissés**. Les demandes en attente qui visent la fiche deviennent `cible_disparue` à leur prochain examen ; les demandes tranchées restent l'historique de la discussion — « une demande n'est jamais supprimée » |
+| `prp_revision`, `core_audit_log` | **laissés, et c'est le point** : un journal qu'une suppression pourrait amputer n'est pas un journal |
+| `mbr_member.person_id` | **bloque** la suppression (règle 2) |
+| `mbr_invitation.person_id` | **bloque** si l'invitation est `active` ; les autres sont de l'historique |
+
+#### Les deux cas où une union est effacée plutôt que vidée
+
+**1. La personne en est le seul époux.** `ck_tree_family_au_moins_un_epoux` interdit une
+famille sans personne : le `ON DELETE SET NULL` produirait une ligne que la base refuse.
+
+**2. Le couple restant existe déjà ailleurs.** `uniq_tree_family_couple` porte
+`NULLS NOT DISTINCT` : deux familles `(NULL, W)` ne peuvent pas coexister. Vider
+l'emplacement du mari d'une famille `(X, W)` la transforme précisément en `(NULL, W)`, et
+si une famille de parent seul pour `W` existe déjà — le modèle en compte, « 3 familles
+`WIFE` sans `HUSB` » —, la validation échouerait **dans sa transaction**, sur une violation
+d'unicité, loin du geste qui l'a causée et sans que l'écran ait rien laissé prévoir.
+
+Dans les deux cas la ligne part, et `unions[].supprimee` vaut `true` à l'inventaire — donc
+avant le clic. Une union **effacée** emporte au passage ses propres notes, citations et
+faits, par les `ON DELETE CASCADE` de `family_id` : ils sont comptés dans les totaux
+`notes`, `citations` et `faits`, et non à part.
+
+**L'empreinte de l'arbre change** — `tree_person`, `tree_family` et `tree_child` en font
+partie (ADR 0005) —, ce qui invalide le cache de placement et les cercles de visibilité sans
+geste. C'est la différence avec `ajout_note` et `ajout_citation`, qui ne la font pas bouger.
+
+#### `GET /api/demandes/suppression/personne/{id}` — l'aperçu, avant tout dépôt
+
+Lecture seule, accessible à tout lecteur qui peut voir la fiche. Elle sert le formulaire :
+l'auteur doit voir ce qu'il efface **avant** d'écrire son motif, et non le découvrir en
+`422` après avoir rédigé.
+
+```json
+{
+  "inventaire": { "personneId": 17, "displayName": "Marne Dolomite Sureau", "notes": 3, "citations": 2, "faits": 1, "filiations": 1, "unions": [], "descendants": [], "descendanceTotale": 0, "medias": 0, "membreId": null, "invitationsActives": 0 },
+  "resume": "Suppression de la fiche « Marne Dolomite Sureau » : emporte 3 notes, 2 citations, 1 fait et 1 rattachement à ses parents.",
+  "bloquee": false,
+  "raisons": []
+}
+```
+
+`bloquee` et `raisons` sont rendus **à côté** de l'inventaire et non déduits de lui par le
+client : la règle qui interdit appartient au serveur, et un front qui la redériverait
+finirait par diverger — dans le sens permissif, c'est-à-dire en proposant un bouton qui
+efface une branche.
+
+`404` sur une fiche qui n'existe plus, ou que le lecteur n'a pas le droit de voir.
+
+#### Ce qui n'est pas dans ce lot
+
+**La fusion.** Le besoin réel est presque toujours un doublon, et fusionner conserverait ce
+que la fiche supprimée portait au lieu d'exiger qu'elle soit vide. Elle demande une
+résolution de conflit champ par champ entre les deux fiches, le report des unions avec
+l'arbitrage de `uniq_tree_family_couple`, et le déplacement des preuves — trois choses
+qu'une suppression n'a pas à savoir faire. La suppression telle qu'elle est livrée couvre
+le cas du doublon **vide**, qui est celui qu'on rencontre, et refuse explicitement l'autre
+plutôt que de le traiter à moitié.
+
+**La réattribution.** L'ADR autorisait « refuser **ou** exiger une réattribution
+explicite » ; c'est le refus qui est livré. Réattribuer les unions d'une fiche à une autre
+est la moitié structurelle d'une fusion, et elle échoue sur le même écueil : le couple
+réattribué peut entrer en collision avec une union existante, au milieu de la transaction.
 
 ### 6.5 Une demande vue par son auteur
 
@@ -2379,9 +2618,25 @@ seconde ».
 Disponible sur `caduque` et `refusee`. Sur `validee` ou `en_attente` ⇒ `409`
 `demande_non_refaisable`.
 
+#### Refaire une suppression — le corps rendu ne porte **pas** l'op
+
+La boucle de reprise ignore les ops sans `field`, ce qu'une op de suppression est par
+construction (`ck_prp_op_champ`). Le corps rendu porte donc `kind`, `targetKind`,
+`targetId`, `message` et `"ops": []`, et il est **redéposable tel quel** : le constructeur
+de `suppression_personne` ne lit pas `ops`, il remesure l'inventaire.
+
+Ce n'est pas une perte, c'est le comportement voulu. Une suppression devient caduque
+**précisément parce que ce qu'elle emportait a changé** — une note, une citation ou une
+preuve est arrivée depuis le dépôt. Recopier l'inventaire d'alors remettrait sous les yeux
+de l'auteur l'état périmé qui a tué sa première demande, et le motif qu'il avait écrit en
+le regardant. L'écran relit, montre ce qu'il en est maintenant, et redemande un motif.
+
+C'est aussi pourquoi le front n'ajoute pas `?refaire=<id>` sur ce seul écran : il n'y a
+rien à pré-remplir qu'il ne doive relire.
+
 #### Refaire une création de personne ou un ajout de lien
 
-La route couvre **les six natures de `RequestKind`**, pas seulement les modifications. Pour
+La route couvre **toutes les natures de `RequestKind`**, pas seulement les modifications. Pour
 `creation_personne` et `ajout_lien`, le corps rendu est celui du § 6.3 ou du § 6.4, et la
 règle de reprise est plus simple qu'elle n'en a l'air :
 

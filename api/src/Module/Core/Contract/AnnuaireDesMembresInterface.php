@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Module\Core\Contract;
 
 /**
- * Le **minimum** que `Core` demande à `Membership` pour servir ses propres écrans
- * d'administration : un libellé de membre, et la charge `membre` d'un compte.
+ * Le **minimum** que `Core` demande à `Membership`, pour ses propres écrans d'administration
+ * — un libellé de membre, la charge `membre` d'un compte — et, depuis
+ * {@see rattachementsDeLaPersonne()}, pour un **refus** que `Proposal` doit pouvoir
+ * prononcer sans connaître `mbr_member`.
  *
  * `Core` tient les comptes (`core_user`), pas le rattachement à l'arbre (`mbr_member`).
  * Deux de ses routes en ont pourtant besoin :
@@ -85,4 +87,53 @@ interface AnnuaireDesMembresInterface
      * en avoir l'air*.
      */
     public function personneDuCompte(int $userId): ?int;
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     * **CE QUI, CÔTÉ COMPTES, DÉPEND D'UNE FICHE DE L'ARBRE.**
+     *
+     * La cinquième question, et la première qui ne serve pas un écran : elle sert un
+     * **refus**. `Proposal` la pose avant d'accepter une demande de suppression de fiche.
+     *
+     * ## Le défaut qu'elle empêche
+     *
+     * `mbr_member.person_id` porte un `uniq_mbr_member_person` et **aucune clé
+     * étrangère** — `Membership` et `Tree` sont deux modules, et le § 2.6 du modèle
+     * interdit la jointure qui la poserait. Supprimer `tree_person` ne fait donc rien
+     * ici : la ligne reste, et le compte se retrouve rattaché à une fiche qui n'existe
+     * plus.
+     *
+     * Ce n'est pas un effet de bord cosmétique. **Le cercle de visibilité d'un membre et
+     * son champ `parente` se calculent depuis cette racine** ({@see personneDuCompte()},
+     * consommé par `Tree\Serializer\ParenteDuLecteur`). Une racine absente ne produit pas
+     * une erreur : elle produit un calcul sur rien, c'est-à-dire un compte qui ne voit
+     * plus rien ou qui voit tout, selon ce que le calcul fait d'un point de départ
+     * manquant. Le membre le découvre en se connectant, des jours plus tard, et sans
+     * pouvoir relier ce qu'il voit au geste qui l'a causé.
+     *
+     * `mbr_invitation.person_id` pose le même problème **en différé** : une invitation
+     * active désignant une fiche supprimée crée un compte sans racine **à son
+     * acceptation**, donc plus tard encore et plus loin du geste.
+     *
+     * ## Ce qu'elle rend, et ce qu'elle se garde de rendre
+     *
+     * `membreId` est l'identifiant du rattachement : c'est ce qui permet à
+     * l'administrateur de retrouver le compte dans `GET /api/administration/utilisateurs`
+     * et de le rattacher ailleurs avant de supprimer.
+     *
+     * `membreLibelle` est `mbr_member.person_label` — **le nom de la fiche elle-même**,
+     * que celui qui demande sa suppression a déjà sous les yeux. C'est délibérément ce
+     * libellé-là et **pas l'adresse du compte** : contrairement aux quatre autres méthodes
+     * de ce contrat, celle-ci est appelée depuis une route ouverte à tout membre — le
+     * dépôt d'une demande —, et non depuis un écran `ROLE_ADMIN`. Y faire sortir un
+     * courriel serait une neuvième porte de sortie, ouverte sur le chemin le plus
+     * fréquenté du produit.
+     *
+     * `invitationsActives` est un **compte**, pour la même raison : une invitation porte
+     * l'adresse de son destinataire, et le refus n'a pas besoin de la nommer pour dire
+     * quoi faire.
+     *
+     * @return array{membreId: int|null, membreLibelle: string|null, invitationsActives: int}
+     */
+    public function rattachementsDeLaPersonne(int $personneId): array;
 }

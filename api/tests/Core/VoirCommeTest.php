@@ -238,6 +238,16 @@ final class VoirCommeTest extends CoreWebTestCase
             {
                 return null;
             }
+
+            /**
+             * Aucun rattachement : cette bascule-ci ne teste pas les suppressions.
+             *
+             * @return array{membreId: int|null, membreLibelle: string|null, invitationsActives: int}
+             */
+            public function rattachementsDeLaPersonne(int $personneId): array
+            {
+                return ['membreId' => null, 'membreLibelle' => null, 'invitationsActives' => 0];
+            }
         };
 
         $requete = new Request();

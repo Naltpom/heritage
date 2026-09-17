@@ -8,6 +8,7 @@ use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\InventaireDeSuppression;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
@@ -18,6 +19,7 @@ use App\Module\Proposal\Service\Port\PersonneAcreer;
 use App\Module\Proposal\Service\Port\PortArbre;
 use App\Module\Tree\Entity\Child;
 use App\Module\Tree\Entity\Citation;
+use App\Module\Tree\Entity\Fact;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Note;
 use App\Module\Tree\Entity\Person;
@@ -25,6 +27,7 @@ use App\Module\Tree\Entity\Source;
 use App\Module\Tree\Enum\CitationQuality;
 use App\Module\Tree\Enum\NoteScope;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Query;
 
 /**
  * L'écriture de `Tree` par une proposition validée — l'implémentation de
@@ -262,6 +265,74 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         return new LigneCreee($id, $this->libelleDeNote($ligne));
     }
 
+    public function inventaireDeSuppression(int $personneId): ?InventaireDeSuppression
+    {
+        $personne = $this->em->find(Person::class, $personneId);
+
+        if (!$personne instanceof Person) {
+            // `null` et non une exception : une fiche déjà supprimée n'est pas une panne,
+            // c'est le résultat recherché obtenu par quelqu'un d'autre. L'appelant en fait
+            // un `cible_disparue`, qui est une caducité.
+            return null;
+        }
+
+        return $this->mesurer($personne);
+    }
+
+    public function supprimerPersonne(int $personneId): InventaireDeSuppression
+    {
+        $personne = $this->em->find(Person::class, $personneId);
+
+        if (!$personne instanceof Person) {
+            // Même refus que `creerNote()` : une ligne disparue **pendant** la validation
+            // fait échouer bruyamment. Ici, rendre un inventaire vide ferait croire à une
+            // suppression réussie qui n'aurait rien supprimé.
+            throw new \RuntimeException(\sprintf('La personne %d a disparu pendant la validation : il n’y a plus rien à supprimer.', $personneId));
+        }
+
+        $inventaire = $this->mesurer($personne);
+
+        if ([] !== $inventaire->descendants) {
+            // Le dernier filet. `AnalyseDeDemande` a déjà rendu la demande caduque dans ce
+            // cas, et arriver ici signifie qu'un chemin l'a contourné. On lève plutôt que
+            // d'effacer : détacher une branche est précisément ce que tout ce circuit
+            // existe pour empêcher, et l'annulation de la transaction est le seul recours
+            // qui ne laisse rien derrière.
+            throw new \RuntimeException(\sprintf('La personne %d est le parent de %d fiche(s) : la supprimer les détacherait de l’arbre.', $personneId, \count($inventaire->descendants)));
+        }
+
+        $faits = $this->identifiantsDesFaits($personneId);
+        $famillesEffacees = $this->famillesEffacees($inventaire);
+
+        // ── L'ordre est celui des clés étrangères, des feuilles vers la racine ────────
+        //
+        // Les quatre `ON DELETE CASCADE` du schéma feraient ce travail en base. On ne s'y
+        // fie pas, pour deux raisons : SQLite n'applique ses clés étrangères que si
+        // `PRAGMA foreign_keys` est armé — ce que la suite de tests ne garantit pas —, et
+        // surtout l'unité de travail de Doctrine ne saurait pas que ces lignes sont
+        // parties. Une entité encore en mémoire ressortirait d'un `find()` ultérieur comme
+        // si elle existait, et le compte journalisé serait faux.
+        $this->effacerLesAnnexes(Note::class, $personneId, $faits, $famillesEffacees);
+        $this->effacerLesAnnexes(Citation::class, $personneId, $faits, $famillesEffacees);
+        $this->effacerLesFaits($personneId, $famillesEffacees);
+        $this->effacerLesFiliations($personneId, $famillesEffacees);
+        $this->reglerLesUnions($personne, $famillesEffacees);
+
+        $this->em->remove($personne);
+        $this->em->flush();
+
+        // **Après le `flush`, et jamais avant.** `RecalculDesColonnesDerivees` relit
+        // l'arbre par des requêtes : tant que la personne est là, il recalcule les
+        // générations d'un graphe qui la contient encore. Le symptôme serait une branche
+        // restée au rang qu'elle tenait par la fiche effacée — visible seulement à
+        // l'écran, et seulement par quelqu'un qui connaît l'arbre. C'est le même piège,
+        // dans le même ordre, que `rattacherEnfant()`.
+        $this->derivees->recalculer();
+        $this->em->flush();
+
+        return $inventaire;
+    }
+
     public function trouverOuCreerFamille(?int $personneA, ?int $personneB): LigneCreee
     {
         [$mari, $femme] = $this->rangerLeCouple($personneA, $personneB);
@@ -454,6 +525,415 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             'quay' => $ligne->getQuay()?->value,
             'dataText' => $ligne->getDataText(),
         ];
+    }
+
+    // ------------------------------------------------- inventaire d'une suppression
+
+    /**
+     * Ce qu'une suppression emporterait, mesuré avant toute écriture.
+     *
+     * ## Pourquoi les unions se lisent **avant** les notes et les citations
+     *
+     * Parce qu'une union dont la personne est le seul époux **part avec elle** —
+     * `ck_tree_family_au_moins_un_epoux` interdit une famille sans personne — et qu'elle
+     * emporte à son tour ses propres notes, citations et faits, par les
+     * `ON DELETE CASCADE` de `family_id`. Compter les seules notes de la personne
+     * annoncerait donc un nombre inférieur à ce qui disparaîtra, et c'est exactement
+     * l'inverse de ce que l'inventaire promet.
+     *
+     * ## Le second cas où une union part, et qui ne se devine pas
+     *
+     * `uniq_tree_family_couple` porte `NULLS NOT DISTINCT` : deux familles `(NULL, W)` ne
+     * peuvent pas coexister. Retirer le mari d'une famille `(X, W)` alors qu'une famille
+     * `(NULL, W)` existe déjà violerait l'index — au moment de la validation, dans la
+     * transaction, sous la forme d'une `500` que personne n'aurait vue venir. On efface
+     * donc la ligne plutôt que de la vider, et l'inventaire l'annonce.
+     */
+    private function mesurer(Person $personne): InventaireDeSuppression
+    {
+        $id = $personne->getId();
+        \assert(null !== $id);
+
+        $unions = [];
+        $descendants = [];
+        $famillesEffacees = [];
+
+        foreach ($this->famillesDe($id) as $famille) {
+            $familleId = $famille->getId();
+            \assert(null !== $familleId);
+
+            $enfants = $this->enfantsDeLaFamille($familleId);
+            $effacee = $this->familleDisparaitraitSans($famille, $personne);
+
+            $unions[] = [
+                'familleId' => $familleId,
+                'libelle' => $this->libelleDuCouple($famille),
+                'enfants' => \count($enfants),
+                'supprimee' => $effacee,
+            ];
+
+            if ($effacee) {
+                $famillesEffacees[] = $familleId;
+            }
+
+            foreach ($enfants as $enfant) {
+                $descendants[] = $enfant;
+            }
+        }
+
+        $faits = $this->identifiantsDesFaits($id);
+
+        return new InventaireDeSuppression(
+            $id,
+            $personne->getDisplayName(),
+            $this->compterLesAnnexes(Note::class, $id, $faits, $famillesEffacees),
+            $this->compterLesAnnexes(Citation::class, $id, $faits, $famillesEffacees),
+            \count($faits) + $this->compterLesFaitsDesFamilles($famillesEffacees),
+            $this->compterLesFiliations($id),
+            $unions,
+            $descendants,
+            // Le parcours n'est lancé **que** s'il y a un enfant direct : sans descendance,
+            // le total vaut zéro et trois requêtes par génération seraient dépensées pour
+            // l'apprendre. C'est le cas courant — la fiche vide d'un doublon.
+            [] === $descendants ? 0 : $this->compterLaDescendance($id),
+        );
+    }
+
+    /**
+     * Le nombre de fiches qui descendent de celle-ci, **toutes générations confondues**.
+     *
+     * ## Pourquoi ce nombre existe alors qu'il ne décide de rien
+     *
+     * Le blocage tient à `descendants` — la présence d'un seul enfant direct suffit, et
+     * c'est volontairement le critère le plus simple possible : faire dépendre une règle de
+     * sûreté d'un parcours de graphe, c'est la faire dépendre de sa terminaison.
+     *
+     * Ce total-ci ne sert qu'à **écrire la phrase qui arrête la main**. « Cette fiche est
+     * le parent de Cobalt Sureau » est exact et ne pèse rien ; « 23 fiches descendent
+     * d'elle » pèse. C'est la différence entre les deux moitiés du doublon réel : l'une
+     * porte six générations, l'autre est vide, et c'est ce nombre-là qui les distingue d'un
+     * coup d'œil.
+     *
+     * ## Le parcours
+     *
+     * En largeur, une génération par tour, et deux requêtes par tour plutôt qu'une requête
+     * par personne. L'ensemble `$vus` garantit la terminaison : une généalogie n'a pas de
+     * cycle, mais un import fautif peut en fabriquer un, et une boucle infinie dans une
+     * lecture d'écran serait une panne plus coûteuse que le nombre qu'elle calcule.
+     */
+    private function compterLaDescendance(int $personneId): int
+    {
+        $vus = [$personneId => true];
+        $generation = [$personneId];
+        $total = 0;
+
+        while ([] !== $generation) {
+            $suivante = [];
+
+            foreach ($this->enfantsDeCesParents($generation) as $enfant) {
+                if (isset($vus[$enfant])) {
+                    continue;
+                }
+
+                $vus[$enfant] = true;
+                $suivante[] = $enfant;
+                ++$total;
+            }
+
+            $generation = $suivante;
+        }
+
+        return $total;
+    }
+
+    /**
+     * Les enfants de toute une génération, en deux requêtes.
+     *
+     * @param list<int> $parents
+     *
+     * @return list<int>
+     */
+    private function enfantsDeCesParents(array $parents): array
+    {
+        /** @var list<array{id: int}> $familles */
+        $familles = $this->em->createQuery(\sprintf(
+            'SELECT f.id FROM %s f WHERE IDENTITY(f.husband) IN (:parents) OR IDENTITY(f.wife) IN (:parents)',
+            Family::class,
+        ))->setParameter('parents', $parents)->getArrayResult();
+
+        if ([] === $familles) {
+            return [];
+        }
+
+        /** @var list<array{enfant: int}> $lignes */
+        $lignes = $this->em->createQuery(\sprintf(
+            'SELECT DISTINCT IDENTITY(c.person) AS enfant FROM %s c WHERE IDENTITY(c.family) IN (:familles)',
+            Child::class,
+        ))
+            ->setParameter('familles', array_map(static fn (array $f): int => (int) $f['id'], $familles))
+            ->getArrayResult();
+
+        return array_map(static fn (array $ligne): int => (int) $ligne['enfant'], $lignes);
+    }
+
+    /**
+     * Les unions que l'inventaire a marquées comme disparaissant.
+     *
+     * Relues depuis l'inventaire plutôt que recalculées : c'est ce qui garantit
+     * qu'**exactement** ce qui a été annoncé est effacé. Deux calculs séparés
+     * divergeraient un jour, et ce jour-là l'écran aurait annoncé une union et la
+     * transaction en aurait emporté deux.
+     *
+     * @return list<int>
+     */
+    private function famillesEffacees(InventaireDeSuppression $inventaire): array
+    {
+        $identifiants = [];
+
+        foreach ($inventaire->unions as $union) {
+            if ($union['supprimee']) {
+                $identifiants[] = $union['familleId'];
+            }
+        }
+
+        return $identifiants;
+    }
+
+    /** @return list<Family> */
+    private function famillesDe(int $personneId): array
+    {
+        /** @var list<Family> $familles */
+        $familles = $this->em->createQuery(\sprintf(
+            'SELECT f FROM %s f WHERE IDENTITY(f.husband) = :personne OR IDENTITY(f.wife) = :personne ORDER BY f.id ASC',
+            Family::class,
+        ))->setParameter('personne', $personneId)->getResult();
+
+        return $familles;
+    }
+
+    /**
+     * Les enfants rattachés à une union — **c'est le blocage de la règle 1**.
+     *
+     * Ils sont rendus nommés et non comptés : « cette fiche est le parent de Cobalt
+     * Sureau » dit à l'auteur laquelle des deux fiches du doublon il s'apprête à effacer,
+     * là où « 6 descendants » le laisse deviner.
+     *
+     * @return list<array{personneId: int, displayName: string}>
+     */
+    private function enfantsDeLaFamille(int $familleId): array
+    {
+        /** @var list<array{id: int, displayName: string}> $lignes */
+        $lignes = $this->em->createQuery(\sprintf(
+            'SELECT p.id, p.displayName FROM %s c JOIN c.person p WHERE IDENTITY(c.family) = :famille ORDER BY c.siblingOrder ASC, p.id ASC',
+            Child::class,
+        ))->setParameter('famille', $familleId)->getArrayResult();
+
+        return array_map(
+            static fn (array $ligne): array => ['personneId' => (int) $ligne['id'], 'displayName' => (string) $ligne['displayName']],
+            $lignes,
+        );
+    }
+
+    /**
+     * L'union disparaîtrait-elle si cette personne en sortait ?
+     *
+     * Deux cas, et un seul se devine : le conjoint absent, et la collision avec une union
+     * déjà existante — voir l'en-tête de {@see mesurer()}.
+     */
+    private function familleDisparaitraitSans(Family $famille, Person $personne): bool
+    {
+        $mari = $famille->getHusband() === $personne ? null : $famille->getHusband();
+        $femme = $famille->getWife() === $personne ? null : $famille->getWife();
+
+        if (null === $mari && null === $femme) {
+            return true;
+        }
+
+        $jumelle = $this->familleDuCouple($mari, $femme);
+
+        return null !== $jumelle && $jumelle !== $famille;
+    }
+
+    /** @return list<int> */
+    private function identifiantsDesFaits(int $personneId): array
+    {
+        /** @var list<array{id: int}> $lignes */
+        $lignes = $this->em->createQuery(\sprintf(
+            'SELECT f.id FROM %s f WHERE IDENTITY(f.person) = :personne',
+            Fact::class,
+        ))->setParameter('personne', $personneId)->getArrayResult();
+
+        return array_map(static fn (array $ligne): int => (int) $ligne['id'], $lignes);
+    }
+
+    /**
+     * Les notes — ou les citations — qui partiraient : celles de la personne, celles de
+     * ses faits, celles des unions qui disparaissent avec elle.
+     *
+     * @param class-string<Citation|Note> $entite
+     * @param list<int>                   $faits
+     * @param list<int>                   $famillesEffacees
+     */
+    private function compterLesAnnexes(string $entite, int $personneId, array $faits, array $famillesEffacees): int
+    {
+        return (int) $this->requeteDAnnexes('SELECT COUNT(x.id) FROM %s x WHERE %s', $entite, $personneId, $faits, $famillesEffacees)
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * ── Pourquoi on charge les lignes pour les effacer, plutôt qu'un `DELETE` de masse ──
+     *
+     * Un `DELETE` en DQL contourne l'unité de travail : les lignes partent en base, et les
+     * entités correspondantes **restent gérées en mémoire**. Au `flush` suivant — celui du
+     * validateur, qui persiste les révisions —, Doctrine retrouve alors une `Note` gérée
+     * pointant vers une `Person` qu'il vient de supprimer, la prend pour une entité neuve,
+     * et refuse : « A new entity was found through the relationship ». La validation entière
+     * échoue, après la suppression, dans une transaction qu'il faut annuler.
+     *
+     * Le volume autorise le chargement sans arrière-pensée : une fiche porte des notes et
+     * des citations en unités, jamais en milliers. Le jour où ce ne serait plus vrai, c'est
+     * le `flush` du validateur qu'il faudrait revoir, pas cette boucle.
+     *
+     * @param class-string<Citation|Note> $entite
+     * @param list<int>                   $faits
+     * @param list<int>                   $famillesEffacees
+     */
+    private function effacerLesAnnexes(string $entite, int $personneId, array $faits, array $famillesEffacees): void
+    {
+        /** @var list<Citation|Note> $lignes */
+        $lignes = $this->requeteDAnnexes('SELECT x FROM %s x WHERE %s', $entite, $personneId, $faits, $famillesEffacees)
+            ->getResult();
+
+        foreach ($lignes as $ligne) {
+            $this->em->remove($ligne);
+        }
+    }
+
+    /**
+     * La requête partagée par le compte et par l'effacement — **une seule condition**.
+     *
+     * Deux formulations qui divergeraient feraient annoncer un nombre et en effacer un
+     * autre, ce qui est le mode de défaillance que l'inventaire entier existe pour
+     * interdire. Une liste vide devient `[0]` : `IN ()` n'est pas du SQL valide, et
+     * aucune ligne ne porte l'identifiant zéro.
+     *
+     * @param class-string<Citation|Note> $entite
+     * @param list<int>                   $faits
+     * @param list<int>                   $famillesEffacees
+     */
+    private function requeteDAnnexes(string $gabarit, string $entite, int $personneId, array $faits, array $famillesEffacees): Query
+    {
+        return $this->em
+            ->createQuery(\sprintf(
+                $gabarit,
+                $entite,
+                'IDENTITY(x.person) = :personne OR IDENTITY(x.fact) IN (:faits) OR IDENTITY(x.family) IN (:familles)',
+            ))
+            ->setParameter('personne', $personneId)
+            ->setParameter('faits', [] === $faits ? [0] : $faits)
+            ->setParameter('familles', [] === $famillesEffacees ? [0] : $famillesEffacees);
+    }
+
+    /** @param list<int> $famillesEffacees */
+    private function compterLesFaitsDesFamilles(array $famillesEffacees): int
+    {
+        if ([] === $famillesEffacees) {
+            return 0;
+        }
+
+        return (int) $this->em->createQuery(\sprintf(
+            'SELECT COUNT(f.id) FROM %s f WHERE IDENTITY(f.family) IN (:familles)',
+            Fact::class,
+        ))->setParameter('familles', $famillesEffacees)->getSingleScalarResult();
+    }
+
+    /** Les `tree_child` où la personne est **l'enfant** : sa propre filiation. */
+    private function compterLesFiliations(int $personneId): int
+    {
+        return (int) $this->em->createQuery(\sprintf(
+            'SELECT COUNT(c.id) FROM %s c WHERE IDENTITY(c.person) = :personne',
+            Child::class,
+        ))->setParameter('personne', $personneId)->getSingleScalarResult();
+    }
+
+    // ------------------------------------------------- effacement d'une personne
+
+    /** @param list<int> $famillesEffacees */
+    private function effacerLesFaits(int $personneId, array $famillesEffacees): void
+    {
+        /** @var list<Fact> $faits */
+        $faits = $this->em->createQuery(\sprintf(
+            'SELECT f FROM %s f WHERE IDENTITY(f.person) = :personne OR IDENTITY(f.family) IN (:familles)',
+            Fact::class,
+        ))
+            ->setParameter('personne', $personneId)
+            ->setParameter('familles', [] === $famillesEffacees ? [0] : $famillesEffacees)
+            ->getResult();
+
+        foreach ($faits as $fait) {
+            $this->em->remove($fait);
+        }
+    }
+
+    /**
+     * Les filiations qui partent : celle de la personne comme enfant, et celles portées
+     * par les unions qui disparaissent.
+     *
+     * Les secondes sont **vides par construction** — une union avec enfants bloque la
+     * suppression bien avant d'arriver ici. La clause est là quand même, parce qu'un
+     * effacement qui dépend d'un invariant sans le nommer cassera le jour où l'invariant
+     * changera, et `tree_child.family_id NOT NULL` le ferait échouer en base, tard et
+     * sans explication.
+     *
+     * @param list<int> $famillesEffacees
+     */
+    private function effacerLesFiliations(int $personneId, array $famillesEffacees): void
+    {
+        /** @var list<Child> $filiations */
+        $filiations = $this->em->createQuery(\sprintf(
+            'SELECT c FROM %s c WHERE IDENTITY(c.person) = :personne OR IDENTITY(c.family) IN (:familles)',
+            Child::class,
+        ))
+            ->setParameter('personne', $personneId)
+            ->setParameter('familles', [] === $famillesEffacees ? [0] : $famillesEffacees)
+            ->getResult();
+
+        foreach ($filiations as $filiation) {
+            $this->em->remove($filiation);
+        }
+    }
+
+    /**
+     * Les unions : effacées quand elles ne survivraient pas, vidées de leur époux sinon.
+     *
+     * `setHusband(null)` plutôt que d'attendre le `ON DELETE SET NULL` de la base : le
+     * `SET NULL` ferait le travail en SQL, mais l'entité `Family` resterait en mémoire
+     * avec son mari, et `#[ORM\Version]` ne verrait pas l'écriture. L'union garderait
+     * alors le numéro de version d'avant, ce qui rendrait indétectable le conflit sur la
+     * prochaine demande qui la vise.
+     *
+     * @param list<int> $famillesEffacees
+     */
+    private function reglerLesUnions(Person $personne, array $famillesEffacees): void
+    {
+        $id = $personne->getId();
+        \assert(null !== $id);
+
+        foreach ($this->famillesDe($id) as $famille) {
+            if (\in_array($famille->getId(), $famillesEffacees, true)) {
+                $this->em->remove($famille);
+
+                continue;
+            }
+
+            if ($famille->getHusband() === $personne) {
+                $famille->setHusband(null)->toucher();
+            }
+
+            if ($famille->getWife() === $personne) {
+                $famille->setWife(null)->toucher();
+            }
+        }
     }
 
     // ------------------------------------------------------------------ écriture

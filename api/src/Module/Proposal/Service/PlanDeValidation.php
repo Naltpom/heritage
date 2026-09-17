@@ -55,8 +55,18 @@ final readonly class PlanDeValidation
             }
 
             $champ = $etat->op->getField();
+
             if (null === $champ) {
-                continue;
+                // Une op de suppression ne nomme aucun champ — `ck_prp_op_champ` l'interdit
+                // —, et pourtant elle **peut** être en conflit : c'est l'inventaire de ce
+                // qu'elle emporte qui a bougé. Sans cette ligne, la caducité d'une
+                // suppression partirait avec `champs: []`, c'est-à-dire un `409` qui
+                // annonce un conflit sans pouvoir dire lequel, et une notification qui
+                // demande à l'auteur de refaire sa demande sans lui dire pourquoi.
+                //
+                // Le nom posé est celui de la **nature d'op**, pas d'une colonne : c'est la
+                // seule désignation vraie, et le front la lit comme les autres.
+                $champ = $etat->op->getOpKind()->value;
             }
 
             $nature = $etat->op->getValueKind();

@@ -66,4 +66,35 @@ interface PortMedias
      * @return int le nombre de médias effectivement rattachés
      */
     public function resoudreLesBrouillons(int $demandeId, array $creees): int;
+
+    /**
+     * Combien de médias visent cette personne — **lecture seule**, appelée au dépôt d'une
+     * demande de suppression et à chaque lecture d'administration.
+     *
+     * ## Pourquoi une suppression de fiche a besoin de cette question
+     *
+     * `med_media.subject_id` n'est **protégé par aucune clé étrangère** : la colonne porte
+     * un identifiant de personne, de famille ou de citation selon `subject_kind`, et
+     * PostgreSQL ne peut pas contraindre une référence polymorphe. Supprimer `tree_person`
+     * ne fait donc rien côté médias : la ligne reste, les octets restent sur le disque, et
+     * plus aucun écran n'y mène. C'est la « preuve orpheline » que ce module a déjà
+     * rencontrée au moment des brouillons non résolus, et le remède est le même : poser la
+     * question plutôt que supposer la réponse.
+     *
+     * Le compte **bloque** la suppression tant qu'il n'est pas nul ; il ne la modifie pas.
+     * `Proposal` n'a aucun droit d'écriture sur `med_media` (règle 5 de l'ADR 0002), et
+     * même s'il en avait un, effacer des octets en effet de bord d'une autre opération est
+     * exactement ce que {@see \App\Module\Media\Service\SuppressionMedia} refuse de
+     * laisser faire à trois autres chemins. L'opérateur déplace ou supprime la preuve
+     * lui-même, depuis la galerie, et c'est un geste qu'il aura vu.
+     *
+     * **Tous les statuts sont comptés**, y compris `en_attente` et `refuse` : une preuve en
+     * attente de validation est celle dont la perte serait la plus silencieuse, personne ne
+     * l'ayant encore vue.
+     *
+     * @param string $subjectKind valeur de `Core\Enum\SubjectKind` — elle traverse en chaîne,
+     *                            comme partout au bord de ce module : `MediaSubject` est une
+     *                            énumération de `Media`, que `Proposal` ne peut pas nommer
+     */
+    public function compterLesMediasDe(string $subjectKind, int $subjectId): int;
 }

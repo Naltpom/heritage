@@ -7,7 +7,7 @@ namespace App\Module\Proposal\Enum;
 /**
  * La nature d'une demande — elle dit **quelles tables filles sont peuplées** (§ 5.7).
  *
- * Huit valeurs, dont trois `modification_*` distinctes là où l'ADR 0004 n'en proposait
+ * Neuf valeurs, dont trois `modification_*` distinctes là où l'ADR 0004 n'en proposait
  * qu'une générique. C'est le modèle qui l'emporte (arbitrage I) : `kind` sert à filtrer
  * et à grouper la file d'administration, et un générique obligerait à lire `target_kind`
  * pour savoir ce qui est modifié. Ce sont des chaînes qui partent en base — à acter
@@ -56,6 +56,35 @@ enum RequestKind: string
      * aucun moyen d'en recevoir une.
      */
     case AjoutNote = 'ajout_note';
+    /**
+     * « Cette fiche est un doublon, effacez-la » → `prp_change_op` avec
+     * `op_kind = 'suppression_personne'`.
+     *
+     * ## La neuvième, et la première qui retire au lieu d'ajouter
+     *
+     * Les huit autres ajoutent ou corrigent ; celle-ci **efface**, et c'est ce qui la rend
+     * différente de bout en bout. Un doublon dans un arbre généalogique se réparait
+     * jusqu'ici à la main en base — un `DELETE` écrit dans un client SQL, sans demande,
+     * sans motif, sans révision et sans personne pour relire. C'est le seul chemin
+     * d'écriture qui contournait le mécanisme, et l'ADR 0004 dit qu'il ne doit pas en
+     * exister.
+     *
+     * ## Trois règles la distinguent des huit autres
+     *
+     * 1. **Le motif est obligatoire au dépôt.** `message` est facultatif partout ailleurs ;
+     *    ici il ne l'est pas. `POST /api/demandes/{id}/valider` ne lit aucun corps de
+     *    requête — seul un refus porte un motif —, si bien qu'une validation ne laisse
+     *    aucune trace écrite de la raison. Le motif doit donc vivre sur la demande, déposé
+     *    à la création, ou il n'existera nulle part.
+     * 2. **Une suppression qui détacherait des descendants est refusée.** Deux fiches du
+     *    même homme, l'une portant six générations et l'autre vide : supprimer la mauvaise
+     *    est trivial, supprimer la bonne serait une catastrophe silencieuse. Le refus est
+     *    prononcé **au dépôt**, pas à la validation.
+     * 3. **Rien ne part en silence.** L'op porte l'inventaire de ce que la suppression
+     *    emporte, l'administrateur le lit avant de cliquer, et `prp_revision.changes` le
+     *    garde après.
+     */
+    case SuppressionPersonne = 'suppression_personne';
 
     public function label(): string
     {
@@ -68,6 +97,7 @@ enum RequestKind: string
             self::AjoutMedia => "Ajout d'un média",
             self::AjoutCitation => "Ajout d'une source",
             self::AjoutNote => "Ajout d'une note",
+            self::SuppressionPersonne => "Suppression d'une fiche",
         };
     }
 }

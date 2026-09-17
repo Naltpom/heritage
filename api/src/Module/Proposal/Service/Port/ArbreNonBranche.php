@@ -7,6 +7,7 @@ namespace App\Module\Proposal\Service\Port;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\InventaireDeSuppression;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
@@ -64,6 +65,23 @@ final readonly class ArbreNonBranche implements PortArbre
     }
 
     public function creerCitation(CitationAcreer $citation): LigneCreee
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    /**
+     * Elle lève, alors que le contrat autorise `null` pour « la personne n'existe plus ».
+     *
+     * Même raison que {@see chargerSource()} : rendre `null` ferait passer toute fiche pour
+     * déjà supprimée, donc toute demande de suppression pour caduque, et l'auteur
+     * conclurait que quelqu'un l'a devancé.
+     */
+    public function inventaireDeSuppression(int $personneId): ?InventaireDeSuppression
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    public function supprimerPersonne(int $personneId): InventaireDeSuppression
     {
         throw new \LogicException(self::MESSAGE);
     }

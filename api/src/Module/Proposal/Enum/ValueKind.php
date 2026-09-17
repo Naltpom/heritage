@@ -21,7 +21,11 @@ namespace App\Module\Proposal\Enum;
  * - `Lien` : la forme sérialisée de `prp_draft_link` ;
  * - `Media` : `{mediaId, kind, caption, sha256}` ;
  * - `Citation` : `{sourceId, sourceTitle, page, quay, dataText, scope}` ;
- * - `Note` : `{body, scope}`.
+ * - `Note` : `{body, scope}` ;
+ * - `Suppression` : l'inventaire de ce qu'une suppression emporte —
+ *   `{personneId, displayName, notes, citations, faits, filiations, unions, descendants,
+ *   medias}`, dans cet ordre exact. Voir
+ *   {@see \App\Module\Proposal\Contract\InventaireDeSuppression}.
  *
  * **Pourquoi `Citation` n'est pas un `Reference` sur la source.** Une citation n'est pas
  * un lien vers une source : c'est **l'usage** d'une source sur un fait précis, avec sa
@@ -50,4 +54,21 @@ enum ValueKind: string
     case Media = 'media';
     case Citation = 'citation';
     case Note = 'note';
+    /**
+     * L'inventaire de ce qu'une suppression emporte.
+     *
+     * **C'est le seul `ValueKind` qui vit dans `old_value` sans jumeau dans `new_value`**
+     * : une suppression n'a pas d'« après », `new_value` vaut `null`, et l'« avant »
+     * n'est pas la valeur d'un champ mais le décompte de ce qui disparaîtra. C'est
+     * délibérément cette forme-là qui est stockée plutôt qu'un simple identifiant :
+     * l'inventaire du dépôt est ce à quoi le contrôle préalable compare l'inventaire
+     * courant, et c'est cette comparaison qui empêche d'effacer plus que ce qui a été
+     * annoncé.
+     *
+     * L'ordre des clés est un contrat, pour la même raison qu'un bloc date :
+     * la comparaison se fait sur le tableau entier, et `JSONB` ne préserve pas l'ordre
+     * d'écriture. Les deux côtés repassent donc par
+     * {@see \App\Module\Proposal\Contract\InventaireDeSuppression::depuisJson()}.
+     */
+    case Suppression = 'suppression';
 }

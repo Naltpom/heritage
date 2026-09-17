@@ -177,7 +177,7 @@ describe('refaire une demande — ou dire honnêtement qu’on ne peut pas', () 
     ['modification_citation', 'modification_citation'],
     ['ajout_citation', 'ajout_citation'],
     ['ajout_note', 'ajout_note'],
-  ] as const)('ne propose rien sur « %s », qui n’a pas de formulaire', (_nom, kind) => {
+  ] as const)('ne propose rien sur « %s », qui n’a pas de formulaire de reprise', (_nom, kind) => {
     expect(lienDeReprise(resume({ id: 8, status: 'refusee', kind }))).toBeNull()
   })
 
@@ -193,13 +193,35 @@ describe('refaire une demande — ou dire honnêtement qu’on ne peut pas', () 
   })
 })
 
+describe('refaire une suppression', () => {
+  it('renvoie à l’écran de suppression, **sans** `?refaire`', () => {
+    // Une suppression devient caduque parce que ce qu'elle emportait a changé.
+    // Pré-remplir depuis la demande morte remettrait sous les yeux de l'auteur
+    // l'inventaire périmé qui l'a tuée — c'est le contraire de ce qu'il faut.
+    const lien = lienDeReprise(
+      resume({ id: 9, status: 'caduque', kind: 'suppression_personne', targetId: 17 }),
+    )
+
+    expect(lien).toEqual({ name: 'proposition.suppression', params: { id: 17 } })
+  })
+
+  it('ne propose rien sans cible : il n’y a pas de fiche à rouvrir', () => {
+    expect(
+      lienDeReprise(
+        resume({ id: 9, status: 'refusee', kind: 'suppression_personne', targetId: null }),
+      ),
+    ).toBeNull()
+  })
+})
+
 describe('les libellés, et l’exhaustivité qui les tient', () => {
-  it('nomme les huit natures du contrat', () => {
+  it('nomme les neuf natures du contrat', () => {
     // `Record<NatureDemande, string>` fait échouer la **compilation** le jour où
     // le contrat en ajoute une : ce test garde le compte, le typeur garde la
-    // liste.
-    expect(Object.keys(LIBELLES_NATURE)).toHaveLength(8)
+    // liste. Neuf depuis `suppression_personne`, la première qui retire.
+    expect(Object.keys(LIBELLES_NATURE)).toHaveLength(9)
     expect(LIBELLES_NATURE.creation_personne).toBe('Ajout d’une personne')
+    expect(LIBELLES_NATURE.suppression_personne).toBe('Suppression d’une fiche')
   })
 
   it('donne une pastille aux six statuts, et un libellé aux deux que la pastille ignore', () => {

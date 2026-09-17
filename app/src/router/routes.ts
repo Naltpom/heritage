@@ -189,6 +189,24 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Proposer une modification' },
   },
   {
+    // **Demander la suppression d'une fiche** (§ 6.4 quater).
+    //
+    // Écran séparé et non panneau de la fiche, pour la même raison que
+    // `proposition.modification` : il **relit la cible à son ouverture**, et ce
+    // qu'il affiche — l'inventaire de ce que la suppression emporte — doit être
+    // celui d'aujourd'hui, pas celui du chargement de la fiche, qui peut dater
+    // de vingt minutes. Un panneau incrusté hériterait de cet état périmé et
+    // annoncerait « 0 note » sur une fiche qui vient d'en recevoir une.
+    //
+    // `membre` comme les deux autres formulaires : un compte en attente de
+    // rattachement ne dépose pas, et l'API le lui redirait en
+    // `403 regime_en_attente`.
+    path: '/personnes/:id(\d+)/supprimer',
+    name: 'proposition.suppression',
+    component: () => import('@/views/PropositionSuppressionView.vue'),
+    meta: { acces: 'membre', titre: 'Demander la suppression' },
+  },
+  {
     // Pas de `:id` : la personne n'existe pas encore, et n'aura d'identifiant
     // qu'à la validation. Elle vit jusque-là sous une référence provisoire
     // propre à la demande (§ 6.4 du dossier, § 9.5).

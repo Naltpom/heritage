@@ -7,6 +7,7 @@ namespace App\Tests\Proposal\Double;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\InventaireDeSuppression;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
@@ -77,6 +78,9 @@ final class ArbreEnMemoire implements PortArbre
      */
     private static array $notesCreees = [];
 
+    /** @var list<int> les personnes effacées par une validation — le pendant de {@see $personnesCreees} */
+    private static array $personnesSupprimees = [];
+
     private static int $prochainIdentifiant = 1000;
 
     /**
@@ -138,6 +142,7 @@ final class ArbreEnMemoire implements PortArbre
         self::$sources = [];
         self::$citationsCreees = [];
         self::$notesCreees = [];
+        self::$personnesSupprimees = [];
         self::$prochainIdentifiant = 1000;
     }
 
@@ -423,6 +428,224 @@ final class ArbreEnMemoire implements PortArbre
         ];
 
         return new LigneCreee($id, self::$sources[$citation->sourceId]);
+    }
+
+    /**
+     * L'inventaire de ce qu'une suppression emporterait, **calculé** et non déclaré.
+     *
+     * Le double tient le rôle des tables : il recompte donc ses notes, ses citations, ses
+     * couples et ses filiations à chaque appel, comme le port réel relit la base. Un
+     * inventaire que le test poserait à la main ne prouverait qu'une chose — que le test
+     * sait compter — et laisserait passer un applicateur qui effacerait autre chose que ce
+     * qui a été annoncé.
+     *
+     * Deux écarts assumés avec la production, parce que le double n'a pas ces tables :
+     * `faits` vaut toujours `0`, et `medias` aussi — ce dernier étant de toute façon
+     * ajouté par `Proposal` lui-même, via `PortMedias`.
+     */
+    public function inventaireDeSuppression(int $personneId): ?InventaireDeSuppression
+    {
+        $ligne = self::$lignes[EtatCible::cleDe(SubjectKind::Personne, $personneId)] ?? null;
+
+        if (null === $ligne) {
+            return null;
+        }
+
+        $unions = [];
+        $descendants = [];
+
+        foreach ($this->unionsDe($personneId) as $familleId => $membres) {
+            $enfants = array_keys(self::$filiations[$familleId] ?? []);
+
+            $unions[] = [
+                'familleId' => $familleId,
+                'libelle' => self::$lignes[EtatCible::cleDe(SubjectKind::Famille, $familleId)]['libelle'] ?? 'Union',
+                'enfants' => \count($enfants),
+                // L'union part quand la personne en est le seul membre. Le double ne
+                // reproduit pas la seconde raison du port réel — la collision avec
+                // `uniq_tree_family_couple` —, et c'est dit ici pour que personne ne
+                // conclue de sa verdeur que le cas est couvert.
+                'supprimee' => [$personneId] === $membres,
+            ];
+
+            foreach ($enfants as $enfant) {
+                $descendants[] = [
+                    'personneId' => $enfant,
+                    'displayName' => self::$lignes[EtatCible::cleDe(SubjectKind::Personne, $enfant)]['libelle'] ?? 'p'.$enfant,
+                ];
+            }
+        }
+
+        return new InventaireDeSuppression(
+            $personneId,
+            $ligne['libelle'],
+            \count($this->notesDe($personneId)),
+            \count($this->citationsDe($personneId)),
+            0,
+            $this->filiationsDe($personneId),
+            $unions,
+            $descendants,
+            [] === $descendants ? 0 : $this->compterLaDescendance($personneId),
+        );
+    }
+
+    /**
+     * La descendance transitive, comptée comme le port réel la compte.
+     *
+     * Un double qui rendrait le seul nombre d'enfants directs ferait passer au vert un
+     * message de blocage qui annonce « 1 fiche descend de celle-ci » là où la production en
+     * annonce vingt-trois — c'est-à-dire le seul chiffre qui arrête la main, faux dans le
+     * sens rassurant.
+     */
+    private function compterLaDescendance(int $personneId): int
+    {
+        $vus = [$personneId => true];
+        $generation = [$personneId];
+        $total = 0;
+
+        while ([] !== $generation) {
+            $suivante = [];
+
+            foreach ($generation as $parent) {
+                foreach (array_keys($this->unionsDe($parent)) as $familleId) {
+                    foreach (array_keys(self::$filiations[$familleId] ?? []) as $enfant) {
+                        if (isset($vus[$enfant])) {
+                            continue;
+                        }
+
+                        $vus[$enfant] = true;
+                        $suivante[] = $enfant;
+                        ++$total;
+                    }
+                }
+            }
+
+            $generation = $suivante;
+        }
+
+        return $total;
+    }
+
+    /**
+     * Efface la fiche et ce qu'elle porte, et rend l'inventaire de ce qui est parti.
+     *
+     * **Les deux mêmes refus que l'implémentation réelle**, et c'est le point : un double
+     * plus permissif que la production ferait passer au vert un chemin qui échoue. Une
+     * fiche disparue lève ; une fiche qui porte des descendants lève aussi, parce que
+     * détacher une branche est exactement ce que tout ce circuit existe pour empêcher.
+     */
+    public function supprimerPersonne(int $personneId): InventaireDeSuppression
+    {
+        ++self::$ecritures;
+
+        $inventaire = $this->inventaireDeSuppression($personneId);
+
+        if (null === $inventaire) {
+            throw new \RuntimeException(\sprintf('La personne %d a disparu pendant la validation : il n\'y a plus rien à supprimer.', $personneId));
+        }
+
+        if ([] !== $inventaire->descendants) {
+            throw new \RuntimeException(\sprintf('La personne %d est le parent de %d fiche(s) : la supprimer les détacherait de l\'arbre.', $personneId, \count($inventaire->descendants)));
+        }
+
+        foreach ($this->unionsDe($personneId) as $familleId => $membres) {
+            if ([$personneId] === $membres) {
+                unset(self::$lignes[EtatCible::cleDe(SubjectKind::Famille, $familleId)], self::$filiations[$familleId]);
+                self::$couples = array_filter(self::$couples, static fn (int $id): bool => $id !== $familleId);
+
+                continue;
+            }
+
+            // L'union survit, amputée d'un époux : sa clé de couple est recomposée sur le
+            // membre restant. Sans ce report, `trouverOuCreerFamille()` retrouverait
+            // ensuite l'ancienne famille sous l'ancien couple, et le double affirmerait
+            // l'existence d'une union entre une personne et une fiche effacée.
+            $restants = array_values(array_filter($membres, static fn (int $id): bool => $id !== $personneId));
+            unset(self::$couples[implode(':', $membres)]);
+            self::$couples[implode(':', $restants)] = $familleId;
+        }
+
+        self::$notesCreees = array_values(array_filter(
+            self::$notesCreees,
+            static fn (array $note): bool => $note['personneId'] !== $personneId,
+        ));
+
+        self::$citationsCreees = array_values(array_filter(
+            self::$citationsCreees,
+            static fn (array $citation): bool => $citation['personneId'] !== $personneId,
+        ));
+
+        foreach (self::$filiations as $familleId => $enfants) {
+            unset(self::$filiations[$familleId][$personneId]);
+        }
+
+        unset(self::$lignes[EtatCible::cleDe(SubjectKind::Personne, $personneId)]);
+
+        self::$personnesSupprimees[] = $personneId;
+
+        return $inventaire;
+    }
+
+    /** @return list<int> les personnes effacées par une validation, dans l'ordre */
+    public function personnesSupprimees(): array
+    {
+        return self::$personnesSupprimees;
+    }
+
+    /**
+     * Les unions dont la personne est un membre, indexées par identifiant de famille.
+     *
+     * @return array<int, list<int>> famille => membres du couple, triés
+     */
+    private function unionsDe(int $personneId): array
+    {
+        $unions = [];
+
+        foreach (self::$couples as $cle => $familleId) {
+            // `(string) $cle` et non `$cle` : la clé d'un couple à un seul membre est
+            // « 17 », et PHP convertit toute clé de tableau numérique en entier. Sans ce
+            // cast, une union de parent seul — le cas exact d'une fiche qu'on supprime —
+            // fait lever `explode()`.
+            $membres = array_map(intval(...), array_filter(explode(':', (string) $cle), static fn (string $part): bool => '' !== $part));
+
+            if (\in_array($personneId, $membres, true)) {
+                $unions[$familleId] = array_values($membres);
+            }
+        }
+
+        return $unions;
+    }
+
+    /** @return list<array{id: int, personneId: int, corps: string, scope: string, auteurUserId: int|null, auteurLabel: string|null}> */
+    private function notesDe(int $personneId): array
+    {
+        return array_values(array_filter(
+            self::$notesCreees,
+            static fn (array $note): bool => $note['personneId'] === $personneId,
+        ));
+    }
+
+    /** @return list<array{id: int, personneId: int, sourceId: int, page: string|null, quay: int|null, dataText: string|null, scope: string}> */
+    private function citationsDe(int $personneId): array
+    {
+        return array_values(array_filter(
+            self::$citationsCreees,
+            static fn (array $citation): bool => $citation['personneId'] === $personneId,
+        ));
+    }
+
+    /** Les filiations où la personne est **l'enfant** — sa propre parenté. */
+    private function filiationsDe(int $personneId): int
+    {
+        $compte = 0;
+
+        foreach (self::$filiations as $enfants) {
+            if (\array_key_exists($personneId, $enfants)) {
+                ++$compte;
+            }
+        }
+
+        return $compte;
     }
 
     /**

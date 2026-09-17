@@ -66,6 +66,7 @@ import FicheRestreinte from '@/components/personne/FicheRestreinte.vue'
 import IdentiteFiche from '@/components/personne/IdentiteFiche.vue'
 import ParenteFiche from '@/components/personne/ParenteFiche.vue'
 import PointProposition from '@/components/personne/PointProposition.vue'
+import PointSuppression from '@/components/personne/PointSuppression.vue'
 import SourcesFiche from '@/components/personne/SourcesFiche.vue'
 import GalerieMedias from '@/components/medias/GalerieMedias.vue'
 import LoupeMedia from '@/components/medias/LoupeMedia.vue'
@@ -189,6 +190,16 @@ watch(identifiant, () => {
              `displayName`). -->
         <PanneauBase titre="Proposer une modification" class="mb-4">
           <PointProposition :fiche="complete" />
+        </PanneauBase>
+
+        <!-- La suppression est un panneau à part, en dernier, et ce n'est pas
+             qu'une question d'ordre : la même boîte que « proposer une
+             modification » ferait de « corriger » et « effacer » deux
+             variantes d'un même geste. Ce sont deux gestes, dont un seul
+             détruit — et un doublon d'arbre généalogique ne se corrige pas, il
+             se supprime. Voir `PointSuppression.vue`. -->
+        <PanneauBase titre="Supprimer cette fiche" class="mb-4">
+          <PointSuppression :fiche="complete" />
         </PanneauBase>
       </template>
 

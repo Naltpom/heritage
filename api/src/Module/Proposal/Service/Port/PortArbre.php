@@ -7,6 +7,7 @@ namespace App\Module\Proposal\Service\Port;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\InventaireDeSuppression;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
@@ -199,6 +200,61 @@ interface PortArbre
      * @throws \RuntimeException si la personne a disparu depuis le dépôt
      */
     public function creerNote(NoteAcreer $note): LigneCreee;
+
+    /**
+     * Ce qu'une suppression de fiche emporterait — **aucune écriture**, appelée au dépôt
+     * comme à la lecture d'administration.
+     *
+     * ## Pourquoi c'est l'arbre qui compte et pas `Proposal`
+     *
+     * Parce que le compte dépend de six clés étrangères et d'une contrainte `CHECK` que
+     * seul `Tree` connaît. `tree_child`, `tree_citation`, `tree_fact` et `tree_note` partent
+     * en `ON DELETE CASCADE` ; `tree_family.husband_id` et `wife_id` passent à `NULL` —
+     * **sauf** quand la personne en est le seul époux, car `ck_tree_family_au_moins_un_epoux`
+     * interdit alors une famille sans personne, et la ligne doit partir. Recopier cette
+     * règle dans `Proposal` serait le mécanisme exact par lequel une frontière se dissout,
+     * et elle se dissoudrait sur la seule opération du produit qui détruit.
+     *
+     * Rend `null` **quand la personne n'existe plus**, pour la même raison que
+     * {@see chargerCible()} : c'est le cas `cible_disparue`, une caducité prévue et non une
+     * panne. Une fiche déjà supprimée par une autre demande n'est pas une erreur, c'est le
+     * résultat recherché obtenu par quelqu'un d'autre.
+     *
+     * `InventaireDeSuppression::$medias` vaut **toujours `0`** ici : `med_media` appartient
+     * à `Media`, et l'arbre ne la lit pas. C'est `Proposal` qui complète, par
+     * {@see PortMedias::compterLesMediasDe()}.
+     */
+    public function inventaireDeSuppression(int $personneId): ?InventaireDeSuppression;
+
+    /**
+     * Efface une fiche et ce qu'elle porte, et rend **l'inventaire de ce qui est
+     * réellement parti**.
+     *
+     * ## Ce qu'elle rend, et pourquoi ce n'est pas `void`
+     *
+     * `prp_revision.changes` doit porter le décompte de ce qui a disparu, mesuré
+     * **dans la transaction** — pas celui du dépôt, qui date de trois jours, ni celui de
+     * la lecture d'administration, qui date du dernier rafraîchissement d'écran. C'est la
+     * seule mesure qui puisse prétendre décrire ce qui a eu lieu, et l'historique d'une
+     * fiche effacée est tout ce qu'il en restera.
+     *
+     * ## Les deux refus, qui sont des pannes et non des caducités
+     *
+     * - **la personne a disparu depuis le contrôle préalable** : même forme que
+     *   {@see creerNote()}, l'implémentation **lève**. Une validation qui réussit sans
+     *   écrire est le défaut que ce circuit a déjà payé une fois ;
+     * - **l'inventaire courant est bloqué** — un descendant ou une preuve est apparu
+     *   depuis. L'implémentation **lève** aussi, et c'est le dernier filet : le contrôle
+     *   préalable a déjà rendu la demande caduque dans ce cas, et arriver ici signifie
+     *   qu'un chemin l'a contourné. Effacer quand même emporterait une branche que personne
+     *   n'a vue passer.
+     *
+     * Appelée **dans la transaction** du validateur, et elle `flush()` sans jamais ouvrir
+     * de transaction — la règle commune à tout ce port.
+     *
+     * @throws \RuntimeException si la personne a disparu, ou si ce qu'elle emporte a changé
+     */
+    public function supprimerPersonne(int $personneId): InventaireDeSuppression;
 
     /**
      * Trouve **ou** crée la famille d'un couple — passe 4 du § 9.5.

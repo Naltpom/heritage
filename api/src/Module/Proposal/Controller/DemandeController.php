@@ -18,6 +18,7 @@ use App\Module\Proposal\Repository\RevisionRepository;
 use App\Module\Proposal\Security\DemandeVoter;
 use App\Module\Proposal\Service\DepotDeDemande;
 use App\Module\Proposal\Service\FabriqueDeLecteur;
+use App\Module\Proposal\Service\InventaireDeLaSuppression;
 use App\Module\Proposal\Service\RefaireDemande;
 use App\Module\Proposal\Service\SerialiseurDeDemande;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -230,6 +231,59 @@ final class DemandeController extends AbstractController
             $page,
             $parPage,
         ));
+    }
+
+    /**
+     * Ce qu'une suppression de fiche emporterait — **lecture seule, avant tout dépôt**.
+     *
+     * ## Pourquoi cette route existe, et pourquoi elle n'est pas facultative
+     *
+     * Le formulaire de suppression doit dire ce qu'il efface **avant** que l'auteur écrive
+     * son motif. Sans elle, il n'aurait que deux façons de l'apprendre :
+     *
+     * - recomposer le décompte côté front depuis la fiche, ce qui recopierait dans du
+     *   TypeScript les six clés étrangères de `tree_person` et la contrainte `CHECK` qui
+     *   décide du sort d'une union. Deux sources de vérité pour une opération qui
+     *   détruit ;
+     * - poster et lire la `422`, c'est-à-dire découvrir après avoir rédigé que ce n'était
+     *   pas cette fiche-là qu'il fallait supprimer.
+     *
+     * `bloquee` et `raisons` sont rendus **à côté** de l'inventaire, et non déduits de lui
+     * par le front : la règle qui bloque appartient au serveur, et un front qui la
+     * redériverait finirait par diverger dans le sens permissif.
+     *
+     * ## Ce qu'elle ne fait pas
+     *
+     * Aucune écriture, donc aucun `refuserSiActive()` : un administrateur sous la bascule
+     * « voir comme un membre » doit pouvoir **lire** ce que verrait le membre. C'est le
+     * même raisonnement que pour {@see refaire()}, et c'est exactement ce que la bascule
+     * existe pour permettre.
+     *
+     * Le filtrage de visibilité est celui de la cible : `404` sur une fiche que le lecteur
+     * n'a pas le droit de voir, rendu par le port de l'arbre qui ne la trouve pas.
+     */
+    #[Route(
+        '/suppression/personne/{personneId}',
+        name: 'proposal_demande_apercu_suppression',
+        requirements: ['personneId' => '\d+'],
+        methods: ['GET'],
+    )]
+    public function apercuDeSuppression(int $personneId, InventaireDeLaSuppression $inventaires): JsonResponse
+    {
+        $this->lecteurs->courant();
+
+        $inventaire = $inventaires->de($personneId);
+
+        if (null === $inventaire) {
+            throw Introuvable::cible(SubjectKind::Personne->value, $personneId);
+        }
+
+        return $this->charge([
+            'inventaire' => $inventaire->versJson(),
+            'resume' => $inventaire->enUneLigne(),
+            'bloquee' => $inventaire->estBloquee(),
+            'raisons' => $inventaire->raisonsDuBlocage(),
+        ]);
     }
 
     private function trouver(int $id): ChangeRequest

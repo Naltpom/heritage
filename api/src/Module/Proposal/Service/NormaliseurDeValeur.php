@@ -63,7 +63,11 @@ final class NormaliseurDeValeur
             // L'en-tête annonçait « quatre » alors que la liste en portait trois : ce
             // n'était pas une faute d'accord, c'était la place de la citation, vide
             // depuis le premier jour. Elle est occupée.
-            ValueKind::Reference, ValueKind::Lien, ValueKind::Media, ValueKind::Citation, ValueKind::Note => $json,
+            // `Suppression` rejoint la liste pour une raison de plus : elle n'est jamais
+            // appliquée comme un champ **ni comme une valeur** — c'est un inventaire, pas
+            // une donnée à écrire. Son applicateur ne lit même pas `newValue`, qui vaut
+            // `null` : il relit l'arbre, parce qu'après une suppression il n'y a rien à poser.
+            ValueKind::Reference, ValueKind::Lien, ValueKind::Media, ValueKind::Citation, ValueKind::Note, ValueKind::Suppression => $json,
         };
     }
 

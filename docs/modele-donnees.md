@@ -1576,6 +1576,9 @@ compensation 2). C'est le prix de la frontière, et il est explicitement accept�
 | `creation_personne` | `prp_draft_person` + `prp_draft_link` | Le cas du § 6.4 du dossier et du § 9.5. |
 | `ajout_lien` | `prp_draft_link` | « Ils étaient frère et sœur », « elle s'est remariée avec lui » — sans fiche nouvelle. |
 | `ajout_media` | `prp_change_op` (`op_kind = 'ajout_media'`) | Portrait ou preuve. |
+| `ajout_citation` | `prp_change_op` (`op_kind = 'ajout_citation'`) | « Cette fiche repose sur cet acte ». |
+| `ajout_note` | `prp_change_op` (`op_kind = 'ajout_note'`) | Le raisonnement derrière une correction, sur une fiche existante. |
+| `suppression_personne` | `prp_change_op` (`op_kind = 'suppression_personne'`) | Effacer une fiche — **la seule nature qui retire**. `message` y est **obligatoire**, et l'op porte dans `old_value` l'inventaire de ce qu'elle emporte (§ 6.4 quater du contrat d'API). |
 
 **`RequestStatus`**
 
@@ -1589,7 +1592,9 @@ compensation 2). C'est le prix de la frontière, et il est explicitement accept�
 | `caduque` | Le monde a bougé sous la demande : à la validation, l'`old_value` d'un de ses ops ne correspondait plus à la base, ou la personne visée a été supprimée ou fusionnée, ou — cas propre à la création — l'identifiant provisoire référençait une personne disparue entre-temps. **Rien n'a été appliqué.** Statut **distinct de `refusee`** : personne ne l'a refusée. L'auteur est notifié avec le diff de ce qui a changé et dispose de « refaire cette demande », pré-remplie sur les valeurs courantes (§ 9.6). La caducité est constatée **à la validation**, jamais par une tâche de fond : à ce volume, un balayage périodique serait de la mécanique pour rien. |
 
 **`OpKind`** — `champ`, `ajout_lien`, `retrait_lien`, `ajout_media`, `retrait_media`,
-`ajout_citation`, `retrait_citation`, `ajout_note`.
+`ajout_citation`, `retrait_citation`, `ajout_note`, `suppression_personne`. La dernière
+tient tout juste dans `prp_change_op.op_kind`, un `VARCHAR(20)` : vingt caractères tout
+rond. Une nature plus longue demanderait une migration.
 
 **`SubjectKind`** — `personne`, `famille`, `citation`, `media`, `note`, `fait`. Les six
 valeurs sont ouvertes à `prp_change_op.subject_kind` et à `prp_revision.subject_kind` ;
@@ -1599,7 +1604,9 @@ valeurs sont ouvertes à `prp_change_op.subject_kind` et à `prp_revision.subjec
 touchés *par* une demande qui vise la personne ou la famille qui les porte.
 
 **`ValueKind`** — `texte`, `entier`, `booleen`, `enum`, `date_incertaine`, `reference`,
-`lien`, `media`.
+`lien`, `media`, `citation`, `note`, `suppression`. Le dernier est le seul qui vive dans
+`old_value` **sans jumeau** dans `new_value` : une suppression n'a pas d'« après », et son
+« avant » n'est pas la valeur d'un champ mais le décompte de ce qui disparaîtra.
 
 **`LinkKind`** — `enfant_de`, `parent_de`, `conjoint_de`.
 

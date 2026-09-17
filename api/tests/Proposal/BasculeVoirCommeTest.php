@@ -193,6 +193,16 @@ final class BasculeVoirCommeTest extends BaseDeDemandes
             {
                 return null;
             }
+
+            /**
+             * Aucun rattachement : cette bascule-ci ne teste pas les suppressions.
+             *
+             * @return array{membreId: int|null, membreLibelle: string|null, invitationsActives: int}
+             */
+            public function rattachementsDeLaPersonne(int $personneId): array
+            {
+                return ['membreId' => null, 'membreLibelle' => null, 'invitationsActives' => 0];
+            }
         };
 
         $audit = self::getContainer()->get(AuditService::class);

@@ -31,4 +31,19 @@ final readonly class MediasNonBranches implements PortMedias
     {
         return 0;
     }
+
+    /**
+     * Aucun média, donc aucun blocage.
+     *
+     * **Et c'est le repli le plus dangereux des trois**, parce qu'il répond « rien à
+     * signaler » à une question de sûreté. Si `Media` cessait d'être branché, une
+     * suppression de fiche passerait alors qu'une preuve y est rattachée. C'est assumé
+     * pour la même raison que les deux autres méthodes de cette classe — le conteneur doit
+     * compiler sans `Media` —, et c'est écrit ici pour que celui qui débranche le module
+     * sache ce qu'il débranche avec.
+     */
+    public function compterLesMediasDe(string $subjectKind, int $subjectId): int
+    {
+        return 0;
+    }
 }

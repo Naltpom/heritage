@@ -56,6 +56,20 @@ export type NatureDemande =
    * L'API l'accepte ; **aucun écran ne la dépose encore**.
    */
   | 'ajout_note'
+  /**
+   * La **suppression** d'une fiche existante (§ 6.4 quater du contrat).
+   *
+   * La neuvième, et la première qui retire au lieu d'ajouter. Un doublon dans un
+   * arbre généalogique se réparait jusqu'ici à la main en base — le seul chemin
+   * d'écriture qui contournait le mécanisme des demandes.
+   *
+   * Trois différences avec les huit autres, qui se voient toutes à l'écran :
+   * le **motif est obligatoire** au dépôt, l'écran annonce **ce que la
+   * suppression emporte** avant qu'on écrive, et une fiche qui porte une
+   * descendance ou une preuve n'est **pas supprimable** — c'est l'autre fiche du
+   * doublon qu'il faut viser.
+   */
+  | 'suppression_personne'
 
 /**
  * `caduque` n'est **pas** `refusee` : personne n'a refusé, le monde a bougé
@@ -600,7 +614,31 @@ export interface CorpsCreationPersonne extends CorpsCommun {
   liens: LienPropose[]
 }
 
-export type CorpsDemande = CorpsModificationPersonne | CorpsCreationPersonne
+/**
+ * § 6.4 quater — supprimer une fiche.
+ *
+ * **`message` est obligatoire ici**, et c'est la seule nature où il l'est. Il ne
+ * peut pas être demandé plus tard : `POST /api/demandes/{id}/valider` ne lit
+ * aucun corps de requête, une validation ne laisse donc aucune trace écrite de
+ * sa raison — seul un refus en porte une. Le motif vit sur la demande, déposé à
+ * la création, ou il n'existe nulle part.
+ *
+ * Le corps ne porte **aucun `ops`** : la demande dit ce qu'elle vise, et c'est le
+ * serveur qui mesure ce que la suppression emporte. Un inventaire fabriqué par le
+ * front serait une seconde source de vérité pour une opération qui détruit.
+ */
+export interface CorpsSuppressionPersonne extends CorpsCommun {
+  kind: 'suppression_personne'
+  targetKind: 'personne'
+  targetId: number
+  /** Obligatoire, contrairement au `message` de `CorpsCommun`. Le type le dit. */
+  message: string
+}
+
+export type CorpsDemande =
+  | CorpsModificationPersonne
+  | CorpsCreationPersonne
+  | CorpsSuppressionPersonne
 
 /**
  * `POST /api/demandes` — **réservé aux membres**.
@@ -615,6 +653,91 @@ export type CorpsDemande = CorpsModificationPersonne | CorpsCreationPersonne
  */
 export function creerDemande(corps: CorpsDemande): Promise<Demande> {
   return requeteApi<Demande>('/demandes', { methode: 'POST', corps })
+}
+
+/**
+ * § 6.4 quater — ce qu'une suppression emporterait, pour une union donnée.
+ *
+ * `supprimee` dit que l'union **part avec la fiche** : c'est le cas quand la
+ * personne en est le seul époux, la base interdisant une famille sans personne.
+ */
+export interface UnionEmportee {
+  familleId: number
+  libelle: string
+  enfants: number
+  supprimee: boolean
+}
+
+/** Un enfant qui serait détaché de l'arbre — **il bloque la suppression**. */
+export interface DescendantDetache {
+  personneId: number
+  displayName: string
+}
+
+/** § 6.4 quater — l'inventaire, tel que le serveur le mesure. */
+export interface InventaireDeSuppression {
+  personneId: number
+  displayName: string
+  notes: number
+  citations: number
+  faits: number
+  /** `tree_child` où la personne est **l'enfant** : sa propre parenté. */
+  filiations: number
+  unions: UnionEmportee[]
+  /** Les enfants **directs** qui seraient détachés, **nommés**. */
+  descendants: DescendantDetache[]
+  /**
+   * La branche entière sous cette fiche, **toutes générations confondues**.
+   *
+   * C'est le chiffre qui arrête la main : « parent de Cobalt Sureau » est exact
+   * et ne pèse rien, « 23 fiches descendent d'elle » pèse. Les deux coexistent
+   * parce qu'ils ne disent pas la même chose — le total dit l'ampleur, les noms
+   * disent **laquelle des deux fiches du doublon** on tient.
+   */
+  descendanceTotale: number
+  medias: number
+  /**
+   * Le rattachement `mbr_member` dont cette fiche est la **racine**, s'il existe.
+   *
+   * Nommé par son numéro et jamais par l'adresse du compte : cette charge part
+   * sur une route ouverte à tout membre, et le libellé d'un compte est la
+   * huitième porte de sortie de l'ADR 0003.
+   */
+  membreId: number | null
+  /** Invitations en attente désignant cette fiche — le même défaut, en différé. */
+  invitationsActives: number
+}
+
+/**
+ * § 6.4 quater — la réponse de `GET /api/demandes/suppression/personne/{id}`.
+ *
+ * **`bloquee` et `raisons` viennent du serveur, ils ne se déduisent pas de
+ * l'inventaire côté front.** La règle qui interdit une suppression appartient au
+ * back — elle connaît les six clés étrangères de `tree_person` et la contrainte
+ * qui décide du sort d'une union —, et un front qui la redériverait finirait par
+ * diverger dans le sens permissif, c'est-à-dire par proposer un bouton qui
+ * efface.
+ */
+export interface ApercuDeSuppression {
+  inventaire: InventaireDeSuppression
+  /** La phrase prête à afficher : « emporte 3 notes, 2 citations ». */
+  resume: string
+  bloquee: boolean
+  raisons: string[]
+}
+
+/**
+ * `GET /api/demandes/suppression/personne/{id}` — **lecture seule**.
+ *
+ * Appelée à l'ouverture du formulaire de suppression, avant que l'auteur écrive
+ * quoi que ce soit : découvrir après avoir rédigé son motif que ce n'était pas
+ * cette fiche-là qu'il fallait viser est exactement ce que cet appel évite.
+ *
+ * `404` sur une fiche qui n'existe plus, ou que le lecteur n'a pas le droit de
+ * voir — c'est le même filtre que partout, et il est appliqué en amont.
+ */
+export function lireApercuDeSuppression(personneId: number): Promise<ApercuDeSuppression> {
+  return requeteApi<ApercuDeSuppression>(`/demandes/suppression/personne/${personneId}`)
 }
 
 /**

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Module\Media\Service\Proposition;
 
 use App\Module\Media\Entity\Media;
+use App\Module\Media\Enum\MediaStatus;
+use App\Module\Media\Enum\MediaSubject;
 use App\Module\Media\Repository\MediaRepository;
 use App\Module\Media\Service\CircuitDeValidationMedia;
 use App\Module\Proposal\Service\Port\PortMedias;
@@ -129,5 +131,32 @@ final readonly class MediasDeBrouillon implements PortMedias
             ],
             $this->medias->pourBrouillon($demandeId, $reference),
         );
+    }
+
+    /**
+     * Le compte de médias visés par un sujet — la moitié « lecture » de ce port.
+     *
+     * `Proposal` l'appelle avant d'accepter une demande de suppression de fiche :
+     * `med_media.subject_id` n'est protégé par aucune clé étrangère, et une personne
+     * effacée laisserait ses preuves pointer dans le vide, fichiers compris.
+     *
+     * **Tous les statuts**, et c'est voulu : une preuve `en_attente` est celle dont la
+     * perte serait la plus silencieuse — personne ne l'a encore vue, donc personne ne la
+     * réclamerait. Un `refuse` compte aussi, parce qu'un refus n'est pas une destruction
+     * (§ 7.6) et que les octets sont toujours là.
+     *
+     * Une `subjectKind` que `Media` ne connaît pas rend `0` plutôt que de lever :
+     * `SubjectKind` en compte six, `MediaSubject` trois, et demander le compte de médias
+     * d'une note est une question sans objet, pas une panne.
+     */
+    public function compterLesMediasDe(string $subjectKind, int $subjectId): int
+    {
+        $sujet = MediaSubject::tryFrom($subjectKind);
+
+        if (null === $sujet) {
+            return 0;
+        }
+
+        return \count($this->medias->pourSujet($sujet, $subjectId, MediaStatus::cases()));
     }
 }
