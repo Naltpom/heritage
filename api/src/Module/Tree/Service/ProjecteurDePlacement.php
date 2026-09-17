@@ -70,7 +70,10 @@ final class ProjecteurDePlacement
         $aretes = $partage->aretes;
 
         foreach ($enAttente as $attente) {
-            $pose = $this->pose($noeuds, $partage, $attente);
+            // Les arêtes passées sont **celles du moment**, arêtes provisoires comprises.
+            // Voir {@see enfantsDe()} pour ce que cela change et pourquoi l'inverse était
+            // faux : c'est ce qui permet à une fiche proposée d'en ancrer une autre.
+            $pose = $this->pose($noeuds, $aretes, $attente);
 
             if (null === $pose) {
                 // Ancrage introuvable : la cible a pu disparaître entre le dépôt de la
@@ -90,10 +93,11 @@ final class ProjecteurDePlacement
 
     /**
      * @param array<string, NoeudPlace> $noeuds
+     * @param list<AreteDePlacement>    $aretesConnues arêtes validées **et** provisoires déjà posées
      *
      * @return array{0: array<string, NoeudPlace>, 1: list<AreteDePlacement>}|null
      */
-    private function pose(array $noeuds, Placement $partage, NoeudEnAttente $attente): ?array
+    private function pose(array $noeuds, array $aretesConnues, NoeudEnAttente $attente): ?array
     {
         $cible = $noeuds[$attente->ancrage->cibleId] ?? null;
 
@@ -105,9 +109,10 @@ final class ProjecteurDePlacement
         $y = (float) ($attente->personne->generation * MoteurDePlacement::H_RANG);
 
         [$vise, $aretes, $poseLosange] = match ($attente->ancrage->genre) {
-            AncrageEnAttente::ENFANT_DE_FAMILLE => $this->ancreCommeEnfant($noeuds, $partage, $attente, $cible, $largeur),
+            AncrageEnAttente::ENFANT_DE_FAMILLE => $this->ancreCommeEnfant($noeuds, $aretesConnues, $attente, $cible, $largeur),
+            AncrageEnAttente::ENFANT_DE_PARENT => $this->ancreCommeEnfantDUnParent($noeuds, $aretesConnues, $attente, $cible, $largeur),
             AncrageEnAttente::CONJOINT_DE => $this->ancreCommeConjoint($attente, $cible, $largeur),
-            AncrageEnAttente::PARENT_DE => $this->ancreCommeParent($noeuds, $partage, $attente, $cible, $largeur, $y),
+            AncrageEnAttente::PARENT_DE => $this->ancreCommeParent($noeuds, $aretesConnues, $attente, $cible, $largeur, $y),
         };
 
         // La rangée se partage en deux autour de l'abscisse visée, et chaque nœud tombe
@@ -138,14 +143,15 @@ final class ProjecteurDePlacement
      * exactement la réorganisation que l'ADR 0005 interdit.
      *
      * @param array<string, NoeudPlace> $noeuds
+     * @param list<AreteDePlacement>    $aretesConnues
      *
      * @return array{0: float, 1: list<AreteDePlacement>, 2: (\Closure(float): NoeudPlace)|null}
      */
-    private function ancreCommeEnfant(array $noeuds, Placement $partage, NoeudEnAttente $attente, NoeudPlace $famille, int $largeur): array
+    private function ancreCommeEnfant(array $noeuds, array $aretesConnues, NoeudEnAttente $attente, NoeudPlace $famille, int $largeur): array
     {
         $bordDroit = null;
 
-        foreach ($this->enfantsDe($partage, $famille->id) as $enfantId) {
+        foreach ($this->enfantsDe($aretesConnues, $famille->id) as $enfantId) {
             $enfant = $noeuds[$enfantId] ?? null;
 
             if (null !== $enfant) {
@@ -159,6 +165,57 @@ final class ProjecteurDePlacement
             : $famille->x;
 
         return [$x, [AreteDePlacement::filiation($famille->id, $attente->id())], null];
+    }
+
+    /**
+     * Enfant d'une **personne** : le demandeur a nommé un parent, pas un couple.
+     *
+     * Deux cas, et c'est ici — et nulle part ailleurs — qu'ils se départagent, parce que
+     * seule cette classe tient les arêtes :
+     *
+     * - le parent a une famille : l'enfant rejoint cette fratrie, exactement comme s'il
+     *   avait désigné le couple. Le résultat est **le même au millième** que par
+     *   {@see AncrageEnAttente::ENFANT_DE_FAMILLE}, et c'est voulu : le demandeur a
+     *   nommé une personne plutôt qu'un couple, il n'a pas décrit un autre arbre ;
+     * - le parent n'en a pas : on pose un losange provisoire **sous lui** et l'enfant
+     *   dessous. C'est ce que la validation ferait — « désigner un parent crée une
+     *   famille » (§ 6.4). Auparavant le nœud était écarté sous le motif `sans_couple` :
+     *   la réponse était exacte mais elle privait le demandeur de la seule chose que ce
+     *   calque existe pour produire, la vue de ce qu'il vient de proposer.
+     *
+     * Le losange porte l'identifiant provisoire **de l'enfant** (`#12/p3#union`), comme
+     * dans le cas du parent seul plus bas : ce n'est pas le nom du couple, c'est un
+     * identifiant de rendu, et la sérialisation le renomme en `#12/fN`.
+     *
+     * @param array<string, NoeudPlace> $noeuds
+     * @param list<AreteDePlacement>    $aretesConnues
+     *
+     * @return array{0: float, 1: list<AreteDePlacement>, 2: (\Closure(float): NoeudPlace)|null}
+     */
+    private function ancreCommeEnfantDUnParent(array $noeuds, array $aretesConnues, NoeudEnAttente $attente, NoeudPlace $parent, int $largeur): array
+    {
+        foreach ($aretesConnues as $arete) {
+            if (AreteDePlacement::GENRE_UNION !== $arete->genre || $arete->de !== $parent->id) {
+                continue;
+            }
+
+            $famille = $noeuds[$arete->vers] ?? null;
+
+            if (null !== $famille) {
+                return $this->ancreCommeEnfant($noeuds, $aretesConnues, $attente, $famille, $largeur);
+            }
+        }
+
+        return [
+            $parent->x,
+            [
+                AreteDePlacement::union($parent->id, $attente->familleProvisoireId(), false),
+                AreteDePlacement::filiation($attente->familleProvisoireId(), $attente->id()),
+            ],
+            // Le losange se pose sous la rangée du **parent**, pas sous celle de l'enfant :
+            // c'est la rangée des époux qui le porte, partout ailleurs dans ce fichier.
+            fn (float $xFinal): NoeudPlace => $this->losangeProvisoire($attente, ($parent->x + $xFinal) / 2, $parent->y),
+        ];
     }
 
     /**
@@ -200,17 +257,18 @@ final class ProjecteurDePlacement
      * - l'enfant n'a aucune famille : on crée un losange provisoire au-dessus de lui.
      *
      * @param array<string, NoeudPlace> $noeuds
+     * @param list<AreteDePlacement>    $aretesConnues
      *
      * @return array{0: float, 1: list<AreteDePlacement>, 2: (\Closure(float): NoeudPlace)|null}
      */
-    private function ancreCommeParent(array $noeuds, Placement $partage, NoeudEnAttente $attente, NoeudPlace $enfant, int $largeur, float $y): array
+    private function ancreCommeParent(array $noeuds, array $aretesConnues, NoeudEnAttente $attente, NoeudPlace $enfant, int $largeur, float $y): array
     {
-        $familleId = $this->familleDe($partage, $enfant->id);
+        $familleId = $this->familleDe($aretesConnues, $enfant->id);
 
         if (null !== $familleId && isset($noeuds[$familleId])) {
             $x = $noeuds[$familleId]->x;
 
-            foreach ($this->epouxDe($partage, $familleId) as $epouxId) {
+            foreach ($this->epouxDe($aretesConnues, $familleId) as $epouxId) {
                 $epoux = $noeuds[$epouxId] ?? null;
 
                 if (null !== $epoux && $epoux->y === $y) {
@@ -364,16 +422,42 @@ final class ProjecteurDePlacement
      * la géométrie des rangées : les arêtes sont exactes, la géométrie ne l'est
      * qu'approximativement et deux familles peuvent partager une rangée.
      *
-     * On ne parcourt que les arêtes d'origine : un nœud en attente ne doit jamais servir
-     * d'ancre à un autre.
+     * ── Ce qui a changé, et pourquoi la règle d'avant était le défaut ───────────────
+     *
+     * Ces trois lecteurs ne parcouraient que les arêtes **d'origine**, sous la règle
+     * « un nœud en attente ne doit jamais servir d'ancre à un autre ». Elle paraissait
+     * prudente ; elle décrivait en réalité la moitié manquante du calque. Une branche se
+     * propose en bloc — « sa mère, puis le père de sa mère » —, et tout ce qui pendait
+     * derrière la première fiche tombait : mesuré, huit nœuds sur trente et un.
+     *
+     * Ils reçoivent donc la liste **du moment**, arêtes provisoires comprises. Trois
+     * choses rendent le renversement sûr :
+     *
+     * - l'objet partagé n'est jamais touché. `projette()` rend `$partage` tel quel quand
+     *   le lecteur n'a aucune demande, et travaille sinon sur des copies. L'étage 1 reste
+     *   commun à tous, ce qui est la condition de l'ADR 0005 ;
+     * - l'ordre est **acquis avant d'arriver ici**. {@see PropositionsProjetees} résout
+     *   les ancrages par vagues et rend les nœuds dans l'ordre où ils se posent : une
+     *   fiche ancre est toujours passée avant celles qui pendent à elle. Un nœud dont
+     *   l'ancre n'est pas encore là n'est pas différé, il est écarté — comme avant ;
+     * - un cycle ne peut pas boucler : chaque fiche n'est posée qu'une fois, dans la
+     *   boucle `foreach` de `projette()`, et rien ne revient en arrière.
+     *
+     * Le gain accessoire vaut d'être noté : deux parents proposés pour le même enfant
+     * partagent désormais **un seul losange**, parce que le second retrouve par
+     * `familleDe()` la filiation provisoire que le premier vient de poser. Auparavant ils
+     * en auraient créé deux — c'est-à-dire auraient affiché deux unions là où il n'y en a
+     * qu'une.
+     *
+     * @param list<AreteDePlacement> $aretes
      *
      * @return list<string>
      */
-    private function enfantsDe(Placement $partage, string $familleId): array
+    private function enfantsDe(array $aretes, string $familleId): array
     {
         $sortie = [];
 
-        foreach ($partage->aretes as $arete) {
+        foreach ($aretes as $arete) {
             if (AreteDePlacement::GENRE_FILIATION === $arete->genre && $arete->de === $familleId) {
                 $sortie[] = $arete->vers;
             }
@@ -382,12 +466,16 @@ final class ProjecteurDePlacement
         return $sortie;
     }
 
-    /** @return list<string> */
-    private function epouxDe(Placement $partage, string $familleId): array
+    /**
+     * @param list<AreteDePlacement> $aretes
+     *
+     * @return list<string>
+     */
+    private function epouxDe(array $aretes, string $familleId): array
     {
         $sortie = [];
 
-        foreach ($partage->aretes as $arete) {
+        foreach ($aretes as $arete) {
             if (AreteDePlacement::GENRE_UNION === $arete->genre && $arete->vers === $familleId) {
                 $sortie[] = $arete->de;
             }
@@ -396,10 +484,14 @@ final class ProjecteurDePlacement
         return $sortie;
     }
 
-    /** La famille dont `$personneId` est l'enfant, s'il en a une. */
-    private function familleDe(Placement $partage, string $personneId): ?string
+    /**
+     * La famille dont `$personneId` est l'enfant, s'il en a une.
+     *
+     * @param list<AreteDePlacement> $aretes
+     */
+    private function familleDe(array $aretes, string $personneId): ?string
     {
-        foreach ($partage->aretes as $arete) {
+        foreach ($aretes as $arete) {
             if (AreteDePlacement::GENRE_FILIATION === $arete->genre && $arete->vers === $personneId) {
                 return $arete->de;
             }

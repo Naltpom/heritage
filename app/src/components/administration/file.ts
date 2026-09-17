@@ -78,6 +78,28 @@ export function groupesEnConcurrence(groupes: GroupeDemandes[]): GroupeDemandes[
   return groupes.filter((groupe) => !groupe.sansCible && groupe.demandes.length > 1)
 }
 
+/**
+ * La personne dont ce groupe permet d'ouvrir un aperçu, ou `null`.
+ *
+ * **Trois cas rendent `null`, et il faut les distinguer d'un oubli.** Les
+ * créations n'ont pas de cible — la personne n'existe pas encore, c'est tout
+ * leur objet, et son contenu proposé est déjà sous les yeux dans le diff. Une
+ * cible de nature `famille`, `citation` ou `source` n'est **pas** une personne :
+ * `GET /api/arbre/personnes/{id}` y répondrait `404`, ou pire, rendrait la fiche
+ * d'un homonyme numérique. Et un `targetId` absent ne se devine pas.
+ *
+ * C'est une fonction plutôt qu'un `v-if` dans le gabarit parce que la condition
+ * porte deux clauses dont une est facile à oublier — celle de la nature —, et
+ * qu'un bouton « voir la fiche » qui ouvre un 404 se lit comme une panne.
+ */
+export function personneDuGroupe(groupe: GroupeDemandes): number | null {
+  if (groupe.sansCible) return null
+  const premiere = groupe.demandes[0]
+  if (premiere === undefined) return null
+  if (premiere.targetKind !== 'personne' || premiere.targetId === null) return null
+  return premiere.targetId
+}
+
 /* ------------------------------------------------------------------ */
 /* Le tri — explicite, et seulement explicite                          */
 /* ------------------------------------------------------------------ */

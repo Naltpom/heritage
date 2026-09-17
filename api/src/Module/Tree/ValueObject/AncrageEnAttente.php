@@ -21,6 +21,19 @@ final readonly class AncrageEnAttente
     /** Enfant d'une famille **existante**, désignée par son identifiant. */
     public const string ENFANT_DE_FAMILLE = 'enfant_de_famille';
 
+    /**
+     * Enfant d'une **personne** : le demandeur a nommé un parent, pas un couple.
+     *
+     * La famille est donc à trouver — ou à inventer — et c'est
+     * {@see \App\Module\Tree\Service\ProjecteurDePlacement} qui le fait, parce que c'est
+     * lui qui tient les arêtes. Ce genre existe précisément pour qu'il n'y ait **qu'un**
+     * endroit où se lit la topologie : la traduction cherchait auparavant le losange
+     * elle-même, dans les seules arêtes validées, et écartait l'enfant quand elle n'en
+     * trouvait pas — y compris lorsque le parent était lui-même une fiche proposée dont
+     * le losange venait d'être posé.
+     */
+    public const string ENFANT_DE_PARENT = 'enfant_de_parent';
+
     /** Conjoint d'une personne existante. Crée toujours une famille (§ 6.4). */
     public const string CONJOINT_DE = 'conjoint_de';
 
@@ -37,6 +50,11 @@ final readonly class AncrageEnAttente
     public static function enfantDe(string $familleId): self
     {
         return new self(self::ENFANT_DE_FAMILLE, $familleId);
+    }
+
+    public static function enfantDeParent(string $personneId): self
+    {
+        return new self(self::ENFANT_DE_PARENT, $personneId);
     }
 
     public static function conjointDe(string $personneId): self

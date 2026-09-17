@@ -114,25 +114,46 @@ export function reinitialiserTiroirs(): void {
  * La largeur courante, sous forme réactive — `true` en deçà du seuil mobile.
  *
  * Elle emploie `REQUETE_MOBILE`, donc **la chaîne exacte** que Tailwind compile
- * pour `max-md:` : CSS et JavaScript ne peuvent pas diverger, y compris sous
- * zoom texte où `48rem` ne vaut plus 768 px.
+ * pour `max-md:` : CSS et JavaScript ne peuvent pas diverger.
  *
  * `false` hors navigateur, ce qui est le bon défaut : les composants de ce
  * produit sont rendus côté serveur dans les tests, et un rendu SSR doit donner
  * la forme large — celle qui ne déplace rien.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **La valeur est lue à la construction, pas au montage.**
+ *
+ * Elle l'était dans `onMounted`, et cela veut dire quelque chose de précis :
+ * dans un navigateur étroit, le **premier rendu** donnait la forme large, puis
+ * un second rendu la corrigeait. Toute structure qui dépend de ce drapeau —
+ * un `v-if`, et jadis un `<Teleport>` — changeait donc de forme juste après le
+ * montage, pour rien. Sur téléphone, c'est cette bascule-là qui cassait le
+ * rendu en production.
+ *
+ * `matchMedia` n'a pas besoin du DOM monté : c'est une propriété de la fenêtre.
+ * On la lit donc tout de suite, et le premier rendu est déjà le bon. Le garde
+ * `typeof … !== 'function'` couvre le rendu SSR des tests, où il n'y a pas de
+ * fenêtre du tout.
+ * ────────────────────────────────────────────────────────────────────
  */
 export function useEstMobile(): Readonly<Ref<boolean>> {
-  const estMobile = ref(false)
+  const disponible = typeof globalThis.matchMedia === 'function'
+  const liste = disponible ? globalThis.matchMedia(REQUETE_MOBILE) : null
+  const estMobile = ref(liste?.matches ?? false)
 
   onMounted(() => {
-    if (typeof globalThis.matchMedia !== 'function') return
-    const liste = globalThis.matchMedia(REQUETE_MOBILE)
+    if (liste === null) return
+    // Relu une fois : entre la construction et le montage, une image peut
+    // s'être chargée et faire apparaître une barre de défilement.
     estMobile.value = liste.matches
+  })
+
+  if (liste !== null) {
     const detacherCelui = surveillerLargeur(liste, (mobile) => {
       estMobile.value = mobile
     })
     onBeforeUnmount(detacherCelui)
-  })
+  }
 
   return readonly(estMobile)
 }

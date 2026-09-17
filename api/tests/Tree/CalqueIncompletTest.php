@@ -15,29 +15,35 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * UN CALQUE QUI NE PEUT PAS TOUT MONTRER DOIT LE DIRE.
+ * UN CALQUE QUI NE PEUT PAS TOUT MONTRER DOIT LE DIRE — ET IL DOIT D'ABORD TOUT
+ * ESSAYER.
  *
- * Le défaut, mesuré sur un cas réel : cinq demandes ont déposé une branche de
+ * Le défaut d'origine, mesuré sur un cas réel : cinq demandes ont déposé une branche de
  * vingt-deux personnes. Le calque du graphe a rendu `actif: true` et
  * `demandes: [1,2,3,4,5]` — **cinq nœuds placés, dix-sept absents**, et rien dans la
- * charge ne signalait l'écart. Le lecteur avait sous les yeux un calque qui se déclarait
- * complet sur cinq demandes en ayant écarté les trois quarts de ce qu'elles proposaient.
+ * charge ne signalait l'écart.
  *
- * ── Ce qui est corrigé, et ce qui ne l'est pas ─────────────────────────────────
+ * ── Première réponse : compter et nommer ───────────────────────────────────────
  *
- * **L'omission reste.** Une fiche dont l'ancre n'est pas dans le placement partagé serait
- * posée à `x = 0`, c'est-à-dire sur l'ego : dix-sept fiches empilées là seraient pires
- * qu'absentes. Ce test vérifie donc que les mêmes nœuds sont placés qu'avant.
+ * `actif` ne dit pas « complet » ; `proposes`, `places` et `nonPlaces` le disent. Cette
+ * moitié-là reste, et elle est tenue plus bas : un compte seul (« 17 fiches non
+ * affichées ») laisse l'utilisateur sans geste possible.
  *
- * Ce qui change, c'est que le calque **compte et nomme** ce qu'il n'a pas pu poser.
- * `actif` ne dit pas « complet » ; `proposes`, `places` et `nonPlaces` le disent.
+ * ── Seconde réponse, et c'est celle que ce fichier a changée ───────────────────
  *
- * ── Pourquoi le cas n'est pas un accident rare ─────────────────────────────────
+ * Les dix-sept absents n'étaient pas un fatalisme, c'était un **défaut de placement**.
+ * Une branche se propose en bloc — « sa mère, puis le père de sa mère » — et tout ce qui
+ * pendait derrière la première fiche tombait, parce que le placement partagé ne porte que
+ * l'arbre validé et qu'on n'y cherchait les ancres qu'une seule fois.
  *
- * Il est la forme normale d'une branche déposée en bloc. Le placement partagé ne contient
- * que l'arbre **validé** : une fiche rattachée à une personne qui existe s'y ancre, une
- * fiche rattachée à une autre fiche de la même demande n'a nulle part où s'accrocher.
- * D'où le rapport observé — seules les racines de la branche se placent.
+ * {@see \App\Module\Tree\Serializer\PropositionsProjetees} résout désormais les ancrages
+ * **par vagues** : une fiche posée devient une ancre valable pour la suivante. Une branche
+ * enchaînée se place donc en entier, et c'est ce que ce fichier vérifie maintenant.
+ *
+ * Les assertions qui disaient l'inverse ont été réécrites, pas supprimées : elles
+ * décrivaient fidèlement ce que le code faisait, et ce que le code faisait était le
+ * défaut que le commanditaire a signalé — « on devrait voir tous ceux que j'ajoute, même
+ * non validés ».
  */
 final class CalqueIncompletTest extends ArbreWebTestCase
 {
@@ -45,14 +51,15 @@ final class CalqueIncompletTest extends ArbreWebTestCase
 
     /**
      * ═══════════════════════════════════════════════════════════════════════════
-     *  LE CAS MESURÉ, EN RÉDUCTION : TROIS FICHES PROPOSÉES, UNE SEULE PLACÉE.
+     *  LE CAS MESURÉ, EN RÉDUCTION : TROIS FICHES PROPOSÉES, TROIS PLACÉES.
      * ═══════════════════════════════════════════════════════════════════════════.
      *
-     * Les trois assertions de tête sont celles qui manquaient. Un test qui se contente de
-     * parcourir `noeuds` et de vérifier que ceux qu'il trouve sont corrects reste vert
-     * quand il n'en reste qu'un sur trois : c'est exactement ce qui s'est produit.
+     * Les trois assertions de tête sont celles qui manquaient à l'origine. Un test qui se
+     * contente de parcourir `noeuds` et de vérifier que ceux qu'il trouve sont corrects
+     * reste vert quand il n'en reste qu'un sur trois : c'est exactement ce qui s'est
+     * produit. Elles gardent donc leur place, avec les nombres d'aujourd'hui.
      */
-    public function testLeCalqueAnnonceCombienDeNoeudsProposesIlNAPasPuPlacer(): void
+    public function testUneBrancheEnchaineeSePlaceEnEntier(): void
     {
         $demande = $this->deposerUneBrancheEnchainee();
 
@@ -68,8 +75,12 @@ final class CalqueIncompletTest extends ArbreWebTestCase
 
         // ───── Les trois clés qui lèvent le silence.
         self::assertSame(3, $calque['proposes'], 'Trois fiches ont été proposées.');
-        self::assertSame(1, $calque['places'], 'Une seule se raccroche à l’arbre validé.');
-        self::assertCount(2, $calque['nonPlaces'], 'Les deux autres sont annoncées, pas tues.');
+        self::assertSame(
+            3,
+            $calque['places'],
+            'La racine s’ancre à l’arbre validé ; les deux enfants s’ancrent à la racine, à la vague suivante.',
+        );
+        self::assertSame([], $calque['nonPlaces'], 'Il ne reste rien à annoncer comme absent.');
 
         // ───── L'invariant : rien ne disparaît entre les deux comptes.
         self::assertSame(
@@ -80,48 +91,12 @@ final class CalqueIncompletTest extends ArbreWebTestCase
     }
 
     /**
-     * Chaque nœud non placé est **nommé**, et dit pourquoi.
+     * Les trois fiches sont dans le graphe, **et rattachées** — pas seulement comptées.
      *
-     * Un compte seul (« 17 fiches non affichées ») laisse l'utilisateur sans geste
-     * possible. Le nom et la raison lui disent laquelle manque et ce qui la retient — et
-     * `demandeId` et `brouillonRef` lui permettent d'ouvrir la fiche, qui reste
-     * consultable même quand le graphe ne sait pas la dessiner.
-     *
-     * Ce n'est pas une fuite : la projection est déjà bornée aux demandes que ce lecteur
-     * a le droit de voir (§ 13.3), et ce nom serait sur le nœud si le nœud avait été
-     * placé.
+     * Un nœud sans arête flotte : le compter comme placé et le dessiner à l'écart serait
+     * une autre façon de mentir sur le même sujet.
      */
-    public function testChaqueNoeudNonPlaceEstNommeAvecSaRaisonEtDeQuoiLOuvrir(): void
-    {
-        $demande = $this->deposerUneBrancheEnchainee();
-
-        $this->connexionDe(self::MEMBRE);
-        $this->requete('/api/arbre/graphe');
-
-        $nonPlaces = [];
-        foreach ($this->calque()['nonPlaces'] as $absent) {
-            self::assertSame(['noeudId', 'demandeId', 'brouillonRef', 'displayName', 'raison'], array_keys($absent));
-            self::assertSame($demande, $absent['demandeId']);
-            $nonPlaces[$absent['displayName']] = $absent['raison'];
-        }
-
-        self::assertSame(
-            [
-                'Morille Chanterelle' => NoeudProposeEcarte::ENCHAINEMENT,
-                'Cèpe Chanterelle' => NoeudProposeEcarte::ENCHAINEMENT,
-            ],
-            $nonPlaces,
-            'Les deux enfants pendent à une fiche de la même demande, qui n’est dans aucun placement partagé.',
-        );
-    }
-
-    /**
-     * Le nœud qui **est** placé l'est toujours, et au même endroit.
-     *
-     * L'ajout des trois clés ne devait rien changer au rendu : c'est la moitié de la
-     * correction qui n'a pas d'effet visible, et c'est celle qu'il faut tenir.
-     */
-    public function testLaFichePlaceeResteDansLeGrapheAvecSesAretes(): void
+    public function testLesTroisFichesSontDansLeGrapheAvecLeursAretes(): void
     {
         $demande = $this->deposerUneBrancheEnchainee();
 
@@ -137,16 +112,62 @@ final class CalqueIncompletTest extends ArbreWebTestCase
             }
         }
 
-        self::assertSame(['#'.$demande.'/p1'], $enAttente, 'La racine de la branche reste placée, et elle seule.');
+        sort($enAttente);
 
-        $aretes = 0;
-        foreach ($graphe['aretes'] as $arete) {
-            if ('#'.$demande.'/p1' === $arete['de'] || '#'.$demande.'/p1' === $arete['vers']) {
-                ++$aretes;
+        self::assertSame(
+            ['#'.$demande.'/p1', '#'.$demande.'/p2', '#'.$demande.'/p3'],
+            $enAttente,
+            'La branche entière est placée, pas seulement sa racine.',
+        );
+
+        foreach ($enAttente as $id) {
+            $aretes = 0;
+            foreach ($graphe['aretes'] as $arete) {
+                if ($id === $arete['de'] || $id === $arete['vers']) {
+                    ++$aretes;
+                }
             }
+
+            self::assertGreaterThan(0, $aretes, "Le nœud $id garde ses arêtes : un nœud sans arête flotte.");
+        }
+    }
+
+    /**
+     * Chaque nœud non placé est **nommé**, et dit pourquoi.
+     *
+     * Un compte seul (« 17 fiches non affichées ») laisse l'utilisateur sans geste
+     * possible. Le nom et la raison lui disent laquelle manque et ce qui la retient — et
+     * `demandeId` et `brouillonRef` lui permettent d'ouvrir la fiche, qui reste
+     * consultable même quand le graphe ne sait pas la dessiner.
+     *
+     * Ce n'est pas une fuite : la projection est déjà bornée aux demandes que ce lecteur
+     * a le droit de voir (§ 13.3), et ce nom serait sur le nœud si le nœud avait été
+     * placé.
+     *
+     * **Le cas éprouvé ici a changé**, et il fallait qu'il change : l'enchaînement se
+     * place désormais. Reste ce qu'aucune vague ne peut sauver — une fiche que *rien* ne
+     * rattache. Le § 6.4 du dossier l'interdit à la saisie ; le rendu, lui, ne suppose
+     * jamais qu'une règle d'écriture a tenu.
+     */
+    public function testChaqueNoeudNonPlaceEstNommeAvecSaRaisonEtDeQuoiLOuvrir(): void
+    {
+        $demande = $this->deposerUneFicheQueRienNeRattache();
+
+        $this->connexionDe(self::MEMBRE);
+        $this->requete('/api/arbre/graphe');
+
+        $nonPlaces = [];
+        foreach ($this->calque()['nonPlaces'] as $absent) {
+            self::assertSame(['noeudId', 'demandeId', 'brouillonRef', 'displayName', 'raison'], array_keys($absent));
+            self::assertSame($demande, $absent['demandeId']);
+            $nonPlaces[$absent['displayName']] = $absent['raison'];
         }
 
-        self::assertGreaterThan(0, $aretes, 'Le nœud placé garde ses arêtes : un nœud sans arête flotte.');
+        self::assertSame(
+            ['Amanite Chanterelle' => NoeudProposeEcarte::SANS_LIEN],
+            $nonPlaces,
+            'Aucun lien ne porte cette fiche, dans un sens ni dans l’autre : elle flotterait hors de l’arbre.',
+        );
     }
 
     /**
@@ -181,6 +202,49 @@ final class CalqueIncompletTest extends ArbreWebTestCase
     private function deposerUneBrancheEnchainee(): int
     {
         $em = $this->em();
+        $demande = $this->demandeDe($em);
+
+        foreach ([['#p1', 'Girolle'], ['#p2', 'Morille'], ['#p3', 'Cèpe']] as [$reference, $prenom]) {
+            $fiche = new DraftPerson($demande, $reference);
+            $fiche->setGivenNames($prenom)->setSurname('Chanterelle')->setSex(Sex::Inconnu)->setDeceased(true);
+            $em->persist($fiche);
+        }
+
+        // ⇢ La seule qui se raccroche à quelqu'un qui existe : la vague 0.
+        $racine = new DraftLink($demande, 1, LinkKind::ConjointDe, 'Girolle Chanterelle');
+        $racine->viserSujetBrouillon('#p1')->designerAutre($this->idDe('aieul'), null, 'Émeri Sarriette');
+        $em->persist($racine);
+
+        // ⇢ Les deux qui pendent à la première : leur ancre est `#N/p1`, qui n'est dans
+        //   aucun placement partagé. Elle y sera à la vague 1, et c'est tout le sujet.
+        foreach ([[2, '#p2', 'Morille Chanterelle'], [3, '#p3', 'Cèpe Chanterelle']] as [$seq, $reference, $libelle]) {
+            $lien = new DraftLink($demande, $seq, LinkKind::EnfantDe, $libelle);
+            $lien->viserSujetBrouillon($reference)->designerAutre(null, '#p1', 'Girolle Chanterelle');
+            $em->persist($lien);
+        }
+
+        return $this->enregistrer($em, $demande);
+    }
+
+    /**
+     * Une fiche proposée que **rien** ne rattache — ni comme sujet, ni comme autre bout.
+     *
+     * @return int l'identifiant de la demande déposée
+     */
+    private function deposerUneFicheQueRienNeRattache(): int
+    {
+        $em = $this->em();
+        $demande = $this->demandeDe($em);
+
+        $fiche = new DraftPerson($demande, '#p1');
+        $fiche->setGivenNames('Amanite')->setSurname('Chanterelle')->setSex(Sex::Inconnu)->setDeceased(true);
+        $em->persist($fiche);
+
+        return $this->enregistrer($em, $demande);
+    }
+
+    private function demandeDe(\Doctrine\ORM\EntityManagerInterface $em): ChangeRequest
+    {
         $auteur = $this->creerUtilisateur(self::MEMBRE, nomAffiche: 'Girolle Chanterelle');
         $auteurId = $auteur->getId();
         self::assertNotNull($auteurId);
@@ -189,25 +253,11 @@ final class CalqueIncompletTest extends ArbreWebTestCase
         $demande->soumettre();
         $em->persist($demande);
 
-        foreach ([['#p1', 'Girolle'], ['#p2', 'Morille'], ['#p3', 'Cèpe']] as [$reference, $prenom]) {
-            $fiche = new DraftPerson($demande, $reference);
-            $fiche->setGivenNames($prenom)->setSurname('Chanterelle')->setSex(Sex::Inconnu)->setDeceased(true);
-            $em->persist($fiche);
-        }
+        return $demande;
+    }
 
-        // ⇢ La seule qui se raccroche à quelqu'un qui existe.
-        $racine = new DraftLink($demande, 1, LinkKind::ConjointDe, 'Girolle Chanterelle');
-        $racine->viserSujetBrouillon('#p1')->designerAutre($this->idDe('aieul'), null, 'Émeri Sarriette');
-        $em->persist($racine);
-
-        // ⇢ Les deux qui pendent à la première : leur ancre est `#N/p1`, qui n'est dans
-        //   aucun placement partagé — celui-ci ne porte que l'arbre validé.
-        foreach ([[2, '#p2', 'Morille Chanterelle'], [3, '#p3', 'Cèpe Chanterelle']] as [$seq, $reference, $libelle]) {
-            $lien = new DraftLink($demande, $seq, LinkKind::EnfantDe, $libelle);
-            $lien->viserSujetBrouillon($reference)->designerAutre(null, '#p1', 'Girolle Chanterelle');
-            $em->persist($lien);
-        }
-
+    private function enregistrer(\Doctrine\ORM\EntityManagerInterface $em, ChangeRequest $demande): int
+    {
         $em->flush();
 
         $id = $demande->getId();

@@ -168,6 +168,17 @@ export function formaterValeur(valeur: ValeurOp | undefined): string {
         .concat(mentionDePortee(valeur['scope']))
     }
 
+    // ── Un document (`ajout_media`) ───────────────────────────────────
+    // La légende, ou le genre à défaut. **Jamais l'empreinte seule** : un sha256 ne
+    // se relit pas, et l'identifiant non plus. L'image elle-même est rendue par
+    // `DiffDemande`, qui sait la charger — voir `mediaDeLOp()` plus bas.
+    const media = valeur['mediaId']
+    if (typeof media === 'number') {
+      const legende = chaineNonVide(valeur['caption'])
+      const genre = chaineNonVide(valeur['kind'])
+      return legende ?? (genre === null ? 'Document' : `Document (${genre})`)
+    }
+
     return INDISPONIBLE
   }
 
@@ -193,6 +204,16 @@ export interface LigneDiff {
   courante: string | null
   /** `null` ⇒ la charge ne dit rien du mouvement : on n'affiche pas l'indicateur. */
   aBouge: boolean | null
+  /**
+   * L'identifiant du document proposé, quand l'op en porte un.
+   *
+   * **C'est ce qui manquait pour qu'un administrateur voie ce qu'il valide.**
+   * Une demande `ajout_media` n'affichait que son libellé, « Ajout d'un document » :
+   * on approuvait une pièce sans jamais la regarder. La ligne porte donc de quoi
+   * la charger — pas son URL, que le front ne fabrique jamais (voir l'en-tête de
+   * `lib/api/medias.ts`), mais son identifiant.
+   */
+  mediaId: number | null
 }
 
 /**
@@ -221,7 +242,15 @@ export function ligneDeDiff(op: OpDemande): LigneDiff {
     // distinction absent / null porte une règle, ici comme ailleurs (§ 1.3).
     courante: 'valeurCourante' in op ? formaterValeur(op.valeurCourante) : null,
     aBouge: typeof op.aBouge === 'boolean' ? op.aBouge : null,
+    mediaId: mediaDeLOp(op.newValue),
   }
+}
+
+/** L'identifiant du document d'une op, ou `null` si elle n'en porte pas. */
+function mediaDeLOp(valeur: ValeurOp | undefined): number | null {
+  if (!estObjet(valeur)) return null
+  const id = valeur['mediaId']
+  return typeof id === 'number' ? id : null
 }
 
 export function lignesDeDiff(ops: OpDemande[]): LigneDiff[] {

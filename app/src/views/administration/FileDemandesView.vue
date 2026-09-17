@@ -30,9 +30,13 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
+import ApercuFiche from '@/components/administration/ApercuFiche.vue'
+import LoupeMedia from '@/components/medias/LoupeMedia.vue'
+import type { CibleLoupe } from '@/components/medias/medias'
 import {
   grouperParCible,
   ligneAuteur,
+  personneDuGroupe,
   trierDemandes,
   type SensDeTri,
 } from '@/components/administration/file'
@@ -80,6 +84,13 @@ const demandes = ref<Demande[]>([])
 const total = ref(0)
 const chargement = ref(false)
 const erreur = ref<unknown>(null)
+
+/** La fiche en aperçu. `null` ferme la modale — un identifiant, pas un booléen
+ *  plus un identifiant, pour qu'« ouverte sur personne » soit inreprésentable. */
+const apercu = ref<number | null>(null)
+/** Le portrait en grand, si on le demande depuis l'aperçu. Une seule image
+ *  d'origine décodée à la fois : la loupe est tenue ici. */
+const loupe = ref<CibleLoupe | null>(null)
 
 // Trier **puis** grouper : le regroupement conserve l'ordre qu'on lui donne, et
 // c'est ce qui fait que changer le tri réordonne aussi les groupes entre eux.
@@ -203,7 +214,19 @@ function dateLisible(valeur: string | null): string {
       <PanneauBase v-for="groupe in groupes" :key="groupe.cle">
         <template #entete>
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-sm font-semibold tracking-tight">{{ groupe.titre }}</h2>
+            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h2 class="text-sm font-semibold tracking-tight">{{ groupe.titre }}</h2>
+              <!-- Voir qui est visé sans perdre le filtre, le tri, ni sa place
+                   dans la file : revenir en arrière rechargerait tout. -->
+              <button
+                v-if="personneDuGroupe(groupe) !== null"
+                type="button"
+                class="cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline"
+                @click="apercu = personneDuGroupe(groupe)"
+              >
+                Voir la fiche
+              </button>
+            </div>
             <!-- Deux demandes sur la même fiche : l'ordre de décision compte,
                  et le dire ici évite de le découvrir en cliquant. -->
             <span v-if="!groupe.sansCible && groupe.demandes.length > 1" class="text-xs text-alerte">
@@ -239,5 +262,11 @@ function dateLisible(valeur: string | null): string {
         </ul>
       </PanneauBase>
     </div>
+
+    <!-- Déclarée après la file, donc peinte par-dessus. La loupe vient ensuite,
+         pour passer par-dessus l'aperçu lui-même. -->
+    <ApercuFiche :personne-id="apercu" @fermer="apercu = null" @agrandir="loupe = $event" />
   </div>
+
+  <LoupeMedia :cible="loupe" @fermer="loupe = null" />
 </template>

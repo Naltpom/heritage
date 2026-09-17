@@ -77,22 +77,30 @@ final readonly class PropositionsProjetees
      */
     public function preparer(ProjectionEnAttente $projection, Placement $partage, array $branchesDesPersonnes): array
     {
-        $ancrages = [];
-        foreach ($projection->ancrages as $ancrage) {
-            // Le premier lien d'une personne proposée est celui qui la pose ; les suivants
-            // sont des arêtes que le projecteur ne sait pas placer. `seq` porte l'ordre de
-            // la demande, et c'est lui qui départage.
-            $ancrages[$ancrage->sujetNoeudId] ??= $ancrage;
-        }
+        $rattachements = $this->rattachements($projection);
 
         $noeuds = [];
         $renommage = [];
         $ecartes = [];
 
-        foreach ($projection->noeuds as $source) {
-            $ancrage = $ancrages[$source->noeudId] ?? null;
+        /**
+         * Ce qui a déjà trouvé sa place, et ce qu'on en sait.
+         *
+         * C'est le carnet des vagues : une fiche posée devient une ancre valable pour la
+         * suivante, avec sa rangée et sa branche. Sans lui, une branche proposée en bloc
+         * ne montrait que sa racine.
+         *
+         * @var array<string, array{generation: int, branche: Branch|null}> $poses
+         */
+        $poses = [];
 
-            if (null === $ancrage) {
+        /** @var list<array{0: NoeudPropose, 1: array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null}}> $restants */
+        $restants = [];
+
+        foreach ($projection->noeuds as $source) {
+            $rattachement = $rattachements[$source->noeudId] ?? null;
+
+            if (null === $rattachement) {
                 // Une personne proposée sans lien flotterait hors de l'arbre : le § 6.4 du
                 // dossier l'interdit à la saisie. Si le cas survient malgré tout, on omet
                 // le nœud plutôt que de le poser à `x = 0`, où il recouvrirait l'ego.
@@ -101,48 +109,160 @@ final readonly class PropositionsProjetees
                 continue;
             }
 
-            $prepare = $this->traduire($source, $ancrage, $partage, $branchesDesPersonnes);
+            $restants[] = [$source, $rattachement];
+        }
 
-            if (\is_string($prepare)) {
+        // ── Les vagues ──────────────────────────────────────────────────────────────
+        // Une passe pose tout ce qui s'ancre à du déjà placé ; la suivante reprend le
+        // reste, qui peut maintenant s'ancrer à ce que la première a posé. On s'arrête
+        // dès qu'une passe ne pose rien : ce qui reste alors ne se posera jamais — ancre
+        // disparue, ou cycle — et part en écarté avec la raison de sa dernière tentative.
+        //
+        // L'ordre de sortie est celui des vagues, et ce n'est pas cosmétique : le
+        // projecteur pose dans l'ordre reçu, donc une ancre doit précéder ce qui pend à
+        // elle. Le rendre ici, c'est éviter que deux classes aient à s'accorder dessus.
+        while ([] !== $restants) {
+            $suivants = [];
+            $raisons = [];
+            $aPose = false;
+
+            foreach ($restants as [$source, $rattachement]) {
+                $prepare = $this->traduire($source, $rattachement, $partage, $poses, $branchesDesPersonnes);
+
+                if (\is_string($prepare)) {
+                    $suivants[] = [$source, $rattachement];
+                    $raisons[$source->noeudId] = $prepare;
+
+                    continue;
+                }
+
+                $noeuds[] = $prepare;
+                $poses[$source->noeudId] = [
+                    'generation' => $prepare->mesure->generation,
+                    'branche' => $prepare->branche,
+                ];
+                $aPose = true;
+
+                if (null !== $prepare->familleProvisoire) {
+                    $renommage[$prepare->pourLaProjection()->familleProvisoireId()] = $prepare->familleProvisoire;
+                }
+            }
+
+            if (!$aPose) {
                 // **L'omission reste la bonne réponse ; le silence ne l'était pas.** La
                 // raison remonte jusqu'au calque, qui la publie — voir
                 // {@see NoeudProposeEcarte}.
-                $ecartes[] = new NoeudProposeEcarte($source, $prepare);
+                foreach ($suivants as [$source]) {
+                    $ecartes[] = new NoeudProposeEcarte($source, $raisons[$source->noeudId] ?? NoeudProposeEcarte::ANCRE_ABSENTE);
+                }
 
-                continue;
+                break;
             }
 
-            $noeuds[] = $prepare;
-
-            if (null !== $prepare->familleProvisoire) {
-                $renommage[$prepare->pourLaProjection()->familleProvisoireId()] = $prepare->familleProvisoire;
-            }
+            $restants = $suivants;
         }
 
         return ['noeuds' => $noeuds, 'renommage' => $renommage, 'ecartes' => $ecartes];
     }
 
     /**
+     * Par quoi chaque fiche proposée se rattache — **lu dans les deux sens**.
+     *
+     * ── Le défaut que ce sens inverse répare ────────────────────────────────────────
+     *
+     * Un lien a un sujet et une autre extrémité, et l'écran qui les compose met en sujet
+     * **la fiche qu'on est en train de compléter**, pas celle qu'on ajoute. « Ajouter le
+     * père de Jean » s'envoie `enfant_de(sujet: Jean, autre: le père proposé)` ; de même
+     * pour un conjoint et pour un enfant hors couple. La fiche proposée n'est alors le
+     * sujet d'aucun lien — et l'indexation par le seul sujet la déclarait `sans_lien`,
+     * c'est-à-dire « flotte hors de l'arbre », alors qu'elle était parfaitement rattachée.
+     * Mesuré sur la file réelle : treize nœuds sur trente et un.
+     *
+     * L'inversion est celle des rôles, pas des identifiants : `enfant_de` vu de l'autre
+     * bout est `parent_de`, et réciproquement ; `conjoint_de` est sa propre réciproque.
+     * `autre2` — le second parent d'une filiation — s'inverse de la même façon.
+     *
+     * ── Ce qui départage quand plusieurs liens portent la même fiche ────────────────
+     *
+     * Le sens direct d'abord, l'inverse ensuite. Un lien dont la fiche est le sujet dit
+     * ce qu'elle est ; un lien où elle est l'autre bout ne le dit que par déduction, et
+     * les deux peuvent coexister. À sens égal, le premier rencontré gagne — `seq` porte
+     * l'ordre de la demande, et la liste arrive dans cet ordre.
+     *
+     * Une filiation qui désigne un **couple existant** ne s'inverse pas : elle n'a pas
+     * d'autre extrémité, `familleId` tient lieu des deux parents.
+     *
+     * @return array<string, array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null}>
+     */
+    private function rattachements(ProjectionEnAttente $projection): array
+    {
+        $direct = [];
+        $inverse = [];
+
+        foreach ($projection->ancrages as $ancrage) {
+            $direct[$ancrage->sujetNoeudId] ??= [
+                'kind' => $ancrage->kind,
+                'cible' => $ancrage->autreNoeudId,
+                'familleId' => $ancrage->familleId,
+                'familleProvisoire' => $ancrage->familleProvisoire,
+            ];
+
+            $reciproque = match ($ancrage->kind) {
+                'enfant_de' => 'parent_de',
+                'parent_de' => 'enfant_de',
+                'conjoint_de' => 'conjoint_de',
+                default => null,
+            };
+
+            if (null === $reciproque) {
+                continue;
+            }
+
+            foreach ([$ancrage->autreNoeudId, $ancrage->autre2NoeudId] as $bout) {
+                if (null === $bout) {
+                    continue;
+                }
+
+                $inverse[$bout] ??= [
+                    'kind' => $reciproque,
+                    'cible' => $ancrage->sujetNoeudId,
+                    // Le couple existant, s'il y en avait un, portait la filiation du
+                    // sujet. Vu de ce bout-ci on est **parent**, et la famille se retrouve
+                    // — ou s'invente — depuis l'enfant : voir
+                    // {@see \App\Module\Tree\Service\ProjecteurDePlacement::ancreCommeParent()}.
+                    'familleId' => null,
+                    'familleProvisoire' => $ancrage->familleProvisoire,
+                ];
+            }
+        }
+
+        return $direct + $inverse;
+    }
+
+    /**
      * Le nœud traduit, **ou la raison de son absence** — jamais `null` : un `null` est ce
      * qui a laissé dix-sept nœuds disparaître sans que rien ne puisse le dire.
      *
-     * @param array<int, array{displayName: string, branch: string|null}> $branches
+     * @param array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null} $rattachement
+     * @param array<string, array{generation: int, branche: Branch|null}>                                  $poses        les fiches proposées déjà posées par une vague précédente
+     * @param array<int, array{displayName: string, branch: string|null}>                                  $branches
      */
     private function traduire(
         NoeudPropose $source,
-        AncragePropose $ancrage,
+        array $rattachement,
         Placement $partage,
+        array $poses,
         array $branches,
     ): NoeudProposePlacable|string {
-        $traduit = $this->ancrage($ancrage, $partage);
+        $traduit = $this->ancrage($rattachement, $partage, $poses);
 
         if (null === $traduit) {
-            return $this->raisonDAncrage($ancrage, $partage);
+            return $this->raisonDAncrage($rattachement, $partage);
         }
 
         [$ancre, $cibleId] = $traduit;
 
-        $generation = $this->generationDepuisLAncre($ancrage->kind, $cibleId, $partage);
+        $generation = $this->generationDepuisLAncre($rattachement['kind'], $cibleId, $partage, $poses);
 
         if (null === $generation) {
             return NoeudProposeEcarte::GENERATION_INDETERMINEE;
@@ -173,26 +293,33 @@ final readonly class PropositionsProjetees
             $source,
             $mesure,
             $ancre,
-            $this->brancheDeLAncre($cibleId, $partage, $branches),
-            $ancrage->familleProvisoire,
+            $this->brancheDeLAncre($cibleId, $partage, $poses, $branches),
+            $rattachement['familleProvisoire'],
         );
     }
 
     /**
-     * Pourquoi {@see ancrage()} n'a rien rendu — lu sur l'ancrage, pas deviné.
+     * Pourquoi {@see ancrage()} n'a rien rendu — lu sur le rattachement, pas deviné.
      *
      * La distinction qui compte est celle entre `enchainement` et `ancre_absente` : la
-     * première est la forme normale d'une branche proposée en bloc et elle en écarte la
-     * majeure partie ; la seconde est une cible qui a disparu de l'arbre. Les confondre
-     * ferait passer un fonctionnement attendu pour une anomalie, et l'inverse.
+     * première dit que l'ancre est une autre fiche proposée, la seconde qu'une cible a
+     * disparu de l'arbre. Les confondre ferait passer un fonctionnement attendu pour une
+     * anomalie, et l'inverse.
+     *
+     * **`enchainement` est devenu rare, et c'est le but.** Il ne sortait autrefois que
+     * parce qu'une ancre proposée n'était jamais placée ; les vagues de {@see preparer()}
+     * les placent désormais. Ce qui reste sous ce motif est ce qu'aucune vague n'a pu
+     * résoudre : une ancre elle-même écartée, ou un cycle.
+     *
+     * @param array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null} $rattachement
      */
-    private function raisonDAncrage(AncragePropose $ancrage, Placement $partage): string
+    private function raisonDAncrage(array $rattachement, Placement $partage): string
     {
-        if (null !== $ancrage->familleId) {
+        if (null !== $rattachement['familleId']) {
             return NoeudProposeEcarte::ANCRE_ABSENTE;
         }
 
-        $autre = $ancrage->autreNoeudId;
+        $autre = $rattachement['cible'];
 
         if (null === $autre) {
             return NoeudProposeEcarte::ANCRE_ABSENTE;
@@ -202,56 +329,46 @@ final readonly class PropositionsProjetees
             return NoeudProposeEcarte::ENCHAINEMENT;
         }
 
-        // L'autre extrémité est une personne validée, et elle est bien dans le graphe :
-        // l'ancrage a donc échoué plus loin, et il ne reste qu'un cas — `enfant_de` n'a
-        // trouvé aucun losange sous ce parent.
-        return isset($partage->noeuds[$autre]) && 'enfant_de' === $ancrage->kind
-            ? NoeudProposeEcarte::SANS_COUPLE
-            : NoeudProposeEcarte::ANCRE_ABSENTE;
+        return NoeudProposeEcarte::ANCRE_ABSENTE;
     }
 
     /**
-     * L'ancrage du moteur, et l'identifiant du nœud **déjà placé** dont il dépend.
+     * L'ancrage du moteur, et l'identifiant du nœud dont il dépend.
+     *
+     * Ce nœud est **déjà placé** — dans le placement partagé, ou par une vague
+     * précédente. C'est toute la condition à vérifier ici ; le reste du travail est au
+     * projecteur, qui tient les arêtes.
+     *
+     * @param array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null} $rattachement
+     * @param array<string, array{generation: int, branche: Branch|null}>                                  $poses
      *
      * @return array{0: AncrageEnAttente, 1: string}|null
      */
-    private function ancrage(AncragePropose $ancrage, Placement $partage): ?array
+    private function ancrage(array $rattachement, Placement $partage, array $poses): ?array
     {
-        if (null !== $ancrage->familleId) {
+        if (null !== $rattachement['familleId']) {
             // Un couple existant a été désigné : il y a un losange, rien à inventer.
-            $famille = IdentifiantDeNoeud::famille($ancrage->familleId);
+            $famille = IdentifiantDeNoeud::famille($rattachement['familleId']);
 
             return isset($partage->noeuds[$famille]) ? [AncrageEnAttente::enfantDe($famille), $famille] : null;
         }
 
-        $autre = $ancrage->autreNoeudId;
+        $autre = $rattachement['cible'];
 
-        if (null === $autre || !isset($partage->noeuds[$autre])) {
+        if (null === $autre || (!isset($partage->noeuds[$autre]) && !isset($poses[$autre]))) {
             return null;
         }
 
-        return match ($ancrage->kind) {
+        return match ($rattachement['kind']) {
             'conjoint_de' => [AncrageEnAttente::conjointDe($autre), $autre],
             'parent_de' => [AncrageEnAttente::parentDe($autre), $autre],
-            // « Enfant de » sans couple désigné : un seul parent est nommé. Le projecteur
-            // ne sait ancrer un enfant que sous un losange, on cherche donc la famille de
-            // ce parent dans les arêtes du placement — exactes, là où la géométrie ne
-            // l'est qu'approximativement.
-            'enfant_de' => $this->familleDe($autre, $partage),
+            // « Enfant de » sans couple désigné : un seul parent est nommé, et la famille
+            // reste à trouver — ou à inventer. C'est le projecteur qui s'en charge : la
+            // chercher ici obligeait à relire les arêtes **validées seulement**, donc à
+            // écarter tout enfant dont le parent venait d'être posé par une vague.
+            'enfant_de' => [AncrageEnAttente::enfantDeParent($autre), $autre],
             default => null,
         };
-    }
-
-    /** @return array{0: AncrageEnAttente, 1: string}|null */
-    private function familleDe(string $personneId, Placement $partage): ?array
-    {
-        foreach ($partage->aretes as $arete) {
-            if (AreteDePlacement::GENRE_UNION === $arete->genre && $arete->de === $personneId) {
-                return [AncrageEnAttente::enfantDe($arete->vers), $arete->vers];
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -260,9 +377,23 @@ final readonly class PropositionsProjetees
      * `y = génération × 150` pour une fiche ; un losange vit 46 px plus bas que la rangée
      * de ses époux — `H_FICHE / 2 + 26`. On retire ce décalage avant de diviser, sans quoi
      * un enfant proposé tomberait un tiers de rangée trop bas.
+     *
+     * **Une ancre posée par une vague précédente n'a pas d'ordonnée à lire** : elle n'est
+     * pas dans le placement partagé, et le projecteur ne l'aura placée qu'après. Sa
+     * génération, elle, est connue — c'est celle que la vague a calculée. On la reprend
+     * telle quelle et on applique le même décalage. Pas d'arrondi ici : la rangée n'a
+     * jamais transité par des pixels, donc rien à en déduire.
+     *
+     * @param array<string, array{generation: int, branche: Branch|null}> $poses
      */
-    private function generationDepuisLAncre(string $kind, string $cibleId, Placement $partage): ?int
+    private function generationDepuisLAncre(string $kind, string $cibleId, Placement $partage, array $poses): ?int
     {
+        $posee = $poses[$cibleId] ?? null;
+
+        if (null !== $posee) {
+            return $this->decalage($kind, $posee['generation']);
+        }
+
         $cible = $partage->noeuds[$cibleId] ?? null;
 
         if (null === $cible) {
@@ -276,8 +407,12 @@ final readonly class PropositionsProjetees
             return (int) round($rangeeDesEpoux) + 1;
         }
 
-        $rangee = (int) round($cible->y / MoteurDePlacement::H_RANG);
+        return $this->decalage($kind, (int) round($cible->y / MoteurDePlacement::H_RANG));
+    }
 
+    /** La rangée de l'ancre, décalée par la nature du lien. */
+    private function decalage(string $kind, int $rangee): int
+    {
         return match ($kind) {
             // Les générations sont négatives en remontant : un parent est **une de moins**.
             'parent_de' => $rangee - 1,
@@ -287,10 +422,20 @@ final readonly class PropositionsProjetees
     }
 
     /**
+     * @param array<string, array{generation: int, branche: Branch|null}> $poses
      * @param array<int, array{displayName: string, branch: string|null}> $branches
      */
-    private function brancheDeLAncre(string $cibleId, Placement $partage, array $branches): ?Branch
+    private function brancheDeLAncre(string $cibleId, Placement $partage, array $poses, array $branches): ?Branch
     {
+        // Une ancre posée par une vague précédente n'est dans aucune table de branches :
+        // elle n'a pas d'identifiant d'arbre. Sa couleur est celle qu'on lui a déduite, et
+        // la passer au suivant est exactement l'approximation assumée en tête de fichier —
+        // « un conjoint, un parent ou un enfant proposé appartient au même quart que la
+        // personne à laquelle il se rattache », transitivement.
+        if (isset($poses[$cibleId])) {
+            return $poses[$cibleId]['branche'];
+        }
+
         if (IdentifiantDeNoeud::estFamille($cibleId)) {
             // Pour une famille, on prend la branche du premier époux placé : les deux
             // époux d'un couple portent le même quart d'ascendance, sauf à la jonction des

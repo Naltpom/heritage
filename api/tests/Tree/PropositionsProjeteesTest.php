@@ -172,16 +172,29 @@ final class PropositionsProjeteesTest extends TestCase
     }
 
     /**
-     * « Enfant de » avec un **seul parent nommé** : le projecteur ne sait ancrer un enfant
-     * que sous un losange, et la famille de ce parent se retrouve dans les **arêtes** du
-     * placement — exactes, là où la géométrie ne l'est qu'approximativement.
+     * « Enfant de » avec un **seul parent nommé** : l'ancrage désigne le parent, et la
+     * famille se retrouve — ou s'invente — chez le projecteur.
+     *
+     * ── Pourquoi la recherche du losange a changé de camp ──────────────────────────
+     *
+     * Elle se faisait ici, dans les arêtes du placement **partagé**. C'était juste tant
+     * que le parent était une personne validée, et faux dans deux cas qui pèsent lourd
+     * dans la file réelle : un parent lui-même proposé n'a aucune arête partagée, et un
+     * parent validé sans couple n'en a pas non plus — l'enfant partait alors en
+     * `sans_couple`, alors que la validation, elle, aurait créé cette famille.
+     *
+     * La topologie se lit désormais là où elle est tenue,
+     * {@see \App\Module\Tree\Service\ProjecteurDePlacement}, qui voit les arêtes
+     * provisoires en plus des validées. Ce test garde donc la **rangée** — la seule chose
+     * que cette classe décide encore — et la cible désignée.
      */
-    public function testUnEnfantDUnSeulParentRetrouveLaFamilleParLesAretes(): void
+    public function testUnEnfantDUnSeulParentSAncreSurLeParent(): void
     {
         $prepare = $this->preparer($this->noeud('2001-'), $this->ancrage('enfant_de', 'p3'))['noeuds'][0];
 
-        self::assertSame(AncrageEnAttente::ENFANT_DE_FAMILLE, $prepare->ancrage->genre);
-        self::assertSame('f9', $prepare->ancrage->cibleId);
+        self::assertSame(AncrageEnAttente::ENFANT_DE_PARENT, $prepare->ancrage->genre);
+        self::assertSame('p3', $prepare->ancrage->cibleId);
+        self::assertSame(0, $prepare->mesure->generation, 'p3 est sur la rangée −1 : son enfant est sur la rangée 0.');
     }
 
     /**
@@ -267,7 +280,7 @@ final class PropositionsProjeteesTest extends TestCase
 
     /**
      * ═══════════════════════════════════════════════════════════════════════════
-     *  LE CAS MESURÉ : UNE BRANCHE PROPOSÉE EN BLOC, DONT UNE SEULE FICHE SE POSE.
+     *  LE CAS MESURÉ : UNE BRANCHE PROPOSÉE EN BLOC SE PLACE EN ENTIER.
      * ═══════════════════════════════════════════════════════════════════════════.
      *
      * Cinq demandes ont déposé une branche de vingt-deux personnes ; **cinq nœuds ont
@@ -276,16 +289,22 @@ final class PropositionsProjeteesTest extends TestCase
      * la **taille** de l'ensemble qu'il parcourait : un test qui vérifie que les nœuds
      * rendus sont bien placés reste vert quand il n'en reste qu'un sur quatre.
      *
-     * Le mécanisme est ici, en réduction : seule la fiche rattachée à une personne de
-     * l'arbre validé se place. Tout ce qui pend derrière elle — l'enfant d'un parent
-     * lui-même proposé — a pour ancre `#12/p1`, qui n'est dans aucun placement partagé,
-     * puisque celui-ci ne contient que l'arbre validé.
+     * ── Ce que ce cas assertait, et ce qu'il asserte maintenant ────────────────────
      *
-     * **Ce n'est pas le comportement qui est corrigé, c'est le silence.** Les mêmes nœuds
-     * sont placés, les mêmes sont omis ; l'invariant ci-dessous est la seule chose qui
-     * change, et c'est lui qui permet à l'écran de dire ce qu'il ne montre pas.
+     * Il a d'abord servi à **lever le silence** : les mêmes nœuds étaient placés, les
+     * mêmes omis, et le compte rendait l'écart visible. C'était la bonne première
+     * réponse, et l'invariant qu'elle a introduit reste ci-dessous.
+     *
+     * Mais l'omission n'était pas une fatalité. Une seule passe cherchait les ancres, et
+     * uniquement dans le placement **partagé** — qui ne porte que l'arbre validé. Tout ce
+     * qui pendait derrière la racine tombait, par construction. La résolution par vagues
+     * pose d'abord ce qui s'ancre au validé, puis ce qui s'ancre à ce qui vient d'être
+     * posé, et ainsi de suite : quatre fiches, quatre vagues au pire, zéro écarté.
+     *
+     * L'ordre de sortie compte et il est assertionné : le projecteur pose dans l'ordre
+     * reçu, donc une ancre doit précéder ce qui pend à elle.
      */
-    public function testUneBrancheProposeeEnBlocNePlaceQueSaRacineEtCompteLeReste(): void
+    public function testUneBrancheProposeeEnBlocSePlaceEnEntierParVagues(): void
     {
         $prepare = $this->preparerPlusieurs(
             [
@@ -305,31 +324,121 @@ final class PropositionsProjeteesTest extends TestCase
             [2 => ['displayName' => 'Cresson', 'branch' => Branch::Pm->value]],
         );
 
-        // ───── L'assertion qui manquait : la taille de l'ensemble parcouru.
-        self::assertCount(1, $prepare['noeuds'], 'Seule la fiche rattachée à l’arbre validé se place.');
-        self::assertCount(3, $prepare['ecartes'], 'Les trois autres sont écartées, et comptées.');
-        self::assertCount(
-            4,
-            [...$prepare['noeuds'], ...$prepare['ecartes']],
-            'Tout nœud proposé est soit placé, soit écarté : aucun ne disparaît entre les deux.',
+        // ───── L'assertion qui manquait à l'origine : la taille de l'ensemble parcouru.
+        self::assertCount(4, $prepare['noeuds'], 'La branche entière se place, racine comprise.');
+        self::assertSame([], $prepare['ecartes'], 'Il ne reste rien à écarter.');
+
+        self::assertSame(
+            ['#12/p1', '#12/p2', '#12/p3', '#12/p4'],
+            array_map(static fn ($noeud): string => $noeud->id(), $prepare['noeuds']),
+            'L’ordre est celui des vagues : une ancre précède toujours ce qui pend à elle.',
         );
 
-        self::assertSame('#12/p1', $prepare['noeuds'][0]->id());
-
-        $ecartes = [];
-        foreach ($prepare['ecartes'] as $ecarte) {
-            $ecartes[$ecarte->source->noeudId] = $ecarte->raison;
+        // ───── Les rangées suivent l'enchaînement, et ne retombent pas sur celle de l'ego.
+        $rangees = [];
+        foreach ($prepare['noeuds'] as $noeud) {
+            $rangees[$noeud->id()] = $noeud->mesure->generation;
         }
 
         self::assertSame(
             [
-                '#12/p2' => NoeudProposeEcarte::ENCHAINEMENT,
-                '#12/p3' => NoeudProposeEcarte::ENCHAINEMENT,
-                '#12/p4' => NoeudProposeEcarte::ENCHAINEMENT,
+                // Conjoint de `p2`, qui est sur la rangée −1.
+                '#12/p1' => -1,
+                // Enfants de `#12/p1` : une rangée plus bas.
+                '#12/p2' => 0,
+                '#12/p3' => 0,
+                // Conjointe de `#12/p2` : la même rangée que lui.
+                '#12/p4' => 0,
             ],
-            $ecartes,
-            'La raison distingue l’enchaînement — la forme normale d’une branche proposée — d’une cible disparue.',
+            $rangees,
         );
+
+        // ───── La branche se transmet de proche en proche, comme pour une ancre validée.
+        foreach ($prepare['noeuds'] as $noeud) {
+            self::assertSame(Branch::Pm, $noeud->branche, $noeud->id());
+        }
+    }
+
+    /**
+     * Une ancre qui **n'est nulle part** n'est pas rattrapée par les vagues : elle sort
+     * en `enchainement`, et le calque le dit.
+     *
+     * C'est ce qui garde le motif vivant. Les vagues placent tout ce qui pend à une fiche
+     * posée ; ce qui pend à une fiche **elle-même jamais posée** n'a pas d'issue, et le
+     * taire recréerait exactement le silence que ce fichier existe pour empêcher.
+     */
+    public function testCeQuiPendAUneFicheJamaisPoseeSortEnEnchainement(): void
+    {
+        $prepare = $this->preparerPlusieurs(
+            [$this->noeudNomme('#12/p2', 'Morille', 'Chanterelle')],
+            [
+                // `#12/p1` n'est proposée par aucune fiche de cette projection : l'ancre
+                // ne sera posée par aucune vague.
+                $this->ancrageDe('#12/p2', 'enfant_de', '#12/p1'),
+            ],
+        );
+
+        self::assertSame([], $prepare['noeuds']);
+        self::assertCount(1, $prepare['ecartes']);
+        self::assertSame(NoeudProposeEcarte::ENCHAINEMENT, $prepare['ecartes'][0]->raison);
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     *  LE LIEN SE LIT DANS LES DEUX SENS.
+     * ═══════════════════════════════════════════════════════════════════════════.
+     *
+     * L'écran qui ajoute des liens à une fiche met en sujet **la fiche qu'on complète**,
+     * pas celle qu'on ajoute : « ajouter le père de Jean » s'envoie
+     * `enfant_de(sujet: Jean, autre: le père proposé)`. Indexée par le seul sujet, la
+     * fiche proposée n'avait aucun ancrage et sortait en `sans_lien` — « flotte hors de
+     * l'arbre » — alors qu'elle était parfaitement rattachée. Mesuré sur la file réelle :
+     * treize nœuds sur trente et un.
+     *
+     * L'inversion porte sur les **rôles** : vu de l'autre bout, `enfant_de` est
+     * `parent_de`, et réciproquement ; `conjoint_de` est sa propre réciproque.
+     */
+    public function testUneFicheProposeeALAutreBoutDuLienEstRattacheeQuandMeme(): void
+    {
+        // `p1` est l'ego du placement, sur la rangée 0. On lui propose un parent.
+        $prepare = $this->preparerPlusieurs(
+            [$this->noeudNomme('#12/p1', 'Girolle', 'Chanterelle')],
+            [$this->ancrageDe('p1', 'enfant_de', '#12/p1')],
+        );
+
+        self::assertSame([], $prepare['ecartes'], 'Ce n’est pas une fiche sans lien : le lien la nomme à l’autre bout.');
+        self::assertCount(1, $prepare['noeuds']);
+
+        $place = $prepare['noeuds'][0];
+
+        self::assertSame(AncrageEnAttente::PARENT_DE, $place->ancrage->genre, 'Enfant de X, vu de X, c’est parent de.');
+        self::assertSame('p1', $place->ancrage->cibleId);
+        self::assertSame(-1, $place->mesure->generation, 'Un parent est une rangée au-dessus de son enfant.');
+    }
+
+    /**
+     * Le sens direct l'emporte sur le sens déduit.
+     *
+     * Une fiche peut être le sujet d'un lien **et** l'autre bout d'un autre. Ce qu'un lien
+     * dit d'elle en la prenant pour sujet est direct ; ce qu'on tire d'un lien où elle est
+     * l'autre bout est une déduction. À égalité, on garde ce qui est dit.
+     */
+    public function testLeLienDontLaFicheEstSujetLEmporteSurLInverse(): void
+    {
+        $prepare = $this->preparerPlusieurs(
+            [$this->noeudNomme('#12/p1', 'Girolle', 'Chanterelle')],
+            [
+                // Déduit : `p1` est enfant de la fiche ⇒ la fiche est parente de `p1`.
+                $this->ancrageDe('p1', 'enfant_de', '#12/p1'),
+                // Direct : la fiche est conjointe de `p2`.
+                $this->ancrageDe('#12/p1', 'conjoint_de', 'p2'),
+            ],
+        );
+
+        $place = $prepare['noeuds'][0];
+
+        self::assertSame(AncrageEnAttente::CONJOINT_DE, $place->ancrage->genre);
+        self::assertSame('p2', $place->ancrage->cibleId);
     }
 
     /**
@@ -347,21 +456,31 @@ final class PropositionsProjeteesTest extends TestCase
     }
 
     /**
-     * « Enfant de » désignant un **seul parent qui n'a aucun couple** dans l'arbre : le
-     * projecteur ne sait ancrer un enfant que sous un losange, et il n'y en a pas.
+     * « Enfant de » désignant un **seul parent qui n'a aucun couple** dans l'arbre.
      *
-     * Le distinguer d'une ancre disparue n'est pas un raffinement : la validation, elle,
-     * **créerait** ce couple. Dire « introuvable » d'un parent bien présent enverrait
-     * l'administrateur chercher une fiche qui n'a jamais manqué.
+     * ── Ce cas s'écartait, et il se place ──────────────────────────────────────────
+     *
+     * Il sortait en `sans_couple` : « le projecteur ne sait ancrer un enfant que sous un
+     * losange, et il n'y en a pas ». Le constat était exact, la conclusion non. La
+     * validation, elle, **créerait** ce couple — « désigner un parent crée une famille »
+     * (§ 6.4) —, et le calque existe précisément pour montrer ce que la validation ferait.
+     * Refuser de dessiner l'enfant privait le demandeur de la seule chose qu'il attend en
+     * regardant l'arbre après son dépôt.
+     *
+     * Le losange provisoire se pose donc sous le parent, comme pour un parent seul. La
+     * décision a changé de camp : elle appartient à
+     * {@see \App\Module\Tree\Service\ProjecteurDePlacement}, qui tient les arêtes et voit
+     * les provisoires — voir `testUnEnfantDUnSeulParentSAncreSurLeParent()`.
      */
-    public function testUnEnfantDUnParentSansCoupleEstEcarteSousSonPropreMotif(): void
+    public function testUnEnfantDUnParentSansCoupleSePlaceQuandMeme(): void
     {
         // `p1` est l'ego du placement de ce fichier : il est enfant de `f9`, et n'est
         // l'époux de personne.
         $prepare = $this->preparer($this->noeud('2001-'), $this->ancrage('enfant_de', 'p1'));
 
-        self::assertSame([], $prepare['noeuds']);
-        self::assertCount(1, $prepare['ecartes']);
-        self::assertSame(NoeudProposeEcarte::SANS_COUPLE, $prepare['ecartes'][0]->raison);
+        self::assertSame([], $prepare['ecartes']);
+        self::assertCount(1, $prepare['noeuds']);
+        self::assertSame(AncrageEnAttente::ENFANT_DE_PARENT, $prepare['noeuds'][0]->ancrage->genre);
+        self::assertSame(1, $prepare['noeuds'][0]->mesure->generation, 'p1 est sur la rangée 0 : son enfant est sur la 1.');
     }
 }

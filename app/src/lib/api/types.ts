@@ -425,15 +425,17 @@ export interface BoiteGraphe {
 /**
  * Une fiche proposée que le graphe **n'a pas su placer**.
  *
- * Le placement partagé ne porte que l'arbre **validé** : une fiche rattachée à
- * une autre fiche de la même demande — un enfant dont le parent est lui-même
- * proposé — n'a nulle part où s'accrocher. Elle est omise du graphe, et ce doit
- * rester ainsi : la poser faute de mieux la mettrait à `x = 0`, c'est-à-dire sur
- * l'ego.
+ * Elle est omise plutôt que posée faute de mieux : sans ancre, elle atterrirait
+ * à `x = 0`, c'est-à-dire sur l'ego. Ce qui compte, c'est qu'elle soit **dite**.
+ * `demandeId` et `brouillonRef` sont là pour que l'écran puisse l'ouvrir : la
+ * fiche reste consultable même quand le canevas ne sait pas la dessiner.
  *
- * Ce qui est nouveau, c'est qu'elle soit **dite**. `demandeId` et
- * `brouillonRef` sont là pour que l'écran puisse l'ouvrir : la fiche reste
- * consultable même quand le canevas ne sait pas la dessiner.
+ * **Le cas qui dominait cette liste n'existe plus.** Une fiche rattachée à une
+ * autre fiche de la même demande — un enfant dont le parent est lui-même proposé
+ * — tombait, parce que le serveur ne cherchait les ancres qu'une fois et
+ * seulement dans l'arbre validé. Il résout désormais par vagues : une branche
+ * proposée en bloc se place entièrement. Ce qui reste ici est ce qu'aucune vague
+ * ne rattrape — une ancre disparue, ou un enchaînement sans issue.
  */
 export interface NoeudNonPlace {
   noeudId: IdentifiantNoeud

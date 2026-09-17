@@ -2,7 +2,13 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { Demande } from '@/lib/api'
-import { grouperParCible, groupesEnConcurrence, ligneAuteur, trierDemandes } from './file'
+import {
+  grouperParCible,
+  groupesEnConcurrence,
+  ligneAuteur,
+  personneDuGroupe,
+  trierDemandes,
+} from './file'
 
 /**
  * Ce que ces tests protègent : **l'ordre du serveur, et le regroupement par
@@ -178,6 +184,63 @@ describe('les groupes en concurrence', () => {
     ])
 
     expect(groupesEnConcurrence(groupes)).toHaveLength(0)
+  })
+})
+
+/**
+ * **L'aperçu de fiche, et les trois cas où il ne s'ouvre pas.**
+ *
+ * La file dit « Modification — Jean Voulgre ». Pour juger la correction
+ * proposée, il fallait ouvrir la fiche dans un autre écran, donc perdre le
+ * filtre, le tri et sa place dans la file. Un bouton ouvre désormais l'aperçu
+ * sur place.
+ *
+ * Le piège est dans la condition. Une cible existe aussi pour une **famille**,
+ * une **citation** ou une **source** — et `GET /api/arbre/personnes/{id}` y
+ * répondrait `404`, ou pire, rendrait la fiche d'un homonyme numérique : la
+ * famille n° 17 n'est pas la personne n° 17. Un bouton qui ouvre une panne
+ * apparente vaut moins qu'un bouton absent.
+ */
+describe('l’aperçu de la fiche visée', () => {
+  it('ouvre la personne que le groupe vise', () => {
+    const groupes = grouperParCible([demande({ id: 1 })])
+
+    expect(personneDuGroupe(groupes[0]!)).toBe(17)
+  })
+
+  it('ne s’ouvre pas sur une création : la personne n’existe pas encore', () => {
+    /* Et son contenu proposé est déjà sous les yeux, dans le diff. */
+    const groupes = grouperParCible([
+      demande({ id: 1, kind: 'creation_personne', targetKind: null, targetId: null }),
+    ])
+
+    expect(personneDuGroupe(groupes[0]!)).toBeNull()
+  })
+
+  it('ne confond pas une famille avec la personne du même numéro', () => {
+    const groupes = grouperParCible([
+      demande({ id: 1, kind: 'modification_famille', targetKind: 'famille', targetId: 17 }),
+    ])
+
+    expect(personneDuGroupe(groupes[0]!)).toBeNull()
+  })
+
+  it('ne confond pas non plus une source avec une personne', () => {
+    const groupes = grouperParCible([
+      demande({ id: 1, kind: 'modification_citation', targetKind: 'citation', targetId: 17 }),
+    ])
+
+    expect(personneDuGroupe(groupes[0]!)).toBeNull()
+  })
+
+  it('rend un identifiant, jamais un booléen : « ouvert sur personne » n’existe pas', () => {
+    /* La vue tient `apercu: number | null`. Un drapeau séparé rendrait
+       représentable l'état « ouverte, mais sur qui ? ». */
+    const groupes = grouperParCible([demande({ id: 1, targetId: 55 })])
+    const ouvert = personneDuGroupe(groupes[0]!)
+
+    expect(typeof ouvert).toBe('number')
+    expect(ouvert).toBe(55)
   })
 })
 
