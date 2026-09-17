@@ -24,16 +24,53 @@ use App\Module\Proposal\Service\Port\EtatCible;
 final readonly class PlanDeValidation
 {
     /**
-     * @param list<EtatDOp>                      $ops       dans l'ordre de `seq`
-     * @param array<string, EtatCible>           $cibles    indexées par {@see EtatCible::cleDe()}
-     * @param list<array{kind: string, id: int}> $disparues lignes visées qui n'existent plus
+     * @param list<EtatDOp>                      $ops          dans l'ordre de `seq`
+     * @param array<string, EtatCible>           $cibles       indexées par {@see EtatCible::cleDe()}
+     * @param list<array{kind: string, id: int}> $disparues    lignes visées qui n'existent plus
+     * @param list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}> $dependances
+     *                                                         les fiches proposées par **d'autres** demandes
+     *                                                         que celle-ci désigne, avec leur état :
+     *                                                         `resolue`, `en_attente`, `morte` ou `disparue`
      */
     public function __construct(
         public ResolutionPrevue $resolution,
         public array $ops,
         public array $cibles,
         public array $disparues = [],
+        public array $dependances = [],
     ) {
+    }
+
+    /**
+     * Les dépendances qui **bloquent** — celles dont on attend encore la décision.
+     *
+     * Rendues à part de `dependances` parce que l'écran d'administration montre les
+     * deux différemment : une dépendance déjà résolue est une information de contexte
+     * (« s'appuie sur la demande n° 12, validée »), une dépendance en attente est la
+     * raison pour laquelle le bouton ne part pas.
+     *
+     * @return list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}>
+     */
+    public function dependancesEnAttente(): array
+    {
+        return array_values(array_filter(
+            $this->dependances,
+            static fn (array $dependance): bool => 'en_attente' === $dependance['etat'],
+        ));
+    }
+
+    /**
+     * Les dépendances qui ne se réaliseront jamais : demande refusée, retirée, caduque,
+     * ou fiche disparue. Chacune condamne celle-ci.
+     *
+     * @return list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}>
+     */
+    public function dependancesMortes(): array
+    {
+        return array_values(array_filter(
+            $this->dependances,
+            static fn (array $dependance): bool => \in_array($dependance['etat'], ['morte', 'disparue'], true),
+        ));
     }
 
     /**

@@ -10,17 +10,20 @@ use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
 use App\Module\Proposal\Entity\DraftLink;
 use App\Module\Proposal\Enum\OpKind;
+use App\Module\Proposal\Enum\RequestStatus;
 use App\Module\Proposal\Repository\ChangeRequestOpRepository;
 use App\Module\Proposal\Repository\DraftLinkRepository;
+use App\Module\Proposal\Repository\DraftPersonRepository;
 use App\Module\Proposal\Service\Port\EtatCible;
 use App\Module\Proposal\Service\Port\PortArbre;
 
 /**
  * Le contrôle préalable du § 9.4, point 2 — **aucune écriture**.
  *
- * Il répond à une seule question, et la réponse tient en quatre valeurs : cette demande
- * s'applique-t-elle telle quelle, se rejoue-t-elle, est-elle caduque, ou sa cible
- * a-t-elle disparu ?
+ * Il répond à une seule question, et la réponse tient en six valeurs : cette demande
+ * s'applique-t-elle telle quelle, se rejoue-t-elle, est-elle caduque, sa cible a-t-elle
+ * disparu, attend-elle qu'une **autre demande** soit validée d'abord, ou cette autre
+ * demande est-elle morte ?
  *
  * ── La règle, en deux temps ──────────────────────────────────────────────────────
  *
@@ -42,6 +45,15 @@ use App\Module\Proposal\Service\Port\PortArbre;
  * C'est `old_value`, stocké **par op**, qui permet de dire mieux que « la version a
  * changé ».
  *
+ * ── Les liens, qui n'ont pas d'op à confronter ──────────────────────────────────
+ *
+ * Une création ne porte **aucun op** : tout ce qu'elle affirme est dans ses liens, et
+ * ceux-ci désignent trois sortes de choses — des personnes de l'arbre, des fiches de la
+ * demande elle-même, et depuis `Version20260917190000` des fiches proposées par
+ * **d'autres demandes en attente**. Les deux premières n'ont rien de neuf à contrôler ;
+ * la troisième introduit un **ordre de validation** entre deux demandes, et c'est
+ * {@see dependancesDe()} qui le dit avant le premier clic.
+ *
  * ── La comparaison elle-même ─────────────────────────────────────────────────────
  *
  * Elle se fait sur la **forme JSON normalisée** des deux valeurs, jamais sur les objets
@@ -56,6 +68,7 @@ final readonly class AnalyseDeDemande
     public function __construct(
         private ChangeRequestOpRepository $ops,
         private DraftLinkRepository $liens,
+        private DraftPersonRepository $brouillons,
         private PortArbre $arbre,
         private NormaliseurDeValeur $normaliseur,
         private SurfaceEditable $surface,
@@ -87,9 +100,10 @@ final readonly class AnalyseDeDemande
      */
     private function verifierLesLiens(ChangeRequest $demande, PlanDeValidation $plan): PlanDeValidation
     {
+        $liens = $this->liens->pourDemande($demande);
         $disparues = $plan->disparues;
 
-        foreach ($this->liens->pourDemande($demande) as $lien) {
+        foreach ($liens as $lien) {
             foreach ($this->referencesReelles($lien) as [$kind, $id]) {
                 if (null === $this->arbre->chargerCible($kind, $id)) {
                     $disparues[] = ['kind' => $kind->value, 'id' => $id];
@@ -97,11 +111,147 @@ final readonly class AnalyseDeDemande
             }
         }
 
-        if ($disparues === $plan->disparues) {
+        $dependances = $this->dependancesDe($liens);
+
+        if ($disparues === $plan->disparues && [] === $dependances) {
             return $plan;
         }
 
-        return new PlanDeValidation(ResolutionPrevue::CibleDisparue, $plan->ops, $plan->cibles, $disparues);
+        return new PlanDeValidation(
+            $this->trancherAvecLesLiens($plan->resolution, $disparues, $dependances),
+            $plan->ops,
+            $plan->cibles,
+            $disparues,
+            $dependances,
+        );
+    }
+
+    /**
+     * La résolution, une fois les liens pris en compte.
+     *
+     * **L'ordre des tests est la règle elle-même**, et il prolonge celui de
+     * {@see trancher()} : ce qui condamne l'emporte sur ce qui fait attendre. Une
+     * dépendance en attente n'est pas un malheur — c'est un ordre de validation —, et
+     * l'annoncer alors qu'un champ a par ailleurs bougé sous les pieds de l'auteur
+     * enverrait l'administrateur attendre une autre demande pour découvrir ensuite que
+     * celle-ci était morte depuis le début.
+     *
+     * @param list<array{kind: string, id: int}>                                          $disparues
+     * @param list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}> $dependances
+     */
+    private function trancherAvecLesLiens(
+        ResolutionPrevue $resolution,
+        array $disparues,
+        array $dependances,
+    ): ResolutionPrevue {
+        if ([] !== $disparues) {
+            return ResolutionPrevue::CibleDisparue;
+        }
+
+        $mortes = array_filter(
+            $dependances,
+            static fn (array $dependance): bool => \in_array($dependance['etat'], ['morte', 'disparue'], true),
+        );
+
+        if ([] !== $mortes) {
+            return ResolutionPrevue::DependanceMorte;
+        }
+
+        if ($resolution->estCaduque()) {
+            return $resolution;
+        }
+
+        $attendues = array_filter(
+            $dependances,
+            static fn (array $dependance): bool => 'en_attente' === $dependance['etat'],
+        );
+
+        return [] === $attendues ? $resolution : ResolutionPrevue::DependanceEnAttente;
+    }
+
+    /**
+     * Les fiches proposées par **d'autres** demandes que celle-ci désigne, et l'état de
+     * chacune.
+     *
+     * C'est la moitié manquante du contrôle préalable depuis qu'une extrémité de lien
+     * peut désigner une fiche qui n'existe ni dans l'arbre ni dans la demande courante.
+     * Quatre états, et chacun mène ailleurs :
+     *
+     * | État | Ce que ça veut dire | Ce qui en découle |
+     * |---|---|---|
+     * | `resolue` | l'autre demande est validée, la personne existe | on applique, l'identifiant est connu |
+     * | `en_attente` | l'autre demande n'est pas tranchée | `dependance_en_attente` — on attend |
+     * | `morte` | refusée, retirée ou caduque | caducité : la personne ne naîtra pas |
+     * | `disparue` | la ligne `prp_draft_person` n'est plus là | caducité, pour la même raison |
+     *
+     * La lecture se fait **sans portée d'auteur** : on est au contrôle préalable d'une
+     * validation, c'est-à-dire du côté de l'administrateur, et la question n'est pas
+     * « qui a le droit de voir cette fiche » mais « cette fiche deviendra-t-elle une
+     * personne ». Le filtre du § 13.3 s'applique au dépôt, où il a un sens.
+     *
+     * @param list<DraftLink> $liens
+     *
+     * @return list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}>
+     */
+    private function dependancesDe(array $liens): array
+    {
+        $vues = [];
+        $dependances = [];
+
+        foreach ($liens as $lien) {
+            $references = [
+                $lien->getSubjectDraftPersonId(),
+                $lien->getOtherDraftPersonId(),
+                $lien->getOther2DraftPersonId(),
+            ];
+
+            foreach ($references as $id) {
+                // Une même fiche peut être désignée par plusieurs liens — père de l'un,
+                // conjoint de l'autre. On ne la compte qu'une fois : l'écran de décision
+                // afficherait sinon trois fois la même phrase.
+                if (null === $id || isset($vues[$id])) {
+                    continue;
+                }
+
+                $vues[$id] = true;
+                $dependances[] = $this->etatDeLaDependance($id);
+            }
+        }
+
+        return $dependances;
+    }
+
+    /** @return array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string} */
+    private function etatDeLaDependance(int $draftPersonId): array
+    {
+        $brouillon = $this->brouillons->find($draftPersonId);
+
+        if (null === $brouillon) {
+            return [
+                'draftPersonId' => $draftPersonId,
+                'demandeId' => null,
+                // Le libellé ne peut pas être relu : la ligne n'est plus là. Le laisser
+                // vide plutôt que d'inventer « personne n° 3 » — un numéro de ligne
+                // interne n'apprend rien à l'auteur qui lira la notification.
+                'libelle' => '',
+                'etat' => 'disparue',
+            ];
+        }
+
+        $autre = $brouillon->getRequest();
+
+        $etat = match (true) {
+            null !== $brouillon->getResolvedPersonId() => 'resolue',
+            RequestStatus::EnAttente === $autre->getStatus() => 'en_attente',
+            default => 'morte',
+        };
+
+        return [
+            'draftPersonId' => $draftPersonId,
+            'demandeId' => $autre->getId(),
+            'libelle' => $brouillon->nomPropose(),
+            'etat' => $etat,
+        ];
     }
 
     /**

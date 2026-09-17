@@ -182,9 +182,9 @@ final readonly class LectureDesPropositions implements CalqueEnAttenteInterface
                 $demandeId,
                 $lien->getSeq(),
                 $lien->getKind()->value,
-                $this->extremite($demandeId, $lien->getSubjectPersonId(), $lien->getSubjectDraftRef()) ?? '',
-                $this->extremite($demandeId, $lien->getOtherPersonId(), $lien->getOtherDraftRef()),
-                $this->extremite($demandeId, $lien->getOther2PersonId(), $lien->getOther2DraftRef()),
+                $this->extremite($demandeId, $lien->getSubjectPersonId(), $lien->getSubjectDraftRef(), $lien->getSubjectDraftPersonId()) ?? '',
+                $this->extremite($demandeId, $lien->getOtherPersonId(), $lien->getOtherDraftRef(), $lien->getOtherDraftPersonId()),
+                $this->extremite($demandeId, $lien->getOther2PersonId(), $lien->getOther2DraftRef(), $lien->getOther2DraftPersonId()),
                 $familleId,
                 $provisoire,
                 LinkKind::ConjointDe === $lien->getKind() && $lien->isDivorced(),
@@ -198,17 +198,57 @@ final readonly class LectureDesPropositions implements CalqueEnAttenteInterface
      * Un identifiant de nœud pour une extrémité de lien : `p55` si la personne existe,
      * `#12/p1` si elle est proposée.
      *
-     * Les deux colonnes sont mutuellement exclusives en base (`ck_prp_link_cible`) ; on
+     * Les trois colonnes sont mutuellement exclusives en base (`ck_prp_link_cible`) ; on
      * rend `null` quand aucune n'est renseignée, ce qui est le cas légitime d'une
      * filiation désignant un couple existant.
+     *
+     * ── La fiche proposée par une **autre** demande ─────────────────────────────────
+     *
+     * Elle se nomme avec **la demande qui la propose**, pas avec celle qui la désigne :
+     * `#12/p1` reste `#12/p1` vu de la demande 13. C'est exactement ce qui fait que
+     * l'arête se referme dans le graphe — les deux nœuds proposés portent le même
+     * identifiant de part et d'autre, et le rendu les relie sans savoir qu'ils viennent
+     * de deux demandes.
+     *
+     * Si cette autre demande a été validée entre-temps, la fiche porte son
+     * `resolved_person_id` et le nœud désigné est la **personne réelle** : le graphe
+     * montre alors une proposition rattachée à quelqu'un qui existe, ce qui est
+     * précisément l'état des choses.
      */
-    private function extremite(int $demandeId, ?int $personId, ?string $draftRef): ?string
+    private function extremite(int $demandeId, ?int $personId, ?string $draftRef, ?int $brouillonId = null): ?string
     {
         if (null !== $personId) {
             return 'p'.$personId;
         }
 
-        return null === $draftRef ? null : $this->noeudDeBrouillon($demandeId, $draftRef);
+        if (null !== $draftRef) {
+            return $this->noeudDeBrouillon($demandeId, $draftRef);
+        }
+
+        if (null === $brouillonId) {
+            return null;
+        }
+
+        $brouillon = $this->brouillons->find($brouillonId);
+
+        if (null === $brouillon) {
+            // La fiche citée a disparu avec sa demande. L'arête n'a plus d'extrémité, et
+            // c'est au moteur de placement d'en faire un nœud écarté plutôt qu'à ce
+            // service d'inventer un identifiant. La caducité, elle, sera prononcée au
+            // contrôle préalable ({@see AnalyseDeDemande}) — ici on ne fait que dessiner.
+            return null;
+        }
+
+        $resolue = $brouillon->getResolvedPersonId();
+
+        if (null !== $resolue) {
+            return 'p'.$resolue;
+        }
+
+        return $this->noeudDeBrouillon(
+            $brouillon->getRequest()->getId() ?? 0,
+            $brouillon->getLocalRef(),
+        );
     }
 
     /**
