@@ -96,6 +96,11 @@ final readonly class ArbreNonBranche implements PortArbre
         throw new \LogicException(self::MESSAGE);
     }
 
+    public function epouxDeFamille(int $familleId): array
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
     public function porterUnion(int $familleId, UncertainDate $mariage, bool $divorce, UncertainDate $rupture): void
     {
         throw new \LogicException(self::MESSAGE);

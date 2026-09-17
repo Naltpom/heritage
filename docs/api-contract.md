@@ -1910,9 +1910,11 @@ prend pour cible le sujet du **premier** lien, ce qui se trompe sur le geste le 
 cet écran : « ajouter un frère à Untel » s'écrit « ce frère est enfant du couple de ses
 parents », dont le **sujet est le frère**. La demande apparaîtrait alors dans la file
 d'administration sur la fiche du frère, alors que le contributeur travaillait sur celle
-d'Untel. La cible annoncée doit être **une des personnes que les liens désignent**, sinon
-`422` — sans quoi `targetId` serait un champ libre permettant de faire apparaître n'importe
-quelle demande sur n'importe quelle fiche.
+d'Untel. La cible annoncée doit être **une des personnes que les liens touchent** — celles
+qu'une extrémité nomme, **et les époux des couples désignés par `familyId`** —, sinon `422`.
+Sans ce contrôle, `targetId` serait un champ libre permettant de faire apparaître n'importe
+quelle demande sur n'importe quelle fiche ; sans les époux, il interdirait précisément le cas
+qui l'a motivé, la fratrie ne citant pas la fiche d'où l'on vient.
 
 Une fratrie n'est **pas** une nature de lien : `LinkKind` en compte trois, « ni plus ni moins »
 (§ 9.3 du modèle). Elle s'écrit « enfant du même couple » — `enfant_de` + `familyId` —, ce qui

@@ -367,6 +367,36 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         return new LigneCreee($id, $this->libelleDuCouple($famille));
     }
 
+    /**
+     * Les époux d'une famille — au plus deux, parfois un seul, jamais `null`.
+     *
+     * Le motif de cette lecture est dans l'interface : elle sert au contrôle de la cible
+     * annoncée d'une demande `ajout_lien`, dont le geste « ajouter un frère » ne cite pas
+     * la fiche sur laquelle il porte.
+     *
+     * @return list<int>
+     */
+    public function epouxDeFamille(int $familleId): array
+    {
+        $famille = $this->em->find(Family::class, $familleId);
+
+        if (!$famille instanceof Family) {
+            return [];
+        }
+
+        $identifiants = [];
+
+        foreach ([$famille->getHusband(), $famille->getWife()] as $epoux) {
+            $id = $epoux?->getId();
+
+            if (null !== $id) {
+                $identifiants[] = $id;
+            }
+        }
+
+        return $identifiants;
+    }
+
     public function porterUnion(int $familleId, UncertainDate $mariage, bool $divorce, UncertainDate $rupture): void
     {
         $famille = $this->em->find(Family::class, $familleId);

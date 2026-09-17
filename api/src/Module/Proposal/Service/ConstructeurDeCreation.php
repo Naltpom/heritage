@@ -357,8 +357,10 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         //
         // Le contrôle d'appartenance n'est pas décoratif : sans lui, `targetId` serait
         // un champ libre permettant de faire apparaître n'importe quelle demande sur
-        // n'importe quelle fiche de la file.
-        $annoncee = $this->cibleAnnoncee($corps, $this->personnesCitees($brut));
+        // n'importe quelle fiche de la file. Il compte **les époux des couples
+        // désignés** autant que les extrémités nommées — sans quoi il interdirait
+        // précisément le cas qui l'a motivé, la fratrie n'y citant pas la fiche.
+        $annoncee = $this->cibleAnnoncee($corps, $this->personnesTouchees($brut));
 
         $sujet = $annoncee ?? $premierSujetReel;
 
@@ -369,16 +371,16 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
     }
 
     /**
-     * `targetId` du corps, **s'il désigne une personne que les liens citent**.
+     * `targetId` du corps, **s'il désigne une personne que les liens touchent**.
      *
      * `targetKind` est refusé s'il vaut autre chose que `personne` : un `ajout_lien` ne
      * relie que des personnes, et laisser passer une autre portée écrirait dans la file
      * une cible qu'aucun écran ne sait ouvrir.
      *
      * @param array<string, mixed> $corps
-     * @param list<int>            $citees
+     * @param list<int>            $touchees
      */
-    private function cibleAnnoncee(array $corps, array $citees): ?int
+    private function cibleAnnoncee(array $corps, array $touchees): ?int
     {
         $kind = $corps['targetKind'] ?? null;
 
@@ -396,7 +398,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             throw DonneesInvalides::pourChamp('targetId', 'L\'identifiant de la cible est un entier.');
         }
 
-        if (!\in_array($id, $citees, true)) {
+        if (!\in_array($id, $touchees, true)) {
             throw DonneesInvalides::pourChamp('targetId', 'La cible annoncée n\'est pas une des personnes que ces liens désignent.');
         }
 
@@ -404,21 +406,30 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
     }
 
     /**
-     * Les personnes **de l'arbre** que ce corps de liens désigne, toutes extrémités
-     * confondues.
+     * Les personnes **de l'arbre** que ce corps de liens touche : celles qu'une extrémité
+     * désigne, **et les époux des couples désignés**.
+     *
+     * ── Pourquoi les époux comptent ────────────────────────────────────────────────
+     *
+     * Parce que le geste le plus courant de l'écran des liens de parenté ne cite pas la
+     * fiche sur laquelle il porte. « Ajouter un frère à Untel » s'écrit « ce frère est
+     * enfant du couple de ses parents » : le sujet est **le frère**, l'autre extrémité
+     * est une `family_id`, et Untel n'apparaît nulle part. Sans cette lecture, annoncer
+     * Untel en cible serait refusé — c'est-à-dire que le contrôle interdirait le seul
+     * cas pour lequel `targetId` a été ajouté.
      *
      * Lu sur le corps et non sur les entités construites : le contrôle porte sur ce que
      * l'appelant a écrit, et c'est la seule chose dont il soit comptable. Les valeurs
      * qui ne sont pas des entiers sont ignorées ici — elles ont déjà été refusées, une
-     * par une, par {@see extremite()}.
+     * par une, par {@see extremite()} et {@see designerLAutreExtremite()}.
      *
      * @param array<mixed> $liens
      *
      * @return list<int>
      */
-    private function personnesCitees(array $liens): array
+    private function personnesTouchees(array $liens): array
     {
-        $citees = [];
+        $touchees = [];
 
         foreach ($liens as $lien) {
             if (!\is_array($lien)) {
@@ -429,12 +440,20 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
                 $valeur = $lien[$cle] ?? null;
 
                 if (\is_int($valeur)) {
-                    $citees[] = $valeur;
+                    $touchees[] = $valeur;
+                }
+            }
+
+            $famille = $lien['familyId'] ?? null;
+
+            if (\is_int($famille)) {
+                foreach ($this->arbre->epouxDeFamille($famille) as $epoux) {
+                    $touchees[] = $epoux;
                 }
             }
         }
 
-        return array_values(array_unique($citees));
+        return array_values(array_unique($touchees));
     }
 
     /**
