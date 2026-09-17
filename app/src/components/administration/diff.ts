@@ -71,8 +71,45 @@ export function libelleDeChamp(field: string): string {
 
 /** Ce qu'on affiche à la place d'une valeur vide. */
 const VIDE = '(vide)'
-/** Ce qu'on affiche quand la valeur est là mais illisible sans la recomposer. */
-const INDISPONIBLE = '(date non formatée par le serveur)'
+/**
+ * Ce qu'on affiche quand la valeur est un objet dont on ne sait rien dire.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **Ce message disait « date » et il a menti.** Il a été écrit quand le seul op
+ * à valeur-objet était un bloc date, et il est resté quand `ajout_note` et
+ * `ajout_citation` en ont apporté deux autres. Résultat, sur la demande 592 en
+ * production : une note de quarante lignes, parfaitement enregistrée, s'affichait
+ * « (date non formatée par le serveur) » — un message faux, sur un objet qui
+ * n'était pas une date, pour un défaut qui n'existait pas côté serveur.
+ *
+ * Il ne nomme donc plus de forme. Et il ne doit plus jamais être atteint par une
+ * valeur qu'on sait lire : la règle est d'ajouter une branche à
+ * {@link formaterValeur} en même temps qu'un `ValueKind` à valeur-objet.
+ * ────────────────────────────────────────────────────────────────────
+ */
+const INDISPONIBLE = '(valeur que cet écran ne sait pas encore afficher)'
+
+/** Les portées de note et de citation, en français. `generale` ne s'affiche pas :
+ *  c'est le défaut, et l'annoncer ajouterait du bruit à chaque ligne. */
+const LIBELLES_DE_PORTEE: Record<string, string> = {
+  naissance: 'naissance',
+  deces: 'décès',
+  mariage: 'mariage',
+  profession: 'profession',
+  residence: 'résidence',
+  source: 'source',
+}
+
+function chaineNonVide(valeur: unknown): string | null {
+  return typeof valeur === 'string' && valeur.trim().length > 0 ? valeur.trim() : null
+}
+
+/** « … (sur la naissance) », ou rien du tout. */
+function mentionDePortee(scope: unknown): string {
+  const brut = chaineNonVide(scope)
+  if (brut === null || brut === 'generale') return ''
+  return ` (sur ${LIBELLES_DE_PORTEE[brut] ?? brut})`
+}
 
 function estObjet(valeur: unknown): valeur is Record<string, unknown> {
   return typeof valeur === 'object' && valeur !== null && !Array.isArray(valeur)
@@ -97,11 +134,40 @@ export function formaterValeur(valeur: ValeurOp | undefined): string {
   }
 
   if (estObjet(valeur)) {
-    const texte = valeur['texte']
-    if (typeof texte === 'string' && texte.length > 0) return texte
-    const brut = valeur['raw']
-    if (typeof brut === 'string' && brut.length > 0) return brut
+    // ── Un bloc date ───────────────────────────────────────────────────────
+    // `texte` d'abord — le libellé du serveur —, puis `raw`, la chaîne source.
     // On ne descend **pas** dans `min` / `max` : voir l'en-tête de ce fichier.
+    const texte = chaineNonVide(valeur['texte'])
+    if (texte !== null) return texte
+    const brut = chaineNonVide(valeur['raw'])
+    if (brut !== null) return brut
+
+    // ── Une note (`ajout_note`) : `{body, scope}` ──────────────────────────
+    // Le corps s'affiche **entier**. C'est ce que l'administrateur doit lire
+    // pour décider, et une note de recherche fait volontiers quarante lignes —
+    // la tronquer ici reviendrait à lui demander de valider ce qu'il ne voit
+    // pas. Le gabarit s'occupe de l'enrouler.
+    const corps = chaineNonVide(valeur['body'])
+    if (corps !== null) return corps + mentionDePortee(valeur['scope'])
+
+    // ── Une citation (`ajout_citation`) ────────────────────────────────────
+    // Le titre vient de la **ligne** de source, pas du corps de la demande :
+    // c'est le serveur qui l'a recopié, précisément pour que le diff dise ce
+    // qui sera réellement écrit. On ne remonte donc jamais `sourceId` seul —
+    // un numéro ne se relit pas.
+    const titre = chaineNonVide(valeur['sourceTitle'])
+    if (titre !== null) {
+      const page = chaineNonVide(valeur['page'])
+      const extrait = chaineNonVide(valeur['dataText'])
+      return [
+        page === null ? titre : `${titre}, ${page}`,
+        extrait === null ? null : `« ${extrait} »`,
+      ]
+        .filter((part): part is string => part !== null)
+        .join(' — ')
+        .concat(mentionDePortee(valeur['scope']))
+    }
+
     return INDISPONIBLE
   }
 

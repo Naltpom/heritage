@@ -1627,7 +1627,8 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `GET` | `/api/demandes/brouillons/recherche` | `MEMBRE` | `?q=&limite=` | `200` § 6.6 bis | `422` (`q` < 2) | — |
 | `GET` | `/api/demandes/brouillons/{brouillonId}` | `MEMBRE` | — | `200` une ligne du § 6.6 bis | `404` | — |
 | `GET` | `/api/demandes/historique/{subjectKind}/{subjectId}` | `ATTENTE` | `?page=&parPage=` | `200` liste paginée | `404` | — |
-| `GET` | `/api/administration/demandes` | `ADMIN` | `?status=&kind=&targetId=&page=` | `200` liste paginée | — | — |
+| `GET` | `/api/administration/demandes` | `ADMIN` | `?status=&kind=&targetId=&auteur=&page=` | `200` liste paginée | — | — |
+| `GET` | `/api/administration/demandes/auteurs` | `ADMIN` | — | `200` `{elements}` | — | — |
 | `GET` | `/api/administration/demandes/{id}` | `ADMIN` | — | `200` § 6.7 | `404` | — |
 | `POST` | `/api/administration/demandes/{id}/valider` | `ADMIN` | *(vide)* | `200` § 6.8 | **`409` × 6 (§ 6.8)** · `404` · `409` `vue_comme_membre_active` | — |
 | `POST` | `/api/administration/demandes/{id}/refuser` | `ADMIN` | `{message, doublonDeId?}` | `200` demande (`refusee`) | `422` `donnees_invalides` · `409` `demande_deja_decidee` · `409` `vue_comme_membre_active` | — |
@@ -2586,6 +2587,37 @@ autre membre, jamais `403`.
 `GET /api/administration/demandes?status=en_attente` — triée par `submittedAt` croissant
 (`idx_prp_request_file`), **regroupée par personne** côté affichage : l'API rend
 `targetKind`/`targetId`, le front groupe (ADR 0004).
+
+| Paramètre | Défaut | Valeurs |
+|---|---|---|
+| `status` | tous | `en_attente`, `validee`, `refusee`, `caduque`, `brouillon`, `annulee` |
+| `kind` | tous | les valeurs de `RequestKind` |
+| `targetId` | toutes | un `tree_person.id` |
+| `auteur` | tout le monde | un `authorUserId` |
+| `page`, `parPage` | 1, 25 (max 100) | § 1.5 |
+
+Les filtres se posent **sur la même requête**, jamais l'un après l'autre en mémoire :
+`total` doit compter ce que la liste montre, sans quoi la pagination ment.
+
+#### `GET /api/administration/demandes/auteurs`
+
+Les auteurs qui ont **réellement déposé** quelque chose, pour peupler le filtre.
+
+```json
+{ "elements": [ { "userId": 3, "libelle": "Opale Romarin" } ] }
+```
+
+> **Une route à part, et non une clé de plus sur la file.** Le § 1.5 fixe l'enveloppe
+> d'une liste paginée à quatre clés, et `FileEtDiffEnHttpTest` la tient « sans une clé
+> de plus » : une enveloppe de liste qui varie selon l'écran cesse d'être une enveloppe
+> de liste. Le premier jet l'y avait glissée ; le test l'a refusée, et il avait raison.
+>
+> Ce n'est pas non plus `GET /api/administration/utilisateurs` : celle-là porte **tous**
+> les comptes, y compris ceux qui n'ont jamais rien proposé, et un sélecteur où presque
+> toutes les entrées ne donnent aucun résultat est un sélecteur qu'on n'ouvre plus.
+>
+> Elle ne prend **aucun filtre** : changer de statut ne doit pas faire disparaître sous
+> le doigt l'auteur qu'on venait de choisir.
 
 `GET /api/administration/demandes/14` ajoute au § 6.5 tout ce qu'il faut pour décider :
 

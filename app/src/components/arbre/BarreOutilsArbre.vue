@@ -13,6 +13,7 @@
  * un filtre qui marche et ne trouve rien. Le survol dit pourquoi.
  */
 import { ref } from 'vue'
+import { useEstMobile } from '@/composables/useTiroirs'
 import type { DefinitionFiltre, IdFiltre } from './graphe'
 
 const { filtres, disponibles, actif, resultat, tronque, chargement } = defineProps<{
@@ -34,7 +35,41 @@ const emit = defineEmits<{
 
 const question = defineModel<string>({ required: true })
 
+/**
+ * Le recadrage automatique sur les résultats.
+ *
+ * `defineModel` nommé plutôt qu'un couple prop/emit : c'est une case à cocher,
+ * et l'état vit dans la vue comme tout le reste de cette barre — elle émet, elle
+ * ne retient rien.
+ *
+ * **Pourquoi elle est offerte et non imposée.** Un recadrage déplace la vue.
+ * Quelqu'un qui explore une branche et cherche des noms au passage veut parfois
+ * garder son cadrage ; le bouton « Cadrer » et la touche `Entrée` restent là
+ * pour lui. Mais le défaut est coché, parce que marquer des fiches qu'on ne voit
+ * pas n'apprend rien.
+ */
+const recadrageAuto = defineModel<boolean>('recadrageAuto', { required: true })
+
 const champ = ref<HTMLInputElement | null>(null)
+
+/**
+ * Sur téléphone, le champ de recherche **sort du tiroir**.
+ *
+ * Un tiroir fermé est en `display: none` : le CSS seul ne peut donc pas en faire
+ * sortir quoi que ce soit, il faut déplacer l'élément dans le DOM, et c'est
+ * exactement ce que fait `<Teleport>`. Le champ est **rendu une seule fois** —
+ * deux champs auraient deux valeurs, deux fois le même `id`, et
+ * `focusRecherche()` ne saurait plus lequel viser.
+ *
+ * Pourquoi lui et pas les pastilles : chercher est le geste qu'on répète, et
+ * qu'on veut voir. Filtrer sur « vérifiées » ou « sans source » se fait une
+ * fois, et peut attendre dans le tiroir.
+ *
+ * `disabled` à l'inverse d'`estMobile` : hors téléphone le téléportage ne
+ * s'applique pas et le champ reste à sa place d'origine, dans la barre. Un rendu
+ * SSR donne `false`, donc la forme large — celle qui ne déplace rien.
+ */
+const estMobile = useEstMobile()
 
 function focusRecherche(): void {
   champ.value?.focus()
@@ -58,20 +93,36 @@ defineExpose({ focusRecherche })
 <template>
   <div
     class="flex flex-wrap items-center gap-3 border-b border-ligne bg-panneau px-4 py-2 max-md:flex-col max-md:items-stretch max-md:gap-2 max-md:border-b-0 max-md:bg-transparent max-md:px-0 max-md:py-0"
-    role="search"
+    role="group"
+    aria-label="Filtres de l’arbre"
   >
-    <label class="lecteur-ecran" for="arbre-recherche">Chercher une personne</label>
-    <input
-      id="arbre-recherche"
-      ref="champ"
-      v-model="question"
-      type="search"
-      class="min-w-[150px] flex-[0_1_250px] rounded-champ border border-ligne bg-fond px-2.5 py-1 text-[13px] text-texte"
-      placeholder="Chercher un nom, une date, un lieu…"
-      autocomplete="off"
-      spellcheck="false"
-      @keydown="surTouche"
-    />
+    <Teleport to="#recherche-arbre-mobile" :disabled="!estMobile">
+      <div
+        class="flex items-center gap-2 max-md:w-full max-md:border-t max-md:border-ligne max-md:bg-panneau max-md:px-4 max-md:py-2 md:contents"
+        role="search"
+      >
+        <label class="lecteur-ecran" for="arbre-recherche">Chercher une personne</label>
+        <input
+          id="arbre-recherche"
+          ref="champ"
+          v-model="question"
+          type="search"
+          class="min-w-[150px] flex-[0_1_250px] rounded-champ border border-ligne bg-fond px-2.5 py-1 text-[13px] text-texte max-md:min-w-0 max-md:flex-1 max-md:py-2"
+          placeholder="Chercher un nom, une date, un lieu…"
+          autocomplete="off"
+          spellcheck="false"
+          @keydown="surTouche"
+        />
+        <span
+          v-if="estMobile"
+          class="min-w-[74px] text-right text-xs font-semibold text-accent"
+          aria-live="polite"
+        >
+          <template v-if="chargement">…</template>
+          <template v-else>{{ resultat }}</template>
+        </span>
+      </div>
+    </Teleport>
 
     <button
       v-for="f in filtres"
@@ -104,11 +155,19 @@ defineExpose({ focusRecherche })
       Tout afficher
     </button>
 
-    <span class="min-w-[74px] text-xs font-semibold text-accent" aria-live="polite">
+    <span class="min-w-[74px] text-xs font-semibold text-accent max-md:hidden" aria-live="polite">
       <template v-if="chargement">…</template>
       <template v-else>{{ resultat }}</template>
       <span v-if="tronque" class="font-normal text-attenue"> (liste plafonnée)</span>
     </span>
+
+    <label
+      class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-attenue hover:text-texte"
+      title="Cadrer la vue sur les fiches trouvées dès que la recherche aboutit"
+    >
+      <input v-model="recadrageAuto" type="checkbox" class="cursor-pointer accent-accent" />
+      Suivre la recherche
+    </label>
 
     <span class="flex-auto max-md:hidden"></span>
 

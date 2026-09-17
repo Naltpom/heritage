@@ -445,10 +445,17 @@ export function lireDemande(id: number): Promise<Demande> {
  * Triée par `submittedAt` **croissant** côté serveur : la plus ancienne en
  * premier, parce qu'une file se prend par le début.
  */
+/** Un auteur qui a réellement déposé quelque chose, pour peupler le filtre. */
+export interface AuteurDeLaFile {
+  userId: number
+  libelle: string
+}
+
 export function listerDemandesAdministration(options: {
   status?: StatutDemande | undefined
   kind?: NatureDemande | undefined
   targetId?: number | undefined
+  auteur?: number | undefined
   page?: number | undefined
   parPage?: number | undefined
 }): Promise<ListePaginee<Demande>> {
@@ -457,10 +464,22 @@ export function listerDemandesAdministration(options: {
       status: options.status,
       kind: options.kind,
       targetId: options.targetId,
+      auteur: options.auteur,
       page: options.page,
       parPage: options.parPage,
     },
   })
+}
+
+/**
+ * `GET /api/administration/demandes/auteurs` — qui a déposé quelque chose.
+ *
+ * Une route à part, et non une clé de plus sur la file : le § 1.5 fixe
+ * l'enveloppe d'une liste paginée à quatre clés, et un test la tient « sans une
+ * clé de plus ».
+ */
+export function listerAuteursDesDemandes(): Promise<{ elements: readonly AuteurDeLaFile[] }> {
+  return requeteApi<{ elements: readonly AuteurDeLaFile[] }>('/administration/demandes/auteurs')
 }
 
 /** `GET /api/administration/demandes/{id}` — le § 6.5 plus de quoi décider. */

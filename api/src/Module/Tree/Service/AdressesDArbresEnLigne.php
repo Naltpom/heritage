@@ -170,7 +170,7 @@ final class AdressesDArbresEnLigne
 
     /**
      * ═══════════════════════════════════════════════════════════════════════════
-     * **CETTE ADRESSE DÉSIGNE-T-ELLE LA FICHE D'UN ARBRE, ET NON UN RELEVÉ ?**
+     * **CETTE ADRESSE DÉSIGNE-T-ELLE LA FICHE D'UN ARBRE, ET NON UN RELEVÉ ?**.
      *
      * Plus stricte que {@see estUnArbreEnLigne()}, et les deux ne servent pas à la même
      * chose. Celle-ci ne répond `true` que pour une adresse dont le **chemin** montre

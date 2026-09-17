@@ -27,7 +27,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * un arbre généalogique se réparait donc **à la main en base** : un `DELETE` écrit dans un
  * client SQL, sans demande, sans motif, sans révision, et sans personne pour relire. C'est
  * le seul chemin d'écriture qui contournait le mécanisme, et l'en-tête de
- * {@see \App\Module\Proposal\Entity\ChangeRequest} dit qu'il ne doit pas en exister.
+ * {@see ChangeRequest} dit qu'il ne doit pas en exister.
  *
  * Deux doublons ont déjà été traités ainsi sur ce projet. L'un avait détaché six
  * générations.
@@ -219,10 +219,7 @@ final readonly class ConstructeurDeSuppressionDePersonne implements Constructeur
             return;
         }
 
-        throw new DonneesInvalides(
-            ['targetId' => implode(' ', $inventaire->raisonsDuBlocage())],
-            'Cette fiche ne peut pas être supprimée en l\'état.',
-        );
+        throw new DonneesInvalides(['targetId' => implode(' ', $inventaire->raisonsDuBlocage())], 'Cette fiche ne peut pas être supprimée en l\'état.');
     }
 
     /**

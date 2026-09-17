@@ -90,7 +90,7 @@ interface AnnuaireDesMembresInterface
 
     /**
      * ═══════════════════════════════════════════════════════════════════════════
-     * **CE QUI, CÔTÉ COMPTES, DÉPEND D'UNE FICHE DE L'ARBRE.**
+     * **CE QUI, CÔTÉ COMPTES, DÉPEND D'UNE FICHE DE L'ARBRE.**.
      *
      * La cinquième question, et la première qui ne serve pas un écran : elle sert un
      * **refus**. `Proposal` la pose avant d'accepter une demande de suppression de fiche.

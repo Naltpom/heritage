@@ -191,6 +191,96 @@ describe('les dates ne s’aplatissent pas', () => {
   })
 })
 
+describe('une note et une citation ne sont pas des dates', () => {
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * LE DÉFAUT, CONSTATÉ EN PRODUCTION SUR LA DEMANDE 592.
+   *
+   * Le rendu d'une valeur-objet avait été écrit quand la seule valeur-objet
+   * était un bloc date : `texte`, sinon `raw`, sinon « (date non formatée par
+   * le serveur) ». Puis `ajout_note` et `ajout_citation` sont arrivés avec deux
+   * autres formes d'objet, et personne n'est revenu ici.
+   *
+   * Conséquence : une note de recherche de quarante lignes, enregistrée sans le
+   * moindre problème, s'affichait à l'administrateur comme un défaut de
+   * formatage de date. Le message était faux sur trois points — ce n'était pas
+   * une date, il n'y avait pas de défaut, et le serveur n'y était pour rien —
+   * et il portait sur le seul contenu que l'administrateur devait lire pour
+   * décider.
+   *
+   * Ce que ces cas tiennent : chaque forme à valeur-objet s'affiche, et le
+   * repli ne nomme plus jamais « date ».
+   * ════════════════════════════════════════════════════════════════════════
+   */
+
+  it('affiche le corps d’une note, et non un message d’erreur', () => {
+    const rendu = formaterValeur({ body: 'Le troisième volume n’est pas Montignac.', scope: 'generale' } as never)
+
+    expect(rendu).toBe('Le troisième volume n’est pas Montignac.')
+  })
+
+  it('affiche le corps entier : une note de recherche ne se tronque pas', () => {
+    /* C'est ce que l'administrateur lit pour décider. Le tronquer reviendrait à
+       lui demander de valider ce qu'il ne voit pas. */
+    const corps = 'A'.repeat(4000)
+
+    expect(formaterValeur({ body: corps, scope: 'generale' } as never)).toHaveLength(4000)
+  })
+
+  it('dit la portée d’une note quand ce n’est pas la portée générale', () => {
+    expect(formaterValeur({ body: 'Acte retrouvé.', scope: 'naissance' } as never)).toBe(
+      'Acte retrouvé. (sur naissance)',
+    )
+  })
+
+  it('tait la portée générale, qui est le défaut et n’apprend rien', () => {
+    expect(formaterValeur({ body: 'Acte retrouvé.', scope: 'generale' } as never)).not.toContain('sur')
+  })
+
+  it('affiche une citation par son titre de source, sa page et son extrait', () => {
+    const rendu = formaterValeur({
+      sourceId: 12,
+      sourceTitle: 'Collection communale 1743-1790',
+      page: 'vue 140',
+      quay: 3,
+      dataText: 'sépulture de Pierre Voulgre',
+      scope: 'deces',
+    } as never)
+
+    expect(rendu).toBe(
+      'Collection communale 1743-1790, vue 140 — « sépulture de Pierre Voulgre » (sur décès)',
+    )
+  })
+
+  it('ne remonte jamais un identifiant de source seul : un numéro ne se relit pas', () => {
+    const rendu = formaterValeur({ sourceId: 12, sourceTitle: 'Registre paroissial' } as never)
+
+    expect(rendu).toBe('Registre paroissial')
+    expect(rendu).not.toContain('12')
+  })
+
+  it('ne dit plus jamais « date » quand il ne sait pas lire une valeur', () => {
+    /*
+     * LA GARDE. Le repli d'origine nommait une forme — « date » — qu'il n'avait
+     * aucun moyen de connaître. Un message de repli ne doit pas affirmer ce
+     * qu'il ignore : c'est ce qui a envoyé chercher un défaut de formatage de
+     * date là où il n'y avait qu'un type d'op non prévu par cet écran.
+     */
+    const rendu = formaterValeur({ uneFormeInconnue: true } as never)
+
+    expect(rendu).not.toContain('date')
+    expect(rendu).toContain('affich')
+  })
+
+  it('laisse un bloc date passer avant tout le reste', () => {
+    /* L'ordre compte : un bloc date porte `texte`, et c'est lui qui gagne même
+       si une clé d'une autre forme venait à coexister. */
+    const rendu = formaterValeur({ texte: 'entre 1901 et 1909', body: 'à ne pas lire' } as never)
+
+    expect(rendu).toBe('entre 1901 et 1909')
+  })
+})
+
 describe('le nom du champ, pour quelqu’un qui n’est pas technicien', () => {
   it('laisse la main au libellé du serveur quand il existe', () => {
     // Il porte le contexte et les valeurs déjà formatées : le front ne réécrit

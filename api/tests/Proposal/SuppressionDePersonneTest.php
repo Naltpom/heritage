@@ -106,7 +106,7 @@ final class SuppressionDePersonneTest extends BaseDeDemandes
 
     /**
      * ═══════════════════════════════════════════════════════════════════════════
-     * **L'op porte l'inventaire de ce qu'elle emporte, et `newValue` vaut `null`.**
+     * **L'op porte l'inventaire de ce qu'elle emporte, et `newValue` vaut `null`.**.
      *
      * C'est l'exact miroir d'une création. L'« avant » n'est pas la valeur d'un champ mais
      * le décompte de ce qui disparaîtra, et c'est lui que le contrôle préalable comparera
@@ -405,7 +405,7 @@ final class SuppressionDePersonneTest extends BaseDeDemandes
 
     /**
      * ═══════════════════════════════════════════════════════════════════════════
-     * **Une suppression caduque se refait, et le corps rendu est redéposable tel quel.**
+     * **Une suppression caduque se refait, et le corps rendu est redéposable tel quel.**.
      *
      * C'est ce qui empêche la caducité d'être une contribution perdue — « un membre dont
      * la première contribution se perd n'en dépose pas de seconde » (§ 9.6).

@@ -20,7 +20,9 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import {
+  listerAuteursDesDemandes,
   listerDemandesAdministration,
+  type AuteurDeLaFile,
   type Demande,
   type StatutDemande,
 } from '@/lib/api'
@@ -65,6 +67,13 @@ const LIBELLES_HORS_PASTILLE: Record<string, string> = {
 }
 
 const etat = ref<StatutDemande | ''>('en_attente')
+/** Le filtre par demandeur. `0` vaut « tout le monde », la même convention que
+ *  le serveur : un `authorUserId` est toujours strictement positif. */
+const auteur = ref(0)
+/** Les auteurs qui ont réellement déposé. Servie par la file elle-même, et non
+ *  par la liste des utilisateurs : un sélecteur où presque toutes les entrées ne
+ *  donnent aucun résultat est un sélecteur qu'on n'ouvre plus. */
+const auteurs = ref<readonly AuteurDeLaFile[]>([])
 /** Le défaut reprend l'ordre du serveur : la plus ancienne en premier. */
 const tri = ref<SensDeTri>('anciennes')
 const demandes = ref<Demande[]>([])
@@ -88,6 +97,7 @@ async function charger(): Promise<void> {
   try {
     const liste = await listerDemandesAdministration({
       status: etat.value === '' ? undefined : etat.value,
+      auteur: auteur.value === 0 ? undefined : auteur.value,
       parPage: 100,
     })
     demandes.value = liste.elements
@@ -99,8 +109,28 @@ async function charger(): Promise<void> {
   }
 }
 
-onMounted(charger)
-watch(etat, charger)
+/**
+ * Les auteurs se chargent **une fois**, au montage, et par leur propre route.
+ *
+ * Leur échec ne remonte pas dans `erreur` : sans eux le sélecteur reste sur
+ * « tout le monde » et la file fonctionne entièrement. Remplacer l'écran par un
+ * message d'erreur parce qu'un filtre facultatif n'a pas pu se peupler serait
+ * hors de proportion — même motif que le chargement secondaire de
+ * `MesDemandesView`.
+ */
+async function chargerLesAuteurs(): Promise<void> {
+  try {
+    auteurs.value = (await listerAuteursDesDemandes()).elements
+  } catch {
+    auteurs.value = []
+  }
+}
+
+onMounted(() => {
+  void charger()
+  void chargerLesAuteurs()
+})
+watch([etat, auteur], charger)
 
 function dateLisible(valeur: string | null): string {
   if (valeur === null) return ''
@@ -122,6 +152,18 @@ function dateLisible(valeur: string | null): string {
       >
         <option v-for="choix in ETATS" :key="choix.libelle" :value="choix.valeur">
           {{ choix.libelle }}
+        </option>
+      </select>
+
+      <label for="filtre-auteur" class="ml-2 text-sm font-medium">Déposées par</label>
+      <select
+        id="filtre-auteur"
+        v-model.number="auteur"
+        class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
+      >
+        <option :value="0">Tout le monde</option>
+        <option v-for="a in auteurs" :key="a.userId" :value="a.userId">
+          {{ a.libelle }}
         </option>
       </select>
 

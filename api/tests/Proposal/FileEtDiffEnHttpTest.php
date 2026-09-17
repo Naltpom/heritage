@@ -140,6 +140,75 @@ final class FileEtDiffEnHttpTest extends CasDeTestDemandesHttp
     // ---------------------------------------------------------------------------------
 
     /**
+     * **Le filtre par demandeur.** Sur une file qui mêle les dépôts de plusieurs
+     * personnes, répondre à « qu'est devenue ma proposition » obligeait à parcourir
+     * tout l'écran à l'œil.
+     *
+     * Le filtre se pose sur la **même requête** que celui de l'état, et non après
+     * coup en mémoire : sans quoi la pagination compterait les demandes des autres,
+     * et le total afficherait un nombre que la liste ne montre pas.
+     */
+    public function testLaFileSeFiltreParDemandeur(): void
+    {
+        $this->connexionContributeur();
+        $sien = $this->deposer([$this->opTexte('surname', 'Sureau', 'SUREAU')], 'du contributeur');
+
+        $this->connexionSecondContributeur();
+        $autre = $this->deposer([$this->opTexte('nickname', null, 'Perle', seq: 2)], 'du second');
+
+        $this->connexionAdministrateur();
+        $this->requete('GET', '/api/administration/demandes');
+
+        $toutes = $this->charge()['elements'];
+        $auteurDuSien = null;
+        foreach ($toutes as $ligne) {
+            if ($ligne['id'] === $sien) {
+                $auteurDuSien = $ligne['authorUserId'];
+            }
+        }
+
+        self::assertNotNull($auteurDuSien, 'Sans cet identifiant, le cas ne prouverait rien.');
+
+        $this->requete('GET', '/api/administration/demandes?auteur='.$auteurDuSien);
+
+        self::assertResponseIsSuccessful();
+
+        $ids = array_column($this->charge()['elements'], 'id');
+
+        self::assertContains($sien, $ids, 'La demande de cet auteur est là.');
+        self::assertNotContains($autre, $ids, 'Celle de quelqu\'un d\'autre, non.');
+        self::assertSame(1, $this->charge()['total'], 'Le total suit le filtre, sinon la pagination ment.');
+    }
+
+    /**
+     * **Les auteurs sont servis par leur propre route, jamais par l'enveloppe.**.
+     *
+     * Le premier jet les avait glissés dans la charge de la file. Le cas
+     * `testLaFileRendLEnveloppeEtTrieParDepotCroissant` l'a refusé — « l'enveloppe
+     * du § 1.5, sans une clé de plus » — et il avait raison : une enveloppe de
+     * liste qui varie selon l'écran cesse d'être une enveloppe de liste.
+     *
+     * La route ne prend aucun filtre, et c'est voulu : changer de statut ne doit
+     * pas faire disparaître sous le doigt l'auteur qu'on venait de choisir.
+     */
+    public function testLesAuteursSontServisParUneRouteAPart(): void
+    {
+        $this->connexionContributeur();
+        $this->deposer([$this->opTexte('surname', 'Sureau', 'SUREAU')], 'une demande');
+
+        $this->connexionAdministrateur();
+        $this->requete('GET', '/api/administration/demandes/auteurs');
+
+        self::assertResponseIsSuccessful();
+
+        $charge = $this->charge();
+
+        self::assertSame(['elements'], array_keys($charge), 'Une route, une forme, rien de plus.');
+        self::assertNotSame([], $charge['elements'], 'Un auteur a déposé : il doit paraître.');
+        self::assertSame(['userId', 'libelle'], array_keys($charge['elements'][0]));
+    }
+
+    /**
      * L'enveloppe du § 1.5, et l'ordre promis : `submittedAt` **croissant**.
      *
      * L'ordre n'est pas cosmétique. La file est une file d'attente : le premier déposé

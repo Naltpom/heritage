@@ -77,6 +77,7 @@ final class AdministrationDemandeController extends AbstractController
             $this->cible($requete),
             $page,
             $parPage,
+            $this->auteur($requete),
         );
 
         return $this->charge($this->serialiseur->enveloppe(
@@ -95,6 +96,28 @@ final class AdministrationDemandeController extends AbstractController
      * Sans `resolutionPrevue`, « l'administrateur découvre la caducité en cliquant, ce
      * qui la rend indistinguable d'une panne » (§ 6.7).
      */
+    /**
+     * Les auteurs qui ont déposé quelque chose, pour peupler le filtre de la file.
+     *
+     * **Une route à part, et non une clé de plus sur la file.** Le § 1.5 fixe
+     * l'enveloppe d'une liste paginée à quatre clés, et un test la tient « sans une
+     * clé de plus » : y glisser une cinquième obligerait chaque client de liste à
+     * l'ignorer, et la règle cesserait d'être une règle. Le premier jet l'y avait
+     * mise ; le test l'a refusée, et il avait raison.
+     *
+     * Elle ne prend **aucun filtre**, et c'est voulu : changer de statut ne doit pas
+     * faire disparaître sous le doigt l'auteur qu'on venait de choisir.
+     *
+     * Aucun chevauchement avec `/{id}`, dont l'exigence est `\d+`.
+     */
+    #[Route('/auteurs', name: 'proposal_admin_demande_auteurs', methods: ['GET'])]
+    public function auteurs(): JsonResponse
+    {
+        $this->lecteurs->courant();
+
+        return $this->charge(['elements' => $this->demandes->auteursDeLaFile()]);
+    }
+
     #[Route('/{id}', name: 'proposal_admin_demande_voir', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function voir(int $id): JsonResponse
     {
@@ -248,6 +271,18 @@ final class AdministrationDemandeController extends AbstractController
     private function cible(Request $requete): ?int
     {
         $brut = $requete->query->getInt('targetId');
+
+        return 0 === $brut ? null : $brut;
+    }
+
+    /**
+     * Le filtre par auteur. `0` vaut absence, comme pour `targetId` : un
+     * `authorUserId` est toujours strictement positif, et la forme vide d'un
+     * sélecteur HTML est la chaîne vide, que `getInt` rend à 0.
+     */
+    private function auteur(Request $requete): ?int
+    {
+        $brut = $requete->query->getInt('auteur');
 
         return 0 === $brut ? null : $brut;
     }
