@@ -65,6 +65,17 @@ use Doctrine\Migrations\AbstractMigration;
  * `num_nonnulls`**. Elles sont donc `DROP` puis `ADD` : PostgreSQL ne sait pas modifier
  * une `CHECK` en place, et les laisser telles quelles interdirait en base la seule
  * chose que cette migration ajoute.
+ *
+ * ## Vérifiée sur un vrai PostgreSQL
+ *
+ * La suite de tests tourne sur SQLite, dont le schéma est bâti par `SchemaTool` depuis le
+ * mapping : **aucune de ces quatre `CHECK` n'y existe**. Elles ont donc été éprouvées à la
+ * main sur un serveur PostgreSQL, sur la chaîne complète des cinq migrations, puis par
+ * `doctrine:schema:validate` et par six cas limites du lien — les deux formes cumulées sur
+ * une même extrémité, un couple existant doublé d'une fiche proposée, un second parent sur
+ * une union. Les quatre refus attendus tombent, les trois formes légitimes passent, et
+ * l'aller-retour `migrate latest` / `migrate prev` / `migrate latest` laisse le schéma en
+ * phase avec le mapping.
  */
 final class Version20260917190000 extends AbstractMigration
 {
@@ -129,6 +140,20 @@ final class Version20260917190000 extends AbstractMigration
             SQL);
     }
 
+    /**
+     * ## Elle **échoue** si des liens s'appuient déjà sur la nouvelle forme, et c'est voulu
+     *
+     * Retirer les trois colonnes prive de sujet tout lien qui n'en avait pas d'autre, et la
+     * `CHECK` étroite remise à la fin refuse alors ces lignes — mesuré :
+     * `ck_prp_link_sujet_unique is violated by some row`.
+     *
+     * Le « corriger » serait pire. Un `down()` qui supprimerait ces liens amputerait en
+     * silence des demandes en attente que personne n'a tranchées ; un `down()` qui les
+     * laisserait sans sujet écrirait des lignes que la version précédente du code ne sait
+     * pas lire. Une migration descendante qui **s'arrête** est le seul des trois
+     * comportements qui ne détruit rien : elle nomme ce qui bloque, et la décision —
+     * retirer ces demandes, ou les valider d'abord — revient à qui redescend.
+     */
     public function down(Schema $schema): void
     {
         // Les contraintes d'abord, les colonnes ensuite : une `CHECK` qui nomme une
