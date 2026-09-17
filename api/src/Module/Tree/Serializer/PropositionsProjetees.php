@@ -94,13 +94,13 @@ final readonly class PropositionsProjetees
          */
         $poses = [];
 
-        /** @var list<array{0: NoeudPropose, 1: array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null}}> $restants */
+        /** @var list<array{0: NoeudPropose, 1: non-empty-list<array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null}>}> $restants */
         $restants = [];
 
         foreach ($projection->noeuds as $source) {
-            $rattachement = $rattachements[$source->noeudId] ?? null;
+            $candidats = $rattachements[$source->noeudId] ?? [];
 
-            if (null === $rattachement) {
+            if ([] === $candidats) {
                 // Une personne proposée sans lien flotterait hors de l'arbre : le § 6.4 du
                 // dossier l'interdit à la saisie. Si le cas survient malgré tout, on omet
                 // le nœud plutôt que de le poser à `x = 0`, où il recouvrirait l'ego.
@@ -109,7 +109,7 @@ final readonly class PropositionsProjetees
                 continue;
             }
 
-            $restants[] = [$source, $rattachement];
+            $restants[] = [$source, $candidats];
         }
 
         // ── Les vagues ──────────────────────────────────────────────────────────────
@@ -126,11 +126,11 @@ final readonly class PropositionsProjetees
             $raisons = [];
             $aPose = false;
 
-            foreach ($restants as [$source, $rattachement]) {
-                $prepare = $this->traduire($source, $rattachement, $partage, $poses, $branchesDesPersonnes);
+            foreach ($restants as [$source, $candidats]) {
+                $prepare = $this->traduirePremierPossible($source, $candidats, $partage, $poses, $branchesDesPersonnes);
 
                 if (\is_string($prepare)) {
-                    $suivants[] = [$source, $rattachement];
+                    $suivants[] = [$source, $candidats];
                     $raisons[$source->noeudId] = $prepare;
 
                     continue;
@@ -166,9 +166,10 @@ final readonly class PropositionsProjetees
     }
 
     /**
-     * Par quoi chaque fiche proposée se rattache — **lu dans les deux sens**.
+     * Par quoi chaque fiche proposée **peut** se rattacher — tous les liens, lus dans
+     * les deux sens.
      *
-     * ── Le défaut que ce sens inverse répare ────────────────────────────────────────
+     * ── Le défaut que le sens inverse répare ────────────────────────────────
      *
      * Un lien a un sujet et une autre extrémité, et l'écran qui les compose met en sujet
      * **la fiche qu'on est en train de compléter**, pas celle qu'on ajoute. « Ajouter le
@@ -182,25 +183,41 @@ final readonly class PropositionsProjetees
      * bout est `parent_de`, et réciproquement ; `conjoint_de` est sa propre réciproque.
      * `autre2` — le second parent d'une filiation — s'inverse de la même façon.
      *
-     * ── Ce qui départage quand plusieurs liens portent la même fiche ────────────────
+     * ── Pourquoi **tous** les candidats, et non le premier ────────────────────
      *
-     * Le sens direct d'abord, l'inverse ensuite. Un lien dont la fiche est le sujet dit
-     * ce qu'elle est ; un lien où elle est l'autre bout ne le dit que par déduction, et
-     * les deux peuvent coexister. À sens égal, le premier rencontré gagne — `seq` porte
-     * l'ordre de la demande, et la liste arrive dans cet ordre.
+     * N'en garder qu'un par fiche était la simplification d'avant les vagues, et elle
+     * décidait trop tôt. Mesuré en production, sur la forme la plus courante de la file —
+     * « j'ajoute les deux parents de quelqu'un » :
+     *
+     * ```
+     * seq 1 : conjoint_de(sujet: #p2, autre: #p1)          les deux proposés
+     * seq 2 : enfant_de(sujet: p307, autre: #p1, autre2: #p2)
+     * ```
+     *
+     * `#p1` a deux rattachements possibles : « conjoint de `#p2` », qui n'est nulle part,
+     * et « parent de `p307` », qui existe. Le premier seul, c'est une impasse — et les
+     * deux fiches s'attendaient l'une l'autre indéfiniment. Huit demandes sur neuf étaient
+     * dans ce cas.
+     *
+     * On rend donc la liste, et {@see preparer()} essaie dans l'ordre à chaque vague. Le
+     * sens direct vient d'abord — un lien dont la fiche est le sujet dit ce qu'elle est,
+     * un lien où elle est l'autre bout ne le dit que par déduction —, puis l'inverse, et
+     * à sens égal l'ordre de `seq`, c'est-à-dire celui de la demande.
      *
      * Une filiation qui désigne un **couple existant** ne s'inverse pas : elle n'a pas
      * d'autre extrémité, `familleId` tient lieu des deux parents.
      *
-     * @return array<string, array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null}>
+     * @return array<string, non-empty-list<array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null}>>
      */
     private function rattachements(ProjectionEnAttente $projection): array
     {
+        /** @var array<string, list<array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null}>> $direct */
         $direct = [];
+        /** @var array<string, list<array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null}>> $inverse */
         $inverse = [];
 
         foreach ($projection->ancrages as $ancrage) {
-            $direct[$ancrage->sujetNoeudId] ??= [
+            $direct[$ancrage->sujetNoeudId][] = [
                 'kind' => $ancrage->kind,
                 'cible' => $ancrage->autreNoeudId,
                 'familleId' => $ancrage->familleId,
@@ -223,7 +240,7 @@ final readonly class PropositionsProjetees
                     continue;
                 }
 
-                $inverse[$bout] ??= [
+                $inverse[$bout][] = [
                     'kind' => $reciproque,
                     'cible' => $ancrage->sujetNoeudId,
                     // Le couple existant, s'il y en avait un, portait la filiation du
@@ -236,7 +253,48 @@ final readonly class PropositionsProjetees
             }
         }
 
-        return $direct + $inverse;
+        $tous = [];
+        foreach ([...array_keys($direct), ...array_keys($inverse)] as $noeudId) {
+            $tous[$noeudId] = [...($direct[$noeudId] ?? []), ...($inverse[$noeudId] ?? [])];
+        }
+
+        return array_filter($tous, static fn (array $liste): bool => [] !== $liste);
+    }
+
+    /**
+     * Le premier candidat qui se pose, **ou la raison de l'échec le plus instructif**.
+     *
+     * Entre deux échecs, `enchainement` l'emporte sur `ancre_absente` : le premier dit
+     * « l'ancre est une fiche proposée », donc « une vague suivante peut encore la poser »,
+     * et c'est ce qu'un lecteur a besoin de savoir. Une cible disparue, elle, appelle un
+     * tout autre geste.
+     *
+     * @param non-empty-list<array{kind: string, cible: string|null, familleId: int|null, familleProvisoire: string|null}> $candidats
+     * @param array<string, array{generation: int, branche: Branch|null}>                                                  $poses
+     * @param array<int, array{displayName: string, branch: string|null}>                                                  $branches
+     */
+    private function traduirePremierPossible(
+        NoeudPropose $source,
+        array $candidats,
+        Placement $partage,
+        array $poses,
+        array $branches,
+    ): NoeudProposePlacable|string {
+        $raison = NoeudProposeEcarte::ANCRE_ABSENTE;
+
+        foreach ($candidats as $candidat) {
+            $prepare = $this->traduire($source, $candidat, $partage, $poses, $branches);
+
+            if (!\is_string($prepare)) {
+                return $prepare;
+            }
+
+            if (NoeudProposeEcarte::ENCHAINEMENT === $prepare) {
+                $raison = $prepare;
+            }
+        }
+
+        return $raison;
     }
 
     /**
