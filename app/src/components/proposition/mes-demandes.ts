@@ -169,9 +169,16 @@ export function motifDepuisDemande(demande: Demande): MotifDecision | null {
  * - un statut autre que `refusee` ou `caduque` : il n'y a rien à refaire d'une
  *   demande validée, et une demande en attente se retire, elle ne se reprend
  *   pas ;
- * - une nature sans formulaire (`ajout_lien`, `ajout_media`, les deux
- *   modifications qui ne visent pas une personne) : le geste existe ailleurs
- *   dans le produit, pas derrière ce bouton-là ;
+ * - une nature que la reprise n'outille pas (`ajout_lien`, `ajout_media`, les
+ *   deux modifications qui ne visent pas une personne) : le geste existe
+ *   ailleurs dans le produit, pas derrière ce bouton-là. `ajout_lien` a
+ *   **désormais son formulaire** — c'est l'écran des liens de parenté — mais le
+ *   corps que rend `GET /api/demandes/{id}/refaire` ne porte que des
+ *   identifiants de personnes et de familles, sans les noms ni la distinction
+ *   « frère ou sœur » / « enfant d'une union » que cet écran demande. Le
+ *   pré-remplir demanderait de relire la fiche et de reclasser chaque lien :
+ *   c'est faisable, ce n'est pas fait, et un bouton qui ouvrirait un formulaire
+ *   vide serait pire qu'un bouton absent — l'auteur croirait sa demande reprise ;
  * - une modification **sans cible** : `proposition.modification` est montée sur
  *   `/personnes/:id(\d+)/proposer` et n'a pas de sens sans identifiant. Le
  *   serveur peut rendre `targetId: null` — on ne fabrique pas d'URL par

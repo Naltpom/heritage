@@ -243,6 +243,69 @@ describe('les enfants', () => {
   })
 })
 
+describe('une extrémité peut désigner une personne proposée ailleurs', () => {
+  /**
+   * Le défaut réparé, dans les mots du commanditaire : « si je repousse une
+   * autre personne et que je cherche le père que j'ai proposé juste avant, non
+   * validé encore mais proposé par moi, il ne m'est pas proposé ».
+   *
+   * Une fiche en attente n'a pas de `personId` : ce qui part est
+   * `otherDraftPersonId`, l'identifiant de sa **ligne**. Les deux clés ensemble
+   * seraient refusées par `ck_prp_link_cible`, et c'est ce que le second
+   * `expect` verrouille.
+   */
+  const PROPOSE = { draftPersonId: 7, demandeId: 12, libelle: 'Barnabé Muguet' }
+
+  it('envoie `otherDraftPersonId` pour un parent encore proposé', () => {
+    const saisie = saisieMinimale()
+    saisie.filiation.parents = [PROPOSE]
+
+    const filiation = construireLiens(saisie).liens.find((lien) => lien.kind === 'enfant_de')!
+
+    expect(filiation.otherDraftPersonId).toBe(7)
+    expect('otherPersonId' in filiation).toBe(false)
+  })
+
+  it('met le second parent proposé sur le même lien', () => {
+    // Deux parents ne font pas deux liens, et la forme de la seconde extrémité
+    // n'y change rien : `other2DraftPersonId` est le second parent du **même**
+    // lien.
+    const saisie = saisieMinimale()
+    saisie.filiation.parents = [PERE, PROPOSE]
+
+    const filiation = construireLiens(saisie).liens.find((lien) => lien.kind === 'enfant_de')!
+
+    expect(filiation.otherPersonId).toBe(61)
+    expect(filiation.other2DraftPersonId).toBe(7)
+    expect('other2PersonId' in filiation).toBe(false)
+  })
+
+  it('distingue une personne n° 7 de l’arbre d’une fiche proposée n° 7', () => {
+    // Deux parents « différents » dont les identifiants se ressemblent ne sont
+    // pas la même personne. Une clé commune les confondrait, et le contrôle
+    // « les deux parents désignés sont la même personne » refuserait une
+    // filiation parfaitement valide.
+    const saisie = saisieMinimale()
+    saisie.filiation.parents = [{ personId: 7, libelle: 'Une personne de l’arbre' }, PROPOSE]
+
+    const { erreurs } = construireLiens(saisie)
+
+    expect(erreurs).toEqual([])
+  })
+
+  it('accepte un conjoint et un enfant proposés', () => {
+    const saisie = creationVide()
+    saisie.brouillon.surname = 'Muguet'
+    saisie.unions = [unionVide(PROPOSE)]
+    saisie.enfants = [{ personne: PROPOSE, rangFratrie: null }]
+
+    const { liens } = construireLiens(saisie)
+
+    expect(liens.map((lien) => lien.otherDraftPersonId)).toEqual([7, 7])
+    expect(liens.every((lien) => !('otherPersonId' in lien))).toBe(true)
+  })
+})
+
 describe('le corps complet', () => {
   it('numérote les liens sans trou, dans l’ordre du formulaire', () => {
     const saisie = saisieMinimale()

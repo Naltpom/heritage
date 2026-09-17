@@ -24,13 +24,13 @@ use App\Module\Proposal\Service\Port\EtatCible;
 final readonly class PlanDeValidation
 {
     /**
-     * @param list<EtatDOp>                      $ops          dans l'ordre de `seq`
-     * @param array<string, EtatCible>           $cibles       indexées par {@see EtatCible::cleDe()}
-     * @param list<array{kind: string, id: int}> $disparues    lignes visées qui n'existent plus
+     * @param list<EtatDOp>                                                                       $ops         dans l'ordre de `seq`
+     * @param array<string, EtatCible>                                                            $cibles      indexées par {@see EtatCible::cleDe()}
+     * @param list<array{kind: string, id: int}>                                                  $disparues   lignes visées qui n'existent plus
      * @param list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}> $dependances
-     *                                                         les fiches proposées par **d'autres** demandes
-     *                                                         que celle-ci désigne, avec leur état :
-     *                                                         `resolue`, `en_attente`, `morte` ou `disparue`
+     *                                                                                                         les fiches proposées par **d'autres** demandes
+     *                                                                                                         que celle-ci désigne, avec leur état :
+     *                                                                                                         `resolue`, `en_attente`, `morte` ou `disparue`
      */
     public function __construct(
         public ResolutionPrevue $resolution,

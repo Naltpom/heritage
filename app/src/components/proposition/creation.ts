@@ -71,6 +71,78 @@ export interface PersonneChoisie {
   libelle: string
 }
 
+/**
+ * Une personne **proposée et non encore validée**, désignée à l'écran.
+ *
+ * C'est la réponse au défaut signalé par le commanditaire : « le père que j'ai
+ * proposé juste avant, non validé encore mais proposé par moi, il ne m'est pas
+ * proposé ». Elle n'a pas de `personId` — elle n'existe pas dans l'arbre —, et
+ * ce qu'on reposte est l'identifiant de sa **ligne**, `draftPersonId`.
+ *
+ * `demandeId` est porté pour l'écran seulement : « proposée dans votre demande
+ * n° 12 » est ce qui évite qu'un contributeur croie désigner une personne
+ * validée. Le serveur ne s'en sert pas — il retrouve la demande depuis la ligne.
+ */
+export interface FicheProposeeChoisie {
+  draftPersonId: number
+  demandeId: number
+  libelle: string
+}
+
+/**
+ * L'un ou l'autre — **jamais les deux**, et c'est un `CHECK` en base
+ * (`ck_prp_link_cible`).
+ *
+ * Une union discriminée plutôt qu'un objet à deux champs facultatifs : c'est le
+ * typeur qui empêche alors d'écrire les deux clés dans un lien, là où deux
+ * `number | undefined` laisseraient passer un corps que le serveur refuserait
+ * en `422` — et le front ne saurait pas dire pourquoi.
+ */
+export type ChoixDePersonne = PersonneChoisie | FicheProposeeChoisie
+
+export function estFicheProposee(choix: ChoixDePersonne): choix is FicheProposeeChoisie {
+  return 'draftPersonId' in choix
+}
+
+/**
+ * La clé d'un choix, pour un `:key` de liste et pour « déjà désigné ».
+ *
+ * Préfixée par la nature : une personne n° 7 de l'arbre et une fiche proposée
+ * n° 7 sont deux choses différentes, et une clé qui les confondrait éteindrait
+ * le bouton de l'une parce que l'autre est déjà dans le formulaire.
+ */
+export function cleDuChoix(choix: ChoixDePersonne): string {
+  return estFicheProposee(choix) ? 'brouillon:'.concat(String(choix.draftPersonId)) : 'personne:'.concat(String(choix.personId))
+}
+
+/**
+ * Les clés d'un lien qui désignent ce choix à l'autre extrémité.
+ *
+ * Écrit **une fois** : c'est l'endroit où l'on choisit entre `otherPersonId` et
+ * `otherDraftPersonId`, et trois appelants faisaient le même `if` — jusqu'au
+ * jour où l'un des trois ne l'aurait pas fait.
+ *
+ * Deux fonctions et non une avec un paramètre de préfixe : une seule rendrait
+ * l'union des quatre formes, et le typeur laisserait alors écrire un
+ * `other2PersonId` sur une union — que `ck_prp_link_second_parent` refuse.
+ */
+export function autreDuChoix(
+  choix: ChoixDePersonne,
+): { otherPersonId: number } | { otherDraftPersonId: number } {
+  return estFicheProposee(choix)
+    ? { otherDraftPersonId: choix.draftPersonId }
+    : { otherPersonId: choix.personId }
+}
+
+/** Le **second parent** d'une filiation — `enfant_de` seulement. */
+export function secondParentDuChoix(
+  choix: ChoixDePersonne,
+): { other2PersonId: number } | { other2DraftPersonId: number } {
+  return estFicheProposee(choix)
+    ? { other2DraftPersonId: choix.draftPersonId }
+    : { other2PersonId: choix.personId }
+}
+
 /** Un couple existant. Le formulaire ne propose pas de le désigner — mais une
  *  reprise peut en rapporter un, et « `family_id` est conservé » (§ 6.10). */
 export interface FamilleChoisie {
@@ -81,13 +153,13 @@ export interface FamilleChoisie {
 /** Les parents de la personne proposée : un couple, **ou** un ou deux parents. */
 export interface SaisieFiliation {
   famille: FamilleChoisie | null
-  parents: PersonneChoisie[]
+  parents: ChoixDePersonne[]
 }
 
 /** Un enfant de la personne proposée. `rangFratrie` est le « c'était l'aîné »
  *  du modèle : absent, l'enfant est rattaché à la fin. */
 export interface SaisieEnfant {
-  personne: PersonneChoisie
+  personne: ChoixDePersonne
   rangFratrie: number | null
 }
 
@@ -100,7 +172,7 @@ export interface SaisieEnfant {
  * souvent.
  */
 export interface SaisieUnion {
-  personne: PersonneChoisie
+  personne: ChoixDePersonne
   mariage: SaisieDate
   rompue: boolean
   rupture: SaisieDate
@@ -156,7 +228,7 @@ export function creationVide(): SaisieCreation {
   }
 }
 
-export function unionVide(personne: PersonneChoisie): SaisieUnion {
+export function unionVide(personne: ChoixDePersonne): SaisieUnion {
   return { personne, mariage: saisieVide(), rompue: false, rupture: saisieVide(), note: '' }
 }
 
@@ -211,19 +283,19 @@ export function construireLiens(saisie: SaisieCreation): {
   } else if (parents.length > 0) {
     if (parents.length > 2) {
       erreurs.push({ champ: 'filiation', message: 'Une personne ne peut avoir plus de deux parents désignés.' })
-    } else if (parents.length === 2 && parents[0]!.personId === parents[1]!.personId) {
+    } else if (parents.length === 2 && cleDuChoix(parents[0]!) === cleDuChoix(parents[1]!)) {
       erreurs.push({ champ: 'filiation', message: 'Les deux parents désignés sont la même personne.' })
     } else {
       const lien: LienPropose = {
         seq: liens.length + 1,
         kind: 'enfant_de',
         subjectDraftRef: sujet,
-        otherPersonId: parents[0]!.personId,
+        ...autreDuChoix(parents[0]!),
       }
       // `ck_prp_link_second_parent` : `other2` n'a de sens que sur `enfant_de`,
       // et il n'est posé que s'il existe — `exactOptionalPropertyTypes` interdit
       // de l'écrire à `undefined`, et le serveur compte les clés non nulles.
-      if (parents.length === 2) lien.other2PersonId = parents[1]!.personId
+      if (parents.length === 2) Object.assign(lien, secondParentDuChoix(parents[1]!))
       liens.push(lien)
     }
   }
@@ -234,7 +306,7 @@ export function construireLiens(saisie: SaisieCreation): {
       seq: liens.length + 1,
       kind: 'conjoint_de',
       subjectDraftRef: sujet,
-      otherPersonId: union.personne.personId,
+      ...autreDuChoix(union.personne),
       // `divorced` est toujours posé : c'est un booléen non nul en base
       // (`DEFAULT false`), et l'omettre laisserait le serveur deviner.
       divorced: union.rompue,
@@ -276,7 +348,7 @@ export function construireLiens(saisie: SaisieCreation): {
       seq: liens.length + 1,
       kind: 'parent_de',
       subjectDraftRef: sujet,
-      otherPersonId: enfant.personne.personId,
+      ...autreDuChoix(enfant.personne),
     }
     if (enfant.rangFratrie !== null) lien.siblingOrder = enfant.rangFratrie
     liens.push(lien)

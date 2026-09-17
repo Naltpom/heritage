@@ -37,6 +37,7 @@ import {
   lireDemande,
   lireDemandeAdministration,
   type DemandeAdministration,
+  type DependanceDeDemande,
 } from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import MessageErreur from '@/components/base/MessageErreur.vue'
@@ -142,6 +143,23 @@ const titreDeLaParente = computed(() => {
 })
 const doublons = computed(() => demande.value?.doublonsProbables ?? [])
 const concurrentes = computed(() => demande.value?.demandesConcurrentes ?? [])
+/**
+ * Les fiches proposées **par d'autres demandes** que celle-ci désigne (§ 6.7).
+ *
+ * Elles sont affichées **toutes**, résolues comprises : « s'appuie sur la
+ * demande n° 12, validée » est un contexte utile à qui décide, et le taire
+ * laisserait croire qu'une demande à l'arrêt l'est sans raison. C'est
+ * `resolutionPrevue` qui dit ce que le clic fera, pas cette liste.
+ */
+const dependances = computed(() => demande.value?.dependances ?? [])
+
+/** Ce que chaque état veut dire, en une phrase qui tient sur la ligne. */
+const ETATS_DE_DEPENDANCE: Record<DependanceDeDemande['etat'], string> = {
+  resolue: 'validée : la personne existe désormais dans l’arbre',
+  en_attente: 'encore en attente — à valider avant celle-ci',
+  morte: 'refusée, retirée ou caduque : la personne n’existera jamais',
+  disparue: 'la fiche proposée n’existe plus',
+}
 /** Présent uniquement sur la charge d'administration : on teste la clé. */
 const cible = computed(() => demande.value?.cible ?? null)
 /**
@@ -240,6 +258,31 @@ function dateLisible(valeur: string | null | undefined): string {
 
       <PanneauBase v-if="doublons.length > 0" titre="Doublons probables" class="mb-4">
         <DoublonsProbables :doublons="doublons" />
+      </PanneauBase>
+
+      <!-- Sur quoi cette demande s'appuie. Sans ce bloc, une demande
+           « à valider après l'autre » n'indiquerait pas **laquelle**, et
+           l'administrateur devrait la chercher dans la file. -->
+      <PanneauBase v-if="dependances.length > 0" titre="Cette demande s’appuie sur" class="mb-4">
+        <ul class="flex flex-col gap-1.5 text-sm">
+          <li
+            v-for="dependance in dependances"
+            :key="dependance.draftPersonId"
+            class="flex flex-wrap gap-x-2"
+          >
+            <span class="font-semibold">
+              {{ dependance.libelle.length > 0 ? dependance.libelle : 'une personne proposée' }}
+            </span>
+            <RouterLink
+              v-if="dependance.demandeId !== null"
+              :to="{ name: 'demande.detail', params: { id: dependance.demandeId } }"
+              class="text-accent underline"
+            >
+              demande n° {{ dependance.demandeId }}
+            </RouterLink>
+            <span class="text-attenue">— {{ ETATS_DE_DEPENDANCE[dependance.etat] }}</span>
+          </li>
+        </ul>
       </PanneauBase>
 
       <!-- Les autres demandes en attente sur la même cible : décider de

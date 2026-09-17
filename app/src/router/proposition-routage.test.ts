@@ -55,6 +55,29 @@ describe('les deux formulaires ont leur route', () => {
     expect(routeur().resolve('/personnes/proposer').name).not.toBe('personne.detail')
   })
 
+  it('ouvre l’écran des liens de parenté sur l’identifiant de la fiche', () => {
+    // La parenté ne se propose pas par `modification_personne` : un op nomme un
+    // champ, et une filiation est une ligne de `tree_child`. C'est une demande
+    // `ajout_lien`, donc un formulaire à part — et il doit être atteignable.
+    const resolue = routeur().resolve('/personnes/17/liens')
+
+    expect(resolue.name).toBe('proposition.liens')
+    expect(resolue.params['id']).toBe('17')
+  })
+
+  it('ouvre l’écran de suppression sur un identifiant réellement numérique', () => {
+    // **Une échappée perdue rendait cette route inatteignable.** Le chemin était
+    // écrit `'/personnes/:id(\d+)/supprimer'` : dans une chaîne JavaScript,
+    // `\d` vaut `d`, et la contrainte du paramètre était donc `(d+)`. Seule une
+    // URL comme `/personnes/ddd/supprimer` correspondait ; `/personnes/17/
+    // supprimer` ne résolvait rien, et l'écran « demander la suppression »
+    // n'existait que dans la table.
+    const resolue = routeur().resolve('/personnes/17/supprimer')
+
+    expect(resolue.name).toBe('proposition.suppression')
+    expect(resolue.params['id']).toBe('17')
+  })
+
   it('conserve le paramètre de reprise', () => {
     // `?refaire=<id>` est ce qui transforme une caducité en contribution
     // reprise plutôt qu'en contribution perdue (§ 6.10).
@@ -64,7 +87,12 @@ describe('les deux formulaires ont leur route', () => {
 })
 
 describe('proposer est réservé aux membres', () => {
-  it.each(['proposition.modification', 'proposition.creation'])(
+  it.each([
+    'proposition.modification',
+    'proposition.creation',
+    'proposition.liens',
+    'proposition.suppression',
+  ])(
     '%s exige un rattachement validé',
     (nom) => {
       expect(niveauDe(nom)).toBe('membre')

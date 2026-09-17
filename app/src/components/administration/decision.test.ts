@@ -198,6 +198,37 @@ describe('ce que propose le bouton « Valider »', () => {
     expect(action.explication).toMatch(/écraserait|refaite/i)
   })
 
+  it('sur `cible_disparue` : éteint, et surtout pas `undefined`', () => {
+    // **Le cas que l'union ignorait.** La valeur n'était pas dans
+    // `ResolutionPrevue`, donc elle ne tombait dans aucun `case`, donc cette
+    // fonction rendait `undefined` — sur la seule demande qu'il fallait
+    // surtout ne pas valider, et l'écran de décision plantait à l'ouverture.
+    const action = actionValidation('cible_disparue')
+    expect(action).toBeDefined()
+    expect(action.desactive).toBe(true)
+    expect(action.explication).toMatch(/n’existe plus/i)
+  })
+
+  it('sur `dependance_en_attente` : on dit qu’il y a un ordre, pas une mort', () => {
+    // Ni un succès ni une fin : la demande s'appliquera **telle quelle** après
+    // l'autre, sans que son auteur la refasse. Dire « validation impossible »
+    // enverrait l'administrateur refuser une demande parfaitement valide.
+    const action = actionValidation('dependance_en_attente')
+    expect(action.desactive).toBe(true)
+    expect(action.libelle).toMatch(/après/i)
+    expect(action.explication).toMatch(/Validez d’abord/i)
+    // Et le contraire d'une caducité : la demande n'est pas à refaire, elle est
+    // à attendre. La phrase le dit dans ces termes.
+    expect(action.explication).toMatch(/sans que son auteur ait à la refaire/i)
+  })
+
+  it('sur `dependance_morte` : éteint, et la reprise est la sortie', () => {
+    const action = actionValidation('dependance_morte')
+    expect(action.desactive).toBe(true)
+    expect(action.explication).toMatch(/n’aboutira pas/i)
+    expect(action.explication).toMatch(/refaire/i)
+  })
+
   it('sans `resolutionPrevue` : défaut fermé', () => {
     // La charge de l'auteur (§ 6.5) ne porte pas ce champ. Ne rien savoir de
     // l'état de la cible n'autorise pas à promettre une validation.

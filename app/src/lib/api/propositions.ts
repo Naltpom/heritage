@@ -22,7 +22,7 @@
  * retirer du serveur.
  */
 
-import { requeteApi } from './client'
+import { requeteApi, type OptionsRequete } from './client'
 import type { BlocDate, BlocDateOp, ListePaginee, Sexe } from './types'
 
 /* ------------------------------------------------------------------ */
@@ -159,6 +159,16 @@ export interface LienDemande {
   subjectDraftRef?: string | null
   subjectPersonId?: number | null
   /**
+   * Le sujet, quand c'est une fiche proposée par une **autre demande encore en
+   * attente** — la troisième forme d'extrémité (§ 6.3).
+   *
+   * C'est l'identifiant de la **ligne** `prp_draft_person`. `subjectDraftRef`
+   * ne vaut, lui, que dans sa propre demande : `#p1` de la demande 12 et `#p1`
+   * de la demande 13 n'ont aucun rapport, et c'est précisément pourquoi une
+   * seconde demande ne pouvait pas désigner la fiche de la première.
+   */
+  subjectDraftPersonId?: number | null
+  /**
    * Le sujet du lien, nommé. Pour une fiche de la même demande, le serveur rend
    * son nom suivi de « (proposée) » — il rendait sa **référence**, « Personne
    * proposée #p1 », et c'est ce qui a rendu illisible la parenté d'une branche
@@ -169,6 +179,8 @@ export interface LienDemande {
   otherPersonId?: number | null
   /** Renseigné quand l'autre extrémité est une fiche de la même demande. */
   otherDraftRef?: string | null
+  /** Renseigné quand l'autre extrémité est une fiche proposée **ailleurs**. */
+  otherDraftPersonId?: number | null
   otherLabel?: string | null
   other2PersonId?: number | null
   /**
@@ -177,6 +189,8 @@ export interface LienDemande {
    * `other2Label` seul, dont rien ne disait s'il désignait quelqu'un qui existe.
    */
   other2DraftRef?: string | null
+  /** Le second parent, quand c'est une fiche proposée **ailleurs**. */
+  other2DraftPersonId?: number | null
   other2Label?: string | null
   familyId?: number | null
   /**
@@ -236,7 +250,48 @@ export interface Demande {
  * Sans ce champ, l'administrateur découvre la caducité **en cliquant**, ce qui
  * la rend indistinguable d'une panne.
  */
-export type ResolutionPrevue = 'application' | 'rejeu' | 'caducite'
+export type ResolutionPrevue =
+  | 'application'
+  | 'rejeu'
+  | 'caducite'
+  /**
+   * La ligne visée n'existe plus. **Elle manquait à ce type** alors que le
+   * serveur la rend depuis toujours : `actionValidation()` discrimine sur cette
+   * union, et une valeur absente n'y tombait dans aucun cas — la fonction
+   * rendait `undefined`, et l'écran de décision plantait sur la seule demande
+   * qu'il fallait surtout ne pas valider.
+   */
+  | 'cible_disparue'
+  /**
+   * Cette demande s'appuie sur une personne proposée par **une autre demande
+   * encore en attente** : il y a un ordre à respecter, pas une demande à
+   * condamner. Elle reste dans la file et se validera après l'autre.
+   */
+  | 'dependance_en_attente'
+  /**
+   * La demande sur laquelle celle-ci s'appuyait a été refusée, retirée ou rendue
+   * caduque : la personne désignée n'existera jamais. C'est une caducité.
+   */
+  | 'dependance_morte'
+
+/**
+ * § 6.7 — une fiche proposée par une autre demande que celle-ci désigne, et
+ * l'état de cette autre demande.
+ *
+ * Quatre états, et ils ne se déduisent pas l'un de l'autre : `resolue` (l'autre
+ * demande est validée, la personne existe), `en_attente` (on attend),
+ * `morte` (refusée, retirée ou caduque), `disparue` (la fiche n'est plus là).
+ * Les deux derniers condamnent la demande ; le deuxième la fait attendre ; le
+ * premier n'est qu'un contexte utile à qui décide.
+ */
+export interface DependanceDeDemande {
+  draftPersonId: number
+  /** `null` quand la fiche a disparu avec sa demande. */
+  demandeId: number | null
+  /** Le nom proposé. Vide quand la fiche n'est plus là pour être relue. */
+  libelle: string
+  etat: 'resolue' | 'en_attente' | 'morte' | 'disparue'
+}
 
 export interface CibleDemande {
   version: number
@@ -273,6 +328,10 @@ export interface DemandeConcurrente {
 export interface DemandeAdministration extends Demande {
   cible?: CibleDemande
   resolutionPrevue?: ResolutionPrevue
+  /** **Toujours un tableau** sur la route d'administration, vide quand la
+   *  demande ne s'appuie sur personne (§ 6.7). Facultatif au typage comme les
+   *  trois autres blocs : la vue de l'auteur ne le porte pas. */
+  dependances?: DependanceDeDemande[]
   demandesConcurrentes?: DemandeConcurrente[]
   doublonsProbables?: DoublonProbable[]
 }
@@ -561,9 +620,24 @@ export interface LienPropose {
   kind: NatureLien
   subjectDraftRef?: string
   subjectPersonId?: number
+  /**
+   * Le sujet est une fiche proposée par **une autre demande en attente**.
+   *
+   * C'est ce qui permet de proposer un père un jour et son fils le lendemain :
+   * la fiche du père n'a pas encore d'identifiant de personne, mais sa **ligne**
+   * en a un, et c'est celui-là. Le serveur vérifie au dépôt que le lecteur a le
+   * droit de voir cette fiche et que sa demande est encore en attente — et si
+   * elle vient d'être validée, il résout la référence en personne réelle plutôt
+   * que de refuser.
+   */
+  subjectDraftPersonId?: number
   otherPersonId?: number
+  /** L'autre extrémité est une fiche proposée par une autre demande en attente. */
+  otherDraftPersonId?: number
   /** Le **second parent**, sur `enfant_de` seulement. */
   other2PersonId?: number
+  /** Le second parent, quand c'est une fiche proposée ailleurs. */
+  other2DraftPersonId?: number
   /** Un couple existant, sur `enfant_de` seulement. Exclusif avec `other*`. */
   familyId?: number
   marriage?: ValeurDate | null
@@ -615,6 +689,29 @@ export interface CorpsCreationPersonne extends CorpsCommun {
 }
 
 /**
+ * § 6.4 bis — **rattacher des personnes qui existent déjà**.
+ *
+ * C'est la nature `ajout_lien` : « ils étaient frère et sœur », « elle s'est
+ * remariée avec lui ». Elle ne crée **aucune fiche** — `brouillons` y est refusé
+ * en `422` — et ne porte que des liens.
+ *
+ * `targetId` n'est pas décoratif. Sans lui, le serveur prend pour cible le sujet
+ * du premier lien, ce qui se trompe précisément sur le geste le plus courant de
+ * cet écran : « ajouter un frère à Untel » s'écrit « ce frère est enfant du
+ * couple de ses parents », dont le sujet est **le frère**. La demande
+ * apparaîtrait alors dans la file sur la fiche du frère, alors que le
+ * contributeur travaillait sur celle d'Untel. La cible annoncée doit être une
+ * des personnes que les liens désignent, sinon `422` : c'est ce qui l'empêche
+ * d'être un champ libre.
+ */
+export interface CorpsAjoutLien extends CorpsCommun {
+  kind: 'ajout_lien'
+  targetKind: 'personne'
+  targetId: number
+  liens: LienPropose[]
+}
+
+/**
  * § 6.4 quater — supprimer une fiche.
  *
  * **`message` est obligatoire ici**, et c'est la seule nature où il l'est. Il ne
@@ -638,6 +735,7 @@ export interface CorpsSuppressionPersonne extends CorpsCommun {
 export type CorpsDemande =
   | CorpsModificationPersonne
   | CorpsCreationPersonne
+  | CorpsAjoutLien
   | CorpsSuppressionPersonne
 
 /**
@@ -653,6 +751,86 @@ export type CorpsDemande =
  */
 export function creerDemande(corps: CorpsDemande): Promise<Demande> {
   return requeteApi<Demande>('/demandes', { methode: 'POST', corps })
+}
+
+/* ------------------------------------------------------------------ */
+/* Chercher parmi les personnes proposées — § 6.6 bis                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Une personne **proposée et non encore validée**, telle que la recherche la
+ * rend.
+ *
+ * Elle n'a **pas de `personId`**, et c'est tout le problème qu'elle résout :
+ * `GET /api/arbre/recherche` ne cherche que dans l'arbre validé, si bien qu'une
+ * fiche déposée la veille n'était offerte à personne — pas même à son auteur.
+ * Ce qu'on reposte pour la désigner est `draftPersonId`, l'identifiant de sa
+ * **ligne** ; `localRef` ne vaut que dans sa demande.
+ */
+export interface BrouillonTrouve {
+  draftPersonId: number
+  demandeId: number
+  localRef: string
+  /** L'identifiant de ce nœud **dans le graphe**. Lu, jamais fabriqué. */
+  noeudId: string
+  displayName: string
+  sex: Sexe
+  deceased: boolean
+  /** « vers 1889 – 1972 », composée par le serveur. `null` si rien n'est connu. */
+  ligneDates: string | null
+  /** Qui l'a proposée. Un administrateur en voit d'autres que les siennes. */
+  authorLabel: string
+  /** Toujours `true` sur cette route. Lu quand même, pas déduit de l'URL. */
+  enAttente: boolean
+}
+
+/**
+ * `GET /api/demandes/brouillons/recherche` — **les propositions du lecteur**, et
+ * celles de tout le monde pour un administrateur (§ 13.3).
+ *
+ * Pas de `total`, comme au § 5.5 : « une recherche qui se pagine est une
+ * énumération déguisée », et un compte avant filtrage dirait combien de
+ * propositions on ne montre pas. `tronque` se dit en mots.
+ *
+ * `q` doit faire au moins deux caractères, sinon `422` : c'est à l'appelant de
+ * ne pas appeler avant.
+ */
+export function rechercherBrouillons(
+  q: string,
+  limite = 10,
+  signal?: AbortSignal,
+): Promise<{ elements: BrouillonTrouve[]; tronque: boolean }> {
+  // `exactOptionalPropertyTypes` interdit une clé facultative posée à
+  // `undefined` : on la pose seulement si elle existe.
+  const o: OptionsRequete = { requete: { q, limite } }
+  if (signal !== undefined) o.signal = signal
+
+  return requeteApi<{ elements: BrouillonTrouve[]; tronque: boolean }>(
+    '/demandes/brouillons/recherche',
+    o,
+  )
+}
+
+/**
+ * `GET /api/demandes/brouillons/{draftPersonId}` — **nommer** une fiche proposée
+ * dont on tient l'identifiant de ligne.
+ *
+ * Un corps de lien ne transporte que `otherDraftPersonId` : c'est la seule
+ * désignation qui vaille hors de sa demande. Sans cette lecture, une reprise de
+ * demande afficherait « personne n° 7 » — un identifiant sous les yeux du
+ * lecteur, ce que le dépôt s'interdit partout ailleurs.
+ *
+ * `404` sur la fiche d'un autre membre, jamais `403` : un `403` apprendrait
+ * qu'elle existe.
+ */
+export function lireFicheProposee(
+  draftPersonId: number,
+  signal?: AbortSignal,
+): Promise<BrouillonTrouve> {
+  const o: OptionsRequete = {}
+  if (signal !== undefined) o.signal = signal
+
+  return requeteApi<BrouillonTrouve>(`/demandes/brouillons/${draftPersonId}`, o)
 }
 
 /**

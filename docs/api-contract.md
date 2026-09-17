@@ -1624,10 +1624,12 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `POST` | `/api/demandes/{id}/retirer` | `MEMBRE` | *(vide)* | `200` demande (`annulee`) | `409` `demande_deja_decidee` · `403` · `404` | — |
 | `GET` | `/api/demandes/{id}/refaire` | `MEMBRE` | — | `200` corps pré-rempli | `403` · `404` · `409` `demande_non_refaisable` | — |
 | `GET` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | — | `200` § 6.6 | `403` · `404` | — |
+| `GET` | `/api/demandes/brouillons/recherche` | `MEMBRE` | `?q=&limite=` | `200` § 6.6 bis | `422` (`q` < 2) | — |
+| `GET` | `/api/demandes/brouillons/{brouillonId}` | `MEMBRE` | — | `200` une ligne du § 6.6 bis | `404` | — |
 | `GET` | `/api/demandes/historique/{subjectKind}/{subjectId}` | `ATTENTE` | `?page=&parPage=` | `200` liste paginée | `404` | — |
 | `GET` | `/api/administration/demandes` | `ADMIN` | `?status=&kind=&targetId=&page=` | `200` liste paginée | — | — |
 | `GET` | `/api/administration/demandes/{id}` | `ADMIN` | — | `200` § 6.7 | `404` | — |
-| `POST` | `/api/administration/demandes/{id}/valider` | `ADMIN` | *(vide)* | `200` § 6.8 | **`409` × 4 (§ 6.8)** · `404` · `409` `vue_comme_membre_active` | — |
+| `POST` | `/api/administration/demandes/{id}/valider` | `ADMIN` | *(vide)* | `200` § 6.8 | **`409` × 6 (§ 6.8)** · `404` · `409` `vue_comme_membre_active` | — |
 | `POST` | `/api/administration/demandes/{id}/refuser` | `ADMIN` | `{message, doublonDeId?}` | `200` demande (`refusee`) | `422` `donnees_invalides` · `409` `demande_deja_decidee` · `409` `vue_comme_membre_active` | — |
 
 `GET /api/demandes/{id}` : accessible à **son auteur** et aux **administrateurs**, personne
@@ -1806,8 +1808,9 @@ Règles :
   Contrôlé à la **soumission**, pas à la création : on peut enregistrer un brouillon
   incomplet. `POST .../soumettre` sur une demande sans lien ⇒ `422` `demande_sans_lien`.
 - `localRef` respecte `#p<n>`, unique dans la demande (`uniq_prp_draft_person_ref`).
-- Chaque extrémité d'un lien est **soit** un `*PersonId`, **soit** un `*DraftRef`, jamais les
-  deux (`ck_prp_link_sujet_unique`, `ck_prp_link_cible`) ⇒ `422` sinon.
+- Chaque extrémité d'un lien est **soit** un `*PersonId`, **soit** un `*DraftRef`, **soit**
+  un `*DraftPersonId` — une seule des trois (`ck_prp_link_sujet_unique`, `ck_prp_link_cible`)
+  ⇒ `422` sinon. La troisième forme est celle du § 6.3 bis.
 - Une filiation désigne **soit** `familyId` (un couple existant), **soit** `otherPersonId`
   (+ `other2PersonId` pour le second parent). Jamais les deux
   (`ck_prp_link_famille_filiation`).
@@ -1821,10 +1824,60 @@ Règles :
 - `dedup_key` est calculée par le serveur à la soumission (`search_key` + année de naissance).
   Le client ne l'envoie pas et ne la voit que dans la vue d'administration.
 
+### 6.3 bis Désigner une personne **proposée par une autre demande**
+
+Le besoin, dans les mots du commanditaire :
+
+> « Si je propose une personne, elle apparaît dans mon arbre et celui de l'admin ; mais si je
+> repousse une autre personne et que je cherche le père que j'ai proposé juste avant, non
+> validé encore mais proposé par moi, il ne m'est pas proposé. »
+
+Une fiche proposée n'a **pas** d'identifiant de personne, et `*DraftRef` ne vaut que **dans sa
+demande** (`uniq_prp_draft_person_ref`) : `#p1` de la demande 12 et `#p1` de la demande 13
+n'ont aucun rapport. Décrire une branche exigeait donc de tout saisir en une seule demande —
+ou d'attendre une validation, ou de ressaisir la même personne, c'est-à-dire de fabriquer le
+doublon que le § 9.5 du modèle passe son temps à écarter.
+
+La troisième forme d'extrémité désigne la **ligne** `prp_draft_person`, qui est unique en base,
+elle : `subjectDraftPersonId`, `otherDraftPersonId`, `other2DraftPersonId`.
+
+```json
+{
+  "kind": "creation_personne",
+  "soumettre": true,
+  "brouillons": [{ "localRef": "#p1", "givenNames": "Céleste", "surname": "Muguet", "sex": "feminin", "deceased": true }],
+  "liens": [
+    {
+      "seq": 1,
+      "kind": "enfant_de",
+      "subjectDraftRef": "#p1",
+      "otherDraftPersonId": 7
+    }
+  ]
+}
+```
+
+Trois contrôles au dépôt, et chacun attrape autre chose :
+
+| Cas | Réponse |
+|---|---|
+| la fiche n'existe pas, **ou** appartient à la demande d'un autre membre | `404 introuvable` — jamais `403`, qui apprendrait qu'elle existe (§ 15.2) |
+| sa demande n'est plus `en_attente` et la fiche n'a pas été résolue | `422`, `champs.liens[n].otherDraftPersonId` |
+| sa demande a été **validée entre la recherche et le dépôt** | accepté : le serveur remplace la référence par la **personne réelle** (`resolved_person_id`) |
+
+Le dernier cas n'est pas une tolérance : refuser ferait échouer une demande que la réalité
+vient de conforter, alors que le contributeur vient de voir la fiche dans sa liste de choix.
+
+**Une demande qui s'appuie sur une autre ne se valide pas avant elle.** C'est un ordre, pas un
+refus, et il est annoncé **avant le premier clic** par `resolutionPrevue` (§ 6.7) puis par
+`409 dependance_en_attente` (§ 6.8).
+
 ### 6.4 `kind = ajout_lien` et `kind = ajout_media`
 
 `ajout_lien` — « ils étaient frère et sœur », « elle s'est remariée avec lui ». Même forme que
-le § 6.3, **sans `brouillons`**, et les deux extrémités sont des personnes existantes :
+le § 6.3, **sans `brouillons`** — un ajout de lien ne crée aucune fiche, et en envoyer une rend
+`422`. Les extrémités sont des personnes existantes, ou des fiches proposées par une autre
+demande (§ 6.3 bis) ; jamais un `*DraftRef`, qui n'aurait aucun brouillon à désigner :
 
 ```json
 {
@@ -1851,6 +1904,20 @@ le § 6.3, **sans `brouillons`**, et les deux extrémités sont des personnes ex
   ]
 }
 ```
+
+**`targetKind` / `targetId` sont facultatifs, et il faut les envoyer.** Sans eux, le serveur
+prend pour cible le sujet du **premier** lien, ce qui se trompe sur le geste le plus courant de
+cet écran : « ajouter un frère à Untel » s'écrit « ce frère est enfant du couple de ses
+parents », dont le **sujet est le frère**. La demande apparaîtrait alors dans la file
+d'administration sur la fiche du frère, alors que le contributeur travaillait sur celle
+d'Untel. La cible annoncée doit être **une des personnes que les liens désignent**, sinon
+`422` — sans quoi `targetId` serait un champ libre permettant de faire apparaître n'importe
+quelle demande sur n'importe quelle fiche.
+
+Une fratrie n'est **pas** une nature de lien : `LinkKind` en compte trois, « ni plus ni moins »
+(§ 9.3 du modèle). Elle s'écrit « enfant du même couple » — `enfant_de` + `familyId` —, ce qui
+suppose que la fiche ait déjà une famille d'origine. Sans parent connu, il n'existe aucun
+couple à désigner, et c'est aux écrans de le dire plutôt que de laisser la demande échouer.
 
 `ajout_media` — le média est **d'abord téléversé** (§ 7.1, il naît `en_attente`), puis la
 demande le désigne :
@@ -2457,6 +2524,61 @@ administrateurs**, et invisible pour tout le monde d'autre : elle n'est dans auc
 puisque le cercle porte sur des personnes validées (§ 9.3). Le calque et le cercle sont deux
 filtres distincts, composés dans le même normaliseur (ADR 0004) — ils ne se remplacent pas.
 
+### 6.6 bis Chercher parmi les personnes **proposées**
+
+`GET /api/demandes/brouillons/recherche?q=barnab&limite=10`
+
+`GET /api/arbre/recherche` cherche dans l'arbre **validé** : une fiche sans identifiant n'y
+figure pas, et son auteur ne pouvait donc pas la désigner dans une seconde demande (§ 6.3
+bis). Cette route est son pendant côté `Proposal`.
+
+```json
+{
+  "elements": [
+    {
+      "draftPersonId": 7,
+      "demandeId": 12,
+      "localRef": "#p1",
+      "noeudId": "#12/p1",
+      "displayName": "Barnabé Muguet",
+      "sex": "masculin",
+      "deceased": true,
+      "ligneDates": "~1901 – 1968",
+      "authorLabel": "Cobalt Romarin",
+      "enAttente": true
+    }
+  ],
+  "tronque": false
+}
+```
+
+**Deux routes et non une clé de plus dans la première**, parce que les deux réponses ne se
+filtrent pas pareil : l'arbre se filtre par le **cercle de visibilité** (ADR 0003), les
+propositions par la règle du § 13.3 — l'auteur et les administrateurs, personne d'autre. Une
+route par règle, c'est une règle par endroit. Et une ligne de l'arbre porte un `personId`
+qu'une fiche proposée n'a pas : les glisser dans le même tableau obligerait chaque client à
+tester quelle forme il tient.
+
+| Lecteur | Ce qu'il obtient |
+|---|---|
+| Un membre | les fiches de **ses** demandes en attente |
+| Administrateur | celles de **toutes** les demandes en attente |
+| Administrateur sous « voir comme un membre » | ce que verrait le membre emprunté |
+| Compte `en_attente` | `{"elements": [], "tronque": false}` — il ne dépose pas de demande |
+
+Seules les demandes `en_attente` : une demande validée a produit une personne, que la recherche
+de l'arbre sait trouver ; une demande refusée n'a plus rien à offrir.
+
+Comme au § 5.5, **pas de `total`** — « une recherche qui se pagine est une énumération
+déguisée » —, et `tronque` se calcule sur le jeu **déjà filtré**. `q` doit faire au moins deux
+caractères, sinon `422`.
+
+`GET /api/demandes/brouillons/7` rend **la même ligne** pour une fiche dont on tient déjà
+l'identifiant. Elle existe parce qu'un corps de lien ne transporte que `otherDraftPersonId` :
+sans elle, un écran de reprise afficherait « personne n° 7 », c'est-à-dire un identifiant sous
+les yeux du lecteur, ce que le dépôt s'interdit partout ailleurs. `404` sur la fiche d'un
+autre membre, jamais `403`.
+
 ### 6.7 La file d'administration et le diff
 
 `GET /api/administration/demandes?status=en_attente` — triée par `submittedAt` croissant
@@ -2519,15 +2641,37 @@ ne peut pas exister :
   | `"application"` | Aucune version n'a bougé. | « Valider » |
   | `"rejeu"` | Une version a bougé, **toutes** les `oldValue` correspondent encore. | « Valider (sera rejouée sur la version courante) » |
   | `"caducite"` | **Une** `oldValue` a changé. | « Cette demande est devenue caduque » — le bouton valider est désactivé |
+  | `"cible_disparue"` | La ligne visée n'existe plus. | même chose : c'est une caducité |
+  | `"dependance_en_attente"` | Elle désigne une fiche proposée par **une autre demande non tranchée** (§ 6.3 bis). | « À valider après la demande n° X » — désactivé, mais **pas** à refaire |
+  | `"dependance_morte"` | Cette autre demande a été refusée, retirée ou rendue caduque. | une caducité : la personne désignée n'existera jamais |
+
+  Les cinq valeurs sont **à traiter exhaustivement**. Le front les discrimine dans un `switch`
+  sur l'union, et une valeur que le serveur rend mais que le client ignore ne tombe dans aucun
+  cas — le calcul rend alors `undefined`, sur la seule demande qu'il fallait surtout ne pas
+  valider.
 
   C'est un calcul en lecture seule, qui applique exactement la règle du § 9.6. Sans lui,
   l'administrateur découvre la caducité en cliquant, ce qui la rend indistinguable d'une
   panne.
+- **`dependances`** — **toujours un tableau**, vide quand la demande ne s'appuie sur personne.
+  Une entrée par fiche proposée ailleurs que les liens désignent, dédoublonnée :
+
+  ```json
+  "dependances": [
+    { "draftPersonId": 7, "demandeId": 12, "libelle": "Barnabé Muguet", "etat": "en_attente" }
+  ]
+  ```
+
+  Quatre états : `resolue` (l'autre demande est validée, la personne existe), `en_attente`
+  (on attend), `morte` (refusée, retirée ou caduque), `disparue` (la ligne n'est plus là). Les
+  résolues y figurent aussi : « s'appuie sur la demande n° 12, validée » est un contexte utile
+  à qui décide, et le taire laisserait croire qu'une demande à l'arrêt l'est sans raison.
+  C'est `resolutionPrevue` qui dit ce que le clic fera, jamais cette liste.
 - **`doublonsProbables`** vient de `idx_prp_request_dedup` — les autres demandes `en_attente`
   de même `dedup_key` (§ 9.5). Il porte `{id, authorLabel, libelle, dedupKey}` ; il n'y a
   aucun `personId`, puisque la personne n'existe pas.
 
-### 6.8 Valider — quatre issues, et deux 409 aux conseils opposés
+### 6.8 Valider — six issues, et deux 409 aux conseils opposés
 
 `POST /api/administration/demandes/14/valider`, corps vide. Toute la séquence est
 transactionnelle et **le contrôle est intégralement fait avant la première écriture**
@@ -2656,6 +2800,42 @@ demande reste `en_attente`, et réessayer est la bonne action.**
 
 **Issue 6 — déjà décidée.** `409` `demande_deja_decidee`, avec `details.statut` : on ne valide
 pas deux fois, et un double clic ne doit pas produire deux révisions.
+
+**Issue 7 — dépendance en attente.** `409` :
+
+```json
+{
+  "erreur": {
+    "code": "dependance_en_attente",
+    "message": "Cette demande s'appuie sur une personne proposée par une demande encore en attente : validez celle-là d'abord.",
+    "details": {
+      "demandeId": 19,
+      "statut": "en_attente",
+      "rejouable": true,
+      "dependances": [
+        { "draftPersonId": 7, "demandeId": 12, "libelle": "Barnabé Muguet", "etat": "en_attente" }
+      ]
+    }
+  }
+}
+```
+
+**La seule `409` qui n'écrit rien du tout, pas même un statut.** La demande désigne une fiche
+proposée par une autre demande non tranchée (§ 6.3 bis) : il y a un **ordre** à respecter, pas
+une demande à condamner. Elle reste `en_attente`, son auteur n'est pas notifié — il n'a rien à
+corriger —, et elle se validera **telle quelle** dès que l'autre sera tranchée.
+
+`rejouable: true`, comme pour `verrou_concurrent` et pour la même raison : le geste refusé
+redeviendra possible sans rien changer. Ce qui diffère, c'est **quand** — d'où les dépendances
+nommées, pour que le front dise « validez d'abord la demande n° 12 » plutôt que « réessayez »
+sans dire quand.
+
+**Issue 8 — dépendance morte.** `409` `dependance_morte`, même forme, `details.statut:
+"caduque"` et `rejouable: false`. La demande citée a été refusée, retirée ou rendue caduque —
+ou sa fiche a disparu : la personne désignée ne naîtra jamais. C'est une caducité de la même
+nature que `cible_disparue`, elle **écrit** comme elle (statut `caduque`), et l'auteur est
+notifié — avec une phrase qui nomme la proposition perdue, et non un diff de champs, puisque
+rien n'a bougé sur aucune fiche.
 
 ### 6.9 Refuser — message obligatoire
 
@@ -4490,6 +4670,8 @@ agent recopiera la référence :
 | `conflit` | 409 | générique — état incompatible | variable |
 | `demande_caduque` | 409 | validation (§ 6.8) | `{demandeId, statut, rejouable: false, champs[]}` |
 | `cible_disparue` | 409 | validation | `{demandeId, statut, rejouable: false, cible}` |
+| `dependance_en_attente` | 409 | validation (§ 6.8, issue 7) | `{demandeId, statut: "en_attente", rejouable: true, dependances[]}` |
+| `dependance_morte` | 409 | validation (§ 6.8, issue 8) | `{demandeId, statut: "caduque", rejouable: false, dependances[]}` |
 | `verrou_concurrent` | 409 | validation | `{demandeId, statut, rejouable: true}` |
 | `demande_deja_decidee` | 409 | valider, refuser, retirer | `{statut}` |
 | `demande_deja_soumise` | 409 | soumettre | `{statut}` |

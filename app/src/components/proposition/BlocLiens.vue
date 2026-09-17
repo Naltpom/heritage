@@ -18,6 +18,14 @@
  *   mariage ni date de rupture, et le gabarit n'en propose pas : ce n'est pas
  *   une omission, c'est `ck_prp_link_dates_union`.
  *
+ * ── Une extrémité peut être une personne **proposée** ───────────────────────
+ *
+ * Le sélecteur rend deux groupes : l'arbre validé, et les fiches encore en
+ * attente que le lecteur a le droit de voir. Désigner une fiche en attente est
+ * permis — c'est tout l'objet du correctif : « le père que j'ai proposé juste
+ * avant ne m'est pas offert » — et l'écran le **dit** à côté du nom, parce
+ * qu'une demande qui s'appuie sur une autre attendra sa validation.
+ *
  * **Une union sans date reste une union, une rupture sans date reste une
  * rupture.** Les champs de date sont donc facultatifs partout, et la case
  * « union rompue » est indépendante de la date de rupture — sur un arbre ancien,
@@ -32,7 +40,14 @@ import BoutonBase from '@/components/base/BoutonBase.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import ChampDateIncertaine from './ChampDateIncertaine.vue'
 import SelecteurPersonne from './SelecteurPersonne.vue'
-import { nombreDeLiens, unionVide, type PersonneChoisie, type SaisieCreation } from './creation'
+import {
+  cleDuChoix,
+  estFicheProposee,
+  nombreDeLiens,
+  unionVide,
+  type ChoixDePersonne,
+  type SaisieCreation,
+} from './creation'
 
 const { erreurs = {} } = defineProps<{
   /** Messages indexés par `filiation`, `liens`, `unions.<n>.mariage`… */
@@ -45,14 +60,14 @@ const saisie = defineModel<SaisieCreation>({ required: true })
  *  masquer un résultat serait cacher ce que le serveur a rendu — mais éteint
  *  leur bouton. */
 const dejaChoisis = computed(() => [
-  ...saisie.value.filiation.parents.map((parent) => parent.personId),
-  ...saisie.value.unions.map((union) => union.personne.personId),
-  ...saisie.value.enfants.map((enfant) => enfant.personne.personId),
+  ...saisie.value.filiation.parents.map(cleDuChoix),
+  ...saisie.value.unions.map((union) => cleDuChoix(union.personne)),
+  ...saisie.value.enfants.map((enfant) => cleDuChoix(enfant.personne)),
 ])
 
 const total = computed(() => nombreDeLiens(saisie.value))
 
-function ajouterParent(personne: PersonneChoisie): void {
+function ajouterParent(personne: ChoixDePersonne): void {
   if (saisie.value.filiation.parents.length >= 2) return
   saisie.value.filiation.parents.push(personne)
 }
@@ -65,7 +80,7 @@ function retirerFamille(): void {
   saisie.value.filiation.famille = null
 }
 
-function ajouterUnion(personne: PersonneChoisie): void {
+function ajouterUnion(personne: ChoixDePersonne): void {
   saisie.value.unions.push(unionVide(personne))
 }
 
@@ -73,7 +88,7 @@ function retirerUnion(index: number): void {
   saisie.value.unions.splice(index, 1)
 }
 
-function ajouterEnfant(personne: PersonneChoisie): void {
+function ajouterEnfant(personne: ChoixDePersonne): void {
   saisie.value.enfants.push({ personne, rangFratrie: null })
 }
 
@@ -106,10 +121,15 @@ function poserRang(index: number, brut: string): void {
         <ul v-if="saisie.filiation.parents.length > 0" class="flex flex-col gap-1.5">
           <li
             v-for="(parent, index) in saisie.filiation.parents"
-            :key="parent.personId"
+            :key="cleDuChoix(parent)"
             class="flex flex-wrap items-center justify-between gap-2 rounded-champ border border-ligne px-2.5 py-1.5"
           >
-            <span class="text-sm font-medium">{{ parent.libelle }}</span>
+            <span class="text-sm font-medium">
+              {{ parent.libelle }}
+              <span v-if="estFicheProposee(parent)" class="ml-1 text-xs font-normal text-attenue">
+                proposée, demande n° {{ parent.demandeId }}
+              </span>
+            </span>
             <BoutonBase variante="discret" @click="retirerParent(index)">Retirer</BoutonBase>
           </li>
         </ul>
@@ -131,11 +151,16 @@ function poserRang(index: number, brut: string): void {
       <div class="flex flex-col gap-4">
         <article
           v-for="(union, index) in saisie.unions"
-          :key="union.personne.personId"
+          :key="cleDuChoix(union.personne)"
           class="flex flex-col gap-3 rounded-champ border border-ligne px-3 py-3"
         >
           <header class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="text-sm font-semibold">{{ union.personne.libelle }}</h3>
+            <h3 class="text-sm font-semibold">
+              {{ union.personne.libelle }}
+              <span v-if="estFicheProposee(union.personne)" class="ml-1 text-xs font-normal text-attenue">
+                proposée, demande n° {{ union.personne.demandeId }}
+              </span>
+            </h3>
             <BoutonBase variante="discret" @click="retirerUnion(index)">Retirer</BoutonBase>
           </header>
 
@@ -194,10 +219,15 @@ function poserRang(index: number, brut: string): void {
       <div class="flex flex-col gap-3">
         <article
           v-for="(enfant, index) in saisie.enfants"
-          :key="enfant.personne.personId"
+          :key="cleDuChoix(enfant.personne)"
           class="flex flex-wrap items-end justify-between gap-2 rounded-champ border border-ligne px-3 py-2.5"
         >
-          <span class="text-sm font-medium">{{ enfant.personne.libelle }}</span>
+          <span class="text-sm font-medium">
+            {{ enfant.personne.libelle }}
+            <span v-if="estFicheProposee(enfant.personne)" class="ml-1 text-xs font-normal text-attenue">
+              proposé·e, demande n° {{ enfant.personne.demandeId }}
+            </span>
+          </span>
 
           <div class="flex items-end gap-2">
             <label class="flex flex-col gap-1">
