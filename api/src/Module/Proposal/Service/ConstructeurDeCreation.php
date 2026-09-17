@@ -294,6 +294,23 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             throw DonneesInvalides::pourChamp("$chemin.surname", 'Une fiche proposée porte au moins un nom ou un prénom.');
         }
 
+        // Même raison, un cran plus loin : `ck_tree_person_deces_coherent` ne mord qu'à
+        // la **validation**, quand le brouillon devient une vraie fiche. Sans ce contrôle,
+        // le dépôt passe, et c'est l'administrateur qui reçoit une erreur de pilote de
+        // base de données trois jours plus tard, sur une demande qu'il n'a pas écrite.
+        //
+        // On refuse plutôt que de cocher la case : `deceased` **ouvre la visibilité** —
+        // un vivant hors cercle est absent de l'arbre, un défunt est visible de tout
+        // compte connecté (ADR 0003). On ne bascule pas cela à la place de quelqu'un qui
+        // n'a saisi qu'une date.
+        $deces = $brouillon->getDeath();
+
+        if (!$brouillon->isDeceased()
+            && (null !== $deces->getRaw() || null !== $deces->getMin() || null !== $deces->getMax())
+        ) {
+            throw DonneesInvalides::pourChamp("$chemin.death", 'Une date de décès implique le décès : cochez « personne décédée », ou retirez la date. Une fiche marquée décédée devient visible de tout compte connecté, et on ne bascule pas cela à votre place.');
+        }
+
         return $brouillon;
     }
 
