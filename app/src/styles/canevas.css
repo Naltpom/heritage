@@ -151,6 +151,27 @@
 }
 
 /**
+ * Nœud **écho** — le second exemplaire d'une personne déjà dessinée ailleurs,
+ * posé par la disposition « duplication » (maquette `/arbre-5`).
+ *
+ * Il doit se lire comme un renvoi et non comme une personne de plus : sans marque
+ * visible, l'arbre a l'air de compter deux fois la même personne, ce qui est
+ * exactement le défaut que cette disposition échange contre un trait long.
+ *
+ * Tiret court pour le distinguer du tiret long de « en attente », et
+ * `fill-opacity` — **jamais `opacity`** : une couche de composition par œcho
+ * coûterait autant que les 377 nœuds (ADR 0007).
+ */
+.fiche.echo rect:not(.br) {
+  stroke-dasharray: 3 3;
+  fill-opacity: 0.35;
+}
+
+.fiche.echo text {
+  fill-opacity: 0.6;
+}
+
+/**
  * Liseré de branche : le quart d'ascendance dont la personne relève.
  *
  * **Pourquoi les règles du cadre portent toutes `rect:not(.br)`.** Le liseré est

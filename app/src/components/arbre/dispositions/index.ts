@@ -20,10 +20,16 @@
 
 import type { Graphe } from '@/lib/api'
 import { conjointsAccoles } from './conjointsAccoles'
-import type { Disposition, NomDeDisposition } from './socle'
+import { croisementsMinimises } from './croisements'
+import { duplication } from './duplication'
+import { vueBornee } from './vueBornee'
+import type { Disposition, NomDeDisposition, OptionsDeDisposition } from './socle'
 
 export * from './socle'
 export { conjointsAccoles }
+export { vueBornee }
+export { croisementsMinimises, compterLesCroisements } from './croisements'
+export { duplication, compterLesEchos, estUnEcho, originalDeLEcho } from './duplication'
 
 /** Ce que l'écran dit de la variante qu'on regarde. */
 export interface PresentationDeDisposition {
@@ -49,18 +55,31 @@ export const PRESENTATIONS: Record<NomDeDisposition, PresentationDeDisposition> 
   },
   bornee: {
     titre: 'Vue bornée',
-    resume: 'En construction.',
-    appliquer: (graphe: Graphe) => graphe,
+    resume:
+      'Une fenêtre autour de vous, comme chez MyHeritage ou webtrees : quelques générations ' +
+      'au-dessus, quelques-unes en dessous, et les conjoints de tout le monde. Elle ne déplace ' +
+      'rien — ce qui reste est exactement où l’arbre d’origine le met. La profondeur se règle ' +
+      'dans l’adresse : ?haut=3&bas=2.',
+    appliquer: vueBornee,
   },
   croisements: {
     titre: 'Minimisation de croisements',
-    resume: 'En construction.',
-    appliquer: (graphe: Graphe) => graphe,
+    resume:
+      'La méthode de GraphViz : chaque rangée se retrie par barycentre de ses voisins, on ' +
+      'balaie de haut en bas puis de bas en haut, et on garde le meilleur ordre — mesuré en ' +
+      'croisements. Elle corrige les 36 couples séparés, y compris ceux que nul échange local ' +
+      'ne peut rapprocher. Son prix est l’instabilité : ajouter une personne peut réorganiser ' +
+      'une branche entière.',
+    appliquer: croisementsMinimises,
   },
   duplication: {
     titre: 'Duplication',
-    resume: 'En construction.',
-    appliquer: (graphe: Graphe) => graphe,
+    resume:
+      'La méthode des éventails d’ascendance : plutôt que de choisir entre la place d’enfant ' +
+      'et la place de conjoint, on dessine la personne deux fois — une fois pleine, une fois en ' +
+      'écho tireté à côté de son partenaire. Le trait long disparaît, remplaçé par un doublon ' +
+      'assumé. L’écho porte le même identifiant de personne : cliquer dessus mène à la même fiche.',
+    appliquer: duplication,
   },
 }
 
@@ -73,7 +92,9 @@ export const PRESENTATIONS: Record<NomDeDisposition, PresentationDeDisposition> 
  * lieu de ne se manifester que sur les maquettes.
  */
 export function dispositionDeLaRoute(nom: unknown): Disposition {
-  return estUnNomDeDisposition(nom) ? PRESENTATIONS[nom].appliquer : (graphe: Graphe) => graphe
+  return estUnNomDeDisposition(nom)
+    ? PRESENTATIONS[nom].appliquer
+    : (graphe: Graphe, _options: OptionsDeDisposition) => graphe
 }
 
 export function presentationDeLaRoute(nom: unknown): PresentationDeDisposition | null {

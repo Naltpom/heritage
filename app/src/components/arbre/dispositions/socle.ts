@@ -44,8 +44,46 @@ export const ESPACE = 20
 /** `MoteurDePlacement::MARGE_BOITE`, recopiée pour la même raison qu'`ESPACE`. */
 export const MARGE_BOITE = 60
 
+/**
+ * Les réglages d'une disposition, lus dans la **chaîne de requête**.
+ *
+ * `?haut=3&bas=2` plutôt que des constantes : une profondeur se juge en la
+ * changeant, et un aller-retour par essai coûterait un déploiement. Les valeurs
+ * hors bornes sont ramenées dans l'intervalle plutôt que refusées — une URL
+ * tapée à la main ne doit pas rendre un écran vide.
+ */
+export interface OptionsDeDisposition {
+  /** Générations d'ascendance conservées au-dessus du lecteur. */
+  haut: number
+  /** Générations de descendance conservées en dessous. */
+  bas: number
+}
+
+export const OPTIONS_PAR_DEFAUT: OptionsDeDisposition = { haut: 3, bas: 2 }
+
 /** Une disposition : la même charge, autrement placée. */
-export type Disposition = (graphe: Graphe) => Graphe
+export type Disposition = (graphe: Graphe, options: OptionsDeDisposition) => Graphe
+
+/**
+ * Les réglages, bornés.
+ *
+ * `0` est une valeur légitime — « moi et mes conjoints seulement » — et doit le
+ * rester ; c'est le plus petit arbre qu'on puisse demander, pas une erreur.
+ */
+export function optionsDepuis(brut: Partial<Record<keyof OptionsDeDisposition, unknown>>): OptionsDeDisposition {
+  return {
+    haut: entierBorne(brut.haut, OPTIONS_PAR_DEFAUT.haut),
+    bas: entierBorne(brut.bas, OPTIONS_PAR_DEFAUT.bas),
+  }
+}
+
+function entierBorne(valeur: unknown, defaut: number): number {
+  const nombre = typeof valeur === 'string' ? Number(valeur) : typeof valeur === 'number' ? valeur : Number.NaN
+
+  if (!Number.isFinite(nombre)) return defaut
+
+  return Math.min(20, Math.max(0, Math.trunc(nombre)))
+}
 
 export const DISPOSITIONS = ['conjoints', 'bornee', 'croisements', 'duplication'] as const
 
@@ -125,6 +163,8 @@ export function rangeesDePersonnes(noeuds: readonly NoeudGraphe[]): Map<number, 
 /* ------------------------------------------------------------------ */
 
 export interface MesureDeLisibilite {
+  /** Fiches affichées — le chiffre que la vue bornée fait varier. */
+  personnes: number
   /** Couples dont les deux époux sont sur la même rangée. */
   couples: number
   /** Ceux dont les deux époux sont voisins immédiats. */
@@ -174,7 +214,13 @@ export function mesurerLisibilite(graphe: Graphe): MesureDeLisibilite {
     }
   }
 
-  return { couples, accoles, separes, intercales }
+  return {
+    personnes: graphe.noeuds.filter((noeud) => noeud.type === 'personne').length,
+    couples,
+    accoles,
+    separes,
+    intercales,
+  }
 }
 
 /* ------------------------------------------------------------------ */

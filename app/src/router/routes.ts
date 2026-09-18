@@ -47,10 +47,15 @@ declare module 'vue-router' {
  * page s'y trouvent déjà, et une disposition en segment d'URL serait un
  * paramètre que n'importe qui pourrait inventer.
  */
-function dispositionEnProp(route: { meta: { disposition?: NomDeDisposition } }): {
-  disposition: NomDeDisposition | undefined
-} {
-  return { disposition: route.meta.disposition }
+function dispositionEnProp(route: {
+  meta: { disposition?: NomDeDisposition }
+  query: Record<string, unknown>
+}): { disposition: NomDeDisposition | undefined; haut: unknown; bas: unknown } {
+  // La profondeur voyage dans la **chaîne de requête** : une profondeur se juge
+  // en la changeant, et un aller-retour par essai coûterait un déploiement. Les
+  // valeurs sont bornées par `optionsDepuis()`, pas ici — une URL tapée à la main
+  // ne doit pas rendre un écran vide.
+  return { disposition: route.meta.disposition, haut: route.query['haut'], bas: route.query['bas'] }
 }
 
 /** Exportée pour que les tests montent la table sur un historique en mémoire :
@@ -151,6 +156,27 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/views/ArbreView.vue'),
     props: dispositionEnProp,
     meta: { acces: 'attente', titre: 'Arbre — conjoints accolés', disposition: 'conjoints' },
+  },
+  {
+    path: '/arbre-3',
+    name: 'arbre.bornee',
+    component: () => import('@/views/ArbreView.vue'),
+    props: dispositionEnProp,
+    meta: { acces: 'attente', titre: 'Arbre — vue bornée', disposition: 'bornee' },
+  },
+  {
+    path: '/arbre-4',
+    name: 'arbre.croisements',
+    component: () => import('@/views/ArbreView.vue'),
+    props: dispositionEnProp,
+    meta: { acces: 'attente', titre: 'Arbre — croisements minimisés', disposition: 'croisements' },
+  },
+  {
+    path: '/arbre-5',
+    name: 'arbre.duplication',
+    component: () => import('@/views/ArbreView.vue'),
+    props: dispositionEnProp,
+    meta: { acces: 'attente', titre: 'Arbre — duplication', disposition: 'duplication' },
   },
   {
     // `{id}` est un entier : un identifiant provisoire (`#12/p1`) ne correspond

@@ -393,6 +393,10 @@ export function classesDeFiche(
   if (noeud.id === egoId) classes.push('ego')
   if (unions > 1) classes.push('remarie')
   if (noeud.enAttente === true) classes.push('attente')
+  // Un **écho** : le second exemplaire d'une personne déjà dessinée ailleurs,
+  // posé par la disposition « duplication ». Il doit se distinguer au premier
+  // coup d'œil, sans quoi l'arbre a l'air de compter deux fois la même personne.
+  if (noeud.id.endsWith('#echo')) classes.push('echo')
   return classes
 }
 

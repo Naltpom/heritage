@@ -118,6 +118,7 @@ import { avertissementDuCalque, ponctuationApres } from '@/components/arbre/calq
 import {
   dispositionDeLaRoute,
   mesurerLisibilite,
+  optionsDepuis,
   presentationDeLaRoute,
   type NomDeDisposition,
 } from '@/components/arbre/dispositions'
@@ -171,15 +172,19 @@ const grapheBrut = shallowRef<Graphe | null>(null)
  * serveur, sans routeur, et un `useRoute()` y vaut `undefined`. Le même piège a
  * déjà été payé sur l'en-tête.
  */
-const { disposition: nomDeDisposition } = defineProps<{
+const { disposition: nomDeDisposition, haut, bas } = defineProps<{
   disposition?: NomDeDisposition
+  /** Réglages de profondeur, bruts : `optionsDepuis()` les borne. */
+  haut?: unknown
+  bas?: unknown
 }>()
 
 const disposition = computed(() => dispositionDeLaRoute(nomDeDisposition))
 const presentation = computed(() => presentationDeLaRoute(nomDeDisposition))
+const optionsDeDisposition = computed(() => optionsDepuis({ haut, bas }))
 
 const graphe = computed<Graphe | null>(() =>
-  grapheBrut.value === null ? null : disposition.value(grapheBrut.value),
+  grapheBrut.value === null ? null : disposition.value(grapheBrut.value, optionsDeDisposition.value),
 )
 
 /**
@@ -662,6 +667,9 @@ onBeforeUnmount(() => {
         {{ presentation.resume }}
       </p>
       <p v-if="effetDeLaDisposition !== null" class="mt-1 text-attenue tnum">
+        Fiches affichées : {{ effetDeLaDisposition.apres.personnes }} sur
+        {{ effetDeLaDisposition.avant.personnes }}.
+
         Couples accolés : {{ effetDeLaDisposition.avant.accoles }} →
         {{ effetDeLaDisposition.apres.accoles }} sur {{ effetDeLaDisposition.apres.couples }}.
         Personnes assises entre deux époux :
