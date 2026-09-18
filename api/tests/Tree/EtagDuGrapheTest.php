@@ -6,6 +6,8 @@ namespace App\Tests\Tree;
 
 use App\Module\Core\Enum\Regime;
 use App\Module\Tree\Serializer\EtagDuGraphe;
+use App\Module\Tree\Serializer\PersonneDuLecteur;
+use App\Tests\Tree\Double\AnnuaireEnMemoire;
 use App\Module\Tree\Serializer\FabriqueDuCercle;
 use App\Module\Tree\Serializer\LecteurDeLArbre;
 use App\Module\Tree\Serializer\PopulationDeLArbre;
@@ -219,6 +221,65 @@ final class EtagDuGrapheTest extends TestCase
         );
     }
 
+    /**
+     * ════════════════════════════════════════════════════════════════════════════
+     *  DEUX LECTEURS DE MÊME CERCLE, MAIS PAS LE MÊME POINT DE VUE.
+     * ═══════════════════════════════════════════════════════════════════════════.
+     *
+     * La mise en page est calculée **par lecteur** : `génération 0` est sa rangée, et les
+     * quatre couleurs de branche disent son quart d'ascendance. Deux administrateurs —
+     * même cercle, aucune demande — reçoivent donc des charges dont **toutes les
+     * coordonnées** diffèrent, et qui ne différaient par aucune des trois autres
+     * composantes.
+     *
+     * C'est le défaut mesuré en tête de ce fichier, sur une autre dimension : un `ETag`
+     * identique pour deux charges différentes. « Quand on hésite, on distingue ».
+     */
+    public function testDeuxLecteursDeMemeCercleMaisDePointsDeVueDifferentsNePartagentPasLEtag(): void
+    {
+        $etags = $this->etags(personneParCompte: [42 => 100, 43 => 200]);
+
+        self::assertNotSame(
+            $etags->pour(new LecteurDeLArbre(42, 'Membre', false, Regime::Cercle)),
+            $etags->pour(new LecteurDeLArbre(43, 'Membre', false, Regime::Cercle)),
+            'Deux mises en page différentes ne peuvent pas porter le même `ETag`.',
+        );
+    }
+
+    /**
+     * Le pendant : **un même lecteur retrouve son `ETag`**, d'une requête à l'autre.
+     *
+     * C'est la propriété dont dépend la revalidation, et ajouter une composante ne doit
+     * pas la coûter.
+     */
+    public function testUnMemeLecteurRetrouveSonEtag(): void
+    {
+        $lecteur = new LecteurDeLArbre(42, 'Membre', false, Regime::Cercle);
+
+        self::assertSame(
+            $this->etags(personneParCompte: [42 => 100])->pour($lecteur),
+            $this->etags(personneParCompte: [42 => 100])->pour($lecteur),
+        );
+    }
+
+    /**
+     * Deux lecteurs **rattachés à personne** regardent depuis la racine, donc partagent
+     * leur mise en page — et peuvent partager leur `ETag`.
+     *
+     * Distinguer ici ne coûterait qu'une revalidation, mais ce serait dire que les charges
+     * diffèrent alors qu'elles sont identiques. La règle est « distinguer ce qui distingue
+     * la représentation », pas « distinguer tout le monde ».
+     */
+    public function testDeuxLecteursSansRattachementPartagentLEtag(): void
+    {
+        $etags = $this->etags();
+
+        self::assertSame(
+            $etags->pour(new LecteurDeLArbre(42, 'Membre', false, Regime::Cercle)),
+            $etags->pour(new LecteurDeLArbre(43, 'Membre', false, Regime::Cercle)),
+        );
+    }
+
     /** `ETag` **fort**, jamais faible : deux représentations qui diffèrent d'un champ diffèrent d'une donnée personnelle. */
     public function testLEtagEstFortEtEntreGuillemets(): void
     {
@@ -240,13 +301,20 @@ final class EtagDuGrapheTest extends TestCase
         self::assertFalse($etags->correspond('"aaa"', $etag));
     }
 
-    private function etags(?CalqueEnMemoire $propositions = null, ?CercleEnMemoire $cercle = null): EtagDuGraphe
+    /**
+     * @param array<int, int> $personneParCompte le point de vue de chaque compte, quand le
+     *                                           cas en a besoin — vide par défaut : un
+     *                                           lecteur rattaché à personne regarde depuis
+     *                                           la racine
+     */
+    private function etags(?CalqueEnMemoire $propositions = null, ?CercleEnMemoire $cercle = null, array $personneParCompte = []): EtagDuGraphe
     {
         return new EtagDuGraphe(
             $this->empreinteFigee(),
             $propositions ?? new CalqueEnMemoire(7),
             new FabriqueDuCercle($cercle ?? new CercleEnMemoire(Regime::Cercle, [11, 12])),
             $this->populationFigee(),
+            new PersonneDuLecteur(new AnnuaireEnMemoire($personneParCompte)),
         );
     }
 

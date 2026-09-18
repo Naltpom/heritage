@@ -305,15 +305,43 @@ export function saisieDepuisFiche(fiche: FichePersonneComplete): SaisieModificat
  * formulaire n'a alors qu'une seule façon d'afficher une erreur, qu'elle vienne
  * d'ici ou du serveur.
  *
- * **Une date de décès sans `deceased` n'est pas refusée ici**, alors qu'elle
- * l'est sur le formulaire de création (`creation.ts`), et la différence est
- * voulue. Une création part d'une feuille blanche : l'incohérence y est
- * forcément le fait du contributeur, on peut la lui signaler. Une modification
- * part d'une fiche importée, où 25 personnes portent un `DEAT Y` sans date et
- * où l'inverse existe aussi. Refuser tant que la case n'est pas cochée
- * bloquerait la correction d'un prénom sur une incohérence que le contributeur
- * n'a pas créée, et qu'on lui demanderait de trancher au passage.
+ * **Une date de décès sans `deceased` est refusée ici aussi**, et ça n'a pas
+ * toujours été le cas. La raison de s'en abstenir était celle-ci : « une
+ * modification part d'une fiche importée, où 25 personnes portent un `DEAT Y`
+ * sans date ; refuser tant que la case n'est pas cochée bloquerait la
+ * correction d'un prénom sur une incohérence que le contributeur n'a pas
+ * créée ». Le souci était juste, la conclusion non.
+ *
+ * L'incohérence redoutée est **l'inverse** de celle-ci, et elle ne pose aucun
+ * problème : `DEAT Y` sans date, c'est `deceased` coché sans date de décès, ce
+ * qui est parfaitement valide. Le cas refusé est l'autre — une date de décès
+ * sur quelqu'un laissé vivant — et il ne peut pas préexister sur une fiche :
+ * `ck_tree_person_deces_coherent` l'interdit en base. Toute occurrence est donc
+ * forcément le fait de la saisie en cours.
+ *
+ * Sans ce contrôle, le refus arrivait quand même — mais du serveur, et il
+ * arrivait autrefois de la base elle-même, sous la forme d'une erreur de pilote
+ * que personne ne pouvait lire.
+ *
+ * On signale plutôt que de cocher la case : `deceased` **ouvre la visibilité**
+ * — un vivant hors cercle est absent de l'arbre, un défunt est visible de tout
+ * compte connecté. On ne bascule pas cela à la place de quelqu'un.
  */
+/**
+ * Le critère de `ck_tree_person_deces_coherent`, recopié : `raw`, `min` ou `max`
+ * renseigné.
+ *
+ * Le **lieu** n'en fait pas partie, et c'est voulu des deux côtés : « inhumé à
+ * Trochu » sans date est une information qu'on n'a pas à refuser. Élargir le
+ * critère « par prudence » ferait diverger le front du serveur, et le front
+ * refuserait alors des saisies que le serveur accepte.
+ */
+function porteUneDateDeDeces(date: ValeurDate | null): boolean {
+  if (date === null) return false
+
+  return date.raw !== null || date.min !== null || date.max !== null
+}
+
 export function valeursDepuisSaisie(saisie: SaisieModification): {
   valeurs: ValeursPersonne | null
   erreurs: Record<string, string>
@@ -330,6 +358,16 @@ export function valeursDepuisSaisie(saisie: SaisieModification): {
   if (!deces.valide) erreurs['death'] = deces.message
 
   if (!naissance.valide || !deces.valide) return { valeurs: null, erreurs }
+
+  // La clé est `deceased` et non `death` : c'est la case à cocher qui manque,
+  // c'est donc sur elle que le formulaire doit poser le message. Le serveur dit
+  // la même chose, dans les mêmes termes.
+  if (!saisie.deceased && porteUneDateDeDeces(deces.valeur)) {
+    erreurs['deceased'] =
+      'Une date de décès est indiquée : cochez « personne décédée », ou effacez la date.'
+
+    return { valeurs: null, erreurs }
+  }
 
   return {
     valeurs: {

@@ -182,9 +182,9 @@ final class TreeFingerprint
      * @param string $empreinteDuCercleEffectif {@see \App\Module\Tree\Serializer\CercleDuLecteur::empreinte()}
      * @param string $empreinteDesDemandes      `''` quand le lecteur n'a aucune demande en cours
      */
-    public function etag(string $empreinteDuCercleEffectif, string $empreinteDesDemandes): string
+    public function etag(string $empreinteDuCercleEffectif, string $empreinteDesDemandes, string $pointDeVue = ''): string
     {
-        return hash('sha256', $this->empreinte().':'.$empreinteDuCercleEffectif.':'.$empreinteDesDemandes);
+        return hash('sha256', $this->empreinte().':'.$empreinteDuCercleEffectif.':'.$empreinteDesDemandes.':'.$pointDeVue);
     }
 
     /**

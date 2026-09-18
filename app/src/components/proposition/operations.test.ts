@@ -298,3 +298,80 @@ describe('une date que l’éditeur ne sait pas rééditer', () => {
     expect(construireOps(instantaneDeFiche(avecMois), valeursDepuisSaisie(saisie).valeurs!)).toEqual([])
   })
 })
+
+/**
+ * ────────────────────────────────────────────────────────────────────
+ * **UNE DATE DE DÉCÈS SUR QUELQU'UN QU'ON LAISSE VIVANT.**
+ *
+ * Le formulaire de modification ne disait rien : la règle n'existait qu'en base
+ * — `ck_tree_person_deces_coherent` —, et elle s'appliquait au `flush`. Le
+ * contributeur recevait une erreur de pilote de base de données, un message qui
+ * ne nomme ni le champ ni le geste à faire. Constaté sur une fiche réelle.
+ *
+ * La raison qu'on s'était donnée de ne pas le contrôler ici était : « une fiche
+ * importée porte 25 `DEAT Y` sans date, refuser bloquerait la correction d'un
+ * prénom ». Elle visait **l'incohérence inverse**, celle qui est parfaitement
+ * valide — décès coché sans date. Celle-ci ne peut pas préexister : la base
+ * l'interdit. Toute occurrence vient donc de la saisie en cours.
+ * ────────────────────────────────────────────────────────────────────
+ */
+describe('une date de décès implique le décès', () => {
+  /** La fiche de référence, remise vivante et sans date de décès. */
+  function vivante(): FichePersonneComplete {
+    return { ...FICHE, deceased: false, vivant: true, death: null }
+  }
+
+  it('refuse la date quand la case reste décochée', () => {
+    const saisie = saisieDepuisFiche(vivante())
+    saisie.deces.forme = 'connue'
+    saisie.deces.debut = '1991'
+
+    const converti = valeursDepuisSaisie(saisie)
+
+    expect(converti.valeurs).toBeNull()
+    // La clé est `deceased` et non `death` : c'est la case qui manque, et c'est
+    // sur elle que le formulaire doit poser le message.
+    expect(converti.erreurs['deceased']).toMatch(/personne décédée/)
+    expect(converti.erreurs['deceased']).toMatch(/effacez la date/)
+  })
+
+  it('accepte la date et la case dans la même saisie', () => {
+    const saisie = saisieDepuisFiche(vivante())
+    saisie.deces.forme = 'connue'
+    saisie.deces.debut = '1991'
+    saisie.deceased = true
+
+    expect(valeursDepuisSaisie(saisie).valeurs).not.toBeNull()
+  })
+
+  it('laisse passer une fiche déjà décédée qui reçoit une date', () => {
+    /* Le cas des 25 `DEAT Y` sans date : on retrouve la date des années plus
+       tard, et rien d'autre n'a à être coché. */
+    const saisie = saisieDepuisFiche(FICHE)
+    saisie.deces.forme = 'connue'
+    saisie.deces.debut = '1991'
+
+    expect(valeursDepuisSaisie(saisie).valeurs).not.toBeNull()
+  })
+
+  it('ne bloque pas la correction d’un prénom sur une fiche vivante sans date', () => {
+    /* La crainte d'origine, vérifiée : on ne juge que ce que la saisie produit. */
+    const saisie = saisieDepuisFiche(vivante())
+    saisie.surname = 'SUREAU'
+
+    expect(valeursDepuisSaisie(saisie).valeurs).not.toBeNull()
+  })
+
+  it('n’appelle pas une date un lieu de décès seul', () => {
+    /*
+     * Le critère recopie celui de la contrainte : `raw`, `min` ou `max`. Le lieu
+     * n'en fait pas partie — « inhumé à Trochu » sans date est une information
+     * qu'on n'a pas à refuser. Élargir « par prudence » ferait refuser au front
+     * des saisies que le serveur accepte.
+     */
+    const saisie = saisieDepuisFiche(vivante())
+    saisie.deces.lieu = 'Trochu'
+
+    expect(valeursDepuisSaisie(saisie).valeurs).not.toBeNull()
+  })
+})

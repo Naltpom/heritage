@@ -7,7 +7,7 @@ namespace App\Module\Tree\Serializer;
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
 use App\Module\Core\Contract\ProjectionEnAttente;
 use App\Module\Core\Enum\Branch;
-use App\Module\Tree\Service\FournisseurDeJeuDePlacement;
+use App\Module\Tree\Service\ArbreVuDepuis;
 use App\Module\Tree\Service\MesureDeFiche;
 use App\Module\Tree\Service\PlacementPartage;
 use App\Module\Tree\Service\ProjecteurDePlacement;
@@ -83,9 +83,10 @@ final readonly class NormaliseurDeGraphe
         private CalqueEnAttenteInterface $calque,
         private PropositionsProjetees $traduction,
         private PortDesMedias $medias,
+        private PersonneDuLecteur $pointDeVue,
         private EtiquetteDuNom $noms,
         private Connection $connexion,
-        private FournisseurDeJeuDePlacement $fournisseur,
+        private ArbreVuDepuis $arbre,
         private MesureDeFiche $mesure = new MesureDeFiche(),
     ) {
     }
@@ -101,7 +102,11 @@ final readonly class NormaliseurDeGraphe
         // rouvrirait l'écart entre la largeur envoyée et le texte envoyé. 274 lignes,
         // une fois par affichage du graphe : à cette échelle, la cohérence vaut la
         // requête (§ 3 du dossier de mission).
-        $jeu = $this->fournisseur->jeuComplet();
+        // **Le même point de vue que le placement**, sans quoi les étiquettes seraient
+        // mesurées sur un arbre et posées sur un autre.
+        $pointDeVue = $this->pointDeVue->pour($lecteur);
+
+        $jeu = $this->arbre->jeu($pointDeVue);
 
         /** @var array<string, PersonnePlacable> $placables indexés par identifiant de nœud */
         $placables = [];
@@ -109,8 +114,12 @@ final readonly class NormaliseurDeGraphe
             $placables[$placable->id] = $placable;
         }
 
-        $partage = $this->partage->placement();
-        $libelles = $this->libelles();
+        // La mise en page est **celle du lecteur** : `génération 0` est sa rangée, et les
+        // quatre couleurs de branche disent son quart d'ascendance à lui. Servir celle de
+        // la racine à tout le monde serait juste pour un compte et faux pour tous les
+        // autres — voir {@see ArbreVuDepuis} et {@see PersonneDuLecteur}.
+        $partage = $this->partage->placement($pointDeVue);
+        $libelles = $this->libelles($this->arbre->branches($pointDeVue));
 
         // Le calque et le cercle sont deux filtres **composés** (ADR 0004) : celui-ci
         // décide *quelles* propositions ce lecteur a le droit de voir — les siennes, ou
@@ -483,9 +492,13 @@ final readonly class NormaliseurDeGraphe
      * `sex`, `generation` et l'état vivant viennent de {@see PersonnePlacable}, ce qui
      * garantit qu'ils ne divergent pas de ce que le moteur a mesuré.
      *
+     * @param array<int, Branch> $branchesVues les branches recalculées pour le point de vue
+     *                                          du lecteur, vides quand il regarde depuis la
+     *                                          racine — la colonne suffit alors
+     *
      * @return array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, bool>}
      */
-    private function libelles(): array
+    private function libelles(array $branchesVues = []): array
     {
         $personnes = [];
 
@@ -496,7 +509,12 @@ final readonly class NormaliseurDeGraphe
                 continue;
             }
 
-            $branche = \is_string($ligne['branch']) ? Branch::tryFrom($ligne['branch']) : null;
+            // La colonne `branch` est la vue de **la racine** : elle reste juste pour qui
+            // n'est rattaché à personne, et `$branchesVues` est alors vide. Pour un lecteur
+            // rattaché, la branche a été recalculée depuis lui — « paternelle » doit
+            // vouloir dire *son* côté paternel.
+            $branche = $branchesVues[(int) $ligne['id']]
+                ?? (\is_string($ligne['branch']) ? Branch::tryFrom($ligne['branch']) : null);
 
             $personnes[(int) $ligne['id']] = [
                 'displayName' => \is_string($ligne['display_name']) ? $ligne['display_name'] : '?',

@@ -14,6 +14,7 @@ use App\Module\Proposal\Enum\ValueKind;
 use App\Module\Proposal\Exception\Conflit;
 use App\Module\Proposal\Exception\DonneesInvalides;
 use App\Module\Proposal\Exception\Introuvable;
+use App\Module\Proposal\Service\Port\EtatCible;
 use App\Module\Proposal\Service\Port\PortArbre;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -99,11 +100,103 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
 
         $cible = $this->arbre->chargerCible($premier->getSubjectKind(), $sujet);
 
+        if (SubjectKind::Personne === $premier->getSubjectKind() && null !== $cible) {
+            $this->verifierQueLeDecesEstCoherent($construits, $cible);
+        }
+
         $demande->setTarget(
             $premier->getSubjectKind(),
             $sujet,
             $cible?->libelle,
         );
+    }
+
+    /**
+     * **Une date de décès sur quelqu'un qu'on laisse marqué vivant.**.
+     *
+     * ── Ce qui se passait avant ────────────────────────────────────────────────────
+     *
+     * Rien, jusqu'à l'écriture. La règle n'existait qu'en base —
+     * `ck_tree_person_deces_coherent`, « une date de décès implique le décès » — et elle
+     * s'appliquait au `flush`. Le contributeur recevait donc une erreur de pilote de base
+     * de données, c'est-à-dire un message qui ne nomme ni le champ ni le geste à faire, et
+     * il n'avait aucun moyen de deviner qu'il lui manquait une case à cocher.
+     *
+     * ── Pourquoi on refuse plutôt que de cocher la case à sa place ─────────────────
+     *
+     * Parce que c'est un fait d'état civil, pas un détail d'affichage. Et parce que
+     * `deceased` **ouvre la visibilité** : un vivant hors du cercle du lecteur est absent
+     * de l'arbre (ADR 0003), un défunt est « un fait historique, visible de tout compte
+     * connecté ». Basculer ce drapeau au nom de quelqu'un qui n'a saisi qu'une date
+     * élargirait l'audience d'une fiche sans que personne ne l'ait demandé.
+     *
+     * C'est exactement l'arbitrage déjà pris pour la rupture d'union à la saisie : « on ne
+     * devine pas une rupture à partir d'une date — le lecteur a pu saisir la date avant de
+     * cocher ». Le message dit donc les deux gestes possibles, et laisse choisir.
+     *
+     * ── L'état vérifié est celui d'**après** ───────────────────────────────────────
+     *
+     * Une demande qui pose la date **et** coche la case est parfaitement valide, et c'est
+     * le cas courant. On compose donc l'état résultant — les valeurs de la fiche, écrasées
+     * par les ops — au lieu de regarder chaque op isolément, qui refuserait la moitié des
+     * demandes légitimes.
+     *
+     * Le critère reprend celui de la contrainte, terme pour terme : `raw`, `min` ou `max`
+     * renseigné. Un **lieu** de décès seul passe, et c'est voulu — la contrainte l'admet,
+     * et « inhumé à Trochu » sans date est une information qu'on n'a pas à refuser.
+     *
+     * @param list<ChangeRequestOp> $ops
+     */
+    private function verifierQueLeDecesEstCoherent(array $ops, EtatCible $cible): void
+    {
+        $deces = $this->normaliseur->versJson(ValueKind::DateIncertaine, $cible->valeurs['death'] ?? null);
+        $decedee = (bool) ($cible->valeurs['deceased'] ?? false);
+        $touche = false;
+
+        foreach ($ops as $op) {
+            if ('death' === $op->getField()) {
+                $deces = $op->getNewValue();
+                $touche = true;
+            }
+
+            if ('deceased' === $op->getField()) {
+                $decedee = (bool) $op->getNewValue();
+                $touche = true;
+            }
+        }
+
+        // **On juge la modification, pas la fiche.** Corriger un prénom sur une fiche dont
+        // l'état de décès serait incohérent ne doit pas être bloqué : le contributeur
+        // n'a pas créé cette incohérence, et on n'a pas à lui demander de la trancher au
+        // passage. Le cas ne devrait pas exister — la contrainte de base l'interdit — mais
+        // un contrôle qui dépend de cette promesse en hérite les conséquences le jour où
+        // elle est levée, et ce jour-là il bloquerait des corrections sans rapport.
+        if (!$touche || $decedee || !self::porteUneDate($deces)) {
+            return;
+        }
+
+        throw DonneesInvalides::pourChamp('ops', 'Une date de décès implique le décès : cochez « personne décédée », ou retirez la date. Ce n’est pas un détail d’affichage — une fiche marquée décédée devient visible de tout compte connecté, et on ne bascule pas cela à votre place.');
+    }
+
+    /**
+     * Le critère de la contrainte `ck_tree_person_deces_coherent`, recopié : `raw`, `min`
+     * ou `max` renseigné. Le lieu n'en fait pas partie.
+     */
+    private static function porteUneDate(mixed $date): bool
+    {
+        if (!\is_array($date)) {
+            return false;
+        }
+
+        foreach (['raw', 'min', 'max'] as $cle) {
+            $valeur = $date[$cle] ?? null;
+
+            if (null !== $valeur && '' !== $valeur) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
