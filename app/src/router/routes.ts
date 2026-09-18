@@ -179,6 +179,18 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'attente', titre: 'Arbre — duplication', disposition: 'duplication' },
   },
   {
+    // **Sa propre vue**, et c'est la seule des six. Les cinq autres sont des
+    // transformations de la charge, que le canevas de l'arbre dessine sans savoir
+    // qu'elle a été retouchée. Le quilt n'est pas une disposition, c'est une
+    // autre **représentation** : une matrice, sans fiche, sans losange, sans
+    // arête. Lui faire porter les deux aurait fait du canevas un composant à deux
+    // modes, celui qu'on ne sait plus lire.
+    path: '/arbre-6',
+    name: 'arbre.quilt',
+    component: () => import('@/views/ArbreQuiltView.vue'),
+    meta: { acces: 'attente', titre: 'Arbre — quilt' },
+  },
+  {
     // `{id}` est un entier : un identifiant provisoire (`#12/p1`) ne correspond
     // à aucune route côté API et n'a pas à en avoir une ici non plus. Le détail
     // d'un nœud en attente passe par la demande qui le porte (§ 6.6).

@@ -526,3 +526,90 @@
 .chrono.selection .barre.sel .pointe { fill-opacity: 0.6; }
 .chrono.selection .barre.sel .hachure { fill-opacity: 1; stroke-opacity: 0.4; }
 .chrono.selection .barre.sel .nom { fill-opacity: 1; }
+
+/* ------------------------------------------------------------------ */
+/* Le quilt — maquette `/arbre-6`                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * La matrice ne dessine **aucune arête**, donc aucune des règles de `.ar` ne la
+ * concerne. Ce qu'elle garde du reste du canevas : `fill-opacity` et jamais
+ * `opacity`, parce qu'une couche de composition par case coûterait, sur une
+ * matrice, bien plus cher que sur un arbre (ADR 0007).
+ */
+.quilt {
+  touch-action: none;
+}
+
+/** La colonne d'une famille : un rail vertical, discret, sous les lignes. */
+.quilt .qcol {
+  fill: var(--color-ligne);
+  fill-opacity: 0.55;
+}
+
+/** Une union rompue : même information que le losange barré de l'arbre. */
+.quilt .qcol.div {
+  fill: var(--color-alerte);
+  fill-opacity: 0.35;
+}
+
+/** La ligne d'une personne : un rail horizontal, de sa première à sa dernière case. */
+.quilt .qligne rect {
+  fill: var(--color-ligne);
+  fill-opacity: 0.4;
+  cursor: pointer;
+}
+
+.quilt .qligne text {
+  fill: var(--color-texte);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.quilt .qligne:hover rect {
+  fill-opacity: 0.75;
+}
+
+/** La ligne sélectionnée : c'est elle qu'on suit du regard à travers la matrice. */
+.quilt .qligne.vise rect {
+  fill: var(--color-accent);
+  fill-opacity: 0.55;
+}
+
+.quilt .qligne.vise text {
+  font-weight: 600;
+}
+
+/**
+ * Une personne vivante hors du cercle : la charge ne porte déjà que son nom.
+ * Le traitement visuel le redit, comme sur l'arbre.
+ */
+.quilt .qligne.prive text {
+  fill: var(--color-attenue);
+}
+
+/** Une fiche proposée, non validée (§ 13.4). */
+.quilt .qligne.attente rect {
+  fill: var(--color-accent);
+  fill-opacity: 0.3;
+}
+
+/**
+ * **Les deux rôles, et c'est toute la lecture du quilt.**
+ *
+ * Case pleine et carrée : cette personne est **parent** dans cette famille.
+ * Case arrondie et creuse : elle en est **enfant**. Confondre les deux rendrait
+ * la matrice muette — on saurait qui appartient à quelle famille, sans savoir à
+ * quel titre, c'est-à-dire sans savoir dans quel sens se lit la parenté.
+ */
+.quilt .qcase.parent {
+  fill: var(--color-texte);
+  fill-opacity: 0.85;
+}
+
+.quilt .qcase.enfant {
+  fill: var(--color-fond);
+  stroke: var(--color-texte);
+  stroke-width: 1.5;
+  stroke-opacity: 0.8;
+}
