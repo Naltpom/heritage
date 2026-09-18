@@ -11,9 +11,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   hauteursDeBarre,
+  hauteursDUnion,
   pointsFiliation,
   pointsUnion,
   trace,
+  type BarreDUnion,
   type BoiteNoeud,
   type PeigneDeFamille,
 } from './chemins'
@@ -159,5 +161,87 @@ describe('hauteursDeBarre', () => {
     ])
     expect(hauteurs.get('haut')).toBeCloseTo(-404 + (-320 - -404) * 0.3, 9)
     expect(hauteurs.get('bas')).toBeCloseTo(-104 + 84 * 0.3, 9)
+  })
+})
+
+describe('hauteursDUnion', () => {
+  /** Un couple : l'époux à `x`, le losange 46 px plus bas, à `xf`. */
+  function barre(cle: string, x: number, xf: number, y = 0): BarreDUnion {
+    return {
+      cle,
+      epoux: { x, y, w: 120, h: 40 },
+      famille: { x: xf, y: y + 46, w: 22, h: 14 },
+    }
+  }
+
+  it('laisse la hauteur historique quand rien ne se recouvre', () => {
+    // Deux barres loin l'une de l'autre : aucune raison de les déplacer, et une
+    // entrée absente vaut « garde `famille.y - RECUL_UNION` ».
+    const hauteurs = hauteursDUnion([barre('a', 0, 60), barre('b', 1000, 1060)])
+    expect(hauteurs.size).toBe(0)
+  })
+
+  it('sépare deux barres qui se recouvrent', () => {
+    // 'longue' va de 0 à 900, 'courte' de 400 à 460 : elles se traversent, et
+    // c'est exactement le cas qui produisait deux traits confondus.
+    const hauteurs = hauteursDUnion([barre('longue', 0, 900), barre('courte', 400, 460)])
+    expect(hauteurs.get('longue')).toBeDefined()
+    expect(hauteurs.get('courte')).toBeDefined()
+    expect(hauteurs.get('longue')).not.toBeCloseTo(hauteurs.get('courte') ?? 0, 6)
+  })
+
+  it('n’ouvre que deux hauteurs quand deux suffisent, même à cinq barres', () => {
+    // Une longue qui traverse quatre courtes disjointes entre elles : le nombre
+    // minimal de hauteurs est 2, et c'est la propriété des graphes d'intervalles
+    // qu'on exploite. Trois hauteurs pour ce cas seraient un étalement inutile,
+    // donc des barres plus serrées pour rien.
+    const hauteurs = hauteursDUnion([
+      barre('longue', 0, 2000),
+      barre('c1', 100, 160),
+      barre('c2', 600, 660),
+      barre('c3', 1100, 1160),
+      barre('c4', 1600, 1660),
+    ])
+    const distinctes = new Set([...hauteurs.values()].map((v) => v.toFixed(6)))
+    expect(distinctes.size).toBe(2)
+  })
+
+  it('ne laisse aucune paire superposée, et reste dans la bande disponible', () => {
+    const barres = [
+      barre('a', 0, 800),
+      barre('b', 200, 260),
+      barre('c', 240, 1400),
+      barre('d', 1300, 1360),
+      barre('e', 600, 1500),
+    ]
+    const hauteurs = hauteursDUnion(barres)
+
+    for (const b of barres) {
+      const h = hauteurs.get(b.cle)
+      if (h === undefined) continue
+      // La bande : du bas des fiches à la pointe haute du losange. Sortir par le
+      // haut ferait passer le trait dans le losange, par le bas dans la fiche.
+      expect(h).toBeGreaterThanOrEqual(b.epoux.y + b.epoux.h / 2)
+      expect(h).toBeLessThanOrEqual(b.famille.y - b.famille.h / 2)
+    }
+
+    for (let i = 0; i < barres.length; i++) {
+      for (let j = i + 1; j < barres.length; j++) {
+        const a = barres[i]
+        const b = barres[j]
+        const recouvre =
+          Math.min(Math.max(a.epoux.x, a.famille.x), Math.max(b.epoux.x, b.famille.x)) -
+          Math.max(Math.min(a.epoux.x, a.famille.x), Math.min(b.epoux.x, b.famille.x))
+        if (recouvre <= 0) continue
+        expect(hauteurs.get(a.cle)).not.toBeCloseTo(hauteurs.get(b.cle) ?? -1, 6)
+      }
+    }
+  })
+
+  it('traite chaque rangée séparément', () => {
+    // Deux barres identiques sur deux rangées différentes ne se voient pas : leur
+    // donner des hauteurs différentes serait déplacer un trait sans raison.
+    const hauteurs = hauteursDUnion([barre('haut', 0, 900, -300), barre('bas', 0, 900, 0)])
+    expect(hauteurs.size).toBe(0)
   })
 })
