@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Module\Core\Controller;
 
 use App\Module\Core\Entity\User;
+use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Http\ErrorEnvelope;
+use App\Module\Core\Service\ChangementDeCourriel;
 use App\Module\Core\Service\SessionPayloadBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -117,6 +119,41 @@ final class SecurityController extends AbstractController
         $em->flush();
 
         return new JsonResponse(['motDePasseChange' => true]);
+    }
+
+    /**
+     * § 2.5 — demande de changement de courriel. Mot de passe actuel exigé, lien de
+     * confirmation envoyé à la **nouvelle** adresse ; rien ne change avant le clic.
+     * Tout est dans {@see ChangementDeCourriel}, y compris pourquoi.
+     */
+    #[Route('/api/session/courriel', name: 'core_session_courriel', methods: ['POST'])]
+    public function demanderChangementDeCourriel(
+        Request $requete,
+        #[CurrentUser] User $utilisateur,
+        ChangementDeCourriel $changement,
+    ): JsonResponse {
+        return new JsonResponse($changement->demander($utilisateur, $this->corpsJson($requete), $requete));
+    }
+
+    /**
+     * § 2.5 — le clic sur le lien. **Publique** (`security.yaml`) : on clique souvent
+     * depuis un autre appareil, sans session. Tout refus rend `404`, jamais `403`.
+     *
+     * Un jeton absent du corps vaut un jeton mal formé : même `404`, même corps. Le
+     * seul `422` que cette route connaisse est celui d'un corps qui n'est pas du JSON.
+     */
+    #[Route('/api/session/courriel/confirmer', name: 'core_session_courriel_confirmer', methods: ['POST'])]
+    public function confirmerChangementDeCourriel(Request $requete, ChangementDeCourriel $changement): JsonResponse
+    {
+        $jeton = $this->corpsJson($requete)['jeton'] ?? null;
+
+        if (!\is_string($jeton)) {
+            throw new NotFoundException();
+        }
+
+        $changement->confirmer($jeton);
+
+        return new JsonResponse(['courrielChange' => true]);
     }
 
     /** @return array<string, mixed> */

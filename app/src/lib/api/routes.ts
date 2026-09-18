@@ -62,6 +62,49 @@ export function changerMotDePasse(
   })
 }
 
+/**
+ * `POST /api/session/courriel` — § 2.5, la demande.
+ *
+ * Rien ne change à cet appel : un lien part vers la **nouvelle** adresse, et
+ * c'est le clic qui change le courriel. Le mot de passe actuel est exigé pour
+ * la même raison qu'au § 2.1, et son refus est un `422` sur
+ * `champs.motDePasseActuel`, pas une `401`.
+ *
+ * `409 courriel_non_envoyable` : aucun SMTP n'est configuré. Ce n'est pas une
+ * panne passagère, l'écran doit le dire tel quel.
+ */
+export function demanderChangementDeCourriel(
+  motDePasseActuel: string,
+  nouveauCourriel: string,
+): Promise<{ courrielEnvoye: boolean; expiresAt: string }> {
+  return requeteApi<{ courrielEnvoye: boolean; expiresAt: string }>('/session/courriel', {
+    methode: 'POST',
+    corps: { motDePasseActuel, nouveauCourriel },
+  })
+}
+
+/**
+ * `POST /api/session/courriel/confirmer` — § 2.5, le clic sur le lien.
+ *
+ * Route **publique** : on clique depuis le courriel, souvent sur un autre
+ * appareil, sans session. Tout jeton douteux — inconnu, périmé, déjà consommé,
+ * mal formé — rend `404` avec le même corps, et l'écran ne cherche pas à
+ * distinguer ces cas : il n'en a pas le moyen, et c'est le but.
+ *
+ * Après un succès, la session qui a confirmé — s'il y en avait une sur cet
+ * appareil — continue sous la nouvelle adresse ; celles ouvertes ailleurs sous
+ * l'ancienne tombent à leur requête suivante (§ 2.3, mesuré).
+ */
+export function confirmerChangementDeCourriel(
+  jeton: string,
+): Promise<{ courrielChange: boolean }> {
+  return requeteApi<{ courrielChange: boolean }>('/session/courriel/confirmer', {
+    methode: 'POST',
+    corps: { jeton },
+    sansRattrapage: true,
+  })
+}
+
 /* ------------------------------------------------------------------ */
 /* § 5.2 — le graphe                                                   */
 /* ------------------------------------------------------------------ */

@@ -79,5 +79,23 @@ services:
     App\Module\Core\Contract\CalqueEnAttenteInterface:
         alias: App\Module\Core\Contract\CalqueFerme
 
-#parameters:
-#    app.core.exemple: 42
+parameters:
+    # L'expéditeur des courriels que Core envoie lui-même — aujourd'hui le seul : le lien
+    # de confirmation d'un changement de courriel (§ 2.5). Même variable d'environnement
+    # que Membership, et le même repli : Core ne peut pas lire un paramètre de Membership
+    # sans franchir la frontière (ADR 0002), donc chaque module déclare le sien.
+    app.core.expediteur_par_defaut: 'heritage@localhost'
+    app.core.expediteur: '%env(default:app.core.expediteur_par_defaut:MAILER_EXPEDITEUR)%'
+
+    # Le DSN tel que `ChangementDeCourriel` le lit pour décider si un envoi est
+    # possible. C'est un paramètre, et non `env:` lu dans la classe, pour une seule
+    # raison : pouvoir le déclarer « configuré » en test (ci-dessous) sans toucher au
+    # transport réel, qui reste `null://null` et dont le mailer de test collecte les
+    # messages au lieu de les envoyer.
+    app.core.mailer_dsn: '%env(MAILER_DSN)%'
+
+when@test:
+    parameters:
+        # Un DSN qui n'est pas `null:` : la fonctionnalité existe en test. Le transport
+        # effectif est toujours celui de `framework.mailer.dsn`, donc rien ne part.
+        app.core.mailer_dsn: 'smtp://tests-collecte-sans-envoi'

@@ -224,6 +224,13 @@ async function quitter(): Promise<void> {
             {{ nomAffiche }}
           </span>
           <span v-if="regime === 'en_attente'" class="text-xs text-attenue">· en attente</span>
+          <RouterLink
+            :to="{ name: 'compte' }"
+            class="rounded-champ px-2.5 py-1 text-xs text-attenue hover:text-texte"
+            active-class="bg-accent-doux font-semibold text-texte"
+          >
+            Mon compte
+          </RouterLink>
           <BoutonBase variante="discret" @click="quitter">Se déconnecter</BoutonBase>
         </div>
       </template>

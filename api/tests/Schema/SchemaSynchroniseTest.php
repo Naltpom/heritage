@@ -58,8 +58,17 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * {@see \App\Module\Tree\Entity\Place} : la table de correspondance existe précisément
      * pour qu'aucune colonne ne s'ajoute aux cinq tables qui portent déjà un lieu — dont
      * deux sont versionnées, et dont une réécriture périmerait les demandes en attente.
+     *
+     * **25 depuis le 2026-09-18** : `core_email_change` (module `Core`,
+     * `migrations/Version20260918150000.php`) porte la demande de changement de courriel
+     * entre le moment où elle est faite et le clic sur le lien reçu à la nouvelle
+     * adresse. C'est une **décision** : le courriel est l'identifiant du compte, et le
+     * remplacer sans preuve de possession de la nouvelle adresse permettrait à une
+     * session volée d'enfermer le titulaire dehors. Une table à part, et non trois
+     * colonnes sur `core_user`, pour ne pas mêler à l'identité une donnée qui vit
+     * vingt-quatre heures — l'en-tête de la migration le dit en entier.
      */
-    private const int NOMBRE_DE_TABLES = 24;
+    private const int NOMBRE_DE_TABLES = 25;
 
     public function testLeMappingEstValide(): void
     {

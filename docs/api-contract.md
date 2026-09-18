@@ -381,6 +381,8 @@ Module `Core`. Session `json_login`, cookie `HttpOnly`, 401 JSON (§ 2 du dossie
 | `POST` | `/api/deconnexion` | `ATTENTE` | *(vide)* | `200` `{"deconnecte": true}` | `401` | — |
 | `GET` | `/api/session` | `ATTENTE` | — | `200` charge de session | `401` | — |
 | `POST` | `/api/session/mot-de-passe` | `ATTENTE` | `{motDePasseActuel, nouveauMotDePasse}` | `200` `{"motDePasseChange": true}` | `401` · `422` `donnees_invalides` | — |
+| `POST` | `/api/session/courriel` | `ATTENTE` | `{motDePasseActuel, nouveauCourriel}` | `200` `{"courrielEnvoye": true, "expiresAt"}` | `401` · `422` `donnees_invalides` · `409` `courriel_deja_pris` · `409` `courriel_non_envoyable` | — |
+| `POST` | `/api/session/courriel/confirmer` | `PUBLIC` | `{jeton}` | `200` `{"courrielChange": true}` | `404` · `409` `courriel_deja_pris` | — |
 
 `POST /api/connexion` est le `check_path` de `json_login` : les clés du corps sont fixées par
 `username_path: email` et `password_path: password`. Elles se trouvent être aussi les noms de
@@ -490,6 +492,65 @@ plutôt que magique.
 
 
 ---
+
+### 2.3 Changement de courriel
+
+Le courriel est l'**identifiant** du compte. Il ne se remplace pas sans deux preuves, et
+aucune des deux ne suffit seule :
+
+1. **le mot de passe actuel**, à la demande — une session volée ne le connaît pas ;
+2. **un clic sur un lien reçu à la nouvelle adresse**, à la confirmation — sans lui, une
+   faute de frappe enferme le titulaire dehors, et la réinitialisation partirait vers une
+   boîte qui n'existe pas.
+
+**La demande** — `POST /api/session/courriel`, accès `ATTENTE` :
+
+```json
+{ "motDePasseActuel": "…", "nouveauCourriel": "ada.nouvelle@exemple.test" }
+```
+
+- Rien ne change à cet appel. Un courriel part vers la **nouvelle** adresse avec un lien
+  `/compte/courriel/{jeton}`, valable **24 h**, à usage unique. Réponse :
+  `{"courrielEnvoye": true, "expiresAt": "…"}`.
+- `motDePasseActuel` faux → `422` sur `champs.motDePasseActuel`, **pas** `401` — même
+  arbitrage qu'au § 2.1. Adresse invalide ou identique à l'actuelle → `422` sur
+  `champs.nouveauCourriel`.
+- `409 courriel_deja_pris` : un compte existe pour cette adresse. C'est la seconde route de
+  l'API qui admet de le révéler (avec § 4.3), et pour la même raison : l'index unique
+  refuserait de toute façon. Le risque est borné — il faut une session **et** le mot de
+  passe pour poser la question.
+- `409 courriel_non_envoyable` : aucun SMTP n'est configuré. Contrairement à l'invitation,
+  dont le lien est aussi affiché à l'administrateur, il n'y a personne ici à qui montrer le
+  lien — le montrer au demandeur annulerait la seconde preuve. Sans SMTP, la fonctionnalité
+  n'existe pas, et la réponse le dit plutôt que de réussir en silence.
+- Une nouvelle demande **périme la précédente** : un compte n'a jamais qu'un lien valable.
+- Le serveur ne stocke que `hash(jeton)` (`core_email_change`), jamais le jeton.
+
+**La confirmation** — `POST /api/session/courriel/confirmer`, accès `PUBLIC` :
+
+```json
+{ "jeton": "…" }
+```
+
+- Publique pour la même raison que l'inscription : on clique depuis le courriel, souvent
+  sur un autre appareil, sans session.
+- Réponse `200 {"courrielChange": true}`. Le courriel devient l'identifiant du compte à cet
+  instant. **La session qui confirme continue**, sous la nouvelle adresse — le jeton de
+  sécurité porte l'entité, modifiée pendant la requête et resérialisée avec la nouvelle
+  adresse. **Toute autre session**, ouverte ailleurs sous l'ancienne, tombe à sa requête
+  suivante (`User::isEqualTo` compare l'identifiant). C'est le cas nominal d'un compte
+  repris : le titulaire légitime a la nouvelle adresse et son mot de passe, il se
+  reconnecte. Mesuré, pas déduit — la première rédaction disait « toute session tombe ».
+- **Tout refus rend `404`, avec le même corps** : jeton inconnu, mal formé, absent, périmé
+  ou déjà consommé. Un seul cas observable — un `403` sur « périmé » dirait qu'un jeton a
+  existé, et la route est publique.
+- `409 courriel_deja_pris` si l'adresse a été prise entre la demande et le clic.
+- Journalisé par le souscripteur d'audit comme toute modification de `Core\User` :
+  `changes.email` porte l'ancienne et la nouvelle adresse (§ 2.4). Aucune entrée à écrire à
+  la main.
+
+**Ce qui n'est pas ici** : le nom et le prénom. Ce sont ceux de la fiche rattachée, pas du
+compte, et ils se corrigent par une demande (§ 6) — jamais depuis la page du compte.
 
 ## 3. Invitations
 
