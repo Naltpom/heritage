@@ -109,7 +109,7 @@ final class ArbreVuDuLecteurTest extends ArbreWebTestCase
     }
 
     /**
-     * **L'`ETag` distingue les deux points de vue.**
+     * **L'`ETag` distingue les deux points de vue.**.
      *
      * Sans cela, deux lecteurs de même cercle et sans demande en cours recevraient le
      * même `ETag` sur deux charges dont *toutes* les coordonnées diffèrent : en le

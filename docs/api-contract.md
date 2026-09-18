@@ -1186,16 +1186,26 @@ ETag = "sha256(
       empreinte_de_l_arbre                          -- § 2.3, identique pour tout le monde
   || ':' || empreinte_du_cercle_effectif_du_lecteur -- ci-dessous
   || ':' || empreinte_des_demandes_du_lecteur       -- '' s'il n'en a aucune
+  || ':' || point_de_vue_du_lecteur                 -- 'p<id>', '' s'il n'est rattaché à personne
+  || ':' || empreinte_de_la_mise_en_page            -- l'image elle-même, ci-dessous
 )"
 
 empreinte_du_cercle_effectif =
     sha256( regime || ':' || implode(',', identifiants_du_cercle_triés) )
+
+empreinte_de_la_mise_en_page =
+    sha256( ego || les nœuds placés, dans l'ordre servi || les arêtes )
 ```
 
-**Trois composantes, et la règle qui les explique tient en une ligne :**
+**Cinq composantes, et la règle qui les explique tient en une ligne :**
 
 > **L'`ETag` doit distinguer tout ce qui distingue la représentation. Le cercle en fait
 > partie.**
+
+Et l'arbitrage qui la fonde, parce qu'il se reposera à chaque composante qu'on hésitera à
+ajouter : **deux `ETag` différents pour deux charges identiques coûtent une revalidation —
+quelques kilo-octets, une fois. Un `ETag` identique pour deux charges différentes est une
+FUITE. Quand on hésite, on distingue.**
 
 `empreinte_de_l_arbre` ne dépend pas du lecteur — c'est son intérêt, elle rend le placement
 partageable (ADR 0005). `empreinte_des_demandes` porte le calque. **Aucune des deux ne porte
@@ -1210,6 +1220,30 @@ Mesuré sur trois lecteurs réels du même arbre, sans aucune demande en cours :
 
 Trois régimes, des charges qui diffèrent, et — avec une formule à deux composantes — **un seul
 `ETag`**. Un `304` servi au mauvais lecteur lui rend alors le graphe d'un autre.
+
+##### Les deux composantes qui ne viennent pas de la base
+
+`point_de_vue_du_lecteur` : depuis que la mise en page est calculée **par lecteur** (ADR
+0005, § 9.9 du modèle), deux comptes de même cercle et sans demande reçoivent des charges
+dont toutes les coordonnées diffèrent. Elles ne différaient par aucune des trois autres
+composantes.
+
+`empreinte_de_la_mise_en_page` : les quatre premières décrivent **l'état de la base et le
+lecteur**, et aucune ne bouge quand c'est le *code* de placement qui change. Or la route
+répond `Cache-Control: private, no-cache` : le navigateur garde la charge et revalide. Un
+lecteur revenu après un déploiement qui change les règles de placement présentait donc son
+ancien `ETag`, recevait `304`, et **redessinait l'ancienne image**, pendant que le serveur
+en calculait une nouvelle que personne ne recevait. C'est le défaut de `cercle.generations`
+décrit plus bas, sur une cinquième dimension.
+
+Elle est **dérivée du placement** et non posée comme un numéro de version à bousculer à la
+main : un compteur qu'on oublie d'incrémenter donne ici une page vieille mais plausible,
+avec une suite de tests verte. C'est le même arbitrage qu'au § 2.3, qui a déjà écarté un
+compteur d'invalidation au profit d'une empreinte.
+
+**Conséquence à connaître** : le chemin du `304` lit désormais le placement en cache (§ 9.9)
+en plus de résoudre le cercle. Une revalidation n'est pas gratuite ; c'est le prix des deux
+corrections, et il est assumé ici plutôt que découvert en service.
 
 **Le cercle effectif, c'est celui qui sert à la sérialisation**, pas celui du compte
 authentifié : sous la bascule « voir comme un membre », c'est le cercle **emprunté** qui entre

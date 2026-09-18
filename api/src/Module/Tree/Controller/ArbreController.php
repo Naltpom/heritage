@@ -72,11 +72,13 @@ final class ArbreController extends AbstractController
      *
      * Les trois en-têtes vont ensemble et aucun n'est décoratif :
      *
-     * - `ETag` — la revalidation. Trois composantes (§ 5.2) : l'empreinte de l'arbre,
-     *   **celle du cercle effectif du lecteur**, et celle de ses demandes en attente. La
-     *   deuxième est celle qui manquait : sans elle, trois lecteurs aux charges
-     *   différentes recevaient le même `ETag`, et l'un pouvait obtenir `304` sur le graphe
-     *   d'un autre. La bascule « voir comme un membre » y entre désormais **par
+     * - `ETag` — la revalidation. Cinq composantes (§ 5.2) : l'empreinte de l'arbre,
+     *   **celle du cercle effectif du lecteur**, celle de ses demandes en attente, son
+     *   point de vue, et **celle de la mise en page elle-même**. La deuxième est celle qui
+     *   manquait d'abord : sans elle, trois lecteurs aux charges différentes recevaient le
+     *   même `ETag`, et l'un pouvait obtenir `304` sur le graphe d'un autre. La cinquième
+     *   est la seule qui ne vienne pas de la base — sans elle, un déploiement qui change
+     *   les règles de placement ne parvient à aucun navigateur qui revalide. La bascule « voir comme un membre » y entre désormais **par
      *   conséquence**, le cercle effectif étant celui du membre emprunté. Le détail et les
      *   mesures sont dans {@see EtagDuGraphe}.
      * - `Cache-Control: private, no-cache` — `private` parce que la charge dépend du

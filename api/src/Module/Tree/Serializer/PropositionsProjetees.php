@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Serializer;
 
-use App\Module\Core\Contract\AncragePropose;
 use App\Module\Core\Contract\NoeudPropose;
 use App\Module\Core\Contract\ProjectionEnAttente;
 use App\Module\Core\Enum\Branch;

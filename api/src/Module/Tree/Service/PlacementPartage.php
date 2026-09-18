@@ -59,7 +59,7 @@ use Symfony\Contracts\Cache\ItemInterface;
  * chaque nouveau chemin d'écriture — validation de proposition, édition d'administrateur,
  * import GEDCOM, correction en base — était une occasion d'oubli.
  */
-final class PlacementPartage
+final class PlacementPartage implements EmpreinteDeLaMiseEnPage
 {
     /**
      * 24 h. Ce n'est pas une durée de fraîcheur : la fraîcheur est garantie par
@@ -77,6 +77,7 @@ final class PlacementPartage
      */
     public function __construct(
         private readonly MoteurDePlacement $moteur,
+        private readonly AffinageDuPlacement $affinage,
         private readonly TreeFingerprint $empreinte,
         private readonly CacheInterface $cacheArbre,
         private readonly ArbreVuDepuis $arbre,
@@ -121,6 +122,23 @@ final class PlacementPartage
         return null === $egoPersonneId ? $base : $base.'.p'.$egoPersonneId;
     }
 
+    /**
+     * L'empreinte de l'image servie à ce point de vue — {@see EmpreinteDeLaMiseEnPage}.
+     *
+     * Elle passe par le cache, donc elle ne recalcule rien : sur le chemin d'un `304`,
+     * c'est une lecture d'entrée et un haché. La revalidation n'était déjà plus gratuite
+     * — elle résout le cercle du lecteur — et ceci s'ajoute au même ordre de grandeur.
+     *
+     * Ce que ça achète, en échange : un déploiement qui change les règles de mise en page
+     * **atteint les navigateurs**. Sans cette composante, ils revalidaient, recevaient
+     * `304`, et redessinaient l'ancienne image. Le raisonnement complet est dans
+     * {@see Placement::empreinte()}.
+     */
+    public function empreinteDeLaMiseEnPage(?int $egoPersonneId): string
+    {
+        return $this->placement($egoPersonneId)->empreinte();
+    }
+
     private function calcule(ItemInterface $entree, ?int $egoPersonneId): Placement
     {
         $entree->expiresAfter(self::TTL);
@@ -128,6 +146,12 @@ final class PlacementPartage
         // L'arbre vu depuis ce point de vue — mêmes fiches, mêmes largeurs, générations
         // recalculées. Le moteur, lui, ne sait rien de tout cela : il reçoit un jeu et son
         // ego, comme toujours. Voir {@see ArbreVuDepuis}.
-        return $this->moteur->calcule($this->arbre->jeu($egoPersonneId));
+        $jeu = $this->arbre->jeu($egoPersonneId);
+
+        // Puis l'affinage : le moteur donne les générations et la structure
+        // d'ascendance — ce qui met le lecteur au centre et fonctionne —, l'affinage
+        // refait l'ordre des rangées et toutes les abscisses. Voir
+        // {@see AffinageDuPlacement} pour les règles et ce qu'elles ont coûté.
+        return $this->affinage->affine($this->moteur->calcule($jeu), $jeu);
     }
 }

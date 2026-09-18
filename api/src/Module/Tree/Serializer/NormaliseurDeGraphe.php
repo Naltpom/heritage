@@ -493,8 +493,8 @@ final readonly class NormaliseurDeGraphe
      * garantit qu'ils ne divergent pas de ce que le moteur a mesuré.
      *
      * @param array<int, Branch> $branchesVues les branches recalculées pour le point de vue
-     *                                          du lecteur, vides quand il regarde depuis la
-     *                                          racine — la colonne suffit alors
+     *                                         du lecteur, vides quand il regarde depuis la
+     *                                         racine — la colonne suffit alors
      *
      * @return array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, bool>}
      */
