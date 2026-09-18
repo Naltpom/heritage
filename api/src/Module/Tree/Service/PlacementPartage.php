@@ -77,6 +77,7 @@ final class PlacementPartage
      */
     public function __construct(
         private readonly MoteurDePlacement $moteur,
+        private readonly AffinageDuPlacement $affinage,
         private readonly TreeFingerprint $empreinte,
         private readonly CacheInterface $cacheArbre,
         private readonly ArbreVuDepuis $arbre,
@@ -128,6 +129,12 @@ final class PlacementPartage
         // L'arbre vu depuis ce point de vue — mêmes fiches, mêmes largeurs, générations
         // recalculées. Le moteur, lui, ne sait rien de tout cela : il reçoit un jeu et son
         // ego, comme toujours. Voir {@see ArbreVuDepuis}.
-        return $this->moteur->calcule($this->arbre->jeu($egoPersonneId));
+        $jeu = $this->arbre->jeu($egoPersonneId);
+
+        // Puis l'affinage : le moteur donne les générations et la structure
+        // d'ascendance — ce qui met le lecteur au centre et fonctionne —, l'affinage
+        // refait l'ordre des rangées et toutes les abscisses. Voir
+        // {@see AffinageDuPlacement} pour les règles et ce qu'elles ont coûté.
+        return $this->affinage->affine($this->moteur->calcule($jeu), $jeu);
     }
 }

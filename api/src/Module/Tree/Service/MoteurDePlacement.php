@@ -13,9 +13,26 @@ use App\Module\Tree\ValueObject\Placement;
  *
  * **C'est un portage, pas une inspiration.** Le script d'origine est déterministe et on
  * possède son code : la sortie de ce service doit reproduire `graphe.json` au centième
- * près sur les 377 nœuds. Toute « amélioration » de l'algorithme casse cette preuve.
- * Si une règle de placement doit changer un jour, elle se change **après** avoir
- * consigné un nouveau fichier de référence, jamais à la place.
+ * près sur les 377 nœuds. Cette preuve tient toujours, et **rien ici ne doit la casser**.
+ *
+ * ── Mais ce n'est plus ce qui est servi ───────────────────────────────────
+ *
+ * Ce moteur est désormais la **première moitié** du calcul. Il donne les générations et
+ * la structure d'ascendance — le lecteur au centre, son père à gauche, sa mère à
+ * droite, les fratries recentrées sous leur couple parental —, et c'est la partie qui
+ * fonctionne. {@see AffinageDuPlacement} refait ensuite l'ordre des rangées et toutes
+ * les abscisses, sous des règles arrêtées avec le commanditaire.
+ *
+ * **Pourquoi il a fallu en passer par là.** Une preuve d'identité interdit par
+ * construction toute amélioration : « toute *amélioration* casse cette preuve », disait
+ * cette ligne, et c'est exactement ce qui bloquait pendant que 28 couples sur 100
+ * étaient séparés sur l'arbre réel. La preuve d'identité est donc conservée **pour ce
+ * qu'elle prouve** — que le portage est fidèle —, et une preuve de **propriétés** a
+ * pris sa place sur ce qui sort : {@see \App\Tests\Tree\PlacementLisibleTest}.
+ *
+ * Si une règle de placement doit changer, elle se change donc dans l'affinage, où le
+ * contrat est une liste d'invariants et une mesure qui ne remonte jamais — pas ici,
+ * où le contrat est une égalité.
  *
  * **Service sans état, sans accès à la base**, c'est une contrainte de l'ADR 0005 et pas
  * un commentaire de style : c'est elle qui rend le moteur testable contre le fichier de
