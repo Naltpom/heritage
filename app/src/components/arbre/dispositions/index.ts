@@ -19,6 +19,7 @@
  */
 
 import type { Graphe } from '@/lib/api'
+import { ascendanceSeule } from './ascendanceSeule'
 import { conjointsAccoles } from './conjointsAccoles'
 import { croisementsMinimises } from './croisements'
 import { duplication } from './duplication'
@@ -26,6 +27,7 @@ import { vueBornee } from './vueBornee'
 import type { Disposition, NomDeDisposition, OptionsDeDisposition } from './socle'
 
 export * from './socle'
+export { ascendanceSeule }
 export { conjointsAccoles }
 export { vueBornee }
 export { croisementsMinimises, compterLesCroisements } from './croisements'

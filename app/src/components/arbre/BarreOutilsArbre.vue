@@ -51,6 +51,20 @@ const question = defineModel<string>({ required: true })
  */
 const recadrageAuto = defineModel<boolean>('recadrageAuto', { required: true })
 
+/**
+ * **Ascendance seule** — l'arbre réduit au lecteur et à ses ancêtres.
+ *
+ * Chacun a au plus deux parents : ce qui reste est donc un arbre binaire, et **un
+ * arbre binaire dessiné par niveaux ne peut pas avoir de croisement**. C'est une
+ * propriété de sa forme, pas un résultat d'algorithme — et c'est pourquoi les
+ * éventails d'ascendance de tous les logiciels de généalogie sont lisibles là où
+ * les vues complètes ne le sont pas.
+ *
+ * Une case et non une URL : elle se **combine** avec n'importe quelle disposition,
+ * et une URL par combinaison en ferait une dizaine.
+ */
+const ascendanceSeule = defineModel<boolean>('ascendanceSeule', { required: true })
+
 const champ = ref<InstanceType<typeof ChampRechercheArbre> | null>(null)
 
 /**
@@ -131,6 +145,14 @@ defineExpose({ focusRecherche })
     >
       <input v-model="recadrageAuto" type="checkbox" class="cursor-pointer accent-accent" />
       Suivre la recherche
+    </label>
+
+    <label
+      class="flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-attenue hover:text-texte"
+      title="N’afficher que vous et vos ancêtres — un arbre binaire, sans aucun croisement possible"
+    >
+      <input v-model="ascendanceSeule" type="checkbox" class="cursor-pointer accent-accent" />
+      Ascendance seule
     </label>
 
     <span class="flex-auto max-md:hidden"></span>

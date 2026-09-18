@@ -116,6 +116,7 @@ import TiroirOutils from '@/components/mise-en-page/TiroirOutils.vue'
 import PanneauFiche from '@/components/arbre/PanneauFiche.vue'
 import { avertissementDuCalque, ponctuationApres } from '@/components/arbre/calque'
 import {
+  ascendanceSeule as reduireALAscendance,
   dispositionDeLaRoute,
   mesurerLisibilite,
   optionsDepuis,
@@ -183,9 +184,24 @@ const disposition = computed(() => dispositionDeLaRoute(nomDeDisposition))
 const presentation = computed(() => presentationDeLaRoute(nomDeDisposition))
 const optionsDeDisposition = computed(() => optionsDepuis({ haut, bas }))
 
-const graphe = computed<Graphe | null>(() =>
-  grapheBrut.value === null ? null : disposition.value(grapheBrut.value, optionsDeDisposition.value),
-)
+/**
+ * Le filtre « ascendance seule », **avant** la disposition.
+ *
+ * L'ordre compte : réduire d'abord, placer ensuite. Dans l'autre sens, la
+ * disposition travaillerait sur des nœuds qu'on s'apprête à retirer — elle
+ * laisserait des trous, et la mesure annoncée porterait sur un arbre qui n'est
+ * pas celui qu'on dessine.
+ */
+const ascendanceSeule = ref(false)
+
+const graphe = computed<Graphe | null>(() => {
+  const brut = grapheBrut.value
+  if (brut === null) return null
+
+  const reduit = ascendanceSeule.value ? reduireALAscendance(brut) : brut
+
+  return disposition.value(reduit, optionsDeDisposition.value)
+})
 
 /**
  * Ce que la disposition change, **en nombres**.
@@ -633,6 +649,7 @@ onBeforeUnmount(() => {
         ref="barre"
         v-model="question"
         v-model:recadrage-auto="recadrageAuto"
+        v-model:ascendance-seule="ascendanceSeule"
         :filtres="FILTRES"
         :disponibles="disponibles"
         :actif="filtreActif"
