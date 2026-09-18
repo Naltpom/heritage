@@ -117,6 +117,35 @@ final class AffinageDuPlacement
     private const int PASSES_DE_PLACEMENT = 60;
 
     /**
+     * **De combien le losange descend sous la rangée de ses époux.**.
+     *
+     * Le moteur pose 26 px ({@see MoteurDePlacement::DESCENTE_NOEUD_FAMILLE}), et on
+     * ne touche pas à sa constante : sa preuve de portage au centième en dépend.
+     * C'est ici, en sortie, qu'on la corrige.
+     *
+     * ── Pourquoi 46, et pas un chiffre rond choisi à l'œil ──────────────────────
+     *
+     * Les barres d'union d'une rangée vivent dans une bande étroite : sous le bas des
+     * fiches, au-dessus de la pointe haute du losange. Avec 26, cette bande vaut
+     * exactement **19 px** — `26 + 20 - 20 - 7` —, et quatre barres qui se croisent
+     * s'y retrouvent à moins de 4 px l'une de l'autre. Elles ne se superposent plus
+     * depuis la coloration par intervalles, mais elles se frôlent.
+     *
+     * 46 donne **39 px**, soit exactement le double. C'est ce que le commanditaire a
+     * demandé, et c'est le seul levier : l'étalement à l'intérieur de la bande est
+     * déjà presque complet, il ne restait qu'un facteur 1,4 à y gagner.
+     *
+     * ── Ce que ça coûte, et ce qui a été vérifié ────────────────────────────────
+     *
+     * Le losange descend de 20 px, donc la bande des **peignes de filiation** — du
+     * losange au haut des fiches enfants — passe de 84 à 64 px. Ces barres-là sont
+     * étagées depuis toujours et n'ont jamais eu de recouvrement ; la mesure après
+     * changement le confirme, sans quoi on aurait déplacé un défaut au lieu d'en
+     * corriger un.
+     */
+    private const int DESCENTE_DU_LOSANGE = 46;
+
+    /**
      * @var array<string, list<string>> famille → ses époux
      */
     private array $epoux = [];
@@ -156,13 +185,68 @@ final class AffinageDuPlacement
         $this->placer($rangees, self::PASSES_DE_PLACEMENT);
         $this->recentrerSurLEgo($place->egoId);
 
+        $descendus = $this->losangesDescendus();
         $noeuds = [];
 
         foreach ($this->noeuds as $id => $noeud) {
-            $noeuds[$id] = new NoeudPlace($id, $this->posx[$id] ?? $noeud->x, $noeud->y, $noeud->w, $noeud->h);
+            $noeuds[$id] = new NoeudPlace(
+                $id,
+                $this->posx[$id] ?? $noeud->x,
+                $descendus[$id] ?? $noeud->y,
+                $noeud->w,
+                $noeud->h,
+            );
         }
 
         return new Placement($noeuds, $place->aretes, $this->boiteEnglobante($noeuds), $place->egoId);
+    }
+
+    /**
+     * La nouvelle ordonnée de chaque losange — {@see DESCENTE_DU_LOSANGE}.
+     *
+     * **Seuls les losanges bougent, et seulement ceux dont les deux époux sont sur
+     * une même rangée.** Une famille sans époux placé est posée autrement par le
+     * moteur, au-dessus de ses enfants ; la recalculer ici sur une règle qui ne la
+     * concerne pas la décrocherait de sa fratrie.
+     *
+     * L'ordonnée d'une personne, elle, ne bouge jamais : c'est sa génération, une
+     * propriété de la donnée. C'est **I1**, et elle tient toujours — au mot près,
+     * qu'il faut donc lire « la rangée d'une personne », pas « toute ordonnée ».
+     *
+     * @return array<string, float>
+     */
+    private function losangesDescendus(): array
+    {
+        $descendus = [];
+
+        foreach ($this->epoux as $famille => $membres) {
+            if (!isset($this->noeuds[$famille])) {
+                continue;
+            }
+
+            $ys = [];
+
+            foreach ($membres as $membre) {
+                if (isset($this->noeuds[$membre])) {
+                    $ys[] = $this->noeuds[$membre]->y;
+                }
+            }
+
+            // Une liste puis `array_unique`, et non un tableau indexé par l'ordonnée :
+            // une clé de tableau ne peut pas être un flottant, PHP la tronquerait en
+            // entier et deux rangées distantes de moins d'un pixel se confondraient.
+            $rangees = array_values(array_unique($ys, \SORT_REGULAR));
+
+            if (1 !== \count($rangees)) {
+                continue;
+            }
+
+            $descendus[$famille] = $rangees[0]
+                + MoteurDePlacement::H_FICHE / 2
+                + self::DESCENTE_DU_LOSANGE;
+        }
+
+        return $descendus;
     }
 
     /* ------------------------------------------------------------------ */
