@@ -216,7 +216,7 @@ Décisions d'exclusion, pour que personne ne les reprenne à zéro dans six mois
 
 | Module | Préfixe | Tables |
 |---|---|---|
-| `Core` | `core_` | `core_user`, `core_setting`, `core_audit_log`, `core_notification` |
+| `Core` | `core_` | `core_user`, `core_setting`, `core_audit_log`, `core_notification`, `core_email_change` |
 | `Tree` | `tree_` | `tree_person`, `tree_family`, `tree_child`, `tree_fact`, `tree_note`, `tree_source`, `tree_citation` |
 | `Membership` | `mbr_` | `mbr_invitation`, `mbr_member`, `mbr_claim_attempt` |
 | `Proposal` | `prp_` | `prp_change_request`, `prp_change_op`, `prp_draft_person`, `prp_draft_link`, `prp_revision` |
@@ -3463,6 +3463,8 @@ le même ordre pour ne pas violer de contrainte.
 | 21 | `tml_preference` | — | 0 |
 | 22 | `ged_run` | — | 1 |
 | 23 | `ged_issue` | `ged_run` | variable |
+| 24 | `tree_place` | — | variable (une ligne par graphie de lieu résolue, § 0.6) |
+| 25 | `core_email_change` | — | 0 (transitoire : une demande vit 24 h) |
 
 **Quatre points de vigilance sur cet ordre.**
 
