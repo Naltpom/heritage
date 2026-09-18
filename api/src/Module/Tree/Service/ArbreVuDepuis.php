@@ -11,7 +11,7 @@ use App\Module\Tree\ValueObject\PersonnePlacable;
 use App\Module\Tree\ValueObject\PlacementLogique;
 
 /**
- * **L'arbre validé, tel qu'il se lit depuis une personne donnée.**
+ * **L'arbre validé, tel qu'il se lit depuis une personne donnée.**.
  *
  * ── Pourquoi cette classe existe ────────────────────────────────────────────────
  *

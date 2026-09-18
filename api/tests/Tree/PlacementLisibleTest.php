@@ -258,7 +258,7 @@ final class PlacementLisibleTest extends TestCase
 
     /**
      * ════════════════════════════════════════════════════════════════════
-     * **LES INVARIANTS SUR LES 377 NŒUDS, ET LE GAIN CHIFFRÉ.**
+     * **LES INVARIANTS SUR LES 377 NŒUDS, ET LE GAIN CHIFFRÉ.**.
      *
      * L'arbre synthétique a dix personnes et deux couples : il éprouve les règles
      * une par une, il ne dit rien de ce qui arrive à un arbre de 377 nœuds où dix

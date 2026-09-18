@@ -59,7 +59,7 @@ use Symfony\Contracts\Cache\ItemInterface;
  * chaque nouveau chemin d'écriture — validation de proposition, édition d'administrateur,
  * import GEDCOM, correction en base — était une occasion d'oubli.
  */
-final class PlacementPartage
+final class PlacementPartage implements EmpreinteDeLaMiseEnPage
 {
     /**
      * 24 h. Ce n'est pas une durée de fraîcheur : la fraîcheur est garantie par
@@ -120,6 +120,23 @@ final class PlacementPartage
         $base = self::PREFIXE_CLE.$this->empreinte->empreinte();
 
         return null === $egoPersonneId ? $base : $base.'.p'.$egoPersonneId;
+    }
+
+    /**
+     * L'empreinte de l'image servie à ce point de vue — {@see EmpreinteDeLaMiseEnPage}.
+     *
+     * Elle passe par le cache, donc elle ne recalcule rien : sur le chemin d'un `304`,
+     * c'est une lecture d'entrée et un haché. La revalidation n'était déjà plus gratuite
+     * — elle résout le cercle du lecteur — et ceci s'ajoute au même ordre de grandeur.
+     *
+     * Ce que ça achète, en échange : un déploiement qui change les règles de mise en page
+     * **atteint les navigateurs**. Sans cette composante, ils revalidaient, recevaient
+     * `304`, et redessinaient l'ancienne image. Le raisonnement complet est dans
+     * {@see Placement::empreinte()}.
+     */
+    public function empreinteDeLaMiseEnPage(?int $egoPersonneId): string
+    {
+        return $this->placement($egoPersonneId)->empreinte();
     }
 
     private function calcule(ItemInterface $entree, ?int $egoPersonneId): Placement

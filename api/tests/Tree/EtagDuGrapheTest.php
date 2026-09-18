@@ -6,14 +6,15 @@ namespace App\Tests\Tree;
 
 use App\Module\Core\Enum\Regime;
 use App\Module\Tree\Serializer\EtagDuGraphe;
-use App\Module\Tree\Serializer\PersonneDuLecteur;
-use App\Tests\Tree\Double\AnnuaireEnMemoire;
 use App\Module\Tree\Serializer\FabriqueDuCercle;
 use App\Module\Tree\Serializer\LecteurDeLArbre;
+use App\Module\Tree\Serializer\PersonneDuLecteur;
 use App\Module\Tree\Serializer\PopulationDeLArbre;
 use App\Module\Tree\Service\TreeFingerprint;
+use App\Tests\Tree\Double\AnnuaireEnMemoire;
 use App\Tests\Tree\Double\CalqueEnMemoire;
 use App\Tests\Tree\Double\CercleEnMemoire;
+use App\Tests\Tree\Double\MiseEnPageEnMemoire;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\TestCase;
 
@@ -31,12 +32,14 @@ use PHPUnit\Framework\TestCase;
  * couvre que `tree_person`, `tree_family` et `tree_child`. Ni le régime, ni le cercle, ni
  * `cercle.generations` n'y entraient.
  *
- * Ce fichier garde la formule du § 5.2, à trois composantes :
+ * Ce fichier garde la formule du § 5.2, à cinq composantes :
  *
  * ```
  * ETag = sha256( empreinte_de_l_arbre
  *        || ':' || empreinte_du_cercle_effectif_du_lecteur
- *        || ':' || empreinte_des_demandes_du_lecteur )
+ *        || ':' || empreinte_des_demandes_du_lecteur
+ *        || ':' || point_de_vue_du_lecteur
+ *        || ':' || empreinte_de_la_mise_en_page )
  * ```
  *
  * ## Ce qui est gardé ici, et ce qui l'est ailleurs
@@ -307,14 +310,54 @@ final class EtagDuGrapheTest extends TestCase
      *                                           lecteur rattaché à personne regarde depuis
      *                                           la racine
      */
-    private function etags(?CalqueEnMemoire $propositions = null, ?CercleEnMemoire $cercle = null, array $personneParCompte = []): EtagDuGraphe
-    {
+    private function etags(
+        ?CalqueEnMemoire $propositions = null,
+        ?CercleEnMemoire $cercle = null,
+        array $personneParCompte = [],
+        ?MiseEnPageEnMemoire $miseEnPage = null,
+    ): EtagDuGraphe {
         return new EtagDuGraphe(
             $this->empreinteFigee(),
             $propositions ?? new CalqueEnMemoire(7),
             new FabriqueDuCercle($cercle ?? new CercleEnMemoire(Regime::Cercle, [11, 12])),
             $this->populationFigee(),
             new PersonneDuLecteur(new AnnuaireEnMemoire($personneParCompte)),
+            $miseEnPage ?? new MiseEnPageEnMemoire(),
+        );
+    }
+
+    /**
+     * ════════════════════════════════════════════════════════════════════════════
+     * **LE CODE DE MISE EN PAGE CHANGE, L'ARBRE NON — L'`ETAG` DOIT BOUGER.**.
+     *
+     * Le quatrième cas de la série, et le seul qui ne vienne pas de la base. Les quatre
+     * autres composantes décrivent l'état des tables et le lecteur ; aucune ne remue
+     * quand on réécrit les règles de placement. Or la route répond
+     * `Cache-Control: private, no-cache` : le navigateur garde la charge et revalide.
+     *
+     * Sans cette composante, un déploiement qui change la mise en page laisse chaque
+     * lecteur revenu présenter son ancien `ETag`, recevoir `304`, et **redessiner
+     * l'ancienne image** — pendant que le serveur en calcule une nouvelle que personne
+     * ne reçoit. C'est le défaut de `cercle.generations`, sur une cinquième dimension.
+     * ════════════════════════════════════════════════════════════════════════════
+     */
+    public function testUneMiseEnPageDifferenteDonneUnEtagDifferent(): void
+    {
+        $lecteur = new LecteurDeLArbre(42, 'Membre', false, Regime::Cercle);
+
+        $avant = $this->etags(miseEnPage: new MiseEnPageEnMemoire('regles-de-2026-09'));
+        $apres = $this->etags(miseEnPage: new MiseEnPageEnMemoire('regles-affinees'));
+
+        self::assertNotSame(
+            $avant->pour($lecteur),
+            $apres->pour($lecteur),
+            'À arbre, cercle, demandes et point de vue identiques, deux images différentes doivent donner deux `ETag` différents.',
+        );
+
+        self::assertSame(
+            $avant->pour($lecteur),
+            $this->etags(miseEnPage: new MiseEnPageEnMemoire('regles-de-2026-09'))->pour($lecteur),
+            'Et la même image doit rendre le même `ETag`, sans quoi plus rien ne revalide.',
         );
     }
 

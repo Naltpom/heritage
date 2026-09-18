@@ -162,7 +162,9 @@ final class TreeFingerprint
      * ```
      * ETag = sha256( empreinte_de_l_arbre
      *        || ':' || empreinte_du_cercle_effectif_du_lecteur
-     *        || ':' || empreinte_des_demandes_du_lecteur )
+     *        || ':' || empreinte_des_demandes_du_lecteur
+     *        || ':' || point_de_vue_du_lecteur
+     *        || ':' || empreinte_de_la_mise_en_page )
      * ```
      *
      * **Les deux paramètres sont obligatoires, et c'est la correction elle-même.** La
@@ -176,15 +178,32 @@ final class TreeFingerprint
      * confidentialité qu'un paramètre par défaut rend silencieuse doit devenir une erreur
      * bruyante ; c'est la seule forme de garde qui survive à une relecture distraite.*
      *
-     * Ce qui entre dans chaque composante, et pourquoi, est écrit là où elle se calcule :
-     * {@see \App\Module\Tree\Serializer\EtagDuGraphe}.
+     * **Les cinq sont donc obligatoires**, et les deux dernières le sont devenues pour la
+     * même raison qu'un cas réel a rendue concrète : le point de vue et la mise en page
+     * portaient un défaut, et le défaut rendait l'`ETag` recevable et faux. La leçon vaut
+     * pour la sixième composante que quelqu'un ajoutera un jour.
      *
+     * @param string $empreinteDeLaMiseEnPage {@see EmpreinteDeLaMiseEnPage}
+     * @param string $pointDeVue              `''` quand le lecteur n'est rattaché à aucune personne
+     *
+     * Ce qui entre dans chaque composante, et pourquoi, est écrit là où elle se calcule :
+     * {@see \App\Module\Tree\Serializer\EtagDuGraphe}
      * @param string $empreinteDuCercleEffectif {@see \App\Module\Tree\Serializer\CercleDuLecteur::empreinte()}
      * @param string $empreinteDesDemandes      `''` quand le lecteur n'a aucune demande en cours
      */
-    public function etag(string $empreinteDuCercleEffectif, string $empreinteDesDemandes, string $pointDeVue = ''): string
-    {
-        return hash('sha256', $this->empreinte().':'.$empreinteDuCercleEffectif.':'.$empreinteDesDemandes.':'.$pointDeVue);
+    public function etag(
+        string $empreinteDuCercleEffectif,
+        string $empreinteDesDemandes,
+        string $pointDeVue,
+        string $empreinteDeLaMiseEnPage,
+    ): string {
+        return hash('sha256', implode(':', [
+            $this->empreinte(),
+            $empreinteDuCercleEffectif,
+            $empreinteDesDemandes,
+            $pointDeVue,
+            $empreinteDeLaMiseEnPage,
+        ]));
     }
 
     /**

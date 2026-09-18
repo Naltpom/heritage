@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Tree\Serializer;
 
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
+use App\Module\Tree\Service\EmpreinteDeLaMiseEnPage;
 use App\Module\Tree\Service\TreeFingerprint;
 
 /**
@@ -14,7 +15,8 @@ use App\Module\Tree\Service\TreeFingerprint;
  * ETag = "sha256( empreinte_de_l_arbre                     -- § 2.3, identique pour tous
  *         || ':' || empreinte_du_cercle_effectif_du_lecteur
  *         || ':' || empreinte_des_demandes_du_lecteur      -- '' s'il n'en a aucune
- *         || ':' || point_de_vue_du_lecteur )"             -- '' s'il n'est rattaché à personne
+ *         || ':' || point_de_vue_du_lecteur                -- '' s'il n'est rattaché à personne
+ *         || ':' || empreinte_de_la_mise_en_page )"         -- l'image elle-même
  * ```
  *
  * ── La règle, en une ligne ───────────────────────────────────────────────────────
@@ -89,6 +91,28 @@ use App\Module\Tree\Service\TreeFingerprint;
  * personne : il regarde alors depuis la racine, comme tous ceux qui sont dans son cas, et
  * ils peuvent partager une entrée.
  *
+ * ── La cinquième composante : l'image elle-même ──────────────────────────────────
+ *
+ * Les quatre premières décrivent **l'état de la base et le lecteur**. Aucune ne bouge
+ * quand c'est le *code* de mise en page qui change. Or cette route répond
+ * `Cache-Control: private, no-cache` : le navigateur garde la charge et revalide. Un
+ * lecteur revenu après un déploiement qui change les règles de placement présentait son
+ * ancien `ETag`, recevait `304`, et **continuait de dessiner l'ancienne image** — pendant
+ * que le serveur, lui, en calculait une nouvelle que personne ne recevait.
+ *
+ * C'est le cas 3 ci-dessus, mot pour mot, sur une cinquième dimension : *le durcissement
+ * n'atteignait jamais le client.* Et comme lui, il ne se referme pas par un `if` mais en
+ * mettant dans la clé **ce qui est réellement servi**. D'où une empreinte de la mise en
+ * page, dérivée du placement — jamais une constante de version à bousculer à la main, que
+ * {@see \App\Module\Tree\ValueObject\Placement::empreinte()} explique en détail.
+ *
+ * Elle rend d'ailleurs la quatrième redondante en pratique — deux points de vue donnent
+ * deux images — et on la garde quand même : elle est lisible, gratuite, et la redondance
+ * n'a jamais coûté qu'une revalidation.
+ *
+ * Le coût, lui, s'ajoute à celui déjà assumé plus bas : le chemin du `304` lit désormais
+ * aussi le placement en cache (§ 9.9). Une entrée de cache et un haché.
+ *
  * ── La composante des demandes reste nécessaire ──────────────────────────────────
  *
  * Déposer un brouillon ne touche aucune table `tree_*`, donc ne change pas l'empreinte —
@@ -125,6 +149,7 @@ final readonly class EtagDuGraphe
         private FabriqueDuCercle $cercles,
         private PopulationDeLArbre $population,
         private PersonneDuLecteur $pointDeVue,
+        private EmpreinteDeLaMiseEnPage $miseEnPage,
     ) {
     }
 
@@ -137,6 +162,7 @@ final readonly class EtagDuGraphe
             $this->empreinteDuCercleEffectif($lecteur),
             $this->calque->empreinteDesDemandes($lecteur->pourLeCalque()),
             null === $pointDeVue ? '' : 'p'.$pointDeVue,
+            $this->miseEnPage->empreinteDeLaMiseEnPage($pointDeVue),
         ).'"';
     }
 

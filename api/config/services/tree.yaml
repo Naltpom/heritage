@@ -37,6 +37,13 @@ services:
         arguments:
             $cacheArbre: '@cache.arbre'
 
+    # L'`ETag` du graphe doit distinguer la mise en page, sinon un déploiement qui la
+    # change n'atteint jamais un navigateur qui revalide (voir EtagDuGraphe). Il passe
+    # par ce port étroit plutôt que par PlacementPartage lui-même, pour que la règle de
+    # clé reste éprouvable sans cache ni base.
+    App\Module\Tree\Service\EmpreinteDeLaMiseEnPage:
+        alias: App\Module\Tree\Service\PlacementPartage
+
     # Les deux contrats du module et leur implémentation. Le conteneur ne peut pas
     # deviner l'association : c'est tout l'intérêt d'avoir des interfaces ici — le
     # moteur et son fournisseur restent testables sans base (ADR 0005).
