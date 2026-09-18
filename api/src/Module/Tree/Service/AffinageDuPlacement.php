@@ -116,6 +116,10 @@ final class AffinageDuPlacement
     /** Passes de descente sur les abscisses. */
     private const int PASSES_DE_PLACEMENT = 60;
 
+    private const int VERS_LA_GAUCHE = -1;
+
+    private const int VERS_LA_DROITE = 1;
+
     /**
      * **De combien le losange descend sous la rangée de ses époux.**.
      *
@@ -183,6 +187,7 @@ final class AffinageDuPlacement
 
         $this->ordonner($rangees);
         $this->placer($rangees, self::PASSES_DE_PLACEMENT);
+        $this->isolerLeTronc($place->egoId);
         $this->recentrerSurLEgo($place->egoId);
 
         $descendus = $this->losangesDescendus();
@@ -736,6 +741,295 @@ final class AffinageDuPlacement
         }
 
         return $sortie;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* I9 : le tronc du lecteur */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * ════════════════════════════════════════════════════════════════════════════
+     * **LE TRONC DU LECTEUR, ISOLÉ.**.
+     *
+     * ```
+     *   [famille du père]      [père]◇[mère]      [famille de la mère]
+     *                                │
+     *                      ┌─────────┼─────────┐
+     *                   [frère]   [lecteur]   [sœur]
+     * ```
+     *
+     * Trois blocs, un couloir. C'est ce que le commanditaire a décrit, mot pour mot,
+     * et c'est construit **tel quel** — par translation de blocs rigides, après que
+     * la descente a fait son travail — plutôt que dérivé d'une règle générale.
+     *
+     * ── Pourquoi une passe à part, et pas une contrainte dans la descente ────────
+     *
+     * La descente au barycentre est exacte sur son objectif, et elle place bien.
+     * Elle a un angle mort : rien ne lui interdit de laisser un aïeul paternel
+     * franchir la colonne du lecteur. Mesuré sur l'arbre réel : le bloc paternel
+     * s'étendait jusqu'à **+466 px**, le lecteur étant à 0 — il vivait *dans* le bloc
+     * de son père. Et le couple parent, tiré vers le haut par ses propres parents,
+     * ne se posait pas au milieu de sa fratrie.
+     *
+     * Une réécriture complète en tassement de sous-arbres a été tentée — douze
+     * variantes, mesurées — et n'a pas convergé : chacune réparait un défaut en en
+     * ouvrant un autre. Celle-ci ne prétend à rien de général. Elle prend l'arbre
+     * tel que la descente le rend, déplace **trois blocs** pour qu'ils ne se
+     * recouvrent plus, puis **trois nœuds** pour que les parents soient au-dessus de
+     * leurs enfants. Rien d'autre ne bouge, et c'est ce qui la rend sûre.
+     *
+     * ── Les trois blocs ──────────────────────────────────────────────────────────
+     *
+     * Le **tronc** : tout ce qui est atteignable depuis la fratrie du lecteur sans
+     * passer par ses parents. Conjoints, enfants, petits-enfants — et les
+     * belles-familles, qui sont les voisins naturels du tronc et restent avec lui.
+     *
+     * Le **côté paternel** : tout ce qui est atteignable depuis le père sans passer
+     * par la mère ni par le tronc. Ses parents, ses frères, leurs descendances, ses
+     * autres unions. Le **côté maternel** : pareil depuis la mère, et ce que les deux
+     * côtés se disputent — deux cousins mariés — reste au père.
+     *
+     * Les côtés sont poussés **en bloc**, du minimum qui dégage le couloir, chacun
+     * du sien. Leur mise en page interne est intacte.
+     * ════════════════════════════════════════════════════════════════════════════
+     */
+    private function isolerLeTronc(string $egoId): void
+    {
+        $famille = $this->familleDesParents[$egoId] ?? null;
+
+        if (null === $famille || 2 !== \count($this->epoux[$famille] ?? [])) {
+            return;
+        }
+
+        [$pere, $mere] = $this->hommeAGauche(...$this->epoux[$famille]);
+
+        if (!isset($this->noeuds[$pere], $this->noeuds[$mere], $this->noeuds[$famille])) {
+            return;
+        }
+
+        $xs = [];
+
+        foreach ($this->enfants[$famille] ?? [] as $enfant) {
+            if (isset($this->posx[$enfant])) {
+                $xs[] = $this->posx[$enfant];
+            }
+        }
+
+        if ([] === $xs) {
+            return;
+        }
+
+        // ── Qui est de quel côté. L'ordre des trois fouilles est la règle.
+        //
+        // Les ascendances STRICTES d'abord : un aïeul du père est paternel même si un
+        // frère du lecteur a épousé une cousine et qu'on l'atteint par elle. Sans
+        // cette priorité, la fouille du tronc remontait par la belle-famille et
+        // avalait un morceau du côté paternel — mesuré : un aïeul restait à +466 px,
+        // dans le couloir, et le bloc paternel recouvrait le maternel sur 254 px.
+        //
+        // Le noyau du tronc — la fratrie et ce qui en descend, sans jamais remonter —
+        // est interdit aux deux côtés. Le reste du tronc, ses belles-familles, prend
+        // ce que les côtés n'ont pas réclamé.
+        $parents = [$famille => true, $pere => true, $mere => true];
+        $noyau = $this->descendanceStricte($this->enfants[$famille]);
+        $aieuxDuPere = $this->ascendanceStricte($pere);
+        $aieuxDeLaMere = $this->ascendanceStricte($mere);
+
+        $paternel = $this->atteignableDepuis(
+            array_keys($aieuxDuPere + [$pere => true]),
+            $parents + $aieuxDeLaMere + $noyau,
+        );
+        $maternel = $this->atteignableDepuis(
+            array_keys($aieuxDeLaMere + [$mere => true]),
+            $parents + $paternel + $noyau,
+        );
+        $tronc = $this->atteignableDepuis($this->enfants[$famille], $parents + $paternel + $maternel);
+
+        // ── Les parents au milieu de leur fratrie, accolés, l'homme à gauche.
+        $milieu = (min($xs) + max($xs)) / 2;
+        $largeurPere = (float) $this->noeuds[$pere]->w;
+        $largeurMere = (float) $this->noeuds[$mere]->w;
+        $couple = $largeurPere + MoteurDePlacement::ESPACE + $largeurMere;
+
+        $this->posx[$pere] = $milieu - $couple / 2 + $largeurPere / 2;
+        $this->posx[$mere] = $milieu + $couple / 2 - $largeurMere / 2;
+        $this->posx[$famille] = $milieu;
+
+        // ── Le couloir : l'emprise du tronc et du couple, toutes rangées confondues.
+        //    Toutes rangées, et non rangée par rangée : c'est ce qui fait un couloir
+        //    qu'on voit, et non trois blocs qui s'imbriquent.
+        $gauche = $this->posx[$pere] - $largeurPere / 2;
+        $droite = $this->posx[$mere] + $largeurMere / 2;
+
+        foreach (array_keys($tronc) as $id) {
+            if (!isset($this->posx[$id], $this->noeuds[$id])) {
+                continue;
+            }
+
+            $gauche = min($gauche, $this->posx[$id] - $this->noeuds[$id]->w / 2);
+            $droite = max($droite, $this->posx[$id] + $this->noeuds[$id]->w / 2);
+        }
+
+        $this->pousserLeBloc($paternel, $gauche - MoteurDePlacement::ESPACE, self::VERS_LA_GAUCHE);
+        $this->pousserLeBloc($maternel, $droite + MoteurDePlacement::ESPACE, self::VERS_LA_DROITE);
+    }
+
+    /**
+     * Les aïeux d'une personne, et rien qu'eux : on ne remonte que par la famille
+     * dont chacun est l'enfant. Les losanges traversés en font partie.
+     *
+     * @return array<string, true>
+     */
+    private function ascendanceStricte(string $personne): array
+    {
+        $vus = [];
+        $pile = [$personne];
+
+        while ([] !== $pile) {
+            $courant = array_pop($pile);
+            $famille = $this->familleDesParents[$courant] ?? null;
+
+            if (null === $famille || isset($vus[$famille])) {
+                continue;
+            }
+
+            $vus[$famille] = true;
+
+            foreach ($this->epoux[$famille] ?? [] as $parent) {
+                if (!isset($vus[$parent])) {
+                    $vus[$parent] = true;
+                    $pile[] = $parent;
+                }
+            }
+        }
+
+        return $vus;
+    }
+
+    /**
+     * Ce qui descend de ces personnes, et rien qu'eux : leurs unions, les conjoints
+     * de ces unions, leurs enfants, et ainsi de suite — sans jamais remonter vers la
+     * famille dont quelqu'un est l'enfant.
+     *
+     * @param list<string> $departs
+     *
+     * @return array<string, true>
+     */
+    private function descendanceStricte(array $departs): array
+    {
+        $vus = [];
+        $file = [];
+
+        foreach ($departs as $depart) {
+            if (isset($this->noeuds[$depart])) {
+                $vus[$depart] = true;
+                $file[] = $depart;
+            }
+        }
+
+        while ([] !== $file) {
+            $courant = array_shift($file);
+
+            if (isset($this->epoux[$courant]) || isset($this->enfants[$courant])) {
+                $suivants = array_merge($this->epoux[$courant] ?? [], $this->enfants[$courant] ?? []);
+            } else {
+                $suivants = [];
+
+                foreach ($this->voisins[$courant] ?? [] as $voisin) {
+                    if (isset($this->epoux[$voisin]) && \in_array($courant, $this->epoux[$voisin], true)) {
+                        $suivants[] = $voisin;
+                    }
+                }
+            }
+
+            foreach ($suivants as $suivant) {
+                if (!isset($vus[$suivant]) && isset($this->noeuds[$suivant])) {
+                    $vus[$suivant] = true;
+                    $file[] = $suivant;
+                }
+            }
+        }
+
+        return $vus;
+    }
+
+    /**
+     * Tout ce qui est atteignable depuis ces départs, sans jamais entrer dans un
+     * nœud bloqué. Les arêtes sont parcourues dans les deux sens : ce qu'on cherche
+     * est un **côté** de l'arbre, pas une direction.
+     *
+     * @param list<string>        $departs
+     * @param array<string, true> $bloques
+     *
+     * @return array<string, true>
+     */
+    private function atteignableDepuis(array $departs, array $bloques): array
+    {
+        $vus = [];
+        $file = [];
+
+        foreach ($departs as $depart) {
+            if (!isset($bloques[$depart]) && isset($this->noeuds[$depart])) {
+                $vus[$depart] = true;
+                $file[] = $depart;
+            }
+        }
+
+        while ([] !== $file) {
+            $courant = array_shift($file);
+
+            foreach ($this->voisins[$courant] ?? [] as $voisin) {
+                if (isset($vus[$voisin]) || isset($bloques[$voisin]) || !isset($this->noeuds[$voisin])) {
+                    continue;
+                }
+
+                $vus[$voisin] = true;
+                $file[] = $voisin;
+            }
+        }
+
+        return $vus;
+    }
+
+    /**
+     * Translate un bloc entier pour que son bord ne dépasse pas la limite — vers la
+     * gauche si c'est son bord droit qui compte, vers la droite sinon. Du minimum
+     * nécessaire, et pas d'un pixel s'il est déjà du bon côté.
+     *
+     * @param array<string, true> $bloc
+     */
+    private function pousserLeBloc(array $bloc, float $limite, int $sens): void
+    {
+        $bord = null;
+
+        foreach (array_keys($bloc) as $id) {
+            if (!isset($this->posx[$id], $this->noeuds[$id])) {
+                continue;
+            }
+
+            $demi = $this->noeuds[$id]->w / 2;
+            $candidat = self::VERS_LA_GAUCHE === $sens ? $this->posx[$id] + $demi : $this->posx[$id] - $demi;
+
+            $bord = null === $bord
+                ? $candidat
+                : (self::VERS_LA_GAUCHE === $sens ? max($bord, $candidat) : min($bord, $candidat));
+        }
+
+        if (null === $bord) {
+            return;
+        }
+
+        $decalage = self::VERS_LA_GAUCHE === $sens ? min(0.0, $limite - $bord) : max(0.0, $limite - $bord);
+
+        if (0.0 === $decalage) {
+            return;
+        }
+
+        foreach (array_keys($bloc) as $id) {
+            if (isset($this->posx[$id])) {
+                $this->posx[$id] += $decalage;
+            }
+        }
     }
 
     /* ------------------------------------------------------------------ */

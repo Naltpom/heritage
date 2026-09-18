@@ -231,25 +231,52 @@ final class PlacementLisibleTest extends TestCase
     /* ------------------------------------------------------------------ */
 
     /**
-     * **La somme des carrés ne remonte jamais.**.
+     * **La somme des carrés et le trait le plus long ne remontent jamais — sur l'arbre
+     * RÉEL**, où c'est vérifié plus bas.
      *
-     * C'est la propriété qui remplace la preuve d'identité, et c'est la seule qu'un
-     * algorithme de ce genre puisse tenir : les balayages oscillent, et garder le
-     * dernier ordre au lieu du meilleur produit régulièrement un résultat moins bon
-     * que le point de départ — sans que rien ne le signale, puisque l'arbre a changé
-     * de forme et qu'on n'a plus l'ancienne sous les yeux.
+     * Ils l'étaient aussi ici, sur dix personnes, jusqu'au couloir du tronc. Le
+     * couloir allonge **par construction** les deux traits qui relient les parents
+     * du lecteur à leurs propres parents : c'est la règle demandée, pas un effet de
+     * bord. Sur 377 nœuds ces deux traits se noient dans la mesure et elle reste très
+     * en dessous du moteur — 45 M contre 106 M. Sur dix nœuds, ils sont la mesure.
+     *
+     * Ce cas tient donc ce que le couloir promet, et c'est **I10**.
      */
-    public function testLaSommeDesCarresNeRemonteJamais(): void
+    public function testI10LeTroncDuLecteurEstIsole(): void
     {
-        self::assertLessThanOrEqual(
-            $this->sommeDesCarres($this->brut()),
-            $this->sommeDesCarres($this->affine()),
-        );
-    }
+        $apres = $this->affine();
+        $noeud = fn (string $id): NoeudPlace => $apres->noeuds[$id];
 
-    public function testLeTraitLePlusLongNeSAllongeJamais(): void
-    {
-        self::assertLessThanOrEqual($this->traitLePlusLong($this->brut()), $this->traitLePlusLong($this->affine()));
+        $pere = $noeud('P-pere');
+        $mere = $noeud('P-mere');
+        $losange = $noeud('F-parents');
+
+        // Le père à gauche de la mère, accolés, et leur losange au milieu de la fratrie.
+        self::assertLessThan($mere->x, $pere->x);
+        self::assertEqualsWithDelta(
+            $pere->droite() + MoteurDePlacement::ESPACE,
+            $mere->gauche(),
+            0.001,
+            'Les parents du lecteur doivent être accolés.',
+        );
+
+        $fratrie = [$noeud('P-soeur')->x, $noeud('P-ego')->x, $noeud('P-frere')->x];
+        self::assertEqualsWithDelta(
+            (min($fratrie) + max($fratrie)) / 2,
+            $losange->x,
+            0.001,
+            'Le losange des parents doit être au milieu de la fratrie du lecteur.',
+        );
+
+        // Tout le côté paternel à gauche du père, tout le côté maternel à droite de
+        // la mère — la belle-famille de l'oncle comprise, et les cousins avec.
+        foreach (['P-gp-pat', 'P-gm-pat', 'P-oncle', 'P-tante', 'P-cousin1', 'P-cousin2'] as $id) {
+            self::assertLessThanOrEqual($pere->x, $noeud($id)->x, \sprintf('%s devrait être du côté paternel.', $id));
+        }
+
+        foreach (['P-gp-mat', 'P-gm-mat'] as $id) {
+            self::assertGreaterThanOrEqual($mere->x, $noeud($id)->x, \sprintf('%s devrait être du côté maternel.', $id));
+        }
     }
 
     /* ------------------------------------------------------------------ */
@@ -398,6 +425,70 @@ final class PlacementLisibleTest extends TestCase
 
         // ── I7, sur l'arbre réel comme sur l'autre.
         self::assertSame(0.0, $apres->noeuds[$brut->egoId]->x);
+
+        // ── I10 : le tronc du lecteur isolé. Aucun nom n'est imprimé : les messages
+        //    ne portent que des identifiants, et ceux-ci ne sont pas des personnes.
+        $familleDesParents = [];
+        $epouxDe = [];
+
+        foreach ($jeu->familles as $famille) {
+            $epouxDe[$famille->id] = array_values($famille->epoux);
+
+            foreach ($famille->enfants as $enfant) {
+                $familleDesParents[$enfant] = $famille->id;
+            }
+        }
+
+        $parents = $familleDesParents[$brut->egoId] ?? null;
+        self::assertNotNull($parents, 'Le lecteur de référence doit avoir des parents dans l’arbre.');
+        self::assertCount(2, $epouxDe[$parents]);
+
+        [$pere, $mere] = $epouxDe[$parents];
+
+        if ($apres->noeuds[$pere]->x > $apres->noeuds[$mere]->x) {
+            [$pere, $mere] = [$mere, $pere];
+        }
+
+        $aieux = function (string $de) use ($familleDesParents, $epouxDe): array {
+            $vus = [];
+            $pile = [$de];
+
+            while ([] !== $pile) {
+                $courant = array_pop($pile);
+                $famille = $familleDesParents[$courant] ?? null;
+
+                if (null === $famille) {
+                    continue;
+                }
+
+                foreach ($epouxDe[$famille] ?? [] as $parent) {
+                    if (!isset($vus[$parent])) {
+                        $vus[$parent] = true;
+                        $pile[] = $parent;
+                    }
+                }
+            }
+
+            return array_keys($vus);
+        };
+
+        $xPere = $apres->noeuds[$pere]->x;
+        $xMere = $apres->noeuds[$mere]->x;
+
+        foreach ($aieux($pere) as $aieul) {
+            self::assertLessThanOrEqual($xPere, $apres->noeuds[$aieul]->x, 'Un aïeul paternel déborde à droite du père.');
+        }
+
+        foreach ($aieux($mere) as $aieul) {
+            self::assertGreaterThanOrEqual($xMere, $apres->noeuds[$aieul]->x, 'Un aïeul maternel déborde à gauche de la mère.');
+        }
+
+        self::assertEqualsWithDelta(
+            $apres->noeuds[$pere]->droite() + MoteurDePlacement::ESPACE,
+            $apres->noeuds[$mere]->gauche(),
+            0.001,
+            'Les parents du lecteur doivent être accolés.',
+        );
     }
 
     /* ------------------------------------------------------------------ */
