@@ -17,6 +17,7 @@
  */
 
 import type { RouteRecordRaw } from 'vue-router'
+import type { NomDeDisposition } from '@/components/arbre/dispositions'
 import type { NiveauRequis } from './acces'
 
 declare module 'vue-router' {
@@ -28,7 +29,28 @@ declare module 'vue-router' {
     titre: string
     /** `false` masque l'en-tête applicatif (connexion, inscription). */
     cadre?: boolean
+    /**
+     * La **disposition** de l'arbre, pour les maquettes de comparaison.
+     *
+     * Absente sur `/arbre`, qui rend la mise en page du moteur telle quelle et
+     * sert de référence. Voir `components/arbre/dispositions/`.
+     */
+    disposition?: NomDeDisposition
   }
+}
+
+/**
+ * La disposition déclarée dans `meta`, servie à la vue en prop.
+ *
+ * Une fonction et non `props: true` : `meta` n'est pas un paramètre d'URL, et
+ * c'est bien dans `meta` qu'elle doit vivre — la garde d'accès et le titre de
+ * page s'y trouvent déjà, et une disposition en segment d'URL serait un
+ * paramètre que n'importe qui pourrait inventer.
+ */
+function dispositionEnProp(route: { meta: { disposition?: NomDeDisposition } }): {
+  disposition: NomDeDisposition | undefined
+} {
+  return { disposition: route.meta.disposition }
 }
 
 /** Exportée pour que les tests montent la table sur un historique en mémoire :
@@ -102,7 +124,33 @@ export const routes: RouteRecordRaw[] = [
     path: '/arbre',
     name: 'arbre',
     component: () => import('@/views/ArbreView.vue'),
+    // La disposition voyage en **prop** et non par `useRoute()` : la vue reste
+    // montable seule dans un test de rendu, où il n'y a pas de routeur.
+    props: dispositionEnProp,
     meta: { acces: 'attente', titre: 'Arbre' },
+  },
+
+  /* --- Maquettes de comparaison des dispositions -------------------
+   *
+   * **Volontairement absentes du menu.** Ce sont des variantes de mise en page
+   * proposées au commanditaire pour qu'il choisisse ; les exposer au reste de la
+   * famille montrerait cinq arbres différents sans dire lequel fait foi.
+   * Accessibles par URL, et rien de plus.
+   *
+   * Elles montent **le même composant** que `/arbre` : ce qui diffère est une
+   * fonction pure appliquée à la charge reçue, et rien d'autre. Deux écrans
+   * séparés auraient divergé au premier correctif, et la comparaison n'aurait
+   * plus rien dit.
+   *
+   * Même `acces` que `/arbre` : une maquette plus permissive que l'écran qu'elle
+   * imite serait une porte dérobée sur les mêmes données.
+   */
+  {
+    path: '/arbre-2',
+    name: 'arbre.conjoints',
+    component: () => import('@/views/ArbreView.vue'),
+    props: dispositionEnProp,
+    meta: { acces: 'attente', titre: 'Arbre — conjoints accolés', disposition: 'conjoints' },
   },
   {
     // `{id}` est un entier : un identifiant provisoire (`#12/p1`) ne correspond

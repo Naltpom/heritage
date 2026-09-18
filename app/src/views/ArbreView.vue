@@ -116,6 +116,12 @@ import TiroirOutils from '@/components/mise-en-page/TiroirOutils.vue'
 import PanneauFiche from '@/components/arbre/PanneauFiche.vue'
 import { avertissementDuCalque, ponctuationApres } from '@/components/arbre/calque'
 import {
+  dispositionDeLaRoute,
+  mesurerLisibilite,
+  presentationDeLaRoute,
+  type NomDeDisposition,
+} from '@/components/arbre/dispositions'
+import {
   FILTRES,
   ensembleAEclairer,
   filtresDisponibles,
@@ -141,7 +147,56 @@ import {
 /* Le graphe                                                           */
 /* ------------------------------------------------------------------ */
 
-const graphe = shallowRef<Graphe | null>(null)
+/**
+ * **Deux graphes, et il faut les distinguer.**
+ *
+ * `grapheBrut` est ce que le serveur a envoyé. `graphe` est ce qu'on dessine :
+ * le même, passé par la **disposition** de la route.
+ *
+ * Les garder séparés n'est pas une élégance. La revalidation rend `inchange`
+ * quand rien n'a bougé, auquel cas on garde ce qu'on a — et si ce qu'on gardait
+ * était déjà transformé, la transformation se rejouerait par-dessus elle-même à
+ * chaque retour d'onglet. Une disposition idempotente y survivrait ; une qui
+ * duplique des nœuds, non, et elle en ajouterait à l'infini.
+ */
+const grapheBrut = shallowRef<Graphe | null>(null)
+
+/**
+ * La disposition de cette route — absente sur `/arbre`, qui rend la mise en page
+ * du moteur telle quelle.
+ *
+ * **Une prop, et non `useRoute()`.** La table de routage la tire de `meta` et la
+ * passe ; la vue, elle, ne connaît pas le routeur. C'est ce qui la garde montable
+ * seule dans un test de rendu — la suite de ce produit rend les composants côté
+ * serveur, sans routeur, et un `useRoute()` y vaut `undefined`. Le même piège a
+ * déjà été payé sur l'en-tête.
+ */
+const { disposition: nomDeDisposition } = defineProps<{
+  disposition?: NomDeDisposition
+}>()
+
+const disposition = computed(() => dispositionDeLaRoute(nomDeDisposition))
+const presentation = computed(() => presentationDeLaRoute(nomDeDisposition))
+
+const graphe = computed<Graphe | null>(() =>
+  grapheBrut.value === null ? null : disposition.value(grapheBrut.value),
+)
+
+/**
+ * Ce que la disposition change, **en nombres**.
+ *
+ * Une maquette se juge sur une mesure, pas sur une impression : on peut très bien
+ * rendre un arbre plus joli localement en le dégradant ailleurs, et l'œil ne le
+ * voit pas sur 377 nœuds. Le bandeau annonce donc l'avant et l'après.
+ */
+const effetDeLaDisposition = computed(() => {
+  const brut = grapheBrut.value
+  const affiche = graphe.value
+
+  if (brut === null || affiche === null || presentation.value === null) return null
+
+  return { avant: mesurerLisibilite(brut), apres: mesurerLisibilite(affiche) }
+})
 const canevas = ref<InstanceType<typeof CanevasArbre> | null>(null)
 const barre = ref<InstanceType<typeof BarreOutilsArbre> | null>(null)
 /** Le champ du pied de page. Exactement un des deux exemplaires est monté —
@@ -159,7 +214,7 @@ const {
 } = useAppelApi(chargerGraphe)
 
 async function revaliderGraphe(): Promise<void> {
-  graphe.value = await grapheApresRevalidation(graphe.value, appelerGraphe)
+  grapheBrut.value = await grapheApresRevalidation(grapheBrut.value, appelerGraphe)
 }
 
 const calqueActif = computed(() => graphe.value?.calque.actif === true)
@@ -587,6 +642,35 @@ onBeforeUnmount(() => {
         <LegendeArbre v-if="graphe !== null" :calque-actif="calqueActif" en-tiroir />
       </template>
     </TiroirOutils>
+
+    <!--
+      **Le bandeau de la maquette.** Deux onglets ouverts sur deux dispositions
+      sont indiscernables dès qu'on a fait défiler l'arbre : sans ce bandeau, on
+      compare deux images dont on ne sait plus laquelle est laquelle.
+
+      Il annonce aussi la **mesure** — couples accolés avant et après. Une
+      disposition se juge sur des nombres, pas sur une impression : on peut rendre
+      un arbre plus joli localement en le dégradant ailleurs, et l'œil ne le voit
+      pas sur 377 nœuds.
+    -->
+    <div
+      v-if="presentation !== null"
+      class="border-b border-ligne bg-panneau px-4 py-2 text-xs text-texte"
+    >
+      <p>
+        <strong class="font-semibold">Maquette « {{ presentation.titre }} ».</strong>
+        {{ presentation.resume }}
+      </p>
+      <p v-if="effetDeLaDisposition !== null" class="mt-1 text-attenue tnum">
+        Couples accolés : {{ effetDeLaDisposition.avant.accoles }} →
+        {{ effetDeLaDisposition.apres.accoles }} sur {{ effetDeLaDisposition.apres.couples }}.
+        Personnes assises entre deux époux :
+        {{ effetDeLaDisposition.avant.intercales }} → {{ effetDeLaDisposition.apres.intercales }}.
+        <RouterLink :to="{ name: 'arbre' }" class="text-accent underline">
+          Comparer à l’arbre d’origine
+        </RouterLink>
+      </p>
+    </div>
 
     <p
       v-if="calqueActif"
