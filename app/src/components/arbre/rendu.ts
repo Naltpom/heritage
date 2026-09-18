@@ -13,7 +13,14 @@
  */
 
 import type { AreteGraphe, NoeudGraphe } from '@/lib/api'
-import { hauteursDeBarre, pointsFiliation, pointsUnion, trace } from './chemins'
+import {
+  type BarreDUnion,
+  hauteursDeBarre,
+  hauteursDUnion,
+  pointsFiliation,
+  pointsUnion,
+  trace,
+} from './chemins'
 import { classesDArete, type IndexGraphe } from './graphe'
 
 /**
@@ -64,6 +71,7 @@ export interface AreteTracee {
  */
 export function tracerAretes(index: IndexGraphe, aretes: readonly AreteGraphe[]): AreteTracee[] {
   const barres = hauteursDeBarre(peignesDeFamille(index))
+  const unions = hauteursDUnion(unionsDuGraphe(index, aretes))
   const tracees: AreteTracee[] = []
 
   for (const arete of aretes) {
@@ -80,7 +88,7 @@ export function tracerAretes(index: IndexGraphe, aretes: readonly AreteGraphe[])
 
     const points =
       arete.genre === 'union'
-        ? pointsUnion(personne, famille)
+        ? pointsUnion(personne, famille, unions.get(cleDUnion(arete.de, arete.vers)))
         : pointsFiliation(
             famille,
             personne,
@@ -93,6 +101,31 @@ export function tracerAretes(index: IndexGraphe, aretes: readonly AreteGraphe[])
     tracees.push({ de: arete.de, vers: arete.vers, classes: classesDArete(arete), d })
   }
   return tracees
+}
+
+/**
+ * La clé d'une arête d'union. Les deux extrémités, dans l'ordre où l'API les
+ * donne : c'est déjà unique, et la recomposer ailleurs qu'ici donnerait deux
+ * définitions pour une même chose.
+ */
+function cleDUnion(de: string, vers: string): string {
+  return `${de}\u0000${vers}`
+}
+
+/** Les arêtes d'union du graphe, prêtes pour {@link hauteursDUnion}. */
+function unionsDuGraphe(index: IndexGraphe, aretes: readonly AreteGraphe[]): BarreDUnion[] {
+  const barres: BarreDUnion[] = []
+  for (const arete of aretes) {
+    if (arete.genre !== 'union') continue
+    const de = index.parId.get(arete.de)
+    const vers = index.parId.get(arete.vers)
+    if (de === undefined || vers === undefined) continue
+    const epoux = de.type === 'personne' ? de : vers.type === 'personne' ? vers : null
+    const famille = de.type === 'famille' ? de : vers.type === 'famille' ? vers : null
+    if (epoux === null || famille === null) continue
+    barres.push({ cle: cleDUnion(arete.de, arete.vers), epoux, famille })
+  }
+  return barres
 }
 
 /** Les quatre sommets du losange d'une famille — 22 × 14, pas un cercle. */
