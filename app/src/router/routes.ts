@@ -124,6 +124,32 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'attente', titre: 'Votre inscription' },
   },
 
+  /* --- Le compte ------------------------------------------------------ */
+  {
+    // Courriel et mot de passe modifiables ; nom et prénom en lecture seule —
+    // ce sont ceux de la fiche rattachée, et les corriger passe par une demande.
+    // `attente` et non `membre` : un compte non encore validé peut déjà corriger
+    // son courriel ou son mot de passe, ce sont les siens, pas une donnée de
+    // l'arbre.
+    path: '/compte',
+    name: 'compte',
+    component: () => import('@/views/CompteView.vue'),
+    meta: { acces: 'attente', titre: 'Mon compte' },
+  },
+  {
+    // Le lien reçu à la nouvelle adresse (§ 2.5). `public` et non `anonyme` :
+    // on y arrive depuis un courriel, tantôt sur un autre appareil sans session,
+    // tantôt sur l'appareil où l'on vient de faire la demande — donc connecté.
+    // `anonyme` renverrait ce second cas vers l'arbre sans rien confirmer, et
+    // c'est le cas courant. Le jeton est passé en prop plutôt que lu par
+    // `useRoute()` — la vue reste rendable hors routeur.
+    path: '/compte/courriel/:jeton',
+    name: 'compte.courriel',
+    component: () => import('@/views/CompteCourrielView.vue'),
+    props: true,
+    meta: { acces: 'public', titre: 'Changement de courriel', cadre: false },
+  },
+
   /* --- Consultation : ouverte au régime « en attente » ------------ */
   {
     path: '/arbre',

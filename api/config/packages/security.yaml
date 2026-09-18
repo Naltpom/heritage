@@ -75,6 +75,10 @@ security:
         # refus est un `404` (§ 4).
         - { path: ^/api/connexion, roles: PUBLIC_ACCESS }
         - { path: ^/api/inscription, roles: PUBLIC_ACCESS }
+        # Le clic sur le lien de changement de courriel (§ 2.5). Public pour la même
+        # raison que l'inscription : on clique depuis le courriel, souvent sur un autre
+        # appareil, sans session. Sa protection est le jeton, et son refus un `404`.
+        - { path: ^/api/session/courriel/confirmer, roles: PUBLIC_ACCESS }
         # Avant `^/api`, faute de quoi cette règle ne serait jamais atteinte. Le journal
         # d'audit, les réglages, la bascule « voir comme un membre » et la gestion des
         # comptes vivent tous derrière.
