@@ -157,7 +157,7 @@ final class TreeFingerprint
     }
 
     /**
-     * L'`ETag` servi au client — **les trois composantes du § 5.2 du contrat d'API** :
+     * L'`ETag` servi au client — **les cinq composantes du § 5.2 du contrat d'API** :
      *
      * ```
      * ETag = sha256( empreinte_de_l_arbre
