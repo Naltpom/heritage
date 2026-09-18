@@ -38,16 +38,71 @@ final class PlacementLisibleTest extends TestCase
     /* Sur l'arbre synthétique : les invariants, un par un */
     /* ------------------------------------------------------------------ */
 
-    public function testI1LesOrdonneesNeBougentPas(): void
+    public function testI1LaRangeeDUnePersonneNeBougePas(): void
     {
-        /* Une ordonnée est une propriété de la topologie — `génération × 150` — et
-           l'affinage n'a aucune liberté verticale. */
+        /* L'ordonnée d'une PERSONNE est une propriété de la topologie —
+           `génération × 150` — et l'affinage n'a aucune liberté verticale dessus.
+           Celle d'un losange, en revanche, est dérivée : il descend sous la rangée de
+           ses époux d'une distance que l'affinage choisit, pour donner aux barres
+           d'union la place de s'étager. Voir AffinageDuPlacement::DESCENTE_DU_LOSANGE. */
         $avant = $this->brut();
         $apres = $this->affine();
+        $personnes = 0;
 
         foreach ($avant->noeuds as $id => $noeud) {
+            if (str_starts_with($id, 'F-') || str_starts_with($id, '@F')) {
+                continue;
+            }
+
+            ++$personnes;
             self::assertSame($noeud->y, $apres->noeuds[$id]->y ?? null, $id);
         }
+
+        // Sans ce compte, le cas serait vert sur un arbre sans personne.
+        self::assertGreaterThan(0, $personnes);
+    }
+
+    public function testLeLosangeDescendAssezPourQueLesBarresDUnionSEtagent(): void
+    {
+        /* La bande où vivent les barres d'union va du bas des fiches à la pointe haute
+           du losange. Avec la descente du moteur elle vaut 19 px, et quatre barres qui
+           se croisent s'y retrouvent à moins de 4 px l'une de l'autre — elles ne se
+           superposent plus depuis la coloration par intervalles, mais elles se
+           frôlent. Le commanditaire a demandé le double ; ce cas le verrouille. */
+        $apres = $this->affine();
+        $losanges = 0;
+
+        foreach ($apres->noeuds as $id => $noeud) {
+            if (!str_starts_with($id, 'F-') && !str_starts_with($id, '@F')) {
+                continue;
+            }
+
+            $epoux = null;
+
+            foreach ($apres->aretes as $arete) {
+                if (AreteDePlacement::GENRE_UNION === $arete->genre && $arete->vers === $id) {
+                    $epoux = $apres->noeud($arete->de);
+
+                    break;
+                }
+            }
+
+            if (null === $epoux) {
+                continue;
+            }
+
+            ++$losanges;
+
+            $bande = ($noeud->y - $noeud->h / 2) - ($epoux->y + $epoux->h / 2);
+
+            self::assertGreaterThanOrEqual(
+                38.0,
+                $bande,
+                \sprintf('La bande des barres d’union ne fait que %.0f px sous %s.', $bande, $id),
+            );
+        }
+
+        self::assertGreaterThan(0, $losanges, 'L’arbre de test doit porter des losanges.');
     }
 
     public function testI2AucuneFicheNEnChevaucheUneAutre(): void
@@ -295,8 +350,13 @@ final class PlacementLisibleTest extends TestCase
             }
         }
 
-        // ── I1 : aucune ordonnée n'a bougé.
+        // ── I1 : aucune rangée de PERSONNE n'a bougé. Les losanges, eux, descendent
+        //    pour laisser la place aux barres d'union — voir le cas dédié.
         foreach ($brut->noeuds as $id => $noeud) {
+            if (str_starts_with($id, '@F')) {
+                continue;
+            }
+
             self::assertSame($noeud->y, $apres->noeuds[$id]->y, $id);
         }
 
