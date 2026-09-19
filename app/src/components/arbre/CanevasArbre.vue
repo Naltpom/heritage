@@ -21,7 +21,7 @@ import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import type { Graphe, NoeudGraphe } from '@/lib/api'
 import { useGestesCanevas } from '@/composables/useGestesCanevas'
 import { construireCanevas, type PiloteCanevas } from './canevas'
-import { cadrer, centrerSur, type Boite, type CadreEcran } from './geometrie'
+import { cadrer, centrerSur, estDessinable, type Boite, type CadreEcran } from './geometrie'
 import { tronc } from './graphe'
 
 const { graphe, cadrageInitial = 'tout' } = defineProps<{
@@ -67,6 +67,10 @@ function mesurerCadre(): CadreEcran {
 }
 
 function appliquer(): void {
+  // Un `viewBox` sans surface n'est pas dessiné ; un `viewBox` infini est
+  // ignoré, et le graphe surgit à l'échelle 1 depuis le coin. Ni l'un ni
+  // l'autre ne se rattrape au geste : on revient à l'arbre entier, qui l'est.
+  if (!estDessinable(vb)) vb = { ...boiteInitiale }
   pilote.value?.appliquerViewBox(vb)
 }
 
@@ -87,13 +91,61 @@ function construire(): void {
   pilote.value = construireCanevas(svg, graphe)
   boiteInitiale = { ...graphe.boite }
 
-  // Le premier cadrage. `tronc` sur téléphone : la personne du lecteur et ses
-  // proches ; à défaut d'un tronc trouvable — lecteur inconnu du graphe, ou
-  // tronc vide —, l'arbre entier, plutôt que rien.
+  // D'abord l'arbre entier — un cadrage toujours valable, qui ne dépend pas de la
+  // taille du cadre. Puis, sur téléphone, le tronc : la personne du lecteur et
+  // ses proches. À défaut d'un tronc trouvable — lecteur inconnu du graphe —,
+  // l'arbre entier reste.
+  recadrer()
   const cible = cadrageInitial === 'tronc' ? tronc(pilote.value.index, graphe.ego) : []
-  if (cible.length > 0) cadrerSur(cible)
-  else recadrer()
+  if (cible.length > 0) cadrerQuandLeCadreAUneTaille(cible)
 }
+
+/**
+ * Le cadrage du tronc a besoin de la **taille du cadre à l'écran**, et elle peut
+ * être nulle au moment où le graphe arrive : la vue tient ce composant sous un
+ * `v-show`, et un `watch` ordinaire court **avant** qu'elle retire le
+ * `display: none` — `getBoundingClientRect()` rend alors 0 × 0. Le `watch` du
+ * bas est donc en `flush: 'post'`, {@link cadrer} refuse un cadre sans taille,
+ * et ce qui suit est la ceinture par-dessus les bretelles.
+ *
+ * Ce que ça donnait sur téléphone, rapporté puis retrouvé dans le code : un
+ * `viewBox` de largeur 0, que le navigateur ne dessine pas — rien à l'écran ;
+ * au premier pincement, une division par cette largeur — un `viewBox` infini,
+ * que le navigateur ignore : le graphe surgit à l'échelle 1 depuis le coin, et
+ * plus aucun geste ne le rattrape. Deux bogues visibles, une seule cause.
+ *
+ * On cadre tout de suite si le cadre a une taille, et sinon **à la première
+ * taille**, une seule fois : recadrer ensuite reprendrait la main au lecteur.
+ */
+let observateurDeCadre: ResizeObserver | null = null
+
+function cadrerQuandLeCadreAUneTaille(ids: readonly string[]): void {
+  observateurDeCadre?.disconnect()
+  observateurDeCadre = null
+
+  const cadre = mesurerCadre()
+  if (cadre.largeur > 0 && cadre.hauteur > 0) {
+    cadrerSur(ids)
+    return
+  }
+
+  const element = cadreRef.value
+  if (element === null || typeof ResizeObserver === 'undefined') return
+
+  observateurDeCadre = new ResizeObserver(() => {
+    const mesure = mesurerCadre()
+    if (!(mesure.largeur > 0) || !(mesure.hauteur > 0)) return
+    observateurDeCadre?.disconnect()
+    observateurDeCadre = null
+    cadrerSur(ids)
+  })
+  observateurDeCadre.observe(element)
+}
+
+onBeforeUnmount(() => {
+  observateurDeCadre?.disconnect()
+  observateurDeCadre = null
+})
 
 /* ------------------------------------------------------------------ */
 /* Gestes                                                              */
@@ -183,11 +235,16 @@ onBeforeUnmount(() => {
 
 // Un nouveau graphe ⇒ reconstruction complète. Le `304` n'arrive jamais ici :
 // la vue ne change la prop que sur `statut === 'nouveau'`.
+//
+// `flush: 'post'` : la construction mesure le cadre, et la vue ne retire son
+// `display: none` qu'en rendant — un `watch` ordinaire courrait avant, sur un
+// cadre de 0 × 0. Voir `cadrerQuandLeCadreAUneTaille`.
 watch(
   () => graphe,
   () => {
     construire()
   },
+  { flush: 'post' },
 )
 </script>
 
