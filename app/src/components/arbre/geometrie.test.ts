@@ -12,6 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  boiteVisible,
   cadrer,
   estDessinable,
   centrerSur,
@@ -231,6 +232,30 @@ describe('cadrer', () => {
     if (vb === null) return
     expect(vb.x + vb.w / 2).toBeCloseTo(0, 6)
     expect(vb.y + vb.h / 2).toBeCloseTo(-300, 6)
+  })
+})
+
+describe('boiteVisible', () => {
+  const vue: Boite = { x: 0, y: 0, w: 1000, h: 500 }
+
+  it('voit un nœud dans le viewBox', () => {
+    expect(boiteVisible({ x: 500, y: 250, w: 120, h: 40 }, vue)).toBe(true)
+  })
+
+  it('voit encore un nœud à moins d’une demi-vue du bord — un déplacement ne découvre pas de rond vide', () => {
+    expect(boiteVisible({ x: 1400, y: 250, w: 120, h: 40 }, vue)).toBe(true)
+    expect(boiteVisible({ x: 500, y: -200, w: 120, h: 40 }, vue)).toBe(true)
+  })
+
+  it('ne voit pas un nœud au-delà de la marge', () => {
+    expect(boiteVisible({ x: 1600, y: 250, w: 120, h: 40 }, vue)).toBe(false)
+    expect(boiteVisible({ x: 500, y: 900, w: 120, h: 40 }, vue)).toBe(false)
+  })
+
+  it('compte la largeur du nœud : une fiche qui déborde dans la vue est vue', () => {
+    // Centre hors de la marge, mais le bord droit de la fiche y entre.
+    expect(boiteVisible({ x: -560, y: 250, w: 140, h: 40 }, vue)).toBe(true)
+    expect(boiteVisible({ x: -580, y: 250, w: 140, h: 40 }, vue)).toBe(false)
   })
 })
 

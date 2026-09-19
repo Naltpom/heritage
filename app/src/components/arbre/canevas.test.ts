@@ -250,8 +250,33 @@ describe('construireCanevas', () => {
     const images = svg.tous((e) => e.tag === 'image')
     expect(images).toHaveLength(1)
     expect(images[0]?.attributs['clip-path']).toBe(`url(#${ronds[0]?.attributs['id']})`)
-    // Hors navigateur, pas d'`IntersectionObserver` : l'adresse est posée tout de suite.
-    expect(images[0]?.attributs['href']).toBe('/api/medias/9/vignette')
+    // L'adresse attend que la fiche entre dans le viewBox : voir le cas suivant.
+    expect(images[0]?.attributs['href']).toBeUndefined()
+    expect(images[0]?.attributs['data-href']).toBe('/api/medias/9/vignette')
+  })
+
+  it('charge une vignette quand sa fiche entre dans le viewBox — jamais avant, une seule fois', () => {
+    // Safari ne signale jamais l'apparition d'une `<image>` SVG à un
+    // `IntersectionObserver` : `href` n'était jamais posé, et le rond restait
+    // vide. Le viewBox décide, à chaque changement.
+    const graphe = grapheEssai()
+    graphe.noeuds = graphe.noeuds.map((n) =>
+      n.id === 'p2' ? ({ ...n, portrait: '/api/medias/9/vignette' } as NoeudGraphe) : n,
+    )
+    const svg = new ElementFactice('svg')
+    const pilote = construireCanevas(svg as unknown as SVGSVGElement, graphe)
+    const image = svg.tous((e) => e.tag === 'image')[0]
+    const p2 = graphe.noeuds.find((n) => n.id === 'p2')
+    if (image === undefined || p2 === undefined) throw new Error('fixture')
+
+    pilote.appliquerViewBox({ x: p2.x + 5000, y: p2.y + 5000, w: 100, h: 100 })
+    expect(image.attributs['href']).toBeUndefined()
+
+    pilote.appliquerViewBox({ x: p2.x - 50, y: p2.y - 50, w: 100, h: 100 })
+    expect(image.attributs['href']).toBe('/api/medias/9/vignette')
+
+    pilote.appliquerViewBox({ x: p2.x + 5000, y: p2.y + 5000, w: 100, h: 100 })
+    expect(image.attributs['href']).toBe('/api/medias/9/vignette')
   })
 
   it('crée un élément par nœud et par arête', () => {

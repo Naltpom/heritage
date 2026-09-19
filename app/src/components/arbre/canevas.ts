@@ -26,7 +26,7 @@
 
 import type { Graphe, NoeudGraphe } from '@/lib/api'
 import type { Boite, BoiteCentree } from './geometrie'
-import { viewBoxEnTexte } from './geometrie'
+import { boiteVisible, viewBoxEnTexte } from './geometrie'
 import { barreDeDivorce, pointsDeLosange, tracerAretes } from './rendu'
 import {
   classesDeFamille,
@@ -61,46 +61,32 @@ const LIGNE_NOM = 24
 const LIGNE_DATES = 40
 
 /**
- * Les vignettes se chargent **à l'apparition**, pas toutes à la construction :
- * 274 fiches font 274 requêtes, et sur un téléphone qui n'en montre que dix,
- * c'est 264 de trop (ADR 0007). Hors navigateur — rendu de test —, `href` est
- * posé tout de suite : il n'y a rien à économiser.
- */
-let observateurDeVignettes: IntersectionObserver | null | undefined
-
-/**
  * Le rond des portraits : un `<clipPath>` SVG **défini une fois** dans le
- * canevas, en unités de boîte englobante, et référencé par chaque `<image>`.
- *
- * La première version posait `clip-path="inset(0 round 50%)"` sur chaque image
- * — une forme CSS. Chrome la dessine ; Safari, sur Mac comme sur iPhone, laisse
- * l'emplacement **vide** : l'image est demandée et reçue (vu dans le journal du
- * serveur, `200` puis `304`), mais rien n'est peint. Le `<clipPath>` natif est
- * ce que tout moteur SVG sait rogner.
+ * canevas, en unités de boîte englobante, et référencé par chaque `<image>` —
+ * la forme que tout moteur SVG sait rogner, là où `clip-path="inset(0 round
+ * 50%)"` est une forme CSS posée sur un élément SVG.
  */
 const ID_ROND_PORTRAIT = 'rond-portrait'
 
-function chargerALApparition(image: SVGImageElement, href: string): void {
-  if (observateurDeVignettes === undefined) {
-    observateurDeVignettes =
-      typeof IntersectionObserver === 'undefined'
-        ? null
-        : new IntersectionObserver((entrees, observateur) => {
-            for (const entree of entrees) {
-              if (!entree.isIntersecting) continue
-              const cible = entree.target
-              const url = cible.getAttribute('data-href')
-              if (url !== null) cible.setAttribute('href', url)
-              observateur.unobserve(cible)
-            }
-          })
-  }
-  if (observateurDeVignettes === null) {
-    image.setAttribute('href', href)
-    return
-  }
-  image.setAttribute('data-href', href)
-  observateurDeVignettes.observe(image)
+/**
+ * Les vignettes se chargent **quand leur fiche entre dans le `viewBox`**, pas
+ * toutes à la construction : 274 fiches font 274 requêtes, et sur un téléphone
+ * qui n'en montre que dix, c'est 264 de trop (ADR 0007).
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **Pas d'`IntersectionObserver`.** La première version confiait le moment à
+ * l'observateur du navigateur, et Safari — Mac comme iPhone — ne signale jamais
+ * l'apparition d'une `<image>` SVG : `data-href` posé, `href` jamais, et un
+ * rond vide sur toutes les fiches à photo — vu dans son inspecteur. Le
+ * `viewBox` est la seule vérité de ce que le lecteur voit ; c'est lui qui
+ * décide, à chaque fois qu'il change ({@link boiteVisible}), et il ne dépend
+ * d'aucun moteur. Une image chargée le reste.
+ * ────────────────────────────────────────────────────────────────────
+ */
+interface VignetteEnAttente {
+  image: SVGImageElement
+  noeud: BoiteCentree
+  href: string
 }
 
 function creer<K extends keyof SVGElementTagNameMap>(
@@ -180,8 +166,14 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
   /* ---- fiches ---- */
 
   const fiches = new Map<string, SVGGElement>()
+  let vignettesEnAttente: VignetteEnAttente[] = []
   for (const personne of index.personnes) {
-    fiches.set(personne.id, construireFiche(personne, index, gFiches))
+    fiches.set(
+      personne.id,
+      construireFiche(personne, index, gFiches, (image, href) => {
+        vignettesEnAttente.push({ image, noeud: personne, href })
+      }),
+    )
   }
 
   const fragment = document.createDocumentFragment()
@@ -200,6 +192,12 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
 
     appliquerViewBox(vb) {
       svg.setAttribute('viewBox', viewBoxEnTexte(vb))
+      if (vignettesEnAttente.length === 0) return
+      vignettesEnAttente = vignettesEnAttente.filter(({ image, noeud, href }) => {
+        if (!boiteVisible(noeud, vb)) return true
+        image.setAttribute('href', href)
+        return false
+      })
     },
 
     eclairer(garder, selection, chaine) {
@@ -262,6 +260,7 @@ function construireFiche(
   personne: NoeudPersonneEtendu,
   index: IndexGraphe,
   parent: SVGGElement,
+  enregistrerVignette: (image: SVGImageElement, href: string) => void,
 ): SVGGElement {
   const x = personne.x - personne.w / 2
   const y = personne.y - personne.h / 2
@@ -309,7 +308,9 @@ function construireFiche(
       preserveAspectRatio: 'xMidYMid slice',
       'clip-path': `url(#${ID_ROND_PORTRAIT})`,
     })
-    chargerALApparition(image as unknown as SVGImageElement, personne.portrait)
+    // `data-href` reste lisible dans l'inspecteur ; `href` vient avec le viewBox.
+    image.setAttribute('data-href', personne.portrait)
+    enregistrerVignette(image as unknown as SVGImageElement, personne.portrait)
     g.appendChild(image)
   } else {
     // La silhouette : une tête et des épaules, en deux formes, dans la teinte de
