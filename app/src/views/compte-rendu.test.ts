@@ -89,11 +89,12 @@ describe('CompteView', () => {
     etat.regime = 'membre'
     const html = await rendreLeCompte()
 
-    // Les seuls champs sont ceux des deux formulaires : une adresse et quatre mots
-    // de passe. Un champ « nom » ou « prénom », même désactivé, laisserait croire
-    // qu'un droit manque plutôt qu'un circuit existe.
+    // Les seuls champs sont ceux des trois formulaires : la photo, une adresse et
+    // quatre mots de passe. Un champ « nom » ou « prénom », même désactivé,
+    // laisserait croire qu'un droit manque plutôt qu'un circuit existe.
     const champs = html.match(/<input[^>]*>/g) ?? []
-    expect(champs).toHaveLength(5)
+    expect(champs).toHaveLength(6)
+    expect(champs.filter((c) => c.includes('type="file"'))).toHaveLength(1)
     expect(champs.filter((c) => c.includes('type="password"'))).toHaveLength(4)
     expect(champs.filter((c) => c.includes('type="email"'))).toHaveLength(1)
   })

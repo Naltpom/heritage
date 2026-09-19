@@ -40,6 +40,11 @@ final class MediasNonBranches implements PortDesMedias
      * pas approximatif : aucun média n'est servable non plus. Le filtre « Avec image »
      * rendra donc zéro résultat, ce qui est la vérité de ce que l'API sait servir.
      */
+    public function vignettesDePortraits(array $personneIds, LecteurDeLArbre $lecteur): array
+    {
+        return [];
+    }
+
     public function personnesAvecMedia(array $personneIds, LecteurDeLArbre $lecteur): array
     {
         return [];

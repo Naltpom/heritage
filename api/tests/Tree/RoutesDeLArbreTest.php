@@ -376,13 +376,19 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
                 continue;
             }
 
+            // La largeur servie est celle de la fiche AFFICHÉE : la zone de texte, mesurée
+            // sur les deux étiquettes émises, plus l'emplacement photo et son espace
+            // (`MesureDeFiche::LARGEUR_PHOTO + ESPACE_PHOTO`), identique pour tout le
+            // monde. Le client ne recalcule toujours rien ; ce test refait le calcul
+            // pour vérifier que les étiquettes émises sont bien celles qui ont été
+            // mesurées.
             $largeur = max(
                 104,
                 (int) (max(
                     self::signes($noeud['etiquetteNom']) * 6.6,
                     self::signes($noeud['etiquetteDates']) * 5.8,
                 ) + 28),
-            );
+            ) + 48;
 
             self::assertSame($largeur, $noeud['w'], \sprintf(
                 'Le nœud %s annonce w = %d, mais ses deux étiquettes (« %s », « %s ») mesurent %d.',

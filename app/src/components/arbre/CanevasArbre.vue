@@ -22,10 +22,24 @@ import type { Graphe, NoeudGraphe } from '@/lib/api'
 import { useGestesCanevas } from '@/composables/useGestesCanevas'
 import { construireCanevas, type PiloteCanevas } from './canevas'
 import { cadrer, centrerSur, type Boite, type CadreEcran } from './geometrie'
+import { tronc } from './graphe'
 
-const { graphe } = defineProps<{
+const { graphe, cadrageInitial = 'tout' } = defineProps<{
   /** `null` tant que le premier chargement n'a pas abouti. */
   graphe: Graphe | null
+  /**
+   * Ce que la vue montre **au premier affichage** d'un graphe.
+   *
+   * `tout` : la boîte englobante rendue par l'API — l'arbre entier. `tronc` : la
+   * personne du lecteur, ses parents, sa fratrie, ses conjoints et ses enfants
+   * ({@link tronc}). Sur un téléphone, l'arbre entier fait douze mille unités de
+   * large pour un écran qui en montre trois cents : « tout » y est une vue de
+   * rien. Le bouton « tout afficher » reste le chemin vers l'arbre complet.
+   *
+   * Lu à chaque construction, jamais entre deux : recadrer une vue que le
+   * lecteur a déplacée serait lui reprendre la main.
+   */
+  cadrageInitial?: 'tout' | 'tronc'
 }>()
 
 const emit = defineEmits<{
@@ -72,7 +86,13 @@ function construire(): void {
 
   pilote.value = construireCanevas(svg, graphe)
   boiteInitiale = { ...graphe.boite }
-  recadrer()
+
+  // Le premier cadrage. `tronc` sur téléphone : la personne du lecteur et ses
+  // proches ; à défaut d'un tronc trouvable — lecteur inconnu du graphe, ou
+  // tronc vide —, l'arbre entier, plutôt que rien.
+  const cible = cadrageInitial === 'tronc' ? tronc(pilote.value.index, graphe.ego) : []
+  if (cible.length > 0) cadrerSur(cible)
+  else recadrer()
 }
 
 /* ------------------------------------------------------------------ */

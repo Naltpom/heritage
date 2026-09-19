@@ -30,8 +30,13 @@
  * vient de faire.
  */
 import { computed, ref } from 'vue'
-import { analyserErreur, changerMotDePasse, demanderChangementDeCourriel } from '@/lib/api'
-import { connecter, useSession } from '@/composables/useSession'
+import {
+  analyserErreur,
+  changerMotDePasse,
+  demanderChangementDeCourriel,
+  televerserPortraitDuCompte,
+} from '@/lib/api'
+import { connecter, rafraichirSession, useSession } from '@/composables/useSession'
 import { erreurCourriel, erreurMotDePasse } from '@/components/inscription/reglesMotDePasse'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import ChampTexte from '@/components/base/ChampTexte.vue'
@@ -51,6 +56,34 @@ const membreRattache = computed(() => {
 })
 const personneId = computed(() => membreRattache.value?.personId ?? null)
 const nomDeLaFiche = computed(() => membreRattache.value?.personLabel ?? null)
+
+/* --- photo de profil = portrait de la personne ---------------------- */
+
+const portrait = computed(() => session.value?.portrait ?? null)
+const envoiPortrait = ref(false)
+const erreurPortrait = ref<unknown>(null)
+const portraitDepose = ref(false)
+
+async function deposerLePortrait(evenement: Event): Promise<void> {
+  const entree = evenement.target
+  if (!(entree instanceof HTMLInputElement) || entree.files === null) return
+  const fichier = entree.files[0]
+  if (fichier === undefined) return
+  envoiPortrait.value = true
+  erreurPortrait.value = null
+  portraitDepose.value = false
+  try {
+    await televerserPortraitDuCompte(fichier)
+    // La session porte le portrait courant : c'est elle qu'on relit, pas le média.
+    await rafraichirSession()
+    portraitDepose.value = true
+  } catch (e) {
+    erreurPortrait.value = e
+  } finally {
+    entree.value = ''
+    envoiPortrait.value = false
+  }
+}
 
 /* --- courriel ------------------------------------------------------- */
 
@@ -194,6 +227,39 @@ function dateLisible(iso: string): string {
         >
           Proposer une modification de ma fiche
         </RouterLink>
+      </section>
+    </PanneauBase>
+
+    <PanneauBase v-if="personneId !== null">
+      <section class="flex flex-col gap-3 p-4">
+        <h2 class="text-base font-semibold">Photo de profil</h2>
+        <p class="text-sm text-attenue">
+          C'est le portrait de votre fiche : il apparaît sur votre carte dans l'arbre et
+          partout où vous êtes cité. Une nouvelle photo remplace l'ancienne, qui reste
+          visible sur votre fiche.
+        </p>
+        <div class="flex items-center gap-4">
+          <img
+            v-if="portrait !== null"
+            :src="portrait.vignetteUrl"
+            alt="Votre portrait actuel"
+            class="h-20 w-20 rounded-full object-cover"
+          />
+          <div v-else class="flex h-20 w-20 items-center justify-center rounded-full bg-accent-doux text-attenue" aria-hidden="true">
+            —
+          </div>
+          <label class="flex flex-col gap-1 text-sm">
+            <span>{{ portrait === null ? 'Ajouter ma photo' : 'Remplacer ma photo' }}</span>
+            <input
+              type="file"
+              accept="image/*"
+              :disabled="envoiPortrait"
+              @change="deposerLePortrait"
+            />
+          </label>
+        </div>
+        <MessageErreur v-if="erreurPortrait !== null" :erreur="erreurPortrait" />
+        <p v-if="portraitDepose" class="text-sm" role="status">Photo enregistrée.</p>
       </section>
     </PanneauBase>
 

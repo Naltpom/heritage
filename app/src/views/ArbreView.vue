@@ -118,6 +118,7 @@ import { avertissementDuCalque, ponctuationApres } from '@/components/arbre/calq
 import {
   ascendanceSeule as reduireALAscendance,
   dispositionDeLaRoute,
+  pedigree,
   mesurerLisibilite,
   optionsDepuis,
   presentationDeLaRoute,
@@ -198,7 +199,11 @@ const graphe = computed<Graphe | null>(() => {
   const brut = grapheBrut.value
   if (brut === null) return null
 
-  const reduit = ascendanceSeule.value ? reduireALAscendance(brut) : brut
+  // Filtrer ne suffit pas : les ancêtres garderaient les places que leur
+  // avaient values des gens qu'on ne dessine plus. L'éventail les replace
+  // (`pedigree`), et le décocher rend l'arbre complet tel que le serveur le
+  // place — `brut` n'est jamais modifié.
+  const reduit = ascendanceSeule.value ? pedigree(reduireALAscendance(brut)) : brut
 
   return disposition.value(reduit, optionsDeDisposition.value)
 })
@@ -810,6 +815,7 @@ onBeforeUnmount(() => {
         v-show="graphe !== null"
         ref="canevas"
         :graphe="graphe"
+        :cadrage-initial="estMobile ? 'tronc' : 'tout'"
         @selection="ouvrirNoeud"
         @fond="effacerSelection"
       />

@@ -331,6 +331,24 @@ export function televerserMedia(envoi: EnvoiMedia, signal?: AbortSignal): Promis
  * `409 media_reference` sur un média `actif` encore rattaché à une citation
  * référencée : la suppression n'a pas eu lieu, et le message du serveur le dit.
  */
+/**
+ * `POST /api/medias/portrait-du-compte` — **son propre portrait, direct.**
+ *
+ * Le seul média qui ne passe pas par le circuit de demande : c'est ton visage.
+ * La règle « un seul portrait actif » tient quand même — l'ancien passe à
+ * `remplace` et reste visible sur la fiche. `409 compte_non_rattache` sans
+ * personne validée : un compte en attente n'a pas de fiche à lui.
+ */
+export function televerserPortraitDuCompte(fichier: File, signal?: AbortSignal): Promise<Media> {
+  const formulaire = new FormData()
+  formulaire.append('fichier', fichier, fichier.name)
+  return requeteApi<Media>('/medias/portrait-du-compte', {
+    methode: 'POST',
+    corps: formulaire,
+    ...(signal === undefined ? {} : { signal }),
+  })
+}
+
 export function supprimerMedia(id: number): Promise<{ supprime: boolean; id: number }> {
   return requeteApi<{ supprime: boolean; id: number }>(`/medias/${id}`, { methode: 'DELETE' })
 }

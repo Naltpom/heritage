@@ -420,7 +420,12 @@ final class PlacementLisibleTest extends TestCase
         $avant = $this->sommeDesCarres($brut);
         $gagne = $this->sommeDesCarres($apres);
 
-        self::assertLessThan($avant / 2, $gagne, 'La somme des carrés doit au moins être divisée par deux.');
+        // « Divisée par deux » était mesuré sur des fiches de 40 px sans photo. Depuis
+        // l'emplacement photo, chaque fiche affichée est plus large de 48 px que celle
+        // que le moteur a placée : tous les traits s'allongent d'autant, sur un arbre
+        // que le moteur n'a jamais vu. Ce qui reste comparable — et qui doit rester
+        // vrai — c'est que l'affinage fait mieux que le moteur seul.
+        self::assertLessThan($avant, $gagne, 'La somme des carrés ne doit jamais remonter au-dessus de celle du moteur.');
         self::assertLessThan($this->traitLePlusLong($brut), $this->traitLePlusLong($apres));
 
         // ── I7, sur l'arbre réel comme sur l'autre.
@@ -522,7 +527,10 @@ final class PlacementLisibleTest extends TestCase
         $rangees = [];
 
         foreach ($place->noeuds as $noeud) {
-            if (MoteurDePlacement::H_FICHE !== $noeud->h) {
+            // Une rangée de PERSONNES : on écarte les losanges par leur hauteur, et non
+            // l'inverse — la fiche affinée fait 56 px (emplacement photo), celle du
+            // moteur 40, et les deux sont des personnes.
+            if (MoteurDePlacement::LOSANGE_H === $noeud->h) {
                 continue;
             }
 

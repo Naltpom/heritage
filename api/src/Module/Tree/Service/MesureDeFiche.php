@@ -105,6 +105,61 @@ final class MesureDeFiche
      * `iconv_strlen()` plutôt que `mb_strlen()` : `ext-iconv` est une dépendance ferme
      * déclarée du projet, `ext-mbstring` ne l'est pas.
      */
+    /* ------------------------------------------------------------------ */
+    /* La fiche telle qu'elle est AFFICHÉE — photo à gauche, dates des vivants */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * L'emplacement photo, **fixe pour tout le monde**, silhouette quand il n'y a pas
+     * de portrait. Fixe, parce qu'une largeur qui changerait selon qui a une photo
+     * réorganiserait l'arbre à chaque portrait déposé.
+     */
+    public const int LARGEUR_PHOTO = 40;
+
+    /** Entre le bord gauche de la fiche et la photo, puis entre la photo et le texte. */
+    public const int ESPACE_PHOTO = 8;
+
+    /** 56 et non 40 : la photo est carrée et il faut deux lignes de texte à côté. */
+    public const int HAUTEUR_AFFICHEE = 56;
+
+    /**
+     * La ligne de dates **telle qu'elle est affichée** : pour une personne vivante,
+     * sa naissance puis « vivant·e », et non « vivant·e » seul.
+     *
+     * Elle est distincte de {@see ligneDates()}, et ce n'est pas un doublon : cette
+     * dernière est **ce que le moteur mesure**, et la preuve de non-régression du
+     * moteur — 377 nœuds au centième — dépend de ce qu'elle rend. La ligne affichée
+     * change ici, le moteur ne le voit pas, et c'est l'affinage qui remesure.
+     *
+     * Elle n'est servie que sur une fiche visible du lecteur : sur une fiche
+     * restreinte, aucune ligne de dates ne part, ni celle-ci ni l'autre (§ 16.2).
+     */
+    public function ligneDatesAffichee(PersonnePlacable $p): string
+    {
+        if ($p->vivant) {
+            return '' !== $p->nais ? 'n. '.$p->nais.' · vivant·e' : 'vivant·e';
+        }
+
+        return $this->ligneDates($p);
+    }
+
+    /**
+     * La largeur **affichée** : le texte, mesuré sur la ligne de dates affichée, plus
+     * l'emplacement photo et ses deux marges.
+     */
+    public function largeurAffichee(PersonnePlacable $p): int
+    {
+        $largeurNom = self::longueur($this->etiquetteNom($p)) * MoteurDePlacement::LARG_CAR;
+        $largeurDates = self::longueur($this->ligneDatesAffichee($p)) * MoteurDePlacement::LARG_CAR_DATES;
+
+        $texte = max(
+            MoteurDePlacement::LARGEUR_MINIMALE,
+            (int) (max($largeurNom, $largeurDates) + 2 * MoteurDePlacement::PAD),
+        );
+
+        return $texte + self::LARGEUR_PHOTO + self::ESPACE_PHOTO;
+    }
+
     private static function longueur(string $texte): int
     {
         $n = iconv_strlen($texte, 'UTF-8');

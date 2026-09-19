@@ -50,7 +50,7 @@ final class InscriptionTest extends CasDeTestMembership
         // « C'est exactement la charge de session du § 2.2 : une seule forme à implémenter
         // côté front, un seul magasin à alimenter. »
         self::assertSame(
-            ['utilisateur', 'membre', 'cercle', 'voirComme', 'demandesEnAttente'],
+            ['utilisateur', 'membre', 'cercle', 'voirComme', 'demandesEnAttente', 'portrait'],
             array_keys($charge),
         );
         self::assertIsArray($charge['utilisateur']);

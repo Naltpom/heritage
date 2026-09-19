@@ -150,6 +150,10 @@ final readonly class NormaliseurDeGraphe
         // 274 allers-retours pour l'obtenir.
         $avecImage = $this->medias->personnesAvecMedia(array_keys($libelles['personnes']), $lecteur);
 
+        // Même geste pour la vignette du portrait, dessinée à gauche de chaque fiche :
+        // une question pour tout l'arbre, et une personne masquée en est absente.
+        $vignettes = $this->medias->vignettesDePortraits(array_keys($libelles['personnes']), $lecteur);
+
         $demandes = $projection->demandes;
         $nonPlaces = $this->nonPlaces($projection, $placement, $ecartes);
 
@@ -179,7 +183,7 @@ final readonly class NormaliseurDeGraphe
                 'places' => \count($projection->noeuds) - \count($nonPlaces),
                 'nonPlaces' => $nonPlaces,
             ],
-            'noeuds' => $this->noeuds($placement, $placables, $proposesParId, $libelles, $renommage, $cercle, $avecImage),
+            'noeuds' => $this->noeuds($placement, $placables, $proposesParId, $libelles, $renommage, $cercle, $avecImage, $vignettes),
             'aretes' => $this->aretes($placement, $renommage),
         ];
     }
@@ -249,6 +253,7 @@ final readonly class NormaliseurDeGraphe
      * @param array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, bool>} $libelles
      * @param array<string, string>                                                                                                                             $renommage
      * @param array<int, true>                                                                                                                                  $avecImage
+     * @param array<int, string>                                                                                                                                $vignettes personne visible → URL de la vignette de son portrait
      *
      * @return list<array<string, mixed>>
      */
@@ -260,6 +265,7 @@ final readonly class NormaliseurDeGraphe
         array $renommage,
         CercleDuLecteur $cercle,
         array $avecImage,
+        array $vignettes,
     ): array {
         $sortie = [];
 
@@ -281,7 +287,7 @@ final readonly class NormaliseurDeGraphe
             $base = IdentifiantDeNoeud::identifiantBase($noeud->id);
 
             if (IdentifiantDeNoeud::estPersonne($noeud->id) && null !== $base) {
-                $sortie[] = $this->noeudDePersonne($noeud, $base, $placables[$noeud->id] ?? null, $libelles['personnes'][$base] ?? null, $cercle, $avecImage);
+                $sortie[] = $this->noeudDePersonne($noeud, $base, $placables[$noeud->id] ?? null, $libelles['personnes'][$base] ?? null, $cercle, $avecImage, $vignettes);
 
                 continue;
             }
@@ -310,6 +316,7 @@ final readonly class NormaliseurDeGraphe
     /**
      * @param array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}|null $libelle
      * @param array<int, true>                                                                             $avecImage
+     * @param array<int, string>                                                                           $vignettes personne visible → URL de la vignette de son portrait
      *
      * @return array<string, mixed>
      */
@@ -320,6 +327,7 @@ final readonly class NormaliseurDeGraphe
         ?array $libelle,
         CercleDuLecteur $cercle,
         array $avecImage,
+        array $vignettes,
     ): array {
         // **L'état vivant est celui du jeu de placement**, pas un second calcul. C'est
         // celui sur lequel `w` a été mesurée ; en recalculer un ici ouvrirait la porte à
@@ -380,10 +388,18 @@ final readonly class NormaliseurDeGraphe
         // `MesureDeFiche::ligneDates()`, jamais une recomposition depuis les blocs date :
         // c'est la chaîne **sur laquelle `w` a été mesurée**, et la seule qui rende la
         // constante « vivant·e ».
-        $charge['etiquetteDates'] = null !== $placable ? $this->mesure->ligneDates($placable) : '—';
+        // La ligne AFFICHÉE — naissance des vivants comprise —, celle sur laquelle
+        // l'affinage a remesuré `w`. `ligneDates()` reste ce que le moteur mesure.
+        $charge['etiquetteDates'] = null !== $placable ? $this->mesure->ligneDatesAffichee($placable) : '—';
         $charge['bestQuay'] = $libelle['bestQuay'] ?? null;
         $charge['citationCount'] = $libelle['citationCount'] ?? 0;
         $charge['avecImage'] = isset($avecImage[$personneId]);
+
+        // La vignette du portrait actif, pour l'emplacement photo de la fiche. Absente
+        // et non `null` quand il n'y en a pas : le canevas dessine alors la silhouette.
+        if (isset($vignettes[$personneId])) {
+            $charge['portrait'] = $vignettes[$personneId];
+        }
 
         return $charge;
     }

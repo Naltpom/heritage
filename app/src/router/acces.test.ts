@@ -44,6 +44,7 @@ const SESSION_MEMBRE: ChargeDeSession = {
   cercle: { regime: 'cercle', generations: 3, taille: 34 },
   voirComme: null,
   demandesEnAttente: [12],
+  portrait: null,
 }
 
 const SESSION_ADMIN: ChargeDeSession = {
@@ -71,6 +72,7 @@ const SESSION_EN_ATTENTE: ChargeDeSession = {
   cercle: { regime: 'aucun' },
   voirComme: null,
   demandesEnAttente: [],
+  portrait: null,
 }
 
 describe('régime déduit de la charge de session', () => {

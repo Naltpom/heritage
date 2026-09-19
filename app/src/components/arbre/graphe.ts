@@ -169,7 +169,9 @@ export function nomDeFiche(noeud: NoeudPersonneEtendu): NomDeFiche {
     return { texte: mesure, largeurImposee: null }
   }
 
-  const disponible = noeud.w - 2 * MARGE_FICHE
+  // À droite de l'emplacement photo (40 px) et de son espace (8 px) : le texte
+  // n'a que le reste de la fiche, comme le serveur l'a mesuré.
+  const disponible = noeud.w - 2 * MARGE_FICHE - 48
   const estimee = noeud.displayName.length * LARGEUR_PAR_SIGNE
   if (disponible <= 0 || estimee <= disponible * TOLERANCE) {
     return { texte: noeud.displayName, largeurImposee: null }
@@ -337,6 +339,25 @@ export function voisinage(index: IndexGraphe, id: string): string[] {
     }
   }
   return [...vus]
+}
+
+/**
+ * **Le tronc** d'une personne : elle, ses parents, sa fratrie, ses conjoints et
+ * ses enfants — ce que le lecteur veut voir en premier sur un téléphone, où
+ * l'arbre entier fait douze mille unités de large pour un écran qui en montre
+ * trois cents.
+ *
+ * C'est exactement le {@link voisinage}, la personne comprise. La fonction
+ * existe pour nommer cette intention à l'endroit où le canevas cadre, et pour
+ * qu'un test dise ce qu'elle contient — et surtout ce qu'elle ne contient pas :
+ * ni grands-parents, ni cousins, ni belle-famille au-delà du conjoint.
+ *
+ * Vide sur une personne inconnue : le canevas garde alors le cadrage complet,
+ * plutôt que de zoomer sur rien.
+ */
+export function tronc(index: IndexGraphe, id: string): string[] {
+  if (!index.parId.has(id)) return []
+  return [id, ...voisinage(index, id)]
 }
 
 export interface EnsembleEclaire {

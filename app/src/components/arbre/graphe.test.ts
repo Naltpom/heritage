@@ -403,18 +403,20 @@ describe('nomDeFiche', () => {
 
   it('condense un nom franchement trop long, sans le couper ni le récrire', () => {
     // Le filet, donc un nœud **sans** `etiquetteNom` : 44 signes pour une boîte
-    // de 149, soit 290 unités pour 121.
+    // de 149, soit 290 unités pour 73 — la boîte moins ses deux marges (28) et
+    // moins l'emplacement photo (48), qui ne laisse au texte que le reste.
     const n = sansNomMesure('Glauconie Malachite Lignite Rosasite Chardon', 149)
     const e = nomDeFiche(n)
     // Le nom reste **entier** : « Glauconie Chardon » serait un nom inventé, et
     // une coupure perdrait des lettres. On le contraint, c'est tout.
     expect(e.texte).toBe('Glauconie Malachite Lignite Rosasite Chardon')
-    expect(e.largeurImposee).toBe(121)
+    expect(e.largeurImposee).toBe(73)
   })
 
   it('ne contraint jamais au-delà de la place réellement disponible', () => {
     const n = sansNomMesure('Un nom démesurément long pour sa boîte', 104)
-    expect(nomDeFiche(n).largeurImposee).toBe(104 - 28)
+    // Deux marges et l'emplacement photo : c'est tout ce qui est retiré à la boîte.
+    expect(nomDeFiche(n).largeurImposee).toBe(104 - 28 - 48)
   })
 
   it('n’impose rien sur une boîte dégénérée, plutôt qu’une largeur négative', () => {

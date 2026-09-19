@@ -47,8 +47,49 @@ const LISERE_LARGEUR = 4
 const LISERE_MARGE_X = 1.2
 const LISERE_MARGE_Y = 6
 /** Lignes de texte, mesurées depuis le haut de la fiche. */
-const LIGNE_NOM = 17
-const LIGNE_DATES = 31
+/*
+ * La fiche AFFICHÉE fait 56 px de haut, avec un emplacement photo de 40 px à
+ * gauche — le même pour tout le monde, silhouette quand il n'y a pas de portrait
+ * (`MesureDeFiche::HAUTEUR_AFFICHEE`, `LARGEUR_PHOTO`, `ESPACE_PHOTO` côté
+ * serveur : c'est lui qui a mesuré `w` avec cet emplacement). Le texte se centre
+ * sur la zone qui lui reste, à droite de la photo.
+ */
+const LARGEUR_PHOTO = 40
+const ESPACE_PHOTO = 8
+const DECALAGE_TEXTE = (LARGEUR_PHOTO + ESPACE_PHOTO) / 2
+const LIGNE_NOM = 24
+const LIGNE_DATES = 40
+
+/**
+ * Les vignettes se chargent **à l'apparition**, pas toutes à la construction :
+ * 274 fiches font 274 requêtes, et sur un téléphone qui n'en montre que dix,
+ * c'est 264 de trop (ADR 0007). Hors navigateur — rendu de test —, `href` est
+ * posé tout de suite : il n'y a rien à économiser.
+ */
+let observateurDeVignettes: IntersectionObserver | null | undefined
+
+function chargerALApparition(image: SVGImageElement, href: string): void {
+  if (observateurDeVignettes === undefined) {
+    observateurDeVignettes =
+      typeof IntersectionObserver === 'undefined'
+        ? null
+        : new IntersectionObserver((entrees, observateur) => {
+            for (const entree of entrees) {
+              if (!entree.isIntersecting) continue
+              const cible = entree.target
+              const url = cible.getAttribute('data-href')
+              if (url !== null) cible.setAttribute('href', url)
+              observateur.unobserve(cible)
+            }
+          })
+  }
+  if (observateurDeVignettes === null) {
+    image.setAttribute('href', href)
+    return
+  }
+  image.setAttribute('data-href', href)
+  observateurDeVignettes.observe(image)
+}
 
 function creer<K extends keyof SVGElementTagNameMap>(
   nom: K,
@@ -232,11 +273,47 @@ function construireFiche(
     }),
   )
 
+  // L'emplacement photo, identique pour toutes les fiches : le portrait s'il y en
+  // a un et si la fiche est visible du lecteur — la clé est alors présente —,
+  // la silhouette sinon. Une image rognée en rond, jamais déformée
+  // (`preserveAspectRatio` par défaut : `xMidYMid meet`, complété par `slice`
+  // pour remplir le rond).
+  const xPhoto = x + ESPACE_PHOTO
+  const yPhoto = y + (personne.h - LARGEUR_PHOTO) / 2
+  if (personne.portrait !== undefined) {
+    const image = creer('image', {
+      class: 'photo',
+      x: xPhoto,
+      y: yPhoto,
+      width: LARGEUR_PHOTO,
+      height: LARGEUR_PHOTO,
+      preserveAspectRatio: 'xMidYMid slice',
+      'clip-path': 'inset(0 round 50%)',
+    })
+    chargerALApparition(image as unknown as SVGImageElement, personne.portrait)
+    g.appendChild(image)
+  } else {
+    // La silhouette : une tête et des épaules, en deux formes, dans la teinte de
+    // la fiche. Pas d'icône externe — rien à charger pour dire « pas de photo ».
+    const cx = xPhoto + LARGEUR_PHOTO / 2
+    g.appendChild(
+      creer('circle', { class: 'photo-vide', cx, cy: yPhoto + LARGEUR_PHOTO * 0.34, r: LARGEUR_PHOTO * 0.17 }),
+    )
+    g.appendChild(
+      creer('path', {
+        class: 'photo-vide',
+        d:
+          `M${cx - LARGEUR_PHOTO * 0.33},${yPhoto + LARGEUR_PHOTO * 0.92} ` +
+          `a${LARGEUR_PHOTO * 0.33},${LARGEUR_PHOTO * 0.33} 0 0 1 ${LARGEUR_PHOTO * 0.66},0 Z`,
+      }),
+    )
+  }
+
   // `libelle` est le NOM ; `personne.etiquette`, vingt lignes plus bas, est la
   // ligne de DATES. Deux notions que le contrat a fini par séparer justement
   // parce qu'un seul mot les désignait — on ne les rapproche pas ici.
   const libelle = nomDeFiche(personne)
-  const nom = creer('text', { class: 'nm', x: personne.x, y: y + LIGNE_NOM })
+  const nom = creer('text', { class: 'nm', x: personne.x + DECALAGE_TEXTE, y: y + LIGNE_NOM })
   if (libelle.largeurImposee !== null) {
     // Le nom complet dépasse la boîte mesurée par le moteur : on le condense
     // pour qu'il y tienne, plutôt que de le laisser chevaucher les fiches
@@ -252,7 +329,7 @@ function construireFiche(
   // de date c'est, et pourquoi elle est à part.
   const dates = datesDeFiche(personne)
   if (dates !== null) {
-    const ligne = creer('text', { class: 'dt', x: personne.x, y: y + LIGNE_DATES })
+    const ligne = creer('text', { class: 'dt', x: personne.x + DECALAGE_TEXTE, y: y + LIGNE_DATES })
     ligne.textContent = dates
     g.appendChild(ligne)
   }

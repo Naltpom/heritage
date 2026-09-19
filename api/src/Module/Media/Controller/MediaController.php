@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Module\Media\Controller;
 
+use App\Module\Core\Contract\AnnuaireDesMembresInterface;
 use App\Module\Core\Entity\User;
+use App\Module\Core\Exception\ConflictException;
 use App\Module\Core\Exception\FichierTropVolumineuxException;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\TooManyRequestsException;
@@ -18,6 +20,7 @@ use App\Module\Media\Http\BlocDate;
 use App\Module\Media\Security\FabriqueDeLecteur;
 use App\Module\Media\Security\LecteurMedia;
 use App\Module\Media\Service\CatalogueMedia;
+use App\Module\Media\Service\CircuitDeValidationMedia;
 use App\Module\Media\Service\NormaliseurMedia;
 use App\Module\Media\Service\RequeteDeTeleversement;
 use App\Module\Media\Service\StockageMedia;
@@ -112,6 +115,8 @@ final class MediaController extends AbstractController
          * L'appel ne coûte rien hors bascule : il rend immédiatement.
          */
         private readonly BasculeVoirComme $bascule,
+        private readonly AnnuaireDesMembresInterface $annuaire,
+        private readonly CircuitDeValidationMedia $circuit,
     ) {
     }
 
@@ -147,6 +152,59 @@ final class MediaController extends AbstractController
             ),
             $lecteur,
         );
+
+        return $this->charge(
+            $this->normaliseur->normaliser($resultat->media, $lecteur, $resultat->avertissements),
+            Response::HTTP_CREATED,
+        );
+    }
+
+    /**
+     * **Le portrait de sa propre personne — direct, sans validation.**.
+     *
+     * Tout média passe par le circuit de demande ; celui-ci non, et c'est une décision
+     * du commanditaire : c'est ton visage. La règle « un seul portrait actif » tient
+     * quand même — l'ancien passe à `remplace`, il reste visible sur la fiche — parce
+     * que c'est {@see CircuitDeValidationMedia::valider()} qui l'applique, exactement
+     * comme après une validation d'administrateur.
+     *
+     * `409 compte_non_rattache` : le compte n'a pas de personne validée. Un compte en
+     * attente ne peut pas poser un portrait sur une fiche qu'il ne fait que réclamer.
+     */
+    #[Route('/portrait-du-compte', name: 'media_portrait_du_compte', methods: ['POST'])]
+    public function portraitDuCompte(Request $requete): Response
+    {
+        $this->bascule->refuserSiActive();
+
+        $lecteur = $this->lecteur();
+        $this->limiter($lecteur);
+
+        $personneId = $this->annuaire->personneDuCompte($lecteur->userId);
+
+        if (null === $personneId) {
+            throw new ConflictException('compte_non_rattache', 'Votre compte n’est rattaché à aucune personne validée.');
+        }
+
+        $fichier = $requete->files->get('fichier');
+
+        if (!$fichier instanceof UploadedFile) {
+            throw new ValidationException(['fichier' => 'Aucun fichier reçu.']);
+        }
+
+        $this->verifierLeTransfert($fichier);
+
+        $resultat = $this->televersement->televerser(
+            new RequeteDeTeleversement(
+                cheminTemporaire: $fichier->getPathname(),
+                nomOrigine: $fichier->getClientOriginalName(),
+                kind: MediaKind::Portrait,
+                subjectKind: MediaSubject::Personne,
+                subjectId: $personneId,
+            ),
+            $lecteur,
+        );
+
+        $this->circuit->valider($resultat->media);
 
         return $this->charge(
             $this->normaliseur->normaliser($resultat->media, $lecteur, $resultat->avertissements),

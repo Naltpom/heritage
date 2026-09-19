@@ -143,6 +143,41 @@ final readonly class PortDesMediasDeLArbre implements PortDesMedias
         return $reponse;
     }
 
+    public function vignettesDePortraits(array $personneIds, LecteurDeLArbre $lecteur): array
+    {
+        if ([] === $personneIds) {
+            return [];
+        }
+
+        // Une requête pour les portraits actifs, une pour la visibilité — et la seconde
+        // ne porte que sur les personnes qui ont un portrait. C'est le même dessin que
+        // `personnesAvecMedia()`, avec une vignette au lieu d'un booléen : une personne
+        // masquée pour ce lecteur est absente de la réponse, comme là-bas.
+        $portraits = $this->medias->portraitsActifsPour($personneIds);
+
+        if ([] === $portraits) {
+            return [];
+        }
+
+        $parPersonne = [];
+
+        foreach ($portraits as $portrait) {
+            $sujet = $portrait->getSubjectId();
+
+            if (null !== $sujet) {
+                $parPersonne[$sujet] = $portrait;
+            }
+        }
+
+        $reponse = [];
+
+        foreach ($this->visibilite->filtrerVisibles(MediaSubject::Personne, array_keys($parPersonne)) as $personneId) {
+            $reponse[$personneId] = $this->url($parPersonne[$personneId], 'vignette');
+        }
+
+        return $reponse;
+    }
+
     private function url(Media $media, string $segment): string
     {
         return \sprintf('/api/medias/%d/%s', (int) $media->getId(), $segment);
