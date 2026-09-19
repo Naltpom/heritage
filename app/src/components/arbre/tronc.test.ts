@@ -77,9 +77,19 @@ describe('le premier cadrage sur téléphone', () => {
     expect(source('../../views/ArbreView.vue')).toContain(`:cadrage-initial="estMobile ? 'tronc' : 'tout'"`)
   })
 
-  it('est appliqué par le canevas à la construction, avec repli sur l’arbre entier', () => {
+  it('est appliqué par le canevas à la construction, après l’arbre entier', () => {
     const canevas = source('./CanevasArbre.vue')
-    expect(canevas).toContain("cadrageInitial === 'tronc' ? tronc(pilote.value.index, graphe.ego) : []")
-    expect(canevas).toMatch(/if \(cible\.length > 0\) cadrerSur\(cible\)\s*\n\s*else recadrer\(\)/)
+    expect(canevas).toMatch(
+      /recadrer\(\)\s*\n\s*const cible = cadrageInitial === 'tronc' \? tronc\(pilote\.value\.index, graphe\.ego\) : \[\]\s*\n\s*if \(cible\.length > 0\) cadrerQuandLeCadreAUneTaille\(cible\)/,
+    )
+  })
+
+  it('attend que le cadre ait une taille — la vue tient le canevas sous `v-show`', () => {
+    // Le `watch` sur le graphe court après le rendu, sinon il mesure un cadre en
+    // `display: none` ; et le cadrage se fait à la première taille non nulle.
+    const canevas = source('./CanevasArbre.vue')
+    expect(canevas).toMatch(/construire\(\)\s*\n\s*},\s*\n\s*\{ flush: 'post' \},/)
+    expect(canevas).toContain('new ResizeObserver(')
+    expect(source('../../views/ArbreView.vue')).toMatch(/<CanevasArbre\s*\n\s*v-show="graphe !== null"/)
   })
 })

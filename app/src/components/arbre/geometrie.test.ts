@@ -13,6 +13,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   cadrer,
+  estDessinable,
   centrerSur,
   deplacer,
   echelle,
@@ -158,6 +159,16 @@ describe('cadrer', () => {
     expect(cadrer([], CADRE)).toBeNull()
   })
 
+  it('rend null sur un cadre sans taille plutôt qu’un viewBox de largeur 0', () => {
+    // Un cadre en `display: none` mesure 0 × 0. Sans ce refus, la hauteur suit
+    // le rapport du cadre (0), le second passage inverse, et la largeur devient
+    // 0 à son tour : un `viewBox` que le navigateur ne dessine pas — puis, au
+    // premier zoom, une division par cette largeur. Vu sur téléphone.
+    const masque: CadreEcran = { largeur: 0, hauteur: 0, gauche: 0, haut: 0 }
+    expect(cadrer([{ x: 0, y: 0, w: 120, h: 40 }], masque)).toBeNull()
+    expect(cadrer([{ x: 0, y: 0, w: 120, h: 40 }], { ...CADRE, hauteur: 0 })).toBeNull()
+  })
+
   it('englobe tous les nœuds, marge comprise', () => {
     const noeuds = [
       { x: -1000, y: -450, w: 120, h: 40 },
@@ -220,6 +231,30 @@ describe('cadrer', () => {
     if (vb === null) return
     expect(vb.x + vb.w / 2).toBeCloseTo(0, 6)
     expect(vb.y + vb.h / 2).toBeCloseTo(-300, 6)
+  })
+})
+
+describe('estDessinable', () => {
+  it('accepte une boîte finie avec une surface', () => {
+    expect(estDessinable(BOITE)).toBe(true)
+  })
+
+  it('refuse une largeur ou une hauteur nulle — le navigateur ne dessine pas', () => {
+    expect(estDessinable({ ...BOITE, w: 0 })).toBe(false)
+    expect(estDessinable({ ...BOITE, h: 0 })).toBe(false)
+  })
+
+  it('refuse l’infini et NaN — le navigateur ignore l’attribut', () => {
+    expect(estDessinable({ ...BOITE, x: Infinity })).toBe(false)
+    expect(estDessinable({ ...BOITE, h: Infinity })).toBe(false)
+    expect(estDessinable({ ...BOITE, y: NaN })).toBe(false)
+  })
+
+  it('est ce que produit un pincement depuis un viewBox de largeur 0', () => {
+    // La panne du téléphone, rejouée : le cadrage sur un cadre masqué donnait
+    // `w = 0`, et le premier pincement divisait par cette largeur.
+    const casse = { ...BOITE, w: 0 }
+    expect(estDessinable(zoomerRatio(casse, BOITE, CADRE, 800, 446, 2))).toBe(false)
   })
 })
 

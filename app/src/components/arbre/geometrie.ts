@@ -67,6 +67,24 @@ export const MARGE_CADRAGE = 240
  *  donnerait un zoom absurde. */
 export const LARGEUR_CADRAGE_MIN = 900
 
+/**
+ * Un `viewBox` que le navigateur dessine : quatre nombres finis et une surface.
+ *
+ * Une largeur ou une hauteur nulle **désactive le rendu** de l'élément ; une
+ * valeur infinie ou `NaN` invalide l'attribut, que le navigateur ignore alors
+ * — le graphe s'affiche à l'échelle 1 depuis le coin. Les deux sont muets.
+ */
+export function estDessinable(vb: Boite): boolean {
+  return (
+    Number.isFinite(vb.x) &&
+    Number.isFinite(vb.y) &&
+    Number.isFinite(vb.w) &&
+    Number.isFinite(vb.h) &&
+    vb.w > 0 &&
+    vb.h > 0
+  )
+}
+
 /** Le `viewBox` sous sa forme d'attribut. Rien d'autre n'écrit cet attribut. */
 export function viewBoxEnTexte(vb: Boite): string {
   return `${vb.x} ${vb.y} ${vb.w} ${vb.h}`
@@ -245,6 +263,12 @@ export function cadrer(
   largeurMin: number = LARGEUR_CADRAGE_MIN,
 ): Boite | null {
   if (noeuds.length === 0) return null
+  // Un cadre sans taille — masqué par un `display: none`, ou pas encore mis en
+  // page — mesure 0 × 0 : la hauteur suivrait un rapport nul, le second passage
+  // inverserait, et la largeur deviendrait nulle à son tour. Un `viewBox` de
+  // largeur 0 n'est pas dessiné, et le premier zoom divise par cette largeur.
+  // On rend `null`, et l'appelant garde le cadrage qu'il a.
+  if (!(cadre.largeur > 0) || !(cadre.hauteur > 0)) return null
 
   let x1 = Infinity
   let y1 = Infinity
