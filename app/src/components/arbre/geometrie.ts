@@ -68,6 +68,28 @@ export const MARGE_CADRAGE = 240
 export const LARGEUR_CADRAGE_MIN = 900
 
 /**
+ * Un nœud est-il dans le `viewBox`, ou à moins d'une **marge** autour ?
+ *
+ * C'est le critère de chargement des vignettes : une fiche dont la boîte touche
+ * le `viewBox` élargi d'une demi-vue de chaque côté reçoit son image, pour
+ * qu'un déplacement ne découvre pas de ronds vides. Le critère est ici, pur,
+ * parce qu'il a d'abord été confié à un `IntersectionObserver` — et Safari ne
+ * signale jamais l'apparition d'une `<image>` SVG : `data-href` posé, `href`
+ * jamais, un rond vide sur toutes les fiches à photo. Le `viewBox`, lui, est
+ * la seule vérité de ce que le lecteur voit, et il ne dépend d'aucun moteur.
+ */
+export function boiteVisible(noeud: BoiteCentree, vb: Boite, marge: number = 0.5): boolean {
+  const mx = vb.w * marge
+  const my = vb.h * marge
+  return (
+    noeud.x + noeud.w / 2 >= vb.x - mx &&
+    noeud.x - noeud.w / 2 <= vb.x + vb.w + mx &&
+    noeud.y + noeud.h / 2 >= vb.y - my &&
+    noeud.y - noeud.h / 2 <= vb.y + vb.h + my
+  )
+}
+
+/**
  * Un `viewBox` que le navigateur dessine : quatre nombres finis et une surface.
  *
  * Une largeur ou une hauteur nulle **désactive le rendu** de l'élément ; une
