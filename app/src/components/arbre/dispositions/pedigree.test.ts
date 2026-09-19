@@ -146,4 +146,53 @@ describe('pedigree', () => {
     const sansEgo = { ...grapheEssai(), ego: 'inconnu' }
     expect(pedigree(sansEgo)).toBe(sansEgo)
   })
+
+  it('a la largeur des lignées connues, pas celle des créneaux binaires', () => {
+    // Quatre lignées connues sur deux générations : 3 pas de large, et non les
+    // 2² = 4 créneaux d'un éventail imprimé. Mesuré sur l'arbre réel : 210
+    // ancêtres sur 11 générations faisaient 563 648 unités en créneaux binaires
+    // — une fiche de 0,7 px à l'écran —, contre 105 lignées × un pas en compact.
+    expect(x(eventail, 'p11') - x(eventail, 'p5')).toBeCloseTo(3 * 140, 6)
+  })
+
+  it('ne creuse aucune largeur pour une lignée à parent unique', () => {
+    // Six générations où l'on ne connaît que le père : tout le monde est à
+    // l'aplomb du lecteur. En créneaux binaires, la génération du haut aurait eu
+    // 2⁵ = 32 places pour une seule personne.
+    const noeuds: NoeudGraphe[] = []
+    const aretes: AreteGraphe[] = []
+    for (let g = 0; g < 6; g++) {
+      noeuds.push(personne(`p${g + 1}`, g))
+      if (g === 0) continue
+      noeuds.push(famille(`f${g}`, g))
+      aretes.push({ de: `p${g + 1}`, vers: `f${g}`, genre: 'union', divorce: false })
+      aretes.push({ de: `f${g}`, vers: `p${g}`, genre: 'filiation' })
+    }
+    const lignee = pedigree(ascendanceSeule({ ...grapheEssai(), noeuds, aretes }))
+    const xs = lignee.noeuds.map((n) => n.x)
+    expect(Math.max(...xs) - Math.min(...xs)).toBe(0)
+  })
+
+  it('place un ancêtre partagé une seule fois, sans tirer la seconde branche sur la première', () => {
+    // p5 et p10 sont frères : les parents du lecteur sont cousins germains, et
+    // p20 × p21 sont atteints par les deux branches. Ils sont posés par la
+    // première (celle du père) ; pour la seconde, p10 est une lignée qui s'arrête
+    // — il prend le créneau suivant, à droite de tout ce que la première a posé.
+    const base = grapheEssai()
+    const noeuds: NoeudGraphe[] = [...base.noeuds, personne('p20', 3), personne('p21', 3, 'feminin'), famille('f5', 3)]
+    const aretes: AreteGraphe[] = [
+      ...base.aretes,
+      { de: 'p20', vers: 'f5', genre: 'union', divorce: false },
+      { de: 'p21', vers: 'f5', genre: 'union', divorce: false },
+      { de: 'f5', vers: 'p5', genre: 'filiation' },
+      { de: 'f5', vers: 'p10', genre: 'filiation' },
+    ]
+    const implexe = pedigree(ascendanceSeule({ ...base, noeuds, aretes }))
+    expect(implexe.noeuds.filter((n) => n.id === 'p20')).toHaveLength(1)
+    // Les feuilles, de gauche à droite, à un pas les unes des autres.
+    const feuilles = ['p20', 'p21', 'p6', 'p10', 'p11'].map((id) => x(implexe, id))
+    for (let i = 1; i < feuilles.length; i++) expect(feuilles[i] - feuilles[i - 1]).toBeCloseTo(140, 6)
+    // Le couple partagé reste au-dessus de son premier enfant : le trait vers p10 est long, et c'est tout.
+    expect(x(implexe, 'f5')).toBeCloseTo(x(implexe, 'p5'), 6)
+  })
 })

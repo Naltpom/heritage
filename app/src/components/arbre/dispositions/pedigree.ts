@@ -10,32 +10,35 @@
  * arbre binaire il n'y a rien à optimiser : la place de chacun se déduit de sa
  * position dans l'arbre, comme sur tous les éventails de généalogie.
  *
- * Chaque ancêtre reçoit une **génération** `g` et un **créneau** `s` :
- * le lecteur est en `(0, 0)` ; le père d'un ancêtre en `(g, s)` est en
- * `(g+1, 2s)`, sa mère en `(g+1, 2s+1)`. À la génération la plus haute `G`, les
- * créneaux sont contigus ; en dessous, chaque génération a deux fois moins de
- * créneaux, donc un pas deux fois plus large — et chaque couple se retrouve
- * **exactement au-dessus de son enfant**, sans qu'aucune règle ne le demande.
+ * **Le placement est compact, pas par créneaux binaires.** La première version
+ * donnait à chaque ancêtre un créneau `2s` / `2s + 1` sous celui de son enfant,
+ * comme sur un éventail imprimé : la génération la plus haute occupait
+ * `2^G` créneaux, qu'ils soient remplis ou non. Mesuré sur l'arbre réel :
+ * 210 ancêtres sur 11 générations, donc 2 048 créneaux pour 105 lignées
+ * connues — une boîte de 563 648 unités de large, où une fiche fait 0,7 pixel
+ * sur un écran de bureau. « Rien ne s'affiche », littéralement.
  *
- * Le losange d'un couple se pose au milieu de ses deux époux ; les ordonnées
- * ne bougent pas — la génération est une donnée, pas un choix de dessin.
+ * Ici, seules les **lignées connues** prennent de la place : un ancêtre sans
+ * parents connus — une feuille — reçoit le créneau suivant, de gauche à droite,
+ * le père avant la mère ; un ancêtre dont on connaît les parents se pose **au
+ * milieu d'eux**. Chaque couple se retrouve exactement au-dessus de son enfant,
+ * et la largeur suit le nombre de lignées, pas la profondeur : 105 lignées ×
+ * une fiche, soit à peu près l'arbre complet. Les ordonnées ne bougent pas —
+ * la génération est une donnée, pas un choix de dessin. Le tout est recentré
+ * sur le lecteur.
  *
  * ── L'implexe ────────────────────────────────────────────────────────
  *
  * Le même ancêtre atteint par deux chemins (deux cousins qui se sont épousés)
- * n'existe qu'une fois dans le graphe : il garde le premier créneau rencontré,
- * et le second trait est simplement plus long. C'est rare, et un doublon
- * dessiné serait un mensonge sur le nombre d'ancêtres.
+ * n'existe qu'une fois dans le graphe. Il est placé par le **premier** chemin
+ * qui l'atteint, et il ne compte plus pour le second : sinon il tirerait la
+ * seconde branche vers la première, par-dessus tout ce qui se trouve entre les
+ * deux. Le trait qui le relie à son autre enfant est simplement plus long. Un
+ * doublon dessiné serait un mensonge sur le nombre d'ancêtres.
  * ────────────────────────────────────────────────────────────────────
  */
-
 import type { AreteGraphe, Graphe, IdentifiantNoeud, NoeudGraphe } from '@/lib/api'
 import { ESPACE, epouxParFamille, grapheReplace } from './socle'
-
-interface Creneau {
-  generation: number
-  rang: number
-}
 
 export function pedigree(graphe: Graphe): Graphe {
   const parId = new Map<IdentifiantNoeud, NoeudGraphe>()
@@ -47,44 +50,42 @@ export function pedigree(graphe: Graphe): Graphe {
     if (arete.genre === 'filiation') familleDesParents.set(arete.vers, arete.de)
   }
   const epoux = epouxParFamille(graphe.aretes)
+  const parentsDe = (id: IdentifiantNoeud): IdentifiantNoeud[] => {
+    const famille = familleDesParents.get(id)
+    return famille === undefined ? [] : pereDAbord(epoux.get(famille) ?? [], parId)
+  }
 
-  const creneaux = new Map<IdentifiantNoeud, Creneau>()
-  creneaux.set(graphe.ego, { generation: 0, rang: 0 })
+  // Les ancêtres, pour le pas de base : la fiche la plus large parmi eux, plus
+  // l'espace réglementaire. Deux feuilles voisines sont exactement à cette
+  // distance — le rang est plein, sans être serré.
+  const ancetres = new Set<IdentifiantNoeud>([graphe.ego])
   const file: IdentifiantNoeud[] = [graphe.ego]
-  let plusHaute = 0
-
   while (file.length > 0) {
     const courant = file.shift()
     if (courant === undefined) continue
-    const place = creneaux.get(courant)
-    const famille = place === undefined ? undefined : familleDesParents.get(courant)
-    if (place === undefined || famille === undefined) continue
-
-    const parents = pereDAbord(epoux.get(famille) ?? [], parId)
-    parents.forEach((parent, cote) => {
-      if (creneaux.has(parent)) return
-      const generation = place.generation + 1
-      creneaux.set(parent, { generation, rang: 2 * place.rang + cote })
-      plusHaute = Math.max(plusHaute, generation)
+    for (const parent of parentsDe(courant)) {
+      if (ancetres.has(parent)) continue
+      ancetres.add(parent)
       file.push(parent)
-    })
+    }
   }
-
-  // Le pas de base : la fiche la plus large parmi les ancêtres, plus l'espace
-  // réglementaire. À la génération la plus haute, deux créneaux voisins sont
-  // donc exactement à cette distance — le rang est plein, sans être serré.
   let largeurMax = 0
-  for (const id of creneaux.keys()) {
-    largeurMax = Math.max(largeurMax, parId.get(id)?.w ?? 0)
-  }
+  for (const id of ancetres) largeurMax = Math.max(largeurMax, parId.get(id)?.w ?? 0)
   const pas = largeurMax + ESPACE
 
+  // Le placement, en post-ordre : les parents d'abord, l'enfant au milieu d'eux.
+  // Un parent déjà placé — atteint par un autre chemin — ne compte pas (implexe).
   const abscisses = new Map<IdentifiantNoeud, number>()
-  for (const [id, { generation, rang }] of creneaux) {
-    const largeur = pas * 2 ** (plusHaute - generation)
-    const centre = (2 ** generation - 1) / 2
-    abscisses.set(id, (rang - centre) * largeur)
+  let prochainCreneau = 0
+  const placer = (id: IdentifiantNoeud): number => {
+    const propres = parentsDe(id).filter((parent) => !abscisses.has(parent))
+    const xs = propres.map(placer)
+    const x = xs.length === 0 ? prochainCreneau++ * pas : (Math.min(...xs) + Math.max(...xs)) / 2
+    abscisses.set(id, x)
+    return x
   }
+  const xLecteur = placer(graphe.ego)
+  for (const [id, x] of abscisses) abscisses.set(id, x - xLecteur)
 
   // Les losanges : au milieu de leurs époux, une fois ceux-ci posés.
   for (const [famille, membres] of epoux) {
