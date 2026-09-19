@@ -221,13 +221,37 @@ function monter(): { svg: ElementFactice; pilote: ReturnType<typeof construireCa
 /* ------------------------------------------------------------------ */
 
 describe('construireCanevas', () => {
-  it('empile les arêtes sous les familles, puis les fiches', () => {
+  it('empile les arêtes sous les familles, puis les fiches — après les définitions', () => {
     const { svg } = monter()
-    expect(svg.enfants.map((e) => e.attributs['class'])).toEqual([
+    expect(svg.enfants.map((e) => e.attributs['class'] ?? e.tag)).toEqual([
+      'defs',
       'aretes',
       'familles',
       'fiches',
     ])
+  })
+
+  it('rogne les portraits par un clipPath SVG partagé, jamais par une forme CSS', () => {
+    // `clip-path="inset(0 round 50%)"` sur une `<image>` n'est pas dessiné par
+    // Safari : l'emplacement reste vide. Un seul `<clipPath>` en unités de boîte
+    // englobante, que chaque image référence, est ce que tout moteur SVG rogne.
+    const graphe = grapheEssai()
+    graphe.noeuds = graphe.noeuds.map((n) =>
+      n.id === 'p2' ? ({ ...n, portrait: '/api/medias/9/vignette' } as NoeudGraphe) : n,
+    )
+    const svg = new ElementFactice('svg')
+    construireCanevas(svg as unknown as SVGSVGElement, graphe)
+
+    const ronds = svg.tous((e) => e.tag === 'clipPath')
+    expect(ronds).toHaveLength(1)
+    expect(ronds[0]?.attributs['clipPathUnits']).toBe('objectBoundingBox')
+    expect(ronds[0]?.enfants.map((e) => e.tag)).toEqual(['circle'])
+
+    const images = svg.tous((e) => e.tag === 'image')
+    expect(images).toHaveLength(1)
+    expect(images[0]?.attributs['clip-path']).toBe(`url(#${ronds[0]?.attributs['id']})`)
+    // Hors navigateur, pas d'`IntersectionObserver` : l'adresse est posée tout de suite.
+    expect(images[0]?.attributs['href']).toBe('/api/medias/9/vignette')
   })
 
   it('crée un élément par nœud et par arête', () => {

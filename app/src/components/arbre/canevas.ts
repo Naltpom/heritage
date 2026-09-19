@@ -68,6 +68,18 @@ const LIGNE_DATES = 40
  */
 let observateurDeVignettes: IntersectionObserver | null | undefined
 
+/**
+ * Le rond des portraits : un `<clipPath>` SVG **défini une fois** dans le
+ * canevas, en unités de boîte englobante, et référencé par chaque `<image>`.
+ *
+ * La première version posait `clip-path="inset(0 round 50%)"` sur chaque image
+ * — une forme CSS. Chrome la dessine ; Safari, sur Mac comme sur iPhone, laisse
+ * l'emplacement **vide** : l'image est demandée et reçue (vu dans le journal du
+ * serveur, `200` puis `304`), mais rien n'est peint. Le `<clipPath>` natif est
+ * ce que tout moteur SVG sait rogner.
+ */
+const ID_ROND_PORTRAIT = 'rond-portrait'
+
 function chargerALApparition(image: SVGImageElement, href: string): void {
   if (observateurDeVignettes === undefined) {
     observateurDeVignettes =
@@ -129,6 +141,12 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
   const gFamilles = creer('g', { class: 'familles' })
   const gFiches = creer('g', { class: 'fiches' })
 
+  // Le rond partagé des portraits — voir `ID_ROND_PORTRAIT`.
+  const defs = creer('defs', {})
+  const rond = creer('clipPath', { id: ID_ROND_PORTRAIT, clipPathUnits: 'objectBoundingBox' })
+  rond.appendChild(creer('circle', { cx: 0.5, cy: 0.5, r: 0.5 }))
+  defs.appendChild(rond)
+
   /* ---- arêtes, sous les fiches ---- */
 
   const aretes: { el: SVGPathElement; de: string; vers: string }[] = []
@@ -167,6 +185,7 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
   }
 
   const fragment = document.createDocumentFragment()
+  fragment.appendChild(defs)
   fragment.appendChild(gAretes)
   fragment.appendChild(gFamilles)
   fragment.appendChild(gFiches)
@@ -288,7 +307,7 @@ function construireFiche(
       width: LARGEUR_PHOTO,
       height: LARGEUR_PHOTO,
       preserveAspectRatio: 'xMidYMid slice',
-      'clip-path': 'inset(0 round 50%)',
+      'clip-path': `url(#${ID_ROND_PORTRAIT})`,
     })
     chargerALApparition(image as unknown as SVGImageElement, personne.portrait)
     g.appendChild(image)
