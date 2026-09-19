@@ -77,4 +77,18 @@ interface PortDesMedias
      * @return array<int, true> indexé par identifiant ; une personne sans média est **absente**
      */
     public function personnesAvecMedia(array $personneIds, LecteurDeLArbre $lecteur): array;
+
+    /**
+     * La vignette du portrait actif de chaque personne, pour les cartes de l'arbre.
+     *
+     * Même discipline que {@see personnesAvecMedia()} : une seule question pour tout
+     * l'arbre, et **une personne sans portrait, ou dont la fiche n'est pas visible du
+     * lecteur, est absente** — jamais présente à `null`. La présence d'un portrait sur
+     * une fiche masquée est déjà une information (§ 16.2).
+     *
+     * @param list<int> $personneIds
+     *
+     * @return array<int, string> identifiant de personne → URL de la vignette
+     */
+    public function vignettesDePortraits(array $personneIds, LecteurDeLArbre $lecteur): array;
 }

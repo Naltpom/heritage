@@ -104,6 +104,34 @@ class MediaRepository extends ServiceEntityRepository
     /**
      * Le portrait actif d'une personne — au plus un, garanti par `uniq_med_portrait_actif`.
      */
+    /**
+     * Les portraits actifs d'un lot de personnes — une requête pour tout l'arbre.
+     *
+     * @param list<int> $personIds
+     *
+     * @return list<Media>
+     */
+    public function portraitsActifsPour(array $personIds): array
+    {
+        if ([] === $personIds) {
+            return [];
+        }
+
+        /** @var list<Media> $resultat */
+        $resultat = $this->createQueryBuilder('m')
+            ->andWhere('m.subjectKind = :personne')
+            ->andWhere('m.subjectId IN (:ids)')
+            ->andWhere('m.kind = :portrait')
+            ->andWhere('m.isActivePortrait = true')
+            ->setParameter('personne', MediaSubject::Personne)
+            ->setParameter('ids', $personIds)
+            ->setParameter('portrait', MediaKind::Portrait)
+            ->getQuery()
+            ->getResult();
+
+        return $resultat;
+    }
+
     public function portraitActif(int $personId): ?Media
     {
         return $this->createQueryBuilder('m')

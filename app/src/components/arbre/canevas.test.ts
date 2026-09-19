@@ -238,17 +238,20 @@ describe('construireCanevas', () => {
     expect(svg.tous((e) => e.classes.includes('barre'))).toHaveLength(1)
   })
 
-  it('compose une fiche : titre, cadre, liseré de branche, nom, dates', () => {
+  it('compose une fiche : titre, cadre, liseré de branche, silhouette, nom, dates', () => {
     const { svg } = monter()
     const ego = svg.parId('p1')
     expect(ego).toBeDefined()
     if (ego === undefined) return
     expect(ego.classes).toContain('ego')
-    expect(ego.enfants.map((e) => e.tag)).toEqual(['title', 'rect', 'rect', 'text', 'text'])
+    // Sans `portrait`, l'emplacement photo porte la silhouette — un rond et une
+    // épaule — et jamais une image vide qui ferait une requête pour rien.
+    expect(ego.enfants.map((e) => e.tag)).toEqual(['title', 'rect', 'rect', 'circle', 'path', 'text', 'text'])
     expect(ego.enfants[0].textContent).toBe('Personne p1')
     expect(ego.enfants[2].attributs['class']).toBe('br b-pm')
-    expect(ego.enfants[3].attributs['class']).toBe('nm')
-    expect(ego.enfants[4].textContent).toBe('1900 – 1980')
+    expect(ego.enfants[3].attributs['class']).toBe('photo-vide')
+    expect(ego.enfants[5].attributs['class']).toBe('nm')
+    expect(ego.enfants[6].textContent).toBe('1900 – 1980')
   })
 
   it('ne dessine aucune ligne de dates sur un nœud restreint, et n’en invente pas', () => {

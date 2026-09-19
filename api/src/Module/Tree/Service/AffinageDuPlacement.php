@@ -135,19 +135,23 @@ final class AffinageDuPlacement
      * s'y retrouvent à moins de 4 px l'une de l'autre. Elles ne se superposent plus
      * depuis la coloration par intervalles, mais elles se frôlent.
      *
-     * 46 donne **39 px**, soit exactement le double. C'est ce que le commanditaire a
-     * demandé, et c'est le seul levier : l'étalement à l'intérieur de la bande est
+     * 46 donnait **39 px**, soit exactement le double — c'est ce que le commanditaire
+     * a demandé, et c'est le seul levier : l'étalement à l'intérieur de la bande est
      * déjà presque complet, il ne restait qu'un facteur 1,4 à y gagner.
+     *
+     * **54 depuis que la fiche fait 56 px de haut** ({@see MesureDeFiche::HAUTEUR_AFFICHEE}) :
+     * le bas des fiches est descendu de 8 px, et la bande vaut `54 + 20 - 7 - 28`,
+     * soit toujours **39 px**. Le chiffre suit la géométrie de la fiche, pas l'inverse.
      *
      * ── Ce que ça coûte, et ce qui a été vérifié ────────────────────────────────
      *
-     * Le losange descend de 20 px, donc la bande des **peignes de filiation** — du
-     * losange au haut des fiches enfants — passe de 84 à 64 px. Ces barres-là sont
-     * étagées depuis toujours et n'ont jamais eu de recouvrement ; la mesure après
-     * changement le confirme, sans quoi on aurait déplacé un défaut au lieu d'en
-     * corriger un.
+     * Le losange descend, donc la bande des **peignes de filiation** — du losange au
+     * haut des fiches enfants — se resserre : de 84 px à l'origine à 48 px maintenant
+     * (`150 - 28 - 74`). Ces barres-là sont étagées depuis toujours et n'ont jamais eu
+     * de recouvrement ; la mesure après changement le confirme, sans quoi on aurait
+     * déplacé un défaut au lieu d'en corriger un.
      */
-    private const int DESCENTE_DU_LOSANGE = 46;
+    private const int DESCENTE_DU_LOSANGE = 54;
 
     /**
      * @var array<string, list<string>> famille → ses époux
@@ -174,6 +178,17 @@ final class AffinageDuPlacement
 
     /** @var array<string, float> */
     private array $posx = [];
+
+    /**
+     * La mesure des fiches **telles qu'elles sont affichées** — photo à gauche, dates
+     * des vivants — est faite ici et non dans le moteur : le moteur mesure ce que sa
+     * preuve de non-régression attend, et c'est l'affinage qui refait les abscisses.
+     * Un défaut en argument, pour que `new AffinageDuPlacement()` reste possible dans
+     * les tests et les scripts de mesure.
+     */
+    public function __construct(private readonly MesureDeFiche $mesure = new MesureDeFiche())
+    {
+    }
 
     public function affine(Placement $place, JeuDePlacement $jeu): Placement
     {
@@ -276,6 +291,23 @@ final class AffinageDuPlacement
         foreach ($jeu->personnes as $personne) {
             $this->sexes[$personne->id] = $personne->sexe;
             $this->annees[$personne->id] = $personne->anNais;
+
+            // La fiche telle qu'elle est AFFICHÉE : un emplacement photo à gauche pour
+            // tout le monde, et la naissance des vivants sur la ligne de dates. Le
+            // moteur a mesuré la fiche d'avant — c'est ce que sa preuve attend — et
+            // c'est ici, avant de refaire les abscisses, que la vraie boîte remplace la
+            // sienne. Voir {@see MesureDeFiche::largeurAffichee()}.
+            $ancien = $this->noeuds[$personne->id] ?? null;
+
+            if (null !== $ancien) {
+                $this->noeuds[$personne->id] = new NoeudPlace(
+                    $ancien->id,
+                    $ancien->x,
+                    $ancien->y,
+                    $this->mesure->largeurAffichee($personne),
+                    MesureDeFiche::HAUTEUR_AFFICHEE,
+                );
+            }
         }
 
         foreach ($place->aretes as $arete) {

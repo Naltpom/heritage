@@ -217,6 +217,19 @@ export interface ChargeDeSession {
   voirComme: VueCommeMembre | null
   /** Identifiants des demandes `en_attente` dont le lecteur est l'auteur. */
   demandesEnAttente: number[]
+  /**
+   * Le portrait actif de la personne du lecteur, ou `null` — sans portrait, ou
+   * sans personne validée. `deposeParMoi` distingue « ajoutez votre photo » de
+   * « quelqu'un a déposé cette photo de vous : la garder ou la remplacer ? ».
+   */
+  portrait: PortraitDeSession | null
+}
+
+export interface PortraitDeSession {
+  mediaId: number
+  url: string
+  vignetteUrl: string
+  deposeParMoi: boolean
 }
 
 /* ------------------------------------------------------------------ */
@@ -305,6 +318,14 @@ export interface NoeudPersonne extends NoeudCommun {
    *  à découper `#12/p1`. C'est ce couple (`demandeId`, `brouillonRef`) que
    *  prend la route de détail d'un nœud en attente (§ 6.6). */
   brouillonRef?: string
+  /**
+   * La vignette du portrait actif, pour l'emplacement photo de la fiche.
+   * **Absente** — et non `null` — quand la personne n'en a pas, ou quand sa
+   * fiche est restreinte pour ce lecteur : « cette personne masquée a une
+   * photo » est déjà une information (§ 16.2). Le canevas dessine alors la
+   * silhouette ; l'emplacement, lui, est le même pour tout le monde.
+   */
+  portrait?: string
   /**
    * Le nom **complet** — tous les prénoms : « Ambre Célestin Jade Mica Romarin ».
    * Il sert à **lire** : survol, panneau latéral, recherche. Le canevas ne le

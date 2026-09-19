@@ -107,6 +107,21 @@
   fill: var(--color-attenue);
 }
 
+/* L'emplacement photo, à gauche de chaque fiche. Le portrait est rogné en rond
+ * par `clip-path` sur l'élément (posé en attribut par le canevas) ; la silhouette
+ * — un rond et une épaule — prend la teinte atténuée pour ne pas concurrencer le
+ * nom. Aucune `opacity` ici : ADR 0007, on ne pose jamais `opacity` sur un
+ * élément SVG. */
+.fiche .photo {
+  pointer-events: none;
+}
+
+.fiche .photo-vide {
+  fill: var(--color-attenue);
+  fill-opacity: 0.35;
+  pointer-events: none;
+}
+
 /* Teinte par sexe : `h` masculin, `f` féminin, `x` inconnu. */
 .fiche.h rect:not(.br) {
   fill: var(--color-homme);

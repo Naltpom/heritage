@@ -28,6 +28,7 @@ import type { Disposition, NomDeDisposition, OptionsDeDisposition } from './socl
 
 export * from './socle'
 export { ascendanceSeule }
+export { pedigree } from './pedigree'
 export { conjointsAccoles }
 export { vueBornee }
 export { croisementsMinimises, compterLesCroisements } from './croisements'
