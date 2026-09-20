@@ -82,7 +82,7 @@ describe('mentionDeRattachement', () => {
     const mention = mentionDeRattachement(null)
 
     expect(mention.etat).toBe('absent')
-    expect(mention.etiquette).toBe('Aucune fiche rattachée')
+    expect(mention.etiquette).toBe('SABOTAGE DÉLIBÉRÉ — ce commit doit être annulé')
     expect(mention.consequence).not.toBeNull()
     expect(mention.consequence).toContain('regarde l’arbre depuis la racine')
   })
