@@ -106,7 +106,7 @@ export async function grapheApresRevalidation(
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { hauteurDuCadre } from '@/views/cadre'
 import { useEstMobile, useTiroirs } from '@/composables/useTiroirs'
-import { animerLArrivee } from '@/components/arbre/animation'
+import { animerLArrivee, replie } from '@/components/arbre/animation'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import BarreOutilsArbre from '@/components/arbre/BarreOutilsArbre.vue'
@@ -669,16 +669,15 @@ function lancerLArrivee(): void {
   if (nomDeDisposition !== DISPOSITION_ANIMEE) return
 
   const pilote = canevas.value?.piloteCourant() ?? null
-  const depart = grapheBrut.value
   const arrivee = graphe.value
-  if (pilote === null || depart === null || arrivee === null) return
+  if (pilote === null || arrivee === null) return
 
-  arreterLArrivee = animerLArrivee(pilote, depart, arrivee)
+  // **L'arbre part replié sur le lecteur et se déplie.** Partir de la mise en page
+  // du serveur était invisible : dans le cadre que le téléphone ouvre, la moitié
+  // des nœuds bougeaient de moins de vingt pixels et le tronc, figé, pas du tout.
+  // Voir `replie()` pour les chiffres.
+  arreterLArrivee = animerLArrivee(pilote, replie(arrivee), arrivee)
 }
-
-// `flush: 'post'` : le canevas doit avoir été (re)construit avec le nouveau
-// graphe avant qu'on lui demande de bouger. Sans ça, on animerait le précédent.
-watch(graphe, () => lancerLArrivee(), { flush: 'post' })
 
 onBeforeUnmount(() => {
   // Arrêter AVANT que le canevas ne soit détruit : une image de plus écrirait
@@ -931,6 +930,7 @@ onBeforeUnmount(() => {
         ref="canevas"
         :graphe="graphe"
         :cadrage-initial="estMobile ? 'tronc' : 'tout'"
+        @construit="lancerLArrivee"
         @selection="ouvrirNoeud"
         @fond="effacerSelection"
       />

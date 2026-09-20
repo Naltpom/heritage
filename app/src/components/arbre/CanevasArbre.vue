@@ -47,6 +47,17 @@ const emit = defineEmits<{
   selection: [noeud: NoeudGraphe]
   /** Le fond a été cliqué : la vue en fait ce qu'elle veut (fermer le panneau). */
   fond: []
+  /**
+   * **Le canevas vient d'être (re)construit, et il est à jour.**
+   *
+   * Sans cet événement, la vue devait deviner le moment où le dessin existe — et
+   * elle devinait mal. Les deux `watch` sont en `flush: 'post'` ; celui de la vue
+   * est créé pendant le `setup` du PARENT, donc AVANT celui de l'enfant, et Vue
+   * les exécute dans l'ordre de création. L'animation d'arrivée partait donc sur
+   * le canevas d'AVANT, que `construire()` effaçait aussitôt : pas une image
+   * peinte. **Un événement dit le fait ; un ordre de `flush` se devine.**
+   */
+  construit: []
 }>()
 
 const cadreRef = ref<HTMLDivElement | null>(null)
@@ -89,6 +100,7 @@ function construire(): void {
   }
 
   pilote.value = construireCanevas(svg, graphe)
+  emit('construit')
   boiteInitiale = { ...graphe.boite }
 
   // D'abord l'arbre entier — un cadrage toujours valable, qui ne dépend pas de la

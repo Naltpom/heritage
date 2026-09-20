@@ -85,6 +85,48 @@ export function interpoler(depart: Graphe, arrivee: Graphe, t: number): Graphe {
   }
 }
 
+/**
+ * **De quelle fraction de sa place finale l'arbre part.**
+ *
+ * `0,2` : chaque nœud commence à un cinquième de son abscisse, donc l'arbre part
+ * replié sur le lecteur et se **déplie**.
+ *
+ * ## Pourquoi pas « de la place du serveur vers la solution »
+ *
+ * C'était la première version, et elle était invisible. Mesuré le 20/09/2026 sur
+ * l'arbre réel : le déplacement médian d'un nœud entre les deux était de **105 px
+ * sur un arbre large de 21 912** — et, dans le cadre que le téléphone ouvre au
+ * chargement (le tronc du lecteur, vingt nœuds sur six cent quarante-quatre), la
+ * médiane tombait à **21 px, avec neuf nœuds sur vingt bougeant de moins de vingt
+ * pixels et six pas du tout** — les six étant précisément le tronc, qu'on fige.
+ *
+ * > **Le commanditaire regardait la seule région de l'arbre garantie immobile.**
+ *
+ * Avec le repli, la médiane du même cadre passe à **350 px** et un seul nœud sur
+ * vingt reste sous vingt pixels. Et ça **montre la mécanique** au lieu de la
+ * laisser deviner : l'arbre s'ouvre depuis le lecteur.
+ *
+ * Un cinquième et non zéro : à zéro, les six cent quarante-quatre fiches se
+ * superposent à la première image, ce qui se lit comme un défaut d'affichage
+ * plutôt que comme un départ.
+ */
+export const REPLI = 0.2
+
+/**
+ * L'arbre **replié sur le lecteur** : le point de départ de l'arrivée.
+ *
+ * Les ordonnées ne bougent pas, et l'abscisse zéro reste zéro — le lecteur est
+ * l'ancre, il ne se déplace pas pendant que son arbre s'ouvre autour de lui.
+ */
+export function replie(arrivee: Graphe, fraction: number = REPLI): Graphe {
+  return {
+    ...arrivee,
+    noeuds: arrivee.noeuds.map((noeud) =>
+      noeud.x === 0 ? noeud : { ...noeud, x: noeud.x * fraction },
+    ),
+  }
+}
+
 /** Ce que l'animation a besoin de connaître de son environnement. */
 export interface HorlogeDAnimation {
   maintenant: () => number

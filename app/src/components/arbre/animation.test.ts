@@ -19,7 +19,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Graphe, NoeudGraphe } from '@/lib/api'
 import type { PiloteCanevas } from './canevas'
-import { adoucir, animerLArrivee, interpoler } from './animation'
+import { adoucir, animerLArrivee, interpoler, REPLI, replie } from './animation'
 
 function noeud(id: string, x: number, y = 0): NoeudGraphe {
   return { type: 'personne', id, x, y, w: 100, h: 40 } as unknown as NoeudGraphe
@@ -139,6 +139,55 @@ describe('l’interpolation', () => {
     const copie = JSON.parse(JSON.stringify(depart))
     interpoler(depart, arrivee, 0.5)
     expect(depart).toEqual(copie)
+  })
+})
+
+describe('le repli — d’où l’arbre part', () => {
+  it('ramène chaque nœud à une fraction de son abscisse', () => {
+    const arrivee = graphe([noeud('A', 1000), noeud('B', -500)])
+    const debut = replie(arrivee, 0.2)
+
+    expect(debut.noeuds.map((n) => n.x)).toEqual([200, -100])
+  })
+
+  it('LAISSE LE LECTEUR À ZÉRO — c’est l’ancre, l’arbre s’ouvre autour de lui', () => {
+    const arrivee = graphe([noeud('EGO', 0), noeud('AUTRE', 800)])
+
+    expect(replie(arrivee, 0.2).noeuds[0]!.x).toBe(0)
+  })
+
+  it('ne touche pas aux ordonnées', () => {
+    const arrivee = graphe([noeud('A', 1000, 300)])
+
+    expect(replie(arrivee, 0.2).noeuds[0]!.y).toBe(300)
+  })
+
+  it('ne mute pas le graphe reçu', () => {
+    const arrivee = graphe([noeud('A', 1000)])
+    const copie = JSON.parse(JSON.stringify(arrivee))
+    replie(arrivee, 0.2)
+
+    expect(arrivee).toEqual(copie)
+  })
+
+  it('le repli du dossier est un cinquième, et c’est une décision mesurée', () => {
+    // À zéro, les 644 fiches se superposent à la première image et ça se lit
+    // comme un défaut. Voir `REPLI` pour les chiffres du cadre du téléphone.
+    expect(REPLI).toBe(0.2)
+  })
+
+  it('AVEC LE REPLI, l’arrivée finit quand même sur l’état construit', () => {
+    const pilote = piloteEspion()
+    const scene = horlogeDeTheatre()
+    const arrivee = graphe([noeud('A', 1000)])
+
+    animerLArrivee(pilote, replie(arrivee), arrivee, scene.horloge, 1000)
+    for (let t = 0; t <= 1200; t += 100) if (!scene.jouer(t)) break
+
+    // La dernière action est le figeage : les `transform` sont retirés, donc le
+    // dessin redevient celui de la construction — pas celui du dernier pas.
+    expect(pilote.figeages).toBe(1)
+    expect(pilote.vus[0]).toEqual([200])
   })
 })
 
