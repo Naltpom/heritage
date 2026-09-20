@@ -212,6 +212,13 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'attente', titre: 'Arbre — ressorts et isotonie', disposition: 'ressorts' },
   },
   {
+    path: '/arbre-8',
+    name: 'arbre.blocs',
+    component: () => import('@/views/ArbreView.vue'),
+    props: dispositionEnProp,
+    meta: { acces: 'attente', titre: 'Arbre — blocs rigides', disposition: 'blocs' },
+  },
+  {
     // **Sa propre vue**, et c'est la seule des sept. Les six autres sont des
     // transformations de la charge, que le canevas de l'arbre dessine sans savoir
     // qu'elle a été retouchée. Le quilt n'est pas une disposition, c'est une

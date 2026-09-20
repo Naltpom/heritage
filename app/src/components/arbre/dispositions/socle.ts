@@ -85,7 +85,7 @@ function entierBorne(valeur: unknown, defaut: number): number {
   return Math.min(20, Math.max(0, Math.trunc(nombre)))
 }
 
-export const DISPOSITIONS = ['conjoints', 'bornee', 'croisements', 'duplication', 'ressorts'] as const
+export const DISPOSITIONS = ['conjoints', 'bornee', 'croisements', 'duplication', 'ressorts', 'blocs'] as const
 
 export type NomDeDisposition = (typeof DISPOSITIONS)[number]
 
