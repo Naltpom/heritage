@@ -145,7 +145,7 @@ jobs:
       # individus, cinq familles, comptés dans le fichier lui-même.
       - name: Ensemencer PostgreSQL avec l'arbre d'essai (données inventées)
         env:
-          DATABASE_URL: postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage
+          DATABASE_URL: "postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage?serverVersion=17&charset=utf8"
         run: |
           set -euo pipefail
           php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
