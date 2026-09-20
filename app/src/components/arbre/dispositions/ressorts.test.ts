@@ -3,9 +3,8 @@
  * **CE QUI EST ÉPROUVÉ ICI, C'EST L'EXACTITUDE — PAS UNE AMÉLIORATION.**
  *
  * Les autres dispositions promettent de ne pas empirer. Celle-ci promet plus, et
- * doit donc être éprouvée plus durement : pour un ordre donné, elle rend **la**
- * solution du problème posé, pas une bonne solution. Trois gardes en découlent, et
- * aucune n'est une impression :
+ * doit donc être éprouvée plus durement. Trois gardes en découlent, et aucune
+ * n'est une impression :
  *
  * 1. **la contrainte est tenue par construction** — aucune rangée ne chevauche,
  *    quels que soient les désirs, même absurdes ;
@@ -14,6 +13,36 @@
  *    comparaison qui dit si « exact » veut dire quelque chose ;
  * 3. **le mouvement retombe.** Une relaxation qui rebondit est le défaut que ce
  *    solveur remplace ; si le mouvement ne tombe pas, il ne l'a pas remplacé.
+ *
+ * ## CE QUI EST EXACT, ET CE QUI NE L'EST PAS — MESURÉ LE 20/09/2026
+ *
+ * Cet en-tête a porté jusqu'ici la phrase *« pour un ordre donné, elle rend **la**
+ * solution du problème posé »*. **Elle est vraie d'UN tour, et fausse de la mise
+ * en page.** PAVA résout une rangée exactement ; la mise en page est un
+ * Gauss-Seidel sur quinze rangées répété {@link ITERATIONS} fois, et il n'a pas
+ * convergé au huitième tour — l'objectif baisse encore au quarantième.
+ *
+ * La conséquence n'est pas théorique. Quatre graphes de **même ordre exactement**
+ * — 0 nœud sur 648 change de rang, losanges compris, vérifié un par un — ne
+ * donnent pas le même résultat :
+ *
+ * ```
+ * abscisses d'entrée      ->  sortie
+ * 106,6 M                     100,3 M
+ * 108,7 M                      96,1 M
+ * ```
+ *
+ * **4,2 % d'écart à ordre identique : le point de départ compte encore.** Et dans
+ * le sens contre-intuitif — l'entrée la pire donne la sortie la meilleure. Deux
+ * choses en découlent pour qui reprend :
+ *
+ * - on ne peut pas dire que cette disposition efface ce que fait le serveur ;
+ *   **le serveur vaut 4,2 % de son résultat** ;
+ * - améliorer le serveur sur la somme des carrés peut **dégrader** cette page.
+ *   Personne n'avait arbitré cela, parce que personne ne l'avait mesuré.
+ *
+ * Ce n'est pas un défaut à réparer ici : la convergence est lente et monotone,
+ * pas instable. C'est une promesse à ne plus faire.
  *
  * Les noms sont inventés — aucune personne réelle n'entre dans le dépôt (ADR 0006).
  * ════════════════════════════════════════════════════════════════════
