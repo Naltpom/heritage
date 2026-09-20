@@ -1156,8 +1156,14 @@ final class AffinageDuPlacement
         // dans le couloir, et le bloc paternel recouvrait le maternel sur 254 px.
         //
         // Le noyau du tronc — la fratrie et ce qui en descend, sans jamais remonter —
-        // est interdit aux deux côtés. Le reste du tronc, ses belles-familles, prend
-        // ce que les côtés n'ont pas réclamé.
+        // est interdit aux deux côtés.
+        //
+        // **Ce commentaire disait que le tronc récupère les belles-familles. C'est
+        // faux, et mesuré le 20/09/2026 :** sur l'arbre du commanditaire comme sur
+        // l'arbre de référence, `$tronc` fait **trois nœuds**. La fouille part de la
+        // fratrie du lecteur et se trouve aussitôt cernée par les deux côtés, qui
+        // ont été calculés avant elle. Les belles-familles ne sont donc dans AUCUN
+        // des trois ensembles — voir `$detachees` plus bas.
         $parents = [$famille => true, $pere => true, $mere => true];
         $noyau = $this->descendanceStricte($this->enfants[$famille]);
         $aieuxDuPere = $this->ascendanceStricte($pere);
@@ -1200,6 +1206,49 @@ final class AffinageDuPlacement
 
         $this->pousserLeBloc($paternel, $gauche - MoteurDePlacement::ESPACE, self::VERS_LA_GAUCHE);
         $this->pousserLeBloc($maternel, $droite + MoteurDePlacement::ESPACE, self::VERS_LA_DROITE);
+
+        // ── CE QUI N'EST RELIÉ À RIEN, ET QUI DOIT QUAND MÊME SE POSER QUELQUE PART.
+        //
+        // Ce qu'aucun des trois ensembles n'a réclamé. **On a d'abord cru à des
+        // belles-familles ; la mesure dit autre chose**, et c'est plus important que
+        // le placement : le 20/09/2026, sur l'arbre du commanditaire, ces nœuds
+        // forment **trois composantes DÉTACHÉES du reste du graphe**.
+        //
+        //     composantes connexes : 607 nœuds · 39 · 1 · 1
+        //     aucune arête ne relie les 41 au reste — vérifié, zéro
+        //
+        // Ce ne sont donc pas des parents par alliance mal rangés : ce sont des
+        // personnes dont le lien à l'arbre **manque**. Le placement ne peut pas le
+        // réparer, et ce commentaire ne prétend pas le contraire.
+        //
+        // Elles flottaient à **4 161 px à gauche du bloc paternel**, posées là par la
+        // seule cascade. On les aligne contre lui :
+        // `[ détachées ][ paternel ][ TRONC ][ maternel ]`. Ce n'est pas une place
+        // *méritée*, c'est une place *décidée* — et surtout arrêtée, plutôt que
+        // laissée au hasard d'une poussée.
+        //
+        // Sur l'arbre de référence, l'ensemble est **vide** : aucune garde locale ne
+        // couvre ce chemin, et il faut le savoir avant de lire un vert.
+        $detachees = [];
+
+        foreach (array_keys($this->noeuds) as $id) {
+            if (!isset($parents[$id]) && !isset($paternel[$id])
+                && !isset($maternel[$id]) && !isset($tronc[$id])) {
+                $detachees[$id] = true;
+            }
+        }
+
+        if ([] === $detachees) {
+            return;
+        }
+
+        $bordPaternel = $this->bordDuBloc($paternel, self::VERS_LA_DROITE);
+
+        if (null === $bordPaternel) {
+            return;
+        }
+
+        $this->pousserLeBloc($detachees, $bordPaternel - MoteurDePlacement::ESPACE, self::VERS_LA_GAUCHE);
     }
 
     /**
@@ -1320,13 +1369,14 @@ final class AffinageDuPlacement
     }
 
     /**
-     * Translate un bloc entier pour que son bord ne dépasse pas la limite — vers la
-     * gauche si c'est son bord droit qui compte, vers la droite sinon. Du minimum
-     * nécessaire, et pas d'un pixel s'il est déjà du bon côté.
+     * **Le bord d'un bloc dans le sens où on le pousse** : son extrémité droite
+     * quand on l'écarte vers la gauche, son extrémité gauche dans l'autre cas.
+     *
+     * C'est ce bord-là qui touche le voisin, et donc le seul qui décide.
      *
      * @param array<string, true> $bloc
      */
-    private function pousserLeBloc(array $bloc, float $limite, int $sens): void
+    private function bordDuBloc(array $bloc, int $sens): ?float
     {
         $bord = null;
 
@@ -1342,6 +1392,19 @@ final class AffinageDuPlacement
                 ? $candidat
                 : (self::VERS_LA_GAUCHE === $sens ? max($bord, $candidat) : min($bord, $candidat));
         }
+
+        return $bord;
+    }
+
+    /**
+     * **Aligne un bloc entier sur une limite** — son bord droit dessus quand on
+     * l'écarte vers la gauche, son bord gauche dans l'autre cas.
+     *
+     * @param array<string, true> $bloc
+     */
+    private function pousserLeBloc(array $bloc, float $limite, int $sens): void
+    {
+        $bord = $this->bordDuBloc($bloc, $sens);
 
         if (null === $bord) {
             return;
