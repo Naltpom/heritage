@@ -321,6 +321,32 @@ describe('l’insertion dans un arbre', () => {
     expect(abscisse(arrivee.graphe, 'flottant')).toBe(4242)
   })
 
+  it('REPLACE une fiche qui a changé de RANGÉE, au lieu de lui rendre son ancienne abscisse', () => {
+    // Il suffit qu'on lui donne des parents pour que sa génération se décale.
+    // Lui rendre sa place d'avant dans sa nouvelle rangée la poserait sur une
+    // place que personne ne lui a réservée — et la séparation tomberait.
+    const avant = graphe(
+      [personne('p1', 0, 0), personne('mobile', 5000, 0), personne('occupe', 0, -200), famille('f1', 0, -160)],
+      [],
+    )
+    const apres: Graphe = {
+      ...avant,
+      // La disposition l'a fait monter d'une génération, juste sur « occupe ».
+      noeuds: avant.noeuds.map((n) => (n.id === 'mobile' ? { ...n, y: -200 } : n)),
+      aretes: [fi('f1', 'mobile')],
+    }
+
+    const arrivee = insererLocalement(avant, apres)
+    const rangee = arrivee.graphe.noeuds.filter((n) => n.y === -200).sort((a, b) => a.x - b.x)
+
+    expect(arrivee.nouveaux).toContain('mobile')
+    for (let i = 1; i < rangee.length; i += 1) {
+      expect(rangee[i]!.x - rangee[i]!.w / 2).toBeGreaterThanOrEqual(
+        rangee[i - 1]!.x + rangee[i - 1]!.w / 2 + ESPACE - 0.001,
+      )
+    }
+  })
+
   it('laisse partir ce qui a disparu de la charge, sans reboucher', () => {
     const avant = arbre()
     const apres: Graphe = {

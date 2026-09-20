@@ -312,7 +312,17 @@ export interface Arrivee {
  * exactement ce que ce module existe pour éviter.
  */
 export function insererLocalement(affiche: Graphe, servi: Graphe): Arrivee {
-  const connues = new Map(affiche.noeuds.map((noeud) => [noeud.id, noeud.x]))
+  // **On se souvient de l'ordonnée autant que de l'abscisse.**
+  //
+  // Une fiche peut changer de RANGÉE d'une charge à l'autre — il suffit qu'on
+  // lui donne des parents, et sa génération se décale. Lui rendre son ancienne
+  // abscisse dans sa nouvelle rangée la poserait sur une place que personne ne
+  // lui a réservée : elle chevaucherait sa voisine, et la séparation — la seule
+  // garantie que ce module donne par construction — tomberait sans bruit.
+  //
+  // Une fiche qui a changé de rangée n'est donc plus « la même place » : elle
+  // est traitée comme une arrivée, et replacée sous ses voisins.
+  const connues = new Map(affiche.noeuds.map((noeud) => [noeud.id, { x: noeud.x, y: noeud.y }]))
 
   // L'abscisse de travail de chaque nœud : celle de l'écran si on la connaît,
   // celle de la disposition sinon — cette dernière ne servira que de secours.
@@ -321,8 +331,8 @@ export function insererLocalement(affiche: Graphe, servi: Graphe): Arrivee {
 
   for (const noeud of servi.noeuds) {
     const ancienne = connues.get(noeud.id)
-    if (ancienne === undefined) aPlacer.push(noeud)
-    else x.set(noeud.id, ancienne)
+    if (ancienne === undefined || ancienne.y !== noeud.y) aPlacer.push(noeud)
+    else x.set(noeud.id, ancienne.x)
   }
 
   const nouveaux = aPlacer.map((noeud) => noeud.id)
@@ -403,17 +413,18 @@ export function insererLocalement(affiche: Graphe, servi: Graphe): Arrivee {
   // cette restriction, greffer quinze générations déclenchait la réorganisation
   // alors que pas une seule fiche de l'arbre n'avait bougé — mesuré le
   // 20/09/2026, et c'est la version qui a failli partir.
+  const neufs = new Set(nouveaux)
   let combien = 0
   let ecart = 0
   let lecteur = false
 
   for (const id of pousses) {
     const ancienne = connues.get(id)
-    if (ancienne === undefined) continue
+    if (ancienne === undefined || neufs.has(id)) continue
     const noeud = parId.get(id)
     if (noeud === undefined || !estDuTronc(noeud, servi.ego)) continue
     combien += 1
-    ecart = Math.max(ecart, Math.abs((x.get(id) ?? noeud.x) - ancienne))
+    ecart = Math.max(ecart, Math.abs((x.get(id) ?? noeud.x) - ancienne.x))
     if (id === servi.ego) lecteur = true
   }
 
@@ -421,7 +432,7 @@ export function insererLocalement(affiche: Graphe, servi: Graphe): Arrivee {
 
   const deplacees: IdentifiantNoeud[] = []
   for (const id of pousses) {
-    if (!connues.has(id)) continue
+    if (!connues.has(id) || neufs.has(id)) continue
     if (parId.get(id)?.type !== 'personne') continue
     deplacees.push(id)
   }
