@@ -220,6 +220,67 @@ function monter(): { svg: ElementFactice; pilote: ReturnType<typeof construireCa
 
 /* ------------------------------------------------------------------ */
 
+describe('appliquerPositions — et la garantie que le chemin d’origine ne bouge pas', () => {
+  /** Tous les attributs qui décrivent la GÉOMÉTRIE du dessin, à plat. */
+  const geometrie = (racine: ElementFactice): string[] => {
+    const out: string[] = []
+    const visiter = (el: ElementFactice, chemin: string): void => {
+      const cle = `${chemin}/${el.tag}#${el.attributs['data-id'] ?? el.attributs['data-de'] ?? ''}`
+      out.push(`${cle} transform=${el.attributs['transform'] ?? '-'} d=${el.attributs['d'] ?? '-'}`)
+      el.enfants.forEach((enfant, i) => visiter(enfant, `${cle}[${i}]`))
+    }
+    visiter(racine, '')
+    return out
+  }
+
+  /** Le même graphe, mais tout le monde décalé : de quoi faire bouger le dessin. */
+  const decale = (): Graphe => {
+    const g = grapheEssai()
+    return { ...g, noeuds: g.noeuds.map((n) => ({ ...n, x: n.x + 250 })) }
+  }
+
+  it('NE POSE AUCUN transform tant qu’on ne lui demande rien', () => {
+    const { svg } = monter()
+
+    expect(geometrie(svg).every((l) => l.includes('transform=-'))).toBe(true)
+  })
+
+  it('déplace les fiches ET refait les tracés — les deux, jamais l’un seul', () => {
+    const { svg, pilote } = monter()
+    const avant = geometrie(svg)
+
+    pilote.appliquerPositions(decale())
+    const apres = geometrie(svg)
+
+    const transformesChanges = apres.filter((l, i) => l.split(' d=')[0] !== avant[i]!.split(' d=')[0])
+    const tracesChanges = apres.filter((l, i) => l.split(' d=')[1] !== avant[i]!.split(' d=')[1])
+
+    expect(transformesChanges.length).toBeGreaterThan(0)
+    expect(tracesChanges.length).toBeGreaterThan(0)
+  })
+
+  it('LE VA-ET-VIENT EST L’IDENTITÉ — c’est ce qui garantit la position finale', () => {
+    const { svg, pilote } = monter()
+    const origine = geometrie(svg)
+
+    pilote.appliquerPositions(decale())
+    pilote.figerLesPositions()
+
+    // **Au caractère près.** L'animation ne peut donc pas laisser l'arbre de
+    // travers : elle ne rattrape pas une position, elle retire un attribut.
+    expect(geometrie(svg)).toEqual(origine)
+  })
+
+  it('appelée avec le graphe d’origine, elle ne dérange rien', () => {
+    const { svg, pilote } = monter()
+    const origine = geometrie(svg)
+
+    pilote.appliquerPositions(grapheEssai())
+
+    expect(geometrie(svg)).toEqual(origine)
+  })
+})
+
 describe('construireCanevas', () => {
   it('empile les arêtes sous les familles, puis les fiches — après les définitions', () => {
     const { svg } = monter()

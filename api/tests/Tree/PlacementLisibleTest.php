@@ -700,6 +700,75 @@ final class PlacementLisibleTest extends TestCase
         );
     }
 
+    /**
+     * **I8 tient aussi quand une sœur est MARIÉE — et il ne tenait pas.**
+     *
+     * Un bloc n'est pas une personne : c'est une personne **et son conjoint**, et
+     * I6 met l'homme à gauche. Trier la fratrie sur la tête du bloc revenait donc,
+     * pour une sœur mariée, à la trier sur l'année de son **mari** — qui n'est pas
+     * de la fratrie, et dont l'année est souvent inconnue.
+     *
+     * Le cas synthétique précédent ne pouvait pas l'attraper : ses trois enfants
+     * sont célibataires. **Mesuré sur l'arbre réel le 20/09/2026 : dix fratries
+     * entièrement datables sur trente étaient dans le désordre**, dont quatre
+     * d'entre elles où l'aînée de 1820 finissait à droite de ses frères de 1823,
+     * 1825 et 1830, parce que son époux n'a pas de date.
+     *
+     * Ici : `s2` est née entre `s1` et `s3`, et elle épouse `m` qui n'a aucune
+     * année. Si le tri lit le mari, `s2` part en dernier.
+     */
+    public function testI8TientQuandUneSoeurEstMariee(): void
+    {
+        $apres = (new AffinageDuPlacement())->affine($this->fratrieMariee(), $this->jeuFratrieMariee());
+
+        $fratrie = ['s1', 's2', 's3'];
+        usort($fratrie, fn (string $a, string $b): int => $apres->noeuds[$a]->x <=> $apres->noeuds[$b]->x);
+
+        self::assertSame(
+            ['s1', 's2', 's3'],
+            $fratrie,
+            'La sœur mariée est triée sur l’année de son époux, pas sur la sienne.',
+        );
+    }
+
+    private function jeuFratrieMariee(): JeuDePlacement
+    {
+        return new JeuDePlacement(
+            [
+                self::fiche('s1', Sex::Masculin, 1900),
+                self::fiche('s2', Sex::Feminin, 1905),
+                self::fiche('s3', Sex::Masculin, 1910),
+                // L'époux rapporté : AUCUNE année. C'est lui qui faussait le tri.
+                self::fiche('m', Sex::Masculin, null),
+            ],
+            [],
+            's1',
+        );
+    }
+
+    /** Trois enfants, et `s2` — celle du milieu — épouse `m`, sans date. */
+    private function fratrieMariee(): Placement
+    {
+        $noeuds = [
+            's1' => new NoeudPlace('s1', 0.0, 0.0, 100, MoteurDePlacement::H_FICHE),
+            's2' => new NoeudPlace('s2', 120.0, 0.0, 100, MoteurDePlacement::H_FICHE),
+            'm' => new NoeudPlace('m', 240.0, 0.0, 100, MoteurDePlacement::H_FICHE),
+            's3' => new NoeudPlace('s3', 360.0, 0.0, 100, MoteurDePlacement::H_FICHE),
+            'fP' => new NoeudPlace('fP', 180.0, -104.0, MoteurDePlacement::LOSANGE_L, MoteurDePlacement::LOSANGE_H),
+            'fM' => new NoeudPlace('fM', 180.0, 46.0, MoteurDePlacement::LOSANGE_L, MoteurDePlacement::LOSANGE_H),
+        ];
+
+        $aretes = [
+            AreteDePlacement::filiation('fP', 's1'),
+            AreteDePlacement::filiation('fP', 's2'),
+            AreteDePlacement::filiation('fP', 's3'),
+            AreteDePlacement::union('s2', 'fM', false),
+            AreteDePlacement::union('m', 'fM', false),
+        ];
+
+        return new Placement($noeuds, $aretes, new BoiteEnglobante(-200, -300, 1200, 700), 's1');
+    }
+
     /** Une fratrie de trois, une de deux, et `g3` épouse `q2`. */
     private function deuxFratries(): Placement
     {

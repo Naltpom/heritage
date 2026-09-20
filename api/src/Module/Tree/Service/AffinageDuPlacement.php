@@ -501,7 +501,13 @@ final class AffinageDuPlacement
 
         // I8 : dans une fratrie, l'ordre des naissances.
         foreach ($groupes as $cle => $membres) {
-            usort($membres, fn (array $a, array $b): int => $this->cleDeNaissance($a) <=> $this->cleDeNaissance($b));
+            $famille = str_starts_with($cle, 'seul:') ? null : $cle;
+
+            usort(
+                $membres,
+                fn (array $a, array $b): int => $this->cleDeNaissance($a, $famille)
+                    <=> $this->cleDeNaissance($b, $famille),
+            );
             $groupes[$cle] = $membres;
         }
 
@@ -595,14 +601,42 @@ final class AffinageDuPlacement
      * Une année inconnue passe en dernier plutôt qu'en premier : à l'année zéro,
      * elle prendrait la tête de toutes les fratries de l'arbre.
      *
+     * ── L'année DE QUI, et c'est tout le sujet ──────────────────────────────
+     *
+     * Un bloc n'est pas une personne : c'est une personne **et son conjoint**, et
+     * I6 met l'homme à gauche. Lire `$bloc[0]` revient donc, pour une sœur mariée,
+     * à trier la fratrie sur l'année de son **mari** — qui n'en fait pas partie, et
+     * dont l'année est souvent inconnue.
+     *
+     * Mesuré le 20/09/2026 sur l'arbre réel, avant correction : **dix fratries
+     * entièrement datables sur trente étaient dans le désordre.** Dans l'une d'elles,
+     * l'aînée née en 1820 passait après ses trois frères de 1823, 1825 et 1830, parce
+     * que son époux n'a pas de date et tombait donc à 9999.
+     *
+     * On prend donc l'année du membre **qui est enfant de la famille triée**, et
+     * l'on ne retombe sur la tête du bloc que lorsqu'aucune ancre n'est connue.
+     *
      * @param list<string> $bloc
+     * @param string|null  $famille la fratrie qu'on est en train d'ordonner
      */
-    private function cleDeNaissance(array $bloc): string
+    private function cleDeNaissance(array $bloc, ?string $famille = null): string
     {
-        $tete = $bloc[0] ?? '';
-        $annee = $this->annees[$tete] ?? null;
+        $sujet = $bloc[0] ?? '';
 
-        return \sprintf('%04d|%s', $annee ?? 9999, $tete);
+        if (null !== $famille) {
+            $fratrie = $this->enfants[$famille] ?? [];
+
+            foreach ($bloc as $membre) {
+                if (\in_array($membre, $fratrie, true)) {
+                    $sujet = $membre;
+                    break;
+                }
+            }
+        }
+
+        $annee = $this->annees[$sujet] ?? null;
+
+        return \sprintf('%04d|%s', $annee ?? 9999, $sujet);
     }
 
     /** @param list<string> $bloc */

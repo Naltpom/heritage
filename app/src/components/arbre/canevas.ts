@@ -111,6 +111,28 @@ export interface PiloteCanevas {
   toutAfficher: () => void
   marquerTrouves: (ids: ReadonlySet<string>) => void
   effacerRecherche: () => void
+  /**
+   * **Déplace ce qui est déjà dessiné, sans rien reconstruire.**
+   *
+   * Le canevas est bâti une fois : les 460 fiches, les 178 losanges et les 641
+   * tracés sont créés par `createElementNS` et insérés une seule fois. Rejouer
+   * `construireCanevas` à chaque image d'une animation recréerait mille trois
+   * cents éléments soixante fois par seconde — ce n'est pas une option.
+   *
+   * Cette méthode écrit donc **un `transform` par groupe** et **un `d` par
+   * tracé**. Les deux sont nécessaires et le second est le piège : une fiche est
+   * un `<g>` qu'une translation suffit à bouger, mais une arête est un chemin
+   * dont la forme dépend des DEUX extrémités. Ne translater que les cartes
+   * laisserait les traits sur place.
+   *
+   * **Le graphe passé ne change pas l'état construit.** Rappeler la méthode avec
+   * le graphe d'origine remet tout exactement où c'était, et `figerLesPositions`
+   * efface les `transform` : la position finale reste celle de la construction,
+   * au pixel près.
+   */
+  appliquerPositions: (deplace: Graphe) => void
+  /** Retire les `transform` posés par {@link appliquerPositions}. */
+  figerLesPositions: () => void
   /** Le nœud sous un événement de souris, ou `null` hors d'une fiche. */
   noeudSousLeCurseur: (cible: EventTarget | null) => NoeudGraphe | null
   boiteDe: (id: string) => BoiteCentree | null
@@ -187,8 +209,48 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
 
   const boiteDe = (id: string): BoiteCentree | null => index.parId.get(id) ?? null
 
+  /** Les abscisses **de construction**, seule référence des translations. */
+  const abscisseDOrigine = new Map<string, number>(graphe.noeuds.map((n) => [n.id, n.x]))
+
   return {
     index,
+
+    appliquerPositions(deplace) {
+      const idx = indexer(deplace)
+
+      const translater = (groupes: Map<string, SVGGElement>): void => {
+        for (const [id, el] of groupes) {
+          const arrivee = idx.parId.get(id)
+          const depart = abscisseDOrigine.get(id)
+          if (arrivee === undefined || depart === undefined) continue
+
+          const dx = arrivee.x - depart
+          if (dx === 0) el.removeAttribute('transform')
+          else el.setAttribute('transform', `translate(${dx} 0)`)
+        }
+      }
+
+      translater(fiches)
+      translater(familles)
+
+      const traces = new Map<string, string>()
+      for (const tracee of tracerAretes(idx, deplace.aretes)) {
+        traces.set(`${tracee.de}\u0000${tracee.vers}`, tracee.d)
+      }
+      for (const arete of aretes) {
+        const d = traces.get(`${arete.de}\u0000${arete.vers}`)
+        if (d !== undefined) arete.el.setAttribute('d', d)
+      }
+    },
+
+    figerLesPositions() {
+      for (const el of fiches.values()) el.removeAttribute('transform')
+      for (const el of familles.values()) el.removeAttribute('transform')
+      for (const tracee of tracerAretes(index, graphe.aretes)) {
+        const arete = aretes.find((a) => a.de === tracee.de && a.vers === tracee.vers)
+        if (arete !== undefined) arete.el.setAttribute('d', tracee.d)
+      }
+    },
 
     appliquerViewBox(vb) {
       svg.setAttribute('viewBox', viewBoxEnTexte(vb))

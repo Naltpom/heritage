@@ -22,6 +22,10 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import type { AreteGraphe, Graphe, NoeudGraphe } from '@/lib/api'
 import {
+  echangerVersLUnionNonRompue,
+  famillesRompues,
+  FRATRIE_CONSEQUENTE,
+  separerLesGrossesFratries,
   ITERATIONS,
   modeleLocal,
   mouvements,
@@ -31,6 +35,7 @@ import {
   ressortsIsotoniques,
   losangesHorsDeLeursEpoux,
   sommeDesCarres,
+  unions,
   voisinage,
 } from './ressorts'
 import { croisementsMinimises } from './croisements'
@@ -267,6 +272,76 @@ describe('une rangée sous bornes', () => {
 
 /* ------------------------------------------------------------------ */
 
+describe('la séparation des grosses fratries', () => {
+  // Deux fratries de trois, et l'un des VERT épouse l'une des BLEU. Le serveur
+  // les a collés, donc l'épouse a été tirée hors des siens.
+  const rangee = [
+    personne('VERT1', 0, 0),
+    personne('VERT2', 120, 0),
+    personne('VERT3', 240, 0),
+    personne('BLEU2', 360, 0), // tirée près de VERT3, loin de sa fratrie
+    personne('BLEU1', 480, 0),
+    personne('BLEU3', 600, 0),
+  ]
+  const aretes = [
+    f('fV', 'VERT1'),
+    f('fV', 'VERT2'),
+    f('fV', 'VERT3'),
+    f('fB', 'BLEU1'),
+    f('fB', 'BLEU2'),
+    f('fB', 'BLEU3'),
+    u('VERT3', 'fC'),
+    u('BLEU2', 'fC'),
+  ]
+
+  const ordre = (x: Map<string, number>): string[] =>
+    [...x.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id)
+
+  it('RAMÈNE l’époux tiré hors des siens, et les deux fratries redeviennent contiguës', () => {
+    const resultat = ordre(separerLesGrossesFratries(rangee, aretes, 3))
+
+    const positions = (ids: string[]): number[] => ids.map((id) => resultat.indexOf(id)).sort((a, b) => a - b)
+    const contigue = (ids: string[]): boolean => {
+      const p = positions(ids)
+      return p[p.length - 1]! - p[0]! === p.length - 1
+    }
+
+    expect(contigue(['VERT1', 'VERT2', 'VERT3'])).toBe(true)
+    expect(contigue(['BLEU1', 'BLEU2', 'BLEU3'])).toBe(true)
+  })
+
+  it('ne touche à RIEN sous le seuil', () => {
+    const avant = ordre(new Map(rangee.map((n) => [n.id, n.x])))
+    const apres = ordre(separerLesGrossesFratries(rangee, aretes, 4))
+
+    expect(apres).toEqual(avant)
+  })
+
+  it('ne s’applique PAS à une union rompue — la règle du remariage l’emporte', () => {
+    const rompue = aretes.map((a) =>
+      a.genre === 'union' && a.vers === 'fC' ? ({ ...a, divorce: true } as typeof a) : a,
+    )
+    const avant = ordre(new Map(rangee.map((n) => [n.id, n.x])))
+
+    expect(ordre(separerLesGrossesFratries(rangee, rompue, 3))).toEqual(avant)
+  })
+
+  it('garde la rangée à la même largeur : elle permute des occupants, pas des écarts', () => {
+    const avant = [...rangee.map((n) => n.x)].sort((a, b) => a - b)
+    const apres = [...separerLesGrossesFratries(rangee, aretes, 3).values()].sort((a, b) => a - b)
+
+    expect(apres).toEqual(avant)
+  })
+
+  it('le seuil du dossier est TROIS, et c’est une décision mesurée', () => {
+    // À 2, une fratrie de deux serait « conséquente » (12 couples séparés sur
+    // l'arbre réel) ; à 4, il n'en reste qu'UN. Trois en sépare huit.
+    expect(FRATRIE_CONSEQUENTE).toBe(3)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+
 describe('le modèle local', () => {
   // AIEUL x AIEULE -> PERE ; PERE x MERE -> FILS.
   const aretes = [
@@ -343,6 +418,65 @@ describe('les rangées', () => {
   it('vont de haut en bas : les parents avant les enfants', () => {
     const noeuds = [personne('BAS', 0, 300), personne('HAUT', 0, 0), personne('MILIEU', 0, 150)]
     expect(rangeesCompletes(noeuds).map((r) => r[0]!.id)).toEqual(['HAUT', 'MILIEU', 'BAS'])
+  })
+})
+
+/* ------------------------------------------------------------------ */
+
+describe('la règle de l’union non rompue', () => {
+  // EPOUX a deux unions sur la même rangée : ROMPUE colle à lui, INTACTE est loin.
+  const noeuds = [
+    personne('EPOUX', 0, 0),
+    personne('ROMPUE', 120, 0),
+    personne('PASSANT', 240, 0),
+    personne('INTACTE', 360, 0),
+  ]
+  const aretes = [
+    u('EPOUX', 'fa'),
+    u('ROMPUE', 'fa'),
+    u('EPOUX', 'fb'),
+    u('INTACTE', 'fb'),
+  ]
+  const rompues = new Set(['fa'])
+
+  it('échange les deux conjoints, et ne touche pas à la personne', () => {
+    const x = echangerVersLUnionNonRompue(noeuds, unions(aretes), rompues)
+
+    expect(x.get('EPOUX')).toBe(0) // la personne ne bouge pas
+    expect(x.get('INTACTE')).toBe(120) // l'intacte prend la place accolée
+    expect(x.get('ROMPUE')).toBe(360) // la rompue prend celle de l'intacte
+    expect(x.get('PASSANT')).toBe(240) // le reste de la rangée ne bouge pas
+  })
+
+  it('ne fait RIEN quand l’union accolée n’est pas rompue', () => {
+    const x = echangerVersLUnionNonRompue(noeuds, unions(aretes), new Set(['fb']))
+
+    expect(x.get('ROMPUE')).toBe(120)
+    expect(x.get('INTACTE')).toBe(360)
+  })
+
+  it('ne fait RIEN quand TOUTES les unions sont rompues — l’ordre reçu vaut', () => {
+    const x = echangerVersLUnionNonRompue(noeuds, unions(aretes), new Set(['fa', 'fb']))
+
+    expect(x.get('ROMPUE')).toBe(120)
+    expect(x.get('INTACTE')).toBe(360)
+  })
+
+  it('ignore un conjoint qui n’est pas sur la même rangée', () => {
+    const ailleurs = [...noeuds.slice(0, 3), personne('INTACTE', 360, 150)]
+    const x = echangerVersLUnionNonRompue(ailleurs, unions(aretes), rompues)
+
+    expect(x.get('ROMPUE')).toBe(120)
+  })
+
+  it('lit le divorce sur l’arête d’union', () => {
+    const avec = [
+      { de: 'EPOUX', vers: 'fa', genre: 'union', divorce: true },
+      { de: 'ROMPUE', vers: 'fa', genre: 'union', divorce: true },
+      { de: 'EPOUX', vers: 'fb', genre: 'union' },
+    ] as unknown as AreteGraphe[]
+
+    expect([...famillesRompues(avec)]).toEqual(['fa'])
   })
 })
 
@@ -507,15 +641,118 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
     }
   })
 
-  it('n’accole pas PLUS de couples que le serveur : la règle du remariage tient', () => {
-    const avant = mesurerLisibilite(g)
-    const gagne = mesurerLisibilite(apres)
+  it('NE LAISSE SÉPARÉE AUCUNE UNION INTACTE quand l’autre est rompue', () => {
+    const rompues = famillesRompues(g.aretes)
+    expect(rompues.size).toBeGreaterThan(0) // témoin : la charge porte bien des divorces
 
-    expect(gagne.couples).toBe(avant.couples)
-    // Les séparés du serveur sont les remariages. En descendre en dessous
-    // signifierait encadrer un remarié entre ses deux conjoints — la règle dit
-    // que l'union sans enfant garde le trait long.
-    expect(gagne.separes).toBeGreaterThanOrEqual(avant.separes)
+    const x = new Map(apres.noeuds.map((n) => [n.id, n.x]))
+    const yy = new Map(apres.noeuds.map((n) => [n.id, n.y]))
+    const rangees = new Map<number, string[]>()
+    for (const n of apres.noeuds) {
+      if (n.type !== 'personne') continue
+      rangees.set(n.y, [...(rangees.get(n.y) ?? []), n.id])
+    }
+    const rang = new Map<string, number>()
+    for (const [, ids] of rangees) {
+      ids.sort((p, q) => x.get(p)! - x.get(q)!)
+      ids.forEach((id, i) => rang.set(id, i))
+    }
+
+    const liens = unions(apres.aretes)
+
+    // **Pour chaque personne à plusieurs unions sur une même rangée : si l'une de
+    // ses unions est rompue et une autre ne l'est pas, ce n'est PAS la rompue qui
+    // doit être la plus proche.** C'est la règle, énoncée sur ce qu'elle interdit.
+    for (const [personne, familles] of liens.familles) {
+      if (familles.length < 2) continue
+
+      const candidats = familles
+        .map((famille) => ({
+          famille,
+          conjoint: (liens.epoux.get(famille) ?? []).find((id) => id !== personne),
+        }))
+        .filter((c): c is { famille: string; conjoint: string } => c.conjoint !== undefined)
+        .filter((c) => yy.get(c.conjoint) === yy.get(personne))
+        .map((c) => ({
+          rompue: rompues.has(c.famille),
+          ecart: Math.abs(rang.get(c.conjoint)! - rang.get(personne)!),
+        }))
+
+      if (candidats.length < 2) continue
+      if (!candidats.some((c) => c.rompue) || !candidats.some((c) => !c.rompue)) continue
+
+      const plusProche = candidats.reduce((a, b) => (b.ecart < a.ecart ? b : a))
+      expect(plusProche.rompue).toBe(false)
+    }
+  })
+
+  it('TOUTE FRATRIE D’UN COUPLE SÉPARÉ RESTE ENTIÈRE — dont celle des grands-parents', () => {
+    const enfants = new Map<string, string[]>()
+    const familleDesParents = new Map<string, string>()
+    for (const a of g.aretes) {
+      if (a.genre !== 'filiation') continue
+      enfants.set(a.de, [...(enfants.get(a.de) ?? []), a.vers])
+      familleDesParents.set(a.vers, a.de)
+    }
+    const epx = new Map<string, string[]>()
+    for (const a of g.aretes) {
+      if (a.genre === 'union') epx.set(a.vers, [...(epx.get(a.vers) ?? []), a.de])
+    }
+
+    const x = new Map(apres.noeuds.map((n) => [n.id, n.x]))
+    const yy = new Map(apres.noeuds.map((n) => [n.id, n.y]))
+    const rang = new Map<string, number>()
+    const parRangee = new Map<number, string[]>()
+    for (const n of apres.noeuds) {
+      if (n.type !== 'personne') continue
+      parRangee.set(n.y, [...(parRangee.get(n.y) ?? []), n.id])
+    }
+    for (const [, ids] of parRangee) {
+      ids.sort((p, q) => x.get(p)! - x.get(q)!)
+      ids.forEach((id, i) => rang.set(id, i))
+    }
+
+    let verifiees = 0
+    for (const [famille, membres] of epx) {
+      if (membres.length !== 2) continue
+      const [a, b] = membres as [string, string]
+      if (yy.get(a) !== yy.get(b)) continue
+
+      const fa = familleDesParents.get(a)
+      const fb = familleDesParents.get(b)
+      if (fa === undefined || fb === undefined) continue
+      if ((enfants.get(fa) ?? []).length < FRATRIE_CONSEQUENTE) continue
+      if ((enfants.get(fb) ?? []).length < FRATRIE_CONSEQUENTE) continue
+      if (famillesRompues(g.aretes).has(famille)) continue
+
+      // **Les deux fratries ne s'entrelacent pas** : c'est ça, « chacun reste
+      // entier au milieu des siens ». On n'exige PAS que chaque fratrie soit
+      // contiguë au sens étroit — le conjoint d'un frère s'assied à côté de lui,
+      // donc à l'intérieur de l'intervalle, et c'est normal. Mesuré le
+      // 20/09/2026 : l'assertion étroite échouait sur une fratrie de trois dont
+      // l'intervalle vaut onze, uniquement peuplé de conjoints.
+      //
+      // Le cas le plus lourd de l'arbre — une fratrie de neuf alliée à une de
+      // sept — passe par ici **sans être nommé** : aucune personne réelle
+      // n'entre dans le dépôt (ADR 0006).
+      const places = (fratrie: string[]): number[] =>
+        fratrie
+          .map((id) => rang.get(id))
+          .filter((r): r is number => r !== undefined)
+          .sort((p, q) => p - q)
+
+      const pa = places(enfants.get(fa) ?? [])
+      const pb = places(enfants.get(fb) ?? [])
+      if (pa.length < 2 || pb.length < 2) continue
+
+      const disjointes =
+        pa[pa.length - 1]! < pb[0]! || pb[pb.length - 1]! < pa[0]!
+
+      expect(disjointes).toBe(true)
+      verifiees += 1
+    }
+
+    expect(verifiees).toBeGreaterThan(0) // témoin : des cas existent bien
   })
 
   it('RESSERRE LES TRAITS : la somme des carrés passe SOUS celle du serveur', () => {
@@ -541,8 +778,13 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
     // qu'elle imite. On borne donc le NOMBRE, et par ce que fait le serveur.
     const serveur = losangesHorsDeLeursEpoux(epoux, new Map(g.noeuds.map((n) => [n.id, n.x])))
 
+    // **La borne se lit en trois temps, mesurés le 20/09/2026 :** 63 chez le
+    // serveur, 68 après le solveur et la règle de l'union non rompue, 70 après la
+    // séparation des grosses fratries. Cette dernière en coûte donc DEUX, et c'est
+    // le prix de l'arbitrage choisi : un couple séparé a un trait d'union long, et
+    // son losange, tiré par les enfants, sort plus facilement de l'intervalle.
     expect(serveur.combien).toBeGreaterThan(50)
-    expect(combien).toBeLessThanOrEqual(serveur.combien + 5)
+    expect(combien).toBeLessThanOrEqual(serveur.combien + 10)
     expect(depassementMaximal).toBeLessThan(serveur.depassementMaximal * 1.5)
   })
 

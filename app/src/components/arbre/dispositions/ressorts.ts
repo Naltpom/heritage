@@ -446,6 +446,254 @@ export function rangeesCompletes(noeuds: readonly NoeudGraphe[]): NoeudGraphe[][
 }
 
 /* ------------------------------------------------------------------ */
+/* La règle sémantique, appliquée AVANT le placement                   */
+/* ------------------------------------------------------------------ */
+
+/** Les familles dont l'union est rompue, lues sur les arêtes d'union. */
+export function famillesRompues(aretes: readonly AreteGraphe[]): Set<IdentifiantNoeud> {
+  const rompues = new Set<IdentifiantNoeud>()
+
+  for (const arete of aretes) {
+    if (arete.genre === 'union' && arete.divorce === true) rompues.add(arete.vers)
+  }
+
+  return rompues
+}
+
+/** Les époux de chaque famille, et les familles de chaque époux. */
+export function unions(aretes: readonly AreteGraphe[]): {
+  epoux: Map<IdentifiantNoeud, IdentifiantNoeud[]>
+  familles: Map<IdentifiantNoeud, IdentifiantNoeud[]>
+} {
+  const epoux = new Map<IdentifiantNoeud, IdentifiantNoeud[]>()
+  const familles = new Map<IdentifiantNoeud, IdentifiantNoeud[]>()
+
+  for (const arete of aretes) {
+    if (arete.genre !== 'union') continue
+    epoux.set(arete.vers, [...(epoux.get(arete.vers) ?? []), arete.de])
+    familles.set(arete.de, [...(familles.get(arete.de) ?? []), arete.vers])
+  }
+
+  return { epoux, familles }
+}
+
+/**
+ * **Le conjoint accolé est celui de l'union NON ROMPUE.**
+ *
+ * Une personne à deux unions ne peut être accolée qu'à un seul de ses conjoints.
+ * Jusqu'ici c'était celui qui porte les enfants — et sur l'arbre réel, ça dessinait
+ * **l'ex-épouse collée et la compagne actuelle reléguée à trois rangs**. Ce n'est pas
+ * une maladresse d'affichage : c'est une information fausse pour qui lit l'arbre.
+ *
+ * La règle devient donc : **l'union non rompue d'abord** ; à défaut — plusieurs
+ * ruptures, ou aucune information — celle qui porte des enfants, comme avant.
+ *
+ * ## C'est un échange d'ORDRE, et il a lieu AVANT PAVA
+ *
+ * PAVA place, il ne réordonne pas : aucun jeu sur les poids ne peut rendre adjacente
+ * une personne séparée de trois rangs. Il faut donc **échanger les deux conjoints dans
+ * la rangée**, et le faire avant la relaxation — **une contrainte sémantique se pose
+ * d'abord, l'optimisation travaille dessous.**
+ *
+ * L'échange porte sur les abscisses des deux CONJOINTS, pas sur celle de la personne :
+ * le reste de la rangée ne bouge pas, et PAVA rétablit ensuite les écarts. Mesuré sur
+ * l'arbre réel : **deux cas changent**, et les six autres remariés ne bougent pas.
+ */
+export function echangerVersLUnionNonRompue(
+  noeuds: readonly NoeudGraphe[],
+  liens: { epoux: Map<IdentifiantNoeud, IdentifiantNoeud[]>; familles: Map<IdentifiantNoeud, IdentifiantNoeud[]> },
+  rompues: ReadonlySet<IdentifiantNoeud>,
+): Map<IdentifiantNoeud, number> {
+  const x = new Map(noeuds.map((n) => [n.id, n.x]))
+  const y = new Map(noeuds.map((n) => [n.id, n.y]))
+
+  for (const [personne, familles] of liens.familles) {
+    if (familles.length < 2) continue
+
+    const mienne = x.get(personne)
+    const rangee = y.get(personne)
+    if (mienne === undefined || rangee === undefined) continue
+
+    const candidats = familles
+      .map((famille) => ({ famille, conjoint: (liens.epoux.get(famille) ?? []).find((id) => id !== personne) }))
+      .filter((c): c is { famille: IdentifiantNoeud; conjoint: IdentifiantNoeud } => c.conjoint !== undefined)
+      .filter((c) => y.get(c.conjoint) === rangee)
+      .map((c) => ({
+        famille: c.famille,
+        conjoint: c.conjoint,
+        ecart: Math.abs((x.get(c.conjoint) ?? 0) - mienne),
+        rompue: rompues.has(c.famille),
+      }))
+
+    if (candidats.length < 2) continue
+
+    const plusProche = candidats.reduce((a, b) => (b.ecart < a.ecart ? b : a))
+    if (!plusProche.rompue) continue
+
+    const intacts = candidats.filter((c) => !c.rompue)
+    if (intacts.length === 0) continue
+
+    const repris = intacts.reduce((a, b) => (b.ecart < a.ecart ? b : a))
+    const ici = x.get(plusProche.conjoint)
+    const la = x.get(repris.conjoint)
+    if (ici === undefined || la === undefined) continue
+
+    x.set(plusProche.conjoint, la)
+    x.set(repris.conjoint, ici)
+  }
+
+  return x
+}
+
+/**
+ * **À partir de combien d'enfants une fratrie est-elle « conséquente ».**
+ *
+ * Trois, et c'est une décision, pas une constante technique. Mesuré le
+ * 20/09/2026 sur l'arbre réel, le nombre de couples que la règle sépare tombe
+ * d'une falaise :
+ *
+ * | seuil | couples séparés |
+ * |---|---|
+ * | 2 | 12 |
+ * | **3** | **8** |
+ * | 4 | 1 |
+ * | 5 et au-delà | 1 |
+ *
+ * À deux, une fratrie de deux enfants serait « conséquente » et la règle perdrait
+ * son sens. À quatre, il ne reste qu'un seul cas dans tout l'arbre. **Trois est le
+ * seul seuil où la règle décrit une famille nombreuse sans devenir anecdotique.**
+ */
+export const FRATRIE_CONSEQUENTE = 3
+
+/**
+ * **Quand les deux époux viennent d'une grosse fratrie, le couple cède : chacun
+ * reste entier au milieu des siens, et le trait d'union s'allonge.**
+ *
+ * C'est l'arbitrage du commanditaire, et il est **l'inverse de celui du
+ * serveur** : `PlacementLisibleTest::testLeCoupleRejointLaPlusGrandeDesDeuxFratries`
+ * garde le couple ensemble et casse la plus petite fratrie. Les deux lectures de
+ * la phrase « sauf si le poids des deux familles est conséquent » étaient
+ * défendables ; il a choisi celle-ci. **La maquette porte la sienne, le serveur
+ * garde la sienne** — c'est à ça qu'une maquette sert, et c'est ce qui permet de
+ * les comparer à l'écran.
+ *
+ * ## Elle ne s'applique PAS à une union rompue
+ *
+ * Un remariage est déjà traité par {@link echangerVersLUnionNonRompue}, qui
+ * rapproche le conjoint intact. Appliquer les deux règles au même couple
+ * reviendrait à le rapprocher puis à l'éloigner. **La rupture l'emporte** : une
+ * union rompue n'est pas un couple à garder ensemble, donc la question du poids
+ * des fratries ne se pose pas pour elle.
+ *
+ * ## Ce que « rester entier » veut dire ici
+ *
+ * L'époux qui a été tiré hors de sa fratrie y **revient par le côté d'où il
+ * venait**. On ne prétend pas connaître son rang de naissance : la charge du
+ * client ne porte aucune date, et `etiquetteDates` vaut `vivant·e` pour les
+ * vivants. Ce que la règle garantit est que **les deux fratries redeviennent
+ * contiguës**, pas que l'aîné soit à gauche — cet ordre-là appartient au serveur,
+ * qui a les vraies dates.
+ */
+export function separerLesGrossesFratries(
+  noeuds: readonly NoeudGraphe[],
+  aretes: readonly AreteGraphe[],
+  seuil: number = FRATRIE_CONSEQUENTE,
+): Map<IdentifiantNoeud, number> {
+  const x = new Map(noeuds.map((n) => [n.id, n.x]))
+  const liens = unions(aretes)
+  const rompues = famillesRompues(aretes)
+
+  const enfants = new Map<IdentifiantNoeud, IdentifiantNoeud[]>()
+  const familleDesParents = new Map<IdentifiantNoeud, IdentifiantNoeud>()
+  for (const arete of aretes) {
+    if (arete.genre !== 'filiation') continue
+    enfants.set(arete.de, [...(enfants.get(arete.de) ?? []), arete.vers])
+    familleDesParents.set(arete.vers, arete.de)
+  }
+
+  // **Le tronc du lecteur ne se remanie pas.** Le serveur l'isole entre les deux
+  // ascendances (I10), et réattribuer ses emplacements le fait dériver dans
+  // l'ascendance paternelle — mesuré le 20/09/2026 : un nœud de tronc à −3 407 px
+  // alors que le côté paternel s'arrêtait à −218. Il est donc retiré des rangées
+  // avant le remaniement, et ses abscisses restent celles qu'il avait.
+  const tronc = troncDuLecteur(noeuds)
+
+  // Les rangées de personnes, dans l'ordre reçu.
+  const rangees = new Map<number, IdentifiantNoeud[]>()
+  for (const noeud of noeuds) {
+    if (noeud.type !== 'personne') continue
+    if (tronc.has(noeud.id)) continue
+    rangees.set(noeud.y, [...(rangees.get(noeud.y) ?? []), noeud.id])
+  }
+  for (const ids of rangees.values()) ids.sort((a, b) => (x.get(a) ?? 0) - (x.get(b) ?? 0))
+
+  const rangeeDe = new Map<IdentifiantNoeud, number>()
+  for (const [y, ids] of rangees) for (const id of ids) rangeeDe.set(id, y)
+
+  /** Les époux à ramener dans leur fratrie, par rangée. */
+  const aRamener = new Map<number, IdentifiantNoeud[]>()
+
+  for (const [famille, membres] of liens.epoux) {
+    if (membres.length !== 2) continue
+    if (rompues.has(famille)) continue
+
+    const [a, b] = membres as [IdentifiantNoeud, IdentifiantNoeud]
+    const y = rangeeDe.get(a)
+    if (y === undefined || y !== rangeeDe.get(b)) continue
+
+    const fa = familleDesParents.get(a)
+    const fb = familleDesParents.get(b)
+    if (fa === undefined || fb === undefined) continue
+    if ((enfants.get(fa) ?? []).length < seuil) continue
+    if ((enfants.get(fb) ?? []).length < seuil) continue
+
+    aRamener.set(y, [...(aRamener.get(y) ?? []), a, b])
+  }
+
+  for (const [y, epouxDeLaRangee] of aRamener) {
+    let ordre = [...(rangees.get(y) ?? [])]
+
+    for (const personne of epouxDeLaRangee) {
+      const sienne = familleDesParents.get(personne)
+      if (sienne === undefined) continue
+
+      const fratrie = (enfants.get(sienne) ?? []).filter((id) => id !== personne)
+      const places = fratrie
+        .map((id) => ordre.indexOf(id))
+        .filter((i) => i >= 0)
+        .sort((p, q) => p - q)
+
+      if (places.length === 0) continue
+
+      const ici = ordre.indexOf(personne)
+      if (ici < 0) continue
+
+      // Déjà collé à l'un des siens : rien à faire.
+      if (places.some((i) => Math.abs(i - ici) === 1)) continue
+
+      const premier = places[0]!
+      const dernier = places[places.length - 1]!
+      const sansLui = ordre.filter((id) => id !== personne)
+      const decalage = ici < premier ? 0 : 1
+
+      // Il revient par le côté d'où il venait : à gauche de sa fratrie s'il était
+      // à sa gauche, à droite sinon.
+      const cible = ici < premier ? premier - decalage : dernier - decalage + 1
+
+      sansLui.splice(cible, 0, personne)
+      ordre = sansLui
+    }
+
+    // Les emplacements du serveur, réattribués dans le nouvel ordre : la rangée
+    // garde exactement sa largeur et ses écarts, seuls les occupants changent.
+    const emplacements = (rangees.get(y) ?? []).map((id) => x.get(id) ?? 0).sort((p, q) => p - q)
+    ordre.forEach((id, i) => x.set(id, emplacements[i] ?? (x.get(id) ?? 0)))
+  }
+
+  return x
+}
+
+/* ------------------------------------------------------------------ */
 /* La relaxation                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -602,20 +850,46 @@ export function mouvements(
  * qu'elles coûtent.
  */
 export function ressortsIsotoniques(graphe: Graphe, _options: OptionsDeDisposition): Graphe {
-  const rangees = rangeesCompletes(graphe.noeuds)
+  if (graphe.noeuds.length === 0) return graphe
+
+  // **La règle sémantique d'abord, l'optimisation dessous.** L'échange des conjoints
+  // change l'ORDRE, il doit donc précéder PAVA qui place sans réordonner.
+  const echange = echangerVersLUnionNonRompue(
+    graphe.noeuds,
+    unions(graphe.aretes),
+    famillesRompues(graphe.aretes),
+  )
+  const apresEchange = graphe.noeuds.map((n) => {
+    const abscisse = echange.get(n.id)
+    return abscisse === undefined || abscisse === n.x ? n : { ...n, x: abscisse }
+  })
+
+  // Puis la seconde règle sémantique : les grosses fratries restent entières.
+  // Elle vient APRÈS l'échange, parce qu'elle ne s'applique qu'aux unions non
+  // rompues et doit donc voir l'ordre que l'échange a déjà arrêté.
+  const separe = separerLesGrossesFratries(apresEchange, graphe.aretes)
+  const reordonne: Graphe = {
+    ...graphe,
+    noeuds: apresEchange.map((n) => {
+      const abscisse = separe.get(n.id)
+      return abscisse === undefined || abscisse === n.x ? n : { ...n, x: abscisse }
+    }),
+  }
+
+  const rangees = rangeesCompletes(reordonne.noeuds)
   if (rangees.length === 0) return graphe
 
-  const voisins = voisinage(graphe.aretes)
-  const figes = troncDuLecteur(graphe.noeuds)
-  let x: ReadonlyMap<IdentifiantNoeud, number> = new Map(graphe.noeuds.map((n) => [n.id, n.x]))
+  const voisins = voisinage(reordonne.aretes)
+  const figes = troncDuLecteur(reordonne.noeuds)
+  let x: ReadonlyMap<IdentifiantNoeud, number> = new Map(reordonne.noeuds.map((n) => [n.id, n.x]))
 
   for (let tour = 0; tour < ITERATIONS; tour += 1) {
     x = unTour(voisins, rangees, figes, x).positions
   }
 
   const borne = x
-  const origine = borne.get(graphe.ego) ?? 0
-  const noeuds = graphe.noeuds.map((noeud) => {
+  const origine = borne.get(reordonne.ego) ?? 0
+  const noeuds = reordonne.noeuds.map((noeud) => {
     const valeur = borne.get(noeud.id)
     if (valeur === undefined) return noeud
     const abscisse = valeur - origine
