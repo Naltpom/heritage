@@ -181,12 +181,35 @@ describe('MentionDeRattachement.vue', () => {
   })
 
   /**
-   * Les deux états qui retombent n'ont pas le même poids visuel, et ce n'est
-   * pas décoratif : `inactif` a son bouton de réparation sur la ligne, `absent`
-   * n'en a aucun. Le ton d'alerte est réservé à celui qu'aucun clic ne referme.
+   * **Aucune alerte rouge sur le compte d'amorçage.** `membre === null` ne
+   * désigne en pratique que lui — un compte né d'une invitation a toujours une
+   * ligne `mbr_member` —, et il retombe sur une racine qui est justement sa
+   * fiche. Un voyant rouge permanent sur la ligne du propriétaire apprendrait à
+   * l'administrateur que le rouge de cet écran ne veut rien dire.
+   *
+   * Les deux états restent **visibles** et **distincts** : c'est l'objet du
+   * correctif, et ce test le tient en même temps que la retenue du ton.
    */
-  it('réserve le ton d’alerte au cas sans rattachement', async () => {
-    expect(await rendre(null)).toContain('alerte')
-    expect(await rendre(membre('en_attente'))).not.toContain('alerte')
+  it('n’allume aucune alerte rouge sur le cas sans rattachement', async () => {
+    const absent = await rendre(null)
+    const inactif = await rendre(membre('en_attente'))
+
+    expect(absent).not.toContain('alerte')
+    expect(inactif).not.toContain('alerte')
+    // Visibles tous les deux, et distincts l'un de l'autre.
+    expect(absent).toContain('data-rattachement="absent"')
+    expect(inactif).toContain('data-rattachement="inactif"')
+    expect(absent).not.toBe(inactif)
+  })
+
+  /**
+   * La phrase qui empêche la mention `absent` d'envoyer l'administrateur
+   * chasser un défaut qui n'en est pas un sur cette ligne-là.
+   */
+  it('nomme le compte d’amorçage dans la mention sans rattachement', async () => {
+    const html = await rendre(null)
+
+    expect(html).toContain('compte d’amorçage')
+    expect(html).toContain('sur tout autre compte')
   })
 })

@@ -14,12 +14,18 @@
  * qu'un administrateur qui balaie une liste de comptes ne lit pas les lignes
  * grises, il les survole.
  *
- * L'état **absent** porte le ton d'alerte et l'état **inactif** le ton d'accent
- * — le même que la pastille « en attente de validation ». Ce n'est pas une
- * nuance décorative : `inactif` a déjà son bouton de réparation sur la ligne,
- * `absent` n'en a aucun (il n'existe pas de route pour rattacher un compte
- * existant à une fiche). Le plus grave est celui qu'on ne peut pas refermer
- * d'un clic, et c'est celui qui doit crier le plus fort.
+ * **Le ton d'accent va à `inactif`, et le ton neutre à `absent`** — l'inverse
+ * de ce que leurs noms suggèrent, et c'est délibéré. `absent` ne désigne en
+ * pratique que le compte d'amorçage du propriétaire, qui retombe sur une racine
+ * qui est justement sa fiche : il obtient le bon arbre par coïncidence. Le
+ * peindre en rouge allumerait un voyant permanent sur la ligne du propriétaire
+ * et userait l'attention avant la ligne qui la mérite. `inactif`, lui, désigne
+ * un compte qui a une ligne `mbr_member` sans qu'elle serve de point de vue —
+ * c'est le cas qui touche réellement un membre de la famille. Le raisonnement
+ * complet, et ce qui l'a mesuré, sont dans `rattachement.ts`.
+ *
+ * Aucun des deux n'est masqué pour autant : les deux sortent du flux du texte
+ * dans un encadré, et c'était tout l'objet du correctif.
  *
  * `data-rattachement` porte l'état sur le balisage, comme `data-etat` sur
  * `PastilleEtat` : c'est la prise stable des tests de rendu, qui ne dépend ni
@@ -37,7 +43,7 @@ const { membre } = defineProps<{
 const mention = computed(() => mentionDeRattachement(membre))
 
 const TONS: Record<Exclude<EtatDuRattachement, 'actif'>, string> = {
-  absent: 'border-alerte-bord bg-alerte-doux text-alerte',
+  absent: 'border-ligne text-attenue',
   inactif: 'border-accent bg-accent-doux text-accent',
 }
 </script>

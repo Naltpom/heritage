@@ -42,6 +42,28 @@
  * étiquette propre à chacun, plutôt que d'inventer une distinction que la
  * conséquence ne porte pas.
  *
+ * ── Qui est vraiment `absent`, et pourquoi il ne crie pas ───────────────────
+ *
+ * Mesuré, et contre-intuitif : **un compte né d'une invitation a toujours une
+ * ligne `mbr_member`**. `ServiceDInscription` en crée une sans condition, juste
+ * après avoir persisté le `User` ; seul son *statut* varie. Les seuls comptes
+ * sans ligne sont donc ceux d'**amorçage** — `CreerAdministrateurCommand` et
+ * `AmorcageDuCompteAdministrateur` créent un `User` `ROLE_ADMIN` sans `Member`,
+ * et `AmorcageFixtures::rattacher()` ressort sans rien poser dans cinq
+ * conditions (pas d'identifiant, XREF absent, rattachement déjà là, arbre pas
+ * encore importé, personne déjà réclamée).
+ *
+ * Or ce compte-là retombe sur la racine **et la racine est justement sa fiche**
+ * : il obtient le bon arbre par coïncidence. Lui coller un ton d'alerte
+ * reviendrait à allumer un voyant rouge permanent sur la ligne du propriétaire,
+ * à chaque ouverture de l'écran — et à apprendre à l'administrateur que le
+ * rouge de cet écran ne veut rien dire, juste avant la ligne où il voudra dire
+ * quelque chose. D'où un ton neutre **et** une phrase qui nomme le cas attendu.
+ *
+ * Le corollaire vaut d'être retenu : le propriétaire est **structurellement
+ * aveugle** à ce défaut. Il ne peut pas le reproduire depuis son propre compte,
+ * et les comptes qui le subissent sont ceux qui ont une ligne — donc `inactif`.
+ *
  * ── Ce que ce module ne fait pas ────────────────────────────────────────────
  *
  * **Il ne propose aucune réparation pour le cas `absent`**, et ce n'est pas un
@@ -118,7 +140,12 @@ export function mentionDeRattachement(
     return {
       etat: 'absent',
       etiquette: 'Aucune fiche rattachée',
-      consequence: phrase(DEPUIS_LA_RACINE),
+      // Le second membre de phrase est ce qui empêche cette mention de devenir
+      // une fausse alerte permanente : voir l'en-tête du module.
+      consequence:
+        `${phrase(DEPUIS_LA_RACINE)} C’est l’état attendu du compte d’amorçage du ` +
+        'propriétaire, dont la racine est justement la fiche ; sur tout autre compte, ' +
+        'c’est un défaut.',
     }
   }
 
