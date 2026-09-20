@@ -7,21 +7,44 @@
 # (ou `gh workflow run deploy.yml -f mode=production`). Une mise en production
 # qui part toute seule est une mise en production que personne ne regarde.
 #
-# TROIS ÉTAPES, DANS CET ORDRE, ET CHACUNE PEUT TOUT ARRÊTER :
+# QUATRE ÉTAPES, DANS CET ORDRE, ET CHACUNE PEUT TOUT ARRÊTER :
 #
-#   1. porte-ci         la CI est-elle VERTE sur ce commit précis ?
-#   2. deploiement      SSH vers le VPS, construction, démarrage, et retour
-#                       arrière automatique si la nouvelle version ne répond pas
-#                       ou ne sert pas le bon code
-#   3. controle-public  depuis l'extérieur, par le vrai domaine et le vrai
-#                       certificat : https://<domaine>/sante.php répond-il, et
-#                       sert-il l'empreinte du commit demandé ?
+#   1. porte-ci          la CI est-elle VERTE sur ce commit précis ?
+#   2. deploiement       SSH vers le VPS, construction, démarrage, et retour
+#                        arrière automatique si la nouvelle version ne répond pas
+#                        ou ne sert pas le bon code — API **et** front
+#   3. controle-public   depuis l'extérieur, par le vrai domaine et le vrai
+#                        certificat : https://<domaine>/sante.php répond-il, et
+#                        sert-il l'empreinte de l'API de ce commit ?
+#   4. controle-paquet   depuis l'extérieur aussi : le PAQUET DU FRONT servi est-il
+#                        celui que ce commit produit ?
 #
 # L'étape 3 n'est pas une redite de l'étape 2. L'étape 2 sonde `127.0.0.1:5511`
 # depuis le VPS : elle prouve que la pile va bien. L'étape 3 traverse le DNS, le
 # certificat et le nginx de l'hôte : elle prouve que le PUBLIC voit cette pile.
 # Les deux pannes qu'elle attrape — un vhost qui pointe ailleurs, un certificat
 # mort — ne se voient pas du tout depuis l'intérieur.
+#
+# ── POURQUOI L'ÉTAPE 4 EXISTE, ET CE QU'ELLE A COÛTÉ DE NE PAS EXISTER ───────
+#
+# Le 20 septembre 2026, un déploiement de FRONT PUR est parti, a réussi, et les
+# trois portes l'ont validé — **sans qu'aucune n'ait regardé le front.**
+# `sante.php` porte l'empreinte de l'image de l'API, qui ne hache que des fichiers
+# de `api/` : 411 fichiers hachés, **zéro des 263 de `app/`**. Mesuré ce jour-là,
+# trois calculs indépendants de part et d'autre du déploiement rendaient tous
+# `f73c498b467f`. **L'étape 3 a donc comparé une égalité garantie d'avance.**
+#
+# Ce n'était pas un outil cassé — une ligne ajoutée à `api/src/Kernel.php` déplace
+# bien l'empreinte — c'était un angle mort de sa PORTÉE.
+#
+# Et ce n'est pas la vigilance qui l'a trouvé : c'est d'avoir lu DEUX sources au
+# lieu d'une, le résultat du flux **et** la page servie. Un vert est une réponse,
+# et une réponse invite à passer à la suite. La seconde source est reproductible,
+# la vigilance ne l'est pas — c'est la raison d'être de cette étape.
+#
+# `app/empreinte.sh` en est la source unique : l'image la grave dans
+# `dist/paquet.txt` à la construction, le dépôt la recalcule ici. La même forme
+# exactement que `api/docker/empreinte.sh`, pour la même raison.
 #
 # -----------------------------------------------------------------------------
 #  SECRETS ET VARIABLES ATTENDUS (Settings → Secrets and variables → Actions)
@@ -233,7 +256,7 @@ jobs:
   # 3. Le contrôle public
   # ---------------------------------------------------------------------------
   controle-public:
-    name: Contrôle public — le domaine sert-il bien ce commit ?
+    name: Contrôle public — le domaine sert-il l’API de ce commit ?
     needs: deploiement
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -299,4 +322,69 @@ jobs:
             echo "| Empreinte attendue | \`${{ steps.empreinte.outputs.attendue }}\` |"
             echo "| Empreinte servie | \`${{ steps.sonde.outputs.servie }}\` |"
             echo "| Image construite le | ${{ steps.sonde.outputs.construite }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # 4. Le front — la porte qui manquait
+  # ---------------------------------------------------------------------------
+  #
+  # Elle n'atteste QU'UNE chose, et son nom le dit : le paquet servi est celui que
+  # ce commit produit. Pas « le domaine sert ce commit » — l'étape 3 s'appelait
+  # ainsi et ne regardait que l'API, c'est précisément ce qui l'a rendue muette.
+  #
+  # Elle tourne EN PARALLÈLE de l'étape 3 et non à sa suite : les deux interrogent
+  # le même domaine sur deux fichiers différents, aucune ne dépend du verdict de
+  # l'autre, et les enchaîner ferait taire la seconde quand la première échoue —
+  # alors que c'est justement dans ce cas qu'on veut savoir lequel des deux moitiés
+  # est en cause.
+  # ---------------------------------------------------------------------------
+  controle-paquet:
+    name: Contrôle public — le paquet servi est-il celui qu’on vient de construire ?
+    needs: deploiement
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Recalculée ICI, sur le dépôt, par le MÊME script que celui qui l'a gravée
+      # dans l'image. Une valeur recopiée d'un endroit à l'autre ne prouverait que
+      # la recopie ; deux calculs indépendants prouvent le contenu.
+      - name: Paquet attendu, calculé sur le dépôt
+        id: paquet
+        run: |
+          set -euo pipefail
+          valeur="$(cd app && sh empreinte.sh)"
+          echo "attendu=$valeur" >> "$GITHUB_OUTPUT"
+          echo "Paquet du commit ${{ github.sha }} : $valeur"
+
+      - name: Interroger ${{ env.DOMAINE_PUBLIC }}/paquet.txt
+        id: sonde
+        run: |
+          set -euo pipefail
+          # Mêmes tentatives que la sonde de l'API : le conteneur vient de
+          # redémarrer et le nginx de l'hôte garde des connexions en amont.
+          corps="$(curl -fsS --max-time 20 --retry 5 --retry-delay 5 --retry-connrefused \
+                    "https://$DOMAINE_PUBLIC/paquet.txt" || true)"
+          servi="$(printf '%s' "$corps" | tr -d '\r\n')"
+          echo "Paquet servi : ${servi:-<absent>}"
+          echo "servi=$servi" >> "$GITHUB_OUTPUT"
+
+      - name: Le paquet servi est-il celui de ce commit ?
+        if: inputs.mode == 'production'
+        env:
+          ATTENDU: ${{ steps.paquet.outputs.attendu }}
+          SERVI: ${{ steps.sonde.outputs.servi }}
+        run: bash .github/scripts/comparer-le-paquet.sh
+
+      - name: Résumé
+        if: always()
+        run: |
+          {
+            echo "### Paquet du front — ${{ inputs.mode }}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Paquet attendu | \`${{ steps.paquet.outputs.attendu }}\` |"
+            echo "| Paquet servi | \`${{ steps.sonde.outputs.servi }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
