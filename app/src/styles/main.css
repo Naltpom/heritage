@@ -78,6 +78,11 @@
   --h-branche-mp: #8a7bc8; /* Chardon   — paternelle de la mère */
   --h-branche-mm: #7fa855; /* Tilleul   — maternelle de la mère */
   --h-branche-tr: var(--h-attenue); /* tronc : l'ego, sa fratrie, ses parents */
+  /* Sans branche : les personnes que rien ne relie à la racine. Ce n'est pas une
+     sixième branche, c'est l'absence de branche — `branch` sort à `null` (voir
+     `components/arbre/zones.ts`). Teinte volontairement hors du cercle
+     chromatique des quatre quarts, pour qu'on ne la lise pas comme un cinquième. */
+  --h-branche-hors: #9aa0a6;
 
   /* Fonds translucides dérivés, pour les bandeaux et les pastilles. Le
      `color-mix` évite d'inventer douze hexadécimaux qui dériveraient du reste
@@ -151,6 +156,7 @@
   --color-branche-mp: var(--h-branche-mp);
   --color-branche-mm: var(--h-branche-mm);
   --color-branche-tr: var(--h-branche-tr);
+  --color-branche-hors: var(--h-branche-hors);
 
   /* Rayons repris du viewer : 7px pour un champ, 10px pour un panneau,
      99px pour une pastille. */

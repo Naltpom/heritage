@@ -219,6 +219,103 @@
 .b-mp { fill: var(--color-branche-mp); }
 .b-mm { fill: var(--color-branche-mm); }
 .b-tr { fill: var(--color-branche-tr); }
+/* Sans branche. La classe existe parce que le sérialiseur peut poser
+   `branch: null` — le canevas composait alors `b-null`, à laquelle rien ne
+   répondait : liseré non peint, sur des fiches bien réelles. */
+.b-hors { fill: var(--color-branche-hors); }
+
+/* ------------------------------------------------------------------ */
+/* Zones de branche — l'aplat des régions, SOUS tout le reste          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Les régions logiques de l'arbre, peintes en aplat : `pp` et `pm` à gauche du
+ * tronc, `mp` et `mm` à droite, et les sans-branche à l'écart. La géométrie est
+ * dans `components/arbre/zones.ts` ; ici, il n'y a que la teinte.
+ *
+ * **La teinte vient de `.b-…`, celle du liseré de fiche**, et ce n'est pas une
+ * économie : une région et le liseré des fiches qu'elle porte ne peuvent pas
+ * diverger si les deux sortent de la même déclaration. La légende s'appuie sur
+ * la même — c'est déjà son principe (voir l'en-tête de `LegendeArbre.vue`).
+ *
+ * **`fill-opacity` et jamais `opacity`** — règle n° 2 de l'en-tête. Ici la
+ * tentation était forte : un aplat est précisément ce qu'on a envie d'écrire
+ * `opacity: .08`. Ce sont cinq à six chemins seulement, mais `opacity` crée un
+ * contexte d'empilement, et un contexte d'empilement placé SOUS les 377 arêtes
+ * force le compositeur à traiter tout ce qui le suit dans une couche à part.
+ *
+ * **Pas de `pointer-events`** : un aplat couvre la moitié de l'écran ; s'il
+ * recevait le clic, il ne changerait rien au résultat — `noeudSousLeCurseur`
+ * remonte par `closest('.fiche, .fam')` et rendrait `null`, donc « fond » — mais
+ * il porterait le curseur `pointer` de `.fiche` nulle part et prendrait le survol.
+ * On le retire du chemin des événements plutôt que de compter sur le `closest`.
+ */
+.zones {
+  pointer-events: none;
+}
+
+/**
+ * **Un aplat très pâle, et un contour net.** L'aplat seul ne suffisait pas, et
+ * c'est mesuré sur l'image : à teinte égale, `--h-branche-pm` (#4f9d8c, sarcelle)
+ * et `--h-branche-mm` (#7fa855, olive) sont deux verts, et sous 0,10 de couche
+ * ils deviennent le même vert. Monter la couche les aurait séparés au prix du
+ * reste — l'aplat serait passé devant le fond des fiches, qui est lui-même une
+ * teinte claire (`--h-homme`, #dbe6f2).
+ *
+ * C'est donc le **bord** qui porte la distinction : deux régions voisines se
+ * lisent à leur frontière, pas à la nuance de leur remplissage. Sur un téléphone
+ * de 390 px, où l'arbre entier fait 15 824 unités de large, c'est la seule des
+ * deux qui survive à la réduction.
+ */
+.zones .zone {
+  fill-opacity: 0.1;
+  stroke-opacity: 0.55;
+  stroke-width: 1.5;
+  /*
+   * **Indispensable, et pas cosmétique.** Le zoom passe par le `viewBox` (règle
+   * n° 1) : à l'arbre entier, une unité du graphe vaut environ un dixième de
+   * pixel, et un contour de 1,5 unité ne serait jamais peint. `non-scaling-stroke`
+   * fixe l'épaisseur en pixels de l'écran, donc le contour reste le même trait à
+   * tous les niveaux de zoom — ce qui est précisément ce qu'on veut d'une
+   * frontière de région, là où un trait qui grossit avec le zoom finirait par
+   * masquer les fiches qu'il entoure.
+   */
+  vector-effect: non-scaling-stroke;
+}
+
+/* Le contour reprend la teinte de la région. Deux déclarations par région plutôt
+   qu'une : `.b-…` pose un `fill` et sert aussi au liseré des fiches, qui n'a rien
+   à faire d'un `stroke`. */
+.zone.b-pp { stroke: var(--color-branche-pp); }
+.zone.b-pm { stroke: var(--color-branche-pm); }
+.zone.b-mp { stroke: var(--color-branche-mp); }
+.zone.b-mm { stroke: var(--color-branche-mm); }
+.zone.b-tr { stroke: var(--color-branche-tr); }
+.zone.b-hors { stroke: var(--color-branche-hors); }
+
+/*
+ * En sombre, la même teinte sur un fond `#141517` rend nettement plus sourde : à
+ * 0,10 les régions disparaissent. Les cinq couleurs de branche, elles, ne
+ * changent pas avec le thème — ce sont des étiquettes de donnée (voir
+ * `main.css`) —, donc c'est la couche qui s'ajuste, pas la couleur.
+ */
+@media (prefers-color-scheme: dark) {
+  .zones .zone {
+    fill-opacity: 0.17;
+    stroke-opacity: 0.68;
+  }
+}
+
+/*
+ * La mise en retrait. Un aplat de région n'est pas une information de parenté :
+ * quand le lecteur isole une chaîne ou cherche un nom, il doit s'effacer avec le
+ * reste, sans quoi il resterait le seul élément en pleine teinte de l'écran.
+ */
+.canevas.focus .zones .zone,
+.canevas.recherche .zones .zone {
+  fill-opacity: 0.03;
+  stroke-opacity: 0.12;
+}
 
 
 /* ------------------------------------------------------------------ */
