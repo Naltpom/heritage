@@ -9,31 +9,54 @@
  * sans navigateur ni faux document.
  *
  * ────────────────────────────────────────────────────────────────────
+ * TOUT CE QUI SUIT EST MESURÉ SUR LE GRAPHE SERVI, empreinte `91ad68db` —
+ * 648 nœuds, 468 personnes, 15 rangées, boîte 26 977 × 2 301.
+ *
  * **POURQUOI PAS UN RECTANGLE PAR BRANCHE.** C'était la forme évidente, et elle
- * est fausse : les emprises globales se chevauchent. Mesuré sur le graphe servi
- * (274 personnes, 12 générations), `tr` recouvre `pm` sur 5 590 unités, `mp` sur
- * 3 482 et `mm` sur 615 — trois paires de bandes superposées sur cinq régions.
- * On peint donc **rangée par rangée**, une bande par génération, empilées.
+ * est fausse : les emprises globales se chevauchent. `pp` (-13 723 .. -3 102)
+ * recouvre `pm` (-7 439 .. -125) sur **4 337 unités**, et `mp` (583 .. 6 220)
+ * recouvre `mm` (4 440 .. 8 953) sur **1 780**. Un rectangle par branche
+ * donnerait deux paires de bandes superposées. On peint donc **rangée par
+ * rangée**, une bande par génération, empilées.
  *
- * **ET POURQUOI PAS UNE BANDE PAR (BRANCHE, RANGÉE) NON PLUS.** C'est le piège,
- * et il ne se voit que sur la rangée des parents. À `y = -150`, le tronc ne
- * compte que **deux** personnes — le père et la mère de la racine — et le moteur
- * les pose chacun au-dessus de sa propre moitié d'arbre : `x = -4 700` et
- * `x = +4 980`, soit **9 544 unités d'écart**, quand le plus grand écart interne
- * légitime mesuré ailleurs dans l'arbre est de 1 815. Une bande unique par
- * (branche, rangée) donnerait donc au tronc, sur cette rangée, un aplat large de
- * dix mille unités qui avale celui de `pm` — la couleur cesserait de dire où
- * sont les gens pour ne plus dire que de qui ils descendent.
+ * **ET POURQUOI PAS UNE BANDE PAR (BRANCHE, RANGÉE) NON PLUS.** Une seule rangée
+ * sur quinze fait échouer cette forme-là, et c'est `y = -300` : les branches y
+ * sont **entrelacées**, pas seulement voisines. Dans l'ordre des abscisses, la
+ * rangée se lit
  *
- * **La coupure ne se fait pas sur une distance.** Un seuil en unités aurait
- * fonctionné ici — l'intervalle [1 815, 9 544] est vide —, mais il aurait été
- * réglé sur *cet* arbre, et un arbre qui grandit l'aurait franchi sans que rien
- * ne sonne. On coupe sur le fait lui-même : **une bande s'arrête là où une
- * personne d'une AUTRE branche s'intercale**. Les bandes d'une rangée sont donc
- * les suites maximales de personnes consécutives de même branche, dans l'ordre
- * des `x` — c'est-à-dire des intervalles disjoints par construction. Deux bandes
- * d'une même rangée ne peuvent plus se chevaucher : ce n'est plus une mesure qui
- * tient, c'est la forme qui l'interdit. {@link zones.test.ts} le vérifie.
+ *     pp×10 | pm×1 | pp×1 | pm×17 | mp×2 | mm×1 | mp×7 | mm×12
+ *
+ * — quatre branches coupées en deux morceaux chacune. Une bande unique par
+ * (branche, rangée) enjamberait donc les intrus : `pp` recouvrirait `pm` sur
+ * 430 unités et `mp` recouvrirait `mm` sur 1 683. Sur `/arbre-4` (croisements),
+ * qui réordonne les rangées, la même forme naïve produit **neuf** paires
+ * superposées au lieu de deux.
+ *
+ * **Et la coupure ne peut PAS se faire sur une distance.** Ce n'était pas
+ * évident, c'est mesuré, et le résultat est catégorique. Sur cette rangée, le
+ * plus petit écart qu'il FAUT couper — entre `pp×10` et le `pm` qui s'y glisse —
+ * vaut **20 unités**. Ailleurs dans l'arbre, le plus grand écart interne qu'il ne
+ * faut SURTOUT pas couper — un trou à l'intérieur de `pp`, sur la rangée du bas —
+ * vaut **3 795 unités**. Un seuil `t` devrait donc vérifier `t < 20` et
+ * `t > 3 795` à la fois : **aucun seuil n'existe.** Réglé sur 20, il couperait
+ * à tort 416 des 417 écarts internes et réduirait les régions en confettis.
+ *
+ * On coupe donc sur le fait lui-même : **une bande s'arrête là où une personne
+ * d'une AUTRE branche s'intercale**. Les bandes d'une rangée sont les suites
+ * maximales de personnes consécutives de même branche, dans l'ordre des `x` —
+ * c'est-à-dire des intervalles disjoints par construction. Deux bandes d'une même
+ * rangée ne peuvent plus se chevaucher : ce n'est plus une mesure qui tient,
+ * c'est la forme qui l'interdit. Vérifié sur les six dispositions, **zéro
+ * chevauchement partout**, là où la forme naïve en laisse de 1 à 9.
+ * {@link zones.test.ts} tient la propriété.
+ *
+ * **La seule condition, et elle n'est pas de notre ressort** : que deux fiches de
+ * branches différentes ne se chevauchent pas *elles-mêmes*. Si le moteur en
+ * posait deux l'une sur l'autre, aucune découpe en intervalles ne pourrait les
+ * séparer — les aplats se recouvriraient parce que les fiches se recouvrent. Le
+ * graphe servi la vérifie largement (plus petit écart entre deux suites voisines :
+ * 20 unités). Dans ce cas dégénéré, la bande reste d'aire positive au lieu de se
+ * retourner, et c'est tout ce qu'on peut promettre.
  * ────────────────────────────────────────────────────────────────────
  *
  * **Une seule `<path>` par région, et c'est délibéré.** Toutes les bandes d'une
@@ -81,10 +104,12 @@ export function cleDeZone(branche: string | null | undefined): CleDeZone {
  * Le débord d'un aplat autour des fiches qu'il porte, en unités du graphe.
  *
  * 16 de chaque côté, **rabotés** à la moitié de l'espace disponible quand la
- * bande voisine est plus près que ça : le débord ne peut donc jamais créer le
- * chevauchement que la forme interdit par ailleurs. Le plus petit écart mesuré
- * entre deux bandes voisines du graphe servi est de 59 unités, ce qui laisse
- * 27 unités de fond entre les deux aplats les plus serrés.
+ * bande voisine est plus près que ça. Le rabot n'est pas une précaution
+ * théorique : sur le graphe servi, deux suites voisines sont séparées de
+ * **20 unités seulement** (`y = -300`, `pp` puis `pm`). Sans lui, les deux
+ * aplats se recouvriraient de 12 unités et la propriété que toute cette forme
+ * existe pour garantir tomberait à cet endroit précis. Avec lui, les deux bandes
+ * se touchent exactement, sans jamais se croiser.
  */
 const DEBORD_X = 16
 

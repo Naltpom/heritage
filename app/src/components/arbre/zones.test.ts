@@ -89,37 +89,41 @@ describe('zonesDeBranche', () => {
   /* ---------------------------------------------------------------- */
 
   it('coupe la bande là où une personne d’une AUTRE branche s’intercale', () => {
-    // Le cas réel, aux valeurs mesurées sur le graphe servi : à la rangée des
-    // parents, le tronc n'a que deux personnes — le père et la mère de la racine
-    // — et le moteur les pose chacune au-dessus de sa moitié d'arbre, à
-    // 9 544 unités l'une de l'autre. Deux personnes d'une autre branche se
-    // trouvent entre les deux.
+    // La rangée `y = -300` du graphe servi, en réduction : c'est la seule des
+    // quinze où les branches sont ENTRELACÉES et non simplement voisines. Elle se
+    // lit `pp×10 | pm×1 | pp×1 | pm×17 | …` — un `pm` isolé tombe au milieu du
+    // `pp`, et un `pp` isolé au milieu du `pm`. Une bande unique par
+    // (branche, rangée) enjamberait les intrus.
     const zones = zonesDeBranche([
-      p('p1', -4700, -150, 'tr'),
-      p('p2', -1896, -150, 'pm'),
-      p('p3', -1648, -150, 'pm'),
-      p('p4', 4980, -150, 'tr'),
+      p('p1', -13000, -300, 'pp'),
+      p('p2', -12800, -300, 'pp'),
+      p('p3', -12600, -300, 'pm'), // l'intrus
+      p('p4', -12400, -300, 'pp'),
+      p('p5', -12200, -300, 'pm'),
+      p('p6', -12000, -300, 'pm'),
     ])
 
-    const tronc = zones.find((z) => z.cle === 'tr')
-    expect(tronc).toBeDefined()
-    // DEUX bandes, et non une seule large de dix mille unités qui avalerait `pm`.
-    expect(tronc?.bandes).toHaveLength(2)
-    expect(tronc?.d.match(/M/g)).toHaveLength(2)
+    // `pp` en DEUX bandes, et non une seule qui recouvrirait le `pm` du milieu.
+    const pp = zones.find((z) => z.cle === 'pp')
+    expect(pp?.bandes).toHaveLength(2)
+    expect(pp?.d.match(/M/g)).toHaveLength(2)
+    // `pm` aussi : l'isolé d'un côté, la paire de l'autre.
+    expect(zones.find((z) => z.cle === 'pm')?.bandes).toHaveLength(2)
   })
 
   it('ne laisse JAMAIS deux bandes d’une même rangée se chevaucher', () => {
-    // La même rangée, plus deux branches serrées l'une contre l'autre : 8 unités
-    // d'écart, bien moins que le débord de 16 demandé. Le débord doit être raboté,
-    // pas appliqué tel quel.
+    // Le débord vaut 16 de chaque côté, mais sur le graphe servi deux suites
+    // voisines ne sont séparées que de 20 unités (`y = -300`, `pp` puis `pm`).
+    // Appliqué tel quel, le débord les ferait se recouvrir de 12 ; il doit être
+    // raboté à la moitié de l'espace libre. C'est ce rabot que ce test tient.
     const zones = zonesDeBranche([
-      p('p1', -4700, -150, 'tr'),
-      p('p2', -1896, -150, 'pm'),
-      p('p3', -1648, -150, 'pm'),
-      p('p4', -1520, -150, 'mp'),
-      p('p5', 4980, -150, 'tr'),
-      p('p6', -3000, 0, 'pp'),
-      p('p7', -2872, 0, 'pm'),
+      p('p1', -13000, -300, 'pp'),
+      p('p2', -12860, -300, 'pm'), // 20 unités d'écart exactement (120 de large)
+      p('p3', -12600, -300, 'pp'),
+      p('p4', -12000, -300, 'mp'),
+      p('p5', -11860, -300, 'mm'), // 20 unités, de nouveau
+      p('p6', 0, -150, 'tr'),
+      p('p7', 300, -150, 'pm'),
     ])
 
     const toutes = zones.flatMap((z) => z.bandes)
@@ -130,6 +134,44 @@ describe('zonesDeBranche', () => {
         expect(recouvrement).toBeLessThanOrEqual(0)
       }
     }
+  })
+
+  it('tient la propriété sur la rangée qui a motivé la forme, telle qu’elle est servie', () => {
+    // Les huit suites de `y = -300`, dans l'ordre et aux effectifs mesurés. Une
+    // bande par (branche, rangée) donnerait ici 2 paires superposées ; la forme
+    // livrée en donne zéro, et rend 8 bandes au lieu de 4.
+    const suites: [string, number][] = [
+      ['pp', 10],
+      ['pm', 1],
+      ['pp', 1],
+      ['pm', 17],
+      ['mp', 2],
+      ['mm', 1],
+      ['mp', 7],
+      ['mm', 12],
+    ]
+    const noeuds: NoeudGraphe[] = []
+    let x = -13700
+    let i = 0
+    for (const [branche, combien] of suites) {
+      for (let k = 0; k < combien; k++) {
+        noeuds.push(p(`p${++i}`, x, -300, branche))
+        x += 140
+      }
+      x += 60
+    }
+
+    const zones = zonesDeBranche(noeuds)
+    expect(zones.flatMap((z) => z.bandes)).toHaveLength(8)
+    expect(zones.find((z) => z.cle === 'pp')?.bandes).toHaveLength(2)
+    expect(zones.find((z) => z.cle === 'mm')?.bandes).toHaveLength(2)
+
+    const toutes = zones.flatMap((z) => z.bandes)
+    for (const a of toutes)
+      for (const b of toutes) {
+        if (a === b) continue
+        expect(Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)).toBeLessThanOrEqual(0)
+      }
   })
 
   it('n’inverse pas une bande quand deux fiches voisines se chevauchent déjà', () => {
