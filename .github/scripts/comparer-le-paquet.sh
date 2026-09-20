@@ -35,12 +35,26 @@ fi
 
 if [ -z "$SERVI" ]; then
     # **Absent n'est pas faux.** Une image construite avant que ce contrôle
-    # n'existe ne porte pas ce fichier. On le dit sans accuser le code déployé.
-    echo "::error::Le domaine ne sert pas /paquet.txt."
+    # n'existe ne porte pas ce fichier. On le dit sans accuser le code déployé —
+    # et surtout on nomme le remède ici, parce que celui qui lira ce rouge à deux
+    # heures du matin n'aura pas la demande de tirage sous les yeux.
+    echo "::error::Le domaine ne sert pas /paquet.txt — le front n'a rien à comparer."
+    echo
+    echo "LE REMÈDE EST UNE RECONSTRUCTION, PAS UN RETOUR ARRIÈRE."
+    echo "Relancer le flux « Déploiement » en mode « production » sur ce commit : le"
+    echo "mode production reconstruit toujours les images. Un retour arrière ferait"
+    echo "l'inverse — il remettrait en service une image ENCORE plus ancienne, qui"
+    echo "ne porte pas davantage ce fichier."
+    echo
     echo "Trois causes, dans cet ordre de vraisemblance :"
-    echo "  - l'image du front est antérieure à ce contrôle : la reconstruire suffit ;"
-    echo "  - la racine servie n'est pas celle de l'image (volume, ou root nginx ailleurs) ;"
-    echo "  - le vhost de l'hôte ne mène pas à cette pile."
+    echo "  1. l'image du front est antérieure à ce contrôle — c'est le cas attendu"
+    echo "     au premier passage, et une reconstruction le referme ;"
+    echo "  2. une couche de cache a été reprise à tort. Si le point 1 se répète,"
+    echo "     reconstruire SANS cache depuis le dépôt du VPS :"
+    echo "       docker compose --env-file .env --env-file .deploiement/env \\"
+    echo "         -f compose.yaml -f compose.prod.yaml build --no-cache app"
+    echo "  3. la racine servie n'est pas celle de l'image (volume, root nginx"
+    echo "     ailleurs), ou le vhost de l'hôte ne mène pas à cette pile."
     exit 1
 fi
 

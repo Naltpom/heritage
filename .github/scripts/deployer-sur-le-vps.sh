@@ -416,8 +416,13 @@ if [ -z "$PAQUET_SERVI" ]; then
     # image construite avant que ce fichier n'existe ne porte rien : revenir à une
     # image ENCORE plus ancienne ne réparerait rien et casserait un déploiement
     # sain. On échoue en le disant, et c'est au lecteur de reconstruire.
-    crier "le front ne sert pas /paquet.txt : image anterieure a ce controle, ou racine nginx ailleurs."
-    crier "Reconstruire le front (RECONSTRUIRE=1) suffit si l'image est simplement trop ancienne."
+    crier "le front ne sert pas /paquet.txt : rien a comparer."
+    crier "LE REMEDE EST UNE RECONSTRUCTION, PAS UN RETOUR ARRIERE."
+    crier "Relancez le flux « Deploiement » en mode « production » sur ce commit : ce mode"
+    crier "reconstruit toujours (RECONSTRUIRE=1). Un retour arriere remettrait en service une"
+    crier "image ENCORE plus ancienne, qui ne porte pas davantage ce fichier."
+    crier "Si cela se repete, une couche de cache a ete reprise a tort — reconstruire sans cache :"
+    crier "  docker compose --env-file .env --env-file $ETAT/env -f compose.yaml -f compose.prod.yaml build --no-cache app"
     exit 1
 fi
 
