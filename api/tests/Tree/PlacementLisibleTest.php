@@ -701,6 +701,99 @@ final class PlacementLisibleTest extends TestCase
     }
 
     /**
+     * **L'ordre des enfants suit celui des parents, même quand un sous-arbre est
+     * beaucoup plus lourd que celui de ses cadets.**
+     *
+     * ── Le défaut que ce cas ferme ──────────────────────────────────────────────
+     *
+     * Le moteur centre bien chaque fratrie sous ses parents, **puis** dépose les
+     * conjoints « juste à droite de mon partenaire, sans vérifier si quelqu'un y est
+     * déjà », **puis** décroche les chevauchements par une **seule poussée vers la
+     * droite** qui ne réordonne jamais et ne ramène jamais personne vers la gauche.
+     *
+     * Une fratrie qui porte des conjoints est donc plus large, chevauche davantage,
+     * et la cascade la déplace à droite — par-dessus les fratries de ses cadets.
+     * L'affinage triait ensuite les groupes sur la médiane de leurs positions
+     * **courantes**, ce qui ratifiait le déplacement au lieu de le défaire.
+     *
+     * Mesuré sur l'arbre du commanditaire, avant correction : sur 46 paires de
+     * frères et sœurs ayant tous deux une descendance, **9 avaient l'ordre de leurs
+     * enfants inversé par rapport au leur**, et dans 8 cas sur 9 celui qui était
+     * devant portait la descendance la plus lourde.
+     *
+     * ── Ce que le cas construit ────────────────────────────────────────────────
+     *
+     * `aine` et `cadet` sont frère et sœur, dans cet ordre. Les enfants de l'aîné
+     * sont posés **à droite** de ceux du cadet — c'est l'état que la cascade produit.
+     * L'affinage doit les ramener à gauche, parce que leur parent y est.
+     */
+    public function testLesEnfantsSuiventLOrdreDeLeursParents(): void
+    {
+        $apres = (new AffinageDuPlacement())->affine($this->fratriesCroisees(), $this->jeuFratriesCroisees());
+
+        $x = static fn (string $id): float => $apres->noeuds[$id]->x;
+
+        // Les parents, inchangés : l'aîné à gauche du cadet.
+        self::assertLessThan($x('cadet'), $x('aine'), 'Les parents ont changé d’ordre.');
+
+        // Et leurs enfants dans le même sens.
+        $enfantsDeLAine = (($x('a1') + $x('a2')) / 2);
+        $enfantsDuCadet = (($x('c1') + $x('c2')) / 2);
+
+        self::assertLessThan(
+            $enfantsDuCadet,
+            $enfantsDeLAine,
+            'Les enfants de l’aîné passent après ceux du cadet : la fratrie ne suit pas ses parents.',
+        );
+    }
+
+    private function jeuFratriesCroisees(): JeuDePlacement
+    {
+        return new JeuDePlacement(
+            [
+                self::fiche('aine', Sex::Feminin, 1960),
+                self::fiche('cadet', Sex::Masculin, 1965),
+                self::fiche('a1', Sex::Feminin, 1985),
+                self::fiche('a2', Sex::Masculin, 1987),
+                self::fiche('c1', Sex::Feminin, 1990),
+                self::fiche('c2', Sex::Masculin, 1992),
+            ],
+            [],
+            'aine',
+        );
+    }
+
+    /** L'aîné est à gauche, mais SES enfants sont à droite de ceux du cadet. */
+    private function fratriesCroisees(): Placement
+    {
+        $noeuds = [
+            'aine' => new NoeudPlace('aine', 0.0, 0.0, 100, MoteurDePlacement::H_FICHE),
+            'cadet' => new NoeudPlace('cadet', 120.0, 0.0, 100, MoteurDePlacement::H_FICHE),
+            'fP' => new NoeudPlace('fP', 60.0, -104.0, MoteurDePlacement::LOSANGE_L, MoteurDePlacement::LOSANGE_H),
+            'fA' => new NoeudPlace('fA', 0.0, 46.0, MoteurDePlacement::LOSANGE_L, MoteurDePlacement::LOSANGE_H),
+            'fC' => new NoeudPlace('fC', 120.0, 46.0, MoteurDePlacement::LOSANGE_L, MoteurDePlacement::LOSANGE_H),
+            // Les enfants du CADET à gauche, ceux de l'AÎNÉ à droite : le défaut.
+            'c1' => new NoeudPlace('c1', 0.0, 150.0, 100, MoteurDePlacement::H_FICHE),
+            'c2' => new NoeudPlace('c2', 120.0, 150.0, 100, MoteurDePlacement::H_FICHE),
+            'a1' => new NoeudPlace('a1', 240.0, 150.0, 100, MoteurDePlacement::H_FICHE),
+            'a2' => new NoeudPlace('a2', 360.0, 150.0, 100, MoteurDePlacement::H_FICHE),
+        ];
+
+        $aretes = [
+            AreteDePlacement::filiation('fP', 'aine'),
+            AreteDePlacement::filiation('fP', 'cadet'),
+            AreteDePlacement::union('aine', 'fA', false),
+            AreteDePlacement::union('cadet', 'fC', false),
+            AreteDePlacement::filiation('fA', 'a1'),
+            AreteDePlacement::filiation('fA', 'a2'),
+            AreteDePlacement::filiation('fC', 'c1'),
+            AreteDePlacement::filiation('fC', 'c2'),
+        ];
+
+        return new Placement($noeuds, $aretes, new BoiteEnglobante(-400, -300, 1400, 700), 'aine');
+    }
+
+    /**
      * **I8 tient aussi quand une sœur est MARIÉE — et il ne tenait pas.**
      *
      * Un bloc n'est pas une personne : c'est une personne **et son conjoint**, et
