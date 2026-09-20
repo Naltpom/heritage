@@ -25,6 +25,7 @@ import {
   echangerVersLUnionNonRompue,
   famillesRompues,
   FRATRIE_CONSEQUENTE,
+  fratriesVoisines,
   separerLesGrossesFratries,
   ITERATIONS,
   modeleLocal,
@@ -331,6 +332,55 @@ describe('la séparation des grosses fratries', () => {
     const apres = [...separerLesGrossesFratries(rangee, aretes, 3).values()].sort((a, b) => a - b)
 
     expect(apres).toEqual(avant)
+  })
+
+  /**
+   * **La condition qui est venue après le seuil, et qui ne le remplace pas.**
+   *
+   * Mesurée sur l'arbre réel le 20/09/2026 : la règle écartait un couple de
+   * **quatorze fiches et 3 210 px** parce que les deux fratries étaient aux deux
+   * bouts de la rangée, avec deux fiches étrangères au milieu. Ramener chacun
+   * chez les siens n'y réparait rien — ça fabriquait le trait que le dessin
+   * montre traverser l'écran.
+   *
+   * **On n'a pas déplacé le seuil, on a ajouté une condition** : un seuil déplacé
+   * fait réapparaître le défaut ailleurs, une condition nomme le cas.
+   */
+  it('S’ABSTIENT quand une fiche étrangère sépare les deux fratries', () => {
+    // La même rangée, mais un ÉTRANGER s'assoit entre les VERT et les BLEU.
+    const eloignee = [
+      personne('VERT1', 0, 0),
+      personne('VERT2', 120, 0),
+      personne('VERT3', 240, 0),
+      personne('BLEU2', 360, 0),
+      personne('ETRANGER', 480, 0),
+      personne('BLEU1', 600, 0),
+      personne('BLEU3', 720, 0),
+    ]
+    const avant = ordre(new Map(eloignee.map((n) => [n.id, n.x])))
+
+    expect(ordre(separerLesGrossesFratries(eloignee, aretes, 3))).toEqual(avant)
+  })
+
+  it('la condition se lit sur les fratries SANS le couple examiné', () => {
+    const familles = new Map([
+      ['VERT3', ['fC']],
+      ['BLEU2', ['fC']],
+    ])
+    const epoux = new Map([['fC', ['VERT3', 'BLEU2']]])
+    const rangeeSerree = ['VERT1', 'VERT2', 'VERT3', 'BLEU2', 'BLEU1', 'BLEU3']
+    const rangeeCoupee = ['VERT1', 'VERT2', 'VERT3', 'BLEU2', 'ETRANGER', 'BLEU1', 'BLEU3']
+
+    const vert = ['VERT1', 'VERT2', 'VERT3']
+    const bleu = ['BLEU1', 'BLEU2', 'BLEU3']
+
+    expect(fratriesVoisines(vert, bleu, rangeeSerree, familles, epoux, ['VERT3', 'BLEU2'])).toBe(true)
+    expect(fratriesVoisines(vert, bleu, rangeeCoupee, familles, epoux, ['VERT3', 'BLEU2'])).toBe(false)
+
+    // **Sans retirer le couple, la condition ne dit plus rien** : l'épouse est
+    // comptée parmi les conjoints de la fratrie de son mari, les deux
+    // intervalles se chevauchent, et tout devient « voisin ».
+    expect(fratriesVoisines(vert, bleu, rangeeCoupee, familles, epoux)).toBe(true)
   })
 
   it('le seuil du dossier est TROIS, et c’est une décision mesurée', () => {

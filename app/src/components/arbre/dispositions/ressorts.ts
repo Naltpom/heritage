@@ -594,6 +594,93 @@ export const FRATRIE_CONSEQUENTE = 3
  * contiguës**, pas que l'aîné soit à gauche — cet ordre-là appartient au serveur,
  * qui a les vraies dates.
  */
+/**
+ * **Les deux fratries sont-elles déjà voisines dans la rangée ?**
+ *
+ * C'est la condition qui décide si la règle des grosses fratries a le droit de
+ * s'appliquer — et **c'est une condition, pas un seuil**. Le seuil dit *à partir
+ * de quand* une fratrie est nombreuse ; la condition dit *dans quel cas* les
+ * séparer répare quelque chose.
+ *
+ * ## Ce qu'elle empêche, mesuré sur l'arbre réel
+ *
+ * Quand les deux fratries se touchent déjà, ramener chaque époux chez les siens
+ * ne coûte qu'un trait d'union de quelques centaines de pixels : c'est le cas que
+ * le commanditaire décrivait. Quand elles sont à l'opposé de la rangée — huit
+ * fiches d'un côté, cinq de l'autre, et deux étrangères au milieu — la même règle
+ * écarte le couple de **3 210 px et quatorze fiches**. Le dessin le montre : le
+ * trait d'union traverse la moitié de l'écran. Ce n'est plus l'arbitrage demandé,
+ * c'est sa caricature.
+ *
+ * ## Ce que « voisines » veut dire, sans réglage
+ *
+ * Chaque fratrie est prise **avec les conjoints de ses membres** — un beau-frère
+ * assis au milieu d'une fratrie en fait partie pour l'œil. Les deux ensembles
+ * occupent chacun un intervalle de la rangée. Elles sont voisines si ces
+ * intervalles se chevauchent, ou si **tout ce qui les sépare appartient encore à
+ * l'une des deux**. Une seule fiche étrangère au milieu suffit à dire non : il
+ * n'y a **aucun nombre à régler**.
+ *
+ * **Le couple examiné est retiré des deux ensembles**, et sans ça la condition ne
+ * dit rien du tout : l'épouse est déjà accolée à son mari, donc comptée parmi les
+ * conjoints de la fratrie de celui-ci, et les deux intervalles se chevauchent
+ * toujours. Mesuré : sans ce retrait, la condition rendait « voisines » pour les
+ * quinze couples de l'arbre, y compris celui que le dessin montre écarté de
+ * quatorze fiches.
+ */
+export function fratriesVoisines(
+  premiere: readonly IdentifiantNoeud[],
+  seconde: readonly IdentifiantNoeud[],
+  rangee: readonly IdentifiantNoeud[],
+  familles: ReadonlyMap<IdentifiantNoeud, IdentifiantNoeud[]>,
+  epoux: ReadonlyMap<IdentifiantNoeud, IdentifiantNoeud[]>,
+  couple: readonly IdentifiantNoeud[] = [],
+): boolean {
+  const examine = new Set(couple)
+
+  const avecConjoints = (fratrie: readonly IdentifiantNoeud[]): Set<IdentifiantNoeud> => {
+    const tous = new Set<IdentifiantNoeud>(fratrie)
+    for (const membre of fratrie) {
+      for (const famille of familles.get(membre) ?? []) {
+        for (const conjoint of epoux.get(famille) ?? []) tous.add(conjoint)
+      }
+    }
+    for (const id of examine) tous.delete(id)
+
+    return tous
+  }
+
+  const a = avecConjoints(premiere)
+  const b = avecConjoints(seconde)
+
+  const bornes = (ensemble: ReadonlySet<IdentifiantNoeud>): [number, number] | null => {
+    const places = rangee.map((id, i) => (ensemble.has(id) ? i : -1)).filter((i) => i >= 0)
+
+    return places.length === 0 ? null : [places[0]!, places[places.length - 1]!]
+  }
+
+  const ba = bornes(a)
+  const bb = bornes(b)
+  if (ba === null || bb === null) return false
+
+  // Chevauchement : elles sont déjà mêlées, donc voisines.
+  if (ba[0] <= bb[1] && bb[0] <= ba[1]) return true
+
+  const [gauche, droite] = ba[1] < bb[0] ? [ba, bb] : [bb, ba]
+
+  for (let i = gauche[1] + 1; i < droite[0]; i += 1) {
+    const id = rangee[i]
+    if (id === undefined) continue
+    // Le couple examiné est TRANSPARENT : retiré des deux ensembles, il ne doit
+    // pas pour autant compter comme l'étranger qui les sépare — il est assis
+    // entre les deux précisément parce que le serveur l'a collé.
+    if (examine.has(id)) continue
+    if (!a.has(id) && !b.has(id)) return false
+  }
+
+  return true
+}
+
 export function separerLesGrossesFratries(
   noeuds: readonly NoeudGraphe[],
   aretes: readonly AreteGraphe[],
@@ -646,6 +733,22 @@ export function separerLesGrossesFratries(
     if (fa === undefined || fb === undefined) continue
     if ((enfants.get(fa) ?? []).length < seuil) continue
     if ((enfants.get(fb) ?? []).length < seuil) continue
+
+    // **La règle ne s'applique que si les deux fratries sont déjà voisines.**
+    // Voir {@link fratriesVoisines} : ailleurs, elle écarterait le couple d'un
+    // bout à l'autre de la rangée au lieu de le décaler de quelques fiches.
+    if (
+      !fratriesVoisines(
+        enfants.get(fa) ?? [],
+        enfants.get(fb) ?? [],
+        rangees.get(y) ?? [],
+        liens.familles,
+        liens.epoux,
+        [a, b],
+      )
+    ) {
+      continue
+    }
 
     aRamener.set(y, [...(aRamener.get(y) ?? []), a, b])
   }
