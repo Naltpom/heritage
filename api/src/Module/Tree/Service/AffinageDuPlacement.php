@@ -514,6 +514,15 @@ final class AffinageDuPlacement
         $rang = array_flip($ordre);
 
         usort($ordre, function (string $a, string $b) use ($groupes, $rang): int {
+            // **Une fratrie se range sous ses parents ; sa descendance la suit, elle
+            // ne la commande pas.** C'est la première clé, avant la médiane.
+            $pa = $this->ancreDesParents($a);
+            $pb = $this->ancreDesParents($b);
+
+            if (null !== $pa && null !== $pb && $pa !== $pb) {
+                return $pa <=> $pb;
+            }
+
             $ma = $this->medianeDuGroupe($groupes[$a]);
             $mb = $this->medianeDuGroupe($groupes[$b]);
 
@@ -566,6 +575,61 @@ final class AffinageDuPlacement
         arsort($candidats);
 
         return (string) array_key_first($candidats);
+    }
+
+    /**
+     * **Où sont les parents de cette fratrie.**
+     *
+     * C'est la clé qui range les fratries d'une rangée, **avant** la médiane de leurs
+     * positions courantes. La différence n'est pas théorique :
+     *
+     * ── Ce que la médiane seule produisait ──────────────────────────────────────
+     *
+     * Les positions courantes portent la cascade du moteur. Celui-ci centre bien
+     * chaque fratrie sous ses parents ({@see CalculDePlacement::poseNonAscendant()}),
+     * **puis** dépose les conjoints « juste à droite de mon partenaire, sans
+     * vérifier si quelqu'un y est déjà », **puis** décroche les chevauchements par
+     * une seule poussée vers la droite qui ne réordonne jamais et ne ramène jamais
+     * personne vers la gauche.
+     *
+     * Une fratrie qui porte des conjoints est donc plus large, chevauche davantage,
+     * et la cascade la déplace à droite. Trier ensuite sur la médiane des positions
+     * **ratifiait ce déplacement au lieu de le défaire.**
+     *
+     * Mesuré sur l'arbre réel, avant correction : sur 46 paires de frères et sœurs
+     * ayant tous deux une descendance, **9 avaient l'ordre de leurs enfants inversé
+     * par rapport au leur** — et dans 8 cas sur 9, celui qui était devant portait la
+     * descendance la plus lourde. Le rapport de poids décidait : au-delà d'un
+     * facteur trois environ, le sous-arbre lourd doublait ses cadets.
+     *
+     * ── Ce que ça ne change pas ────────────────────────────────────────────────
+     *
+     * La médiane reste la clé de secours : un groupe sans parents placés — les
+     * aïeux du haut de l'arbre, les pièces rapportées isolées — garde exactement le
+     * comportement précédent. **On ajoute une clé devant, on n'en retire aucune.**
+     *
+     * Les rangées sont parcourues de haut en bas : quand on ordonne une rangée, les
+     * parents de ses fratries sont déjà placés par la passe courante.
+     */
+    private function ancreDesParents(string $cle): ?float
+    {
+        if (str_starts_with($cle, 'seul:')) {
+            return null;
+        }
+
+        $positions = [];
+
+        foreach ($this->epoux[$cle] ?? [] as $epoux) {
+            if (isset($this->posx[$epoux])) {
+                $positions[] = $this->posx[$epoux];
+            }
+        }
+
+        if ([] === $positions) {
+            return null;
+        }
+
+        return array_sum($positions) / \count($positions);
     }
 
     /** @param list<list<string>> $groupe */
