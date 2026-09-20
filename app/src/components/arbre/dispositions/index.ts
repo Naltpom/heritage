@@ -123,12 +123,10 @@ export const PRESENTATIONS: Record<NomDeDisposition, PresentationDeDisposition> 
       'faux —, et **quand les deux époux viennent d’une fratrie d’au moins trois enfants, le ' +
       'couple cède : chacun reste entier au milieu des siens et le trait d’union s’allonge**. ' +
       'Cette seconde règle est l’INVERSE de celle du serveur, qui garde le couple et casse la ' +
-      'plus petite fratrie : les deux sont ici pour être comparées. Elle ne s’applique QUE si ' +
-      'les deux fratries sont déjà voisines dans la rangée — ailleurs, elle écarterait le ' +
-      'couple d’un bout à l’autre au lieu de le décaler de quelques fiches. Et l’ajout d’une ' +
-      'personne ne déplace rien d’autre qu’elle. **Les nombres sont sous cette phrase, ' +
-      'recalculés à chaque affichage** : un chiffre écrit ici se périmerait au premier ' +
-      'correctif, et c’est arrivé.',
+      'plus petite fratrie : les deux sont ici pour être comparées. Et l’ajout d’une personne ' +
+      'ne déplace rien d’autre qu’elle. **Les nombres sont sous cette phrase, recalculés à ' +
+      'chaque affichage** : un chiffre écrit ici se périmerait au premier correctif, et c’est ' +
+      'arrivé.',
     appliquer: ressortsIsotoniques,
   },
   blocs: {
