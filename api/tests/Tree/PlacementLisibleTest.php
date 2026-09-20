@@ -279,6 +279,68 @@ final class PlacementLisibleTest extends TestCase
         }
     }
 
+    /**
+     * **Le bloc latéral est ALIGNÉ contre le couloir, pas seulement écarté de lui.**
+     *
+     * `pousserLeBloc()` ne déplaçait que dans un sens : un bloc déjà trop loin y
+     * restait. Mesuré le 20/09/2026 sur l'arbre du commanditaire, le bloc paternel
+     * s'était arrêté à **2 693 px** de sa place, emmenant 268 fiches et allongeant
+     * le trait du tronc de 3 288 à 5 879 px.
+     *
+     * ── CE QUE CE TEST PROUVE, ET CE QU'IL NE PROUVE PAS ────────────────────────
+     *
+     * Il tient l'invariant : **les deux blocs touchent le couloir, à la marge près**.
+     * Il **n'est pas** une preuve à deux faces, et il faut le dire : sur l'arbre
+     * synthétique, l'invariant était **déjà vrai** avant le correctif, et il le reste
+     * même quand on décale le bloc paternel de 3 000 px en entrée — les passes de
+     * placement le ramènent. Un arbre de dix personnes ne sait pas produire la
+     * dérive ; elle demande les treize rangées et la cascade de l'arbre réel.
+     *
+     * La preuve du défaut est donc ailleurs, et elle est chiffrée : l'emprise du
+     * tronc, mesurée rangée par rangée sur le graphe servi, **n'a pas bougé d'un
+     * pixel** entre les deux versions, pendant que le bord intérieur du bloc
+     * paternel passait de −124 à −2 818. Ce test garde l'invariant pour la suite ;
+     * il ne remplace pas cette mesure.
+     */
+    public function testLesBlocsLaterauxTouchentLeCouloirDuTronc(): void
+    {
+        $apres = $this->affine();
+        $noeud = fn (string $id): NoeudPlace => $apres->noeuds[$id];
+
+        $gauche = min(array_map(
+            static fn (NoeudPlace $n): float => $n->gauche(),
+            array_map($noeud, ['P-ego', 'P-soeur', 'P-frere', 'P-pere']),
+        ));
+        $droite = max(array_map(
+            static fn (NoeudPlace $n): float => $n->droite(),
+            array_map($noeud, ['P-ego', 'P-soeur', 'P-frere', 'P-mere']),
+        ));
+
+        $paternels = array_map($noeud, ['P-gp-pat', 'P-gm-pat', 'P-oncle', 'P-tante', 'P-cousin1', 'P-cousin2']);
+        $maternels = array_map($noeud, ['P-gp-mat', 'P-gm-mat']);
+
+        self::assertEqualsWithDelta(
+            $gauche - MoteurDePlacement::ESPACE,
+            max(array_map(static fn (NoeudPlace $n): float => $n->droite(), $paternels)),
+            0.001,
+            'Le bloc paternel doit toucher le couloir du tronc, pas seulement rester à sa gauche.',
+        );
+        self::assertEqualsWithDelta(
+            $droite + MoteurDePlacement::ESPACE,
+            min(array_map(static fn (NoeudPlace $n): float => $n->gauche(), $maternels)),
+            0.001,
+            'Le bloc maternel doit toucher le couloir du tronc.',
+        );
+
+        // Et aucune fiche du tronc n'est touchée : c'est l'argument exact qui rend
+        // l'alignement sûr, et il se vérifie ici plutôt que de se raisonner.
+        foreach ($paternels as $lateral) {
+            foreach (array_map($noeud, ['P-ego', 'P-soeur', 'P-frere', 'P-pere']) as $interne) {
+                self::assertLessThanOrEqual($interne->gauche(), $lateral->droite(), $lateral->id);
+            }
+        }
+    }
+
     /* ------------------------------------------------------------------ */
     /* Les deux exceptions structurelles */
     /* ------------------------------------------------------------------ */
