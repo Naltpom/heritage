@@ -251,6 +251,26 @@ jobs:
           fi
           echo "Gabarit et sonde en place."
 
+      # La SECONDE sonde, et le même argument que celle du dessus.
+      #
+      # `sante.php` rend l'empreinte de l'image de l'API : elle ne bouge pas d'un
+      # caractère quand seul `app/` change. La porte du paquet de `deploy.yml`
+      # est l'autre moitié — elle répond à « le front servi est-il celui qu'on
+      # vient de construire ? » — et elle repose sur trois choses qui vivent
+      # toutes dans `app/`, donc hors du flux de déploiement : `empreinte.sh`,
+      # une ligne du `Dockerfile`, et la `map` de cache de `nginx.conf`.
+      #
+      # Les trois peuvent disparaître par un remaniement raisonnable. La
+      # troisième est la pire : un `/paquet.txt` mis en cache un an ferait
+      # **mentir** la porte — elle comparerait une valeur figée à elle-même et
+      # rendrait vert sur le cas qu'elle existe pour attraper. Le détail du
+      # raisonnement, et pourquoi la garde ÉVALUE la map au lieu de la lire, sont
+      # dans l'en-tête du script.
+      # Ce travail n'a pas de `working-directory` : il tourne à la racine du
+      # dépôt, contrairement à « api » et « app ».
+      - name: Les trois appuis de la porte du paquet tiennent
+        run: bash .github/scripts/verifier-la-sonde-du-paquet.sh
+
       # Les quatre variables qui portent le domaine, et les deux qui portent les
       # invitations. Chacune a un repli MUET quelque part (api/.env copié dans
       # l'image, paramètre de service, liste blanche de développement) : absente
