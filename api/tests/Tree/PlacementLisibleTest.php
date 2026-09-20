@@ -9,6 +9,7 @@ use App\Module\Tree\Service\AffinageDuPlacement;
 use App\Module\Tree\Service\MoteurDePlacement;
 use App\Module\Tree\ValueObject\AreteDePlacement;
 use App\Module\Tree\ValueObject\BoiteEnglobante;
+use App\Module\Tree\ValueObject\FamillePlacable;
 use App\Module\Tree\ValueObject\JeuDePlacement;
 use App\Module\Tree\ValueObject\NoeudPlace;
 use App\Module\Tree\ValueObject\PersonnePlacable;
@@ -339,6 +340,51 @@ final class PlacementLisibleTest extends TestCase
                 self::assertLessThanOrEqual($interne->gauche(), $lateral->droite(), $lateral->id);
             }
         }
+    }
+
+    /**
+     * **Les neuf régions, dans l'ordre, quand le lecteur a un conjoint.**
+     *
+     * `[ pp | pm | mp | mm ][ TRONC ][ pp' | pm' | mp' | mm' ]` — la moitié du
+     * lecteur à gauche, la sienne à droite, le foyer entre les deux.
+     *
+     * ── POURQUOI CE CAS EST ÉCRIT À LA MAIN ────────────────────────────────────
+     *
+     * **Ni l'arbre synthétique ni l'arbre de référence n'ont de lecteur marié.**
+     * Leur ego n'a ni conjoint ni descendance, donc ce chemin y est **mort** : les
+     * 327 tests passent sans en exécuter une ligne. Sans ce cas, on livrerait un
+     * code que rien ne regarde — et c'est exactement la faute qu'on a refusé de
+     * commettre sur le bloc des détachées.
+     *
+     * L'extraction est **mesurée** sur l'arbre du commanditaire : depuis son père,
+     * le tronc du moteur fait **244 nœuds dont 181 personnes**, et il avale
+     * l'ascendance entière de sa conjointe. La spécification du commanditaire dit
+     * l'inverse — *« mon conjoint, mais pas ses frères et sœurs »*. Ce test tient
+     * la définition qu'il a écrite, pas celle que la fouille produisait.
+     */
+    public function testLesNeufRegionsSOrdonnentQuandLeLecteurAUnConjoint(): void
+    {
+        $apres = (new AffinageDuPlacement())->affine($this->foyerMarie(), $this->jeuFoyerMarie());
+        $x = static fn (string $id): float => $apres->noeuds[$id]->x;
+
+        // Les quatre quarts du lecteur, à gauche, dans l'ordre.
+        self::assertLessThan($x('GP-PM'), $x('GP-PP'), 'pp doit précéder pm');
+        self::assertLessThan($x('GP-MP'), $x('GP-PM'), 'pm doit précéder mp');
+        self::assertLessThan($x('GP-MM'), $x('GP-MP'), 'mp doit précéder mm');
+
+        // Le foyer, entre les deux moitiés.
+        self::assertLessThan($x('EGO'), $x('GP-MM'), 'le lecteur est à droite de sa propre ascendance');
+
+        // Les quatre quarts du conjoint, à droite, dans l'ordre.
+        self::assertLessThan($x('CGP-PP'), $x('EGO'), 'le côté du conjoint est à droite du foyer');
+        self::assertLessThan($x('CGP-PM'), $x('CGP-PP'), "pp' doit précéder pm'");
+        self::assertLessThan($x('CGP-MP'), $x('CGP-PM'), "pm' doit précéder mp'");
+        self::assertLessThan($x('CGP-MM'), $x('CGP-MP'), "mp' doit précéder mm'");
+
+        // **Le conjoint reste dans le foyer, sa fratrie n'y est pas.** C'est la
+        // phrase du commanditaire, et c'est ce que l'extraction doit produire.
+        self::assertGreaterThan($x('EGO'), $x('CONJ'), 'le conjoint est accolé au lecteur');
+        self::assertLessThan($x('C-SOEUR'), $x('CONJ'), 'la sœur du conjoint est de SON côté, pas dans le foyer');
     }
 
     /* ------------------------------------------------------------------ */
@@ -694,6 +740,48 @@ final class PlacementLisibleTest extends TestCase
      * naissance (I8). Le reste ne sert qu'à la mesure de largeur, que ces cas
      * fixent eux-mêmes à la main sur les `NoeudPlace`.
      */
+    /**
+     * Un lecteur marié, avec ses quatre grands-parents et ceux de sa conjointe.
+     *
+     * Dix-sept personnes : c'est le plus petit arbre qui porte les neuf régions.
+     */
+    private function jeuFoyerMarie(): JeuDePlacement
+    {
+        $ids = [
+            'EGO', 'CONJ', 'C-SOEUR',
+            'PERE', 'MERE', 'GP-PP', 'GP-PM', 'GP-MP', 'GP-MM',
+            'C-PERE', 'C-MERE', 'CGP-PP', 'CGP-PM', 'CGP-MP', 'CGP-MM',
+        ];
+        $sexes = [
+            'EGO' => Sex::Masculin, 'CONJ' => Sex::Feminin, 'C-SOEUR' => Sex::Feminin,
+            'PERE' => Sex::Masculin, 'MERE' => Sex::Feminin,
+            'GP-PP' => Sex::Masculin, 'GP-PM' => Sex::Feminin,
+            'GP-MP' => Sex::Masculin, 'GP-MM' => Sex::Feminin,
+            'C-PERE' => Sex::Masculin, 'C-MERE' => Sex::Feminin,
+            'CGP-PP' => Sex::Masculin, 'CGP-PM' => Sex::Feminin,
+            'CGP-MP' => Sex::Masculin, 'CGP-MM' => Sex::Feminin,
+        ];
+
+        return new JeuDePlacement(
+            array_map(static fn (string $id): PersonnePlacable => self::fiche($id, $sexes[$id], 1950), $ids),
+            [
+                new FamillePlacable('F-EGO', ['EGO', 'CONJ'], [], false),
+                new FamillePlacable('F-PAR', ['PERE', 'MERE'], ['EGO'], false),
+                new FamillePlacable('F-GP-P', ['GP-PP', 'GP-PM'], ['PERE'], false),
+                new FamillePlacable('F-GP-M', ['GP-MP', 'GP-MM'], ['MERE'], false),
+                new FamillePlacable('F-C-PAR', ['C-PERE', 'C-MERE'], ['CONJ', 'C-SOEUR'], false),
+                new FamillePlacable('F-CGP-P', ['CGP-PP', 'CGP-PM'], ['C-PERE'], false),
+                new FamillePlacable('F-CGP-M', ['CGP-MP', 'CGP-MM'], ['C-MERE'], false),
+            ],
+            'EGO',
+        );
+    }
+
+    private function foyerMarie(): Placement
+    {
+        return (new MoteurDePlacement())->calcule($this->jeuFoyerMarie());
+    }
+
     private static function fiche(string $id, Sex $sexe, ?int $anNais): PersonnePlacable
     {
         return new PersonnePlacable(
