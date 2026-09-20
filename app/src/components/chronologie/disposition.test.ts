@@ -115,7 +115,10 @@ describe('disposer', () => {
     expect(EXEMPLE_CHRONOLOGIE.bandes).toHaveLength(16)
     expect(disposition?.barres).toHaveLength(6)
     expect(disposition?.groupes).toHaveLength(3)
-    expect(ORDRE_BRANCHES).toHaveLength(5)
+    // SIX depuis que la belle-famille a sa région : quatre quarts, le tronc, et elle.
+    // Ce n'est pas un quart de plus — c'est la famille du conjoint d'un membre du tronc,
+    // que le sang du lecteur n'atteint pas. Voir `Branche` et `CalculAscendance`.
+    expect(ORDRE_BRANCHES).toHaveLength(6)
   })
 
   it('rend null sans bande — il n’y a pas d’axe, donc rien à placer', () => {

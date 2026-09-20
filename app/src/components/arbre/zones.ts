@@ -89,9 +89,9 @@ import type { NoeudGraphe } from '@/lib/api'
  * `b-null`, à laquelle aucune règle ne répond : liseré non peint, et aucun aplat.
  * Elles ont une région, et c'est celle des gens sans place attribuée.
  */
-export type CleDeZone = 'pp' | 'pm' | 'mp' | 'mm' | 'tr' | 'hors'
+export type CleDeZone = 'pp' | 'pm' | 'mp' | 'mm' | 'tr' | 'bf' | 'hors'
 
-export const CLES_DE_ZONE: readonly CleDeZone[] = ['pp', 'pm', 'tr', 'mp', 'mm', 'hors']
+export const CLES_DE_ZONE: readonly CleDeZone[] = ['pp', 'pm', 'tr', 'mp', 'mm', 'bf', 'hors']
 
 /** La clé de région d'un nœud — {@link CleDeZone} pour `branch: null`. */
 export function cleDeZone(branche: string | null | undefined): CleDeZone {
@@ -101,6 +101,7 @@ export function cleDeZone(branche: string | null | undefined): CleDeZone {
     case 'mp':
     case 'mm':
     case 'tr':
+    case 'bf':
       return branche
     default:
       return 'hors'

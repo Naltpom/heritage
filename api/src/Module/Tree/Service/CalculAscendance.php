@@ -263,7 +263,7 @@ final class CalculAscendance
         //
         // Le tronc est le point où les quatre branches se rejoignent : quelques personnes,
         // pas une région. Sans cette condition il déborde par les conjoints, puis de proche
-        // en proche, et **mesuré sur le graphe servi (468 personnes) il passe de 5 à 180**
+        // en proche, et **mesuré sur le graphe servi (468 personnes) il passe de 8 à 180**
         // dès que l'ego n'est pas la racine. Le mot cesse alors de vouloir dire quelque
         // chose : « le lecteur, sa fratrie, ses parents » se retrouve sur un tiers de
         // l'arbre.
@@ -275,13 +275,13 @@ final class CalculAscendance
         // n'atteint jamais est une mine ; `testLeTroncNeSePropagePasParAlliance` la
         // désamorce.
         //
-        // **Ce que la garde laisse en plan, et qui n'est pas réglé ici.** Les personnes
-        // qu'elle écarte — la famille du conjoint d'un membre du tronc — ressortent *sans
-        // branche*, et le sérialiseur leur sert alors celle **de la racine** par un repli
-        // silencieux (tâche #89 : 179 fiches sur 468 pour le père de la racine). Le remède
-        // n'est pas de lever cette condition, qui ne ferait que vider le mot « tronc » de
-        // son sens : c'est de donner à ces personnes des régions à elles. Ce travail est
-        // ouvert ailleurs, et il ne se fait pas en une clé mais en quatre.
+        // **Ce que la garde laisse en plan, et où c'est repris.** Les personnes qu'elle
+        // écarte — la famille du conjoint d'un membre du tronc — ressortaient *sans
+        // branche*, et le sérialiseur leur servait alors celle **de la racine** par un
+        // repli silencieux : 179 fiches sur 468 pour le père de la racine. Le remède n'est
+        // pas de lever cette condition, qui ne ferait que vider le mot « tronc » de son
+        // sens — c'est de leur donner une région à elles, et c'est {@see Branch::Bf},
+        // posée par {@see self::belleFamille()} juste après cette boucle.
         // ────────────────────────────────────────────────────────────────────
         for ($passage = 0; $passage < self::ITERATIONS_HERITAGE; ++$passage) {
             foreach ($idsPersonnes as $id) {
@@ -304,7 +304,73 @@ final class CalculAscendance
             }
         }
 
+        $this->belleFamille($idsPersonnes, $adjacence, $branche);
+
         return $branche;
+    }
+
+    /**
+     * **La belle-famille** : ce que le sang du lecteur n'atteint pas, et qui entre dans
+     * l'arbre par une alliance avec son tronc.
+     *
+     * Cette passe vient **après** l'héritage par le sang : elle ne touche donc que des
+     * personnes encore sans branche, et ne dispute rien aux quatre quarts. L'amorce est une
+     * alliance — le conjoint d'un membre du tronc —, puis la région s'étend de proche en
+     * proche, parce qu'une belle-famille est une famille entière et pas une personne.
+     *
+     * **Pourquoi elle est nécessaire.** Sans elle ces personnes sortaient sans branche, et
+     * le sérialiseur du graphe leur servait alors celle **de la racine** par un repli
+     * silencieux. Mesuré pour le père de la racine : 179 fiches sur 468 affichaient le quart
+     * d'ascendance de quelqu'un d'autre — dont son épouse et ses trois enfants étiquetés
+     * « Tronc ».
+     *
+     * **Pourquoi elle ne change rien pour la racine.** L'amorce exige un conjoint **sans
+     * branche**. Sur la vue de la racine, les conjoints des membres de son tronc sont ses
+     * propres parents et les conjoints de sa fratrie, que les quatre souches ont déjà
+     * servis : la passe n'amorce rien et ne pose aucune `Bf`. Vérifié sur le graphe servi —
+     * 0 fiche sur 468 change.
+     *
+     * @param list<string>                                                                                                             $idsPersonnes
+     * @param array{parents: array<string, list<string>>, enfants: array<string, list<string>>, conjoints: array<string, list<string>>} $adjacence
+     * @param array<string, Branch>                                                                                                    $branche      modifié sur place
+     */
+    private function belleFamille(array $idsPersonnes, array $adjacence, array &$branche): void
+    {
+        // L'amorce : un conjoint de membre du tronc que le sang n'a pas classé.
+        foreach ($idsPersonnes as $id) {
+            if (!isset($branche[$id]) || Branch::Tr !== $branche[$id]) {
+                continue;
+            }
+
+            foreach ($adjacence['conjoints'][$id] ?? [] as $conjoint) {
+                if (!isset($branche[$conjoint])) {
+                    $branche[$conjoint] = Branch::Bf;
+                }
+            }
+        }
+
+        // Puis la famille autour de cette amorce, avec le même nombre de passages que
+        // l'héritage : une belle-famille se remonte comme une ascendance.
+        for ($passage = 0; $passage < self::ITERATIONS_HERITAGE; ++$passage) {
+            foreach ($idsPersonnes as $id) {
+                if (isset($branche[$id])) {
+                    continue;
+                }
+
+                $voisins = array_merge(
+                    $adjacence['parents'][$id] ?? [],
+                    $adjacence['enfants'][$id] ?? [],
+                    $adjacence['conjoints'][$id] ?? [],
+                );
+
+                foreach ($voisins as $voisin) {
+                    if (isset($branche[$voisin]) && Branch::Bf === $branche[$voisin]) {
+                        $branche[$id] = Branch::Bf;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -371,8 +437,15 @@ final class CalculAscendance
     }
 
     /**
-     * L'ego, ses parents, et tous les enfants de ses parents — c'est-à-dire sa fratrie,
-     * demi-frères et demi-sœurs compris.
+     * **La lignée directe du lecteur et sa fratrie** : l'ego, ses parents, tous les enfants
+     * de ses parents — donc ses demi-frères et demi-sœurs —, et **sa descendance**.
+     *
+     * La descendance manquait, alors que {@see Branch::Tr} la nomme depuis toujours : « le
+     * tronc : la **lignée directe** et la fratrie ». L'oubli ne se voyait pas, parce que la
+     * racine de cet arbre n'a pas d'enfant : sa vue ne change pas d'une fiche. Il se voyait
+     * dès qu'un autre lecteur regardait — ses propres enfants n'étant d'aucun de ses quatre
+     * quarts ni de son tronc, ils finissaient rangés avec la belle-famille, c'est-à-dire du
+     * côté de leur mère plutôt que dans sa ligne.
      *
      * @param array{parents: array<string, list<string>>, enfants: array<string, list<string>>, conjoints: array<string, list<string>>} $adjacence
      *
@@ -387,6 +460,24 @@ final class CalculAscendance
 
             foreach ($adjacence['enfants'][$parent] ?? [] as $enfant) {
                 $tronc[$enfant] = true;
+            }
+        }
+
+        // La descendance, de proche en proche. Une pile et le tableau lui-même comme
+        // registre des vus, plutôt qu'une récursion : un arbre réel porte des implexes, et
+        // une boucle de filiation ferait tourner sans fin ({@see testUnImplexeNeFaitPasBoucler}).
+        $pile = [$ego];
+
+        while ([] !== $pile) {
+            $courant = array_pop($pile);
+
+            foreach ($adjacence['enfants'][$courant] ?? [] as $enfant) {
+                if (isset($tronc[$enfant])) {
+                    continue;
+                }
+
+                $tronc[$enfant] = true;
+                $pile[] = $enfant;
             }
         }
 
