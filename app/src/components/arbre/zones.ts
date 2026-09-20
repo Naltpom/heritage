@@ -9,13 +9,20 @@
  * sans navigateur ni faux document.
  *
  * ────────────────────────────────────────────────────────────────────
+ * **Ces nombres sont datés, et la mise en page bouge.** Ils ont été relevés le
+ * 20/09/2026 ; le même jour, la boîte est passée de 26 977 à 24 693 unités de large
+ * sans qu'aucune branche change de contenu. Ce qui doit tenir n'est donc pas le
+ * chiffre mais **la forme de l'argument** : deux emprises globales se chevauchent,
+ * une rangée sur quinze est entrelacée, et aucun seuil ne sépare les deux familles
+ * d'écarts. Si un relevé futur les contredit, c'est la forme qu'il faut réexaminer.
+ *
  * TOUT CE QUI SUIT EST MESURÉ SUR LE GRAPHE SERVI, empreinte `91ad68db` —
- * 648 nœuds, 468 personnes, 15 rangées, boîte 26 977 × 2 301.
+ * 648 nœuds, 468 personnes, 15 rangées, boîte 24 693 × 2 301.
  *
  * **POURQUOI PAS UN RECTANGLE PAR BRANCHE.** C'était la forme évidente, et elle
- * est fausse : les emprises globales se chevauchent. `pp` (-13 723 .. -3 102)
- * recouvre `pm` (-7 439 .. -125) sur **4 337 unités**, et `mp` (583 .. 6 220)
- * recouvre `mm` (4 440 .. 8 953) sur **1 780**. Un rectangle par branche
+ * est fausse : les emprises globales se chevauchent. `pp` (-13 715 .. -3 148)
+ * recouvre `pm` (-7 432 .. -125) sur **4 284 unités**, et `mp` (583 .. 5 468)
+ * recouvre `mm` (3 629 .. 8 189) sur **1 839**. Un rectangle par branche
  * donnerait deux paires de bandes superposées. On peint donc **rangée par
  * rangée**, une bande par génération, empilées.
  *
@@ -37,8 +44,8 @@
  * plus petit écart qu'il FAUT couper — entre `pp×10` et le `pm` qui s'y glisse —
  * vaut **20 unités**. Ailleurs dans l'arbre, le plus grand écart interne qu'il ne
  * faut SURTOUT pas couper — un trou à l'intérieur de `pp`, sur la rangée du bas —
- * vaut **3 795 unités**. Un seuil `t` devrait donc vérifier `t < 20` et
- * `t > 3 795` à la fois : **aucun seuil n'existe.** Réglé sur 20, il couperait
+ * vaut **3 750 unités**. Un seuil `t` devrait donc vérifier `t < 20` et
+ * `t > 3 750` à la fois : **aucun seuil n'existe.** Réglé sur 20, il couperait
  * à tort 416 des 417 écarts internes et réduirait les régions en confettis.
  *
  * On coupe donc sur le fait lui-même : **une bande s'arrête là où une personne
@@ -47,7 +54,7 @@
  * c'est-à-dire des intervalles disjoints par construction. Deux bandes d'une même
  * rangée ne peuvent plus se chevaucher : ce n'est plus une mesure qui tient,
  * c'est la forme qui l'interdit. Vérifié sur les six dispositions, **zéro
- * chevauchement partout**, là où la forme naïve en laisse de 1 à 9.
+ * chevauchement partout** — 1 à 9 pour la forme naïve, selon la disposition.
  * {@link zones.test.ts} tient la propriété.
  *
  * **La seule condition, et elle n'est pas de notre ressort** : que deux fiches de

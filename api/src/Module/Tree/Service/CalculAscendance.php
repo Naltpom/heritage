@@ -255,6 +255,34 @@ final class CalculAscendance
         // Héritage : le SANG d'abord (parents, puis enfants), l'alliance en dernier.
         // Dans l'autre ordre, un homme héritait de la branche de sa femme — c'est ainsi
         // que le père de l'ego se retrouvait étiqueté du côté maternel.
+        //
+        // ────────────────────────────────────────────────────────────────────
+        // **`Branch::Tr !== $branche[$voisin]` : LE TRONC NE SE PROPAGE PAS.** Cette
+        // condition porte tout le sens du mot « tronc », et rien ne la justifiait — d'où
+        // ces lignes.
+        //
+        // Le tronc est le point où les quatre branches se rejoignent : quelques personnes,
+        // pas une région. Sans cette condition il déborde par les conjoints, puis de proche
+        // en proche, et **mesuré sur le graphe servi (468 personnes) il passe de 5 à 180**
+        // dès que l'ego n'est pas la racine. Le mot cesse alors de vouloir dire quelque
+        // chose : « le lecteur, sa fratrie, ses parents » se retrouve sur un tiers de
+        // l'arbre.
+        //
+        // **Pourquoi personne ne l'avait remarqué** : la condition est *inerte pour la
+        // racine* — la lever ne change aucune fiche sur sa vue. Elle ne mord que pour un
+        // ego non-racine, cas qu'aucun compte n'exerce tant que le rattachement retombe sur
+        // la racine (tâche #74). Une condition porteuse que son seul cas révélateur
+        // n'atteint jamais est une mine ; `testLeTroncNeSePropagePasParAlliance` la
+        // désamorce.
+        //
+        // **Ce que la garde laisse en plan, et qui n'est pas réglé ici.** Les personnes
+        // qu'elle écarte — la famille du conjoint d'un membre du tronc — ressortent *sans
+        // branche*, et le sérialiseur leur sert alors celle **de la racine** par un repli
+        // silencieux (tâche #89 : 179 fiches sur 468 pour le père de la racine). Le remède
+        // n'est pas de lever cette condition, qui ne ferait que vider le mot « tronc » de
+        // son sens : c'est de donner à ces personnes des régions à elles. Ce travail est
+        // ouvert ailleurs, et il ne se fait pas en une clé mais en quatre.
+        // ────────────────────────────────────────────────────────────────────
         for ($passage = 0; $passage < self::ITERATIONS_HERITAGE; ++$passage) {
             foreach ($idsPersonnes as $id) {
                 if (isset($branche[$id])) {
