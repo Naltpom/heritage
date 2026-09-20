@@ -2,14 +2,24 @@
 #  Intégration continue — Heritage
 # =============================================================================
 #
-# Quatre portes bloquantes, plus la construction des images :
+# Cinq portes bloquantes, plus la construction des images :
 #
 #   1. phpstan niveau 6, zéro erreur          (travail « api »)
 #   2. phpunit                                 (travail « api »)
 #   3. vue-tsc --noEmit                        (travail « app »)
-#   4. npm run build                           (travail « app »)
-#   5. docker compose build, les deux images   (travail « docker »)
-#   6. la chaîne de déploiement se tient       (travail « deploiement »)
+#   4. vitest                                  (travail « app »)
+#   5. npm run build                           (travail « app »)
+#   6. docker compose build, les deux images   (travail « docker »)
+#   7. la chaîne de déploiement se tient       (travail « deploiement »)
+#
+# LA PORTE 4 A MANQUÉ JUSQU'AU 20 SEPTEMBRE 2026, et son absence ne se voyait
+# pas : le travail « app » s'appelait « vue-tsc + build », ce qu'il faisait
+# exactement — mais « CI verte » était lu, en face, comme « les tests passent ».
+# Les ~1200 tests du front n'avaient jamais tourné ailleurs que sur la machine
+# de leur auteur, y compris ceux écrits exprès pour garder un correctif. Le vert
+# était exact ; c'est le sens qu'on lui donnait qui débordait. L'asymétrie avec
+# le travail « api », qui lance bien l'analyse ET les tests, ne se devinait
+# depuis aucun écran.
 #
 # Regroupées en trois travaux et non cinq : chaque travail supplémentaire coûte
 # un démarrage de machine et une réinstallation de dépendances, et les minutes
@@ -91,7 +101,7 @@ jobs:
         run: php vendor/bin/phpunit
 
   app:
-    name: Front — vue-tsc + build
+    name: Front — vue-tsc + vitest + build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -114,9 +124,19 @@ jobs:
       - name: Porte 3 — vérification des types (vue-tsc --noEmit)
         run: npm run typecheck
 
-      # Porte 4. Le typage peut passer alors que le build casse (import d'un
+      # Porte 4. **La porte qui manquait.** Elle est placée avant le build, et
+      # non après, pour deux raisons : elle échoue sur ce qu'on veut savoir en
+      # premier, et elle met le travail « app » dans le même ordre que le
+      # travail « api » — l'analyse statique, puis les tests.
+      #
+      # `npm test` est `vitest run` (et non `vitest`, qui resterait en
+      # surveillance et ferait expirer le travail au bout de 15 minutes).
+      - name: Porte 4 — tests unitaires (vitest)
+        run: npm test
+
+      # Porte 5. Le typage peut passer alors que le build casse (import d'un
       # actif absent, plugin Vite mal configuré) : ce sont deux portes, pas une.
-      - name: Porte 4 — build de production (vite build)
+      - name: Porte 5 — build de production (vite build)
         run: npm run build
 
   docker:
@@ -137,15 +157,15 @@ jobs:
           docker compose config --quiet
           docker compose -f compose.yaml -f compose.prod.yaml config --quiet
 
-      # Porte 5. La seule vérification qui exerce réellement les deux
+      # Porte 6. La seule vérification qui exerce réellement les deux
       # Dockerfile : installation des extensions PHP et de Composer d'un côté,
       # `npm ci` puis `vite build` puis copie dans nginx de l'autre.
-      - name: Porte 5 — construction des deux images
+      - name: Porte 6 — construction des deux images
         run: docker compose build
 
-      # Porte 5 bis. L'image CONSTRUITE applique-t-elle les limites du dépôt ?
+      # Porte 6 bis. L’image CONSTRUITE applique-t-elle les limites du dépôt ?
       #
-      # Ni la porte 5 ni l'empreinte ne peuvent répondre à ça. La porte 5 prouve
+      # Ni la porte 6 ni l'empreinte ne peuvent répondre à ça. La porte 6 prouve
       # que le Dockerfile se construit, pas qu'il configure quoi que ce soit ; et
       # `docker/empreinte.sh`, qui hache bien `docker/php.ini` depuis le
       # 17 septembre 2026, atteste que ces octets sont PARTIS dans l'image — pas
@@ -161,13 +181,13 @@ jobs:
       # `--no-deps` : ni base ni boîte aux lettres, on ne démarre rien.
       # `--entrypoint php` : l'entrypoint de l'image attend PostgreSQL et joue les
       # migrations ; on veut PHP, pas la pile.
-      - name: Porte 5 bis — le conteneur applique-t-il les limites PHP du dépôt ?
+      - name: Porte 6 bis — le conteneur applique-t-il les limites PHP du dépôt ?
         run: |
           bash .github/scripts/verifier-les-limites-php.sh \
             docker compose run --rm --no-deps --entrypoint php api -i
 
   # ---------------------------------------------------------------------------
-  # Porte 6 — la chaîne de déploiement se tient
+  # Porte 7 — la chaîne de déploiement se tient
   # ---------------------------------------------------------------------------
   #
   # POURQUOI CETTE PORTE EXISTE. Le flux de déploiement ne part que si CETTE CI
