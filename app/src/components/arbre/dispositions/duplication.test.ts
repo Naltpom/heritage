@@ -2,13 +2,25 @@
  * ════════════════════════════════════════════════════════════════════
  * LA DUPLICATION ÉCHANGE UN TRAIT LONG CONTRE UN DOUBLON ASSUMÉ.
  *
- * Ce qu'il faut tenir tient en deux points, et le second est le piège :
+ * **Ce fichier a changé de sujet le 20/09/2026**, et il faut dire pourquoi : la
+ * page dupliquait le conjoint **rapporté**, c'est-à-dire celui qui n'a aucun
+ * parent dans l'arbre. Mesuré sur la charge réelle, ce choix couvrait **zéro**
+ * des 61 unions où les deux époux sont enfants de l'arbre — et ce sont elles qui
+ * portent **71 des 79 croisements**. Elle travaillait sur les huit autres.
  *
- * 1. le trait d'union part bien de l'**écho**, sinon on a ajouté une fiche sans
- *    rien supprimer — le pire des deux mondes ;
- * 2. l'écho porte le **même `personId`** que son original. Sans cela, l'arbre
- *    compte deux personnes là où il y en a une, et cliquer sur l'écho ouvrirait
- *    une fiche vide.
+ * Deux choses sont donc éprouvées ici, et la seconde est le cœur :
+ *
+ * 1. **le conjoint rapporté se DÉPLACE, il ne se dédouble pas.** L'exemplaire
+ *    qu'on laissait derrière lui n'avait aucune arête — pas de parents, l'union
+ *    partie à l'écho : une carte pleine reliée à rien, à côté d'une carte pâle
+ *    reliée au conjoint. Un exemplaire qui ne porte aucun trait ne dit rien.
+ * 2. **quand les deux époux sont enfants de l'arbre, l'écho se pose sous le
+ *    losange des parents**, avec la filiation, et l'original reste collé au
+ *    conjoint avec l'union. Chaque exemplaire porte **exactement un trait**, et
+ *    les deux sont courts.
+ *
+ * Et le piège d'origine tient toujours : l'écho porte le **même `personId`** que
+ * son original, sinon l'arbre compte deux personnes là où il y en a une.
  * ════════════════════════════════════════════════════════════════════
  */
 import { describe, expect, it } from 'vitest'
@@ -43,10 +55,10 @@ const f = (de: string, vers: string): AreteGraphe =>
   ({ de, vers, genre: 'filiation' }) as AreteGraphe
 
 /**
- * `a1` (enfant, a des parents) est mariée à `x1` (rapportée), et trois personnes
+ * `a1` (enfant, a des parents) est mariée à `x1` (rapportée), et deux personnes
  * s'intercalent entre elles.
  */
-const SEPARE: Graphe = {
+const RAPPORTE: Graphe = {
   empreinte: 'a'.repeat(64),
   ego: 'a1',
   boite: { x: -500, y: -500, w: 2000, h: 1000 },
@@ -60,68 +72,150 @@ const SEPARE: Graphe = {
     personne('x1', 360, 0, 4),
     famille('fCouple', 180, 46),
   ],
+  aretes: [u('pa', 'fParents'), f('fParents', 'a1'), u('a1', 'fCouple'), u('x1', 'fCouple')],
+} as unknown as Graphe
+
+/**
+ * **Le cas qui compte.** `a1` et `b1` sont chacun enfant d'une famille de
+ * l'arbre ; le moteur les a gardés accolés, et celui qui a quitté les siens
+ * traîne une filiation à travers la rangée. `b2` est la sœur de `b1`, restée
+ * de son côté.
+ */
+const DEUX_ENFANTS: Graphe = {
+  empreinte: 'b'.repeat(64),
+  ego: 'a1',
+  boite: { x: -500, y: -500, w: 2000, h: 1000 },
+  calque: { actif: false, demandes: [], proposes: 0, places: 0, nonPlaces: [] },
+  noeuds: [
+    personne('pa', 0, -150, 90),
+    personne('pb', 900, -150, 91),
+    famille('fA', 0, -104),
+    famille('fB', 900, -104),
+    personne('a1', 0, 0, 1),
+    personne('b1', 120, 0, 4),
+    personne('t1', 400, 0, 2),
+    personne('a2', 520, 0, 7),
+    personne('a3', 640, 0, 8),
+    personne('b2', 900, 0, 5),
+    famille('fCouple', 60, 46),
+  ],
   aretes: [
-    u('pa', 'fParents'),
-    f('fParents', 'a1'),
+    u('pa', 'fA'),
+    f('fA', 'a1'),
+    f('fA', 'a2'),
+    f('fA', 'a3'),
+    u('pb', 'fB'),
+    f('fB', 'b1'),
+    f('fB', 'b2'),
     u('a1', 'fCouple'),
-    u('x1', 'fCouple'),
+    u('b1', 'fCouple'),
   ],
 } as unknown as Graphe
 
-const apres = (): Graphe => duplication(SEPARE, OPTIONS_PAR_DEFAUT)
+const parId = (g: Graphe): Map<string, NoeudGraphe> => new Map(g.noeuds.map((n) => [n.id, n]))
+const aretesDe = (g: Graphe, id: string): AreteGraphe[] =>
+  g.aretes.filter((a) => a.de === id || a.vers === id)
 
-describe('l’écho remplace le trait long', () => {
-  it('pose un écho, et un seul', () => {
-    expect(compterLesEchos(apres())).toBe(1)
+/* ------------------------------------------------------------------ */
+
+describe('le conjoint rapporté se déplace, il ne se dédouble pas', () => {
+  const g = duplication(RAPPORTE, OPTIONS_PAR_DEFAUT)
+
+  it('ne pose aucun écho', () => {
+    /*
+     * L'exemplaire laissé derrière n'aurait AUCUNE arête : pas de parents, et
+     * l'union partie à l'écho. Mesuré le 20/09/2026 sur l'arbre réel, les six
+     * originaux de la version précédente étaient dans ce cas.
+     */
+    expect(compterLesEchos(g)).toBe(0)
   })
 
-  it('fait partir l’union de l’écho, et non de l’original', () => {
+  it('amène le rapporté contre son conjoint', () => {
+    const N = parId(g)
+    const a1 = N.get('a1')!
+    const x1 = N.get('x1')!
+    const entre = g.noeuds.filter(
+      (n) => n.type === 'personne' && n.y === 0 && n.x > Math.min(a1.x, x1.x) && n.x < Math.max(a1.x, x1.x),
+    )
+
+    expect(entre).toEqual([])
+  })
+
+  it('garde son union sur lui, et n’ajoute aucune arête', () => {
+    expect(aretesDe(g, 'x1').map((a) => a.genre)).toEqual(['union'])
+    expect(g.aretes).toHaveLength(RAPPORTE.aretes.length)
+  })
+})
+
+describe('les deux époux enfants de l’arbre : l’écho rejoint la fratrie', () => {
+  const g = duplication(DEUX_ENFANTS, OPTIONS_PAR_DEFAUT)
+
+  it('pose un écho, et un seul', () => {
+    // `a1` vient d'une fratrie de trois, `b1` d'une fratrie de deux : le couple
+    // rejoint la plus nombreuse, donc c'est `b1` qui quitte les siens.
+    expect(compterLesEchos(g)).toBe(1)
+    expect(g.noeuds.some((n) => n.id === 'b1#echo')).toBe(true)
+  })
+
+  it('fait partir la FILIATION de l’écho, et non de l’original', () => {
     /*
      * LE POINT CENTRAL. Si l'arête d'origine restait, on aurait ajouté une fiche
      * sans supprimer le trait — le pire des deux mondes : un doublon **et** un
      * croisement.
      */
-    const g = apres()
-    const versLeCouple = g.aretes.filter((a) => a.genre === 'union' && a.vers === 'fCouple')
+    const depuisLesParents = g.aretes.filter((a) => a.genre === 'filiation' && a.de === 'fB')
 
-    expect(versLeCouple.map((a) => a.de).sort()).toEqual(['a1', 'x1#echo'])
-    expect(versLeCouple.some((a) => a.de === 'x1')).toBe(false)
+    expect(depuisLesParents.map((a) => a.vers).sort()).toEqual(['b1#echo', 'b2'])
+    expect(depuisLesParents.some((a) => a.vers === 'b1')).toBe(false)
   })
 
-  it('pose l’écho à côté de son partenaire', () => {
-    const g = apres()
-    const parId = new Map(g.noeuds.map((n) => [n.id, n]))
+  it('donne UN trait à chaque exemplaire, et c’est ce qui rend le cas praticable', () => {
+    /*
+     * La page refusait ce cas en écrivant qu'un tel écho porterait deux traits.
+     * C'est vrai de l'autre construction — celle où l'écho prend l'union alors
+     * que l'original garde la filiation. Ici les rôles sont répartis.
+     */
+    expect(aretesDe(g, 'b1').map((a) => a.genre)).toEqual(['union'])
+    expect(aretesDe(g, 'b1#echo').map((a) => a.genre)).toEqual(['filiation'])
+  })
 
-    const a1 = parId.get('a1')!
-    const echo = parId.get('x1#echo')!
-    const intercales = g.noeuds.filter(
-      (n) => n.type === 'personne' && n.y === 0 && n.x > a1.x && n.x < echo.x,
+  it('pose l’écho AU CONTACT de sa fratrie, sous le losange de ses parents', () => {
+    /*
+     * Il est inséré à l'abscisse du losange, puis la passe d'écartement lui fait
+     * la place — il se retrouve donc **collé à sa sœur**, à une fiche du losange
+     * et non dessus. C'est la promesse qui compte : la fratrie l'a retrouvé.
+     */
+    const N = parId(g)
+    const echo = N.get('b1#echo')!
+    const rangee = g.noeuds
+      .filter((n) => n.type === 'personne' && n.y === 0)
+      .sort((p, q) => p.x - q.x)
+    const ou = rangee.findIndex((n) => n.id === 'b1#echo')
+    const voisins = [rangee[ou - 1]?.id, rangee[ou + 1]?.id]
+
+    expect(voisins).toContain('b2')
+    expect(Math.abs(echo.x - N.get('fB')!.x)).toBeLessThan(200)
+  })
+
+  it('laisse l’original collé à son conjoint', () => {
+    const N = parId(g)
+    const entre = g.noeuds.filter(
+      (n) => n.type === 'personne' && n.y === 0 && n.x > N.get('a1')!.x && n.x < N.get('b1')!.x,
     )
 
-    expect(intercales).toEqual([])
-  })
-
-  it('garde l’original dans la rangée, poussé par l’écho inséré', () => {
-    /*
-     * L'écho s'insère dans la rangée : tout ce qui était à sa droite recule d'une
-     * fiche, l'original compris. C'est le coût assumé de la duplication — la
-     * rangée s'élargit —, et non un déplacement décidé quelque part.
-     */
-    const g = apres()
-    const original = g.noeuds.find((n) => n.id === 'x1')!
-
-    expect(original.x).toBeGreaterThan(360)
-    expect(original.y).toBe(0)
+    expect(entre).toEqual([])
   })
 })
 
 describe('un écho n’est pas une personne de plus', () => {
+  const g = duplication(DEUX_ENFANTS, OPTIONS_PAR_DEFAUT)
+
   it('porte le même `personId` que son original', () => {
     /* Sans cela, l'arbre compte deux personnes là où il y en a une, et cliquer
        sur l'écho ouvrirait une fiche vide. */
-    const g = apres()
-    const echo = g.noeuds.find((n) => n.id === 'x1#echo')!
-    const original = g.noeuds.find((n) => n.id === 'x1')!
+    const N = parId(g)
+    const echo = N.get('b1#echo')!
+    const original = N.get('b1')!
 
     expect(echo.type === 'personne' && original.type === 'personne').toBe(true)
     expect((echo as { personId: number | null }).personId).toBe(
@@ -137,69 +231,46 @@ describe('un écho n’est pas une personne de plus', () => {
   })
 
   it('reste sur la rangée de son original', () => {
-    const g = apres()
-    const echo = g.noeuds.find((n) => n.id === 'x1#echo')!
-
-    expect(echo.y).toBe(0)
+    expect(parId(g).get('b1#echo')!.y).toBe(0)
   })
 })
 
-describe('ce qu’elle ne duplique pas', () => {
-  it('laisse tranquille un couple déjà accolé', () => {
+describe('ce qu’elle ne touche pas', () => {
+  it('laisse tranquille un couple déjà accolé, sans parents des deux côtés', () => {
     const accole = {
-      ...SEPARE,
-      noeuds: [
-        personne('a1', 0, 0, 1),
-        personne('x1', 120, 0, 4),
-        famille('fCouple', 60, 46),
-      ],
+      ...RAPPORTE,
+      noeuds: [personne('a1', 0, 0, 1), personne('x1', 120, 0, 4), famille('fCouple', 60, 46)],
       aretes: [u('a1', 'fCouple'), u('x1', 'fCouple')],
     } as unknown as Graphe
 
-    expect(compterLesEchos(duplication(accole, OPTIONS_PAR_DEFAUT))).toBe(0)
+    expect(duplication(accole, OPTIONS_PAR_DEFAUT)).toBe(accole)
   })
 
-  it('ne duplique pas un couple dont les deux époux ont des parents', () => {
+  it('ne duplique pas celui qui touche déjà l’un des siens', () => {
     /*
-     * Leur écho porterait **deux** traits — sa filiation et son union — et l'on
-     * n'aurait rien simplifié : un doublon de plus, un croisement toujours là.
+     * **Condition, pas seuil.** Si la personne est assise à côté d'un frère ou
+     * d'une sœur, sa fratrie ne l'a pas perdue : son trait de filiation est court
+     * et il n'y a rien à réparer.
      */
-    const deuxEnfants = {
-      ...SEPARE,
-      noeuds: [
-        personne('pa', 0, -150, 90),
-        personne('pb', 400, -150, 91),
-        famille('fA', 0, -104),
-        famille('fB', 400, -104),
-        personne('a1', 0, 0, 1),
-        personne('t1', 120, 0, 2),
-        personne('t2', 240, 0, 3),
-        personne('b1', 360, 0, 4),
-        famille('fCouple', 180, 46),
-      ],
-      aretes: [
-        u('pa', 'fA'),
-        f('fA', 'a1'),
-        u('pb', 'fB'),
-        f('fB', 'b1'),
-        u('a1', 'fCouple'),
-        u('b1', 'fCouple'),
-      ],
+    const colle = {
+      ...DEUX_ENFANTS,
+      noeuds: DEUX_ENFANTS.noeuds.map((n) => (n.id === 'b2' ? { ...n, x: 240 } : n)),
     } as unknown as Graphe
 
-    expect(compterLesEchos(duplication(deuxEnfants, OPTIONS_PAR_DEFAUT))).toBe(0)
+    expect(compterLesEchos(duplication(colle, OPTIONS_PAR_DEFAUT))).toBe(0)
   })
 
-  it('rend le graphe inchangé quand il n’y a rien à dupliquer', () => {
-    const rien = { ...SEPARE, aretes: [] } as unknown as Graphe
+  it('rend le graphe inchangé quand il n’y a rien à faire', () => {
+    const rien = { ...RAPPORTE, aretes: [] } as unknown as Graphe
 
     expect(duplication(rien, OPTIONS_PAR_DEFAUT)).toBe(rien)
   })
 })
 
 describe('la cohérence du résultat', () => {
+  const g = duplication(DEUX_ENFANTS, OPTIONS_PAR_DEFAUT)
+
   it('ne laisse aucune arête pointer dans le vide', () => {
-    const g = apres()
     const presents = new Set(g.noeuds.map((n) => n.id))
 
     for (const arete of g.aretes) {
@@ -209,19 +280,13 @@ describe('la cohérence du résultat', () => {
   })
 
   it('replace le losange sur le couple qu’il joint réellement', () => {
-    const g = apres()
-    const parId = new Map(g.noeuds.map((n) => [n.id, n]))
+    const N = parId(g)
+    const losange = N.get('fCouple')!
 
-    const a1 = parId.get('a1')!
-    const echo = parId.get('x1#echo')!
-    const losange = parId.get('fCouple')!
-
-    expect(losange.x).toBeCloseTo((a1.x + echo.x) / 2, 6)
+    expect(losange.x).toBeCloseTo((N.get('a1')!.x + N.get('b1')!.x) / 2, 6)
   })
 
   it('recalcule la boîte pour contenir les échos', () => {
-    const g = apres()
-
     for (const noeud of g.noeuds) {
       expect(noeud.x - noeud.w / 2).toBeGreaterThanOrEqual(g.boite.x)
       expect(noeud.x + noeud.w / 2).toBeLessThanOrEqual(g.boite.x + g.boite.w)
