@@ -189,6 +189,9 @@ final class AffinageDuPlacement
      */
     private array $quarts = [];
 
+    /** Le rang du tronc dans {@see $quarts} : 2 sans conjoint, 4 avec. */
+    private int $rangDuTronc = 2;
+
     /**
      * La mesure des fiches **telles qu'elles sont affichées** — photo à gauche, dates
      * des vivants — est faite ici et non dans le moteur : le moteur mesure ce que sa
@@ -586,22 +589,71 @@ final class AffinageDuPlacement
         );
         $tronc = $this->atteignableDepuis($this->enfants[$famille] ?? [], $parents + $paternel + $maternel);
 
+        // ── L'ASCENDANCE DU CONJOINT, EXTRAITE DU TRONC.
+        //
+        // **Le tronc du moteur et le tronc du commanditaire ne sont pas le même
+        // objet.** Sa définition dit : *« moi, mes parents, mon conjoint — mais pas
+        // ses frères et sœurs, eux restent dans le bloc de la famille opposée — mes
+        // enfants et leurs conjoints »*. Celle du moteur avale toute la parenté du
+        // conjoint, parce que la fouille du tronc part de la fratrie du lecteur et
+        // que rien ne l'arrête avant.
+        //
+        // Mesuré le 20/09/2026, depuis le père du commanditaire :
+        //
+        //     paternel 154 · maternel 204 · TRONC 244 · hors 43
+        //
+        // **181 personnes dans ce tronc, dont l'ascendance entière de sa conjointe.**
+        // C'est cela qu'on en sort.
+        $conjoints = $this->conjointsDe($egoId);
+        $cote = [];
+
+        foreach ($conjoints as $conjoint) {
+            $cote = $this->ascendanceDuConjoint($conjoint, $tronc);
+
+            if ([] !== $cote) {
+                $tronc = array_diff_key($tronc, $cote);
+                break;
+            }
+        }
+
+        // **Le tronc se tient ENTRE les deux moitiés du dessin.** Avec un conjoint,
+        // ce sont la moitié du lecteur et la sienne ; sans conjoint, ce sont le côté
+        // du père et celui de la mère — l'arrangement d'aujourd'hui, inchangé.
+        //
+        // Sans cette distinction, un lecteur sans conjoint verrait tout son arbre
+        // passer à gauche et **sa propre fiche partir au bord droit du dessin**,
+        // alors qu'elle est au milieu. On ne déplace pas le lecteur pour une moitié
+        // qui n'existe pas.
+        $avecConjoint = [] !== $cote;
+        $rangs = $avecConjoint
+            ? ['pp' => 0, 'pm' => 1, 'mp' => 2, 'mm' => 3, 'tr' => 4]
+            : ['pp' => 0, 'pm' => 1, 'tr' => 2, 'mp' => 3, 'mm' => 4];
+        $this->rangDuTronc = $rangs['tr'];
+
         $quarts = [];
 
-        foreach ([[$pere, $paternel, 0, 1], [$mere, $maternel, 3, 4]] as [$parent, $bloc, $dedans, $dehors]) {
+        foreach ([[$pere, $paternel, 'pp', 'pm'], [$mere, $maternel, 'mp', 'mm']] as [$parent, $bloc, $un, $deux]) {
             [$premier, $second] = $this->deuxQuarts($parent, $bloc);
 
             foreach (array_keys($premier) as $id) {
-                $quarts[$id] = $dedans;
+                $quarts[$id] = $rangs[$un];
             }
 
             foreach (array_keys($second) as $id) {
-                $quarts[$id] = $dehors;
+                $quarts[$id] = $rangs[$deux];
             }
         }
 
         foreach (array_keys($tronc + $parents) as $id) {
-            $quarts[$id] = 2;
+            $quarts[$id] = $rangs['tr'];
+        }
+
+        if ($avecConjoint) {
+            foreach ($this->quatreQuartsDuConjoint($cote) as $rang => $ensemble) {
+                foreach (array_keys($ensemble) as $id) {
+                    $quarts[$id] = 5 + $rang;
+                }
+            }
         }
 
         foreach (array_keys($this->noeuds) as $id) {
@@ -611,6 +663,122 @@ final class AffinageDuPlacement
         }
 
         return $quarts;
+    }
+
+    /**
+     * Les conjoints du lecteur, dans l'ordre des familles où il est époux.
+     *
+     * @return list<string>
+     */
+    private function conjointsDe(string $egoId): array
+    {
+        $conjoints = [];
+
+        foreach ($this->voisins[$egoId] ?? [] as $voisin) {
+            if (!isset($this->epoux[$voisin]) || !\in_array($egoId, $this->epoux[$voisin], true)) {
+                continue;
+            }
+
+            foreach ($this->epoux[$voisin] as $membre) {
+                if ($membre !== $egoId) {
+                    $conjoints[] = $membre;
+                }
+            }
+        }
+
+        return $conjoints;
+    }
+
+    /**
+     * **Ce qui, dans le tronc, appartient à la parenté du conjoint et non au foyer.**
+     *
+     * On part de ses parents — jamais de lui : le conjoint reste dans le tronc, c'est
+     * le foyer du lecteur. Sa fratrie, ses parents et leur lignée en sortent.
+     *
+     * Rend un tableau vide quand il n'a aucun parent placé : il n'y a alors rien à
+     * extraire, et le dessin garde son arrangement d'aujourd'hui.
+     *
+     * @param array<string, true> $tronc
+     *
+     * @return array<string, true>
+     */
+    private function ascendanceDuConjoint(string $conjoint, array $tronc): array
+    {
+        $famille = $this->familleDesParents[$conjoint] ?? null;
+
+        if (null === $famille || !isset($tronc[$famille])) {
+            return [];
+        }
+
+        return $this->atteignableDepuis([$famille], $this->horsDe($tronc) + [$conjoint => true]);
+    }
+
+    /**
+     * Le côté du conjoint, découpé comme celui du lecteur : `pp'`, `pm'`, `mp'`, `mm'`.
+     *
+     * Le même geste que {@see deuxQuarts()}, appliqué deux fois — une par parent du
+     * conjoint. Quand un partage n'est pas possible, le quart vide reste vide : c'est
+     * une région de moins, pas une région fausse.
+     *
+     * @param array<string, true> $cote
+     *
+     * @return list<array<string, true>>
+     */
+    private function quatreQuartsDuConjoint(array $cote): array
+    {
+        $couple = null;
+
+        foreach (array_keys($cote) as $id) {
+            if (isset($this->epoux[$id]) && 2 === \count($this->epoux[$id])) {
+                $couple = $id;
+                break;
+            }
+        }
+
+        if (null === $couple) {
+            return [$cote, [], [], []];
+        }
+
+        [$pere, $mere] = $this->hommeAGauche(...$this->epoux[$couple]);
+
+        $paternel = $this->atteignableDepuis(
+            array_keys($this->ascendanceStricte($pere) + [$pere => true]),
+            $this->horsDe($cote) + $this->ascendanceStricte($mere) + [$mere => true, $couple => true],
+        );
+
+        $maternel = [];
+
+        foreach (array_keys($cote) as $id) {
+            if (!isset($paternel[$id])) {
+                $maternel[$id] = true;
+            }
+        }
+
+        [$pp, $pm] = $this->deuxQuarts($pere, $paternel);
+        [$mp, $mm] = $this->deuxQuarts($mere, $maternel);
+
+        return [$pp, $pm, $mp, $mm];
+    }
+
+    /**
+     * Le complément d'un ensemble parmi les nœuds placés — ce qu'une fouille doit
+     * s'interdire pour rester chez elle.
+     *
+     * @param array<string, true> $ensemble
+     *
+     * @return array<string, true>
+     */
+    private function horsDe(array $ensemble): array
+    {
+        $dehors = [];
+
+        foreach (array_keys($this->noeuds) as $id) {
+            if (!isset($ensemble[$id])) {
+                $dehors[$id] = true;
+            }
+        }
+
+        return $dehors;
     }
 
     /**
@@ -639,17 +807,9 @@ final class AffinageDuPlacement
             return [$bloc, []];
         }
 
-        $dehors = [];
-
-        foreach (array_keys($this->noeuds) as $id) {
-            if (!isset($bloc[$id])) {
-                $dehors[$id] = true;
-            }
-        }
-
         $premier = $this->atteignableDepuis(
             array_keys($this->ascendanceStricte($grandPere) + [$grandPere => true]),
-            $dehors + $this->ascendanceStricte($grandMere) + [$grandMere => true],
+            $this->horsDe($bloc) + $this->ascendanceStricte($grandMere) + [$grandMere => true],
         );
 
         $second = [];
@@ -1204,8 +1364,29 @@ final class AffinageDuPlacement
             $droite = max($droite, $this->posx[$id] + $this->noeuds[$id]->w / 2);
         }
 
-        $this->pousserLeBloc($paternel, $gauche - MoteurDePlacement::ESPACE, self::VERS_LA_GAUCHE);
-        $this->pousserLeBloc($maternel, $droite + MoteurDePlacement::ESPACE, self::VERS_LA_DROITE);
+        // **Les deux moitiés se lisent sur les rangs, plus sur « paternel » et
+        // « maternel ».** Le tronc est au milieu par définition : ce qui a un rang
+        // plus petit va à sa gauche, ce qui en a un plus grand à sa droite. Sans
+        // conjoint, ça redonne exactement l'arrangement d'avant — père à gauche,
+        // mère à droite —, et avec conjoint c'est le lecteur à gauche et lui à droite.
+        $aGauche = [];
+        $aDroite = [];
+
+        foreach ($this->quarts as $id => $rang) {
+            if ($rang >= 0 && $rang < $this->rangDuTronc) {
+                $aGauche[$id] = true;
+            } elseif ($rang > $this->rangDuTronc) {
+                $aDroite[$id] = true;
+            }
+        }
+
+        if ([] === $this->quarts) {
+            $aGauche = $paternel;
+            $aDroite = $maternel;
+        }
+
+        $this->pousserLeBloc($aGauche, $gauche - MoteurDePlacement::ESPACE, self::VERS_LA_GAUCHE);
+        $this->pousserLeBloc($aDroite, $droite + MoteurDePlacement::ESPACE, self::VERS_LA_DROITE);
 
         // ── CE QUI N'EST RELIÉ À RIEN, ET QUI DOIT QUAND MÊME SE POSER QUELQUE PART.
         //
@@ -1242,7 +1423,7 @@ final class AffinageDuPlacement
             return;
         }
 
-        $bordPaternel = $this->bordDuBloc($paternel, self::VERS_LA_DROITE);
+        $bordPaternel = $this->bordDuBloc([] === $aGauche ? $paternel : $aGauche, self::VERS_LA_DROITE);
 
         if (null === $bordPaternel) {
             return;
