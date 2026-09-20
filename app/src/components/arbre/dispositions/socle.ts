@@ -85,7 +85,7 @@ function entierBorne(valeur: unknown, defaut: number): number {
   return Math.min(20, Math.max(0, Math.trunc(nombre)))
 }
 
-export const DISPOSITIONS = ['conjoints', 'bornee', 'croisements', 'duplication'] as const
+export const DISPOSITIONS = ['conjoints', 'bornee', 'croisements', 'duplication', 'ressorts'] as const
 
 export type NomDeDisposition = (typeof DISPOSITIONS)[number]
 
@@ -172,6 +172,16 @@ export interface MesureDeLisibilite {
   /** Ceux qui ne le sont pas, et combien de personnes s'intercalent en tout. */
   separes: number
   intercales: number
+  /**
+   * **La somme des carrés des traits** — l'objectif que le serveur optimise
+   * (`PlacementLisibleTest::sommeDesCarres`), et le seul nombre sur lequel une
+   * disposition qui ne réordonne pas puisse se juger. Sans lui, le bandeau
+   * afficherait « 163 → 163 » pour une mise en page qui raccourcit tous les
+   * traits de huit pour cent, et le lecteur conclurait qu'elle ne fait rien.
+   */
+  carres: number
+  /** Le trait le plus long. Une somme de carrés peut baisser en le laissant croître. */
+  traitLePlusLong: number
 }
 
 /**
@@ -214,12 +224,28 @@ export function mesurerLisibilite(graphe: Graphe): MesureDeLisibilite {
     }
   }
 
+  const abscisses = new Map(graphe.noeuds.map((noeud) => [noeud.id, noeud.x]))
+  let carres = 0
+  let traitLePlusLong = 0
+
+  for (const arete of graphe.aretes) {
+    const de = abscisses.get(arete.de)
+    const vers = abscisses.get(arete.vers)
+    if (de === undefined || vers === undefined) continue
+
+    const ecart = Math.abs(de - vers)
+    carres += ecart * ecart
+    traitLePlusLong = Math.max(traitLePlusLong, ecart)
+  }
+
   return {
     personnes: graphe.noeuds.filter((noeud) => noeud.type === 'personne').length,
     couples,
     accoles,
     separes,
     intercales,
+    carres,
+    traitLePlusLong,
   }
 }
 
