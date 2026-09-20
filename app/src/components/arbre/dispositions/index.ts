@@ -141,7 +141,10 @@ export const PRESENTATIONS: Record<NomDeDisposition, PresentationDeDisposition> 
       'largeur double presque, et les croisements ne baissent pas. La cause en est mesurée le ' +
       '20/09/2026 : 71 des 79 croisements de l’arbre d’origine viennent des 61 unions où les ' +
       'DEUX époux sont enfants de l’arbre ; l’un des deux doit quitter sa fratrie et traîne un ' +
-      'trait à travers tout. Aucune géométrie ne les supprime — seule la duplication les vise.',
+      'trait à travers tout. Aucune géométrie ne les supprime, et la duplication telle qu’elle ' +
+      'est écrite non plus : elle ne duplique qu’un conjoint SANS parents dans l’arbre, donc ' +
+      'aucune de ces 61 unions. Les supprimer demanderait de dupliquer aussi celui qui a des ' +
+      'parents — mesuré possible, pas écrit.',
     appliquer: blocsRigides,
   },
 }

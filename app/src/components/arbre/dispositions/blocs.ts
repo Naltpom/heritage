@@ -48,9 +48,20 @@
  * Ce module reste ce qu'il promet : l'ordre y est **construit** et non obtenu, un
  * enfant tombe sous ses parents, et deux branches ne se traversent pas. Mais il
  * n'achète pas les croisements que le commanditaire voit, et il coûte **×1,92 en
- * largeur, ×3,25 sur le trait le plus long** (5 879 → 19 103 px). La disposition
- * qui vise ces 71 croisements est {@link duplication}, qui dessine le conjoint
- * deux fois au lieu de tirer le trait.
+ * largeur, ×3,25 sur le trait le plus long** (5 879 → 19 103 px).
+ *
+ * **Et la duplication ne les vise pas non plus**, contrairement à ce que cette
+ * page a d'abord annoncé. Vérifié dans son code le 20/09/2026 : elle ne duplique
+ * que le conjoint **sans parents dans l'arbre** — `const rapporte =
+ * membres.find((id) => !avecParents.has(id))`, et sans lui elle passe son chemin.
+ * Les 61 unions en cause sont exactement le cas complémentaire, et elle en couvre
+ * **zéro**. Mesuré : elle pose six échos, aucun sur ces 61.
+ *
+ * La piste qui les viserait est une duplication **étendue à celui qui a des
+ * parents** : son original reste au milieu des siens avec sa filiation, son écho
+ * se colle au conjoint avec l'union, et chaque exemplaire ne porte qu'un trait.
+ * Le plafond du gain est mesurable sans l'écrire : en retirant ces 61 filiations,
+ * les croisements du serveur tombent de **79 à 8**.
  *
  * **PAS DE CONTOUR, NI EN V1 NI APRÈS.** Mesuré avant de décider : l'imbrication
  * par contour récupère **491 px sur 2 173 d'excès** au sens de l'ancienne formule.
