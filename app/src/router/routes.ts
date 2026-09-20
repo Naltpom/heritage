@@ -165,7 +165,7 @@ export const routes: RouteRecordRaw[] = [
    *
    * **Volontairement absentes du menu.** Ce sont des variantes de mise en page
    * proposées au commanditaire pour qu'il choisisse ; les exposer au reste de la
-   * famille montrerait cinq arbres différents sans dire lequel fait foi.
+   * famille montrerait six arbres différents sans dire lequel fait foi.
    * Accessibles par URL, et rien de plus.
    *
    * Elles montent **le même composant** que `/arbre` : ce qui diffère est une
@@ -205,7 +205,14 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'attente', titre: 'Arbre — duplication', disposition: 'duplication' },
   },
   {
-    // **Sa propre vue**, et c'est la seule des six. Les cinq autres sont des
+    path: '/arbre-7',
+    name: 'arbre.ressorts',
+    component: () => import('@/views/ArbreView.vue'),
+    props: dispositionEnProp,
+    meta: { acces: 'attente', titre: 'Arbre — ressorts et isotonie', disposition: 'ressorts' },
+  },
+  {
+    // **Sa propre vue**, et c'est la seule des sept. Les six autres sont des
     // transformations de la charge, que le canevas de l'arbre dessine sans savoir
     // qu'elle a été retouchée. Le quilt n'est pas une disposition, c'est une
     // autre **représentation** : une matrice, sans fiche, sans losange, sans

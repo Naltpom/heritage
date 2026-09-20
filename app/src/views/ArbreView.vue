@@ -221,7 +221,23 @@ const effetDeLaDisposition = computed(() => {
 
   if (brut === null || affiche === null || presentation.value === null) return null
 
-  return { avant: mesurerLisibilite(brut), apres: mesurerLisibilite(affiche) }
+  const avant = mesurerLisibilite(brut)
+  const apres = mesurerLisibilite(affiche)
+
+  // Les nombres sont **mis en forme ici, pas dans le gabarit** : une expression
+  // dans un gabarit n'est éprouvée par aucun test de ce dépôt, et se découvre
+  // à l'écran quand elle est fausse.
+  const millions = (valeur: number): string => String(Math.round(valeur / 1e6))
+  const pixels = (valeur: number): string => String(Math.round(valeur))
+
+  return {
+    avant,
+    apres,
+    carresAvant: millions(avant.carres),
+    carresApres: millions(apres.carres),
+    traitAvant: pixels(avant.traitLePlusLong),
+    traitApres: pixels(apres.traitLePlusLong),
+  }
 })
 const canevas = ref<InstanceType<typeof CanevasArbre> | null>(null)
 const barre = ref<InstanceType<typeof BarreOutilsArbre> | null>(null)
@@ -675,10 +691,16 @@ onBeforeUnmount(() => {
       sont indiscernables dès qu'on a fait défiler l'arbre : sans ce bandeau, on
       compare deux images dont on ne sait plus laquelle est laquelle.
 
-      Il annonce aussi la **mesure** — couples accolés avant et après. Une
-      disposition se juge sur des nombres, pas sur une impression : on peut rendre
-      un arbre plus joli localement en le dégradant ailleurs, et l'œil ne le voit
-      pas sur 377 nœuds.
+      Il annonce aussi la **mesure** — couples accolés, et longueur des traits.
+      Une disposition se juge sur des nombres, pas sur une impression : on peut
+      rendre un arbre plus joli localement en le dégradant ailleurs, et l'œil ne le
+      voit pas sur 377 nœuds.
+
+      **Deux familles de nombres, parce qu'une seule ne suffit pas.** Les couples
+      accolés ne disent rien d'une disposition qui ne réordonne pas — elle
+      afficherait « 163 → 163 » en ayant raccourci tous les traits. Et la somme des
+      carrés ne dit rien d'une disposition qui réordonne. Chacune a besoin de
+      l'autre pour ne pas se faire juger sur ce qu'elle ne touche pas.
     -->
     <div
       v-if="presentation !== null"
@@ -696,6 +718,11 @@ onBeforeUnmount(() => {
         {{ effetDeLaDisposition.apres.accoles }} sur {{ effetDeLaDisposition.apres.couples }}.
         Personnes assises entre deux époux :
         {{ effetDeLaDisposition.avant.intercales }} → {{ effetDeLaDisposition.apres.intercales }}.
+
+        Longueur des traits, somme des carrés :
+        {{ effetDeLaDisposition.carresAvant }} →
+        {{ effetDeLaDisposition.carresApres }} millions ; le plus long :
+        {{ effetDeLaDisposition.traitAvant }} → {{ effetDeLaDisposition.traitApres }} px.
         <RouterLink :to="{ name: 'arbre' }" class="text-accent underline">
           Comparer à l’arbre d’origine
         </RouterLink>

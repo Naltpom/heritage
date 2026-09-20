@@ -23,6 +23,7 @@ import { ascendanceSeule } from './ascendanceSeule'
 import { conjointsAccoles } from './conjointsAccoles'
 import { croisementsMinimises } from './croisements'
 import { duplication } from './duplication'
+import { ressortsIsotoniques } from './ressorts'
 import { vueBornee } from './vueBornee'
 import type { Disposition, NomDeDisposition, OptionsDeDisposition } from './socle'
 
@@ -33,6 +34,15 @@ export { conjointsAccoles }
 export { vueBornee }
 export { croisementsMinimises, compterLesCroisements } from './croisements'
 export { duplication, compterLesEchos, estUnEcho, originalDeLEcho } from './duplication'
+export {
+  ressortsIsotoniques,
+  pava,
+  placerParIsotonie,
+  bornesDesLosanges,
+  losangesHorsDeLeursEpoux,
+  mouvements,
+  sommeDesCarres,
+} from './ressorts'
 
 /** Ce que l'écran dit de la variante qu'on regarde. */
 export interface PresentationDeDisposition {
@@ -83,6 +93,21 @@ export const PRESENTATIONS: Record<NomDeDisposition, PresentationDeDisposition> 
       'écho tireté à côté de son partenaire. Le trait long disparaît, remplaçé par un doublon ' +
       'assumé. L’écho porte le même identifiant de personne : cliquer dessus mène à la même fiche.',
     appliquer: duplication,
+  },
+  ressorts: {
+    titre: 'Ressorts et isotonie',
+    resume:
+      'Chaque nœud est tiré vers la moyenne de ses voisins, et chaque rangée est résolue ' +
+      '**exactement** sous la contrainte de non-chevauchement — la régression isotonique, en ' +
+      'une passe, sans itération interne ni amortissement. Elle ne réordonne rien : elle garde ' +
+      'l’ordre du serveur, donc les couples accolés et la règle du remariage restent tels quels, ' +
+      'et le nombre de croisements ne bouge pas. Ce qu’elle gagne est la longueur des traits : ' +
+      'la somme de leurs carrés passe de 119,8 à 109,8 millions sur l’arbre réel (mesuré le ' +
+      '20/09/2026, 644 nœuds), et l’ajout d’une personne ne déplace rien d’autre qu’elle. Deux ' +
+      'prix, dits ici plutôt que découverts à l’écran : le trait le PLUS long s’allonge de 9 % ' +
+      '(3 185 → 3 486 px), et comme l’arbre d’origine elle laisse une soixantaine de losanges ' +
+      'hors de l’intervalle de leurs époux — 64 contre 63.',
+    appliquer: ressortsIsotoniques,
   },
 }
 
