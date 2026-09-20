@@ -525,6 +525,33 @@ final class AffinageDuPlacement
      * ne lit aucune abscisse : c'est ce qui permet de s'en servir comme clé d'ordre
      * avant le premier placement.
      *
+     * ── L'INFORMATION LA PLUS UTILE DE CE CHANTIER, POUR QUI REPREND ────────────
+     *
+     * **Ordonner et écarter ne sont pas la même contrainte, et l'écart vaut
+     * 67 millions.** Mesuré le 20/09/2026 sur l'arbre de référence, 377 nœuds :
+     *
+     * |                          | carrés | trait max | largeur |
+     * |---|---|---|---|
+     * | moteur seul              | 106,5 M | 4 840 | 15 704 |
+     * | affinage, avant          | 61,9 M | 4 198 | 13 714 |
+     * | quatre blocs **écartés** | **122,8 M** | 7 548 | 18 709 |
+     * | quarts **ordonnés**      | **55,7 M** | 3 982 | 13 437 |
+     *
+     * Écarter impose un espace : chaque arête qui va d'un quart à l'autre traverse
+     * alors la largeur entière d'un quart, et la garde de l'arbre réel refuse la
+     * version — la somme des carrés repasse au-dessus du moteur seul.
+     *
+     * Ordonner n'impose rien : les quarts se touchent, ils ne se traversent plus.
+     * **Et le gain n'est pas un hasard** — l'entrelacement mesuré avant (`pp` et
+     * `pm` chevauchés sur 4 337 px sur l'arbre du commanditaire) **était lui-même
+     * du désordre**. Le défaire sans écarter raccourcit les traits.
+     *
+     * **Conséquence pour la suite, et elle est chiffrée, plus supposée :** la
+     * spécification à treize régions du commanditaire — ses quatre quarts, ceux de
+     * sa conjointe, le tronc — passe par une **clé de tri plus fine**, pas par des
+     * blocs rigides. C'est « les blocs d'abord, les gens ensuite » sans blocs.
+     * ────────────────────────────────────────────────────────────────────
+     *
      * Rend un tableau vide quand le découpage n'a pas de sens — lecteur sans
      * parents placés, ou famille qui n'en porte pas deux.
      *
