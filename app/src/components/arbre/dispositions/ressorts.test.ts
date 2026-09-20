@@ -788,7 +788,28 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
     expect(depassementMaximal).toBeLessThan(serveur.depassementMaximal * 1.5)
   })
 
-  it('ALLONGE LE TRAIT LE PLUS LONG — le prix de la somme des carrés, dit ici', () => {
+  /**
+   * **LA BORNE, ET PLUS LE PRIX.**
+   *
+   * Ce cas exigeait que le solveur **allonge** le trait le plus long :
+   * `traitMax(apres) > traitMax(g)`. C'était un fait mesuré quand il a été écrit
+   * — *« mesuré le 20/09/2026, 3 185 → 3 486 px, soit +9,5 % »* — et la raison en
+   * était juste : **minimiser une somme de carrés n'est pas minimiser le
+   * maximum**, raccourcir beaucoup de traits peut en laisser un s'allonger.
+   *
+   * Le même jour, plus tard, le prix a cessé d'être payé. Remesuré sur la charge
+   * de production : **5 582 → 5 445 px**, le solveur le **raccourcit**. Les deux
+   * chiffres ont changé, et le trait le plus long est une filiation **vers le
+   * tronc** — exactement ce sur quoi la correction du trait du tronc a travaillé.
+   *
+   * **Un test qui EXIGE une dégradation masquera la vraie régression le jour où
+   * elle revient** : si le solveur se remettait à allonger ce trait de moitié,
+   * l'ancienne assertion resterait verte. La borne haute, elle, garde tout son
+   * sens et devient le seul garde-fou — elle attrape l'emballement, qui est le
+   * défaut qu'on craint, et se tait sur le sens de la variation, qui est un
+   * arbitrage et non une promesse.
+   */
+  it('NE LAISSE PAS LE TRAIT LE PLUS LONG S’EMBALLER', () => {
     const traitMax = (graphe: Graphe): number => {
       const x = new Map(graphe.noeuds.map((n) => [n.id, n.x]))
       return Math.max(
@@ -796,13 +817,8 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
       )
     }
 
-    // **Minimiser une somme de carrés n'est pas minimiser le maximum.** Raccourcir
-    // beaucoup de traits peut en laisser un s'allonger, et c'est ce qui arrive :
-    // mesuré le 20/09/2026, 3 185 → 3 486 px, soit +9,5 %. Le serveur, lui, tient
-    // que son trait le plus long ne remonte jamais. **C'est un vrai coût, et le
-    // test le borne au lieu de l'ignorer** — si un changement le fait doubler, il
-    // faudra le voir ici et non à l'écran.
-    expect(traitMax(apres)).toBeGreaterThan(traitMax(g))
+    // Le témoin : sans lui, la borne passerait aussi sur un arbre vide.
+    expect(traitMax(g)).toBeGreaterThan(1000)
     expect(traitMax(apres)).toBeLessThan(traitMax(g) * 1.25)
   })
 
@@ -817,9 +833,67 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
     expect(etendue(apres)).toBeLessThan(etendue(g) * 2)
   })
 
-  it('le mouvement retombe, à cette échelle aussi', () => {
-    const { deplacements } = mouvements(g)
-    expect(deplacements[deplacements.length - 1]!).toBeLessThan(deplacements[0]! / 2)
+  /**
+   * **CE QUI DÉCROÎT, ET CE QUI N'EST PLUS PROMIS.**
+   *
+   * Ce cas exigeait `dernier < premier / 2` : que le solveur **divise le
+   * mouvement par deux en huit tours**. C'était vrai quand il a été écrit, et
+   * confortablement — sur la charge du 19/09, `22 039 → 15 807 → 11 702 → 9 537`,
+   * la moitié était atteinte **au deuxième tour**.
+   *
+   * Cette prémisse est morte, et **pas parce que le solveur s'est dégradé** :
+   * parce que le serveur s'est amélioré. Le mouvement du **premier** tour est
+   * tombé de `22 039 px` à `9 109 px` — on nous rend un arbre deux fois et demie
+   * moins désordonné, donc il y a deux fois et demie moins à rattraper, et la
+   * proportion qu'on rattrape en huit tours n'est plus la même. Mesuré sur la
+   * charge de production : `t8 = 8 543`, `t20 = 8 122`, `t40 = 7 329` — **même
+   * quarante tours n'atteignent pas la moitié.**
+   *
+   * Le symptôme mesurait donc la **taille du désordre initial**, pas la santé du
+   * solveur. Une assertion qui en dépend se périmera à chaque correctif du
+   * serveur, et elle l'a fait le jour même.
+   *
+   * ## Ce qui reste vrai, et qui est ce qu'on voulait dire
+   *
+   * **Le mouvement total décroît à chaque tour, et l'objectif aussi.** Vérifié
+   * sur trois charges successives et quarante tours : **pas une seule remontée**,
+   * ni de l'un ni de l'autre. Ces deux propriétés ne dépendent d'aucune quantité à
+   * rattraper, donc elles survivront au prochain correctif serveur.
+   *
+   * **Et elles attrapent mieux la vraie panne.** Une relaxation instable — celle
+   * que ce solveur remplace, qui rebondissait — fait **remonter** l'objectif ou
+   * **osciller** le total. La monotonie le voit au tour où ça arrive.
+   * `< premier / 2` ne le voyait qu'indirectement, et pouvait rester verte sur une
+   * suite qui oscille pourvu qu'elle finisse basse.
+   *
+   * ## ⚠ LA MONOTONIE EST CELLE DU TOTAL, PAS CELLE DE CHAQUE NŒUD
+   *
+   * **Ne resserrez pas cette assertion au nœud.** Mesuré sur douze tours de la
+   * charge réelle : sur 644 nœuds, **537 avancent toujours dans le même sens, 60
+   * changent de sens** et 47 ne bougent pas. Ces soixante-là sont normaux — un
+   * nœud tiré par deux voisins qui se placent l'un après l'autre recule puis
+   * avance. C'est la **somme** qui décroît, et c'est elle qui dit que ça se
+   * calme.
+   *
+   * La décroissance de l'objectif est aussi tenue par le cas voisin, qui la
+   * nomme ; elle est répétée ici **à dessein**, parce que c'est la **paire** qui
+   * a un sens : un mouvement qui tombe sans que l'objectif tombe serait un
+   * solveur qui s'endort sur une mauvaise mise en page.
+   */
+  it('LE MOUVEMENT ET L’OBJECTIF DÉCROISSENT À CHAQUE TOUR — jamais l’inverse', () => {
+    const { deplacements, objectifs } = mouvements(g)
+
+    // Le témoin : sans mouvement au départ, la monotonie serait celle d'une
+    // suite de zéros, et l'instrument serait débranché.
+    expect(deplacements[0]!).toBeGreaterThan(100)
+
+    for (let tour = 1; tour < deplacements.length; tour += 1) {
+      expect(deplacements[tour]!).toBeLessThanOrEqual(deplacements[tour - 1]!)
+    }
+
+    for (let tour = 1; tour < objectifs.length; tour += 1) {
+      expect(objectifs[tour]!).toBeLessThanOrEqual(objectifs[tour - 1]!)
+    }
   })
 
   it('L’OBJECTIF NE REMONTE À AUCUN TOUR, sur six cents nœuds non plus', () => {

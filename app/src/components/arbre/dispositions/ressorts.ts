@@ -585,14 +585,44 @@ export const FRATRIE_CONSEQUENTE = 3
  * union rompue n'est pas un couple à garder ensemble, donc la question du poids
  * des fratries ne se pose pas pour elle.
  *
- * ## Ce que « rester entier » veut dire ici
+ * ## Ce que « rester entier » veut dire ici — et ce que ça ne voulait PAS dire
  *
- * L'époux qui a été tiré hors de sa fratrie y **revient par le côté d'où il
- * venait**. On ne prétend pas connaître son rang de naissance : la charge du
- * client ne porte aucune date, et `etiquetteDates` vaut `vivant·e` pour les
- * vivants. Ce que la règle garantit est que **les deux fratries redeviennent
- * contiguës**, pas que l'aîné soit à gauche — cet ordre-là appartient au serveur,
- * qui a les vraies dates.
+ * La première version ramenait l'époux **à côté d'un de ses frères**, et
+ * s'arrêtait là. C'était trop peu, et le 20/09/2026 la mesure l'a montré :
+ * **deux unions de l'arbre réel gardaient leurs fratries entrelacées** alors que
+ * chaque époux touchait bien l'un des siens. Une fratrie de trois enfourchait
+ * une fratrie de six — rangs `[30..38]` contre `[31..36]` — et la règle passait
+ * son tour, parce que son critère était *l'adjacence à un frère* quand ce qu'on
+ * voulait était *la disjonction des deux fratries*. **Deux critères différents,
+ * dont le plus faible était écrit dans le code et le plus fort dans le test.**
+ *
+ * La règle vise donc désormais ce qu'elle promettait : **quand les intervalles
+ * des deux fratries se recouvrent, chacune est regroupée en un bloc contigu**,
+ * et les deux blocs sont posés côte à côte à l'endroit où commençait la plus à
+ * gauche. Ramener les deux époux n'y suffisait pas — dans le cas réel, ce n'est
+ * pas un époux qui était sorti, c'est une fratrie qui était coupée en deux par
+ * l'autre.
+ *
+ * **Aucun rang de naissance n'est inventé, et c'est une garantie, pas un
+ * hasard :** l'ordre interne de chaque fratrie est celui qu'on reçoit,
+ * intégralement. La charge du client ne porte aucune date — `etiquetteDates`
+ * vaut `vivant·e` pour les vivants — et une clé de naissance reconstituée ici
+ * fausserait ce que le serveur, qui a les vraies dates, a déjà trié.
+ *
+ * ## Ce que le renforcement coûte, mesuré avant de le livrer
+ *
+ * | sur la charge de production | règle molle | règle renforcée |
+ * |---|---|---|
+ * | fratries entrelacées | **2** | **0** |
+ * | croisements | 76 | **64** |
+ * | somme des carrés | 119,8 M | **117,9 M** |
+ * | couples séparés | 15 | 15 |
+ * | plus long trait d'union | 2 352 px | 2 352 px |
+ *
+ * **Il ne coûte rien, et il rapporte.** La prévision écrite avant la mesure
+ * disait l'inverse — « la règle se remettrait à rallonger des traits d'union » —
+ * et elle avait tort. Le seul prix réel est ailleurs : **51 fiches changent de
+ * place une fois.**
  */
 export function separerLesGrossesFratries(
   noeuds: readonly NoeudGraphe[],
@@ -630,8 +660,8 @@ export function separerLesGrossesFratries(
   const rangeeDe = new Map<IdentifiantNoeud, number>()
   for (const [y, ids] of rangees) for (const id of ids) rangeeDe.set(id, y)
 
-  /** Les époux à ramener dans leur fratrie, par rangée. */
-  const aRamener = new Map<number, IdentifiantNoeud[]>()
+  /** Les deux fratries de chaque couple visé, par rangée. */
+  const aDemeler = new Map<number, [IdentifiantNoeud, IdentifiantNoeud][]>()
 
   for (const [famille, membres] of liens.epoux) {
     if (membres.length !== 2) continue
@@ -647,41 +677,44 @@ export function separerLesGrossesFratries(
     if ((enfants.get(fa) ?? []).length < seuil) continue
     if ((enfants.get(fb) ?? []).length < seuil) continue
 
-    aRamener.set(y, [...(aRamener.get(y) ?? []), a, b])
+    aDemeler.set(y, [...(aDemeler.get(y) ?? []), [fa, fb]])
   }
 
-  for (const [y, epouxDeLaRangee] of aRamener) {
+  for (const [y, couples] of aDemeler) {
     let ordre = [...(rangees.get(y) ?? [])]
 
-    for (const personne of epouxDeLaRangee) {
-      const sienne = familleDesParents.get(personne)
-      if (sienne === undefined) continue
+    for (const [fa, fb] of couples) {
+      const presents = (famille: IdentifiantNoeud): Set<IdentifiantNoeud> =>
+        new Set((enfants.get(famille) ?? []).filter((id) => ordre.includes(id)))
 
-      const fratrie = (enfants.get(sienne) ?? []).filter((id) => id !== personne)
-      const places = fratrie
-        .map((id) => ordre.indexOf(id))
-        .filter((i) => i >= 0)
-        .sort((p, q) => p - q)
+      const dansA = presents(fa)
+      const dansB = presents(fb)
+      if (dansA.size < 2 || dansB.size < 2) continue
 
-      if (places.length === 0) continue
+      const bornes = (membres: ReadonlySet<IdentifiantNoeud>): [number, number] => {
+        const places = ordre.map((id, i) => (membres.has(id) ? i : -1)).filter((i) => i >= 0)
+        return [places[0]!, places[places.length - 1]!]
+      }
 
-      const ici = ordre.indexOf(personne)
-      if (ici < 0) continue
+      const ba = bornes(dansA)
+      const bb = bornes(dansB)
 
-      // Déjà collé à l'un des siens : rien à faire.
-      if (places.some((i) => Math.abs(i - ici) === 1)) continue
+      // Déjà disjointes : la règle n'a rien à faire, et surtout rien à défaire.
+      if (ba[1] < bb[0] || bb[1] < ba[0]) continue
 
-      const premier = places[0]!
-      const dernier = places[places.length - 1]!
-      const sansLui = ordre.filter((id) => id !== personne)
-      const decalage = ici < premier ? 0 : 1
+      // **Chaque fratrie devient un bloc, l'ordre interne inchangé.** C'est ce
+      // qui garantit qu'aucun rang de naissance n'est inventé : on ne trie pas,
+      // on rassemble.
+      const blocA = ordre.filter((id) => dansA.has(id))
+      const blocB = ordre.filter((id) => dansB.has(id))
+      const reste = ordre.filter((id) => !dansA.has(id) && !dansB.has(id))
 
-      // Il revient par le côté d'où il venait : à gauche de sa fratrie s'il était
-      // à sa gauche, à droite sinon.
-      const cible = ici < premier ? premier - decalage : dernier - decalage + 1
+      // Les deux blocs se posent là où commençait la fratrie la plus à gauche,
+      // dans cet ordre-là : le reste de la rangée ne bouge pas d'un cran.
+      const depart = Math.min(ba[0], bb[0])
+      const premiers = ba[0] <= bb[0] ? [...blocA, ...blocB] : [...blocB, ...blocA]
 
-      sansLui.splice(cible, 0, personne)
-      ordre = sansLui
+      ordre = [...reste.slice(0, depart), ...premiers, ...reste.slice(depart)]
     }
 
     // Les emplacements du serveur, réattribués dans le nouvel ordre : la rangée
