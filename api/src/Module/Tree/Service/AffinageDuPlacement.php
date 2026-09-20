@@ -180,6 +180,16 @@ final class AffinageDuPlacement
     private array $posx = [];
 
     /**
+     * Le rang du quart de chaque nœud, quand le lecteur a ses deux parents placés.
+     *
+     * `-1` détaché · `0` pp · `1` pm · `2` tronc et parents · `3` mp · `4` mm.
+     * Vide quand le découpage n'a pas de sens — pas de parents, ou pas deux.
+     *
+     * @var array<string, int>
+     */
+    private array $quarts = [];
+
+    /**
      * La mesure des fiches **telles qu'elles sont affichées** — photo à gauche, dates
      * des vivants — est faite ici et non dans le moteur : le moteur mesure ce que sa
      * preuve de non-régression attend, et c'est l'affinage qui refait les abscisses.
@@ -197,6 +207,12 @@ final class AffinageDuPlacement
         if ([] === $this->noeuds) {
             return $place;
         }
+
+        // **Les blocs d'abord, les gens ensuite.** Le découpage en quarts est
+        // topologique : il ne dépend d'aucune abscisse, donc il se calcule avant
+        // tout placement et sert de première clé d'ordre. Les quarts sont ainsi
+        // **ordonnés sans être écartés** — aucun espace n'est imposé entre eux.
+        $this->quarts = $this->quartsDuLecteur($place->egoId);
 
         $rangees = $this->blocs();
 
@@ -477,6 +493,150 @@ final class AffinageDuPlacement
     }
 
     /**
+     * Le quart d'un groupe de blocs — le plus petit rang de ses membres.
+     *
+     * Le plus petit, et non la moyenne : un groupe qui touche deux quarts se range
+     * du côté du premier, ce qui garde l'ordre total et évite qu'un cas mixte
+     * flotte entre les deux.
+     *
+     * @param list<list<string>> $groupe
+     */
+    private function quartDuGroupe(array $groupe): ?int
+    {
+        $rang = null;
+
+        foreach ($groupe as $bloc) {
+            foreach ($bloc as $id) {
+                if (!isset($this->quarts[$id])) {
+                    continue;
+                }
+
+                $rang = null === $rang ? $this->quarts[$id] : min($rang, $this->quarts[$id]);
+            }
+        }
+
+        return $rang;
+    }
+
+    /**
+     * **Les cinq régions du lecteur, en topologie pure.**
+     *
+     * `[ pp | pm ][ TRONC ][ mp | mm ]`, plus ce qui n'est relié à rien. Le calcul
+     * ne lit aucune abscisse : c'est ce qui permet de s'en servir comme clé d'ordre
+     * avant le premier placement.
+     *
+     * Rend un tableau vide quand le découpage n'a pas de sens — lecteur sans
+     * parents placés, ou famille qui n'en porte pas deux.
+     *
+     * @return array<string, int>
+     */
+    private function quartsDuLecteur(string $egoId): array
+    {
+        $famille = $this->familleDesParents[$egoId] ?? null;
+
+        if (null === $famille || 2 !== \count($this->epoux[$famille] ?? [])) {
+            return [];
+        }
+
+        [$pere, $mere] = $this->hommeAGauche(...$this->epoux[$famille]);
+
+        if (!isset($this->noeuds[$pere], $this->noeuds[$mere])) {
+            return [];
+        }
+
+        $parents = [$famille => true, $pere => true, $mere => true];
+        $noyau = $this->descendanceStricte($this->enfants[$famille] ?? []);
+        $aieuxDuPere = $this->ascendanceStricte($pere);
+        $aieuxDeLaMere = $this->ascendanceStricte($mere);
+
+        $paternel = $this->atteignableDepuis(
+            array_keys($aieuxDuPere + [$pere => true]),
+            $parents + $aieuxDeLaMere + $noyau,
+        );
+        $maternel = $this->atteignableDepuis(
+            array_keys($aieuxDeLaMere + [$mere => true]),
+            $parents + $paternel + $noyau,
+        );
+        $tronc = $this->atteignableDepuis($this->enfants[$famille] ?? [], $parents + $paternel + $maternel);
+
+        $quarts = [];
+
+        foreach ([[$pere, $paternel, 0, 1], [$mere, $maternel, 3, 4]] as [$parent, $bloc, $dedans, $dehors]) {
+            [$premier, $second] = $this->deuxQuarts($parent, $bloc);
+
+            foreach (array_keys($premier) as $id) {
+                $quarts[$id] = $dedans;
+            }
+
+            foreach (array_keys($second) as $id) {
+                $quarts[$id] = $dehors;
+            }
+        }
+
+        foreach (array_keys($tronc + $parents) as $id) {
+            $quarts[$id] = 2;
+        }
+
+        foreach (array_keys($this->noeuds) as $id) {
+            if (!isset($quarts[$id])) {
+                $quarts[$id] = -1;
+            }
+        }
+
+        return $quarts;
+    }
+
+    /**
+     * Les deux quarts d'un côté : la lignée du grand-père, puis celle de la
+     * grand-mère. Sans partage possible, tout va dans le premier.
+     *
+     * Les frères et sœurs du parent descendent des deux grands-parents : ils
+     * suivent le losange de leurs parents, donc le quart du grand-père. **C'est un
+     * choix par défaut, pas une évidence.**
+     *
+     * @param array<string, true> $bloc
+     *
+     * @return array{0: array<string, true>, 1: array<string, true>}
+     */
+    private function deuxQuarts(string $parent, array $bloc): array
+    {
+        $famille = $this->familleDesParents[$parent] ?? null;
+
+        if (null === $famille || 2 !== \count($this->epoux[$famille] ?? [])) {
+            return [$bloc, []];
+        }
+
+        [$grandPere, $grandMere] = $this->hommeAGauche(...$this->epoux[$famille]);
+
+        if (!isset($this->noeuds[$grandPere], $this->noeuds[$grandMere])) {
+            return [$bloc, []];
+        }
+
+        $dehors = [];
+
+        foreach (array_keys($this->noeuds) as $id) {
+            if (!isset($bloc[$id])) {
+                $dehors[$id] = true;
+            }
+        }
+
+        $premier = $this->atteignableDepuis(
+            array_keys($this->ascendanceStricte($grandPere) + [$grandPere => true]),
+            $dehors + $this->ascendanceStricte($grandMere) + [$grandMere => true],
+        );
+
+        $second = [];
+
+        foreach (array_keys($bloc) as $id) {
+            if (!isset($premier[$id])) {
+                $second[$id] = true;
+            }
+        }
+
+        return [] === $premier || [] === $second ? [$bloc, []] : [$premier, $second];
+    }
+
+    /**
      * @param list<list<string>> $blocs
      *
      * @return list<list<string>>
@@ -514,8 +674,19 @@ final class AffinageDuPlacement
         $rang = array_flip($ordre);
 
         usort($ordre, function (string $a, string $b) use ($groupes, $rang): int {
+            // **Le quart passe avant tout le reste.** `[ pp | pm ][ TRONC ][ mp | mm ]`
+            // est l'ordre demandé par le commanditaire ; il se tient par une clé de
+            // tri, pas par des blocs écartés. Rien n'impose d'espace entre deux
+            // quarts : ils se touchent, ils ne se traversent pas.
+            $qa = $this->quartDuGroupe($groupes[$a]);
+            $qb = $this->quartDuGroupe($groupes[$b]);
+
+            if (null !== $qa && null !== $qb && $qa !== $qb) {
+                return $qa <=> $qb;
+            }
+
             // **Une fratrie se range sous ses parents ; sa descendance la suit, elle
-            // ne la commande pas.** C'est la première clé, avant la médiane.
+            // ne la commande pas.** C'est la clé suivante, avant la médiane.
             $pa = $this->ancreDesParents($a);
             $pb = $this->ancreDesParents($b);
 
