@@ -23,9 +23,18 @@
  * formes est visible à toute largeur — celle-ci est `md:block`, l'autre vit dans
  * un conteneur `md:hidden`.
  */
-const { calqueActif, enTiroir = false } = defineProps<{
+const { calqueActif, avecHorsBranche = false, enTiroir = false } = defineProps<{
   /** Le lecteur a des nœuds « en attente » dans son graphe (§ 5.2). */
   calqueActif: boolean
+  /**
+   * Le graphe porte des personnes **sans branche**.
+   *
+   * Passé plutôt que supposé : une légende qui annoncerait une région absente de
+   * l'arbre ferait chercher au lecteur une couleur qui n'y est pas. Et l'inverse
+   * — ne jamais l'annoncer — laisserait sans explication le seul groupe que rien
+   * ne relie au reste, celui qu'on remarque justement parce qu'il est à l'écart.
+   */
+  avecHorsBranche?: boolean
   /** Rendue dans le tiroir des filtres du mobile, et non en flottant. */
   enTiroir?: boolean
 }>()
@@ -37,6 +46,14 @@ const BRANCHES = [
   { classe: 'b-mm', libelle: 'Tilleul — maternelle de la mère' },
   { classe: 'b-tr', libelle: 'Tronc — l’ego, sa fratrie, ses parents' },
 ] as const
+
+/**
+ * Les personnes que rien ne relie à la racine — une belle-famille, le plus
+ * souvent, entrée avec un conjoint et jamais rattachée. Ce n'est **pas** une
+ * sixième branche : le sérialiseur sort `branch: null`, et le moteur les pose à
+ * l'écart de tout le reste. Voir `zones.ts`.
+ */
+const HORS_BRANCHE = { classe: 'b-hors', libelle: 'Sans branche — non rattachée à la racine' } as const
 
 const SEXES = [
   { classe: 'h', libelle: 'Homme' },
@@ -92,8 +109,22 @@ const SEXES = [
       <h4 class="mt-1 text-[10.5px] font-bold uppercase tracking-wider text-attenue">
         Branches
       </h4>
-      <div v-for="b in BRANCHES" :key="b.classe" class="flex items-center gap-2 leading-tight">
+      <p class="-mt-1 text-[10.5px] leading-snug text-attenue">
+        Les aplats du fond reprennent ces teintes : chacun couvre une région de l’arbre.
+      </p>
+      <!--
+        L'échantillon porte les DEUX formes de la même teinte — le liseré de la
+        fiche et l'aplat de la région — parce que c'est ainsi qu'elles se
+        présentent à l'écran, et parce que les deux sortent de la même règle
+        `.b-…` : elles ne peuvent pas diverger. Voir l'en-tête.
+      -->
+      <div
+        v-for="b in avecHorsBranche ? [...BRANCHES, HORS_BRANCHE] : BRANCHES"
+        :key="b.classe"
+        class="flex items-center gap-2 leading-tight"
+      >
         <svg width="34" height="16" class="shrink-0 overflow-visible" aria-hidden="true">
+          <g class="zones"><path :class="['zone', b.classe]" d="M0,1 H34 V15 H0 Z" /></g>
           <rect :class="['br', b.classe]" x="14" y="2" width="4" height="12" />
         </svg>
         <span class="text-attenue">{{ b.libelle }}</span>

@@ -37,6 +37,7 @@ import {
   type IndexGraphe,
   type NoeudPersonneEtendu,
 } from './graphe'
+import { cleDeZone, zonesDeBranche } from './zones'
 
 const NS_SVG = 'http://www.w3.org/2000/svg'
 
@@ -145,6 +146,7 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
 
   while (svg.firstChild !== null) svg.removeChild(svg.firstChild)
 
+  const gZones = creer('g', { class: 'zones' })
   const gAretes = creer('g', { class: 'aretes' })
   const gFamilles = creer('g', { class: 'familles' })
   const gFiches = creer('g', { class: 'fiches' })
@@ -154,6 +156,46 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
   const rond = creer('clipPath', { id: ID_ROND_PORTRAIT, clipPathUnits: 'objectBoundingBox' })
   rond.appendChild(creer('circle', { cx: 0.5, cy: 0.5, r: 0.5 }))
   defs.appendChild(rond)
+
+  /* ---- zones de branche, SOUS les arêtes ---- */
+
+  /*
+   * Les aplats de région. Posés en premier, donc peints en premier : au-dessus,
+   * ils masqueraient les traits qu'ils sont censés accompagner.
+   *
+   * Aucune propriété de peinture ici — règle n° 2. La classe `b-…` est celle du
+   * liseré de fiche, réutilisée exprès : la teinte d'une région et celle de son
+   * liseré ne peuvent pas diverger si elles viennent de la même règle. La mise en
+   * retrait, elle, est dans `canevas.css` et passe par `fill-opacity`.
+   */
+  const zones = new Map<string, SVGPathElement>()
+  for (const zone of zonesDeBranche(graphe.noeuds)) {
+    const path = creer('path', { class: `zone b-${zone.cle}`, d: zone.d })
+    gZones.appendChild(path)
+    zones.set(zone.cle, path)
+  }
+
+  /**
+   * Les aplats suivent les fiches quand elles bougent.
+   *
+   * Sans cela, l'animation d'arrivée de `ressorts` traînerait les régions
+   * derrière les fiches pendant toute sa durée, pour retomber juste à la fin —
+   * le genre de défaut qui ne se voit qu'en mouvement. Un aplat n'a pas de
+   * `transform` à recevoir : sa forme dépend de TOUS les nœuds de sa rangée, pas
+   * d'un seul, exactement comme une arête dépend de ses deux extrémités. On
+   * recalcule donc les cinq ou six `d`, ce qui coûte un tri des nœuds — à côté
+   * des 377 arêtes retracées dans la même passe, ce n'est pas ce qui pèse.
+   */
+  const redessinerLesZones = (noeuds: readonly NoeudGraphe[]): void => {
+    const aJour = new Set<string>()
+    for (const zone of zonesDeBranche(noeuds)) {
+      aJour.add(zone.cle)
+      zones.get(zone.cle)?.setAttribute('d', zone.d)
+    }
+    // Une région que le graphe déplacé ne porte plus : on la vide plutôt que de
+    // la laisser sur sa dernière forme connue.
+    for (const [cle, path] of zones) if (!aJour.has(cle)) path.setAttribute('d', '')
+  }
 
   /* ---- arêtes, sous les fiches ---- */
 
@@ -200,6 +242,7 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
 
   const fragment = document.createDocumentFragment()
   fragment.appendChild(defs)
+  fragment.appendChild(gZones)
   fragment.appendChild(gAretes)
   fragment.appendChild(gFamilles)
   fragment.appendChild(gFiches)
@@ -241,6 +284,8 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
         const d = traces.get(`${arete.de}\u0000${arete.vers}`)
         if (d !== undefined) arete.el.setAttribute('d', d)
       }
+
+      redessinerLesZones(deplace.noeuds)
     },
 
     figerLesPositions() {
@@ -250,6 +295,8 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
         const arete = aretes.find((a) => a.de === tracee.de && a.vers === tracee.vers)
         if (arete !== undefined) arete.el.setAttribute('d', tracee.d)
       }
+
+      redessinerLesZones(graphe.noeuds)
     },
 
     appliquerViewBox(vb) {
@@ -345,7 +392,10 @@ function construireFiche(
 
   g.appendChild(
     creer('rect', {
-      class: `br b-${personne.branch}`,
+      // `cleDeZone` et non `personne.branch` : le sérialiseur peut poser `null`,
+      // qui composait la classe `b-null` — à laquelle aucune règle ne répond, donc
+      // un liseré non peint sur des fiches bien réelles. Voir `zones.ts`.
+      class: `br b-${cleDeZone(personne.branch)}`,
       x: x + LISERE_MARGE_X,
       y: y + LISERE_MARGE_Y,
       width: LISERE_LARGEUR,

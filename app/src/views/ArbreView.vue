@@ -466,6 +466,19 @@ async function revaliderGraphe(): Promise<void> {
 }
 
 const calqueActif = computed(() => graphe.value?.calque.actif === true)
+
+/**
+ * Le graphe porte-t-il des personnes sans branche ? La légende ne l'annonce
+ * qu'alors — voir `LegendeArbre.vue`. Lu sur le graphe **affiché**, donc après
+ * la disposition et après le filtre « ascendance seule », qui peut justement
+ * retirer les derniers.
+ */
+const avecHorsBranche = computed(
+  () =>
+    graphe.value?.noeuds.some(
+      (n) => n.type === 'personne' && (n as { branch?: string | null }).branch == null,
+    ) === true,
+)
 const demandesDuCalque = computed(() => graphe.value?.calque.demandes ?? [])
 
 /**
@@ -934,7 +947,12 @@ onBeforeUnmount(() => {
         @cadrer="cadrerSurResultats"
       />
       <template #legende>
-        <LegendeArbre v-if="graphe !== null" :calque-actif="calqueActif" en-tiroir />
+        <LegendeArbre
+          v-if="graphe !== null"
+          :calque-actif="calqueActif"
+          :avec-hors-branche="avecHorsBranche"
+          en-tiroir
+        />
       </template>
     </TiroirOutils>
 
@@ -1186,7 +1204,11 @@ onBeforeUnmount(() => {
         @fond="effacerSelection"
       />
 
-      <LegendeArbre v-if="graphe !== null" :calque-actif="calqueActif" />
+      <LegendeArbre
+        v-if="graphe !== null"
+        :calque-actif="calqueActif"
+        :avec-hors-branche="avecHorsBranche"
+      />
 
       <PanneauFiche
         :fiche="fiche"

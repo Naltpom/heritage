@@ -282,10 +282,15 @@ describe('appliquerPositions — et la garantie que le chemin d’origine ne bou
 })
 
 describe('construireCanevas', () => {
-  it('empile les arêtes sous les familles, puis les fiches — après les définitions', () => {
+  it('empile les zones sous les arêtes, puis les familles et les fiches', () => {
     const { svg } = monter()
+    // L'ordre du document EST l'ordre de peinture en SVG : il n'y a pas de
+    // `z-index`. Les aplats de région passent donc en tête — au-dessus, ils
+    // masqueraient les traits qu'ils sont censés accompagner. `defs` ne peint
+    // rien et reste avant tout le monde.
     expect(svg.enfants.map((e) => e.attributs['class'] ?? e.tag)).toEqual([
       'defs',
+      'zones',
       'aretes',
       'familles',
       'fiches',
@@ -381,6 +386,58 @@ describe('construireCanevas', () => {
     expect(svg.attributs['viewBox']).toBe('-600 -300 1200 400')
     expect(svg.attributs['transform']).toBeUndefined()
     expect(svg.attributs['style']).toBeUndefined()
+  })
+
+  /* ---------------------------------------------------------------- */
+  /* Les zones de branche                                              */
+  /* ---------------------------------------------------------------- */
+
+  it('peint une zone par région du graphe, avec la classe de branche', () => {
+    const { svg } = monter()
+    const zones = svg.tous((e) => e.classes.includes('zone'))
+
+    // Le jeu d'essai porte `pm` (quatre fiches) et `mm` (la restreinte).
+    expect(zones.map((z) => z.classes.filter((c) => c.startsWith('b-')).join())).toEqual([
+      'b-pm',
+      'b-mm',
+    ])
+    expect(zones.every((z) => (z.attributs['d'] ?? '').startsWith('M'))).toBe(true)
+  })
+
+  it('donne une zone aux fiches SANS branche, que le type ne prévoit pas', () => {
+    // `NormaliseurDeGraphe.php` pose `'branch' => $libelle['branch'] ?? null` : une
+    // personne que rien ne relie à la racine sort avec `branch: null`, alors que
+    // le type `Branche` déclare la clé obligatoire. Elles recevaient la classe
+    // `b-null`, à laquelle aucune règle ne répond.
+    const g = grapheEssai()
+    const svg = new ElementFactice('svg')
+    construireCanevas(
+      svg as unknown as SVGSVGElement,
+      { ...g, noeuds: g.noeuds.map((n) => (n.id === 'p4' ? { ...n, branch: null } : n)) } as Graphe,
+    )
+
+    const zones = svg.tous((e) => e.classes.includes('zone'))
+    expect(zones.some((z) => z.classes.includes('b-hors'))).toBe(true)
+    expect(zones.some((z) => z.classes.includes('b-null'))).toBe(false)
+    // Et le liseré de la fiche, lui aussi, cesse de pointer vers une règle absente.
+    expect(svg.tous((e) => e.classes.includes('b-null'))).toHaveLength(0)
+  })
+
+  it('redessine les zones quand les fiches bougent, et les remet en figeant', () => {
+    const { svg, pilote } = monter()
+    const zone = (): string =>
+      svg.tous((e) => e.classes.includes('zone'))[0]?.attributs['d'] ?? ''
+    const origine = zone()
+
+    const g = grapheEssai()
+    pilote.appliquerPositions({ ...g, noeuds: g.noeuds.map((n) => ({ ...n, x: n.x + 250 })) })
+    // Une région dépend de TOUS les nœuds de sa rangée : elle n'a pas de
+    // `transform` à recevoir, il faut refaire son `d`. Sans cela, les aplats
+    // traînent derrière les fiches pendant toute l'animation d'arrivée.
+    expect(zone()).not.toBe(origine)
+
+    pilote.figerLesPositions()
+    expect(zone()).toBe(origine)
   })
 
   it('ne pose JAMAIS d’attribut `opacity` sur un élément SVG', () => {

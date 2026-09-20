@@ -143,6 +143,46 @@ final class CalculAscendanceTest extends TestCase
     }
 
     /**
+     * **LE TRONC NE SE PROPAGE PAS PAR ALLIANCE.** C'est le test qui manquait, et il vise
+     * une seule ligne : `Branch::Tr !== $branche[$voisin]` dans la passe d'héritage.
+     *
+     * Le test voisin vérifie ce que le tronc **contient** ; celui-ci vérifie ce qu'il ne
+     * **déborde pas**. La nuance n'est pas académique : retirer cette condition fait passer
+     * le tronc de 5 à 180 personnes sur le graphe servi, parce qu'il s'écoule par les
+     * conjoints puis de proche en proche. **Retirer la garde doit faire rougir ce test.**
+     *
+     * Et il ne rougissait nulle part ailleurs : la garde est *inerte pour la racine*, seul
+     * point de vue qu'un compte obtienne aujourd'hui. Sans ce test, la condition restait
+     * une mine — porteuse, non documentée, et jamais exercée.
+     *
+     * L'arbre : l'ego, son épouse, et les parents de son épouse. Rien ne relie ces
+     * beaux-parents au sang de l'ego — ils ne doivent donc jamais devenir `Tr`.
+     */
+    public function testLeTroncNeSePropagePasParAlliance(): void
+    {
+        $placement = (new CalculAscendance())->calculer(
+            ['pEgo', 'pPere', 'pMere', 'pEpouse', 'pBeauPere', 'pBelleMere'],
+            [
+                $this->famille('f1', ['pPere', 'pMere'], ['pEgo']),
+                $this->famille('f2', ['pBeauPere', 'pBelleMere'], ['pEpouse']),
+                $this->famille('f3', ['pEgo', 'pEpouse'], []),
+            ],
+            'pEgo',
+        );
+
+        self::assertSame(Branch::Tr, $placement->branches['pEgo']);
+        self::assertSame(Branch::Tr, $placement->branches['pPere']);
+        self::assertSame(Branch::Tr, $placement->branches['pMere']);
+
+        // L'épouse touche le tronc par trois liens : elle n'en fait pas partie pour autant,
+        // et sa famille non plus. Qu'elles ressortent sans branche est un autre sujet —
+        // voir le docbloc de la garde, et la tâche #89.
+        self::assertNotSame(Branch::Tr, $placement->branches['pEpouse'] ?? null);
+        self::assertNotSame(Branch::Tr, $placement->branches['pBeauPere'] ?? null);
+        self::assertNotSame(Branch::Tr, $placement->branches['pBelleMere'] ?? null);
+    }
+
+    /**
      * L'implexe : le couple des arrière-grands-parents est atteint par les deux côtés.
      * La remontée doit s'arrêter, et la branche revenir à la première souche qui l'atteint
      * — l'ordre pp, pm, mp, mm, celui de `graphe.py`.
