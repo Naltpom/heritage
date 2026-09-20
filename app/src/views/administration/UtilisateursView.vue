@@ -2,6 +2,13 @@
 /**
  * Les utilisateurs — § 10.1, et la bascule « voir comme un membre » (§ 10.4).
  *
+ * **C'est aussi le seul écran où se diagnostique un compte qui regarde l'arbre
+ * de quelqu'un d'autre.** Le point de vue d'un visiteur se choisit d'après la
+ * fiche à laquelle son compte est rattaché ; faute de rattachement *actif*, il
+ * retombe sur la racine — et rien, côté visiteur, ne le lui dit. La mention de
+ * rattachement est donc affichée dans **les trois** états, y compris celui où
+ * il n'y a aucune ligne `mbr_member` : voir `administration/rattachement.ts`.
+ *
  * Quatre gestes, et chacun a un piège propre.
  *
  * **Valider un compte en attente.** C'est le geste le plus important de cet
@@ -43,6 +50,7 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
+import MentionDeRattachement from '@/components/administration/MentionDeRattachement.vue'
 import {
   ecrituresSuspendues,
   infobulleSuspension,
@@ -198,18 +206,11 @@ function dateLisible(valeur: string | null): string {
             </template>
           </p>
 
-          <!-- Le rattachement. `personLabel` n'est envoyé que si le serveur l'a
-               envoyé : on ne le devine pas pour un compte non validé, où il est
-               justement absent (§ 2.2). -->
-          <p v-if="utilisateur.membre !== null" class="mt-0.5 text-sm text-attenue">
-            <template v-if="utilisateur.membre.personLabel">
-              Rattaché à {{ utilisateur.membre.personLabel }}
-            </template>
-            <template v-else>
-              Rattachement demandé, pas encore validé — la fiche visée n’est pas divulguée
-              tant qu’elle ne l’est pas.
-            </template>
-          </p>
+          <!-- Le rattachement, dans ses trois états — y compris celui où il n'y
+               en a aucun. Ce bloc était auparavant sous `v-if="membre !== null"`
+               et ne montrait donc **rien** pour le seul cas qu'on ne peut pas
+               deviner autrement. Le détail est dans `rattachement.ts`. -->
+          <MentionDeRattachement :membre="utilisateur.membre" />
 
           <div class="mt-2 flex flex-wrap gap-2">
             <BoutonBase
