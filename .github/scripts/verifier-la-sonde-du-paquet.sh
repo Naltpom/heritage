@@ -108,14 +108,14 @@ correspond() {
 # ─────────────────────────────────────────────────────────────────────────────
 if [ ! -f "$racine/app/empreinte.sh" ]; then
     echouer "app/empreinte.sh a disparu. La porte du paquet de deploy.yml n'a plus de quoi calculer le côté « attendu » : elle ne peut plus rien comparer."
+elif ! empreinte="$(cd "$racine/app" && sh empreinte.sh 2>&1)"; then
+    # Le script a échoué : on montre ce qu'il a dit. Un `|| true` aurait rangé
+    # cet échec avec « sortie vide » et perdu le motif.
+    echouer "app/empreinte.sh s'est terminé en erreur : ${empreinte}"
+elif printf '%s' "$empreinte" | grep -qE '^[0-9a-f]{12}$'; then
+    printf 'Garde 1 — app/empreinte.sh rend « %s », douze hexadécimaux.\n' "$empreinte"
 else
-    empreinte="$(cd "$racine/app" && sh empreinte.sh 2>/dev/null || true)"
-
-    if printf '%s' "$empreinte" | grep -qE '^[0-9a-f]{12}$'; then
-        printf 'Garde 1 — app/empreinte.sh rend « %s », douze hexadécimaux.\n' "$empreinte"
-    else
-        echouer "app/empreinte.sh existe mais ne rend pas douze hexadécimaux (obtenu : « ${empreinte} »). Un fichier présent et cassé rend du vert : c'est pour ça qu'on le LANCE au lieu de constater sa présence."
-    fi
+    echouer "app/empreinte.sh existe mais ne rend pas douze hexadécimaux (obtenu : « ${empreinte} »). Un fichier présent et cassé rend du vert : c'est pour ça qu'on le LANCE au lieu de constater sa présence."
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -141,7 +141,11 @@ fi
 if [ ! -f "$nginx" ]; then
     echouer "app/nginx.conf est introuvable."
 else
-    bloc="$(sed -n '/map \$uri \$cache_actifs[[:space:]]*{/,/^}/p' "$nginx")"
+    # Les « $ » sont ceux de nginx — `$uri`, `$cache_actifs` — et doivent rester
+    # littéraux. Guillemets doubles avec `\$` plutôt que guillemets simples : le
+    # résultat est le même et l'intention se lit, au lieu de ressembler à un
+    # oubli d'expansion.
+    bloc="$(sed -n "/map \$uri \$cache_actifs[[:space:]]*{/,/^}/p" "$nginx")"
 
     if [ -z "$bloc" ]; then
         echouer "La map « \$uri \$cache_actifs » a disparu de app/nginx.conf. Sans elle, on ne sait plus ce qui est mis en cache — et /paquet.txt pourrait l'être."
