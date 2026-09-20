@@ -107,9 +107,14 @@ export const PRESENTATIONS: Record<NomDeDisposition, PresentationDeDisposition> 
     titre: 'Duplication',
     resume:
       'La méthode des éventails d’ascendance : plutôt que de choisir entre la place d’enfant ' +
-      'et la place de conjoint, on dessine la personne deux fois — une fois pleine, une fois en ' +
-      'écho tireté à côté de son partenaire. Le trait long disparaît, remplaçé par un doublon ' +
-      'assumé. L’écho porte le même identifiant de personne : cliquer dessus mène à la même fiche.',
+      'et la place de conjoint, on dessine la personne deux fois — une fois pleine auprès de ' +
+      'son conjoint, une fois en écho tireté sous le losange de ses parents, au milieu de sa ' +
+      'fratrie. Chaque exemplaire ne porte qu’un seul trait, et les deux sont courts. C’est la ' +
+      'SEULE méthode qui atteigne les unions dont les deux époux sont enfants de l’arbre — ' +
+      'elles sont 61, et leurs filiations portent 71 des 79 croisements : aucune géométrie ne ' +
+      'les supprime. Son prix est le doublon lui-même : une carte pâle assise entre deux époux ' +
+      'les sépare à l’œil comme une autre. L’écho porte le même identifiant de personne : ' +
+      'cliquer dessus mène à la même fiche.',
     appliquer: duplication,
   },
   ressorts: {
