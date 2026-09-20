@@ -15,6 +15,13 @@
  * une troisième. Sa suite est `cadre.test.ts`.
  */
 import { invaliderGraphe, type Graphe, type ResultatRevalide } from '@/lib/api'
+import {
+  accueillir,
+  annonce,
+  effetDeLaReorganisation,
+  phraseDuBouton,
+  type Annonce,
+} from '@/components/arbre/dispositions/insertionLocale'
 
 /**
  * Ce que devient le graphe **affiché** après un appel revalidé.
@@ -63,6 +70,57 @@ export async function grapheApresRevalidation(
   const resultat = await appeler()
   if (resultat === null || resultat.statut === 'inchange') return affiche
   return resultat.donnees
+}
+
+/**
+ * Ce que l'écran garde d'une charge à la suivante.
+ *
+ * `cle` identifie la **transformation** — la disposition, ses réglages, le
+ * filtre « ascendance seule ». Tant qu'elle ne change pas, les places affichées
+ * sont conservées et l'on y insère ce qui arrive. Dès qu'elle change, elles sont
+ * oubliées : ce n'est pas une fiche qui est arrivée, c'est la mise en page qu'on
+ * a demandé de refaire.
+ */
+export interface EtatDeLArbre {
+  graphe: Graphe | null
+  annonce: Annonce | null
+  cle: string | null
+  /** Le dépliage rejoue-t-il ? Non sur une insertion locale — voir `lancerLArrivee`. */
+  animer: boolean
+}
+
+export const ETAT_INITIAL: EtatDeLArbre = { graphe: null, annonce: null, cle: null, animer: true }
+
+/**
+ * **La décision de cet écran qui se prouve sans navigateur, la seconde.**
+ *
+ * Elle est ici, dans un `<script>` ordinaire, pour la raison déjà écrite en tête
+ * de ce fichier : un `<script setup>` se compile en une fermeture que rien ne
+ * peut appeler du dehors, et une règle qu'aucun test ne peut atteindre se casse
+ * en silence. Celle-ci décide de **ce que le lecteur voit bouger** — le genre de
+ * défaut qui ne se remarque qu'après coup, quand on ne retrouve plus une fiche.
+ *
+ * Sa suite est `arbre-insertion-locale.test.ts`.
+ */
+export function etatApresUneCharge(
+  precedent: EtatDeLArbre,
+  calcule: Graphe | null,
+  cle: string,
+): EtatDeLArbre {
+  if (calcule === null) return { graphe: null, annonce: null, cle: null, animer: true }
+
+  const memoire = precedent.cle === cle ? precedent.graphe : null
+  const arrivee = accueillir(memoire, calcule)
+
+  return {
+    graphe: arrivee.graphe,
+    annonce: annonce(arrivee),
+    cle,
+    // On déplie au premier affichage, et sur une réorganisation — là, le
+    // mouvement EST l'information. Jamais sur une insertion locale : six cents
+    // cartes traverseraient l'écran pour en annoncer deux.
+    animer: memoire === null || arrivee.motif !== null,
+  }
 }
 
 </script>
@@ -126,6 +184,12 @@ import {
   presentationDeLaRoute,
   type NomDeDisposition,
 } from '@/components/arbre/dispositions'
+/* `insertionLocale` n'est PAS une disposition et n'entre donc pas au registre :
+   elle ne transforme pas la charge, elle décide de ce qu'on garde d'une mise en
+   page à la suivante. La ranger dans `PRESENTATIONS` l'aurait fait apparaître
+   comme une sixième maquette dans le bandeau, et il n'y a rien à comparer.
+   Elle est importée par le bloc `<script>` ci-dessus, dont les liaisons sont
+   dans la portée d'ici : la réimporter ferait un doublon d'identifiant. */
 import {
   FILTRES,
   ensembleAEclairer,
@@ -197,7 +261,17 @@ const optionsDeDisposition = computed(() => optionsDepuis({ haut, bas }))
  */
 const ascendanceSeule = ref(false)
 
-const graphe = computed<Graphe | null>(() => {
+/**
+ * La mise en page que la disposition calcule **de zéro**, sur la charge entière.
+ *
+ * C'est la meilleure qu'elle sache produire, et c'est exactement pour cela
+ * qu'elle ne peut pas être affichée telle quelle à chaque charge : elle est
+ * calculée sur *toutes* les fiches, donc six fiches de plus la changent partout.
+ * Elle sert désormais de **destination** — ce que le bouton « réorganiser »
+ * applique, et ce vers quoi l'insertion locale se rabat quand elle ne peut plus
+ * rester locale.
+ */
+const grapheCalcule = computed<Graphe | null>(() => {
   const brut = grapheBrut.value
   if (brut === null) return null
 
@@ -209,6 +283,104 @@ const graphe = computed<Graphe | null>(() => {
 
   return disposition.value(reduit, optionsDeDisposition.value)
 })
+
+/* ------------------------------------------------------------------ */
+/* L'arrivée d'une fiche : locale par défaut                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **Ce qui est réellement à l'écran.**
+ *
+ * Mesuré le 20/09/2026 sur deux charges réelles successives : six fiches de plus,
+ * et la mise en page recalculée déplaçait **109 fiches sur 447**. Le serveur, lui,
+ * n'en déplaçait aucune. Ce qui cassait les repères du lecteur, c'était donc
+ * nous — voir `dispositions/insertionLocale.ts` pour le tableau complet.
+ *
+ * On garde donc la mise en page qu'il regarde, et l'on y **insère** ce qui arrive.
+ */
+const grapheAffiche = shallowRef<Graphe | null>(null)
+const graphe = computed<Graphe | null>(() => grapheAffiche.value)
+
+/** Ce que l'écran a à dire de la dernière charge — `null` la plupart du temps. */
+const annonceCourante = shallowRef<Annonce | null>(null)
+
+/**
+ * **La mémoire des places ne survit pas à un changement de MISE EN PAGE.**
+ *
+ * Changer de disposition, de profondeur (`?haut=&bas=`) ou cocher « ascendance
+ * seule » ne fait pas *arriver* des fiches : cela change la transformation
+ * elle-même. Insérer dans l'ancienne mise en page y répondrait par un arbre
+ * inchangé — la maquette demandée ne s'afficherait jamais. On ne garde donc les
+ * places que tant que la transformation est la même ; **seul un changement de
+ * DONNÉES passe par l'insertion locale.**
+ */
+const cleDeTransformation = computed(() =>
+  JSON.stringify([
+    nomDeDisposition ?? null,
+    optionsDeDisposition.value,
+    ascendanceSeule.value,
+  ]),
+)
+
+/**
+ * L'animation de dépliage ne rejoue **pas** sur une insertion locale — voir
+ * `etatApresUneCharge`, qui en décide.
+ */
+let etat: EtatDeLArbre = ETAT_INITIAL
+let animerLaProchaineArrivee = true
+
+watch(
+  grapheCalcule,
+  (calcule) => {
+    etat = etatApresUneCharge(etat, calcule, cleDeTransformation.value)
+
+    grapheAffiche.value = etat.graphe
+    annonceCourante.value = etat.annonce
+    animerLaProchaineArrivee = etat.animer
+  },
+  { immediate: true },
+)
+
+/**
+ * **Ce que le bouton « réorganiser » promet, calculé sur les deux mises en page.**
+ *
+ * `null` quand il n'y a rien à replacer : un bouton qui ne ferait rien n'a pas à
+ * occuper une ligne sur un écran de 390 px. Il apparaît donc **exactement quand
+ * la mise en page affichée s'est écartée de la meilleure**, ce qui est aussi le
+ * seul moment où le forcer a un sens.
+ */
+const effetDeLaReorganisationCourante = computed(() => {
+  const affiche = grapheAffiche.value
+  const calcule = grapheCalcule.value
+  if (affiche === null || calcule === null || affiche === calcule) return null
+
+  const effet = effetDeLaReorganisation(affiche, calcule)
+
+  return effet.deplacees === 0 ? null : effet
+})
+
+const phraseDuBoutonReorganiser = computed(() => {
+  const effet = effetDeLaReorganisationCourante.value
+  return effet === null ? '' : phraseDuBouton(effet)
+})
+
+/**
+ * Réorganiser sur demande : on adopte la mise en page calculée, et l'annonce
+ * s'efface — le lecteur vient de la provoquer, on n'a pas à la lui apprendre.
+ */
+function reorganiser(): void {
+  const calcule = grapheCalcule.value
+  if (calcule === null) return
+
+  // L'animation n'est pas lancée d'ici : le canevas se reconstruit sur le
+  // changement de `graphe` et émet « construit ». La déclencher ici la ferait
+  // tourner sur le canevas d'AVANT, que la reconstruction effacerait aussitôt —
+  // le défaut exact qui rendait l'animation invisible le 20/09/2026.
+  etat = { graphe: calcule, annonce: null, cle: cleDeTransformation.value, animer: true }
+  grapheAffiche.value = calcule
+  annonceCourante.value = null
+  animerLaProchaineArrivee = true
+}
 
 /**
  * Ce que la disposition change, **en nombres**.
@@ -677,6 +849,8 @@ function lancerLArrivee(): void {
   arreterLArrivee = null
 
   if (nomDeDisposition !== DISPOSITION_ANIMEE) return
+  // Une insertion locale ne se déplie pas : voir `animerLaProchaineArrivee`.
+  if (!animerLaProchaineArrivee) return
 
   const pilote = canevas.value?.piloteCourant() ?? null
   const arrivee = graphe.value
@@ -828,6 +1002,70 @@ onBeforeUnmount(() => {
         </RouterLink>
       </p>
     </div>
+
+    <!--
+      **L'arbre a bougé : on le dit, on ne le fait pas subir.**
+
+      Ce n'est **pas une boîte de dialogue**, et c'est une décision : l'arbre se
+      regarde sur téléphone, une modale y prend l'écran entier, vole le focus et
+      interrompt un geste en cours pour annoncer quelque chose qui est déjà fait.
+      Un bandeau se lit en passant, se ferme d'un doigt, et laisse l'arbre visible
+      pendant qu'on le lit — c'est-à-dire qu'on peut vérifier ce qu'il annonce.
+
+      `role="status"` avec `aria-live="polite"` : la phrase est lue par un lecteur
+      d'écran **à la fin de ce qu'il était en train de dire**, sans couper. Une
+      alerte (`assertive`) interromprait la lecture d'une fiche pour annoncer un
+      déplacement de cartes, ce qui serait une fausse urgence.
+
+      Il **ne disparaît pas tout seul** : une annonce qui s'efface après trois
+      secondes n'est pas lue par qui lisait autre chose, et l'information serait
+      perdue au moment précis où elle compte.
+    -->
+    <p
+      v-if="annonceCourante !== null"
+      class="flex flex-wrap items-center gap-x-2 border-b px-4 py-1.5 text-xs text-texte"
+      :class="
+        annonceCourante.ton === 'reorganisation'
+          ? 'border-alerte-bord bg-alerte-doux'
+          : 'border-ligne bg-accent-doux'
+      "
+      role="status"
+      aria-live="polite"
+    >
+      <strong v-if="annonceCourante.ton === 'reorganisation'" class="font-semibold">
+        {{ annonceCourante.texte }}
+      </strong>
+      <span v-else>{{ annonceCourante.texte }}</span>
+      <button
+        type="button"
+        class="ml-auto shrink-0 cursor-pointer border-0 bg-transparent p-0 text-accent underline"
+        @click="annonceCourante = null"
+      >
+        Masquer
+      </button>
+    </p>
+
+    <!--
+      **Le bouton « réorganiser », et ce qu'il promet avant qu'on le presse.**
+
+      Il n'apparaît que lorsqu'il a quelque chose à faire, et la phrase qui le
+      suit est **calculée sur les deux mises en page**, pas écrite à la main : un
+      nombre en dur dans une phrase se périme au premier correctif, et c'est déjà
+      arrivé sur le bandeau de maquette le 20/09/2026.
+    -->
+    <p
+      v-if="effetDeLaReorganisationCourante !== null"
+      class="flex flex-wrap items-center gap-x-2 border-b border-ligne bg-panneau px-4 py-1.5 text-xs text-attenue"
+    >
+      <button
+        type="button"
+        class="cursor-pointer border-0 bg-transparent p-0 font-semibold text-accent underline"
+        @click="reorganiser"
+      >
+        Réorganiser l’arbre
+      </button>
+      <span class="tnum">{{ phraseDuBoutonReorganiser }}</span>
+    </p>
 
     <p
       v-if="calqueActif"
