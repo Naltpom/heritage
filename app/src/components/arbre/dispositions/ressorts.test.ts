@@ -788,7 +788,28 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
     expect(depassementMaximal).toBeLessThan(serveur.depassementMaximal * 1.5)
   })
 
-  it('ALLONGE LE TRAIT LE PLUS LONG — le prix de la somme des carrés, dit ici', () => {
+  /**
+   * **LA BORNE, ET PLUS LE PRIX.**
+   *
+   * Ce cas exigeait que le solveur **allonge** le trait le plus long :
+   * `traitMax(apres) > traitMax(g)`. C'était un fait mesuré quand il a été écrit
+   * — *« mesuré le 20/09/2026, 3 185 → 3 486 px, soit +9,5 % »* — et la raison en
+   * était juste : **minimiser une somme de carrés n'est pas minimiser le
+   * maximum**, raccourcir beaucoup de traits peut en laisser un s'allonger.
+   *
+   * Le même jour, plus tard, le prix a cessé d'être payé. Remesuré sur la charge
+   * de production : **5 582 → 5 445 px**, le solveur le **raccourcit**. Les deux
+   * chiffres ont changé, et le trait le plus long est une filiation **vers le
+   * tronc** — exactement ce sur quoi la correction du trait du tronc a travaillé.
+   *
+   * **Un test qui EXIGE une dégradation masquera la vraie régression le jour où
+   * elle revient** : si le solveur se remettait à allonger ce trait de moitié,
+   * l'ancienne assertion resterait verte. La borne haute, elle, garde tout son
+   * sens et devient le seul garde-fou — elle attrape l'emballement, qui est le
+   * défaut qu'on craint, et se tait sur le sens de la variation, qui est un
+   * arbitrage et non une promesse.
+   */
+  it('NE LAISSE PAS LE TRAIT LE PLUS LONG S’EMBALLER', () => {
     const traitMax = (graphe: Graphe): number => {
       const x = new Map(graphe.noeuds.map((n) => [n.id, n.x]))
       return Math.max(
@@ -796,13 +817,8 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
       )
     }
 
-    // **Minimiser une somme de carrés n'est pas minimiser le maximum.** Raccourcir
-    // beaucoup de traits peut en laisser un s'allonger, et c'est ce qui arrive :
-    // mesuré le 20/09/2026, 3 185 → 3 486 px, soit +9,5 %. Le serveur, lui, tient
-    // que son trait le plus long ne remonte jamais. **C'est un vrai coût, et le
-    // test le borne au lieu de l'ignorer** — si un changement le fait doubler, il
-    // faudra le voir ici et non à l'écran.
-    expect(traitMax(apres)).toBeGreaterThan(traitMax(g))
+    // Le témoin : sans lui, la borne passerait aussi sur un arbre vide.
+    expect(traitMax(g)).toBeGreaterThan(1000)
     expect(traitMax(apres)).toBeLessThan(traitMax(g) * 1.25)
   })
 
