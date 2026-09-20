@@ -246,6 +246,29 @@ const barre = ref<InstanceType<typeof BarreOutilsArbre> | null>(null)
  *  qui garantit un seul `id="arbre-recherche"` dans le document. */
 const champMobile = ref<InstanceType<typeof ChampRechercheArbre> | null>(null)
 const estMobile = useEstMobile()
+
+/**
+ * **Le bandeau de maquette se replie, et il est fermé d'office sur téléphone.**
+ *
+ * Déplié, il porte cinq mesures et deux phrases : sur un écran de 390 px il
+ * occupait la page entière et l'arbre passait sous la ligne de flottaison — c'est
+ * le premier retour du commanditaire après la mise en ligne. **Le supprimer n'est
+ * pas une option** : sans lui, deux onglets ouverts sur deux maquettes sont
+ * indiscernables, et une disposition qui ne réordonne pas se présenterait comme ne
+ * faisant rien. Il se cache, il ne se tue pas.
+ *
+ * `null` tant que le lecteur n'a pas tranché : le bandeau **suit alors la
+ * largeur**, donc il s'ouvre au large et reste fermé sur téléphone, y compris
+ * après la relecture de `matchMedia` au montage. Dès que le lecteur touche le
+ * bouton, c'est son choix qui vaut et la largeur ne le reprend plus — une
+ * rotation d'écran ne doit pas refermer ce qu'il vient d'ouvrir.
+ */
+const bandeauChoisi = ref<boolean | null>(null)
+const bandeauOuvert = computed(() => bandeauChoisi.value ?? !estMobile.value)
+
+function basculerLeBandeau(): void {
+  bandeauChoisi.value = !bandeauOuvert.value
+}
 const { ouvert: tiroirOuvert, unTiroirEstOuvert } = useTiroirs()
 const racine = ref<HTMLElement | null>(null)
 
@@ -696,6 +719,10 @@ onBeforeUnmount(() => {
       rendre un arbre plus joli localement en le dégradant ailleurs, et l'œil ne le
       voit pas sur 377 nœuds.
 
+      **Replié d'office sur téléphone**, où il mangeait la page entière. Ce qui reste
+      visible est le TITRE, parce que c'est lui qui répond à « laquelle est-ce ? » ;
+      le reste se déplie à la demande.
+
       **Deux familles de nombres, parce qu'une seule ne suffit pas.** Les couples
       accolés ne disent rien d'une disposition qui ne réordonne pas — elle
       afficherait « 163 → 163 » en ayant raccourci tous les traits. Et la somme des
@@ -706,11 +733,26 @@ onBeforeUnmount(() => {
       v-if="presentation !== null"
       class="border-b border-ligne bg-panneau px-4 py-2 text-xs text-texte"
     >
-      <p>
+      <p class="flex items-baseline gap-2">
         <strong class="font-semibold">Maquette « {{ presentation.titre }} ».</strong>
+        <button
+          type="button"
+          class="ml-auto shrink-0 text-accent underline"
+          :aria-expanded="bandeauOuvert"
+          aria-controls="bandeau-maquette"
+          @click="basculerLeBandeau"
+        >
+          {{ bandeauOuvert ? 'Masquer' : 'Ce qu’elle change' }}
+        </button>
+      </p>
+      <p v-if="bandeauOuvert" class="mt-1">
         {{ presentation.resume }}
       </p>
-      <p v-if="effetDeLaDisposition !== null" class="mt-1 text-attenue tnum">
+      <p
+        v-if="bandeauOuvert && effetDeLaDisposition !== null"
+        id="bandeau-maquette"
+        class="mt-1 text-attenue tnum"
+      >
         Fiches affichées : {{ effetDeLaDisposition.apres.personnes }} sur
         {{ effetDeLaDisposition.avant.personnes }}.
 
