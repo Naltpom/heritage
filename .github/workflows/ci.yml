@@ -12,6 +12,13 @@
 #   6. docker compose build, les deux images   (travail « docker »)
 #   7. la chaîne de déploiement se tient       (travail « deploiement »)
 #
+# Le travail « api » monte en plus un service **PostgreSQL 17**, et la porte 2 bis
+# relit le rapport JUnit pour exiger que les tests qui en dépendent aient bien
+# TOURNÉ. Sans elle, monter une base pour des tests qui continueraient de se sauter
+# rendrait le même vert qu'avant, pour une machine de plus. La base est peuplée d'un
+# arbre d'essai **inventé** (`api/tests/Gedcom/fixtures/arbre-essai.ged`) : le dépôt
+# est public et l'ADR 0006 interdit toute personne réelle.
+#
 # LA PORTE 4 A MANQUÉ JUSQU'AU 20 SEPTEMBRE 2026, et son absence ne se voyait
 # pas : le travail « app » s'appelait « vue-tsc + build », ce qu'il faisait
 # exactement — mais « CI verte » était lu, en face, comme « les tests passent ».
@@ -61,12 +68,40 @@ concurrency:
 jobs:
 
   api:
-    name: API — phpstan + phpunit
+    name: API — phpstan + phpunit (+ PostgreSQL)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
       run:
         working-directory: api
+
+    # PostgreSQL 17, la version de `compose.yaml`. Il ne remplace pas SQLite : la
+    # quasi-totalité de la suite continue de tourner sans base externe, et c'est une
+    # propriété qu'on garde. Il n'existe que pour les tests du groupe
+    # `donnees-reelles`, qui comparent un moteur à l'autre et ne peuvent donc pas se
+    # contenter d'un seul.
+    #
+    # Identifiants identiques à ceux de `compose.yaml` : c'est le DSN par défaut que
+    # les tests utilisent quand `HERITAGE_DSN_REEL` n'est pas posée, et faire
+    # coïncider les deux évite un réglage de plus à maintenir en double.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: heritage
+          POSTGRES_PASSWORD: heritage_dev
+          POSTGRES_DB: heritage
+        ports:
+          - 5432:5432
+        # Sans `--health-cmd`, les étapes démarrent avant que le serveur accepte les
+        # connexions, et l'ensemencement échoue une fois sur trois pour une raison
+        # qui n'a rien à voir avec le code.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -74,10 +109,12 @@ jobs:
         with:
           php-version: '8.4'
           # intl et gd sont exigées par composer.json (tri des noms accentués,
-          # vignettes et purge EXIF). pdo_sqlite parce que api/.env.test bascule
-          # la base de test sur SQLite : la CI ne monte aucun service PostgreSQL,
-          # les tests doivent tourner sans base externe.
-          extensions: intl, zip, gd, exif, pdo_sqlite
+          # vignettes et purge EXIF). pdo_sqlite parce que api/.env.test bascule la
+          # base de test sur SQLite : l'essentiel de la suite tourne sans base
+          # externe, et doit continuer à le pouvoir. pdo_pgsql pour le service
+          # ci-dessus — sans elle, les tests du groupe `donnees-reelles` se
+          # **sautent**, ce qui est un vert qui ne mesure rien.
+          extensions: intl, zip, gd, exif, pdo_sqlite, pdo_pgsql
           coverage: none
 
       - name: Cache des dépendances Composer
@@ -90,6 +127,31 @@ jobs:
       - name: Installer les dépendances
         run: composer install --no-interaction --prefer-dist --no-progress
 
+      # ── L'ensemencement de la base PostgreSQL ────────────────────────────────
+      #
+      # **Des personnes inventées, jamais réelles.** `arbre-essai.ged` est versionné
+      # et ne porte que des noms fabriqués (Persil, Thym, Bréval…). Le dépôt est
+      # public et l'ADR 0006 interdit toute personne réelle : aucune donnée de
+      # l'arbre du commanditaire n'entre ici, ni maintenant ni jamais.
+      #
+      # On passe par les migrations puis par la **vraie** commande d'import, et non
+      # par un `INSERT` de circonstance : ce que les tests liront ensuite est ce que
+      # l'import écrit réellement, pas ce qu'on aurait cru qu'il écrit.
+      #
+      # `--premier-import` parce que la commande refuse un arbre vide sous des
+      # comptes existants ; ici il n'y a ni comptes ni arbre, et ce drapeau dit que
+      # c'est légitime. `--attendus` parce que les totaux de contrôle sont indexés
+      # par empreinte de fichier et que celui-ci n'a pas de jeu de référence : onze
+      # individus, cinq familles, comptés dans le fichier lui-même.
+      - name: Ensemencer PostgreSQL avec l'arbre d'essai (données inventées)
+        env:
+          DATABASE_URL: postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage
+        run: |
+          set -euo pipefail
+          php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+          php bin/console heritage:import-gedcom tests/Gedcom/fixtures/arbre-essai.ged \
+            --premier-import --attendus personnes=11,familles=5
+
       # Porte 1. `--level=6` en ligne de commande et non seulement dans
       # phpstan.neon : la CI est le contrat, elle ne doit pas pouvoir être
       # assouplie en abaissant le niveau dans le fichier de configuration.
@@ -97,8 +159,30 @@ jobs:
         run: php vendor/bin/phpstan analyse --level=6 --no-progress --memory-limit=1G
 
       # Porte 2.
+      #
+      # `HERITAGE_EXIGE_BASE_REELLE` retourne les sauts du groupe `donnees-reelles`
+      # en échecs. C'est le cœur de la porte 2 bis : ici, un saut ne veut pas dire
+      # « sans objet », il veut dire « le service n'est pas branché » — et c'est
+      # précisément ce qu'on ne doit pas apprendre en vert.
       - name: Porte 2 — tests (phpunit)
+        env:
+          HERITAGE_DSN_REEL: postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage
+          HERITAGE_EXIGE_BASE_REELLE: '1'
         run: php vendor/bin/phpunit
+
+      # Porte 2 bis. **Le décompte est lu, pas supposé.**
+      #
+      # Une porte verte ne dit pas combien de cas elle a exécutés. Monter un service
+      # PostgreSQL pour que les tests qui en dépendent continuent de se sauter
+      # produirait exactement le même vert qu'avant — et coûterait une machine de
+      # plus pour ne rien mesurer. On relit donc la sortie JUnit et on exige le
+      # nombre de cas, zéro saut.
+      #
+      # `if: always()` : quand la porte 2 tombe, c'est là qu'on veut savoir si elle
+      # est tombée parce qu'un test a échoué ou parce qu'aucun n'a tourné.
+      - name: Porte 2 bis — les tests PostgreSQL ont TOURNÉ, et n'ont pas sauté
+        if: always()
+        run: php ../.github/scripts/verifier-les-tests-postgres.php
 
   app:
     name: Front — vue-tsc + vitest + build
