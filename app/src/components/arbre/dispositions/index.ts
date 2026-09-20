@@ -20,6 +20,7 @@
 
 import type { Graphe } from '@/lib/api'
 import { ascendanceSeule } from './ascendanceSeule'
+import { blocsRigides } from './blocs'
 import { conjointsAccoles } from './conjointsAccoles'
 import { croisementsMinimises } from './croisements'
 import { duplication } from './duplication'
@@ -34,6 +35,21 @@ export { conjointsAccoles }
 export { vueBornee }
 export { croisementsMinimises, compterLesCroisements } from './croisements'
 export { duplication, compterLesEchos, estUnEcho, originalDeLEcho } from './duplication'
+export {
+  blocsRigides,
+  abscissesDesBlocs,
+  topologie,
+  absorbes,
+  groupes,
+  blocsEnfants,
+  largeurPropre,
+  largeurDuBloc,
+  racines,
+  degagerLesRangees,
+  personnesNonPlacees,
+  unionsInterBlocs,
+  traitLePlusLong,
+} from './blocs'
 export {
   ressortsIsotoniques,
   pava,
@@ -110,6 +126,22 @@ export const PRESENTATIONS: Record<NomDeDisposition, PresentationDeDisposition> 
       'huit couples séparés par la règle des fratries. Et l’ajout d’une personne ne déplace ' +
       'rien d’autre qu’elle.',
     appliquer: ressortsIsotoniques,
+  },
+  blocs: {
+    titre: 'Blocs rigides',
+    resume:
+      'La méthode de Reingold et Tilford : chaque sous-arbre est un bloc qui réserve sa largeur ' +
+      'maximale sur tous ses étages, et les blocs frères sont posés côte à côte. L’ordre des ' +
+      'enfants n’est pas corrigé, il est CONSTRUIT — deux branches ne peuvent pas se traverser, ' +
+      'et un enfant tombe sous ses parents. Mesuré le 20/09/2026 sur 644 nœuds, et le résultat ' +
+      'dément la raison d’être de la maquette : la largeur passe de 26 860 à 51 448 px (×1,92, ' +
+      'et non les ×1,08 annoncés — l’estimation d’avant laissait les blocs se chevaucher), le ' +
+      'trait le plus long de 5 879 à 19 103 px, et les croisements ne bougent pas : 80 contre ' +
+      '79. La cause en est mesurée : 71 des 79 croisements du serveur viennent des 61 unions ' +
+      'où les DEUX époux sont enfants de l’arbre ; l’un des deux doit quitter sa fratrie et ' +
+      'traîne un trait à travers tout. Aucune géométrie ne les supprime — seule la duplication ' +
+      'les vise.',
+    appliquer: blocsRigides,
   },
 }
 
