@@ -1149,7 +1149,21 @@ final class AffinageDuPlacement
             return;
         }
 
-        $decalage = self::VERS_LA_GAUCHE === $sens ? min(0.0, $limite - $bord) : max(0.0, $limite - $bord);
+        // **Un ALIGNEMENT, et non une poussée.** Le `min(0.0, …)` qui était ici
+        // n'écartait que dans un sens : un bloc déjà trop loin y restait, et rien
+        // ne le ramenait jamais. Mesuré le 20/09/2026 sur l'arbre du commanditaire,
+        // après le correctif du tri des fratries : le bloc paternel s'était arrêté
+        // à **2 693 px** de la place que cette ligne lui assigne, et les 268 fiches
+        // qu'il porte avec lui ont emmené le trait du tronc de 3 288 à 5 879 px.
+        //
+        // **Ce que l'alignement ne peut pas casser, et c'est un argument exact :**
+        // le bord droit du bloc paternel finit à `gauche - ESPACE`, où `gauche` est
+        // le minimum sur TOUT le tronc. Aucun nœud paternel ne peut donc toucher un
+        // nœud du tronc, sur aucune rangée. Le bloc maternel est de l'autre côté.
+        // Restaient les nœuds qui n'appartiennent à aucun des trois ensembles :
+        // mesuré, ils sont 41 sur 644, et **aucun** ne se tient dans l'intervalle
+        // que le bloc traverse.
+        $decalage = $limite - $bord;
 
         if (0.0 === $decalage) {
             return;
