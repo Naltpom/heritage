@@ -19,6 +19,39 @@
 #
 # Deux valeurs différentes = l'image du front est périmée, ou ce n'est pas elle qu'on sert.
 #
+# ⚠ SUR UN POSTE WINDOWS, LA PREMIÈRE COMMANDE MENT — ET C'EST MESURÉ
+#
+# Cette formule hache les **octets tels que `git` les a écrits**. Sur un poste où
+# `core.autocrlf` rend les fichiers texte en CRLF, ce ne sont pas les mêmes octets
+# que dans l'image, qui est construite sur Linux. Relevé le 20/09/2026 sur le poste
+# du commanditaire : **quatre des fichiers hachés portaient des CRLF**, la commande
+# rendait `d15a8c54f877` quand l'image et le dépôt Linux s'accordaient sur
+# `0f40734b54af`. **Un écart de cent pour cent, sur une pile parfaitement saine.**
+#
+# Depuis un tel poste, comparer avec les fins de ligne normalisées :
+#
+#     { for f in package-lock.json package.json index.html vite.config.ts \
+#               tsconfig.json nginx.conf; do
+#           printf '%s\n' "$f"; tr -d '\r' < "$f"
+#       done
+#       find src public -type f ! -name '*.sh' | LC_ALL=C sort \
+#       | while IFS= read -r f; do printf '%s\n' "$f"; tr -d '\r' < "$f"; done
+#     } | sha256sum | cut -c1-12
+#
+# **La formule n'est délibérément PAS normalisée**, et ce n'est pas un oubli : un
+# `tr -d '\r'` appliqué à tout mangerait aussi les octets `0x0D` des fichiers
+# binaires de `public/` — polices, images —, et deux binaires qui ne diffèrent que
+# par ces octets rendraient la même empreinte. Les trois calculs qui décident
+# (l'image, le clone du VPS, le coureur d'intégration) tournent tous sur Linux et
+# s'accordent ; c'est le mode d'emploi manuel qui devait porter la réserve, pas la
+# formule.
+#
+# ── Et cet écart a prouvé quelque chose qu'aucun vert n'aurait prouvé ──────────
+#
+# Si la valeur du flux avait été recopiée depuis l'image au lieu d'être recalculée,
+# la divergence Windows/Linux n'aurait **jamais pu apparaître**. Elle est la preuve
+# que les deux côtés lisent bien des octets, chacun les siens.
+#
 # POURQUOI LES SOURCES ET NON LE PAQUET CONSTRUIT
 #
 # Le nom du paquet (`index-BhpKRW2Z.js`) est déjà une empreinte de contenu, et il aurait
