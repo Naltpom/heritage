@@ -120,6 +120,7 @@ import {
   ascendanceSeule as reduireALAscendance,
   dispositionDeLaRoute,
   pedigree,
+  compterLesCroisements,
   mesurerLisibilite,
   optionsDepuis,
   presentationDeLaRoute,
@@ -225,6 +226,13 @@ const effetDeLaDisposition = computed(() => {
   const avant = mesurerLisibilite(brut)
   const apres = mesurerLisibilite(affiche)
 
+  // **Les croisements sont comptés ici, en vrai, et non recopiés dans le résumé.**
+  // Un nombre écrit en dur dans une phrase se périme sans prévenir — c'est arrivé
+  // le 20/09/2026 : le correctif du serveur a changé les croisements, et le
+  // bandeau a continué d'annoncer les anciens. 0,7 ms sur 644 nœuds, mesuré.
+  const croisementsAvant = compterLesCroisements(brut)
+  const croisementsApres = compterLesCroisements(affiche)
+
   // Les nombres sont **mis en forme ici, pas dans le gabarit** : une expression
   // dans un gabarit n'est éprouvée par aucun test de ce dépôt, et se découvre
   // à l'écran quand elle est fausse.
@@ -234,6 +242,8 @@ const effetDeLaDisposition = computed(() => {
   return {
     avant,
     apres,
+    croisementsAvant: String(croisementsAvant),
+    croisementsApres: String(croisementsApres),
     carresAvant: millions(avant.carres),
     carresApres: millions(apres.carres),
     traitAvant: pixels(avant.traitLePlusLong),
@@ -805,6 +815,9 @@ onBeforeUnmount(() => {
         {{ effetDeLaDisposition.apres.accoles }} sur {{ effetDeLaDisposition.apres.couples }}.
         Personnes assises entre deux époux :
         {{ effetDeLaDisposition.avant.intercales }} → {{ effetDeLaDisposition.apres.intercales }}.
+
+        Croisements de traits : {{ effetDeLaDisposition.croisementsAvant }} →
+        {{ effetDeLaDisposition.croisementsApres }}.
 
         Longueur des traits, somme des carrés :
         {{ effetDeLaDisposition.carresAvant }} →
