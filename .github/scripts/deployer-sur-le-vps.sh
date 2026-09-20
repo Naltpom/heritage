@@ -388,6 +388,47 @@ fi
 dire "racine du front : 200."
 
 # -----------------------------------------------------------------------------
+# LE MÊME CONTRÔLE, POUR LE FRONT — et il manquait
+# -----------------------------------------------------------------------------
+#
+# Une racine qui rend 200 ne prouve rien sur le CODE qu'elle sert, exactement comme
+# une pile qui répond 200 ne prouvait rien sur celui de l'API. Et l'empreinte
+# ci-dessus n'en dit rien non plus : elle ne hache que des fichiers de `api/`.
+#
+# Mesuré le 20 septembre 2026, un déploiement de front pur a franchi les trois
+# portes du flux sans qu'aucune n'ait regardé le front. Trois calculs indépendants
+# de part et d'autre de ce déploiement rendaient tous la même valeur : la porte
+# publique a comparé une égalité garantie d'avance.
+#
+# `app/empreinte.sh` est la source unique de l'autre moitié : l'image la grave dans
+# `dist/paquet.txt` à la construction, le dépôt la recalcule ici.
+# -----------------------------------------------------------------------------
+
+PAQUET_ATTENDU="$( cd app && sh empreinte.sh )"
+PAQUET_SERVI="$(curl -fsS --max-time 10 -H "Host: $DOMAINE" \
+    "http://127.0.0.1:$PORT/paquet.txt" 2>/dev/null | tr -d '\r\n' || true)"
+
+dire "paquet attendu (depot) : $PAQUET_ATTENDU"
+dire "paquet servi   (image) : ${PAQUET_SERVI:-<absent>}"
+
+if [ -z "$PAQUET_SERVI" ]; then
+    # **Absent n'est pas faux, et ne déclenche donc PAS le retour arrière.** Une
+    # image construite avant que ce fichier n'existe ne porte rien : revenir à une
+    # image ENCORE plus ancienne ne réparerait rien et casserait un déploiement
+    # sain. On échoue en le disant, et c'est au lecteur de reconstruire.
+    crier "le front ne sert pas /paquet.txt : image anterieure a ce controle, ou racine nginx ailleurs."
+    crier "Reconstruire le front (RECONSTRUIRE=1) suffit si l'image est simplement trop ancienne."
+    exit 1
+fi
+
+if [ "$PAQUET_SERVI" != "$PAQUET_ATTENDU" ]; then
+    revenir_en_arriere \
+        "le front sert le paquet $PAQUET_SERVI alors que le commit $TAG_CIBLE en produit $PAQUET_ATTENDU : l'image du front ne contient pas ce code" \
+        || exit 1
+fi
+dire "le front sert bien le paquet de ce commit."
+
+# -----------------------------------------------------------------------------
 # Succès — on enregistre, puis on fait le ménage
 # -----------------------------------------------------------------------------
 
