@@ -208,7 +208,7 @@ final class EmpreinteEntreMoteursTest extends TestCase
                 \sprintf('%s est vide côté source : la recopie ne prouverait rien.', $table),
             );
             self::assertSame(
-                $attendu + 1, // SABOTAGE DÉLIBÉRÉ — annulé par le commit suivant
+                $attendu,
                 (int) $copie->fetchOne(\sprintf('SELECT count(*) FROM %s', $table)),
                 \sprintf('La recopie de %s a perdu des lignes.', $table),
             );
