@@ -34,11 +34,19 @@ use PHPUnit\Framework\TestCase;
  * | `created_at` (horodatage daté) | `2026-09-15 18:24:05+00` | `2026-09-15 18:24:05` |
  * | `birth_min` (date nue) | `1901-01-01` | `1901-01-01` |
  *
- * Le test lit les **274 personnes, 103 familles et 174 filiations réellement importées**
- * depuis PostgreSQL, les recopie dans une base SQLite en mémoire **en les écrivant à la
- * façon de SQLite** — booléens en `0`/`1`, horodatages sans décalage —, puis compare les
- * deux empreintes. C'est le scénario réel : la même donnée logique, stockée par chaque
- * moteur selon ses conventions.
+ * Le test lit les personnes, familles et filiations **telles que l'import les a
+ * écrites** dans PostgreSQL, les recopie dans une base SQLite en mémoire **en les
+ * écrivant à la façon de SQLite** — booléens en `0`/`1`, horodatages sans décalage —,
+ * puis compare les deux empreintes. C'est le scénario réel : la même donnée logique,
+ * stockée par chaque moteur selon ses conventions.
+ *
+ * **Sur quelles données ?** Sur celles qui sont là. Ce fichier ne code plus aucun
+ * décompte en dur : il a longtemps comparé `274 / 103 / 174`, les chiffres de l'arbre
+ * du commanditaire, ce qui le rendait juste sur une seule machine au monde. Ce qu'il
+ * démontre — que l'empreinte est indifférente au moteur — ne dépend pas de *quelles*
+ * personnes sont en base, seulement de la présence de booléens, d'horodatages et de
+ * dates nues. En intégration continue il tourne donc sur `tests/Gedcom/fixtures/
+ * arbre-essai.ged`, onze individus inventés, et il y prouve exactement la même chose.
  *
  * Écrire les valeurs verbatim n'aurait rien prouvé : SQLite les aurait rendues telles
  * quelles, et on aurait comparé PostgreSQL à lui-même.
@@ -52,24 +60,59 @@ final class EmpreinteEntreMoteursTest extends TestCase
     /** @var list<class-string> */
     private const array TABLES = [Person::class, Family::class, Child::class];
 
+    /** Posée par la CI : interdit les sauts, voir {@see exigeLaBaseReelle()}. */
+    public const string VARIABLE_EXIGENCE = 'HERITAGE_EXIGE_BASE_REELLE';
+
     private EntityManagerInterface $postgres;
     private EntityManagerInterface $sqlite;
+
+    /**
+     * **L'interrupteur qui interdit de sauter.**
+     *
+     * Ce test a trois portes de sortie — extension absente, base injoignable, base
+     * vide — et toutes trois rendaient un **saut**, c'est-à-dire un vert. C'est
+     * tenable sur un poste de développement, où l'absence de PostgreSQL est l'état
+     * normal. Ça ne l'est pas en intégration continue : là, on a monté un service
+     * exprès, et un saut n'y signifie pas « sans objet » mais « le montage est
+     * cassé et personne ne le saura ».
+     *
+     * La CI pose donc `HERITAGE_EXIGE_BASE_REELLE=1`, et les trois portes deviennent
+     * des **échecs francs**. La troisième est la plus sournoise : une base qui
+     * répond mais ne contient rien est exactement ce à quoi ressemble un
+     * ensemencement qui a échoué sans faire de bruit.
+     */
+    private static function exigeLaBaseReelle(): bool
+    {
+        $valeur = $_SERVER[self::VARIABLE_EXIGENCE] ?? $_ENV[self::VARIABLE_EXIGENCE] ?? null;
+
+        return \is_string($valeur) && '' !== $valeur && '0' !== $valeur;
+    }
+
+    /** Sauter, ou échouer si l'environnement a déclaré que la base est exigée. */
+    private static function absente(string $motif): never
+    {
+        if (self::exigeLaBaseReelle()) {
+            self::fail($motif.\sprintf(' — et %s interdit de sauter ici.', self::VARIABLE_EXIGENCE));
+        }
+
+        self::markTestSkipped($motif);
+    }
 
     protected function setUp(): void
     {
         if (!\extension_loaded('pdo_pgsql')) {
-            self::markTestSkipped('pdo_pgsql non chargé — relancer avec `php -d extension=pdo_pgsql`.');
+            self::absente('pdo_pgsql non chargé — relancer avec `php -d extension=pdo_pgsql`.');
         }
 
         try {
             $this->postgres = FabriqueDEntityManager::versDsn(self::dsn());
             $personnes = (int) $this->postgres->getConnection()->fetchOne('SELECT count(*) FROM tree_person');
         } catch (\Throwable $e) {
-            self::markTestSkipped(\sprintf('Base réelle injoignable (%s) : %s', self::dsn(), $e->getMessage()));
+            self::absente(\sprintf('Base réelle injoignable (%s) : %s', self::dsn(), $e->getMessage()));
         }
 
         if (0 === $personnes) {
-            self::markTestSkipped('Base réelle vide : lancer `bin/console heritage:import-gedcom` d\'abord.');
+            self::absente('Base réelle vide : lancer `bin/console heritage:import-gedcom` d\'abord.');
         }
 
         $this->sqlite = FabriqueDEntityManager::enMemoire();
@@ -133,16 +176,43 @@ final class EmpreinteEntreMoteursTest extends TestCase
         self::assertStringNotContainsString('+00', (string) $deSqlite['created_at'], 'SQLite ne le porte pas.');
     }
 
-    /** Les trois tables structurantes, et le compte attendu de l'arbre. */
+    /**
+     * Les trois tables structurantes : **la copie porte autant de lignes que la
+     * source**.
+     *
+     * Ce test comparait `274 / 103 / 174` en dur — les décomptes de l'arbre du
+     * commanditaire. C'était juste sur sa machine et faux partout ailleurs : sur la
+     * base d'essai de la CI, peuplée de personnes inventées, il aurait **échoué** au
+     * lieu de mesurer quoi que ce soit. Or ce qu'il vérifie n'a jamais été « l'arbre
+     * fait 274 personnes » — c'est `PlacementBaseImporteeTest` qui dit cela — mais
+     * « la recopie n'a pas perdu de lignes en route ». Comparer à la source dit
+     * exactement cela, et le dit pour n'importe quel jeu de données.
+     *
+     * Le plancher à zéro n'est pas une précaution de style : sans lui, deux bases
+     * vides se ressembleraient parfaitement et le test passerait en n'ayant rien
+     * recopié. Un vert obtenu sur rien est ce qu'on cherche à rendre impossible ici.
+     */
     public function testLaRecopiePorteLArbreEntier(): void
     {
         $this->recopieVersSqlite();
 
-        $connexion = $this->sqlite->getConnection();
+        $source = $this->postgres->getConnection();
+        $copie = $this->sqlite->getConnection();
 
-        self::assertSame(274, (int) $connexion->fetchOne('SELECT count(*) FROM tree_person'));
-        self::assertSame(103, (int) $connexion->fetchOne('SELECT count(*) FROM tree_family'));
-        self::assertSame(174, (int) $connexion->fetchOne('SELECT count(*) FROM tree_child'));
+        foreach (['tree_person', 'tree_family', 'tree_child'] as $table) {
+            $attendu = (int) $source->fetchOne(\sprintf('SELECT count(*) FROM %s', $table));
+
+            self::assertGreaterThan(
+                0,
+                $attendu,
+                \sprintf('%s est vide côté source : la recopie ne prouverait rien.', $table),
+            );
+            self::assertSame(
+                $attendu,
+                (int) $copie->fetchOne(\sprintf('SELECT count(*) FROM %s', $table)),
+                \sprintf('La recopie de %s a perdu des lignes.', $table),
+            );
+        }
     }
 
     /**

@@ -1,0 +1,117 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * **Les tests qui exigent PostgreSQL ont-ils réellement tourné ?**
+ *
+ * ── Pourquoi ce script existe ───────────────────────────────────────────────
+ *
+ * Trois cas de `EmpreinteEntreMoteursTest` n'ont jamais tourné nulle part : ni sur la
+ * machine du commanditaire, où `pdo_pgsql` n'est pas chargée, ni en intégration
+ * continue, où aucun service PostgreSQL n'était monté. Ils ne tombaient pas pour
+ * autant : ils se **sautaient**, et un saut est vert.
+ *
+ * Monter le service ne suffit donc pas à prouver quoi que ce soit. Si le DSN est
+ * faux, si l'ensemencement échoue à moitié, si l'extension manque, les trois cas se
+ * sauteront de nouveau et la porte 2 restera **exactement aussi verte qu'avant**.
+ * Une machine de plus, zéro mesure de plus, et rien pour le signaler.
+ *
+ * D'où ce contrôle : on relit la sortie JUnit que `phpunit.dist.xml` écrit déjà, et
+ * on exige un **décompte**. C'est la même leçon que l'en-tête de `phpunit.dist.xml`
+ * a tirée d'un `rmdir()` qui avalait la ligne de résumé : « un harnais qui ne sait
+ * pas dire combien de tests il a exécutés est un harnais qu'on croit sur parole ».
+ *
+ * ── Ce qu'il n'exige pas ────────────────────────────────────────────────────
+ *
+ * `PlacementBaseImporteeTest` est dans le même groupe `donnees-reelles` et continue
+ * de se sauter : il lui faut `graphe.json`, hors dépôt parce qu'il contient des
+ * personnes vivantes (ADR 0006), et deux dates réelles passées par l'environnement.
+ * Aucun réglage de CI ne le fera tourner sur un dépôt public, et ce script ne le
+ * réclame pas — il nommerait sinon une exigence qu'on ne peut pas satisfaire.
+ */
+
+const RAPPORT = __DIR__.'/../../api/var/log/phpunit.xml';
+
+/** La classe surveillée, et le nombre de cas qu'elle doit exécuter. */
+const CLASSE = 'App\Tests\Tree\EmpreinteEntreMoteursTest';
+const CAS_ATTENDUS = 3;
+
+function echouer(string $message): never
+{
+    fwrite(STDERR, "::error::{$message}\n");
+    exit(1);
+}
+
+if (!is_file(RAPPORT)) {
+    echouer(sprintf(
+        'Rapport JUnit absent (%s) : phpunit n\'a pas tourné, ou n\'a pas écrit son journal.',
+        RAPPORT,
+    ));
+}
+
+$xml = simplexml_load_file(RAPPORT);
+
+if (false === $xml) {
+    echouer('Rapport JUnit illisible : '.RAPPORT);
+}
+
+$suites = $xml->xpath(sprintf('//testsuite[@name=%s]', escaperXpath(CLASSE)));
+
+if (!\is_array($suites) || [] === $suites) {
+    echouer(sprintf(
+        '%s n\'apparaît pas dans le rapport JUnit. La classe a été renommée, exclue, '
+        .'ou la suite ne l\'a pas collectée — dans les trois cas elle ne garde plus rien.',
+        CLASSE,
+    ));
+}
+
+$suite = $suites[0];
+$executes = (int) $suite['tests'];
+
+/* Les sauts se comptent sur les éléments, pas sur l'attribut : selon la version de
+   PHPUnit l'attribut `skipped` est absent du rapport, et un attribut absent lu comme
+   un entier vaut zéro — soit exactement la réponse rassurante qu'on ne veut pas. */
+$sautes = \count((array) $suite->xpath('.//skipped'));
+$echecs = \count((array) $suite->xpath('.//failure'));
+$erreurs = \count((array) $suite->xpath('.//error'));
+
+printf(
+    "%s : %d cas exécutés, %d sautés, %d échecs, %d erreurs.\n",
+    CLASSE,
+    $executes,
+    $sautes,
+    $echecs,
+    $erreurs,
+);
+
+if ($sautes > 0) {
+    echouer(sprintf(
+        '%d cas de %s se sont SAUTÉS. Le service PostgreSQL est monté mais ces tests ne '
+        .'le touchent pas : DSN faux, extension pdo_pgsql absente, ou ensemencement vide. '
+        .'Un saut ici est un vert qui ne mesure rien.',
+        $sautes,
+        CLASSE,
+    ));
+}
+
+if ($executes < CAS_ATTENDUS) {
+    echouer(sprintf(
+        '%s n\'a exécuté que %d cas sur %d attendus.',
+        CLASSE,
+        $executes,
+        CAS_ATTENDUS,
+    ));
+}
+
+printf("Les %d cas sur PostgreSQL ont bien tourné.\n", $executes);
+
+/** Un littéral XPath sûr, y compris si le nom porte une apostrophe. */
+function escaperXpath(string $valeur): string
+{
+    if (!str_contains($valeur, "'")) {
+        return "'".$valeur."'";
+    }
+
+    return 'concat(\''.str_replace("'", '\', "\'", \'', $valeur).'\')';
+}
