@@ -99,14 +99,16 @@ export const PRESENTATIONS: Record<NomDeDisposition, PresentationDeDisposition> 
     resume:
       'Chaque nœud est tiré vers la moyenne de ses voisins, et chaque rangée est résolue ' +
       '**exactement** sous la contrainte de non-chevauchement — la régression isotonique, en ' +
-      'une passe, sans itération interne ni amortissement. Elle ne réordonne rien : elle garde ' +
-      'l’ordre du serveur, donc les couples accolés et la règle du remariage restent tels quels, ' +
-      'et le nombre de croisements ne bouge pas. Ce qu’elle gagne est la longueur des traits : ' +
-      'la somme de leurs carrés passe de 119,8 à 109,8 millions sur l’arbre réel (mesuré le ' +
-      '20/09/2026, 644 nœuds), et l’ajout d’une personne ne déplace rien d’autre qu’elle. Deux ' +
-      'prix, dits ici plutôt que découverts à l’écran : le trait le PLUS long s’allonge de 9 % ' +
-      '(3 185 → 3 486 px), et comme l’arbre d’origine elle laisse une soixantaine de losanges ' +
-      'hors de l’intervalle de leurs époux — 64 contre 63.',
+      'une passe, sans itération interne ni amortissement. Deux règles d’ordre s’y ajoutent, ' +
+      'et elles passent AVANT l’optimisation : **le conjoint accolé est celui de l’union non ' +
+      'rompue** — un arbre qui colle l’ex-époux et relègue la compagne dit quelque chose de ' +
+      'faux —, et **quand les deux époux viennent d’une fratrie d’au moins trois enfants, le ' +
+      'couple cède : chacun reste entier au milieu des siens et le trait d’union s’allonge**. ' +
+      'Cette seconde règle est l’INVERSE de celle du serveur, qui garde le couple et casse la ' +
+      'plus petite fratrie : les deux sont ici pour être comparées. Mesuré le 20/09/2026 sur ' +
+      '644 nœuds — somme des carrés des traits 119,8 → 106,9 millions, croisements 125 → 113, ' +
+      'huit couples séparés par la règle des fratries. Et l’ajout d’une personne ne déplace ' +
+      'rien d’autre qu’elle.',
     appliquer: ressortsIsotoniques,
   },
 }

@@ -106,6 +106,7 @@ export async function grapheApresRevalidation(
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { hauteurDuCadre } from '@/views/cadre'
 import { useEstMobile, useTiroirs } from '@/composables/useTiroirs'
+import { animerLArrivee } from '@/components/arbre/animation'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import BarreOutilsArbre from '@/components/arbre/BarreOutilsArbre.vue'
@@ -639,6 +640,51 @@ onMounted(() => {
   window.addEventListener('keydown', surToucheGlobale)
   document.addEventListener('visibilitychange', surRetourDOnglet)
   void revaliderGraphe()
+})
+
+/* ------------------------------------------------------------------ */
+/* L'arrivée animée                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **Les cartes glissent de la place que le serveur leur donnait vers celle que
+ * la disposition a calculée, puis s'immobilisent.**
+ *
+ * Elle ne tourne que sur `ressorts` : c'est la seule disposition dont le
+ * mouvement raconte quelque chose — les autres réordonnent, et voir une fiche
+ * traverser l'écran ne dit rien de plus que son arrivée. Un `if` plutôt qu'un
+ * réglage : une maquette qui s'anime « parfois » serait indéchiffrable.
+ *
+ * Le canevas est bâti avec les positions FINALES ; l'animation les ramène au
+ * départ puis les rend. La position finale est donc celle de la construction,
+ * pas celle du dernier pas — voir `animation.ts`.
+ */
+const DISPOSITION_ANIMEE = 'ressorts'
+let arreterLArrivee: (() => void) | null = null
+
+function lancerLArrivee(): void {
+  arreterLArrivee?.()
+  arreterLArrivee = null
+
+  if (nomDeDisposition !== DISPOSITION_ANIMEE) return
+
+  const pilote = canevas.value?.piloteCourant() ?? null
+  const depart = grapheBrut.value
+  const arrivee = graphe.value
+  if (pilote === null || depart === null || arrivee === null) return
+
+  arreterLArrivee = animerLArrivee(pilote, depart, arrivee)
+}
+
+// `flush: 'post'` : le canevas doit avoir été (re)construit avec le nouveau
+// graphe avant qu'on lui demande de bouger. Sans ça, on animerait le précédent.
+watch(graphe, () => lancerLArrivee(), { flush: 'post' })
+
+onBeforeUnmount(() => {
+  // Arrêter AVANT que le canevas ne soit détruit : une image de plus écrirait
+  // dans des éléments retirés du document.
+  arreterLArrivee?.()
+  arreterLArrivee = null
 })
 
 onBeforeUnmount(() => {
