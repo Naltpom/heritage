@@ -55,12 +55,21 @@
 name: CI
 
 on:
-  # `push` restreint à `main` : une branche de travail est couverte par
-  # `pull_request`, et sans cette restriction chaque poussée sur une branche
-  # ouverte déclencherait deux fois la même CI, pour deux fois les minutes.
-  push:
-    branches: [main]
+  # **UNE SEULE CI PAR CHANGEMENT : CELLE DE LA PULL REQUEST.**
+  #
+  # Il n'y a plus de `push` sur `main`. Une pull request teste déjà le commit de
+  # fusion SIMULÉ (`refs/pull/N/merge`) : quand `main` n'a pas bougé depuis, la
+  # fusion réelle produit exactement la même arborescence, octet pour octet, et
+  # la rejouer ne prouvait rien de plus — elle faisait attendre un deuxième vert
+  # avant chaque déploiement.
+  #
+  # Le lien entre les deux est l'EMPREINTE D'ARBORESCENCE (`git rev-parse
+  # HEAD^{tree}`), publiée par le job `arbre` ci-dessous et vérifiée par la porte
+  # de `deploy.yml` : on déploie un commit de `main` si une CI verte a testé la
+  # même arborescence. Si `main` a bougé entre la CI et la fusion, l'empreinte
+  # diffère, la porte refuse — et `workflow_dispatch` relance la CI sur `main`.
   pull_request:
+  workflow_dispatch:
 
 # Rien à écrire dans le dépôt : ni commentaire, ni étiquette, ni publication
 # d'image. Le jeton n'a donc besoin que de la lecture.
@@ -442,3 +451,29 @@ jobs:
           set -euo pipefail
           docker compose -f compose.yaml -f compose.prod.yaml config --quiet
           echo "compose.yaml + compose.prod.yaml : rendu sans substitution manquante."
+
+  # ---------------------------------------------------------------------------
+  # L'empreinte de ce qui a été testé
+  # ---------------------------------------------------------------------------
+  # Sur une pull request, `actions/checkout` extrait le commit de fusion simulé :
+  # son arborescence est celle que `main` aura après la fusion, si `main` n'a pas
+  # bougé. Elle est publiée comme nom d'artefact ; la porte de `deploy.yml` la
+  # cherche, puis n'accepte que si l'exécution qui la porte est VERTE en entier.
+  arbre:
+    name: Empreinte de l'arborescence testée
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Calculer l'empreinte
+        run: |
+          set -euo pipefail
+          arbre="$(git rev-parse 'HEAD^{tree}')"
+          echo "$arbre" > arbre.txt
+          echo "ARBRE=$arbre" >> "$GITHUB_ENV"
+          echo "Arborescence testée : $arbre (commit $(git rev-parse HEAD))"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arbre-${{ env.ARBRE }}
+          path: arbre.txt
+          retention-days: 90

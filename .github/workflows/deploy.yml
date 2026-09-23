@@ -129,6 +129,29 @@ jobs:
         run: |
           set -euo pipefail
 
+          # ── 1. L'ARBORESCENCE : la CI de la pull request suffit ─────────────
+          # La CI ne tourne plus au push sur `main` (voir l'en-tête de `ci.yml`).
+          # Elle publie l'empreinte de l'arborescence qu'elle a testée ; si une
+          # exécution VERTE a testé exactement l'arborescence de ce commit, c'est
+          # ce code-là qui a passé les portes — peu importe sous quel SHA.
+          arbre="$(gh api "repos/$DEPOT/commits/$SHA" --jq '.commit.tree.sha')"
+          echo "Commit $SHA, arborescence $arbre"
+          executions="$(gh api "repos/$DEPOT/actions/artifacts?name=arbre-$arbre&per_page=100" \
+            --jq '[.artifacts[] | select(.expired | not) | .workflow_run.id] | unique | .[]')"
+          for id in $executions; do
+            ligne="$(gh api "repos/$DEPOT/actions/runs/$id" --jq '"\(.status) \(.conclusion) \(.html_url)"')"
+            echo "  exécution $id : $ligne"
+            case "$ligne" in
+              "completed success "*)
+                echo "Porte franchie : cette arborescence a été testée et la CI est verte."
+                exit 0
+                ;;
+            esac
+          done
+          echo "Aucune CI verte n'a testé cette arborescence exacte ; repli sur la CI du commit."
+          echo "(Si main a bougé entre la CI de la PR et la fusion : Actions → CI → Run workflow sur main.)"
+
+          # ── 2. LE COMMIT : une CI lancée sur ce SHA précis (workflow_dispatch) ─
           # On interroge les exécutions de ci.yml POUR CE SHA, et non l'état
           # global des « checks » du commit. La différence n'est pas théorique :
           # l'exécution en cours de CE flux crée elle aussi des « checks » sur ce
@@ -139,9 +162,8 @@ jobs:
           nombre="$(printf '%s' "$reponse" | jq '.workflow_runs | length')"
           if [ "$nombre" -eq 0 ]; then
             echo "::error::Aucune exécution de la CI pour le commit $SHA."
-            echo "La CI se déclenche sur push vers main et sur pull request. Un commit"
-            echo "qui n'a jamais été poussé sur une branche suivie n'a pas de CI, et"
-            echo "ne se déploie donc pas."
+            echo "La CI se déclenche sur pull request, ou à la main (Run workflow)."
+            echo "Aucune n'a testé ce commit ni son arborescence : il ne se déploie pas."
             exit 1
           fi
 
