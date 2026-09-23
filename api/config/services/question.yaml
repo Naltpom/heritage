@@ -25,6 +25,53 @@
 # `_autoload.yaml`, donc AVANT ce fichier, donc écrasé. C'est le même arbitrage que
 # `config/services/almanach.yaml`, `timeline.yaml` et `membership.yaml` ont déjà tranché.
 # ─────────────────────────────────────────────────────────────────────────────────
+#
+# ═════════════════════════════════════════════════════════════════════════════════
+# CE PIÈGE A MORDU UNE TROISIÈME FOIS LE 23/09/2026, ICI. ET `almanach.yaml` LE
+# DOCUMENTAIT DÉJÀ — CE QUI N'A PAS SUFFI.
+# ═════════════════════════════════════════════════════════════════════════════════
+#
+# La décoration de `RedacteurDeQuestions` par Gemini a d'abord été déclarée ici, avec
+# `decorates:` et `arguments: { $repli: '@.inner' }`. Le fichier était juste au sens
+# de YAML. Ce qui s'est passé :
+#
+#     composer / cache warmup   OK
+#     bin/console lint:container   OK
+#     bin/console debug:container  montrait l'alias ATTENDU, sur la bonne classe
+#     premier appel HTTP réel      ArgumentCountError: 1 passed, exactly 8 expected
+#
+# Le bloc `services:` de ce fichier n'a pas de `_defaults`. Une définition concrète y
+# REMPLACE donc celle du prototype `App\:` au lieu de la compléter — autowiring
+# compris. Les sept autres arguments ne sont plus injectés, et rien ne le dit.
+#
+# ── LE SECOND INCIDENT, LE MÊME JOUR, ET IL EST PIRE ──────────────────────────────
+#
+# En insérant un bloc ici PAR SCRIPT, j'ai coupé le fichier à un marqueur et
+# **supprimé un alias qui marchait** (`Contract\DepotDeReponse`). Symptômes :
+#
+#     lint:container   OK
+#     phpstan          OK
+#     tests unitaires  OK
+#     premier POST     « references interface … but no such service exists »
+#
+# ── CE QU'IL FAUT EN RETENIR, ET QUI N'EST PAS « FAIRE ATTENTION » ────────────────
+#
+#   1. AUCUN des outils qui prétendent vérifier la configuration n'attrape ces deux
+#      défauts. `lint:container` valide la syntaxe et les références déclarées ; il ne
+#      construit aucun service. `debug:container` montre la définition, pas ce qui
+#      sortira du constructeur. **Seul un test qui EXERCE le chemin les voit** — ici,
+#      `tests/Question/RoutesDesQuestionsTest.php`, qui fait de vrais appels HTTP.
+#
+#   2. Après toute réécriture scriptée de ce fichier, lire `git diff` — pas
+#      `git diff --stat`. Un « + » attendu peut voisiner un « − » qu'on n'a pas voulu,
+#      et le compte de lignes ne le dit pas.
+#
+#   3. Une définition concrète ne se pose PAS ici. Elle se pose en attribut, dans la
+#      classe : `#[AsDecorator]`, `#[AutowireDecorated]`, `#[Autowire(service: …)]`.
+#      Les attributs sont appliqués par une passe de compilation, SUR la définition que
+#      le prototype a déjà construite — ils complètent au lieu de remplacer. C'est ce
+#      que `_autoload.yaml` prescrit déjà, et c'est la seule forme qui ne se trompe pas.
+# ═════════════════════════════════════════════════════════════════════════════════
 
 services:
     # ── Les trois ports, et leurs trois replis ─────────────────────────────────────
