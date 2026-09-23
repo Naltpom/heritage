@@ -91,6 +91,11 @@ function construire(): { graphe: Graphe; id: Record<string, string> } {
 
   // Un îlot, relié à personne.
   personne('ilot', 'Personne Isolée', 'inconnu', null)
+  // Un couple détaché de l'arbre, avec des dates : sa rangée s'estime d'après elles.
+  const antoine = personne('antoine', 'Antoine Leonard', 'masculin', 1912)
+  const jeanne = personne('jeanne', 'Jeanne Leonard', 'feminin', 1915)
+  const jean = personne('jean', 'Jean Leonard', 'masculin', 1941)
+  famille([antoine, jeanne], [jean])
 
   const graphe: Graphe = {
     empreinte: '0'.repeat(64),
@@ -185,11 +190,33 @@ describe('disposition lignees', () => {
   })
 
   it('n’oublie ni les remariages, ni l’ascendance du conjoint, ni les îlots', () => {
-    for (const cle of ['secondeEpouse', 'demiTante', 'beauPere', 'belleMere', 'ilot']) {
+    for (const cle of ['secondeEpouse', 'demiTante', 'beauPere', 'belleMere', 'ilot', 'antoine', 'jean']) {
       expect(d.parId.has(id[cle]!)).toBe(true)
     }
     expect(f('demiTante').y).toBe(f('mere').y)
     expect(f('beauPere').y).toBe(f('pere').y)
+  })
+
+  it('estime la rangée des personnes détachées d’après leurs dates, dans une zone à part', () => {
+    // 1912 : la génération des arrière-grands-parents (Alain Provost, 1913).
+    expect(f('antoine').rangee).toBe(-3)
+    expect(f('jeanne').rangee).toBe(-3)
+    expect(f('jean').rangee).toBe(-2)
+    expect(f('antoine').detache).toBe(true)
+    expect(f('ego').detache).toBe(false)
+    expect(f('beauPere').detache).toBe(false)
+    // Au-delà du bord droit de l'arbre relié.
+    const bordDroit = Math.max(...d.fiches.filter((x) => !x.detache).map((x) => x.x + x.w))
+    for (const x of d.fiches.filter((x) => x.detache)) expect(x.x).toBeGreaterThan(bordDroit)
+    expect(d.zoneDetachee?.effectif).toBe(4)
+  })
+
+  it('fait descendre l’enfant direct tout droit sous l’union de ses parents', () => {
+    for (const [p, m, e] of [['gpp', 'gmp', 'pere'], ['gpm', 'gmm', 'mere'], ['agp', 'agm', 'gpp']] as const) {
+      const enfant = f(e)
+      expect(enfant.cx).toBeGreaterThan(f(p).x + f(p).w)
+      expect(enfant.cx).toBeLessThan(f(m).x)
+    }
   })
 
   it('dessine la ligne directe et le divorce à part', () => {
