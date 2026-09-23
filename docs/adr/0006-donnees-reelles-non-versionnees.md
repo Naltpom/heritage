@@ -93,6 +93,122 @@ Trois règles s'ajoutent au tableau :
    c'est-à-dire qu'on commiterait une **transformation** des vraies données, dont il faudrait
    alors prouver l'irréversibilité. On ne le fait pas.
 
+### La règle 3 a été éprouvée le 23/09/2026, et elle tient
+
+La piste qu'elle interdit — **partir du relevé réel et en remplacer les identités** — a été
+mesurée ce jour-là, dans le cadre du chantier des nuages. Elle est enregistrée ici parce
+qu'**une reconnaissance qui conclut « écarté » a autant de valeur qu'une qui conclut
+« retenu »** : sans trace, quelqu'un la refera en croyant l'avoir inventée, et il n'aura pas
+la règle 3 sous les yeux au moment de conclure.
+
+**Ce qui a été construit**, hors dépôt : le graphe servi (empreinte `91ad68db`, 648 nœuds,
+468 personnes, 180 familles), avec les 92 identités de personnes vivantes remplacées par des
+chaînes d'un alphabet neutre **de même longueur**, et les lignes de dates de ces mêmes
+personnes remplacées par des points de même longueur. Puis, en seconde variante, toutes les
+largeurs arrondies à un pas de 20 unités.
+
+**Ce que la mesure établit** — et c'est solide :
+
+| | couples éligibles | largeurs distinctes | `ressorts.test.ts` |
+|---|---|---|---|
+| relevé réel | 8 | 27 | 1 échec (`:780`), 59 passés |
+| identités remplacées | 8 | 27 | 1 échec (`:780`), 59 passés |
+| + largeurs au pas de 20 | 8 | 6 | 1 échec (`:780`), 59 passés |
+
+Sur la suite front entière, la variante arrondie rend **1289 cas, 1288 passés, 1 échec,
+zéro saut** — à la ligne près ce que rend le relevé réel. Le troisième contrôle est celui
+qu'on oublie et c'est lui qui compte : **aucun autre invariant ne tombe**, ni `:924` ni
+`:932`. C'est ce qui distingue un arbre d'un artefact — un objet peut conserver le défaut
+visé *et* en fabriquer d'autres.
+
+**Et pourtant elle est écartée, par cet ADR même.** La règle 3 interdit la dérivation ; la
+règle 2 refuse l'anonymisation par déformation, et préserver les longueurs en est une ; le
+contexte nomme les **filiations** parmi ce qui n'entre pas — c'est-à-dire exactement la
+structure que cette variante conserve intacte. Un relevé anonymisé est *un arbre dont on ne
+peut plus nommer les personnes*, ce n'est pas *un arbre inventé*. L'argument « le dépôt est
+privé » ne le sauve pas non plus : la **Décision** ci-dessus le pré-rejette en toutes lettres.
+
+### Ce que la reconnaissance laisse d'utile à la piste conforme
+
+Elle n'a pas été inutile : elle dit **ce qui porte le défaut**, donc ce qu'un générateur doit
+reproduire.
+
+- **Les rangs et les familles le portent ; les noms et les dates, non.** Le prédicat de
+  `:780` ne lit que la position en rangée et la composition des fratries. C'est pourquoi le
+  remplacement des identités ne change rien — et c'est la raison pour laquelle un arbre
+  **inventé** peut le porter sans ressembler à personne.
+- **La tolérance en position est large : ±100 unités par nœud.** Mesurée par secousse
+  aléatoire déterministe sur les 648 abscisses : à ±1, ±5, ±20 et ±100, le seul échec reste
+  `:780` ; à ±500 et au-delà, trois échecs — le relevé cesse d'être un arbre plausible. À
+  comparer aux **20 unités** du plus petit écart entre deux suites voisines
+  (`components/arbre/zones.ts`). **Une fixture n'a donc pas besoin de positions exactes.**
+- **Le prédicat à reproduire est nommable** : huit couples dont les **deux** partenaires
+  viennent d'une fratrie d'au moins trois, posés sur la même rangée, familles rompues
+  exclues. Le titre du test promet plus large que ce qu'il vérifie.
+
+**Le chemin conforme en découle** : générer l'arbre selon le tableau ci-dessus, faire tourner
+le **vrai moteur de placement** dessus, et capturer sa sortie comme relevé. La disposition
+vient alors du moteur — elle est une vraie disposition, et elle ne contient aucune donnée
+réelle. C'était l'obstacle que l'on croyait rédhibitoire ; il ne l'est pas.
+
+⚠ **Ce qu'il ne faut pas en conclure, et c'est le risque qui reste entier : rien ne garantit
+qu'un arbre généré reproduise `:780`.** C'est le premier critère du cahier des charges, et il
+ne se vérifie qu'une fois le générateur écrit. **Une tolérance large ne promet pas
+l'apparition de la pathologie** — elle promet seulement qu'une fois apparue, elle survivra à
+l'imprécision.
+
+### Si une fixture porte un jour des largeurs dérivées d'étiquettes réelles
+
+La largeur d'une fiche est déterministe :
+`max(104, int(max(len(étiquette) × 6,6 , len(dates) × 5,8) + 28))`
+(`Tree\Service\MesureDeFiche::largeur()`). Une largeur conservée est donc **une dérivée
+de la longueur du nom**, et l'ADR 0003 tranche ce cas : *« tout champ dérivé d'une donnée
+masquée est une donnée masquée »*. Ce dépôt a déjà appliqué cette phrase une fois — sans la
+constante `vivant·e`, la largeur encoderait la longueur des dates d'une personne masquée
+(`Tree\ValueObject\PersonnePlacable`).
+
+**Arbitrage rendu : arrondir les largeurs à un pas de 20 unités.** Et la garantie s'écrit pour
+ce qu'elle fait, pas plus : **elle ramène chaque largeur à l'une de six classes** (160, 180,
+200, 220, 240, 260, pour 27 valeurs distinctes s'étalant de 152 à 260). Elle réduit
+l'information, **elle ne l'annule pas**. Écrire « il n'y a plus de donnée dérivée à protéger »
+serait une garantie plus forte que le geste, donc un ADR qu'on ne peut plus inspecter.
+
+Le coût est nul : 20 unités contre une tolérance mesurée de ±100.
+
+**Pourquoi pas une largeur unique**, qui annulerait l'information ? La mesure, et non la
+déduction : `:780` **survit** à une largeur unique. Ce qui casse, ce sont deux invariants de
+convergence du solveur — `ressorts.test.ts:924` et `:932`. On fabrique alors un graphe sur
+lequel le moteur cesse de converger de façon monotone : un artefact, pas un arbre. Cet
+argument est plus solide que « le défaut disparaîtrait », car il ne dépend pas du défaut
+qu'on cherche à reproduire.
+
+*(La tolérance de ±100 a été mesurée sur une secousse **aléatoire**. Un aplatissement des
+largeurs est un décalage **systématique** : les deux ne se comparent pas, et c'est pourquoi le
+cas systématique a été mesuré à part au lieu d'être extrapolé.)*
+
+⚠ **Et il faut garder la hiérarchie dans le bon ordre.** L'arrondi ferme un canal
+**secondaire**. Le canal principal est ailleurs : le relevé du 23/09/2026 portait, pour ses
+92 personnes vivantes, un nom d'affichage, une étiquette de nom, une date de naissance et une
+position, toutes en visibilité `complete` — la constante `vivant·e` ne neutralise que le côté
+**décès**. Arrondir des largeurs ne rend pas un tel fichier publiable. **Ce qui l'en empêche,
+ce sont les identités et les dates, pas les largeurs.**
+
+**Deux nombres de personnes vivantes circulent, et les deux sont justes** — chacun pour son
+objet, ce que le tableau ci-dessus fait déjà en nommant sa source :
+
+```
+graphe.json / arbre-romarin-v5.ged    274 personnes    ~18 vivantes
+graphe servi, empreinte 91ad68db      468 personnes     92 vivantes
+```
+
+Les citer sans leur empreinte fabrique une contradiction qui n'existe pas. C'est arrivé trois
+fois dans la même journée sur ce dépôt.
+
+**Cette décision précède l'outil** : quiconque écrira la capture trouvera la règle avant
+d'écrire la ligne, ce qui est l'ordre utile. Et elle est notée ici plutôt que dans le code
+parce qu'au 23/09/2026 **il n'existe ni fixture ni outil qui en produise une** — les relevés
+utilisés jusqu'ici sont posés à la main hors dépôt.
+
 ## Alternatives considérées
 
 - **Dépôt privé avec les vraies données dedans.** L'option confortable. Écartée : historique
