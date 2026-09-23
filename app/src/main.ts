@@ -20,10 +20,13 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import routeur from './router'
 import { assurerSessionChargee, installerRattrapageSession } from './composables/useSession'
+// Importé tôt : l'invitation d'installation peut partir avant le premier écran.
+import { enregistrerServiceWorker } from './composables/installation'
 import './styles/main.css'
 
 async function demarrer(): Promise<void> {
   installerRattrapageSession(routeur)
+  enregistrerServiceWorker()
 
   await assurerSessionChargee()
 

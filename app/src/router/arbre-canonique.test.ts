@@ -29,12 +29,30 @@ function table() {
 }
 
 describe('la route de l’arbre', () => {
-  it('sert `ressorts` — et non plus la sortie brute du moteur', async () => {
+  it('sert l’arbre à niveaux de détail, sous le nom `arbre`', async () => {
     const routeur = table()
     await routeur.push('/arbre')
 
     expect(routeur.currentRoute.value.name).toBe('arbre')
+    // Le 24/09/2026, `/arbre` est passé à l'écran de `/histoire`, qui ne prend pas
+    // de disposition : il porte sa propre mise en page, `histoire/lignees.ts`.
+    expect(routeur.currentRoute.value.meta['disposition']).toBeUndefined()
+  })
+
+  it('garde l’écran précédent, `ressorts`, sous `/arbre/ancien`', async () => {
+    const routeur = table()
+    await routeur.push('/arbre/ancien')
+
+    expect(routeur.currentRoute.value.name).toBe('arbre.ancien')
+    // Et non la sortie brute du moteur : c'est le défaut que ce fichier protège.
     expect(routeur.currentRoute.value.meta['disposition']).toBe('ressorts')
+  })
+
+  it('renvoie `/histoire` vers `/arbre`', async () => {
+    const routeur = table()
+    await routeur.push('/histoire')
+
+    expect(routeur.currentRoute.value.name).toBe('arbre')
   })
 
   it('est bien celle où tout lecteur connecté atterrit', () => {

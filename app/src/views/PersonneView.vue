@@ -71,8 +71,12 @@ import SourcesFiche from '@/components/personne/SourcesFiche.vue'
 import GalerieMedias from '@/components/medias/GalerieMedias.vue'
 import LoupeMedia from '@/components/medias/LoupeMedia.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
+import { vueARetrouver } from '@/histoire/retour'
 
 const route = useRoute()
+
+/** Venu de l'arbre : un bouton y ramène, sur la vue exacte qu'on avait quittée. */
+const retourArbre = vueARetrouver()
 
 /** Le routeur contraint déjà `:id(\d+)` : un identifiant provisoire (`#12/p1`)
  *  ne correspond à aucune route côté API et n'en a pas ici non plus (§ 13.4). */
@@ -119,6 +123,13 @@ watch(identifiant, () => {
 
 <template>
   <div class="mx-auto w-full max-w-3xl px-4 py-8">
+    <RouterLink
+      v-if="retourArbre"
+      :to="{ name: 'arbre' }"
+      class="mb-4 inline-flex min-h-11 items-center gap-2 rounded-champ border border-ligne bg-panneau px-3 text-sm font-semibold hover:border-accent"
+    >
+      <span aria-hidden="true">←</span> Retour à l'arbre
+    </RouterLink>
     <!-- Chargement : la place du contenu à venir, pas une page blanche. -->
     <PanneauBase v-if="chargement && fiche === null">
       <p class="mb-3 text-sm text-attenue" role="status">Chargement de la fiche…</p>
