@@ -38,15 +38,17 @@ import type { Branche, Graphe, IdentifiantNoeud, NoeudFamille, NoeudPersonne } f
 /** Écart entre frères et sœurs, et entre conjoints. */
 export const ECART_FRATRIE = 12
 /** Écart entre deux blocs familiaux. */
-export const ECART_BLOC = 44
+export const ECART_BLOC = 28
 /** Espace vertical entre deux rangées, en plus de la hauteur d'une fiche. */
-const INTERLIGNE = 76
+const INTERLIGNE = 60
 /** Marge du monde autour de l'arbre. */
 const MARGE_X = 60
 const MARGE_Y = 40
 /** Hauteur de la barre de fratrie au-dessus de la rangée des enfants. */
-const BARRE_DIRECTE = 36
-const BARRE_ORDINAIRE = 22
+const BARRE_DIRECTE = 28
+const BARRE_ORDINAIRE = 16
+/** Écart entre l'arbre et la zone des personnes détachées. */
+const ECART_ZONE = 160
 
 /* ------------------------------------------------------------------ */
 /* Ce que la disposition rend                                          */
@@ -67,6 +69,8 @@ export interface FicheHistoire {
   /** Ancêtre de l'ego, ou l'ego lui-même. */
   directe: boolean
   sosa: number | null
+  /** Aucun lien connu avec l'ego : la rangée est estimée d'après les dates. */
+  detache: boolean
 }
 
 export interface EtiquetteFoyer {
@@ -119,6 +123,8 @@ export interface DispositionHistoire {
   traces: TracesHistoire
   foyers: EtiquetteFoyer[]
   quarts: Quart[]
+  /** La zone des personnes détachées, au-delà du bord droit ; `null` s'il n'y en a pas. */
+  zoneDetachee: { cx: number; x0: number; x1: number; effectif: number } | null
   generations: GenerationHistoire[]
   largeur: number
   hauteur: number
@@ -462,8 +468,17 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
         mx = FM!.ancre
         forme = FM!
       }
+      // L'enfant direct se pose du côté INTÉRIEUR de l'union de ses parents, sous
+      // elle : son trait descend tout droit, et son propre couple reste court.
       const milieu = fx !== null && mx !== null ? (fx + mx) / 2 : (fx ?? mx)!
-      const pref = milieu - ancres[iDirect]!
+      let cibleX = milieu
+      if (fx !== null && mx !== null) {
+        cibleX =
+          cote === 'D'
+            ? Math.min(milieu, fx + largeur(sosa.get(n)!) / 2 + ECART_BLOC)
+            : Math.max(milieu, mx - largeur(sosa.get(n + 1)!) / 2 - ECART_BLOC)
+      }
+      const pref = cibleX - ancres[iDirect]!
       let dx: number
       if (cote === 'D') {
         const besoin = besoinAGauche(forme, G, ECART_BLOC)
@@ -515,44 +530,122 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     fusionner(racine, bloc)
   }
 
-  let progres = true
-  while (progres) {
-    progres = false
-    const x = xDe()
-    for (const fam of familles.keys()) {
-      const ep = epouxDe(fam)
-      const en = enfantsDe(fam)
-      const epPoses = ep.filter((e) => poses.has(e))
-      const enPoses = en.filter((e) => poses.has(e))
-      if (!epPoses.length && !enPoses.length) continue
-      const epLibres = ep.filter((e) => !poses.has(e))
-      const enLibres = en.filter((e) => !poses.has(e))
-      if (!epLibres.length && !enLibres.length) continue
+  function accrocherLesProches(): void {
+    let progres = true
+    while (progres) {
+      progres = false
+      const x = xDe()
+      for (const fam of familles.keys()) {
+        const ep = epouxDe(fam)
+        const en = enfantsDe(fam)
+        const epPoses = ep.filter((e) => poses.has(e))
+        const enPoses = en.filter((e) => poses.has(e))
+        if (!epPoses.length && !enPoses.length) continue
+        const epLibres = ep.filter((e) => !poses.has(e))
+        const enLibres = en.filter((e) => !poses.has(e))
+        if (!epLibres.length && !enLibres.length) continue
 
-      const attache = epPoses[0] ?? enPoses[0]!
-      const cote: Cote = (x.get(attache) ?? 0) < xEgo ? 'G' : 'D'
-      const rangee = rangeeDe.get(attache)! + (epPoses.length ? 0 : -1)
+        const attache = epPoses[0] ?? enPoses[0]!
+        const cote: Cote = (x.get(attache) ?? 0) < xEgo ? 'G' : 'D'
+        const rangee = rangeeDe.get(attache)! + (epPoses.length ? 0 : -1)
 
-      if (epLibres.length) {
-        for (const e of epLibres) {
-          if (poses.has(e)) continue
-          accrocher(blocDescendance(e, cote, rangee), cote)
+        if (epLibres.length) {
+          for (const e of epLibres) {
+            if (poses.has(e)) continue
+            accrocher(blocDescendance(e, cote, rangee), cote)
+          }
+        } else {
+          // Les époux sont posés, il reste des enfants : une fratrie issue d'une autre union.
+          const parties = enLibres
+            .sort((a, b) => anneeTri(a) - anneeTri(b))
+            .map((e) => blocDescendance(e, cote, rangee + 1))
+          accrocher(empiler(parties, ECART_FRATRIE).forme, cote)
         }
-      } else {
-        // Les époux sont posés, il reste des enfants : une fratrie issue d'une autre union.
-        const parties = enLibres
-          .sort((a, b) => anneeTri(a) - anneeTri(b))
-          .map((e) => blocDescendance(e, cote, rangee + 1))
-        accrocher(empiler(parties, ECART_FRATRIE).forme, cote)
+        progres = true
+        break
       }
-      progres = true
-      break
     }
   }
-  // Les îlots, sans aucun lien avec ce qui est posé.
-  for (const p of index.personnes) {
-    if (poses.has(p.id)) continue
-    accrocher(blocDescendance(p.id, 'D', p.generation), 'D')
+  accrocherLesProches()
+
+  /*
+   * Les personnes DÉTACHÉES : aucun chemin ne les relie à l'ego. Leur génération
+   * servie ne dit rien de leur place ; on l'ESTIME d'après leurs dates, sur la
+   * droite « année ↔ rangée » tirée de la lignée directe, en attendant le vrai
+   * lien. Elles vont dans une zone à part, au-delà du bord droit de l'arbre.
+   */
+  const detaches = new Set<string>()
+  if (poses.size < personnes.size) {
+    // La droite année = a + b · rangée, ajustée sur les fiches posées (la lignée directe d'abord).
+    const points: [number, number][] = []
+    for (const id of poses) {
+      const an = numeroDe.has(id) ? anneeDe(personnes.get(id)!) : null
+      if (an !== null) points.push([rangeeDe.get(id)!, an])
+    }
+    if (new Set(points.map((p) => p[0])).size < 2) {
+      points.length = 0
+      for (const id of poses) {
+        const an = anneeDe(personnes.get(id)!)
+        if (an !== null) points.push([rangeeDe.get(id)!, an])
+      }
+    }
+    let a = 1990
+    let b = 28
+    if (points.length) {
+      const mx = points.reduce((t, p) => t + p[0], 0) / points.length
+      const my = points.reduce((t, p) => t + p[1], 0) / points.length
+      const sxx = points.reduce((t, p) => t + (p[0] - mx) ** 2, 0)
+      const sxy = points.reduce((t, p) => t + (p[0] - mx) * (p[1] - my), 0)
+      if (sxx > 0 && sxy / sxx > 10) b = sxy / sxx
+      a = my - b * mx
+    }
+
+    // Un mur au-delà du bord droit : la zone détachée ne se glisse pas dans les creux de l'arbre.
+    let bord = -Infinity
+    for (const r of racine.rangees.values()) bord = Math.max(bord, r[1])
+    if (Number.isFinite(bord)) {
+      for (let g = -40; g <= 40; g++) {
+        const r = racine.rangees.get(g)
+        if (r) r[1] = Math.max(r[1], bord + ECART_ZONE - ECART_BLOC)
+        else racine.rangees.set(g, [bord + ECART_ZONE - ECART_BLOC - 1, bord + ECART_ZONE - ECART_BLOC])
+      }
+    }
+
+    for (const depart of index.personnes) {
+      if (poses.has(depart.id)) continue
+      // La composante, avec la génération relative de chacun (conjoint 0, enfant +1, parent −1).
+      const relatif = new Map<string, number>([[depart.id, 0]])
+      const file = [depart.id]
+      while (file.length) {
+        const id = file.shift()!
+        const g = relatif.get(id)!
+        const voisins: [string, number][] = []
+        for (const f of famillesEpoux.get(id) ?? []) {
+          for (const e of epouxDe(f)) voisins.push([e, g])
+          for (const e of enfantsDe(f)) voisins.push([e, g + 1])
+        }
+        for (const f of famillesEnfant.get(id) ?? []) for (const e of epouxDe(f)) voisins.push([e, g - 1])
+        for (const [v, gv] of voisins) {
+          if (relatif.has(v) || poses.has(v)) continue
+          relatif.set(v, gv)
+          file.push(v)
+        }
+      }
+      const decalages = [...relatif]
+        .map(([id, g]) => {
+          const an = anneeDe(personnes.get(id)!)
+          return an === null ? null : (an - a) / b - g
+        })
+        .filter((d): d is number => d !== null)
+        .sort((x, y) => x - y)
+      const sommet = [...relatif].sort((x, y) => x[1] - y[1])[0]!
+      const rangee = decalages.length
+        ? Math.round(decalages[decalages.length >> 1]! + sommet[1])
+        : personnes.get(sommet[0])!.generation
+      for (const id of relatif.keys()) detaches.add(id)
+      accrocher(blocDescendance(sommet[0], 'D', rangee), 'D')
+      accrocherLesProches()
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -598,6 +691,7 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       rangee: p.g,
       directe: numero !== null,
       sosa: numero,
+      detache: detaches.has(p.id),
     }
     fiches.push(fiche)
     parId.set(p.id, fiche)
@@ -624,8 +718,12 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       .map((e) => parId.get(e))
       .filter((e): e is FicheHistoire => e !== undefined)
 
+    // L'union : un trait entre les deux époux ; le point d'où descendent les
+    // enfants est pris SUR ce trait, au plus près d'eux — un seul enfant placé
+    // sous l'union reçoit un trait droit, sans détour.
     let milieuX: number | null = null
     let milieuY = 0
+    let portee: [number, number] | null = null
     if (ep.length >= 2) {
       const [a, b] = [ep[0]!, ep[ep.length - 1]!]
       const ya = a.y + a.h / 2
@@ -636,9 +734,12 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       else traits.ordinaires += s
       milieuX = (a.x + a.w + b.x) / 2
       milieuY = ya
+      if (a.rangee === b.rangee && b.x - (a.x + a.w) > 16) portee = [a.x + a.w + 8, b.x - 8]
     } else if (ep.length === 1) {
-      milieuX = ep[0]!.cx
-      milieuY = ep[0]!.y + ep[0]!.h
+      const p = ep[0]!
+      milieuX = p.cx
+      milieuY = p.y + p.h
+      portee = [p.x + 12, p.x + p.w - 12]
     }
 
     if (ep.length) {
@@ -659,24 +760,44 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     }
 
     if (!en.length || milieuX === null) continue
-    const rangeeEnfants = Math.min(...en.map((e) => e.rangee))
-    const barre = hautRangee(rangeeEnfants) - (ancestrale ? BARRE_DIRECTE : BARRE_ORDINAIRE)
     const direct = ancestrale ? en.find((e) => e.directe) : undefined
+    const xs = en.map((e) => e.cx)
+    const vise = direct ? direct.cx : (Math.min(...xs) + Math.max(...xs)) / 2
+    const departX = portee ? Math.min(portee[1], Math.max(portee[0], vise)) : milieuX
     const cible = (s: string, directe: boolean, attente: boolean): void => {
       if (attente) traits.attente += s
       else if (directe) traits.directs += s
       else traits.ordinaires += s
     }
-    cible(seg(milieuX, milieuY, milieuX, barre), ancestrale, false)
-    const xs = en.map((e) => e.cx)
-    const lo = Math.min(milieuX, ...xs)
-    const hi = Math.max(milieuX, ...xs)
+    const seul = en.length === 1 ? en[0]! : null
+    if (seul && Math.abs(seul.cx - departX) < 0.5) {
+      // Un enfant sous l'union : un trait droit.
+      cible(seg(departX, milieuY, departX, seul.y), ancestrale, enAttente(fam, seul.id))
+      continue
+    }
+    const rangeeEnfants = Math.min(...en.map((e) => e.rangee))
+    const barre = hautRangee(rangeeEnfants) - (ancestrale ? BARRE_DIRECTE : BARRE_ORDINAIRE)
+    cible(seg(departX, milieuY, departX, barre), ancestrale, false)
+    const lo = Math.min(departX, ...xs)
+    const hi = Math.max(departX, ...xs)
     if (hi > lo) traits.ordinaires += seg(lo, barre, hi, barre)
-    if (direct && direct.cx !== milieuX) traits.directs += seg(Math.min(milieuX, direct.cx), barre, Math.max(milieuX, direct.cx), barre)
+    if (direct && Math.abs(direct.cx - departX) >= 0.5)
+      traits.directs += seg(Math.min(departX, direct.cx), barre, Math.max(departX, direct.cx), barre)
     for (const e of en) cible(seg(e.cx, barre, e.cx, e.y), e === direct, enAttente(fam, e.id))
   }
 
   /* Les quarts : ceux du lecteur, puis ceux de son conjoint. */
+  const fichesDetachees = fiches.filter((f) => f.detache)
+  const zoneDetachee = fichesDetachees.length
+    ? {
+        x0: Math.min(...fichesDetachees.map((f) => f.x)),
+        x1: Math.max(...fichesDetachees.map((f) => f.x + f.w)),
+        cx: 0,
+        effectif: fichesDetachees.length,
+      }
+    : null
+  if (zoneDetachee) zoneDetachee.cx = (zoneDetachee.x0 + zoneDetachee.x1) / 2
+
   const quarts: Quart[] = []
   const conjointEgo = (famillesEpoux.get(ego) ?? []).flatMap((f) => epouxDe(f)).find((e) => e !== ego)
   const sosaConjoint = conjointEgo !== undefined ? sosaDepuis(conjointEgo).parNumero : new Map<number, string>()
@@ -723,6 +844,7 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     traces: traits,
     foyers,
     quarts,
+    zoneDetachee,
     generations,
     largeur: maxX - minX + 2 * MARGE_X,
     hauteur: hautRangee(maxG) + hauteurFiche + MARGE_Y + 20,

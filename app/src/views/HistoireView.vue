@@ -319,6 +319,22 @@ function passe(f: FicheHistoire): boolean {
   return true
 }
 
+/** La lignée directe n'est mise en valeur que lorsqu'on la demande. */
+const surligner = computed(() => filtres.ligneDirecte)
+
+/* L'état de la recherche, lu par le rendu : les cibles sont mises en évidence. */
+const recherche = ref('')
+const resultats = ref<ResultatDeRecherche[]>([])
+const tronque = ref(false)
+const curseur = ref(0)
+const listeOuverte = ref(false)
+const cibles = computed<FicheHistoire[]>(() => {
+  const d = disposition.value
+  if (!d || recherche.value.trim().length < 2) return []
+  return resultats.value.map((r) => d.parPersonId.get(r.personId)).filter((f): f is FicheHistoire => f !== undefined)
+})
+const idsCibles = computed(() => new Set(cibles.value.map((f) => f.id)))
+
 const effectifAffiche = computed(() => disposition.value?.fiches.filter(passe).length ?? 0)
 
 /* ------------------------------------------------------------------ */
@@ -339,6 +355,8 @@ const stylesFiches = computed(() => {
   const d = disposition.value
   if (!d) return []
   const loin = ensemble.value
+  const direct = surligner.value
+  const ciblees = idsCibles.value
   return d.fiches.map((f) => {
     const n = f.noeud
     const sexe = n.sex === 'masculin' ? 'homme' : n.sex === 'feminin' ? 'femme' : 'inconnu'
@@ -347,14 +365,14 @@ const stylesFiches = computed(() => {
       top: `${f.y}px`,
       width: `${f.w}px`,
       height: `${f.h}px`,
-      opacity: passe(f) ? '1' : '0.1',
+      opacity: !passe(f) ? '0.1' : ciblees.size && !ciblees.has(f.id) ? '0.25' : '1',
     }
     if (loin) {
-      base.background = f.directe ? 'var(--hi-direct-plein)' : `color-mix(in srgb, ${couleurBranche(n.branch)} 70%, transparent)`
+      base.background = f.directe && direct ? 'var(--hi-direct-plein)' : `color-mix(in srgb, ${couleurBranche(n.branch)} 70%, transparent)`
       return base
     }
     base.background = `var(--h-${sexe})`
-    base.border = f.directe
+    base.border = f.directe && direct
       ? '1px solid var(--h-accent)'
       : n.enAttente
         ? '1px dashed var(--h-accent)'
@@ -364,6 +382,11 @@ const stylesFiches = computed(() => {
     return base
   })
 })
+
+/** Sans lignée surlignée, le niveau Ensemble garde tous les liens, en discret. */
+const opaciteOrdinaire = computed(() =>
+  niveau.value === 0 ? (surligner.value ? 0 : 0.35) : niveau.value === 1 ? 0.55 : 0.9,
+)
 
 const transformationMonde = computed(
   () => `translate(${cadrage.value.tx}px, ${cadrage.value.ty}px) scale(${s.value}, ${sy.value})`,
@@ -376,8 +399,13 @@ function dansLaFenetre(x: number, y: number, w: number, h: number): boolean {
   return X + w * s.value > 0 && X < taille.value.l && Y + h * sy.value > 0 && Y < taille.value.h
 }
 
+/** L'emplacement photo mesuré par le moteur (`LARGEUR_PHOTO`, `ESPACE_PHOTO`) : 40 px, 8 px de marge. */
+const LARGEUR_PHOTO = 40
+const ESPACE_PHOTO = 8
+
 interface Libelle {
   id: string
+  photo: { x: number; y: number; d: number; src: string | null }
   x: number
   y: number
   w: number
@@ -386,6 +414,7 @@ interface Libelle {
   t2: string
   taille: number
   directe: boolean
+  estompe: boolean
 }
 
 /** Le texte des fiches visibles, en coordonnées écran (culling). */
@@ -393,19 +422,31 @@ const libelles = computed<Libelle[]>(() => {
   const d = disposition.value
   if (!d || niveau.value < 2) return []
   const nv = niveau.value
+  const direct = surligner.value
+  const ciblees = idsCibles.value
+  const d0 = LARGEUR_PHOTO * Math.min(s.value, sy.value)
+  const texte = (ESPACE_PHOTO * 2 + LARGEUR_PHOTO) * s.value
   return d.fiches
     .filter((f) => passe(f) && dansLaFenetre(f.x, f.y, f.w, f.h))
     .map((f) => ({
       id: f.id,
-      x: versEcranX(f.x) + 4 * s.value + 5,
+      // Le portrait s'il y en a un (clé absente sur une fiche restreinte), la silhouette sinon.
+      photo: {
+        x: versEcranX(f.x) + ESPACE_PHOTO * s.value,
+        y: versEcranY(f.y) + (f.h * sy.value - d0) / 2,
+        d: d0,
+        src: typeof f.noeud.portrait === 'string' ? f.noeud.portrait : null,
+      },
+      x: versEcranX(f.x) + texte,
       y: versEcranY(f.y),
-      w: Math.max(0, f.w * s.value - 4 * s.value - 9),
+      w: Math.max(0, f.w * s.value - texte - 4),
       h: f.h * sy.value,
       t1: nv === 2 ? prenomDe(f.noeud) || nomDeFiche(f.noeud).texte : nomDeFiche(f.noeud).texte,
       // Absente sur un nœud restreint : ni tiret, ni case vide.
       t2: nv === 3 && typeof f.noeud.etiquetteDates === 'string' ? f.noeud.etiquetteDates : '',
       taille: nv === 2 ? 10.5 : 12,
-      directe: f.directe,
+      directe: f.directe && direct,
+      estompe: ciblees.size > 0 && !ciblees.has(f.id),
     }))
 })
 
@@ -426,20 +467,31 @@ const libellesQuarts = computed(() => {
   const ecart = mobile ? 64 : 190
   const demi = mobile ? 34 : 95
   let dernier = -Infinity
-  return d.quarts
+  const entrees = d.quarts
     .filter((q) => q.nom !== '')
-    .map((q) => ({ q, x: versEcranX(q.cx) }))
+    .map((q) => ({
+      cle: q.branche as string,
+      couleur: couleurBranche(q.branche),
+      nom: q.nom,
+      sous: mobile ? `${q.effectif}` : `${q.libelle} · ${q.effectif}`,
+      x: versEcranX(q.cx),
+    }))
+  const z = d.zoneDetachee
+  if (z) {
+    entrees.push({
+      cle: 'detaches',
+      couleur: 'var(--h-attenue)',
+      nom: 'Sans lien connu',
+      sous: mobile ? `${z.effectif}` : `position estimée · ${z.effectif}`,
+      x: versEcranX(z.cx),
+    })
+  }
+  return entrees
     .sort((a, b) => a.x - b.x)
-    .map(({ q, x }) => {
-      const px = Math.max(dernier + ecart, Math.max(gouttiere.value + demi, x))
+    .map((e) => {
+      const px = Math.max(dernier + ecart, Math.max(gouttiere.value + demi, e.x))
       dernier = px
-      return {
-        branche: q.branche,
-        x: px,
-        y: Math.max(6, haut),
-        nom: q.nom,
-        sous: mobile ? `${q.effectif}` : `${q.libelle} · ${q.effectif}`,
-      }
+      return { ...e, x: px, y: Math.max(6, haut) }
     })
 })
 
@@ -474,6 +526,20 @@ const anneau = computed(() => {
   return { x: versEcranX(f.x) - 4, y: versEcranY(f.y) - 4, w: f.w * s.value + 8, h: f.h * sy.value + 8 }
 })
 
+/** Les cibles de la recherche visibles à l'écran ; celle du curseur est plus marquée. */
+const anneauxCibles = computed(() =>
+  cibles.value
+    .filter((f) => dansLaFenetre(f.x, f.y, f.w, f.h))
+    .map((f) => ({
+      id: f.id,
+      courante: resultats.value[curseur.value]?.personId === f.noeud.personId,
+      x: versEcranX(f.x) - 3,
+      y: versEcranY(f.y) - 3,
+      w: f.w * s.value + 6,
+      h: f.h * sy.value + 6,
+    })),
+)
+
 /* Mini-carte (bureau). */
 const LARGEUR_MINI = 236
 const miniCarte = computed(() => {
@@ -485,7 +551,12 @@ const miniCarte = computed(() => {
   return {
     bandes: d.quarts
       .filter((q) => !q.branche.startsWith('c'))
-      .map((q) => ({ branche: q.branche, x: q.x0 * k, w: Math.max(2, (q.x1 - q.x0) * k) })),
+      .map((q) => ({ branche: q.branche as string, x: q.x0 * k, w: Math.max(2, (q.x1 - q.x0) * k) }))
+      .concat(
+        d.zoneDetachee
+          ? [{ branche: 'hors', x: d.zoneDetachee.x0 * k, w: Math.max(2, (d.zoneDetachee.x1 - d.zoneDetachee.x0) * k) }]
+          : [],
+      ),
     vue: { x: x0 * k, w: Math.max(6, (x1 - x0) * k) },
     k,
   }
@@ -520,34 +591,69 @@ const compteur = computed(() => {
 /* Recherche : par l'API, jamais par un index local                     */
 /* ------------------------------------------------------------------ */
 
-const recherche = ref('')
-const resultats = ref<ResultatDeRecherche[]>([])
 const champ = ref<HTMLInputElement | null>(null)
 let minuterie = 0
 let requete: AbortController | null = null
 
+/**
+ * À chaque frappe : l'API rend jusqu'à 50 personnes (son plafond), toutes sont
+ * mises en évidence sur le canevas et la vue se cadre sur elles ; la liste
+ * reste affichée pour choisir.
+ */
 watch(recherche, (q) => {
   window.clearTimeout(minuterie)
   requete?.abort()
   const texte = q.trim()
   if (texte.length < 2) {
     resultats.value = []
+    tronque.value = false
     return
   }
   minuterie = window.setTimeout(() => {
     requete = new AbortController()
-    rechercherPersonnes(texte, 6, requete.signal)
+    rechercherPersonnes(texte, 50, requete.signal)
       .then((r) => {
         resultats.value = r.elements
+        tronque.value = r.tronque
+        curseur.value = 0
+        listeOuverte.value = true
+        cadrerCibles()
       })
       .catch(() => {})
-  }, 200)
+  }, 120)
 })
+
+/** Cadre la vue sur toutes les cibles ; une seule : on vole vers elle. */
+function cadrerCibles(): void {
+  const fs = cibles.value
+  if (!fs.length) return
+  if (fs.length === 1) {
+    const f = fs[0]!
+    voler(Math.max(s.value, 0.9), f.cx, f.y + f.h / 2)
+    return
+  }
+  const x0 = Math.min(...fs.map((f) => f.x))
+  const x1 = Math.max(...fs.map((f) => f.x + f.w))
+  const y0 = Math.min(...fs.map((f) => f.y))
+  const y1 = Math.max(...fs.map((f) => f.y + f.h))
+  const utile = Math.max(100, taille.value.l - gouttiere.value - 80)
+  voler(Math.min(1, utile / Math.max(1, x1 - x0)), (x0 + x1) / 2, (y0 + y1) / 2)
+}
+
+function surCurseur(i: number): void {
+  const n = resultats.value.length
+  if (!n) return
+  curseur.value = (i + n) % n
+  const f = disposition.value?.parPersonId.get(resultats.value[curseur.value]!.personId)
+  if (f) voler(Math.max(s.value, 0.9), f.cx, f.y + f.h / 2)
+  document.getElementById(`resultat-histoire-${curseur.value}`)?.scrollIntoView({ block: 'nearest' })
+}
 
 function allerA(r: ResultatDeRecherche): void {
   const f = disposition.value?.parPersonId.get(r.personId)
   recherche.value = ''
   resultats.value = []
+  listeOuverte.value = false
   champ.value?.blur()
   if (!f) return
   selection.value = f.id
@@ -555,9 +661,20 @@ function allerA(r: ResultatDeRecherche): void {
 }
 
 function surToucheRecherche(e: KeyboardEvent): void {
-  if (e.key === 'Enter' && resultats.value[0]) allerA(resultats.value[0])
-  else if (e.key === 'Escape') {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    listeOuverte.value = true
+    surCurseur(curseur.value + 1)
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    listeOuverte.value = true
+    surCurseur(curseur.value - 1)
+  } else if (e.key === 'Enter') {
+    const r = resultats.value[curseur.value]
+    if (r) allerA(r)
+  } else if (e.key === 'Escape') {
     recherche.value = ''
+    listeOuverte.value = false
     champ.value?.blur()
   }
 }
@@ -649,18 +766,28 @@ onBeforeUnmount(() => {
           aria-label="Aller à une personne"
           class="h-9 w-full rounded-champ border border-ligne bg-fond px-3 text-[13px] outline-none focus:border-accent"
           @keydown="surToucheRecherche"
+          @focus="listeOuverte = true"
+          @blur="listeOuverte = false"
         />
         <div
-          v-if="resultats.length"
-          class="absolute inset-x-0 top-10 z-20 rounded-panneau border border-ligne bg-panneau py-1 shadow-[0_10px_30px_rgba(0,0,0,.5)]"
+          v-if="listeOuverte && recherche.trim().length >= 2"
+          class="absolute inset-x-0 top-10 z-20 rounded-panneau border border-ligne bg-panneau py-1 shadow-[0_10px_30px_rgba(0,0,0,.5)] max-h-[60vh] overflow-y-auto"
           role="listbox"
+          @pointerdown.prevent
         >
+          <div class="px-3 pt-1 pb-1.5 text-[11px] text-attenue">
+            <template v-if="resultats.length">{{ resultats.length }}{{ tronque ? '+' : '' }} personne{{ resultats.length > 1 ? 's' : '' }} · ↑ ↓ pour parcourir</template>
+            <template v-else>Personne ne correspond.</template>
+          </div>
           <button
-            v-for="r in resultats"
+            v-for="(r, i) in resultats"
+            :id="`resultat-histoire-${i}`"
             :key="r.personId"
             type="button"
             role="option"
+            :aria-selected="i === curseur"
             class="flex w-full flex-col items-start px-3 py-1.5 text-left leading-snug hover:bg-accent-doux"
+            :class="i === curseur ? 'bg-accent-doux' : ''"
             @click="allerA(r)"
           >
             <span class="text-[13px] font-semibold">{{ r.displayName }}</span>
@@ -769,7 +896,7 @@ onBeforeUnmount(() => {
               stroke="var(--hi-arete)"
               stroke-width="1.2"
               vector-effect="non-scaling-stroke"
-              :opacity="niveau === 0 ? 0 : niveau === 1 ? 0.55 : 0.9"
+              :opacity="opaciteOrdinaire"
             />
             <path
               :d="disposition.traces.divorces"
@@ -792,9 +919,10 @@ onBeforeUnmount(() => {
             <path
               :d="disposition.traces.directs"
               fill="none"
-              stroke="var(--h-accent)"
-              :stroke-width="niveau === 0 ? 2.5 : 2"
+              :stroke="surligner ? 'var(--h-accent)' : 'var(--hi-arete)'"
+              :stroke-width="surligner ? (niveau === 0 ? 2.5 : 2) : 1.2"
               vector-effect="non-scaling-stroke"
+              :opacity="surligner ? 1 : opaciteOrdinaire"
             />
           </g>
         </svg>
@@ -803,12 +931,33 @@ onBeforeUnmount(() => {
           <FichesMonde :fiches="disposition.fiches" :styles="stylesFiches" @choisir="choisir" />
         </div>
 
-        <!-- Textes, en coordonnées écran, à taille fixe -->
+        <!-- Photos et textes, en coordonnées écran : seules les fiches visibles en reçoivent -->
+        <template v-for="t in libelles" :key="`photo-${t.id}`">
+          <img
+            v-if="t.photo.src"
+            :src="t.photo.src"
+            alt=""
+            loading="lazy"
+            decoding="async"
+            class="pointer-events-none absolute rounded-full object-cover"
+            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1 }"
+          />
+          <svg
+            v-else
+            class="pointer-events-none absolute"
+            viewBox="0 0 40 40"
+            aria-hidden="true"
+            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1 }"
+          >
+            <circle cx="20" cy="13.6" r="6.8" class="silhouette" />
+            <path d="M6.8,36.8 a13.2,13.2 0 0 1 26.4,0 Z" class="silhouette" />
+          </svg>
+        </template>
         <div
           v-for="t in libelles"
           :key="t.id"
           class="pointer-events-none absolute flex flex-col justify-center overflow-hidden leading-tight"
-          :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px` }"
+          :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, opacity: t.estompe ? 0.35 : 1 }"
         >
           <span
             class="truncate font-semibold"
@@ -824,8 +973,8 @@ onBeforeUnmount(() => {
           :style="{
             left: `${c.x}px`,
             top: `${c.y}px`,
-            fontSize: c.ancetres ? '11.5px' : '10.5px',
-            color: c.ancetres ? 'var(--hi-libelle-accent)' : 'var(--h-attenue)',
+            fontSize: c.ancetres && surligner ? '11.5px' : '10.5px',
+            color: c.ancetres && surligner ? 'var(--hi-libelle-accent)' : 'var(--h-attenue)',
           }"
         >
           {{ c.nom }}
@@ -833,18 +982,25 @@ onBeforeUnmount(() => {
 
         <div
           v-for="q in libellesQuarts"
-          :key="q.branche"
+          :key="q.cle"
           class="pointer-events-none absolute flex -translate-x-1/2 flex-col items-center text-center leading-tight"
           :style="{ left: `${q.x}px`, top: `${q.y}px` }"
         >
           <span
             class="font-bold tracking-tight whitespace-nowrap"
             :class="estMobile ? 'text-xs' : 'text-[17px]'"
-            :style="{ color: couleurBranche(q.branche) }"
+            :style="{ color: q.couleur }"
           >{{ q.nom }}</span>
           <span class="whitespace-nowrap text-attenue" :class="estMobile ? 'text-[10px]' : 'text-xs'">{{ q.sous }}</span>
         </div>
 
+        <div
+          v-for="a in anneauxCibles"
+          :key="`cible-${a.id}`"
+          class="pointer-events-none absolute rounded-[9px] border-[var(--hi-libelle-accent)]"
+          :class="a.courante ? 'border-2 shadow-[0_0_0_5px_rgba(217,160,102,.25)]' : 'border'"
+          :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
+        />
         <div
           v-if="anneau"
           class="pointer-events-none absolute rounded-[9px] border-2 border-[var(--hi-libelle-accent)] shadow-[0_0_0_5px_rgba(217,160,102,.2)]"
@@ -929,6 +1085,11 @@ onBeforeUnmount(() => {
             <span class="rounded-pastille border border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]">{{
               libelleBranche(ficheChoisie.noeud.branch)
             }}</span>
+            <span
+              v-if="ficheChoisie.detache"
+              class="rounded-pastille border border-dashed border-ligne px-2.5 py-px text-xs text-attenue"
+              title="Aucun lien connu avec vous : la génération est estimée d'après les dates."
+            >sans lien connu · position estimée</span>
             <span v-if="ficheChoisie.noeud.enAttente" class="rounded-pastille border border-accent px-2.5 py-px text-xs text-accent">en attente</span>
           </div>
           <div class="flex gap-2">
@@ -977,18 +1138,28 @@ onBeforeUnmount(() => {
           aria-label="Aller à une personne"
           class="h-11 w-full rounded-pastille border border-ligne bg-fond px-4 text-[15px] outline-none focus:border-accent"
           @keydown="surToucheRecherche"
+          @focus="listeOuverte = true"
+          @blur="listeOuverte = false"
         />
         <div
-          v-if="resultats.length"
-          class="absolute bottom-[52px] left-0 -right-[52px] z-20 rounded-panneau border border-ligne bg-panneau py-1 shadow-[0_-10px_30px_rgba(0,0,0,.5)]"
+          v-if="listeOuverte && recherche.trim().length >= 2"
+          class="absolute bottom-[52px] left-0 -right-[52px] z-20 rounded-panneau border border-ligne bg-panneau py-1 shadow-[0_-10px_30px_rgba(0,0,0,.5)] max-h-[60vh] overflow-y-auto"
           role="listbox"
+          @pointerdown.prevent
         >
+          <div class="px-3 pt-1 pb-1.5 text-[11px] text-attenue">
+            <template v-if="resultats.length">{{ resultats.length }}{{ tronque ? '+' : '' }} personne{{ resultats.length > 1 ? 's' : '' }} · ↑ ↓ pour parcourir</template>
+            <template v-else>Personne ne correspond.</template>
+          </div>
           <button
-            v-for="r in resultats"
+            v-for="(r, i) in resultats"
+            :id="`resultat-histoire-${i}`"
             :key="r.personId"
             type="button"
             role="option"
+            :aria-selected="i === curseur"
             class="flex min-h-11 w-full flex-col items-start justify-center px-3 py-1 text-left leading-snug"
+            :class="i === curseur ? 'bg-accent-doux' : ''"
             @click="allerA(r)"
           >
             <span class="text-sm font-semibold">{{ r.displayName }}</span>
@@ -1093,6 +1264,10 @@ onBeforeUnmount(() => {
 .grille {
   background-image: radial-gradient(var(--hi-grille) 1px, transparent 1px);
   background-size: 22px 22px;
+}
+.silhouette {
+  fill: var(--h-attenue);
+  fill-opacity: 0.35;
 }
 .gouttiere {
   background: linear-gradient(90deg, var(--h-fond) 62%, transparent);
