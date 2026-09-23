@@ -73,6 +73,14 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'public', titre: 'Accueil' },
   },
 
+  {
+    // L'arbre total, repris de zéro : plein écran, placement propre au client.
+    path: '/tree',
+    name: 'tree',
+    component: () => import('@/views/TreeView.vue'),
+    meta: { acces: 'attente', titre: 'Arbre', cadre: false },
+  },
+
   /* --- Entrée : connexion et inscription (§ 2, § 4) --------------- */
   {
     path: '/connexion',
