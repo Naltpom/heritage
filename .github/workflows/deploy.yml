@@ -131,24 +131,45 @@ jobs:
 
           # ── 1. L'ARBORESCENCE : la CI de la pull request suffit ─────────────
           # La CI ne tourne plus au push sur `main` (voir l'en-tête de `ci.yml`).
-          # Elle publie l'empreinte de l'arborescence qu'elle a testée ; si une
-          # exécution VERTE a testé exactement l'arborescence de ce commit, c'est
-          # ce code-là qui a passé les portes — peu importe sous quel SHA.
-          arbre="$(gh api "repos/$DEPOT/commits/$SHA" --jq '.commit.tree.sha')"
-          echo "Commit $SHA, arborescence $arbre"
-          executions="$(gh api "repos/$DEPOT/actions/artifacts?name=arbre-$arbre&per_page=100" \
-            --jq '[.artifacts[] | select(.expired | not) | .workflow_run.id] | unique | .[]')"
-          for id in $executions; do
-            ligne="$(gh api "repos/$DEPOT/actions/runs/$id" --jq '"\(.status) \(.conclusion) \(.html_url)"')"
-            echo "  exécution $id : $ligne"
-            case "$ligne" in
-              "completed success "*)
-                echo "Porte franchie : cette arborescence a été testée et la CI est verte."
+          # Elle publie l'empreinte de l'arborescence qu'elle a testée. Si l'exécution
+          # de la PR RÉELLEMENT FUSIONNÉE ici a testé exactement l'arborescence de ce
+          # commit, et qu'elle est verte, c'est ce code-là qui a passé les portes.
+          #
+          # ⚠ UN NOM D'ARTEFACT NE PROUVE RIEN À LUI SEUL. N'importe quelle pull
+          # request — y compris depuis un fork, avec un `ci.yml` modifié — peut
+          # publier un artefact au nom de son choix. On n'accepte donc l'empreinte
+          # que si l'exécution qui la porte :
+          #   - a pour `head_sha` le SECOND PARENT de ce commit de fusion (la branche
+          #     qui a été fusionnée, donc relue) ;
+          #   - vient de CE dépôt, pas d'un fork ;
+          #   - est un `pull_request` de `.github/workflows/ci.yml` ;
+          #   - est terminée et verte.
+          infos="$(gh api "repos/$DEPOT/commits/$SHA")"
+          arbre="$(printf '%s' "$infos" | jq -r '.commit.tree.sha')"
+          fusionnee="$(printf '%s' "$infos" | jq -r '.parents[1].sha // empty')"
+          depot_id="$(gh api "repos/$DEPOT" --jq '.id')"
+          echo "Commit $SHA, arborescence $arbre, branche fusionnée ${fusionnee:-aucune}"
+          if [ -n "$fusionnee" ]; then
+            executions="$(gh api "repos/$DEPOT/actions/artifacts?name=arbre-$arbre&per_page=100" \
+              --jq '[.artifacts[] | select(.expired | not) | .workflow_run.id] | unique | .[]')"
+            for id in $executions; do
+              run="$(gh api "repos/$DEPOT/actions/runs/$id")"
+              verdict="$(printf '%s' "$run" | jq -r --arg sha "$fusionnee" --argjson depot "$depot_id" '
+                if .head_sha != $sha then "autre branche"
+                elif .head_repository.id != $depot then "fork"
+                elif .event != "pull_request" then "événement \(.event)"
+                elif .path != ".github/workflows/ci.yml" then "flux \(.path)"
+                elif .status != "completed" then "en cours"
+                elif .conclusion != "success" then "conclusion \(.conclusion)"
+                else "ok" end')"
+              echo "  exécution $id : $verdict — $(printf '%s' "$run" | jq -r '.html_url')"
+              if [ "$verdict" = "ok" ]; then
+                echo "Porte franchie : la CI de la branche fusionnée a testé cette arborescence, et elle est verte."
                 exit 0
-                ;;
-            esac
-          done
-          echo "Aucune CI verte n'a testé cette arborescence exacte ; repli sur la CI du commit."
+              fi
+            done
+          fi
+          echo "Aucune CI verte de la branche fusionnée n'a testé cette arborescence ; repli sur la CI du commit."
           echo "(Si main a bougé entre la CI de la PR et la fusion : Actions → CI → Run workflow sur main.)"
 
           # ── 2. LE COMMIT : une CI lancée sur ce SHA précis (workflow_dispatch) ─
