@@ -282,14 +282,21 @@ describe('appliquerPositions — et la garantie que le chemin d’origine ne bou
 })
 
 describe('construireCanevas', () => {
-  it('empile les zones sous les arêtes, puis les familles et les fiches', () => {
+  it('empile les nuages sous les zones, sous les arêtes, puis les familles et les fiches', () => {
     const { svg } = monter()
     // L'ordre du document EST l'ordre de peinture en SVG : il n'y a pas de
     // `z-index`. Les aplats de région passent donc en tête — au-dessus, ils
     // masqueraient les traits qu'ils sont censés accompagner. `defs` ne peint
     // rien et reste avant tout le monde.
+    //
+    // **`nuages` avant `zones`, et c'est toute l'imbrication.** Un gros nuage porte
+    // deux régions : peint après elles, il les recouvrirait au lieu de les contenir,
+    // et le dessin cesserait de se lire comme un contenant et son contenu. C'est la
+    // seule chose qui distingue « dans les gros blocs on retrouve 2 blocs nuage »
+    // d'un empilement d'aplats sans rapport.
     expect(svg.enfants.map((e) => e.attributs['class'] ?? e.tag)).toEqual([
       'defs',
+      'nuages',
       'zones',
       'aretes',
       'familles',
