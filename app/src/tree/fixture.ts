@@ -15,13 +15,13 @@ export function syntheticGraph(seed = 7, depth = 5): Graphe {
   let fid = 0
   const given = ['Jean', 'Marie', 'Louis', 'Anne', 'Paul', 'Jeanne', 'Pierre', 'Louise', 'Henri', 'Rose']
   const sur = ['Martin', 'Bernard', 'Dubois', 'Laurent', 'Petit', 'Leroy', 'Moreau', 'Garnier', 'de la Tour']
-  const person = (gen: number, surname?: string): string => {
+  const person = (gen: number, surname?: string, sex?: 'masculin' | 'feminin'): string => {
     const id = `p${++pid}`
     const name = `${given[int(0, given.length - 1)]} ${surname ?? sur[int(0, sur.length - 1)]}`
     const year = 1995 - gen * 28 + int(-4, 4)
     noeuds.push({
       id, type: 'personne', personId: pid, x: 0, y: 0, w: 0, h: 0,
-      displayName: name, etiquetteNom: name, sex: pid % 2 ? 'masculin' : 'feminin',
+      displayName: name, etiquetteNom: name, sex: sex ?? (pid % 2 ? 'masculin' : 'feminin'),
       generation: gen, branch: 'tr', vivant: gen < 2, visibilite: 'complete',
       etiquetteDates: gen < 2 ? 'vivant·e' : `${year} – ${year + int(40, 90)}`,
     })
@@ -34,8 +34,10 @@ export function syntheticGraph(seed = 7, depth = 5): Graphe {
     for (const c of children) aretes.push({ de: id, vers: c, genre: 'filiation' })
     return id
   }
+  const sexOf = (id: string): string => (noeuds.find((n) => n.id === id) as { sex: string }).sex
+  const other = (id: string): 'masculin' | 'feminin' => (sexOf(id) === 'masculin' ? 'feminin' : 'masculin')
   const descend = (a: string, gen: number, maxDown: number, keep?: string): string[] => {
-    const b = person(gen)
+    const b = person(gen, undefined, other(a))
     const kids: string[] = []
     const n = int(1, 4)
     for (let i = 0; i < n; i++) kids.push(person(gen - 1))
@@ -45,10 +47,10 @@ export function syntheticGraph(seed = 7, depth = 5): Graphe {
       for (const k of kids) if (k !== keep && rnd() < 0.55) descend(k, gen - 1, maxDown)
     return kids
   }
-  const ego = person(0, 'Martin')
+  const ego = person(0, 'Martin', 'masculin')
   const ancestors = (child: string, gen: number): void => {
-    const f = person(gen)
-    const m = person(gen)
+    const f = person(gen, undefined, 'masculin')
+    const m = person(gen, undefined, 'feminin')
     const others: string[] = []
     const n = int(0, 3)
     for (let i = 0; i < n; i++) others.push(person(gen - 1))
@@ -61,12 +63,12 @@ export function syntheticGraph(seed = 7, depth = 5): Graphe {
   }
   ancestors(ego, 1)
   // Moi : conjointe, ses parents, nos enfants, et un premier mariage.
-  const wife = person(0)
+  const wife = person(0, undefined, 'feminin')
   const k1 = person(-1)
   const k2 = person(-1)
   family([ego, wife], [k1, k2])
-  family([person(1), person(1)], [wife, person(0)])
-  const ex = person(0)
+  family([person(1, undefined, 'masculin'), person(1, undefined, 'feminin')], [wife, person(0)])
+  const ex = person(0, undefined, 'feminin')
   family([ego, ex], [person(-1)], true)
   // Un îlot.
   family([person(3), person(3)], [person(2), person(2)])

@@ -81,6 +81,15 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'attente', titre: 'Arbre', cadre: false },
   },
 
+  {
+    // Tout l'arbre à niveaux de détail : plus on dézoome, moins on écrit.
+    // Écran autonome, avec le cadre de l'application (burger et filtres de l'en-tête).
+    path: '/histoire',
+    name: 'histoire',
+    component: () => import('@/views/HistoireView.vue'),
+    meta: { acces: 'attente', titre: 'Histoire' },
+  },
+
   /* --- Entrée : connexion et inscription (§ 2, § 4) --------------- */
   {
     path: '/connexion',
