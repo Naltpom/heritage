@@ -51,7 +51,8 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * inter-modules où un compte serait une mauvaise idée. La différence tient à deux
      * choses :
      *
-     * - ce que ce test compte **ne bouge pas** — le schéma est figé à 23 tables, et les
+     * - ce que ce test compte **ne bouge pas** — le schéma ne gagne une table que par
+     *   décision écrite (voir {@see SchemaSynchroniseTest::NOMBRE_DE_TABLES}), et les
      *   énumérations qui montent dans `Core` changent de dossier sans changer le nombre de
      *   colonnes qui les portent ;
      * - un écart ici se **corrige en une ligne** (on met le nouveau chiffre, après avoir
@@ -61,8 +62,14 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * Quand ce nombre doit changer, c'est qu'on a ajouté ou retiré une colonne
      * d'énumération. Le mettre à jour est alors un geste délibéré, visible en revue — et
      * c'est exactement ce qu'on veut qu'il soit.
+     *
+     * **48 depuis le 2026-09-23** : `qst_question` en porte quatre — `nature`,
+     * `sujet_kind`, `etat` et `redacteur` (ADR 0008). La plus longue valeur du lot est
+     * `date_naissance_inconnue`, 23 signes, d'où le `VARCHAR(32)` de `nature` : c'est
+     * exactement la forme de débordement que ce test existe pour attraper, une valeur
+     * descriptive ajoutée à une énumération dont les premières étaient courtes.
      */
-    private const int COLONNES_ENUM_ATTENDUES = 44;
+    private const int COLONNES_ENUM_ATTENDUES = 48;
 
     public function testChaqueColonneAccueilleLaPlusLongueValeurDeSonEnumeration(): void
     {

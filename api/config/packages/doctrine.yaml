@@ -71,6 +71,12 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Module/Gedcom/Entity'
                 prefix: 'App\Module\Gedcom\Entity'
                 alias: Gedcom
+            Question:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Question/Entity'
+                prefix: 'App\Module\Question\Entity'
+                alias: Question
 
 when@test:
     doctrine:
