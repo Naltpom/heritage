@@ -51,6 +51,7 @@ function reinitialiser(): void {
   etape.value = 'choix'
   erreur.value = null
   envoi.value = false
+  repliNatif.value = false
 }
 
 function fermer(): void {
@@ -108,6 +109,8 @@ const video = ref<HTMLVideoElement | null>(null)
 const selecteurAppareil = ref<HTMLInputElement | null>(null)
 let flux: MediaStream | null = null
 const faceAvant = ref(true)
+/** La caméra dans la page a été refusée : on propose l'appareil photo natif. */
+const repliNatif = ref(false)
 
 function arreterCamera(): void {
   flux?.getTracks().forEach((t) => t.stop())
@@ -128,7 +131,12 @@ async function ouvrirCamera(): Promise<void> {
       audio: false,
     })
   } catch {
-    erreur.value = "La caméra n'est pas accessible (autorisation refusée ou aucune caméra). Vous pouvez importer une photo."
+    // Autorisation refusée, caméra occupée, ou navigateur qui ne la prête pas à
+    // une page : l'appareil photo natif du téléphone ne dépend pas de tout cela.
+    // Le bouton qui l'ouvre est un vrai geste du lecteur — un `click()` lancé
+    // après un `await` est ignoré par Safari.
+    erreur.value = "La caméra n'a pas pu s'ouvrir dans la page. Utilisez l'appareil photo du téléphone, ou importez une photo."
+    repliNatif.value = true
     etape.value = 'choix'
     return
   }
@@ -348,7 +356,14 @@ onBeforeUnmount(() => {
             Prendre une photo
           </button>
           <!-- Repli sans caméra dans la page : l'appareil photo natif du téléphone. -->
-          <input ref="selecteurAppareil" type="file" accept="image/*" capture="user" class="hidden" @change="surFichier" />
+          <label
+            v-if="repliNatif"
+            class="col-span-2 flex min-h-11 cursor-pointer items-center justify-center rounded-panneau border border-accent px-3 text-sm font-semibold text-accent"
+          >
+            Ouvrir l'appareil photo
+            <input ref="selecteurAppareil" type="file" accept="image/*" capture="user" class="sr-only" @change="surFichier" />
+          </label>
+          <input v-else ref="selecteurAppareil" type="file" accept="image/*" capture="user" class="hidden" @change="surFichier" />
         </div>
       </template>
 
