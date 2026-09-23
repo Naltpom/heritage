@@ -1,3 +1,55 @@
+<script lang="ts">
+/**
+ * Le filtre « vivants uniquement », **hors du `<script setup>`**.
+ *
+ * Même raison qu'`etatDeLEcran` dans `AnniversairesView.vue` : un `<script
+ * setup>` se compile en une fermeture sur l'état du composant, que rien ne peut
+ * appeler depuis une suite de tests. Le projet n'a ni `jsdom` ni
+ * `@vue/test-utils` ; la seule façon de **prouver** un prédicat est de l'écrire
+ * dans un bloc ordinaire et de l'appeler directement.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **LE PRÉDICAT EST `barre.vivant`, ET RIEN D'AUTRE.**
+ *
+ * Ni `deceased`, ni l'absence de date de fin, ni l'étiquette affichée :
+ *
+ *  - `deceased` est le `DEAT` **stocké** du GEDCOM ; `vivant` est le résultat
+ *    **calculé** de la règle de confidentialité (seuil d'âge, cercle). C'est
+ *    déjà la règle de `classesDeNoeud()` dans `components/arbre/graphe.ts`, où
+ *    la classe `prive` est allumée par `vivant` « jamais par `deceased` ni par
+ *    l'absence de dates » ;
+ *  - `ouverte` ne suffit pas davantage : la charge réelle porte 53 barres
+ *    `fin: null` **avec** `ouverte: false` — des personnes décédées dont on
+ *    ignore la date. Filtrer sur `fin === null` les classerait vivantes ;
+ *  - l'étiquette de date vaut littéralement « vivant·e » sur d'autres écrans.
+ *    Un filtre bâti sur cette chaîne casserait au premier changement de
+ *    libellé, et **en silence** : il rendrait zéro barre, pas une erreur.
+ * ────────────────────────────────────────────────────────────────────
+ *
+ * **Filtre éteint ⟹ la vue elle-même, à l'identité.** Pas une copie
+ * superficielle : le canevas surveille `vue` par identité et se reconstruit à
+ * chaque nouvel objet. Rendre `{ ...vue }` ferait repeindre tout le dessin pour
+ * une valeur inchangée. C'est aussi ce qui garantit que « filtre éteint » est
+ * exactement l'ancien comportement, sans rien à comparer.
+ *
+ * **Les jalons suivent les barres.** `placerJalons()` écarte déjà un jalon dont
+ * la personne n'a pas de barre, mais s'appuyer là-dessus laisserait cet objet
+ * incohérent avec lui-même — des `jalons` qui désignent des personnes absentes
+ * de `barres`. Une retouche de `placerJalons()` remettrait alors à l'écran les
+ * faits datés de personnes que le filtre venait d'écarter, sans qu'aucun test
+ * d'ici ne rougisse. On rend donc une vue cohérente, pas une vue rattrapée en
+ * aval.
+ */
+import type { VueChronologie } from '@/lib/api'
+
+export function filtrerVivants(vue: VueChronologie, vivantsSeuls: boolean): VueChronologie {
+  if (!vivantsSeuls) return vue
+  const barres = vue.barres.filter((barre) => barre.vivant)
+  const retenues = new Set(barres.map((barre) => barre.personId))
+  return { ...vue, barres, jalons: vue.jalons.filter((j) => retenues.has(j.personId)) }
+}
+</script>
+
 <script setup lang="ts">
 /**
  * Chronologie — § 9 du contrat, § 7.4 du dossier de mission.
@@ -23,6 +75,16 @@
  * 4. **Après la première réponse, les réglages appartiennent au lecteur.** Les
  *    réponses suivantes n'apportent que de la donnée : sinon l'écho du serveur
  *    reprendrait la main sur ce que le lecteur vient de choisir.
+ * 5. **« Vivants uniquement » n'est pas dans `Reglages`, et c'est voulu.**
+ *    `Reglages` est le miroir des **quatre** champs de `PreferenceChronologie`,
+ *    que le bouton « Enregistrer » envoie d'un bloc : le `PUT` est un
+ *    remplacement complet, pas un `PATCH` (§ 9.2). Un cinquième champ posé dans
+ *    cet objet partirait un jour dans ce corps — par un `...r` distrait — et le
+ *    serveur rendrait `422` sur un réglage d'affichage. Le filtre est donc une
+ *    `ref` à part : il ne peut pas entrer dans la préférence, il n'entre pas
+ *    dans `cleDeDemande()` (il ne change pas la donnée, il la cache), et il
+ *    **ne survit pas au rechargement**. Le rendre durable demanderait un champ
+ *    de plus au contrat du serveur, ce que ce chantier ne touche pas.
  * ────────────────────────────────────────────────────────────────────
  *
  * **Ce qu'il ne faut pas prendre pour un bogue.** Un membre voit **moins de
@@ -43,6 +105,7 @@ import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import BarreOutilsChronologie from '@/components/chronologie/BarreOutilsChronologie.vue'
 import CanevasChronologie from '@/components/chronologie/CanevasChronologie.vue'
 import LegendeChronologie from '@/components/chronologie/LegendeChronologie.vue'
+import ReserveVivants from '@/components/chronologie/ReserveVivants.vue'
 import TiroirOutils from '@/components/mise-en-page/TiroirOutils.vue'
 import { DESCRIPTIONS_BRANCHE, estVide } from '@/components/chronologie/disposition'
 import {
@@ -53,8 +116,11 @@ import {
   type Branche,
   type OrientationChronologie,
   type PreferenceChronologie,
-  type VueChronologie,
 } from '@/lib/api'
+
+/* `VueChronologie` est déjà importé par le bloc `<script>` ci-dessus, dont les
+   liaisons sont dans la portée de ce `<script setup>` : le réimporter ici ferait
+   un doublon d'identifiant. Même montage qu'`AnniversairesView.vue`. */
 
 /** Les quatre réglages, tels que le lecteur les manipule. Ils reprennent les
  *  valeurs du serveur au premier chargement, puis lui appartiennent. */
@@ -165,6 +231,36 @@ function changerIncertitude(montrer: boolean): void {
 }
 
 /* ------------------------------------------------------------------ */
+/* Vivants uniquement                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Éteint au premier rendu, toujours.
+ *
+ * Un écran qui s'ouvrirait déjà filtré montrerait une fraction de l'arbre en
+ * ayant l'air de tout montrer — le même défaut que `showUncertainty`, qu'on
+ * « n'éteint jamais de soi-même » (§ 9.2). Seul un geste du lecteur l'allume.
+ */
+const vivantsSeuls = ref(false)
+
+function changerVivantsSeuls(actif: boolean): void {
+  vivantsSeuls.value = actif
+}
+
+/**
+ * Ce que l'écran dessine. Le filtre s'applique **ici**, entre la donnée du
+ * serveur et le canevas, et pas dans `disposer()` : ce module « ne redérive
+ * aucune donnée, il ne fait que placer », et lui confier un prédicat brouillerait
+ * la seule frontière qui rende sa suite de tests lisible.
+ *
+ * `vue` reste intacte : c'est elle qu'on réenverra au serveur, et c'est sur
+ * elle que se lit ce que le compte a le droit de voir.
+ */
+const vueAffichee = computed(() =>
+  vue.value === null ? null : filtrerVivants(vue.value, vivantsSeuls.value),
+)
+
+/* ------------------------------------------------------------------ */
 /* Préférence — la seule écriture de cet écran                          */
 /* ------------------------------------------------------------------ */
 
@@ -232,6 +328,21 @@ function surBarre(barre: BarreChronologie | null): void {
   selection.value = barre
 }
 
+/**
+ * La fiche ouverte suit le filtre.
+ *
+ * Sans cela, masquer une barre laisse son panneau à l'écran : le nom, les dates
+ * et le lien « Ouvrir la fiche » d'une personne dont plus aucun trait n'est
+ * visible. Le lecteur cherche la barre qui correspond, ne la trouve pas, et le
+ * panneau donne raison à sa recherche — une information juste au mauvais
+ * moment se lit comme une panne.
+ */
+watch(vueAffichee, (affichee) => {
+  const choisie = selection.value
+  if (choisie === null || affichee === null) return
+  if (!affichee.barres.some((b) => b.personId === choisie.personId)) selection.value = null
+})
+
 /** Le cadrage de départ, et plus rien de sélectionné : les deux gestes vont
  *  ensemble, comme `Échap` et le bouton de l'arbre. */
 function recadrer(): void {
@@ -243,7 +354,9 @@ function recadrer(): void {
 /* Cadre                                                               */
 /* ------------------------------------------------------------------ */
 
-const vide = computed(() => vue.value !== null && estVide(vue.value))
+/** Sur la vue **affichée** : un filtre qui ne laisse aucune barre doit donner
+ *  l'état vide explicite, et non un canevas blanc qu'on prend pour une panne. */
+const vide = computed(() => vueAffichee.value !== null && estVide(vueAffichee.value))
 
 /**
  * Le canevas occupe tout ce qui reste sous l'en-tête applicatif. La hauteur est
@@ -305,6 +418,7 @@ onBeforeUnmount(() => {
         :orientation="reglages.orientation"
         :branches="reglages.branches"
         :montrer-incertitude="reglages.montrerIncertitude"
+        :vivants-seuls="vivantsSeuls"
         :chargement="chargement"
         :preference-a-jour="preferenceAJour"
         :enregistrement="enregistrement"
@@ -312,13 +426,22 @@ onBeforeUnmount(() => {
         @orientation="changerOrientation"
         @branche="basculerBranche"
         @incertitude="changerIncertitude"
+        @vivants-seuls="changerVivantsSeuls"
         @enregistrer="enregistrer"
         @recadrer="recadrer"
       />
       <template #legende>
-        <LegendeChronologie v-if="vue !== null && !vide" en-tiroir />
+        <LegendeChronologie v-if="vueAffichee !== null && !vide" en-tiroir />
       </template>
     </TiroirOutils>
+
+    <!--
+      La réserve ne paraît qu'une fois le filtre allumé : une mise en garde
+      permanente sur un écran qui ne filtre rien s'apprend à ne plus être lue, et
+      ne dit plus rien le jour où elle compte. Ce qu'elle dit, et pourquoi elle
+      est à l'écran plutôt qu'en commentaire, est dans `ReserveVivants.vue`.
+    -->
+    <ReserveVivants v-if="vivantsSeuls" />
 
     <!--
       Une demande refusée ne vide pas le canevas : la chronologie affichée reste
@@ -358,29 +481,47 @@ onBeforeUnmount(() => {
       <!-- État vide explicite : bornes vides, ou aucune barre visible. Jamais
            un canevas blanc, qu'on prendrait pour une panne. -->
       <div v-else-if="vide" class="mx-auto w-full max-w-2xl p-6">
+        <!-- L'état vide ne dit pas la même chose selon la cause. Garder le
+             texte d'origine sous le filtre conseillerait d'élargir les branches
+             ou les bandes — deux gestes qui ne peuvent rien y faire, et le
+             lecteur les essaierait avant de penser au filtre qu'il vient
+             d'allumer. -->
         <PanneauBase titre="Aucune barre à afficher">
-          <p class="text-sm">
-            Aucune des personnes que vous pouvez voir ne porte de date sur cette période.
-          </p>
-          <p class="mt-2 text-xs text-attenue">
-            Une barre est faite de dates : une personne vivante hors de votre cercle de
-            visibilité n’en a pas. Essayez d’élargir les branches affichées ou de changer la
-            largeur des bandes.
-          </p>
+          <template v-if="vivantsSeuls">
+            <p class="text-sm">
+              Aucune personne vivante de votre cercle de visibilité ne porte de date sur
+              cette période.
+            </p>
+            <p class="mt-2 text-xs text-attenue">
+              Le filtre « Vivants uniquement » est actif. L’éteindre rendra les barres des
+              personnes décédées ; il ne fera pas apparaître d’autres vivants — ceux qui
+              sont hors de votre cercle n’exposent aucune date, donc aucune barre.
+            </p>
+          </template>
+          <template v-else>
+            <p class="text-sm">
+              Aucune des personnes que vous pouvez voir ne porte de date sur cette période.
+            </p>
+            <p class="mt-2 text-xs text-attenue">
+              Une barre est faite de dates : une personne vivante hors de votre cercle de
+              visibilité n’en a pas. Essayez d’élargir les branches affichées ou de changer la
+              largeur des bandes.
+            </p>
+          </template>
         </PanneauBase>
       </div>
 
       <CanevasChronologie
-        v-show="vue !== null && !vide"
+        v-show="vueAffichee !== null && !vide"
         ref="canevas"
-        :vue="vue"
+        :vue="vueAffichee"
         :orientation="reglages?.orientation ?? 'lignes'"
         :montrer-incertitude="reglages?.montrerIncertitude ?? true"
         :selection="personneSelectionnee"
         @barre="surBarre"
       />
 
-      <LegendeChronologie v-if="vue !== null && !vide" />
+      <LegendeChronologie v-if="vueAffichee !== null && !vide" />
 
       <!-- La fiche d'une barre sélectionnée. Elle ne charge rien : tout ce
            qu'elle montre est déjà dans la barre. -->

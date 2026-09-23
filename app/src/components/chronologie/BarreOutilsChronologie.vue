@@ -1,7 +1,14 @@
 <script setup lang="ts">
 /**
  * La barre d'outils de la chronologie : la bande, l'orientation, les branches,
- * l'incertitude, et l'enregistrement de la préférence.
+ * l'incertitude, le filtre « vivants uniquement », et l'enregistrement de la
+ * préférence.
+ *
+ * **Quatre de ces six réglages s'enregistrent, pas cinq.** « Vivants
+ * uniquement » n'a pas de champ dans `PreferenceChronologie` (§ 9.2) et ne part
+ * donc jamais dans le `PUT` — voir le point 5 de l'en-tête de
+ * `ChronologieView.vue`. L'infobulle du bouton « Enregistrer » énumère
+ * volontairement ce qu'il retient, et ce filtre n'y figure pas.
  *
  * ────────────────────────────────────────────────────────────────────
  * **EXPLORER UN RÉGLAGE N'ÉCRIT PAS LA PRÉFÉRENCE.** Aucun contrôle de cette
@@ -27,12 +34,19 @@ import type { Branche, OrientationChronologie } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import { DESCRIPTIONS_BRANCHE, LIBELLES_BRANCHE, ORDRE_BRANCHES } from './disposition'
 
-const { bande, orientation, branches, montrerIncertitude, chargement, preferenceAJour, enregistrement } =
+const { bande, orientation, branches, montrerIncertitude, vivantsSeuls, chargement, preferenceAJour, enregistrement } =
   defineProps<{
     bande: number
     orientation: OrientationChronologie
     branches: readonly Branche[]
     montrerIncertitude: boolean
+    /**
+     * N'affiche que les personnes vivantes. **Ne fait pas partie de la
+     * préférence** : les quatre champs du `PUT` sont ceux du § 9.2, et le
+     * bouton « Enregistrer » n'emporte pas celui-ci. L'infobulle du contrôle le
+     * dit au lecteur plutôt que de le lui laisser découvrir au rechargement.
+     */
+    vivantsSeuls: boolean
     chargement: boolean
     /** Les réglages courants sont déjà ceux de la préférence enregistrée : il
      *  n'y a rien à écrire. */
@@ -45,6 +59,7 @@ const emit = defineEmits<{
   orientation: [orientation: OrientationChronologie]
   branche: [branche: Branche]
   incertitude: [montrer: boolean]
+  vivantsSeuls: [actif: boolean]
   enregistrer: []
   recadrer: []
 }>()
@@ -202,6 +217,27 @@ onBeforeUnmount(() => clearTimeout(minuterie))
         @change="emit('incertitude', ($event.target as HTMLInputElement).checked)"
       />
       Hachurer les dates incertaines
+    </label>
+
+    <!-- Vivants uniquement ------------------------------------------ -->
+    <!--
+      Même forme que l'incertitude : une case, une propriété, un événement. Le
+      filtre se pose sur le booléen `vivant` de chaque barre — jamais sur
+      `deceased`, ni sur l'étiquette « vivant·e » affichée ailleurs.
+
+      L'infobulle dit les deux choses qu'on découvrirait autrement de travers :
+      que ce réglage n'est pas retenu, et qu'il montre les vivants **du cercle
+      du lecteur**, les seuls dont l'API expose une date.
+    -->
+    <label class="flex cursor-pointer items-center gap-1.5 text-xs text-attenue">
+      <input
+        type="checkbox"
+        :checked="vivantsSeuls"
+        class="accent-accent"
+        title="N’afficher que les personnes vivantes de votre cercle de visibilité. Ce réglage n’est pas enregistré dans votre préférence."
+        @change="emit('vivantsSeuls', ($event.target as HTMLInputElement).checked)"
+      />
+      Vivants uniquement
     </label>
 
     <span class="flex-auto max-md:hidden"></span>
