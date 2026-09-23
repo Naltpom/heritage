@@ -1,0 +1,731 @@
+/**
+ * La disposition `lignees` de `/histoire` : tout l'arbre, une rangée par
+ * génération, la lignée directe dégagée au milieu.
+ *
+ * Transposée de `disposer()` dans la maquette « Arbre complet à niveaux de
+ * détail (3a) ». Les règles, dans l'ordre où elles s'appliquent :
+ *
+ *  1. une rangée par génération ;
+ *  2. numérotation de Sosa depuis l'ego (1 = ego, 2n = père, 2n+1 = mère) : côté
+ *     père à gauche, côté mère à droite, à tous les niveaux ;
+ *  3. les collatéraux d'un ancêtre sont rangés **à l'extérieur** de la lignée
+ *     directe — à gauche s'il est père dans son couple, à droite s'il est mère ;
+ *  4. pour chaque couple d'ancêtres, on empile `[père] [mère] [enfants]` côté
+ *     gauche et l'ordre inverse côté droit ;
+ *  5. empilement par contours : chaque bloc est posé au plus près du précédent,
+ *     sans chevaucher aucune rangée commune ;
+ *  6. la descendance d'un collatéral est un arbre de foyers compact ;
+ *  7. les barres de fratrie de la lignée directe sont plus hautes (36 contre 22).
+ *
+ * **Personne n'est perdu.** La maquette ne connaissait que l'ascendance et les
+ * collatéraux ; le graphe réel porte aussi les remariages, l'ascendance du
+ * conjoint et des îlots. Ce qui n'est pas atteint par les règles ci-dessus est
+ * posé ensuite, bloc par bloc, contre le bord extérieur de l'arbre, du côté de
+ * la personne déjà placée qui le rattache.
+ *
+ * **La largeur d'une fiche est celle du moteur** (`w`, `h`) : la disposition
+ * change la position des boîtes, jamais leur taille.
+ *
+ * Pur, sans DOM : tout ce fichier se vérifie dans `lignees.test.ts`.
+ */
+import { indexer } from '@/components/arbre/graphe'
+import type { Branche, Graphe, IdentifiantNoeud, NoeudFamille, NoeudPersonne } from '@/lib/api'
+
+/* ------------------------------------------------------------------ */
+/* Constantes de placement (celles de la maquette)                     */
+/* ------------------------------------------------------------------ */
+
+/** Écart entre frères et sœurs, et entre conjoints. */
+export const ECART_FRATRIE = 12
+/** Écart entre deux blocs familiaux. */
+export const ECART_BLOC = 44
+/** Espace vertical entre deux rangées, en plus de la hauteur d'une fiche. */
+const INTERLIGNE = 76
+/** Marge du monde autour de l'arbre. */
+const MARGE_X = 60
+const MARGE_Y = 40
+/** Hauteur de la barre de fratrie au-dessus de la rangée des enfants. */
+const BARRE_DIRECTE = 36
+const BARRE_ORDINAIRE = 22
+
+/* ------------------------------------------------------------------ */
+/* Ce que la disposition rend                                          */
+/* ------------------------------------------------------------------ */
+
+export interface FicheHistoire {
+  id: IdentifiantNoeud
+  noeud: NoeudPersonne
+  /** Coin haut-gauche, dans le monde. */
+  x: number
+  y: number
+  w: number
+  h: number
+  /** Centre horizontal. */
+  cx: number
+  /** Génération relative à l'ego : 0 = lui, −1 = ses parents. */
+  rangee: number
+  /** Ancêtre de l'ego, ou l'ego lui-même. */
+  directe: boolean
+  sosa: number | null
+}
+
+export interface EtiquetteFoyer {
+  x: number
+  y: number
+  nom: string
+  /** Un couple d'ancêtres. */
+  ancetres: boolean
+  /** Largeur du couple dans le monde, pour décider s'il a la place. */
+  envergure: number
+}
+
+export type BrancheDeQuart = Extract<Branche, 'pp' | 'pm' | 'mp' | 'mm' | 'cpp' | 'cpm' | 'cmp' | 'cmm'>
+
+export interface Quart {
+  branche: BrancheDeQuart
+  libelle: string
+  /** Nom de famille du grand-parent de tête ; vide s'il n'est pas connu. */
+  nom: string
+  effectif: number
+  /** Barycentre horizontal des fiches du quart. */
+  cx: number
+  /** Étendue horizontale, pour la mini-carte. */
+  x0: number
+  x1: number
+}
+
+export interface GenerationHistoire {
+  rangee: number
+  /** Milieu de la rangée, dans le monde. */
+  y: number
+  libelle: string
+  /** « vers 1930 », ou `null` quand aucune année n'est lisible. */
+  annees: string | null
+  effectif: number
+}
+
+export interface TracesHistoire {
+  ordinaires: string
+  directs: string
+  divorces: string
+  attente: string
+}
+
+export interface DispositionHistoire {
+  ego: IdentifiantNoeud
+  fiches: FicheHistoire[]
+  parId: Map<IdentifiantNoeud, FicheHistoire>
+  parPersonId: Map<number, FicheHistoire>
+  traces: TracesHistoire
+  foyers: EtiquetteFoyer[]
+  quarts: Quart[]
+  generations: GenerationHistoire[]
+  largeur: number
+  hauteur: number
+  /** Pas vertical entre deux rangées. */
+  pasRangee: number
+}
+
+/* ------------------------------------------------------------------ */
+/* Lecture des noms et des années                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Le prénom dessiné : premier mot de `etiquetteNom`. Le nom de famille peut
+ * contenir des espaces, le prénom non — par construction (§ 5.2).
+ */
+export function prenomDe(noeud: NoeudPersonne): string {
+  const nom = typeof noeud.etiquetteNom === 'string' ? noeud.etiquetteNom : ''
+  const espace = nom.indexOf(' ')
+  return espace < 0 ? nom : nom.slice(0, espace)
+}
+
+/** Le nom de famille : ce qui suit le premier mot de `etiquetteNom`. */
+export function nomDeFamilleDe(noeud: NoeudPersonne): string {
+  const nom = typeof noeud.etiquetteNom === 'string' ? noeud.etiquetteNom : ''
+  const espace = nom.indexOf(' ')
+  return espace < 0 ? '' : nom.slice(espace + 1).trim()
+}
+
+/**
+ * Première année lisible de la ligne de dates, pour **ordonner** une fratrie et
+ * situer une génération dans la gouttière — jamais pour l'afficher : la ligne
+ * de dates s'affiche telle quelle.
+ */
+export function anneeDe(noeud: NoeudPersonne): number | null {
+  const d = noeud.etiquetteDates
+  if (typeof d !== 'string') return null
+  const m = /\b(1[0-9]{3}|20[0-9]{2})\b/.exec(d)
+  return m ? Number(m[1]) : null
+}
+
+const LIBELLES_GENERATION: Record<number, string> = {
+  [-6]: 'Quintaïeux',
+  [-5]: 'Quadrisaïeux',
+  [-4]: 'Trisaïeux',
+  [-3]: 'Arrière-grands-parents',
+  [-2]: 'Grands-parents',
+  [-1]: 'Parents',
+  0: 'Votre génération',
+  1: 'Enfants',
+  2: 'Petits-enfants',
+  3: 'Arrière-petits-enfants',
+}
+
+export function libelleGeneration(rangee: number): string {
+  return LIBELLES_GENERATION[rangee] ?? `Génération ${rangee > 0 ? '+' : ''}${rangee}`
+}
+
+export const LIBELLES_QUART: Record<BrancheDeQuart, string> = {
+  pp: 'Père du père',
+  pm: 'Mère du père',
+  mp: 'Père de la mère',
+  mm: 'Mère de la mère',
+  cpp: 'Conjoint · Père du père',
+  cpm: 'Conjoint · Mère du père',
+  cmp: 'Conjoint · Père de la mère',
+  cmm: 'Conjoint · Mère de la mère',
+}
+
+/** Sosa du grand-parent de tête de chaque quart. */
+const SOSA_DU_QUART: Record<'pp' | 'pm' | 'mp' | 'mm', number> = { pp: 4, pm: 5, mp: 6, mm: 7 }
+
+const generationSosa = (n: number): number => Math.floor(Math.log2(n))
+
+/* ------------------------------------------------------------------ */
+/* Formes : un contour par rangée                                      */
+/* ------------------------------------------------------------------ */
+
+interface Pose {
+  id: IdentifiantNoeud
+  x: number
+  g: number
+}
+
+interface Forme {
+  poses: Pose[]
+  rangees: Map<number, [number, number]>
+  ancre: number
+}
+
+const vide = (): Forme => ({ poses: [], rangees: new Map(), ancre: 0 })
+
+function decaler(f: Forme, dx: number): Forme {
+  if (!dx || !Number.isFinite(dx)) return f
+  for (const p of f.poses) p.x += dx
+  for (const r of f.rangees.values()) {
+    r[0] += dx
+    r[1] += dx
+  }
+  f.ancre += dx
+  return f
+}
+
+function fusionner(a: Forme, b: Forme): Forme {
+  for (const p of b.poses) a.poses.push(p)
+  for (const [g, s] of b.rangees) {
+    const r = a.rangees.get(g)
+    if (r) {
+      r[0] = Math.min(r[0], s[0])
+      r[1] = Math.max(r[1], s[1])
+    } else a.rangees.set(g, [s[0], s[1]])
+  }
+  return a
+}
+
+/** Décalage minimal pour poser `b` à droite de `a` sans rangée commune qui se chevauche. */
+function besoinADroite(a: Forme, b: Forme, ecart: number): number {
+  let d = -Infinity
+  for (const [g, s] of b.rangees) {
+    const r = a.rangees.get(g)
+    if (r) d = Math.max(d, r[1] - s[0] + ecart)
+  }
+  return d
+}
+
+function besoinAGauche(a: Forme, b: Forme, ecart: number): number {
+  let d = Infinity
+  for (const [g, s] of b.rangees) {
+    const r = a.rangees.get(g)
+    if (r) d = Math.min(d, r[0] - s[1] - ecart)
+  }
+  return d
+}
+
+/** Empile de gauche à droite ; rend la forme fusionnée et l'ancre de chaque partie. */
+function empiler(parties: Forme[], ecart: number): { forme: Forme; ancres: number[] } {
+  const acc = parties[0]!
+  const ancres = [acc.ancre]
+  for (let i = 1; i < parties.length; i++) {
+    const p = parties[i]!
+    const dx = besoinADroite(acc, p, ecart)
+    decaler(p, Number.isFinite(dx) ? dx : 0)
+    ancres.push(p.ancre)
+    fusionner(acc, p)
+  }
+  acc.ancre = ancres[0]!
+  return { forme: acc, ancres }
+}
+
+/* ------------------------------------------------------------------ */
+/* La disposition                                                      */
+/* ------------------------------------------------------------------ */
+
+type Cote = 'G' | 'D'
+
+export function disposerLignees(graphe: Graphe): DispositionHistoire {
+  const index = indexer(graphe)
+  const personnes = new Map<string, NoeudPersonne>()
+  for (const p of index.personnes) personnes.set(p.id, p)
+  const familles = new Map<string, NoeudFamille>()
+  for (const f of index.familles) familles.set(f.id, f)
+
+  const enfantsDe = (f: string): string[] =>
+    (index.enfantsParFamille.get(f) ?? []).filter((id) => personnes.has(id))
+  const epouxDe = (f: string): string[] => {
+    const enfants = new Set(index.enfantsParFamille.get(f) ?? [])
+    return (index.membresParFamille.get(f) ?? []).filter((id) => !enfants.has(id) && personnes.has(id))
+  }
+  const famillesEnfant = new Map<string, string[]>()
+  const famillesEpoux = new Map<string, string[]>()
+  for (const f of familles.keys()) {
+    for (const e of enfantsDe(f)) famillesEnfant.set(e, [...(famillesEnfant.get(e) ?? []), f])
+    for (const e of epouxDe(f)) famillesEpoux.set(e, [...(famillesEpoux.get(e) ?? []), f])
+  }
+  const largeur = (id: string): number => personnes.get(id)?.w ?? 132
+  const hauteurFiche = Math.max(48, ...index.personnes.map((p) => p.h || 0))
+
+  /** Père puis mère d'une famille ; un sexe inconnu prend la place libre. */
+  function pereEtMere(f: string): [string | null, string | null] {
+    const ep = epouxDe(f)
+    let pere = ep.find((id) => personnes.get(id)!.sex === 'masculin') ?? null
+    let mere = ep.find((id) => personnes.get(id)!.sex === 'feminin' && id !== pere) ?? null
+    for (const id of ep) {
+      if (id === pere || id === mere) continue
+      if (pere === null) pere = id
+      else if (mere === null) mere = id
+    }
+    return [pere, mere]
+  }
+
+  /** Numérotation de Sosa depuis une personne. Un ancêtre déjà numéroté (implexe) n'est pas repris. */
+  function sosaDepuis(racine: string): { parNumero: Map<number, string>; couples: Map<number, string> } {
+    const parNumero = new Map<number, string>([[1, racine]])
+    const vus = new Set([racine])
+    const couples = new Map<number, string>()
+    const file = [1]
+    while (file.length) {
+      const n = file.shift()!
+      const f = famillesEnfant.get(parNumero.get(n)!)?.[0]
+      if (f === undefined) continue
+      couples.set(2 * n, f)
+      const [pere, mere] = pereEtMere(f)
+      for (const [id, k] of [[pere, 2 * n], [mere, 2 * n + 1]] as const) {
+        if (id === null || vus.has(id)) continue
+        vus.add(id)
+        parNumero.set(k, id)
+        file.push(k)
+      }
+    }
+    return { parNumero, couples }
+  }
+
+  const ego = personnes.has(graphe.ego) ? graphe.ego : (index.personnes[0]?.id ?? graphe.ego)
+  const { parNumero: sosa, couples } = sosaDepuis(ego)
+  const numeroDe = new Map<string, number>()
+  for (const [n, id] of sosa) numeroDe.set(id, n)
+  const famillesAncestrales = new Set(couples.values())
+
+  const poses = new Set<string>()
+  const rangeeDe = new Map<string, number>()
+  const anneeTri = (id: string): number => anneeDe(personnes.get(id)!) ?? Number.POSITIVE_INFINITY
+
+  function poser(f: Forme, id: string, x: number, g: number): void {
+    const w = largeur(id)
+    f.poses.push({ id, x, g })
+    poses.add(id)
+    rangeeDe.set(id, g)
+    const r = f.rangees.get(g)
+    if (r) {
+      r[0] = Math.min(r[0], x - w / 2)
+      r[1] = Math.max(r[1], x + w / 2)
+    } else f.rangees.set(g, [x - w / 2, x + w / 2])
+  }
+
+  /**
+   * Un collatéral et sa descendance : le conjoint du côté extérieur, les
+   * enfants centrés sous le couple.
+   */
+  function blocDescendance(id: string, cote: Cote, g: number): Forme {
+    const f = vide()
+    poser(f, id, 0, g)
+    // La fiche la plus à l'extérieur sur la rangée : un second conjoint se pose au-delà du premier.
+    let exterieur = { id, x: 0 }
+    for (const fam of famillesEpoux.get(id) ?? []) {
+      if (famillesAncestrales.has(fam)) continue
+      let milieu = 0
+      const conjoint = epouxDe(fam).find((e) => e !== id && !poses.has(e) && !numeroDe.has(e))
+      if (conjoint !== undefined) {
+        const pas = largeur(exterieur.id) / 2 + ECART_FRATRIE + largeur(conjoint) / 2
+        const x = cote === 'G' ? exterieur.x - pas : exterieur.x + pas
+        poser(f, conjoint, x, g)
+        exterieur = { id: conjoint, x }
+        milieu = x / 2
+      }
+      const enfants = enfantsDe(fam)
+        .filter((e) => !poses.has(e) && !numeroDe.has(e))
+        .sort((a, b) => anneeTri(a) - anneeTri(b))
+      if (!enfants.length) continue
+      const parties = enfants.map((e) => blocDescendance(e, cote, g + 1))
+      const { forme, ancres } = empiler(parties, ECART_FRATRIE)
+      const centre = (ancres[0]! + ancres[ancres.length - 1]!) / 2
+      decaler(forme, milieu - centre)
+      // Les enfants d'une seconde union ne doivent pas recouvrir ceux de la première.
+      const besoin = cote === 'G' ? besoinAGauche(f, forme, ECART_BLOC) : besoinADroite(f, forme, ECART_BLOC)
+      if (Number.isFinite(besoin)) {
+        if (cote === 'G' && besoin < 0) decaler(forme, besoin)
+        if (cote === 'D' && besoin > 0) decaler(forme, besoin)
+      }
+      fusionner(f, forme)
+    }
+    f.ancre = 0
+    return f
+  }
+
+  function seule(id: string, g: number): Forme {
+    const f = vide()
+    poser(f, id, 0, g)
+    return f
+  }
+
+  /** La forme d'un ancêtre : sa propre ascendance s'il en a une, sinon sa fiche. */
+  function formePersonne(n: number): Forme {
+    if (couples.has(2 * n)) return formeCouple(2 * n)
+    return seule(sosa.get(n)!, -generationSosa(n))
+  }
+
+  /** Le couple d'ancêtres de Sosa `n` (pair) et `n + 1`, avec toute leur fratrie. */
+  function formeCouple(n: number): Forme {
+    const m = n >> 1
+    const g = -generationSosa(n)
+    const cote: 'G' | 'D' | 'C' = m === 1 ? 'C' : m % 2 === 0 ? 'G' : 'D'
+    const fam = couples.get(n)!
+    const direct = sosa.get(m)!
+
+    const FP = sosa.has(n) ? formePersonne(n) : null
+    const FM = sosa.has(n + 1) ? formePersonne(n + 1) : null
+
+    const fratrie = enfantsDe(fam)
+      .filter((e) => e === direct || (!poses.has(e) && !numeroDe.has(e)))
+      .sort((a, b) => anneeTri(a) - anneeTri(b))
+    if (!fratrie.includes(direct)) fratrie.push(direct)
+    const autres = fratrie.filter((e) => e !== direct)
+    const ordre = cote === 'G' ? [...autres, direct] : cote === 'D' ? [direct, ...autres] : fratrie
+    const iDirect = ordre.indexOf(direct)
+
+    const parties = ordre.map((e, i) => {
+      if (e === direct) return m === 1 ? blocDescendance(e, 'D', g + 1) : seule(e, g + 1)
+      const sens: Cote = cote === 'C' ? (i < iDirect ? 'G' : 'D') : cote
+      return blocDescendance(e, sens, g + 1)
+    })
+    const { forme: G, ancres } = empiler(parties, ECART_FRATRIE)
+
+    let fx: number | null = null
+    let mx: number | null = null
+    let forme: Forme
+    if (FP === null && FM === null) {
+      forme = G
+    } else if (cote === 'C' && FP && FM) {
+      forme = FP
+      fx = FP.ancre
+      const pref = fx + (largeur(sosa.get(n)!) + ECART_FRATRIE) / 2 - ancres[iDirect]!
+      const besoin = besoinADroite(FP, G, ECART_BLOC)
+      const dx = Math.max(Number.isFinite(besoin) ? besoin : -Infinity, pref)
+      decaler(G, dx)
+      for (let i = 0; i < ancres.length; i++) ancres[i]! += dx
+      fusionner(forme, G)
+      const dm = besoinADroite(forme, FM, ECART_BLOC)
+      decaler(FM, Number.isFinite(dm) ? dm : 0)
+      mx = FM.ancre
+      fusionner(forme, FM)
+    } else {
+      if (FP && FM) {
+        const dm = besoinADroite(FP, FM, ECART_BLOC)
+        decaler(FM, Number.isFinite(dm) ? dm : 0)
+        fx = FP.ancre
+        mx = FM.ancre
+        forme = fusionner(FP, FM)
+      } else if (FP) {
+        fx = FP.ancre
+        forme = FP
+      } else {
+        mx = FM!.ancre
+        forme = FM!
+      }
+      const milieu = fx !== null && mx !== null ? (fx + mx) / 2 : (fx ?? mx)!
+      const pref = milieu - ancres[iDirect]!
+      let dx: number
+      if (cote === 'D') {
+        const besoin = besoinAGauche(forme, G, ECART_BLOC)
+        dx = Math.min(Number.isFinite(besoin) ? besoin : Infinity, pref)
+      } else {
+        const besoin = besoinADroite(forme, G, ECART_BLOC)
+        dx = Math.max(Number.isFinite(besoin) ? besoin : -Infinity, pref)
+      }
+      decaler(G, dx)
+      for (let i = 0; i < ancres.length; i++) ancres[i]! += dx
+      fusionner(forme, G)
+    }
+    forme.ancre = ancres[iDirect]!
+    return forme
+  }
+
+  /* L'arbre principal. */
+  let racine: Forme
+  if (couples.has(2)) racine = formeCouple(2)
+  else racine = blocDescendance(ego, 'D', 0)
+
+  const xDe = (): Map<string, number> => {
+    const m = new Map<string, number>()
+    for (const p of racine.poses) m.set(p.id, p.x)
+    return m
+  }
+  const xEgo = racine.poses.find((p) => p.id === ego)?.x ?? 0
+
+  /* Ce qui reste : remariages, ascendance du conjoint, îlots. */
+  function accrocher(bloc: Forme, cote: Cote): void {
+    const besoin = cote === 'G' ? besoinAGauche(racine, bloc, ECART_BLOC) : besoinADroite(racine, bloc, ECART_BLOC)
+    if (Number.isFinite(besoin)) decaler(bloc, besoin)
+    else {
+      // Aucune rangée commune : on pose le bloc au-delà du bord de l'arbre.
+      let lo = Infinity
+      let hi = -Infinity
+      for (const r of racine.rangees.values()) {
+        lo = Math.min(lo, r[0])
+        hi = Math.max(hi, r[1])
+      }
+      let blo = Infinity
+      let bhi = -Infinity
+      for (const r of bloc.rangees.values()) {
+        blo = Math.min(blo, r[0])
+        bhi = Math.max(bhi, r[1])
+      }
+      if (Number.isFinite(lo)) decaler(bloc, cote === 'G' ? lo - ECART_BLOC - bhi : hi + ECART_BLOC - blo)
+    }
+    fusionner(racine, bloc)
+  }
+
+  let progres = true
+  while (progres) {
+    progres = false
+    const x = xDe()
+    for (const fam of familles.keys()) {
+      const ep = epouxDe(fam)
+      const en = enfantsDe(fam)
+      const epPoses = ep.filter((e) => poses.has(e))
+      const enPoses = en.filter((e) => poses.has(e))
+      if (!epPoses.length && !enPoses.length) continue
+      const epLibres = ep.filter((e) => !poses.has(e))
+      const enLibres = en.filter((e) => !poses.has(e))
+      if (!epLibres.length && !enLibres.length) continue
+
+      const attache = epPoses[0] ?? enPoses[0]!
+      const cote: Cote = (x.get(attache) ?? 0) < xEgo ? 'G' : 'D'
+      const rangee = rangeeDe.get(attache)! + (epPoses.length ? 0 : -1)
+
+      if (epLibres.length) {
+        for (const e of epLibres) {
+          if (poses.has(e)) continue
+          accrocher(blocDescendance(e, cote, rangee), cote)
+        }
+      } else {
+        // Les époux sont posés, il reste des enfants : une fratrie issue d'une autre union.
+        const parties = enLibres
+          .sort((a, b) => anneeTri(a) - anneeTri(b))
+          .map((e) => blocDescendance(e, cote, rangee + 1))
+        accrocher(empiler(parties, ECART_FRATRIE).forme, cote)
+      }
+      progres = true
+      break
+    }
+  }
+  // Les îlots, sans aucun lien avec ce qui est posé.
+  for (const p of index.personnes) {
+    if (poses.has(p.id)) continue
+    accrocher(blocDescendance(p.id, 'D', p.generation), 'D')
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Passage au monde                                                    */
+  /* ------------------------------------------------------------------ */
+
+  let minX = Infinity
+  let maxX = -Infinity
+  let minG = Infinity
+  let maxG = -Infinity
+  for (const p of racine.poses) {
+    const w = largeur(p.id)
+    minX = Math.min(minX, p.x - w / 2)
+    maxX = Math.max(maxX, p.x + w / 2)
+    minG = Math.min(minG, p.g)
+    maxG = Math.max(maxG, p.g)
+  }
+  if (!racine.poses.length) {
+    minX = maxX = 0
+    minG = maxG = 0
+  }
+  const pasRangee = hauteurFiche + INTERLIGNE
+  const decalage = -minX + MARGE_X
+  const hautRangee = (g: number): number => (g - minG) * pasRangee + MARGE_Y
+  const milieuRangee = (g: number): number => hautRangee(g) + hauteurFiche / 2
+
+  const fiches: FicheHistoire[] = []
+  const parId = new Map<string, FicheHistoire>()
+  const parPersonId = new Map<number, FicheHistoire>()
+  for (const p of racine.poses) {
+    const noeud = personnes.get(p.id)!
+    const w = largeur(p.id)
+    const cx = p.x + decalage
+    const numero = numeroDe.get(p.id) ?? null
+    const fiche: FicheHistoire = {
+      id: p.id,
+      noeud,
+      x: cx - w / 2,
+      y: hautRangee(p.g),
+      w,
+      h: noeud.h || hauteurFiche,
+      cx,
+      rangee: p.g,
+      directe: numero !== null,
+      sosa: numero,
+    }
+    fiches.push(fiche)
+    parId.set(p.id, fiche)
+    if (noeud.personId !== null) parPersonId.set(noeud.personId, fiche)
+  }
+
+  /* Les traits, famille par famille. */
+  const traits: TracesHistoire = { ordinaires: '', directs: '', divorces: '', attente: '' }
+  const seg = (x1: number, y1: number, x2: number, y2: number): string =>
+    `M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}`
+  const aretesEnAttente = new Set<string>()
+  for (const a of graphe.aretes) if (a.enAttente) aretesEnAttente.add(`${a.de}|${a.vers}`)
+  const enAttente = (f: string, p: string): boolean =>
+    aretesEnAttente.has(`${f}|${p}`) || aretesEnAttente.has(`${p}|${f}`)
+
+  const foyers: EtiquetteFoyer[] = []
+  for (const [fam, noeudFamille] of familles) {
+    const ancestrale = famillesAncestrales.has(fam)
+    const ep = epouxDe(fam)
+      .map((e) => parId.get(e))
+      .filter((e): e is FicheHistoire => e !== undefined)
+      .sort((a, b) => a.cx - b.cx)
+    const en = enfantsDe(fam)
+      .map((e) => parId.get(e))
+      .filter((e): e is FicheHistoire => e !== undefined)
+
+    let milieuX: number | null = null
+    let milieuY = 0
+    if (ep.length >= 2) {
+      const [a, b] = [ep[0]!, ep[ep.length - 1]!]
+      const ya = a.y + a.h / 2
+      const s = a.rangee === b.rangee ? seg(a.x + a.w, ya, b.x, ya) : seg(a.cx, a.y + a.h / 2, b.cx, b.y + b.h / 2)
+      if (ep.some((e) => enAttente(fam, e.id))) traits.attente += s
+      else if (noeudFamille.divorced) traits.divorces += s
+      else if (ancestrale) traits.directs += s
+      else traits.ordinaires += s
+      milieuX = (a.x + a.w + b.x) / 2
+      milieuY = ya
+    } else if (ep.length === 1) {
+      milieuX = ep[0]!.cx
+      milieuY = ep[0]!.y + ep[0]!.h
+    }
+
+    if (ep.length) {
+      const tete =
+        ep.find((e) => e.noeud.sex === 'masculin') ?? ep.find((e) => e.noeud.sex === 'feminin') ?? ep[0]!
+      const nom = nomDeFamilleDe(tete.noeud)
+      if (nom !== '' && milieuX !== null) {
+        const gauche = ep[0]!
+        const droite = ep[ep.length - 1]!
+        foyers.push({
+          x: milieuX,
+          y: hautRangee(gauche.rangee) - 8,
+          nom,
+          ancetres: ancestrale,
+          envergure: droite.x + droite.w - gauche.x,
+        })
+      }
+    }
+
+    if (!en.length || milieuX === null) continue
+    const rangeeEnfants = Math.min(...en.map((e) => e.rangee))
+    const barre = hautRangee(rangeeEnfants) - (ancestrale ? BARRE_DIRECTE : BARRE_ORDINAIRE)
+    const direct = ancestrale ? en.find((e) => e.directe) : undefined
+    const cible = (s: string, directe: boolean, attente: boolean): void => {
+      if (attente) traits.attente += s
+      else if (directe) traits.directs += s
+      else traits.ordinaires += s
+    }
+    cible(seg(milieuX, milieuY, milieuX, barre), ancestrale, false)
+    const xs = en.map((e) => e.cx)
+    const lo = Math.min(milieuX, ...xs)
+    const hi = Math.max(milieuX, ...xs)
+    if (hi > lo) traits.ordinaires += seg(lo, barre, hi, barre)
+    if (direct && direct.cx !== milieuX) traits.directs += seg(Math.min(milieuX, direct.cx), barre, Math.max(milieuX, direct.cx), barre)
+    for (const e of en) cible(seg(e.cx, barre, e.cx, e.y), e === direct, enAttente(fam, e.id))
+  }
+
+  /* Les quarts : ceux du lecteur, puis ceux de son conjoint. */
+  const quarts: Quart[] = []
+  const conjointEgo = (famillesEpoux.get(ego) ?? []).flatMap((f) => epouxDe(f)).find((e) => e !== ego)
+  const sosaConjoint = conjointEgo !== undefined ? sosaDepuis(conjointEgo).parNumero : new Map<number, string>()
+  for (const branche of ['pp', 'pm', 'mp', 'mm', 'cpp', 'cpm', 'cmp', 'cmm'] as const) {
+    const membres = fiches.filter((f) => f.noeud.branch === branche)
+    if (!membres.length) continue
+    const conjoint = branche.startsWith('c')
+    const cle = (conjoint ? branche.slice(1) : branche) as 'pp' | 'pm' | 'mp' | 'mm'
+    const tete = (conjoint ? sosaConjoint : sosa).get(SOSA_DU_QUART[cle])
+    const noeudTete = tete !== undefined ? personnes.get(tete) : undefined
+    quarts.push({
+      branche,
+      libelle: LIBELLES_QUART[branche],
+      nom: noeudTete ? nomDeFamilleDe(noeudTete) : '',
+      effectif: membres.length,
+      cx: membres.reduce((s, f) => s + f.cx, 0) / membres.length,
+      x0: Math.min(...membres.map((f) => f.x)),
+      x1: Math.max(...membres.map((f) => f.x + f.w)),
+    })
+  }
+
+  /* La gouttière des générations. */
+  const generations: GenerationHistoire[] = []
+  for (let g = minG; g <= maxG; g++) {
+    const rangee = fiches.filter((f) => f.rangee === g)
+    if (!rangee.length) continue
+    const directs = rangee.filter((f) => f.directe)
+    const annees = (directs.length ? directs : rangee).map((f) => anneeDe(f.noeud)).filter((a): a is number => a !== null)
+    const moyenne = annees.length ? Math.round(annees.reduce((s, a) => s + a, 0) / annees.length / 10) * 10 : null
+    generations.push({
+      rangee: g,
+      y: milieuRangee(g),
+      libelle: libelleGeneration(g),
+      annees: moyenne === null ? null : `vers ${moyenne}`,
+      effectif: rangee.length,
+    })
+  }
+
+  return {
+    ego,
+    fiches,
+    parId,
+    parPersonId,
+    traces: traits,
+    foyers,
+    quarts,
+    generations,
+    largeur: maxX - minX + 2 * MARGE_X,
+    hauteur: hautRangee(maxG) + hauteurFiche + MARGE_Y + 20,
+    pasRangee,
+  }
+}
