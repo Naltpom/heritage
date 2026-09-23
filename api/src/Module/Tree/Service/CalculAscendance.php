@@ -278,7 +278,7 @@ final class CalculAscendance
         // **Ce que la garde laisse en plan, et où c'est repris.** Les personnes qu'elle
         // écarte — la famille du conjoint d'un membre du tronc — ressortaient *sans
         // branche*, et le sérialiseur leur servait alors celle **de la racine** par un
-        // repli silencieux : 179 fiches sur 468 pour le père de la racine. Le remède n'est
+        // repli silencieux : 207 fiches sur 468 pour le père de la racine. Le remède n'est
         // pas de lever cette condition, qui ne ferait que vider le mot « tronc » de son
         // sens — c'est de leur donner une région à elles, et c'est {@see Branch::Bf},
         // posée par {@see self::belleFamille()} juste après cette boucle.
@@ -320,9 +320,32 @@ final class CalculAscendance
      *
      * **Pourquoi elle est nécessaire.** Sans elle ces personnes sortaient sans branche, et
      * le sérialiseur du graphe leur servait alors celle **de la racine** par un repli
-     * silencieux. Mesuré pour le père de la racine : 179 fiches sur 468 affichaient le quart
-     * d'ascendance de quelqu'un d'autre — dont son épouse et ses trois enfants étiquetés
-     * « Tronc ».
+     * silencieux. Mesuré pour le père de la racine : **207 fiches sur 468** affichaient le
+     * quart d'ascendance de quelqu'un d'autre — dont son épouse et ses trois enfants
+     * étiquetés « Tronc ».
+     *
+     * ⚠ **LE MESSAGE DE `f32fb1f` ANNONCE 179, ET 179 N'EST PAS CE NOMBRE-LÀ.** Il est
+     * fusionné, donc figé ; cette note est le seul endroit où la valeur juste puisse encore
+     * être posée. Les quatre quantités sont distinctes, et l'erreur est d'avoir servi
+     * l'écart à la place des deux autres :
+     *
+     * | quantité | valeur |
+     * |---|---|
+     * | fiches sans branche AVANT, donc sur le repli | **207** |
+     * | fiches sans branche APRÈS, l'îlot réellement détaché | **28** |
+     * | fiches qui reçoivent `Bf` | **176** |
+     * | fiches qui CHANGENT (176 `Bf` + 3 enfants en `Tr`) | **179** |
+     *
+     * `207 − 28 = 179` : le message emploie l'écart pour nommer l'état d'avant (« 179
+     * tombaient sur le repli », « 28 au lieu de 179 ») et pour nommer la population `Bf`
+     * (« 179 portent `b-bf` », qui sont 176 — les 3 autres sont les enfants, en `b-tr`).
+     * **Seul l'usage « 179 fiches changent » est exact.**
+     *
+     * Mesuré en rejouant les deux versions de ce service sur les relevés du graphe servi —
+     * hors dépôt, ADR 0006 : **huit relevés, trois empreintes distinctes** (`91ad68db`,
+     * 648 nœuds / 468 personnes ; `ec114d52` et `63b3d6cc`, 644 / 466), et les quatre
+     * quantités sont identiques partout. Ce n'est donc pas un relevé différent qui
+     * expliquerait 179.
      *
      * **Pourquoi elle ne change rien pour la racine.** L'amorce exige un conjoint **sans
      * branche**. Sur la vue de la racine, les conjoints des membres de son tronc sont ses
