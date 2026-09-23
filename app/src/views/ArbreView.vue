@@ -231,8 +231,12 @@ import {
 const grapheBrut = shallowRef<Graphe | null>(null)
 
 /**
- * La disposition de cette route — absente sur `/arbre`, qui rend la mise en page
- * du moteur telle quelle.
+ * La disposition de cette route — `ressorts` sur `/arbre`, la seule qui reste.
+ *
+ * Elle reste **facultative**, et ce n'est pas un reliquat : `dispositionDeLaRoute()`
+ * rend l'identité quand elle manque, ce qui laisse la vue montable sans route dans
+ * un test de rendu. Elle a longtemps été absente sur `/arbre` lui-même — c'était le
+ * défaut : tout membre recevait alors la mise en page brute du moteur.
  *
  * **Une prop, et non `useRoute()`.** La table de routage la tire de `meta` et la
  * passe ; la vue, elle, ne connaît pas le routeur. C'est ce qui la garde montable

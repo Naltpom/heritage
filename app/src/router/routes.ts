@@ -30,10 +30,12 @@ declare module 'vue-router' {
     /** `false` masque l'en-tête applicatif (connexion, inscription). */
     cadre?: boolean
     /**
-     * La **disposition** de l'arbre, pour les maquettes de comparaison.
+     * La **disposition** de l'arbre : la transformation appliquée à la charge.
      *
-     * Absente sur `/arbre`, qui rend la mise en page du moteur telle quelle et
-     * sert de référence. Voir `components/arbre/dispositions/`.
+     * Elle a servi à distinguer sept maquettes de comparaison ; il n'en reste
+     * qu'une, `ressorts`, et c'est `/arbre` qui la porte. Facultative parce que la
+     * vue reste montable sans route — pas parce qu'une route de l'arbre aurait
+     * encore de bonnes raisons de s'en passer. Voir `components/arbre/dispositions/`.
      */
     disposition?: NomDeDisposition
   }
