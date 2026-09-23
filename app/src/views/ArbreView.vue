@@ -231,8 +231,12 @@ import {
 const grapheBrut = shallowRef<Graphe | null>(null)
 
 /**
- * La disposition de cette route — absente sur `/arbre`, qui rend la mise en page
- * du moteur telle quelle.
+ * La disposition de cette route — `ressorts` sur `/arbre`, la seule qui reste.
+ *
+ * Elle reste **facultative**, et ce n'est pas un reliquat : `dispositionDeLaRoute()`
+ * rend l'identité quand elle manque, ce qui laisse la vue montable sans route dans
+ * un test de rendu. Elle a longtemps été absente sur `/arbre` lui-même — c'était le
+ * défaut : tout membre recevait alors la mise en page brute du moteur.
  *
  * **Une prop, et non `useRoute()`.** La table de routage la tire de `meta` et la
  * passe ; la vue, elle, ne connaît pas le routeur. C'est ce qui la garde montable
@@ -447,7 +451,19 @@ const estMobile = useEstMobile()
  * rotation d'écran ne doit pas refermer ce qu'il vient d'ouvrir.
  */
 const bandeauChoisi = ref<boolean | null>(null)
-const bandeauOuvert = computed(() => bandeauChoisi.value ?? !estMobile.value)
+/*
+ * **Replié d'office, désormais pour tout le monde.** Tant que ce bandeau ne
+ * s'affichait que sur `/arbre-2`…`/arbre-8`, son public était celui qui venait
+ * comparer : l'ouvrir d'office sur grand écran lui rendait service. `/arbre` sert
+ * maintenant `ressorts`, donc le bandeau s'afficherait sur l'écran d'accueil de
+ * TOUS les membres — et ce qu'il déplie est un relevé d'ingénierie (croisements,
+ * somme des carrés), pas une information de famille.
+ *
+ * Il n'est pas retiré pour autant : il porte la **mesure** de la disposition, et
+ * c'est le seul endroit du produit où elle se lit sur les données servies. Le
+ * retirer supprimerait l'instrument. On le replie, on ne le supprime pas.
+ */
+const bandeauOuvert = computed(() => bandeauChoisi.value ?? false)
 
 function basculerLeBandeau(): void {
   bandeauChoisi.value = !bandeauOuvert.value
@@ -957,18 +973,20 @@ onBeforeUnmount(() => {
     </TiroirOutils>
 
     <!--
-      **Le bandeau de la maquette.** Deux onglets ouverts sur deux dispositions
-      sont indiscernables dès qu'on a fait défiler l'arbre : sans ce bandeau, on
-      compare deux images dont on ne sait plus laquelle est laquelle.
+      **Le bandeau de la mise en page.** Il annonce la **mesure** — couples
+      accolés, croisements, et longueur des traits. Une disposition se juge sur des
+      nombres, pas sur une impression : on peut rendre un arbre plus joli
+      localement en le dégradant ailleurs, et l'œil ne le voit pas sur 377 nœuds.
 
-      Il annonce aussi la **mesure** — couples accolés, et longueur des traits.
-      Une disposition se juge sur des nombres, pas sur une impression : on peut
-      rendre un arbre plus joli localement en le dégradant ailleurs, et l'œil ne le
-      voit pas sur 377 nœuds.
+      Il servait d'abord à répondre à « laquelle est-ce ? » quand sept maquettes
+      coexistaient. **Elles n'existent plus** : `/arbre` sert `ressorts` et il n'y a
+      plus rien à confondre. Ce qui reste est la mesure, et c'est pour cela qu'on
+      garde le bandeau au lieu de le supprimer avec les maquettes.
 
-      **Replié d'office sur téléphone**, où il mangeait la page entière. Ce qui reste
-      visible est le TITRE, parce que c'est lui qui répond à « laquelle est-ce ? » ;
-      le reste se déplie à la demande.
+      **Replié d'office**, pour tout le monde et plus seulement sur téléphone : cet
+      écran est désormais l'accueil de tous les membres, et ce qu'il déplie est un
+      relevé d'ingénierie. Ce qui reste visible est le titre ; le reste se déplie à
+      la demande.
 
       **Deux familles de nombres, parce qu'une seule ne suffit pas.** Les couples
       accolés ne disent rien d'une disposition qui ne réordonne pas — elle
@@ -981,7 +999,7 @@ onBeforeUnmount(() => {
       class="border-b border-ligne bg-panneau px-4 py-2 text-xs text-texte"
     >
       <p class="flex items-baseline gap-2">
-        <strong class="font-semibold">Maquette « {{ presentation.titre }} ».</strong>
+        <strong class="font-semibold">Mise en page « {{ presentation.titre }} ».</strong>
         <button
           type="button"
           class="ml-auto shrink-0 text-accent underline"
@@ -1000,24 +1018,22 @@ onBeforeUnmount(() => {
         id="bandeau-maquette"
         class="mt-1 text-attenue tnum"
       >
-        Fiches affichées : {{ effetDeLaDisposition.apres.personnes }} sur
+        Personnes affichées : {{ effetDeLaDisposition.apres.personnes }} sur
         {{ effetDeLaDisposition.avant.personnes }}.
 
-        Couples accolés : {{ effetDeLaDisposition.avant.accoles }} →
+        Couples dessinés côte à côte :
+        {{ effetDeLaDisposition.avant.accoles }} →
         {{ effetDeLaDisposition.apres.accoles }} sur {{ effetDeLaDisposition.apres.couples }}.
-        Personnes assises entre deux époux :
+        Personnes qui se trouvaient entre deux époux :
         {{ effetDeLaDisposition.avant.intercales }} → {{ effetDeLaDisposition.apres.intercales }}.
 
-        Croisements de traits : {{ effetDeLaDisposition.croisementsAvant }} →
+        Traits qui se croisent : {{ effetDeLaDisposition.croisementsAvant }} →
         {{ effetDeLaDisposition.croisementsApres }}.
 
-        Longueur des traits, somme des carrés :
-        {{ effetDeLaDisposition.carresAvant }} →
-        {{ effetDeLaDisposition.carresApres }} millions ; le plus long :
-        {{ effetDeLaDisposition.traitAvant }} → {{ effetDeLaDisposition.traitApres }} px.
-        <RouterLink :to="{ name: 'arbre' }" class="text-accent underline">
-          Comparer à l’arbre d’origine
-        </RouterLink>
+        Trait le plus long : {{ effetDeLaDisposition.traitAvant }} →
+        {{ effetDeLaDisposition.traitApres }} px (indice de longueur d’ensemble :
+        {{ effetDeLaDisposition.carresAvant }} → {{ effetDeLaDisposition.carresApres }},
+        plus bas = traits plus courts).
       </p>
     </div>
 

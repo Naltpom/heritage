@@ -30,10 +30,12 @@ declare module 'vue-router' {
     /** `false` masque l'en-tête applicatif (connexion, inscription). */
     cadre?: boolean
     /**
-     * La **disposition** de l'arbre, pour les maquettes de comparaison.
+     * La **disposition** de l'arbre : la transformation appliquée à la charge.
      *
-     * Absente sur `/arbre`, qui rend la mise en page du moteur telle quelle et
-     * sert de référence. Voir `components/arbre/dispositions/`.
+     * Elle a servi à distinguer sept maquettes de comparaison ; il n'en reste
+     * qu'une, `ressorts`, et c'est `/arbre` qui la porte. Facultative parce que la
+     * vue reste montable sans route — pas parce qu'une route de l'arbre aurait
+     * encore de bonnes raisons de s'en passer. Voir `components/arbre/dispositions/`.
      */
     disposition?: NomDeDisposition
   }
@@ -150,85 +152,27 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'public', titre: 'Changement de courriel', cadre: false },
   },
 
-  /* --- Consultation : ouverte au régime « en attente » ------------ */
+  /* --- Consultation : ouverte au régime « en attente » ------------
+   *
+   * **`/arbre` SERT `ressorts`, et c'est la fin de la comparaison.** Les sept
+   * maquettes `/arbre-2` à `/arbre-8` ont été retirées : elles existaient pour que
+   * le commanditaire choisisse, il a choisi, et tant qu'elles vivaient **la route
+   * que tout le monde atteint servait la sortie brute du moteur** — celle qui
+   * n'avait été retenue par personne. `routeParDefaut()` renvoie `{ name: 'arbre' }`
+   * pour tous les régimes : le travail fait sur les dispositions n'était donc servi
+   * à aucun membre.
+   *
+   * La disposition reste posée en `meta` et voyage en **prop** plutôt que par
+   * `useRoute()` : la vue reste montable seule dans un test de rendu, où il n'y a
+   * pas de routeur. `?haut=` et `?bas=` continuent d'être lus et bornés par
+   * `optionsDepuis()`.
+   */
   {
     path: '/arbre',
     name: 'arbre',
     component: () => import('@/views/ArbreView.vue'),
-    // La disposition voyage en **prop** et non par `useRoute()` : la vue reste
-    // montable seule dans un test de rendu, où il n'y a pas de routeur.
     props: dispositionEnProp,
-    meta: { acces: 'attente', titre: 'Arbre' },
-  },
-
-  /* --- Maquettes de comparaison des dispositions -------------------
-   *
-   * **Volontairement absentes du menu.** Ce sont des variantes de mise en page
-   * proposées au commanditaire pour qu'il choisisse ; les exposer au reste de la
-   * famille montrerait six arbres différents sans dire lequel fait foi.
-   * Accessibles par URL, et rien de plus.
-   *
-   * Elles montent **le même composant** que `/arbre` : ce qui diffère est une
-   * fonction pure appliquée à la charge reçue, et rien d'autre. Deux écrans
-   * séparés auraient divergé au premier correctif, et la comparaison n'aurait
-   * plus rien dit.
-   *
-   * Même `acces` que `/arbre` : une maquette plus permissive que l'écran qu'elle
-   * imite serait une porte dérobée sur les mêmes données.
-   */
-  {
-    path: '/arbre-2',
-    name: 'arbre.conjoints',
-    component: () => import('@/views/ArbreView.vue'),
-    props: dispositionEnProp,
-    meta: { acces: 'attente', titre: 'Arbre — conjoints accolés', disposition: 'conjoints' },
-  },
-  {
-    path: '/arbre-3',
-    name: 'arbre.bornee',
-    component: () => import('@/views/ArbreView.vue'),
-    props: dispositionEnProp,
-    meta: { acces: 'attente', titre: 'Arbre — vue bornée', disposition: 'bornee' },
-  },
-  {
-    path: '/arbre-4',
-    name: 'arbre.croisements',
-    component: () => import('@/views/ArbreView.vue'),
-    props: dispositionEnProp,
-    meta: { acces: 'attente', titre: 'Arbre — croisements minimisés', disposition: 'croisements' },
-  },
-  {
-    path: '/arbre-5',
-    name: 'arbre.duplication',
-    component: () => import('@/views/ArbreView.vue'),
-    props: dispositionEnProp,
-    meta: { acces: 'attente', titre: 'Arbre — duplication', disposition: 'duplication' },
-  },
-  {
-    path: '/arbre-7',
-    name: 'arbre.ressorts',
-    component: () => import('@/views/ArbreView.vue'),
-    props: dispositionEnProp,
-    meta: { acces: 'attente', titre: 'Arbre — ressorts et isotonie', disposition: 'ressorts' },
-  },
-  {
-    path: '/arbre-8',
-    name: 'arbre.blocs',
-    component: () => import('@/views/ArbreView.vue'),
-    props: dispositionEnProp,
-    meta: { acces: 'attente', titre: 'Arbre — blocs rigides', disposition: 'blocs' },
-  },
-  {
-    // **Sa propre vue**, et c'est la seule des sept. Les six autres sont des
-    // transformations de la charge, que le canevas de l'arbre dessine sans savoir
-    // qu'elle a été retouchée. Le quilt n'est pas une disposition, c'est une
-    // autre **représentation** : une matrice, sans fiche, sans losange, sans
-    // arête. Lui faire porter les deux aurait fait du canevas un composant à deux
-    // modes, celui qu'on ne sait plus lire.
-    path: '/arbre-6',
-    name: 'arbre.quilt',
-    component: () => import('@/views/ArbreQuiltView.vue'),
-    meta: { acces: 'attente', titre: 'Arbre — quilt' },
+    meta: { acces: 'attente', titre: 'Arbre', disposition: 'ressorts' },
   },
   {
     // `{id}` est un entier : un identifiant provisoire (`#12/p1`) ne correspond

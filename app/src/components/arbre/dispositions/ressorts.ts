@@ -1,5 +1,8 @@
 /**
- * **Disposition « ressorts et isotonie »** — `/arbre-7`.
+ * **Disposition « ressorts et isotonie »** — c'est celle que `/arbre` sert.
+ *
+ * Elle s'est appelée `/arbre-7` tant que les sept maquettes coexistaient ; elles ont
+ * été retirées une fois le choix fait.
  *
  * ────────────────────────────────────────────────────────────────────
  * **LE PLACEMENT A UNE SOLUTION EXACTE, ET ELLE N'EST PAS ITÉRATIVE.**
@@ -46,7 +49,7 @@
  * celui du serveur — `AffinageDuPlacement`, qui l'a arrêté sous les invariants
  * convenus avec le commanditaire. Cette disposition ne les rediscute pas : elle
  * prend l'ordre qu'on lui donne et cherche les meilleures abscisses *dans cet
- * ordre*. C'est aussi ce qui la distingue d'`/arbre-4`, qui réordonne et dont le
+ * ordre*. C'est aussi ce qui la distingue de `croisements`, qui réordonne et dont le
  * prix annoncé est l'instabilité.
  *
  * ── Le désir et le poids ne sont pas réglés à la main ───────────────────
@@ -838,7 +841,7 @@ export function mouvements(
 }
 
 /**
- * `/arbre-7` : les désirs, résolus exactement rangée par rangée.
+ * Les désirs, résolus exactement rangée par rangée.
  *
  * Un seul geste après la relaxation : **le lecteur reste à l'abscisse zéro** (I7),
  * par une translation globale, qui ne change aucune distance et évite que la vue

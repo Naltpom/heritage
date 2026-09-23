@@ -1,5 +1,9 @@
 /**
- * **Disposition « minimisation de croisements »** — `/arbre-4`.
+ * **Disposition « minimisation de croisements »** — sans route, et gardée quand même.
+ *
+ * Sa maquette `/arbre-4` a été retirée ; le module reste parce que `ArbreView`
+ * importe `compterLesCroisements` pour le bandeau de mesure, et que
+ * `ressorts.test.ts` compare la stabilité de `ressorts` à la sienne.
  *
  * ────────────────────────────────────────────────────────────────────
  * **LA MÉTHODE DE GRAPHVIZ, APPLIQUÉE À L'ARBRE.**

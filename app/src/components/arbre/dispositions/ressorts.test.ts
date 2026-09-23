@@ -989,13 +989,13 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
   })
 
   /* ---------------------------------------------------------------- */
-  /* La stabilité à l'ajout — le défaut que /arbre-4 annonce           */
+  /* La stabilité à l'ajout — le défaut que `croisements` annonce      */
   /* ---------------------------------------------------------------- */
 
   /**
    * **Ce que coûte une personne de plus.**
    *
-   * `/arbre-4` écrit son propre prix : *« ajouter une personne peut renvoyer une
+   * `croisements` écrit son propre prix : *« ajouter une personne peut renvoyer une
    * branche entière de l'autre côté de l'écran, et deux captures prises à une
    * semaine d'intervalle ne se comparent plus »*. C'est mesurable, et c'est la
    * question que le commanditaire a posée en premier : *mes repères tiennent-ils ?*
@@ -1040,7 +1040,7 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
     return bouges
   }
 
-  it('L’AJOUT D’UNE PERSONNE RESTE LOCAL — et bien plus que sur /arbre-4', () => {
+  it('L’AJOUT D’UNE PERSONNE RESTE LOCAL — et bien plus que sur `croisements`', () => {
     const { reduit, retiree } = sansUneFeuille()
 
     const nous = {
@@ -1055,7 +1055,7 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
     const nombreNous = combienOntBouge(nous.avant, nous.apres, retiree)
     const nombreEux = combienOntBouge(eux.avant, eux.apres, retiree)
 
-    // Le témoin est `/arbre-4`, pas zéro : une personne de plus déplace
+    // Le témoin est `croisements`, pas zéro : une personne de plus déplace
     // forcément quelque chose, et une disposition qui ne bougerait rien ne
     // l'aurait pas placée.
     expect(nombreEux).toBeGreaterThan(0)

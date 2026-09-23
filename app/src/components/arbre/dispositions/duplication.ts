@@ -1,5 +1,11 @@
 /**
- * **Disposition « duplication »** — `/arbre-5`.
+ * **Disposition « duplication »** — sans route, et gardée quand même.
+ *
+ * Sa maquette `/arbre-5` a été retirée. Le module reste une **bibliothèque de
+ * mesure** : `compterLesEchos`, `estUnEcho` et `originalDeLEcho` sont la seule
+ * façon de chiffrer ce que coûtent les 61 unions endogames, et `duplication.test.ts`
+ * les tient. Le supprimer parce que sa page est morte ferait disparaître cet
+ * instrument sans qu'aucune porte ne rougisse.
  *
  * ────────────────────────────────────────────────────────────────────
  * **LA RÉPONSE DES ÉVENTAILS D'ASCENDANCE, ET DE PRESQUE TOUS LES LOGICIELS.**

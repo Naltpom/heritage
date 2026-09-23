@@ -35,7 +35,7 @@
  *
  * — quatre branches coupées en deux morceaux chacune. Une bande unique par
  * (branche, rangée) enjamberait donc les intrus : `pp` recouvrirait `pm` sur
- * 430 unités et `mp` recouvrirait `mm` sur 1 683. Sur `/arbre-4` (croisements),
+ * 430 unités et `mp` recouvrirait `mm` sur 1 683. Sur la disposition `croisements`,
  * qui réordonne les rangées, la même forme naïve produit **neuf** paires
  * superposées au lieu de deux.
  *

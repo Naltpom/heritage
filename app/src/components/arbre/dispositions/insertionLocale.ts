@@ -11,7 +11,7 @@
  * | | fiches déplacées, sur 447 | de plus de 50 px |
  * |---|---|---|
  * | la charge brute du serveur | **0** | 0 |
- * | la même, passée par `/arbre-7` | **109** | 33 |
+ * | la même, passée par `ressorts` | **109** | 33 |
  *
  * Et sur la paire suivante (625 → 633, six fiches) : **92** et 15. Le moteur du
  * serveur réserve la place et ne remue rien ; c'est la **relaxation globale du
@@ -29,7 +29,7 @@
  * Il ne connaît ni PAVA, ni les ressorts, ni les blocs : il prend **deux
  * graphes déjà placés** — celui qui est à l'écran, celui que la disposition
  * vient de calculer — et rend le premier, augmenté du second. `/arbre`,
- * `/arbre-7` et les maquettes empruntent donc exactement le même chemin, ce qui
+ * `/arbre` et les maquettes empruntaient exactement le même chemin, ce qui
  * est la règle de ce dossier : une seule vue, plusieurs mises en page. Une
  * insertion écrite **dans** `ressorts.ts` aurait été une sixième copie à
  * corriger, et elle aurait dû rediscuter le contrat de PAVA — *il place, il ne
@@ -224,7 +224,7 @@ export function poser(rangee: readonly Place[], nouveau: Place): Pose {
  * moyenne de ses époux. Elle est refaite ici plutôt qu'importée parce que ce
  * module ne doit rien devoir à une disposition en particulier ; c'est six lignes
  * et cela vaut mieux qu'une dépendance qui obligerait `/arbre` à charger le
- * solveur d'`/arbre-7`.
+ * solveur de `ressorts`.
  */
 function voisinage(aretes: readonly AreteGraphe[]): Map<IdentifiantNoeud, IdentifiantNoeud[]> {
   const voisins = new Map<IdentifiantNoeud, IdentifiantNoeud[]>()
