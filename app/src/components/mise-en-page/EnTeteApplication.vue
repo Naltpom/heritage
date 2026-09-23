@@ -1,106 +1,85 @@
 <script setup lang="ts">
 /**
- * L'en-tête applicatif : identité, navigation, compte.
+ * L'en-tête applicatif — refonte « En-tête, barres d'écran et fiche » (4a/4b).
  *
- * La navigation suit le **régime** et non le rôle : un compte en attente de
- * validation accède à l'arbre et à la chronologie (§ 12.1), mais pas à la
- * contribution. Les entrées d'administration n'apparaissent que pour
- * `ROLE_ADMIN`.
+ * **Bureau (≥ md), une seule barre de 56 px** : la marque, les quatre onglets
+ * d'exploration (Arbre · Chronologie · Carte · Anniversaires, filet d'accent sous
+ * l'actif), la recherche d'une personne au centre, puis Mes demandes, Validation,
+ * « + Proposer » et le menu du compte (avatar).
  *
- * Masquer une entrée de menu n'est **pas** une mesure de sécurité — les gardes
- * de route la doublent, et le serveur les double toutes les deux. C'est une
- * mesure de lisibilité : on ne propose pas un écran qui refusera. **Le tiroir
- * mobile ne change rien à cela** : il déplace les entrées, il n'en retire
- * aucune, et rien n'y devient une autorisation.
+ * **Téléphone (< md), 52 px** : le burger — ou « ‹ parent » sur un écran de
+ * détail —, le titre de l'écran et son résumé, et le bouton filtres, qui porte le
+ * nombre de filtres actifs. Le burger ouvre un panneau latéral (86 %) : carte du
+ * compte, « Proposer une personne », sections Explorer, Contribuer,
+ * Administration, et « Se déconnecter » en pied.
  *
- * Le créneau `actions` est laissé aux écrans qui ajoutent un contrôle global
- * (compteur de notifications, recherche) sans modifier ce fichier. Sur mobile il
- * atterrit dans le tiroir, avec le reste.
+ * Ce qui ne change pas, et pourquoi :
  *
- * **« Proposer une personne » est ici, et pas dans la barre d'outils de
- * l'arbre.** La personne à ajouter est justement celle qui n'a pas de fiche : le
- * geste ne part d'aucun contexte, et une barre d'outils est contextuelle. Dans
- * l'en-tête, il reste atteignable depuis n'importe quel écran, y compris la
- * chronologie. `PointCreation` porte ses deux conditions d'affichage lui-même —
- * rattachement validé, et hors bascule « voir comme un membre » — parce qu'elles
- * appartiennent au formulaire qu'il ouvre, pas au cadre qui l'affiche.
- *
- * Il est monté en `discret` : l'en-tête porte déjà « Se déconnecter », et deux
- * boutons pleins se disputeraient l'attention.
- *
- * **« Mes demandes » est ici pour la même raison.** La décision d'une demande
- * doit revenir à son auteur, et elle ne lui revenait pas : le serveur refuse
- * avec un motif obligatoire, le stocke et le sert, mais aucun écran ne
- * l'affichait et aucun chemin n'y menait — on n'atteignait le motif de son
- * propre refus qu'en tapant `/demandes/6` dans la barre d'adresse. Une capacité
- * entière tenait donc, là aussi, à deux lignes d'en-tête.
- *
- * Le lien suit le **régime**, comme le reste de cette barre : un compte en
- * attente de validation n'a aucune demande — l'API lui refuse le dépôt — et un
- * écran toujours vide est une promesse qu'on ne tient pas.
- *
- * (Ce paragraphe est dans le script et non en commentaire de template : un
- * commentaire de template est **rendu dans le HTML** — le rendu SSR d'un test
- * l'a montré en faisant échouer une assertion sur un texte qui n'existait que
- * dans ce commentaire. C'est arrivé une seconde fois en ajoutant « Mes
- * demandes » : trois tests d'absence sont tombés d'un coup, sur un texte qui
- * n'existait que dans le commentaire qu'on vient de déplacer ici.)
- *
- * ────────────────────────────────────────────────────────────────────
- * **LE MOBILE, ET CE QUI LE REND SÛR.**
- *
- * En deçà de `md`, cette barre s'enroulait sur quatre rangs et prenait 192 px
- * d'un écran de 400 — mesuré. Les entrées passent donc dans un tiroir, et les
- * deux boutons qui les commandent se tiennent aux deux bouts de la barre : la
- * navigation à gauche, les filtres de l'écran à droite.
- *
- * **Rien de ce qui suit ne peut atteindre un écran large.** Toute déclaration
- * mobile s'écrit `max-md:`, qui compile en `@media (width < 48rem)`, ou vit sur
- * un élément portant `md:hidden`. Aucune classe existante n'a été modifiée.
- *
- * **`md:contents` est la pièce maîtresse.** Au-delà du seuil, le conteneur du
- * tiroir ne génère aucune boîte : ses enfants redeviennent enfants flex directs
- * de l'en-tête, dans le même ordre, avec les mêmes gouttières. L'ordre aplati y
- * est donc, jeton pour jeton, celui d'avant ce commentaire.
- *
- * **Le burger est conditionné à `connecte`, et ce n'est pas une coquetterie.**
- * `entete-creation.test.ts` vérifie qu'un visiteur anonyme ne reçoit **aucun**
- * `<button>` — l'assertion porte sur l'élément et non sur le texte, précisément
- * parce qu'une assertion sur le texte avait déjà menti. Un burger inconditionnel
- * la ferait tomber. Et elle a raison : un en-tête anonyme n'a rien à ouvrir.
- *
- * **Aucun `useRoute()` ici.** Le même fichier de test simule `vue-router` en
- * n'exportant que `useRouter` ; un `useRoute()` ferait lever ses dix cas. La
- * fermeture des tiroirs au changement de page appartient de toute façon au
- * routeur, et elle est dans `router/index.ts`.
- *
- * **Pas de piège à focus, délibérément.** Ce sont des *disclosures*
- * (`aria-expanded` + `aria-controls`), pas des dialogues : on n'ajoute pas
- * `aria-modal`, qui seul rendrait le piège obligatoire. Fermé, le panneau est
- * `max-md:hidden` — donc retiré de la mise en page, du clavier **et** de l'arbre
- * d'accessibilité, et ce de façon bornée au point de rupture. `inert`, lui,
- * n'aurait pas de variante de largeur et fuirait sur grand écran.
- * ────────────────────────────────────────────────────────────────────
+ * - **La navigation suit le régime**, pas le rôle : un compte en attente voit
+ *   l'arbre et la chronologie, pas la contribution ; l'administration n'apparaît
+ *   qu'à `ROLE_ADMIN`. Masquer une entrée n'est pas une mesure de sécurité — les
+ *   gardes de route la doublent, et le serveur les double toutes les deux.
+ * - **La navigation n'est rendue qu'une fois.** `#menu-principal` porte
+ *   `md:contents` : au-delà du seuil il ne génère aucune boîte, et ses liens
+ *   deviennent les onglets de la barre ; en deçà, c'est le panneau latéral. Le
+ *   tiroir DÉPLACE, il ne recopie pas.
+ * - **Le burger n'existe que si `connecte`** : un visiteur anonyme ne reçoit
+ *   aucun `<button>` (`entete-creation.test.ts`).
+ * - **Aucun `useRoute()` ici** : les tests simulent `vue-router` avec `useRouter`
+ *   seul. La section active, le titre et le parent viennent de `entete.ts`, que
+ *   le routeur publie à chaque navigation ; la fermeture des tiroirs au
+ *   changement de page est dans `router/index.ts`.
+ * - **Pas de piège à focus** : ce sont des *disclosures* (`aria-expanded` +
+ *   `aria-controls`). Fermé, le panneau est `max-md:hidden` — hors mise en page,
+ *   clavier et arbre d'accessibilité, borné au point de rupture. `inert` n'aurait
+ *   pas de variante de largeur.
+ * - `PointCreation` garde ses deux conditions d'affichage (rattachement validé,
+ *   hors bascule « voir comme »).
  */
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { deconnecter, useSession } from '@/composables/useSession'
 import { useTiroirs } from '@/composables/useTiroirs'
-import BoutonBase from '@/components/base/BoutonBase.vue'
+import { useEntete, type Section } from '@/composables/entete'
+import { listerDemandesAdministration } from '@/lib/api'
 import PointCreation from '@/components/proposition/PointCreation.vue'
+import RechercheEntete from './RechercheEntete.vue'
 
 const routeur = useRouter()
-const { regime, connecte, rattache, administrateur, nomAffiche } = useSession()
+const etatSession = useSession()
+const { regime, connecte, rattache, administrateur, nomAffiche } = etatSession
 const { ouvert, outilsDisponibles, basculerTiroir, fermerTiroirs } = useTiroirs()
+const { section, titre, resume, parent, filtresActifs } = useEntete()
 
 const boutonMenu = ref<HTMLButtonElement | null>(null)
 const boutonOutils = ref<HTMLButtonElement | null>(null)
+const boutonCompte = ref<HTMLButtonElement | null>(null)
+const menuCompte = ref<HTMLElement | null>(null)
 
-/** Le focus revient au bouton qui a ouvert le tiroir. Sans ce retour, refermer
- *  au clavier renvoie le focus au début du document, et il faut retraverser la
- *  page pour revenir là où l'on était. */
+const ONGLETS: { section: Section; nom: string; libelle: string }[] = [
+  { section: 'arbre', nom: 'arbre', libelle: 'Arbre' },
+  { section: 'chronologie', nom: 'chronologie', libelle: 'Chronologie' },
+  { section: 'carte', nom: 'carte', libelle: 'Carte' },
+  { section: 'anniversaires', nom: 'anniversaires', libelle: 'Anniversaires' },
+]
+
+const demandesEnAttente = computed(() => etatSession.session?.value?.demandesEnAttente?.length ?? 0)
+const fileEnAttente = ref(0)
+
+const libelleRole = computed(() =>
+  administrateur.value ? 'Administrateur' : regime.value === 'en_attente' ? 'En attente de validation' : 'Membre',
+)
+const courriel = computed(() => etatSession.session?.value?.utilisateur.email ?? '')
+const initiales = computed(() => {
+  const mots = nomAffiche.value.split(/[\s@.]+/).filter(Boolean)
+  return ((mots[0]?.[0] ?? '') + (mots[1]?.[0] ?? '')).toUpperCase() || '?'
+})
+
+/** Le focus revient au bouton qui a ouvert ce qu'on referme. */
 function fermerEtRendreLeFocus(): void {
-  const declencheur = ouvert.value === 'menu' ? boutonMenu.value : boutonOutils.value
+  const declencheur =
+    ouvert.value === 'menu' ? boutonMenu.value : ouvert.value === 'compte' ? boutonCompte.value : boutonOutils.value
+  if (ouvert.value === 'aucun') return
   fermerTiroirs()
   declencheur?.focus()
 }
@@ -110,169 +89,249 @@ async function quitter(): Promise<void> {
   await deconnecter()
   await routeur.push({ name: 'connexion' })
 }
+
+/** « ‹ Arbre » : l'arbre reprend la vue quittée ; ailleurs, on revient d'où l'on vient. */
+function retour(): void {
+  const p = parent.value
+  if (!p) return
+  const precedent = (globalThis.history?.state as { back?: unknown } | null)?.back
+  if (p.nom !== 'arbre' && typeof precedent === 'string') routeur.back()
+  else void routeur.push({ name: p.nom })
+}
+
+function surClicExterieur(e: MouseEvent): void {
+  if (ouvert.value !== 'compte') return
+  const cible = e.target as Node
+  if (menuCompte.value?.contains(cible) || boutonCompte.value?.contains(cible)) return
+  fermerTiroirs()
+}
+
+async function compterLaFile(): Promise<void> {
+  if (!administrateur.value) return
+  try {
+    fileEnAttente.value = (await listerDemandesAdministration({ status: 'en_attente', parPage: 1 })).total
+  } catch {
+    fileEnAttente.value = 0
+  }
+}
+
+watch(administrateur, () => void compterLaFile())
+onMounted(() => {
+  document.addEventListener('click', surClicExterieur, true)
+  void compterLaFile()
+})
+onBeforeUnmount(() => document.removeEventListener('click', surClicExterieur, true))
+
+const classeOnglet = (actif: boolean): string =>
+  [
+    'inline-flex items-center whitespace-nowrap',
+    'md:h-14 md:border-b-2 md:px-3 md:text-sm',
+    'max-md:h-11 max-md:rounded-champ max-md:px-3 max-md:text-[15px]',
+    actif
+      ? 'md:border-accent md:font-semibold md:text-accent max-md:bg-accent-doux max-md:font-semibold'
+      : 'md:border-transparent text-attenue hover:text-texte max-md:text-texte',
+  ].join(' ')
+
+const classeLigneTiroir =
+  'flex h-11 items-center justify-between rounded-champ px-3 text-[15px] hover:bg-accent-doux'
 </script>
 
 <template>
   <header
-    class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-ligne bg-panneau px-4 py-2.5 max-md:relative max-md:flex-nowrap"
+    class="relative flex h-14 items-center gap-1 border-b border-ligne bg-panneau px-5 max-md:h-[52px] max-md:px-1"
     @keydown.escape="fermerEtRendreLeFocus"
   >
+    <!-- Téléphone : le retour d'un écran de détail remplace le burger. -->
     <button
-      v-if="connecte"
+      v-if="connecte && parent"
+      type="button"
+      class="flex h-11 items-center gap-1 px-2 text-[15px] font-semibold whitespace-nowrap text-accent md:hidden"
+      @click="retour"
+    >
+      <span aria-hidden="true">‹</span> {{ parent.libelle }}
+    </button>
+    <button
+      v-else-if="connecte"
       ref="boutonMenu"
       type="button"
-      class="rounded-champ px-2 py-1.5 text-attenue hover:text-texte md:hidden max-md:relative max-md:z-40"
+      class="flex h-11 w-11 flex-none md:hidden items-center justify-center rounded-champ text-attenue hover:text-texte"
       :aria-label="ouvert === 'menu' ? 'Fermer le menu' : 'Ouvrir le menu'"
       :aria-expanded="ouvert === 'menu'"
       aria-controls="menu-principal"
       @click="basculerTiroir('menu')"
     >
       <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
-        <path
-          d="M3 5h14M3 10h14M3 15h14"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-        />
+        <path d="M3 5h14M3 10h14M3 15h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
       </svg>
     </button>
 
     <RouterLink
       :to="{ name: 'arbre' }"
-      class="text-sm font-semibold tracking-tight whitespace-nowrap max-md:relative max-md:z-40"
+      class="mr-[18px] text-base font-bold tracking-[-.01em] whitespace-nowrap"
+      :class="connecte ? 'max-md:hidden' : 'max-md:px-3'"
     >
       Heritage
     </RouterLink>
 
-    <span class="h-5 w-px bg-ligne max-md:hidden" aria-hidden="true" />
-
-    <div
-      v-if="ouvert === 'menu'"
-      class="fixed inset-0 z-30 bg-black/40 md:hidden"
-      aria-hidden="true"
-      @click="fermerTiroirs"
-    />
-
-    <div
-      id="menu-principal"
-      class="md:contents max-md:absolute max-md:inset-x-0 max-md:top-full max-md:z-40 max-md:flex max-md:flex-col max-md:items-stretch max-md:gap-1 max-md:border-b max-md:border-ligne max-md:bg-panneau max-md:p-3 max-md:shadow-panneau"
-      :class="ouvert === 'menu' ? '' : 'max-md:hidden'"
-    >
-      <nav aria-label="Navigation principale" class="flex flex-wrap items-center gap-1">
-        <RouterLink
-          v-if="connecte"
-          :to="{ name: 'arbre' }"
-          class="rounded-champ px-2.5 py-1 text-sm text-attenue hover:text-texte"
-          active-class="bg-accent-doux font-semibold text-texte"
-        >
-          Arbre
-        </RouterLink>
-        <RouterLink
-          v-if="connecte"
-          :to="{ name: 'chronologie' }"
-          class="rounded-champ px-2.5 py-1 text-sm text-attenue hover:text-texte"
-          active-class="bg-accent-doux font-semibold text-texte"
-        >
-          Chronologie
-        </RouterLink>
-        <RouterLink
-          v-if="connecte"
-          :to="{ name: 'carte' }"
-          class="rounded-champ px-2.5 py-1 text-sm text-attenue hover:text-texte"
-          active-class="bg-accent-doux font-semibold text-texte"
-        >
-          Carte
-        </RouterLink>
-        <RouterLink
-          v-if="connecte"
-          :to="{ name: 'anniversaires' }"
-          class="rounded-champ px-2.5 py-1 text-sm text-attenue hover:text-texte"
-          active-class="bg-accent-doux font-semibold text-texte"
-        >
-          Anniversaires
-        </RouterLink>
-        <!--
-          `rattache` et non `connecte` : un compte dont le rattachement n'est pas
-          validé n'a **pas de cercle** (ADR 0003), donc aucune question sur une
-          personne vivante — et l'API lui refuse de toute façon le dépôt d'une
-          réponse. Lui ouvrir l'entrée serait lui promettre une contribution
-          impossible. La route porte la même exigence, `meta.acces: 'membre'` :
-          le lien caché n'est pas la protection, il évite une impasse.
-        -->
-        <RouterLink
-          v-if="rattache"
-          :to="{ name: 'questions' }"
-          class="rounded-champ px-2.5 py-1 text-sm text-attenue hover:text-texte"
-          active-class="bg-accent-doux font-semibold text-texte"
-        >
-          Questions
-        </RouterLink>
-        <RouterLink
-          v-if="rattache"
-          :to="{ name: 'demandes.miennes' }"
-          class="rounded-champ px-2.5 py-1 text-sm text-attenue hover:text-texte"
-          active-class="bg-accent-doux font-semibold text-texte"
-        >
-          Mes demandes
-        </RouterLink>
-        <RouterLink
-          v-if="administrateur"
-          :to="{ name: 'administration' }"
-          class="rounded-champ px-2.5 py-1 text-sm text-attenue hover:text-texte"
-          active-class="bg-accent-doux font-semibold text-texte"
-        >
-          Administration
-        </RouterLink>
-      </nav>
-
-      <span class="flex-1" />
-
-      <PointCreation discret />
-
-      <slot name="actions" />
-
-      <template v-if="connecte">
-        <div
-          class="md:contents max-md:mt-1 max-md:flex max-md:flex-wrap max-md:items-center max-md:gap-2 max-md:border-t max-md:border-ligne max-md:pt-2"
-        >
-          <span class="max-w-[16rem] truncate text-xs text-attenue" :title="nomAffiche">
-            {{ nomAffiche }}
-          </span>
-          <span v-if="regime === 'en_attente'" class="text-xs text-attenue">· en attente</span>
-          <RouterLink
-            :to="{ name: 'compte' }"
-            class="rounded-champ px-2.5 py-1 text-xs text-attenue hover:text-texte"
-            active-class="bg-accent-doux font-semibold text-texte"
-          >
-            Mon compte
-          </RouterLink>
-          <BoutonBase variante="discret" @click="quitter">Se déconnecter</BoutonBase>
-        </div>
-      </template>
+    <!-- Téléphone : le titre de l'écran et son résumé. -->
+    <div v-if="connecte" class="titre-ecran flex min-w-0 flex-1 flex-col leading-tight md:hidden">
+      <span class="truncate text-base font-semibold">{{ titre }}</span>
+      <span v-if="resume" class="truncate text-[11.5px] text-attenue">{{ resume }}</span>
     </div>
 
-    <span class="flex-1 md:hidden" aria-hidden="true" />
+    <div v-if="ouvert === 'menu'" class="fixed inset-0 z-30 bg-black/40 md:hidden" aria-hidden="true" @click="fermerTiroirs" />
 
+    <div
+      v-if="connecte"
+      id="menu-principal"
+      class="md:contents max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:flex max-md:w-[86%] max-md:max-w-sm max-md:flex-col max-md:overflow-y-auto max-md:bg-panneau max-md:pt-1.5 max-md:pb-4 max-md:shadow-panneau"
+      :class="ouvert === 'menu' ? '' : 'max-md:hidden'"
+    >
+      <!-- Tiroir : en-tête, compte, proposer. -->
+      <div class="flex flex-col md:hidden">
+        <div class="flex h-12 items-center justify-between pr-1 pl-5">
+          <span class="text-base font-bold">Heritage</span>
+          <button type="button" class="h-11 w-11 text-xl text-attenue" aria-label="Fermer le menu" @click="fermerEtRendreLeFocus">×</button>
+        </div>
+        <RouterLink :to="{ name: 'compte' }" class="mx-3 mt-1 flex items-center gap-3 rounded-panneau border border-ligne p-3">
+          <span class="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-accent-doux text-sm font-bold text-accent">{{ initiales }}</span>
+          <span class="flex min-w-0 flex-col leading-snug">
+            <span class="truncate font-semibold">{{ nomAffiche }}</span>
+            <span class="text-xs text-attenue">{{ libelleRole }} · Mon compte</span>
+          </span>
+        </RouterLink>
+        <div class="p-3 empty:hidden [&>a]:flex [&>a]:h-11 [&>a]:w-full [&>a]:justify-center">
+          <PointCreation />
+        </div>
+      </div>
+
+      <nav aria-label="Navigation principale" class="flex md:h-14 md:items-stretch max-md:flex-col max-md:px-2">
+        <span class="px-3 pt-1.5 pb-1.5 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase md:hidden">Explorer</span>
+        <RouterLink v-for="o in ONGLETS" :key="o.nom" :to="{ name: o.nom }" :class="classeOnglet(section === o.section)">
+          {{ o.libelle }}
+        </RouterLink>
+
+        <template v-if="rattache">
+          <span class="px-3 pt-3.5 pb-1.5 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase md:hidden">Contribuer</span>
+          <RouterLink :to="{ name: 'demandes.miennes' }" :class="classeLigneTiroir" class="md:hidden">
+            Mes demandes
+            <span v-if="demandesEnAttente" class="flex h-[22px] min-w-[22px] items-center justify-center rounded-pastille bg-accent-doux px-1.5 text-xs font-bold text-accent">{{ demandesEnAttente }}</span>
+          </RouterLink>
+          <RouterLink :to="{ name: 'questions' }" :class="classeLigneTiroir" class="md:hidden">Questions</RouterLink>
+        </template>
+
+        <template v-if="administrateur">
+          <span class="px-3 pt-3.5 pb-1.5 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase md:hidden">Administration</span>
+          <RouterLink :to="{ name: 'administration.demandes' }" :class="classeLigneTiroir" class="md:hidden">
+            File de validation
+            <span v-if="fileEnAttente" class="flex h-[22px] min-w-[22px] items-center justify-center rounded-pastille bg-accent px-1.5 text-xs font-bold text-fond">{{ fileEnAttente }}</span>
+          </RouterLink>
+          <RouterLink :to="{ name: 'administration.invitations' }" :class="classeLigneTiroir" class="md:hidden">Invitations</RouterLink>
+          <RouterLink :to="{ name: 'administration.utilisateurs' }" :class="classeLigneTiroir" class="md:hidden">Utilisateurs</RouterLink>
+        </template>
+      </nav>
+
+      <div class="mt-auto border-t border-ligne pt-2 md:hidden">
+        <button type="button" class="flex h-11 w-full items-center px-5 text-attenue" @click="quitter">Se déconnecter</button>
+      </div>
+    </div>
+
+    <!-- Bureau : recherche, contribution, compte. -->
+    <template v-if="connecte">
+      <span class="flex-1 max-md:hidden" aria-hidden="true" />
+      <RechercheEntete class="max-md:hidden" />
+      <span class="flex-1 max-md:hidden" aria-hidden="true" />
+
+      <RouterLink
+        v-if="rattache"
+        :to="{ name: 'demandes.miennes' }"
+        class="flex h-[34px] items-center gap-1.5 rounded-champ px-2.5 text-[13px] whitespace-nowrap hover:bg-accent-doux max-md:hidden"
+        active-class="bg-accent-doux font-semibold"
+      >
+        Mes demandes
+        <span v-if="demandesEnAttente" class="flex h-[18px] min-w-[18px] items-center justify-center rounded-pastille bg-accent-doux px-1 text-[11px] font-bold text-accent">{{ demandesEnAttente }}</span>
+      </RouterLink>
+      <RouterLink
+        v-if="administrateur"
+        :to="{ name: 'administration.demandes' }"
+        class="flex h-[34px] items-center gap-1.5 rounded-champ px-2.5 text-[13px] whitespace-nowrap hover:bg-accent-doux max-md:hidden"
+        active-class="bg-accent-doux font-semibold"
+      >
+        Validation
+        <span v-if="fileEnAttente" class="flex h-[18px] min-w-[18px] items-center justify-center rounded-pastille bg-accent px-1 text-[11px] font-bold text-fond">{{ fileEnAttente }}</span>
+      </RouterLink>
+      <div class="max-md:hidden [&>a]:h-[34px] [&>a]:py-0 [&>a]:text-[13px]">
+        <PointCreation discret libelle="+ Proposer" />
+      </div>
+
+      <div class="relative max-md:hidden">
+        <button
+          ref="boutonCompte"
+          type="button"
+          class="ml-1 flex h-[34px] items-center gap-1 rounded-pastille pr-1.5 pl-0.5 hover:bg-accent-doux"
+          :aria-expanded="ouvert === 'compte'"
+          aria-controls="menu-compte"
+          aria-label="Mon compte"
+          @click="basculerTiroir('compte')"
+        >
+          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-accent-doux text-xs font-bold text-accent">{{ initiales }}</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" class="text-attenue">
+            <path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+        </button>
+        <div
+          v-if="ouvert === 'compte'"
+          id="menu-compte"
+          ref="menuCompte"
+          class="absolute top-[calc(100%+10px)] right-0 z-50 w-[280px] rounded-panneau border border-ligne bg-panneau py-1 shadow-panneau"
+        >
+          <div class="border-b border-ligne px-4 pt-2 pb-2.5">
+            <div class="truncate font-semibold">{{ nomAffiche }}</div>
+            <div class="truncate text-xs text-attenue">{{ libelleRole }}<template v-if="courriel"> · {{ courriel }}</template></div>
+          </div>
+          <RouterLink :to="{ name: 'compte' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">Mon compte</RouterLink>
+          <template v-if="rattache">
+            <RouterLink :to="{ name: 'demandes.miennes' }" class="flex h-[38px] items-center justify-between px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">
+              Mes demandes
+              <span v-if="demandesEnAttente" class="rounded-pastille bg-accent-doux px-1.5 text-[11px] font-bold text-accent">{{ demandesEnAttente }}</span>
+            </RouterLink>
+            <RouterLink :to="{ name: 'questions' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">Questions</RouterLink>
+          </template>
+          <template v-if="administrateur">
+            <div class="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Administration</div>
+            <RouterLink :to="{ name: 'administration.demandes' }" class="flex h-[38px] items-center justify-between px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">
+              File de validation
+              <span v-if="fileEnAttente" class="rounded-pastille bg-accent px-1.5 text-[11px] font-bold text-fond">{{ fileEnAttente }}</span>
+            </RouterLink>
+            <RouterLink :to="{ name: 'administration.invitations' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">Invitations</RouterLink>
+            <RouterLink :to="{ name: 'administration.utilisateurs' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">Utilisateurs</RouterLink>
+            <RouterLink :to="{ name: 'administration.utilisateurs' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux">Voir comme un membre…</RouterLink>
+          </template>
+          <div class="my-1 border-t border-ligne" />
+          <button type="button" class="flex h-[38px] w-full items-center px-4 text-[13.5px] text-attenue hover:bg-accent-doux" @click="quitter">Se déconnecter</button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Téléphone : le bouton filtres, à l'autre bout de la barre. -->
     <button
       v-if="connecte && outilsDisponibles"
       ref="boutonOutils"
       type="button"
-      class="rounded-champ px-2 py-1.5 text-attenue hover:text-texte md:hidden max-md:relative max-md:z-40"
+      class="relative flex h-11 w-11 flex-none items-center justify-center rounded-champ md:hidden"
+      :class="ouvert === 'outils' ? 'bg-accent-doux text-accent' : 'text-attenue hover:text-texte'"
       :aria-label="ouvert === 'outils' ? 'Fermer les filtres' : 'Ouvrir les filtres'"
       :aria-expanded="ouvert === 'outils'"
       aria-controls="tiroir-outils"
       @click="basculerTiroir('outils')"
     >
       <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
-        <path
-          d="M3 5h14M6 10h8M9 15h2"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.6"
-          stroke-linecap="round"
-        />
+        <path d="M3 5h14M6 10h8M9 15h2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
       </svg>
+      <span
+        v-if="filtresActifs > 0"
+        class="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-pastille bg-accent px-1 text-[10px] font-bold text-fond"
+      >{{ filtresActifs }}</span>
     </button>
   </header>
 </template>

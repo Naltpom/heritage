@@ -23,7 +23,7 @@
 /** La requête média du mobile — exactement celle que compile `max-md:`. */
 export const REQUETE_MOBILE = '(width < 48rem)'
 
-export type TiroirOuvert = 'aucun' | 'menu' | 'outils'
+export type TiroirOuvert = 'aucun' | 'menu' | 'outils' | 'compte'
 
 export interface EtatTiroirs {
   ouvert: TiroirOuvert

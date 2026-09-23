@@ -24,7 +24,8 @@ import { assurerSessionChargee, useSession } from '@/composables/useSession'
 import { regimeDeSession, resoudreAcces, routeParDefaut } from './acces'
 // La table vit dans `routes.ts` : elle y est importable par un test, alors
 // que ce fichier-ci appelle `createWebHistory()` dès son chargement.
-import { routes } from './routes'
+import { routes, sectionDe } from './routes'
+import { definirPage } from '@/composables/entete'
 import { useTiroirs } from '@/composables/useTiroirs'
 
 export { routes }
@@ -57,6 +58,13 @@ const { fermerTiroirs: fermerLesTiroirs } = useTiroirs()
 routeur.afterEach((vers) => {
   const titre = typeof vers.meta.titre === 'string' ? vers.meta.titre : ''
   document.title = titre.length > 0 ? `${titre} — Heritage` : 'Heritage'
+
+  // Ce que l'en-tête affiche de l'écran : il ne lit pas la route lui-même.
+  definirPage({
+    section: sectionDe(String(vers.name ?? ''), vers.meta),
+    titre,
+    parent: vers.meta.parent ?? null,
+  })
 
   // Les tiroirs du mobile se referment en changeant de page. C'est ici et non
   // dans l'en-tête : `entete-creation.test.ts` simule `vue-router` en n'en

@@ -25,10 +25,24 @@
  * ────────────────────────────────────────────────────────────────────
  * ## Ce que cette vue fait, et ce qu'elle délègue
  *
- * Elle charge **une** route — `GET /api/arbre/personnes/{id}` — et répartit la
- * charge utile. Les trois règles ci-dessus ne se décident pas ici : elles vivent
- * dans `components/personne/champs.ts`, un module pur que `champs.test.ts`
- * éprouve sur les charges utiles du contrat, sans monter de composant.
+ * Elle charge **une** route — `GET /api/arbre/personnes/{id}` —, discrimine la
+ * charge utile **une fois**, lit l'onglet dans la requête et tient la loupe.
+ * Tout le reste est délégué :
+ *
+ * - `PageFiche` dessine une fiche complète : bandeau, onglets (Identité ·
+ *   Famille · Sources et notes · Preuves et documents · Demandes), colonne
+ *   « Dans l'arbre », barre d'action mobile ;
+ * - `CarteRestreinte` dessine une fiche réduite : un nom, une raison, une
+ *   sortie — ni onglets, ni barre d'action ;
+ * - les trois règles ci-dessus vivent dans `components/personne/champs.ts`, un
+ *   module pur que `champs.test.ts` éprouve sans monter de composant.
+ *
+ * ## L'onglet voyage dans la requête
+ *
+ * `?onglet=famille | sources | documents | demandes`, Identité par défaut
+ * (`components/personne/onglets.ts`). **Aucun nouveau nom de route** : celui de
+ * la fiche, `personne.detail`, est un contrat avec les notifications. Changer
+ * d'onglet ne recharge pas la fiche — seul l'identifiant est surveillé.
  *
  * La galerie de preuves charge ses propres médias (§ 7.3) : la fiche ne porte
  * que la vue **validée**, et la moitié de ce qu'il faut montrer est justement ce
@@ -42,9 +56,9 @@
  * la version front du `if ($estAdmin) { return $tout; }` qu'il a fallu retirer
  * du serveur — et il n'afficherait de toute façon qu'un `undefined`.
  *
- * Seules les **actions réservées** se cachent par rôle, et aucune n'est ici :
- * le dépôt et la suppression d'un média sont dans la galerie, la proposition de
- * modification dans son emplacement. Chacun porte sa condition et l'explique.
+ * Seules les **actions réservées** se cachent, et aucune n'est décidée ici :
+ * chacune porte sa condition dans `components/personne/gestes.ts`, et la
+ * suppression reste un geste séparé, derrière un filet du menu ⋯.
  *
  * ## Ce qui n'est volontairement pas branché
  *
@@ -61,21 +75,18 @@ import { useAppelApi } from '@/composables/useAppelApi'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
-import EnTeteFiche from '@/components/personne/EnTeteFiche.vue'
-import FicheRestreinte from '@/components/personne/FicheRestreinte.vue'
-import IdentiteFiche from '@/components/personne/IdentiteFiche.vue'
-import ParenteFiche from '@/components/personne/ParenteFiche.vue'
-import PointProposition from '@/components/personne/PointProposition.vue'
-import PointSuppression from '@/components/personne/PointSuppression.vue'
-import SourcesFiche from '@/components/personne/SourcesFiche.vue'
-import GalerieMedias from '@/components/medias/GalerieMedias.vue'
+import CarteRestreinte from '@/components/personne/CarteRestreinte.vue'
+import PageFiche from '@/components/personne/PageFiche.vue'
+import { ongletDepuisRequete, type OngletFiche } from '@/components/personne/onglets'
 import LoupeMedia from '@/components/medias/LoupeMedia.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
 import { vueARetrouver } from '@/histoire/retour'
 
 const route = useRoute()
 
-/** Venu de l'arbre : un bouton y ramène, sur la vue exacte qu'on avait quittée. */
+/** Venu de l'arbre : « Retour à l'arbre » y ramène, sur la vue exacte qu'on
+ *  avait quittée. Le lien est là dans tous les cas ; ceci n'en change que
+ *  l'infobulle. */
 const retourArbre = vueARetrouver()
 
 /** Le routeur contraint déjà `:id(\d+)` : un identifiant provisoire (`#12/p1`)
@@ -105,9 +116,11 @@ const restreinte = computed(() =>
   fiche.value !== null && fiche.value.visibilite === 'restreinte' ? fiche.value : null,
 )
 
-/** Les demandes en attente sur cette fiche, que la charge utile nomme (§ 5.3).
- *  Absentes d'une fiche réduite, comme le calque lui-même (§ 11.1). */
-const demandesEnAttente = computed(() => complete.value?.demandesEnAttente ?? [])
+/** L'onglet ouvert, lu dans `?onglet=`. Identité par défaut, et aussi pour
+ *  `?onglet=demandes` sur une fiche qui n'en porte plus. */
+const onglet = computed<OngletFiche>(() =>
+  complete.value === null ? 'identite' : ongletDepuisRequete(route.query['onglet'], complete.value),
+)
 
 /** Une seule image d'origine décodée à la fois, quel que soit le nombre de
  *  vignettes à l'écran. La loupe est tenue ici pour cette raison. */
@@ -122,104 +135,32 @@ watch(identifiant, () => {
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-4 py-8">
-    <RouterLink
-      v-if="retourArbre"
-      :to="{ name: 'arbre' }"
-      class="mb-4 inline-flex min-h-11 items-center gap-2 rounded-champ border border-ligne bg-panneau px-3 text-sm font-semibold hover:border-accent"
-    >
-      <span aria-hidden="true">←</span> Retour à l'arbre
-    </RouterLink>
+  <div class="w-full">
     <!-- Chargement : la place du contenu à venir, pas une page blanche. -->
-    <PanneauBase v-if="chargement && fiche === null">
-      <p class="mb-3 text-sm text-attenue" role="status">Chargement de la fiche…</p>
-      <SqueletteChargement :lignes="6" />
-    </PanneauBase>
+    <div v-if="chargement && fiche === null" class="mx-auto w-full max-w-[1040px] px-8 py-6 max-md:px-4">
+      <PanneauBase>
+        <p class="mb-3 text-sm text-attenue" role="status">Chargement de la fiche…</p>
+        <SqueletteChargement :lignes="6" />
+      </PanneauBase>
+    </div>
 
     <!-- Une vraie erreur : `404` sur un identifiant qui n'existe pas, réseau,
          session perdue. Une fiche réduite n'arrive **jamais** ici — elle est un
          `200`, et c'est tout le point du § 5.1. -->
-    <MessageErreur v-else-if="erreur !== null" :erreur="erreur" @action="executer" />
+    <div v-else-if="erreur !== null" class="mx-auto w-full max-w-[1040px] px-8 py-6 max-md:px-4">
+      <MessageErreur :erreur="erreur" @action="executer" />
+    </div>
 
-    <template v-else-if="fiche !== null">
-      <EnTeteFiche :fiche="fiche" @agrandir="loupe = $event" />
+    <!-- L'impasse assumée : sept clés, un nom, une raison, une sortie. -->
+    <CarteRestreinte v-else-if="restreinte !== null" :fiche="restreinte" />
 
-      <!-- ------------------------------------------------------- -->
-      <!-- L'impasse assumée : sept clés, un nom, une raison        -->
-      <!-- ------------------------------------------------------- -->
-      <FicheRestreinte v-if="restreinte !== null" :fiche="restreinte" />
-
-      <!-- ------------------------------------------------------- -->
-      <!-- La fiche complète                                        -->
-      <!-- ------------------------------------------------------- -->
-      <template v-else-if="complete !== null">
-        <PanneauBase titre="Identité" class="mb-4">
-          <IdentiteFiche :fiche="complete" />
-        </PanneauBase>
-
-        <!-- Les demandes en cours sur cette fiche. Le calque les signale champ
-             par champ ; ce bloc les rassemble, parce qu'une demande peut porter
-             sur autre chose qu'un champ affiché ici (un lien, un média). -->
-        <PanneauBase
-          v-if="demandesEnAttente.length > 0"
-          titre="Demandes en attente sur cette fiche"
-          class="mb-4"
-        >
-          <ul class="m-0 flex list-none flex-col gap-1 p-0 text-sm">
-            <li v-for="demande in demandesEnAttente" :key="demande">
-              <RouterLink
-                :to="{ name: 'demande.detail', params: { id: demande } }"
-                class="font-semibold text-accent underline"
-              >
-                Demande n° {{ demande }}
-              </RouterLink>
-            </li>
-          </ul>
-        </PanneauBase>
-
-        <PanneauBase titre="Parenté" class="mb-4">
-          <ParenteFiche :fiche="complete" />
-        </PanneauBase>
-
-        <!-- Les preuves : demande n° 3 du commanditaire, seconde moitié. Le
-             portrait, lui, est en tête de fiche. -->
-        <PanneauBase titre="Preuves et documents" class="mb-4">
-          <GalerieMedias
-            :person-id="complete.id"
-            :nom="complete.displayName"
-            @agrandir="loupe = $event"
-          />
-        </PanneauBase>
-
-        <PanneauBase titre="Sources et notes" class="mb-4">
-          <SourcesFiche :fiche="complete" @agrandir="loupe = $event" />
-        </PanneauBase>
-
-        <!-- L'emplacement réservé au formulaire de proposition. Il n'est pas
-             implémenté ici : voir `PointProposition.vue` pour son contrat de
-             greffe (créneau `action`, données `personId` / `version` /
-             `displayName`). -->
-        <PanneauBase titre="Proposer une modification" class="mb-4">
-          <PointProposition :fiche="complete" />
-        </PanneauBase>
-
-        <!-- La suppression est un panneau à part, en dernier, et ce n'est pas
-             qu'une question d'ordre : la même boîte que « proposer une
-             modification » ferait de « corriger » et « effacer » deux
-             variantes d'un même geste. Ce sont deux gestes, dont un seul
-             détruit — et un doublon d'arbre généalogique ne se corrige pas, il
-             se supprime. Voir `PointSuppression.vue`. -->
-        <PanneauBase titre="Supprimer cette fiche" class="mb-4">
-          <PointSuppression :fiche="complete" />
-        </PanneauBase>
-      </template>
-
-      <p class="mt-6 text-sm">
-        <RouterLink :to="{ name: 'arbre' }" class="text-accent underline">
-          Revenir à l’arbre
-        </RouterLink>
-      </p>
-    </template>
+    <PageFiche
+      v-else-if="complete !== null"
+      :fiche="complete"
+      :onglet="onglet"
+      :retour-memorise="retourArbre"
+      @agrandir="loupe = $event"
+    />
   </div>
 
   <LoupeMedia :cible="loupe" @fermer="loupe = null" />

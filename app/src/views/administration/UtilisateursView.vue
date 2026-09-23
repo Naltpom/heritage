@@ -50,6 +50,8 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
+import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
+import OngletsAdministration from './OngletsAdministration.vue'
 import MentionDeRattachement from '@/components/administration/MentionDeRattachement.vue'
 import {
   ecrituresSuspendues,
@@ -163,7 +165,14 @@ function dateLisible(valeur: string | null): string {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
+  <!-- La barre d'écran de l'administration : les trois sections en onglets,
+       et rien d'autre ici — pas de filtre, donc pas de feuillet ni de bouton
+       filtres sur téléphone. Voir `OngletsAdministration`. -->
+  <BarreEcran ecran="Administration" :reinitialisable="false">
+    <template #vue><OngletsAdministration /></template>
+  </BarreEcran>
+
+  <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6">
     <!-- La bascule est active : on le redit ici, avec le moyen d'en sortir.
          Le bandeau du socle le dit déjà en haut de toutes les pages ; ce
          rappel-ci est à côté des boutons qu'il éteint. -->

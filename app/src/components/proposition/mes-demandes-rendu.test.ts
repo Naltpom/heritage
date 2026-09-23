@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { CODE_RESEAU, ErreurApi } from '@/lib/api'
 import type { ResumeDemande } from '@/lib/api'
 import ListeMesDemandes from './ListeMesDemandes.vue'
-import type { MotifDecision } from './mes-demandes'
+import type { ComptesParFiltre, MotifDecision } from './mes-demandes'
 
 /**
  * `mes-demandes.test.ts` vérifie ce que la logique décide ; **ce fichier
@@ -56,6 +56,7 @@ async function rendre(props: {
   total?: number
   chargement?: boolean
   erreur?: unknown
+  comptes?: ComptesParFiltre
 }): Promise<string> {
   const app = createSSRApp({
     render: () =>
@@ -194,5 +195,29 @@ describe('la liste elle-même', () => {
     const html = await rendre({ demandes: [resume({ id: 1 })], total: 140 })
 
     expect(html).toContain('plus récentes de vos 140 demandes')
+  })
+})
+
+describe('la barre d’écran de Mes demandes', () => {
+  it('porte le titre, l’état en segmenté avec compteurs, et le nombre de demandes', async () => {
+    const html = await rendre({
+      demandes: [resume({ id: 1 }), resume({ id: 2 })],
+      total: 2,
+      comptes: { '': 2, en_attente: 2, validee: 0 },
+    })
+    const texte = html.replace(/\s+/g, ' ')
+
+    expect(texte).toContain('Mes demandes')
+    // L'état actif est dit par `aria-pressed`, jamais par la seule couleur.
+    expect(html).toMatch(/aria-pressed="true"[^>]*>\s*Toutes/)
+    expect(texte).toContain('2 demandes')
+    expect(html).not.toContain('<select')
+  })
+
+  it('n’a ni bouton Filtres ni feuillet : il n’y a rien au-delà de la vue', async () => {
+    const html = await rendre({ demandes: [resume({ id: 1 })] })
+
+    expect(html).not.toContain('tiroir-outils')
+    expect(html).not.toMatch(/>\s*Filtres\s*</)
   })
 })

@@ -40,14 +40,14 @@
  *    règle que la chronologie et la recherche.
  * ────────────────────────────────────────────────────────────────────
  */
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { hauteurDuCadre } from '@/views/cadre'
 import { chargerCarte, type GenreEvenement, type VueCarte } from '@/lib/api'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
-import TiroirOutils from '@/components/mise-en-page/TiroirOutils.vue'
+import { definirResume } from '@/composables/entete'
 import { basculerGenre, genresParDefaut } from '@/components/evenements/filtres'
 import BarreOutilsCarte from '@/components/carte/BarreOutilsCarte.vue'
 import LegendeCarte from '@/components/carte/LegendeCarte.vue'
@@ -89,6 +89,20 @@ const bulles = computed(() => regroupement.value.bulles)
 const maximumBulles = computed(() => maximum(bulles.value))
 const bornes = computed(() => bornesDesMedianes(bulles.value))
 const vide = computed(() => vue.value !== null && bulles.value.length === 0)
+
+/**
+ * Les événements que les bulles portent, filtres du lecteur appliqués. C'est
+ * ce qu'on **voit** — jamais un total « sur N » (point 4 ci-dessus).
+ */
+const evenementsSitues = computed(() =>
+  vue.value === null ? null : bulles.value.reduce((somme, b) => somme + b.total, 0),
+)
+
+/** Le résumé de l'en-tête mobile, sous le titre : « 284 événements situés ». */
+watchEffect(() => {
+  const n = evenementsSitues.value
+  definirResume(n === null ? '' : `${n} événement${n > 1 ? 's' : ''} situé${n > 1 ? 's' : ''}`)
+})
 
 async function charger(): Promise<void> {
   abandon?.abort()
@@ -161,36 +175,42 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="racine" class="flex flex-col" :style="{ height: hauteurCadre }">
-    <TiroirOutils titre="Réglages de la carte">
-      <BarreOutilsCarte
-        :actifs="actifs"
-        :resume="vue?.resume.parGenre ?? null"
-        :mode="mode"
-        :fond="fond"
-        :non-situes="regroupement.nonSitues.length"
-        :chargement="chargement"
-        @genre="surGenre"
-        @mode="(m) => (mode = m)"
-        @fond="(f) => (fond = f)"
-        @recadrer="recadrer"
-        @non-situes="listeNonSitues = !listeNonSitues"
-      />
-      <template #legende>
-        <LegendeCarte
-          v-if="vue !== null && !vide"
-          :mode="mode"
-          :maximum="maximumBulles"
-          :bornes="bornes"
-          en-tiroir
-        />
+    <!--
+      La barre d'écran commune (`BarreEcran`, portée par la barre d'outils) :
+      sur bureau, une ligne de 50 px ; sur téléphone, le segmenté sous l'en-tête
+      et tout le reste dans le feuillet — la légende comprise, puisque sa forme
+      flottante y est masquée.
+    -->
+    <BarreOutilsCarte
+      :actifs="actifs"
+      :resume="vue?.resume.parGenre ?? null"
+      :mode="mode"
+      :fond="fond"
+      :non-situes="regroupement.nonSitues.length"
+      :chargement="chargement"
+      :evenements-situes="evenementsSitues"
+      @genre="surGenre"
+      @mode="(m) => (mode = m)"
+      @fond="(f) => (fond = f)"
+      @recadrer="recadrer"
+      @non-situes="listeNonSitues = !listeNonSitues"
+    >
+      <template v-if="vue !== null && !vide" #legende>
+        <LegendeCarte :mode="mode" :maximum="maximumBulles" :bornes="bornes" en-tiroir />
       </template>
-    </TiroirOutils>
+    </BarreOutilsCarte>
 
     <div v-if="erreur && vue !== null" class="border-b border-ligne px-4 py-2">
       <MessageErreur :erreur="erreur" titre="La carte n’a pas pu être rafraîchie" />
     </div>
 
-    <div class="relative min-h-0 flex-1">
+    <!--
+      `isolate` : Leaflet pose ses volets et ses contrôles à des z-index de 400 à
+      1000, sans contexte d'empilement à lui. Sans cette isolation, ils
+      passeraient par-dessus la barre d'écran — son feuillet mobile et
+      l'avertissement du fond détaillé compris.
+    -->
+    <div class="relative isolate min-h-0 flex-1">
       <SqueletteChargement v-if="vue === null && erreur === null" :lignes="8" />
 
       <div v-else-if="vue === null" class="p-4">

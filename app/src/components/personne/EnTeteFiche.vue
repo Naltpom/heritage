@@ -3,6 +3,11 @@
  * L'en-tête de la fiche : le portrait, le nom, la ligne de dates, et ce que le
  * lecteur doit savoir du **régime** de cette fiche avant d'en lire le détail.
  *
+ * **Forme compacte, pour l'aperçu de la file d'administration** (`ApercuFiche`).
+ * La page `/personnes/:id` a son propre bandeau, `BandeauFiche.vue`, avec les
+ * onglets et les actions ; les deux lisent les mêmes fonctions de `champs.ts`
+ * et suivent les mêmes deux règles, ci-dessous.
+ *
  * Deux points de contrat s'y jouent.
  *
  * **1. `ligneDates` est la forme compacte, et elle vient du serveur.** Le § 14.4
@@ -31,7 +36,7 @@ import { computed } from 'vue'
 import type { FichePersonne } from '@/lib/api'
 import PortraitPersonne from '@/components/medias/PortraitPersonne.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
-import { regimeDocumentaire } from './champs'
+import { noteDeConfidentialite, regimeDocumentaire } from './champs'
 
 const { fiche } = defineProps<{ fiche: FichePersonne }>()
 
@@ -53,23 +58,8 @@ const portrait = computed(() => complete.value?.portrait ?? null)
 
 const documentaire = computed(() => regimeDocumentaire(fiche))
 
-/**
- * Pourquoi cette personne est traitée comme vivante.
- *
- * `forcePrivacy` est une décision d'administration : elle l'emporte sur les
- * dates. Le dire évite la question « pourquoi cette fiche de 1901 est-elle
- * protégée ? », dont la réponse est dans `privacyNote` quand elle existe.
- */
-const confidentialite = computed<string | null>(() => {
-  const f = complete.value
-  if (f === null || !f.vivant) return null
-  if (f.forcePrivacy) {
-    return f.privacyNote !== null && f.privacyNote.length > 0
-      ? `Fiche protégée par décision d’administration : ${f.privacyNote}`
-      : 'Fiche protégée par décision d’administration.'
-  }
-  return 'Personne vivante : sa fiche n’est communiquée qu’aux membres de son cercle de visibilité.'
-})
+/** Voir `noteDeConfidentialite()` : `vivant` commande, jamais `deceased`. */
+const confidentialite = computed(() => noteDeConfidentialite(fiche))
 </script>
 
 <template>

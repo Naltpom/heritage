@@ -22,6 +22,7 @@
  *  - aucun texte sous 10 px à l'écran.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   lireFichePersonne,
   rechercherPersonnes,
@@ -31,8 +32,13 @@ import {
   type NoeudNonPlace,
   type ResultatDeRecherche,
 } from '@/lib/api'
-import { nomDeFiche } from '@/components/arbre/graphe'
-import { annoncerBarreDOutils, useEstMobile, useTiroirs } from '@/composables/useTiroirs'
+import { FILTRES, filtreDisponible, nomDeFiche, type IdFiltre, type NoeudPersonneEtendu } from '@/components/arbre/graphe'
+import { useEstMobile, useTiroirs } from '@/composables/useTiroirs'
+import { definirResume } from '@/composables/entete'
+import { abonnerChoix, useRechercheGlobale } from '@/composables/rechercheGlobale'
+import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
+import Segmente from '@/components/mise-en-page/Segmente.vue'
+import PastilleFiltre from '@/components/evenements/PastilleFiltre.vue'
 import { hauteurDuCadre } from '@/views/cadre'
 import FichesMonde from '@/histoire/FichesMonde.vue'
 import {
@@ -60,7 +66,7 @@ import {
 import { memoriserVue, reprendreVue, type VueMemorisee } from '@/histoire/retour'
 
 const estMobile = useEstMobile()
-const { ouvert: tiroirOuvert, fermerTiroirs, unTiroirEstOuvert } = useTiroirs()
+const { fermerTiroirs, unTiroirEstOuvert } = useTiroirs()
 
 /* ------------------------------------------------------------------ */
 /* Chargement                                                          */
@@ -81,6 +87,9 @@ async function charger(): Promise<void> {
     await nextTick()
     // Retour d'une fiche : la vue quittée, exactement ; sinon l'arbre ajusté.
     vueAReprendre = reprendreVue()
+    // « Voir dans l'arbre » depuis une fiche : `?personne=<id>` l'emporte sur la vue mémorisée.
+    personneDemandee = Number(route.query['personne']) || null
+    if (personneDemandee !== null) vueAReprendre = null
     mesurer()
     ajuster()
   } catch (e) {
@@ -125,6 +134,9 @@ function mesurer(): void {
 }
 
 let vueAReprendre: VueMemorisee | null = null
+let personneDemandee: number | null = null
+const route = useRoute()
+const routeur = useRouter()
 
 /** Le premier cadrage : la vue reprise au retour d'une fiche, sinon ajusté à la largeur. */
 function ajuster(): void {
@@ -137,6 +149,15 @@ function ajuster(): void {
     return
   }
   cadrage.value = ajusterLargeur(canevas.value, gouttiere.value)
+  const cible = personneDemandee !== null ? disposition.value.parPersonId.get(personneDemandee) : undefined
+  personneDemandee = null
+  if (cible) {
+    selection.value = cible.id
+    voler(1, cible.cx, cible.y + cible.h / 2)
+    // La requête a servi : on la retire, pour qu'un rechargement reparte de l'arbre entier.
+    // Le routeur republie alors la page et vide le résumé : on le remet.
+    void routeur.replace({ name: 'arbre' }).then(() => definirResume(compteur.value))
+  }
 }
 
 function reprendre(v: VueMemorisee): void {
@@ -323,23 +344,36 @@ function meTrouver(): void {
 /* Filtres : ils estompent, ils ne retirent rien                        */
 /* ------------------------------------------------------------------ */
 
-const filtres = reactive({ masquees: [] as BrancheDeQuart[], ligneDirecte: false, vivants: false })
-const filtreActif = computed(() => filtres.masquees.length > 0 || filtres.ligneDirecte || filtres.vivants)
-const filtresBureau = ref(false)
-const filtresOuverts = computed(() => (estMobile.value ? tiroirOuvert.value === 'outils' : filtresBureau.value))
+const filtres = reactive({
+  masquees: [] as BrancheDeQuart[],
+  ligneDirecte: false,
+  vivants: false,
+  /** Le filtre documentaire de la barre (Vérifiés, Sans source…) : un seul à la fois. */
+  qualite: null as IdFiltre | null,
+})
+/** Le nombre de filtres actifs, pour « Filtres · n » et le bouton de l'en-tête. */
+const nombreFiltresActifs = computed(
+  () => filtres.masquees.length + (filtres.ligneDirecte ? 1 : 0) + (filtres.vivants ? 1 : 0) + (filtres.qualite ? 1 : 0),
+)
 
-function basculerFiltres(): void {
-  filtresBureau.value = !filtresBureau.value
-}
 function fermerFiltres(): void {
-  filtresBureau.value = false
   fermerTiroirs()
 }
 function toutAfficher(): void {
   filtres.masquees = []
   filtres.ligneDirecte = false
   filtres.vivants = false
+  filtres.qualite = null
 }
+function basculerQualite(id: IdFiltre): void {
+  filtres.qualite = filtres.qualite === id ? null : id
+}
+/** Un filtre documentaire sans donnée est désactivé, et sa pastille dit pourquoi. */
+const qualitesDisponibles = computed(() => {
+  const personnes = (disposition.value?.fiches ?? []).map((f) => f.noeud as NoeudPersonneEtendu)
+  return new Set(FILTRES.filter((f) => filtreDisponible(f, personnes)).map((f) => f.id))
+})
+const OPTIONS_PALIERS = PALIERS.map((p, i) => ({ valeur: i, libelle: p.libelle }))
 function basculerBranche(b: BrancheDeQuart): void {
   filtres.masquees = filtres.masquees.includes(b) ? filtres.masquees.filter((x) => x !== b) : [...filtres.masquees, b]
 }
@@ -353,6 +387,10 @@ function passe(f: FicheHistoire): boolean {
   if ((filtres.masquees as Branche[]).includes(f.noeud.branch)) return false
   if (filtres.ligneDirecte && !f.directe) return false
   if (filtres.vivants && !f.noeud.vivant) return false
+  if (filtres.qualite) {
+    const def = FILTRES.find((d) => d.id === filtres.qualite)
+    if (def && !def.test(f.noeud as NoeudPersonneEtendu)) return false
+  }
   return true
 }
 
@@ -638,6 +676,8 @@ let requete: AbortController | null = null
  * reste affichée pour choisir.
  */
 watch(recherche, (q) => {
+  // Sur grand écran, la recherche est celle de l'en-tête (voir plus bas).
+  if (!estMobile.value) return
   window.clearTimeout(minuterie)
   requete?.abort()
   const texte = q.trim()
@@ -659,6 +699,29 @@ watch(recherche, (q) => {
       .catch(() => {})
   }, 120)
 })
+
+/*
+ * Sur grand écran, le champ est dans l'en-tête (`RechercheEntete`) : l'arbre
+ * s'abonne à ses résultats pour les mettre en évidence et cadrer la vue, suit
+ * son curseur, et reçoit le choix final (voler vers la personne).
+ */
+const globale = useRechercheGlobale()
+watch(
+  () => globale.resultats.value,
+  (liste) => {
+    if (estMobile.value) return
+    recherche.value = globale.requete.value
+    resultats.value = [...liste]
+    curseur.value = 0
+    if (liste.length) cadrerCibles()
+  },
+)
+watch(
+  () => globale.curseur.value,
+  (i) => {
+    if (!estMobile.value && resultats.value.length) surCurseur(i)
+  },
+)
 
 /** Cadre la vue sur toutes les cibles ; une seule : on vole vers elle. */
 function cadrerCibles(): void {
@@ -732,7 +795,7 @@ function surToucheGlobale(e: KeyboardEvent): void {
   else if (e.key === '-') zoomer(1 / 1.6)
   else if (e.key === 'Escape') {
     // Un tiroir ouvert garde la priorité : il se referme avant qu'on désélectionne.
-    if (filtresOuverts.value || unTiroirEstOuvert()) fermerFiltres()
+    if (unTiroirEstOuvert()) fermerFiltres()
     else selection.value = null
   }
 }
@@ -742,15 +805,18 @@ function surToucheGlobale(e: KeyboardEvent): void {
 /* ------------------------------------------------------------------ */
 
 let observateur: ResizeObserver | null = null
-let retirerOutils: (() => void) | null = null
+let desabonner: (() => void) | null = null
+
+// Le résumé sous le titre, dans l'en-tête du téléphone.
+watch(compteur, (t) => definirResume(t), { immediate: true })
 
 function surRedimension(): void {
   mesurer()
 }
 
 onMounted(() => {
-  // L'en-tête fait paraître son bouton filtres (téléphone) quand un écran s'annonce.
-  retirerOutils = annoncerBarreDOutils()
+  // Le choix d'un résultat de la recherche de l'en-tête : on vole vers la personne.
+  desabonner = abonnerChoix(allerA)
   mesurer()
   window.addEventListener('resize', surRedimension)
   window.addEventListener('keydown', surToucheGlobale)
@@ -768,7 +834,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  retirerOutils?.()
+  desabonner?.()
   window.removeEventListener('resize', surRedimension)
   window.removeEventListener('keydown', surToucheGlobale)
   fenetre.value?.removeEventListener('wheel', surMolette)
@@ -783,119 +849,89 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="racine" class="histoire flex flex-col bg-fond text-texte" :style="{ height: hauteurCadre }">
-    <!-- Bureau : la barre d'outils -->
-    <div
-      v-if="!estMobile"
-      class="relative z-10 flex h-14 flex-none items-center gap-3 border-b border-ligne bg-panneau px-4"
+    <!-- La barre d'écran commune : vue, pastilles, compteur, Filtres · n, actions. -->
+    <BarreEcran
+      ecran="Arbre"
+      :filtres-actifs="nombreFiltresActifs"
+      :voir="`Voir ${effectifAffiche} personne${effectifAffiche > 1 ? 's' : ''}`"
+      @reinitialiser="toutAfficher"
     >
-      <div class="mr-1 flex flex-col leading-tight whitespace-nowrap">
-        <span class="text-sm font-semibold">Tout l’arbre</span>
-        <span class="text-xs text-attenue">{{ compteur }}</span>
-      </div>
-
-      <div class="relative w-[260px]">
-        <input
-          ref="champ"
-          v-model="recherche"
-          type="search"
-          autocomplete="off"
-          placeholder="Aller à une personne…"
-          aria-label="Aller à une personne"
-          class="h-9 w-full rounded-champ border border-ligne bg-fond px-3 text-[13px] outline-none focus:border-accent"
-          @keydown="surToucheRecherche"
-          @focus="listeOuverte = true"
-          @blur="listeOuverte = false"
+      <template #vue>
+        <Segmente :options="OPTIONS_PALIERS" :valeur="niveau" etiquette="Niveau de détail" :colonnes="4" @choisir="allerAuPalier" />
+      </template>
+      <template #pastilles>
+        <PastilleFiltre
+          v-for="f in FILTRES"
+          :key="f.id"
+          :libelle="f.libelle"
+          :titre="qualitesDisponibles.has(f.id) ? f.description : 'Donnée absente de l’arbre servi'"
+          :actif="filtres.qualite === f.id"
+          :disponible="qualitesDisponibles.has(f.id)"
+          @basculer="basculerQualite(f.id)"
         />
-        <div
-          v-if="listeOuverte && recherche.trim().length >= 2"
-          class="absolute inset-x-0 top-10 z-20 rounded-panneau border border-ligne bg-panneau py-1 shadow-[0_10px_30px_rgba(0,0,0,.5)] max-h-[60vh] overflow-y-auto"
-          role="listbox"
-          @pointerdown.prevent
-        >
-          <div class="px-3 pt-1 pb-1.5 text-[11px] text-attenue">
-            <template v-if="resultats.length">{{ resultats.length }}{{ tronque ? '+' : '' }} personne{{ resultats.length > 1 ? 's' : '' }} · ↑ ↓ pour parcourir</template>
-            <template v-else>Personne ne correspond.</template>
-          </div>
+      </template>
+      <template #compteur>{{ effectifAffiche }} fiches sur {{ disposition?.fiches.length ?? 0 }}</template>
+      <template v-if="disposition" #filtres>
+        <div v-if="disposition.quarts.length" class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Branches</div>
+        <div class="grid grid-cols-2 gap-2">
           <button
-            v-for="(r, i) in resultats"
-            :id="`resultat-histoire-${i}`"
-            :key="r.personId"
+            v-for="q in disposition.quarts"
+            :key="q.branche"
             type="button"
-            role="option"
-            :aria-selected="i === curseur"
-            class="flex w-full flex-col items-start px-3 py-1.5 text-left leading-snug hover:bg-accent-doux"
-            :class="i === curseur ? 'bg-accent-doux' : ''"
-            @click="allerA(r)"
+            class="flex min-h-11 items-center gap-2 rounded-champ border px-2.5 py-1.5 text-left"
+            :style="
+              filtres.masquees.includes(q.branche)
+                ? { opacity: '0.55' }
+                : { borderColor: couleurBranche(q.branche), background: `color-mix(in srgb, ${couleurBranche(q.branche)} 12%, transparent)` }
+            "
+            :class="filtres.masquees.includes(q.branche) ? 'border-ligne' : ''"
+            :aria-pressed="!filtres.masquees.includes(q.branche)"
+            @click="basculerBranche(q.branche)"
           >
-            <span class="text-[13px] font-semibold">{{ r.displayName }}</span>
-            <span class="text-[11.5px] text-attenue">{{ libelleBranche(r.branch) }}<template v-if="r.ligneDates"> · {{ r.ligneDates }}</template></span>
+            <span class="h-2.5 w-2.5 flex-none rounded-[3px]" :style="{ background: couleurBranche(q.branche) }" />
+            <span class="flex flex-col leading-tight">
+              <span class="text-[13px] font-semibold">{{ q.nom || '—' }}</span>
+              <span class="text-[11px] text-attenue">{{ q.libelle }}</span>
+            </span>
           </button>
         </div>
-      </div>
-
-      <span class="flex-1" />
-
-      <div class="flex gap-0.5 rounded-lg border border-ligne bg-fond p-[3px]" role="group" aria-label="Niveau de détail">
+        <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Afficher seulement</div>
         <button
-          v-for="(p, i) in PALIERS"
-          :key="p.libelle"
+          v-for="t in BASCULES"
+          :key="t.cle"
           type="button"
-          class="h-[30px] rounded-md px-3 text-[13px]"
-          :class="niveau === i ? 'bg-accent-doux font-semibold text-[var(--hi-libelle-accent)]' : 'text-attenue hover:text-texte'"
-          :aria-pressed="niveau === i"
-          @click="allerAuPalier(i)"
+          role="checkbox"
+          :aria-checked="filtres[t.cle]"
+          class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
+          @click="filtres[t.cle] = !filtres[t.cle]"
         >
-          {{ p.libelle }}
+          <span
+            class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
+            :class="filtres[t.cle] ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+          >{{ filtres[t.cle] ? '✓' : '' }}</span>
+          <span class="flex-1 text-sm">{{ t.libelle }}</span>
+          <span class="text-xs text-attenue">{{ t.sous }}</span>
         </button>
-      </div>
-
-      <div class="flex overflow-hidden rounded-lg border border-ligne">
-        <button type="button" aria-label="Dézoomer" class="h-[34px] w-[34px] text-lg hover:bg-accent-doux" @click="zoomer(1 / 1.6)">−</button>
-        <button type="button" aria-label="Zoomer" class="h-[34px] w-[34px] border-l border-ligne text-lg hover:bg-accent-doux" @click="zoomer(1.6)">+</button>
-      </div>
-
-      <div class="relative">
+        <p class="m-0 text-xs text-attenue">
+          Les fiches filtrées restent visibles, estompées · {{ effectifAffiche }} sur {{ disposition.fiches.length }}.
+        </p>
+      </template>
+      <template #actions>
+        <div class="flex overflow-hidden rounded-lg border border-ligne">
+          <button type="button" aria-label="Dézoomer" class="h-8 w-8 text-lg hover:bg-accent-doux" @click="zoomer(1 / 1.6)">−</button>
+          <button type="button" aria-label="Zoomer" class="h-8 w-8 border-l border-ligne text-lg hover:bg-accent-doux" @click="zoomer(1.6)">+</button>
+        </div>
         <button
           type="button"
-          class="flex h-[34px] items-center gap-1.5 rounded-champ border px-3 text-[13px] whitespace-nowrap"
-          :class="filtreActif ? 'border-accent' : 'border-ligne'"
-          :aria-expanded="filtresOuverts"
-          aria-controls="filtres-histoire"
-          @click="basculerFiltres"
-        >
-          <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M3 5h14M6 10h8M9 15h2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-          </svg>
-          {{ filtreActif ? 'Filtres · actifs' : 'Filtres' }}
+          class="h-8 w-8 rounded-champ border border-ligne text-sm text-attenue hover:text-texte"
+          aria-label="Raccourcis clavier"
+          title="Raccourcis : / rechercher · Entrée ouvrir · 0 tout l’arbre · + / − zoomer · Échap désélectionner"
+        >?</button>
+        <button type="button" class="h-8 rounded-champ bg-accent px-3 text-[13px] font-semibold whitespace-nowrap text-fond" @click="meTrouver">
+          Me trouver
         </button>
-      </div>
-
-      <button
-        type="button"
-        class="h-[34px] rounded-champ bg-accent px-3 font-semibold whitespace-nowrap text-fond"
-        @click="meTrouver"
-      >
-        Me trouver
-      </button>
-    </div>
-
-    <!-- Téléphone : les paliers en haut -->
-    <div v-else class="flex-none border-b border-ligne bg-panneau px-3 pt-2 pb-2.5">
-      <div class="mb-1.5 text-[11.5px] text-attenue">{{ compteur }}</div>
-      <div class="grid grid-cols-4 gap-0.5 rounded-lg border border-ligne bg-fond p-[3px]" role="group" aria-label="Niveau de détail">
-        <button
-          v-for="(p, i) in PALIERS"
-          :key="p.libelle"
-          type="button"
-          class="h-9 rounded-md p-0 text-[11.5px]"
-          :class="niveau === i ? 'bg-accent-doux font-semibold text-[var(--hi-libelle-accent)]' : 'text-attenue'"
-          :aria-pressed="niveau === i"
-          @click="allerAuPalier(i)"
-        >
-          {{ p.libelle }}
-        </button>
-      </div>
-    </div>
+      </template>
+    </BarreEcran>
 
     <!-- Les fiches proposées que le serveur n'a pas su placer : toujours les dire. -->
     <div
@@ -1209,72 +1245,6 @@ onBeforeUnmount(() => {
       <button type="button" class="h-11 rounded-pastille bg-accent px-3.5 font-semibold text-fond" @click="meTrouver">Moi</button>
     </div>
 
-    <!-- Filtres : menu déroulant sur bureau, feuillet qui monte du bas sur téléphone -->
-    <template v-if="filtresOuverts && disposition">
-      <div
-        class="fixed inset-0 z-30"
-        :class="estMobile ? 'bg-black/50' : ''"
-        aria-hidden="true"
-        @click="fermerFiltres"
-      />
-      <div
-        id="filtres-histoire"
-        class="fixed z-40 flex flex-col gap-3 border border-ligne bg-panneau px-4 pt-3.5 pb-5 shadow-[0_10px_30px_rgba(0,0,0,.5)]"
-        :class="estMobile ? 'inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-2xl' : 'right-32 w-[340px] rounded-panneau'"
-        :style="estMobile ? {} : { top: `${(racine?.getBoundingClientRect().top ?? 0) + 62}px` }"
-        role="dialog"
-        aria-label="Filtres"
-      >
-        <div class="flex items-center justify-between">
-          <span class="text-base font-semibold">Filtres</span>
-          <button type="button" class="h-9 font-semibold text-accent" @click="toutAfficher">Tout afficher</button>
-        </div>
-        <div v-if="disposition.quarts.length" class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Branches</div>
-        <div class="grid grid-cols-2 gap-2">
-          <button
-            v-for="q in disposition.quarts"
-            :key="q.branche"
-            type="button"
-            class="flex min-h-11 items-center gap-2 rounded-champ border px-2.5 py-1.5 text-left"
-            :style="
-              filtres.masquees.includes(q.branche)
-                ? { opacity: '0.55' }
-                : { borderColor: couleurBranche(q.branche), background: `color-mix(in srgb, ${couleurBranche(q.branche)} 12%, transparent)` }
-            "
-            :class="filtres.masquees.includes(q.branche) ? 'border-ligne' : ''"
-            :aria-pressed="!filtres.masquees.includes(q.branche)"
-            @click="basculerBranche(q.branche)"
-          >
-            <span class="h-2.5 w-2.5 flex-none rounded-[3px]" :style="{ background: couleurBranche(q.branche) }" />
-            <span class="flex flex-col leading-tight">
-              <span class="text-[13px] font-semibold">{{ q.nom || '—' }}</span>
-              <span class="text-[11px] text-attenue">{{ q.libelle }}</span>
-            </span>
-          </button>
-        </div>
-        <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Afficher seulement</div>
-        <button
-          v-for="t in BASCULES"
-          :key="t.cle"
-          type="button"
-          role="checkbox"
-          :aria-checked="filtres[t.cle]"
-          class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
-          @click="filtres[t.cle] = !filtres[t.cle]"
-        >
-          <span
-            class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
-            :class="filtres[t.cle] ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
-          >{{ filtres[t.cle] ? '✓' : '' }}</span>
-          <span class="flex-1 text-sm">{{ t.libelle }}</span>
-          <span class="text-xs text-attenue">{{ t.sous }}</span>
-        </button>
-        <div class="text-xs text-attenue">
-          {{ effectifAffiche }} personne{{ effectifAffiche > 1 ? 's' : '' }} affichée{{ effectifAffiche > 1 ? 's' : '' }} sur
-          {{ disposition.fiches.length }}
-        </div>
-      </div>
-    </template>
   </div>
 </template>
 

@@ -3,6 +3,8 @@ import type { Demande, ResumeDemande, StatutDemande } from '@/lib/api'
 import {
   FILTRES,
   LIBELLES_NATURE,
+  choixDuSegmente,
+  comptesDepuisListe,
   lienDeReprise,
   messageQuandVide,
   motifDepuisDemande,
@@ -262,5 +264,50 @@ describe('le vide — deux vides, deux phrases', () => {
     for (const choix of FILTRES) {
       expect(messageQuandVide(choix.valeur), choix.libelle).not.toMatch(/«\s*»/)
     }
+  })
+})
+
+describe('les compteurs du segmenté ne disent que ce que la réponse apprend', () => {
+  it('ventile une liste non filtrée et entière, zéro compris', () => {
+    const elements = [
+      resume({ id: 1, status: 'en_attente' }),
+      resume({ id: 2, status: 'validee' }),
+      resume({ id: 3, status: 'validee' }),
+    ]
+    const comptes = comptesDepuisListe('', elements, 3)
+
+    expect(comptes['']).toBe(3)
+    expect(comptes.en_attente).toBe(1)
+    expect(comptes.validee).toBe(2)
+    expect(comptes.refusee).toBe(0)
+  })
+
+  it('ne ventile pas une liste tronquée : un compteur faux est pire qu’absent', () => {
+    // Cent éléments reçus sur cent quarante : les répartir donnerait des
+    // comptes faux. Seul le total est sûr.
+    const comptes = comptesDepuisListe('', [resume({ id: 1, status: 'validee' })], 140)
+
+    expect(comptes).toEqual({ '': 140 })
+  })
+
+  it('retient le total exact d’une liste filtrée, et rien d’autre', () => {
+    expect(comptesDepuisListe('refusee', [], 0)).toEqual({ refusee: 0 })
+  })
+
+  it('n’affiche aucun nombre pour un compte inconnu', () => {
+    const choix = choixDuSegmente({ '': 4 }, '')
+
+    expect(choix.find((c) => c.valeur === '')?.compte).toBe(4)
+    expect(choix.find((c) => c.valeur === 'validee')?.compte).toBeUndefined()
+  })
+
+  it('ne montre « Brouillons » que s’il a de quoi, ou s’il est choisi', () => {
+    const sans = choixDuSegmente({ brouillon: 0 }, '').map((c) => c.valeur)
+    const avec = choixDuSegmente({ brouillon: 2 }, '').map((c) => c.valeur)
+    const choisi = choixDuSegmente({}, 'brouillon').map((c) => c.valeur)
+
+    expect(sans).toEqual(['', 'en_attente', 'validee', 'refusee', 'caduque'])
+    expect(avec).toContain('brouillon')
+    expect(choisi).toContain('brouillon')
   })
 })

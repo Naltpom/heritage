@@ -33,15 +33,24 @@
  * Le jour où le serveur portera `decisionMessage` dans le résumé, la seconde
  * lecture disparaît d'ici sans que rien d'autre bouge. C'est signalé au lot
  * serveur ; le front n'attend pas après pour afficher le motif.
+ *
+ * **La barre d'écran et les compteurs.** Le titre, le segmenté d'état et le
+ * compteur sont dans la barre de `ListeMesDemandes`. Les compteurs du segmenté
+ * se déduisent des réponses **déjà reçues** (`comptesDepuisListe()`) — aucune
+ * lecture de plus — et se cumulent d'un filtre à l'autre. Le résumé d'une ligne
+ * de l'en-tête mobile (« 7 demandes ») est publié ici.
  */
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { lireDemande, listerDemandes, type ResumeDemande, type StatutDemande } from '@/lib/api'
 import ListeMesDemandes from '@/components/proposition/ListeMesDemandes.vue'
 import {
+  comptesDepuisListe,
   motifDepuisDemande,
   motifsARecuperer,
+  type ComptesParFiltre,
   type MotifDecision,
 } from '@/components/proposition/mes-demandes'
+import { definirResume } from '@/composables/entete'
 
 const demandes = ref<ResumeDemande[]>([])
 const motifs = ref(new Map<number, MotifDecision | null>())
@@ -49,6 +58,8 @@ const total = ref(0)
 const filtre = ref<StatutDemande | ''>('')
 const chargement = ref(false)
 const erreur = ref<unknown>(null)
+/** Ce qu'on sait du compte de chaque filtre — voir `comptesDepuisListe()`. */
+const comptes = ref<ComptesParFiltre>({})
 
 /**
  * `parPage: 100` — le plafond du serveur, atteint volontairement.
@@ -67,6 +78,7 @@ async function charger(): Promise<void> {
     })
     demandes.value = liste.elements
     total.value = liste.total
+    comptes.value = { ...comptes.value, ...comptesDepuisListe(filtre.value, liste.elements, liste.total) }
     void chargerMotifs(liste.elements)
   } catch (cause) {
     erreur.value = cause
@@ -110,27 +122,30 @@ function filtrer(valeur: StatutDemande | ''): void {
 }
 
 onMounted(charger)
+
+// Le résumé sous le titre, dans l'en-tête du téléphone : le compteur de la
+// barre n'y est pas visible. Rien tant que la liste n'est pas là.
+watch(
+  [total, chargement, erreur, comptes],
+  () => {
+    const n = total.value
+    const connu = comptes.value[filtre.value] !== undefined
+    definirResume(!connu || chargement.value || erreur.value !== null ? '' : `${n} demande${n > 1 ? 's' : ''}`)
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-4 py-8">
-    <header class="mb-5">
-      <h1 class="text-xl font-semibold tracking-tight">Mes demandes</h1>
-      <p class="mt-1.5 text-sm text-attenue">
-        Ce que vous avez proposé, et ce que c’est devenu. Une demande refusée porte
-        toujours le motif de son refus.
-      </p>
-    </header>
-
-    <ListeMesDemandes
-      :demandes="demandes"
-      :motifs="motifs"
-      :filtre="filtre"
-      :total="total"
-      :chargement="chargement"
-      :erreur="erreur"
-      @filtrer="filtrer"
-      @recharger="charger"
-    />
-  </div>
+  <ListeMesDemandes
+    :demandes="demandes"
+    :motifs="motifs"
+    :filtre="filtre"
+    :total="total"
+    :chargement="chargement"
+    :erreur="erreur"
+    :comptes="comptes"
+    @filtrer="filtrer"
+    @recharger="charger"
+  />
 </template>

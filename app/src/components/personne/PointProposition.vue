@@ -19,6 +19,14 @@
  * qui a bougé entre-temps. Le formulaire est mieux placé que nous pour savoir ce
  * qu'il propose : on lui donne l'identifiant, il va chercher le reste.
  *
+ * ## Deux dispositions, une seule condition
+ *
+ * La refonte de la fiche pose ces liens à deux endroits : dans le **bandeau**
+ * desktop (« Proposer une modification » en principal, « Proposer des liens » en
+ * secondaire), et dans la **barre d'action fixe** du mobile, où seul le premier
+ * tient — le second passe alors dans le menu ⋯ (`MenuFiche.vue`). La condition,
+ * elle, est la même partout : elle vit dans `gestes.ts`.
+ *
  * ## Pourquoi un `v-if` sur le rôle est légitime ici, et seulement ici
  *
  * > **Le rôle du lecteur choisit la route, jamais l'affichage** (§ 10.4).
@@ -61,39 +69,47 @@
  * lecture » (§ 11.1). Le composant n'y est pas monté.
  * ────────────────────────────────────────────────────────────────────
  */
-import { computed } from 'vue'
 import type { FichePersonneComplete } from '@/lib/api'
-import { useSession } from '@/composables/useSession'
+import { useGestesFiche } from './gestes'
 
-const { fiche } = defineProps<{ fiche: FichePersonneComplete }>()
+const { fiche, disposition = 'bandeau' } = defineProps<{
+  fiche: FichePersonneComplete
+  /** `bandeau` : les deux liens côte à côte (desktop). `barre` : le seul
+   *  « Proposer une modification », flexible, 44 px (barre mobile). */
+  disposition?: 'bandeau' | 'barre'
+}>()
 
-const { rattache, vueEmpruntee } = useSession()
+const { peutProposer } = useGestesFiche()
 
-const ouvert = computed(() => rattache.value && vueEmpruntee.value === null)
+/** Ce que disait le panneau d'avant, gardé en infobulle : la proposition part en
+ *  demande, personne ne modifie l'arbre directement. */
+const EXPLICATION =
+  'Votre proposition part en demande, qu’un administrateur valide ou refuse. En attendant, vous seul la voyez appliquée sur cette fiche.'
 </script>
 
 <template>
-  <div v-if="ouvert" id="proposition" class="flex flex-col gap-2">
-    <p class="m-0 text-sm text-attenue">
-      Une information vous paraît fausse ou incomplète&nbsp;? Personne ne modifie l’arbre
-      directement&nbsp;: votre proposition part en demande, qu’un administrateur valide ou
-      refuse. En attendant, vous seul la voyez appliquée sur cette fiche.
-    </p>
+  <template v-if="peutProposer">
+    <RouterLink
+      :to="{ name: 'proposition.modification', params: { id: fiche.id } }"
+      :title="EXPLICATION"
+      data-geste="proposer-modification"
+      class="inline-flex items-center justify-center rounded-champ border border-accent bg-accent px-3.5 font-semibold whitespace-nowrap text-fond transition-opacity hover:opacity-90"
+      :class="disposition === 'barre' ? 'h-11 min-w-0 flex-1 text-[15px]' : 'h-9 text-[13.5px]'"
+    >
+      Proposer une modification
+    </RouterLink>
 
-    <p class="m-0 flex flex-wrap items-center gap-2">
-      <RouterLink
-        :to="{ name: 'proposition.modification', params: { id: fiche.id } }"
-        class="inline-flex items-center rounded-champ border border-accent bg-accent px-3.5 py-1.5 text-sm font-semibold text-fond transition-opacity hover:opacity-90"
-      >
-        Proposer une modification
-      </RouterLink>
-
-      <RouterLink
-        :to="{ name: 'proposition.liens', params: { id: fiche.id } }"
-        class="inline-flex items-center rounded-champ border border-ligne px-3.5 py-1.5 text-sm font-semibold transition-colors hover:border-accent"
-      >
-        Ajouter parents, fratrie, conjoints ou enfants
-      </RouterLink>
-    </p>
-  </div>
+    <!-- Les liens de parenté sont une autre nature de demande (`ajout_lien`),
+         donc un autre formulaire : dit à côté, pour qu'on n'ait pas à deviner
+         qu'« ajouter le père » ne se trouve pas derrière « modification ». -->
+    <RouterLink
+      v-if="disposition === 'bandeau'"
+      :to="{ name: 'proposition.liens', params: { id: fiche.id } }"
+      title="Ajouter parents, fratrie, conjoints ou enfants"
+      data-geste="proposer-liens"
+      class="inline-flex h-9 items-center rounded-champ border border-ligne bg-panneau px-3.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors hover:border-accent"
+    >
+      Proposer des liens
+    </RouterLink>
+  </template>
 </template>

@@ -19,6 +19,7 @@
 import type { RouteRecordRaw } from 'vue-router'
 import type { NomDeDisposition } from '@/components/arbre/dispositions'
 import type { NiveauRequis } from './acces'
+import type { ParentDeDetail, Section } from '@/composables/entete'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -38,7 +39,22 @@ declare module 'vue-router' {
      * encore de bonnes raisons de s'en passer. Voir `components/arbre/dispositions/`.
      */
     disposition?: NomDeDisposition
+    /** L'onglet d'exploration allumé dans l'en-tête. Par défaut, déduit du nom
+     *  de route (`sectionDe`) : la fiche et les formulaires gardent « Arbre ». */
+    section?: Section
+    /** Écran de DÉTAIL : sur téléphone, « ‹ {libelle} » remplace le burger. */
+    parent?: ParentDeDetail
   }
+}
+
+const VERS_ARBRE: ParentDeDetail = { nom: 'arbre', libelle: 'Arbre' }
+
+/** L'onglet de l'en-tête pour une route, sans lire la route dans l'en-tête. */
+export function sectionDe(nom: string, meta: { section?: Section }): Section {
+  if (meta.section) return meta.section
+  if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires') return nom
+  if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
+  return 'autre'
 }
 
 /**
@@ -208,7 +224,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/personnes/:id(\\d+)',
     name: 'personne.detail',
     component: () => import('@/views/PersonneView.vue'),
-    meta: { acces: 'attente', titre: 'Fiche' },
+    meta: { acces: 'attente', titre: 'Fiche', parent: VERS_ARBRE },
   },
   {
     path: '/chronologie',
@@ -257,7 +273,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/demandes/:id(\\d+)',
     name: 'demande.detail',
     component: () => import('@/views/DemandeView.vue'),
-    meta: { acces: 'membre', titre: 'Demande' },
+    meta: { acces: 'membre', titre: 'Demande', parent: { nom: 'demandes.miennes', libelle: 'Mes demandes' } },
   },
   {
     // **La liste de ses propres demandes.**
@@ -297,7 +313,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/personnes/:id(\\d+)/proposer',
     name: 'proposition.modification',
     component: () => import('@/views/PropositionModificationView.vue'),
-    meta: { acces: 'membre', titre: 'Proposer une modification' },
+    meta: { acces: 'membre', titre: 'Proposer une modification', parent: { nom: 'arbre', libelle: 'Retour' } },
   },
   {
     // **Demander la suppression d'une fiche** (§ 6.4 quater).
@@ -315,7 +331,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/personnes/:id(\\d+)/supprimer',
     name: 'proposition.suppression',
     component: () => import('@/views/PropositionSuppressionView.vue'),
-    meta: { acces: 'membre', titre: 'Demander la suppression' },
+    meta: { acces: 'membre', titre: 'Demander la suppression', parent: { nom: 'arbre', libelle: 'Retour' } },
   },
   {
     // **Proposer des liens de parenté sur une fiche existante** (§ 6.4 bis).
@@ -333,7 +349,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/personnes/:id(\\d+)/liens',
     name: 'proposition.liens',
     component: () => import('@/views/PropositionLiensView.vue'),
-    meta: { acces: 'membre', titre: 'Proposer des liens' },
+    meta: { acces: 'membre', titre: 'Proposer des liens', parent: { nom: 'arbre', libelle: 'Retour' } },
   },
   {
     // Pas de `:id` : la personne n'existe pas encore, et n'aura d'identifiant
@@ -342,7 +358,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/personnes/proposer',
     name: 'proposition.creation',
     component: () => import('@/views/PropositionCreationView.vue'),
-    meta: { acces: 'membre', titre: 'Proposer une personne' },
+    meta: { acces: 'membre', titre: 'Proposer une personne', parent: VERS_ARBRE },
   },
 
   /* --- Administration -------------------------------------------- */

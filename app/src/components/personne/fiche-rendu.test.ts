@@ -124,12 +124,22 @@ describe('§ 13.2 — l’écran montre la valeur proposée ET la valeur validé
     // La valeur validée **reste dans le corps** : un lecteur qui ignore le
     // calque doit voir l'arbre validé, pas une proposition présentée comme
     // acquise.
-    expect(html).toContain('Valeur validée aujourd’hui')
     expect(html).toContain('Bourrache')
     expect(html).toContain('En attente de validation')
+    // Le calque est **à côté**, jamais à la place : la valeur validée vient
+    // d'abord, à sa place, puis le bloc du calque, qui porte la valeur proposée.
+    const validee = html.indexOf('data-valeur="validee"')
+    const calque = html.indexOf('data-calque')
+    expect(validee).toBeGreaterThan(-1)
+    expect(calque).toBeGreaterThan(validee)
+    expect(html.slice(validee, calque)).toContain('Bourrache')
+    expect(html.slice(validee, calque)).not.toContain('BOURRACHE')
+    expect(html.slice(calque)).toContain('BOURRACHE')
+    // « Proposé par {auteur} le {date} · Demande n° {id} ».
+    expect(html).toContain('Proposé par Opale Romarin')
+    expect(html).toContain('Demande n° 14')
     // `actuel` est accessible sans condition, dans le repli.
     expect(html).toContain('Valeur au dépôt de la demande')
-    expect(html).toContain('Opale Romarin')
   })
 
   it('annonce la caducité quand la fiche a bougé depuis le dépôt', async () => {

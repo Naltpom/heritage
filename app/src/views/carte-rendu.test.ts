@@ -17,7 +17,7 @@
  * ────────────────────────────────────────────────────────────────────
  */
 import { describe, expect, it, vi } from 'vitest'
-import { createSSRApp, defineComponent, h } from 'vue'
+import { createSSRApp, defineComponent, h, type Component } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 
 // `useRouter` lève une injection manquante hors d'une application routée. On le
@@ -27,6 +27,7 @@ vi.mock('vue-router', () => ({
 }))
 
 import CarteView from './CarteView.vue'
+import BarreOutilsCarte from '@/components/carte/BarreOutilsCarte.vue'
 
 /** Les deux `RouterLink` du panneau ne se résolvent pas hors d'une application
  *  routée. Même remplacement que dans `arbre-revalidation.test.ts`. */
@@ -94,7 +95,7 @@ describe('la barre d’outils est là dès le premier rendu', () => {
   it('part sur le fond sobre, celui qui ne parle à personne', async () => {
     /*
      * La règle qui compte : élargir la CSP et s'en servir sont deux choses
-     * distinctes. Tant que « Fond sobre » est la pastille enfoncée, aucune
+     * distinctes. Tant que « Fond sobre » est le bouton enfoncé, aucune
      * requête ne sort vers un tiers — et c'est l'état de départ.
      */
     const html = await rendreLaVue()
@@ -115,7 +116,7 @@ describe('la barre d’outils est là dès le premier rendu', () => {
 
   it('annonce ce que coûte le fond détaillé AVANT qu’on y touche', async () => {
     /* Le dire après l'appui ne servirait plus à rien. L'hôte est donc nommé
-       dans l'infobulle de la pastille, dès le premier rendu. */
+       dans l’infobulle du bouton « Fond détaillé », dès le premier rendu. */
     const html = await rendreLaVue()
 
     expect(html).toContain('openstreetmap.org')
@@ -151,5 +152,45 @@ describe('le tiroir des filtres', () => {
     const html = await rendreLaVue()
 
     expect(html).toContain('id="tiroir-outils"')
+  })
+})
+
+describe('la barre d’écran de la carte', () => {
+  function rendreLaBarre(supplement: Record<string, unknown> = {}): Promise<string> {
+    const proprietes: Record<string, unknown> = {
+      actifs: new Set(['naissance']),
+      resume: null,
+      mode: 'date',
+      fond: 'vectoriel',
+      nonSitues: 12,
+      chargement: false,
+      ...supplement,
+    }
+    return renderToString(createSSRApp({ render: () => h(BarreOutilsCarte as Component, proprietes) }))
+  }
+
+  it('n’a pas de bouton Filtres sur bureau : tout tient dans la barre', async () => {
+    const html = await rendreLaBarre()
+    expect(html).not.toMatch(/>\s*Filtres\s*</)
+  })
+
+  it('compte les lieux non situés, et ne dit rien quand il n’y en a pas', async () => {
+    expect(await rendreLaBarre()).toContain('12 sans lieu situé')
+    expect(await rendreLaBarre({ nonSitues: 0 })).not.toContain('sans lieu situé')
+  })
+
+  it('présente Fond sobre · Fond détaillé en segmenté, avec l’hôte dans l’infobulle', async () => {
+    const html = await rendreLaBarre()
+    expect(html).toMatch(/role="group"[^>]*aria-label="Fond de carte"/)
+    expect(html).toMatch(/aria-pressed="false"[^>]*title="Charge des images depuis openstreetmap\.org/)
+  })
+
+  it('écrit l’avertissement sous la barre une fois le fond détaillé choisi', async () => {
+    /* Avant l'appui, le survol et le focus le font paraître (état local, hors
+       d'atteinte du rendu SSR) ; choisi, il reste. */
+    const avant = await rendreLaBarre()
+    expect(avant).not.toContain('role="note"')
+    const apres = await rendreLaBarre({ fond: 'tuiles' })
+    expect(apres).toMatch(/role="note"[^>]*>[^<]*openstreetmap\.org : ce serveur voit alors/)
   })
 })

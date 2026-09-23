@@ -18,19 +18,32 @@
  * Conséquence pratique : ce composant marche tel quel sur une fiche réduite. Il
  * y rend trois lignes — sexe, branche, génération —, ce qui est exactement ce
  * que les sept clés du § 11.1 permettent d'écrire.
+ *
+ * `seulement` restreint les lignes à une liste de clés — pour la carte réduite
+ * de la page, qui n'écrit que Sexe et Génération. Ce filtre ne peut **que
+ * retirer** : une clé listée mais absente de la charge utile n'a toujours pas de
+ * ligne. Ce n'est pas un filtre de confidentialité (le serveur l'a déjà fait),
+ * c'est un choix de mise en page.
  */
 import { computed } from 'vue'
 import type { FichePersonne } from '@/lib/api'
 import { construireLignes } from './champs'
 import LigneChamp from './LigneChamp.vue'
 
-const { fiche } = defineProps<{ fiche: FichePersonne }>()
+const { fiche, seulement } = defineProps<{ fiche: FichePersonne; seulement?: readonly string[] }>()
 
-const lignes = computed(() => construireLignes(fiche))
+const lignes = computed(() => {
+  const toutes = construireLignes(fiche)
+  return seulement === undefined ? toutes : toutes.filter((ligne) => seulement.includes(ligne.cle))
+})
 </script>
 
 <template>
-  <dl class="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2 text-sm">
+  <!-- Grille `140px 1fr`, gap `10px 16px` (maquette 4c) ; sur mobile, la
+       colonne des étiquettes prend sa largeur naturelle. -->
+  <dl
+    class="m-0 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2.5 text-sm md:grid-cols-[140px_minmax(0,1fr)]"
+  >
     <LigneChamp v-for="ligne in lignes" :key="ligne.cle" :ligne="ligne" />
   </dl>
 </template>

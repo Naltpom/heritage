@@ -253,3 +253,61 @@ export function messageQuandVide(filtre: StatutDemande | ''): string {
   const libelle = FILTRES.find((choix) => choix.valeur === filtre)?.libelle ?? ''
   return `Aucune de vos demandes n’est dans l’état « ${libelle.toLowerCase()} ». Vos autres demandes sont toujours là : choisissez « Toutes ».`
 }
+
+/* ------------------------------------------------------------------ */
+/* Les compteurs du segmenté — ce qu'on sait, et rien de plus          */
+/* ------------------------------------------------------------------ */
+
+/** Le compte connu de chaque filtre. Une clé **absente** veut dire « inconnu » :
+ *  le segmenté n'affiche alors aucun nombre, plutôt qu'un zéro inventé. */
+export type ComptesParFiltre = Partial<Record<StatutDemande | '', number>>
+
+/**
+ * Ce qu'une réponse de `GET /api/demandes` apprend sur les compteurs.
+ *
+ * **Aucun appel de plus.** Le serveur n'a pas de route de comptes ; on ne lit
+ * donc que ce que l'écran reçoit déjà :
+ *
+ * - le `total` d'une liste filtrée est le compte **exact** de ce filtre-là ;
+ * - la liste **non filtrée**, quand elle est **entière** (`total` égal au nombre
+ *   d'éléments reçus), se ventile par état : chaque filtre y trouve son compte,
+ *   zéro compris. Tronquée — plus de 100 demandes —, elle ne dit que le total :
+ *   ventiler cent éléments sur cent quarante donnerait des comptes faux, et un
+ *   compteur faux est pire qu'un compteur absent.
+ *
+ * Le résultat se **fusionne** avec ce qu'on savait déjà : changer de filtre ne
+ * fait pas oublier les autres comptes.
+ */
+export function comptesDepuisListe(
+  filtre: StatutDemande | '',
+  elements: readonly ResumeDemande[],
+  total: number,
+): ComptesParFiltre {
+  const comptes: ComptesParFiltre = { [filtre]: total }
+  if (filtre !== '' || total !== elements.length) return comptes
+
+  for (const choix of FILTRES) {
+    if (choix.valeur === '') continue
+    comptes[choix.valeur] = elements.filter((demande) => demande.status === choix.valeur).length
+  }
+  return comptes
+}
+
+/**
+ * Les choix du segmenté, avec leur compte.
+ *
+ * Le handoff n'en montre que cinq — Toutes, En attente, Validées, Refusées,
+ * Devenues caduques. **« Brouillons » n'est pas retiré pour autant** : il
+ * n'apparaît que s'il a quelque chose à montrer (compte connu non nul), ou s'il
+ * est le filtre en cours. Un bouton qui mène toujours à une liste vide
+ * encombre ; un filtre qui disparaît sous les pieds de celui qui l'a choisi
+ * serait pire.
+ */
+export function choixDuSegmente(
+  comptes: ComptesParFiltre,
+  filtre: StatutDemande | '',
+): { valeur: StatutDemande | ''; libelle: string; compte: number | undefined }[] {
+  return FILTRES.filter(
+    (choix) => choix.valeur !== 'brouillon' || filtre === 'brouillon' || (comptes.brouillon ?? 0) > 0,
+  ).map((choix) => ({ valeur: choix.valeur, libelle: choix.libelle, compte: comptes[choix.valeur] }))
+}

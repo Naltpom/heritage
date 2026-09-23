@@ -45,6 +45,8 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
+import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
+import OngletsAdministration from './OngletsAdministration.vue'
 import LienInvitation from '@/components/administration/LienInvitation.vue'
 import { ecrituresSuspendues, infobulleSuspension, motifSuspension } from '@/components/administration/ecriture'
 
@@ -161,7 +163,14 @@ function dateLisible(valeur: string | null): string {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
+  <!-- La barre d'écran de l'administration : les trois sections en onglets,
+       et rien d'autre ici — pas de filtre, donc pas de feuillet ni de bouton
+       filtres sur téléphone. Voir `OngletsAdministration`. -->
+  <BarreEcran ecran="Administration" :reinitialisable="false">
+    <template #vue><OngletsAdministration /></template>
+  </BarreEcran>
+
+  <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6">
     <p
       v-if="raisonSuspension !== null"
       class="rounded-panneau border border-accent bg-accent-doux px-3.5 py-3 text-sm text-accent"
