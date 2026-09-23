@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
+    "test:rapport": "vitest run --reporter=default --reporter=json --outputFile.json=var/vitest.json",
     "test:watch": "vitest"
   },
   "dependencies": {

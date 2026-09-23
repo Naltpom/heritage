@@ -7,7 +7,7 @@
 #   1. phpstan niveau 6, zéro erreur          (travail « api »)
 #   2. phpunit                                 (travail « api »)
 #   3. vue-tsc --noEmit                        (travail « app »)
-#   4. vitest                                  (travail « app »)
+#   4. vitest, et 4 bis : ses sauts sont déclarés  (travail « app »)
 #   5. npm run build                           (travail « app »)
 #   6. docker compose build, les deux images   (travail « docker »)
 #   7. la chaîne de déploiement se tient       (travail « deploiement »)
@@ -18,6 +18,14 @@
 # rendrait le même vert qu'avant, pour une machine de plus. La base est peuplée d'un
 # arbre d'essai **inventé** (`api/tests/Gedcom/fixtures/arbre-essai.ged`) : le dépôt
 # est public et l'ADR 0006 interdit toute personne réelle.
+#
+# LE TRAVAIL « APP » A LA MÊME GARDE DEPUIS LE 23 SEPTEMBRE 2026, et il lui a
+# manqué trois jours de plus qu'à l'API. La porte 4 bis relit le rapport JSON de
+# `vitest` et exige que les sauts soient **déclarés** — pas qu'ils soient nuls,
+# ce qui serait une exigence qu'on ne peut pas satisfaire : les 23 cas du bloc
+# « sur le graphe réel » demandent un relevé qui porte des personnes vivantes et
+# ne peut pas entrer dans le dépôt. Ce qu'elle interdit, c'est le **24ᵉ**, et le
+# budget périmé. Elle est née rouge, vue rouge quatre fois, puis mise au vert.
 #
 # LA PORTE 4 A MANQUÉ JUSQU'AU 20 SEPTEMBRE 2026, et son absence ne se voyait
 # pas : le travail « app » s'appelait « vue-tsc + build », ce qu'il faisait
@@ -215,8 +223,27 @@ jobs:
       #
       # `npm test` est `vitest run` (et non `vitest`, qui resterait en
       # surveillance et ferait expirer le travail au bout de 15 minutes).
+      #
+      # `npm run test:rapport` ajoute le rapport JSON que lit la porte 4 bis. Le
+      # rapporteur `default` est gardé à côté : sans lui, la sortie du travail
+      # deviendrait illisible pour un humain.
       - name: Porte 4 — tests unitaires (vitest)
-        run: npm test
+        run: npm run test:rapport
+
+      # Porte 4 bis. **Le pendant front de la porte 2 bis, et il manquait.**
+      #
+      # Une porte 4 verte ne dit pas combien de cas elle a exécutés. 23 d'entre
+      # eux sont derrière `describe.runIf(HERITAGE_GRAPHE_CLIENT !== undefined)`,
+      # que ce fichier ne posait nulle part : ils ne tombaient pas, ils
+      # disparaissaient du décompte. En les faisant tourner à la main, un cas est
+      # rouge sur `main` depuis un moment — et une branche candidate à la fusion
+      # en ajoutait un second tout en rendant les cinq portes vertes.
+      #
+      # `if: always()` : quand la porte 4 tombe, c'est là qu'on veut savoir si
+      # elle est tombée parce qu'un cas a échoué ou parce qu'aucun n'a tourné.
+      - name: Porte 4 bis — les cas front ont TOURNÉ, et les sauts sont déclarés
+        if: always()
+        run: node ../.github/scripts/verifier-les-tests-front.mjs
 
       # Porte 5. Le typage peut passer alors que le build casse (import d'un
       # actif absent, plugin Vite mal configuré) : ce sont deux portes, pas une.
