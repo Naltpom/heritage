@@ -224,6 +224,45 @@ vieillirait d'un an par an, en silence.
 semer la ligne à l'installation aurait figé la valeur du jour de l'installation, ce qui
 est l'inverse du but d'un réglage.
 
+### 4 quater. Ce qu'on refuse d'une réponse du modèle
+
+Le modèle ne décide de rien, mais il **écrit**, et une phrase écrite est servie telle
+quelle. Trois contrôles la filtrent avant qu'elle n'atteigne un membre, et un seul des
+trois compte vraiment.
+
+> **La phrase doit NOMMER la personne dont elle parle.** C'est le seul défaut qu'un
+> modèle peut produire ici et qui **ne se voit pas** : une question parfaitement écrite,
+> parfaitement plausible, qui porte sur quelqu'un d'autre. Le membre répond de bonne foi,
+> la réponse entre dans la file au nom de la mauvaise fiche, et l'administrateur valide
+> un fait juste sur la mauvaise personne.
+
+Le contrôle est bête — le nom du sujet doit figurer dans le texte — et il tient. La
+consigne l'exige déjà ; **une consigne n'est pas une garantie**. Il ne prouve pas que la
+phrase pose la bonne *question* ; rien d'automatique ne le prouverait. Il attrape le cas
+dont la conséquence est irréversible.
+
+Les deux autres sont de forme : une phrase, pas un paragraphe — moins de 280 signes,
+sans retour à la ligne. Toute phrase refusée retombe sur le gabarit, **silencieusement**,
+et porte donc `redacteur = regles`.
+
+*Une référence que le modèle rendrait sans qu'on la lui ait donnée est ignorée* : il ne
+peut pas ouvrir de question.
+
+### 4 quinquies. Le coupe-circuit, et pourquoi il n'alerte pas
+
+Trois échecs consécutifs, et l'on cesse d'appeler pendant cinq minutes ; un succès remet
+le compteur à zéro. Sans lui, un tiers tombé coûte **un aller-retour raté par lacune
+nouvelle, à chaque ouverture, par chaque membre** — et le symptôme n'est pas « le tiers
+est en panne », c'est « l'application est lente ».
+
+Un compteur en cache, avec une durée de vie : ni table, ni tâche de fond, ni nettoyage.
+Un cache vidé se lit « passant », ce qui est le bon défaut — perdre la mémoire d'une
+panne coûte un aller-retour, garder par erreur la mémoire d'une panne réparée coûterait
+des heures de repli silencieux.
+
+**Il n'alerte jamais.** Ouvert ou fermé, la page sert des questions. Ce qui se lit, quand
+on veut savoir, est `SELECT redacteur, count(*) FROM qst_question GROUP BY 1`.
+
 ### 5. Palier payant / Vertex AI, jamais le palier gratuit
 
 L'accès se fait par l'**offre payante** de l'API Gemini (clé d'API payante ou Vertex AI sur
