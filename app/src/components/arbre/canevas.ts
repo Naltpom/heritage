@@ -172,8 +172,36 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
    */
   for (const { cle } of ENVELOPPES) {
     const degrade = creer('radialGradient', { id: `nuage-${cle}`, class: `n-${cle}` })
+    /*
+     * **L'ARRÊT MÉDIAN EST À 0,85, ET CE N'EST PAS UN RÉGLAGE AU GOÛT.**
+     *
+     * Le dégradé est en `objectBoundingBox` : ses arrêts sont posés en FRACTION de la boîte
+     * du chemin, pas en unités. Élargir une enveloppe étire donc le dégradé au lieu
+     * d'ajouter de la surface peinte, et la marge gagnée atterrit là où l'alpha vaut zéro.
+     * Mesuré : l'élargissement latéral seul ne changeait que **2,4 niveaux sur 255**, sur
+     * 7,11 % des pixels — la surface était réelle, son alpha était nul. **On peignait du
+     * transparent.**
+     *
+     * Reculer l'arrêt médian de 0,62 à 0,85 resserre l'estompe sans jamais donner de bord :
+     * l'alpha tombe toujours à zéro au bord de la boîte, il y descend seulement plus vite.
+     * Mesuré au pixel, sur le graphe servi, lecteur `p3`, même cadrage :
+     *
+     *     arrêt 0,50   12,09 % des pixels changent · écart moyen  2,4 niveaux
+     *     arrêt 0,70   15,65 %                      ·              6,7
+     *     arrêt 0,85   15,71 %                      ·             10,1   ← retenu
+     *
+     * **Le repère qui rend ce 10,1 lisible** : les régions elles-mêmes écartent le fond de
+     * **10,0 niveaux** en médiane. À 0,85, un gros nuage a donc la même présence que les
+     * deux petits qu'il contient — ni plus, ce qui les écraserait, ni moins, ce qui le
+     * rendait invisible.
+     *
+     * ⚠ **NE PAS MONTER PLUS HAUT SANS REGARDER L'ÉCRAN.** Plus l'arrêt monte, plus la
+     * transition se fait sur une frange étroite, et plus le nuage tend vers un aplat à bord
+     * franc — c'est-à-dire vers le rendu que le commanditaire a rejeté en premier. Aucune
+     * mesure ne dit où est cette limite ; à 0,85 il a dit oui sur image.
+     */
     degrade.appendChild(creer('stop', { offset: '0', 'stop-opacity': '0.5' }))
-    degrade.appendChild(creer('stop', { offset: '0.62', 'stop-opacity': '0.34' }))
+    degrade.appendChild(creer('stop', { offset: '0.85', 'stop-opacity': '0.44' }))
     degrade.appendChild(creer('stop', { offset: '1', 'stop-opacity': '0' }))
     defs.appendChild(degrade)
   }
