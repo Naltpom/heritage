@@ -52,9 +52,12 @@ import {
   trajectoire,
   versMonde,
   zoomAutour,
+  borner as bornerEchelle,
+  centrerSur,
   type Cadrage,
   type Canevas,
 } from '@/histoire/vue'
+import { memoriserVue, reprendreVue, type VueMemorisee } from '@/histoire/retour'
 
 const estMobile = useEstMobile()
 const { ouvert: tiroirOuvert, fermerTiroirs, unTiroirEstOuvert } = useTiroirs()
@@ -76,6 +79,8 @@ async function charger(): Promise<void> {
     disposition.value = disposerLignees(graphe)
     nonPlaces.value = graphe.calque.nonPlaces
     await nextTick()
+    // Retour d'une fiche : la vue quittée, exactement ; sinon l'arbre ajusté.
+    vueAReprendre = reprendreVue()
     mesurer()
     ajuster()
   } catch (e) {
@@ -119,10 +124,42 @@ function mesurer(): void {
   if (el) taille.value = { l: el.clientWidth, h: el.clientHeight }
 }
 
+let vueAReprendre: VueMemorisee | null = null
+
+/** Le premier cadrage : la vue reprise au retour d'une fiche, sinon ajusté à la largeur. */
 function ajuster(): void {
   if (!disposition.value || taille.value.l === 0) return
   premierAjustement = false
+  const v = vueAReprendre
+  vueAReprendre = null
+  if (v) {
+    reprendre(v)
+    return
+  }
   cadrage.value = ajusterLargeur(canevas.value, gouttiere.value)
+}
+
+function reprendre(v: VueMemorisee): void {
+  const d = disposition.value!
+  const c = canevas.value
+  cadrage.value = centrerSur(bornerEchelle(v.s, c), c, v.x, v.y, taille.value.l / 2, taille.value.h / 2)
+  selection.value = v.selection !== null && d.parId.has(v.selection) ? v.selection : null
+  const quarts = new Set<string>(d.quarts.map((q) => q.branche))
+  filtres.masquees = v.filtres.masquees.filter((b): b is BrancheDeQuart => quarts.has(b))
+  filtres.ligneDirecte = v.filtres.ligneDirecte
+  filtres.vivants = v.filtres.vivants
+}
+
+/** Au départ vers une fiche : ce qu'il faut pour revenir exactement ici. */
+function memoriserLaVue(): void {
+  const c = centreMonde()
+  memoriserVue({
+    x: c.x,
+    y: c.y,
+    s: cadrage.value.s,
+    selection: selection.value,
+    filtres: { masquees: [...filtres.masquees], ligneDirecte: filtres.ligneDirecte, vivants: filtres.vivants },
+  })
 }
 
 /* Le vol animé. Tout geste l'interrompt. */
@@ -1104,6 +1141,7 @@ onBeforeUnmount(() => {
               v-if="ficheChoisie.noeud.personId !== null"
               :to="{ name: 'personne.detail', params: { id: ficheChoisie.noeud.personId } }"
               class="flex h-9 flex-1 items-center justify-center rounded-champ bg-accent font-semibold text-fond"
+              @click="memoriserLaVue"
             >
               Fiche
             </RouterLink>
@@ -1111,6 +1149,7 @@ onBeforeUnmount(() => {
               v-else-if="ficheChoisie.noeud.demandeId !== undefined"
               :to="{ name: 'demande.detail', params: { id: ficheChoisie.noeud.demandeId } }"
               class="flex h-9 flex-1 items-center justify-center rounded-champ bg-accent font-semibold text-fond"
+              @click="memoriserLaVue"
             >
               Demande
             </RouterLink>

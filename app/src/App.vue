@@ -14,6 +14,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import EnTeteApplication from '@/components/mise-en-page/EnTeteApplication.vue'
 import BandeauPortrait from '@/components/mise-en-page/BandeauPortrait.vue'
+import InstallationApplication from '@/components/mise-en-page/InstallationApplication.vue'
 import BandeauRegime from '@/components/mise-en-page/BandeauRegime.vue'
 // Le créneau `quitter-vue` du bandeau existait, vide : la sortie de la bascule
 // doit être là où le bandeau est, c'est-à-dire partout. Un administrateur qui a
@@ -38,6 +39,7 @@ const avecCadre = computed(() => route.meta.cadre !== false)
     <template v-if="avecCadre">
       <EnTeteApplication />
       <BandeauPortrait />
+      <InstallationApplication />
       <BandeauRegime>
         <template #quitter-vue>
           <QuitterVueEmpruntee />

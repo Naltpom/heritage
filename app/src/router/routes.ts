@@ -82,12 +82,12 @@ export const routes: RouteRecordRaw[] = [
   },
 
   {
-    // Tout l'arbre à niveaux de détail : plus on dézoome, moins on écrit.
-    // Écran autonome, avec le cadre de l'application (burger et filtres de l'en-tête).
+    // L'ancienne adresse de l'arbre à niveaux de détail, devenu `/arbre` : les
+    // liens déjà partagés continuent de marcher.
     path: '/histoire',
     name: 'histoire',
-    component: () => import('@/views/HistoireView.vue'),
-    meta: { acces: 'attente', titre: 'Histoire' },
+    redirect: { name: 'arbre' },
+    meta: { acces: 'attente', titre: 'Arbre' },
   },
 
   /* --- Entrée : connexion et inscription (§ 2, § 4) --------------- */
@@ -185,11 +185,21 @@ export const routes: RouteRecordRaw[] = [
    * `optionsDepuis()`.
    */
   {
+    // **`/arbre` sert l'arbre à niveaux de détail** (`HistoireView`) : tout
+    // l'arbre d'un coup, plus on dézoome, moins on écrit. Le NOM `arbre` ne
+    // change pas — `routeParDefaut()` et les notifications y renvoient.
     path: '/arbre',
     name: 'arbre',
+    component: () => import('@/views/HistoireView.vue'),
+    meta: { acces: 'attente', titre: 'Arbre' },
+  },
+  {
+    // L'écran précédent, disposition `ressorts`, gardé à portée de main.
+    path: '/arbre/ancien',
+    name: 'arbre.ancien',
     component: () => import('@/views/ArbreView.vue'),
     props: dispositionEnProp,
-    meta: { acces: 'attente', titre: 'Arbre', disposition: 'ressorts' },
+    meta: { acces: 'attente', titre: 'Arbre (ancien)', disposition: 'ressorts' },
   },
   {
     // `{id}` est un entier : un identifiant provisoire (`#12/p1`) ne correspond

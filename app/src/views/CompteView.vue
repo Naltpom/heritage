@@ -42,6 +42,7 @@ import ChampTexte from '@/components/base/ChampTexte.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import ChoixPortrait from '@/components/medias/ChoixPortrait.vue'
+import InstallationApplication from '@/components/mise-en-page/InstallationApplication.vue'
 
 const { session, rattache } = useSession()
 
@@ -237,6 +238,17 @@ function dateLisible(iso: string): string {
           @fermer="choixPortraitOuvert = false"
           @depose="portraitDepose = true"
         />
+      </section>
+    </PanneauBase>
+
+    <PanneauBase>
+      <section class="flex flex-col gap-3 p-4">
+        <h2 class="text-base font-semibold">Application</h2>
+        <InstallationApplication forme="panneau" />
+        <p class="m-0 text-xs text-attenue">
+          Déjà installée, ou navigateur qui ne le propose pas ? Ouvrez le menu du navigateur :
+          « Installer l'application » ou « Ajouter à l'écran d'accueil ».
+        </p>
       </section>
     </PanneauBase>
 
