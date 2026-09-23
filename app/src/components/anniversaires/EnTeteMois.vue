@@ -1,20 +1,23 @@
 <script setup lang="ts">
 /**
- * Le titre du mois, et les trois commandes qui le changent.
+ * Le titre du mois, et les trois commandes qui le changent : ‹ {mois} › et
+ * « Aujourd’hui ».
  *
  * ────────────────────────────────────────────────────────────────────
- * **POURQUOI LA NAVIGATION N'EST PAS DANS LA BARRE D'OUTILS.**
+ * **OÙ VIT LA NAVIGATION, ET POURQUOI PAS DANS LE FEUILLET.**
  *
- * `TiroirOutils` range la barre derrière un bouton et un voile noir sous `md` :
- * c'est exactement ce qu'il faut pour des filtres, qu'on règle une fois. Les
- * deux flèches, elles, sont le geste **principal** de cet écran, et on les
- * actionne dix fois de suite en regardant le résultat. Dans le tiroir, chaque
- * pression peindrait un calendrier que le voile cache — ou demanderait
- * d'ouvrir, presser, refermer, regarder, rouvrir.
+ * Depuis la refonte de l'en-tête (handoff § 2), ce composant n'est plus posé
+ * au-dessus de la grille : il est la **vue** de la barre d'écran — l'emplacement
+ * `#vue` de `BarreEcran`, via `BarreOutilsAnniversaires`. La grille, elle, ne
+ * garde que ses sept en-têtes de colonne.
  *
- * Elles vivent donc ici, à côté du nom du mois qu'elles changent, visibles à
- * toutes les largeurs. C'est le seul point où cet écran s'écarte du partage
- * habituel « tout ce qui règle l'affichage va dans la barre ».
+ * La raison qui le tenait hors de l'ancien tiroir reste entière. Le feuillet
+ * range les filtres derrière un bouton et un voile noir sous `md` : c'est ce
+ * qu'il faut pour des réglages qu'on fait une fois. Les deux flèches, elles,
+ * sont le geste **principal** de cet écran, et on les actionne dix fois de
+ * suite en regardant le résultat. Or la vue de `BarreEcran` est justement ce qui
+ * **reste visible** sur téléphone, au rang 2 sous l'en-tête : les flèches y
+ * sont à portée de pouce (42 px de haut, 44 px de large), jamais sous un voile.
  * ────────────────────────────────────────────────────────────────────
  *
  * **`aria-live="polite"` sur le titre.** Changer de mois ne déplace pas le
@@ -44,18 +47,18 @@ const titre = computed(() => titreDuMois({ annee, mois }))
 const titreAvant = computed(() => titreDuMois(moisPrecedent({ annee, mois })))
 const titreApres = computed(() => titreDuMois(moisSuivant({ annee, mois })))
 
-const COMMANDE =
-  'cursor-pointer rounded-pastille border border-ligne bg-fond px-2.5 py-1 text-xs text-attenue hover:border-accent'
+const FLECHE =
+  'flex h-8 w-8 flex-none cursor-pointer items-center justify-center text-attenue hover:text-texte max-md:h-10 max-md:w-11 max-md:text-lg'
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center justify-between gap-2 pb-2">
-    <h2 class="text-base font-semibold tracking-tight" aria-live="polite">{{ titre }}</h2>
-
-    <div class="flex items-center gap-1.5">
+  <div class="flex items-center gap-2.5 max-md:w-full">
+    <div
+      class="flex items-center rounded-[8px] border border-ligne bg-panneau max-md:h-[42px] max-md:flex-1 max-md:bg-fond"
+    >
       <button
         type="button"
-        :class="COMMANDE"
+        :class="FLECHE"
         :title="`Mois précédent — ${titreAvant} (flèche gauche)`"
         :aria-label="`Mois précédent — ${titreAvant}`"
         @click="emit('precedent')"
@@ -63,18 +66,16 @@ const COMMANDE =
         ‹
       </button>
 
-      <button
-        type="button"
-        :class="COMMANDE"
-        title="Revenir au mois courant (touche Origine)"
-        @click="emit('aujourdhui')"
+      <h2
+        class="min-w-[120px] px-2.5 text-center text-[13.5px] font-semibold capitalize max-md:flex-1 max-md:text-[15px]"
+        aria-live="polite"
       >
-        Aujourd’hui
-      </button>
+        {{ titre }}
+      </h2>
 
       <button
         type="button"
-        :class="COMMANDE"
+        :class="FLECHE"
         :title="`Mois suivant — ${titreApres} (flèche droite)`"
         :aria-label="`Mois suivant — ${titreApres}`"
         @click="emit('suivant')"
@@ -82,5 +83,14 @@ const COMMANDE =
         ›
       </button>
     </div>
+
+    <button
+      type="button"
+      class="flex-none cursor-pointer text-[13px] font-semibold text-accent hover:underline max-md:h-[42px] max-md:px-1"
+      title="Revenir au mois courant (touche Origine)"
+      @click="emit('aujourdhui')"
+    >
+      Aujourd’hui
+    </button>
   </div>
 </template>

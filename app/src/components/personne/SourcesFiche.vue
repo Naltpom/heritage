@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /**
- * Ce qui appuie la fiche : les faits, les sources, les notes.
+ * Ce qui appuie la fiche : les sources et les notes — l'onglet « Sources et
+ * notes » de la page. Les faits, eux, sont passés dans l'onglet Identité
+ * (`FaitsFiche.vue`) : ils disent ce qu'a été la personne, pas ce qui le prouve.
  *
  * **Les citations sont triées par `appui` décroissant, et non par `quay`.**
  *
@@ -35,14 +37,10 @@
  * dans sa réponse. Voir l'en-tête de `LoupeMedia.vue` : une URL devinée
  * court-circuiterait l'endroit où le serveur décide, et rendrait une image
  * cassée là où il faut un message.
- *
- * Les dates passent par `rendreDate()` — `texte` puis `raw`, jamais une
- * recomposition depuis `min` et `max` (§ 14).
  */
 import { computed } from 'vue'
 import type { CitationDeFiche, FichePersonneComplete } from '@/lib/api'
 import type { CibleLoupe } from '@/components/medias/medias'
-import { rendreDate } from './champs'
 
 const { fiche } = defineProps<{ fiche: FichePersonneComplete }>()
 
@@ -74,23 +72,6 @@ const PASTILLE: Record<CitationDeFiche['appui'], string> = {
 
 <template>
   <div class="flex flex-col gap-5 text-sm">
-    <!-- Faits ---------------------------------------------------- -->
-    <section v-if="fiche.faits.length > 0">
-      <h3 class="mb-2 text-[11px] tracking-wider text-attenue uppercase">Faits</h3>
-      <ul class="m-0 list-none p-0">
-        <li v-for="fait in fiche.faits" :key="fait.id" class="py-0.5">
-          <!-- `type` est une valeur du modèle (`residence`, `profession`…) :
-               affichée telle quelle quand aucun libellé ne l'accompagne. -->
-          <span>{{ fait.label ?? fait.type.replace(/_/g, ' ') }}</span>
-          <span v-if="fait.happened !== null" class="text-xs text-attenue">
-            — {{ rendreDate(fait.happened, 'date inconnue').principal }}
-            <template v-if="fait.happened.place"> — {{ fait.happened.place }}</template>
-          </span>
-          <span v-if="fait.address" class="block text-xs text-attenue">{{ fait.address }}</span>
-        </li>
-      </ul>
-    </section>
-
     <!-- Sources -------------------------------------------------- -->
     <section v-if="citations.length > 0">
       <h3 class="mb-2 text-[11px] tracking-wider text-attenue uppercase">
@@ -178,10 +159,10 @@ const PASTILLE: Record<CitationDeFiche['appui'], string> = {
     </section>
 
     <p
-      v-if="fiche.faits.length === 0 && citations.length === 0 && fiche.notes.length === 0"
+      v-if="citations.length === 0 && fiche.notes.length === 0"
       class="m-0 text-attenue italic"
     >
-      Rien n’appuie encore cette fiche : ni fait, ni source, ni note.
+      Rien n’appuie encore cette fiche : ni source, ni note.
     </p>
   </div>
 </template>

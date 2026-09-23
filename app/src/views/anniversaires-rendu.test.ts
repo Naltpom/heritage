@@ -412,6 +412,8 @@ describe('la barre d’outils', () => {
       actifs: NAISSANCES,
       resume: RESUME,
       chargement: false,
+      annee: 2026,
+      mois: 3,
     })
 
     expect(html).toContain('<details')
@@ -426,6 +428,8 @@ describe('la barre d’outils', () => {
       actifs: NAISSANCES,
       resume: RESUME,
       chargement: false,
+      annee: 2026,
+      mois: 3,
     })
       .then((rendu) => rendu.replace(/\s+/g, ' '))
 
@@ -440,6 +444,8 @@ describe('la barre d’outils', () => {
       actifs: NAISSANCES,
       resume: RESUME,
       chargement: false,
+      annee: 2026,
+      mois: 3,
     })
 
     expect(html).toMatch(/<button[^>]*disabled[^>]*title="Aucun événement de ce genre/)
@@ -450,23 +456,52 @@ describe('la barre d’outils', () => {
       actifs: NAISSANCES,
       resume: null,
       chargement: true,
+      annee: 2026,
+      mois: 3,
     })
 
     expect(html).not.toContain('<details')
   })
 
-  it('entre dans le tiroir : aucune bordure ni fond ne lui reste sous `md`', async () => {
-    /* La condition posée par `TiroirOutils` — le décor appartient à l'hôte. */
+  it('porte la navigation du mois dans sa vue, et les genres dans ses pastilles', async () => {
+    /*
+     * LA REFONTE TENUE (handoff § 2). Les flèches ont quitté le haut de la
+     * grille pour la barre d'écran : leur emplacement est la vue de
+     * `BarreEcran`, qui reste visible sur téléphone — jamais le feuillet, où
+     * chaque pression peindrait un calendrier caché par le voile.
+     */
     const html = await rendre(BarreOutilsAnniversaires, {
       actifs: NAISSANCES,
       resume: RESUME,
       chargement: false,
-    })
-    const jetons = (/<div class="([^"]*)"/.exec(html)?.[1] ?? '').split(/\s+/)
+      annee: 2026,
+      mois: 3,
+    }).then((rendu) => rendu.replace(/\s+/g, ' '))
 
-    expect(jetons).toContain('max-md:border-b-0')
-    expect(jetons).toContain('max-md:bg-transparent')
-    expect(jetons).toContain('max-md:px-0')
+    expect(html).toContain('aria-label="Mois précédent — février 2026"')
+    expect(html).toContain('aria-label="Mois suivant — avril 2026"')
+    expect(html).toContain('Aujourd’hui')
+    expect(html).toContain('aria-live="polite"')
+    expect(html).toContain('224 événements datés')
+    expect(html).toContain('166 sans jour connu ▾')
+    expect(html).not.toContain('<aside')
+  })
+
+  it('a un feuillet sur téléphone, mais aucun bouton Filtres sur bureau', async () => {
+    /* Sur bureau, les genres sont des pastilles en ligne et le détail « sans
+       jour connu » un bouton : il n'y a rien à ranger derrière « Filtres ».
+       Sur téléphone, pastilles et détail vont dans le feuillet. */
+    const html = await rendre(BarreOutilsAnniversaires, {
+      actifs: NAISSANCES,
+      resume: RESUME,
+      chargement: false,
+      annee: 2026,
+      mois: 3,
+    })
+
+    expect(html).toContain('Filtres · Anniversaires')
+    expect(html).toContain('id="tiroir-outils"')
+    expect(html).not.toMatch(/>\s*Filtres\s*</)
   })
 })
 

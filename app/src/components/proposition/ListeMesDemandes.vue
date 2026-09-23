@@ -25,6 +25,16 @@
  * Le troisième est le plus important : il renvoie au détail plutôt que de
  * laisser une ligne muette là où il y avait un motif.
  * ────────────────────────────────────────────────────────────────────
+ *
+ * **La barre d'écran** (handoff « En-tête, barres d'écran et fiche », § 2) :
+ * le titre « Mes demandes », puis le filtre d'état — naguère un menu déroulant —
+ * en **segmenté avec compteurs**, puis « {n} demandes ». **Pas de bouton
+ * Filtres** : il n'y a rien au-delà de la vue, donc `BarreEcran` n'annonce
+ * aucun feuillet, et l'en-tête mobile n'a pas de bouton filtres. Sur téléphone,
+ * les états deviennent des pastilles de 36 px qui défilent horizontalement.
+ *
+ * Les compteurs sont ceux que la vue connaît (`comptesDepuisListe()`) ; un
+ * compte inconnu ne s'affiche pas, il ne vaut pas zéro.
  */
 import { computed } from 'vue'
 import type { ResumeDemande, StatutDemande } from '@/lib/api'
@@ -32,12 +42,15 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
+import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
+import Segmente from '@/components/mise-en-page/Segmente.vue'
 import {
-  FILTRES,
   LIBELLES_NATURE,
+  choixDuSegmente,
   lienDeReprise,
   messageQuandVide,
   pastilleDeStatut,
+  type ComptesParFiltre,
   type MotifDecision,
 } from './mes-demandes'
 
@@ -48,6 +61,7 @@ const {
   total = 0,
   chargement = false,
   erreur = null,
+  comptes = {},
 } = defineProps<{
   demandes: readonly ResumeDemande[]
   /**
@@ -60,6 +74,8 @@ const {
   total?: number
   chargement?: boolean
   erreur?: unknown
+  /** Le compte connu de chaque filtre, pour le segmenté. Clé absente : inconnu. */
+  comptes?: ComptesParFiltre
 }>()
 
 const emit = defineEmits<{
@@ -84,130 +100,157 @@ function dateLisible(valeur: string | null): string {
     : date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-function changerFiltre(valeur: string): void {
-  emit('filtrer', valeur as StatutDemande | '')
+const choix = computed(() => choixDuSegmente(comptes, filtre))
+
+function changerFiltre(valeur: StatutDemande | ''): void {
+  emit('filtrer', valeur)
 }
 </script>
 
 <template>
   <div>
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <label for="filtre-mes-demandes" class="text-sm font-medium">Afficher</label>
-      <select
-        id="filtre-mes-demandes"
-        :value="filtre"
-        class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
-        @change="changerFiltre(($event.target as HTMLSelectElement).value)"
-      >
-        <option v-for="choix in FILTRES" :key="choix.libelle" :value="choix.valeur">
-          {{ choix.libelle }}
-        </option>
-      </select>
+    <BarreEcran ecran="Mes demandes">
+      <template #titre>Mes demandes</template>
 
-      <span v-if="!chargement && erreur === null" class="text-sm text-attenue tnum">
+      <template #vue>
+        <!-- Bureau : le segmenté. Enveloppé, parce que `Segmente` pose son
+             `display` en style et qu'une classe ne le masquerait pas. -->
+        <div class="max-md:hidden">
+          <Segmente
+            :options="choix"
+            :valeur="filtre"
+            etiquette="État des demandes affichées"
+            @choisir="changerFiltre"
+          />
+        </div>
+
+        <!-- Téléphone : les mêmes états, en pastilles qui défilent. -->
+        <div class="flex gap-2 md:hidden" role="group" aria-label="État des demandes affichées">
+          <button
+            v-for="o in choix"
+            :key="o.libelle"
+            type="button"
+            class="flex h-9 flex-none items-center rounded-pastille border px-[13px] text-[13px]"
+            :class="o.valeur === filtre ? 'border-accent bg-accent-doux font-semibold' : 'border-ligne text-attenue'"
+            :aria-pressed="o.valeur === filtre"
+            @click="changerFiltre(o.valeur)"
+          >
+            {{ o.libelle }}<template v-if="o.compte !== undefined"> · {{ o.compte }}</template>
+          </button>
+        </div>
+      </template>
+
+      <template v-if="!chargement && erreur === null" #compteur>
         {{ total }} demande{{ total > 1 ? 's' : '' }}
-      </span>
-    </div>
+      </template>
+    </BarreEcran>
 
-    <PanneauBase v-if="chargement && vide">
-      <p class="mb-3 text-sm text-attenue" role="status">Chargement de vos demandes…</p>
-      <SqueletteChargement :lignes="3" />
-    </PanneauBase>
-
-    <!-- L'échec parle. C'est tout l'objet de ce composant. -->
-    <MessageErreur
-      v-else-if="erreur !== null"
-      :erreur="erreur"
-      titre="Vos demandes n’ont pas pu être chargées."
-      @action="emit('recharger')"
-    />
-
-    <PanneauBase v-else-if="vide">
-      <p class="text-sm">{{ messageQuandVide(filtre) }}</p>
-      <p v-if="filtre === ''" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        <RouterLink :to="{ name: 'proposition.creation' }" class="font-semibold text-accent underline">
-          Proposer une personne
-        </RouterLink>
-        <RouterLink :to="{ name: 'arbre' }" class="font-semibold text-accent underline">
-          Parcourir l’arbre
-        </RouterLink>
+    <div class="mx-auto w-full max-w-3xl px-4 py-6">
+      <p class="mb-5 text-sm text-attenue">
+        Ce que vous avez proposé, et ce que c’est devenu. Une demande refusée porte
+        toujours le motif de son refus.
       </p>
-    </PanneauBase>
 
-    <template v-else>
-      <ul class="flex flex-col gap-3">
-        <li v-for="demande in demandes" :key="demande.id">
-          <PanneauBase>
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <RouterLink
-                :to="{ name: 'demande.detail', params: { id: demande.id } }"
-                class="font-semibold text-accent underline"
-              >
-                {{ LIBELLES_NATURE[demande.kind] }}
-              </RouterLink>
-              <PastilleEtat
-                :etat="pastilleDeStatut(demande.status).etat"
-                :libelle="pastilleDeStatut(demande.status).libelle"
-              />
-              <span class="text-sm text-attenue">
-                <template v-if="demande.targetLabel">sur {{ demande.targetLabel }} — </template>
-                déposée le {{ dateLisible(demande.submittedAt ?? demande.createdAt) }}
-              </span>
-            </div>
+      <PanneauBase v-if="chargement && vide">
+        <p class="mb-3 text-sm text-attenue" role="status">Chargement de vos demandes…</p>
+        <SqueletteChargement :lignes="3" />
+      </PanneauBase>
 
-            <p v-if="demande.message" class="mt-1.5 text-sm text-attenue">
-              « {{ demande.message }} »
-            </p>
+      <!-- L'échec parle. C'est tout l'objet de ce composant. -->
+      <MessageErreur
+        v-else-if="erreur !== null"
+        :erreur="erreur"
+        titre="Vos demandes n’ont pas pu être chargées."
+        @action="emit('recharger')"
+      />
 
-            <!-- Le motif, en clair, sur la ligne. Le geste qu'il fallait faire
-                 jusqu'ici pour le lire : taper `/demandes/6` dans la barre
-                 d'adresse. -->
-            <template v-if="demande.status === 'refusee'">
-              <div
-                v-if="motifs.get(demande.id)"
-                class="mt-3 rounded-panneau border border-alerte-bord bg-alerte-doux px-3.5 py-3 text-sm"
-              >
-                <p class="mb-1 font-semibold">Motif du refus</p>
-                <p class="whitespace-pre-line">{{ motifs.get(demande.id)!.message }}</p>
-                <p v-if="motifs.get(demande.id)!.parQui" class="mt-2 text-xs text-attenue">
-                  {{ motifs.get(demande.id)!.parQui }}<template v-if="motifs.get(demande.id)!.quand">,
-                  le {{ dateLisible(motifs.get(demande.id)!.quand) }}</template>
-                </p>
-              </div>
+      <PanneauBase v-else-if="vide">
+        <p class="text-sm">{{ messageQuandVide(filtre) }}</p>
+        <p v-if="filtre === ''" class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          <RouterLink :to="{ name: 'proposition.creation' }" class="font-semibold text-accent underline">
+            Proposer une personne
+          </RouterLink>
+          <RouterLink :to="{ name: 'arbre' }" class="font-semibold text-accent underline">
+            Parcourir l’arbre
+          </RouterLink>
+        </p>
+      </PanneauBase>
 
-              <!-- Lu, mais rien à montrer : on renvoie au détail au lieu de
-                   laisser une ligne muette là où il y avait un motif. -->
-              <p v-else-if="motifs.has(demande.id)" class="mt-3 text-sm text-attenue">
-                Le motif de ce refus n’a pas pu être chargé.
+      <template v-else>
+        <ul class="flex flex-col gap-3">
+          <li v-for="demande in demandes" :key="demande.id">
+            <PanneauBase>
+              <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <RouterLink
                   :to="{ name: 'demande.detail', params: { id: demande.id } }"
                   class="font-semibold text-accent underline"
                 >
-                  Ouvrir la demande
+                  {{ LIBELLES_NATURE[demande.kind] }}
                 </RouterLink>
-                pour le lire.
+                <PastilleEtat
+                  :etat="pastilleDeStatut(demande.status).etat"
+                  :libelle="pastilleDeStatut(demande.status).libelle"
+                />
+                <span class="text-sm text-attenue">
+                  <template v-if="demande.targetLabel">sur {{ demande.targetLabel }} — </template>
+                  déposée le {{ dateLisible(demande.submittedAt ?? demande.createdAt) }}
+                </span>
+              </div>
+
+              <p v-if="demande.message" class="mt-1.5 text-sm text-attenue">
+                « {{ demande.message }} »
               </p>
 
-              <p v-else class="mt-3 text-sm text-attenue" role="status">
-                Chargement du motif du refus…
+              <!-- Le motif, en clair, sur la ligne. Le geste qu'il fallait faire
+                   jusqu'ici pour le lire : taper `/demandes/6` dans la barre
+                   d'adresse. -->
+              <template v-if="demande.status === 'refusee'">
+                <div
+                  v-if="motifs.get(demande.id)"
+                  class="mt-3 rounded-panneau border border-alerte-bord bg-alerte-doux px-3.5 py-3 text-sm"
+                >
+                  <p class="mb-1 font-semibold">Motif du refus</p>
+                  <p class="whitespace-pre-line">{{ motifs.get(demande.id)!.message }}</p>
+                  <p v-if="motifs.get(demande.id)!.parQui" class="mt-2 text-xs text-attenue">
+                    {{ motifs.get(demande.id)!.parQui }}<template v-if="motifs.get(demande.id)!.quand">,
+                    le {{ dateLisible(motifs.get(demande.id)!.quand) }}</template>
+                  </p>
+                </div>
+
+                <!-- Lu, mais rien à montrer : on renvoie au détail au lieu de
+                     laisser une ligne muette là où il y avait un motif. -->
+                <p v-else-if="motifs.has(demande.id)" class="mt-3 text-sm text-attenue">
+                  Le motif de ce refus n’a pas pu être chargé.
+                  <RouterLink
+                    :to="{ name: 'demande.detail', params: { id: demande.id } }"
+                    class="font-semibold text-accent underline"
+                  >
+                    Ouvrir la demande
+                  </RouterLink>
+                  pour le lire.
+                </p>
+
+                <p v-else class="mt-3 text-sm text-attenue" role="status">
+                  Chargement du motif du refus…
+                </p>
+              </template>
+
+              <!-- « Une caducité sans ce bouton est une contribution perdue »
+                   (§ 9.6) — et un refus motivé sans ce bouton aussi : on vient de
+                   dire à quelqu'un ce qui manquait à sa proposition. -->
+              <p v-if="lienDeReprise(demande) !== null" class="mt-3 text-sm">
+                <RouterLink :to="lienDeReprise(demande)!" class="font-semibold text-accent underline">
+                  Refaire cette demande
+                </RouterLink>
               </p>
-            </template>
+            </PanneauBase>
+          </li>
+        </ul>
 
-            <!-- « Une caducité sans ce bouton est une contribution perdue »
-                 (§ 9.6) — et un refus motivé sans ce bouton aussi : on vient de
-                 dire à quelqu'un ce qui manquait à sa proposition. -->
-            <p v-if="lienDeReprise(demande) !== null" class="mt-3 text-sm">
-              <RouterLink :to="lienDeReprise(demande)!" class="font-semibold text-accent underline">
-                Refaire cette demande
-              </RouterLink>
-            </p>
-          </PanneauBase>
-        </li>
-      </ul>
-
-      <p v-if="tronquee" class="mt-3 text-sm text-attenue">
-        Les {{ demandes.length }} plus récentes de vos {{ total }} demandes sont affichées.
-      </p>
-    </template>
+        <p v-if="tronquee" class="mt-3 text-sm text-attenue">
+          Les {{ demandes.length }} plus récentes de vos {{ total }} demandes sont affichées.
+        </p>
+      </template>
+    </div>
   </div>
 </template>

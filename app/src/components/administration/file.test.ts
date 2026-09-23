@@ -311,3 +311,37 @@ describe('le gabarit de la file compose la mention par la fonction', () => {
     expect(gabarit()).not.toMatch(/^\s*,\s*le /m)
   })
 })
+
+/**
+ * La barre d'écran de l'administration (handoff § 2) : les trois sections en
+ * onglets, en tête de barre, à la place de la navigation d'`AdministrationView`.
+ * Les noms de route sont un contrat — liens profonds et favoris en dépendent —,
+ * et les deux menus de la file restent des `<select>` natifs.
+ */
+describe('les onglets de l’administration', () => {
+  const lire = (chemin: string): string =>
+    readFileSync(fileURLToPath(new URL(chemin, import.meta.url)), 'utf8')
+
+  it('nomment les trois routes enfants, sans construire d’URL', () => {
+    const source = lire('../../views/administration/OngletsAdministration.vue')
+
+    for (const nom of ['administration.demandes', 'administration.invitations', 'administration.utilisateurs']) {
+      expect(source).toContain(`'${nom}'`)
+    }
+    expect(source).not.toContain("'/administration")
+  })
+
+  it('sont en tête de la barre des trois sous-écrans, et plus dans le cadre', () => {
+    for (const vue of ['FileDemandesView', 'InvitationsView', 'UtilisateursView']) {
+      expect(lire(`../../views/administration/${vue}.vue`), vue).toContain('<OngletsAdministration />')
+    }
+    expect(lire('../../views/AdministrationView.vue')).not.toContain('<nav')
+  })
+
+  it('gardent à la file ses deux menus natifs, auteur et tri', () => {
+    const source = lire('../../views/administration/FileDemandesView.vue')
+
+    expect(source).toContain('id="filtre-auteur" v-model.number="auteur"')
+    expect(source).toContain('id="tri-file" v-model="tri"')
+  })
+})

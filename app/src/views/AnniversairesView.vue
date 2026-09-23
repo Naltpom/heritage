@@ -88,7 +88,7 @@ export function etatDeLEcran(vue: VueAnniversaires | null, erreur: unknown): Eta
  *
  * **Ce que l'écran ne tait pas.** Les événements dont personne n'a noté le jour
  * ne peuvent tenir dans aucune case ; ils sont comptés et détaillés par la barre
- * d'outils. Les 29 février d'une année ordinaire n'ont pas de case non plus ;
+ * d'écran (« {n} sans jour connu ▾ »). Les 29 février d'une année ordinaire n'ont pas de case non plus ;
  * ils sont listés sous la grille de février, et jamais déplacés au 28 ou au 1er
  * mars. Un calendrier qui laisse tomber en silence ce qu'il ne sait pas placer
  * se lit comme un inventaire, ce qu'il n'est pas.
@@ -99,17 +99,22 @@ export function etatDeLEcran(vue: VueAnniversaires | null, erreur: unknown): Eta
  * plancher, et imposer un minimum qui garantit le débordement dès qu'il reste
  * moins que lui — ont déjà été payés deux fois dans ce dépôt. `cadre.test.ts`
  * lit le source de ce fichier pour qu'il n'y ait pas de troisième fois.
+ *
+ * **La barre d'écran** (`BarreOutilsAnniversaires`, posée dans `BarreEcran`)
+ * porte désormais aussi ‹ {mois} › et « Aujourd’hui » : les flèches ont quitté
+ * le haut de la grille. Elle ne retient rien — le mois, les genres et le nombre
+ * de filtres actifs sont calculés ici, et le résumé d'une ligne de l'en-tête
+ * mobile (« 31 événements datés ») est publié ici aussi.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { hauteurDuCadre } from '@/views/cadre'
 import { useTiroirs } from '@/composables/useTiroirs'
+import { definirResume } from '@/composables/entete'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
-import TiroirOutils from '@/components/mise-en-page/TiroirOutils.vue'
-import { basculerGenre, genresParDefaut } from '@/components/evenements/filtres'
+import { GENRES, basculerGenre, compterRetenus, genresParDefaut } from '@/components/evenements/filtres'
 import BarreOutilsAnniversaires from '@/components/anniversaires/BarreOutilsAnniversaires.vue'
-import EnTeteMois from '@/components/anniversaires/EnTeteMois.vue'
 import GrilleMois from '@/components/anniversaires/GrilleMois.vue'
 import LigneEvenement from '@/components/anniversaires/LigneEvenement.vue'
 import PanneauJour from '@/components/anniversaires/PanneauJour.vue'
@@ -202,6 +207,32 @@ function surGenre(genre: GenreEvenement): void {
   actifs.value = basculerGenre(actifs.value, genre)
 }
 
+/** « Réinitialiser » du feuillet : les genres reviennent au défaut. Le mois,
+ *  lui, n'est pas un filtre — il ne bouge pas. */
+function surReinitialiser(): void {
+  actifs.value = genresParDefaut()
+}
+
+/**
+ * Le nombre de filtres actifs : les genres dont l'état **s'écarte du défaut**
+ * (allumé alors qu'il est éteint par défaut, ou l'inverse). Le défaut lui-même
+ * ne compte pas pour un filtre — sinon la pastille du bouton filtres dirait
+ * « 1 » à quelqu'un qui n'a encore rien touché.
+ */
+const filtresActifs = computed(() => {
+  const defaut = genresParDefaut()
+  return GENRES.filter((genre) => actifs.value.has(genre.id) !== defaut.has(genre.id)).length
+})
+
+/** Le résumé d'une ligne sous le titre, dans l'en-tête du téléphone — le même
+ *  compte que la barre, qui n'y est pas visible. */
+const resumeEntete = computed(() => {
+  if (vue.value === null) return ''
+  const n = compterRetenus(vue.value.resume.parGenre, actifs.value)
+  return `${n} événement${n > 1 ? 's' : ''} daté${n > 1 ? 's' : ''}`
+})
+watch(resumeEntete, (texte) => definirResume(texte), { immediate: true })
+
 function surPrecedent(): void {
   affiche.value = moisPrecedent(affiche.value)
 }
@@ -271,14 +302,19 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="racine" class="flex flex-col" :style="{ height: hauteurCadre }">
-    <TiroirOutils titre="Filtres des anniversaires">
-      <BarreOutilsAnniversaires
-        :actifs="actifs"
-        :resume="vue?.resume ?? null"
-        :chargement="chargement"
-        @genre="surGenre"
-      />
-    </TiroirOutils>
+    <BarreOutilsAnniversaires
+      :actifs="actifs"
+      :resume="vue?.resume ?? null"
+      :chargement="chargement"
+      :annee="affiche.annee"
+      :mois="affiche.mois"
+      :filtres-actifs="filtresActifs"
+      @genre="surGenre"
+      @precedent="surPrecedent"
+      @suivant="surSuivant"
+      @aujourdhui="surAujourdhui"
+      @reinitialiser="surReinitialiser"
+    />
 
     <div v-if="etat.bandeau" class="border-b border-ligne px-4 py-2">
       <MessageErreur
@@ -302,14 +338,6 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-else class="p-3 md:p-4">
-        <EnTeteMois
-          :annee="affiche.annee"
-          :mois="affiche.mois"
-          @precedent="surPrecedent"
-          @suivant="surSuivant"
-          @aujourdhui="surAujourdhui"
-        />
-
         <GrilleMois
           :grille="grille"
           :jours="jours"

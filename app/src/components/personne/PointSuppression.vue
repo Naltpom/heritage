@@ -19,49 +19,43 @@
  * transmettre quoi que ce soit d'ici ne ferait que lui donner une seconde source,
  * plus ancienne, pour une opération qui détruit.
  *
- * ## Le ton, et pourquoi il n'est pas alarmiste
+ * ## Un geste séparé (règle n° 9 de la refonte)
  *
- * Ce bouton ne supprime rien. Il ouvre un formulaire qui dépose une demande,
- * qu'un administrateur validera ou refusera — exactement comme une correction de
- * date. Le rouge appartient à l'écran de confirmation, où l'on voit ce qui part ;
- * ici, une couleur d'alerte ferait croire à un geste irréversible et
- * découragerait de signaler un doublon, ce qui est le contraire du but.
+ * « Corriger » et « effacer » ne sont pas deux variantes d'un même geste : un seul
+ * détruit — et un doublon d'arbre généalogique ne se corrige pas, il se
+ * supprime. Ce lien n'est donc **jamais** dans le même bloc que « Proposer une
+ * modification » : il vit dans le menu ⋯ (`MenuFiche.vue`), **séparé par un
+ * filet**, en dernier, et en couleur d'alerte. La couleur signale qu'on quitte
+ * le registre de la correction ; le libellé dit « demander », parce que ce lien
+ * ne supprime rien — il ouvre un formulaire qui montre d'abord tout ce que la
+ * suppression emporterait, puis dépose une demande qu'un administrateur tranche.
  *
  * ## Pourquoi un `v-if` sur le rôle est légitime ici
  *
- * Mêmes deux conditions, mêmes raisons que `PointProposition.vue` : un compte en
+ * Mêmes deux conditions, mêmes raisons que `PointProposition.vue` (voir `gestes.ts`) : un compte en
  * attente de rattachement recevrait `403 regime_en_attente`, et toute écriture
  * sous la bascule « voir comme un membre » rend `409`. Masquer le lien n'est pas
  * une mesure de sécurité — la garde de route le double, et l'API double les deux.
  * C'est éviter de proposer un geste voué au refus.
  * ────────────────────────────────────────────────────────────────────
  */
-import { computed } from 'vue'
 import type { FichePersonneComplete } from '@/lib/api'
-import { useSession } from '@/composables/useSession'
+import { useGestesFiche } from './gestes'
 
 const { fiche } = defineProps<{ fiche: FichePersonneComplete }>()
 
-const { rattache, vueEmpruntee } = useSession()
-
-const ouvert = computed(() => rattache.value && vueEmpruntee.value === null)
+const { peutDemanderSuppression } = useGestesFiche()
 </script>
 
 <template>
-  <div v-if="ouvert" id="suppression" class="flex flex-col gap-2">
-    <p class="m-0 text-sm text-attenue">
-      Cette fiche fait doublon avec une autre, ou n’aurait jamais dû exister&nbsp;? Demandez sa
-      suppression&nbsp;: l’écran vous montrera d’abord tout ce qu’elle emporterait — notes, sources,
-      unions — et vous demandera d’écrire pourquoi. Un administrateur tranche ensuite.
-    </p>
-
-    <p class="m-0">
-      <RouterLink
-        :to="{ name: 'proposition.suppression', params: { id: fiche.id } }"
-        class="inline-flex items-center rounded-champ border border-ligne bg-panneau px-3.5 py-1.5 text-sm font-semibold text-texte transition-colors hover:border-alerte"
-      >
-        Demander la suppression de cette fiche
-      </RouterLink>
-    </p>
-  </div>
+  <RouterLink
+    v-if="peutDemanderSuppression"
+    :to="{ name: 'proposition.suppression', params: { id: fiche.id } }"
+    role="menuitem"
+    data-geste="demander-suppression"
+    title="L’écran vous montrera d’abord tout ce que la suppression emporterait, et vous demandera d’écrire pourquoi."
+    class="flex min-h-11 items-center border-t border-ligne px-3.5 text-sm font-semibold text-alerte hover:bg-alerte-doux md:min-h-10"
+  >
+    Demander la suppression
+  </RouterLink>
 </template>

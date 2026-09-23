@@ -383,6 +383,9 @@ export function horodatageLisible(valeur: string | null | undefined): string {
 export interface RegimeDeFiche {
   ton: 'neutre' | 'mauvais' | 'bon'
   texte: string
+  /** La forme courte, pour la pastille du bandeau mobile : « Vérifié » n'y
+   *  s'écrit que sur un acte, jamais sur « a une source ». */
+  court: string
 }
 
 /**
@@ -406,10 +409,68 @@ export function regimeDocumentaire(fiche: FichePersonne): RegimeDeFiche | null {
   const meilleur = typeof charge['bestQuay'] === 'number' ? charge['bestQuay'] : -1
 
   if (citations === 0) {
-    return { ton: 'mauvais', texte: 'Aucune source. Rien n’appuie ces informations.' }
+    return { ton: 'mauvais', texte: 'Aucune source. Rien n’appuie ces informations.', court: 'Sans source' }
   }
   if (meilleur < 2) {
-    return { ton: 'mauvais', texte: 'Non vérifié : recopies d’arbres, aucun acte.' }
+    return { ton: 'mauvais', texte: 'Non vérifié : recopies d’arbres, aucun acte.', court: 'Non vérifié' }
   }
-  return { ton: 'bon', texte: 'Appuyé sur un acte ou un registre.' }
+  return { ton: 'bon', texte: 'Appuyé sur un acte ou un registre.', court: 'Vérifié' }
+}
+
+/* ------------------------------------------------------------------ */
+/* La place dans l'arbre — la colonne « Dans l'arbre » de la fiche     */
+/* ------------------------------------------------------------------ */
+
+/** Le nom court de chaque branche — ceux de la légende de l'arbre. Le libellé
+ *  long (« Romarin — paternelle du père ») reste celui de la ligne Branche. */
+const NOMS_BRANCHE: Record<string, string> = {
+  pp: 'Romarin',
+  pm: 'Bourrache',
+  mp: 'Chardon',
+  mm: 'Tilleul',
+  tr: 'Tronc',
+  cpp: 'Romarin du conjoint',
+  cpm: 'Bourrache du conjoint',
+  cmp: 'Chardon du conjoint',
+  cmm: 'Tilleul du conjoint',
+}
+
+/** Le nom court d'une branche ; une valeur inconnue s'affiche telle quelle. */
+export function nomBranche(branche: string): string {
+  return NOMS_BRANCHE[branche] ?? branche
+}
+
+/** La couleur de la pastille de branche : un jeton `--h-branche-*` existant,
+ *  jamais une couleur nouvelle. Une branche inconnue prend celle du hors-arbre. */
+export function couleurBranche(branche: string): string {
+  return branche in NOMS_BRANCHE ? `var(--h-branche-${branche})` : 'var(--h-branche-hors)'
+}
+
+/** Une génération, avec un vrai signe moins (« −1 ») : c'est un nombre relatif
+ *  à l'ego, et le tiret court se lirait comme une ponctuation. */
+export function generationLisible(generation: number): string {
+  return generation < 0 ? `−${Math.abs(generation)}` : String(generation)
+}
+
+/**
+ * Pourquoi cette personne est traitée comme vivante — la note du bandeau.
+ *
+ * C'est `vivant` qui commande, **jamais `deceased`** ni l'absence de dates :
+ * `deceased` est le `DEAT` du GEDCOM, `vivant` le résultat de la règle de
+ * confidentialité (seuil, repli par génération, `forcePrivacy`, § 5.3).
+ *
+ * `forcePrivacy` est une décision d'administration : elle l'emporte sur les
+ * dates. Le dire évite la question « pourquoi cette fiche de 1901 est-elle
+ * protégée ? », dont la réponse est dans `privacyNote` quand elle existe.
+ *
+ * `null` sur une fiche réduite : la carte réduite dit déjà tout, autrement.
+ */
+export function noteDeConfidentialite(fiche: FichePersonne): string | null {
+  if (fiche.visibilite !== 'complete' || !fiche.vivant) return null
+  if (fiche.forcePrivacy) {
+    return fiche.privacyNote !== null && fiche.privacyNote.length > 0
+      ? `Fiche protégée par décision d’administration : ${fiche.privacyNote}`
+      : 'Fiche protégée par décision d’administration.'
+  }
+  return 'Personne vivante : sa fiche n’est communiquée qu’aux membres de son cercle de visibilité.'
 }

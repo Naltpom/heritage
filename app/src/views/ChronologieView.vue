@@ -44,9 +44,10 @@
  * barres : un compteur trahirait, par soustraction, le nombre de personnes
  * qu'on n'a pas le droit de voir.
  */
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
 import { hauteurDuCadre } from '@/views/cadre'
 import { useTiroirs } from '@/composables/useTiroirs'
+import { definirResume } from '@/composables/entete'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
@@ -54,7 +55,6 @@ import BarreOutilsChronologie from '@/components/chronologie/BarreOutilsChronolo
 import CanevasChronologie from '@/components/chronologie/CanevasChronologie.vue'
 import LegendeChronologie from '@/components/chronologie/LegendeChronologie.vue'
 import ReserveVivants from '@/components/chronologie/ReserveVivants.vue'
-import TiroirOutils from '@/components/mise-en-page/TiroirOutils.vue'
 import { DESCRIPTIONS_BRANCHE, estVide } from '@/components/chronologie/disposition'
 import { filtrerVivants } from '@/components/chronologie/vivants'
 import {
@@ -175,6 +175,16 @@ function changerIncertitude(montrer: boolean): void {
   if (reglages.value === null) return
   reglages.value = { ...reglages.value, montrerIncertitude: montrer }
 }
+
+/**
+ * Le résumé de l'en-tête mobile, sous le titre : « Une bande par 25 ans ».
+ * **Aucun décompte de barres** — même raison que plus haut : un compteur
+ * trahirait, par soustraction, les personnes qu'on n'a pas le droit de voir.
+ */
+watchEffect(() => {
+  const bande = reglages.value?.bande
+  definirResume(bande === undefined ? '' : `Une bande par ${bande} ${bande > 1 ? 'ans' : 'an'}`)
+})
 
 /* ------------------------------------------------------------------ */
 /* Vivants uniquement                                                  */
@@ -357,29 +367,34 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="racine" class="flex flex-col" :style="{ height: hauteurCadre }">
-    <TiroirOutils titre="Réglages de la chronologie">
-      <BarreOutilsChronologie
-        v-if="reglages !== null"
-        :bande="reglages.bande"
-        :orientation="reglages.orientation"
-        :branches="reglages.branches"
-        :montrer-incertitude="reglages.montrerIncertitude"
-        :vivants-seuls="vivantsSeuls"
-        :chargement="chargement"
-        :preference-a-jour="preferenceAJour"
-        :enregistrement="enregistrement"
-        @bande="changerBande"
-        @orientation="changerOrientation"
-        @branche="basculerBranche"
-        @incertitude="changerIncertitude"
-        @vivants-seuls="changerVivantsSeuls"
-        @enregistrer="enregistrer"
-        @recadrer="recadrer"
-      />
-      <template #legende>
-        <LegendeChronologie v-if="vueAffichee !== null && !vide" en-tiroir />
+    <!--
+      La barre d'écran commune (`BarreEcran`, portée par la barre d'outils) :
+      sur bureau, une ligne de 50 px ; sur téléphone, le segmenté sous l'en-tête
+      et tout le reste dans le feuillet — la légende comprise, puisque sa forme
+      flottante y est masquée.
+    -->
+    <BarreOutilsChronologie
+      v-if="reglages !== null"
+      :bande="reglages.bande"
+      :orientation="reglages.orientation"
+      :branches="reglages.branches"
+      :montrer-incertitude="reglages.montrerIncertitude"
+      :vivants-seuls="vivantsSeuls"
+      :chargement="chargement"
+      :preference-a-jour="preferenceAJour"
+      :enregistrement="enregistrement"
+      @bande="changerBande"
+      @orientation="changerOrientation"
+      @branche="basculerBranche"
+      @incertitude="changerIncertitude"
+      @vivants-seuls="changerVivantsSeuls"
+      @enregistrer="enregistrer"
+      @recadrer="recadrer"
+    >
+      <template v-if="vueAffichee !== null && !vide" #legende>
+        <LegendeChronologie en-tiroir />
       </template>
-    </TiroirOutils>
+    </BarreOutilsChronologie>
 
     <!--
       La réserve ne paraît qu'une fois le filtre allumé : une mise en garde

@@ -17,8 +17,27 @@
  * Le filtre par état est volontairement ouvert au-delà de `en_attente` : une
  * demande **caduque** ou **refusée** reste consultable, et c'est ce qui permet
  * de répondre à quelqu'un qui demande ce qu'est devenue sa proposition.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **La barre d'écran** (handoff « En-tête, barres d'écran et fiche », § 2) :
+ *
+ *     [ Demandes · Invitations · Utilisateurs ] | [ En attente · … · Toutes ] ——— [ n demandes ] [ Déposées par … ▾ ] [ Plus anciennes ▾ ]
+ *
+ * Les onglets remplacent la navigation d'`AdministrationView` ; l'état devient
+ * un segmenté ; les deux menus déroulants — auteur et tri — restent des
+ * `<select>` natifs, restylés en boutons de 32 px : le comportement (et le
+ * clavier) est celui du navigateur, seul le décor change.
+ *
+ * Sur téléphone, les onglets (42 px) et les états — en pastilles qui défilent —
+ * restent visibles sous l'en-tête ; l'auteur et le tri passent dans le
+ * feuillet, en boutons radio et en segmenté. Le seul **filtre** au sens du
+ * compteur de l'en-tête est l'auteur : le tri range, il ne retire rien.
+ *
+ * La barre ne retient rien : `etat`, `auteur` et `tri` vivent ici.
+ * ────────────────────────────────────────────────────────────────────
  */
 import { computed, onMounted, ref, watch } from 'vue'
+import { definirResume } from '@/composables/entete'
 import {
   listerAuteursDesDemandes,
   listerDemandesAdministration,
@@ -32,6 +51,9 @@ import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import ApercuFiche from '@/components/administration/ApercuFiche.vue'
 import LoupeMedia from '@/components/medias/LoupeMedia.vue'
+import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
+import Segmente from '@/components/mise-en-page/Segmente.vue'
+import OngletsAdministration from './OngletsAdministration.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
 import {
   grouperParCible,
@@ -41,13 +63,20 @@ import {
   type SensDeTri,
 } from '@/components/administration/file'
 
-/** Les états proposés au filtre. `''` veut dire « tous ». */
-const ETATS: { valeur: StatutDemande | ''; libelle: string }[] = [
-  { valeur: 'en_attente', libelle: 'En attente' },
-  { valeur: 'validee', libelle: 'Validées' },
-  { valeur: 'refusee', libelle: 'Refusées' },
-  { valeur: 'caduque', libelle: 'Devenues caduques' },
-  { valeur: '', libelle: 'Toutes' },
+/** Les états proposés au filtre. `''` veut dire « tous ». `court` est le
+ *  libellé du segmenté de bureau, où la place est comptée. */
+const ETATS: { valeur: StatutDemande | ''; libelle: string; court: string }[] = [
+  { valeur: 'en_attente', libelle: 'En attente', court: 'En attente' },
+  { valeur: 'validee', libelle: 'Validées', court: 'Validées' },
+  { valeur: 'refusee', libelle: 'Refusées', court: 'Refusées' },
+  { valeur: 'caduque', libelle: 'Devenues caduques', court: 'Caduques' },
+  { valeur: '', libelle: 'Toutes', court: 'Toutes' },
+]
+
+/** Les deux sens de tri, pour le bouton de bureau et le segmenté du feuillet. */
+const TRIS: { valeur: SensDeTri; libelle: string }[] = [
+  { valeur: 'anciennes', libelle: 'Plus anciennes' },
+  { valeur: 'recentes', libelle: 'Plus récentes' },
 ]
 
 const NATURES: Record<string, string> = {
@@ -143,6 +172,49 @@ onMounted(() => {
 })
 watch([etat, auteur], charger)
 
+/* ------------------------------------------------------------------ */
+/* La barre d'écran                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Seul le compte de l'état affiché est connu — le `total` de la réponse. Les
+ *  autres états n'affichent aucun nombre plutôt qu'un zéro inventé. */
+const optionsEtat = computed(() =>
+  ETATS.map((choix) => ({
+    valeur: choix.valeur,
+    libelle: choix.court,
+    compte:
+      choix.valeur === etat.value && !chargement.value && erreur.value === null ? total.value : undefined,
+  })),
+)
+
+/** Le filtre par auteur est le seul filtre du feuillet ; le tri n'en est pas un. */
+const filtresActifs = computed(() => (auteur.value === 0 ? 0 : 1))
+
+/** « Réinitialiser » du feuillet : tout le monde, la plus ancienne d'abord.
+ *  L'état n'est pas un filtre du feuillet, c'est la vue : il ne bouge pas. */
+function reinitialiser(): void {
+  auteur.value = 0
+  tri.value = 'anciennes'
+}
+
+const libelleTotal = computed(() => `${total.value} demande${total.value > 1 ? 's' : ''}`)
+
+// Le résumé sous le titre, dans l'en-tête du téléphone.
+watch(
+  [total, chargement, erreur, etat],
+  () => {
+    if (chargement.value || erreur.value !== null) {
+      definirResume('')
+      return
+    }
+    const n = total.value
+    definirResume(
+      etat.value === 'en_attente' ? `${n} demande${n > 1 ? 's' : ''} à décider` : libelleTotal.value,
+    )
+  },
+  { immediate: true },
+)
+
 function dateLisible(valeur: string | null): string {
   if (valeur === null) return ''
   const date = new Date(valeur)
@@ -153,46 +225,104 @@ function dateLisible(valeur: string | null): string {
 </script>
 
 <template>
-  <div>
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <label for="filtre-etat" class="text-sm font-medium">Afficher</label>
-      <select
-        id="filtre-etat"
-        v-model="etat"
-        class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
-      >
-        <option v-for="choix in ETATS" :key="choix.libelle" :value="choix.valeur">
-          {{ choix.libelle }}
-        </option>
-      </select>
+  <BarreEcran
+    ecran="Validation"
+    :filtres-actifs="filtresActifs"
+    :voir="`Voir ${libelleTotal}`"
+    @reinitialiser="reinitialiser"
+  >
+    <template #vue>
+      <div class="flex items-center gap-2.5 max-md:w-full max-md:flex-col max-md:items-stretch max-md:gap-2">
+        <!-- En tête sur bureau ; sur téléphone, rang du bas, sous les états. -->
+        <div class="max-md:order-last"><OngletsAdministration /></div>
 
-      <label for="filtre-auteur" class="ml-2 text-sm font-medium">Déposées par</label>
-      <select
-        id="filtre-auteur"
-        v-model.number="auteur"
-        class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
+        <span class="h-5 w-px flex-none bg-ligne max-md:hidden" aria-hidden="true" />
+
+        <!-- Enveloppé : `Segmente` pose son `display` en style, qu'une classe
+             ne masquerait pas. -->
+        <div class="max-md:hidden">
+          <Segmente
+            :options="optionsEtat"
+            :valeur="etat"
+            etiquette="État des demandes affichées"
+            @choisir="etat = $event"
+          />
+        </div>
+
+        <div class="flex min-w-0 gap-2 overflow-x-auto md:hidden" role="group" aria-label="État des demandes affichées">
+          <button
+            v-for="(choix, i) in ETATS"
+            :key="choix.libelle"
+            type="button"
+            class="flex h-9 flex-none items-center rounded-pastille border px-[13px] text-[13px]"
+            :class="choix.valeur === etat ? 'border-accent bg-accent-doux font-semibold' : 'border-ligne text-attenue'"
+            :aria-pressed="choix.valeur === etat"
+            @click="etat = choix.valeur"
+          >
+            {{ choix.libelle }}<template v-if="optionsEtat[i]?.compte !== undefined"> · {{ optionsEtat[i]?.compte }}</template>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <template v-if="!chargement" #compteur>{{ libelleTotal }}</template>
+
+    <!-- Bureau : les deux menus déroulants d'avant, en boutons de 32 px. Le
+         `<select>` reste natif ; il est transparent dans son bouton. -->
+    <template #actions>
+      <label
+        for="filtre-auteur"
+        class="relative flex h-8 items-center gap-1.5 rounded-champ border bg-panneau px-[11px] text-[13px]"
+        :class="auteur === 0 ? 'border-ligne' : 'border-accent'"
       >
-        <option :value="0">Tout le monde</option>
-        <option v-for="a in auteurs" :key="a.userId" :value="a.userId">
+        <span class="text-attenue">Déposées par</span>
+        <select id="filtre-auteur" v-model.number="auteur" class="h-8 cursor-pointer appearance-none bg-transparent pr-4 text-[13px] text-texte focus:outline-none">
+          <option :value="0">Tout le monde</option>
+          <option v-for="a in auteurs" :key="a.userId" :value="a.userId">
+            {{ a.libelle }}
+          </option>
+        </select>
+        <span class="pointer-events-none absolute right-[11px]" aria-hidden="true">▾</span>
+      </label>
+
+      <label
+        for="tri-file"
+        class="relative flex h-8 items-center rounded-champ border border-ligne bg-panneau px-[11px] text-[13px]"
+      >
+        <span class="sr-only">Trier</span>
+        <select id="tri-file" v-model="tri" class="h-8 cursor-pointer appearance-none bg-transparent pr-4 text-[13px] text-texte focus:outline-none">
+          <option v-for="t in TRIS" :key="t.valeur" :value="t.valeur">{{ t.libelle }}</option>
+        </select>
+        <span class="pointer-events-none absolute right-[11px]" aria-hidden="true">▾</span>
+      </label>
+    </template>
+
+    <!-- Téléphone : dans le feuillet, des boutons radio et un segmenté. -->
+    <template #actions-mobile>
+      <fieldset class="flex flex-col">
+        <legend class="mb-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Déposées par</legend>
+        <label
+          v-for="a in [{ userId: 0, libelle: 'Tout le monde' }, ...auteurs]"
+          :key="a.userId"
+          class="flex min-h-11 items-center gap-3 border-b border-ligne text-sm last:border-b-0"
+        >
+          <input
+            v-model.number="auteur"
+            type="radio"
+            name="file-auteur"
+            :value="a.userId"
+            class="h-[18px] w-[18px] accent-[var(--color-accent)]"
+          />
           {{ a.libelle }}
-        </option>
-      </select>
+        </label>
+      </fieldset>
 
-      <label for="tri-file" class="ml-2 text-sm font-medium">Trier</label>
-      <select
-        id="tri-file"
-        v-model="tri"
-        class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
-      >
-        <option value="anciennes">Les plus anciennes d’abord</option>
-        <option value="recentes">Les plus récentes d’abord</option>
-      </select>
+      <span class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Trier</span>
+      <Segmente :options="TRIS" :valeur="tri" etiquette="Ordre de la file" :colonnes="2" @choisir="tri = $event" />
+    </template>
+  </BarreEcran>
 
-      <span v-if="!chargement" class="text-sm text-attenue tnum">
-        {{ total }} demande{{ total > 1 ? 's' : '' }}
-      </span>
-    </div>
-
+  <div class="mx-auto w-full max-w-5xl px-4 py-6">
     <PanneauBase v-if="chargement && demandes.length === 0">
       <p class="mb-3 text-sm text-attenue" role="status">Chargement de la file…</p>
       <SqueletteChargement :lignes="4" />

@@ -153,16 +153,17 @@ describe('le menu lui-même', () => {
     expect(html).toMatch(/>\s*Anniversaires\s*</)
   })
 
-  it('garde l’ordre exact des enfants de l’en-tête au-delà du seuil', async () => {
-    /* Aplati par `md:contents`, l'ordre doit être celui d'avant : la marque, le
-       filet, la navigation, l'espaceur, la contribution, puis le compte. */
+  it('garde l’ordre de la barre large : la marque, les onglets, la recherche, la contribution, le compte', async () => {
+    /* Aplati par `md:contents`, le tiroir rend ses onglets DANS la barre, entre
+       la marque et la recherche (refonte 4a). « + Proposer » et le compte
+       viennent après la recherche. */
     const html = await rendre()
     const positions = [
       html.search(/>\s*Heritage\s*</),
       html.indexOf('aria-label="Navigation principale"'),
-      html.indexOf('Proposer une personne'),
-      html.indexOf('Cobalt Romarin'),
-      html.indexOf('Se déconnecter'),
+      html.indexOf('aria-label="Rechercher une personne"'),
+      html.indexOf('+ Proposer'),
+      html.indexOf('aria-label="Mon compte"'),
     ]
 
     expect(positions.every((p) => p >= 0)).toBe(true)
@@ -189,12 +190,12 @@ describe('le second bouton, celui des outils', () => {
 
   it('se tient à l’autre bout de la barre que le burger', async () => {
     /* Les deux tiroirs s'ouvrent de deux côtés opposés ; leurs boutons doivent
-       en dire autant. Entre les deux, un espaceur qui n'existe que sur mobile. */
+       en dire autant. Entre les deux, le titre de l'écran, qui prend la place. */
     annoncerBarreDOutils()
     const html = await rendre()
 
     const burger = html.indexOf('aria-controls="menu-principal"')
-    const espaceur = html.indexOf('flex-1 md:hidden')
+    const espaceur = html.indexOf('titre-ecran')
     const outils = html.indexOf('aria-controls="tiroir-outils"')
 
     expect(burger).toBeLessThan(espaceur)
