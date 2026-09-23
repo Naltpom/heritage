@@ -324,6 +324,23 @@ final class CalculAscendance
      * d'ascendance de quelqu'un d'autre — dont son épouse et ses trois enfants étiquetés
      * « Tronc ».
      *
+     * **179 et 207 comptent deux choses différentes, et les deux sont justes.** 179 est le
+     * nombre de fiches qui **reçoivent une branche qui n'est pas la leur** ; 207 est celui
+     * des fiches qui **tombent sur le repli**. Les 28 de différence ont une colonne `NULL` :
+     * le repli leur rend `null`, elles ressortent sans branche, et cela vaut **pour tout
+     * lecteur, avant comme après cette passe**. Ce ne sont donc pas un reliquat du
+     * correctif, mais l'îlot réellement détaché de l'arbre — rien de faux ne leur arrive, et
+     * rien ici ne les concerne. Prises l'une pour l'autre, ces deux quantités ont déjà coûté
+     * un arbitrage : elles se citent ensemble, ou avec leur prédicat.
+     *
+     * **Où vont les 179 : 176 reçoivent `Bf`, et 3 reviennent à `Tr`.** Ces trois-là sont
+     * les enfants du lecteur, que {@see self::tronc()} laissait dehors tant qu'il
+     * implémentait « l'ego, ses parents, sa fratrie » sans la descendance. C'est pourquoi
+     * `Bf` en compte 176 et non 179 : les deux nombres sont exacts, ils ne désignent pas le
+     * même ensemble. Mesuré en rejouant `branches()` d'avant le correctif sur le graphe
+     * servi — empreinte `91ad68db`, 648 nœuds, 468 personnes, lecteur = le père de la
+     * racine.
+     *
      * **Pourquoi elle ne change rien pour la racine.** L'amorce exige un conjoint **sans
      * branche**. Sur la vue de la racine, les conjoints des membres de son tronc sont ses
      * propres parents et les conjoints de sa fratrie, que les quatre souches ont déjà
