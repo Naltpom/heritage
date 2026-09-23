@@ -32,8 +32,19 @@ export type TypeRattachement = 'pre_lie' | 'recherche_confirmee' | 'manuel_admin
 
 export type Sexe = 'masculin' | 'feminin' | 'inconnu'
 
-/** Les quatre quarts d'ascendance et le tronc (§ 4 du dossier de mission). */
-export type Branche = 'pp' | 'pm' | 'mp' | 'mm' | 'tr'
+/**
+ * Les quatre quarts d'ascendance, le tronc, et la belle-famille.
+ *
+ * **`bf` est la sixième valeur, et elle n'est pas un cinquième quart.** Les quatre quarts
+ * sont des ascendances ; la belle-famille est une famille entière que rien ne relie au sang
+ * du lecteur et qui entre dans l'arbre par une alliance. Elle pèse lourd : pour un lecteur
+ * autre que la racine, 176 personnes sur 468 du graphe servi.
+ *
+ * Avant elle, ces personnes n'avaient pas de branche du tout et le sérialiseur leur servait
+ * celle **de la racine** par un repli silencieux — « maternelle du père » désignait alors le
+ * côté maternel de quelqu'un d'autre.
+ */
+export type Branche = 'pp' | 'pm' | 'mp' | 'mm' | 'tr' | 'bf'
 
 /** § 5.1 — ce que le cercle de visibilité laisse voir d'une personne. */
 export type Visibilite = 'complete' | 'restreinte'

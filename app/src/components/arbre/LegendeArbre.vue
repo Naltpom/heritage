@@ -45,6 +45,7 @@ const BRANCHES = [
   { classe: 'b-mp', libelle: 'Chardon — paternelle de la mère' },
   { classe: 'b-mm', libelle: 'Tilleul — maternelle de la mère' },
   { classe: 'b-tr', libelle: 'Tronc — l’ego, sa fratrie, ses parents' },
+  { classe: 'b-bf', libelle: 'Belle-famille — la famille du conjoint' },
 ] as const
 
 /**

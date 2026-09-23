@@ -42,7 +42,7 @@ import {
 /** L'ordre des quatre quarts puis du tronc. Celui de la charte et de la légende
  *  de l'arbre : on ne le réordonne pas au gré des filtres, sinon les colonnes
  *  changent de place d'un réglage à l'autre. */
-export const ORDRE_BRANCHES: readonly Branche[] = ['pp', 'pm', 'mp', 'mm', 'tr']
+export const ORDRE_BRANCHES: readonly Branche[] = ['pp', 'pm', 'mp', 'mm', 'tr', 'bf']
 
 /** Les noms de branche du produit — les mêmes que la légende de l'arbre. */
 export const LIBELLES_BRANCHE: Record<Branche, string> = {
@@ -51,6 +51,7 @@ export const LIBELLES_BRANCHE: Record<Branche, string> = {
   mp: 'Chardon',
   mm: 'Tilleul',
   tr: 'Tronc',
+  bf: 'Belle-famille',
 }
 
 /** Le libellé long, pour la légende et les infobulles. */
@@ -60,6 +61,7 @@ export const DESCRIPTIONS_BRANCHE: Record<Branche, string> = {
   mp: 'Chardon — paternelle de la mère',
   mm: 'Tilleul — maternelle de la mère',
   tr: 'Tronc — l’ego, sa fratrie, ses parents',
+  bf: 'Belle-famille — la famille du conjoint',
 }
 
 /* ------------------------------------------------------------------ */

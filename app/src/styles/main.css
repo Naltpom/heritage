@@ -87,6 +87,11 @@
      Celui-ci est franchement froid, ce qui les sépare sur le contour de la zone
      — là où la couche de remplissage, trop faible, ne le ferait pas. */
   --h-branche-hors: #76879c;
+  /* Belle-famille : la famille du conjoint d'un membre du tronc. La teinte est choisie
+     par ÉCART DE TON et non au goût — les six autres occupent 30° (romarin), 85°
+     (tilleul), 168° (bourrache), 210° (ardoise), 258° (chardon) et un gris chaud ; le
+     plus grand intervalle libre est autour de 335°, entre le chardon et le romarin. */
+  --h-branche-bf: #a8617f;
 
   /* Fonds translucides dérivés, pour les bandeaux et les pastilles. Le
      `color-mix` évite d'inventer douze hexadécimaux qui dériveraient du reste
@@ -161,6 +166,7 @@
   --color-branche-mm: var(--h-branche-mm);
   --color-branche-tr: var(--h-branche-tr);
   --color-branche-hors: var(--h-branche-hors);
+  --color-branche-bf: var(--h-branche-bf);
 
   /* Rayons repris du viewer : 7px pour un champ, 10px pour un panneau,
      99px pour une pastille. */
