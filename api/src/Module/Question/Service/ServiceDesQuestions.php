@@ -33,6 +33,22 @@ use Doctrine\ORM\EntityManagerInterface;
  * détection mille fois ne crée rien de plus. C'est ce qui rend l'effet de bord
  * inoffensif, et c'est la seule raison pour laquelle il est acceptable.
  *
+ * ── LE JOUR OÙ CE SERA LENT : UN CACHE, PAS UN CRON ─────────────────────────────
+ *
+ * Lire 274 fiches par ouverture de page est dérisoire ; à dix mille, ce ne le sera plus.
+ * **La sortie est écrite d'avance, et ce n'est pas un balayage de fond.**
+ *
+ * C'est le mécanisme que l'ADR 0005 emploie déjà pour le placement : **un cache indexé
+ * sur l'empreinte de l'arbre**. L'écriture change l'empreinte d'elle-même, donc
+ * l'invalidation ne demande aucun geste — ni compteur, ni table, ni purge. Ce qu'on met
+ * en cache est le **produit de la détection**, qui ne dépend que de l'arbre ; le filtre
+ * du cercle, lui, reste appliqué par lecteur, à chaque requête.
+ *
+ * **La règle du cercle reste donc unique, et c'est tout l'enjeu.** Un cron aurait exigé
+ * une seconde implémentation de la formule (§ 3 de l'ADR 0008) ; un cache sur empreinte
+ * n'en exige aucune. *Si vous vous surprenez à écrire une commande de console qui
+ * parcourt les comptes, relisez ce paragraphe.*
+ *
  * ── LES SEPT ÉTAPES, ET CE QUE CHACUNE EMPÊCHE ──────────────────────────────────
  *
  * | # | étape | sans elle |

@@ -42,6 +42,25 @@ namespace App\Module\Question\Enum;
  * après ses propres enfants. Les lieux ont le même défaut : `place` vit **dans** le
  * bloc date, il n'est pas un champ à part.
  *
+ * ── LES LIEUX : UN SECOND MOTIF, ET C'EST LE PLUS SOLIDE ────────────────────────
+ *
+ * Le motif ci-dessus — *`place` vit dans le bloc date, il n'est pas un champ à part* —
+ * est vrai **aujourd'hui**. Il s'évaporerait le jour où quelqu'un sortirait `place` en
+ * colonne propre, et l'on croirait alors pouvoir verser un toponyme en champ. Voici
+ * celui qui ne s'évapore pas :
+ *
+ * > **Un toponyme mal entendu ou mal orthographié ne donne pas une erreur : il donne une
+ * > AUTRE COMMUNE RÉELLE**, toujours plausible, et le plus souvent de la bonne région.
+ *
+ * Une date fausse se trahit tôt ou tard — elle fait naître quelqu'un après ses enfants,
+ * elle sort d'une fourchette. Un lieu faux ne se trahit jamais : il est bien écrit, il
+ * existe, il est à trente kilomètres du bon. « À Brest » entendu pour « à Brech » envoie
+ * le chercheur suivant dans le mauvais fonds d'archives, et rien ne le lui dira.
+ *
+ * *« À Brest » versé en valeur ferme est donc exactement aussi dangereux que « vers
+ * 1923 » — et plus difficile à rattraper.* Un lieu rapporté de mémoire reste une note,
+ * quelle que soit la forme que prendra la colonne.
+ *
  * La réponse devient donc une **note** sur la fiche, que l'administrateur lit avant de
  * saisir la valeur. Ce n'est pas un pis-aller : c'est le mécanisme même de l'ADR 0004,
  * « quelqu'un qui regarde un diff et demande sur quoi tu t'appuies ? ». Ce que la page
