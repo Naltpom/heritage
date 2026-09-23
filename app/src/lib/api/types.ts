@@ -35,7 +35,7 @@ export type Sexe = 'masculin' | 'feminin' | 'inconnu'
 /**
  * Les quatre quarts d'ascendance, le tronc, et la belle-famille.
  *
- * **`bf` est la septième valeur, et elle n'est pas un cinquième quart.** Les quatre quarts
+ * **`bf` est la sixième valeur, et elle n'est pas un cinquième quart.** Les quatre quarts
  * sont des ascendances ; la belle-famille est une famille entière que rien ne relie au sang
  * du lecteur et qui entre dans l'arbre par une alliance. Elle pèse lourd : pour un lecteur
  * autre que la racine, 176 personnes sur 468 du graphe servi.
