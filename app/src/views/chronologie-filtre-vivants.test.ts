@@ -9,8 +9,12 @@
  * Vitest, `createSSRApp` + `renderToString` est le seul rendu disponible, et
  * `onMounted` ne s'exécute jamais. Cela partage le fichier en deux :
  *
- *  - le **prédicat** est exporté par `ChronologieView.vue` dans un bloc
- *    `<script>` ordinaire, et appelé directement ;
+ *  - le **prédicat** vit dans son propre module, `components/chronologie/vivants.ts`,
+ *    et s'appelle directement. Il n'est pas rangé dans le `.vue` : un export
+ *    nommé depuis un composant ne se résout que par le chemin `*.vue`, que seul
+ *    `vue-tsc` sait suivre — `tsc` nu retombe sur la déclaration de complaisance
+ *    d'`env.d.ts`, qui ne porte qu'un export par défaut, et le prédicat arrive
+ *    en `any` avec toute sa cascade. Le module rend les types voyageurs ;
  *  - les deux morceaux d'interface qui portent le filtre — la case de la barre
  *    d'outils et la réserve — reçoivent tout par leurs propriétés : on les rend
  *    et on lit le balisage.
@@ -41,9 +45,9 @@ import {
   EXEMPLE_VIDE,
 } from '@/components/chronologie/_exemple'
 import { estVide } from '@/components/chronologie/disposition'
+import { filtrerVivants } from '@/components/chronologie/vivants'
 import BarreOutilsChronologie from '@/components/chronologie/BarreOutilsChronologie.vue'
 import ReserveVivants from '@/components/chronologie/ReserveVivants.vue'
-import { filtrerVivants } from './ChronologieView.vue'
 
 function rendre(composant: Component, proprietes: Record<string, unknown> = {}): Promise<string> {
   return renderToString(createSSRApp({ render: () => h(composant, proprietes) }))

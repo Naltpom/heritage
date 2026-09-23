@@ -1,55 +1,3 @@
-<script lang="ts">
-/**
- * Le filtre « vivants uniquement », **hors du `<script setup>`**.
- *
- * Même raison qu'`etatDeLEcran` dans `AnniversairesView.vue` : un `<script
- * setup>` se compile en une fermeture sur l'état du composant, que rien ne peut
- * appeler depuis une suite de tests. Le projet n'a ni `jsdom` ni
- * `@vue/test-utils` ; la seule façon de **prouver** un prédicat est de l'écrire
- * dans un bloc ordinaire et de l'appeler directement.
- *
- * ────────────────────────────────────────────────────────────────────
- * **LE PRÉDICAT EST `barre.vivant`, ET RIEN D'AUTRE.**
- *
- * Ni `deceased`, ni l'absence de date de fin, ni l'étiquette affichée :
- *
- *  - `deceased` est le `DEAT` **stocké** du GEDCOM ; `vivant` est le résultat
- *    **calculé** de la règle de confidentialité (seuil d'âge, cercle). C'est
- *    déjà la règle de `classesDeNoeud()` dans `components/arbre/graphe.ts`, où
- *    la classe `prive` est allumée par `vivant` « jamais par `deceased` ni par
- *    l'absence de dates » ;
- *  - `ouverte` ne suffit pas davantage : la charge réelle porte 53 barres
- *    `fin: null` **avec** `ouverte: false` — des personnes décédées dont on
- *    ignore la date. Filtrer sur `fin === null` les classerait vivantes ;
- *  - l'étiquette de date vaut littéralement « vivant·e » sur d'autres écrans.
- *    Un filtre bâti sur cette chaîne casserait au premier changement de
- *    libellé, et **en silence** : il rendrait zéro barre, pas une erreur.
- * ────────────────────────────────────────────────────────────────────
- *
- * **Filtre éteint ⟹ la vue elle-même, à l'identité.** Pas une copie
- * superficielle : le canevas surveille `vue` par identité et se reconstruit à
- * chaque nouvel objet. Rendre `{ ...vue }` ferait repeindre tout le dessin pour
- * une valeur inchangée. C'est aussi ce qui garantit que « filtre éteint » est
- * exactement l'ancien comportement, sans rien à comparer.
- *
- * **Les jalons suivent les barres.** `placerJalons()` écarte déjà un jalon dont
- * la personne n'a pas de barre, mais s'appuyer là-dessus laisserait cet objet
- * incohérent avec lui-même — des `jalons` qui désignent des personnes absentes
- * de `barres`. Une retouche de `placerJalons()` remettrait alors à l'écran les
- * faits datés de personnes que le filtre venait d'écarter, sans qu'aucun test
- * d'ici ne rougisse. On rend donc une vue cohérente, pas une vue rattrapée en
- * aval.
- */
-import type { VueChronologie } from '@/lib/api'
-
-export function filtrerVivants(vue: VueChronologie, vivantsSeuls: boolean): VueChronologie {
-  if (!vivantsSeuls) return vue
-  const barres = vue.barres.filter((barre) => barre.vivant)
-  const retenues = new Set(barres.map((barre) => barre.personId))
-  return { ...vue, barres, jalons: vue.jalons.filter((j) => retenues.has(j.personId)) }
-}
-</script>
-
 <script setup lang="ts">
 /**
  * Chronologie — § 9 du contrat, § 7.4 du dossier de mission.
@@ -108,6 +56,7 @@ import LegendeChronologie from '@/components/chronologie/LegendeChronologie.vue'
 import ReserveVivants from '@/components/chronologie/ReserveVivants.vue'
 import TiroirOutils from '@/components/mise-en-page/TiroirOutils.vue'
 import { DESCRIPTIONS_BRANCHE, estVide } from '@/components/chronologie/disposition'
+import { filtrerVivants } from '@/components/chronologie/vivants'
 import {
   chargerChronologie,
   enregistrerPreferencesChronologie,
@@ -116,11 +65,8 @@ import {
   type Branche,
   type OrientationChronologie,
   type PreferenceChronologie,
+  type VueChronologie,
 } from '@/lib/api'
-
-/* `VueChronologie` est déjà importé par le bloc `<script>` ci-dessus, dont les
-   liaisons sont dans la portée de ce `<script setup>` : le réimporter ici ferait
-   un doublon d'identifiant. Même montage qu'`AnniversairesView.vue`. */
 
 /** Les quatre réglages, tels que le lecteur les manipule. Ils reprennent les
  *  valeurs du serveur au premier chargement, puis lui appartiennent. */
