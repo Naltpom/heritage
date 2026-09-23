@@ -368,8 +368,18 @@ final class CalculAscendance
      *     regions non vides   AVANT  mediane 2  (max 6)   APRES  mediane 3  (max 9)
      *     plus grosse region  AVANT  mediane 381/468      APRES  mediane 431/468
      *
-     * Pour le lecteur médian, le tronc porte donc **431 personnes sur 468**. Trois choses
-     * à lire ensemble avant d'appeler cela une fuite :
+     *     taille du TRONC     min 1  ·  médiane 422  ·  max 440
+     *     sa plus grosse région EST le tronc pour 356 lecteurs sur 468
+     *
+     * ⚠ **LA DEUXIÈME LIGNE ET LA TROISIÈME NE COMPTENT PAS LA MÊME CHOSE, et la première
+     * rédaction de ce docbloc les confondait.** Elle disait « pour le lecteur médian, le
+     * tronc porte 431 personnes » : 431 est la médiane de la **plus grosse région**, quelle
+     * qu'elle soit, et le tronc médian vaut **422**. L'écart est petit, l'erreur ne l'est
+     * pas — elle survit à une relecture parce que les deux nombres sont vrais, chacun de son
+     * prédicat. Le lecteur tiré à la médiane pour la recette, `p420`, le montre en entier :
+     * sa plus grosse région pèse 431 et **c'est `pm`**, son tronc n'en porte que 4.
+     *
+     * Trois choses à lire ensemble avant d'appeler cela une fuite :
      *
      * - **le bloc géant préexiste à cette règle.** Avant elle, les 381 du lecteur médian
      *   étaient dans `Bf`, une région unique elle aussi. La règle ne crée pas la
