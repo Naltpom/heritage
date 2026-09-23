@@ -34,14 +34,14 @@ import {
   analyserErreur,
   changerMotDePasse,
   demanderChangementDeCourriel,
-  televerserPortraitDuCompte,
 } from '@/lib/api'
-import { connecter, rafraichirSession, useSession } from '@/composables/useSession'
+import { connecter, useSession } from '@/composables/useSession'
 import { erreurCourriel, erreurMotDePasse } from '@/components/inscription/reglesMotDePasse'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import ChampTexte from '@/components/base/ChampTexte.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
+import ChoixPortrait from '@/components/medias/ChoixPortrait.vue'
 
 const { session, rattache } = useSession()
 
@@ -60,30 +60,8 @@ const nomDeLaFiche = computed(() => membreRattache.value?.personLabel ?? null)
 /* --- photo de profil = portrait de la personne ---------------------- */
 
 const portrait = computed(() => session.value?.portrait ?? null)
-const envoiPortrait = ref(false)
-const erreurPortrait = ref<unknown>(null)
+const choixPortraitOuvert = ref(false)
 const portraitDepose = ref(false)
-
-async function deposerLePortrait(evenement: Event): Promise<void> {
-  const entree = evenement.target
-  if (!(entree instanceof HTMLInputElement) || entree.files === null) return
-  const fichier = entree.files[0]
-  if (fichier === undefined) return
-  envoiPortrait.value = true
-  erreurPortrait.value = null
-  portraitDepose.value = false
-  try {
-    await televerserPortraitDuCompte(fichier)
-    // La session porte le portrait courant : c'est elle qu'on relit, pas le média.
-    await rafraichirSession()
-    portraitDepose.value = true
-  } catch (e) {
-    erreurPortrait.value = e
-  } finally {
-    entree.value = ''
-    envoiPortrait.value = false
-  }
-}
 
 /* --- courriel ------------------------------------------------------- */
 
@@ -248,18 +226,17 @@ function dateLisible(iso: string): string {
           <div v-else class="flex h-20 w-20 items-center justify-center rounded-full bg-accent-doux text-attenue" aria-hidden="true">
             —
           </div>
-          <label class="flex flex-col gap-1 text-sm">
-            <span>{{ portrait === null ? 'Ajouter ma photo' : 'Remplacer ma photo' }}</span>
-            <input
-              type="file"
-              accept="image/*"
-              :disabled="envoiPortrait"
-              @change="deposerLePortrait"
-            />
-          </label>
+          <BoutonBase variante="secondaire" @click="choixPortraitOuvert = true; portraitDepose = false">
+            {{ portrait === null ? 'Ajouter ma photo' : 'Remplacer ma photo' }}
+          </BoutonBase>
         </div>
-        <MessageErreur v-if="erreurPortrait !== null" :erreur="erreurPortrait" />
+        <p class="m-0 text-xs text-attenue">Importez une photo ou prenez-la, puis cadrez votre visage dans le cercle.</p>
         <p v-if="portraitDepose" class="text-sm" role="status">Photo enregistrée.</p>
+        <ChoixPortrait
+          :ouvert="choixPortraitOuvert"
+          @fermer="choixPortraitOuvert = false"
+          @depose="portraitDepose = true"
+        />
       </section>
     </PanneauBase>
 

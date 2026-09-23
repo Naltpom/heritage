@@ -23,6 +23,7 @@
 import { computed, ref } from 'vue'
 import { useSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
+import ChoixPortrait from '@/components/medias/ChoixPortrait.vue'
 
 const { session, rattache } = useSession()
 
@@ -40,6 +41,8 @@ function lireLeRefus(): boolean {
 }
 
 const refuse = ref(lireLeRefus())
+/** La fenêtre « Ma photo » s'ouvre ici même : importer ou prendre, puis cadrer. */
+const choixOuvert = ref(false)
 
 const portrait = computed(() => session.value?.portrait ?? null)
 
@@ -68,9 +71,7 @@ function fermer(): void {
   >
     <template v-if="etat === 'aucun'">
       <span>Votre fiche n'a pas encore de photo. Ajoutez la vôtre : elle apparaîtra sur votre carte dans l'arbre.</span>
-      <RouterLink :to="{ name: 'compte' }">
-        <BoutonBase variante="principal">Ajouter ma photo</BoutonBase>
-      </RouterLink>
+      <BoutonBase variante="principal" @click="choixOuvert = true">Ajouter ma photo</BoutonBase>
       <BoutonBase variante="discret" @click="fermer">Plus tard</BoutonBase>
     </template>
 
@@ -83,9 +84,8 @@ function fermer(): void {
       />
       <span>Quelqu'un a déjà déposé cette photo de vous. La garder, ou la remplacer par la vôtre ?</span>
       <BoutonBase variante="secondaire" @click="fermer">Garder</BoutonBase>
-      <RouterLink :to="{ name: 'compte' }">
-        <BoutonBase variante="principal">Remplacer</BoutonBase>
-      </RouterLink>
+      <BoutonBase variante="principal" @click="choixOuvert = true">Remplacer</BoutonBase>
     </template>
   </div>
+  <ChoixPortrait :ouvert="choixOuvert" @fermer="choixOuvert = false" />
 </template>
