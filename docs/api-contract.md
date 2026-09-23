@@ -5447,3 +5447,162 @@ Et cela se vérifie mécaniquement : pour un lecteur donné, l'ensemble des
 
 La carte, elle, est hors de cette question : elle ne sert que des agrégats et
 n'ouvre aucune bulle sur une liste nominative.
+
+---
+
+## 21. Questions
+
+Module **`Question`**. Les trous de l'arbre que **ce compte-là** pourrait combler,
+et les trois façons d'y répondre. Décision, motifs et arbitrages :
+[`docs/adr/0008-questions-et-modele-de-langage.md`](adr/0008-questions-et-modele-de-langage.md).
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/questions` | `membre` | — | `200` | `401`, `409` |
+| `POST` | `/api/questions/{id}/je-ne-sais-pas` | `membre` | — | `200` | `401`, `404`, `409` |
+| `POST` | `/api/questions/{id}/plus-tard` | `membre` | — | `200` | `401`, `404`, `409` |
+| `POST` | `/api/questions/{id}/reponse` | `membre` | `{texte?, mediaId?}` | `201` | `401`, `404`, `409`, `422`, `503` |
+
+**Régime de cache : aucun.** `Cache-Control: no-store` sur les quatre. Une question
+nomme une personne et dépend du compte ; elle ne se met en cache nulle part, pas
+même dans le navigateur.
+
+### 21.1 Le `GET` écrit, et c'est délibéré
+
+Ouvrir la page **rejoue la détection côté serveur et crée les lignes manquantes**.
+
+Le motif est structurel, et il n'y a pas d'autre solution propre :
+`CercleDeVisibiliteInterface` résout le lecteur **depuis la session** (§ 10.4, la
+bascule « voir comme un membre »), donc il n'existe pas — et il ne doit pas
+exister — d'API « le cercle du compte n° 12 » qu'une tâche nocturne appellerait
+pour tous les comptes. En fabriquer une aurait voulu dire réécrire la formule du
+cercle une seconde fois, et *une règle de confidentialité ne se trompe qu'une fois
+pour fuir* (ADR 0003).
+
+Deux conséquences pour un client :
+
+- **l'appel est idempotent** — un index unique (`uniq_qst_question_lacune`) fait
+  que le rejouer mille fois ne crée rien de plus. C'est la seule raison pour
+  laquelle l'effet de bord est acceptable ;
+- **il ne se déclenche qu'au montage de son écran.** Ni sur un filtre, ni sur un
+  défilement, ni en rafale.
+
+`409 detection_concurrente` (`details.rejouable: true`) signale deux ouvertures
+simultanées du même compte : rien n'est cassé, rien n'est perdu, **recharger
+suffit**.
+
+### 21.2 La charge de la page
+
+```json
+{
+  "questions": [
+    {
+      "id": 42,
+      "texte": "Savez-vous où Alberte Bourrache est décédée ?",
+      "nature": "lieu_deces_inconnu",
+      "natureLibelle": "Lieu de décès inconnu",
+      "redacteur": "regles",
+      "redacteurLibelle": "Formulation automatique",
+      "attendPhoto": false,
+      "sujet": { "kind": "personne", "id": 214, "libelle": "Alberte Bourrache" },
+      "etat": "posee",
+      "etatLibelle": "Posée",
+      "reports": 0,
+      "demandes": []
+    }
+  ],
+  "total": 1,
+  "redigeesParModele": 0
+}
+```
+
+**`redacteur` et `redigeesParModele` ne sont pas décoratifs.** L'ADR 0008 décide
+que la page dit à qui lit qu'un modèle de langage a écrit la question : *« un
+membre qui découvre par hasard que ses données familiales sont passées chez un
+tiers le vit autrement que celui à qui on l'a dit »*. La mention s'affiche **une
+fois, en tête** — répétée sous vingt questions, elle cesse d'être lue.
+
+**`attendPhoto` existe pour que le client n'ait pas à connaître la liste des
+natures.** Une seule d'entre elles appelle une image plutôt qu'une phrase, et c'est
+au serveur de le dire : un front qui testerait `nature === "aucune_photo"`
+recopierait une règle métier qu'il faudrait corriger à deux endroits.
+
+### 21.3 Les trois réponses, et ce que chacune écrit
+
+| Geste | Écrit | Ne touche PAS |
+|---|---|---|
+| « Je ne sais pas » | `qst_question.etat = inconnue`, horodaté | l'arbre, la file |
+| « Je vais me renseigner » | `etat = differee` + une relance | l'arbre, la file |
+| Une réponse | **1 ou 2 `prp_change_request`** | `tree_person` |
+
+**« Je ne sais pas » et « Je vais me renseigner » sont deux états, pas un.** Le
+premier ferme la question définitivement — sans cette mémoire, la même question
+revient à chaque chargement et la page devient un mur au bout d'une semaine. Le
+second la repousse, et **le délai double à chaque report** : une promesse qu'on
+rappelle indéfiniment est un harcèlement poli, au terme duquel on répond « je ne
+sais pas » pour s'en débarrasser, ce qui détruit l'information au lieu de la
+recueillir.
+
+**Une réponse ne touche jamais `tree_person`.** Elle entre dans le circuit de
+l'ADR 0004, par les natures qui existent déjà :
+
+| Réponse | Nature de demande |
+|---|---|
+| une photo | `ajout_media` |
+| un fait qui vise un champ de la surface éditable (§ 6.2) | `modification_personne` |
+| un fait qui ne vise aucun champ | `ajout_note` |
+
+*Pourquoi si peu de champs.* Une réponse en texte libre n'est pas une valeur
+validée. « vers 1923 », « juste avant la guerre » : un bloc date porte cinq valeurs
+solidaires (§ 14), et les deviner depuis une phrase fabriquerait une date ferme à
+partir d'une fourchette — l'aplatissement que le § 9.1 du modèle interdit. La
+réponse devient donc une note, que l'administrateur lit avant de saisir la valeur.
+
+**Une réponse peut produire DEUX demandes** — le lieu en note, la photo de l'acte
+en média — et il faut qu'elles soient deux : l'administrateur doit pouvoir accepter
+la photo et refuser le lieu. `demandes[]` les porte toutes.
+
+### 21.4 La photo se téléverse d'abord
+
+`POST /api/medias` (§ 7.1) rend un média `en_attente`, puis son identifiant
+accompagne la réponse. **Aucun octet ne transite par les routes de ce module** : le
+téléversement, la purge des métadonnées EXIF, la vignette et l'empreinte
+appartiennent à `Media` et y restent.
+
+### 21.5 Les codes d'erreur propres à ce module
+
+| Code | Statut | `details.rejouable` | Ce qu'il veut dire |
+|---|---|---|---|
+| `detection_concurrente` | `409` | `true` | deux ouvertures simultanées — **rechargez** |
+| `question_deja_tranchee` | `409` | `false` | un second onglet a déjà répondu — **rechargez**, ne réessayez pas |
+| `question_introuvable` | `404` | — | elle n'existe pas, **ou elle n'est pas à vous** |
+| `reponse_invalide` | `422` | — | corps vide, ou texte hors bornes |
+| `depot_indisponible` | `503` | — | le circuit de validation n'est pas joignable ; **rien à corriger dans la réponse** |
+
+**`question_introuvable` couvre les deux cas, et c'est la décision qui compte.** Un
+`403` sur la question d'autrui apprendrait que la ligne existe — or une question
+**nomme une personne**, et « n° 412 existe mais n'est pas à vous » se recoupe avec
+le reste pour reconstituer à qui l'on demande quoi, donc qui connaît qui. C'est le
+§ 15.3 appliqué à une porte de sortie nouvelle.
+
+**`depot_indisponible` est un `503` et non un `422`** parce qu'il n'y a rien à
+corriger dans la réponse du membre. Un `422` le ferait chercher une faute dans un
+texte qui n'en a aucune, et sans doute réécrire — c'est-à-dire perdre ce qu'il
+avait écrit.
+
+### 21.6 Ce que le cercle décide ici
+
+La liste servie passe par le **même** `CercleDeVisibiliteInterface` que les huit
+autres portes de sortie, et **deux fois** :
+
+- **à la création** d'une question — on n'en crée pas une qui nommerait quelqu'un
+  que ce compte n'a pas le droit de voir ;
+- **à la lecture** — un cercle **rétrécit** (`cercle.generations` est un réglage
+  d'administration), et les lignes déjà en base, elles, ne bougent pas.
+
+**Une question se sert entière ou pas du tout.** Deux colonnes portent le nom de la
+personne : `sujet.libelle`, qui est un libellé dénormalisé ordinaire (§ 0.4 du
+modèle), et surtout `texte` — *une phrase en français qui contient le nom*. Aucune
+liste blanche champ par champ ne l'aurait attrapée ; c'est la règle plus générale
+de l'ADR 0003 qui la couvre, *« tout champ dérivé d'une donnée masquée est lui-même
+une donnée masquée »*.

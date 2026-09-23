@@ -56,6 +56,12 @@ final class DepotNonBranche implements DepotDeReponse
         // diagnostic exact et inutile pour qui le lit.
         return new DepotImpossible(
             'Votre réponse n\'a pas pu être enregistrée. Réessayez dans un moment.',
+            champ: null,
+            // `503` et non `422` : il n'y a **rien à corriger** dans la réponse du
+            // membre. Un `422` le ferait chercher une faute dans un texte qui n'en a
+            // aucune, et le ferait sans doute réécrire — c'est-à-dire perdre ce qu'il
+            // avait écrit.
+            statut: 503,
         );
     }
 }

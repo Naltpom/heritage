@@ -43,6 +43,11 @@ export * from './propositions'
    (§ 7). Aucune URL de fichier ne s'y fabrique : le serveur écrit `url` et
    `vignetteUrl` dans la charge du média, et c'est ce qui applique le cercle. */
 export * from './medias'
+/* Module `Question` : la page « Questions » — les trous de l'arbre que ce
+   compte-là pourrait combler, et les trois façons d'y répondre (ADR 0008).
+   Le `GET` de cette page ÉCRIT côté serveur : lire l'en-tête avant de
+   l'appeler ailleurs qu'au montage de son écran. */
+export * from './questions'
 /* Modules `Core` et `Membership`, côté administrateur : invitations,
    utilisateurs, bascule « voir comme un membre » (§ 3, § 10). */
 export * from './administration'

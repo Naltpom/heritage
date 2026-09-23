@@ -210,6 +210,20 @@ export const routes: RouteRecordRaw[] = [
 
   /* --- Contribution : rattachement validé exigé (§ 12.1) ---------- */
   {
+    // **La page « Questions »** (ADR 0008).
+    //
+    // `membre` et non `attente` : un compte dont le rattachement n'est pas
+    // validé n'a **pas de cercle du tout** (ADR 0003), donc aucune question sur
+    // une personne vivante — et il ne peut de toute façon rien déposer, l'API
+    // lui refusant l'écriture (§ 12.2). Lui ouvrir un écran qui ne montrerait
+    // que des aïeux sans qu'il puisse y répondre serait lui promettre une
+    // contribution impossible.
+    path: '/questions',
+    name: 'questions',
+    component: () => import('@/views/QuestionsView.vue'),
+    meta: { acces: 'membre', titre: 'Questions' },
+  },
+  {
     // Nom cité par le contrat (§ 8, `linkRoute: "demande.detail"`). La route
     // existe dès maintenant pour que les notifications aient une cible ; l'écran
     // revient à l'agent des propositions.

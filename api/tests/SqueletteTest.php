@@ -33,12 +33,17 @@ final class SqueletteTest extends KernelTestCase
      * L'arborescence modulaire est un contrat entre les agents qui travaillent en
      * parallèle : si un dossier de module disparaît, le mapping Doctrine et le
      * chargement des routes tombent en même temps. On le vérifie explicitement.
+     *
+     * **Huit depuis le 2026-09-23** : `Question` (la page « Questions », ADR 0008). Il
+     * n'y entre qu'avec son contrôleur et son fichier de routes — un module listé ici
+     * sans eux ferait échouer ce test sur une absence voulue, et l'on apprendrait à le
+     * lire comme du bruit.
      */
-    public function testLesSeptModulesSontPresents(): void
+    public function testLesHuitModulesSontPresents(): void
     {
         $racine = \dirname(__DIR__);
 
-        foreach (['Core', 'Tree', 'Membership', 'Proposal', 'Media', 'Timeline', 'Gedcom'] as $module) {
+        foreach (['Core', 'Tree', 'Membership', 'Proposal', 'Media', 'Timeline', 'Gedcom', 'Question'] as $module) {
             foreach (['Controller', 'Entity', 'Enum', 'Repository', 'Service'] as $couche) {
                 self::assertDirectoryExists(
                     $racine.'/src/Module/'.$module.'/'.$couche,

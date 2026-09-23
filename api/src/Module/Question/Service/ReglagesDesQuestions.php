@@ -32,6 +32,7 @@ final readonly class ReglagesDesQuestions
 {
     public const string CLE_MEMOIRE_VIVANTE = 'questions.memoire_vivante_annees';
     public const string CLE_MAXIMUM_PAR_PAGE = 'questions.maximum_par_page';
+    public const string CLE_RELANCE_JOURS = 'questions.relance_jours';
 
     /**
      * **Un nombre d'années, jamais une année.**.
@@ -61,6 +62,12 @@ final readonly class ReglagesDesQuestions
      */
     public const int MAXIMUM_PAR_PAGE_DEFAUT = 20;
 
+    /** Le premier délai de relance d'un « je vais me renseigner ». */
+    public const int RELANCE_JOURS_DEFAUT = 30;
+
+    /** Le plafond du doublement — voir {@see prochaineRelance()}. */
+    public const int RELANCE_PLAFOND_JOURS = 365;
+
     public function __construct(private SettingService $reglages)
     {
     }
@@ -85,5 +92,31 @@ final readonly class ReglagesDesQuestions
     public function maximumParPage(): int
     {
         return max(1, $this->reglages->entier(self::CLE_MAXIMUM_PAR_PAGE, self::MAXIMUM_PAR_PAGE_DEFAUT));
+    }
+
+    /**
+     * Dans combien de temps reposer une question repoussée — **et le délai DOUBLE à
+     * chaque report**.
+     *
+     * C'est la réponse douce au problème que pose `EtatDeQuestion::Differee` : « je vais
+     * me renseigner » doit revenir, sinon la promesse est perdue ; mais une promesse
+     * qu'on rappelle au même rythme indéfiniment est un harcèlement poli, au terme duquel
+     * le membre répond « je ne sais pas » pour s'en débarrasser — ce qui **détruit**
+     * l'information au lieu de la recueillir.
+     *
+     * Doubler plutôt que fermer au bout de trois : fermer ferait décider à la place du
+     * membre, et le troisième rappel est précisément celui qui tombe le jour où il a
+     * enfin vu sa tante. La question ne disparaît jamais d'elle-même ; elle se fait juste
+     * de plus en plus discrète.
+     *
+     * Le plafond à un an existe pour que le doublement ne rende pas la question
+     * inatteignable au bout de huit reports — `30 × 2^8`, c'est vingt ans.
+     */
+    public function prochaineRelance(\DateTimeImmutable $maintenant, int $reportsDejaFaits): \DateTimeImmutable
+    {
+        $base = max(1, $this->reglages->entier(self::CLE_RELANCE_JOURS, self::RELANCE_JOURS_DEFAUT));
+        $jours = min(self::RELANCE_PLAFOND_JOURS, $base * (2 ** max(0, $reportsDejaFaits)));
+
+        return $maintenant->modify(sprintf('+%d days', $jours));
     }
 }

@@ -68,7 +68,14 @@ services:
     App\Module\Question\Service\RedacteurDeQuestions:
         alias: App\Module\Question\Service\RedactionParGabarit
 
-    # Branché sur `Proposal` au jalon 3. Aucune écriture ne part de ce module tant que
-    # cette ligne pointe sur le repli — qui lève, bruyamment.
+    # Branché sur `Proposal` depuis le jalon 3. L'adaptateur ne fait que construire un
+    # corps de requête et appeler `DepotDeDemande` — le MÊME service que
+    # `POST /api/demandes` : aucun chemin d'écriture nouveau n'existe.
+    #
+    # Le repli (`Service/Port/DepotNonBranche`) reste en place et LÈVE : c'est le seul
+    # des trois qui n'a pas le droit d'échouer en silence. Une réponse qu'on ferait
+    # semblant d'enregistrer serait une contribution perdue sans que personne ne
+    # l'apprenne — ni le membre, qui a vu sa confirmation, ni l'administrateur, dont la
+    # file vide ne rougit pas.
     App\Module\Question\Contract\DepotDeReponse:
-        alias: App\Module\Question\Service\Port\DepotNonBranche
+        alias: App\Module\Proposal\Service\DepotDeReponsesAuxQuestions

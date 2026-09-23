@@ -20,23 +20,27 @@ namespace App\Module\Question\Exception;
  * dont la réparation tient en un rechargement — la seconde tentative trouve les lignes
  * déjà créées et n'en crée aucune.
  *
- * ## Ce que l'appelant en fait
+ * ## `409` avec `details.rejouable`, comme `verrou_concurrent`
  *
- * Un **409 avec « réessayez »**, comme `verrou_concurrent` ailleurs dans ce produit. Pas
- * un 500 : rien n'est cassé, et rien n'est perdu.
+ * Le front branche sur le booléen plutôt que sur la liste des codes — c'est la
+ * « trouvaille la plus coûteuse » du test des trois routes de `Proposal`, et elle vaut
+ * ici : **rien n'est cassé, rien n'est perdu, il suffit de recharger.**
  *
- * On ne rattrape **pas** l'erreur ici pour rejouer la lecture dans la foulée : après un
+ * On ne rattrape **pas** l'erreur pour rejouer la lecture dans la foulée : après un
  * `flush()` en échec, Doctrine **ferme** l'`EntityManager`, et tout ce qu'on tenterait
  * ensuite avec lui lèverait à son tour — on transformerait un incident lisible en une
  * pile d'erreurs dont la cause première aurait disparu.
  */
-final class DetectionConcurrente extends \RuntimeException
+final class DetectionConcurrente extends ErreurDeQuestion
 {
     public static function pourLeCompte(int $userId, ?\Throwable $precedente = null): self
     {
         return new self(
-            \sprintf('Deux détections concurrentes pour le compte %d ; la seconde n\'a rien écrit.', $userId),
-            0,
+            'detection_concurrente',
+            'Vos questions étaient en cours de préparation. Rechargez la page.',
+            409,
+            null,
+            ['rejouable' => true, 'compte' => $userId],
             $precedente,
         );
     }

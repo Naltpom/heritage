@@ -1,0 +1,12 @@
+# Contrat : ce fichier est celui du module Question (la page « Questions », ADR 0008).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# Les routes se déclarent par attributs #[Route] dans les contrôleurs du module ;
+# l'import ci-dessous suffit à les charger. On n'ajoute ici que ce qu'un attribut
+# ne sait pas exprimer : préfixe global, route servie par un service, redirection.
+
+question_controleurs:
+    resource:
+        path: ../../src/Module/Question/Controller/
+        namespace: App\Module\Question\Controller
+    type: attribute
