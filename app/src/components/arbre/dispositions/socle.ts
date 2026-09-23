@@ -85,7 +85,21 @@ function entierBorne(valeur: unknown, defaut: number): number {
   return Math.min(20, Math.max(0, Math.trunc(nombre)))
 }
 
-export const DISPOSITIONS = ['conjoints', 'bornee', 'croisements', 'duplication', 'ressorts', 'blocs'] as const
+/**
+ * Les dispositions qu'une route peut demander.
+ *
+ * **Il n'en reste qu'une, et c'est celle que `/arbre` sert.** Les six autres
+ * étaient des maquettes de comparaison ; le choix est fait, les routes sont
+ * parties. La liste reste une liste — et non une constante — parce que
+ * `PRESENTATIONS` est un `Record<NomDeDisposition, …>` : c'est elle qui fait
+ * rougir `vue-tsc` si une entrée du registre survit à sa route.
+ *
+ * Les modules des maquettes retirées n'ont pas tous disparu avec elles :
+ * `blocs`, `croisements`, `duplication`, `pedigree` et `ascendanceSeule` restent
+ * des **bibliothèques**, parce que `ArbreView` ou les relevés de mesure en
+ * importent des fonctions. Voir l'en-tête d'`index.ts`.
+ */
+export const DISPOSITIONS = ['ressorts'] as const
 
 export type NomDeDisposition = (typeof DISPOSITIONS)[number]
 

@@ -614,7 +614,7 @@ describe.runIf(CHEMIN !== undefined)('sur le graphe réel', () => {
    *
    * | | fiches déplacées, en moyenne | au pire | à zéro |
    * |---|---|---|---|
-   * | recalcul global — ce que faisait `/arbre-7` | **23,4** | — | — |
+   * | recalcul global — ce que faisait `ressorts` seul | **23,4** | — | — |
    * | insertion locale | **3,8** | 19 | 36 cas sur 121 |
    *
    * Les bornes de l'assertion sont larges à dessein : ce qu'on tient ici, c'est
