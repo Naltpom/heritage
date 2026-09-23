@@ -94,6 +94,22 @@ import type { NoeudGraphe } from '@/lib/api'
  * le type ne prévoit pas. Sans cette clé, ces fiches recevaient la classe
  * `b-null`, à laquelle aucune règle ne répond : liseré non peint, et aucun aplat.
  * Elles ont une région, et c'est celle des gens sans place attribuée.
+ *
+ * ── POURQUOI ELLE SE DESSINE, ALORS QU'ELLE N'EST PAS UN BLOC ──────────────
+ *
+ * **Deux affirmations se collent facilement, et une seule est vraie.** La spécification du
+ * chantier a d'abord été formulée ainsi : *« `hors` n'est pas un bloc — ne se dessine
+ * pas »*. Le premier membre est juste : `hors` ne fait pas partie des treize. **Le second
+ * ne s'en déduit pas**, et l'arbitrage rendu le 23/09/2026 l'a retiré.
+ *
+ * `hors` n'est pas un bloc : **c'est la marque de ce qui n'en a aucun.** La règle du
+ * commanditaire dit *« seules les personnes vraiment hors de mon arbre n'ont pas de
+ * bloc »* ; cet aplat est l'expression VISIBLE de cette règle, le seul endroit où l'on
+ * voit *qui* est dehors. Le retirer cacherait l'effet de la règle elle-même.
+ *
+ * Et le moment comptait : le liseré de branche des fiches a été retiré le même jour
+ * (`canevas.ts`). Supprimer l'aplat en plus aurait ôté **deux repères d'un coup à la même
+ * population** — les 28 détachés seraient devenus indistinguables de fiches ordinaires.
  */
 export type CleDeZone =
   | 'pp'

@@ -37,16 +37,12 @@ import {
   type IndexGraphe,
   type NoeudPersonneEtendu,
 } from './graphe'
-import { ENVELOPPES, cleDeZone, enveloppesDeBranche, zonesDeBranche } from './zones'
+import { ENVELOPPES, enveloppesDeBranche, zonesDeBranche } from './zones'
 
 const NS_SVG = 'http://www.w3.org/2000/svg'
 
 /** Rayon des coins d'une fiche, repris de `rendu.py`. */
 const RAYON_FICHE = 5
-/** Le liseré de branche : 4 unités de large, encastré de 1,2 dans le bord. */
-const LISERE_LARGEUR = 4
-const LISERE_MARGE_X = 1.2
-const LISERE_MARGE_Y = 6
 /** Lignes de texte, mesurées depuis le haut de la fiche. */
 /*
  * La fiche AFFICHÉE fait 56 px de haut, avec un emplacement photo de 40 px à
@@ -440,18 +436,32 @@ function construireFiche(
     creer('rect', { x, y, width: personne.w, height: personne.h, rx: RAYON_FICHE }),
   )
 
-  g.appendChild(
-    creer('rect', {
-      // `cleDeZone` et non `personne.branch` : le sérialiseur peut poser `null`,
-      // qui composait la classe `b-null` — à laquelle aucune règle ne répond, donc
-      // un liseré non peint sur des fiches bien réelles. Voir `zones.ts`.
-      class: `br b-${cleDeZone(personne.branch)}`,
-      x: x + LISERE_MARGE_X,
-      y: y + LISERE_MARGE_Y,
-      width: LISERE_LARGEUR,
-      height: personne.h - 2 * LISERE_MARGE_Y,
-    }),
-  )
+  /*
+   * ⚠ **LE LISERÉ DE BRANCHE A ÉTÉ RETIRÉ D'ICI LE 23/09/2026, ET LES RÈGLES CSS RESTENT.**
+   *
+   * Une fiche portait deux couleurs : le fond et la bordure disent le **sexe**, un liseré de
+   * 4 unités disait la **branche**. Le commanditaire a tranché : *seul le liseré disparaît, le
+   * fond de sexe reste.* La branche se lit désormais au nuage, le sexe à la carte — et le
+   * sexe est une convention généalogique indépendante des blocs.
+   *
+   * **LE GESTE EST DE CESSER DE POSER LA CLASSE, JAMAIS DE SUPPRIMER `.br` NI LES `.b-*`.**
+   * Ces règles servent 22 autres émissions dans cinq fichiers, relevées à la commande et non
+   * de mémoire : les aplats de région juste au-dessus dans ce fichier, la légende de l'arbre,
+   * les deux sites de `chronologie/canevas.ts`, la pastille de filtre, et la légende de la
+   * chronologie. **Cette dernière est la plus silencieuse** : des pastilles qui perdent leur
+   * couleur ne cassent rien, ne rougissent nulle part, n'ont aucun test — personne ne s'en
+   * apercevrait avant des semaines.
+   *
+   * La recette de vérification est un inventaire relancé, pas une liste recopiée :
+   *
+   *     git grep -nE 'b-(pp|pm|mp|mm|tr|hors|cpp|cpm|cmp|cmm|\$\{)' origin/main    *         -- 'app/src/**\/*.ts' 'app/src/**\/*.vue' | grep -v '\.test\.ts'
+   *
+   * Guillemets **simples** : entre doubles, le shell mange l'antislash, `$` redevient
+   * l'ancre de fin de ligne, et la commande ne rend plus que les classes littérales — en
+   * silence, avec un code de sortie 0. Elle rendait 25 lignes dont 2 docblocs, soit 23
+   * émissions, avant ce retrait ; 24 et 22 après. **Si elle en rend moins, c'est qu'on a
+   * touché à autre chose que cette ligne.**
+   */
 
   // L'emplacement photo, identique pour toutes les fiches : le portrait s'il y en
   // a un et si la fiche est visible du lecteur — la clé est alors présente —,

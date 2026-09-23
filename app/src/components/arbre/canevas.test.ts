@@ -360,7 +360,7 @@ describe('construireCanevas', () => {
     expect(svg.tous((e) => e.classes.includes('barre'))).toHaveLength(1)
   })
 
-  it('compose une fiche : titre, cadre, liseré de branche, silhouette, nom, dates', () => {
+  it('compose une fiche : titre, cadre, silhouette, nom, dates — et PLUS de liseré', () => {
     const { svg } = monter()
     const ego = svg.parId('p1')
     expect(ego).toBeDefined()
@@ -368,12 +368,41 @@ describe('construireCanevas', () => {
     expect(ego.classes).toContain('ego')
     // Sans `portrait`, l'emplacement photo porte la silhouette — un rond et une
     // épaule — et jamais une image vide qui ferait une requête pour rien.
-    expect(ego.enfants.map((e) => e.tag)).toEqual(['title', 'rect', 'rect', 'circle', 'path', 'text', 'text'])
+    expect(ego.enfants.map((e) => e.tag)).toEqual(['title', 'rect', 'circle', 'path', 'text', 'text'])
     expect(ego.enfants[0].textContent).toBe('Personne p1')
-    expect(ego.enfants[2].attributs['class']).toBe('br b-pm')
-    expect(ego.enfants[3].attributs['class']).toBe('photo-vide')
-    expect(ego.enfants[5].attributs['class']).toBe('nm')
-    expect(ego.enfants[6].textContent).toBe('1900 – 1980')
+    expect(ego.enfants[2].attributs['class']).toBe('photo-vide')
+    expect(ego.enfants[4].attributs['class']).toBe('nm')
+    expect(ego.enfants[5].textContent).toBe('1900 – 1980')
+  })
+
+  /**
+   * **AUCUNE FICHE NE PORTE PLUS DE CLASSE DE BRANCHE**, et c'est une assertion à part
+   * plutôt qu'un rect de moins dans la liste ci-dessus.
+   *
+   * La liste des enfants dit la composition ; celle-ci dit l'**intention**. Un liseré qui
+   * reviendrait sous une autre forme — un `<line>`, un attribut sur le cadre — passerait la
+   * première sans que personne ne le remarque : elle ne compte que des balises.
+   *
+   * Et le complément compte autant : les aplats de région, eux, portent toujours leur
+   * classe. Le geste était de **cesser de la poser sur les fiches**, jamais de supprimer les
+   * règles `.b-*`, dont 22 autres émissions dépendent dans cinq fichiers.
+   */
+  it('ne pose plus AUCUNE classe de branche sur une fiche, et les aplats gardent les leurs', () => {
+    const { svg } = monter()
+
+    const brancheDUneFiche = svg.tous(
+      (e) => e.classes.some((c) => c.startsWith('b-')) && !e.classes.includes('zone'),
+    )
+    expect(brancheDUneFiche).toHaveLength(0)
+    expect(svg.tous((e) => e.classes.includes('br'))).toHaveLength(0)
+
+    // Le témoin qui empêche l'assertion précédente d'être vraie pour la mauvaise raison :
+    // si plus rien ne portait de classe de branche, elle passerait tout aussi bien.
+    expect(svg.tous((e) => e.classes.includes('zone')).length).toBeGreaterThan(0)
+    expect(
+      svg.tous((e) => e.classes.includes('zone') && e.classes.some((c) => c.startsWith('b-')))
+        .length,
+    ).toBeGreaterThan(0)
   })
 
   it('ne dessine aucune ligne de dates sur un nœud restreint, et n’en invente pas', () => {
