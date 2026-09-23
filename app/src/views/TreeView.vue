@@ -85,7 +85,10 @@ function select(p: PlacedPerson, fly = true): void {
 }
 function onCardClick(p: PlacedPerson): void {
   if (wasDrag()) return
-  select(p, false)
+  // Un renvoi mène à la personne, là où elle est posée.
+  const target = p.ref ? layout.value?.byId.get(p.ref) : undefined
+  if (target) select(target)
+  else select(p, false)
 }
 function onBackgroundClick(): void {
   if (!wasDrag()) selectedId.value = null
@@ -120,7 +123,7 @@ const norm = (s: string): string =>
   s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 const index = computed(() =>
-  (layout.value?.persons ?? []).map((p) => ({ p, text: norm(p.node.displayName) })),
+  (layout.value?.persons ?? []).filter((p) => !p.ref).map((p) => ({ p, text: norm(p.node.displayName) })),
 )
 const matches = computed<PlacedPerson[]>(() => {
   const tokens = norm(query.value).split(/\s+/).filter(Boolean)
@@ -182,7 +185,8 @@ const lit = computed(() => {
 function clip(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s
 }
-const nameOf = (p: PlacedPerson): string => clip(p.node.etiquetteNom || p.node.displayName, 21)
+const nameOf = (p: PlacedPerson): string =>
+  (p.ref ? '↪ ' : '') + clip(p.node.etiquetteNom || p.node.displayName, p.ref ? 19 : 21)
 function datesOf(p: PlacedPerson): string {
   const d = p.node.etiquetteDates
   if (!d || d === '—') return ''
@@ -258,16 +262,18 @@ onBeforeUnmount(() => {
               current: matches[cursor] && matches[cursor]!.id === p.id,
               faded: lit ? !lit.has(p.id) && p.id !== selectedId : false,
               pending: p.node.enAttente,
+              ref: p.ref,
             },
           ]"
           @click.stop="onCardClick(p)"
         >
-          <title>{{ p.node.displayName }}</title>
+          <title>{{ p.ref ? `${p.node.displayName} — voir sa place dans l'arbre` : p.node.displayName }}</title>
           <rect class="box" :width="CARD_W" :height="CARD_H" rx="10" />
           <rect class="sexbar" x="0" y="0" width="5" :height="CARD_H" rx="2.5" />
           <template v-if="detail !== 'box'">
-            <text class="name" x="16" :y="detail === 'full' && datesOf(p) ? 25 : 34">{{ nameOf(p) }}</text>
-            <text v-if="detail === 'full' && datesOf(p)" class="dates" x="16" y="44">{{ datesOf(p) }}</text>
+            <text class="name" x="16" :y="detail === 'full' && (datesOf(p) || p.ref) ? 25 : 34">{{ nameOf(p) }}</text>
+            <text v-if="detail === 'full' && p.ref" class="dates" x="16" y="44">voir dans l'arbre</text>
+            <text v-else-if="detail === 'full' && datesOf(p)" class="dates" x="16" y="44">{{ datesOf(p) }}</text>
           </template>
           <text v-if="p.id === egoId && detail !== 'box'" class="tag" :x="CARD_W - 12" y="17" text-anchor="end">
             moi
@@ -450,6 +456,14 @@ onBeforeUnmount(() => {
 }
 .card.feminin .sexbar {
   fill: var(--f);
+}
+.card.ref .box {
+  fill: transparent;
+  stroke-dasharray: 5 4;
+}
+.card.ref .name {
+  font-weight: 500;
+  fill: var(--muted);
 }
 .card.pending .box {
   stroke-dasharray: 4 4;
