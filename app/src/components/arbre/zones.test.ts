@@ -292,6 +292,50 @@ describe('enveloppesDeBranche', () => {
     expect(Math.max(...ordonnees)).toBeGreaterThan(basDesBandes)
   })
 
+  /**
+   * **L'ÉLARGISSEMENT LATÉRAL NE FAIT JAMAIS SE CROISER DEUX ENVELOPPES — au CAS SERRÉ.**
+   *
+   * C'est la garantie que l'élargissement reprend à sa charge. Tant que les bandes d'une
+   * enveloppe passaient par {@link bandesDeLaRangee} sans être retouchées, elle était
+   * héritée du rabot des régions ; en s'élargissant, l'enveloppe la redémontre à son étage.
+   *
+   * **Et elle se prouve au pire endroit, jamais à un endroit confortable.** Sur le graphe
+   * servi, lecteur `p3`, les 29 paires d'enveloppes voisines ont un écart médian de
+   * 2 438 unités — un test sur une rangée large passerait sans rien éprouver. Une seule
+   * paire est à **zéro** : rangée `y = -300`, entre `pc` et `mc`. Cette fixture reproduit
+   * cette condition, et c'est la seule qui ait valeur de preuve.
+   *
+   * Deux fiches de 120 unités séparées de **20** : le rabot des régions donne 10 à chacune,
+   * leurs bandes se touchent exactement, et l'espace libre entre les deux enveloppes vaut
+   * alors 0. L'élargissement doit y obtenir **zéro**, des deux côtés de la jointure.
+   *
+   * Le second groupe d'assertions est le témoin sans lequel le premier ne prouverait rien :
+   * **les bords EXTÉRIEURS, eux, doivent bien s'élargir.** Sans lui, un élargissement
+   * entièrement désactivé passerait ce test aussi bien qu'un élargissement correct.
+   */
+  it('n’élargit pas d’un dixième là où deux enveloppes se touchent déjà — et élargit ailleurs', () => {
+    const enveloppes = enveloppesDeBranche([
+      p('p1', -1000, -300, 'pp'), //   -1060 .. -940
+      p('p2', -820, -300, 'cmp'), //    -880 ..  -760  → 20 unités d'écart exactement
+    ])
+
+    const p_ = enveloppes.find((e) => e.cle === 'p')
+    const mc = enveloppes.find((e) => e.cle === 'mc')
+    expect(p_, 'l’enveloppe paternelle existe').toBeDefined()
+    expect(mc, 'l’enveloppe maternelle du conjoint existe').toBeDefined()
+
+    const bandeP = p_!.bandes.find((b) => b.y === -300)!
+    const bandeMc = mc!.bandes.find((b) => b.y === -300)!
+
+    // LA GARANTIE : elles se touchent, elles ne se croisent pas.
+    expect(bandeMc.x0).toBeGreaterThanOrEqual(bandeP.x1)
+
+    // LE TÉMOIN : les bords extérieurs, eux, ont bien reçu la marge pleine. Sans cette
+    // seconde exigence, l’assertion ci-dessus serait satisfaite par un élargissement mort.
+    expect(bandeP.x1 - bandeP.x0).toBeGreaterThan(120 + 2 * 16)
+    expect(bandeMc.x1 - bandeMc.x0).toBeGreaterThan(120 + 2 * 16)
+  })
+
   it('rend une liste vide sur un graphe sans personne', () => {
     expect(enveloppesDeBranche([])).toEqual([])
   })
