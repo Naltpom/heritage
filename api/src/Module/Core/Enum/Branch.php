@@ -24,6 +24,22 @@ namespace App\Module\Core\Enum;
  * lui donner une valeur que le calcul devrait ensuite tenir cohérente avec ses deux
  * moitiés. **La règle qui tranchera les cas futurs : une valeur ici désigne une partition,
  * jamais une réunion.**
+ *
+ * ── L'INVARIANT : AUCUNE PERSONNE SANS BLOC ───────────────────────────────
+ *
+ * *« Tous doivent forcément être dans un des 13 blocs. Si c'est les conjoints d'une
+ * personne de ma famille, ils vont avec leur partenaire. »* — le commanditaire, 23/09/2026.
+ *
+ * C'est une **propriété du produit**, pas un effet de bord à constater, et elle est tenue
+ * par {@see \App\Module\Tree\Service\CalculAscendance::parAlliance()}. Une personne sans
+ * branche retombe sur le repli silencieux du sérialiseur et reçoit le quart d'ascendance de
+ * **la racine** : « branche paternelle » désigne alors le côté paternel de quelqu'un
+ * d'autre, et rien ne le signale. Le seul reste admis est l'îlot qu'aucun chemin ne relie
+ * au lecteur — 28 personnes sur 468 du graphe servi.
+ *
+ * **Une valeur ne se retire donc jamais d'ici sans dire où vont ceux qui la portaient.**
+ * `Bf`, la belle-famille, a été retirée le 23/09/2026 : ses membres prennent le bloc de
+ * leur partenaire.
  */
 enum Branch: string
 {
@@ -35,35 +51,18 @@ enum Branch: string
     case Mp = 'mp';
     /** Branche maternelle de la mère. */
     case Mm = 'mm';
-    /** Le tronc : la lignée directe, la fratrie **et le conjoint** de la racine. */
-    case Tr = 'tr';
     /**
-     * La belle-famille : la famille du conjoint d'un membre du tronc **autre que le
-     * lecteur lui-même**.
+     * Le tronc : la lignée directe du lecteur, sa fratrie, **son conjoint**, et **tout ce
+     * qui entre par alliance auprès d'eux**.
      *
-     * **Ce n'est pas un cinquième quart, et ce n'est pas « le reste ».** Les quatre quarts
-     * sont des ascendances ; celle-ci est une famille entière que rien ne relie au sang du
-     * lecteur, et qui entre dans l'arbre par une alliance.
-     *
-     * ⚠ **CE QUE CETTE CLÉ COUVRAIT, ET CE QU'ELLE COUVRE DEPUIS LES QUATRE QUARTS DU
-     * CONJOINT.** Son docbloc annonçait « une seule clé aujourd'hui, quatre demain », et
-     * promettait que le découpage la **remplacerait**. Le découpage est fait — {@see Cpp}
-     * et ses trois sœurs — et cette prévision était **fausse sur un point** : `Bf` ne
-     * disparaît pas, elle rétrécit.
-     *
-     * La raison tient à son amorce, et elle se lit dans
-     * {@see \App\Module\Tree\Service\CalculAscendance::belleFamille()} : elle part du
-     * conjoint de **tout** membre du tronc — donc aussi des conjoints de la fratrie du
-     * lecteur et de ceux de ses enfants. Ces familles-là ne sont l'ascendance de personne
-     * dans le dessin : elles n'ont pas de quatre quarts à recevoir. `Bf` les garde, et
-     * c'est **une région, pas un résidu** : « la belle-famille de ma sœur » est une phrase
-     * qui a un sens, et qui n'en a aucun dans les treize blocs.
-     *
-     * Avant qu'elle existe, ces personnes n'avaient pas de branche du tout, et le
-     * sérialiseur leur servait celle **de la racine** par un repli silencieux ;
-     * « maternelle du père » désignait alors le côté maternel de quelqu'un d'autre.
+     * ⚠ **IL EST GROS, ET C'EST LA RÈGLE QUI LE VEUT.** Pour un lecteur autre que la
+     * racine, il passe d'une poignée de personnes à cent cinquante et plus. Ce n'est pas une
+     * fuite à colmater : le commanditaire a arbitré que *« les conjoints d'une personne de
+     * ma famille vont avec leur partenaire »*, et il l'a accepté en le sachant. Le seul
+     * découpage plus fin qui existe est celui du conjoint **du lecteur** ({@see Cpp}) ;
+     * celui de sa sœur ou de son fils n'a pas de bloc à lui dans les treize.
      */
-    case Bf = 'bf';
+    case Tr = 'tr';
     /**
      * `pp'` — la branche paternelle du père **du conjoint du lecteur**.
      *
@@ -115,7 +114,6 @@ enum Branch: string
             self::Mp => 'Branche paternelle de la mère',
             self::Mm => 'Branche maternelle de la mère',
             self::Tr => 'Tronc',
-            self::Bf => 'Belle-famille',
             self::Cpp => 'Branche paternelle du père du conjoint',
             self::Cpm => 'Branche maternelle du père du conjoint',
             self::Cmp => 'Branche paternelle de la mère du conjoint',

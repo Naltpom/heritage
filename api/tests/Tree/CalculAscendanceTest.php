@@ -143,22 +143,24 @@ final class CalculAscendanceTest extends TestCase
     }
 
     /**
-     * **LE TRONC NE SE PROPAGE PAS PAR ALLIANCE.** C'est le test qui manquait, et il vise
-     * une seule ligne : `Branch::Tr !== $branche[$voisin]` dans la passe d'héritage.
+     * **LE SANG DU LECTEUR PASSE AVANT L'ALLIANCE**, et c'est ce qui reste de la garde
+     * `Branch::Tr !== $branche[$voisin]` dans la boucle d'héritage.
      *
-     * Le test voisin vérifie ce que le tronc **contient** ; celui-ci vérifie ce qu'il ne
-     * **déborde pas**. La nuance n'est pas académique : retirer cette condition fait passer
-     * le tronc de 8 à 180 personnes sur le graphe servi, parce qu'il s'écoule par les
-     * conjoints puis de proche en proche. **Retirer la garde doit faire rougir ce test.**
+     * ⚠ **CE TEST S'APPELAIT « LE TRONC NE SE PROPAGE PAS PAR ALLIANCE », ET CE N'EST PLUS
+     * VRAI.** Le commanditaire a arbitré le 23/09/2026 que *« tous doivent forcément être
+     * dans un des 13 blocs ; si c'est les conjoints d'une personne de ma famille, ils vont
+     * avec leur partenaire »*. Le tronc se propage donc bien par alliance, et il grossit
+     * beaucoup — voir {@see CalculAscendance::parAlliance()}, qui porte les mesures.
      *
-     * Et il ne rougissait nulle part ailleurs : la garde est *inerte pour la racine*, seul
-     * point de vue qu'un compte obtienne aujourd'hui. Sans ce test, la condition restait
-     * une mine — porteuse, non documentée, et jamais exercée.
+     * Ce que la garde fait encore, et qui vaut d'être tenu : elle **ordonne**. Les
+     * beaux-parents du lecteur ne sont pas happés par le tronc parce que l'ascendance de
+     * son conjoint est réclamée avant, par les quatre quarts. Sans cet ordre, ils
+     * partiraient au tronc — et les blocs `cpp`/`cmp` se videraient sans que rien ne le
+     * signale, le dessin restant parfaitement cohérent.
      *
-     * L'arbre : l'ego, son épouse, et les parents de son épouse. Rien ne relie ces
-     * beaux-parents au sang de l'ego — ils ne doivent donc jamais devenir `Tr`.
+     * L'arbre : l'ego, son épouse, et les parents de son épouse.
      */
-    public function testLeTroncNeSePropagePasParAlliance(): void
+    public function testLeSangEtLAscendanceDuConjointPassentAvantLAlliance(): void
     {
         $placement = (new CalculAscendance())->calculer(
             ['pEgo', 'pPere', 'pMere', 'pEpouse', 'pBeauPere', 'pBelleMere'],
@@ -174,30 +176,26 @@ final class CalculAscendanceTest extends TestCase
         self::assertSame(Branch::Tr, $placement->branches['pPere']);
         self::assertSame(Branch::Tr, $placement->branches['pMere']);
 
-        // **Ce que ce test vise n'est pas l'épouse, ce sont ses parents.** L'épouse, elle,
-        // est au tronc depuis que la colonne a cessé de contredire le moteur de placement,
-        // qui l'y garde déjà — « le conjoint reste dans le tronc, c'est le foyer du
-        // lecteur ». La définition du commanditaire dit la même chose : *« moi, mes
-        // parents, mon conjoint — mais pas ses frères et sœurs »*. Voir {@see
-        // CalculAscendance::tronc()}, qui porte la raison en entier.
-        //
-        // La garde qu'exerce ce test est intacte, et c'est **la seconde ligne** qui la
-        // porte : le tronc s'arrête au conjoint et ne s'écoule pas chez ses parents. Si la
-        // condition `Branch::Tr !== $branche[$voisin]` disparaissait de la boucle
-        // d'héritage, ce sont ces deux-là qui deviendraient `Tr` — et elles rougiraient.
+        // L'épouse est au tronc : c'est le foyer du lecteur, et le moteur de placement l'y
+        // pose déjà. Ses parents, eux, sont la moitié droite du dessin.
         self::assertSame(Branch::Tr, $placement->branches['pEpouse']);
-        self::assertNotSame(Branch::Tr, $placement->branches['pBeauPere'] ?? null);
-        self::assertNotSame(Branch::Tr, $placement->branches['pBelleMere'] ?? null);
+        self::assertSame(Branch::Cpp, $placement->branches['pBeauPere']);
+        self::assertSame(Branch::Cmp, $placement->branches['pBelleMere']);
     }
 
     /**
-     * La belle-famille reçoit **sa propre région**, et non celle d'un quart d'ascendance.
+     * **QUI ENTRE PAR ALLIANCE PREND LE BLOC DE SON PARTENAIRE**, et sa famille suit.
      *
-     * Avant elle, ces personnes sortaient sans branche du tout, et le sérialiseur du graphe
-     * leur servait celle **de la racine** par un repli silencieux — « maternelle du père »
-     * désignait alors le côté maternel de quelqu'un d'autre.
+     * C'est la règle générale du commanditaire, et ce test en est le cas nominal. Le mari
+     * de la sœur du lecteur n'a ni sang ni ascendance qui le relie aux treize blocs : il
+     * prend celui de sa femme, le tronc. Puis ses parents suivent, parce qu'une
+     * belle-famille est une famille entière et pas une personne.
+     *
+     * Avant cet arbitrage, ces trois-là recevaient `Branch::Bf`, une région à eux. Elle
+     * n'existe plus : les treize blocs n'en prévoient pas, et leur en inventer un
+     * quatorzième a été écarté explicitement.
      */
-    public function testLaBelleFamilleARegionAElle(): void
+    public function testQuiEntreParAlliancePrendLeBlocDeSonPartenaire(): void
     {
         $placement = (new CalculAscendance())->calculer(
             ['pEgo', 'pPere', 'pMere', 'pSoeur', 'pMariDeLaSoeur', 'pSonPere', 'pSaMere'],
@@ -209,29 +207,27 @@ final class CalculAscendanceTest extends TestCase
             'pEgo',
         );
 
-        // L'amorce : le conjoint d'un membre du tronc, que le sang n'a pas classé.
-        self::assertSame(Branch::Bf, $placement->branches['pMariDeLaSoeur']);
-        // Puis sa famille — une belle-famille est une famille, pas une personne.
-        self::assertSame(Branch::Bf, $placement->branches['pSonPere']);
-        self::assertSame(Branch::Bf, $placement->branches['pSaMere']);
+        // Le partenaire est au tronc : il y va.
+        self::assertSame(Branch::Tr, $placement->branches['pSoeur']);
+        self::assertSame(Branch::Tr, $placement->branches['pMariDeLaSoeur']);
+        // Puis sa famille, de proche en proche.
+        self::assertSame(Branch::Tr, $placement->branches['pSonPere']);
+        self::assertSame(Branch::Tr, $placement->branches['pSaMere']);
     }
 
     /**
-     * **`Bf` n'a pas été remplacée par les quatre quarts du conjoint : elle a rétréci.**.
+     * **LES DEUX BELLES-FAMILLES NE VONT PAS AU MÊME ENDROIT**, et c'est ce qui distingue
+     * la règle d'un simple fourre-tout.
      *
-     * Son docbloc annonçait « une seule clé aujourd'hui, quatre demain », et prévoyait que
-     * le découpage la remplace. Ce test tient la part de cette prévision qui était fausse,
-     * parce qu'elle ne se voit qu'en faisant cohabiter les deux régions dans un même arbre.
+     * Celle du conjoint du lecteur a des blocs à elle — ses quatre quarts. Celle de sa
+     * sœur n'en a pas : les treize n'en prévoient pas, et elle rejoint donc le bloc de son
+     * partenaire, le tronc. Une seule passe, deux destinations, décidées par ce que les
+     * quarts du conjoint ont réclamé avant.
      *
-     * L'amorce de `Bf` part du conjoint de **tout** membre du tronc. Celui du lecteur a
-     * désormais ses quatre quarts ; ceux de sa fratrie et de ses enfants n'en ont pas, et
-     * n'en auront pas — les treize blocs ne leur font pas de place. `Bf` les garde.
-     *
-     * L'arbre : le lecteur avec sa conjointe et les parents de celle-ci d'un côté, sa sœur
-     * avec son mari à elle et les parents de ce mari de l'autre. **Les deux belles-familles
-     * ne doivent pas tomber dans la même région.**
+     * Ce test remplace `testLesQuartsDuConjointNeViderontPasLaBelleFamille`, qui tenait la
+     * région `Branch::Bf`. Elle n'existe plus.
      */
-    public function testLesQuartsDuConjointNeViderontPasLaBelleFamille(): void
+    public function testLesDeuxBellesFamillesNeVontPasAuMemeBloc(): void
     {
         $placement = (new CalculAscendance())->calculer(
             [
@@ -253,19 +249,18 @@ final class CalculAscendanceTest extends TestCase
         self::assertSame(Branch::Cpp, $placement->branches['pBeauPere']);
         self::assertSame(Branch::Cmp, $placement->branches['pBelleMere']);
 
-        // La belle-famille de la sœur n'est l'ascendance de personne dans le dessin : elle
-        // n'a pas de quatre quarts à recevoir, et reste donc `Bf`.
-        self::assertSame(Branch::Bf, $placement->branches['pMariDeLaSoeur']);
-        self::assertSame(Branch::Bf, $placement->branches['pSonPere']);
-        self::assertSame(Branch::Bf, $placement->branches['pSaMere']);
+        // La belle-famille de la sœur n'a pas de bloc à elle : elle prend le sien.
+        self::assertSame(Branch::Tr, $placement->branches['pMariDeLaSoeur']);
+        self::assertSame(Branch::Tr, $placement->branches['pSonPere']);
+        self::assertSame(Branch::Tr, $placement->branches['pSaMere']);
     }
 
     /**
-     * **La belle-famille n'entame aucun quart d'ascendance.** Sa passe vient après
-     * l'héritage par le sang et ne touche que ce qui n'a pas de branche : un grand-parent
-     * reste dans son quart même s'il est marié à quelqu'un.
+     * **L'ALLIANCE NE DISPUTE RIEN AU SANG.** La passe qui donne à chacun le bloc de son
+     * partenaire vient après l'héritage par le sang et ne touche que ce qui n'a pas de
+     * bloc : un grand-parent reste dans son quart même s'il est marié à quelqu'un.
      */
-    public function testLaBelleFamilleNeDisputeRienAuSang(): void
+    public function testLAllianceNeDisputeRienAuSang(): void
     {
         $placement = (new CalculAscendance())->calculer(
             ['pEgo', 'pPere', 'pMere', 'pGpp', 'pGpm'],
@@ -278,10 +273,128 @@ final class CalculAscendanceTest extends TestCase
 
         self::assertSame(Branch::Pp, $placement->branches['pGpp']);
         self::assertSame(Branch::Pm, $placement->branches['pGpm']);
-        self::assertArrayNotHasKey('pBf', $placement->branches);
-        foreach ($placement->branches as $branche) {
-            self::assertNotSame(Branch::Bf, $branche);
+    }
+
+    /**
+     * **L'INVARIANT : AUCUNE PERSONNE SANS BLOC, hors îlot qu'aucun chemin ne relie.**.
+     *
+     * *« Tous doivent forcément être dans un des 13 blocs »* — c'est une propriété du
+     * produit, pas un effet de bord à constater, et elle se teste. Une personne sans
+     * branche retombe sur le repli silencieux du sérialiseur et reçoit le quart
+     * d'ascendance de **la racine** : « branche paternelle » désigne alors le côté
+     * paternel de quelqu'un d'autre, et rien ne le signale.
+     *
+     * ⚠ **CE TEST A DÉJÀ MORDU.** La première rédaction de {@see
+     * CalculAscendance::parAlliance()} plafonnait ses passes à huit, comme la boucle
+     * d'héritage. Sur les 468 points de vue du graphe servi, **264 lecteurs gardaient de 4
+     * à 33 personnes sans bloc alors qu'un chemin les reliait à eux** — l'invariant tombait
+     * en silence. Il sort désormais sur un point fixe. L'arbre ci-dessous porte une chaîne
+     * d'alliances de six maillons, qui ne tiendrait pas sous un plafond serré.
+     */
+    public function testAucunePersonneNeSortSansBlocHorsIlotDetache(): void
+    {
+        // Le tronc de départ : le lecteur et sa sœur.
+        $familles = [$this->famille('f1', ['pPere', 'pMere'], ['pEgo', 'pSoeur'])];
+        $chaine = [];
+
+        // **Une chaîne de douze BEAUX-FRÈRES, et pas une descendance.** Chaque maillon
+        // épouse le précédent, amène ses deux parents, et ces parents ont un autre enfant
+        // qui épouse le maillon suivant. Rien ici n'est ni l'ascendance ni la descendance du
+        // lecteur : le seul chemin qui y mène est une suite d'alliances.
+        //
+        // La première rédaction de ce cas chaînait des ENFANTS du lecteur. Elle ne prouvait
+        // rien : {@see CalculAscendance::tronc()} sert toute la descendance d'emblée, si
+        // bien que la chaîne entière était déjà posée avant la passe qu'on voulait éprouver.
+        $ancre = 'pSoeur';
+
+        for ($i = 1; $i <= 12; ++$i) {
+            $conjoint = 'pAllie'.$i;
+            $beauPere = 'pSonPere'.$i;
+            $belleMere = 'pSaMere'.$i;
+            $suivant = 'pSaSoeur'.$i;
+
+            array_push($chaine, $conjoint, $beauPere, $belleMere, $suivant);
+            $familles[] = $this->famille('fu'.$i, [$ancre, $conjoint], []);
+            $familles[] = $this->famille('fp'.$i, [$beauPere, $belleMere], [$conjoint, $suivant]);
+
+            $ancre = $suivant;
         }
+
+        // ** LA CHAÎNE EST DÉCLARÉE À L'ENVERS, ET C'EST TOUT L'INTÉRÊT DU CAS.** L'ordre de
+        // la liste est de la donnée et non de la présentation — `CalculAscendance::calculer()`
+        // le dit en toutes lettres. Une passe sert les identifiants dans cet ordre :
+        // déclarée du lecteur vers le large, la chaîne tombe en une seule passe et le cas ne
+        // prouverait rien. Du large vers le lecteur, elle n'avance que d'un maillon par
+        // passe — et douze maillons ne tiennent pas sous un plafond de huit.
+        $personnes = array_merge(array_reverse($chaine), ['pEgo', 'pSoeur', 'pPere', 'pMere']);
+
+        // Et un îlot que rien ne relie : lui seul a le droit de sortir sans bloc.
+        $personnes[] = 'pIlotA';
+        $personnes[] = 'pIlotB';
+        $familles[] = $this->famille('fi', ['pIlotA', 'pIlotB'], []);
+
+        $placement = (new CalculAscendance())->calculer($personnes, $familles, 'pEgo');
+
+        $sansBloc = array_values(array_diff($personnes, array_keys($placement->branches)));
+        sort($sansBloc);
+
+        // **L'ATTENDU EST CALCULÉ, PAS ÉCRIT À LA MAIN**, et c'est ce qui fait de ce cas une
+        // propriété plutôt qu'un exemple : c'est exactement le complément de la composante
+        // connexe du lecteur. Une liste en dur passerait encore le jour où quelqu'un
+        // ajouterait un maillon à la chaîne sans ajouter l'assertion qui va avec.
+        $detaches = array_values(array_diff($personnes, $this->relieesA('pEgo', $familles)));
+        sort($detaches);
+
+        self::assertSame(
+            $detaches,
+            $sansBloc,
+            'Sans bloc doit valoir EXACTEMENT l’îlot détaché : ni plus — quelqu’un de relié a '
+            .'perdu son bloc —, ni moins — un détaché en a reçu un auquel il n’a pas droit.',
+        );
+        self::assertSame(['pIlotA', 'pIlotB'], $detaches, 'Le témoin : l’îlot n’est pas vide.');
+    }
+
+    /**
+     * Tout ce qu'un chemin relie à une personne — parents, enfants, conjoints, sans limite
+     * de distance. C'est la définition en creux de « vraiment hors de mon arbre ».
+     *
+     * @param list<FamillePlacable> $familles
+     *
+     * @return list<string>
+     */
+    private function relieesA(string $depart, array $familles): array
+    {
+        $voisins = [];
+
+        foreach ($familles as $famille) {
+            foreach ($famille->enfants as $enfant) {
+                foreach ($famille->epoux as $parent) {
+                    $voisins[$enfant][] = $parent;
+                    $voisins[$parent][] = $enfant;
+                }
+            }
+
+            if (2 === \count($famille->epoux)) {
+                $voisins[$famille->epoux[0]][] = $famille->epoux[1];
+                $voisins[$famille->epoux[1]][] = $famille->epoux[0];
+            }
+        }
+
+        $vus = [$depart => true];
+        $pile = [$depart];
+
+        while ([] !== $pile) {
+            $courant = array_pop($pile);
+
+            foreach ($voisins[$courant] ?? [] as $voisin) {
+                if (!isset($vus[$voisin])) {
+                    $vus[$voisin] = true;
+                    $pile[] = $voisin;
+                }
+            }
+        }
+
+        return array_keys($vus);
     }
 
     /**
@@ -380,7 +493,7 @@ final class CalculAscendanceTest extends TestCase
      * La racine de cet arbre n'a pas de conjoint. Les quatre quarts du conjoint ne doivent
      * donc jamais y être posés, et la colonne `branch` persistée — qui est exactement la
      * vue de la racine — ne doit pas bouger. C'est le même témoin que celui de
-     * {@see Branch::Bf} en son temps, et pour la même raison : une région de plus qui
+     * `Branch::Bf` en son temps, et pour la même raison : une région de plus qui
      * s'allumerait sur la racine serait une régression invisible en relecture, puisque le
      * dessin resterait parfaitement cohérent.
      *

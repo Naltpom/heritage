@@ -33,16 +33,26 @@ export type TypeRattachement = 'pre_lie' | 'recherche_confirmee' | 'manuel_admin
 export type Sexe = 'masculin' | 'feminin' | 'inconnu'
 
 /**
- * Les quatre quarts d'ascendance, le tronc, et la belle-famille.
+ * Les quatre quarts d'ascendance du lecteur, le tronc, et les quatre quarts de son
+ * conjoint.
  *
- * **`bf` est la sixième valeur, et elle n'est pas un cinquième quart.** Les quatre quarts
- * sont des ascendances ; la belle-famille est une famille entière que rien ne relie au sang
- * du lecteur et qui entre dans l'arbre par une alliance. Elle pèse lourd : pour un lecteur
- * autre que la racine, 176 personnes sur 468 du graphe servi.
+ * **L'INVARIANT : aucune personne servie sans branche, hors îlot détaché.** *« Tous doivent
+ * forcément être dans un des 13 blocs ; si c'est les conjoints d'une personne de ma
+ * famille, ils vont avec leur partenaire »* — le commanditaire, 23/09/2026. Le serveur le
+ * tient (`CalculAscendance::parAlliance()`), et le front n'a donc **pas** à prévoir de
+ * région de secours : `hors` reste réservée à ce qu'aucun chemin ne relie au lecteur.
  *
- * Avant elle, ces personnes n'avaient pas de branche du tout et le sérialiseur leur servait
- * celle **de la racine** par un repli silencieux — « maternelle du père » désignait alors le
- * côté maternel de quelqu'un d'autre.
+ * **`bf`, la belle-famille, a existé du 20 au 23/09/2026 et n'existe plus.** Elle donnait
+ * une région à ceux qui entraient par alliance ; ils prennent désormais le bloc de leur
+ * partenaire. Une valeur `bf` qui reviendrait d'un stockage ancien tombe dans `hors` par
+ * {@link cleDeZone}, sans rien casser.
+ *
+ * ⚠ **CONSÉQUENCE MESURÉE, à connaître avant de dessiner** : pour le lecteur médian du
+ * graphe servi, `tr` porte **431 personnes sur 468**. La concentration n'est pas nouvelle —
+ * avant l'arbitrage, les 381 du même lecteur étaient dans `bf` — et le nombre de régions
+ * non vides AUGMENTE (médiane 2 → 3, maximum 6 → 9). Mais un dessin qui suppose treize
+ * blocs à peu près équilibrés se trompera : c'est quand le conjoint du lecteur a une
+ * ascendance connue qu'ils se remplissent.
  */
 export type Branche =
   | 'pp'
@@ -50,7 +60,6 @@ export type Branche =
   | 'mp'
   | 'mm'
   | 'tr'
-  | 'bf'
   | 'cpp'
   | 'cpm'
   | 'cmp'

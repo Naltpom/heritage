@@ -45,9 +45,9 @@ import {
  *
  *  **`bf` recule en dernier, et ce n'est pas indifférent.** Les colonnes de la chronologie
  *  se lisent maintenant comme le dessin : les quatre quarts du lecteur, son tronc, les
- *  quatre de son conjoint. La belle-famille — celle de sa fratrie et de ses enfants — n'a
- *  pas de place dans cette lecture de gauche à droite ; elle se range donc au bout, et non
- *  entre le tronc et la moitié droite, où elle couperait la symétrie en deux. */
+ *  quatre de son conjoint. Il n'y a plus de dixième colonne : la belle-famille a eu la
+ *  sienne du 20 au 23/09/2026, puis l'arbitrage du commanditaire lui a donné le bloc de son
+ *  partenaire. Neuf colonnes, et l'ordre est celui du dessin. */
 export const ORDRE_BRANCHES: readonly Branche[] = [
   'pp',
   'pm',
@@ -58,7 +58,6 @@ export const ORDRE_BRANCHES: readonly Branche[] = [
   'cpm',
   'cmp',
   'cmm',
-  'bf',
 ]
 
 /** Les noms de branche du produit — les mêmes que la légende de l'arbre. */
@@ -68,7 +67,6 @@ export const LIBELLES_BRANCHE: Record<Branche, string> = {
   mp: 'Chardon',
   mm: 'Tilleul',
   tr: 'Tronc',
-  bf: 'Belle-famille',
   cpp: 'Romarin du conjoint',
   cpm: 'Bourrache du conjoint',
   cmp: 'Chardon du conjoint',
@@ -81,8 +79,7 @@ export const DESCRIPTIONS_BRANCHE: Record<Branche, string> = {
   pm: 'Bourrache — maternelle du père',
   mp: 'Chardon — paternelle de la mère',
   mm: 'Tilleul — maternelle de la mère',
-  tr: 'Tronc — l’ego, sa fratrie, son conjoint, ses parents',
-  bf: 'Belle-famille — celle de la fratrie et des enfants',
+  tr: 'Tronc — l’ego, sa fratrie, son conjoint, et qui entre par alliance',
   cpp: 'Romarin du conjoint — paternelle de son père',
   cpm: 'Bourrache du conjoint — maternelle de son père',
   cmp: 'Chardon du conjoint — paternelle de sa mère',

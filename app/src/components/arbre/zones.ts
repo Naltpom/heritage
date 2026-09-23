@@ -1,8 +1,9 @@
 /**
  * Les **zones de branche** : un aplat coloré sous l'arbre, par région logique.
  *
- * L'arbre se lit en cinq régions — `pp`, `pm` de part et d'autre du `tr` (le
- * tronc), puis `mp`, `mm` —, et rien à l'écran ne les montrait : la branche ne
+ * L'arbre se lit en neuf régions — les quatre quarts du lecteur de part et d'autre
+ * du `tr` (le tronc), puis les quatre de son conjoint —, et rien à l'écran ne les
+ * montrait : la branche ne
  * se voyait que sur le liseré de 4 unités d'une fiche, invisible dès qu'on
  * s'éloigne. Ce module calcule la géométrie de ces aplats. Il ne touche pas au
  * DOM : {@link construireCanevas} s'en charge, et ces fonctions se testent donc
@@ -77,10 +78,15 @@
 import type { NoeudGraphe } from '@/lib/api'
 
 /**
- * La clé d'une région. Les cinq branches du contrat, plus `hors`.
+ * La clé d'une région. Les neuf branches du contrat, plus `hors`.
  *
- * ⚠ **`hors` n'est pas une sixième branche, c'est l'absence de branche.** Le
- * type `Branche` de l'API n'a que cinq valeurs et déclare `branch` obligatoire,
+ * ⚠ **`hors` n'est pas une dixième branche, c'est l'absence de branche — et depuis
+ * l'arbitrage du 23/09/2026 elle ne désigne plus qu'UNE chose : ce qu'aucun lien ne
+ * rattache à l'arbre du lecteur.** Ni les pièces rapportées, ni les belles-familles,
+ * qui prennent désormais le bloc de leur partenaire. Sur le graphe servi, l'îlot
+ * détaché pèse **28 personnes sur 468**, et c'est tout ce que `hors` doit porter.
+ *
+ * Le type `Branche` de l'API déclare `branch` obligatoire,
  * mais le sérialiseur, lui, pose `'branch' => $libelle['branch'] ?? null`
  * (`NormaliseurDeGraphe.php`) : la colonne est `NULL`able exprès — « sans racine,
  * "branche paternelle du père" ne veut rien dire » (`CalculAscendance::branches`).
@@ -95,7 +101,6 @@ export type CleDeZone =
   | 'mp'
   | 'mm'
   | 'tr'
-  | 'bf'
   | 'cpp'
   | 'cpm'
   | 'cmp'
@@ -121,7 +126,6 @@ export const CLES_DE_ZONE: readonly CleDeZone[] = [
   'cpm',
   'cmp',
   'cmm',
-  'bf',
   'hors',
 ]
 
@@ -133,7 +137,6 @@ export function cleDeZone(branche: string | null | undefined): CleDeZone {
     case 'mp':
     case 'mm':
     case 'tr':
-    case 'bf':
     case 'cpp':
     case 'cpm':
     case 'cmp':
@@ -263,7 +266,7 @@ function bandesDeLaRangee(rangee: Rangee, haut: number, bas: number): BandeDeZon
 }
 
 /**
- * Les cinq régions et les sans-branche, prêtes à peindre.
+ * Les neuf régions et les sans-branche, prêtes à peindre.
  *
  * Les bandes d'une même région sont réunies dans un seul `d`. Les bandes
  * verticalement voisines se touchent **exactement** — le bord commun est posé au

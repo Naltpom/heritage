@@ -87,11 +87,11 @@
      Celui-ci est franchement froid, ce qui les sépare sur le contour de la zone
      — là où la couche de remplissage, trop faible, ne le ferait pas. */
   --h-branche-hors: #76879c;
-  /* Belle-famille : la famille du conjoint d'un membre du tronc. La teinte est choisie
-     par ÉCART DE TON et non au goût — les six autres occupent 30° (romarin), 85°
-     (tilleul), 168° (bourrache), 210° (ardoise), 258° (chardon) et un gris chaud ; le
-     plus grand intervalle libre est autour de 335°, entre le chardon et le romarin. */
-  --h-branche-bf: #a8617f;
+  /* La belle-famille a eu sa teinte, un vieux rose posé à 335°, du 20 au 23/09/2026.
+     Elle est retirée avec la clé : le commanditaire a arbitré que qui entre par alliance
+     prend le bloc de son partenaire, et il n'y a donc plus de région à peindre pour eux.
+     L'angle est noté ici parce qu'il avait été choisi par écart de ton contre les six
+     autres : une région future le reprendrait plutôt que d'en rechercher un. */
 
   /* Les quatre quarts du CONJOINT — `pp'`, `pm'`, `mp'`, `mm'` de la spécification à
      treize blocs. Voir `Branch::Cpp` côté serveur.
@@ -199,7 +199,6 @@
   --color-branche-mm: var(--h-branche-mm);
   --color-branche-tr: var(--h-branche-tr);
   --color-branche-hors: var(--h-branche-hors);
-  --color-branche-bf: var(--h-branche-bf);
   --color-branche-cpp: var(--h-branche-cpp);
   --color-branche-cpm: var(--h-branche-cpm);
   --color-branche-cmp: var(--h-branche-cmp);

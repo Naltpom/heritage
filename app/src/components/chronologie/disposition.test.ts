@@ -115,14 +115,15 @@ describe('disposer', () => {
     expect(EXEMPLE_CHRONOLOGIE.bandes).toHaveLength(16)
     expect(disposition?.barres).toHaveLength(6)
     expect(disposition?.groupes).toHaveLength(3)
-    // DIX depuis que le conjoint du lecteur a ses quatre quarts : les quatre du lecteur,
-    // le tronc, les quatre du conjoint, et la belle-famille.
+    // NEUF : les quatre quarts du lecteur, le tronc, les quatre quarts de son conjoint.
+    // La belle-famille n'en fait plus partie — qui entre par alliance prend le bloc de son
+    // partenaire, et n'a donc pas de région à lui.
     //
     // **Dix régions et treize blocs, et les deux comptes sont justes.** Les quatre qui
     // manquent à l'appel sont les enveloppes `p`, `m`, `p'`, `m'` — des RÉUNIONS de deux
     // régions voisines, dérivées à la géométrie. Une valeur de `Branche` désigne une
     // partition, jamais une réunion. Voir `Branch::Cpp` et `CalculAscendance`.
-    expect(ORDRE_BRANCHES).toHaveLength(10)
+    expect(ORDRE_BRANCHES).toHaveLength(9)
     // Et aucune n'est servie deux fois : c'est ce que l'ordre garantit aux colonnes.
     expect(new Set(ORDRE_BRANCHES).size).toBe(ORDRE_BRANCHES.length)
   })
