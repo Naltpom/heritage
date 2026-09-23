@@ -239,7 +239,94 @@ les quatre ne désignent pas le même domaine**. Une faute de frappe sur l'une d
 trois recopies est arrêtée au démarrage, pas découverte par un membre de la
 famille sur un lien mort.
 
-### 5.3 Contrôler le fichier avant d'aller plus loin
+### 5.3 Les trois lignes de la page « Questions » — **facultatives**
+
+La page « Questions » demande à chaque membre ce que l'arbre ne sait pas encore.
+Un modèle de langage **formule** ces questions ; il n'en ouvre aucune et n'en
+ferme aucune (ADR 0008).
+
+**Ne rien écrire est un choix valide, et la page marche quand même.** Sans clé,
+aucun appel ne part, les questions sont rédigées par des gabarits, et la page
+sert exactement les mêmes questions — moins bien tournées. **Rien ne rougit,
+délibérément** : c'est une dégradation gracieuse, pas une panne, et un rouge
+permanent sur un état normal détruit l'alarme là où elle sert.
+
+Pour les activer, **trois lignes à ajouter dans le même `.env` que ci-dessus** —
+celui de `~/apps/heritage`, à la racine, **celui que Compose lit** :
+
+```
+HERITAGE_GEMINI_CLE_API=
+HERITAGE_GEMINI_MODELE=
+HERITAGE_GEMINI_POINT_DACCES=
+```
+
+| Clé | Valeur | Comment l'obtenir |
+|---|---|---|
+| `HERITAGE_GEMINI_CLE_API` | la clé d'API | Google AI Studio ou Google Cloud — **palier payant**, voir ci-dessous |
+| `HERITAGE_GEMINI_MODELE` | **laisser vide** | le code retombe sur son défaut ; à ne renseigner que si le fournisseur retire ce modèle |
+| `HERITAGE_GEMINI_POINT_DACCES` | **laisser vide** | à renseigner **uniquement** pour Vertex AI, dont l'URL porte le projet et la région |
+
+Seule la première est à remplir. Les deux autres existent parce qu'un identifiant
+de modèle et une URL écrits en dur transforment une décision du fournisseur en
+panne de production réparable seulement par un déploiement.
+
+#### Le piège qui coûterait une heure
+
+**Ces trois lignes vont dans le `.env` de la RACINE, pas dans `api/.env.local`.**
+
+`api/.dockerignore` exclut `.env.local` du contexte de construction — à raison, un
+secret n'a rien à faire dans une image. **Le conteneur ne voit donc jamais ce
+fichier**, quoi qu'on écrive dedans. C'est exactement le piège qui a déjà coûté
+une passe sur `HERITAGE_ADMIN_EMAIL`.
+
+Et une ligne dans le `.env` racine ne suffit pas non plus **par elle-même** : il
+faut que `compose.yaml` la reprenne dans le bloc `environment:` du service `api`,
+sans quoi *« Compose lirait la valeur sans jamais l'injecter dans le conteneur »*.
+**Les trois lignes y sont déjà** — rien à faire de ce côté.
+
+#### Le palier : payant ou Vertex, jamais le gratuit
+
+Le corpus transmis contient **l'arbre entier, personnes vivantes comprises** —
+arbitrage pris en connaissance de la réserve, et écrit dans l'ADR 0008, qui dit
+aussi exactement quelle phrase de l'ADR 0003 il amende.
+
+Les conditions du **palier gratuit** prévoient que les contenus soumis peuvent
+être examinés par des personnes et servir à améliorer les produits ; celles des
+offres **payantes** (clé payante, Vertex AI) s'engagent à ne pas les utiliser
+pour entraîner des modèles. Pour un corpus qui nomme dix-huit personnes vivantes,
+ce n'est pas une nuance de facturation.
+
+**Ces conditions appartiennent à Google : les relire chez eux avant de poser la
+clé.** Ce qui est gravé de notre côté, c'est la règle — *jamais le palier
+gratuit* — quelle que soit leur rédaction du moment.
+
+#### Vérifier que la clé a pris, sans jamais l'afficher
+
+```
+vps$ docker compose exec api printenv HERITAGE_GEMINI_CLE_API | wc -c
+```
+
+Un nombre **supérieur à 1** dit que la variable est arrivée dans le conteneur.
+`1` (le seul retour à la ligne) dit qu'elle est vide. **La valeur n'est jamais
+imprimée** — un secret affiché une fois dans un terminal est un secret dans un
+historique de commandes.
+
+Le contrôle qui compte vraiment vient **après** : ouvrir la page une fois, puis
+
+```sql
+SELECT redacteur, count(*) FROM qst_question GROUP BY 1;
+```
+
+`gemini` ⇒ les appels partent. Uniquement `regles` ⇒ le repli rédige, ce qui est
+le bon comportement mais veut dire que la clé n'est pas prise **ou** que le
+fournisseur ne répond pas. C'est la seule façon de distinguer les deux, parce que
+l'écran, lui, est identique dans les deux cas.
+
+Le journal d'audit garde la trace de chaque appel sortant — combien de personnes
+transmises, combien de vivantes parmi elles, quel modèle. **Jamais le corpus,
+jamais la réponse, jamais la clé.**
+
+### 5.4 Contrôler le fichier avant d'aller plus loin
 
 ```
 vps$ docker compose -f compose.yaml -f compose.prod.yaml config --quiet ; echo $?
