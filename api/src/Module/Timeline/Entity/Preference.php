@@ -55,6 +55,17 @@ class Preference
      * chaînes différentes pour le comparateur de schéma — donc un `schema:validate`
      * rouge en permanence, pour un espace.
      *
+     * **Ce défaut-ci n'est PAS celui que l'API sert**, et la nuance vaut d'être écrite : le
+     * défaut servi quand aucune ligne n'existe est {@see PreferenceDeLecture::defaut()},
+     * qui prend `Branch::cases()` — donc **toutes** les branches, `Bf` comprise depuis
+     * qu'elle existe. Celui-ci n'est qu'un défaut de **stockage** : `ServiceDesPreferences`
+     * appelle toujours `setBranches()` avec ce que le lecteur a soumis, si bien qu'aucune
+     * ligne n'est jamais créée en s'y fiant.
+     *
+     * Il reste donc à cinq valeurs, et ce n'est pas un oubli : le porter à six changerait le
+     * défaut SQL, donc la chaîne que le comparateur de schéma compare — pour un réglage que
+     * rien ne lit. Voir le paragraphe ci-dessus.
+     *
      * @var list<string> valeurs de {@see Branch}
      */
     #[ORM\Column(type: Types::JSONB, options: ['default' => '["pp", "pm", "mp", "mm", "tr"]'])]

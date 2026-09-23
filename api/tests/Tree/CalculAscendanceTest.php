@@ -148,7 +148,7 @@ final class CalculAscendanceTest extends TestCase
      *
      * Le test voisin vérifie ce que le tronc **contient** ; celui-ci vérifie ce qu'il ne
      * **déborde pas**. La nuance n'est pas académique : retirer cette condition fait passer
-     * le tronc de 5 à 180 personnes sur le graphe servi, parce qu'il s'écoule par les
+     * le tronc de 8 à 180 personnes sur le graphe servi, parce qu'il s'écoule par les
      * conjoints puis de proche en proche. **Retirer la garde doit faire rougir ce test.**
      *
      * Et il ne rougissait nulle part ailleurs : la garde est *inerte pour la racine*, seul
@@ -175,11 +175,89 @@ final class CalculAscendanceTest extends TestCase
         self::assertSame(Branch::Tr, $placement->branches['pMere']);
 
         // L'épouse touche le tronc par trois liens : elle n'en fait pas partie pour autant,
-        // et sa famille non plus. Qu'elles ressortent sans branche est un autre sujet —
-        // voir le docbloc de la garde, et la tâche #89.
+        // et sa famille non plus. Ce qu'elles reçoivent à la place est `Bf`, et c'est le
+        // test suivant qui le tient.
         self::assertNotSame(Branch::Tr, $placement->branches['pEpouse'] ?? null);
         self::assertNotSame(Branch::Tr, $placement->branches['pBeauPere'] ?? null);
         self::assertNotSame(Branch::Tr, $placement->branches['pBelleMere'] ?? null);
+    }
+
+    /**
+     * La belle-famille reçoit **sa propre région**, et non celle d'un quart d'ascendance.
+     *
+     * Avant elle, ces personnes sortaient sans branche du tout, et le sérialiseur du graphe
+     * leur servait celle **de la racine** par un repli silencieux — « maternelle du père »
+     * désignait alors le côté maternel de quelqu'un d'autre.
+     */
+    public function testLaBelleFamilleARegionAElle(): void
+    {
+        $placement = (new CalculAscendance())->calculer(
+            ['pEgo', 'pPere', 'pMere', 'pEpouse', 'pBeauPere', 'pBelleMere', 'pBeauFrere'],
+            [
+                $this->famille('f1', ['pPere', 'pMere'], ['pEgo']),
+                $this->famille('f2', ['pBeauPere', 'pBelleMere'], ['pEpouse', 'pBeauFrere']),
+                $this->famille('f3', ['pEgo', 'pEpouse'], []),
+            ],
+            'pEgo',
+        );
+
+        // L'amorce : la conjointe d'un membre du tronc, que le sang n'a pas classée.
+        self::assertSame(Branch::Bf, $placement->branches['pEpouse']);
+        // Puis sa famille — une belle-famille est une famille, pas une personne.
+        self::assertSame(Branch::Bf, $placement->branches['pBeauPere']);
+        self::assertSame(Branch::Bf, $placement->branches['pBelleMere']);
+        self::assertSame(Branch::Bf, $placement->branches['pBeauFrere']);
+    }
+
+    /**
+     * **La belle-famille n'entame aucun quart d'ascendance.** Sa passe vient après
+     * l'héritage par le sang et ne touche que ce qui n'a pas de branche : un grand-parent
+     * reste dans son quart même s'il est marié à quelqu'un.
+     */
+    public function testLaBelleFamilleNeDisputeRienAuSang(): void
+    {
+        $placement = (new CalculAscendance())->calculer(
+            ['pEgo', 'pPere', 'pMere', 'pGpp', 'pGpm'],
+            [
+                $this->famille('f1', ['pPere', 'pMere'], ['pEgo']),
+                $this->famille('f2', ['pGpp', 'pGpm'], ['pPere']),
+            ],
+            'pEgo',
+        );
+
+        self::assertSame(Branch::Pp, $placement->branches['pGpp']);
+        self::assertSame(Branch::Pm, $placement->branches['pGpm']);
+        self::assertArrayNotHasKey('pBf', $placement->branches);
+        foreach ($placement->branches as $branche) {
+            self::assertNotSame(Branch::Bf, $branche);
+        }
+    }
+
+    /**
+     * **La descendance du lecteur est sa lignée directe, pas sa belle-famille.**
+     *
+     * {@see Branch::Tr} dit « la lignée directe et la fratrie » depuis toujours, mais
+     * `tronc()` s'arrêtait à l'ego, ses parents et sa fratrie. L'oubli est invisible sur la
+     * racine de l'arbre réel, qui n'a pas d'enfant ; pour tout autre lecteur, ses propres
+     * enfants n'étaient d'aucun quart ni du tronc et tombaient avec la belle-famille —
+     * c'est-à-dire du côté de leur mère.
+     */
+    public function testLaDescendanceDuLecteurEstDansSonTronc(): void
+    {
+        $placement = (new CalculAscendance())->calculer(
+            ['pEgo', 'pPere', 'pMere', 'pEpouse', 'pFils', 'pPetitFils'],
+            [
+                $this->famille('f1', ['pPere', 'pMere'], ['pEgo']),
+                $this->famille('f2', ['pEgo', 'pEpouse'], ['pFils']),
+                $this->famille('f3', ['pFils'], ['pPetitFils']),
+            ],
+            'pEgo',
+        );
+
+        self::assertSame(Branch::Tr, $placement->branches['pFils']);
+        self::assertSame(Branch::Tr, $placement->branches['pPetitFils']);
+        // La mère de l'enfant reste, elle, la belle-famille.
+        self::assertSame(Branch::Bf, $placement->branches['pEpouse']);
     }
 
     /**
