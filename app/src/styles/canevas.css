@@ -231,6 +231,46 @@
 .b-cmm { fill: var(--color-branche-cmm); }
 
 /* ------------------------------------------------------------------ */
+/* Les gros nuages — les enveloppes, SOUS les régions                   */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Un gros nuage porte deux régions et sa surface de convergence : c'est le ▽ du croquis.
+ * Sa géométrie est dans `components/arbre/zones.ts` ; ici il n'y a que la peinture.
+ *
+ * **AUCUNE TEINTE NOUVELLE N'EST INVENTÉE.** Une enveloppe reprend la couleur de sa
+ * première moitié — `p` celle de `pp`, `m` celle de `mp` — parce qu'elle n'est pas une
+ * région de plus : c'est la réunion de deux régions voisines. Lui donner une couleur à elle
+ * ferait lire treize familles de teintes là où il y en a quatre.
+ *
+ * L'estompe vient des `stop-opacity` du dégradé, posées en JavaScript avec la géométrie ;
+ * ici on ne fixe que la couleur, pour qu'elle suive les jetons de la palette. Ni `filter`,
+ * ni `mask`, ni `opacity` : ADR 0007, règle 2 et son corollaire.
+ */
+.nuages .nuage {
+  stroke: none;
+  /* Un fond ne capte pas le clic — le délégué unique du `<svg>` vise les fiches. */
+  pointer-events: none;
+}
+
+radialGradient.n-p stop { stop-color: var(--color-branche-pp); }
+radialGradient.n-m stop { stop-color: var(--color-branche-mp); }
+radialGradient.n-pc stop { stop-color: var(--color-branche-cpp); }
+radialGradient.n-mc stop { stop-color: var(--color-branche-cmp); }
+
+/*
+ * ⚠ **PAS D'AJUSTEMENT SOMBRE ICI, ET C'EST DÉLIBÉRÉMENT UN MANQUE.** Les régions en ont
+ * un : sur le fond `#141517`, la même teinte rend plus sourde, et leur `fill-opacity` passe
+ * de 0,10 à 0,17. Un nuage ne peut pas recevoir le même remède — son alpha ne vient pas
+ * d'une `fill-opacity` mais des `stop-opacity` de son dégradé, et une `fill-opacity` supérieure
+ * à 1 n'existe pas : elle serait ramenée à 1 sans rien changer, donc une règle sans effet que
+ * le prochain croirait active.
+ *
+ * Le remède juste est un second jeu de `stop-opacity`, à régler **en regardant l'écran**.
+ * Ces trois arrêts n'ont été vérifiés ni à 390 px ni en sombre.
+ */
+
+/* ------------------------------------------------------------------ */
 /* Zones de branche — l'aplat des régions, SOUS tout le reste          */
 /* ------------------------------------------------------------------ */
 

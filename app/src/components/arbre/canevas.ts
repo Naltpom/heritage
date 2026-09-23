@@ -37,7 +37,7 @@ import {
   type IndexGraphe,
   type NoeudPersonneEtendu,
 } from './graphe'
-import { cleDeZone, zonesDeBranche } from './zones'
+import { ENVELOPPES, cleDeZone, enveloppesDeBranche, zonesDeBranche } from './zones'
 
 const NS_SVG = 'http://www.w3.org/2000/svg'
 
@@ -146,6 +146,7 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
 
   while (svg.firstChild !== null) svg.removeChild(svg.firstChild)
 
+  const gNuages = creer('g', { class: 'nuages' })
   const gZones = creer('g', { class: 'zones' })
   const gAretes = creer('g', { class: 'aretes' })
   const gFamilles = creer('g', { class: 'familles' })
@@ -156,6 +157,30 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
   const rond = creer('clipPath', { id: ID_ROND_PORTRAIT, clipPathUnits: 'objectBoundingBox' })
   rond.appendChild(creer('circle', { cx: 0.5, cy: 0.5, r: 0.5 }))
   defs.appendChild(rond)
+
+  /*
+   * **L'estompe des bords vient d'un DÉGRADÉ, et c'est une contrainte, pas un goût.**
+   *
+   * Un nuage à bord flou se fait d'instinct avec `feGaussianBlur`. L'ADR 0007 l'interdit
+   * ici, et il nomme `filter` au même titre qu'`opacity` : chacun crée un contexte
+   * d'empilement, donc une couche de composition allouée **par élément et par image**, sur
+   * un canevas de 750. Un `<radialGradient>` est un *paint server* : il s'applique pendant
+   * la peinture, dans la même passe que le reste, et n'alloue rien.
+   *
+   * `gradientUnits` reste à son défaut — `objectBoundingBox` —, si bien qu'un seul dégradé
+   * par enveloppe suit la forme de son chemin quelles que soient sa taille et sa position,
+   * y compris quand `ressorts` la redessine à chaque image de l'animation d'arrivée.
+   *
+   * Les teintes ne sont pas posées ici mais dans `canevas.css`, sur les `stop` : une couleur
+   * écrite en JavaScript échapperait au thème et aux jetons de la palette.
+   */
+  for (const { cle } of ENVELOPPES) {
+    const degrade = creer('radialGradient', { id: `nuage-${cle}`, class: `n-${cle}` })
+    degrade.appendChild(creer('stop', { offset: '0', 'stop-opacity': '0.5' }))
+    degrade.appendChild(creer('stop', { offset: '0.62', 'stop-opacity': '0.34' }))
+    degrade.appendChild(creer('stop', { offset: '1', 'stop-opacity': '0' }))
+    defs.appendChild(degrade)
+  }
 
   /* ---- zones de branche, SOUS les arêtes ---- */
 
@@ -173,6 +198,22 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
     const path = creer('path', { class: `zone b-${zone.cle}`, d: zone.d })
     gZones.appendChild(path)
     zones.set(zone.cle, path)
+  }
+
+  /*
+   * Les gros nuages, SOUS les régions qu'ils contiennent — `gNuages` est ajouté au `<svg>`
+   * avant `gZones`, donc peint avant. C'est l'imbrication du croquis : *« dans les gros
+   * blocs on retrouve 2 blocs nuage »*.
+   */
+  const nuages = new Map<string, SVGPathElement>()
+  for (const enveloppe of enveloppesDeBranche(graphe.noeuds)) {
+    const path = creer('path', {
+      class: `nuage n-${enveloppe.cle}`,
+      d: enveloppe.d,
+      fill: `url(#nuage-${enveloppe.cle})`,
+    })
+    gNuages.appendChild(path)
+    nuages.set(enveloppe.cle, path)
   }
 
   /**
@@ -195,6 +236,13 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
     // Une région que le graphe déplacé ne porte plus : on la vide plutôt que de
     // la laisser sur sa dernière forme connue.
     for (const [cle, path] of zones) if (!aJour.has(cle)) path.setAttribute('d', '')
+
+    const nuagesAJour = new Set<string>()
+    for (const enveloppe of enveloppesDeBranche(noeuds)) {
+      nuagesAJour.add(enveloppe.cle)
+      nuages.get(enveloppe.cle)?.setAttribute('d', enveloppe.d)
+    }
+    for (const [cle, path] of nuages) if (!nuagesAJour.has(cle)) path.setAttribute('d', '')
   }
 
   /* ---- arêtes, sous les fiches ---- */
@@ -242,6 +290,8 @@ export function construireCanevas(svg: SVGSVGElement, graphe: Graphe): PiloteCan
 
   const fragment = document.createDocumentFragment()
   fragment.appendChild(defs)
+  // Les gros nuages d'abord : ils portent les régions, donc ils se peignent dessous.
+  fragment.appendChild(gNuages)
   fragment.appendChild(gZones)
   fragment.appendChild(gAretes)
   fragment.appendChild(gFamilles)

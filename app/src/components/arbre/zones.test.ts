@@ -9,10 +9,29 @@
  *
  * **Les noms sont inventés.** Le dépôt est public et l'arbre est celui d'une
  * famille réelle : aucune fixture de ce dépôt ne recopie un nom de l'arbre.
+ *
+ * ── ⚠ CE QUE CES TESTS NE COUVRENT PAS, ET IL FAUT LE SAVOIR AVANT D'EN AJOUTER ──
+ *
+ * **Ils lisent les BANDES. Aucun ne lit le `d`.** Les bandes sont des nombres ; le `d` est
+ * la chaîne de commandes qu'on en tire, et rien ici ne la relit.
+ *
+ * Ce n'est pas théorique. Le 23/09/2026, {@link contourDeLaPile} accumulait les commandes
+ * du bord gauche pendant la descente puis appelait `.reverse()` — sur un tableau **plat de
+ * chaînes**, ce qui inverse aussi les commandes à l'intérieur de chaque groupe. Un `Q`
+ * passait avant le `L` qui l'amenait, et les nuages partaient en pointes de **plusieurs
+ * milliers d'unités**. Les seize tests de ce fichier sont restés **verts**.
+ *
+ * **Le défaut a été trouvé en rasterisant l'image et en la regardant**, pas en relisant le
+ * code ni en ajoutant une assertion. Un dix-septième test sur les bandes ne fermerait pas
+ * ce trou — il l'élargirait, en donnant l'impression qu'il est fermé.
+ *
+ * **Ce qui couvre le `d` est donc un RENDU**, et il se fait à la main : produire le SVG d'un
+ * relevé, le rasteriser, le regarder. Tant que ce fichier n'a pas de cas qui lise le chemin
+ * lui-même, **son vert ne dit rien de la forme dessinée**.
  */
 import { describe, expect, it } from 'vitest'
 import type { NoeudGraphe } from '@/lib/api'
-import { cleDeZone, zonesDeBranche } from './zones'
+import { cleDeZone, enveloppesDeBranche, zonesDeBranche } from './zones'
 
 function p(id: string, x: number, y: number, branch: string | null, w = 120): NoeudGraphe {
   return {
@@ -183,5 +202,97 @@ describe('zonesDeBranche', () => {
 
   it('rend une liste vide sur un graphe sans personne', () => {
     expect(zonesDeBranche([])).toEqual([])
+  })
+})
+
+describe('enveloppesDeBranche', () => {
+  it('réunit ses deux moitiés, et ne rend rien pour une enveloppe vide', () => {
+    const enveloppes = enveloppesDeBranche([
+      p('p1', -800, -300, 'pp'),
+      p('p2', -600, -300, 'pm'),
+      p('p3', 600, -300, 'mp'),
+    ])
+
+    // `p` et `m` existent ; celles du conjoint, dont aucune moitié n'est peuplée, non.
+    expect(enveloppes.map((e) => e.cle)).toEqual(['p', 'm'])
+    expect(enveloppes.find((e) => e.cle === 'p')?.personnes).toBe(2)
+    expect(enveloppes.find((e) => e.cle === 'm')?.personnes).toBe(1)
+    expect(enveloppes.every((e) => e.d.length > 0)).toBe(true)
+  })
+
+  it('CONTIENT ses deux moitiés : aucune bande de région ne déborde de son enveloppe', () => {
+    // C'est la propriété de l'imbrication. Un gros nuage qui ne couvre pas ses petits
+    // laisserait dépasser un bord coloré, et le dessin cesserait de se lire comme un
+    // contenant et son contenu.
+    const noeuds = [
+      p('p1', -800, -300, 'pp'),
+      p('p2', -600, -300, 'pm'),
+      p('p3', -700, -150, 'pp'),
+      p('p4', 600, -300, 'mp'),
+      p('p5', 900, -300, 'mm'),
+    ]
+    const enveloppes = enveloppesDeBranche(noeuds)
+    const zones = zonesDeBranche(noeuds)
+
+    for (const { cle, membres } of [
+      { cle: 'p', membres: ['pp', 'pm'] },
+      { cle: 'm', membres: ['mp', 'mm'] },
+    ]) {
+      const enveloppe = enveloppes.find((e) => e.cle === cle)
+      expect(enveloppe).toBeDefined()
+
+      for (const bande of zones.filter((z) => membres.includes(z.cle)).flatMap((z) => z.bandes)) {
+        const couvrante = enveloppe!.bandes.find((b) => b.y === bande.y)
+        expect(couvrante, `rangée ${bande.y} de ${bande.cle}`).toBeDefined()
+        expect(couvrante!.x0).toBeLessThanOrEqual(bande.x0)
+        expect(couvrante!.x1).toBeGreaterThanOrEqual(bande.x1)
+      }
+    }
+  })
+
+  it('ne laisse JAMAIS deux enveloppes d’une même rangée se chevaucher', () => {
+    // Le même argument que pour deux régions, et c'est pour cela que les bandes d'une
+    // enveloppe passent par la même fonction : le rabot vaut ici sans être redémontré.
+    const enveloppes = enveloppesDeBranche([
+      p('p1', -800, -300, 'pp'),
+      p('p2', -660, -300, 'pm'), // 20 unités d'écart exactement
+      p('p3', -520, -300, 'mp'), // 20 de nouveau : `p` et `m` se touchent presque
+      p('p4', -380, -300, 'mm'),
+    ])
+
+    const parRangee = new Map<number, { x0: number; x1: number }[]>()
+    for (const e of enveloppes) {
+      for (const b of e.bandes) parRangee.set(b.y, [...(parRangee.get(b.y) ?? []), b])
+    }
+
+    for (const [y, bandes] of parRangee) {
+      const triees = [...bandes].sort((a, b) => a.x0 - b.x0)
+      for (let i = 1; i < triees.length; i += 1) {
+        expect(triees[i]!.x0, `rangée ${y}`).toBeGreaterThanOrEqual(triees[i - 1]!.x1)
+      }
+    }
+  })
+
+  it('descend sous sa dernière rangée, et en se resserrant — le ▽ du croquis', () => {
+    const enveloppe = enveloppesDeBranche([
+      p('p1', -800, -300, 'pp'),
+      p('p2', -600, -300, 'pm'),
+      p('p3', -700, -150, 'pp'),
+    ]).find((e) => e.cle === 'p')
+
+    expect(enveloppe).toBeDefined()
+    const basDesBandes = Math.max(...enveloppe!.bandes.map((b) => b.bas))
+
+    // La surface de convergence n'est pas une bande : elle ne vit que dans le `d`, pour
+    // qu'elle ne compte pas dans les propriétés de non-chevauchement, qu'elle enfreindrait
+    // en dépassant sous la dernière rangée.
+    const ordonnees = [...enveloppe!.d.matchAll(/[ ,](-?\d+(?:\.\d+)?)(?=[ Z]|$)/g)].map((m) =>
+      Number(m[1]),
+    )
+    expect(Math.max(...ordonnees)).toBeGreaterThan(basDesBandes)
+  })
+
+  it('rend une liste vide sur un graphe sans personne', () => {
+    expect(enveloppesDeBranche([])).toEqual([])
   })
 })
