@@ -2024,6 +2024,21 @@ La plus longue valeur est `date_naissance_inconnue`, 23 signes, d'où le `VARCHA
 descriptifs. C'est la forme de débordement que
 `tests/Schema/LongueurDesEnumerationsTest` existe pour attraper.
 
+### 8 bis.3 bis Réglages de `Question` — aucune ligne semée
+
+| Clé `core_setting` | Type | Défaut | Ce qu'elle décide |
+|---|---|---|---|
+| `questions.memoire_vivante_annees` | entier | 90 | l'**année plancher** de la détection, calculée en retranchant ce nombre à l'année courante |
+| `questions.maximum_par_page` | entier | 20 | combien de questions la page sert d'un coup |
+
+**Aucune migration ne les crée**, et c'est délibéré : `SettingService::entier()` prend un
+défaut, et une clé absente vaut ce défaut. Semer la ligne à l'installation figerait la
+valeur du jour de l'installation — l'inverse du but d'un réglage (même motif que
+`cercle.generations`, ADR 0003).
+
+Un **nombre d'années** et non une année : une constante `1936` serait juste une fois et
+vieillirait d'un an par an, en silence.
+
 ### 8 bis.4 Références inter-modules sortant de `Question`
 
 | Colonne | Cible | Libellé recopié |

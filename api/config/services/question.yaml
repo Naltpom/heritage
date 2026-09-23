@@ -43,14 +43,30 @@ services:
     # Une page vide est un état acceptable du produit ; une contribution perdue en
     # silence ne l'est pas. Les pannes n'ont pas le même prix, donc pas le même échec.
 
-    # Branché sur `Tree` au jalon 2. Tant que cette ligne pointe sur le repli, la page
-    # sert zéro question — pas des questions fausses.
+    # Branché sur `Tree` depuis le jalon 2. Le repli reste en place
+    # (`Service/Port/ArbreNonBranchePourQuestions`) : il n'est pas un vestige, c'est la
+    # preuve que le module démarre sans `Tree`, et le test qui l'exerce l'atteste.
     App\Module\Question\Contract\PortArbrePourQuestions:
-        alias: App\Module\Question\Service\Port\ArbreNonBranchePourQuestions
+        alias: App\Module\Tree\Service\VueDeLArbrePourQuestions
 
-    # Branché sur `Media` au jalon 2.
+    # Branché sur `Media` depuis le jalon 2.
+    #
+    # ⚠ SI CETTE LIGNE REVIENT AU REPLI, LA NATURE `aucune_photo` DOIT SE TAIRE.
+    # Un tableau de comptes vide se lit « zéro média pour tout le monde » et ouvrirait la
+    # lacune sur les 274 fiches. C'est `ServiceDesQuestions::photosDemandables()` qui
+    # l'empêche, en reconnaissant le repli **par son type** — pas par un tableau vide, un
+    # arbre réellement sans photo rendrait le même.
     App\Module\Question\Contract\PortMediasPourQuestions:
-        alias: App\Module\Question\Service\Port\MediasNonBranchesPourQuestions
+        alias: App\Module\Media\Service\ComptesDeMediasPourQuestions
+
+    # ── La rédaction des questions ─────────────────────────────────────────────────
+    #
+    # Gemini viendra **décorer** cette ligne au jalon 4, pas la remplacer : le repli doit
+    # rester le dernier maillon, et c'est lui qui garantit qu'une entrée est rendue pour
+    # CHAQUE lacune, quelle que soit la panne du tiers. Lire l'en-tête de
+    # `Service/RedacteurDeQuestions.php` avant d'y toucher.
+    App\Module\Question\Service\RedacteurDeQuestions:
+        alias: App\Module\Question\Service\RedactionParGabarit
 
     # Branché sur `Proposal` au jalon 3. Aucune écriture ne part de ce module tant que
     # cette ligne pointe sur le repli — qui lève, bruyamment.

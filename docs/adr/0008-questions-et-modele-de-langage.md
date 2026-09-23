@@ -174,6 +174,56 @@ La colonne `qst_question.redacteur` garde qui a écrit la phrase — `regles` ou
 elle, « le repli a-t-il servi ? » se répondrait en relisant des logs, c'est-à-dire ne se
 répondrait pas.
 
+### 4 bis. La mémoire vivante : à qui la question peut encore servir
+
+La détection trouve des lacunes **justes et inutiles**. « Qui était la mère de cet homme
+né en 1743 ? » est un vrai trou dans l'arbre ; personne ne peut y répondre. Sur 274
+fiches, ces questions-là sont l'immense majorité, et une page qui s'ouvre dessus ne se
+rouvre pas.
+
+> **On ne pose de question que sur quelqu'un dont la famille peut avoir entendu parler de
+> vive voix.**
+
+Deux cercles concentriques, **et pas un de plus** :
+
+1. **la mémoire directe** — la personne est vivante, ou l'une de ses bornes de date tombe
+   après l'année plancher. C'est « quelqu'un a pu la connaître » ;
+2. **une seule passe de plus** — parent, enfant ou conjoint de quelqu'un du premier
+   cercle. C'est « on m'en a parlé » : le grand-père mort avant ma naissance, dont mon
+   père m'a parlé.
+
+**Une seule passe, en dernier, et elle ne propage rien.** C'est mot pour mot la discipline
+des conjoints de l'ADR 0003, et elle se casse de la même façon : itérer jusqu'à stabilité
+remonterait l'arbre de proche en proche jusqu'à la racine, et le filtre ne filtrerait plus
+rien. On relirait le code en croyant y lire une règle, et il n'en resterait rien. *Un test
+le garde, et il a fallu le corriger : sa première version passait même avec le code
+saboté, l'ordre d'itération masquant le point fixe.*
+
+**Cette règle n'est pas une règle de confidentialité et ne la remplace pas.** Le cercle
+protège ; celle-ci rend la page utile. Les deux s'appliquent, à deux endroits distincts,
+et confondre les deux serait la façon la plus naturelle de croire protégé ce qui ne l'est
+pas.
+
+### 4 ter. Deux réglages, pour la raison qui a fait de `N` un réglage
+
+| Clé `core_setting` | Défaut | Ce qu'elle décide |
+|---|---|---|
+| `questions.memoire_vivante_annees` | **90** | l'année plancher, calculée en retranchant ce nombre à l'année courante |
+| `questions.maximum_par_page` | **20** | combien de questions la page sert d'un coup |
+
+Les deux valeurs sont des **intuitions, pas des mesures** — exactement comme le `N = 3` de
+l'ADR 0003, *« une intuition, formulée avec hésitation »*. Elles seront confrontées à la
+réalité au premier membre qui ouvrira la page : soit un écran vide, soit un mur. Un
+chiffre qu'on découvre faux et qu'on ne peut changer qu'en redéployant sera changé en dur
+dans le code par le premier qui passe, sans trace et sans discussion.
+
+**Un nombre d'années, jamais une année.** Une constante `1936` serait juste une fois et
+vieillirait d'un an par an, en silence.
+
+**Aucune migration ne les sème.** Une clé absente de `core_setting` vaut son défaut ;
+semer la ligne à l'installation aurait figé la valeur du jour de l'installation, ce qui
+est l'inverse du but d'un réglage.
+
 ### 5. Palier payant / Vertex AI, jamais le palier gratuit
 
 L'accès se fait par l'**offre payante** de l'API Gemini (clé d'API payante ou Vertex AI sur
