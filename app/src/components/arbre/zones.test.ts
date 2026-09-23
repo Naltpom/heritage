@@ -9,6 +9,25 @@
  *
  * **Les noms sont inventés.** Le dépôt est public et l'arbre est celui d'une
  * famille réelle : aucune fixture de ce dépôt ne recopie un nom de l'arbre.
+ *
+ * ── ⚠ CE QUE CES TESTS NE COUVRENT PAS, ET IL FAUT LE SAVOIR AVANT D'EN AJOUTER ──
+ *
+ * **Ils lisent les BANDES. Aucun ne lit le `d`.** Les bandes sont des nombres ; le `d` est
+ * la chaîne de commandes qu'on en tire, et rien ici ne la relit.
+ *
+ * Ce n'est pas théorique. Le 23/09/2026, {@link contourDeLaPile} accumulait les commandes
+ * du bord gauche pendant la descente puis appelait `.reverse()` — sur un tableau **plat de
+ * chaînes**, ce qui inverse aussi les commandes à l'intérieur de chaque groupe. Un `Q`
+ * passait avant le `L` qui l'amenait, et les nuages partaient en pointes de **plusieurs
+ * milliers d'unités**. Les seize tests de ce fichier sont restés **verts**.
+ *
+ * **Le défaut a été trouvé en rasterisant l'image et en la regardant**, pas en relisant le
+ * code ni en ajoutant une assertion. Un dix-septième test sur les bandes ne fermerait pas
+ * ce trou — il l'élargirait, en donnant l'impression qu'il est fermé.
+ *
+ * **Ce qui couvre le `d` est donc un RENDU**, et il se fait à la main : produire le SVG d'un
+ * relevé, le rasteriser, le regarder. Tant que ce fichier n'a pas de cas qui lise le chemin
+ * lui-même, **son vert ne dit rien de la forme dessinée**.
  */
 import { describe, expect, it } from 'vitest'
 import type { NoeudGraphe } from '@/lib/api'
