@@ -378,6 +378,49 @@ export const ENVELOPPES: readonly { cle: CleDEnveloppe; membres: readonly CleDeZ
 const MARGE_ENVELOPPE_Y = 26
 
 /**
+ * Ce dont l'enveloppe dépasse ses deux moitiés **sur les côtés**, et ce qu'elle en obtient
+ * réellement.
+ *
+ * ── POURQUOI CE DÉBORD N'EXISTAIT PAS D'ABORD, ET CE QUI A CHANGÉ ─────────────
+ *
+ * La première version n'élargissait que vers le haut, et la raison était bonne : les bandes
+ * d'une enveloppe passent par {@link bandesDeLaRangee}, donc héritent du rabot, et deux
+ * enveloppes d'une rangée ne peuvent pas se recouvrir **sans qu'on ait à le redémontrer**.
+ * Élargir latéralement, c'est reprendre cette garantie à sa charge.
+ *
+ * Le prix de ce renoncement a été mesuré : l'enveloppe peignait **presque exactement les
+ * mêmes pixels que ses enfants** — 179 557 contre 189 132 sur le graphe servi —, si bien
+ * qu'elle se lisait comme « la même région, en plus foncé » et non comme un contenant. Ce
+ * n'était ni un défaut de teinte (les nuages sont 2,3 fois plus contrastés que les régions)
+ * ni une surface nulle (12,5 % en propre) : c'était une superposition.
+ *
+ * ── LE RABOT EST PAR CÔTÉ, ET C'EST TOUT CE QUI REND LA CHOSE POSSIBLE ─────────
+ *
+ * Chaque bord est borné à la **moitié de l'espace libre de SON côté**, séparément. Borné
+ * globalement, une enveloppe coincée d'un côté n'obtiendrait rien des deux ; borné par côté,
+ * elle garde ce que l'autre bord lui laisse. C'est ce qui sauve `mc`, bloquée à gauche sur
+ * une rangée et entièrement libre à droite, puisqu'elle est la dernière du dessin.
+ *
+ * La moitié, et non l'espace entier : deux voisines qui s'élargissent l'une vers l'autre se
+ * **touchent** alors exactement, et ne se croisent jamais. C'est la même démonstration que
+ * celle du débord des régions, refaite à cet étage.
+ *
+ * ── 48, ET CE QU'ON EN OBTIENT VRAIMENT ─────────────────────────────────────
+ *
+ * Trois fois le débord d'une région ({@link DEBORD_X}, 16), pour que la marche entre
+ * l'enveloppe et sa moitié se voie ; et moins du tiers de la fiche la plus étroite (152
+ * unités), pour qu'elle ne puisse jamais passer pour une colonne vide.
+ *
+ * **Le rabot fait que 48 est un plafond, presque jamais la valeur obtenue** — et les écarts
+ * mesurés disent que le plafond s'applique presque partout : sur le graphe servi, lecteur
+ * `p3`, les 29 paires d'enveloppes voisines ont un écart **médian de 2 438 unités**, et deux
+ * seulement tombent sous 500. **Une seule est à zéro** — rangée `y = -300`, entre `pc` et
+ * `mc`, deux enveloppes qui se touchent déjà exactement. Là, et là seulement, l'élargissement
+ * ne donne rien : c'est le rabot qui fonctionne, pas un défaut.
+ */
+const MARGE_ENVELOPPE_X = 48
+
+/**
  * La profondeur de la surface de convergence, sous la dernière rangée de l'enveloppe.
  *
  * C'est le ▽ du croquis : *« large en haut, les aïeux, converge vers le bas »*. Les deux
@@ -486,13 +529,35 @@ export function enveloppesDeBranche(noeuds: readonly NoeudGraphe[]): EnveloppeDe
   const lignes = rangees(noeuds)
   if (lignes.length === 0) return []
 
+  const cles = new Set<string>(ENVELOPPES.map((e) => e.cle))
   const bandes: BandeDeZone[] = []
+
   for (const [i, rangee] of lignes.entries()) {
     const precedente = lignes[i - 1]
     const suivante = lignes[i + 1]
     const haut = precedente === undefined ? rangee.haut - DEBORD_Y : (precedente.bas + rangee.haut) / 2
     const bas = suivante === undefined ? rangee.bas + DEBORD_Y : (rangee.bas + suivante.haut) / 2
-    bandes.push(...bandesDeLaRangee(rangee, haut, bas, enveloppeDe))
+
+    // **L'élargissement se calcule sur la rangée ENTIÈRE**, tronc et sans-branche compris :
+    // l'espace libre d'un bord se mesure vers ce qui s'y trouve réellement, pas seulement
+    // vers une autre enveloppe. Filtrer d'abord reviendrait à s'élargir dans le tronc.
+    const rang = bandesDeLaRangee(rangee, haut, bas, enveloppeDe).sort((a, b) => a.x0 - b.x0)
+
+    for (const [j, b] of rang.entries()) {
+      if (!cles.has(b.cle as string)) continue
+
+      const avant = rang[j - 1]
+      const apres = rang[j + 1]
+      const aGauche = avant === undefined ? MARGE_ENVELOPPE_X : Math.min(MARGE_ENVELOPPE_X, (b.x0 - avant.x1) / 2)
+      const aDroite = apres === undefined ? MARGE_ENVELOPPE_X : Math.min(MARGE_ENVELOPPE_X, (apres.x0 - b.x1) / 2)
+
+      // `Math.max(0, …)` : deux bandes qui se toucheraient déjà rendraient un rabot négatif,
+      // donc une enveloppe qui rétrécirait sous ses propres enfants.
+      b.x0 -= Math.max(0, aGauche)
+      b.x1 += Math.max(0, aDroite)
+    }
+
+    bandes.push(...rang)
   }
 
   const enveloppes: EnveloppeDeZone[] = []
