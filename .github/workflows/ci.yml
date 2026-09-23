@@ -69,9 +69,30 @@ permissions:
 
 # Une poussée rapide sur une branche annule l'exécution précédente, qui ne
 # concerne plus l'état courant. Économie directe de minutes sur dépôt privé.
+#
+# **SAUF SUR `main`, ET C'EST LA MOITIÉ QUI MANQUAIT.** La référence est dans le
+# groupe, donc une branche n'annule jamais `main` — cette moitié-là était déjà juste,
+# et elle a fait geler la branche quatre fois pour rien. Mais deux fusions
+# rapprochées sur `main` tombent, elles, dans le MÊME groupe : la seconde annulait la
+# première, et le commit fusionné entre les deux n'obtenait jamais de vert à lui.
+#
+# Mesuré le 23/09/2026 : la CI de `main` pour la #47 a été annulée au bout de 28 s
+# par la fusion de la #46, vingt secondes plus tard. Rien ne l'a signalé — **une
+# exécution annulée n'est pas un échec, elle disparaît de la liste.** C'est le mode
+# « fusionné jamais servi » : on déploie plus tard un commit dont aucune porte n'a
+# jamais rendu son verdict.
+#
+# La discipline humaine ne suffit pas : « sérialiser les fusions » a tenu jusqu'à ce
+# que deux feux verts se croisent de vingt secondes. La réparation est structurelle,
+# et `deploy.yml` la fait déjà avec `cancel-in-progress: false`.
+#
+# Sur `main`, les exécutions se mettent donc en FILE au lieu de s'annuler : chacune
+# rend son verdict, la suivante attend son tour. Le comportement des branches n'est
+# PAS touché — l'annulation y reste active, et c'est voulu, l'état qu'elle mesurait
+# n'existe plus.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
 
