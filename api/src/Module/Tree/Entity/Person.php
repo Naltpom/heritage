@@ -170,7 +170,7 @@ class Person
      * accès à la base, et c'est cette contrainte qui le rend testable contre
      * `graphe.json`. Le moteur la consomme en entrée. Aucune `ChangeRequest` ne la vise.
      */
-    #[ORM\Column(length: 2, nullable: true, enumType: Branch::class)]
+    #[ORM\Column(length: 3, nullable: true, enumType: Branch::class)]
     private ?Branch $branch = null;
 
     /** Rang générationnel : 0 pour la racine, négatif en remontant (jusqu'à −11). Dérivée. */

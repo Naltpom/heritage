@@ -210,10 +210,26 @@ final class SchemaSynchroniseTest extends KernelTestCase
     /**
      * Rejoue un historique d'instructions et rend l'état final des colonnes, par table.
      *
-     * Trois formes seulement, parce que ce sont les trois que Doctrine produit :
-     * `CREATE TABLE t (col def, …, PRIMARY KEY (…))`, `ALTER TABLE t ADD col def` et
-     * `ALTER TABLE t DROP col`. Tout le reste — index, contraintes, données — est ignoré
-     * ici et couvert ailleurs.
+     * Quatre formes, parce que ce sont les quatre que Doctrine produit :
+     * `CREATE TABLE t (col def, …, PRIMARY KEY (…))`, `ALTER TABLE t ADD col def`,
+     * `ALTER TABLE t DROP col` et `ALTER TABLE t ALTER col TYPE x`. Tout le reste — index,
+     * contraintes, données — est ignoré ici et couvert ailleurs.
+     *
+     * ⚠ **La quatrième manquait, et son absence rendait ce test faux dans un sens qu'on ne
+     * soupçonne pas en le lisant.** Il ne devenait pas permissif : il devenait
+     * **infranchissable**. Une colonne qui change de type — `VARCHAR(2)` élargi en
+     * `VARCHAR(3)` pour les quatre quarts du conjoint — se déclare dans le mapping et
+     * s'applique par une migration que cette relecture ignorait. Le test annonçait alors
+     * « DIVERGENTE » pour un schéma parfaitement juste, **et son propre message d'échec
+     * conseillait `doctrine:migrations:diff`, c'est-à-dire exactement la migration qui
+     * venait d'être écrite.** Le seul moyen de le faire taire était de ne jamais changer le
+     * type d'une colonne, ou de retoucher une migration déjà jouée — la faute même que ce
+     * fichier existe pour empêcher.
+     *
+     * C'est le reproche que le docbloc voisin adresse à la première rédaction du test,
+     * revenu par une autre porte : *« un test qui n'accepte pas l'historique interdit d'en
+     * avoir un »*. Il valait pour l'ajout d'une colonne ; il vaut identiquement pour sa
+     * modification.
      *
      * @param list<string> $instructions
      *
@@ -245,10 +261,45 @@ final class SchemaSynchroniseTest extends KernelTestCase
 
             if (1 === preg_match('/^ALTER TABLE ([a-z0-9_]+) DROP (?!CONSTRAINT\b)([a-z0-9_]+)$/i', $sql, $t)) {
                 unset($tables[$t[1]][$t[2]]);
+                continue;
+            }
+
+            if (1 === preg_match('/^ALTER TABLE ([a-z0-9_]+) ALTER ([a-z0-9_]+) TYPE (.+)$/i', $sql, $t)) {
+                // Une colonne que l'historique n'a pas encore créée ne se modifie pas : on
+                // laisse le trou, et la comparaison le signalera comme une absence — ce
+                // qu'il est réellement.
+                if (isset($tables[$t[1]][$t[2]])) {
+                    $tables[$t[1]][$t[2]] = $this->typeRemplace($tables[$t[1]][$t[2]], trim($t[3]));
+                }
             }
         }
 
         return $tables;
+    }
+
+    /**
+     * Pose un nouveau type devant ce qui suivait l'ancien : `VARCHAR(2) DEFAULT NULL` et
+     * `VARCHAR(3)` donnent `VARCHAR(3) DEFAULT NULL`.
+     *
+     * **Le découpage se fait sur ce qui SUIT le type, jamais sur le type lui-même**, et
+     * c'est le seul point délicat de cette fonction. Un type SQL n'a pas de longueur
+     * prévisible en mots : `VARCHAR(2)` en fait un, `DOUBLE PRECISION` deux,
+     * `TIMESTAMP(0) WITH TIME ZONE` quatre. Le chercher par la gauche demanderait de
+     * connaître la liste des types ; les quatre mots-clés qui peuvent le suivre dans un DDL
+     * Doctrine, eux, se comptent sur une main.
+     *
+     * Un `ALTER … TYPE` ne dit rien de la nullité ni du défaut : PostgreSQL les conserve,
+     * et cette fonction fait de même. Une migration qui changerait les deux d'un coup émet
+     * deux instructions, et c'est la seconde qui porterait le `SET DEFAULT` — forme qu'on
+     * n'a pas encore rencontrée et qu'il faudra ajouter ici le jour où elle arrivera.
+     */
+    private function typeRemplace(string $definition, string $type): string
+    {
+        if (1 === preg_match('/\s(?:DEFAULT|NOT NULL|NULL|CHECK)\b.*$/is', $definition, $suite)) {
+            return $type.$suite[0];
+        }
+
+        return $type;
     }
 
     /**

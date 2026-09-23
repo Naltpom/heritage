@@ -67,7 +67,7 @@ final class PreferencesTest extends CasDeTestTimeline
             [
                 'bandYears' => 10,
                 'orientation' => 'lignes',
-                'branches' => ['pp', 'pm', 'mp', 'mm', 'tr', 'bf'],
+                'branches' => ['pp', 'pm', 'mp', 'mm', 'tr', 'bf', 'cpp', 'cpm', 'cmp', 'cmm'],
                 'showUncertainty' => true,
             ],
             $this->charge(),

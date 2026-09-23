@@ -93,6 +93,39 @@
      plus grand intervalle libre est autour de 335°, entre le chardon et le romarin. */
   --h-branche-bf: #a8617f;
 
+  /* Les quatre quarts du CONJOINT — `pp'`, `pm'`, `mp'`, `mm'` de la spécification à
+     treize blocs. Voir `Branch::Cpp` côté serveur.
+
+     ELLES NE SONT PAS CHOISIES PAR ÉCART DE TON, ET C'EST LE CONTRAIRE D'UN RELÂCHEMENT.
+     Le raisonnement de la belle-famille juste au-dessus — prendre le plus grand intervalle
+     libre du cercle — sert à poser une région qui ne ressemble à aucune autre. Ici il
+     produirait exactement la mauvaise lecture : `cpp` N'EST PAS une neuvième région
+     indépendante, c'est « le pp de quelqu'un d'autre ». Quatre teintes inédites diraient
+     à l'œil qu'il y a huit familles de quarts ; il y en a quatre, vues depuis deux
+     personnes. La parenté se voit donc, et l'appartenance au conjoint se lit à
+     l'assourdissement.
+
+     Chacune est donc son homologue, ramenée vers un gris chaud — `color-mix`, pour la
+     raison déjà écrite quelques lignes plus bas : quatre hexadécimaux inventés ici
+     dériveraient de leurs quatre modèles à la première retouche de la palette, et
+     personne ne s'en apercevrait. Le lien est déclaré, il ne peut pas se défaire.
+
+     ⚠ LE GRIS EST ÉCRIT EN TOUTES LETTRES, ET SURTOUT PAS `var(--h-attenue)`. C'était la
+     première rédaction, et elle enfreignait la consigne de quatre lignes plus haut sans en
+     avoir l'air : `--h-attenue` change avec le thème (#6b6560 en clair, #9a948c en sombre).
+     Le mélange aurait donc rendu quatre ÉTIQUETTES DE DONNÉE dépendantes du thème, et deux
+     captures d'écran incomparables — exactement ce que ce bloc interdit. La valeur ci-
+     dessous est celle du gris chaud en clair, figée ici pour cette seule raison.
+
+     ⚠ CE QUI N'A PAS ENCORE ÉTÉ FAIT : ces quatre teintes n'ont PAS été vérifiées à
+     l'écran, ni à 390 px, ni en sombre — contrairement à celle de la belle-famille, dont
+     le commentaire voisin atteste ces trois contrôles. Le rapport de 55 % est un point de
+     départ raisonné, pas une mesure. */
+  --h-branche-cpp: color-mix(in oklab, var(--h-branche-pp) 55%, #6b6560);
+  --h-branche-cpm: color-mix(in oklab, var(--h-branche-pm) 55%, #6b6560);
+  --h-branche-cmp: color-mix(in oklab, var(--h-branche-mp) 55%, #6b6560);
+  --h-branche-cmm: color-mix(in oklab, var(--h-branche-mm) 55%, #6b6560);
+
   /* Fonds translucides dérivés, pour les bandeaux et les pastilles. Le
      `color-mix` évite d'inventer douze hexadécimaux qui dériveraient du reste
      de la palette à la première retouche. */
@@ -167,6 +200,10 @@
   --color-branche-tr: var(--h-branche-tr);
   --color-branche-hors: var(--h-branche-hors);
   --color-branche-bf: var(--h-branche-bf);
+  --color-branche-cpp: var(--h-branche-cpp);
+  --color-branche-cpm: var(--h-branche-cpm);
+  --color-branche-cmp: var(--h-branche-cmp);
+  --color-branche-cmm: var(--h-branche-cmm);
 
   /* Rayons repris du viewer : 7px pour un champ, 10px pour un panneau,
      99px pour une pastille. */

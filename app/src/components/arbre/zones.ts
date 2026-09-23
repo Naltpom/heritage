@@ -89,9 +89,41 @@ import type { NoeudGraphe } from '@/lib/api'
  * `b-null`, à laquelle aucune règle ne répond : liseré non peint, et aucun aplat.
  * Elles ont une région, et c'est celle des gens sans place attribuée.
  */
-export type CleDeZone = 'pp' | 'pm' | 'mp' | 'mm' | 'tr' | 'bf' | 'hors'
+export type CleDeZone =
+  | 'pp'
+  | 'pm'
+  | 'mp'
+  | 'mm'
+  | 'tr'
+  | 'bf'
+  | 'cpp'
+  | 'cpm'
+  | 'cmp'
+  | 'cmm'
+  | 'hors'
 
-export const CLES_DE_ZONE: readonly CleDeZone[] = ['pp', 'pm', 'tr', 'mp', 'mm', 'bf', 'hors']
+/**
+ * L'ordre de PEINTURE des régions, et il suit maintenant le dessin de gauche à droite :
+ * les quatre quarts du lecteur, le tronc, les quatre quarts de son conjoint, puis ce qui
+ * n'entre dans aucun des deux.
+ *
+ * `tr` reste au milieu et non en cinquième position, parce que c'est là que le moteur le
+ * pose — `[ pp | pm ][ TRONC ][ mp | mm ]` sans conjoint. Avec un conjoint, le moteur
+ * range ses quarts aux rangs 5 à 8, après le tronc : c'est l'ordre repris ici.
+ */
+export const CLES_DE_ZONE: readonly CleDeZone[] = [
+  'pp',
+  'pm',
+  'tr',
+  'mp',
+  'mm',
+  'cpp',
+  'cpm',
+  'cmp',
+  'cmm',
+  'bf',
+  'hors',
+]
 
 /** La clé de région d'un nœud — {@link CleDeZone} pour `branch: null`. */
 export function cleDeZone(branche: string | null | undefined): CleDeZone {
@@ -102,6 +134,10 @@ export function cleDeZone(branche: string | null | undefined): CleDeZone {
     case 'mm':
     case 'tr':
     case 'bf':
+    case 'cpp':
+    case 'cpm':
+    case 'cmp':
+    case 'cmm':
       return branche
     default:
       return 'hors'

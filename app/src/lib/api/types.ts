@@ -44,7 +44,35 @@ export type Sexe = 'masculin' | 'feminin' | 'inconnu'
  * celle **de la racine** par un repli silencieux — « maternelle du père » désignait alors le
  * côté maternel de quelqu'un d'autre.
  */
-export type Branche = 'pp' | 'pm' | 'mp' | 'mm' | 'tr' | 'bf'
+export type Branche =
+  | 'pp'
+  | 'pm'
+  | 'mp'
+  | 'mm'
+  | 'tr'
+  | 'bf'
+  | 'cpp'
+  | 'cpm'
+  | 'cmp'
+  | 'cmm'
+
+/**
+ * Les quatre quarts du CONJOINT du lecteur — `pp'`, `pm'`, `mp'`, `mm'` de la
+ * spécification à treize blocs, préfixés `c` parce qu'une apostrophe ne passe ni dans une
+ * valeur stockée ni dans un nom de classe CSS.
+ *
+ * **Ce ne sont pas quatre régions de plus au même titre que les autres** : ce sont les
+ * quatre mêmes, vues depuis une seconde personne. Le serveur les calcule avec exactement la
+ * fonction qui découpe celles du lecteur (`CalculAscendance::quartsDuConjoint()`), et leurs
+ * teintes sont celles de leurs homologues assourdies — jamais quatre couleurs inédites, qui
+ * feraient lire huit familles de quarts là où il y en a quatre.
+ *
+ * **Le compte des régions n'est pas celui des blocs.** Le dessin en montre treize ; cette
+ * union en porte dix, et il n'en manque aucune : les quatre enveloppes `p`, `m`, `p'`, `m'`
+ * sont des RÉUNIONS de deux régions voisines, dérivées à la géométrie. Une valeur ici
+ * désigne une partition, jamais une réunion.
+ */
+export type BrancheDuConjoint = Extract<Branche, 'cpp' | 'cpm' | 'cmp' | 'cmm'>
 
 /** § 5.1 — ce que le cercle de visibilité laisse voir d'une personne. */
 export type Visibilite = 'complete' | 'restreinte'
