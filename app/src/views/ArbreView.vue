@@ -1018,24 +1018,22 @@ onBeforeUnmount(() => {
         id="bandeau-maquette"
         class="mt-1 text-attenue tnum"
       >
-        Fiches affichées : {{ effetDeLaDisposition.apres.personnes }} sur
+        Personnes affichées : {{ effetDeLaDisposition.apres.personnes }} sur
         {{ effetDeLaDisposition.avant.personnes }}.
 
-        Couples accolés : {{ effetDeLaDisposition.avant.accoles }} →
+        Couples dessinés côte à côte :
+        {{ effetDeLaDisposition.avant.accoles }} →
         {{ effetDeLaDisposition.apres.accoles }} sur {{ effetDeLaDisposition.apres.couples }}.
-        Personnes assises entre deux époux :
+        Personnes qui se trouvaient entre deux époux :
         {{ effetDeLaDisposition.avant.intercales }} → {{ effetDeLaDisposition.apres.intercales }}.
 
-        Croisements de traits : {{ effetDeLaDisposition.croisementsAvant }} →
+        Traits qui se croisent : {{ effetDeLaDisposition.croisementsAvant }} →
         {{ effetDeLaDisposition.croisementsApres }}.
 
-        Longueur des traits, somme des carrés :
-        {{ effetDeLaDisposition.carresAvant }} →
-        {{ effetDeLaDisposition.carresApres }} millions ; le plus long :
-        {{ effetDeLaDisposition.traitAvant }} → {{ effetDeLaDisposition.traitApres }} px.
-        <RouterLink :to="{ name: 'arbre' }" class="text-accent underline">
-          Comparer à l’arbre d’origine
-        </RouterLink>
+        Trait le plus long : {{ effetDeLaDisposition.traitAvant }} →
+        {{ effetDeLaDisposition.traitApres }} px (indice de longueur d’ensemble :
+        {{ effetDeLaDisposition.carresAvant }} → {{ effetDeLaDisposition.carresApres }},
+        plus bas = traits plus courts).
       </p>
     </div>
 

@@ -86,19 +86,23 @@ export interface PresentationDeDisposition {
 export const PRESENTATIONS: Record<NomDeDisposition, PresentationDeDisposition> = {
   ressorts: {
     titre: 'Ressorts et isotonie',
+    /*
+     * **Ce texte est lu par la famille, plus par un relecteur de maquettes.** Tant qu'il
+     * s'affichait sur `/arbre-7`, son public venait comparer sept mises en page ; il
+     * pouvait parler de régression isotonique et de somme des carrés. Il s'affiche
+     * maintenant sur l'écran d'accueil de tous les membres : il dit ce que la mise en
+     * page fait, en français ordinaire. Les nombres restent — ce sont eux la mesure —,
+     * c'est le vocabulaire qui a changé.
+     */
     resume:
-      'Chaque nœud est tiré vers la moyenne de ses voisins, et chaque rangée est résolue ' +
-      '**exactement** sous la contrainte de non-chevauchement — la régression isotonique, en ' +
-      'une passe, sans itération interne ni amortissement. Deux règles d’ordre s’y ajoutent, ' +
-      'et elles passent AVANT l’optimisation : **le conjoint accolé est celui de l’union non ' +
-      'rompue** — un arbre qui colle l’ex-époux et relègue la compagne dit quelque chose de ' +
-      'faux —, et **quand les deux époux viennent d’une fratrie d’au moins trois enfants, le ' +
-      'couple cède : chacun reste entier au milieu des siens et le trait d’union s’allonge**. ' +
-      'Cette seconde règle est l’INVERSE de celle du serveur, qui garde le couple et casse la ' +
-      'plus petite fratrie : les deux sont ici pour être comparées. Et l’ajout d’une personne ' +
-      'ne déplace rien d’autre qu’elle. **Les nombres sont sous cette phrase, recalculés à ' +
-      'chaque affichage** : un chiffre écrit ici se périmerait au premier correctif, et c’est ' +
-      'arrivé.',
+      'Chaque personne est rapprochée de ses proches, et les fiches d’une même rangée ne ' +
+      'se chevauchent jamais. Deux règles passent avant tout le reste : **un couple est ' +
+      'dessiné côte à côte quand son mariage n’a pas été rompu** — coller l’ex-époux et ' +
+      'reléguer la compagne dirait quelque chose de faux —, et **quand les deux époux ont ' +
+      'chacun des frères et sœurs dans l’arbre, chacun reste au milieu des siens** : le ' +
+      'trait qui les relie s’allonge plutôt que de couper une fratrie en deux. Ajouter ' +
+      'une personne ne déplace qu’elle, et rien d’autre autour. Les nombres ci-dessous ' +
+      'sont recalculés à chaque affichage.',
     appliquer: ressortsIsotoniques,
   },
 }
