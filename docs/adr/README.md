@@ -12,9 +12,18 @@ agent qui trouve une meilleure idée ne l'applique pas, il propose un nouvel ADR
 | [0005](0005-moteur-de-placement-recalcule.md) | Le moteur de placement est **porté**, et recalculé | Le code d'origine n'était pas perdu : `docs/moteur-retrouve/graphe.py`, 624 lignes, est la source de vérité de l'algorithme. Portage en PHP, `graphe.json` comme référence de non-régression **à l'identique** — tout écart est un bug de portage. Et un cache à deux étages pour servir un graphe qui dépend du lecteur sans le recalculer par lecteur : étage 1 partagé, mis en cache sous une **empreinte recalculée depuis la base** et restreinte aux trois tables structurantes ; étage 2 par lecteur, jamais mis en cache. C'est aussi ici que se décide l'unique mécanisme d'invalidation du produit : pas de compteur, pas de table. |
 | [0006](0006-donnees-reelles-non-versionnees.md) | Les données réelles ne sont pas versionnées | Fixtures anonymisées à graine fixe, import réel par commande locale — et le cahier des charges chiffré des fixtures, qui doivent reproduire les défauts du vrai arbre. |
 | [0007](0007-rendu-svg-performance.md) | Rendu SVG : les trois règles de performance | Zoom par `viewBox`, `fill-opacity`/`stroke-opacity` jamais `opacity`, canevas piloté impérativement hors de Vue — avec le mécanisme derrière chaque règle. |
+| [0008](0008-questions-et-modele-de-langage.md) | La page « Questions » et l'appel à un modèle de langage | La première dépendance sortante du produit. Ce qui l'encadre : la **détection des lacunes reste au code**, le modèle ne fait que **formuler** — d'où un repli par gabarits qui garantit que la page sert des questions même Gemini coupé, et un coût qui suit les lacunes et non les rechargements. Le corpus envoyé contient l'arbre **entier, vivants compris** (arbitrage du commanditaire), ce qui **amende une phrase de l'ADR 0003** — « pas de liste, pas d'export » — et ajoute un acteur au modèle de menace. Palier **payant / Vertex** et jamais gratuit, pour la clause de non-entraînement. Une réponse n'écrit rien dans l'arbre : elle entre dans la file de l'ADR 0004. |
 
 Le modèle de données (tables, colonnes, index) est décrit à part, dans
 [`docs/modele-donnees.md`](../modele-donnees.md).
+
+**L'ADR 0008 est le premier à en amender un autre par une décision, et non par une
+mesure.** Les révisions des ADR 0002 à 0006 corrigeaient un texte qu'une mesure avait
+démenti ; celui-ci enregistre un arbitrage du commanditaire qui **contredit** une règle
+acceptée de l'ADR 0003. Il dit donc, en une section dédiée, *exactement* quelle phrase
+cesse de valoir et ce qui reste intact — parce qu'une contradiction qu'on ne nomme pas se
+découvre dans deux ans en lisant le code, et l'ADR contredit passe alors pour avoir été
+enfreint en silence.
 
 Les deux corpus ont été rédigés en parallèle, donc sans se lire. Les points sur lesquels ils
 divergeaient, ce qui a été retenu et pourquoi : [`docs/arbitrages.md`](../arbitrages.md) —

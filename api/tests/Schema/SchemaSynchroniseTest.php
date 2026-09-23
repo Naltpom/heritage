@@ -67,8 +67,18 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * session volée d'enfermer le titulaire dehors. Une table à part, et non trois
      * colonnes sur `core_user`, pour ne pas mêler à l'identité une donnée qui vit
      * vingt-quatre heures — l'en-tête de la migration le dit en entier.
+     *
+     * **27 depuis le 2026-09-23** : `qst_question` et `qst_question_demande` (module
+     * `Question`, `migrations/Version20260923153000.php`) portent la page « Questions »
+     * de l'ADR 0008. Ce sont des **décisions**, et elles se lisent dans l'en-tête de la
+     * migration : la première n'enregistre pas les questions — qui naissent d'une
+     * détection rejouée sur l'arbre — mais **la mémoire de ce qu'on en a fait**, sans
+     * laquelle la même question revient indéfiniment ; la seconde est une table et non
+     * une colonne parce qu'une seule réponse peut produire **deux** demandes — le lieu
+     * en note et la photo de l'acte en média —, que l'administrateur doit pouvoir
+     * trancher séparément.
      */
-    private const int NOMBRE_DE_TABLES = 25;
+    private const int NOMBRE_DE_TABLES = 27;
 
     public function testLeMappingEstValide(): void
     {
@@ -105,7 +115,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      */
     public function testChaqueTablePorteLePrefixeDeSonModule(): void
     {
-        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_'];
+        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_'];
 
         foreach ($this->tablesDuMapping() as $table) {
             $porteUnPrefixe = array_filter(
@@ -115,7 +125,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
 
             self::assertNotEmpty(
                 $porteUnPrefixe,
-                \sprintf('La table « %s » ne porte aucun des sept préfixes de module.', $table),
+                \sprintf('La table « %s » ne porte aucun des huit préfixes de module.', $table),
             );
         }
     }

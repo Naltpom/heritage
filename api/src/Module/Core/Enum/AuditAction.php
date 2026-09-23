@@ -59,4 +59,19 @@ enum AuditAction: string
 
     /** Bascule « voir comme un membre » : tracée, parce que c'est une lecture de données masquées. */
     case VueCommeMembre = 'vue_comme_membre';
+
+    /**
+     * Un appel sortant au modèle de langage qui formule les questions (ADR 0008).
+     *
+     * **C'est le seul endroit du produit où des données de personnes vivantes quittent
+     * l'application**, et la seule action de ce journal qui ne décrive pas une décision
+     * humaine. Elle y figure quand même — et surtout — parce que « combien de vivants
+     * sont partis chez le tiers ce mois-ci » est la première question qu'un membre
+     * posera, et qu'une réponse qui suppose de relire des journaux applicatifs est une
+     * réponse qu'on n'obtient pas.
+     *
+     * `changes` porte des **comptes**, jamais le corpus ni la réponse, et évidemment
+     * jamais la clé.
+     */
+    case AppelModeleDeLangage = 'appel_modele_langage';
 }

@@ -382,6 +382,25 @@ services:
       HERITAGE_ADMIN_PASSWORD: ${HERITAGE_ADMIN_PASSWORD:-}
       HERITAGE_ADMIN_NOM: ${HERITAGE_ADMIN_NOM:-}
       HERITAGE_ADMIN_PERSONNE_XREF: ${HERITAGE_ADMIN_PERSONNE_XREF:-}
+      # La page « Questions » (ADR 0008) : un modèle de langage FORMULE les
+      # questions que la détection a trouvées.
+      #
+      # MÊME PIÈGE QUE TOUTES LES LIGNES AU-DESSUS, et c'est pourquoi elles sont
+      # là : sans elles, renseigner la clé dans le .env de la racine ne ferait
+      # rien du tout.
+      #
+      # **CLÉ VIDE EST UN ÉTAT NORMAL.** Aucun appel ne part, le repli par
+      # gabarits rédige, et la page sert les mêmes questions — moins bien
+      # tournées. Rien ne rougit, délibérément : un rouge permanent sur un état
+      # normal détruit l'alarme là où elle sert. Ce qui se lit, c'est
+      # `SELECT redacteur, count(*) FROM qst_question GROUP BY 1`.
+      #
+      # Le palier visé est le **payant / Vertex**, jamais le gratuit : ses
+      # conditions excluent la réutilisation des données pour l'entraînement, et
+      # le corpus transmis nomme des personnes vivantes (ADR 0008 § 1 et § 5).
+      HERITAGE_GEMINI_CLE_API: ${HERITAGE_GEMINI_CLE_API:-}
+      HERITAGE_GEMINI_MODELE: ${HERITAGE_GEMINI_MODELE:-}
+      HERITAGE_GEMINI_POINT_DACCES: ${HERITAGE_GEMINI_POINT_DACCES:-}
     # Aucune sonde déclarée ici : l'image en porte désormais une juste
     # (`HEALTHCHECK` dans api/Dockerfile, sur http://localhost:8000/). C'est sa
     # place — une image doit être correcte seule, pas seulement sous un

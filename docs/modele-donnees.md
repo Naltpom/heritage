@@ -78,8 +78,22 @@ de relation Doctrine, la cohérence est la responsabilité du service applicatif
 > `mbr_invitation.person_label`, `mbr_member.person_label`,
 > `prp_change_request.target_label`, `prp_draft_link.subject_label` / `other_label` /
 > `other2_label` / `family_label`, `prp_revision.subject_label`,
-> `med_media.subject_label`. Aucune de ces tables ne traverse le normaliseur de
-> `Tree\Person`, c'est-à-dire l'endroit unique où le cercle de visibilité est écrit.
+> `med_media.subject_label`, `qst_question.sujet_label`. Aucune de ces tables ne traverse
+> le normaliseur de `Tree\Person`, c'est-à-dire l'endroit unique où le cercle de
+> visibilité est écrit.
+>
+> **Depuis le 2026-09-23, une dixième colonne — et elle n'a pas la forme des neuf
+> autres.** `qst_question.texte` porte la question telle qu'elle sera lue : « Savez-vous
+> où est née Alberte Bourrache ? ». Ce n'est pas un nom recopié dans une colonne prévue
+> pour ça, c'est **une phrase en français qui contient le nom**, et aucune liste blanche
+> champ par champ ne l'aurait vue — elle aurait regardé la colonne `texte` et n'y aurait
+> lu qu'un texte libre. Ce qui l'attrape est la règle plus générale de l'ADR 0003 :
+> *« tout champ dérivé d'une donnée masquée est lui-même une donnée masquée »*. À
+> retenir pour la suite : **la règle du `*_label` est un cas particulier, pas la règle.**
+> Le jour où une colonne porte un résumé, un titre de notification ou un libellé de
+> diff composé à partir d'un nom, elle relève du même filtre sans en porter le suffixe.
+> Le remède ne change pas : la ligne entière n'est pas servie quand son sujet ne l'est
+> pas (ADR 0008).
 > Règle, donc, et elle vaut pour tout `*_label` ajouté plus tard :
 > **toute colonne `*_label` désignant une personne est filtrée comme la personne
 > elle-même**, et les tests de liste blanche de l'ADR 0003 couvrent les réponses de
@@ -217,14 +231,22 @@ Décisions d'exclusion, pour que personne ne les reprenne à zéro dans six mois
 | Module | Préfixe | Tables |
 |---|---|---|
 | `Core` | `core_` | `core_user`, `core_setting`, `core_audit_log`, `core_notification`, `core_email_change` |
-| `Tree` | `tree_` | `tree_person`, `tree_family`, `tree_child`, `tree_fact`, `tree_note`, `tree_source`, `tree_citation` |
+| `Tree` | `tree_` | `tree_person`, `tree_family`, `tree_child`, `tree_fact`, `tree_note`, `tree_source`, `tree_citation`, `tree_place` |
 | `Membership` | `mbr_` | `mbr_invitation`, `mbr_member`, `mbr_claim_attempt` |
 | `Proposal` | `prp_` | `prp_change_request`, `prp_change_op`, `prp_draft_person`, `prp_draft_link`, `prp_revision` |
 | `Media` | `med_` | `med_media` |
 | `Timeline` | `tml_` | `tml_preference` |
 | `Gedcom` | `ged_` | `ged_run`, `ged_issue` |
+| `Question` | `qst_` | `qst_question`, `qst_question_demande` |
 
-**23 tables.** Les dénombrements de référence après import (§ 4 du dossier de mission)
+**27 tables.** Le chiffre a bougé quatre fois depuis la rédaction initiale, qui en
+prévoyait 23 : `tree_place` (17/09), `core_email_change` (18/09), puis `qst_question` et
+`qst_question_demande` (23/09). Les deux premières avaient été ajoutées sans que ce
+tableau soit repris — `tree_place` y manquait encore au 23/09 —, ce qui est exactement le
+défaut qu'un dénombrement écrit à la main finit par avoir. L'autorité est le mapping
+Doctrine, et le contrôle est
+`tests/Schema/SchemaSynchroniseTest::NOMBRE_DE_TABLES`, qui échoue quand les deux
+divergent. Les dénombrements de référence après import (§ 4 du dossier de mission)
 se lisent ainsi :
 
 | Attendu | Requête de contrôle |
@@ -648,7 +670,7 @@ lignes de `tree_fact`. Ce n'est pas une incohérence, c'est un choix (§ 3.1, en
 | `privacy_note` | `TEXT` | oui | `NULL` | Pourquoi `force_privacy` a été posé. Obligatoire quand il l'est (contrainte ci-dessous) : le GEDCOM porte déjà des décisions de caviardage « CONSIGNÉE POUR NE PAS ÊTRE REDÉFAITE », on ne perd pas ce raisonnement. |
 | **bloc date `birth`** | — | — | — | `birth_raw`, `birth_qualifier`, `birth_min`, `birth_max`, `birth_place` (§ 0.5). |
 | **bloc date `death`** | — | — | — | `death_raw`, `death_qualifier`, `death_min`, `death_max`, `death_place` (§ 0.5). |
-| `branch` | `VARCHAR(3)` | oui | `NULL` | Énum `Branch` (§ 2.8) — les quatre quarts du lecteur `pp`, `pm`, `mp`, `mm`, le tronc `tr`, et les quatre quarts de son conjoint `cpp`, `cpm`, `cmp`, `cmm` (`pp'`, `pm'`, `mp'`, `mm'` de la spécification à treize blocs). **INVARIANT : aucune personne servie sans branche**, hors îlot qu'aucun chemin ne relie au lecteur — qui entre par alliance prend le bloc de son partenaire (`CalculAscendance::parAlliance()`). La valeur `bf` a existé du 20 au 23/09/2026 ; toutes les lectures passent par `Branch::tryFrom()`, donc une ligne ancienne ressortirait sans branche plutôt que de faire tomber le service. **`VARCHAR(3)` depuis le 2026-09-23** (`migrations/Version20260923120000.php`) : les quatre dernières ne tiennent pas en deux caractères. **Colonne dérivée**, relative à `tree.personne_racine_id`, recalculée et persistée par un **service de `Tree`** après toute écriture structurante. **Ce n'est pas le moteur de placement qui l'écrit** : l'ADR 0005 lui interdit tout accès à la base, et c'est cette contrainte qui le rend testable contre `graphe.json`. Le moteur la **consomme** en entrée. Aucune `ChangeRequest` ne la modifie. |
+| `branch` | `VARCHAR(3)` | oui | `NULL` | Énum `Branch` (§ 2.8) — les quatre quarts du lecteur `pp`, `pm`, `mp`, `mm`, le tronc `tr`, et les quatre quarts de son conjoint `cpp`, `cpm`, `cmp`, `cmm` (`pp'`, `pm'`, `mp'`, `mm'` de la spécification à treize blocs). **INVARIANT : aucune personne servie sans branche**, hors îlot qu'aucun chemin ne relie au lecteur — qui entre par alliance prend le bloc de son partenaire (`CalculAscendance::parAlliance()`). La valeur `bf` a existé du 20 au 23/09/2026 ; toutes les lectures passent par `Branch::tryFrom()`, donc une ligne ancienne ressortirait sans branche plutôt que de faire tomber le service. **`VARCHAR(3)` depuis le 2026-09-23** (`migrations/Version20260923153000.php`) : les quatre dernières ne tiennent pas en deux caractères. **Colonne dérivée**, relative à `tree.personne_racine_id`, recalculée et persistée par un **service de `Tree`** après toute écriture structurante. **Ce n'est pas le moteur de placement qui l'écrit** : l'ADR 0005 lui interdit tout accès à la base, et c'est cette contrainte qui le rend testable contre `graphe.json`. Le moteur la **consomme** en entrée. Aucune `ChangeRequest` ne la modifie. |
 | `generation` | `SMALLINT` | oui | `NULL` | Rang générationnel, 0 pour la racine, négatif en remontant (jusqu'à −11). **Dérivée**, même régime que `branch` : écrite par `Tree`, lue par le moteur. |
 | `best_quay` | `SMALLINT` | oui | `NULL` | Meilleur `QUAY` parmi les citations de la personne — 0 à 3, `NULL` si aucune citation. **Dérivée**, recalculée par le service de citations. Sert le filtre « non vérifié » du visualiseur sans agrégat à la volée. |
 | `citation_count` | `SMALLINT` | non | `0` | Nombre de citations. Dérivée. `0` = le « sans source » de `graphe.json` (9 personnes). |
@@ -1899,6 +1921,134 @@ que l'import émet.
 **`RunStatus`** — `en_cours`, `reussi`, `echoue`.
 
 **`IssueSeverity`** — `info`, `avertissement`, `erreur`.
+
+---
+
+## 8 bis. Module `Question` — préfixe `qst_`
+
+*Numéroté « 8 bis » et non « 9 » : les sections `§ 9.x` sont citées dans une centaine
+d'en-têtes de classe et dans les six autres documents. Renuméroter aurait rendu fausses
+toutes ces citations en une fois, et faux en silence — un `§ 9.3` qui ne parle plus du
+cercle de visibilité ne lève aucune erreur.*
+
+La page « Questions » : l'application cherche dans l'arbre les trous qu'un compte donné
+pourrait combler, et lui pose la question. Décision, motifs et arbitrages :
+[`docs/adr/0008-questions-et-modele-de-langage.md`](adr/0008-questions-et-modele-de-langage.md).
+
+**Deux tables, et aucune ne stocke les questions.** Les questions naissent d'une
+**détection** qui relit l'arbre à chaque fois ; ces tables portent *ce qu'on en a fait*.
+La distinction décide de tout le reste : une lacune comblée cesse d'être détectée et ne
+demande donc aucun balayage périodique, et une lacune à laquelle on a répondu « je ne
+sais pas » est retrouvée par sa **signature**, quel que soit le nombre de fois où la
+détection est rejouée.
+
+### 8 bis.1 `qst_question`
+
+| Colonne | Type | Rôle |
+|---|---|---|
+| `id` | `INT` identity | |
+| `destinataire_user_id` | `INT` | **⇢ inter-module** (`core_user`). À qui la question est posée. |
+| `signature` | `CHAR(64)` | `sha256(nature : sujet_kind : sujet_id)` — l'empreinte de **la lacune**, pas de la ligne. |
+| `nature` | `VARCHAR(32)` | `NatureDeLacune`, neuf valeurs (§ 8 bis.3). |
+| `sujet_kind` | `VARCHAR(12)` | `SubjectKind` — `personne` dans toutes les natures livrées. |
+| `sujet_id` | `INT` | **⇢ inter-module** (`tree_person`). |
+| `sujet_label` | `VARCHAR(255)` | Libellé dénormalisé. **Sortie de données personnelles : filtrée comme la personne** (§ 0.4). |
+| `texte` | `TEXT` | La question, en français. **Contient le nom : filtrée comme la personne** (§ 0.4, second paragraphe). Écrite une fois, jamais réécrite. |
+| `redacteur` | `VARCHAR(12)` | `regles` \| `gemini` — qui a écrit la phrase, pas qui a trouvé la lacune. |
+| `etat` | `VARCHAR(12)` | `posee` \| `inconnue` \| `differee` \| `repondue`. |
+| `reponse_texte` | `TEXT` null | Le texte libre du membre, verbatim. |
+| `relancer_apres` | `TIMESTAMPTZ` null | Renseigné **si et seulement si** `etat = differee`. |
+| `reports` | `SMALLINT` | Combien de fois « je vais me renseigner » a été répondu. |
+| `repondu_le` | `TIMESTAMPTZ` null | Renseigné **si et seulement si** `etat ∈ {inconnue, repondue}`. |
+| `created_at`, `updated_at` | `TIMESTAMPTZ` | |
+
+Index et contraintes :
+
+| Nom | Ce qu'il fait |
+|---|---|
+| `uniq_qst_question_lacune (destinataire_user_id, signature)` | **Le mécanisme central.** Une lacune, un destinataire, une ligne — quel que soit le nombre de détections. |
+| `idx_qst_question_ouvertes (destinataire_user_id, etat) WHERE etat = 'posee'` | La seule requête chaude : la page. |
+| `idx_qst_question_relance (relancer_apres) WHERE etat = 'differee'` | Le réveil des reports. |
+| `idx_qst_question_sujet (sujet_kind, sujet_id)` | « Toutes les questions sur cette fiche ». |
+| `ck_qst_question_differee` | `(etat = 'differee') = (relancer_apres IS NOT NULL)` |
+| `ck_qst_question_repondue` | `(etat IN ('inconnue','repondue')) = (repondu_le IS NOT NULL)` |
+| `ck_qst_question_reports` | `reports >= 0` |
+
+**Les deux premières `CHECK` sont des équivalences, pas des implications**, et la moitié
+« seulement si » est celle qui compte : une question fermée qui garderait une date de
+relance d'une vie antérieure ne se voit nulle part, jusqu'au jour où une requête de
+réveil la ramasse et repose une question déjà répondue.
+
+**Le destinataire n'entre pas dans la signature**, il est la seconde colonne de l'index.
+Mêlé au haché, il aurait rendu impossible la seule requête transversale du module : « à
+qui d'autre a-t-on posé cette lacune, et qu'en ont-ils dit ? », qu'on pose avant d'en
+interroger un de plus.
+
+**Changer la formule de la signature est une migration**, pas une correction de détail :
+les lignes en base gardent l'ancienne empreinte, la détection en calcule de nouvelles,
+l'index ne rapproche plus rien — et chaque membre retrouve d'un coup tout ce qu'il avait
+écarté.
+
+### 8 bis.2 `qst_question_demande`
+
+| Colonne | Type | Rôle |
+|---|---|---|
+| `id` | `INT` identity | |
+| `question_id` | `INT` FK **intra-module** `ON DELETE CASCADE` | |
+| `demande_id` | `INT` | **⇢ inter-module** (`prp_change_request`). |
+| `nature` | `VARCHAR(24)` | Valeur de `RequestKind`, recopiée. Instantané. |
+| `created_at` | `TIMESTAMPTZ` | |
+
+`uniq_qst_question_demande (question_id, demande_id)` ; `idx_qst_question_demande_demande
+(demande_id)`.
+
+**Une table et non une colonne, parce qu'une réponse peut produire deux demandes.** Le
+membre répond « à Brest » *et* dépose la photo de l'acte : `ajout_note` et `ajout_media`,
+deux natures, deux demandes — et il faut qu'elles soient deux, l'administrateur devant
+pouvoir accepter la photo et refuser le lieu. Une colonne unique aurait perdu la
+première en écrivant la seconde, sans rien dire.
+
+**L'état de la demande n'est pas recopié.** Il change ; une copie d'un état qui change
+est une copie fausse le lendemain. Qui veut l'état va le lire chez `Proposal`.
+
+### 8 bis.3 Énumérations de `Question`
+
+| Énumération | Colonne | Valeurs |
+|---|---|---|
+| `NatureDeLacune` | `qst_question.nature` | `prenom_inconnu`, `nom_inconnu`, `mere_inconnue`, `pere_inconnu`, `date_naissance_inconnue`, `lieu_naissance_inconnu`, `date_deces_inconnue`, `lieu_deces_inconnu`, `aucune_photo` |
+| `EtatDeQuestion` | `qst_question.etat` | `posee`, `inconnue`, `differee`, `repondue` |
+| `RedacteurDeQuestion` | `qst_question.redacteur` | `regles`, `gemini` |
+
+La plus longue valeur est `date_naissance_inconnue`, 23 signes, d'où le `VARCHAR(32)` de
+`nature` — avec la marge qu'exige une énumération à laquelle on ajoutera des cas
+descriptifs. C'est la forme de débordement que
+`tests/Schema/LongueurDesEnumerationsTest` existe pour attraper.
+
+### 8 bis.3 bis Réglages de `Question` — aucune ligne semée
+
+| Clé `core_setting` | Type | Défaut | Ce qu'elle décide |
+|---|---|---|---|
+| `questions.memoire_vivante_annees` | entier | 90 | l'**année plancher** de la détection, calculée en retranchant ce nombre à l'année courante |
+| `questions.maximum_par_page` | entier | 20 | combien de questions la page sert d'un coup |
+
+**Aucune migration ne les crée**, et c'est délibéré : `SettingService::entier()` prend un
+défaut, et une clé absente vaut ce défaut. Semer la ligne à l'installation figerait la
+valeur du jour de l'installation — l'inverse du but d'un réglage (même motif que
+`cercle.generations`, ADR 0003).
+
+Un **nombre d'années** et non une année : une constante `1936` serait juste une fois et
+vieillirait d'un an par an, en silence.
+
+### 8 bis.4 Références inter-modules sortant de `Question`
+
+| Colonne | Cible | Libellé recopié |
+|---|---|---|
+| `qst_question.destinataire_user_id` | `core_user.id` | — |
+| `qst_question.sujet_id` | `tree_person.id` | `sujet_label` (+ `texte`) |
+| `qst_question_demande.demande_id` | `prp_change_request.id` | `nature` |
+
+Aucune référence n'entre **dans** `Question` : aucun autre module ne connaît ces deux
+tables. C'est ce qui rend le module retirable d'un bloc si la page ne prend pas.
 
 ---
 

@@ -8,6 +8,7 @@ use App\Module\Core\Service\SettingService;
 use App\Module\Media\Enum\MediaSubject;
 use App\Module\Media\Security\ResolutionDuSujetInterface;
 use App\Module\Membership\Service\Port\PortArbre;
+use App\Module\Question\Contract\FicheEtudiee;
 use App\Module\Tree\Entity\Citation;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
@@ -15,15 +16,19 @@ use App\Module\Tree\Service\ReglagesDeLArbreParSettings;
 use App\Module\Tree\Service\ReglePersonneVivante;
 use App\Module\Tree\Service\TreeFingerprint;
 use App\Module\Tree\Service\VueDeLArbrePourMembership;
+use App\Module\Tree\Service\VueDeLArbrePourQuestions;
 
 /**
- * Les deux coutures par lesquelles `Membership` et `Media` lisent l'arbre sans l'importer.
+ * Les trois coutures par lesquelles `Membership`, `Media` et `Question` lisent l'arbre
+ * sans l'importer.
  *
  * Elles sont éprouvées ensemble parce qu'elles partagent leur mode de défaillance : **une
  * traduction incomplète ne se voit pas**. Une personne manquante dans la vue de
  * `Membership` donne un cercle amputé, une personne oubliée dans la résolution d'un sujet
- * de `Media` donne une photo publiée. Dans les deux cas la réponse reste plausible, aucune
- * exception n'est levée, et rien ne devient rouge.
+ * de `Media` donne une photo publiée, un parent perdu par la vue de `Question` donne une
+ * question qui demande à une petite-fille le nom d'une aïeule que l'arbre connaît déjà.
+ * Dans les trois cas la réponse reste plausible, aucune exception n'est levée, et rien ne
+ * devient rouge.
  *
  * Chacune est interrogée là où elle se juge : la résolution des sujets par son **interface**,
  * puisque ce qui compte est que l’alias soit branché ; la vue de `Membership` par sa classe,
@@ -249,5 +254,120 @@ final class AdaptateursPourLesAutresModulesTest extends ArbreWebTestCase
 
         self::assertNotNull($resolu, 'La ligne existe : on la décrit.');
         self::assertSame([], $resolu->personIds, 'Elle n’engage personne — l’appelant lit cela comme « masqué ».');
+    }
+
+    // ── Question ─────────────────────────────────────────────────────────────────
+
+    /**
+     * Assemblé à la main, pour la même raison que la vue de `Membership` : ses trois
+     * dépendances sont des services sans état, et l'alias de production est vérifié par
+     * `lint:container`.
+     */
+    private function portQuestions(): VueDeLArbrePourQuestions
+    {
+        $reglages = self::getContainer()->get(SettingService::class);
+        \assert($reglages instanceof SettingService);
+
+        return new VueDeLArbrePourQuestions(
+            $this->em(),
+            new ReglePersonneVivante(),
+            new ReglagesDeLArbreParSettings($reglages),
+        );
+    }
+
+    /** @return array<int, FicheEtudiee> indexé par identifiant */
+    private function fichesEtudiees(): array
+    {
+        $indexees = [];
+
+        foreach ($this->portQuestions()->fiches() as $fiche) {
+            $indexees[$fiche->id] = $fiche;
+        }
+
+        return $indexees;
+    }
+
+    /**
+     * **Le flux est complet et non filtré**, vivants compris — arbitrage de l'ADR 0008,
+     * et nécessité de la détection : un flux partiel produirait des lacunes *fantômes*,
+     * « cette personne n'a pas de mère » parce que la mère n'était pas dans le flux.
+     *
+     * Le filtre du cercle vit ailleurs, en un point unique de `Question`.
+     */
+    public function testLaVuePourQuestionsRendLArbreEntierSansFiltre(): void
+    {
+        $fiches = $this->fichesEtudiees();
+
+        self::assertCount(\count($this->personnes), $fiches);
+        self::assertArrayHasKey($this->idDe('cousin'), $fiches, 'Pyroxène est vivant : il est là quand même.');
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     *  LA PARENTÉ SE LIT SUR LE COUPLE, PAS SUR UN PARENT GARDIEN.
+     * ═══════════════════════════════════════════════════════════════════════════.
+     *
+     * C'est le cas que cette couture peut rater en silence. Un `innerJoin` recopié d'un
+     * autre écran ferait disparaître le parent **manquant** — c'est-à-dire exactement la
+     * lacune qu'on cherche. Ici les deux parents existent, et les deux doivent sortir,
+     * lus séparément sur `husband` et `wife` de la famille qui porte l'enfant.
+     */
+    public function testLesDeuxParentsSortentDeLaFamilleQuiPorteLEnfant(): void
+    {
+        $fiches = $this->fichesEtudiees();
+        $ego = $fiches[$this->idDe('ego')];
+
+        self::assertSame($this->idDe('aieul'), $ego->pereId);
+        self::assertSame($this->idDe('aieule'), $ego->mereId);
+    }
+
+    /** Une fiche sans famille d'enfance porte **deux** lacunes, et c'est la donnée utile. */
+    public function testUneFicheSansFamilleDEnfanceNAniPereNiMere(): void
+    {
+        $fiches = $this->fichesEtudiees();
+        $aieul = $fiches[$this->idDe('aieul')];
+
+        self::assertNull($aieul->pereId);
+        self::assertNull($aieul->mereId);
+    }
+
+    /** Les enfants remontent aux deux parents, les conjoints dans les deux sens. */
+    public function testLesEnfantsEtLesConjointsSontRendusDesDeuxCotes(): void
+    {
+        $fiches = $this->fichesEtudiees();
+
+        self::assertContains($this->idDe('ego'), $fiches[$this->idDe('aieul')]->enfantIds);
+        self::assertContains($this->idDe('ego'), $fiches[$this->idDe('aieule')]->enfantIds);
+
+        self::assertSame([$this->idDe('aieule')], $fiches[$this->idDe('aieul')]->conjointIds);
+        self::assertSame([$this->idDe('aieul')], $fiches[$this->idDe('aieule')]->conjointIds);
+
+        // Un conjoint est un **coépoux**, jamais « quelqu'un de la même famille » : les
+        // enfants n'y entrent pas.
+        self::assertNotContains($this->idDe('ego'), $fiches[$this->idDe('aieul')]->conjointIds);
+    }
+
+    /**
+     * **`vivante` vient de la règle, jamais de `tree_person.deceased`.**.
+     *
+     * Pyroxène n'a aucun décès enregistré et la règle du § 9.2 le classe vivant à
+     * quatre-vingt-douze ans. C'est ce booléen-là qui décide qu'on ne lui demandera pas
+     * son lieu de décès — et, au jalon 4, ce qui partira chez un tiers. Deux définitions
+     * de « vivant » divergeraient ici au pire endroit du produit.
+     */
+    public function testLEtatVivantDeLaVuePourQuestionsVientDeLaRegle(): void
+    {
+        $fiches = $this->fichesEtudiees();
+
+        self::assertTrue($fiches[$this->idDe('cousin')]->vivante, 'Aucun décès enregistré : la règle ferme.');
+        self::assertFalse($fiches[$this->idDe('aieule')]->vivante, 'Décès de 1987 enregistré.');
+    }
+
+    public function testLeLibelleSuitLArbreEtRendNullPourUnInconnu(): void
+    {
+        $port = $this->portQuestions();
+
+        self::assertSame('Natron Romarin', $port->libelleDe($this->idDe('ego')));
+        self::assertNull($port->libelleDe(999999));
     }
 }

@@ -1,0 +1,128 @@
+# Contrat : ce fichier est celui du module Question (la page « Questions », ADR 0008).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services/_autoload.yaml couvre déjà toutes les classes
+# de src/Module/Question/. On ne déclare ici que ce que le conteneur ne peut pas
+# deviner : **alias d'interface**.
+#
+# ─────────────────────────────────────────────────────────────────────────────────
+# PIÈGE D'ORDRE DE CHARGEMENT — à connaître avant d'ajouter une ligne ici.
+#
+# `config/services.yaml` importe `services/*.yaml`, et Symfony traite TOUJOURS les
+# imports avant les définitions du fichier qui les porte. Le prototype `App\:` vit dans
+# `services/_autoload.yaml`, dont le préfixe « _ » le place en tête du glob : les
+# fichiers de module l'emportent donc sur lui. Mais `FileLoader::registerClasses()`
+# appelle `setDefinition()` sans condition, ce qui veut dire qu'une définition de
+# service **concret** posée ici serait écrasée en silence si l'ordre changeait.
+#
+# Ce module n'y est pas exposé : il ne déclare que des alias d'interface, que le
+# prototype ne touche pas. Tout ce qui relèverait d'un service concret se pose en
+# **attribut**, dans la classe. Et l'on vérifie ce qu'on obtient réellement :
+#
+#     bin/console debug:container App\\Module\\Question\\Contract\\PortArbrePourQuestions
+#
+# Un `#[AsAlias]` ne conviendrait pas : il est traité par le prototype de
+# `_autoload.yaml`, donc AVANT ce fichier, donc écrasé. C'est le même arbitrage que
+# `config/services/almanach.yaml`, `timeline.yaml` et `membership.yaml` ont déjà tranché.
+# ─────────────────────────────────────────────────────────────────────────────────
+#
+# ═════════════════════════════════════════════════════════════════════════════════
+# CE PIÈGE A MORDU UNE TROISIÈME FOIS LE 23/09/2026, ICI. ET `almanach.yaml` LE
+# DOCUMENTAIT DÉJÀ — CE QUI N'A PAS SUFFI.
+# ═════════════════════════════════════════════════════════════════════════════════
+#
+# La décoration de `RedacteurDeQuestions` par Gemini a d'abord été déclarée ici, avec
+# `decorates:` et `arguments: { $repli: '@.inner' }`. Le fichier était juste au sens
+# de YAML. Ce qui s'est passé :
+#
+#     composer / cache warmup   OK
+#     bin/console lint:container   OK
+#     bin/console debug:container  montrait l'alias ATTENDU, sur la bonne classe
+#     premier appel HTTP réel      ArgumentCountError: 1 passed, exactly 8 expected
+#
+# Le bloc `services:` de ce fichier n'a pas de `_defaults`. Une définition concrète y
+# REMPLACE donc celle du prototype `App\:` au lieu de la compléter — autowiring
+# compris. Les sept autres arguments ne sont plus injectés, et rien ne le dit.
+#
+# ── LE SECOND INCIDENT, LE MÊME JOUR, ET IL EST PIRE ──────────────────────────────
+#
+# En insérant un bloc ici PAR SCRIPT, j'ai coupé le fichier à un marqueur et
+# **supprimé un alias qui marchait** (`Contract\DepotDeReponse`). Symptômes :
+#
+#     lint:container   OK
+#     phpstan          OK
+#     tests unitaires  OK
+#     premier POST     « references interface … but no such service exists »
+#
+# ── CE QU'IL FAUT EN RETENIR, ET QUI N'EST PAS « FAIRE ATTENTION » ────────────────
+#
+#   1. AUCUN des outils qui prétendent vérifier la configuration n'attrape ces deux
+#      défauts. `lint:container` valide la syntaxe et les références déclarées ; il ne
+#      construit aucun service. `debug:container` montre la définition, pas ce qui
+#      sortira du constructeur. **Seul un test qui EXERCE le chemin les voit** — ici,
+#      `tests/Question/RoutesDesQuestionsTest.php`, qui fait de vrais appels HTTP.
+#
+#   2. Après toute réécriture scriptée de ce fichier, lire `git diff` — pas
+#      `git diff --stat`. Un « + » attendu peut voisiner un « − » qu'on n'a pas voulu,
+#      et le compte de lignes ne le dit pas.
+#
+#   3. Une définition concrète ne se pose PAS ici. Elle se pose en attribut, dans la
+#      classe : `#[AsDecorator]`, `#[AutowireDecorated]`, `#[Autowire(service: …)]`.
+#      Les attributs sont appliqués par une passe de compilation, SUR la définition que
+#      le prototype a déjà construite — ils complètent au lieu de remplacer. C'est ce
+#      que `_autoload.yaml` prescrit déjà, et c'est la seule forme qui ne se trompe pas.
+# ═════════════════════════════════════════════════════════════════════════════════
+
+services:
+    # ── Les trois ports, et leurs trois replis ─────────────────────────────────────
+    #
+    # LES TROIS N'ÉCHOUENT PAS DE LA MÊME FAÇON, ET C'EST DÉLIBÉRÉ. Lire l'en-tête de
+    # chaque repli avant de « corriger » l'asymétrie :
+    #
+    #   - l'arbre non branché rend un flux VIDE      → aucune question, page vide
+    #   - les médias non branchés rendent VIDE       → mais la nature `aucune_photo` est
+    #                                                  désactivée par le détecteur, sinon
+    #                                                  elle s'ouvrirait sur les 274 fiches
+    #   - le dépôt non branché LÈVE                  → une réponse qu'on ferait semblant
+    #                                                  d'enregistrer serait perdue sans
+    #                                                  que personne ne l'apprenne
+    #
+    # Une page vide est un état acceptable du produit ; une contribution perdue en
+    # silence ne l'est pas. Les pannes n'ont pas le même prix, donc pas le même échec.
+
+    # Branché sur `Tree` depuis le jalon 2. Le repli reste en place
+    # (`Service/Port/ArbreNonBranchePourQuestions`) : il n'est pas un vestige, c'est la
+    # preuve que le module démarre sans `Tree`, et le test qui l'exerce l'atteste.
+    App\Module\Question\Contract\PortArbrePourQuestions:
+        alias: App\Module\Tree\Service\VueDeLArbrePourQuestions
+
+    # Branché sur `Media` depuis le jalon 2.
+    #
+    # ⚠ SI CETTE LIGNE REVIENT AU REPLI, LA NATURE `aucune_photo` DOIT SE TAIRE.
+    # Un tableau de comptes vide se lit « zéro média pour tout le monde » et ouvrirait la
+    # lacune sur les 274 fiches. C'est `ServiceDesQuestions::photosDemandables()` qui
+    # l'empêche, en reconnaissant le repli **par son type** — pas par un tableau vide, un
+    # arbre réellement sans photo rendrait le même.
+    App\Module\Question\Contract\PortMediasPourQuestions:
+        alias: App\Module\Media\Service\ComptesDeMediasPourQuestions
+
+    # ── La rédaction des questions ─────────────────────────────────────────────────
+    #
+    # Gemini viendra **décorer** cette ligne au jalon 4, pas la remplacer : le repli doit
+    # rester le dernier maillon, et c'est lui qui garantit qu'une entrée est rendue pour
+    # CHAQUE lacune, quelle que soit la panne du tiers. Lire l'en-tête de
+    # `Service/RedacteurDeQuestions.php` avant d'y toucher.
+    App\Module\Question\Service\RedacteurDeQuestions:
+        alias: App\Module\Question\Service\RedactionParGabarit
+
+    # Branché sur `Proposal` depuis le jalon 3. L'adaptateur ne fait que construire un
+    # corps de requête et appeler `DepotDeDemande` — le MÊME service que
+    # `POST /api/demandes` : aucun chemin d'écriture nouveau n'existe.
+    #
+    # Le repli (`Service/Port/DepotNonBranche`) reste en place et LÈVE : c'est le seul
+    # des trois qui n'a pas le droit d'échouer en silence. Une réponse qu'on ferait
+    # semblant d'enregistrer serait une contribution perdue sans que personne ne
+    # l'apprenne — ni le membre, qui a vu sa confirmation, ni l'administrateur, dont la
+    # file vide ne rougit pas.
+    App\Module\Question\Contract\DepotDeReponse:
+        alias: App\Module\Proposal\Service\DepotDeReponsesAuxQuestions

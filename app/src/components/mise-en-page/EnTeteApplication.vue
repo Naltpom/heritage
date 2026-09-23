@@ -192,6 +192,22 @@ async function quitter(): Promise<void> {
         >
           Anniversaires
         </RouterLink>
+        <!--
+          `rattache` et non `connecte` : un compte dont le rattachement n'est pas
+          validé n'a **pas de cercle** (ADR 0003), donc aucune question sur une
+          personne vivante — et l'API lui refuse de toute façon le dépôt d'une
+          réponse. Lui ouvrir l'entrée serait lui promettre une contribution
+          impossible. La route porte la même exigence, `meta.acces: 'membre'` :
+          le lien caché n'est pas la protection, il évite une impasse.
+        -->
+        <RouterLink
+          v-if="rattache"
+          :to="{ name: 'questions' }"
+          class="rounded-champ px-2.5 py-1 text-sm text-attenue hover:text-texte"
+          active-class="bg-accent-doux font-semibold text-texte"
+        >
+          Questions
+        </RouterLink>
         <RouterLink
           v-if="rattache"
           :to="{ name: 'demandes.miennes' }"

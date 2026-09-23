@@ -150,6 +150,16 @@ qui encadrent le risque :
   sur les vivants hors cercle. Voir le nœud d'une personne qu'on connaît déjà est acceptable ;
   obtenir la liste des vivants ne l'est pas.
 
+  > ⚠ **Cette phrase est amendée depuis le 2026-09-23 par l'[ADR 0008](0008-questions-et-modele-de-langage.md).**
+  > Elle reste vraie pour **tout compte**, membre ou administrateur, et pour toute porte de
+  > sortie de l'API. Elle cesse d'être vraie pour **un tiers unique, nommé, sous contrat** :
+  > le fournisseur du modèle de langage qui formule les questions reçoit l'arbre entier,
+  > vivants compris — arbitrage du commanditaire, rendu en connaissance de cette réserve.
+  > Le modèle de menace ci-dessus (« un cousin curieux, pas un inconnu qui aspire l'arbre »)
+  > gagne donc un acteur. Lire l'ADR 0008 § 2 pour ce qui est amendé **exactement**, et
+  > surtout pour ce qui ne l'est pas : aucune règle de filtrage servie à un lecteur n'est
+  > relâchée.
+
 Limite restante, écrite noir sur blanc : un lecteur patient peut parcourir le graphe nœud par
 nœud et reconstituer cette liste à la main. C'est vrai. On la rend coûteuse et on la rend
 visible — l'accès au graphe est journalisé. On ne va pas plus loin dans cette livraison. Si la
@@ -212,6 +222,17 @@ nouvel ADR ; elle ne l'est pas ici.
   *À retenir de ces deux révisions* : deux ajouts à une liste blanche peuvent être tous deux
   justes et n'avoir aucun argument en commun. Un motif qui marche pour un champ n'autorise
   pas le suivant.
+- **Amendement du 2026-09-23 — un tiers reçoit l'arbre entier ([ADR 0008](0008-questions-et-modele-de-langage.md)).**
+  Ce n'est pas une révision comme les autres : les précédentes corrigeaient un texte qu'une
+  mesure avait démenti ; celle-ci enregistre une **décision** qui contredit une règle de cet
+  ADR. Une seule phrase tombe — « pas de liste, pas d'export » —, et **pour un seul
+  destinataire**, qui n'est pas un compte. Ce qui reste intact, et qu'il faut relire comme
+  tel : la formule `C(u)`, la liste blanche des sept champs, le filtrage dans la
+  sérialisation, l'absence de mode « sans filtre », le régime `Aucun`. La règle des colonnes
+  `*_label` s'étend même : `qst_question.sujet_label` **et** `qst_question.texte` en
+  relèvent, le second étant le premier cas d'une phrase en français qui contient un nom —
+  qu'aucune liste blanche champ par champ n'aurait attrapée, et que seule la règle « tout
+  champ dérivé d'une donnée masquée est lui-même une donnée masquée » couvre.
 - La bascule « voir comme un membre » est **tracée au journal d'audit** : c'est une
   consultation de données personnelles sous une autre identité.
 - **Un test fonctionnel par porte de sortie** (les sept ci-dessus, **plus les libellés
