@@ -243,7 +243,7 @@ final class ChronologieTest extends CasDeTestTimeline
 
         $this->requete('GET', '/api/chronologie/preferences');
         self::assertSame(
-            ['bandYears' => 10, 'orientation' => 'lignes', 'branches' => ['pp', 'pm', 'mp', 'mm', 'tr', 'bf'], 'showUncertainty' => true],
+            ['bandYears' => 10, 'orientation' => 'lignes', 'branches' => ['pp', 'pm', 'mp', 'mm', 'tr', 'cpp', 'cpm', 'cmp', 'cmm'], 'showUncertainty' => true],
             $this->charge(),
             'Le GET a écrit la préférence : c\'est exactement ce que le § 9.1 interdit.',
         );

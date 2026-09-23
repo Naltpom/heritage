@@ -39,10 +39,26 @@ import {
   type TraceDeBarre,
 } from './geometrie'
 
-/** L'ordre des quatre quarts puis du tronc. Celui de la charte et de la légende
- *  de l'arbre : on ne le réordonne pas au gré des filtres, sinon les colonnes
- *  changent de place d'un réglage à l'autre. */
-export const ORDRE_BRANCHES: readonly Branche[] = ['pp', 'pm', 'mp', 'mm', 'tr', 'bf']
+/** L'ordre des quatre quarts, du tronc, puis des quatre quarts du conjoint. Celui de la
+ *  charte et de la légende de l'arbre : on ne le réordonne pas au gré des filtres, sinon
+ *  les colonnes changent de place d'un réglage à l'autre.
+ *
+ *  **`bf` recule en dernier, et ce n'est pas indifférent.** Les colonnes de la chronologie
+ *  se lisent maintenant comme le dessin : les quatre quarts du lecteur, son tronc, les
+ *  quatre de son conjoint. Il n'y a plus de dixième colonne : la belle-famille a eu la
+ *  sienne du 20 au 23/09/2026, puis l'arbitrage du commanditaire lui a donné le bloc de son
+ *  partenaire. Neuf colonnes, et l'ordre est celui du dessin. */
+export const ORDRE_BRANCHES: readonly Branche[] = [
+  'pp',
+  'pm',
+  'mp',
+  'mm',
+  'tr',
+  'cpp',
+  'cpm',
+  'cmp',
+  'cmm',
+]
 
 /** Les noms de branche du produit — les mêmes que la légende de l'arbre. */
 export const LIBELLES_BRANCHE: Record<Branche, string> = {
@@ -51,7 +67,10 @@ export const LIBELLES_BRANCHE: Record<Branche, string> = {
   mp: 'Chardon',
   mm: 'Tilleul',
   tr: 'Tronc',
-  bf: 'Belle-famille',
+  cpp: 'Romarin du conjoint',
+  cpm: 'Bourrache du conjoint',
+  cmp: 'Chardon du conjoint',
+  cmm: 'Tilleul du conjoint',
 }
 
 /** Le libellé long, pour la légende et les infobulles. */
@@ -60,8 +79,11 @@ export const DESCRIPTIONS_BRANCHE: Record<Branche, string> = {
   pm: 'Bourrache — maternelle du père',
   mp: 'Chardon — paternelle de la mère',
   mm: 'Tilleul — maternelle de la mère',
-  tr: 'Tronc — l’ego, sa fratrie, ses parents',
-  bf: 'Belle-famille — la famille du conjoint',
+  tr: 'Tronc — l’ego, sa fratrie, son conjoint, et qui entre par alliance',
+  cpp: 'Romarin du conjoint — paternelle de son père',
+  cpm: 'Bourrache du conjoint — maternelle de son père',
+  cmp: 'Chardon du conjoint — paternelle de sa mère',
+  cmm: 'Tilleul du conjoint — maternelle de sa mère',
 }
 
 /* ------------------------------------------------------------------ */

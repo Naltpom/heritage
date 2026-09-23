@@ -45,6 +45,24 @@ final class CalculAscendance
     /** Idem pour l'héritage des branches : 8 passages dans `graphe.py`. */
     private const int ITERATIONS_HERITAGE = 8;
 
+    /**
+     * Les quatre quarts du lecteur, dans l'ordre `pp`, `pm`, `mp`, `mm` — celui que
+     * {@see souches()} attend, et **celui que l'implexe rend non neutre** : la première
+     * souche qui atteint une personne la garde.
+     */
+    private const array QUARTS_DU_LECTEUR = [Branch::Pp, Branch::Pm, Branch::Mp, Branch::Mm];
+
+    /**
+     * Leurs pendants du côté du conjoint, dans le même ordre.
+     *
+     * Deux listes et **un seul** {@see souches()} : c'est ce qui garantit qu'un quart du
+     * conjoint est découpé par le même geste qu'un quart du lecteur. Une seconde fonction
+     * « comme l'autre mais pour le conjoint » aurait divergé au premier correctif porté
+     * d'un seul côté — et la moitié droite du dessin se serait mise à ne plus ressembler
+     * à la gauche sans que rien ne le signale.
+     */
+    private const array QUARTS_DU_CONJOINT = [Branch::Cpp, Branch::Cpm, Branch::Cmp, Branch::Cmm];
+
     /** Le cas courant, quand l'arbre est déjà chargé depuis la base. */
     public function pourLeJeu(JeuDePlacement $jeu): PlacementLogique
     {
@@ -237,7 +255,7 @@ final class CalculAscendance
 
         $branche = [];
 
-        foreach ($this->souches($adjacence['parents'], $ego) as $code => $souche) {
+        foreach ($this->souches($adjacence['parents'], $ego, self::QUARTS_DU_LECTEUR) as $code => $souche) {
             foreach ($this->remonte($adjacence['parents'], $souche) as $ancetre) {
                 // La première souche qui atteint une personne la garde. L'ordre pp, pm,
                 // mp, mm n'est donc pas neutre — c'est celui du script d'origine, et
@@ -251,6 +269,10 @@ final class CalculAscendance
         foreach ($this->tronc($adjacence, $ego) as $personne) {
             $branche[$personne] = Branch::Tr;
         }
+
+        // **La moitié droite du dessin** : les quatre quarts du conjoint, posés après ceux
+        // du lecteur et après le tronc — donc sans jamais leur disputer une fiche.
+        $this->quartsDuConjoint($adjacence, $ego, $branche);
 
         // Héritage : le SANG d'abord (parents, puis enfants), l'alliance en dernier.
         // Dans l'autre ordre, un homme héritait de la branche de sa femme — c'est ainsi
@@ -275,13 +297,19 @@ final class CalculAscendance
         // n'atteint jamais est une mine ; `testLeTroncNeSePropagePasParAlliance` la
         // désamorce.
         //
-        // **Ce que la garde laisse en plan, et où c'est repris.** Les personnes qu'elle
-        // écarte — la famille du conjoint d'un membre du tronc — ressortaient *sans
-        // branche*, et le sérialiseur leur servait alors celle **de la racine** par un
-        // repli silencieux : 179 fiches sur 468 pour le père de la racine. Le remède n'est
-        // pas de lever cette condition, qui ne ferait que vider le mot « tronc » de son
-        // sens — c'est de leur donner une région à elles, et c'est {@see Branch::Bf},
-        // posée par {@see self::belleFamille()} juste après cette boucle.
+        // ⚠ **CE QUE CETTE GARDE VEUT DIRE A CHANGÉ. Le paragraphe ci-dessus raconte une
+        // étape, ce n'est plus la règle.** Le commanditaire a arbitré le 23/09/2026 :
+        // *« tous doivent forcément être dans un des 13 blocs ; si c'est les conjoints d'une
+        // personne de ma famille, ils vont avec leur partenaire »*. Le tronc **se propage
+        // donc bien par alliance**, et il grossit — c'est voulu, dit, et accepté.
+        //
+        // Ce que cette condition fait n'est plus d'interdire, c'est d'**ORDONNER** : elle
+        // retient l'alliance une passe de plus, pour qu'une personne touchée à la fois par
+        // du sang et par une alliance reparte du côté du sang. Ce que le mot « tronc »
+        // perdrait en la levant ici, ce n'est pas sa taille — c'est la préséance du sang,
+        // qui passerait au premier voisin venu dans l'ordre des identifiants. Ce qu'elle
+        // laisse en plan est repris juste après, et plus rien n'en ressort sans branche :
+        // {@see self::parAlliance()}.
         // ────────────────────────────────────────────────────────────────────
         for ($passage = 0; $passage < self::ITERATIONS_HERITAGE; ++$passage) {
             foreach ($idsPersonnes as $id) {
@@ -304,71 +332,133 @@ final class CalculAscendance
             }
         }
 
-        $this->belleFamille($idsPersonnes, $adjacence, $branche);
+        $this->parAlliance($idsPersonnes, $adjacence, $branche);
 
         return $branche;
     }
 
     /**
-     * **La belle-famille** : ce que le sang du lecteur n'atteint pas, et qui entre dans
-     * l'arbre par une alliance avec son tronc.
+     * **AUCUNE PERSONNE SANS BLOC. Qui n'en a pas prend celui de son partenaire.**.
      *
-     * Cette passe vient **après** l'héritage par le sang : elle ne touche donc que des
-     * personnes encore sans branche, et ne dispute rien aux quatre quarts. L'amorce est une
-     * alliance — le conjoint d'un membre du tronc —, puis la région s'étend de proche en
-     * proche, parce qu'une belle-famille est une famille entière et pas une personne.
+     * C'est la règle générale du commanditaire, rendue le 23/09/2026, et c'est un
+     * **invariant du produit** et non une passe de rattrapage : *« tous doivent forcément
+     * être dans un des 13 blocs ; si c'est les conjoints d'une personne de ma famille, ils
+     * vont avec leur partenaire »*. Puis leur famille suit, de proche en proche, depuis ce
+     * point d'ancrage.
      *
-     * **Pourquoi elle est nécessaire.** Sans elle ces personnes sortaient sans branche, et
-     * le sérialiseur du graphe leur servait alors celle **de la racine** par un repli
-     * silencieux. Mesuré pour le père de la racine : 179 fiches sur 468 affichaient le quart
-     * d'ascendance de quelqu'un d'autre — dont son épouse et ses trois enfants étiquetés
-     * « Tronc ».
+     * ── CE QU'ELLE REMPLACE, ET POURQUOI CE N'EST PAS LE MÊME GESTE ──────────────
      *
-     * **179 et 207 comptent deux choses différentes, et les deux sont justes.** 179 est le
-     * nombre de fiches qui **reçoivent une branche qui n'est pas la leur** ; 207 est celui
-     * des fiches qui **tombent sur le repli**. Les 28 de différence ont une colonne `NULL` :
-     * le repli leur rend `null`, elles ressortent sans branche, et cela vaut **pour tout
-     * lecteur, avant comme après cette passe**. Ce ne sont donc pas un reliquat du
-     * correctif, mais l'îlot réellement détaché de l'arbre — rien de faux ne leur arrive, et
-     * rien ici ne les concerne. Prises l'une pour l'autre, ces deux quantités ont déjà coûté
-     * un arbitrage : elles se citent ensemble, ou avec leur prédicat.
+     * Elle prend la place de `belleFamille()`, qui donnait à ces personnes **une région à
+     * elles**, `Branch::Bf`. Cette clé n'existe plus. Le docbloc de la PR #44 annonçait
+     * qu'elle serait « remplacée par quatre » ; la mesure a montré que sous son amorce
+     * c'était faux — elle gardait la belle-famille de la fratrie et des enfants, que les
+     * quatre quarts du conjoint ne couvrent pas. **Elle disparaît quand même, mais par un
+     * autre mécanisme que celui qui était prévu** : pas « `bf` se découpe en quatre », mais
+     * « ses membres héritent du bloc de leur partenaire ».
      *
-     * **Où vont les 179 : 176 reçoivent `Bf`, et 3 reviennent à `Tr`.** Ces trois-là sont
-     * les enfants du lecteur, que {@see self::tronc()} laissait dehors tant qu'il
-     * implémentait « l'ego, ses parents, sa fratrie » sans la descendance. C'est pourquoi
-     * `Bf` en compte 176 et non 179 : les deux nombres sont exacts, ils ne désignent pas le
-     * même ensemble. Mesuré en rejouant `branches()` d'avant le correctif sur le graphe
-     * servi — empreinte `91ad68db`, 648 nœuds, 468 personnes, lecteur = le père de la
-     * racine.
+     * La différence n'est pas de mise en œuvre, elle est de nature. `Bf` était une
+     * **région** : elle répondait à « où ranger ces gens ? » en créant un endroit. La règle
+     * répond « nulle part de nouveau — là où est déjà leur partenaire ». Treize blocs, pas
+     * un de plus, et rien ne perd son fond.
      *
-     * **Pourquoi elle ne change rien pour la racine.** L'amorce exige un conjoint **sans
-     * branche**. Sur la vue de la racine, les conjoints des membres de son tronc sont ses
-     * propres parents et les conjoints de sa fratrie, que les quatre souches ont déjà
-     * servis : la passe n'amorce rien et ne pose aucune `Bf`. Vérifié sur le graphe servi —
-     * 0 fiche sur 468 change.
+     * ⚠ **LE TRONC GROSSIT BEAUCOUP PLUS QUE CE QUI A ÉTÉ ANNONCÉ, ET LE CHIFFRE EST ICI.**
+     * L'arbitrage parlait de « 155 personnes à côté de 5 ». Mesuré en rejouant `branches()`
+     * pour les **468 points de vue** du graphe servi (empreinte `91ad68db`) :
      *
-     * @param list<string>                                                                                                             $idsPersonnes
+     *     regions non vides   AVANT  mediane 2  (max 6)   APRES  mediane 3  (max 9)
+     *     plus grosse region  AVANT  mediane 381/468      APRES  mediane 431/468
+     *
+     * Pour le lecteur médian, le tronc porte donc **431 personnes sur 468**. Trois choses
+     * à lire ensemble avant d'appeler cela une fuite :
+     *
+     * - **le bloc géant préexiste à cette règle.** Avant elle, les 381 du lecteur médian
+     *   étaient dans `Bf`, une région unique elle aussi. La règle ne crée pas la
+     *   concentration : elle la renomme `Tr` et l'élargit de cinquante ;
+     * - **le nombre de régions AUGMENTE** — médiane 2 → 3, maximum 6 → 9 — parce que les
+     *   quatre quarts du conjoint découpent ce qui était indistinct ;
+     * - **la cause est la forme de l'arbre, pas la règle.** Pour un lecteur qui n'est pas
+     *   la racine, l'essentiel du graphe ne l'atteint que par des chaînes d'alliances. Le
+     *   cas favorable existe : pour le lecteur `p3`, les 176 de `Bf` se répartissent en
+     *   **165 dans les quatre quarts du conjoint et 11 seulement au tronc**, qui passe de
+     *   8 à 19, et ses régions de 6 à 9. C'est quand le conjoint a une ascendance connue
+     *   que les treize blocs se remplissent.
+     *
+     * **Ne pas « corriger » cela par un découpage plus fin** — la simplicité est le but, et
+     * elle a été choisie explicitement contre l'élégance de la symétrie.
+     *
+     * ── L'AMORCE EST SÉPARÉE DE LA PROPAGATION, ET L'ORDRE PORTE LA RÈGLE ────────
+     *
+     * Chaque passe sert d'abord **tous** les conjoints, puis seulement ensuite les parents
+     * et les enfants. Ainsi une personne touchée à la fois par un partenaire et par un
+     * ascendant reçoit le bloc de son partenaire, ce que la règle dit mot pour mot. Les
+     * fondre en une seule boucle rendrait le résultat dépendant de l'ordre des
+     * identifiants, sans que rien ne le signale.
+     *
+     * ⚠ **LA BOUCLE SORT SUR UN POINT FIXE, ET LE PLAFOND N'EST QU'UN FILET.** La
+     * première rédaction réutilisait {@see ITERATIONS_HERITAGE} — huit passes, la constante
+     * reprise de `graphe.py` — en supposant que ça suffirait. **C'était faux, et ça ne se
+     * voyait pas sur un lecteur.** Mesuré en rejouant `branches()` pour les 468 points de
+     * vue du graphe servi : **264 lecteurs gardaient de 4 à 33 personnes sans bloc alors
+     * qu'un chemin les reliait à eux.** L'invariant tombait, et il tombait en silence.
+     *
+     * La cause est l'ordre de visite : une passe sert les identifiants dans l'ordre de la
+     * liste, si bien qu'une personne placée avant son ancre n'est servie qu'à la passe
+     * suivante. Une chaîne d'alliances de longueur *n* demande donc jusqu'à *n* passes, et
+     * cet arbre en porte de plus de huit.
+     *
+     * Le plafond vaut désormais le nombre de personnes — une passe ne peut pas servir moins
+     * d'une personne sans arrêter la boucle, donc il ne peut jamais mordre. **La sortie
+     * réelle est le point fixe.** Sur les données réelles il tombe en trois à quatre passes ;
+     * le coût du filet est nul puisqu'on n'y arrive jamais.
+     *
+     * ── CE QUI RESTE SANS BLOC APRÈS ELLE, ET C'EST LE SEUL CAS ──────────────────
+     *
+     * Une personne qu'**aucun chemin** ne relie à quelqu'un de classé. Sur le graphe servi
+     * elles sont **28**, et forment l'îlot réellement détaché de l'arbre. Aucune règle ne
+     * peut leur donner un bloc : elles n'ont ni sang ni alliance vers le reste, et leur en
+     * attribuer un au hasard serait inventer une parenté. Le sérialiseur les sert à `null`,
+     * et le canevas les range dans « sans branche », qui ne se dessine pas.
+     *
+     * **L'exception est bornée, et mesurée.** Les 28 membres de l'îlot, pris eux-mêmes comme
+     * lecteurs, en classent chacun au moins un et jusqu'à 26 : leurs propres souches y
+     * remontent, puisque l'îlot est alors leur arbre. Ils sont 28 lecteurs possibles sur 468,
+     * aucun ne porte de compte, et pour les 440 autres la phrase ci-dessus vaut sans réserve.
+     * Relevé sur le graphe servi, empreinte `91ad68db`, en rejouant `branches()` pour chacun
+     * des 468 points de vue.
+     *
+     * **L'invariant se teste, et il est testé** :
+     * `testAucunePersonneNeSortSansBlocHorsIlotDetache`. Une personne sans branche retombe
+     * sur le repli silencieux du sérialiseur — elle reçoit alors le quart d'ascendance de
+     * **la racine**, ce qui est faux sans en avoir l'air. C'est le défaut que tout ce
+     * chantier ferme ; l'assertion est donc sur le compte, pas sur un relevé.
+     *
+     * @param list<string>                                                                                                              $idsPersonnes
      * @param array{parents: array<string, list<string>>, enfants: array<string, list<string>>, conjoints: array<string, list<string>>} $adjacence
-     * @param array<string, Branch>                                                                                                    $branche      modifié sur place
+     * @param array<string, Branch>                                                                                                     $branche      modifié sur place
      */
-    private function belleFamille(array $idsPersonnes, array $adjacence, array &$branche): void
+    private function parAlliance(array $idsPersonnes, array $adjacence, array &$branche): void
     {
-        // L'amorce : un conjoint de membre du tronc que le sang n'a pas classé.
-        foreach ($idsPersonnes as $id) {
-            if (!isset($branche[$id]) || Branch::Tr !== $branche[$id]) {
-                continue;
-            }
+        // Le plafond ne peut pas mordre : chaque passe sert au moins une personne ou sort.
+        for ($passage = 0, $filet = \count($idsPersonnes); $passage <= $filet; ++$passage) {
+            $bouge = false;
 
-            foreach ($adjacence['conjoints'][$id] ?? [] as $conjoint) {
-                if (!isset($branche[$conjoint])) {
-                    $branche[$conjoint] = Branch::Bf;
+            // L'amorce, pour tout le monde d'abord : le bloc du partenaire.
+            foreach ($idsPersonnes as $id) {
+                if (isset($branche[$id])) {
+                    continue;
+                }
+
+                foreach ($adjacence['conjoints'][$id] ?? [] as $conjoint) {
+                    if (isset($branche[$conjoint])) {
+                        $branche[$id] = $branche[$conjoint];
+                        $bouge = true;
+                        break;
+                    }
                 }
             }
-        }
 
-        // Puis la famille autour de cette amorce, avec le même nombre de passages que
-        // l'héritage : une belle-famille se remonte comme une ascendance.
-        for ($passage = 0; $passage < self::ITERATIONS_HERITAGE; ++$passage) {
+            // Puis la famille autour de cette amorce — une belle-famille est une famille
+            // entière, pas une personne.
             foreach ($idsPersonnes as $id) {
                 if (isset($branche[$id])) {
                     continue;
@@ -377,33 +467,124 @@ final class CalculAscendance
                 $voisins = array_merge(
                     $adjacence['parents'][$id] ?? [],
                     $adjacence['enfants'][$id] ?? [],
-                    $adjacence['conjoints'][$id] ?? [],
                 );
 
                 foreach ($voisins as $voisin) {
-                    if (isset($branche[$voisin]) && Branch::Bf === $branche[$voisin]) {
-                        $branche[$id] = Branch::Bf;
+                    if (isset($branche[$voisin])) {
+                        $branche[$id] = $branche[$voisin];
+                        $bouge = true;
                         break;
                     }
                 }
+            }
+
+            if (!$bouge) {
+                break;
             }
         }
     }
 
     /**
-     * Les quatre grands-parents de l'ego, dans l'ordre `pp`, `pm`, `mp`, `mm`.
+     * **Les quatre quarts du conjoint du lecteur** — `pp'`, `pm'`, `mp'`, `mm'` de la
+     * spécification, {@see Branch::Cpp} et ses trois sœurs.
      *
-     * @param array<string, list<string>> $parents
+     * ── LE MÊME GESTE, DE L'AUTRE CÔTÉ DU TRONC ─────────────────────────────────
+     *
+     * Il n'y a **rien de neuf** dans cette passe, et c'est tout son intérêt : elle appelle
+     * {@see souches()} puis {@see remonte()}, exactement comme la moitié gauche, avec la
+     * seule autre liste de quatre valeurs. Le moteur de placement, lui, a dû s'y prendre
+     * autrement (`AffinageDuPlacement::quatreQuartsDuConjoint()`, par fouille
+     * d'atteignabilité) parce qu'il partitionne des **nœuds** — les familles comprises — et
+     * qu'il doit tout classer. Ici on classe des personnes, et l'ascendance suffit.
+     *
+     * ── LES PARENTS DU CONJOINT SONT POSÉS ICI, ET IL A FALLU UN ÉCHEC POUR LE VOIR ──
+     *
+     * La première version ne posait que les **grands-parents** et leur remontée, en laissant
+     * la boucle d'héritage servir le reste : le père du conjoint hérite de son propre père,
+     * donc `cpp`, sa mère du sien, donc `cmp`. C'est exact **tant que le conjoint a des
+     * grands-parents dans le graphe.** Sans eux, rien n'amorçait plus sa famille du tout :
+     * elle ressortait **sans branche**, c'est-à-dire sur le repli silencieux du sérialiseur
+     * que le repli silencieux du sérialiseur rend alors la branche de la racine.
+     *
+     * La cause est une asymétrie réelle entre les deux moitiés, et elle ne saute pas aux
+     * yeux : du côté du lecteur, la génération des parents est couverte par {@see tronc()} ;
+     * du côté du conjoint, **rien ne la couvre**. Le tronc s'arrête à son conjoint et ne
+     * remonte pas chez ses beaux-parents. On les pose donc explicitement, et l'héritage
+     * n'est plus qu'un chemin parmi deux vers le même résultat au lieu d'être le seul.
+     *
+     * Le père au premier quart, la mère au troisième — chacun à la tête de sa moitié. Un
+     * couple se retrouve ainsi réparti sur deux quarts, ce qui est déjà le sort des
+     * grands-parents du lecteur : `AffinageDuPlacement::deuxQuarts()` le dit en toutes
+     * lettres, « c'est un choix par défaut, pas une évidence ».
+     *
+     * **UN SEUL CONJOINT, ET LEQUEL.** Le premier, dans l'ordre des familles, dont les
+     * grands-parents sont dans le graphe. Un lecteur remarié n'a donc qu'une moitié droite,
+     * comme dans le moteur (`quartsDuLecteur()` s'arrête au premier lui aussi) : le dessin
+     * a une moitié droite, pas trois. Les autres conjoints et leur famille restent à
+     * servis par {@see self::parAlliance()}, qui leur donne le bloc de leur partenaire.
+     *
+     * **SI RIEN NE S'APPLIQUE, RIEN NE CHANGE.** Lecteur sans conjoint, ou conjoint sans
+     * grands-parents connus : la passe ne pose aucune valeur et l'arbre sort exactement
+     * comme avant. **C'est le témoin de ce chantier sur la vue de la racine**, qui n'a pas
+     * de conjoint — aucune des quatre valeurs n'y est posée, sa colonne `branch` ne bouge
+     * pas d'une ligne, et `testLaRacineSansConjointNeVoitAucunQuartDeConjoint` le tient.
+     *
+     * @param array{parents: array<string, list<string>>, enfants: array<string, list<string>>, conjoints: array<string, list<string>>} $adjacence
+     * @param array<string, Branch>                                                                                                     $branche   modifié sur place
+     */
+    private function quartsDuConjoint(array $adjacence, string $ego, array &$branche): void
+    {
+        foreach ($adjacence['conjoints'][$ego] ?? [] as $conjoint) {
+            $parents = $adjacence['parents'][$conjoint] ?? [];
+
+            if ([] === $parents) {
+                // Un conjoint dont l'arbre ne connaît pas les parents n'amène aucune
+                // famille à découper. On passe au suivant plutôt que de consommer sur lui
+                // l'unique moitié droite du dessin.
+                continue;
+            }
+
+            foreach ($this->souches($adjacence['parents'], $conjoint, self::QUARTS_DU_CONJOINT) as $code => $souche) {
+                foreach ($this->remonte($adjacence['parents'], $souche) as $ancetre) {
+                    // `??=`, comme pour le lecteur, et ici il porte davantage : sur un arbre
+                    // endogame un aïeul appartient aux deux moitiés, et il **reste du côté
+                    // du lecteur**. C'est l'ordre d'appel qui le décide, pas cette ligne.
+                    $branche[$ancetre] ??= Branch::from($code);
+                }
+            }
+
+            // La clé est le rang dans `$famille->epoux` : 0 le père, 1 la mère.
+            foreach ([0 => Branch::Cpp, 1 => Branch::Cmp] as $rang => $quart) {
+                if (isset($parents[$rang])) {
+                    $branche[$parents[$rang]] ??= $quart;
+                }
+            }
+
+            return;
+        }
+    }
+
+    /**
+     * Les quatre grands-parents d'une personne, dans l'ordre `pp`, `pm`, `mp`, `mm`.
+     *
+     * Les quatre souches sont **déduites** et non écrites en dur : le père du père donne le
+     * premier quart, la mère du père le deuxième, le père de la mère le troisième, la mère
+     * de la mère le quatrième. `$quarts` dit lesquelles des quatre valeurs recevoir —
+     * {@see QUARTS_DU_LECTEUR} depuis l'ego, {@see QUARTS_DU_CONJOINT} depuis son conjoint.
+     *
+     * @param array<string, list<string>>           $parents
+     * @param array{Branch, Branch, Branch, Branch} $quarts
      *
      * @return array<string, string> code de branche → identifiant de la souche
      */
-    private function souches(array $parents, string $ego): array
+    private function souches(array $parents, string $ego, array $quarts): array
     {
+        [$quartPp, $quartPm, $quartMp, $quartMm] = $quarts;
         $pere = $parents[$ego][0] ?? null;
         $mere = $parents[$ego][1] ?? null;
         $souches = [];
 
-        foreach ([[Branch::Pp, Branch::Pm, $pere], [Branch::Mp, Branch::Mm, $mere]] as [$cotePere, $coteMere, $parent]) {
+        foreach ([[$quartPp, $quartPm, $pere], [$quartMp, $quartMm, $mere]] as [$cotePere, $coteMere, $parent]) {
             if (null === $parent) {
                 continue;
             }
@@ -454,8 +635,9 @@ final class CalculAscendance
     }
 
     /**
-     * **La lignée directe du lecteur et sa fratrie** : l'ego, ses parents, tous les enfants
-     * de ses parents — donc ses demi-frères et demi-sœurs —, et **sa descendance**.
+     * **La lignée directe du lecteur, sa fratrie et son conjoint** : l'ego, ses parents,
+     * tous les enfants de ses parents — donc ses demi-frères et demi-sœurs —, **sa
+     * descendance**, et **les personnes qu'il a épousées**.
      *
      * La descendance manquait, alors que {@see Branch::Tr} la nomme depuis toujours : « le
      * tronc : la **lignée directe** et la fratrie ». L'oubli ne se voyait pas, parce que la
@@ -496,6 +678,31 @@ final class CalculAscendance
                 $tronc[$enfant] = true;
                 $pile[] = $enfant;
             }
+        }
+
+        // ── LE CONJOINT EST AU TRONC. SA FRATRIE N'Y EST PAS. ───────────────────────
+        //
+        // **Ajouté après coup, et pas pour faire joli : la donnée et le dessin se
+        // contredisaient.** Le moteur de placement garde déjà le conjoint dans le tronc —
+        // « le conjoint reste dans le tronc, c'est le foyer du lecteur »
+        // (`AffinageDuPlacement::ascendanceDuConjoint()`), qui part de ses *parents* et
+        // jamais de lui. La définition du commanditaire dit la même chose : *« moi, mes
+        // parents, mon conjoint — mais pas ses frères et sœurs, eux restent dans le bloc de
+        // la famille opposée »*. Seule cette colonne disait autre chose.
+        //
+        // **Pourquoi cela ne pouvait pas rester ainsi une fois les régions peintes.** Un
+        // aplat de région est découpé par rangée, et une bande s'arrête là où une personne
+        // d'une AUTRE région s'intercale (`app/src/components/arbre/zones.ts`). Le conjoint
+        // étant posé au milieu du tronc par le moteur, une branche `bf` en faisait
+        // exactement cela : **un intrus au centre du tronc**, qui coupait sa bande en deux
+        // et posait un troisième aplat d'une région dont tout le reste est ailleurs. Le
+        // désaccord était invisible tant que la branche ne servait qu'à teinter un liseré de
+        // 4 unités ; il devient une entaille dès qu'elle dessine une surface.
+        //
+        // Il est posé **après** la descendance, et n'entre jamais dans la pile : un conjoint
+        // peut avoir des enfants d'une autre union, qui ne sont pas la lignée du lecteur.
+        foreach ($adjacence['conjoints'][$ego] ?? [] as $conjoint) {
+            $tronc[$conjoint] = true;
         }
 
         return array_keys($tronc);

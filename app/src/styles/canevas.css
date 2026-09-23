@@ -223,10 +223,12 @@
    `branch: null` — le canevas composait alors `b-null`, à laquelle rien ne
    répondait : liseré non peint, sur des fiches bien réelles. */
 .b-hors { fill: var(--color-branche-hors); }
-/* Belle-famille — la famille du conjoint d'un membre du tronc. Sur la vue de la racine,
-   aucune fiche ne la porte : ses conjoints de tronc sont ses propres parents, que les
-   quatre souches ont déjà classés. */
-.b-bf { fill: var(--color-branche-bf); }
+/* Les quatre quarts du conjoint du lecteur — `pp'`, `pm'`, `mp'`, `mm'` de la
+   spécification à treize blocs. Vides sur la vue de la racine, qui n'a pas de conjoint. */
+.b-cpp { fill: var(--color-branche-cpp); }
+.b-cpm { fill: var(--color-branche-cpm); }
+.b-cmp { fill: var(--color-branche-cmp); }
+.b-cmm { fill: var(--color-branche-cmm); }
 
 /* ------------------------------------------------------------------ */
 /* Zones de branche — l'aplat des régions, SOUS tout le reste          */
@@ -296,11 +298,14 @@
 .zone.b-mm { stroke: var(--color-branche-mm); }
 .zone.b-tr { stroke: var(--color-branche-tr); }
 .zone.b-hors { stroke: var(--color-branche-hors); }
-.zone.b-bf { stroke: var(--color-branche-bf); }
+.zone.b-cpp { stroke: var(--color-branche-cpp); }
+.zone.b-cpm { stroke: var(--color-branche-cpm); }
+.zone.b-cmp { stroke: var(--color-branche-cmp); }
+.zone.b-cmm { stroke: var(--color-branche-cmm); }
 
 /*
  * En sombre, la même teinte sur un fond `#141517` rend nettement plus sourde : à
- * 0,10 les régions disparaissent. Les cinq couleurs de branche, elles, ne
+ * 0,10 les régions disparaissent. Les neuf couleurs de branche, elles, ne
  * changent pas avec le thème — ce sont des étiquettes de donnée (voir
  * `main.css`) —, donc c'est la couche qui s'ajuste, pas la couleur.
  */
@@ -524,7 +529,10 @@
 .chrono .barre .corps.b-mp { fill: var(--color-branche-mp); }
 .chrono .barre .corps.b-mm { fill: var(--color-branche-mm); }
 .chrono .barre .corps.b-tr { fill: var(--color-branche-tr); }
-.chrono .barre .corps.b-bf { fill: var(--color-branche-bf); }
+.chrono .barre .corps.b-cpp { fill: var(--color-branche-cpp); }
+.chrono .barre .corps.b-cpm { fill: var(--color-branche-cpm); }
+.chrono .barre .corps.b-cmp { fill: var(--color-branche-cmp); }
+.chrono .barre .corps.b-cmm { fill: var(--color-branche-cmm); }
 
 /**
  * **Ce que la donnée ne sait pas se voit aussi.**
@@ -556,7 +564,10 @@
 .chrono .barre .pointe.b-mp { fill: var(--color-branche-mp); }
 .chrono .barre .pointe.b-mm { fill: var(--color-branche-mm); }
 .chrono .barre .pointe.b-tr { fill: var(--color-branche-tr); }
-.chrono .barre .pointe.b-bf { fill: var(--color-branche-bf); }
+.chrono .barre .pointe.b-cpp { fill: var(--color-branche-cpp); }
+.chrono .barre .pointe.b-cpm { fill: var(--color-branche-cpm); }
+.chrono .barre .pointe.b-cmp { fill: var(--color-branche-cmp); }
+.chrono .barre .pointe.b-cmm { fill: var(--color-branche-cmm); }
 
 .chrono .barre .nom {
   font: 9px var(--font-sans);

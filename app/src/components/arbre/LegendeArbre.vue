@@ -44,14 +44,18 @@ const BRANCHES = [
   { classe: 'b-pm', libelle: 'Bourrache — maternelle du père' },
   { classe: 'b-mp', libelle: 'Chardon — paternelle de la mère' },
   { classe: 'b-mm', libelle: 'Tilleul — maternelle de la mère' },
-  { classe: 'b-tr', libelle: 'Tronc — l’ego, sa fratrie, ses parents' },
-  { classe: 'b-bf', libelle: 'Belle-famille — la famille du conjoint' },
+  { classe: 'b-tr', libelle: 'Tronc — l’ego, sa fratrie, son conjoint, et qui entre par alliance' },
+  { classe: 'b-cpp', libelle: 'Romarin du conjoint — paternelle de son père' },
+  { classe: 'b-cpm', libelle: 'Bourrache du conjoint — maternelle de son père' },
+  { classe: 'b-cmp', libelle: 'Chardon du conjoint — paternelle de sa mère' },
+  { classe: 'b-cmm', libelle: 'Tilleul du conjoint — maternelle de sa mère' },
 ] as const
 
 /**
- * Les personnes que rien ne relie à la racine — une belle-famille, le plus
- * souvent, entrée avec un conjoint et jamais rattachée. Ce n'est **pas** une
- * sixième branche : le sérialiseur sort `branch: null`, et le moteur les pose à
+ * Les personnes que **rien ne relie** à l'arbre du lecteur — et depuis l'arbitrage du
+ * 23/09/2026, rien d'autre : une belle-famille entrée avec un conjoint prend le bloc de
+ * son partenaire, elle ne tombe plus ici. Ce n'est **pas** une
+ * branche de plus : le sérialiseur sort `branch: null`, et le moteur les pose à
  * l'écart de tout le reste. Voir `zones.ts`.
  */
 const HORS_BRANCHE = { classe: 'b-hors', libelle: 'Sans branche — non rattachée à la racine' } as const
