@@ -15,7 +15,9 @@
  *  5. empilement par contours : chaque bloc est posé au plus près du précédent,
  *     sans chevaucher aucune rangée commune ;
  *  6. la descendance d'un collatéral est un arbre de foyers compact ;
- *  7. les barres de fratrie de la lignée directe sont plus hautes (36 contre 22).
+ *  7. aucun trait ne passe derrière une fiche (une union séparée par d'autres
+ *     fiches contourne par le dessous), et deux barres de fratrie ne se
+ *     superposent jamais (chacune son couloir de hauteur).
  *
  * **Personne n'est perdu.** La maquette ne connaissait que l'ascendance et les
  * collatéraux ; le graphe réel porte aussi les remariages, l'ascendance du
@@ -44,9 +46,10 @@ const INTERLIGNE = 60
 /** Marge du monde autour de l'arbre. */
 const MARGE_X = 60
 const MARGE_Y = 40
-/** Hauteur de la barre de fratrie au-dessus de la rangée des enfants. */
-const BARRE_DIRECTE = 28
-const BARRE_ORDINAIRE = 16
+/** Hauteur de base de la barre de fratrie au-dessus de la rangée des enfants
+ *  (+ 6 px par couloir quand deux barres se chevaucheraient). */
+const BARRE_DIRECTE = 12
+const BARRE_ORDINAIRE = 10
 /** Écart entre l'arbre et la zone des personnes détachées. */
 const ECART_ZONE = 160
 
@@ -367,16 +370,31 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     poser(f, id, 0, g)
     // La fiche la plus à l'extérieur sur la rangée : un second conjoint se pose au-delà du premier.
     let exterieur = { id, x: 0 }
-    for (const fam of famillesEpoux.get(id) ?? []) {
-      if (famillesAncestrales.has(fam)) continue
-      let milieu = 0
-      const conjoint = epouxDe(fam).find((e) => e !== id && !poses.has(e) && !numeroDe.has(e))
+    /*
+     * Les unions à poser, en FILE : celles de la personne, puis — dès qu'un
+     * conjoint est posé — les AUTRES unions de ce conjoint, traitées aussitôt pour
+     * que son autre partenaire se pose juste à côté de lui. Sans cela, ce second
+     * partenaire n'était posé que par le rattrapage final, au bord extérieur de
+     * l'arbre, et le trait d'union traversait toute la rangée (constaté en prod :
+     * une belle-sœur remariée, un trait derrière vingt fiches).
+     */
+    const aTraiter = (famillesEpoux.get(id) ?? []).map((fam) => ({ pivot: id, xPivot: 0, fam }))
+    const traitees = new Set<string>()
+    while (aTraiter.length) {
+      const { pivot, xPivot, fam } = aTraiter.shift()!
+      if (traitees.has(fam) || famillesAncestrales.has(fam)) continue
+      traitees.add(fam)
+      let milieu = xPivot
+      const conjoint = epouxDe(fam).find((e) => e !== pivot && !poses.has(e) && !numeroDe.has(e))
       if (conjoint !== undefined) {
         const pas = largeur(exterieur.id) / 2 + ECART_FRATRIE + largeur(conjoint) / 2
         const x = cote === 'G' ? exterieur.x - pas : exterieur.x + pas
         poser(f, conjoint, x, g)
         exterieur = { id: conjoint, x }
-        milieu = x / 2
+        milieu = (xPivot + x) / 2
+        // Ses autres unions passent en tête : son autre partenaire se pose à côté de lui.
+        const autres = (famillesEpoux.get(conjoint) ?? []).filter((f2) => f2 !== fam)
+        aTraiter.unshift(...autres.map((f2) => ({ pivot: conjoint, xPivot: x, fam: f2 })))
       }
       const enfants = enfantsDe(fam)
         .filter((e) => !poses.has(e) && !numeroDe.has(e))
@@ -707,7 +725,70 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
   const enAttente = (f: string, p: string): boolean =>
     aretesEnAttente.has(`${f}|${p}`) || aretesEnAttente.has(`${p}|${f}`)
 
+  /*
+   * Le tracé se fait en DEUX TEMPS.
+   *
+   * 1. Famille par famille, la géométrie : l'union (droite, ou qui CONTOURNE par
+   *    le dessous quand d'autres fiches séparent les époux — jamais un trait
+   *    derrière des cartes), le point d'où descendent les enfants, l'étendue de
+   *    la barre de fratrie.
+   * 2. Rangée par rangée, des COULOIRS : deux barres de fratrie qui se
+   *    chevaucheraient à la même hauteur se confondaient à l'œil (« comme si ces
+   *    personnes étaient liées ») ; chacune reçoit sa hauteur. Même chose pour les
+   *    unions qui contournent.
+   *
+   * L'espace entre deux rangées (60 px) est partagé : le HAUT aux unions qui
+   * contournent, sous la rangée des parents ; le BAS aux barres, au-dessus de la
+   * rangée des enfants. Les deux familles de traits ne peuvent donc pas se croiser.
+   */
+  interface Intervalle {
+    lo: number
+    hi: number
+    couloir: number
+  }
+  /** Répartit des intervalles d'une même rangée en couloirs sans chevauchement. */
+  const repartir = (liste: Intervalle[], ecart: number): void => {
+    const fins: number[] = []
+    for (const it of [...liste].sort((a, b) => a.lo - b.lo)) {
+      let c = fins.findIndex((fin) => fin + ecart <= it.lo)
+      if (c < 0) {
+        c = fins.length
+        fins.push(it.hi)
+      } else fins[c] = it.hi
+      it.couloir = c
+    }
+  }
+  const COULOIRS_DETOUR = 4
+  const COULOIRS_BARRE = 5
+  const yDetour = (rangee: number, couloir: number): number =>
+    hautRangee(rangee) + hauteurFiche + 6 + 5 * Math.min(couloir, COULOIRS_DETOUR - 1)
+  const yBarre = (rangee: number, couloir: number, directe: boolean): number =>
+    hautRangee(rangee) - (directe ? BARRE_DIRECTE : BARRE_ORDINAIRE) - 6 * Math.min(couloir, COULOIRS_BARRE - 1)
+
+  interface Trace {
+    fam: string
+    ancestrale: boolean
+    style: 'attente' | 'divorces' | 'directs' | 'ordinaires'
+    ep: FicheHistoire[]
+    en: FicheHistoire[]
+    /** Union droite (même rangée, rien entre les deux) ou contournement. */
+    detour: (Intervalle & { rangee: number }) | null
+    milieuX: number | null
+    milieuY: number
+    portee: [number, number] | null
+    barre: (Intervalle & { rangee: number }) | null
+    departX: number
+    direct: FicheHistoire | undefined
+  }
+
+  const fichesParRangee = new Map<number, FicheHistoire[]>()
+  for (const f of fiches) fichesParRangee.set(f.rangee, [...(fichesParRangee.get(f.rangee) ?? []), f])
+  /** Une fiche, autre que les époux, entre les deux sur leur rangée ? */
+  const separes = (a: FicheHistoire, b: FicheHistoire): boolean =>
+    (fichesParRangee.get(a.rangee) ?? []).some((f) => f !== a && f !== b && f.x < b.x && f.x + f.w > a.x + a.w)
+
   const foyers: EtiquetteFoyer[] = []
+  const traces: Trace[] = []
   for (const [fam, noeudFamille] of familles) {
     const ancestrale = famillesAncestrales.has(fam)
     const ep = epouxDe(fam)
@@ -717,24 +798,33 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     const en = enfantsDe(fam)
       .map((e) => parId.get(e))
       .filter((e): e is FicheHistoire => e !== undefined)
+    const style: Trace['style'] = ep.some((e) => enAttente(fam, e.id))
+      ? 'attente'
+      : noeudFamille.divorced
+        ? 'divorces'
+        : ancestrale
+          ? 'directs'
+          : 'ordinaires'
 
-    // L'union : un trait entre les deux époux ; le point d'où descendent les
-    // enfants est pris SUR ce trait, au plus près d'eux — un seul enfant placé
-    // sous l'union reçoit un trait droit, sans détour.
     let milieuX: number | null = null
     let milieuY = 0
     let portee: [number, number] | null = null
+    let detour: Trace['detour'] = null
     if (ep.length >= 2) {
       const [a, b] = [ep[0]!, ep[ep.length - 1]!]
       const ya = a.y + a.h / 2
-      const s = a.rangee === b.rangee ? seg(a.x + a.w, ya, b.x, ya) : seg(a.cx, a.y + a.h / 2, b.cx, b.y + b.h / 2)
-      if (ep.some((e) => enAttente(fam, e.id))) traits.attente += s
-      else if (noeudFamille.divorced) traits.divorces += s
-      else if (ancestrale) traits.directs += s
-      else traits.ordinaires += s
-      milieuX = (a.x + a.w + b.x) / 2
-      milieuY = ya
-      if (a.rangee === b.rangee && b.x - (a.x + a.w) > 16) portee = [a.x + a.w + 8, b.x - 8]
+      if (a.rangee === b.rangee && separes(a, b)) {
+        // Des fiches entre les époux : l'union contourne par le dessous.
+        detour = { lo: a.cx, hi: b.cx, couloir: 0, rangee: a.rangee }
+        milieuX = (a.cx + b.cx) / 2
+        portee = [a.cx, b.cx]
+      } else {
+        const s = a.rangee === b.rangee ? seg(a.x + a.w, ya, b.x, ya) : seg(a.cx, a.y + a.h / 2, b.cx, b.y + b.h / 2)
+        traits[style] += s
+        milieuX = (a.x + a.w + b.x) / 2
+        milieuY = ya
+        if (a.rangee === b.rangee && b.x - (a.x + a.w) > 16) portee = [a.x + a.w + 8, b.x - 8]
+      }
     } else if (ep.length === 1) {
       const p = ep[0]!
       milieuX = p.cx
@@ -759,30 +849,62 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       }
     }
 
-    if (!en.length || milieuX === null) continue
     const direct = ancestrale ? en.find((e) => e.directe) : undefined
-    const xs = en.map((e) => e.cx)
-    const vise = direct ? direct.cx : (Math.min(...xs) + Math.max(...xs)) / 2
-    const departX = portee ? Math.min(portee[1], Math.max(portee[0], vise)) : milieuX
+    let departX = milieuX ?? 0
+    let barre: Trace['barre'] = null
+    if (en.length && milieuX !== null) {
+      const xs = en.map((e) => e.cx)
+      const vise = direct ? direct.cx : (Math.min(...xs) + Math.max(...xs)) / 2
+      departX = portee ? Math.min(portee[1], Math.max(portee[0], vise)) : milieuX
+      const seul = en.length === 1 ? en[0]! : null
+      if (!(seul && Math.abs(seul.cx - departX) < 0.5)) {
+        barre = {
+          lo: Math.min(departX, ...xs),
+          hi: Math.max(departX, ...xs),
+          couloir: 0,
+          rangee: Math.min(...en.map((e) => e.rangee)),
+        }
+      }
+    }
+    traces.push({ fam, ancestrale, style, ep, en, detour, milieuX, milieuY, portee, barre, departX, direct })
+  }
+
+  // Les couloirs, rangée par rangée.
+  const parRangee = <T extends { rangee: number }>(liste: T[]): Map<number, T[]> => {
+    const m = new Map<number, T[]>()
+    for (const it of liste) m.set(it.rangee, [...(m.get(it.rangee) ?? []), it])
+    return m
+  }
+  for (const liste of parRangee(traces.flatMap((t) => (t.detour ? [t.detour] : []))).values()) repartir(liste, 10)
+  for (const liste of parRangee(traces.flatMap((t) => (t.barre ? [t.barre] : []))).values()) repartir(liste, 10)
+
+  // Le dessin.
+  for (const t of traces) {
+    const { ep, en, detour, milieuX, direct, ancestrale, fam } = t
+    let departY = t.milieuY
+    if (detour) {
+      const [a, b] = [ep[0]!, ep[ep.length - 1]!]
+      const y = yDetour(detour.rangee, detour.couloir)
+      traits[t.style] += seg(a.cx, a.y + a.h, a.cx, y) + seg(a.cx, y, b.cx, y) + seg(b.cx, y, b.cx, b.y + b.h)
+      departY = y
+    }
+    if (!en.length || milieuX === null) continue
     const cible = (s: string, directe: boolean, attente: boolean): void => {
       if (attente) traits.attente += s
       else if (directe) traits.directs += s
       else traits.ordinaires += s
     }
-    const seul = en.length === 1 ? en[0]! : null
-    if (seul && Math.abs(seul.cx - departX) < 0.5) {
+    if (!t.barre) {
       // Un enfant sous l'union : un trait droit.
-      cible(seg(departX, milieuY, departX, seul.y), ancestrale, enAttente(fam, seul.id))
+      const seul = en[0]!
+      cible(seg(t.departX, departY, t.departX, seul.y), ancestrale, enAttente(fam, seul.id))
       continue
     }
-    const rangeeEnfants = Math.min(...en.map((e) => e.rangee))
-    const barre = hautRangee(rangeeEnfants) - (ancestrale ? BARRE_DIRECTE : BARRE_ORDINAIRE)
-    cible(seg(departX, milieuY, departX, barre), ancestrale, false)
-    const lo = Math.min(departX, ...xs)
-    const hi = Math.max(departX, ...xs)
-    if (hi > lo) traits.ordinaires += seg(lo, barre, hi, barre)
-    if (direct && Math.abs(direct.cx - departX) >= 0.5)
-      traits.directs += seg(Math.min(departX, direct.cx), barre, Math.max(departX, direct.cx), barre)
+    const barre = yBarre(t.barre.rangee, t.barre.couloir, ancestrale)
+    cible(seg(t.departX, departY, t.departX, barre), ancestrale, false)
+    if (t.barre.hi > t.barre.lo) traits.ordinaires += seg(t.barre.lo, barre, t.barre.hi, barre)
+    if (direct && Math.abs(direct.cx - t.departX) >= 0.5)
+      traits.directs += seg(Math.min(t.departX, direct.cx), barre, Math.max(t.departX, direct.cx), barre)
     for (const e of en) cible(seg(e.cx, barre, e.cx, e.y), e === direct, enAttente(fam, e.id))
   }
 
