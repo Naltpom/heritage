@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Tree;
 
+use App\Module\Core\Service\CleDeRecherche;
 use App\Module\Tree\Entity\Place;
 use App\Module\Tree\Service\AppariementDesLieux;
+use App\Module\Tree\Service\NomsDesPays;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -442,6 +444,83 @@ final class AppariementDesLieuxTest extends TestCase
 
         self::assertSame(51.83, $resultat['lat']);
         self::assertSame('St. Anne of the Prairies Catholic Cemetery', $resultat['libelle']);
+    }
+
+    /**
+     * **Tous les pays en français**, et plus seulement cinquante.
+     *
+     * Le Pérou n'était pas dans l'ancienne table : « Lima, Pérou » tombait en passe F alors
+     * que Lima est dans le référentiel mondial. La table est désormais celle du CLDR, et le
+     * pays se reconnaît **par le même repliement** que tout le reste — accents, casse et
+     * espaces parasites compris.
+     */
+    public function testUnPaysAbsentDeLAncienneTableEstReconnuSousSonNomFrancais(): void
+    {
+        $appariement = $this->appariement(villes: ['Lima;PE;-12.04;-77.03;7737002', 'Lima;US;40.74;-84.11;38000']);
+
+        foreach (['Lima, Pérou', 'Lima, PEROU', 'Lima ,  pérou '] as $chaine) {
+            $trouve = $appariement->apparier($chaine);
+
+            self::assertSame(AppariementDesLieux::PASSE_VILLE_DU_MONDE, $trouve['passe'], $chaine);
+            self::assertSame('PE', $trouve['pays'], $chaine.' : c’est le pays cité qui départage, pas la population.');
+            self::assertSame(-12.04, $trouve['lat'], $chaine);
+        }
+
+        // Et le nom composé, avec son trait d'union et son accent : « États-Unis ».
+        self::assertSame('US', $appariement->apparier('Lima, Ohio, États-Unis')['pays']);
+    }
+
+    /**
+     * **Les alias historiques survivent** à l'arrivée du CLDR, qui ne les connaît pas.
+     *
+     * « Écosse » et « Angleterre » ne sont pas des États ; un GEDCOM français les écrit
+     * pourtant. Le CLDR écrit « Viêt Nam » ; l'ancienne table disait « Vietnam » — les
+     * deux doivent marcher. Et « Myanmar (Birmanie) » se reconnaît aussi sans sa
+     * parenthèse.
+     */
+    public function testLesAliasHistoriquesEtLesGraphiesDUsageSontReconnus(): void
+    {
+        $appariement = $this->appariement(villes: [
+            'Edinburgh;GB;55.95;-3.19;464990',
+            'Hanoi;VN;21.02;105.84;8053663',
+            'Mandalay;MM;21.97;96.08;1208099',
+            'Kinshasa;CD;-4.33;15.31;7785965',
+        ]);
+
+        self::assertSame('GB', $appariement->apparier('Edinburgh, Écosse')['pays']);
+        self::assertSame('GB', $appariement->apparier('Edinburgh, Royaume-Uni')['pays']);
+        self::assertSame('VN', $appariement->apparier('Hanoi, Vietnam')['pays']);
+        self::assertSame('VN', $appariement->apparier('Hanoi, Viêt Nam')['pays']);
+        self::assertSame('MM', $appariement->apparier('Mandalay, Myanmar')['pays']);
+        self::assertSame('MM', $appariement->apparier('Mandalay, Birmanie')['pays']);
+        self::assertSame('CD', $appariement->apparier('Kinshasa, Zaïre')['pays']);
+        self::assertSame('CD', $appariement->apparier('Kinshasa, Congo-Kinshasa')['pays']);
+    }
+
+    /**
+     * L'index des pays : les deux sources réunies, et **l'alias l'emporte**.
+     *
+     * « Congo » seul désignait le Congo-Brazzaville dans l'ancienne table ; le CLDR ne
+     * connaît pas ce nom nu. Le garder tel quel, c'est ne rien changer à ce que la
+     * commande résolvait hier. Et « Saint-Martin » reste la partie française : la
+     * parenthèse de « Saint-Martin (partie néerlandaise) » ne lui vole pas son nom.
+     */
+    public function testLIndexDesPaysReunitLeCldrEtLesAlias(): void
+    {
+        $index = NomsDesPays::index();
+
+        self::assertGreaterThan(249, \count($index), 'Les 249 territoires du CLDR, plus les alias et les formes sans parenthèse.');
+        self::assertSame('CG', $index['CONGO']);
+        self::assertSame('MF', $index['SAINT MARTIN']);
+        self::assertSame('SX', $index['SAINT MARTIN PARTIE NEERLANDAISE']);
+        self::assertSame('FR', $index['FRANCE']);
+        self::assertSame('PL', $index['POLOGNE']);
+        self::assertSame('CI', $index['COTE D IVOIRE'], 'L’apostrophe typographique du CLDR se replie comme une droite.');
+
+        foreach ($index as $cle => $code) {
+            self::assertMatchesRegularExpression('/^[A-Z]{2}$/', $code, $cle);
+            self::assertSame((new CleDeRecherche())->replier($cle), $cle, 'Chaque clé doit être déjà repliée : '.$cle);
+        }
     }
 
     /**

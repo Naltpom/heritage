@@ -74,19 +74,21 @@ use App\Module\Tree\Entity\Place;
  * **déterministe** : sans lui, l'ordre des lignes du fichier déciderait, et une
  * régénération du référentiel changerait la carte sans que rien ne l'explique.
  *
- * ── UNE LIMITE DU RÉFÉRENTIEL MONDIAL, MESURÉE ET ASSUMÉE ───────────────────────
+ * ── UNE LIMITE DU RÉFÉRENTIEL MONDIAL, ET CE QUI LA RATTRAPE ──────────────────
  *
  * `communes-fr.csv` porte les noms **français accentués** (`Saint-Étienne`), et le
  * repliement les rapproche de toutes leurs graphies. `villes-monde.csv`, lui, porte le nom
  * **principal de GeoNames**, qui est le plus souvent anglais ou translittéré : on y trouve
- * `Algiers`, jamais `Alger`. Une chaîne `PLAC` écrite en français sur une ville étrangère
- * tombe donc en passe F, où elle est **comptée et nommée** dans le rapport de la commande.
+ * `Algiers`, jamais `Alger`, et il s'arrête à 15 000 habitants. Une chaîne `PLAC` écrite
+ * en français sur une ville étrangère, ou sur un village hors de France et du Canada,
+ * tombe donc en passe F.
  *
- * Ce n'est pas réparé ici, et c'est délibéré : corriger demanderait une table d'exonymes
- * français — une troisième source à tracer, à licencier et à régénérer — pour une poignée
- * de lignes sur un arbre français. La bonne réponse est la correction manuelle, qui existe
- * déjà et que la commande protège. La table {@see self::PAYS} suit la même règle et le même
- * seuil.
+ * Ce n'est pas réparé **ici**, et c'est délibéré : cette classe ne sort pas de la machine.
+ * Le rattrapage est un recours **en ligne** (OpenStreetMap Nominatim, voir
+ * {@see GeocodeurEnLigne}), que la commande n'emploie que sur une passe F — jamais sur une
+ * passe D, où l'on sait déjà qu'il faut choisir et où un géocodeur choisirait à notre
+ * place —, et seulement si on le lui demande. Le pays cité, lui, se reconnaît désormais
+ * quel qu'il soit : voir {@see NomsDesPays}.
  *
  * ── LE FORMAT DES FICHIERS, ET POURQUOI ON N'EMPLOIE PAS `fgetcsv()` ─────────────
  *
@@ -121,37 +123,23 @@ final class AppariementDesLieux
     public const string PASSE_INCONNU = 'inconnu';
 
     /**
-     * Les noms de pays en français que ce produit sait reconnaître, vers leur code ISO
-     * 3166-1 alpha-2.
+     * Les noms de pays en français que ce produit sait reconnaître, **repliés**, vers leur
+     * code ISO 3166-1 alpha-2.
      *
-     * **Volontairement courte.** Le lot de référence ne comporte aucun fichier de noms de
-     * pays : en ajouter un troisième pour une poignée de lignes coûterait une source de
-     * plus à tracer, à licencier et à régénérer. Les entrées ci-dessous couvrent les pays
-     * qu'un arbre familial français cite réellement ; un pays absent n'est pas une panne —
-     * il tombe en passe F, est compté comme non résolu, et s'ajoute ici en une ligne le
-     * jour où il apparaît.
+     * Ce fut une table de cinquante entrées écrite à la main, « volontairement courte ».
+     * Elle faisait tomber en passe F toute chaîne citant un pays qu'elle ignorait — le
+     * Pérou, la Géorgie, le Liban d'un arbre qui en avait un de plus —, et chaque oubli se
+     * payait d'une bulle manquante. Elle est désormais **construite** depuis
+     * {@see NomsDesPays} : les 249 territoires du CLDR en français, plus les alias
+     * historiques (`ANGLETERRE`, `ECOSSE`, `HOLLANDE`…) que l'ancienne table portait et
+     * que le CLDR ne dira jamais.
      *
      * Un dernier morceau déjà écrit en ISO2 (`DZ`, `CH`) est reconnu sans passer par cette
      * table.
      *
      * @var array<string, string> clé repliée du nom → code ISO2
      */
-    private const array PAYS = [
-        'FRANCE' => 'FR', 'ALGERIE' => 'DZ', 'MAROC' => 'MA', 'TUNISIE' => 'TN',
-        'BELGIQUE' => 'BE', 'SUISSE' => 'CH', 'LUXEMBOURG' => 'LU', 'ALLEMAGNE' => 'DE',
-        'ITALIE' => 'IT', 'ESPAGNE' => 'ES', 'PORTUGAL' => 'PT', 'PAYS BAS' => 'NL',
-        'ROYAUME UNI' => 'GB', 'ANGLETERRE' => 'GB', 'ECOSSE' => 'GB', 'IRLANDE' => 'IE',
-        'AUTRICHE' => 'AT', 'POLOGNE' => 'PL', 'HONGRIE' => 'HU', 'ROUMANIE' => 'RO',
-        'GRECE' => 'GR', 'TURQUIE' => 'TR', 'RUSSIE' => 'RU', 'UKRAINE' => 'UA',
-        'SUEDE' => 'SE', 'NORVEGE' => 'NO', 'DANEMARK' => 'DK', 'FINLANDE' => 'FI',
-        'TCHEQUIE' => 'CZ', 'SLOVAQUIE' => 'SK', 'CROATIE' => 'HR', 'SERBIE' => 'RS',
-        'CANADA' => 'CA', 'ETATS UNIS' => 'US', 'MEXIQUE' => 'MX', 'BRESIL' => 'BR',
-        'ARGENTINE' => 'AR', 'CHILI' => 'CL', 'SENEGAL' => 'SN', 'MALI' => 'ML',
-        'COTE D IVOIRE' => 'CI', 'CAMEROUN' => 'CM', 'MADAGASCAR' => 'MG', 'CONGO' => 'CG',
-        'LIBAN' => 'LB', 'SYRIE' => 'SY', 'ISRAEL' => 'IL', 'EGYPTE' => 'EG',
-        'INDE' => 'IN', 'CHINE' => 'CN', 'JAPON' => 'JP', 'VIETNAM' => 'VN',
-        'AUSTRALIE' => 'AU', 'NOUVELLE ZELANDE' => 'NZ',
-    ];
+    private array $pays;
 
     /**
      * Les communes, indexées par leur nom replié. Chaque valeur est la **liste des lignes
@@ -184,6 +172,9 @@ final class AppariementDesLieux
 
     public function __construct(private readonly CleDeRecherche $cles = new CleDeRecherche())
     {
+        // Replié par la **même** instance que les morceaux qu'on lui compare : c'est la
+        // règle d'en-tête, « le repliement n'a pas de formule ici ».
+        $this->pays = NomsDesPays::index($this->cles);
     }
 
     /**
@@ -491,8 +482,8 @@ final class AppariementDesLieux
     /**
      * Le code ISO2 du pays cité par un des morceaux, ou `null`.
      *
-     * Deux formes acceptées : le code à deux lettres écrit tel quel, et le nom français
-     * présent dans {@see self::PAYS}.
+     * Deux formes acceptées : le code à deux lettres écrit tel quel, et un nom français
+     * connu de {@see NomsDesPays} — CLDR ou alias historique.
      *
      * @param list<string> $morceaux
      */
@@ -501,8 +492,8 @@ final class AppariementDesLieux
         foreach (array_reverse($morceaux) as $morceau) {
             $replie = $this->cles->replier($morceau);
 
-            if (isset(self::PAYS[$replie])) {
-                return self::PAYS[$replie];
+            if (isset($this->pays[$replie])) {
+                return $this->pays[$replie];
             }
 
             if (1 === preg_match('/^[A-Z]{2}$/', $replie)) {

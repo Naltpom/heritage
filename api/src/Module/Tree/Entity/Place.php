@@ -85,10 +85,19 @@ use Doctrine\ORM\Mapping as ORM;
  * ## `source` est une chaîne, pas une énumération
  *
  * Ses valeurs sont des **noms de fichiers de référence** (`communes-fr`, `villes-monde`),
- * plus deux états (`aucune`, `manuel`). Une énumération figerait dans le code PHP la liste
- * des fichiers de données qu'un exploitant peut passer en option de la commande ; et la
- * valeur qui compte vraiment, `manuel`, n'est pas un fichier du tout. Les quatre valeurs
- * en usage sont les constantes ci-dessous.
+ * un service tiers (`nominatim`), plus deux états (`aucune`, `manuel`). Une énumération
+ * figerait dans le code PHP la liste des fichiers de données qu'un exploitant peut passer
+ * en option de la commande ; et la valeur qui compte vraiment, `manuel`, n'est pas un
+ * fichier du tout. Les cinq valeurs en usage sont les constantes ci-dessous.
+ *
+ * ## `nominatim` sans coordonnées : « demandé en ligne, rien trouvé »
+ *
+ * C'est la seule valeur de `source` qui existe **avec et sans** coordonnées, et c'est
+ * voulu : elle dit **qui a rendu le verdict**, positif ou négatif. Sans coordonnées, la
+ * ligne est la **mémoire d'un échec en ligne**, et `resolu_le` en est la date — c'est ce
+ * qui empêche la commande de nuit de redemander chaque soir à un service bénévole ce qu'il
+ * a déjà dit ne pas savoir. Voir {@see self::SOURCE_NOMINATIM}. Aucune colonne n'a été
+ * ajoutée pour cela : `source` + `lat IS NULL` + `resolu_le` disent déjà tout.
  */
 #[ORM\Entity(repositoryClass: PlaceRepository::class)]
 #[ORM\Table(name: 'tree_place')]
@@ -105,6 +114,21 @@ class Place
 
     /** `ressources/gazetteer/villes-monde.csv`. */
     public const string SOURCE_VILLES = 'villes-monde';
+
+    /**
+     * OpenStreetMap Nominatim, interrogé **en ligne** par `heritage:resoudre-les-lieux
+     * --en-ligne`, en dernier recours d'une passe F.
+     *
+     * Avec coordonnées : le lieu a été situé par Nominatim (confiance 50 — sous toutes
+     * les passes locales, qui s'appuient sur un référentiel qu'on a lu). Sans
+     * coordonnées : Nominatim a été interrogé **le `resolu_le`** et n'a rien rendu
+     * d'acceptable ; la commande ne le redemande pas avant trente jours.
+     *
+     * Les données viennent d'OpenStreetMap, © les contributeurs d'OpenStreetMap, sous
+     * licence ODbL — mention déjà portée par la carte, dont les tuiles ont la même
+     * origine.
+     */
+    public const string SOURCE_NOMINATIM = 'nominatim';
 
     /**
      * Corrigé à la main, dans la base.
@@ -177,13 +201,13 @@ class Place
     #[ORM\Column(type: Types::FLOAT, nullable: true)]
     private ?float $lon = null;
 
-    /** L'une des quatre constantes `SOURCE_*` ci-dessus. */
+    /** L'une des cinq constantes `SOURCE_*` ci-dessus. */
     #[ORM\Column(length: 16, options: ['default' => self::SOURCE_AUCUNE])]
     private string $source = self::SOURCE_AUCUNE;
 
     /**
      * De 0 à 100, par passe d'appariement : 100 commune + département, 90 commune +
-     * région, 70 commune française unique, 60 ville du monde, 0 rien.
+     * région, 70 commune française unique, 60 ville du monde, 50 Nominatim, 0 rien.
      *
      * Ce n'est pas une probabilité — personne ne l'a calibrée —, c'est un **rang**, et il
      * sert à trier ce qu'on relit en premier quand on corrige à la main.

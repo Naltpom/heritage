@@ -328,7 +328,43 @@ Le journal d'audit garde la trace de chaque appel sortant — combien de personn
 transmises, combien de vivantes parmi elles, quel modèle. **Jamais le corpus,
 jamais la réponse, jamais la clé.**
 
-### 5.4 Contrôler le fichier avant d'aller plus loin
+### 5.4 La carte : situer les lieux en ligne — **rien à écrire, sauf pour couper**
+
+```
+HERITAGE_GEOCODAGE_EN_LIGNE=
+LIEUX_HEURE_UTC=3
+```
+
+| Clé | Valeur | Effet |
+|---|---|---|
+| `HERITAGE_GEOCODAGE_EN_LIGNE` | **laisser vide** | vide = activé ; `0` = aucun lieu n'est plus envoyé à OpenStreetMap Nominatim, pour toute l'instance |
+| `LIEUX_HEURE_UTC` | `3` par défaut | l'heure UTC (0–23) de la résolution de nuit, lancée à HH:17 |
+
+Les référentiels versionnés (`api/ressources/gazetteer/`) situent la France, le
+Canada et les villes du monde de plus de 15 000 habitants **sous leur nom
+anglais**. Pour le reste — « Liège, Belgique », un village polonais —
+`heritage:resoudre-les-lieux --en-ligne` interroge **OpenStreetMap Nominatim**.
+
+**Ce qui sort de la machine : la chaîne du lieu, et rien d'autre.** Ni nom de
+personne, ni date, ni identifiant. L'en-tête `User-Agent` porte
+`HERITAGE_URL_PUBLIQUE` et l'adresse de `MAILER_EXPEDITEUR`, comme l'exige la
+politique d'usage de Nominatim (agent identifié, une requête par seconde au
+plus) — c'est pourquoi ces deux variables sont aussi injectées dans le service
+`lieux`.
+
+Ce recours tourne **tout seul**, à deux moments : à la fin de chaque
+déploiement (§ 11.2, étape 8) et chaque nuit (service `lieux` de
+`compose.prod.yaml`). Il ne traite que les lieux **jamais situés**, jamais une
+correction manuelle, jamais un nom porté par plusieurs communes (la commande ne
+laisse pas un tiers choisir à sa place), et ne redemande pas avant **trente
+jours** un lieu que Nominatim n'a pas su situer. Une panne de Nominatim est
+rapportée dans le journal et **ne fait échouer ni le déploiement ni la nuit**.
+
+Comme pour les lignes Gemini, ces variables vont dans le `.env` de la
+**racine** ; `compose.yaml` (service `api`) et `compose.prod.yaml` (service
+`lieux`) les reprennent déjà.
+
+### 5.5 Contrôler le fichier avant d'aller plus loin
 
 ```
 vps$ docker compose -f compose.yaml -f compose.prod.yaml config --quiet ; echo $?
@@ -595,9 +631,21 @@ commande l'imprime, et un humain tranche en écrivant la ligne à la main
 (`source = 'manuel'`, que la commande ne réécrit plus jamais, même avec
 `--forcer`).
 
-> **À rejouer après chaque import GEDCOM.** Un réimport peut introduire de
-> nouvelles graphies de lieu, et rien d'autre ne s'en aperçoit : la carte se
-> contentera de les compter comme « non situées ».
+> **Rejouée toute seule, désormais — mais pas sur-le-champ.** Le service `lieux`
+> relance la commande chaque nuit avec `--en-ligne`, et le déploiement la relance
+> à la fin de ses contrôles (§ 11.2). Après un réimport, on peut ne pas attendre :
+>
+> ```
+> vps$ docker compose … exec api \
+>        php bin/console heritage:resoudre-les-lieux --en-ligne
+> ```
+>
+> `--en-ligne` demande à OpenStreetMap Nominatim les lieux que le référentiel
+> local ne connaît pas (§ 5.4) — la chaîne du lieu seule sort de la machine. Un
+> lieu situé ainsi porte `source = 'nominatim'` et une confiance de 50 ; un lieu
+> introuvable garde `source = 'nominatim'` **sans coordonnées**, et n'est pas
+> redemandé avant trente jours. Une correction manuelle reste la réponse à tout ce
+> qu'aucune des deux voies ne sait lire.
 
 ### 10.5 Rattacher l'administrateur à sa personne
 
@@ -645,7 +693,13 @@ Sur le VPS, `.github/scripts/deployer-sur-le-vps.sh` :
 4. `up -d`, puis attend jusqu'à 5 minutes une réponse sur `/sante.php` ;
 5. **compare l'empreinte servie à celle que le dépôt produit** ;
 6. vérifie qu'un `Host` inconnu est toujours fermé, et que `/` rend `200` ;
-7. n'enregistre le déploiement comme réussi qu'après ces quatre contrôles.
+7. n'enregistre le déploiement comme réussi qu'après ces quatre contrôles ;
+8. **puis seulement**, situe les lieux nouveaux :
+   `heritage:resoudre-les-lieux --en-ligne` dans le conteneur `api`, borné à cinq
+   minutes. Cette étape vient **après** tout ce qui décide du retour arrière et
+   ne peut pas en déclencher un : si Nominatim est tombé ou si la commande
+   échoue, le script le dit et le déploiement reste réussi — le service `lieux`
+   rejouera la nuit suivante.
 
 **Si l'un échoue, il revient tout seul** : `git reset --hard` sur le commit
 précédent, `IMAGE_TAG` remis à l'étiquette précédente, `up -d` **sans
@@ -740,6 +794,21 @@ Cette double option `--env-file` est **obligatoire** dans toutes les commandes
 manuelles : dès qu'on passe `--env-file`, Compose cesse de charger `.env` tout
 seul, et les deux doivent être nommés, `.env` en premier. Sans le second, Compose
 prendrait le `IMAGE_TAG` de `.env` (`dev`) et parlerait d'une autre pile.
+
+### Résolution des lieux, chaque nuit
+
+Le service `lieux` lance `heritage:resoudre-les-lieux --en-ligne` une fois par
+jour à `LIEUX_HEURE_UTC`h17 UTC (3 h 17 par défaut). Pour lire ce qu'il a fait,
+et ce qui reste hors de la carte :
+
+```
+vps$ docker compose --env-file .env --env-file .deploiement/env \
+       -f compose.yaml -f compose.prod.yaml logs --tail=200 lieux
+```
+
+Les lieux non résolus y sont listés par nombre d'occurrences, chacun avec sa
+raison — homonymes (à trancher à la main), introuvable en ligne (daté), ou
+Nominatim injoignable (redemandé la nuit suivante).
 
 ### Sauvegardes
 

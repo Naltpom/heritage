@@ -7,6 +7,8 @@ namespace App\Module\Tree\Command;
 use App\Module\Core\Service\CleDeRecherche;
 use App\Module\Tree\Entity\Place;
 use App\Module\Tree\Service\AppariementDesLieux;
+use App\Module\Tree\Service\GeocodeurEnLigne;
+use App\Module\Tree\Service\RecoursEnLigne;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -48,6 +50,47 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  * réécrire ne périme rien. L'économie est ici de lisibilité — un « 0 ligne écrite » qui dit
  * la vérité vaut mieux qu'un « 104 lignes écrites » qui ne dit rien.
  *
+ * ## `--en-ligne` : le recours à OpenStreetMap Nominatim
+ *
+ * Les référentiels locaux situent la France, le Canada et les villes du monde de plus de
+ * 15 000 habitants **sous leur nom anglais**. Tout le reste — « Liège, Belgique »,
+ * un village polonais — tombe en passe F. Avec `--en-ligne`, ces lieux-là, et **eux
+ * seuls**, sont demandés à Nominatim ({@see GeocodeurEnLigne}). Les règles, qui sont
+ * autant de refus :
+ *
+ * - **passe F seulement, jamais D.** Une passe D sait déjà qu'il faut choisir entre des
+ *   homonymes ; un géocodeur choisirait à notre place, et c'est précisément ce qu'on ne
+ *   fait pas ;
+ * - **au moins deux morceaux non vides** (« Liège, Belgique ») : un mot seul est trop
+ *   ambigu pour qu'une réponse unique veuille dire quelque chose ;
+ * - **jamais un lieu qui avait des coordonnées** avant cette exécution, y compris sous
+ *   `--forcer` : le recours vise les lieux jamais situés, pas une relecture générale —
+ *   qui, sur un référentiel cassé, enverrait l'arbre entier au tiers ;
+ * - **jamais une correction manuelle**, évidemment ;
+ * - **pas deux fois en trente jours** pour un lieu introuvable : la ligne garde `source =
+ *   'nominatim'` sans coordonnées, et `resolu_le` est la date de la demande. Une
+ *   variation du nombre d'occurrences avance cette date — au pire, la prochaine demande
+ *   est retardée, ce qui est le sens prudent ;
+ * - **un résultat Nominatim n'est jamais redemandé** ; seule une passe locale qui
+ *   aboutirait un jour (référentiel enrichi) le remplace, parce qu'elle vaut mieux ;
+ * - **pas sous `--dry-run`** : une réponse qu'on jetterait est une requête gâchée chez un
+ *   service bénévole, et la mémoire des échecs ne pourrait pas s'écrire ;
+ * - **au plus {@see RecoursEnLigne::REQUETES_MAXIMUM} requêtes par exécution**, dans
+ *   l'ordre des occurrences décroissantes : les lieux les plus cités d'abord, le reste à
+ *   la nuit suivante ;
+ * - **une panne arrête le recours pour l'exécution**, est rapportée, et ne change pas le
+ *   code de sortie — ni un déploiement ni la nuit ne doivent tomber parce qu'un service
+ *   tiers est indisponible.
+ *
+ * **Seule la chaîne du lieu sort de la machine** — ni personne, ni date, ni rien qui
+ * rattache ce lieu à quelqu'un. Voir l'en-tête de
+ * {@see \App\Module\Tree\Service\GeocodeurNominatim}.
+ *
+ * Le recours se coupe pour toute l'instance par `HERITAGE_GEOCODAGE_EN_LIGNE=0` : la
+ * commande accepte alors l'option, le dit, et n'envoie rien. Vide ou absente, la variable
+ * laisse l'option décider — c'est le défaut de production, où la résolution de nuit et
+ * celle du déploiement passent `--en-ligne`.
+ *
  * ## Le code de sortie, et le seul cas rouge
  *
  * **Un lieu non résolu n'est pas un échec** : c'est une bulle qui manque sur une carte, et
@@ -65,6 +108,9 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 )]
 final class ResoudreLesLieuxCommand extends Command
 {
+    /** Les valeurs de `HERITAGE_GEOCODAGE_EN_LIGNE` qui coupent le recours. */
+    private const array VALEURS_QUI_COUPENT = ['0', 'false', 'non', 'no', 'off'];
+
     /**
      * Les chemins par défaut sont **injectés**, jamais écrits en dur : un chemin absolu
      * dans le code ne survit ni au conteneur Docker, ni à la machine du développeur
@@ -76,6 +122,14 @@ final class ResoudreLesLieuxCommand extends Command
         #[Autowire('%kernel.project_dir%')]
         private readonly string $racineDuProjet,
         private readonly CleDeRecherche $cles = new CleDeRecherche(),
+        private readonly ?GeocodeurEnLigne $geocodeur = null,
+        /**
+         * L'interrupteur général : `0`, `false`, `non`, `no` ou `off` coupent le recours en
+         * ligne pour toute l'instance, quelle que soit l'option. Vide ou absente, c'est
+         * l'option `--en-ligne` qui décide.
+         */
+        #[Autowire(env: 'default::HERITAGE_GEOCODAGE_EN_LIGNE')]
+        private readonly ?string $geocodageEnLigne = null,
     ) {
         parent::__construct();
     }
@@ -85,6 +139,7 @@ final class ResoudreLesLieuxCommand extends Command
         $this
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Apparie, annonce les comptes, et n’écrit rien.')
             ->addOption('forcer', null, InputOption::VALUE_NONE, 'Rejoue l’appariement sur les lieux déjà résolus — sauf les corrections manuelles, jamais touchées.')
+            ->addOption('en-ligne', null, InputOption::VALUE_NONE, 'Demande à OpenStreetMap Nominatim les lieux que les référentiels locaux n’ont pas situés (seule la chaîne du lieu sort ; coupé par HERITAGE_GEOCODAGE_EN_LIGNE=0).')
             ->addOption('fichier-communes', null, InputOption::VALUE_REQUIRED, 'Chemin du fichier des communes françaises.', $this->racineDuProjet.'/ressources/gazetteer/communes-fr.csv')
             ->addOption('fichier-villes', null, InputOption::VALUE_REQUIRED, 'Chemin du fichier des villes du monde.', $this->racineDuProjet.'/ressources/gazetteer/villes-monde.csv');
     }
@@ -115,6 +170,7 @@ final class ResoudreLesLieuxCommand extends Command
         );
 
         $existantes = $this->lignesExistantes();
+        $enLigne = $this->recoursEnLigne($style, (bool) $entree->getOption('en-ligne'), $blanc);
 
         $resolus = 0;
         $dejaResolus = 0;
@@ -150,6 +206,54 @@ final class ResoudreLesLieuxCommand extends Command
             }
 
             $trouve = $this->appariement->apparier($lieu['brut']);
+            $raison = 'aucun rapprochement';
+            $demandeEnLigne = false;
+
+            if (AppariementDesLieux::PASSE_INCONNU === $trouve['passe'] && null !== $ligne && Place::SOURCE_NOMINATIM === $ligne->getSource()) {
+                // Un verdict de Nominatim existe déjà, et les passes locales ne font pas
+                // mieux. Positif (atteignable sous --forcer seulement) : on le garde, on
+                // ne le redemande pas. Négatif et récent : on ne le redemande pas non plus.
+                if ($dejaPose) {
+                    ++$dejaResolus;
+                    $ecrites += $this->majOccurrences($ligne, $lieu['occurrences']) ? 1 : 0;
+
+                    continue;
+                }
+
+                if (!$enLigne->peutDemander($ligne)) {
+                    $enEchec[] = [
+                        'lieu' => $lieu['brut'],
+                        'occurrences' => $lieu['occurrences'],
+                        'raison' => \sprintf('aucun rapprochement, ni en ligne (Nominatim, le %s)', $ligne->getResoluLe()->format('Y-m-d')),
+                    ];
+                    $ecrites += $this->majOccurrences($ligne, $lieu['occurrences']) ? 1 : 0;
+
+                    continue;
+                }
+            }
+
+            // Le recours en ligne : passe F seulement — jamais D —, sur un lieu qui n'avait
+            // pas de coordonnées, et dont la chaîne a au moins deux morceaux.
+            if (AppariementDesLieux::PASSE_INCONNU === $trouve['passe'] && !$dejaPose && self::assezPrecisPourLeReseau($lieu['brut'])) {
+                if ($enLigne->peutDemander($ligne)) {
+                    $demandeEnLigne = true;
+                    $reponse = $enLigne->demander($lieu['brut']);
+
+                    if (\is_array($reponse)) {
+                        $trouve = $reponse;
+                    } elseif (null === $reponse) {
+                        // Rien d'acceptable : c'est un verdict, et on le mémorise.
+                        $trouve['source'] = Place::SOURCE_NOMINATIM;
+                        $raison = 'aucun rapprochement, ni en ligne (Nominatim)';
+                    } else {
+                        // Le tiers n'a pas répondu : pas un verdict, rien à mémoriser.
+                        $demandeEnLigne = false;
+                        $raison = 'aucun rapprochement (Nominatim injoignable, redemandé à la prochaine exécution)';
+                    }
+                } elseif ($enLigne->plafondAtteint()) {
+                    $raison = 'aucun rapprochement (demande en ligne reportée : plafond de l’exécution atteint)';
+                }
+            }
 
             if (null === $trouve['lat']) {
                 $enEchec[] = [
@@ -157,14 +261,25 @@ final class ResoudreLesLieuxCommand extends Command
                     'occurrences' => $lieu['occurrences'],
                     'raison' => AppariementDesLieux::PASSE_AMBIGU === $trouve['passe']
                         ? \sprintf('homonymes : %s', implode(' · ', \array_slice($trouve['candidats'], 0, 6)))
-                        : 'aucun rapprochement',
+                        : $raison,
                 ];
             } else {
                 ++$resolus;
             }
 
             $ligne ??= new Place($lieu['brut'], $cle, $trouve['libelle']);
-            $ecrites += $this->appliquer($ligne, $lieu, $trouve) ? 1 : 0;
+            $ecrite = $this->appliquer($ligne, $lieu, $trouve);
+
+            // Une demande en ligne est un fait daté, même quand sa réponse ne change rien
+            // à la ligne : c'est `resolu_le` qui compte les trente jours. Sans ce geste, un
+            // lieu redemandé en vain après trente jours ne serait plus jamais daté — et
+            // serait redemandé chaque nuit.
+            if ($demandeEnLigne && !$ecrite) {
+                $ligne->toucher();
+                $ecrite = true;
+            }
+
+            $ecrites += $ecrite ? 1 : 0;
 
             if (null === $ligne->getId()) {
                 $this->em->persist($ligne);
@@ -183,7 +298,62 @@ final class ResoudreLesLieuxCommand extends Command
             $this->em->flush();
         }
 
+        $enLigne->rendreCompte($style);
+
         return $this->rendreCompte($style, $blanc || $echecTotal, \count($lieux), $resolus, $dejaResolus, $manuels, $ecrites, $enEchec);
+    }
+
+    /**
+     * Le recours en ligne de cette exécution — ou un recours inerte, qui le dit.
+     *
+     * Trois raisons de ne rien envoyer, et chacune est **annoncée** : un « 0 résolu en
+     * ligne » sans cause lisible ferait chercher la panne au mauvais endroit.
+     */
+    private function recoursEnLigne(SymfonyStyle $style, bool $demande, bool $blanc): RecoursEnLigne
+    {
+        if (!$demande) {
+            return new RecoursEnLigne(null);
+        }
+
+        $interrupteur = strtolower(trim((string) $this->geocodageEnLigne));
+
+        if (\in_array($interrupteur, self::VALEURS_QUI_COUPENT, true)) {
+            $style->note('--en-ligne demandé, mais HERITAGE_GEOCODAGE_EN_LIGNE='.$this->geocodageEnLigne.' le coupe pour cette instance : aucune requête ne part.');
+
+            return new RecoursEnLigne(null);
+        }
+
+        if ($blanc) {
+            $style->note('--en-ligne ignoré sous --dry-run : une réponse qu’on jetterait est une requête gâchée chez un service bénévole.');
+
+            return new RecoursEnLigne(null);
+        }
+
+        if (null === $this->geocodeur) {
+            $style->warning('--en-ligne demandé, mais aucun géocodeur n’est configuré : aucune requête ne part.');
+
+            return new RecoursEnLigne(null);
+        }
+
+        return new RecoursEnLigne($this->geocodeur);
+    }
+
+    /**
+     * Au moins **deux morceaux non vides** : « Liège, Belgique », pas « Liège ».
+     *
+     * Un mot seul est trop ambigu pour qu'une réponse unique veuille dire quelque chose —
+     * Nominatim rendrait la Liège la plus « importante » à ses yeux, qui n'est pas
+     * forcément celle de l'acte. Le découpage est celui d'{@see AppariementDesLieux} :
+     * virgules, espaces parasites et morceaux vides ignorés.
+     */
+    private static function assezPrecisPourLeReseau(string $brut): bool
+    {
+        $morceaux = array_filter(
+            array_map(trim(...), explode(',', $brut)),
+            static fn (string $morceau): bool => '' !== $morceau,
+        );
+
+        return \count($morceaux) >= 2;
     }
 
     /**
