@@ -401,6 +401,9 @@ services:
       HERITAGE_GEMINI_CLE_API: ${HERITAGE_GEMINI_CLE_API:-}
       HERITAGE_GEMINI_MODELE: ${HERITAGE_GEMINI_MODELE:-}
       HERITAGE_GEMINI_POINT_DACCES: ${HERITAGE_GEMINI_POINT_DACCES:-}
+      # L'assistant de proposition : même clé, même point d'accès, son propre
+      # modèle (vide = `gemini-pro-latest`).
+      HERITAGE_GEMINI_MODELE_ASSISTANT: ${HERITAGE_GEMINI_MODELE_ASSISTANT:-}
     # Aucune sonde déclarée ici : l'image en porte désormais une juste
     # (`HEALTHCHECK` dans api/Dockerfile, sur http://localhost:8000/). C'est sa
     # place — une image doit être correcte seule, pas seulement sous un

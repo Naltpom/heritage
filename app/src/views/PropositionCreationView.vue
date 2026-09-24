@@ -32,12 +32,29 @@
  * que se lira la décision, et **le motif s'il y a refus** — le commanditaire l'a
  * demandé explicitement, et le § 6.9 rend ce message obligatoire côté
  * administrateur.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **Deux façons de proposer, un segmenté pour choisir.** « Formulaire » est
+ * l'écran ci-dessous, inchangé ; « Assistant IA » (`?mode=assistant`) laisse le
+ * membre écrire librement et joindre des actes, puis relire les demandes que
+ * l'assistant prépare (`components/proposition/assistant/`). Le mode vit dans
+ * l'URL : un lien depuis une fiche (`?mode=assistant&personne=17`) ouvre
+ * directement le bon, et « retour » ramène au précédent.
+ *
+ * Le formulaire reste le défaut, et **l'assistant disparaît sous la bascule
+ * « voir comme un membre »** : il n'écrit rien lui-même, mais son analyse est
+ * une écriture pour l'API (quota, journal), qui la refuserait en `409`. Une
+ * reprise (`?refaire=`) force aussi le formulaire : c'est lui qui sait reprendre
+ * une demande.
+ * ────────────────────────────────────────────────────────────────────
  */
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { creerDemande, invaliderGraphe, type OrigineReprise } from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
+import Segmente from '@/components/mise-en-page/Segmente.vue'
+import AssistantProposition from '@/components/proposition/assistant/AssistantProposition.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
@@ -72,6 +89,38 @@ const erreurs = ref<Record<string, string>>({})
 
 const suspendu = computed(() => ecrituresSuspendues(vueEmpruntee.value))
 const motifSuspendu = computed(() => motifSuspension(vueEmpruntee.value))
+
+/* --- Le mode : formulaire ou assistant ---------------------------- */
+
+type Mode = 'formulaire' | 'assistant'
+
+const MODES: readonly { valeur: Mode; libelle: string }[] = [
+  { valeur: 'formulaire', libelle: 'Formulaire' },
+  { valeur: 'assistant', libelle: 'Assistant IA' },
+]
+
+function premiereValeur(brut: unknown): string | undefined {
+  const valeur = Array.isArray(brut) ? brut[0] : brut
+  return typeof valeur === 'string' ? valeur : undefined
+}
+
+const mode = computed<Mode>(() => {
+  if (suspendu.value || repriseDemandee.value !== null) return 'formulaire'
+  return premiereValeur(route.query['mode']) === 'assistant' ? 'assistant' : 'formulaire'
+})
+
+/** La fiche d'où l'on vient, passée à l'assistant comme contexte. */
+const personneDeContexte = computed(() => {
+  const valeur = Number(premiereValeur(route.query['personne']))
+  return Number.isInteger(valeur) && valeur > 0 ? valeur : null
+})
+
+function choisirMode(valeur: Mode): void {
+  const requete = { ...route.query }
+  if (valeur === 'assistant') requete['mode'] = 'assistant'
+  else delete requete['mode']
+  void routeur.replace({ query: requete })
+}
 
 const repriseDemandee = computed(() => {
   const brut = route.query['refaire']
@@ -154,6 +203,30 @@ function refaire(demandeId: number | null): void {
 
 <template>
   <div class="mx-auto w-full max-w-3xl px-4 py-8">
+    <div v-if="!suspendu && repriseDemandee === null" class="mb-5 max-md:w-full">
+      <Segmente
+        :options="MODES"
+        :valeur="mode"
+        etiquette="Façon de proposer"
+        :colonnes="2"
+        @choisir="choisirMode"
+      />
+    </div>
+
+    <template v-if="mode === 'assistant'">
+      <header class="mb-5">
+        <h1 class="text-xl font-semibold tracking-tight">Proposer avec l’assistant</h1>
+        <p class="mt-1.5 text-sm text-attenue">
+          Racontez ce que vous savez et joignez vos actes : l’assistant retrouve les personnes dans
+          l’arbre et prépare les demandes. Vous relisez, vous choisissez, puis un administrateur
+          valide — comme pour le formulaire.
+        </p>
+      </header>
+
+      <AssistantProposition :person-id="personneDeContexte" />
+    </template>
+
+    <template v-else>
     <header class="mb-5">
       <h1 class="text-xl font-semibold tracking-tight">Proposer l’ajout d’une personne</h1>
       <p class="mt-1.5 text-sm text-attenue">
@@ -280,6 +353,7 @@ function refaire(demandeId: number | null): void {
           </RouterLink>
         </div>
       </form>
+    </template>
     </template>
   </div>
 </template>

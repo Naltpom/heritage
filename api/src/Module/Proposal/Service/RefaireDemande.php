@@ -40,6 +40,7 @@ final readonly class RefaireDemande
         private DraftLinkRepository $liens,
         private PortArbre $arbre,
         private NormaliseurDeValeur $normaliseur,
+        private ValeursMasquees $masques,
     ) {
     }
 
@@ -74,6 +75,14 @@ final readonly class RefaireDemande
             // courantes, et un op sans `oldValue` fiable serait refusé au dépôt. On
             // l'omet plutôt que de proposer une reprise qu'on sait fausse.
             if (null === $cible || !\array_key_exists($champ, $cible->valeurs)) {
+                continue;
+            }
+
+            // Une valeur que l'auteur n'a pas le droit de lire — l'op d'une demande de
+            // l'assistant sur un vivant hors de son cercle — ne se pré-remplit pas : la
+            // reprise la lui servirait fraîchement relue. L'op est omis, comme celui d'une
+            // cible disparue ; le reste de la demande se refait normalement.
+            if ($this->masques->masquee($op->getSubjectKind(), $sujet)) {
                 continue;
             }
 
