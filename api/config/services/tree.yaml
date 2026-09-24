@@ -53,6 +53,13 @@ services:
     App\Module\Tree\Service\ReglagesDeLArbre:
         alias: App\Module\Tree\Service\ReglagesDeLArbreParSettings
 
+    # Le recours en ligne de `heritage:resoudre-les-lieux --en-ligne` (OpenStreetMap
+    # Nominatim). Derrière une interface pour qu'aucun test ne touche le réseau : la
+    # commande ne connaît que le contrat, l'implémentation reçoit un client HTTP que les
+    # tests remplacent par un `MockHttpClient` (voir aussi `when@test` plus bas).
+    App\Module\Tree\Service\GeocodeurEnLigne:
+        alias: App\Module\Tree\Service\GeocodeurNominatim
+
 # ─────────────────────────────────────────────────────────────────────────────
 when@test:
     services:
@@ -79,3 +86,16 @@ when@test:
         # dans son propre conteneur pour combler exactement ce trou.
         App\Module\Tree\Service\EcritureDeLArbrePourProposal:
             public: true
+
+        # **Aucun test ne doit joindre Nominatim**, même par mégarde — un cas qui lancerait
+        # la vraie commande avec `--en-ligne` sur le conteneur de test. Le géocodeur y
+        # reçoit donc un `MockHttpClient` sans réponse programmée : il rend un corps vide,
+        # que le géocodeur lit comme une panne (`GeocodageIndisponible`), et rien ne part.
+        # Les tests qui éprouvent le recours construisent leur propre géocodeur avec un
+        # `MockHttpClient` programmé.
+        app.tree.http_sans_reseau:
+            class: Symfony\Component\HttpClient\MockHttpClient
+
+        App\Module\Tree\Service\GeocodeurNominatim:
+            arguments:
+                $http: '@app.tree.http_sans_reseau'

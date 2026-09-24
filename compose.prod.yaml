@@ -501,3 +501,80 @@ services:
           find /sauvegardes -maxdepth 1 -name 'televersements-*.tar.gz' -mtime +$$RETENTION_JOURS -exec rm -f {} +
           sleep "$$INTERVALLE"
         done
+
+  # ---------------------------------------------------------------------------
+  # Résolution des lieux, chaque nuit
+  # ---------------------------------------------------------------------------
+  #
+  # `heritage:resoudre-les-lieux --en-ligne`, une fois par jour, à
+  # ${LIEUX_HEURE_UTC}h17 UTC. Sans lui, la commande n'était lancée qu'à la main :
+  # un lieu nouveau (réimport, demande validée) restait hors de la carte tant que
+  # personne n'y pensait. Le déploiement la lance aussi, juste après ses contrôles
+  # (voir .github/scripts/deployer-sur-le-vps.sh) ; ce service-ci rattrape ce qui
+  # arrive entre deux déploiements, et ce que Nominatim n'a pas pu servir.
+  #
+  # Même forme que `sauvegarde` : une boucle, pas de cron, pas de démon à
+  # surveiller, les messages dans `docker compose logs lieux`. Et la même règle :
+  # PAS DE `set -e` — un passage raté (Nominatim tombé, base redémarrée) ne tue
+  # pas le conteneur, on journalise et on attend la nuit suivante.
+  #
+  # Sans `--forcer` : seuls les lieux jamais situés sont traités, les
+  # corrections manuelles ne sont jamais touchées, et un lieu introuvable en
+  # ligne n'est pas redemandé avant trente jours. Une nuit où rien n'a changé
+  # n'écrit rien et n'envoie rien.
+  #
+  # POURQUOI L'IMAGE DE L'API, ET POURQUOI SANS SON ENTRYPOINT : la commande et
+  # les référentiels (`ressources/gazetteer/`) sont dans l'image, et la même
+  # étiquette que l'API garantit le même code. Mais l'entrypoint de l'image joue
+  # les MIGRATIONS : deux conteneurs qui les jouent en même temps se disputent
+  # la table de version. On le remplace donc, et `depends_on: api healthy`
+  # garantit que les migrations sont passées avant la première nuit.
+  lieux:
+    image: ${IMAGE_PREFIX:-heritage}/api:${IMAGE_TAG:-prod}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: 0
+      APP_SECRET: ${APP_SECRET:-d3v3l0ppement_secret_local_jetable}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-heritage}:${POSTGRES_PASSWORD:-heritage_dev}@db:5432/${POSTGRES_DB:-heritage}?serverVersion=17&charset=utf8"
+      # Les deux morceaux du `User-Agent` qu'exige la politique de Nominatim :
+      # l'adresse de l'instance et son contact. Exigées par `garde-secrets`.
+      HERITAGE_URL_PUBLIQUE: ${HERITAGE_URL_PUBLIQUE:-}
+      MAILER_EXPEDITEUR: ${MAILER_EXPEDITEUR:-}
+      # `0` coupe le recours en ligne : la boucle tourne encore, n'envoie rien.
+      HERITAGE_GEOCODAGE_EN_LIGNE: ${HERITAGE_GEOCODAGE_EN_LIGNE:-}
+      HEURE_UTC: ${LIEUX_HEURE_UTC:-3}
+    # La sonde de l'image interroge le serveur HTTP de l'API, qui ne tourne pas
+    # ici : sans cette ligne, ce conteneur serait marqué `unhealthy` en
+    # permanence, et un « unhealthy » qu'on apprend à ignorer est une alarme
+    # perdue pour le jour où c'est l'API qui l'est.
+    healthcheck:
+      disable: true
+    entrypoint: ["/bin/sh", "-c"]
+    # Liste d'un seul élément : voir la note du service `garde-secrets`.
+    # L'attente se calcule en secondes depuis minuit UTC, par l'arithmétique
+    # du shell : ni `date -d`, ni cron, rien qui dépende de la distribution.
+    command:
+      - |
+        heure="$${HEURE_UTC:-3}"
+        case "$$heure" in
+          ""|*[!0-9]*) echo "[lieux] HEURE_UTC invalide ($$heure) : 3 retenu" >&2; heure=3 ;;
+        esac
+        [ "$$heure" -le 23 ] || { echo "[lieux] HEURE_UTC hors de 0-23 ($$heure) : 3 retenu" >&2; heure=3; }
+        cible=$$(( heure * 3600 + 17 * 60 ))
+        while true; do
+          maintenant=$$(date -u +%s)
+          attente=$$(( (cible - maintenant % 86400 + 86400) % 86400 ))
+          [ "$$attente" -gt 60 ] || attente=$$(( attente + 86400 ))
+          echo "[lieux] prochaine resolution dans $$attente s ($${heure}h17 UTC)"
+          sleep "$$attente"
+          echo "[lieux] $$(date -u +%Y-%m-%dT%H:%M:%SZ) — debut"
+          if php bin/console heritage:resoudre-les-lieux --en-ligne --no-interaction; then
+            echo "[lieux] termine"
+          else
+            echo "[lieux] ECHEC de la resolution (code $$?) — la carte garde son etat de la veille, nouvelle tentative la nuit prochaine" >&2
+          fi
+        done

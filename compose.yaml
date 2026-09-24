@@ -404,6 +404,11 @@ services:
       # L'assistant de proposition : même clé, même point d'accès, son propre
       # modèle (vide = `gemini-pro-latest`).
       HERITAGE_GEMINI_MODELE_ASSISTANT: ${HERITAGE_GEMINI_MODELE_ASSISTANT:-}
+      # La carte : le recours EN LIGNE de `heritage:resoudre-les-lieux --en-ligne`
+      # (OpenStreetMap Nominatim, seule la chaîne du lieu sort). Vide = activé,
+      # `0` = coupé pour toute l'instance. Même piège qu'au-dessus : sans cette
+      # ligne, la poser dans le .env de la racine ne ferait rien.
+      HERITAGE_GEOCODAGE_EN_LIGNE: ${HERITAGE_GEOCODAGE_EN_LIGNE:-}
     # Aucune sonde déclarée ici : l'image en porte désormais une juste
     # (`HEALTHCHECK` dans api/Dockerfile, sur http://localhost:8000/). C'est sa
     # place — une image doit être correcte seule, pas seulement sous un

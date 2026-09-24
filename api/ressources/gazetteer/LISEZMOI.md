@@ -15,6 +15,11 @@ dossier n'est exclu ni par `.gitignore` ni par `api/.dockerignore`, donc il est
 téléchargement et sans qu'un nom de commune de la famille ne sorte de la machine.
 C'est très exactement ce qui rend ce montage compatible avec l'ADR 0006.
 
+**Une exception, bornée et optionnelle : `--en-ligne`.** Pour les seuls lieux que ces
+fichiers ne savent pas lire (passe F, au moins deux morceaux), la commande peut
+interroger OpenStreetMap Nominatim — voir « La limite connue » plus bas. Ces fichiers
+restent la première source, et la seule qui tourne sans réseau.
+
 ## Pourquoi `ressources/` et pas `data/`
 
 `data/` est le mot interdit du dépôt : `/data/` est ignoré à la racine parce qu'il
@@ -66,19 +71,42 @@ non les seules grandes villes : une généalogie se passe dans des villages.
 fichier mondial porte son ISO2 : rien d'autre à changer, la passe « ville du monde »
 filtre déjà là-dessus.
 
-## La limite connue : `villes-monde.csv` est en anglais
+## La limite connue : `villes-monde.csv` est en anglais — et ce qui la rattrape
 
 GeoNames écrit le nom **principal** d'une ville, qui est l'anglais : `Algiers`,
 jamais `Alger` ; `Naples`, jamais `Napoli`. Un `PLAC` français nommant une ville
-étrangère — « Alger, Algérie » — **ne se résout donc pas**, et retombe dans les
-non situés.
+étrangère — « Alger, Algérie » — ou un village hors de France et du Canada ne se
+résout donc **pas localement**, et tombe en passe F.
 
-Ce n'est pas rattrapé par un troisième fichier de données : les noms alternatifs
-de GeoNames pèsent plusieurs centaines de mégaoctets pour un gain qui, sur cet
-arbre, se compte en unités. La réponse est une **correction manuelle** en base
-(`source = 'manuel'`), que la commande ne réécrit plus jamais. La commande liste
-les non résolus par nombre d'occurrences, précisément pour qu'on sache lesquels
-valent la peine.
+Les noms alternatifs de GeoNames pèsent plusieurs centaines de mégaoctets pour un
+gain qui, sur cet arbre, se compte en unités : ils ne sont toujours pas là. Le
+rattrapage se fait **en ligne**, par `heritage:resoudre-les-lieux --en-ligne` :
+
+- **OpenStreetMap Nominatim**, pour les seules passes F dont la chaîne a au moins
+  deux morceaux (« Liège, Belgique ») — **jamais** pour une passe D (homonymes), où
+  un géocodeur choisirait à notre place ;
+- **seule la chaîne du lieu sort**, avec un `User-Agent` qui identifie l'instance ;
+  une requête par seconde au plus (politique d'usage de Nominatim) ;
+- n'est retenu qu'un résultat **au niveau d'une commune ou plus fin** — jamais le
+  pays ou la région seuls. Le lieu porte alors `source = 'nominatim'`, confiance 50 ;
+- un lieu introuvable garde `source = 'nominatim'` **sans coordonnées** : c'est la
+  mémoire de l'échec, et il n'est pas redemandé avant **trente jours** ;
+- `HERITAGE_GEOCODAGE_EN_LIGNE=0` coupe tout cela pour l'instance.
+
+En production, la commande tourne ainsi après chaque déploiement et chaque nuit
+(service `lieux` de `compose.prod.yaml`). Ce qui reste est une **correction
+manuelle** en base (`source = 'manuel'`), que la commande ne réécrit jamais. Elle
+liste les non résolus par nombre d'occurrences, précisément pour qu'on sache
+lesquels valent la peine.
+
+## Les noms de pays
+
+Le pays cité au bout d'une chaîne se reconnaît sous **son nom français, quel qu'il
+soit** : `Tree\Service\NomsDesPays` porte les 249 territoires du CLDR (ICU 78.3,
+recopiés de `symfony/intl`, Unicode License v3), plus des alias historiques que le
+CLDR ne dira jamais (`Angleterre`, `Écosse`, `Hollande`, `Zaïre`…). Ce n'est pas un
+fichier de ce dossier parce qu'il n'appartient à aucun millésime GeoNames ; sa
+provenance et sa régénération sont écrites en tête de la classe.
 
 ## Régénérer
 

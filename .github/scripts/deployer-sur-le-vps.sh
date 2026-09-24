@@ -466,5 +466,45 @@ for depot in api app; do
 done
 docker image prune -f >/dev/null 2>&1 || true
 
+# -----------------------------------------------------------------------------
+# Situer les lieux nouveaux — APRÈS tous les contrôles, et sans pouvoir échouer
+# -----------------------------------------------------------------------------
+#
+# `heritage:resoudre-les-lieux --en-ligne`, sans `--forcer` : seuls les lieux
+# jamais situés sont traités, en local puis, pour ceux que les référentiels ne
+# connaissent pas, auprès d'OpenStreetMap Nominatim (seule la chaîne du lieu
+# sort ; `HERITAGE_GEOCODAGE_EN_LIGNE=0` dans `.env` coupe cette partie).
+#
+# POURQUOI ICI, ET PAS DANS L'ENTRYPOINT NI AVANT LES SONDES. Parce que cette
+# étape dépend d'un tiers, et qu'un tiers ne doit JAMAIS pouvoir faire échouer ni
+# ralentir un déploiement :
+#   - elle vient APRÈS l'enregistrement du succès et le ménage des images : rien
+#     de ce qui décide du retour arrière ne l'attend, et elle ne peut plus en
+#     déclencher un ;
+#   - son échec est ABSORBÉ par le `if` (`set -e` ne s'applique pas à une
+#     condition) : Nominatim tombé, base lente, commande en erreur — on le dit,
+#     et le déploiement reste réussi. Le service `lieux` rejouera cette nuit ;
+#   - elle est BORNÉE par `timeout` : au plus 200 requêtes à une par seconde,
+#     trois à quatre minutes dans le pire cas normal ; cinq minutes coupent un
+#     tiers qui répondrait lentement à chacune. Le flux dispose de 35 minutes
+#     (`command_timeout` de deploy.yml). Si `timeout` coupe, c'est le client
+#     Compose qui s'arrête ; la commande peut finir dans le conteneur, et ce
+#     qu'elle écrit reste juste — elle n'écrit qu'au `flush` final ;
+#   - l'entrypoint aurait été le pire endroit : il est sur le chemin de la sonde
+#     de santé, et une minute de géocodage y aurait été une minute de 502.
+#
+# Sa sortie reste dans le journal du flux : c'est là qu'on lit, après un
+# réimport, combien de lieux restent hors de la carte.
+dire "lieux : resolution des lieux non situes (--en-ligne), hors du chemin critique"
+if timeout 300 docker compose \
+        --env-file .env --env-file "$ETAT/env" \
+        -f compose.yaml -f compose.prod.yaml \
+        exec -T api php bin/console heritage:resoudre-les-lieux --en-ligne --no-interaction; then
+    dire "lieux : resolution terminee."
+else
+    crier "lieux : la resolution a echoue ou depasse 5 min (code $?) — SANS EFFET sur ce deploiement."
+    crier "lieux : le service « lieux » la rejouera cette nuit ; journal : logs --tail=100 lieux"
+fi
+
 dire "DEPLOIEMENT REUSSI — $SHA_CIBLE, empreinte $EMPREINTE_SERVIE"
 dire "retour arriere disponible vers : $(cat "$ETAT/precedent" 2>/dev/null || echo aucun)"

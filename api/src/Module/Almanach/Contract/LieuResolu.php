@@ -57,7 +57,7 @@ final readonly class LieuResolu
      * @param float        $lon       idem
      * @param string       $precision `commune`, `subdivision` ou `pays`
      * @param int          $confiance rang de 0 à 100 posé par la passe d'appariement
-     * @param string       $source    `communes-fr`, `villes-monde` ou `manuel`
+     * @param string       $source    `communes-fr`, `villes-monde`, `nominatim` ou `manuel`
      * @param list<string> $brut      les chaînes `PLAC` verbatim que cette ligne couvre
      */
     public function __construct(
