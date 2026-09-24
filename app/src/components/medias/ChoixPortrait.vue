@@ -16,12 +16,16 @@
  *
  * L'envoi passe par `POST /api/medias/portrait-du-compte`, comme avant : le
  * portrait de son propre compte est direct, sans circuit de validation.
+ *
+ * Le cadrage lui-même (scène, gestes, export du carré) vit dans
+ * `RecadrageSousCercle.vue`, partagé avec les portraits repérés par
+ * l'assistant ; ce composant-ci garde la source, la caméra et l'envoi.
  */
-import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { analyserErreur, televerserPortraitDuCompte } from '@/lib/api'
 import { rafraichirSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
-import { borner, cadrageInitial, coteDeSortie, zoneSource, zoomerAutour, ZOOM_MAX, type Cadrage } from './cadrage'
+import RecadrageSousCercle from './RecadrageSousCercle.vue'
 
 const { ouvert } = defineProps<{ ouvert: boolean }>()
 const emit = defineEmits<{ fermer: []; depose: [] }>()
@@ -66,7 +70,6 @@ function fermer(): void {
 
 const image = shallowRef<HTMLImageElement | null>(null)
 let urlObjet: string | null = null
-const dims = computed(() => (image.value ? { largeur: image.value.naturalWidth, hauteur: image.value.naturalHeight } : null))
 
 function libererImage(): void {
   if (urlObjet) URL.revokeObjectURL(urlObjet)
@@ -89,8 +92,7 @@ async function chargerImage(source: Blob): Promise<void> {
   }
   urlObjet = url
   image.value = img
-  mesurerScene()
-  cadrage.value = cadrageInitial(dims.value!, cote.value)
+  // Le recadrage mesure sa scène et centre l'image en montant.
   etape.value = 'cadrage'
 }
 
@@ -177,128 +179,21 @@ function declencher(): void {
 /* Le cadrage                                                          */
 /* ------------------------------------------------------------------ */
 
-const scene = ref<HTMLElement | null>(null)
-const cote = ref(280)
-const cadrage = ref<Cadrage>({ zoom: 1, x: 0, y: 0 })
-
-function mesurerScene(): void {
-  cote.value = Math.max(200, Math.min(320, window.innerWidth - 64))
-}
-
-const styleImage = computed(() => {
-  const d = dims.value
-  if (!d) return {}
-  const k = (cote.value / Math.min(d.largeur, d.hauteur)) * cadrage.value.zoom
-  return {
-    width: `${d.largeur * k}px`,
-    height: `${d.hauteur * k}px`,
-    transform: `translate(${cadrage.value.x}px, ${cadrage.value.y}px)`,
-  }
-})
-
-const pointeurs = new Map<number, { x: number; y: number }>()
-let glisser: { x: number; y: number; cx: number; cy: number } | null = null
-let pincement: number | null = null
-
-function local(e: PointerEvent | WheelEvent): { x: number; y: number } {
-  const r = scene.value!.getBoundingClientRect()
-  return { x: e.clientX - r.left, y: e.clientY - r.top }
-}
-
-function surBas(e: PointerEvent): void {
-  scene.value?.setPointerCapture(e.pointerId)
-  pointeurs.set(e.pointerId, local(e))
-  if (pointeurs.size === 1) glisser = { x: e.clientX, y: e.clientY, cx: cadrage.value.x, cy: cadrage.value.y }
-  if (pointeurs.size === 2) {
-    const [a, b] = [...pointeurs.values()] as [{ x: number; y: number }, { x: number; y: number }]
-    pincement = Math.hypot(a.x - b.x, a.y - b.y)
-    glisser = null
-  }
-}
-
-function surDeplace(e: PointerEvent): void {
-  const d = dims.value
-  if (!d || !pointeurs.has(e.pointerId)) return
-  pointeurs.set(e.pointerId, local(e))
-  if (pointeurs.size === 2 && pincement) {
-    const [a, b] = [...pointeurs.values()] as [{ x: number; y: number }, { x: number; y: number }]
-    const dist = Math.hypot(a.x - b.x, a.y - b.y)
-    cadrage.value = zoomerAutour(cadrage.value, d, cote.value, cadrage.value.zoom * (dist / pincement), (a.x + b.x) / 2, (a.y + b.y) / 2)
-    pincement = dist
-    return
-  }
-  if (!glisser) return
-  cadrage.value = borner(
-    { zoom: cadrage.value.zoom, x: glisser.cx + e.clientX - glisser.x, y: glisser.cy + e.clientY - glisser.y },
-    d,
-    cote.value,
-  )
-}
-
-function surHaut(e: PointerEvent): void {
-  pointeurs.delete(e.pointerId)
-  if (pointeurs.size < 2) pincement = null
-  if (pointeurs.size === 0) glisser = null
-}
-
-function surMolette(e: WheelEvent): void {
-  const d = dims.value
-  if (!d) return
-  const { x, y } = local(e)
-  cadrage.value = zoomerAutour(cadrage.value, d, cote.value, cadrage.value.zoom * Math.exp(-e.deltaY * 0.002), x, y)
-}
-
-function surCurseurZoom(e: Event): void {
-  const d = dims.value
-  if (!d) return
-  const z = Number((e.target as HTMLInputElement).value)
-  cadrage.value = zoomerAutour(cadrage.value, d, cote.value, z, cote.value / 2, cote.value / 2)
-}
-
-function surToucheScene(e: KeyboardEvent): void {
-  const d = dims.value
-  if (!d) return
-  const pas = 10
-  const c = cadrage.value
-  const moves: Record<string, [number, number]> = {
-    ArrowLeft: [pas, 0],
-    ArrowRight: [-pas, 0],
-    ArrowUp: [0, pas],
-    ArrowDown: [0, -pas],
-  }
-  if (moves[e.key]) {
-    e.preventDefault()
-    const [dx, dy] = moves[e.key]!
-    cadrage.value = borner({ ...c, x: c.x + dx, y: c.y + dy }, d, cote.value)
-  } else if (e.key === '+' || e.key === '=') {
-    cadrage.value = zoomerAutour(c, d, cote.value, c.zoom * 1.15, cote.value / 2, cote.value / 2)
-  } else if (e.key === '-') {
-    cadrage.value = zoomerAutour(c, d, cote.value, c.zoom / 1.15, cote.value / 2, cote.value / 2)
-  }
-}
+const recadrage = ref<InstanceType<typeof RecadrageSousCercle> | null>(null)
 
 /* ------------------------------------------------------------------ */
 /* L'envoi                                                             */
 /* ------------------------------------------------------------------ */
 
 async function enregistrer(): Promise<void> {
-  const img = image.value
-  const d = dims.value
-  if (!img || !d || envoi.value) return
+  const cadreur = recadrage.value
+  if (!image.value || !cadreur || envoi.value) return
   envoi.value = true
   erreur.value = null
   try {
-    const zone = zoneSource(cadrage.value, d, cote.value)
-    const n = coteDeSortie(zone.cote)
-    const toile = document.createElement('canvas')
-    toile.width = n
-    toile.height = n
-    const ctx = toile.getContext('2d')!
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(img, zone.x, zone.y, zone.cote, zone.cote, 0, 0, n, n)
-    const blob = await new Promise<Blob | null>((ok) => toile.toBlob(ok, 'image/jpeg', 0.9))
-    if (!blob) throw new Error("La photo n'a pas pu être préparée.")
-    await televerserPortraitDuCompte(new File([blob], 'portrait.jpg', { type: 'image/jpeg' }))
+    // Le carré sous le cercle, JPEG, 1024 px au plus.
+    const fichier = await cadreur.exporter()
+    await televerserPortraitDuCompte(fichier)
     // La session porte le portrait courant : c'est elle qu'on relit.
     await rafraichirSession()
     emit('depose')
@@ -390,44 +285,7 @@ onBeforeUnmount(() => {
 
       <!-- 3. Le cadrage -->
       <template v-else-if="etape === 'cadrage' && image">
-        <div
-          ref="scene"
-          class="relative mx-auto cursor-grab touch-none overflow-hidden rounded-panneau bg-black select-none active:cursor-grabbing"
-          :style="{ width: `${cote}px`, height: `${cote}px` }"
-          tabindex="0"
-          role="application"
-          aria-label="Cadrage : glissez pour déplacer, molette ou pincement pour zoomer, flèches et + / − au clavier"
-          @pointerdown="surBas"
-          @pointermove="surDeplace"
-          @pointerup="surHaut"
-          @pointercancel="surHaut"
-          @wheel.prevent="surMolette"
-          @keydown="surToucheScene"
-        >
-          <img
-            :src="image.src"
-            alt=""
-            draggable="false"
-            class="pointer-events-none absolute top-0 left-0 max-w-none origin-top-left"
-            :style="styleImage"
-          />
-          <!-- Le cercle : ce qui sera visible sur la carte de l'arbre. -->
-          <div class="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_0_9999px_rgba(0,0,0,.55)] ring-2 ring-white/85" />
-        </div>
-        <label class="flex items-center gap-3 text-sm">
-          <span class="text-attenue" aria-hidden="true">−</span>
-          <input
-            type="range"
-            min="1"
-            :max="ZOOM_MAX"
-            step="0.01"
-            :value="cadrage.zoom"
-            class="flex-1 accent-[var(--h-accent)]"
-            aria-label="Zoom"
-            @input="surCurseurZoom"
-          />
-          <span class="text-attenue" aria-hidden="true">+</span>
-        </label>
+        <RecadrageSousCercle ref="recadrage" :source="image" />
         <p class="m-0 text-center text-xs text-attenue">Glissez la photo pour placer votre visage dans le cercle.</p>
         <div class="flex flex-wrap justify-end gap-2">
           <BoutonBase variante="discret" @click="etape = 'choix'">Changer de photo</BoutonBase>

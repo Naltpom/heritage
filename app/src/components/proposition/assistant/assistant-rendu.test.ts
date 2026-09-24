@@ -1,7 +1,7 @@
 import { createSSRApp, defineComponent, h } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import { describe, expect, it, vi } from 'vitest'
-import type { DemandeProposee } from '@/lib/api'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
+import type { DemandeProposee, PortraitPropose } from '@/lib/api'
 
 /**
  * « Proposer » et son assistant, rendus côté serveur.
@@ -59,6 +59,12 @@ async function rendreLaVue(requete: Record<string, string>): Promise<string> {
 }
 
 describe('le segmenté « Formulaire · Assistant IA »', () => {
+  // Le premier import de la vue charge tout le formulaire et l'assistant : à froid,
+  // sous la charge de la suite complète, il dépasse seul les 5 s d'un test.
+  beforeAll(async () => {
+    await import('@/views/PropositionCreationView.vue')
+  }, 30_000)
+
   it('ouvre sur le formulaire, inchangé', async () => {
     etat.vueEmpruntee = null
     const html = await rendreLaVue({})
@@ -140,5 +146,92 @@ describe('la carte de relecture', () => {
     expect(html).toContain('Confiance moyenne')
     expect(html).toContain('(valeur masquée)')
     expect(html).toContain('3 mars 1994')
+  })
+})
+
+describe('la section « Portraits repérés »', () => {
+  const CREATION: DemandeProposee = {
+    cle: 'd1',
+    titre: 'Ajouter Marie Dupont',
+    justification: 'Acte de naissance (document 1).',
+    confiance: 'haute',
+    corps: {
+      kind: 'creation_personne',
+      brouillons: [
+        {
+          localRef: '#p1',
+          givenNames: 'Marie',
+          surname: 'Dupont',
+          marriedName: null,
+          nickname: null,
+          sex: 'feminin',
+          deceased: true,
+          birth: null,
+          death: null,
+          note: null,
+        },
+      ],
+      liens: [],
+    },
+    personnes: [],
+    changements: [],
+  }
+
+  const PORTRAITS: PortraitPropose[] = [
+    {
+      cle: 'r1',
+      document: 0,
+      cadre: { haut: 120, gauche: 340, bas: 520, droite: 660 },
+      justification: 'Photo de groupe (document 1) : visage d’Opale.',
+      personId: 202,
+      personne: { personId: 202, displayName: 'Opale Tilleul', ligneDates: '1994 –', visibilite: 'restreinte' },
+      demandeCle: null,
+      brouillonRef: null,
+    },
+    {
+      cle: 'r2',
+      document: 1,
+      cadre: { haut: 100, gauche: 100, bas: 400, droite: 400 },
+      justification: 'Photo de mariage (document 2) : la mariée.',
+      personId: null,
+      personne: null,
+      demandeCle: 'd1',
+      brouillonRef: 'p1',
+    },
+  ]
+
+  async function rendreSection(demandesCochees: string[]): Promise<string> {
+    const { default: Section } = await import('./PortraitsReperes.vue')
+    return rendre(Section, {
+      portraits: PORTRAITS,
+      demandes: [CREATION],
+      cochees: new Set(['r1', 'r2']),
+      demandesCochees: new Set(demandesCochees),
+      apercus: {
+        r1: { etat: 'pret', url: 'blob:groupe', largeur: 2000, hauteur: 1500, cadre: PORTRAITS[0]!.cadre, ajuste: false },
+      },
+    })
+  }
+
+  it('nomme une personne restreinte sans ses dates, et une personne proposée par son brouillon', async () => {
+    const html = await rendreSection(['d1'])
+
+    expect(html).toContain('Portraits repérés')
+    expect(html).toContain('Opale Tilleul')
+    expect(html).not.toContain('1994 –')
+    expect(html).toContain('Marie Dupont')
+    expect(html).toContain('nouvelle personne proposée')
+    expect(html).toContain('Photo de mariage (document 2) : la mariée.')
+    expect(html).toContain('Ajuster le cadrage')
+    // Cochés par défaut, tous les deux.
+    expect(html.match(/<input[^>]*type="checkbox"[^>]*checked/g)).toHaveLength(2)
+    // L'aperçu prêt montre l'image d'origine sous le rond ; l'autre attend.
+    expect(html).toContain('src="blob:groupe"')
+    expect(html).toContain('Aperçu…')
+  })
+
+  it('prévient qu’un portrait ne partira pas si la création est décochée', async () => {
+    const html = await rendreSection([])
+    expect(html).toContain('La demande qui crée cette personne est décochée')
   })
 })

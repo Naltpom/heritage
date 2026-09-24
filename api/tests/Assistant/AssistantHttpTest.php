@@ -208,7 +208,8 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
         $brut = (string) $this->client->getResponse()->getContent();
         $charge = $this->charge();
 
-        self::assertSame(['analyseId', 'resume', 'demandes', 'avertissements', 'restant'], array_keys($charge));
+        self::assertSame(['analyseId', 'resume', 'demandes', 'portraits', 'avertissements', 'restant'], array_keys($charge));
+        self::assertSame([], $charge['portraits'], 'Toujours présent, vide quand le modèle n’en repère aucun.');
         self::assertMatchesRegularExpression('/^[a-f0-9]{32}$/', $charge['analyseId']);
         self::assertSame(19, $charge['restant']);
         self::assertSame('Un acte de naissance et un témoignage.', $charge['resume']);
@@ -273,6 +274,90 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
 
         // ── Le dépôt à blanc n'a rien écrit. ─────────────────────────────────────
         self::assertSame(0, $this->em()->getRepository(ChangeRequest::class)->count([]), 'Analyser ne dépose rien.');
+    }
+
+    public function testLAnalyseRendLesPortraitsReperesVusParLeCercleDuLecteur(): void
+    {
+        $this->seConnecterCommeOpale();
+
+        ModeleScripte::repondra(ModeleScripte::appel('proposer', [
+            'resume' => 'Une photo de famille et un acte.',
+            'demandes' => [
+                [
+                    'nature' => 'creation_personne', 'titre' => 'Ajouter Paul Sureau (2012)',
+                    'justification' => 'Photo légendée, document 1.', 'confiance' => 'moyenne',
+                    'personnes' => [['ref' => '#p1', 'prenoms' => 'Paul', 'nom' => 'Sureau', 'sexe' => 'masculin']],
+                    'liens' => [['nature' => 'enfant_de', 'sujet' => '#p1', 'autre' => (string) $this->marne]],
+                ],
+                [
+                    // Bien formée, mais le dépôt à blanc la refuse : son parent n'existe pas.
+                    'nature' => 'creation_personne', 'titre' => 'Enfant fantôme',
+                    'justification' => '?', 'confiance' => 'faible',
+                    'personnes' => [['ref' => '#p1', 'prenoms' => 'Fantôme', 'nom' => 'Sureau']],
+                    'liens' => [['nature' => 'enfant_de', 'sujet' => '#p1', 'autre' => '999999']],
+                ],
+            ],
+            'portraits' => [
+                ['document' => 1, 'personne' => (string) $this->marne, 'cadre' => ['haut' => 120, 'gauche' => 340, 'bas' => 520, 'droite' => 660], 'justification' => 'Photo légendée, document 1 : Marne à gauche.'],
+                ['document' => 1, 'personne' => $this->tuf, 'cadre' => ['haut' => 100, 'gauche' => 700, 'bas' => 480, 'droite' => 980], 'justification' => 'Document 1 : Tuf à droite.'],
+                ['document' => 1, 'personne' => '#p1', 'demande' => 1, 'cadre' => ['haut' => 600, 'gauche' => 400, 'bas' => 900, 'droite' => 600], 'justification' => 'Document 1 : l’enfant, Paul.'],
+                ['document' => 1, 'personne' => '#p1', 'demande' => 2, 'cadre' => ['haut' => 600, 'gauche' => 100, 'bas' => 900, 'droite' => 300], 'justification' => 'Brouillon d’une demande écartée.'],
+                ['document' => 1, 'personne' => '999999', 'cadre' => ['haut' => 10, 'gauche' => 10, 'bas' => 90, 'droite' => 90], 'justification' => 'Fiche inexistante.'],
+                ['document' => 2, 'personne' => (string) $this->opale, 'cadre' => ['haut' => 10, 'gauche' => 10, 'bas' => 90, 'droite' => 90], 'justification' => 'Un PDF.'],
+            ],
+        ]));
+
+        $this->analyser(['texte' => 'Marne, Tuf et leur fils Paul.'], [
+            $this->fichier("\xFF\xD8\xFFphoto-de-famille", 'famille.jpg'),
+            $this->fichier('%PDF-1.7 acte', 'acte.pdf'),
+        ]);
+
+        self::assertResponseIsSuccessful();
+        $brut = (string) $this->client->getResponse()->getContent();
+        $charge = $this->charge();
+
+        self::assertSame(['d1'], array_column($charge['demandes'], 'cle'), 'La création fantôme est écartée par le dépôt à blanc.');
+        self::assertSame(['r1', 'r2', 'r3'], array_column($charge['portraits'], 'cle'));
+
+        [$marne, $tuf, $paul] = $charge['portraits'];
+
+        // ── Une défunte : décrite en entier. ────────────────────────────────────────
+        self::assertSame([
+            'cle' => 'r1',
+            'document' => 0,
+            'cadre' => ['haut' => 120, 'gauche' => 340, 'bas' => 520, 'droite' => 660],
+            'justification' => 'Photo légendée, document 1 : Marne à gauche.',
+            'personId' => $this->marne,
+            'personne' => ['personId' => $this->marne, 'displayName' => 'Marne Dolomite Sureau', 'visibilite' => 'complete', 'ligneDates' => '1987 –'],
+            'demandeCle' => null,
+            'brouillonRef' => null,
+        ], $marne);
+
+        // ── Un vivant hors cercle : le nom, sans dates — comme dans `personnes[]`. ─
+        self::assertSame($this->tuf, $tuf['personId']);
+        self::assertSame(['personId' => $this->tuf, 'displayName' => 'Tuf Sureau', 'visibilite' => 'restreinte'], $tuf['personne']);
+
+        // ── Une personne proposée : la demande gardée, la référence sans dièse. ────
+        self::assertNull($paul['personId']);
+        self::assertNull($paul['personne']);
+        self::assertSame('d1', $paul['demandeCle']);
+        self::assertSame('p1', $paul['brouillonRef']);
+        self::assertSame('#p1', $charge['demandes'][0]['corps']['brouillons'][0]['localRef'], 'La même référence que le brouillon du corps.');
+
+        // ── Les écartés : dits, jamais rendus. ─────────────────────────────────────
+        $avertissements = implode("\n", $charge['avertissements']);
+        self::assertStringContainsString('« Enfant fantôme » a été écartée', $avertissements);
+        self::assertStringContainsString('(document 2) a été écarté : un portrait ne se tire que d’une photo, jamais d’un PDF', $avertissements);
+        self::assertStringContainsString('la demande qui crée la personne visée a été écartée', $avertissements);
+        self::assertStringContainsString('n’existe pas dans l’arbre', $avertissements);
+
+        foreach ([self::NAISSANCE_MASQUEE, self::LIEU_MASQUE, '1990'] as $interdit) {
+            self::assertStringNotContainsString($interdit, $brut, \sprintf('« %s » est une donnée de Tuf que le lecteur ne voit pas.', $interdit));
+        }
+
+        // Le modèle a bien reçu la déclaration étendue.
+        $proposer = array_column(ModeleScripte::requetes()[0]['charge']['tools'][0]['functionDeclarations'], null, 'name')['proposer'];
+        self::assertArrayHasKey('portraits', $proposer['parameters']['properties']);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

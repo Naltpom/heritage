@@ -28,6 +28,15 @@ namespace App\Module\Assistant\Service;
  * | `modification_personne` | `targetId` + `ops` **sans** `valueKind` / `oldValue` / `baseVersion` — `Proposal` les lit en base |
  * | `creation_personne` | `brouillons` (`#p1`…) + `liens` |
  * | `ajout_lien` | `targetKind`/`targetId` + `liens`, aucune fiche |
+ *
+ * ── Les portraits ─────────────────────────────────────────────────────────────────
+ *
+ * `portraits` désigne un visage dans une photo jointe. Le traducteur vérifie ce qu'il
+ * peut vérifier seul : le document existe **et c'est une image** (jamais un PDF), le
+ * cadre est borné (0–1000) et non vide, la personne est un identifiant ou la référence
+ * `#p<n>` d'un brouillon d'une demande de création **traduite** — sans ambiguïté. Un
+ * portrait par personne au plus. Ce qui ne se vérifie qu'en base (la fiche existe, la
+ * demande de création est gardée par le dépôt) est laissé à {@see AnalyseParLAssistant}.
  */
 final class TraducteurDePropositions
 {
@@ -42,10 +51,18 @@ final class TraducteurDePropositions
 
     private const array CONFIANCES = ['haute', 'moyenne', 'faible'];
 
+    /** Six documents au plus, quelques visages chacun : au-delà, le modèle a dérivé. */
+    private const int PORTRAITS_MAXIMAUX = 12;
+
+    /** Le repère des boîtes de Gemini : chaque coordonnée entre 0 et 1000. */
+    private const int REPERE = 1000;
+
     /**
      * @param array<string, mixed> $arguments
+     * @param list<DocumentJoint>  $documents les documents envoyés, dans l'ordre de `fichiers[]` :
+     *                                        un portrait ne vaut que sur l'un d'eux, et sur une image
      */
-    public function traduire(array $arguments): PropositionsTraduites
+    public function traduire(array $arguments, array $documents = []): PropositionsTraduites
     {
         $avertissements = [];
 
@@ -56,6 +73,11 @@ final class TraducteurDePropositions
         }
 
         $propositions = [];
+        // Pour les portraits : le rang de la demande **telle que le modèle l'a écrite** →
+        // le rang de la proposition traduite, et, pour une création, la table de ses
+        // références (« p1 » du modèle → « #p1 » canonique).
+        $rangs = [];
+        $referencesParProposition = [];
         $demandes = \is_array($arguments['demandes'] ?? null) ? array_values($arguments['demandes']) : [];
 
         if (\count($demandes) > self::DEMANDES_MAXIMALES) {
@@ -63,18 +85,19 @@ final class TraducteurDePropositions
             $demandes = \array_slice($demandes, 0, self::DEMANDES_MAXIMALES);
         }
 
-        foreach ($demandes as $demande) {
+        foreach ($demandes as $rangBrut => $demande) {
             if (!\is_array($demande)) {
                 continue;
             }
 
             /** @var array<string, mixed> $demande */
             $titre = self::texte($demande['titre'] ?? null, 200);
+            $references = [];
 
             try {
                 $corps = match ($demande['nature'] ?? null) {
                     'modification_personne' => $this->modification($demande),
-                    'creation_personne' => $this->creation($demande),
+                    'creation_personne' => $this->creation($demande, $references),
                     'ajout_lien' => $this->ajoutDeLien($demande),
                     default => throw new \UnexpectedValueException('sa nature n’est pas de celles que l’assistant peut proposer.'),
                 };
@@ -86,6 +109,8 @@ final class TraducteurDePropositions
 
             $confiance = $demande['confiance'] ?? null;
 
+            $rangs[$rangBrut] = \count($propositions);
+            $referencesParProposition[\count($propositions)] = $references;
             $propositions[] = new PropositionTraduite(
                 '' === $titre ? self::titreParDefaut($corps) : $titre,
                 self::texte($demande['justification'] ?? null, 2000),
@@ -94,7 +119,159 @@ final class TraducteurDePropositions
             );
         }
 
-        return new PropositionsTraduites(self::texte($arguments['resume'] ?? null, 1000), $propositions, $avertissements);
+        $portraits = $this->portraits($arguments, $documents, $rangs, $referencesParProposition, $avertissements);
+
+        return new PropositionsTraduites(self::texte($arguments['resume'] ?? null, 1000), $propositions, $avertissements, $portraits);
+    }
+
+    /**
+     * @param array<string, mixed>              $arguments
+     * @param list<DocumentJoint>               $documents
+     * @param array<int, int>                   $rangs                    rang de la demande brute → rang de la proposition
+     * @param array<int, array<string, string>> $referencesParProposition
+     * @param list<string>                      $avertissements           complétée des portraits écartés
+     *
+     * @return list<PortraitTraduit>
+     */
+    private function portraits(array $arguments, array $documents, array $rangs, array $referencesParProposition, array &$avertissements): array
+    {
+        $bruts = \is_array($arguments['portraits'] ?? null) ? array_values($arguments['portraits']) : [];
+
+        if (\count($bruts) > self::PORTRAITS_MAXIMAUX) {
+            $avertissements[] = \sprintf('L’assistant a repéré %d portraits ; seuls les %d premiers sont présentés.', \count($bruts), self::PORTRAITS_MAXIMAUX);
+            $bruts = \array_slice($bruts, 0, self::PORTRAITS_MAXIMAUX);
+        }
+
+        $portraits = [];
+        $dejaVisees = [];
+
+        foreach ($bruts as $brut) {
+            if (!\is_array($brut)) {
+                continue;
+            }
+
+            try {
+                $portrait = $this->portrait($brut, $documents, $rangs, $referencesParProposition);
+            } catch (\UnexpectedValueException $e) {
+                $rang = self::entier($brut['document'] ?? null);
+                $avertissements[] = \sprintf(
+                    'Un portrait proposé%s a été écarté : %s',
+                    null === $rang ? '' : \sprintf(' (document %d)', $rang),
+                    $e->getMessage(),
+                );
+
+                continue;
+            }
+
+            // Un portrait par personne : le premier proposé l'emporte, les suivants sont dits.
+            $personne = null !== $portrait->personId
+                ? 'fiche:'.$portrait->personId
+                : 'brouillon:'.$portrait->proposition.':'.$portrait->brouillonRef;
+
+            if (isset($dejaVisees[$personne])) {
+                $avertissements[] = \sprintf('Un second portrait proposé pour la même personne (document %d) a été écarté : un seul portrait par personne.', $portrait->document + 1);
+
+                continue;
+            }
+
+            $dejaVisees[$personne] = true;
+            $portraits[] = $portrait;
+        }
+
+        return $portraits;
+    }
+
+    /**
+     * Un portrait, ou une `\UnexpectedValueException` qui dit pourquoi il est écarté.
+     *
+     * @param array<mixed>                      $brut
+     * @param list<DocumentJoint>               $documents
+     * @param array<int, int>                   $rangs
+     * @param array<int, array<string, string>> $referencesParProposition
+     */
+    private function portrait(array $brut, array $documents, array $rangs, array $referencesParProposition): PortraitTraduit
+    {
+        // ── Le document : rang 1-based côté modèle (« document 2 »), 0-based en sortie.
+        $rang = self::entier($brut['document'] ?? null);
+        $document = null === $rang ? null : ($documents[$rang - 1] ?? null);
+
+        if (null === $rang || null === $document) {
+            throw new \UnexpectedValueException('il ne désigne aucun document joint.');
+        }
+
+        // Le type est celui **reniflé** par le contrôleur, pas celui annoncé.
+        if (!str_starts_with($document->typeMime, 'image/')) {
+            throw new \UnexpectedValueException('un portrait ne se tire que d’une photo, jamais d’un PDF.');
+        }
+
+        // ── Le cadre : dans le repère, et d'aire non nulle. Jamais « réparé ». ─────
+        $cadre = \is_array($brut['cadre'] ?? null) ? $brut['cadre'] : [];
+        $bornes = [];
+
+        foreach (['haut', 'gauche', 'bas', 'droite'] as $cote) {
+            $bornes[$cote] = self::coordonnee($cadre[$cote] ?? null)
+                ?? throw new \UnexpectedValueException('son cadre est incomplet ou sort de l’image.');
+        }
+
+        if ($bornes['haut'] >= $bornes['bas'] || $bornes['gauche'] >= $bornes['droite']) {
+            throw new \UnexpectedValueException('son cadre est vide.');
+        }
+
+        $justification = self::texte($brut['justification'] ?? null, 1000);
+
+        // ── La personne : une fiche de l'arbre… ────────────────────────────────────
+        $valeur = $brut['personne'] ?? null;
+        $personId = self::entier($valeur);
+
+        if (null !== $personId) {
+            return new PortraitTraduit($rang - 1, $bornes, $justification, $personId);
+        }
+
+        // … ou un brouillon d'une création traduite, désigné sans ambiguïté.
+        $cle = \is_string($valeur) ? self::cleDeReference($valeur) : '';
+
+        if (1 !== preg_match('/^p\d{1,3}$/', $cle)) {
+            throw new \UnexpectedValueException('il ne désigne aucune personne.');
+        }
+
+        $candidats = [];
+        $demande = self::entier($brut['demande'] ?? null);
+
+        if (null !== $demande) {
+            // Le modèle a nommé la demande : on n'en cherche pas une autre à sa place.
+            $proposition = $rangs[$demande - 1] ?? null;
+
+            if (null !== $proposition && isset($referencesParProposition[$proposition][$cle])) {
+                $candidats[$proposition] = $referencesParProposition[$proposition][$cle];
+            }
+        } else {
+            foreach ($referencesParProposition as $proposition => $references) {
+                if (isset($references[$cle])) {
+                    $candidats[$proposition] = $references[$cle];
+                }
+            }
+        }
+
+        if (1 !== \count($candidats)) {
+            throw new \UnexpectedValueException([] === $candidats ? 'la personne nouvelle qu’il désigne n’est proposée par aucune demande retenue.' : 'plusieurs demandes proposent une personne nouvelle sous cette référence.');
+        }
+
+        $proposition = array_key_first($candidats);
+
+        return new PortraitTraduit($rang - 1, $bornes, $justification, null, $proposition, $candidats[$proposition]);
+    }
+
+    /** Une coordonnée du repère 0–1000 ; `120.0` vaut `120`, rien d'autre n'est deviné. */
+    private static function coordonnee(mixed $valeur): ?int
+    {
+        $entier = match (true) {
+            \is_int($valeur) => $valeur,
+            \is_float($valeur) && floor($valeur) === $valeur => (int) $valeur,
+            \is_string($valeur) && 1 === preg_match('/^\s*\d{1,4}\s*$/', $valeur) => (int) $valeur,
+            default => null,
+        };
+
+        return null !== $entier && $entier >= 0 && $entier <= self::REPERE ? $entier : null;
     }
 
     /**
@@ -154,6 +331,11 @@ final class TraducteurDePropositions
      */
     private function valeurDeChamp(mixed $champ, array $changement): ?array
     {
+        // Le schéma demande `texte`, mais le modèle range parfois la valeur sous
+        // `valeur` : on l'accepte plutôt que de perdre une proposition valable pour
+        // une question de forme (constaté en essai réel, 24/09/2026).
+        $changement['texte'] ??= $changement['valeur'] ?? null;
+
         if (\in_array($champ, self::CHAMPS_TEXTE, true)) {
             $texte = self::texte($changement['texte'] ?? null, 250);
 
@@ -169,11 +351,13 @@ final class TraducteurDePropositions
     }
 
     /**
-     * @param array<string, mixed> $demande
+     * @param array<string, mixed>  $demande
+     * @param array<string, string> $references rendue : la référence du modèle (« p1 ») → `#p<n>`,
+     *                                          pour que les portraits puissent viser un brouillon
      *
      * @return array<string, mixed>
      */
-    private function creation(array $demande): array
+    private function creation(array $demande, array &$references): array
     {
         $references = [];
         $brouillons = [];
