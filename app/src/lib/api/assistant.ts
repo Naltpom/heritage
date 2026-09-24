@@ -92,6 +92,45 @@ export interface DemandeProposee {
   changements: ChangementPropose[]
 }
 
+/**
+ * Un cadre dans le repère de l'image, en **millièmes** (entiers 0 à 1000), comme
+ * les boîtes du modèle. Même forme que `CadreVisage` (`components/medias/cadrage.ts`).
+ */
+export interface CadrePortrait {
+  haut: number
+  gauche: number
+  bas: number
+  droite: number
+}
+
+/**
+ * Un **portrait repéré** : une photo jointe montre le visage d'une personne, et
+ * l'assistant propose d'en faire son portrait.
+ *
+ * Rien n'est envoyé par le serveur : c'est le front qui a les fichiers, qui
+ * recadre et qui téléverse (`POST /api/medias`, `kind: 'portrait'`), au dépôt
+ * et seulement si le portrait est coché.
+ *
+ * Deux formes, exclusives :
+ * - personne **existante** : `personId` et `personne` (vue du lecteur — une
+ *   personne `restreinte` n'a que son nom), `demandeCle`/`brouillonRef` à `null` ;
+ * - personne **proposée** dans la même analyse : `personId`/`personne` à `null`,
+ *   `demandeCle` = la `cle` de la demande de création, `brouillonRef` = la
+ *   référence du brouillon **sans dièse** (`p1`), comme `BrouillonVise`.
+ */
+export interface PortraitPropose {
+  /** Clé du portrait dans l'analyse (`r1`, `r2`…). */
+  cle: string
+  /** Rang **0-based** du document dans l'ordre d'envoi des `fichiers[]`. */
+  document: number
+  cadre: CadrePortrait
+  justification: string
+  personId: number | null
+  personne: PersonneCitee | null
+  demandeCle: string | null
+  brouillonRef: string | null
+}
+
 /** La réponse `200` de `POST /api/assistant/analyses`. */
 export interface AnalyseAssistant {
   /** Identifiant opaque de l'analyse gardée côté serveur (2 h). */
@@ -99,6 +138,9 @@ export interface AnalyseAssistant {
   resume: string
   demandes: DemandeProposee[]
   avertissements: string[]
+  /** Les portraits repérés dans les photos jointes — vide si aucun. Facultatif
+   *  à la lecture : un serveur antérieur à l'extension ne l'envoie pas. */
+  portraits?: PortraitPropose[]
   /** Analyses restantes aujourd'hui pour ce lecteur. */
   restant: number
 }

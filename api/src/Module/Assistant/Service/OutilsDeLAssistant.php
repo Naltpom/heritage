@@ -161,6 +161,31 @@ final readonly class OutilsDeLAssistant
                                 'required' => ['nature', 'titre', 'justification', 'confiance'],
                             ],
                         ],
+                        'portraits' => [
+                            'type' => 'array',
+                            'description' => 'Facultatif : les visages nets et identifiables repérés dans les PHOTOS jointes (jamais dans un PDF), à utiliser comme portrait de la personne. Au plus un portrait par personne. Liste vide si aucun.',
+                            'items' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'document' => ['type' => 'integer', 'description' => 'Le numéro du document (1 pour « Document 1 »). Une image, jamais un PDF.'],
+                                    'personne' => ['type' => 'string', 'description' => 'L’identifiant numérique d’une personne de l’arbre (« 12 »), ou la référence « #p1 » d’une personne nouvelle d’une demande creation_personne de cet appel.'],
+                                    'demande' => ['type' => 'integer', 'description' => 'Pour une personne nouvelle seulement : le rang (1 pour la première) dans « demandes » de la demande creation_personne qui la décrit.'],
+                                    'cadre' => [
+                                        'type' => 'object',
+                                        'description' => 'La boîte du visage, comme tes boîtes de détection [ymin, xmin, ymax, xmax] normalisées sur 0–1000 dans le repère de l’image (0,0 en haut à gauche). Englobe toute la tête avec une marge : cheveux, menton et haut des épaules compris.',
+                                        'properties' => [
+                                            'haut' => ['type' => 'integer', 'description' => 'ymin, de 0 à 1000.'],
+                                            'gauche' => ['type' => 'integer', 'description' => 'xmin, de 0 à 1000.'],
+                                            'bas' => ['type' => 'integer', 'description' => 'ymax, de 0 à 1000, plus grand que haut.'],
+                                            'droite' => ['type' => 'integer', 'description' => 'xmax, de 0 à 1000, plus grand que gauche.'],
+                                        ],
+                                        'required' => ['haut', 'gauche', 'bas', 'droite'],
+                                    ],
+                                    'justification' => ['type' => 'string', 'description' => 'Pourquoi ce visage est cette personne, d’après le document ou le texte du membre (« photo de mariage, document 2 : la mariée, Marie Dupont »).'],
+                                ],
+                                'required' => ['document', 'personne', 'cadre', 'justification'],
+                            ],
+                        ],
                     ],
                     'required' => ['resume', 'demandes'],
                 ],

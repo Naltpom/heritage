@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { ErreurApi, type DemandeProposee } from '@/lib/api'
+import { ErreurApi, type DemandeProposee, type PortraitPropose } from '@/lib/api'
 import {
+  bilanPortraits,
+  clesPortraitsParDefaut,
+  destinationDuPortrait,
+  documentDuPortrait,
+  empechementDuPortrait,
+  executerPortraits,
+  legendeDePortrait,
+  nomDuBrouillon,
+  personneDuPortrait,
+  planDesPortraits,
+  portraitsPartants,
+  type EtapeDepot,
   NOMBRE_MAX_DOCUMENTS,
   TAILLE_MAX_DOCUMENT,
   VALEUR_MASQUEE,
@@ -276,5 +288,169 @@ describe('l’exécution : séquentielle, un échec n’arrête pas la suite', (
     )
     expect(messageEchecDepot(new ErreurApi(409, 'deja_deposee', 'Déjà.'))).toContain('déjà été déposée')
     expect(messageEchecDepot(new ErreurApi(422, 'donnees_invalides', 'Champ refusé.'))).toBe('Champ refusé.')
+  })
+})
+
+describe('les portraits repérés', () => {
+  const CREATION_MARIE = demande({
+    cle: 'd1',
+    corps: {
+      kind: 'creation_personne',
+      brouillons: [
+        {
+          localRef: '#p1',
+          givenNames: 'Marie',
+          surname: 'Dupont',
+          marriedName: null,
+          nickname: null,
+          sex: 'feminin',
+          deceased: true,
+          birth: null,
+          death: null,
+          note: null,
+        },
+      ],
+      liens: [],
+    },
+  })
+
+  function portrait(surcharge: Partial<PortraitPropose> & Pick<PortraitPropose, 'cle'>): PortraitPropose {
+    return {
+      document: 0,
+      cadre: { haut: 100, gauche: 300, bas: 500, droite: 700 },
+      justification: 'Photo de mariage (document 1).',
+      personId: null,
+      personne: null,
+      demandeCle: null,
+      brouillonRef: null,
+      ...surcharge,
+    }
+  }
+
+  const EXISTANT = portrait({
+    cle: 'r1',
+    personId: 12,
+    personne: { personId: 12, displayName: 'Jean Dupont', ligneDates: '1890 – 1960', visibilite: 'complete' },
+  })
+  const RESTREINT = portrait({
+    cle: 'r2',
+    personId: 202,
+    personne: { personId: 202, displayName: 'Opale Tilleul', ligneDates: '1994 –', visibilite: 'restreinte' },
+  })
+  const PROPOSE = portrait({ cle: 'r3', document: 1, demandeCle: 'd1', brouillonRef: 'p1' })
+
+  function etape(cle: string, etat: EtapeDepot['etat'], demandeId: number | null = null) {
+    return { cle, etat, demandeId }
+  }
+
+  it('nomme la personne proposée par son brouillon, retrouvé par `#<brouillonRef>`', () => {
+    expect(nomDuBrouillon([CREATION_MARIE], 'd1', 'p1')).toBe('Marie Dupont')
+    expect(nomDuBrouillon([CREATION_MARIE], 'd1', 'p2')).toBeNull()
+    expect(nomDuBrouillon([MODIFICATION_12], 'd2', 'p1')).toBeNull()
+
+    const personne = personneDuPortrait(PROPOSE, [CREATION_MARIE])
+    expect(personne).toEqual({ nom: 'Marie Dupont', personId: null, dates: null, nouvelle: true })
+  })
+
+  it('ne donne jamais les dates d’une personne restreinte', () => {
+    expect(personneDuPortrait(EXISTANT, []).dates).toBe('1890 – 1960')
+    expect(personneDuPortrait(RESTREINT, []).dates).toBeNull()
+    expect(personneDuPortrait(RESTREINT, []).nom).toBe('Opale Tilleul')
+  })
+
+  it('prend le document au rang 0-based de l’ordre d’envoi, jamais un PDF', () => {
+    const envoyes = [fichier('mariage.jpg'), fichier('acte.pdf', 10, 'application/pdf'), fichier('groupe.png', 10, 'image/png')]
+    expect(documentDuPortrait({ document: 0 }, envoyes)?.name).toBe('mariage.jpg')
+    expect(documentDuPortrait({ document: 2 }, envoyes)?.name).toBe('groupe.png')
+    expect(documentDuPortrait({ document: 1 }, envoyes)).toBeNull()
+    expect(documentDuPortrait({ document: 3 }, envoyes)).toBeNull()
+  })
+
+  it('coche tout par défaut, mais ne compte pas un portrait dont la création est décochée', () => {
+    const tous = [EXISTANT, RESTREINT, PROPOSE]
+    const cochees = clesPortraitsParDefaut(tous)
+    expect([...cochees]).toEqual(['r1', 'r2', 'r3'])
+
+    expect(portraitsPartants(tous, cochees, new Set(['d1']))).toBe(3)
+    expect(portraitsPartants(tous, cochees, new Set())).toBe(2)
+    expect(empechementDuPortrait(PROPOSE, new Set())).toContain('décochée')
+    expect(portraitsPartants(tous, new Set(['r3']), new Set(['d1']))).toBe(1)
+  })
+
+  it('vise la fiche d’une personne existante', () => {
+    expect(destinationDuPortrait(EXISTANT, [])).toEqual({ type: 'personne', personId: 12 })
+  })
+
+  it('vise le brouillon de la demande créée quand la création est déposée', () => {
+    expect(destinationDuPortrait(PROPOSE, [etape('d1', 'reussi', 88)])).toEqual({
+      type: 'brouillon',
+      demandeId: 88,
+      brouillonRef: 'p1',
+    })
+  })
+
+  it('saute le portrait si la création a échoué ou était décochée', () => {
+    const echec = destinationDuPortrait(PROPOSE, [etape('d1', 'echec')])
+    expect(echec.type).toBe('saute')
+    expect(echec.type === 'saute' && echec.motif).toContain('pas pu être déposée')
+
+    const decochee = destinationDuPortrait(PROPOSE, [etape('d2', 'reussi', 5)])
+    expect(decochee.type).toBe('saute')
+    expect(decochee.type === 'saute' && decochee.motif).toContain('pas été cochée')
+  })
+
+  it('n’envoie que les portraits cochés, un par un, et un échec n’arrête pas les autres', async () => {
+    const tous = [EXISTANT, RESTREINT, PROPOSE]
+    const etapes = planDesPortraits(tous, new Set(['r1', 'r2', 'r3']), [CREATION_MARIE])
+    expect(etapes.map((e) => e.titre)).toEqual([
+      'Portrait de Jean Dupont',
+      'Portrait de Opale Tilleul',
+      'Portrait de Marie Dupont (nouvelle personne)',
+    ])
+    expect(planDesPortraits(tous, new Set(['r2']), [])).toHaveLength(1)
+
+    const envois: string[] = []
+    let enVol = 0
+    await executerPortraits(etapes, [etape('d1', 'echec')], async ({ portrait, destination }) => {
+      enVol++
+      expect(enVol).toBe(1)
+      await Promise.resolve()
+      enVol--
+      envois.push(`${portrait.cle}→${destination.type === 'personne' ? destination.personId : destination.demandeId}`)
+      if (portrait.cle === 'r1') throw new Error('réseau')
+    })
+
+    expect(envois).toEqual(['r1→12', 'r2→202'])
+    expect(etapes.map((e) => e.etat)).toEqual(['echec', 'reussi', 'saute'])
+    expect(bilanPortraits(etapes)).toEqual({ envoyes: 1, echecs: 1, sautes: 1 })
+
+    // « Réessayer » : la création passe cette fois ; ce qui est parti ne repart pas.
+    envois.length = 0
+    await executerPortraits(etapes, [etape('d1', 'reussi', 41)], async ({ portrait, destination }) => {
+      envois.push(`${portrait.cle}→${destination.type === 'brouillon' ? `${destination.demandeId}/${destination.brouillonRef}` : destination.personId}`)
+    })
+    expect(envois).toEqual(['r1→12', 'r3→41/p1'])
+    expect(bilanPortraits(etapes)).toEqual({ envoyes: 3, echecs: 0, sautes: 0 })
+  })
+
+  it('légende le portrait par sa justification, bornée à 255 caractères', () => {
+    expect(legendeDePortrait({ justification: 'Photo de mariage.' })).toBe('Repéré par l’assistant : Photo de mariage.')
+    expect(legendeDePortrait({ justification: 'x'.repeat(400) })).toHaveLength(255)
+  })
+
+  it('dit les demandes et les portraits sur le bouton', () => {
+    expect(libelleDepot(2, 1)).toBe('Déposer les 2 demandes et le portrait')
+    expect(libelleDepot(0, 2)).toBe('Envoyer les 2 portraits')
+    expect(libelleDepot(0, 0)).toBe('Aucune demande cochée')
+  })
+})
+
+describe('la dictée', () => {
+  it('colle la phrase avec une espace, et une majuscule en début de phrase', async () => {
+    const { ajouterDictee } = await import('./assistant')
+    expect(ajouterDictee('', 'ma grand-tante est née en 1921')).toBe('Ma grand-tante est née en 1921')
+    expect(ajouterDictee('Elle vivait à Brest', 'avec son frère')).toBe('Elle vivait à Brest avec son frère')
+    expect(ajouterDictee('Fin.', 'nouvelle phrase')).toBe('Fin. Nouvelle phrase')
+    expect(ajouterDictee('Texte', '   ')).toBe('Texte')
   })
 })

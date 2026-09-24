@@ -74,3 +74,86 @@ export function zoneSource(c: Cadrage, image: Dimensions, cote: number): { x: nu
 export function coteDeSortie(source: number): number {
   return Math.max(1, Math.min(1024, Math.round(source)))
 }
+
+/* ------------------------------------------------------------------ */
+/* Partir d'un cadre de visage                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Un cadre dans le **repère de l'image**, en millièmes (0 à 1000) — la forme
+ * des boîtes que rend le modèle de l'assistant (`haut`, `gauche`, `bas`,
+ * `droite`, comme `ymin, xmin, ymax, xmax`). Indépendant de la résolution :
+ * le même cadre vaut pour la photo d'origine et pour sa version allégée.
+ */
+export interface CadreVisage {
+  haut: number
+  gauche: number
+  bas: number
+  droite: number
+}
+
+/** Un millième, borné à l'image. */
+function millieme(v: number): number {
+  return Math.min(1000, Math.max(0, Number.isFinite(v) ? v : 0))
+}
+
+/**
+ * Le cadrage de départ **posé sur un visage** : un carré centré sur le cadre,
+ * aussi petit que possible **en couvrant tout le cadre**, puis ramené dans ses
+ * bornes par `borner()`.
+ *
+ * - Le carré prend le plus grand côté du cadre (en pixels : un cadre « carré »
+ *   en millièmes ne l'est pas sur une photo en paysage), agrandi de `marge`
+ *   (0,1 = 10 %) si l'on veut de l'air autour — le modèle inclut déjà les
+ *   épaules, d'où 0 par défaut.
+ * - Un cadre plus grand que le petit côté de l'image donne le zoom 1 : le carré
+ *   ne peut pas sortir de la photo, il couvre alors tout ce qu'il peut.
+ * - Un visage minuscule plafonne au `ZOOM_MAX` : le carré est plus grand que le
+ *   cadre, qui reste couvert.
+ * - Le recentrage de `borner()` ne découvre jamais le cadre : un segment au
+ *   moins aussi long que le cadre, centré sur lui puis poussé dans l'image, le
+ *   contient toujours.
+ *
+ * Un cadre vide ou inversé (bas ≤ haut, droite ≤ gauche) ne dit rien : on
+ * retombe sur `cadrageInitial()`, l'image centrée.
+ */
+export function cadrageDepuisCadre(cadre: CadreVisage, image: Dimensions, cote: number, marge = 0): Cadrage {
+  const haut = millieme(cadre.haut)
+  const bas = millieme(cadre.bas)
+  const gauche = millieme(cadre.gauche)
+  const droite = millieme(cadre.droite)
+  if (bas <= haut || droite <= gauche) return cadrageInitial(image, cote)
+
+  const largeur = ((droite - gauche) / 1000) * image.largeur
+  const hauteur = ((bas - haut) / 1000) * image.hauteur
+  const cx = ((gauche + droite) / 2000) * image.largeur
+  const cy = ((haut + bas) / 2000) * image.hauteur
+  const carre = Math.max(largeur, hauteur) * (1 + Math.max(0, marge))
+
+  // Côté du carré découpé au zoom z : min(L, H) / z (voir `zoneSource`).
+  const zoom = Math.min(ZOOM_MAX, Math.max(1, Math.min(image.largeur, image.hauteur) / carre))
+  const k = echelle(image, cote, zoom)
+  return borner({ zoom, x: cote / 2 - cx * k, y: cote / 2 - cy * k }, image, cote)
+}
+
+/** Le carré à découper pour un cadre de visage, en pixels de l'image — sans
+ *  scène : c'est l'aperçu de la relecture et le fichier envoyé tant que le
+ *  membre n'a rien ajusté. */
+export function zoneDepuisCadre(cadre: CadreVisage, image: Dimensions): { x: number; y: number; cote: number } {
+  const COTE = 1000
+  return zoneSource(cadrageDepuisCadre(cadre, image, COTE), image, COTE)
+}
+
+/**
+ * L'inverse : le cadre (en millièmes) d'un carré découpé. Ce que l'on garde
+ * d'un ajustement — rouvrir le recadrage sur ce cadre retrouve le même carré,
+ * quelle que soit la taille de la scène.
+ */
+export function cadreDeZone(zone: { x: number; y: number; cote: number }, image: Dimensions): CadreVisage {
+  return {
+    haut: (zone.y / image.hauteur) * 1000,
+    gauche: (zone.x / image.largeur) * 1000,
+    bas: ((zone.y + zone.cote) / image.hauteur) * 1000,
+    droite: ((zone.x + zone.cote) / image.largeur) * 1000,
+  }
+}

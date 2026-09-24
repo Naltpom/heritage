@@ -24,7 +24,10 @@ use App\Module\Core\ValueObject\UncertainDate;
  * 3. `Proposal` complète chaque corps (verrous lus en base) et le **valide sans rien
  *    écrire** — un corps refusé est retiré, avec un avertissement, jamais rendu cassé ;
  * 4. les corps complets sont gardés côté serveur ({@see MemoireDesAnalyses}) ;
- * 5. la réponse est composée **à travers le cercle du lecteur** ({@see VueDuLecteur}).
+ * 5. la réponse est composée **à travers le cercle du lecteur** ({@see VueDuLecteur}) ;
+ * 6. les portraits repérés ne sont rendus que s'ils visent une fiche qui existe, ou un
+ *    brouillon d'une demande de création **gardée** à l'étape 3 — les autres deviennent
+ *    des avertissements.
  *
  * ── La règle de confidentialité de la réponse, point par point ──────────────────
  *
@@ -55,18 +58,20 @@ final readonly class AnalyseParLAssistant
     }
 
     /**
-     * @return array{analyseId: string, resume: string, demandes: list<array<string, mixed>>, avertissements: list<string>, restant: int}
+     * @return array{analyseId: string, resume: string, demandes: list<array<string, mixed>>, portraits: list<array<string, mixed>>, avertissements: list<string>, restant: int}
      */
     public function analyser(EntreeDAnalyse $entree, int $userId, int $restant): array
     {
         $resultat = $this->agent->analyser($entree);
-        $traduites = $this->traducteur->traduire($resultat->arguments);
+        $traduites = $this->traducteur->traduire($resultat->arguments, $entree->documents);
 
         $avertissements = $traduites->avertissements;
         $gardees = [];
         $rendues = [];
+        /** @var array<int, string> $cles rang de la proposition traduite → `cle` de la demande gardée */
+        $cles = [];
 
-        foreach ($traduites->propositions as $proposition) {
+        foreach ($traduites->propositions as $rang => $proposition) {
             try {
                 $verifiee = $this->depot->preparer($proposition->corps);
             } catch (DemandeIrrecevable $e) {
@@ -76,6 +81,7 @@ final readonly class AnalyseParLAssistant
             }
 
             $cle = 'd'.(\count($gardees) + 1);
+            $cles[$rang] = $cle;
             $gardees[$cle] = [
                 'corps' => $verifiee->corps,
                 'titre' => $proposition->titre,
@@ -84,17 +90,80 @@ final readonly class AnalyseParLAssistant
             $rendues[] = $this->presenter($cle, $proposition, $verifiee);
         }
 
+        $portraits = [];
+
+        foreach ($traduites->portraits as $portrait) {
+            try {
+                $portraits[] = $this->portrait('r'.(\count($portraits) + 1), $portrait, $cles);
+            } catch (\UnexpectedValueException $e) {
+                $avertissements[] = \sprintf('Un portrait proposé (document %d) a été écarté : %s', $portrait->document + 1, $e->getMessage());
+            }
+        }
+
         $analyseId = $this->memoire->garder($userId, $gardees);
 
-        $this->consignerLAppel($entree, $resultat, \count($traduites->propositions), \count($rendues));
+        $this->consignerLAppel($entree, $resultat, \count($traduites->propositions), \count($rendues), \count($portraits));
 
         return [
             'analyseId' => $analyseId,
             'resume' => '' === $traduites->resume ? 'L’assistant n’a pas rédigé de résumé.' : $traduites->resume,
             'demandes' => $rendues,
+            'portraits' => $portraits,
             'avertissements' => array_values($avertissements),
             'restant' => $restant,
         ];
+    }
+
+    /**
+     * Un portrait, tel que le front le reçoit — ou une `\UnexpectedValueException` qui dit
+     * pourquoi il est écarté.
+     *
+     * - fiche existante : `personId` + `personne`, décrite **par le cercle du lecteur**
+     *   (mêmes règles que `personnes[]` : restreinte ⇒ le nom, sans dates) ;
+     * - brouillon : `demandeCle` (la demande de création **gardée**) + `brouillonRef`
+     *   sans dièse (`p1`), que le front passe tel quel au téléversement.
+     *
+     * Le portrait n'est pas gardé côté serveur : le front a les fichiers, les recadre et
+     * les téléverse par `POST /api/medias`, où ils attendent la validation comme tout
+     * média déposé pour autrui.
+     *
+     * @param array<int, string> $cles
+     *
+     * @return array<string, mixed>
+     */
+    private function portrait(string $cle, PortraitTraduit $portrait, array $cles): array
+    {
+        $rendu = [
+            'cle' => $cle,
+            'document' => $portrait->document,
+            'cadre' => $portrait->cadre,
+            'justification' => $portrait->justification,
+            'personId' => null,
+            'personne' => null,
+            'demandeCle' => null,
+            'brouillonRef' => null,
+        ];
+
+        if (null !== $portrait->personId) {
+            $personne = $this->arbre->personne($portrait->personId)
+                ?? throw new \UnexpectedValueException('la personne qu’il désigne n’existe pas dans l’arbre.');
+
+            $rendu['personId'] = $personne->id;
+            $rendu['personne'] = $this->vue->personneCitee($personne);
+
+            return $rendu;
+        }
+
+        $demandeCle = null === $portrait->proposition ? null : ($cles[$portrait->proposition] ?? null);
+
+        if (null === $demandeCle || null === $portrait->brouillonRef) {
+            throw new \UnexpectedValueException('la demande qui crée la personne visée a été écartée.');
+        }
+
+        $rendu['demandeCle'] = $demandeCle;
+        $rendu['brouillonRef'] = ltrim($portrait->brouillonRef, '#');
+
+        return $rendu;
     }
 
     /**
@@ -330,7 +399,7 @@ final readonly class AnalyseParLAssistant
      * ligne, « combien de documents sont partis chez le tiers ce mois-ci » n'aurait pas
      * de réponse.
      */
-    private function consignerLAppel(EntreeDAnalyse $entree, ResultatDeLAgent $resultat, int $proposees, int $rendues): void
+    private function consignerLAppel(EntreeDAnalyse $entree, ResultatDeLAgent $resultat, int $proposees, int $rendues, int $portraits): void
     {
         $this->audit->enregistrer(
             AuditAction::AppelModeleDeLangage,
@@ -344,6 +413,7 @@ final readonly class AnalyseParLAssistant
                 'appels_d_outils' => $resultat->appelsDOutils,
                 'demandes_proposees' => $proposees,
                 'demandes_rendues' => $rendues,
+                'portraits_rendus' => $portraits,
             ],
         );
     }

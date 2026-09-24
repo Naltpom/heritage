@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Assistant;
 
+use App\Module\Assistant\Service\DocumentJoint;
 use App\Module\Assistant\Service\TraducteurDePropositions;
 use PHPUnit\Framework\TestCase;
 
@@ -159,5 +160,140 @@ final class TraducteurDePropositionsTest extends TestCase
         self::assertStringContainsString('« Sans cible » a été écartée', $traduites->avertissements[2]);
         self::assertStringContainsString('introuvable', $traduites->avertissements[3], 'Une extrémité qui n’est ni #p ni un identifiant n’est pas devinée.');
         self::assertStringContainsString('nature inconnue', $traduites->avertissements[4]);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  Les portraits
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    public function testUnPortraitDUnePersonneExistanteGardeSonCadreEtPasseEnRang0(): void
+    {
+        $traduites = (new TraducteurDePropositions())->traduire([
+            'resume' => 'Une photo de Marne.',
+            'demandes' => [],
+            'portraits' => [[
+                'document' => 2.0,
+                'personne' => '17',
+                'cadre' => ['haut' => 120, 'gauche' => 340.0, 'bas' => '520', 'droite' => 660],
+                'justification' => ' Photo légendée « Marne, 1950 », document 2. ',
+            ]],
+        ], self::documents());
+
+        self::assertSame([], $traduites->avertissements);
+        self::assertCount(1, $traduites->portraits);
+
+        $portrait = $traduites->portraits[0];
+        self::assertSame(1, $portrait->document, '« Document 2 » pour le modèle, rang 1 dans `fichiers[]`.');
+        self::assertSame(['haut' => 120, 'gauche' => 340, 'bas' => 520, 'droite' => 660], $portrait->cadre);
+        self::assertSame(17, $portrait->personId);
+        self::assertNull($portrait->proposition);
+        self::assertNull($portrait->brouillonRef);
+        self::assertSame('Photo légendée « Marne, 1950 », document 2.', $portrait->justification);
+    }
+
+    public function testUnPortraitPeutViserLeBrouillonDUneCreationDeLaMemeReponse(): void
+    {
+        $traduites = (new TraducteurDePropositions())->traduire([
+            'resume' => 'x',
+            'demandes' => [
+                ['nature' => 'modification_personne', 'titre' => 'Surnom', 'personId' => 17, 'changements' => [['champ' => 'nickname', 'texte' => 'Mimi']]],
+                self::creation('Ajouter Paul', 'P1'),
+                self::creation('Ajouter Jeanne', '#p2'),
+            ],
+            'portraits' => [
+                // Désigné par la demande : la 2e (rang 1-based), référence « p1 » du modèle.
+                ['document' => 1, 'personne' => '#p1', 'demande' => 2, 'cadre' => self::cadre(), 'justification' => 'Paul.'],
+                // Sans demande : la seule création qui porte « #p2 » l'emporte — et c'est
+                // son premier brouillon, donc « #p1 » canonique.
+                ['document' => 1, 'personne' => 'P2', 'cadre' => self::cadre(), 'justification' => 'Jeanne.'],
+            ],
+        ], self::documents());
+
+        self::assertSame([], $traduites->avertissements);
+        self::assertCount(2, $traduites->portraits);
+
+        self::assertNull($traduites->portraits[0]->personId);
+        self::assertSame(1, $traduites->portraits[0]->proposition, 'Le rang de la proposition traduite, pas celui de la demande brute.');
+        self::assertSame('#p1', $traduites->portraits[0]->brouillonRef);
+
+        self::assertSame(2, $traduites->portraits[1]->proposition);
+        self::assertSame('#p1', $traduites->portraits[1]->brouillonRef, 'La référence canonique du corps, pas celle du modèle.');
+    }
+
+    public function testUnPortraitInvalideEstEcarteEtDit(): void
+    {
+        $traduites = (new TraducteurDePropositions())->traduire([
+            'resume' => 'x',
+            'demandes' => [
+                // Écartée à la traduction : son lien ne désigne personne.
+                ['nature' => 'creation_personne', 'titre' => 'Ajouter Paul', 'personnes' => [['ref' => '#p1', 'prenoms' => 'Paul']], 'liens' => [['nature' => 'enfant_de', 'sujet' => '#p1', 'autre' => 'le père']]],
+                self::creation('Ajouter Jeanne', '#p1'),
+                self::creation('Ajouter Luc', '#p1'),
+            ],
+            'portraits' => [
+                ['document' => 1, 'personne' => '#p1', 'demande' => 1, 'cadre' => self::cadre(), 'justification' => 'Brouillon d’une création écartée.'],
+                ['document' => 1, 'personne' => '#p1', 'cadre' => self::cadre(), 'justification' => 'Deux créations portent #p1 : ambigu.'],
+                ['document' => 3, 'personne' => 17, 'cadre' => self::cadre(), 'justification' => 'Un PDF.'],
+                ['document' => 4, 'personne' => 17, 'cadre' => self::cadre(), 'justification' => 'Pas de document 4.'],
+                ['document' => 1, 'personne' => 17, 'cadre' => ['haut' => 500, 'gauche' => 100, 'bas' => 500, 'droite' => 300], 'justification' => 'Cadre vide.'],
+                ['document' => 1, 'personne' => 17, 'cadre' => ['haut' => 0, 'gauche' => 100, 'bas' => 1200, 'droite' => 300], 'justification' => 'Cadre hors repère.'],
+                ['document' => 1, 'personne' => 17, 'cadre' => ['haut' => 0, 'gauche' => 100, 'bas' => 300], 'justification' => 'Cadre incomplet.'],
+                ['document' => 1, 'personne' => 'la mariée', 'cadre' => self::cadre(), 'justification' => 'Personne non désignée.'],
+                ['document' => 1, 'personne' => 17, 'cadre' => self::cadre(), 'justification' => 'Le bon.'],
+                ['document' => 2, 'personne' => 17.0, 'cadre' => self::cadre(), 'justification' => 'Un second pour la même personne.'],
+            ],
+        ], self::documents());
+
+        self::assertCount(1, $traduites->portraits, 'Seul « Le bon » passe.');
+        self::assertSame('Le bon.', $traduites->portraits[0]->justification);
+
+        $portraits = \array_slice($traduites->avertissements, 1);
+        self::assertCount(9, $portraits);
+        self::assertStringContainsString('aucune demande retenue', $portraits[0]);
+        self::assertStringContainsString('plusieurs demandes', $portraits[1]);
+        self::assertStringContainsString('(document 3) a été écarté : un portrait ne se tire que d’une photo, jamais d’un PDF', $portraits[2]);
+        self::assertStringContainsString('aucun document joint', $portraits[3]);
+        self::assertStringContainsString('cadre est vide', $portraits[4]);
+        self::assertStringContainsString('sort de l’image', $portraits[5]);
+        self::assertStringContainsString('incomplet', $portraits[6]);
+        self::assertStringContainsString('aucune personne', $portraits[7]);
+        self::assertStringContainsString('un seul portrait par personne', $portraits[8]);
+    }
+
+    public function testSansPortraitsLaListeEstVide(): void
+    {
+        $traduites = (new TraducteurDePropositions())->traduire(['resume' => 'x', 'demandes' => []]);
+
+        self::assertSame([], $traduites->portraits);
+    }
+
+    /**
+     * Deux photos puis un PDF — dans l'ordre de `fichiers[]`.
+     *
+     * @return list<DocumentJoint>
+     */
+    private static function documents(): array
+    {
+        return [
+            new DocumentJoint('image/jpeg', "\xFF\xD8\xFF", 'mariage.jpg'),
+            new DocumentJoint('image/png', "\x89PNG", 'portrait.png'),
+            new DocumentJoint('application/pdf', '%PDF-', 'acte.pdf'),
+        ];
+    }
+
+    /** @return array{haut: int, gauche: int, bas: int, droite: int} */
+    private static function cadre(): array
+    {
+        return ['haut' => 100, 'gauche' => 200, 'bas' => 400, 'droite' => 500];
+    }
+
+    /** @return array<string, mixed> */
+    private static function creation(string $titre, string $reference): array
+    {
+        return [
+            'nature' => 'creation_personne', 'titre' => $titre, 'justification' => 'Photo.', 'confiance' => 'moyenne',
+            'personnes' => [['ref' => $reference, 'prenoms' => 'X']],
+            'liens' => [['nature' => 'enfant_de', 'sujet' => $reference, 'autre' => '17']],
+        ];
     }
 }

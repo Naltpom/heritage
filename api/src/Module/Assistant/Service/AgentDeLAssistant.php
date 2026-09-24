@@ -315,5 +315,22 @@ final readonly class AgentDeLAssistant
           témoignage précis ou un document partiellement lisible, faible sinon.
         - S’il n’y a rien à proposer, appelle « proposer » avec une liste vide et explique
           pourquoi dans « resume ».
+
+        Portraits (« portraits » de « proposer », facultatif) :
+        - Si une PHOTO jointe (jamais un PDF) montre nettement le visage d’une personne que
+          tu identifies avec une confiance raisonnable — par une légende, le texte du membre,
+          le contexte du document —, propose-le comme portrait de cette personne : une
+          personne de l’arbre (son identifiant, « 12 ») ou une personne nouvelle de cet appel
+          (« #p1 », avec « demande » = le rang, 1 pour la première, de sa demande
+          creation_personne).
+        - Seulement un visage net et identifiable : pas de visage flou, minuscule, de dos ou
+          caché, pas de devinette parmi plusieurs personnes. Dans le doute, abstiens-toi.
+        - Au plus un portrait par personne (le meilleur visage).
+        - « cadre » est la boîte du visage au format de tes boîtes de détection
+          [ymin, xmin, ymax, xmax], normalisée sur 0–1000 dans le repère de l’image :
+          haut = ymin, gauche = xmin, bas = ymax, droite = xmax (0,0 en haut à gauche).
+          Englobe toute la tête avec une marge : cheveux, menton et haut des épaules compris.
+        - « justification » dit d’où vient l’identification (document, légende, texte du
+          membre), jamais une donnée de l’arbre.
         TEXTE;
 }
