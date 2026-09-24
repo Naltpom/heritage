@@ -115,9 +115,16 @@ export interface OpDemande {
    *  `birth`, jamais `birthMin` — un bloc date est un seul op, jamais cinq. */
   field: string
   valueKind: string
-  oldValue: ValeurOp
+  /**
+   * **Absente** — pas `null` — quand la fiche visée est une personne vivante hors
+   * du cercle de l'auteur (demande déposée par l'assistant, qui peut viser tout
+   * l'arbre) : la valeur d'avant ne lui est pas communiquée. `null` veut dire
+   * « inconnue », l'absence veut dire « masquée » (§ 1.3).
+   */
+  oldValue?: ValeurOp
   newValue: ValeurOp
-  baseVersion: number | null
+  /** Absente dans le même cas que `oldValue`. */
+  baseVersion?: number | null
   /** § 6.7 — administration seulement. Absent ailleurs. */
   valeurCourante?: ValeurOp
   /** § 6.7 — administration seulement. La valeur a-t-elle bougé depuis le dépôt ? */

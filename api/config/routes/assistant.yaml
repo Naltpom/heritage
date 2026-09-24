@@ -1,0 +1,11 @@
+# Contrat : ce fichier est celui du module Assistant (« Proposer avec l'assistant »).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# Les routes se déclarent par attributs #[Route] dans les contrôleurs du module ;
+# l'import ci-dessous suffit à les charger.
+
+assistant_controleurs:
+    resource:
+        path: ../../src/Module/Assistant/Controller/
+        namespace: App\Module\Assistant\Controller
+    type: attribute

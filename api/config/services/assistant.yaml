@@ -1,0 +1,89 @@
+# Contrat : ce fichier est celui du module Assistant (« Proposer avec l'assistant » :
+# analyse de documents par Gemini, demandes prêtes à déposer).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services/_autoload.yaml couvre déjà toutes les classes
+# de src/Module/Assistant/. On ne déclare ici que ce que le conteneur ne peut pas
+# deviner : les **alias d'interface** (les trois ports que d'autres modules implémentent,
+# et le transport du modèle) et le **limiteur** — un service à identifiant propre.
+#
+# Même piège d'ordre de chargement que `almanach.yaml` et `proposal.yaml` : une
+# définition de service CONCRET posée ici serait écrasée en silence par le prototype
+# `App\:`. Rien de tel dans ce fichier ; tout ce qui configure une classe de
+# `src/Module/Assistant/` est en attribut, dans la classe.
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    # ── Les trois ports de l'assistant ─────────────────────────────────────────────
+    #
+    # Déclarés dans `src/Module/Assistant/Contract/`, implémentés chez leur propriétaire :
+    # l'assistant n'a le droit de citer aucune classe d'un autre module hors `Contract\`
+    # (règle 3 de l'ADR 0002, `tests/Frontieres`).
+
+    # ⇢ `Tree` : lire l'arbre ENTIER, vivants hors cercle compris (décision du
+    #    commanditaire). La confidentialité est tenue à la sortie, par
+    #    `Assistant\Service\VueDuLecteur`.
+    App\Module\Assistant\Contract\ArbrePourLAssistant:
+        alias: App\Module\Tree\Service\VueDeLArbrePourLAssistant
+
+    # ⇢ `Proposal` : compléter (verrous lus en base), valider sans écrire, déposer.
+    App\Module\Assistant\Contract\DepotPourLAssistant:
+        alias: App\Module\Proposal\Service\DemandesDeLAssistant
+
+    # ⇢ `Question` : la clé et le point d'accès de Gemini, lus à un seul endroit.
+    App\Module\Assistant\Contract\AccesAuModele:
+        alias: App\Module\Question\Service\AccesAuModelePourLAssistant
+
+    # ── Le transport du modèle ─────────────────────────────────────────────────────
+    App\Module\Assistant\Service\TransportDuModele:
+        alias: App\Module\Assistant\Service\TransportGemini
+
+    # ── Le quota : 20 analyses par 24 heures glissantes et par compte ──────────────
+    #
+    # Sur le modèle exact de `media.limiteur_televersement` (config/services/media.yaml) :
+    # fenêtre GLISSANTE — une fenêtre fixe autoriserait 40 analyses à cheval sur minuit —,
+    # compteur dans le cache applicatif, sans Redis ni table. Contrairement aux
+    # téléversements, **l'administrateur est compté** : chaque analyse est un appel
+    # payant chez un tiers (voir `AssistantController::analyser()`).
+    assistant.stockage_limiteur:
+        class: Symfony\Component\RateLimiter\Storage\CacheStorage
+        arguments: ['@cache.app']
+
+    assistant.limiteur_analyses:
+        class: Symfony\Component\RateLimiter\RateLimiterFactory
+        arguments:
+            -   id: 'assistant_analyses'
+                policy: 'sliding_window'
+                limit: 20
+                interval: '24 hours'
+            - '@assistant.stockage_limiteur'
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EN TEST : un modèle SCRIPTÉ et une clé simulée, rien d'autre.
+#
+# Le transport est remplacé par `ModeleScripte`, qui rejoue une suite de réponses
+# Gemini écrite par le test (il cherche, puis lit une fiche, puis propose) et garde les
+# requêtes reçues. La clé est remplacée par `AccesAuModeleSimule`, qu'un test peut
+# « retirer » pour éprouver le `503`. Tout le reste — l'arbre, le dépôt, le cercle, le
+# limiteur — est celui de la production : c'est ce que les tests HTTP veulent voir.
+# ═══════════════════════════════════════════════════════════════════════════════
+when@test:
+    services:
+        _defaults:
+            autowire: true
+            autoconfigure: true
+            public: true
+
+        App\Tests\Assistant\Double\ModeleScripte: ~
+        App\Tests\Assistant\Double\AccesAuModeleSimule: ~
+
+        App\Module\Assistant\Service\TransportDuModele:
+            alias: App\Tests\Assistant\Double\ModeleScripte
+            public: true
+
+        App\Module\Assistant\Contract\AccesAuModele:
+            alias: App\Tests\Assistant\Double\AccesAuModeleSimule
+            public: true

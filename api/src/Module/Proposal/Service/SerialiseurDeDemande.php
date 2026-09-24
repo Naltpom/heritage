@@ -50,6 +50,7 @@ final readonly class SerialiseurDeDemande
         private NormaliseurDeValeur $normaliseur,
         private AnalyseDeDemande $analyse,
         private PortMedias $medias,
+        private ValeursMasquees $masques,
     ) {
     }
 
@@ -294,7 +295,7 @@ final readonly class SerialiseurDeDemande
         $rendus = [];
 
         foreach ($this->ops->pourDemande($demande) as $op) {
-            $rendus[] = [
+            $rendu = [
                 'seq' => $op->getSeq(),
                 'opKind' => $op->getOpKind()->value,
                 'subjectKind' => $op->getSubjectKind()->value,
@@ -306,6 +307,17 @@ final readonly class SerialiseurDeDemande
                 'newValue' => $this->normaliseur->pourAffichage($op->getValueKind(), $op->getNewValue()),
                 'baseVersion' => $op->getBaseVersion(),
             ];
+
+            // Une demande déposée par l'assistant peut viser un vivant hors du cercle de
+            // son auteur : la valeur d'avant, lue en base, ne lui est pas rendue. Clés
+            // **omises**, jamais mises à `null` — `null` est une valeur de champ, et
+            // l'écran la lirait « vide » (§ 1.3). La vue d'administration, qui remplace
+            // ces ops par `opAvecEtat()`, n'est pas concernée : l'administrateur voit tout.
+            if ($this->masques->masquee($op->getSubjectKind(), $op->getSubjectId())) {
+                unset($rendu['oldValue'], $rendu['baseVersion']);
+            }
+
+            $rendus[] = $rendu;
         }
 
         return $rendus;

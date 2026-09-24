@@ -11,6 +11,7 @@ use App\Module\Proposal\Enum\RequestStatus;
 use App\Module\Proposal\Exception\AccesRefuse;
 use App\Module\Proposal\Exception\Conflit;
 use App\Module\Proposal\Exception\DonneesInvalides;
+use App\Module\Proposal\Exception\ErreurDeDemande;
 use App\Module\Proposal\Service\Port\NotificateurDeDemandes;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
@@ -82,6 +83,61 @@ final readonly class DepotDeDemande
         }
 
         return $demande;
+    }
+
+    /**
+     * **Le dépôt à blanc** : le corps passerait-il {@see deposer()} avec `soumettre: true` ?
+     *
+     * Écrit pour l'assistant de proposition, qui doit rendre au membre des demandes
+     * « prêtes à déposer » et s'est engagé à ne jamais en rendre une cassée. Il ne
+     * recopie **aucune** règle : ce sont les mêmes constructeurs, le même contrôle de
+     * nature, le même contrôle de complétude à la soumission. Une seconde liste de
+     * contrôles, tenue à côté, divergerait de la première à la prochaine livraison — et
+     * l'écart ne se verrait qu'au clic du membre, sous forme d'une `422` sur une demande
+     * qu'on lui avait présentée comme valide.
+     *
+     * ── Pourquoi on détache au lieu de ne pas persister ─────────────────────────────
+     *
+     * Les constructeurs appellent `persist()` sur les ops et les brouillons qu'ils
+     * construisent : c'est leur contrat, et le contrôle « au moins un lien » du
+     * constructeur de création lit justement l'unité de travail pour compter ce qui est
+     * en attente d'insertion. On les laisse donc faire, puis **on détache tout ce qui est
+     * entré dans l'unité de travail pendant l'appel**, qu'il ait réussi ou non. Sans ce
+     * ménage, le premier `flush()` suivant de la même requête — celui du journal d'audit,
+     * par exemple — écrirait en base une demande fantôme que personne n'a déposée.
+     *
+     * La demande elle-même n'est jamais persistée : elle ne sert que de porteur.
+     *
+     * @param array<string, mixed> $corps
+     *
+     * @throws ErreurDeDemande exactement celles que le dépôt lèverait
+     */
+    public function verifierSansEcrire(array $corps, Lecteur $lecteur): void
+    {
+        $this->verifierQuIlPeutEcrire($lecteur);
+
+        $kind = $this->nature($corps);
+        $constructeur = $this->constructeurPour($kind);
+
+        $demande = new ChangeRequest($kind, $lecteur->userId, $lecteur->libelle);
+        $demande->setMessage($this->message($corps));
+
+        $unite = $this->em->getUnitOfWork();
+        $deja = [];
+        foreach ($unite->getScheduledEntityInsertions() as $entite) {
+            $deja[spl_object_id($entite)] = true;
+        }
+
+        try {
+            $constructeur->construire($demande, $corps, $lecteur);
+            $constructeur->verifierAvantSoumission($demande);
+        } finally {
+            foreach ($unite->getScheduledEntityInsertions() as $entite) {
+                if (!isset($deja[spl_object_id($entite)])) {
+                    $this->em->detach($entite);
+                }
+            }
+        }
     }
 
     /**

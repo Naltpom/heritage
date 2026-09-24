@@ -51,3 +51,7 @@ export * from './questions'
 /* Modules `Core` et `Membership`, côté administrateur : invitations,
    utilisateurs, bascule « voir comme un membre » (§ 3, § 10). */
 export * from './administration'
+/* L'assistant de proposition : une analyse (texte + documents) rend des demandes
+   prêtes à déposer ; le dépôt passe par l'analyse gardée côté serveur, jamais
+   par `creerDemande()` — voir l'en-tête du module. */
+export * from './assistant'

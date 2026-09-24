@@ -515,3 +515,13 @@ describe('le nom d’usage porte un seul nom à l’écran', () => {
     expect(libelleDeChamp('marriedName')).toBe('Nom d’usage')
   })
 })
+
+describe('valeur d’avant masquée', () => {
+  it('dit « (valeur masquée) » quand `oldValue` est absente, et garde le tiret pour `null`', async () => {
+    const { ligneDeDiff } = await import('./diff')
+    const base = { seq: 1, opKind: 'champ', subjectKind: 'personne' as const, subjectId: 3, field: 'surname', valueKind: 'texte', newValue: 'Dupont' }
+    expect(ligneDeDiff(base).ancienne).toBe('(valeur masquée)')
+    expect(ligneDeDiff({ ...base, oldValue: null }).ancienne).not.toBe('(valeur masquée)')
+  })
+})
+

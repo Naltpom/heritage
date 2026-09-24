@@ -9,7 +9,11 @@
  *    second lien du bandeau desktop descend ici plutôt que de disparaître ;
  * 2. « Ajouter un document » — ouvre l'onglet Preuves et documents, où vit le
  *    formulaire de dépôt de la galerie ;
- * 3. **un filet**, puis « Demander la suppression », en couleur d'alerte
+ * 3. « Proposer avec l'assistant » — ouvre « Proposer » en mode assistant, avec
+ *    cette fiche pour contexte (`?mode=assistant&personne=`). Même condition que
+ *    les autres propositions (`peutProposer`) : l'analyse est une écriture pour
+ *    l'API, refusée sous la bascule comme pour un compte en attente ;
+ * 4. **un filet**, puis « Demander la suppression », en couleur d'alerte
  *    (`PointSuppression.vue`). Jamais dans le même bloc que « Proposer une
  *    modification » : ce sont deux gestes, dont un seul détruit.
  *
@@ -44,7 +48,7 @@ const {
 const { peutProposer, peutDeposer, peutDemanderSuppression } = useGestesFiche()
 
 const aDesEntrees = computed(
-  () => (avecLiens && peutProposer.value) || peutDeposer.value || peutDemanderSuppression.value,
+  () => peutProposer.value || peutDeposer.value || peutDemanderSuppression.value,
 )
 
 const ouvert = ref(false)
@@ -126,6 +130,18 @@ onBeforeUnmount(() => {
         class="flex min-h-11 items-center px-3.5 text-sm hover:bg-accent-doux md:min-h-10"
       >
         Ajouter un document
+      </RouterLink>
+
+      <RouterLink
+        v-if="peutProposer"
+        :to="{
+          name: 'proposition.creation',
+          query: { mode: 'assistant', personne: fiche.id },
+        }"
+        role="menuitem"
+        class="flex min-h-11 items-center px-3.5 text-sm hover:bg-accent-doux md:min-h-10"
+      >
+        Proposer avec l’assistant
       </RouterLink>
 
       <!-- Le filet est porté par `PointSuppression` : il n'existe que si la

@@ -236,7 +236,9 @@ export function ligneDeDiff(op: OpDemande): LigneDiff {
     seq: op.seq,
     field: op.field,
     libelle,
-    ancienne: formaterValeur(op.oldValue),
+    // Absente (et non `null`) : la valeur d'avant est MASQUÉE à l'auteur — une
+    // demande de l'assistant sur une personne hors de son cercle (§ 1.3).
+    ancienne: 'oldValue' in op ? formaterValeur(op.oldValue) : '(valeur masquée)',
     proposee: formaterValeur(op.newValue),
     // `'valeurCourante' in op` et non `op.valeurCourante !== undefined` : la
     // distinction absent / null porte une règle, ici comme ailleurs (§ 1.3).
