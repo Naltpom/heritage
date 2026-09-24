@@ -418,6 +418,11 @@ services:
       # Le chemin correspond au `mkdir -p var uploads` du Dockerfile, relatif au
       # WORKDIR /app, et au défaut `app.media.racine_par_defaut` du module Media.
       - televersements:/app/uploads
+      # Les SESSIONS, hors du conteneur. Elles vivaient dans son système de
+      # fichiers : chaque mise en production recrée le conteneur, et toute la
+      # famille devait se reconnecter après chaque déploiement. Le chemin est
+      # celui de `framework.session.save_path` (`var/sessions/<env>`).
+      - sessions:/app/var/sessions
       # Atelier généalogique, pour l'import du GEDCOM réel. Décommenter et
       # ajuster le chemin de gauche selon la machine, puis poser
       # `GEDCOM_FILE=/atelier/arbre-romarin-v5.ged` dans le .env.
@@ -486,3 +491,4 @@ services:
 volumes:
   base-de-donnees:
   televersements:
+  sessions:

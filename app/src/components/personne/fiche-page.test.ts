@@ -301,3 +301,27 @@ describe('CarteRestreinte — ni onglets, ni barre d’action', () => {
     expect(html).not.toContain('votre cercle')
   })
 })
+
+describe('le glissement entre onglets (téléphone)', () => {
+  it('ne prend qu’un geste franc et horizontal', async () => {
+    const { sensDuGlissement } = await import('./onglets')
+    expect(sensDuGlissement(-80, 10)).toBe(1)
+    expect(sensDuGlissement(90, -20)).toBe(-1)
+    expect(sensDuGlissement(-40, 0)).toBe(0)
+    // Un défilement vertical un peu de biais ne change pas d'onglet.
+    expect(sensDuGlissement(-70, 60)).toBe(0)
+  })
+
+  it('passe à l’onglet voisin, sans boucler aux extrémités', async () => {
+    const { ongletVoisin } = await import('./onglets')
+    const rangee = [
+      { cle: 'identite' as const, libelle: '', libelleCourt: '', compte: null },
+      { cle: 'famille' as const, libelle: '', libelleCourt: '', compte: null },
+      { cle: 'sources' as const, libelle: '', libelleCourt: '', compte: 0 },
+    ]
+    expect(ongletVoisin(rangee, 'identite', 1)).toBe('famille')
+    expect(ongletVoisin(rangee, 'famille', -1)).toBe('identite')
+    expect(ongletVoisin(rangee, 'identite', -1)).toBeNull()
+    expect(ongletVoisin(rangee, 'sources', 1)).toBeNull()
+  })
+})

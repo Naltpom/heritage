@@ -79,6 +79,27 @@ export function ongletDepuisRequete(valeur: unknown, fiche: FichePersonneComplet
   return onglet
 }
 
+/**
+ * Le glissement du doigt sur la fiche (téléphone) : `1` vers l'onglet suivant
+ * (doigt vers la gauche), `-1` vers le précédent, `0` si ce n'est pas un
+ * glissement d'onglet. Il faut un geste franc — au moins 60 px, et nettement
+ * plus horizontal que vertical — pour ne jamais voler un défilement de la page.
+ */
+export function sensDuGlissement(dx: number, dy: number): -1 | 0 | 1 {
+  if (Math.abs(dx) < 60 || Math.abs(dx) < 1.5 * Math.abs(dy)) return 0
+  return dx < 0 ? 1 : -1
+}
+
+/** L'onglet voisin dans la rangée, ou `null` au bout (on ne boucle pas). */
+export function ongletVoisin(
+  onglets: readonly DescripteurOnglet[],
+  actif: OngletFiche,
+  sens: -1 | 1,
+): OngletFiche | null {
+  const i = onglets.findIndex((o) => o.cle === actif)
+  return onglets[i + sens]?.cle ?? null
+}
+
 /** La requête qui ouvre cet onglet. Identité, le défaut, n'a pas de clé. */
 export function requeteDOnglet(onglet: OngletFiche): Record<string, string> {
   return onglet === 'identite' ? {} : { onglet }
