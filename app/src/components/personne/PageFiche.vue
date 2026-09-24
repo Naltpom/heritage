@@ -43,7 +43,8 @@ import FaitsFiche from './FaitsFiche.vue'
 import { useGestesFiche } from './gestes'
 import IdentiteFiche from './IdentiteFiche.vue'
 import MenuFiche from './MenuFiche.vue'
-import { requeteDOnglet, type OngletFiche } from './onglets'
+import { ongletsDeFiche, ongletVoisin, requeteDOnglet, sensDuGlissement, type OngletFiche } from './onglets'
+import { useRouter } from 'vue-router'
 import ParenteFiche from './ParenteFiche.vue'
 import PointProposition from './PointProposition.vue'
 import SectionFiche from './SectionFiche.vue'
@@ -56,6 +57,28 @@ const { fiche, onglet, retourMemorise = false } = defineProps<{
 }>()
 
 const emit = defineEmits<{ agrandir: [cible: CibleLoupe] }>()
+
+/*
+ * Téléphone : glisser le doigt à gauche ou à droite sur le contenu passe à
+ * l'onglet voisin (Identité → Famille → Sources → Documents → Demandes). Même
+ * URL que le clic sur l'onglet ; `replace` pour ne pas remplir l'historique
+ * d'un aller-retour par geste.
+ */
+const routeur = useRouter()
+let depart: { x: number; y: number } | null = null
+function surToucheDebut(e: TouchEvent): void {
+  const t = e.touches[0]
+  depart = e.touches.length === 1 && t ? { x: t.clientX, y: t.clientY } : null
+}
+function surToucheFin(e: TouchEvent): void {
+  const t = e.changedTouches[0]
+  if (!depart || !t) return
+  const sens = sensDuGlissement(t.clientX - depart.x, t.clientY - depart.y)
+  depart = null
+  if (sens === 0) return
+  const cible = ongletVoisin(ongletsDeFiche(fiche), onglet, sens)
+  if (cible) void routeur.replace({ name: 'personne.detail', params: { id: fiche.id }, query: requeteDOnglet(cible) })
+}
 
 const { peutProposer, peutDeposer, peutDemanderSuppression } = useGestesFiche()
 
@@ -86,7 +109,11 @@ function pluriel(n: number, mot: string): string {
       <!-- ------------------------------------------------------- -->
       <!-- Colonne principale : l'onglet courant                    -->
       <!-- ------------------------------------------------------- -->
-      <div class="flex min-w-0 flex-col gap-3.5 max-md:gap-3">
+      <div
+        class="flex min-w-0 flex-col gap-3.5 max-md:gap-3"
+        @touchstart.passive="surToucheDebut"
+        @touchend.passive="surToucheFin"
+      >
         <!-- Mobile : les demandes en attente, au-dessus du contenu. -->
         <RouterLink
           v-if="demandes.length > 0 && onglet !== 'demandes'"

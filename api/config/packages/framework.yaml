@@ -57,7 +57,14 @@ framework:
     # La session n'est démarrée que si on la lit ou l'écrit.
     # Durcissement explicite du cookie : l'authentification est par session, le
     # cookie ne doit être lisible ni par JavaScript ni depuis un autre site.
+    #
+    # Les fichiers de session vont dans `var/sessions/<env>`, monté sur le volume
+    # `sessions` (compose.yaml) : un redéploiement recrée le conteneur sans
+    # déconnecter personne. Sans `save_path`, PHP les écrivait dans le système
+    # de fichiers du conteneur, perdu à chaque mise en production.
     session:
+        handler_id: session.handler.native_file
+        save_path: '%kernel.project_dir%/var/sessions/%kernel.environment%'
         cookie_secure: auto
         cookie_samesite: lax
         cookie_httponly: true

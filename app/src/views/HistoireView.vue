@@ -228,7 +228,14 @@ function allerAuPalier(i: number): void {
 /* Gestes : glisser, pincer, molette                                   */
 /* ------------------------------------------------------------------ */
 
-const pointeurs = new Map<number, { x: number; y: number }>()
+/** Un doigt : sa position dans le canevas (`x`, `y`) et à l'écran (`cx`, `cy`). */
+interface Pointeur {
+  x: number
+  y: number
+  cx: number
+  cy: number
+}
+const pointeurs = new Map<number, Pointeur>()
 let glisser: { x: number; y: number; tx: number; ty: number; bouge: boolean } | null = null
 let pincement: number | null = null
 let finDeGlisser = 0
@@ -254,23 +261,32 @@ function local(e: PointerEvent | WheelEvent): { x: number; y: number } {
 function surPointeurBas(e: PointerEvent): void {
   if (e.button !== 0 && e.pointerType === 'mouse') return
   arreterVol()
-  pointeurs.set(e.pointerId, local(e))
+  pointeurs.set(e.pointerId, { ...local(e), cx: e.clientX, cy: e.clientY })
   if (pointeurs.size === 1) glisser = { x: e.clientX, y: e.clientY, tx: cadrage.value.tx, ty: cadrage.value.ty, bouge: false }
   if (pointeurs.size === 2) {
-    const [a, b] = [...pointeurs.values()] as [{ x: number; y: number }, { x: number; y: number }]
+    const [a, b] = [...pointeurs.values()] as [Pointeur, Pointeur]
     pincement = Math.hypot(a.x - b.x, a.y - b.y)
+    // Le glissement à un doigt s'arrête : son point de départ date d'avant le zoom.
+    glisser = null
+    finDeGlisser = Date.now()
   }
 }
 
+/**
+ * Le cadrage le plus récent, y compris celui qui attend la prochaine image.
+ * C'est de lui qu'un geste doit repartir, jamais du dernier dessiné.
+ */
+const cadrageCourant = (): Cadrage => enAttente ?? cadrage.value
+
 function surPointeurDeplace(e: PointerEvent): void {
   if (!pointeurs.has(e.pointerId)) return
-  pointeurs.set(e.pointerId, local(e))
-  if (pointeurs.size === 2 && pincement) {
-    const [a, b] = [...pointeurs.values()] as [{ x: number; y: number }, { x: number; y: number }]
+  pointeurs.set(e.pointerId, { ...local(e), cx: e.clientX, cy: e.clientY })
+  if (pointeurs.size >= 2) {
+    if (!pincement) return
+    const [a, b] = [...pointeurs.values()] as [Pointeur, Pointeur]
     const d = Math.hypot(a.x - b.x, a.y - b.y)
-    planifier(zoomAutour(enAttente ?? cadrage.value, canevas.value, (a.x + b.x) / 2, (a.y + b.y) / 2, d / pincement))
+    planifier(zoomAutour(cadrageCourant(), canevas.value, (a.x + b.x) / 2, (a.y + b.y) / 2, d / pincement))
     pincement = d
-    if (glisser) glisser.bouge = true
     return
   }
   if (!glisser) return
@@ -280,12 +296,21 @@ function surPointeurDeplace(e: PointerEvent): void {
     glisser.bouge = true
     fenetre.value?.setPointerCapture(e.pointerId)
   }
-  if (glisser.bouge) planifier({ s: cadrage.value.s, tx: glisser.tx + dx, ty: glisser.ty + dy })
+  if (glisser.bouge) planifier({ s: cadrageCourant().s, tx: glisser.tx + dx, ty: glisser.ty + dy })
 }
 
 function surPointeurHaut(e: PointerEvent): void {
-  pointeurs.delete(e.pointerId)
+  if (!pointeurs.delete(e.pointerId)) return
   if (pointeurs.size < 2) pincement = null
+  if (pointeurs.size === 1) {
+    // Fin d'un pincement, un doigt reste posé : le glissement REPART d'ici, de ce
+    // doigt et du cadrage d'après le zoom. Reprendre l'ancien point de départ
+    // faisait sauter la vue loin de l'arbre.
+    const [reste] = [...pointeurs.values()] as [Pointeur]
+    const c = cadrageCourant()
+    glisser = { x: reste.cx, y: reste.cy, tx: c.tx, ty: c.ty, bouge: true }
+    finDeGlisser = Date.now()
+  }
   if (pointeurs.size === 0) {
     if (glisser?.bouge) finDeGlisser = Date.now()
     glisser = null
@@ -814,12 +839,16 @@ function surRedimension(): void {
   mesurer()
 }
 
+/** Safari (iPhone) zoome toute la page sur un pincement : le canevas s'en charge seul. */
+const bloquerZoomDePage = (e: Event): void => e.preventDefault()
+
 onMounted(() => {
   // Le choix d'un résultat de la recherche de l'en-tête : on vole vers la personne.
   desabonner = abonnerChoix(allerA)
   mesurer()
   window.addEventListener('resize', surRedimension)
   window.addEventListener('keydown', surToucheGlobale)
+  document.addEventListener('gesturestart', bloquerZoomDePage)
   const el = fenetre.value
   if (el) {
     // Non passif, pour pouvoir empêcher le défilement de la page.
@@ -837,6 +866,7 @@ onBeforeUnmount(() => {
   desabonner?.()
   window.removeEventListener('resize', surRedimension)
   window.removeEventListener('keydown', surToucheGlobale)
+  document.removeEventListener('gesturestart', bloquerZoomDePage)
   fenetre.value?.removeEventListener('wheel', surMolette)
   observateur?.disconnect()
   arreterVol()
