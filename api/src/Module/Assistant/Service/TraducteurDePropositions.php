@@ -32,11 +32,12 @@ namespace App\Module\Assistant\Service;
  * ── Les portraits ─────────────────────────────────────────────────────────────────
  *
  * `portraits` désigne un visage dans une photo jointe. Le traducteur vérifie ce qu'il
- * peut vérifier seul : le document existe **et c'est une image** (jamais un PDF), le
- * cadre est borné (0–1000) et non vide, la personne est un identifiant ou la référence
- * `#p<n>` d'un brouillon d'une demande de création **traduite** — sans ambiguïté. Un
- * portrait par personne au plus. Ce qui ne se vérifie qu'en base (la fiche existe, la
- * demande de création est gardée par le dépôt) est laissé à {@see AnalyseParLAssistant}.
+ * peut vérifier seul : le document existe **et c'est une image** (jamais un PDF ni un
+ * enregistrement), le cadre est borné (0–1000) et non vide, la personne est un
+ * identifiant ou la référence `#p<n>` d'un brouillon d'une demande de création
+ * **traduite** — sans ambiguïté. Un portrait par personne au plus. Ce qui ne se vérifie
+ * qu'en base (la fiche existe, la demande de création est gardée par le dépôt) est
+ * laissé à {@see AnalyseParLAssistant}.
  */
 final class TraducteurDePropositions
 {
@@ -201,7 +202,9 @@ final class TraducteurDePropositions
 
         // Le type est celui **reniflé** par le contrôleur, pas celui annoncé.
         if (!str_starts_with($document->typeMime, 'image/')) {
-            throw new \UnexpectedValueException('un portrait ne se tire que d’une photo, jamais d’un PDF.');
+            $source = str_starts_with($document->typeMime, 'audio/') ? 'd’un enregistrement' : 'd’un PDF';
+
+            throw new \UnexpectedValueException(\sprintf('un portrait ne se tire que d’une photo, jamais %s.', $source));
         }
 
         // ── Le cadre : dans le repère, et d'aire non nulle. Jamais « réparé ». ─────
@@ -467,13 +470,13 @@ final class TraducteurDePropositions
 
             $construit = ['seq' => \count($liens) + 1, 'kind' => $nature];
             $construit += $this->extremite($lien['sujet'] ?? null, $references, 'subjectPersonId', 'subjectDraftRef')
-                ?? throw new \UnexpectedValueException('un de ses liens désigne une personne introuvable.');
+                ?? throw self::introuvable($lien['sujet'] ?? null, 'un de ses liens désigne une personne introuvable.');
             $construit += $this->extremite($lien['autre'] ?? null, $references, 'otherPersonId', 'otherDraftRef')
-                ?? throw new \UnexpectedValueException('un de ses liens désigne une personne introuvable.');
+                ?? throw self::introuvable($lien['autre'] ?? null, 'un de ses liens désigne une personne introuvable.');
 
             if ('enfant_de' === $nature && null !== ($lien['autre2'] ?? null) && '' !== $lien['autre2']) {
                 $construit += $this->extremite($lien['autre2'], $references, 'other2PersonId', 'other2DraftRef')
-                    ?? throw new \UnexpectedValueException('le second parent d’un de ses liens est introuvable.');
+                    ?? throw self::introuvable($lien['autre2'], 'le second parent d’un de ses liens est introuvable.');
             }
 
             if ('conjoint_de' === $nature) {
@@ -523,6 +526,20 @@ final class TraducteurDePropositions
         $reference = $references[self::cleDeReference($valeur)] ?? null;
 
         return null === $reference ? null : [$cleBrouillon => $reference];
+    }
+
+    /**
+     * Le motif d'une extrémité introuvable. Une référence `#p<n>` que la demande ne décrit
+     * pas est presque toujours une personne nouvelle décrite dans **une autre** demande :
+     * le dire, c'est dire au membre pourquoi l'enfant ou le conjoint manque.
+     */
+    private static function introuvable(mixed $valeur, string $motif): \UnexpectedValueException
+    {
+        if (\is_string($valeur) && 1 === preg_match('/^p\d{1,3}$/', self::cleDeReference($valeur))) {
+            return new \UnexpectedValueException(\sprintf('un de ses liens vise la personne nouvelle « %s », qu’elle ne décrit pas — une personne nouvelle se décrit dans la même demande que ceux qui s’y rattachent.', trim($valeur)));
+        }
+
+        return new \UnexpectedValueException($motif);
     }
 
     /** « #p1 », « p1 », « #P1 » → « p1 ». */

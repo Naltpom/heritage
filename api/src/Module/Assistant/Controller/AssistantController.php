@@ -216,7 +216,7 @@ final class AssistantController extends AbstractController
             $type = self::typeRenifle($octets);
 
             if (null === $type) {
-                throw new ValidationException(['fichiers' => \sprintf('« %s » n’est ni une image (JPEG, PNG, WebP, HEIC) ni un PDF.', $nom)]);
+                throw new ValidationException(['fichiers' => \sprintf('« %s » n’est ni une image (JPEG, PNG, WebP, HEIC), ni un PDF, ni un enregistrement audio (M4A, MP3, WAV, Ogg, WebM, FLAC, AAC).', $nom)]);
             }
 
             $documents[] = new DocumentJoint($type, $octets, $nom);
@@ -232,18 +232,36 @@ final class AssistantController extends AbstractController
      *
      * HEIC s'ajoute ici parce que c'est le format natif des photos d'iPhone — « Prendre en
      * photo » un acte depuis un téléphone le produit — et que Gemini le lit.
+     *
+     * **L'audio est une source comme une autre** : un témoignage enregistré (la grand-mère
+     * qui raconte, un mémo vocal), que le modèle écoute comme il lit un acte. Les formats
+     * sont ceux qu'enregistrent les navigateurs (`MediaRecorder` : MP4/AAC sur Safari et
+     * Chrome récent, WebM ou Ogg/Opus ailleurs) et ceux des dictaphones et téléphones
+     * (M4A, MP3, WAV). Un MP4 **vidéo** passerait pour de l'audio : le modèle l'écoute
+     * quand même, et les 10 Mo en bornent la durée.
      */
     private static function typeRenifle(string $octets): ?string
     {
         $entete = substr($octets, 0, 16);
+        $marque = 'ftyp' === substr($entete, 4, 4) ? substr($entete, 8, 4) : null;
 
         return match (true) {
             str_starts_with($entete, "\xFF\xD8\xFF") => 'image/jpeg',
             str_starts_with($entete, "\x89PNG\r\n\x1A\n") => 'image/png',
             str_starts_with($entete, 'RIFF') && 'WEBP' === substr($entete, 8, 4) => 'image/webp',
             str_starts_with($entete, '%PDF-') => 'application/pdf',
-            'ftyp' === substr($entete, 4, 4) && \in_array(substr($entete, 8, 4), ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis'], true) => 'image/heic',
-            'ftyp' === substr($entete, 4, 4) && \in_array(substr($entete, 8, 4), ['mif1', 'msf1', 'heif'], true) => 'image/heif',
+            \in_array($marque, ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis'], true) => 'image/heic',
+            \in_array($marque, ['mif1', 'msf1', 'heif'], true) => 'image/heif',
+            \in_array($marque, ['M4A ', 'M4B ', 'mp41', 'mp42', 'isom', 'iso2', 'iso5', 'iso6', 'dash'], true) => 'audio/mp4',
+            str_starts_with($entete, 'RIFF') && 'WAVE' === substr($entete, 8, 4) => 'audio/wav',
+            str_starts_with($entete, 'ID3') => 'audio/mp3',
+            str_starts_with($entete, 'OggS') => 'audio/ogg',
+            str_starts_with($entete, 'fLaC') => 'audio/flac',
+            str_starts_with($entete, "\x1A\x45\xDF\xA3") => 'audio/webm',
+            // Sans étiquette ID3, un MP3 commence par une trame : 11 bits à 1, puis la
+            // version et la couche. L'ADTS (AAC nu) a la même synchronisation, couche 00.
+            \strlen($entete) >= 2 && "\xFF" === $entete[0] && 0xF0 === (\ord($entete[1]) & 0xF6) => 'audio/aac',
+            \strlen($entete) >= 2 && "\xFF" === $entete[0] && 0xE0 === (\ord($entete[1]) & 0xE0) && 0 !== (\ord($entete[1]) & 0x06) => 'audio/mp3',
             default => null,
         };
     }

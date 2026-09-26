@@ -100,13 +100,19 @@ export function trierDocuments(
 
 /** Le rappel des bornes, tel que l'écran l'affiche sous les boutons. */
 export function rappelDesBornes(): string {
-  return `Images ou PDF, ${NOMBRE_MAX_DOCUMENTS} documents au plus, ${tailleLisible(TAILLE_MAX_TOTALE)} en tout. Les photos sont allégées avant l’envoi.`
+  return `Images, PDF ou enregistrements audio, ${NOMBRE_MAX_DOCUMENTS} documents au plus, ${tailleLisible(TAILLE_MAX_TOTALE)} en tout. Les photos sont allégées avant l’envoi.`
 }
 
 /** Un PDF ne se met pas dans une `<img>` : il a sa pastille. Le nom sert de
  *  repli quand le navigateur n'annonce aucun type (courant sur mobile). */
 export function estPdf(fichier: Pick<File, 'type' | 'name'>): boolean {
   return fichier.type === 'application/pdf' || fichier.name.toLowerCase().endsWith('.pdf')
+}
+
+/** Un enregistrement (ou un fichier audio importé) : une source que le modèle
+ *  écoute. Le nom sert de repli, comme pour le PDF. */
+export function estAudio(fichier: Pick<File, 'type' | 'name'>): boolean {
+  return fichier.type.startsWith('audio/') || /\.(m4a|mp3|wav|ogg|oga|opus|webm|flac|aac)$/i.test(fichier.name)
 }
 
 /** Une image se prévisualise par une URL d'objet. */
@@ -253,20 +259,27 @@ export interface EtapeDepot {
  * lien) — une création n'a pas encore de fiche. Deux demandes sur la même fiche
  * ne font pas deux fois les mêmes envois : la première les porte, la seconde
  * n'en porte aucun.
+ *
+ * **Un enregistrement n'est jamais joint** : la médiathèque ne garde que des
+ * images et des PDF. Il a servi à l'analyse, il ne part pas plus loin. Les
+ * autres documents gardent leur rang d'origine (`index`).
  */
 export function planDeDepot(
   demandes: readonly DemandeProposee[],
   cochees: ReadonlySet<string>,
-  documents: readonly Pick<File, 'name'>[],
+  documents: readonly Pick<File, 'name' | 'type'>[],
   joindrePreuves: boolean,
 ): EtapeDepot[] {
   const dejaServies = new Set<number>()
   const plan: EtapeDepot[] = []
+  const joignables = documents
+    .map((document, index) => ({ document, index }))
+    .filter(({ document }) => !estAudio(document))
 
   for (const demande of demandes) {
     if (!cochees.has(demande.cle)) continue
     const cible = cibleExistante(demande)
-    const recoit = joindrePreuves && cible !== null && !dejaServies.has(cible) && documents.length > 0
+    const recoit = joindrePreuves && cible !== null && !dejaServies.has(cible) && joignables.length > 0
     if (recoit) dejaServies.add(cible)
 
     plan.push({
@@ -277,7 +290,7 @@ export function planDeDepot(
       erreur: null,
       cibleDesPreuves: recoit ? cible : null,
       preuves: recoit
-        ? documents.map((document, index) => ({ index, nom: document.name, etat: 'attente', erreur: null }))
+        ? joignables.map(({ document, index }) => ({ index, nom: document.name, etat: 'attente', erreur: null }))
         : [],
     })
   }
@@ -621,15 +634,57 @@ export function bilanPortraits(etapes: readonly EtapePortrait[]): { envoyes: num
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Les enregistrements audio                                           */
+/* ------------------------------------------------------------------ */
+
 /**
- * Ajoute une phrase dictée au texte : une espace entre les deux si besoin, une
- * majuscule en tête de phrase, et jamais au-delà de `TEXTE_MAX`.
+ * Les formats que l'on demande à `MediaRecorder`, dans l'ordre de préférence :
+ * AAC dans du MP4 (Safari, Chrome de Google) et Ogg/Opus (Firefox) sont dans la
+ * liste des formats que le modèle documente ; WebM/Opus (Chromium) ensuite, puis
+ * ce que le navigateur appelle « MP4 » sans préciser. Un Chrome sans AAC
+ * produit de l'Opus même en MP4 : autant le mettre dans son conteneur usuel. Le
+ * serveur renifle les octets de toute façon.
  */
-export function ajouterDictee(texte: string, phrase: string): string {
-  const morceau = phrase.trim()
-  if (!morceau) return texte
-  const debutDePhrase = texte.trim() === '' || /[.!?]\s*$/.test(texte)
-  const ajout = debutDePhrase ? morceau.charAt(0).toUpperCase() + morceau.slice(1) : morceau
-  const separateur = texte === '' || /\s$/.test(texte) ? '' : ' '
-  return (texte + separateur + ajout).slice(0, TEXTE_MAX)
+const FORMATS_D_ENREGISTREMENT = [
+  { mime: 'audio/mp4;codecs=mp4a.40.2', extension: 'm4a' },
+  { mime: 'audio/ogg;codecs=opus', extension: 'ogg' },
+  { mime: 'audio/webm;codecs=opus', extension: 'webm' },
+  { mime: 'audio/mp4', extension: 'm4a' },
+  { mime: 'audio/webm', extension: 'webm' },
+] as const
+
+export interface FormatDEnregistrement {
+  /** `''` : on laisse le navigateur choisir. */
+  mime: string
+  extension: string
+}
+
+/** Le premier format que le navigateur sait enregistrer, sinon le sien. */
+export function choisirFormatEnregistrement(estPris: (mime: string) => boolean): FormatDEnregistrement {
+  const format = FORMATS_D_ENREGISTREMENT.find((f) => estPris(f.mime))
+  return format ? { mime: format.mime, extension: format.extension } : { mime: '', extension: extensionDEnregistrement('') }
+}
+
+/** L'extension d'un type produit par le navigateur, qui peut différer du type demandé. */
+export function extensionDEnregistrement(mime: string): string {
+  if (mime.startsWith('audio/mp4') || mime.startsWith('video/mp4')) return 'm4a'
+  if (mime.startsWith('audio/ogg')) return 'ogg'
+  return 'webm'
+}
+
+/** 32 kbit/s suffisent à la voix : 10 Mio font plus de quarante minutes. */
+export const DEBIT_ENREGISTREMENT = 32_000
+/** Au-delà, l'enregistrement s'arrête seul : il doit tenir dans un document. */
+export const DUREE_MAX_ENREGISTREMENT = 20 * 60
+
+/** Le nom du fichier produit : « enregistrement-1.m4a ». */
+export function nomDEnregistrement(rang: number, extension: string): string {
+  return `enregistrement-${rang}.${extension}`
+}
+
+/** « 1:05 », « 12:00 ». */
+export function dureeLisible(secondes: number): string {
+  const s = Math.max(0, Math.floor(secondes))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }

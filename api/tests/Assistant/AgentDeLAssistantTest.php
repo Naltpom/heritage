@@ -46,6 +46,26 @@ final class AgentDeLAssistantTest extends TestCase
     /** @var list<array{methode: string, url: string, entetes: list<string>, corps: array<string, mixed>, brut: string}> */
     private array $requetes = [];
 
+    public function testUnEnregistrementEstEnvoyeCommeUnDocumentEtDitTel(): void
+    {
+        $agent = $this->agent([
+            ['candidates' => [['content' => ['role' => 'model', 'parts' => [
+                ['functionCall' => ['name' => 'proposer', 'args' => ['resume' => 'Un témoignage.', 'demandes' => []]]],
+            ]]]]],
+        ]);
+
+        $agent->analyser(new EntreeDAnalyse('', [
+            new DocumentJoint('image/jpeg', "\xFF\xD8\xFFacte", 'acte.jpg'),
+            new DocumentJoint('audio/mp4', "\x00\x00\x00\x20ftypM4A temoignage", 'enregistrement-1.m4a'),
+        ]));
+
+        $parts = $this->requetes[0]['corps']['contents'][0]['parts'];
+        self::assertSame('Document 1 :', $parts[1]['text']);
+        self::assertSame('Document 2 (enregistrement audio) :', $parts[3]['text'], 'Le modèle sait qu’il écoute un témoignage.');
+        self::assertSame('audio/mp4', $parts[4]['inlineData']['mimeType']);
+        self::assertStringContainsString('enregistrement audio est un TÉMOIGNAGE', $this->requetes[0]['corps']['systemInstruction']['parts'][0]['text']);
+    }
+
     public function testLeModeleChercheLitPuisProposeEtLaBouclesArreteLa(): void
     {
         $proposition = [

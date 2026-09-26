@@ -445,12 +445,45 @@ describe('les portraits repérés', () => {
   })
 })
 
-describe('la dictée', () => {
-  it('colle la phrase avec une espace, et une majuscule en début de phrase', async () => {
-    const { ajouterDictee } = await import('./assistant')
-    expect(ajouterDictee('', 'ma grand-tante est née en 1921')).toBe('Ma grand-tante est née en 1921')
-    expect(ajouterDictee('Elle vivait à Brest', 'avec son frère')).toBe('Elle vivait à Brest avec son frère')
-    expect(ajouterDictee('Fin.', 'nouvelle phrase')).toBe('Fin. Nouvelle phrase')
-    expect(ajouterDictee('Texte', '   ')).toBe('Texte')
+describe('les enregistrements audio', () => {
+  it('reconnaît un enregistrement par son type, ou son nom quand le type manque', async () => {
+    const { estAudio } = await import('./assistant')
+    expect(estAudio(fichier('enregistrement-1.m4a', 10, 'audio/mp4'))).toBe(true)
+    expect(estAudio(fichier('memo.mp3', 10, ''))).toBe(true)
+    expect(estAudio(fichier('acte.jpg'))).toBe(false)
+    expect(estAudio(fichier('livret.pdf', 10, 'application/pdf'))).toBe(false)
+  })
+
+  it('choisit le premier format que le navigateur sait enregistrer', async () => {
+    const { choisirFormatEnregistrement, nomDEnregistrement, extensionDEnregistrement } = await import('./assistant')
+    expect(choisirFormatEnregistrement(() => true)).toEqual({ mime: 'audio/mp4;codecs=mp4a.40.2', extension: 'm4a' })
+    // Chromium : MP4 et WebM, sans AAC — l'Opus reste dans son conteneur usuel.
+    const chromium = new Set(['audio/mp4', 'audio/mp4;codecs=opus', 'audio/webm', 'audio/webm;codecs=opus'])
+    expect(choisirFormatEnregistrement((m) => chromium.has(m))).toEqual({
+      mime: 'audio/webm;codecs=opus',
+      extension: 'webm',
+    })
+    expect(choisirFormatEnregistrement((m) => m === 'audio/mp4')).toEqual({ mime: 'audio/mp4', extension: 'm4a' })
+    expect(choisirFormatEnregistrement(() => false).mime).toBe('')
+    expect(extensionDEnregistrement('audio/ogg;codecs=opus')).toBe('ogg')
+    expect(extensionDEnregistrement('video/mp4')).toBe('m4a')
+    expect(nomDEnregistrement(2, 'm4a')).toBe('enregistrement-2.m4a')
+  })
+
+  it('dit la durée en minutes et secondes', async () => {
+    const { dureeLisible } = await import('./assistant')
+    expect(dureeLisible(0)).toBe('0:00')
+    expect(dureeLisible(65)).toBe('1:05')
+    expect(dureeLisible(1200)).toBe('20:00')
+  })
+
+  it('ne joint jamais un enregistrement comme preuve, et garde le rang des autres', () => {
+    const docs = [fichier('temoignage.m4a', 10, 'audio/mp4'), fichier('acte.jpg')]
+    const plan = planDeDepot([MODIFICATION_12], new Set(['d2']), docs, true)
+    expect(plan[0]?.preuves.map((p) => [p.index, p.nom])).toEqual([[1, 'acte.jpg']])
+
+    const seulementAudio = planDeDepot([MODIFICATION_12], new Set(['d2']), [docs[0]!], true)
+    expect(seulementAudio[0]?.cibleDesPreuves).toBeNull()
+    expect(seulementAudio[0]?.preuves).toEqual([])
   })
 })
