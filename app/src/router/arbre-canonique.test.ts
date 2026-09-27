@@ -55,12 +55,16 @@ describe('la route de l’arbre', () => {
     expect(routeur.currentRoute.value.name).toBe('arbre')
   })
 
-  it('est bien celle où tout lecteur connecté atterrit', () => {
-    // Le lien entre les deux moitiés du défaut : sans lui, « /arbre sert
-    // ressorts » ne dirait rien de ce que les membres voient réellement.
+  it('est la première porte de l’accueil, où tout lecteur connecté atterrit', async () => {
+    // Depuis le 28/09/2026, on atterrit sur `/home`, et c'est de là qu'on part
+    // vers l'arbre : la route canonique reste `arbre`, l'accueil y mène.
     for (const regime of ['en_attente', 'membre', 'administrateur'] as const) {
-      expect(routeParDefaut(regime)).toEqual({ name: 'arbre' })
+      expect(routeParDefaut(regime)).toEqual({ name: 'accueil' })
     }
+
+    const routeur = table()
+    await routeur.push('/home')
+    expect(routeur.currentRoute.value.name).toBe('accueil')
   })
 
   it('reste ouverte au régime « en attente »', async () => {
