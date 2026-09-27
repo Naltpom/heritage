@@ -16,8 +16,9 @@
  */
 import { computed, useTemplateRef } from 'vue'
 import { tailleLisible } from '@/components/medias/medias'
-import { rappelDesBornes } from './assistant'
+import { dureeMesuree, rappelDesBornes } from './assistant'
 import EnregistrementAudio from './EnregistrementAudio.vue'
+import LecteurAudio from './LecteurAudio.vue'
 
 export interface DocumentAffiche {
   cle: number
@@ -179,7 +180,7 @@ function recevoir(evenement: Event): void {
     <ul v-if="ecoutes.length > 0" class="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Réécouter les enregistrements">
       <li v-for="{ document, rang } in ecoutes" :key="document.cle" class="flex min-w-0 items-center gap-2">
         <span class="flex-none text-[11px] text-attenue tabular-nums">{{ rang }}</span>
-        <audio :src="document.apercu ?? undefined" controls preload="metadata" class="h-9 min-w-0 flex-1" />
+        <LecteurAudio :src="document.apercu!" :mesuree="dureeMesuree(document.fichier)" />
       </li>
     </ul>
   </div>

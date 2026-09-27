@@ -683,6 +683,28 @@ export function nomDEnregistrement(rang: number, extension: string): string {
   return `enregistrement-${rang}.${extension}`
 }
 
+/**
+ * La durée des enregistrements faits ici, mesurée par le chrono. On ne s'en
+ * remet pas au fichier : ce que `MediaRecorder` produit n'annonce souvent
+ * aucune durée (WebM : infinie ; MP4 de Chrome Android : nulle), et le lecteur
+ * afficherait « 0:00 / 0:00 ».
+ */
+const dureesMesurees = new WeakMap<File, number>()
+
+export function retenirDuree(fichier: File, secondes: number): void {
+  dureesMesurees.set(fichier, secondes)
+}
+
+export function dureeMesuree(fichier: File): number | null {
+  return dureesMesurees.get(fichier) ?? null
+}
+
+/** La durée à afficher : celle du fichier si elle est vraisemblable, sinon celle du chrono. */
+export function dureeAffichable(duMedia: number, mesuree: number | null): number | null {
+  if (Number.isFinite(duMedia) && duMedia > 0) return duMedia
+  return mesuree
+}
+
 /** « 1:05 », « 12:00 ». */
 export function dureeLisible(secondes: number): string {
   const s = Math.max(0, Math.floor(secondes))

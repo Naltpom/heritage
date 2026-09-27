@@ -477,6 +477,19 @@ describe('les enregistrements audio', () => {
     expect(dureeLisible(1200)).toBe('20:00')
   })
 
+  it('affiche la durée du fichier si elle est vraisemblable, sinon celle du chrono', async () => {
+    const { dureeAffichable, dureeMesuree, retenirDuree } = await import('./assistant')
+    expect(dureeAffichable(4.2, 5)).toBe(4.2)
+    expect(dureeAffichable(Infinity, 5)).toBe(5)
+    expect(dureeAffichable(0, 5)).toBe(5)
+    expect(dureeAffichable(NaN, null)).toBeNull()
+
+    const enregistrement = fichier('enregistrement-1.m4a', 10, 'audio/mp4')
+    expect(dureeMesuree(enregistrement)).toBeNull()
+    retenirDuree(enregistrement, 5)
+    expect(dureeMesuree(enregistrement)).toBe(5)
+  })
+
   it('ne joint jamais un enregistrement comme preuve, et garde le rang des autres', () => {
     const docs = [fichier('temoignage.m4a', 10, 'audio/mp4'), fichier('acte.jpg')]
     const plan = planDeDepot([MODIFICATION_12], new Set(['d2']), docs, true)
