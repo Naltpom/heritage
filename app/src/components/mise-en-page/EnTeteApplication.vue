@@ -187,19 +187,12 @@ const classeLigneTiroir =
       class="md:contents max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:flex max-md:w-[86%] max-md:max-w-sm max-md:flex-col max-md:overflow-y-auto max-md:bg-panneau max-md:pt-1.5 max-md:pb-4 max-md:shadow-panneau"
       :class="ouvert === 'menu' ? '' : 'max-md:hidden'"
     >
-      <!-- Tiroir : en-tête, compte, proposer. -->
+      <!-- Tiroir : en-tête et proposer. Le compte est en bas, au-dessus de « Se déconnecter ». -->
       <div class="flex flex-col md:hidden">
         <div class="flex h-12 items-center justify-between pr-1 pl-5">
           <span class="text-base font-bold">Heritage</span>
           <button type="button" class="h-11 w-11 text-xl text-attenue" aria-label="Fermer le menu" @click="fermerEtRendreLeFocus">×</button>
         </div>
-        <RouterLink :to="{ name: 'compte' }" class="mx-3 mt-1 flex items-center gap-3 rounded-panneau border border-ligne p-3">
-          <span class="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-accent-doux text-sm font-bold text-accent">{{ initiales }}</span>
-          <span class="flex min-w-0 flex-col leading-snug">
-            <span class="truncate font-semibold">{{ nomAffiche }}</span>
-            <span class="text-xs text-attenue">{{ libelleRole }} · Mon compte</span>
-          </span>
-        </RouterLink>
         <div class="p-3 empty:hidden [&>a]:flex [&>a]:h-11 [&>a]:w-full [&>a]:justify-center">
           <PointCreation />
         </div>
@@ -207,6 +200,8 @@ const classeLigneTiroir =
 
       <nav aria-label="Navigation principale" class="flex md:h-14 md:items-stretch max-md:flex-col max-md:px-2">
         <span class="px-3 pt-1.5 pb-1.5 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase md:hidden">Explorer</span>
+        <!-- Au tiroir seulement : sur bureau, le logo « Heritage » mène à l'accueil. -->
+        <RouterLink :to="{ name: 'accueil' }" :class="classeLigneTiroir" class="md:hidden" active-class="bg-accent-doux font-semibold text-accent">Accueil</RouterLink>
         <RouterLink v-for="o in ONGLETS" :key="o.nom" :to="{ name: o.nom }" :class="classeOnglet(section === o.section)">
           {{ o.libelle }}
         </RouterLink>
@@ -232,8 +227,15 @@ const classeLigneTiroir =
         </template>
       </nav>
 
-      <div class="mt-auto border-t border-ligne pt-2 md:hidden">
-        <button type="button" class="flex h-11 w-full items-center px-5 text-attenue" @click="quitter">Se déconnecter</button>
+      <div class="mt-auto border-t border-ligne pt-3 md:hidden">
+        <RouterLink :to="{ name: 'compte' }" class="mx-3 flex items-center gap-3 rounded-panneau border border-ligne p-3">
+          <span class="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-accent-doux text-sm font-bold text-accent">{{ initiales }}</span>
+          <span class="flex min-w-0 flex-col leading-snug">
+            <span class="truncate font-semibold">{{ nomAffiche }}</span>
+            <span class="text-xs text-attenue">{{ libelleRole }} · Mon compte</span>
+          </span>
+        </RouterLink>
+        <button type="button" class="mt-1 flex h-11 w-full items-center px-5 text-attenue" @click="quitter">Se déconnecter</button>
       </div>
     </div>
 

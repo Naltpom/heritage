@@ -4,6 +4,7 @@ import {
   echelleVerticale,
   niveau,
   syDe,
+  texteDeFiche,
   trajectoire,
   versMonde,
   zoomAutour,
@@ -13,15 +14,40 @@ import {
 const canevas: Canevas = { largeur: 1200, hauteur: 700, largeurMonde: 24000, hauteurMonde: 900 }
 
 describe('niveaux de détail', () => {
-  it('suit les seuils 0,16 / 0,42 / 0,75', () => {
+  it('suit les seuils 0,16 / 0,55 : Ensemble, Familles, Fiches', () => {
     expect(niveau(0.05)).toBe(0)
     expect(niveau(0.159)).toBe(0)
     expect(niveau(0.16)).toBe(1)
-    expect(niveau(0.419)).toBe(1)
-    expect(niveau(0.42)).toBe(2)
-    expect(niveau(0.749)).toBe(2)
-    expect(niveau(0.75)).toBe(3)
-    expect(niveau(1.8)).toBe(3)
+    expect(niveau(0.549)).toBe(1)
+    expect(niveau(0.55)).toBe(2)
+    expect(niveau(1.8)).toBe(2)
+  })
+})
+
+describe('le texte d’une fiche', () => {
+  const natron = { nom: 'Natron Romarin', prenom: 'Natron', dates: '2012 –' }
+
+  it('écrit le nom complet et les dates quand ils tiennent', () => {
+    expect(texteDeFiche(natron, 120, 40)).toEqual({ t1: 'Natron Romarin', t2: '2012 –', taille: 12 })
+  })
+
+  it('laisse tomber les dates sur une fiche trop basse', () => {
+    expect(texteDeFiche(natron, 120, 24).t2).toBe('')
+  })
+
+  it('se replie sur le prénom quand le nom ne tient pas', () => {
+    expect(texteDeFiche(natron, 60, 40)).toEqual({ t1: 'Natron', t2: '', taille: 11 })
+  })
+
+  it('écrit le nom quand il n’y a pas de prénom connu', () => {
+    expect(texteDeFiche({ nom: 'Sarriette', prenom: '', dates: '' }, 20, 40).t1).toBe('Sarriette')
+  })
+
+  it('n’annonce jamais complet un nom qui serait tronqué', () => {
+    for (let largeur = 20; largeur < 200; largeur += 5) {
+      const { t1, taille } = texteDeFiche(natron, largeur, 40)
+      if (t1 === natron.nom) expect(natron.nom.length * taille * 0.55).toBeLessThanOrEqual(largeur)
+    }
   })
 })
 
