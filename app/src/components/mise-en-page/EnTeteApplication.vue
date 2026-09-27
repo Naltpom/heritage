@@ -166,7 +166,7 @@ const classeLigneTiroir =
     </button>
 
     <RouterLink
-      :to="{ name: 'arbre' }"
+      :to="{ name: 'accueil' }"
       class="mr-[18px] text-base font-bold tracking-[-.01em] whitespace-nowrap"
       :class="connecte ? 'max-md:hidden' : 'max-md:px-3'"
     >

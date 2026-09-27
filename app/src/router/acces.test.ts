@@ -197,7 +197,7 @@ describe('gardes de route — écrans d’entrée (niveau « anonyme »)', () =>
       expect(decision.autorise).toBe(false)
       if (!decision.autorise) {
         expect(decision.motif).toBe('deja_connecte')
-        expect(decision.redirection).toEqual({ name: 'arbre' })
+        expect(decision.redirection).toEqual({ name: 'accueil' })
       }
     }
   })
@@ -210,11 +210,11 @@ describe('routes publiques et atterrissage', () => {
     }
   })
 
-  it('l’anonyme atterrit sur la connexion, tout lecteur connecté sur l’arbre', () => {
+  it('l’anonyme atterrit sur la connexion, tout lecteur connecté sur l’accueil', () => {
     expect(routeParDefaut('anonyme')).toEqual({ name: 'connexion' })
-    expect(routeParDefaut('en_attente')).toEqual({ name: 'arbre' })
-    expect(routeParDefaut('membre')).toEqual({ name: 'arbre' })
-    expect(routeParDefaut('administrateur')).toEqual({ name: 'arbre' })
+    expect(routeParDefaut('en_attente')).toEqual({ name: 'accueil' })
+    expect(routeParDefaut('membre')).toEqual({ name: 'accueil' })
+    expect(routeParDefaut('administrateur')).toEqual({ name: 'accueil' })
   })
 
   it('aucune combinaison niveau × régime ne reste indécise', () => {

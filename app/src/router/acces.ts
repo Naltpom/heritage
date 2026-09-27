@@ -91,10 +91,11 @@ export function estRattache(regime: RegimeAcces): boolean {
 /** Où atterrit un lecteur qui n'a rien demandé de précis. */
 export function routeParDefaut(regime: RegimeAcces): RouteLocationRaw {
   if (regime === 'anonyme') return { name: 'connexion' }
-  // Un compte en attente atterrit lui aussi sur l'arbre : 256 fiches de
-  // personnes décédées sur 274 lui sont ouvertes, et « un écran vide pousse à
-  // l'abandon » (§ 12.2). Le bandeau de régime le renvoie vers l'écran d'attente.
-  return { name: 'arbre' }
+  // Tout lecteur connecté atterrit sur l'accueil (`/home`) : les anniversaires du
+  // jour, ses tirages, et les deux portes — l'arbre, proposer. Un compte en
+  // attente aussi : les anniversaires des personnes décédées lui sont ouverts, et
+  // « un écran vide pousse à l'abandon » (§ 12.2).
+  return { name: 'accueil' }
 }
 
 /**

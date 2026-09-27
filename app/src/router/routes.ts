@@ -90,6 +90,15 @@ export const routes: RouteRecordRaw[] = [
   },
 
   {
+    // La page d'accueil de tout lecteur connecté (`routeParDefaut`) : les
+    // anniversaires du jour en carrousel, ses tirages, l'arbre et « proposer ».
+    path: '/home',
+    name: 'accueil',
+    component: () => import('@/views/AccueilView.vue'),
+    meta: { acces: 'attente', titre: 'Accueil' },
+  },
+
+  {
     // L'arbre total, repris de zéro : plein écran, placement propre au client.
     path: '/tree',
     name: 'tree',

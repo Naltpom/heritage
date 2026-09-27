@@ -114,3 +114,83 @@ export function etatDansLaListe(tirage: ResumeDeTirage): string {
   }
   return `${edition.annee} · tirage à venir`
 }
+
+/* ───────────────── Les étapes de validation ───────────────── */
+
+export interface Confirmation {
+  titre: string
+  message: string
+  confirmer: string
+  danger?: boolean
+}
+
+const LIBELLES_DE_PRESENCE: Record<PresenceAuTirage, string> = {
+  sur_place: 'sur place',
+  a_distance: 'à distance',
+  absente: 'ne participe pas',
+}
+
+/** Changer une présence : dire ce que ça change pour le tirage. */
+export function confirmationDePresence(
+  libelle: string,
+  estMoi: boolean,
+  presence: PresenceAuTirage,
+  annee: number,
+): Confirmation {
+  const qui = estMoi ? 'Vous' : libelle
+  const titre = estMoi
+    ? `Passer à « ${LIBELLES_DE_PRESENCE[presence]} » pour ${annee} ?`
+    : `${libelle} : « ${LIBELLES_DE_PRESENCE[presence]} » pour ${annee} ?`
+
+  const message =
+    presence === 'absente'
+      ? `${qui} ${estMoi ? 'ne serez pas' : 'ne sera pas'} dans le tirage ${annee} : ${estMoi ? 'vous n’offrirez' : 'n’offrira'} rien, et personne ne ${estMoi ? 'vous aura' : 'l’aura'}.`
+      : presence === 'a_distance'
+        ? `${qui} ${estMoi ? 'restez' : 'reste'} dans le tirage ${annee}, mais le cadeau devra être transmis pour être là le jour J.`
+        : `${qui} ${estMoi ? 'serez' : 'sera'} sur place le jour J, avec le cadeau.`
+
+  return { titre, message, confirmer: 'Confirmer', danger: presence === 'absente' }
+}
+
+/** Quitter ou retirer quelqu'un du tirage. */
+export function confirmationDeRetrait(libelle: string, estMoi: boolean): Confirmation {
+  return estMoi
+    ? {
+        titre: 'Quitter ce tirage ?',
+        message: 'Vous ne serez plus dans les prochains tirages. Les années passées gardent leur historique.',
+        confirmer: 'Quitter le tirage',
+        danger: true,
+      }
+    : {
+        titre: `Retirer ${libelle} ?`,
+        message: `${libelle} ne sera plus dans les prochains tirages. Les années passées gardent leur historique.`,
+        confirmer: 'Retirer',
+        danger: true,
+      }
+}
+
+export function confirmationDuTirage(annee: number, participants: number): Confirmation {
+  return {
+    titre: `Lancer le tirage ${annee} ?`,
+    message: `${participants} participant${participants > 1 ? 's' : ''} ${participants > 1 ? 'seront prévenus' : 'sera prévenu'}. Vérifiez d’abord qui vient : changer d’avis ensuite demandera d’annuler et de refaire le tirage.`,
+    confirmer: 'Lancer le tirage',
+  }
+}
+
+export function confirmationDAnnulation(annee: number): Confirmation {
+  return {
+    titre: `Annuler le tirage ${annee} ?`,
+    message: 'Toutes les attributions de cette année seront effacées. Il faudra relancer le tirage, et chacun découvrira une nouvelle personne.',
+    confirmer: 'Annuler le tirage',
+    danger: true,
+  }
+}
+
+export function confirmationDeSuppression(nom: string): Confirmation {
+  return {
+    titre: `Supprimer « ${nom} » ?`,
+    message: 'Le tirage, toutes ses années et leur historique seront définitivement perdus.',
+    confirmer: 'Supprimer définitivement',
+    danger: true,
+  }
+}

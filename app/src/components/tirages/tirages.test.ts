@@ -7,6 +7,11 @@ import type { EditionDuTirage, MonAttribution, ResumeDeTirage } from '@/lib/api'
 import {
   anneeProposee,
   avertissementDeMemoire,
+  confirmationDAnnulation,
+  confirmationDePresence,
+  confirmationDeRetrait,
+  confirmationDeSuppression,
+  confirmationDuTirage,
   consigneDeRemise,
   dateLongue,
   etatDansLaListe,
@@ -127,5 +132,40 @@ describe('la liste', () => {
   it('distingue un tirage à venir et l’absence d’édition', () => {
     expect(etatDansLaListe(resume(edition({})))).toBe('2026 · tirage à venir')
     expect(etatDansLaListe(resume(null))).toBe('Aucune édition ouverte')
+  })
+})
+
+describe('les étapes de validation', () => {
+  it('dit à qui ne vient pas qu’il sort du tirage, et le marque comme un geste qui retire', () => {
+    const moi = confirmationDePresence('Cobalt Romarin', true, 'absente', 2026)
+
+    expect(moi.titre).toBe('Passer à « ne participe pas » pour 2026 ?')
+    expect(moi.message).toBe('Vous ne serez pas dans le tirage 2026 : vous n’offrirez rien, et personne ne vous aura.')
+    expect(moi.danger).toBe(true)
+
+    const autre = confirmationDePresence('Cobalt Romarin', false, 'absente', 2026)
+    expect(autre.message).toBe('Cobalt Romarin ne sera pas dans le tirage 2026 : n’offrira rien, et personne ne l’aura.')
+  })
+
+  it('rappelle qu’à distance le cadeau doit être transmis', () => {
+    const c = confirmationDePresence('Cobalt Romarin', true, 'a_distance', 2026)
+
+    expect(c.message).toContain('transmis')
+    expect(c.danger).toBe(false)
+  })
+
+  it('distingue quitter soi-même et retirer quelqu’un', () => {
+    expect(confirmationDeRetrait('Natron', true).confirmer).toBe('Quitter le tirage')
+    expect(confirmationDeRetrait('Natron', false).titre).toBe('Retirer Natron ?')
+  })
+
+  it('compte les participants prévenus au lancement', () => {
+    expect(confirmationDuTirage(2026, 5).message).toContain('5 participants seront prévenus')
+    expect(confirmationDuTirage(2026, 1).message).toContain('1 participant sera prévenu')
+  })
+
+  it('annuler et supprimer sont des gestes qui effacent', () => {
+    expect(confirmationDAnnulation(2026).danger).toBe(true)
+    expect(confirmationDeSuppression('Noël').titre).toBe('Supprimer « Noël » ?')
   })
 })

@@ -60,8 +60,8 @@ describe('où l’on atterrit après la connexion', () => {
   })
 
   it('retombe sur la page d’accueil du régime quand elle ne l’est pas', () => {
-    expect(destinationApresConnexion('https://ailleurs.example/', 'membre')).toEqual({ name: 'arbre' })
-    expect(destinationApresConnexion(undefined, 'administrateur')).toEqual({ name: 'arbre' })
+    expect(destinationApresConnexion('https://ailleurs.example/', 'membre')).toEqual({ name: 'accueil' })
+    expect(destinationApresConnexion(undefined, 'administrateur')).toEqual({ name: 'accueil' })
   })
 
   it('laisse la garde trancher pour un compte en attente de validation', () => {
@@ -69,7 +69,7 @@ describe('où l’on atterrit après la connexion', () => {
     // c'est la garde globale qui emmènera ce compte vers l'écran d'état — pas
     // vers la connexion, où il conclurait que sa session est tombée.
     expect(destinationApresConnexion('/demandes/14', 'en_attente')).toBe('/demandes/14')
-    expect(destinationApresConnexion(undefined, 'en_attente')).toEqual({ name: 'arbre' })
+    expect(destinationApresConnexion(undefined, 'en_attente')).toEqual({ name: 'accueil' })
   })
 })
 

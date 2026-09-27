@@ -31,10 +31,12 @@ import {
   supprimerTirage,
   type DetailDeTirage,
   type EditionDuTirage,
+  type ParticipantDuTirage,
   type PresenceAuTirage,
   type ReglesDuTirage,
 } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
+import DialogueConfirmation, { type DemandeDeConfirmation } from '@/components/base/DialogueConfirmation.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
@@ -46,6 +48,11 @@ import FormulaireReglages from '@/components/tirages/FormulaireReglages.vue'
 import {
   PRESENCES,
   anneeProposee,
+  confirmationDAnnulation,
+  confirmationDePresence,
+  confirmationDeRetrait,
+  confirmationDeSuppression,
+  confirmationDuTirage,
   dateLongue,
   libelleDeMemoire,
   libelleDuJour,
@@ -120,8 +127,41 @@ function peutReglerLaPresence(personId: number): boolean {
   return (tirage.value?.peutGerer ?? false) || suivis.value.has(personId)
 }
 
-function changerPresence(annee: number, personId: number, presence: PresenceAuTirage): void {
-  void agir(`presence-${personId}`, () => definirPresence(id.value, annee, personId, presence))
+/* ───────────────── L'étape de validation ───────────────── */
+
+/**
+ * Le geste en attente de validation. Chaque geste qui engage — présence,
+ * retrait, lancer ou annuler le tirage, supprimer — passe par là : on dit ce
+ * qu'il va changer, et rien ne part avant « Confirmer ».
+ */
+const aConfirmer = ref<(DemandeDeConfirmation & { geste: () => Promise<void> }) | null>(null)
+
+function demander(confirmation: DemandeDeConfirmation, geste: () => Promise<void>): void {
+  if (suspendu.value || enCours.value !== null) return
+  aConfirmer.value = { ...confirmation, geste }
+}
+
+async function surConfirmer(): Promise<void> {
+  const demande = aConfirmer.value
+  if (demande === null) return
+  await demande.geste()
+  aConfirmer.value = null
+}
+
+/**
+ * Un refus remet les listes de présence à la valeur enregistrée : le `<select>`
+ * a déjà basculé sous le doigt, et rien d'autre ne l'y ramènerait.
+ */
+const versionDesPresences = ref(0)
+function surAnnuler(): void {
+  aConfirmer.value = null
+  versionDesPresences.value += 1
+}
+
+function changerPresence(annee: number, personId: number, libelle: string, presence: PresenceAuTirage): void {
+  demander(confirmationDePresence(libelle, personId === moi.value, presence, annee), async () => {
+    await agir(`presence-${personId}`, () => definirPresence(id.value, annee, personId, presence))
+  })
 }
 
 const jeSuisArriveApres = computed(
@@ -140,19 +180,25 @@ const memoireRelachee = computed(() => {
 
 const anneeAOuvrir = computed(() => (tirage.value === null ? null : anneeProposee(tirage.value, new Date())))
 
-const confirmation = ref<'annuler' | 'supprimer' | null>(null)
-
-async function tirer(annee: number): Promise<void> {
-  await agir('tirer', () => lancerLeTirage(id.value, annee))
+function tirer(e: EditionDuTirage): void {
+  const presents = e.presences.filter((p) => p.presence !== 'absente').length
+  demander(confirmationDuTirage(e.annee, presents), async () => {
+    await agir('tirer', () => lancerLeTirage(id.value, e.annee))
+  })
 }
 
-async function annuler(annee: number): Promise<void> {
-  confirmation.value = null
-  await agir('annuler', () => annulerLeTirage(id.value, annee))
+function annuler(annee: number): void {
+  demander(confirmationDAnnulation(annee), async () => {
+    await agir('annuler', () => annulerLeTirage(id.value, annee))
+  })
 }
 
-async function supprimer(): Promise<void> {
-  confirmation.value = null
+function supprimer(): void {
+  const nom = tirage.value?.nom ?? ''
+  demander(confirmationDeSuppression(nom), supprimerPourDeBon)
+}
+
+async function supprimerPourDeBon(): Promise<void> {
   enCours.value = 'supprimer'
   try {
     await supprimerTirage(id.value)
@@ -177,8 +223,10 @@ function ajouter(choix: ChoixDePersonne): void {
   })
 }
 
-function retirer(personId: number): void {
-  void agir(`retirer-${personId}`, () => retirerParticipant(id.value, personId))
+function retirer(participant: ParticipantDuTirage): void {
+  demander(confirmationDeRetrait(participant.libelle, participant.estMoi), async () => {
+    await agir(`retirer-${participant.personId}`, () => retirerParticipant(id.value, participant.personId))
+  })
 }
 
 /* Réglages */
@@ -301,11 +349,12 @@ const classeSelect = 'h-9 rounded-champ border border-ligne bg-fond px-2 text-sm
                 <span class="text-sm text-texte">{{ p.libelle }}</span>
                 <select
                   v-if="peutReglerLaPresence(p.personId) && !edition.passee"
+                  :key="`${p.personId}-${versionDesPresences}`"
                   :class="classeSelect"
                   :value="p.presence"
                   :disabled="suspendu || enCours !== null"
                   :aria-label="`Présence de ${p.libelle}`"
-                  @change="changerPresence(edition.annee, p.personId, ($event.target as HTMLSelectElement).value as PresenceAuTirage)"
+                  @change="changerPresence(edition.annee, p.personId, p.libelle, ($event.target as HTMLSelectElement).value as PresenceAuTirage)"
                 >
                   <option v-for="o in PRESENCES" :key="o.valeur" :value="o.valeur">{{ o.libelle }}</option>
                 </select>
@@ -319,25 +368,19 @@ const classeSelect = 'h-9 rounded-champ border border-ligne bg-fond px-2 text-sm
               v-if="edition.statut === 'ouverte'"
               :chargement="enCours === 'tirer'"
               :desactive="suspendu || enCours !== null"
-              @click="tirer(edition.annee)"
+              @click="tirer(edition)"
             >
               Lancer le tirage {{ edition.annee }}
             </BoutonBase>
-            <template v-else>
-              <BoutonBase
-                v-if="confirmation !== 'annuler'"
-                variante="secondaire"
-                :desactive="suspendu || enCours !== null"
-                @click="confirmation = 'annuler'"
-              >
-                Annuler le tirage
-              </BoutonBase>
-              <template v-else>
-                <span class="text-xs text-attenue">Les attributions seront effacées ; il faudra relancer.</span>
-                <BoutonBase variante="danger" :chargement="enCours === 'annuler'" @click="annuler(edition.annee)">Confirmer</BoutonBase>
-                <BoutonBase variante="discret" @click="confirmation = null">Garder</BoutonBase>
-              </template>
-            </template>
+            <BoutonBase
+              v-else
+              variante="secondaire"
+              :chargement="enCours === 'annuler'"
+              :desactive="suspendu || enCours !== null"
+              @click="annuler(edition.annee)"
+            >
+              Annuler le tirage
+            </BoutonBase>
             <p class="w-full text-xs text-attenue">
               Vous organisez ce tirage, mais vous ne voyez que votre propre attribution — comme tout le monde.
             </p>
@@ -373,7 +416,7 @@ const classeSelect = 'h-9 rounded-champ border border-ligne bg-fond px-2 text-sm
               variante="discret"
               :chargement="enCours === `retirer-${p.personId}`"
               :desactive="suspendu || enCours !== null"
-              @click="retirer(p.personId)"
+              @click="retirer(p)"
             >
               {{ p.estMoi ? 'Quitter' : 'Retirer' }}
             </BoutonBase>
@@ -431,16 +474,18 @@ const classeSelect = 'h-9 rounded-champ border border-ligne bg-fond px-2 text-sm
         </form>
         <div v-else class="flex flex-wrap items-center gap-2">
           <BoutonBase variante="secondaire" :desactive="suspendu" @click="ouvrirLesReglages">Modifier les réglages</BoutonBase>
-          <BoutonBase v-if="confirmation !== 'supprimer'" variante="discret" :desactive="suspendu" @click="confirmation = 'supprimer'">
+          <BoutonBase variante="discret" :chargement="enCours === 'supprimer'" :desactive="suspendu" @click="supprimer">
             Supprimer le tirage
           </BoutonBase>
-          <template v-else>
-            <span class="text-xs text-attenue">Toutes les années et leur historique seront perdus.</span>
-            <BoutonBase variante="danger" :chargement="enCours === 'supprimer'" @click="supprimer">Supprimer définitivement</BoutonBase>
-            <BoutonBase variante="discret" @click="confirmation = null">Garder</BoutonBase>
-          </template>
         </div>
       </PanneauBase>
     </template>
+
+    <DialogueConfirmation
+      :demande="aConfirmer"
+      :chargement="enCours !== null"
+      @confirmer="surConfirmer"
+      @annuler="surAnnuler"
+    />
   </div>
 </template>
