@@ -28,6 +28,7 @@ import {
   dureeLisible,
   extensionDEnregistrement,
   nomDEnregistrement,
+  retenirDuree,
 } from './assistant'
 
 const { desactive = false } = defineProps<{ desactive?: boolean }>()
@@ -42,6 +43,7 @@ let enregistreur: MediaRecorder | null = null
 let flux: MediaStream | null = null
 let minuterie: ReturnType<typeof setInterval> | null = null
 let rang = 0
+let debut = 0
 /** Démonté en cours d'enregistrement : on coupe le micro sans rien émettre. */
 let abandonne = false
 
@@ -95,7 +97,9 @@ async function demarrer(): Promise<void> {
     if (abandonne || morceaux.length === 0) return
     // `video/mp4` chez certains Chrome, même sans image : c'est de l'audio.
     const blob = new Blob(morceaux, { type: type.split(';')[0]!.replace(/^video\//, 'audio/') })
-    emit('enregistrement', new File([blob], nomDEnregistrement(++rang, extensionDEnregistrement(type)), { type: blob.type }))
+    const fichier = new File([blob], nomDEnregistrement(++rang, extensionDEnregistrement(type)), { type: blob.type })
+    retenirDuree(fichier, Math.max(1, (Date.now() - debut) / 1000))
+    emit('enregistrement', fichier)
   }
   r.onerror = () => {
     erreur.value = 'L’enregistrement s’est interrompu. Réessayez, ou importez un fichier audio.'
@@ -105,8 +109,10 @@ async function demarrer(): Promise<void> {
   enregistreur = r
   secondes.value = 0
   enregistre.value = true
-  // Des morceaux réguliers : un arrêt brutal ne perd que la dernière seconde.
-  r.start(1000)
+  // D'un seul tenant, sans tranches : un WebM découpé n'annonce aucune durée,
+  // et certains lecteurs refusent un MP4 fragmenté.
+  debut = Date.now()
+  r.start()
   minuterie = setInterval(() => {
     secondes.value++
     if (secondes.value >= DUREE_MAX_ENREGISTREMENT) arreter()
