@@ -1,0 +1,16 @@
+# Contrat : ce fichier est celui du module Tirage (tirages au sort récurrents, ADR 0009).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring de config/services/_autoload.yaml couvre toutes les classes du module. On
+# ne déclare ici que l'alias d'interface — lire l'en-tête de `timeline.yaml` sur le piège
+# d'ordre de chargement avant d'y ajouter un service concret.
+
+services:
+    # ── Le port vers `Tree` ────────────────────────────────────────────────────────
+    #
+    # Des noms et des couples, rien de plus : c'est la liste blanche que l'arbre sert déjà
+    # à tout compte connecté (ADR 0003). Pas de double en `when@test` : les tests du
+    # module sèment un vrai arbre (`tests/Tree/ArbreWebTestCase`) et éprouvent donc
+    # l'adaptateur réel avec le reste du câblage.
+    App\Module\Tirage\Contract\PortArbrePourTirages:
+        alias: App\Module\Tree\Service\VueDeLArbrePourTirages

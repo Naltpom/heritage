@@ -1,0 +1,11 @@
+# Contrat : ce fichier est celui du module Tirage (tirages au sort récurrents, ADR 0009).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# Les routes se déclarent par attributs #[Route] dans les contrôleurs du module ;
+# l'import ci-dessous suffit à les charger.
+
+tirage_controleurs:
+    resource:
+        path: ../../src/Module/Tirage/Controller/
+        namespace: App\Module\Tirage\Controller
+    type: attribute

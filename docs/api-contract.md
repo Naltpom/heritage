@@ -5606,3 +5606,64 @@ modèle), et surtout `texte` — *une phrase en français qui contient le nom*. 
 liste blanche champ par champ ne l'aurait attrapée ; c'est la règle plus générale
 de l'ADR 0003 qui la couvre, *« tout champ dérivé d'une donnée masquée est lui-même
 une donnée masquée »*.
+
+## 22. Tirages au sort
+
+Module **`Tirage`**. Les tirages récurrents — « Noël côté papa, le 24 décembre » — et, chaque
+année, qui offre à qui. Décision, secret et règles du tirage :
+[`docs/adr/0009-tirages-au-sort.md`](adr/0009-tirages-au-sort.md).
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/tirages` | `membre` | — | `200` | `401`, `403` |
+| `POST` | `/api/tirages` | `membre` | règles + `{participants: int[]}` | `201` | `409`, `422` |
+| `GET` | `/api/tirages/{id}` | `membre` | — | `200` | `404` |
+| `PUT` | `/api/tirages/{id}` | organisateur | règles | `200` | `403`, `404`, `409`, `422` |
+| `DELETE` | `/api/tirages/{id}` | organisateur | — | `204` | `403`, `404`, `409` |
+| `POST` | `/api/tirages/{id}/participants` | organisateur | `{personId, referentPersonId?}` | `201` | `403`, `404`, `409`, `422` |
+| `DELETE` | `/api/tirages/{id}/participants/{personId}` | organisateur, soi, référent | — | `200` | `403`, `404`, `409` |
+| `POST` | `/api/tirages/{id}/rejoindre` | membre rattaché, tirage ouvert | — | `201` | `403`, `404`, `409` |
+| `POST` | `/api/tirages/{id}/editions` | organisateur | `{annee, date?}` | `201` | `403`, `404`, `409`, `422` |
+| `PUT` | `/api/tirages/{id}/editions/{annee}/presences/{personId}` | organisateur, soi, référent | `{presence}` | `200` | `403`, `404`, `409`, `422` |
+| `POST` | `/api/tirages/{id}/editions/{annee}/tirage` | organisateur | — | `200` | `403`, `404`, `409` |
+| `DELETE` | `/api/tirages/{id}/editions/{annee}/tirage` | organisateur | — | `200` | `403`, `404`, `409` |
+
+« Organisateur » vaut aussi pour un administrateur. **Règles** :
+`{nom, jour, mois, lieu?, ouvert?, memoire?, exclureConjoints?}` — `memoire` de 0 à 10
+(défaut 2), `exclureConjoints` vrai par défaut. `presence` vaut `sur_place`, `a_distance`
+ou `absente`. Chaque écriture rend le **tirage relu**, sérialisé pour le lecteur. Chaque
+écriture rend `409 vue_comme_membre_active` sous la bascule.
+
+**Régime de cache : aucun.** `Cache-Control: private, no-store` et `Vary: Cookie` : une
+attribution est un secret par compte.
+
+### 22.1 Le secret
+
+`editions[].mesAttributions` ne contient que les attributions dont le **donneur** est le
+lecteur ou un participant dont il est le référent. Aucune autre clé ne porte un receveur,
+pour aucun lecteur — organisateur et administrateur compris. La lecture se fait sous le
+**compte réel**, jamais sous la bascule « voir comme un membre ».
+
+### 22.2 Les codes d'erreur
+
+| Code | Statut | Quand |
+|---|---|---|
+| `ressource_introuvable` | `404` | Tirage inconnu **ou** invisible pour ce compte — indistinguables (§ 15.3). |
+| `reserve_a_l_organisateur` | `403` | Geste de gestion par un autre compte. |
+| `acces_refuse` | `403` | Présence ou retrait d'un participant qu'on ne suit pas. |
+| `tirage_ferme` | `403` | Rejoindre un tirage non ouvert. |
+| `rattachement_requis` | `409` | Rejoindre sans être rattaché à une personne de l'arbre. |
+| `deja_participant` | `409` | La personne est déjà du tirage. |
+| `edition_existante` | `409` | L'année existe déjà. |
+| `edition_deja_tiree` | `409` | Retirer au sort, ou se retirer d'un tirage fait et à venir. |
+| `edition_non_tiree` | `409` | Annuler un tirage qui n'a pas eu lieu. |
+| `participants_insuffisants` | `409` | Moins de trois présents ; `details.minimum`. |
+| `tirage_impossible` | `409` | Aucune attribution possible, même sans mémoire. |
+| `donnees_invalides` | `422` | `champs` nomme chaque champ fautif. |
+
+### 22.3 La mémoire relâchée
+
+`editions[].memoireAppliquee` peut être **inférieure** à `memoire` : quand la règle « pas la
+même personne pendant N tirages » rend le tirage impossible, les années les plus anciennes
+sont oubliées une à une. `memoireConseillee` (détail) dit, pour le nombre de participants,
+jusqu'où la règle se tient à coup sûr.

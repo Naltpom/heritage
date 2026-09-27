@@ -68,8 +68,12 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * `date_naissance_inconnue`, 23 signes, d'où le `VARCHAR(32)` de `nature` : c'est
      * exactement la forme de débordement que ce test existe pour attraper, une valeur
      * descriptive ajoutée à une énumération dont les premières étaient courtes.
+     *
+     * **50 depuis le 2026-09-27** : `trg_edition.statut` et `trg_presence.presence`
+     * (module `Tirage`, ADR 0009), toutes deux en `VARCHAR(12)` pour une plus longue valeur
+     * de dix signes (`a_distance`).
      */
-    private const int COLONNES_ENUM_ATTENDUES = 48;
+    private const int COLONNES_ENUM_ATTENDUES = 50;
 
     public function testChaqueColonneAccueilleLaPlusLongueValeurDeSonEnumeration(): void
     {
