@@ -2,15 +2,21 @@
  * Le cadrage de `/histoire` : niveaux de détail, échelle anisotrope, zoom
  * autour d'un point et vol animé.
  *
- * **Plus on dézoome, moins on écrit.** Quatre niveaux, choisis sur l'échelle
+ * **Plus on dézoome, moins on écrit.** Trois niveaux, choisis sur l'échelle
  * horizontale `s` (1 = taille réelle d'une fiche) :
  *
  * | Niveau    | `s`         | Ce qu'on dessine                          |
  * |-----------|-------------|-------------------------------------------|
  * | Ensemble  | < 0,16      | rectangles de couleur, lignée directe     |
- * | Familles  | 0,16 – 0,42 | fiches, noms de foyers                    |
- * | Prénoms   | 0,42 – 0,75 | prénom seul                               |
- * | Fiches    | ≥ 0,75      | nom dessiné et ligne de dates             |
+ * | Familles  | 0,16 – 0,55 | fiches, noms de foyers                    |
+ * | Fiches    | ≥ 0,55      | le texte qui tient : voir `texteDeFiche`  |
+ *
+ * **Il y avait un quatrième niveau, « Prénoms », entre 0,42 et 0,75, et il ne
+ * tenait pas sa promesse.** Une fiche fait ~132 px de monde, dont 56 pour la
+ * photo : à 0,42 il restait ~32 px d'écran pour écrire, soit trois lettres ; à
+ * 0,75, ~57 px, où un nom complet ne tenait pas davantage. Les seuils étaient
+ * posés sur l'échelle, alors que ce qui décide est **la place du texte**. Le
+ * niveau Fiches choisit donc lui-même, fiche par fiche, ce qu'il écrit.
  *
  * **L'échelle verticale est séparée.** Cinq cents personnes sur sept
  * générations font un arbre trente fois plus large que haut : à l'échelle
@@ -20,9 +26,9 @@
  * Pur, sans DOM.
  */
 
-export type Niveau = 0 | 1 | 2 | 3
+export type Niveau = 0 | 1 | 2
 
-export const SEUILS = [0.16, 0.42, 0.75] as const
+export const SEUILS = [0.16, 0.55] as const
 
 export interface Palier {
   libelle: string
@@ -32,16 +38,41 @@ export interface Palier {
 
 export const PALIERS: readonly Palier[] = [
   { libelle: 'Ensemble', echelle: null },
-  { libelle: 'Familles', echelle: 0.26 },
-  { libelle: 'Prénoms', echelle: 0.55 },
+  { libelle: 'Familles', echelle: 0.3 },
   { libelle: 'Fiches', echelle: 1 },
 ]
 
 export function niveau(s: number): Niveau {
   if (s < SEUILS[0]) return 0
   if (s < SEUILS[1]) return 1
-  if (s < SEUILS[2]) return 2
-  return 3
+  return 2
+}
+
+/**
+ * Ce qu'une fiche écrit, selon la place qu'elle a **à l'écran**.
+ *
+ * Par ordre de préférence : le nom complet et la ligne de dates ; le nom
+ * complet seul ; le prénom. La police ne suit pas le zoom — une lettre de 7 px
+ * n'est lisible par personne —, c'est le texte qui s'adapte.
+ *
+ * La largeur d'un texte est estimée, pas mesurée : mesurer demanderait un
+ * canevas par fiche et par image. L'estimation est volontairement généreuse,
+ * pour qu'un nom annoncé « complet » ne soit jamais tronqué.
+ */
+export function texteDeFiche(
+  entree: { nom: string; prenom: string; dates: string },
+  largeur: number,
+  hauteur: number,
+): { t1: string; t2: string; taille: number } {
+  const tient = (texte: string, taille: number, chasse = 0.58): boolean => texte.length * taille * chasse <= largeur
+
+  if (tient(entree.nom, 12)) {
+    const dates = entree.dates !== '' && hauteur >= 30 && tient(entree.dates, 10.5, 0.62) ? entree.dates : ''
+    return { t1: entree.nom, t2: dates, taille: 12 }
+  }
+
+  const prenom = entree.prenom !== '' ? entree.prenom : entree.nom
+  return { t1: prenom, t2: '', taille: tient(prenom, 11) ? 11 : 10.5 }
 }
 
 /** `sy(s) = max(s, min(fitY, 30·s))`, avec `fitY = min(1, (hauteurCanevas − 90) / hauteurMonde)`. */

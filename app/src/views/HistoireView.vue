@@ -3,8 +3,9 @@
  * `/histoire` — tout l'arbre d'un coup, lisible à tous les zooms.
  *
  * Recréation de la maquette « Arbre complet à niveaux de détail (3a) ». **Plus
- * on dézoome, moins on écrit** : quatre niveaux (Ensemble, Familles, Prénoms,
- * Fiches), un zoom continu, une recherche qui vole jusqu'à la personne, des
+ * on dézoome, moins on écrit** : trois niveaux (Ensemble, Familles, Fiches —
+ * chaque fiche écrivant ce qui tient à l'écran), un bandeau des familles
+ * toujours visible en haut, un zoom continu, une recherche qui vole jusqu'à la personne, des
  * filtres par branche et une mini-carte.
  *
  * Écran **neuf et autonome** : il ne modifie ni `/arbre` ni `/tree`. Il
@@ -49,12 +50,14 @@ import {
   type DispositionHistoire,
   type FicheHistoire,
 } from '@/histoire/lignees'
+import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
 import {
   DUREE_VOL,
   PALIERS,
   ajusterLargeur,
   niveau as niveauDe,
   syDe,
+  texteDeFiche,
   trajectoire,
   versMonde,
   zoomAutour,
@@ -521,7 +524,6 @@ interface Libelle {
 const libelles = computed<Libelle[]>(() => {
   const d = disposition.value
   if (!d || niveau.value < 2) return []
-  const nv = niveau.value
   const direct = surligner.value
   const ciblees = idsCibles.value
   const d0 = LARGEUR_PHOTO * Math.min(s.value, sy.value)
@@ -530,6 +532,16 @@ const libelles = computed<Libelle[]>(() => {
     .filter((f) => passe(f) && dansLaFenetre(f.x, f.y, f.w, f.h))
     .map((f) => ({
       id: f.id,
+      ...texteDeFiche(
+        {
+          nom: nomDeFiche(f.noeud).texte,
+          prenom: prenomDe(f.noeud),
+          // Absente sur un nœud restreint : ni tiret, ni case vide.
+          dates: typeof f.noeud.etiquetteDates === 'string' ? f.noeud.etiquetteDates : '',
+        },
+        Math.max(0, f.w * s.value - texte - 4),
+        f.h * sy.value,
+      ),
       // Le portrait s'il y en a un (clé absente sur une fiche restreinte), la silhouette sinon.
       photo: {
         x: versEcranX(f.x) + ESPACE_PHOTO * s.value,
@@ -541,10 +553,6 @@ const libelles = computed<Libelle[]>(() => {
       y: versEcranY(f.y),
       w: Math.max(0, f.w * s.value - texte - 4),
       h: f.h * sy.value,
-      t1: nv === 2 ? prenomDe(f.noeud) || nomDeFiche(f.noeud).texte : nomDeFiche(f.noeud).texte,
-      // Absente sur un nœud restreint : ni tiret, ni case vide.
-      t2: nv === 3 && typeof f.noeud.etiquetteDates === 'string' ? f.noeud.etiquetteDates : '',
-      taille: nv === 2 ? 10.5 : 12,
       directe: f.directe && direct,
       estompe: ciblees.size > 0 && !ciblees.has(f.id),
     }))
@@ -558,41 +566,36 @@ const libellesFoyers = computed(() => {
     .map((c, i) => ({ cle: i, x: versEcranX(c.x), y: versEcranY(c.y) - 15, nom: c.nom, ancetres: c.ancetres }))
 })
 
-const libellesQuarts = computed(() => {
+/**
+ * Le bandeau des familles, collé en haut à tous les niveaux : chaque branche
+ * garde son nom visible tant qu'elle occupe l'écran (`histoire/bandeau.ts`).
+ * Il remplace les grands titres de branche posés au-dessus de l'arbre, qui
+ * disparaissaient dès qu'on zoomait ou qu'on descendait dans les générations.
+ */
+const bandeauFamilles = computed(() => {
   const d = disposition.value
-  if (!d || niveau.value > 1) return []
+  if (!d) return []
   const mobile = estMobile.value
-  const haut = cadrage.value.ty - (mobile ? 40 : 52)
-  if (haut < 0) return []
-  const ecart = mobile ? 64 : 190
-  const demi = mobile ? 34 : 95
-  let dernier = -Infinity
-  const entrees = d.quarts
-    .filter((q) => q.nom !== '')
-    .map((q) => ({
-      cle: q.branche as string,
-      couleur: couleurBranche(q.branche),
-      nom: q.nom,
-      sous: mobile ? `${q.effectif}` : `${q.libelle} · ${q.effectif}`,
-      x: versEcranX(q.cx),
-    }))
+  const branches: BrancheDuBandeau[] = d.quarts.map((q) => ({
+    cle: q.branche as string,
+    couleur: couleurBranche(q.branche),
+    nom: q.nom !== '' ? q.nom : q.libelle,
+    sous: mobile ? '' : `${q.libelle} · ${q.effectif}`,
+    x0: versEcranX(q.x0),
+    x1: versEcranX(q.x1),
+  }))
   const z = d.zoneDetachee
   if (z) {
-    entrees.push({
+    branches.push({
       cle: 'detaches',
       couleur: 'var(--h-attenue)',
       nom: 'Sans lien connu',
-      sous: mobile ? `${z.effectif}` : `position estimée · ${z.effectif}`,
-      x: versEcranX(z.cx),
+      sous: mobile ? '' : `position estimée · ${z.effectif}`,
+      x0: versEcranX(z.x0),
+      x1: versEcranX(z.x1),
     })
   }
-  return entrees
-    .sort((a, b) => a.x - b.x)
-    .map((e) => {
-      const px = Math.max(dernier + ecart, Math.max(gouttiere.value + demi, e.x))
-      dernier = px
-      return { ...e, x: px, y: Math.max(6, haut) }
-    })
+  return bandeauDesFamilles(branches, gouttiere.value, taille.value.l, mobile ? 12 : 13)
 })
 
 const etiquettesGouttiere = computed(() => {
@@ -675,8 +678,7 @@ const bulle = computed(() => {
   if (estMobile.value) return niveau.value === 0 ? 'Pincez pour zoomer' : ''
   return [
     'Molette ou pincer pour zoomer · glisser pour se déplacer',
-    'Les noms de famille apparaissent · zoomez encore pour les prénoms',
-    '',
+    'Les noms de famille apparaissent · zoomez encore pour les fiches',
     '',
   ][niveau.value]!
 })
@@ -887,7 +889,7 @@ onBeforeUnmount(() => {
       @reinitialiser="toutAfficher"
     >
       <template #vue>
-        <Segmente :options="OPTIONS_PALIERS" :valeur="niveau" etiquette="Niveau de détail" :colonnes="4" @choisir="allerAuPalier" />
+        <Segmente :options="OPTIONS_PALIERS" :valeur="niveau" etiquette="Niveau de détail" :colonnes="3" @choisir="allerAuPalier" />
       </template>
       <template #pastilles>
         <PastilleFiltre
@@ -1084,20 +1086,6 @@ onBeforeUnmount(() => {
         </div>
 
         <div
-          v-for="q in libellesQuarts"
-          :key="q.cle"
-          class="pointer-events-none absolute flex -translate-x-1/2 flex-col items-center text-center leading-tight"
-          :style="{ left: `${q.x}px`, top: `${q.y}px` }"
-        >
-          <span
-            class="font-bold tracking-tight whitespace-nowrap"
-            :class="estMobile ? 'text-xs' : 'text-[17px]'"
-            :style="{ color: q.couleur }"
-          >{{ q.nom }}</span>
-          <span class="whitespace-nowrap text-attenue" :class="estMobile ? 'text-[10px]' : 'text-xs'">{{ q.sous }}</span>
-        </div>
-
-        <div
           v-for="a in anneauxCibles"
           :key="`cible-${a.id}`"
           class="pointer-events-none absolute rounded-[9px] border-[var(--hi-libelle-accent)]"
@@ -1109,6 +1097,30 @@ onBeforeUnmount(() => {
           class="pointer-events-none absolute rounded-[9px] border-2 border-[var(--hi-libelle-accent)] shadow-[0_0_0_5px_rgba(217,160,102,.2)]"
           :style="{ left: `${anneau.x}px`, top: `${anneau.y}px`, width: `${anneau.w}px`, height: `${anneau.h}px` }"
         />
+
+        <!-- Bandeau des familles : collé en haut, à tous les zooms -->
+        <div
+          class="bandeau-familles pointer-events-none absolute inset-x-0 top-0 z-[1]"
+          :style="{ height: `${estMobile ? 30 : 40}px` }"
+          aria-hidden="true"
+        >
+          <template v-for="b in bandeauFamilles" :key="b.cle">
+            <div
+              class="absolute bottom-0 h-[3px] rounded-full"
+              :style="{ left: `${b.gauche}px`, width: `${b.largeur}px`, background: b.couleur }"
+            />
+            <div
+              v-if="b.etiquette"
+              class="absolute top-1 flex -translate-x-1/2 flex-col items-center leading-tight whitespace-nowrap"
+              :style="{ left: `${b.etiquette.x}px` }"
+            >
+              <span class="font-bold tracking-tight" :class="estMobile ? 'text-xs' : 'text-[13px]'" :style="{ color: b.couleur }">{{
+                b.etiquette.nom
+              }}</span>
+              <span v-if="b.etiquette.sous" class="text-[11px] text-attenue">{{ b.etiquette.sous }}</span>
+            </div>
+          </template>
+        </div>
 
         <!-- Gouttière des générations -->
         <div class="gouttiere pointer-events-none absolute inset-y-0 left-0" :style="{ width: `${gouttiere}px` }">
@@ -1310,5 +1322,8 @@ onBeforeUnmount(() => {
 }
 .gouttiere {
   background: linear-gradient(90deg, var(--h-fond) 62%, transparent);
+}
+.bandeau-familles {
+  background: linear-gradient(180deg, var(--h-fond) 70%, transparent);
 }
 </style>
