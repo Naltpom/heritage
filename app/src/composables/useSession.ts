@@ -110,6 +110,9 @@ export interface EtatSession {
   /** Bascule « voir comme un membre » active (§ 10.4) : bandeau permanent, et
    *  toute écriture rend `409 vue_comme_membre_active`. */
   vueEmpruntee: ComputedRef<ChargeDeSession['voirComme']>
+  /** Un administrateur connecté en tant que ce compte (ADR 0010) : bandeau
+   *  permanent et bouton « Revenir à mon compte ». */
+  incarnation: ComputedRef<NonNullable<ChargeDeSession['incarnation']> | null>
   nomAffiche: ComputedRef<string>
 }
 
@@ -123,6 +126,7 @@ export function useSession(): EtatSession {
     rattache: computed(() => regime.value === 'membre' || regime.value === 'administrateur'),
     administrateur: computed(() => regime.value === 'administrateur'),
     vueEmpruntee: computed(() => session.value?.voirComme ?? null),
+    incarnation: computed(() => session.value?.incarnation ?? null),
     // Retombe sur le courriel tant qu'il n'y a pas de rattachement validé
     // (§ 2.2 point 3) : le serveur ne renseigne jamais `displayName` depuis
     // `person_label` avant activation.

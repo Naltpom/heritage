@@ -16,6 +16,7 @@ use Doctrine\ORM\Event\PreUpdateEventArgs;
 use Doctrine\ORM\Events;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\Security\Core\Authentication\Token\SwitchUserToken;
 
 /**
  * Le **journal d'audit mécanique** : toute création, modification et suppression d'entité
@@ -185,6 +186,10 @@ final class AuditDoctrineSubscriber
     {
         $acteur = $this->security->getUser();
         $requete = $this->requestStack->getCurrentRequest();
+        // Sous une incarnation, l'acteur est le compte incarné ; l'administrateur qui tient
+        // le clavier est écrit à côté, sur chaque ligne (ADR 0010).
+        $jeton = $this->security->getToken();
+        $incarnant = $jeton instanceof SwitchUserToken ? $jeton->getOriginalToken()->getUser() : null;
 
         return new AuditLog(
             $action,
@@ -196,6 +201,8 @@ final class AuditDoctrineSubscriber
             $acteur?->getUserIdentifier(),
             $requete?->getClientIp(),
             $this->tronquer($requete?->headers->get('User-Agent')),
+            $incarnant instanceof User ? $incarnant->getId() : null,
+            $incarnant?->getUserIdentifier(),
         );
     }
 

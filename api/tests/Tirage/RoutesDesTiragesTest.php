@@ -125,6 +125,53 @@ final class RoutesDesTiragesTest extends ArbreWebTestCase
         }
     }
 
+    /**
+     * Sous la bascule « voir comme un membre », l'administrateur voit le tirage **comme ce
+     * membre** — son attribution, et rien de plus — et ne peut rien y écrire (ADR 0009,
+     * révision du 2026-09-27).
+     */
+    public function testSousLaBasculeLAdministrateurVoitLeTirageDuMembreSansPouvoirAgir(): void
+    {
+        $id = $this->tirageDeNoel();
+        $this->connexionDe(self::OPALE);
+        $this->envoyer('POST', "/api/tirages/{$id}/editions", ['annee' => 2026]);
+        $this->envoyer('POST', "/api/tirages/{$id}/editions/2026/tirage");
+
+        $this->creerUtilisateur('admin@example.invalid', ['ROLE_ADMIN']);
+        $this->connexionDe('admin@example.invalid');
+
+        // Sans bascule : l'administrateur voit le tirage, mais aucune attribution.
+        $this->requete("/api/tirages/{$id}");
+        self::assertSame([], $this->charge()['editions'][0]['mesAttributions']);
+
+        $membreDeJaspe = $this->em()->getRepository(Member::class)->findOneBy(['userId' => $this->userIdDe(self::JASPE)]);
+        self::assertNotNull($membreDeJaspe);
+        $this->envoyer('POST', '/api/administration/voir-comme', ['memberId' => $membreDeJaspe->getId()]);
+        self::assertSame(Response::HTTP_OK, $this->statut());
+
+        $this->requete('/api/tirages');
+        self::assertSame($this->idDe('conjointe'), $this->charge()['moi']['personId']);
+
+        $this->requete("/api/tirages/{$id}");
+        $charge = $this->charge();
+        self::assertFalse($charge['peutGerer'], 'Sous la bascule, on ne gère que si le membre organise.');
+        $siennes = $charge['editions'][0]['mesAttributions'];
+        self::assertCount(1, $siennes, 'L’attribution du membre, et seulement elle.');
+        self::assertSame($this->idDe('conjointe'), $siennes[0]['donneur']['personId']);
+
+        $this->envoyer('PUT', "/api/tirages/{$id}/editions/2026/presences/{$this->idDe('conjointe')}", ['presence' => 'a_distance']);
+        self::assertSame(Response::HTTP_CONFLICT, $this->statut());
+        self::assertSame('vue_comme_membre_active', $this->codeDErreur());
+
+        // Un tirage fermé dont le membre n'est pas reste introuvable, même pour l'administrateur.
+        $this->envoyer('DELETE', '/api/administration/voir-comme');
+        $this->envoyer('POST', '/api/tirages', $this->regles() + ['participants' => [$this->idDe('aieule'), $this->idDe('aieul'), $this->idDe('sansDate')]]);
+        $autre = $this->charge()['id'];
+        $this->envoyer('POST', '/api/administration/voir-comme', ['memberId' => $membreDeJaspe->getId()]);
+        $this->requete("/api/tirages/{$autre}");
+        self::assertSame(Response::HTTP_NOT_FOUND, $this->statut());
+    }
+
     /* ───────────────── Qui voit, qui gère ───────────────── */
 
     public function testUnTirageFermeEstIntrouvablePourQuiNEnEstPas(): void

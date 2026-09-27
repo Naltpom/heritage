@@ -257,12 +257,23 @@ export interface VueCommeMembre {
   depuis: string
 }
 
+/**
+ * ADR 0010 — un administrateur **connecté en tant que** ce compte. Toute la
+ * charge est alors celle du compte incarné ; `par` dit qui tient le clavier.
+ */
+export interface IncarnationDeSession {
+  par: { id: number; displayName: string }
+}
+
 export interface ChargeDeSession {
   utilisateur: UtilisateurDeSession
   membre: MembreDeSession | null
   cercle: CercleDeSession
   /** `null` sauf pour un administrateur ayant activé la bascule (§ 10.4). */
   voirComme: VueCommeMembre | null
+  /** `null` hors incarnation (ADR 0010). Facultatif pour les charges d'essai
+   *  écrites avant elle ; le serveur l'envoie toujours. */
+  incarnation?: IncarnationDeSession | null
   /** Identifiants des demandes `en_attente` dont le lecteur est l'auteur. */
   demandesEnAttente: number[]
   /**

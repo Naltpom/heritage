@@ -14,7 +14,9 @@ use Doctrine\ORM\Mapping as ORM;
  * Aucune route ne liste les attributions d'une édition : chacun ne lit que la sienne, et
  * celle des participants dont il est le référent. **L'organisateur ne les voit pas**, ni
  * un administrateur — ils participent souvent eux-mêmes, et un tirage que l'organisateur
- * connaît n'est plus un tirage pour lui. La table sert aussi de **mémoire** : c'est elle
+ * connaît n'est plus un tirage pour lui. Seule exception, tracée : sous la bascule « voir
+ * comme un membre », l'administrateur lit celle **de ce membre**, comme lui (ADR 0009).
+ * La table sert aussi de **mémoire** : c'est elle
  * qu'on relit pour ne pas retomber sur la même personne d'une année sur l'autre.
  *
  * Les deux index uniques disent l'invariant : chacun offre une fois, chacun reçoit une

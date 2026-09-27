@@ -36,9 +36,11 @@
  * croyant tester celui de quelqu'un d'autre. `rafraichirSession()` fait les deux.
  */
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   activerMembre,
   activerVueComme,
+  incarnerUtilisateur,
   listerUtilisateurs,
   modifierUtilisateur,
   quitterVueComme,
@@ -60,6 +62,7 @@ import {
 } from '@/components/administration/ecriture'
 
 const { session, vueEmpruntee } = useSession()
+const routeur = useRouter()
 
 const utilisateurs = ref<UtilisateurAdministration[]>([])
 const chargement = ref(false)
@@ -143,6 +146,31 @@ async function voirComme(utilisateur: UtilisateurAdministration): Promise<void> 
   } catch (cause) {
     erreur.value = cause
   }
+}
+
+/**
+ * Se connecter **en tant que** ce compte (ADR 0010) : on devient le membre,
+ * avec ses droits et rien de plus — donc plus cet écran, réservé à
+ * l'administration. D'où le départ vers l'arbre, qu'il voit comme lui.
+ */
+async function incarner(utilisateur: UtilisateurAdministration): Promise<void> {
+  if (suspendu.value || enCours.value !== null) return
+  enCours.value = utilisateur.id
+  erreur.value = null
+  try {
+    await incarnerUtilisateur(utilisateur.id)
+    await rafraichirSession()
+    await routeur.push({ name: 'arbre' })
+  } catch (cause) {
+    erreur.value = cause
+  } finally {
+    enCours.value = null
+  }
+}
+
+/** Ce qu'on n'incarne pas — le serveur le refuse de toute façon (`409`). */
+function incarnable(utilisateur: UtilisateurAdministration): boolean {
+  return utilisateur.id !== moi.value && !estAdministrateur(utilisateur) && utilisateur.status !== 'suspendu'
 }
 
 async function quitter(): Promise<void> {
@@ -244,6 +272,17 @@ function dateLisible(valeur: string | null): string {
               @click="voirComme(utilisateur)"
             >
               Voir comme ce membre
+            </BoutonBase>
+
+            <BoutonBase
+              v-if="incarnable(utilisateur) && vueEmpruntee === null"
+              variante="secondaire"
+              :chargement="enCours === utilisateur.id"
+              :desactive="suspendu || enCours !== null"
+              :title="infobulle"
+              @click="incarner(utilisateur)"
+            >
+              Se connecter en tant que
             </BoutonBase>
 
             <!-- On ne se suspend pas soi-même, et on ne se retire pas son propre

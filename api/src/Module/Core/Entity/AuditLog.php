@@ -87,6 +87,20 @@ class AuditLog
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $userAgent = null;
 
+    /**
+     * L'administrateur qui **incarnait** l'acteur au moment de l'action, ou `null`.
+     *
+     * Sous une incarnation, `actor_user_id` est le compte incarné — c'est lui qui a agi,
+     * aux yeux du produit — et cette colonne dit qui tenait réellement le clavier. Sans
+     * elle, une action faite par l'administrateur au nom d'un membre serait
+     * indistinguable d'une action du membre lui-même (ADR 0010).
+     */
+    #[ORM\Column(nullable: true)]
+    private ?int $impersonatorUserId = null;
+
+    #[ORM\Column(length: 180, nullable: true)]
+    private ?string $impersonatorEmail = null;
+
     /** @param array<string, mixed>|null $changes */
     public function __construct(
         AuditAction $action,
@@ -98,6 +112,8 @@ class AuditLog
         ?string $actorEmail = null,
         ?string $ip = null,
         ?string $userAgent = null,
+        ?int $impersonatorUserId = null,
+        ?string $impersonatorEmail = null,
     ) {
         $this->occurredAt = new \DateTimeImmutable();
         $this->action = $action;
@@ -109,6 +125,8 @@ class AuditLog
         $this->actorEmail = $actorEmail;
         $this->ip = $ip;
         $this->userAgent = $userAgent;
+        $this->impersonatorUserId = $impersonatorUserId;
+        $this->impersonatorEmail = $impersonatorEmail;
     }
 
     public function getId(): ?int
@@ -165,5 +183,15 @@ class AuditLog
     public function getUserAgent(): ?string
     {
         return $this->userAgent;
+    }
+
+    public function getImpersonatorUserId(): ?int
+    {
+        return $this->impersonatorUserId;
+    }
+
+    public function getImpersonatorEmail(): ?string
+    {
+        return $this->impersonatorEmail;
     }
 }

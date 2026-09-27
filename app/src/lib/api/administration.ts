@@ -221,6 +221,24 @@ export function activerVueComme(memberId: number): Promise<ChargeDeSession> {
   })
 }
 
+/**
+ * `POST /api/administration/incarnation` — se connecter **en tant que** ce
+ * compte (ADR 0010). Rend la charge de session du compte incarné ; l'appelant
+ * passe ensuite par `rafraichirSession()`, pour la même raison que la bascule.
+ */
+export function incarnerUtilisateur(userId: number): Promise<ChargeDeSession> {
+  return requeteApi<ChargeDeSession>('/administration/incarnation', { methode: 'POST', corps: { userId } })
+}
+
+/**
+ * `DELETE /api/session/incarnation` — revenir à son propre compte. Hors de
+ * `/administration` : pendant l'incarnation, le compte connecté n'est pas
+ * administrateur.
+ */
+export function quitterIncarnation(): Promise<ChargeDeSession> {
+  return requeteApi<ChargeDeSession>('/session/incarnation', { methode: 'DELETE' })
+}
+
 /** `DELETE /api/administration/voir-comme` — retour à la session normale. */
 export function quitterVueComme(): Promise<ChargeDeSession> {
   return requeteApi<ChargeDeSession>('/administration/voir-comme', { methode: 'DELETE' })

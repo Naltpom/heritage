@@ -61,6 +61,18 @@ enum AuditAction: string
     case VueCommeMembre = 'vue_comme_membre';
 
     /**
+     * Un administrateur se connecte **en tant qu'un autre compte** (ADR 0010). La ligne
+     * porte l'administrateur en acteur et le compte incarné en sujet.
+     */
+    case IncarnationDebut = 'incarnation_debut';
+
+    /**
+     * Retour au compte réel. Écrite **avant** le retour : son acteur est le compte incarné,
+     * et son incarnant l'administrateur — comme toute ligne écrite pendant l'incarnation.
+     */
+    case IncarnationFin = 'incarnation_fin';
+
+    /**
      * Un appel sortant au modèle de langage qui formule les questions (ADR 0008).
      *
      * **C'est le seul endroit du produit où des données de personnes vivantes quittent

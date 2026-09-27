@@ -55,9 +55,9 @@ fixer la graine.
 
 - L'organisateur ne voit pas les paires, ni un administrateur : ils participent le plus
   souvent eux-mêmes. Aucune route ne liste les attributions d'une édition.
-- La bascule « voir comme un membre » **n'est pas rejouée** pour la lecture d'un tirage : elle
-  donnerait à tout administrateur le moyen de lire l'attribution de n'importe qui. Les
-  écritures restent refusées sous la bascule, comme partout.
+- Sous la bascule « voir comme un membre », l'administrateur lit **comme ce membre** : ses
+  tirages et son attribution — voir la révision plus bas. Les écritures restent refusées
+  sous la bascule, comme partout.
 - La notification `tirage_effectue` ne nomme personne.
 - La liste des tirages ne nomme jamais le receveur, et l'écran du tirage le masque jusqu'au
   geste « Découvrir » : il s'ouvre volontiers devant d'autres, un soir de famille.
@@ -86,6 +86,27 @@ une personne vivante hors cercle — et n'y écrit rien.
 **Ce n'est pas un tirage automatique à date fixe.** L'organisateur ouvre l'année et lance le
 tirage. Le dépôt n'embarque ni Messenger ni Scheduler, et les ajouter pour un geste annuel
 serait disproportionné.
+
+## Révision du 2026-09-27 — la bascule montre le tirage du membre
+
+La première version de cet ADR **ne rejouait pas** la bascule « voir comme un membre » pour
+les tirages : l'administrateur y voyait toujours les siens. Le motif était le secret — la
+bascule donne à tout administrateur le moyen de lire l'attribution de n'importe quel
+participant.
+
+Le commanditaire a tranché dans l'autre sens : la bascule existe pour **voir ce que voit un
+membre**, et un écran de tirage qui montrerait autre chose ne vérifierait rien. Elle est donc
+rejouée (`Tirage\Service\IdentiteDuLecteur`), avec trois bornes :
+
+- l'activation de la bascule est tracée au journal d'audit (`vue_comme_membre`) ;
+- le lecteur emprunté **n'est jamais administrateur** : il voit exactement ce que voit le
+  membre — un tirage fermé dont le membre n'est pas reste introuvable — et ne gère un tirage
+  que si le membre l'organise ;
+- aucune écriture ne passe sous la bascule (`409 vue_comme_membre_active`).
+
+Ce qui change, dit sans détour : **le secret d'un participant n'est plus garanti contre un
+administrateur.** Il l'est toujours contre l'organisateur, les autres participants, les
+notifications et la liste.
 
 ## Conséquences
 
