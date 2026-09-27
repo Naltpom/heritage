@@ -21,6 +21,7 @@ import BandeauRegime from '@/components/mise-en-page/BandeauRegime.vue'
 // activé « voir comme » depuis l'administration parcourt ensuite l'arbre ; le
 // faire revenir dans l'administration pour en sortir, c'est le laisser explorer
 // sous une identité qu'il a oubliée (§ 10.4).
+import QuitterIncarnation from '@/components/administration/QuitterIncarnation.vue'
 import QuitterVueEmpruntee from '@/components/administration/QuitterVueEmpruntee.vue'
 
 const route = useRoute()
@@ -43,6 +44,9 @@ const avecCadre = computed(() => route.meta.cadre !== false)
       <BandeauRegime>
         <template #quitter-vue>
           <QuitterVueEmpruntee />
+        </template>
+        <template #quitter-incarnation>
+          <QuitterIncarnation />
         </template>
       </BandeauRegime>
     </template>

@@ -38,6 +38,8 @@ final class SessionPayloadBuilder
             'membre' => null,
             'cercle' => ['regime' => Regime::Aucun->value],
             'voirComme' => null,
+            // Qui incarne ce compte, ou `null` : posé par {@see Incarnation} (ADR 0010).
+            'incarnation' => null,
             'demandesEnAttente' => [],
         ];
 

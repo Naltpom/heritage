@@ -42,13 +42,24 @@ import BandeauRegime from '@/components/mise-en-page/BandeauRegime.vue'
 const etat = vi.hoisted(() => ({
   vueEmpruntee: null as unknown as { value: { memberId: number; memberLabel: string; depuis: string } | null },
   regime: null as unknown as { value: string },
+  incarnation: null as unknown as { value: { par: { id: number; displayName: string } } | null },
+  nomAffiche: null as unknown as { value: string },
 }))
 
 vi.mock('@/composables/useSession', async () => {
   const { shallowRef } = await import('vue')
   etat.vueEmpruntee = shallowRef(null)
   etat.regime = shallowRef('administrateur')
-  return { useSession: () => ({ vueEmpruntee: etat.vueEmpruntee, regime: etat.regime }) }
+  etat.incarnation = shallowRef(null)
+  etat.nomAffiche = shallowRef('Cobalt Romarin')
+  return {
+    useSession: () => ({
+      vueEmpruntee: etat.vueEmpruntee,
+      regime: etat.regime,
+      incarnation: etat.incarnation,
+      nomAffiche: etat.nomAffiche,
+    }),
+  }
 })
 
 const VUE_EMPRUNTEE = {
@@ -184,9 +195,13 @@ describe('le bandeau permanent', () => {
     template: '<a href="#"><slot /></a>',
   }
 
-  function rendreBandeau(vue: typeof VUE_EMPRUNTEE | null): Promise<string> {
+  function rendreBandeau(
+    vue: typeof VUE_EMPRUNTEE | null,
+    incarnation: { par: { id: number; displayName: string } } | null = null,
+  ): Promise<string> {
     etat.vueEmpruntee.value = vue
-    etat.regime.value = 'administrateur'
+    etat.incarnation.value = incarnation
+    etat.regime.value = incarnation === null ? 'administrateur' : 'membre'
     const app = createSSRApp({ render: () => h(BandeauRegime) })
     // Enregistrement **global**, et non `components:` sur le composant racine :
     // `BandeauRegime` résout `RouterLink` dans sa propre portée, puis retombe
@@ -213,5 +228,20 @@ describe('le bandeau permanent', () => {
     const html = await rendreBandeau(null)
 
     expect(html).not.toMatch(/vue empruntée/i)
+    expect(html).not.toMatch(/connecté en tant que/i)
+  })
+
+  /**
+   * ADR 0010 — sous une incarnation, l'administrateur **agit** au nom du
+   * membre : le bandeau dit en tant que qui, et que chaque geste lui reste
+   * attribué à lui.
+   */
+  it('annonce l’incarnation, qui est incarné et qui tient le clavier', async () => {
+    const html = await rendreBandeau(null, { par: { id: 1, displayName: 'Natron' } })
+
+    expect(html).toMatch(/connecté en tant que/i)
+    expect(html).toContain('Cobalt Romarin')
+    expect(html).toContain('Natron')
+    expect(html).toMatch(/tracée/i)
   })
 })

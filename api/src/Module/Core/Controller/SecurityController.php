@@ -9,6 +9,7 @@ use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Http\ErrorEnvelope;
 use App\Module\Core\Service\ChangementDeCourriel;
+use App\Module\Core\Service\Incarnation;
 use App\Module\Core\Service\SessionPayloadBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -90,7 +91,11 @@ final class SecurityController extends AbstractController
         #[CurrentUser] User $utilisateur,
         UserPasswordHasherInterface $hacheur,
         EntityManagerInterface $em,
+        Incarnation $incarnation,
     ): JsonResponse {
+        // Le mot de passe du membre incarné reste le sien (ADR 0010).
+        $incarnation->refuserSiActive();
+
         $corps = $this->corpsJson($requete);
 
         $actuel = $corps['motDePasseActuel'] ?? null;
@@ -131,7 +136,11 @@ final class SecurityController extends AbstractController
         Request $requete,
         #[CurrentUser] User $utilisateur,
         ChangementDeCourriel $changement,
+        Incarnation $incarnation,
     ): JsonResponse {
+        // Son courriel aussi : c'est l'identifiant du compte (ADR 0010).
+        $incarnation->refuserSiActive();
+
         return new JsonResponse($changement->demander($utilisateur, $this->corpsJson($requete), $requete));
     }
 

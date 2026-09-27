@@ -491,6 +491,8 @@ aucun code n'émet d'`UPDATE` ni de `DELETE` sur cette table.
 | `changes` | `JSONB` | oui | `NULL` | Diff champ par champ : `{"surname": {"avant": "Bourrache", "apres": "BOURRACHE"}}`. **Champs sensibles masqués** : `password`, `totp_secret`, `token_hash` sont remplacés par `"***"` par le souscripteur, jamais écrits. |
 | `ip` | `VARCHAR(45)` | oui | `NULL` | 45 caractères : une IPv6 mappée IPv4 (`::ffff:192.168.0.1`) fait 45 signes. L'IP vient du proxy de confiance, pas de `REMOTE_ADDR`. |
 | `user_agent` | `VARCHAR(255)` | oui | `NULL` | Tronqué à 255. Utile pour distinguer deux sessions du même compte. |
+| `impersonator_user_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`core_user`). L'administrateur qui **incarnait** l'acteur au moment de l'action (ADR 0010) ; `NULL` hors incarnation. Ajoutée par `Version20260928090000`. |
+| `impersonator_email` | `VARCHAR(180)` | oui | `NULL` | Libellé dénormalisé de l'incarnant, comme `actor_email`. |
 
 **Clés et index**
 
@@ -580,6 +582,8 @@ dossier de mission).
 | `import_gedcom` | — |
 | `export_gedcom` | — |
 | `vue_comme_membre` | Un administrateur a activé la bascule du § 6.2 du dossier. Tracé, parce que c'est une lecture de données masquées. |
+| `incarnation_debut` | Un administrateur se connecte en tant qu'un autre compte (ADR 0010). Acteur : l'administrateur ; sujet : le compte incarné. |
+| `incarnation_fin` | Retour au compte d'origine. Écrite sous l'incarnation : acteur le compte incarné, incarnant l'administrateur. |
 
 **`NotificationKind`** — `demande_soumise`, `demande_validee`, `demande_refusee`,
 `demande_caduque`, `doublon_probable`, `invitation_utilisee`, `compte_en_attente`,

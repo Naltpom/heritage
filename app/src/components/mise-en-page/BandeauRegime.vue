@@ -17,13 +17,28 @@
  */
 import { useSession } from '@/composables/useSession'
 
-const { regime, vueEmpruntee } = useSession()
+const { regime, vueEmpruntee, incarnation, nomAffiche } = useSession()
 </script>
 
 <template>
   <div>
+    <!-- L'incarnation passe avant tout : l'administrateur **agit** au nom de
+         quelqu'un, et chaque geste sera enregistré sous ce nom (ADR 0010). -->
     <div
-      v-if="vueEmpruntee !== null"
+      v-if="incarnation !== null"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-alerte-bord bg-alerte-doux px-4 py-2 text-sm text-alerte"
+      role="status"
+    >
+      <strong class="font-semibold">Connecté en tant que {{ nomAffiche }}</strong>
+      <span>
+        Vous voyez et faites tout comme ce membre. Chaque action est tracée à votre nom,
+        {{ incarnation.par.displayName }}.
+      </span>
+      <slot name="quitter-incarnation" />
+    </div>
+
+    <div
+      v-else-if="vueEmpruntee !== null"
       class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-accent bg-accent-doux px-4 py-2 text-sm text-accent"
       role="status"
     >

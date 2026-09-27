@@ -440,6 +440,7 @@ Membre actif :
     "taille": 34
   },
   "voirComme": null,
+  "incarnation": null,
   "demandesEnAttente": [12]
 }
 ```
@@ -466,6 +467,7 @@ cosmétiques :
   },
   "cercle": { "regime": "aucun" },
   "voirComme": null,
+  "incarnation": null,
   "demandesEnAttente": []
 }
 ```
@@ -489,6 +491,8 @@ un compteur ; il conditionne aussi l'`ETag` du graphe (§ 5.2), ce qui rend le l
 plutôt que magique.
 
 `voirComme` est `null` sauf pour un administrateur ayant activé la bascule (§ 10.4).
+`incarnation` est `null` sauf quand un administrateur est connecté en tant que ce compte
+(§ 23) : elle vaut alors `{par: {id, displayName}}`.
 
 
 ---
@@ -871,6 +875,7 @@ rend `candidats: []` — et **surtout pas** un message du genre « la date atten
   },
   "cercle": { "regime": "aucun" },
   "voirComme": null,
+  "incarnation": null,
   "demandesEnAttente": []
 }
 ```
@@ -5669,3 +5674,20 @@ un membre », la lecture se fait **comme ce membre** : tirages visibles, attribu
 même personne pendant N tirages » rend le tirage impossible, les années les plus anciennes
 sont oubliées une à une. `memoireConseillee` (détail) dit, pour le nombre de participants,
 jusqu'où la règle se tient à coup sûr.
+
+## 23. Incarnation d'un compte
+
+Se connecter **en tant qu'un autre compte**, et en revenir. Décision et garde-fous :
+[`docs/adr/0010-incarnation-d-un-compte.md`](adr/0010-incarnation-d-un-compte.md).
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `POST` | `/api/administration/incarnation` | `ADMIN` | `{userId}` | `200` charge de session **du compte incarné** | `404` · `409` `incarnation_impossible` · `409` `incarnation_active` · `422` |
+| `DELETE` | `/api/session/incarnation` | connecté | — | `200` charge de session **de l'administrateur** | `409` `incarnation_inactive` |
+
+- Pendant l'incarnation, la charge de session (§ 2.2) est celle du membre, plus
+  `incarnation: {par: {id, displayName}}` ; hors incarnation, `incarnation` vaut `null`.
+- `POST /api/session/mot-de-passe` et `POST /api/session/courriel` rendent
+  `409 incarnation_active`.
+- `GET /api/administration/journal` expose `impersonatorUserId` et `impersonatorEmail` sur
+  chaque ligne, `null` hors incarnation.

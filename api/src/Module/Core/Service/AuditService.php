@@ -11,6 +11,7 @@ use App\Module\Core\Repository\AuditLogRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\Security\Core\Authentication\Token\SwitchUserToken;
 
 /**
  * Écriture et lecture du **journal d'audit**.
@@ -63,6 +64,9 @@ final class AuditService
         ?array $changes = null,
         ?User $acteur = null,
     ): AuditLog {
+        // L'incarnant n'est posé que pour l'acteur **de la session** : un acteur passé
+        // explicitement (une commande console, un amorçage) n'agit sous personne.
+        $incarnant = null === $acteur ? $this->incarnant() : null;
         $acteur ??= $this->utilisateurCourant();
         $requete = $this->requestStack->getCurrentRequest();
 
@@ -78,6 +82,8 @@ final class AuditService
             // est posé dans `config/packages/framework.yaml` (§ 2.4 du modèle).
             $requete?->getClientIp(),
             $this->tronquer($requete?->headers->get('User-Agent')),
+            $incarnant?->getId(),
+            $incarnant?->getEmail(),
         );
 
         $this->em->persist($journal);
@@ -148,6 +154,9 @@ final class AuditService
             'changes' => $ligne->getChanges(),
             'ip' => $ligne->getIp(),
             'userAgent' => $ligne->getUserAgent(),
+            // L'administrateur qui incarnait l'acteur, ou `null` (ADR 0010).
+            'impersonatorUserId' => $ligne->getImpersonatorUserId(),
+            'impersonatorEmail' => $ligne->getImpersonatorEmail(),
         ];
     }
 
@@ -179,6 +188,20 @@ final class AuditService
         $utilisateur = $this->security->getUser();
 
         return $utilisateur instanceof User ? $utilisateur : null;
+    }
+
+    /** Le compte réel derrière une incarnation en cours, ou `null`. */
+    private function incarnant(): ?User
+    {
+        $jeton = $this->security->getToken();
+
+        if (!$jeton instanceof SwitchUserToken) {
+            return null;
+        }
+
+        $original = $jeton->getOriginalToken()->getUser();
+
+        return $original instanceof User ? $original : null;
     }
 
     /** `user_agent` est un `VARCHAR(255)` : on tronque plutôt que d'échouer l'insertion. */
