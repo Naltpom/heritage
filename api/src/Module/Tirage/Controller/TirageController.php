@@ -41,7 +41,8 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  *
  * Chaque écriture est refusée sous la bascule « voir comme un membre » : l'administrateur
  * écrirait en son nom pendant que l'écran montre quelqu'un d'autre. Les lectures, elles,
- * se font **toujours** sous le compte réel — voir {@see IdentiteDuLecteur}.
+ * se font sous le compte **emprunté** : l'administrateur voit ce que voit le membre, son
+ * attribution comprise — voir {@see IdentiteDuLecteur}.
  *
  * Chaque réponse est le tirage relu, sérialisé pour le lecteur : le front n'a jamais à
  * recoller une réponse partielle.

@@ -5641,8 +5641,10 @@ attribution est un secret par compte.
 
 `editions[].mesAttributions` ne contient que les attributions dont le **donneur** est le
 lecteur ou un participant dont il est le référent. Aucune autre clé ne porte un receveur,
-pour aucun lecteur — organisateur et administrateur compris. La lecture se fait sous le
-**compte réel**, jamais sous la bascule « voir comme un membre ».
+pour aucun lecteur — organisateur et administrateur compris. Sous la bascule « voir comme
+un membre », la lecture se fait **comme ce membre** : tirages visibles, attributions et
+`moi` sont les siens, et `peutGerer` ne vaut `true` que s'il organise (ADR 0009, révision du
+2026-09-27).
 
 ### 22.2 Les codes d'erreur
 
