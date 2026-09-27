@@ -22,4 +22,6 @@ enum NotificationKind: string
     case CompteEnAttente = 'compte_en_attente';
     case MediaValide = 'media_valide';
     case MediaRefuse = 'media_refuse';
+    /** Le tirage au sort d'une année est fait (module `Tirage`). Elle ne nomme personne. */
+    case TirageEffectue = 'tirage_effectue';
 }

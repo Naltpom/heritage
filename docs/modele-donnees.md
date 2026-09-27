@@ -583,7 +583,8 @@ dossier de mission).
 
 **`NotificationKind`** — `demande_soumise`, `demande_validee`, `demande_refusee`,
 `demande_caduque`, `doublon_probable`, `invitation_utilisee`, `compte_en_attente`,
-`media_valide`, `media_refuse`. La notification `demande_caduque` porte le diff de ce qui a
+`media_valide`, `media_refuse`, `tirage_effectue` (module `Tirage`, ADR 0009 — elle ne nomme
+personne). La notification `demande_caduque` porte le diff de ce qui a
 changé et le lien « refaire cette demande » (§ 9.6) : sans eux, c'est une contribution
 perdue.
 
@@ -2051,6 +2052,27 @@ Aucune référence n'entre **dans** `Question` : aucun autre module ne connaît 
 tables. C'est ce qui rend le module retirable d'un bloc si la page ne prend pas.
 
 ---
+
+## 8 ter. Module `Tirage` — préfixe `trg_`
+
+Les tirages au sort récurrents — décision, secret et règles du tirage :
+[ADR 0009](adr/0009-tirages-au-sort.md). Migration : `Version20260927120000`, dont
+l'en-tête détaille chaque `CHECK`.
+
+| Table | Colonnes principales | Contraintes |
+|---|---|---|
+| `trg_tirage` | `nom`, `jour`, `mois`, `lieu?`, `ouvert`, `memoire`, `exclure_conjoints`, `organisateur_user_id` ⇢ `core_user`, `organisateur_libelle` | `ck_trg_tirage_jour`, `ck_trg_tirage_memoire` (0 à 10) |
+| `trg_participant` | `tirage_id`, `person_id` ⇢ `tree_person`, `person_label`, `referent_person_id?`, `referent_label?`, `ajoute_par_user_id` ⇢ `core_user` | `uniq_trg_participant_personne (tirage_id, person_id)`, `ck_trg_participant_referent` |
+| `trg_edition` | `tirage_id`, `annee`, `date`, `statut`, `memoire_appliquee?`, `tiree_le?` | `uniq_trg_edition_annee (tirage_id, annee)`, `ck_trg_edition_statut`, `ck_trg_edition_tiree` (équivalence) |
+| `trg_presence` | `edition_id`, `person_id` ⇢ `tree_person`, `presence` | `uniq_trg_presence_personne (edition_id, person_id)`, `ck_trg_presence_valeur` |
+| `trg_attribution` | `edition_id`, `donneur_person_id`, `donneur_label`, `receveur_person_id`, `receveur_label` | `uniq_trg_attribution_donneur`, `uniq_trg_attribution_receveur`, `ck_trg_attribution_soi` |
+
+Énumérations : **`StatutDEdition`** — `ouverte`, `tiree` ; **`Presence`** — `sur_place`,
+`a_distance`, `absente`. Toutes deux en `VARCHAR(12)`.
+
+Les clés étrangères sont toutes internes au module, en `ON DELETE CASCADE`. Les références
+vers `tree_person` et `core_user` sont des identifiants nus avec libellé dénormalisé
+(ADR 0002, règle 2) : une attribution garde le nom de l'année où elle a été tirée.
 
 ## 9. Décisions et pièges
 

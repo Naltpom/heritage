@@ -38,12 +38,14 @@ final class SqueletteTest extends KernelTestCase
      * n'y entre qu'avec son contrôleur et son fichier de routes — un module listé ici
      * sans eux ferait échouer ce test sur une absence voulue, et l'on apprendrait à le
      * lire comme du bruit.
+     *
+     * **Neuf depuis le 2026-09-27** : `Tirage` (les tirages au sort récurrents, ADR 0009).
      */
-    public function testLesHuitModulesSontPresents(): void
+    public function testLesNeufModulesSontPresents(): void
     {
         $racine = \dirname(__DIR__);
 
-        foreach (['Core', 'Tree', 'Membership', 'Proposal', 'Media', 'Timeline', 'Gedcom', 'Question'] as $module) {
+        foreach (['Core', 'Tree', 'Membership', 'Proposal', 'Media', 'Timeline', 'Gedcom', 'Question', 'Tirage'] as $module) {
             foreach (['Controller', 'Entity', 'Enum', 'Repository', 'Service'] as $couche) {
                 self::assertDirectoryExists(
                     $racine.'/src/Module/'.$module.'/'.$couche,

@@ -267,6 +267,22 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Questions' },
   },
   {
+    // Les tirages au sort récurrents (ADR 0009). `membre` : on y participe par
+    // la personne de l'arbre à laquelle on est rattaché, et l'API refuse tout
+    // compte en attente.
+    path: '/tirages',
+    name: 'tirages',
+    component: () => import('@/views/TiragesView.vue'),
+    meta: { acces: 'membre', titre: 'Tirages au sort' },
+  },
+  {
+    // Nom cité par les notifications `tirage_effectue` : on ne le renomme pas.
+    path: '/tirages/:id(\\d+)',
+    name: 'tirage.detail',
+    component: () => import('@/views/TirageView.vue'),
+    meta: { acces: 'membre', titre: 'Tirage au sort', parent: { nom: 'tirages', libelle: 'Tirages' } },
+  },
+  {
     // Nom cité par le contrat (§ 8, `linkRoute: "demande.detail"`). La route
     // existe dès maintenant pour que les notifications aient une cible ; l'écran
     // revient à l'agent des propositions.

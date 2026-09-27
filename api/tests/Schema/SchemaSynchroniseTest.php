@@ -77,8 +77,15 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * une colonne parce qu'une seule réponse peut produire **deux** demandes — le lieu
      * en note et la photo de l'acte en média —, que l'administrateur doit pouvoir
      * trancher séparément.
+     *
+     * **32 depuis le 2026-09-27** : les cinq tables `trg_*` du module `Tirage`
+     * (`migrations/Version20260927120000.php`, ADR 0009) — le tirage récurrent, ses
+     * participants, chaque édition annuelle, les présences et les attributions. Ce sont des
+     * **décisions** : les présences ont leur table parce qu'elles changent d'une année sur
+     * l'autre, et les attributions parce qu'elles sont à la fois le secret de l'année et la
+     * mémoire des suivantes.
      */
-    private const int NOMBRE_DE_TABLES = 27;
+    private const int NOMBRE_DE_TABLES = 32;
 
     public function testLeMappingEstValide(): void
     {
@@ -115,7 +122,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      */
     public function testChaqueTablePorteLePrefixeDeSonModule(): void
     {
-        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_'];
+        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_'];
 
         foreach ($this->tablesDuMapping() as $table) {
             $porteUnPrefixe = array_filter(
