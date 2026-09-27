@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * Les documents joints à l'analyse : **Importer** et **Prendre en photo**.
+ * Les documents joints à l'analyse : **Importer**, **Prendre en photo** et
+ * **Enregistrer** (un témoignage audio, voir `EnregistrementAudio.vue`).
  *
  * Deux champs de fichier cachés, deux boutons visibles. « Prendre en photo »
  * pose `capture="environment"` : sur téléphone, l'appareil photo arrière s'ouvre
@@ -13,16 +14,18 @@
  * révocation vivent chez le parent, qui est seul à savoir quand un document
  * sert encore — il accompagne aussi le dépôt des preuves.
  */
-import { useTemplateRef } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 import { tailleLisible } from '@/components/medias/medias'
 import { rappelDesBornes } from './assistant'
+import EnregistrementAudio from './EnregistrementAudio.vue'
 
 export interface DocumentAffiche {
   cle: number
   fichier: File
-  /** URL d'objet d'une image, ou `null` (PDF, ou type inconnu). */
+  /** URL d'objet d'une image ou d'un enregistrement, ou `null` (PDF, ou type inconnu). */
   apercu: string | null
   pdf: boolean
+  audio: boolean
 }
 
 const { documents, refus, desactive = false } = defineProps<{
@@ -36,6 +39,13 @@ const emit = defineEmits<{
   ajouter: [fichiers: File[]]
   retirer: [cle: number]
 }>()
+
+/** Les enregistrements, à réécouter avant d'analyser : leur rang reste celui de la grille. */
+const ecoutes = computed(() =>
+  documents
+    .map((document, index) => ({ document, rang: index + 1 }))
+    .filter(({ document }) => document.audio && document.apercu !== null),
+)
 
 const champImport = useTemplateRef<HTMLInputElement>('champImport')
 const champPhoto = useTemplateRef<HTMLInputElement>('champPhoto')
@@ -70,12 +80,13 @@ function recevoir(evenement: Event): void {
         <span aria-hidden="true" class="max-md:hidden">◉</span>
         Prendre en photo
       </button>
+      <EnregistrementAudio :desactive="desactive" @enregistrement="emit('ajouter', [$event])" />
 
       <input
         ref="champImport"
         type="file"
         multiple
-        accept="image/*,application/pdf"
+        accept="image/*,application/pdf,audio/*"
         class="sr-only"
         tabindex="-1"
         aria-hidden="true"
@@ -115,8 +126,17 @@ function recevoir(evenement: Event): void {
         :key="document.cle"
         class="relative overflow-hidden rounded-champ border border-ligne bg-fond"
       >
+        <div
+          v-if="document.audio"
+          class="flex aspect-square w-full flex-col items-center justify-center gap-1 px-1.5 text-center"
+        >
+          <span class="rounded-pastille border border-accent bg-accent-doux px-2 py-0.5 text-[11px] font-semibold">
+            Audio
+          </span>
+          <span class="line-clamp-2 text-[11px] break-all text-attenue">{{ document.fichier.name }}</span>
+        </div>
         <img
-          v-if="document.apercu !== null"
+          v-else-if="document.apercu !== null"
           :src="document.apercu"
           :alt="`Document ${index + 1} : ${document.fichier.name}`"
           class="aspect-square w-full object-cover"
@@ -153,6 +173,13 @@ function recevoir(evenement: Event): void {
             ×
           </span>
         </button>
+      </li>
+    </ul>
+
+    <ul v-if="ecoutes.length > 0" class="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="Réécouter les enregistrements">
+      <li v-for="{ document, rang } in ecoutes" :key="document.cle" class="flex min-w-0 items-center gap-2">
+        <span class="flex-none text-[11px] text-attenue tabular-nums">{{ rang }}</span>
+        <audio :src="document.apercu ?? undefined" controls preload="metadata" class="h-9 min-w-0 flex-1" />
       </li>
     </ul>
   </div>

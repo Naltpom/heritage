@@ -113,6 +113,57 @@ final class TraducteurDePropositionsTest extends TestCase
         );
     }
 
+    /**
+     * « Ma cousine Jeanne, qui n'est pas dans l'arbre, a eu deux enfants » : une seule
+     * demande, le parent nouveau rattaché à l'arbre, ses enfants rattachés à lui.
+     */
+    public function testUnePersonneNouvelleEtSesEnfantsNouveauxFontUneSeuleDemande(): void
+    {
+        $traduites = (new TraducteurDePropositions())->traduire([
+            'resume' => 'Jeanne et ses deux enfants.',
+            'demandes' => [[
+                'nature' => 'creation_personne',
+                'titre' => 'Ajouter Jeanne Sureau et ses enfants',
+                'justification' => 'Texte du membre.',
+                'confiance' => 'moyenne',
+                'personnes' => [
+                    ['ref' => '#p1', 'prenoms' => 'Jeanne', 'nom' => 'Sureau', 'sexe' => 'feminin'],
+                    ['ref' => '#p2', 'prenoms' => 'Louis', 'nom' => 'Sureau', 'sexe' => 'masculin'],
+                    ['ref' => '#p3', 'prenoms' => 'Rose', 'nom' => 'Sureau', 'sexe' => 'feminin'],
+                ],
+                'liens' => [
+                    ['nature' => 'enfant_de', 'sujet' => '#p1', 'autre' => '17'],
+                    ['nature' => 'enfant_de', 'sujet' => '#p2', 'autre' => '#p1'],
+                    ['nature' => 'enfant_de', 'sujet' => 'p3', 'autre' => '#P1', 'autre2' => '18'],
+                ],
+            ]],
+        ]);
+
+        self::assertSame([], $traduites->avertissements);
+        $corps = $traduites->propositions[0]->corps;
+        self::assertSame(['#p1', '#p2', '#p3'], array_column($corps['brouillons'], 'localRef'));
+        self::assertSame([
+            ['seq' => 1, 'kind' => 'enfant_de', 'subjectDraftRef' => '#p1', 'otherPersonId' => 17],
+            ['seq' => 2, 'kind' => 'enfant_de', 'subjectDraftRef' => '#p2', 'otherDraftRef' => '#p1'],
+            ['seq' => 3, 'kind' => 'enfant_de', 'subjectDraftRef' => '#p3', 'otherDraftRef' => '#p1', 'other2PersonId' => 18],
+        ], $corps['liens']);
+    }
+
+    /** Un enfant qui vise le parent nouveau d'une **autre** demande : écarté, et le motif le dit. */
+    public function testUneReferenceDUneAutreDemandeEstEcarteeAvecSonMotif(): void
+    {
+        $traduites = (new TraducteurDePropositions())->traduire([
+            'resume' => 'x',
+            'demandes' => [
+                ['nature' => 'creation_personne', 'titre' => 'Ajouter Jeanne', 'personnes' => [['ref' => '#p1', 'prenoms' => 'Jeanne']], 'liens' => [['nature' => 'enfant_de', 'sujet' => '#p1', 'autre' => '17']]],
+                ['nature' => 'creation_personne', 'titre' => 'Ajouter Louis', 'personnes' => [['ref' => '#p2', 'prenoms' => 'Louis']], 'liens' => [['nature' => 'enfant_de', 'sujet' => '#p2', 'autre' => '#p1']]],
+            ],
+        ]);
+
+        self::assertCount(1, $traduites->propositions);
+        self::assertStringContainsString('« Ajouter Louis » a été écartée : un de ses liens vise la personne nouvelle « #p1 », qu’elle ne décrit pas', $traduites->avertissements[0]);
+    }
+
     public function testUnAjoutDeLienNeCreeAucuneFicheEtAnnonceSaCible(): void
     {
         $traduites = (new TraducteurDePropositions())->traduire([

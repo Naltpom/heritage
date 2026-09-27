@@ -97,7 +97,7 @@ final readonly class OutilsDeLAssistant
                         'avertissements' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Ce que le membre doit savoir : document illisible, homonymie non tranchée, information contradictoire.'],
                         'demandes' => [
                             'type' => 'array',
-                            'description' => 'Une demande par nature et par personne visée.',
+                            'description' => 'Une modification_personne par fiche existante ; une creation_personne par groupe de personnes nouvelles liées entre elles (une personne nouvelle, ses enfants, son conjoint nouveaux : une seule demande).',
                             'items' => [
                                 'type' => 'object',
                                 'properties' => [
@@ -122,7 +122,7 @@ final readonly class OutilsDeLAssistant
                                     ],
                                     'personnes' => [
                                         'type' => 'array',
-                                        'description' => 'creation_personne : les personnes nouvelles, chacune avec une référence « #p1 », « #p2 »…',
+                                        'description' => 'creation_personne : les personnes nouvelles, chacune avec une référence « #p1 », « #p2 »… Une personne nouvelle et ses proches eux aussi nouveaux (enfants, conjoint, parents) se décrivent ensemble ici, dans la même demande.',
                                         'items' => [
                                             'type' => 'object',
                                             'properties' => [
@@ -142,12 +142,12 @@ final readonly class OutilsDeLAssistant
                                     ],
                                     'liens' => [
                                         'type' => 'array',
-                                        'description' => 'creation_personne (au moins un) et ajout_lien. Se lit du sujet vers l’autre : « sujet enfant_de autre ».',
+                                        'description' => 'creation_personne (au moins un, vers l’arbre) et ajout_lien. Se lit du sujet vers l’autre : « sujet enfant_de autre ». Deux personnes nouvelles de la même demande se relient entre elles : « #p2 enfant_de #p1 ».',
                                         'items' => [
                                             'type' => 'object',
                                             'properties' => [
                                                 'nature' => ['type' => 'string', 'enum' => ['enfant_de', 'parent_de', 'conjoint_de']],
-                                                'sujet' => ['type' => 'string', 'description' => '« #p1 » pour une personne nouvelle de la demande, ou l’identifiant numérique d’une personne de l’arbre (« 12 »).'],
+                                                'sujet' => ['type' => 'string', 'description' => '« #p1 » pour une personne nouvelle de CETTE demande (une référence ne vaut que dans sa demande), ou l’identifiant numérique d’une personne de l’arbre (« 12 »).'],
                                                 'autre' => ['type' => 'string', 'description' => 'Même forme que sujet.'],
                                                 'autre2' => ['type' => 'string', 'description' => 'enfant_de seulement : le second parent, même forme.'],
                                                 'mariage' => $date,
@@ -163,11 +163,11 @@ final readonly class OutilsDeLAssistant
                         ],
                         'portraits' => [
                             'type' => 'array',
-                            'description' => 'Facultatif : les visages nets et identifiables repérés dans les PHOTOS jointes (jamais dans un PDF), à utiliser comme portrait de la personne. Au plus un portrait par personne. Liste vide si aucun.',
+                            'description' => 'Facultatif : les visages nets et identifiables repérés dans les PHOTOS jointes (jamais dans un PDF ni un enregistrement), à utiliser comme portrait de la personne. Au plus un portrait par personne. Liste vide si aucun.',
                             'items' => [
                                 'type' => 'object',
                                 'properties' => [
-                                    'document' => ['type' => 'integer', 'description' => 'Le numéro du document (1 pour « Document 1 »). Une image, jamais un PDF.'],
+                                    'document' => ['type' => 'integer', 'description' => 'Le numéro du document (1 pour « Document 1 »). Une image, jamais un PDF ni un enregistrement.'],
                                     'personne' => ['type' => 'string', 'description' => 'L’identifiant numérique d’une personne de l’arbre (« 12 »), ou la référence « #p1 » d’une personne nouvelle d’une demande creation_personne de cet appel.'],
                                     'demande' => ['type' => 'integer', 'description' => 'Pour une personne nouvelle seulement : le rang (1 pour la première) dans « demandes » de la demande creation_personne qui la décrit.'],
                                     'cadre' => [

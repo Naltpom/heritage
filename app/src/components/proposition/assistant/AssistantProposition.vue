@@ -8,7 +8,8 @@
  * preuves aux fiches visées.
  *
  * 1. **Saisie** — un grand champ de texte, les documents (Importer / Prendre en
- *    photo), la mention du quota et « Analyser ».
+ *    photo / Enregistrer — un témoignage audio est un document comme un autre),
+ *    la mention du quota et « Analyser ».
  * 2. **Attente** — 20 à 60 secondes, dites comme telles, avec le temps écoulé
  *    et « Annuler » : une attente qu'on ne peut ni mesurer ni interrompre
  *    ressemble à une panne dès la quinzième seconde.
@@ -79,10 +80,9 @@ import {
   planDeDepot,
   titreErreurAnalyse,
   trierDocuments,
-  ajouterDictee,
+  estAudio,
 } from './assistant'
 import { reduireSiImage } from './reduireImage'
-import DicteeVocale from './DicteeVocale.vue'
 import {
   bilanPortraits,
   clesPortraitsParDefaut,
@@ -122,8 +122,9 @@ async function ajouterDocuments(fichiers: File[]): Promise<void> {
     documents.value.push({
       cle: ++compteur,
       fichier,
-      apercu: estApercuImage(fichier) && typeof URL !== 'undefined' ? URL.createObjectURL(fichier) : null,
+      apercu: (estApercuImage(fichier) || estAudio(fichier)) && typeof URL !== 'undefined' ? URL.createObjectURL(fichier) : null,
       pdf: estPdf(fichier),
+      audio: estAudio(fichier),
     })
   }
 }
@@ -213,6 +214,8 @@ function basculer(cle: string, coche: boolean): void {
 }
 
 const nombreCochees = computed(() => cochees.value.size)
+/** Les documents qui peuvent devenir des preuves : tout sauf les enregistrements. */
+const documentsJoignables = computed(() => documents.value.filter((d) => !d.audio).length)
 const avecCibleExistante = computed(
   () =>
     analyse.value?.demandes.some(
@@ -469,7 +472,8 @@ onBeforeUnmount(() => {
         <div class="flex flex-col gap-4">
           <label class="flex flex-col gap-1">
             <span class="text-sm text-attenue">
-              Écrivez librement : qui, quand, où, et d’où vous le tenez. L’assistant retrouvera les
+              Écrivez librement : qui, quand, où, et d’où vous le tenez. Vous pouvez aussi
+              enregistrer un témoignage, joint comme un document. L’assistant retrouvera les
               personnes dans l’arbre.
             </span>
             <textarea
@@ -484,7 +488,6 @@ onBeforeUnmount(() => {
               {{ texte.length }} / {{ TEXTE_MAX }}
             </span>
           </label>
-          <DicteeVocale :desactive="phase === 'analyse' || suspendu" @phrase="texte = ajouterDictee(texte, $event)" />
 
           <div class="flex flex-col gap-1.5">
             <span class="text-sm font-medium">Documents</span>
@@ -603,7 +606,7 @@ onBeforeUnmount(() => {
         <PanneauBase>
           <div class="flex flex-col gap-3">
             <label
-              v-if="documents.length > 0"
+              v-if="documentsJoignables > 0"
               class="flex min-h-11 cursor-pointer items-start gap-2.5 text-sm"
             >
               <input
@@ -619,6 +622,9 @@ onBeforeUnmount(() => {
                   </template>
                   <template v-else>
                     Aucune demande cochée ne vise une fiche existante : rien ne sera joint.
+                  </template>
+                  <template v-if="documentsJoignables < documents.length">
+                    Les enregistrements audio ne sont pas joints : ils ont servi à l’analyse seulement.
                   </template>
                 </span>
               </span>

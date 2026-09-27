@@ -92,7 +92,7 @@ describe('le segmenté « Formulaire · Assistant IA »', () => {
     expect(html).toContain('Importer')
     expect(html).toContain('Prendre en photo')
     expect(html).toContain('capture="environment"')
-    expect(html).toContain('accept="image/*,application/pdf"')
+    expect(html).toContain('accept="image/*,application/pdf,audio/*"')
     expect(html).toContain('Analyser')
     expect(html).toContain('20 analyses par jour')
     expect(html).not.toContain('Envoyer la proposition')

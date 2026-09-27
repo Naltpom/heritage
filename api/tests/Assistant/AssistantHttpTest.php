@@ -360,6 +360,70 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
         self::assertArrayHasKey('portraits', $proposer['parameters']['properties']);
     }
 
+    public function testUnEnregistrementAudioEstUneSourceEtUnePersonneNouvelleVientAvecSesEnfants(): void
+    {
+        $this->seConnecterCommeOpale();
+
+        ModeleScripte::repondra(ModeleScripte::appel('proposer', [
+            'resume' => 'Un témoignage : Jeanne, fille de Marne, a eu deux enfants.',
+            'demandes' => [[
+                'nature' => 'creation_personne', 'titre' => 'Ajouter Jeanne Sureau et ses deux enfants',
+                'justification' => 'Enregistrement, document 1.', 'confiance' => 'moyenne',
+                'personnes' => [
+                    ['ref' => '#p1', 'prenoms' => 'Jeanne', 'nom' => 'Sureau', 'sexe' => 'feminin'],
+                    ['ref' => '#p2', 'prenoms' => 'Louis', 'nom' => 'Sureau', 'sexe' => 'masculin'],
+                    ['ref' => '#p3', 'prenoms' => 'Rose', 'nom' => 'Sureau', 'sexe' => 'feminin'],
+                ],
+                'liens' => [
+                    ['nature' => 'enfant_de', 'sujet' => '#p1', 'autre' => (string) $this->marne],
+                    ['nature' => 'enfant_de', 'sujet' => '#p2', 'autre' => '#p1'],
+                    ['nature' => 'enfant_de', 'sujet' => '#p3', 'autre' => '#p1'],
+                ],
+            ]],
+            'portraits' => [
+                ['document' => 1, 'personne' => (string) $this->marne, 'cadre' => ['haut' => 10, 'gauche' => 10, 'bas' => 90, 'droite' => 90], 'justification' => 'Un son.'],
+            ],
+        ]));
+
+        $this->analyser([], [$this->fichier("\x00\x00\x00\x20ftypM4A \x00\x00\x00\x00temoignage", 'enregistrement-1.m4a')]);
+
+        self::assertResponseIsSuccessful();
+        $charge = $this->charge();
+
+        // Le dépôt à blanc garde la demande : les enfants se rattachent au parent nouveau.
+        self::assertSame(['d1'], array_column($charge['demandes'], 'cle'));
+        self::assertSame(['#p1', '#p2', '#p3'], array_column($charge['demandes'][0]['corps']['brouillons'], 'localRef'));
+        self::assertSame([], $charge['portraits']);
+        self::assertStringContainsString('jamais d’un enregistrement', implode("\n", $charge['avertissements']));
+
+        $parts = ModeleScripte::requetes()[0]['charge']['contents'][0]['parts'];
+        self::assertSame('Document 1 (enregistrement audio) :', $parts[1]['text']);
+        self::assertSame('audio/mp4', $parts[2]['inlineData']['mimeType'], 'Le type est reniflé sur les octets.');
+    }
+
+    public function testLesFormatsAudioSontRenifles(): void
+    {
+        $this->seConnecterCommeOpale();
+
+        $formats = [
+            'audio/mp3' => ["ID3\x04\x00memo", 'memo.mp3'],
+            'audio/wav' => ["RIFF\x24\x00\x00\x00WAVEfmt ", 'dictaphone.wav'],
+            'audio/ogg' => ["OggS\x00\x02opus", 'note.ogg'],
+            'audio/webm' => ["\x1A\x45\xDF\xA3webm", 'enregistrement-1.webm'],
+        ];
+
+        foreach ($formats as $type => [$octets, $nom]) {
+            ModeleScripte::repondra(ModeleScripte::appel('proposer', ['resume' => 'Rien.', 'demandes' => []]));
+            $this->analyser([], [$this->fichier($octets, $nom)]);
+            self::assertResponseIsSuccessful();
+        }
+
+        self::assertSame(
+            array_keys($formats),
+            array_map(static fn (array $r): string => $r['charge']['contents'][0]['parts'][2]['inlineData']['mimeType'], ModeleScripte::requetes()),
+        );
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────
     //  Le dépôt
     // ─────────────────────────────────────────────────────────────────────────────
