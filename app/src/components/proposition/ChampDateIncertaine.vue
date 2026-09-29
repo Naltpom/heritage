@@ -22,16 +22,17 @@
  * `raw` — vit dans `dates.ts`, testée sans monter de composant. Ce fichier ne
  * fait que relier des champs à cet état.
  */
-import { computed, useId } from 'vue'
+import { computed, ref, useId } from 'vue'
 import {
-  AIDES_FORME,
   LIBELLES_FORME,
   apercuDeValeur,
   relectureFidele,
+  saisieDepuisBloc,
   valeurAEnvoyer,
   type FormeDate,
   type SaisieDate,
 } from './dates'
+import type { ValeurDate } from '@/lib/api'
 
 const { etiquette, erreur = '', aide = '' } = defineProps<{
   etiquette: string
@@ -85,6 +86,33 @@ function changerForme(valeur: string): void {
  */
 const verrouille = computed(() => !relectureFidele(saisie.value.origine))
 
+/**
+ * **Remplacer une date verrouillée — par un geste explicite.**
+ *
+ * Le verrou protège d'une suppression *que personne n'a demandée* ; il n'a pas
+ * à empêcher celui qui connaît la bonne date de l'écrire. Le bouton pré-remplit
+ * au mieux (`FROM 1900` devient « après 1900 ») puis détache l'origine : la
+ * saisie est dès lors composée comme n'importe quelle autre, et l'aperçu montre
+ * ce qui partira. `construireOps` compare à la fiche, pas à `origine` — un
+ * remplacement identique ne produit donc toujours aucun op.
+ *
+ * L'original est gardé ici pour « Annuler », qui remet le verrou tel quel.
+ */
+const remplacee = ref<ValeurDate | null>(null)
+
+function remplacer(): void {
+  const origine = saisie.value.origine
+  if (origine === null) return
+  remplacee.value = origine
+  saisie.value = { ...saisieDepuisBloc(origine), origine: null }
+}
+
+function annulerRemplacement(): void {
+  if (remplacee.value === null) return
+  saisie.value = saisieDepuisBloc(remplacee.value)
+  remplacee.value = null
+}
+
 /** Ce que la saisie produira, ou le motif du refus. Recalculé à chaque frappe :
  *  c'est ce qui rend la borne exclue visible avant l'envoi et non après. */
 const resultat = computed(() => valeurAEnvoyer(saisie.value))
@@ -111,10 +139,16 @@ const classeChamp = computed(() => [
         <span v-if="saisie.origine?.place" class="text-attenue"> — {{ saisie.origine.place }}</span>
       </p>
       <p class="text-xs text-attenue">
-        Cette date est écrite sous une forme que ce formulaire ne sait pas encore rééditer.
-        Elle est laissée intacte : votre proposition ne la touchera pas. Signalez-la à un
-        administrateur si elle doit changer.
+        Cette date est écrite sous une forme que ce formulaire ne sait pas rééditer telle
+        quelle. Elle est laissée intacte tant que vous ne la remplacez pas.
       </p>
+      <button
+        type="button"
+        class="self-start rounded-champ border border-ligne px-2.5 py-1 text-xs hover:bg-panneau"
+        @click="remplacer"
+      >
+        Remplacer cette date
+      </button>
     </template>
 
     <!-- `flex-wrap` plutôt qu'une grille : à 400 px, la nature prend une ligne
@@ -182,9 +216,15 @@ const classeChamp = computed(() => [
     >
       {{ apercu }}
     </p>
-    <p v-if="!verrouille" :id="idAide" class="text-xs text-attenue">
-      {{ aide.length > 0 ? aide : AIDES_FORME[saisie.forme] }}
-    </p>
+    <p v-if="!verrouille && aide.length > 0" :id="idAide" class="text-xs text-attenue">{{ aide }}</p>
+    <button
+      v-if="remplacee !== null"
+      type="button"
+      class="self-start text-xs text-attenue underline"
+      @click="annulerRemplacement"
+    >
+      Annuler — garder « {{ remplacee.raw ?? apercuDeValeur(remplacee) }} »
+    </button>
     <p v-if="erreur.length > 0" :id="idErreur" class="text-xs text-alerte">{{ erreur }}</p>
   </fieldset>
 </template>

@@ -173,7 +173,7 @@ final class JetonInvalideTest extends CasDeTestMembership
         $revoquee->revoquer($identifiant, $administrateur->getEmail());
 
         [$consommee, $jetonConsomme] = $this->creerInvitation($administrateur);
-        $consommee->marquerUtilisee($identifiant, 'quelqun@example.net');
+        $consommee->enregistrerUnUsage($identifiant, 'quelqun@example.net');
 
         $em->flush();
 

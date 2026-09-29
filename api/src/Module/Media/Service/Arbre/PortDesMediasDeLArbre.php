@@ -10,6 +10,7 @@ use App\Module\Media\Enum\MediaSubject;
 use App\Module\Media\Repository\MediaRepository;
 use App\Module\Media\Security\LecteurMedia;
 use App\Module\Media\Security\VisibiliteDesSujetsInterface;
+use App\Module\Media\Service\AdresseDuMedia;
 use App\Module\Media\Service\CatalogueMedia;
 use App\Module\Tree\Serializer\LecteurDeLArbre;
 use App\Module\Tree\Serializer\PortDesMedias;
@@ -180,7 +181,7 @@ final readonly class PortDesMediasDeLArbre implements PortDesMedias
 
     private function url(Media $media, string $segment): string
     {
-        return \sprintf('/api/medias/%d/%s', (int) $media->getId(), $segment);
+        return 'vignette' === $segment ? AdresseDuMedia::vignette($media) : AdresseDuMedia::fichier($media);
     }
 
     /**

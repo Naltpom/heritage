@@ -457,7 +457,7 @@ watch(
             class="mt-1.5 block w-full cursor-zoom-in rounded-[6px] border border-ligne"
             loading="lazy"
             decoding="async"
-            @click="loupe = { url: `/api/medias/${m.mediaId}/fichier`, legende: 'Image d’archive' }"
+            @click="loupe = { url: m.vignetteUrl.replace('/vignette', '/fichier'), legende: 'Image d’archive' }"
           />
         </div>
       </template>

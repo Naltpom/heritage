@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Les points d'entrée « proposer » d'une fiche : **une modification, ou des
- * liens de parenté**.
+ * Le point d'entrée « proposer » d'une fiche. La parenté se modifie sur le même
+ * écran que les champs (`PropositionModificationView.vue`).
  *
  * ────────────────────────────────────────────────────────────────────
  * ## Un lien, et rien d'autre — surtout pas un état transmis
@@ -21,11 +21,8 @@
  *
  * ## Deux dispositions, une seule condition
  *
- * La refonte de la fiche pose ces liens à deux endroits : dans le **bandeau**
- * desktop (« Proposer une modification » en principal, « Proposer des liens » en
- * secondaire), et dans la **barre d'action fixe** du mobile, où seul le premier
- * tient — le second passe alors dans le menu ⋯ (`MenuFiche.vue`). La condition,
- * elle, est la même partout : elle vit dans `gestes.ts`.
+ * Le lien vit dans le **bandeau** desktop et dans la **barre d'action fixe** du
+ * mobile. La condition est la même partout : elle vit dans `gestes.ts`.
  *
  * ## Pourquoi un `v-if` sur le rôle est légitime ici, et seulement ici
  *
@@ -99,17 +96,5 @@ const EXPLICATION =
       Proposer une modification
     </RouterLink>
 
-    <!-- Les liens de parenté sont une autre nature de demande (`ajout_lien`),
-         donc un autre formulaire : dit à côté, pour qu'on n'ait pas à deviner
-         qu'« ajouter le père » ne se trouve pas derrière « modification ». -->
-    <RouterLink
-      v-if="disposition === 'bandeau'"
-      :to="{ name: 'proposition.liens', params: { id: fiche.id } }"
-      title="Ajouter parents, fratrie, conjoints ou enfants"
-      data-geste="proposer-liens"
-      class="inline-flex h-9 items-center rounded-champ border border-ligne bg-panneau px-3.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors hover:border-accent"
-    >
-      Proposer des liens
-    </RouterLink>
   </template>
 </template>

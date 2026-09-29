@@ -20,10 +20,12 @@ use Doctrine\ORM\EntityManagerInterface;
  * que partout ailleurs (ADR 0004), et elle vaut ici avec une raison de plus — un média
  * supprimé emporte un fichier, ce qu'un `UPDATE` sur une fiche ne fait pas.
  *
- * **C'est le seul endroit du module qui efface des octets.** Le refus n'en efface pas
- * (§ 7.6 : « un refus n'est pas une destruction »), la validation non plus, le
- * remplacement d'un portrait non plus — « les précédents sont conservés ». Si un jour un
- * quatrième chemin appelle {@see StockageMedia::supprimer()}, c'est qu'une règle a
+ * **C'est, avec la rotation, le seul endroit du module qui efface des octets.** Le refus
+ * n'en efface pas (§ 7.6 : « un refus n'est pas une destruction »), la validation non
+ * plus, le remplacement d'un portrait non plus — « les précédents sont conservés ».
+ * {@see PivotementMedia} efface l'ancien fichier d'une image qu'il vient de réécrire
+ * sous un autre nom : ce sont les mêmes pixels, tournés, pas une preuve perdue. Si un
+ * jour un autre chemin appelle {@see StockageMedia::supprimer()}, c'est qu'une règle a
  * changé et il faut que cela se voie.
  *
  * La ligne part **après** les fichiers, et pas l'inverse : un fichier orphelin se

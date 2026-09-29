@@ -31,6 +31,10 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  * ré-encodage direct de la ressource décodée est volontaire : elle normalise aussi les
  * images à palette et n'emporte aucune propriété résiduelle de l'objet source.
  *
+ * Une seule métadonnée survit, **sous forme de pixels** : l'orientation EXIF, appliquée
+ * avant l'encodage par {@see OrientationExif}. L'effacer sans l'appliquer couchait
+ * toutes les photos de téléphone prises en hauteur.
+ *
  * ## Les PDF : ce qui est traité, et ce qui ne l'est pas
  *
  * Un PDF n'a pas d'EXIF mais a ses propres métadonnées : le dictionnaire `/Info`
@@ -132,6 +136,7 @@ final class PurgeDesMetadonnees
     public function __construct(
         #[Autowire(param: 'app.media.temporaire')]
         private readonly string $repertoireTemporaire,
+        private readonly OrientationExif $orientation = new OrientationExif(),
     ) {
     }
 
@@ -143,10 +148,33 @@ final class PurgeDesMetadonnees
     {
         return 'application/pdf' === $mime
             ? $this->purgerPdf($chemin)
-            : $this->purgerImage($chemin, $mime);
+            : $this->purgerImage($chemin, $mime, $this->orientation->lire($chemin, $mime));
     }
 
-    private function purgerImage(string $chemin, string $mime): ResultatDePurge
+    /**
+     * Le même ré-encodage, avec un quart de tour imposé au lieu de l'orientation EXIF.
+     *
+     * Passer par ici plutôt que par un second chemin GD garde un seul endroit pour le
+     * plafond de pixels, les qualités d'encodage et la conservation de l'alpha. Le
+     * fichier stocké a déjà été purgé : il n'a plus d'EXIF, donc rien ne se cumule.
+     *
+     * @param 90|180|270 $degresHoraires
+     */
+    public function pivoter(string $chemin, string $mime, int $degresHoraires): ResultatDePurge
+    {
+        // 6, 3 et 8 sont exactement les orientations EXIF « quart de tour horaire »,
+        // « demi-tour » et « quart de tour anti-horaire ».
+        $orientation = match ($degresHoraires) {
+            90 => 6,
+            180 => 3,
+            270 => 8,
+        };
+
+        return $this->purgerImage($chemin, $mime, $orientation);
+    }
+
+    /** @param int $orientation valeur EXIF 1..8 à appliquer aux pixels avant l'encodage */
+    private function purgerImage(string $chemin, string $mime, int $orientation): ResultatDePurge
     {
         $taille = @getimagesize($chemin);
 
@@ -174,39 +202,47 @@ final class PurgeDesMetadonnees
             throw new ValidationException(['fichier' => 'Ce fichier ne peut pas être lu comme une image.']);
         }
 
-        try {
-            $toile = imagecreatetruecolor($largeur, $hauteur);
+        $toile = imagecreatetruecolor($largeur, $hauteur);
 
-            // JPEG n'a pas de canal alpha ; PNG et WebP en ont un, et une toile neuve
-            // est noire opaque. Sans ces trois lignes, un portrait détouré ressort sur
-            // fond noir — la purge ne doit pas abîmer l'image qu'elle nettoie.
-            if ('image/jpeg' !== $mime) {
-                imagealphablending($toile, false);
-                imagesavealpha($toile, true);
-                $transparent = imagecolorallocatealpha($toile, 0, 0, 0, 127);
+        // JPEG n'a pas de canal alpha ; PNG et WebP en ont un, et une toile neuve
+        // est noire opaque. Sans ces trois lignes, un portrait détouré ressort sur
+        // fond noir — la purge ne doit pas abîmer l'image qu'elle nettoie.
+        if ('image/jpeg' !== $mime) {
+            imagealphablending($toile, false);
+            imagesavealpha($toile, true);
+            $transparent = imagecolorallocatealpha($toile, 0, 0, 0, 127);
 
-                if (false !== $transparent) {
-                    imagefilledrectangle($toile, 0, 0, $largeur, $hauteur, $transparent);
-                }
+            if (false !== $transparent) {
+                imagefilledrectangle($toile, 0, 0, $largeur, $hauteur, $transparent);
             }
-
-            imagecopy($toile, $source, 0, 0, 0, 0, $largeur, $hauteur);
-
-            $destination = $this->fichierTemporaire();
-            $ecrit = $this->encoder($toile, $destination, $mime);
-
-            imagedestroy($toile);
-
-            if (!$ecrit) {
-                @unlink($destination);
-
-                throw new \RuntimeException('Le ré-encodage de l\'image a échoué.');
-            }
-
-            return new ResultatDePurge($destination, $mime, $largeur, $hauteur, null, true);
-        } finally {
-            imagedestroy($source);
         }
+
+        imagecopy($toile, $source, 0, 0, 0, 0, $largeur, $hauteur);
+
+        // La source est lâchée AVANT le redressement : `imagerotate()` alloue une
+        // troisième image, et le calcul de `PIXELS_MAX` n'en prévoit que deux vivantes.
+        // (Depuis PHP 8, `imagedestroy()` ne libère rien — seule la dernière référence
+        // qui tombe le fait.)
+        unset($source);
+
+        // L'orientation EXIF part avec le reste des métadonnées : elle doit donc être
+        // appliquée aux pixels, sinon la photo prise en hauteur ressort couchée. Les
+        // dimensions rendues sont celles d'APRÈS le redressement — c'est l'image que
+        // tout le monde verra.
+        $toile = $this->orientation->redresser($toile, $orientation);
+
+        $destination = $this->fichierTemporaire();
+        $ecrit = $this->encoder($toile, $destination, $mime);
+        [$largeur, $hauteur] = [imagesx($toile), imagesy($toile)];
+        unset($toile);
+
+        if (!$ecrit) {
+            @unlink($destination);
+
+            throw new \RuntimeException('Le ré-encodage de l\'image a échoué.');
+        }
+
+        return new ResultatDePurge($destination, $mime, $largeur, $hauteur, null, true);
     }
 
     /**

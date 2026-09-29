@@ -148,7 +148,7 @@ final class TeleversementDUnePreuveHttpTest extends ArbreWebTestCase
         self::assertTrue($media['exifStripped'], 'Ce qui est déposé n’est jamais le fichier reçu : c’est sa réécriture.');
         self::assertSame(MediaStatus::Actif->value, $media['status'], 'Le dépôt d’un administrateur est auto-approuvé (§ 7.1).');
         self::assertTrue($media['isActivePortrait']);
-        self::assertSame('/api/medias/'.$mediaId.'/fichier', $media['url']);
+        self::assertStringStartsWith('/api/medias/'.$mediaId.'/fichier?v=', $media['url']);
         self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', (string) $media['sha256']);
 
         // ── 2. La liste du sujet — un tableau NU, sans enveloppe (§ 1.5).

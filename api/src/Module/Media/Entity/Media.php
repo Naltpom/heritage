@@ -280,6 +280,22 @@ class Media
         return $this->storageName;
     }
 
+    /**
+     * Pointe la ligne vers un fichier réécrit (une rotation). **Nouveau nom** plutôt
+     * qu'un fichier écrasé sur place : les octets d'un nom de stockage restent
+     * immuables, ce sur quoi reposent l'`ETag` et la version des URL de
+     * {@see \App\Module\Media\Service\AdresseDuMedia}. `originalSha256` n'est pas touché :
+     * il décrit le fichier **reçu**, et sert à reconnaître un second dépôt du même.
+     */
+    public function remplacerLeFichier(string $storageName, int $byteSize, string $sha256): self
+    {
+        $this->storageName = $storageName;
+        $this->byteSize = $byteSize;
+        $this->sha256 = $sha256;
+
+        return $this->toucher();
+    }
+
     public function getOriginalName(): ?string
     {
         return $this->originalName;

@@ -35,6 +35,7 @@ final class InvitationsTest extends CasDeTestMembership
 
         $this->requete('POST', '/api/administration/invitations', [
             'personId' => ArbreFamilial::EGO,
+            'maxUses' => 1,
             'note' => 'pour la cousine de Saule',
         ]);
 
@@ -82,6 +83,7 @@ final class InvitationsTest extends CasDeTestMembership
         $this->requete('POST', '/api/administration/invitations', [
             'email' => 'cousin.saule@example.net',
             'envoyerCourriel' => true,
+            'note' => 'pour le cousin de Saule',
         ]);
 
         self::assertSame(201, $this->client->getResponse()->getStatusCode());
@@ -103,7 +105,7 @@ final class InvitationsTest extends CasDeTestMembership
         $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
         $this->connexion('admin@example.net');
 
-        $this->requete('POST', '/api/administration/invitations', ['personId' => 999_999]);
+        $this->requete('POST', '/api/administration/invitations', ['personId' => 999_999, 'maxUses' => 1, 'note' => 'fiche inconnue']);
 
         self::assertSame(422, $this->client->getResponse()->getStatusCode());
 
@@ -123,11 +125,11 @@ final class InvitationsTest extends CasDeTestMembership
         $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
         $this->connexion('admin@example.net');
 
-        $this->requete('POST', '/api/administration/invitations', ['personId' => ArbreFamilial::EGO]);
+        $this->requete('POST', '/api/administration/invitations', ['personId' => ArbreFamilial::EGO, 'maxUses' => 1, 'note' => 'pour Natron']);
         self::assertSame(201, $this->client->getResponse()->getStatusCode());
         $premiere = $this->charge();
 
-        $this->requete('POST', '/api/administration/invitations', ['personId' => ArbreFamilial::EGO]);
+        $this->requete('POST', '/api/administration/invitations', ['personId' => ArbreFamilial::EGO, 'maxUses' => 1, 'note' => 'pour Natron']);
 
         self::assertSame(409, $this->client->getResponse()->getStatusCode());
 
@@ -146,7 +148,7 @@ final class InvitationsTest extends CasDeTestMembership
         $this->creerMembre($membre, ArbreFamilial::EGO, 'Natron Romarin', MemberStatus::Actif);
 
         $this->connexion($administrateur->getEmail());
-        $this->requete('POST', '/api/administration/invitations', ['personId' => ArbreFamilial::EGO]);
+        $this->requete('POST', '/api/administration/invitations', ['personId' => ArbreFamilial::EGO, 'maxUses' => 1, 'note' => 'pour Natron']);
 
         self::assertSame(409, $this->client->getResponse()->getStatusCode());
 
@@ -171,7 +173,7 @@ final class InvitationsTest extends CasDeTestMembership
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
     }
 
-    /** « Révoquer après coup ne défait pas le compte créé » : `409 invitation_deja_consommee`. */
+    /** « Révoquer après coup ne défait pas le compte créé » : un lien **épuisé** rend `409 invitation_deja_consommee`. */
     public function testRevoquerUneInvitationConsommeeEstRefuse(): void
     {
         $administrateur = $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
@@ -179,7 +181,7 @@ final class InvitationsTest extends CasDeTestMembership
 
         $identifiant = $administrateur->getId();
         \assert(null !== $identifiant);
-        $invitation->marquerUtilisee($identifiant, 'quelqun@example.net');
+        $invitation->enregistrerUnUsage($identifiant, 'quelqun@example.net');
         $this->em()->flush();
 
         $this->connexion('admin@example.net');
@@ -228,7 +230,7 @@ final class InvitationsTest extends CasDeTestMembership
         $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
         $this->connexion('admin@example.net');
 
-        $this->requete('POST', '/api/administration/invitations', ['personId' => ArbreFamilial::EGO]);
+        $this->requete('POST', '/api/administration/invitations', ['personId' => ArbreFamilial::EGO, 'maxUses' => 1, 'note' => 'pour Natron']);
         $creation = $this->charge();
 
         $this->requete('POST', \sprintf('/api/administration/invitations/%d/revoquer', $creation['id']));
@@ -253,6 +255,143 @@ final class InvitationsTest extends CasDeTestMembership
         self::assertIsArray($changes);
         self::assertArrayNotHasKey('tokenHash', $changes);
         self::assertArrayHasKey('tokenPrefix', $changes);
+    }
+
+    /** La description est obligatoire ; plafond et échéance valent un entier ≥ 1 ou `null`. */
+    public function testLeCorpsDeCreationEstValide(): void
+    {
+        $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
+        $this->connexion('admin@example.net');
+
+        $this->requete('POST', '/api/administration/invitations', [
+            'note' => '   ',
+            'maxUses' => 0,
+            'expiresInDays' => 'sept',
+            'personId' => ArbreFamilial::EGO,
+        ]);
+
+        self::assertSame(422, $this->client->getResponse()->getStatusCode());
+
+        $corps = $this->charge();
+        self::assertIsArray($corps['erreur']);
+        self::assertIsArray($corps['erreur']['champs']);
+        foreach (['note', 'maxUses', 'expiresInDays', 'personId'] as $champ) {
+            self::assertArrayHasKey($champ, $corps['erreur']['champs'], 'Toutes les erreurs d’un coup.');
+        }
+
+        $depot = self::getContainer()->get(InvitationRepository::class);
+        \assert($depot instanceof InvitationRepository);
+        self::assertCount(0, $depot->findAll());
+    }
+
+    /** Un pré-lien n'a de sens qu'à usage unique : une fiche ne se réclame qu'une fois. */
+    public function testUnPreLienSurUnLienIllimiteEstRefuse(): void
+    {
+        $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
+        $this->connexion('admin@example.net');
+
+        $this->requete('POST', '/api/administration/invitations', ['personId' => ArbreFamilial::EGO, 'note' => 'pour Natron']);
+
+        self::assertSame(422, $this->client->getResponse()->getStatusCode());
+        $corps = $this->charge();
+        self::assertIsArray($corps['erreur']);
+        self::assertIsArray($corps['erreur']['champs']);
+        self::assertArrayHasKey('personId', $corps['erreur']['champs']);
+    }
+
+    /** `maxUses: null` et `expiresInDays: null` : un lien illimité qui n'expire jamais. */
+    public function testUnLienIllimiteSansEcheance(): void
+    {
+        $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
+        $this->connexion('admin@example.net');
+
+        $this->requete('POST', '/api/administration/invitations', [
+            'note' => 'groupe de la famille',
+            'maxUses' => null,
+            'expiresInDays' => null,
+        ]);
+
+        self::assertSame(201, $this->client->getResponse()->getStatusCode());
+
+        $creation = $this->charge();
+        self::assertNull($creation['maxUses']);
+        self::assertSame(0, $creation['useCount']);
+        self::assertNull($creation['expiresAt']);
+        self::assertSame([], $creation['inscrits']);
+        self::assertSame(InvitationStatus::Active->value, $creation['status']);
+
+        // Clé `expiresInDays` absente : la durée réglée s'applique, pas « jamais ».
+        $this->requete('POST', '/api/administration/invitations', ['note' => 'pour un cousin', 'maxUses' => 5]);
+        $plafonne = $this->charge();
+        self::assertSame(5, $plafonne['maxUses']);
+        self::assertIsString($plafonne['expiresAt']);
+    }
+
+    /** Révoquer un lien déjà utilisé mais pas épuisé : permis, les comptes restent. */
+    public function testRevoquerUnLienEntameEstPermis(): void
+    {
+        $administrateur = $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
+        [$invitation] = $this->creerInvitation($administrateur, maxUses: 3);
+
+        $inscrit = $this->creerUtilisateur('cousin@example.net');
+        $membre = $this->creerMembre($inscrit, ArbreFamilial::COUSIN, 'Marbre Romarin', MemberStatus::EnAttente);
+        $membre->setInvitation($invitation);
+        $identifiant = $inscrit->getId();
+        \assert(null !== $identifiant);
+        $invitation->enregistrerUnUsage($identifiant, $inscrit->getEmail());
+        $this->em()->flush();
+
+        $this->connexion('admin@example.net');
+        $this->requete('POST', \sprintf('/api/administration/invitations/%d/revoquer', $invitation->getId()));
+
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+        $ligne = $this->charge();
+        self::assertSame(InvitationStatus::Revoquee->value, $ligne['status']);
+        self::assertSame(1, $ligne['useCount']);
+        self::assertIsArray($ligne['inscrits']);
+        self::assertCount(1, $ligne['inscrits']);
+    }
+
+    /** La liste rend les inscrits de chaque lien, et `?revoquees=0` écarte les révoqués. */
+    public function testLaListeRendLesInscritsEtFiltreLesRevoquees(): void
+    {
+        $administrateur = $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
+        [$collectif] = $this->creerInvitation($administrateur, maxUses: null);
+        [$revoquee] = $this->creerInvitation($administrateur);
+
+        $identifiantAdmin = $administrateur->getId();
+        \assert(null !== $identifiantAdmin);
+        $revoquee->revoquer($identifiantAdmin, $administrateur->getEmail());
+
+        foreach ([['cousin@example.net', ArbreFamilial::COUSIN, 'Marbre Romarin'], ['tante@example.net', ArbreFamilial::TANTE, 'Marbrée Romarin']] as [$courriel, $personne, $libelle]) {
+            $inscrit = $this->creerUtilisateur($courriel);
+            $this->creerMembre($inscrit, $personne, $libelle)->setInvitation($collectif);
+            $identifiant = $inscrit->getId();
+            \assert(null !== $identifiant);
+            $collectif->enregistrerUnUsage($identifiant, $courriel);
+        }
+        $this->em()->flush();
+
+        $this->connexion('admin@example.net');
+
+        $this->requete('GET', '/api/administration/invitations');
+        $liste = $this->charge();
+        self::assertSame(2, $liste['total']);
+
+        $this->requete('GET', '/api/administration/invitations?revoquees=0');
+        $liste = $this->charge();
+        self::assertSame(1, $liste['total']);
+        self::assertIsArray($liste['elements']);
+
+        $ligne = $liste['elements'][0];
+        self::assertSame($collectif->getId(), $ligne['id']);
+        self::assertSame(InvitationStatus::Active->value, $ligne['status'], 'Un lien illimité reste actif.');
+        self::assertNull($ligne['maxUses']);
+        self::assertSame(2, $ligne['useCount']);
+        self::assertIsArray($ligne['inscrits']);
+        self::assertSame(['cousin@example.net', 'tante@example.net'], array_column($ligne['inscrits'], 'email'));
+        self::assertSame(MemberStatus::Actif->value, $ligne['inscrits'][0]['memberStatus']);
+        self::assertSame('tante@example.net', $ligne['usedByEmail'], '`usedByEmail` est le dernier inscrit.');
     }
 
     /** `/api/administration/*` est fermé à un membre ordinaire par `access_control`. */

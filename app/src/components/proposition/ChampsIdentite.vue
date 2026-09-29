@@ -66,7 +66,6 @@ const SEXES: readonly Sexe[] = ['masculin', 'feminin', 'inconnu']
         <ChampTexte
           v-model="marriedName"
           :etiquette="etiquetteDeChamp('marriedName')"
-          aide="Le nom porté après mariage, s’il diffère du nom de naissance."
           :erreur="erreurs['marriedName'] ?? ''"
           autocomplete="off"
         />
@@ -98,12 +97,7 @@ const SEXES: readonly Sexe[] = ['masculin', 'feminin', 'inconnu']
 
       <label class="flex flex-1 items-start gap-2 py-1.5">
         <input v-model="deceased" type="checkbox" class="mt-0.5 size-4 accent-[var(--color-accent)]" />
-        <span class="text-sm">
-          {{ etiquetteDeChamp('deceased') }}
-          <span class="block text-xs text-attenue">
-            Cochez dès que le décès est attesté, même si la date en est inconnue.
-          </span>
-        </span>
+        <span class="text-sm">{{ etiquetteDeChamp('deceased') }}</span>
       </label>
     </div>
 

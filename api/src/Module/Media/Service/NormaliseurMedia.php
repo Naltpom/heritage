@@ -71,8 +71,8 @@ final class NormaliseurMedia
             'taken' => $this->bloc($media->getTaken()),
             'uploadedByLabel' => $media->getUploadedByLabel(),
             'createdAt' => $media->getCreatedAt()->format(\DateTimeInterface::ATOM),
-            'url' => \sprintf('/api/medias/%d/fichier', (int) $id),
-            'vignetteUrl' => \sprintf('/api/medias/%d/vignette', (int) $id),
+            'url' => AdresseDuMedia::fichier($media),
+            'vignetteUrl' => AdresseDuMedia::vignette($media),
             'changeRequestId' => $media->getChangeRequestId(),
         ];
 

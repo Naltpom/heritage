@@ -626,7 +626,10 @@ function jjmmaaaa(date: string | null): string {
  * la bonne façon de réduire cette liste : apprendre une forme, pas la masquer.
  */
 export function relectureFidele(bloc: BlocDate | ValeurDate | null): boolean {
-  if (bloc === null) return true
+  // Un bloc qui n'affirme rien n'a rien à perdre : le champ s'ouvre vide et
+  // modifiable. C'est ce que la fiche rend pour une personne sans date connue,
+  // et le verrouiller interdisait d'y écrire la date qu'on a trouvée.
+  if (bloc === null || !designeUneDate(bloc)) return true
   const compose = composerBlocDate(saisieDepuisBloc(bloc))
   return compose.valide && memeValeurDate(compose.valeur, sansTexte(bloc))
 }
@@ -640,10 +643,18 @@ export function relectureFidele(bloc: BlocDate | ValeurDate | null): boolean {
  * un cas de plus à ne pas traiter, plutôt qu'une exception à ne pas oublier.
  */
 export function valeurAEnvoyer(saisie: SaisieDate): ResultatSaisieDate {
-  if (saisie.origine !== null && !relectureFidele(saisie.origine)) {
-    return { valide: true, valeur: saisie.origine }
+  const origine = saisie.origine
+  if (origine !== null && !relectureFidele(origine)) {
+    return { valide: true, valeur: origine }
   }
-  return composerBlocDate(saisie)
+  const compose = composerBlocDate(saisie)
+  // Rien de saisi sur un bloc qui ne disait rien : c'est le même « rien ». On
+  // rend l'original pour que `construireOps` n'y voie aucune différence — sans
+  // quoi ouvrir puis soumettre la fiche produirait un op `birth: {…} → null`.
+  if (compose.valide && compose.valeur === null && origine !== null && !designeUneDate(origine)) {
+    return { valide: true, valeur: origine }
+  }
+  return compose
 }
 
 /* ------------------------------------------------------------------ */

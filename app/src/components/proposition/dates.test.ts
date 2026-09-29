@@ -477,3 +477,21 @@ describe('un bloc qui ne désigne rien', () => {
     expect(designeUneDate(deFiche)).toBe(false)
   })
 })
+
+describe('un bloc « inconnue » vide, tel que la fiche le rend', () => {
+  const vide = { raw: null, qualifier: 'inconnue', min: null, max: null, place: null } as const
+
+  it('ne verrouille pas le champ : on peut y écrire la date trouvée', () => {
+    expect(relectureFidele(vide)).toBe(true)
+  })
+
+  it('une date saisie part comme une vraie proposition', () => {
+    const resultat = valeurAEnvoyer({ ...saisieDepuisBloc(vide), forme: 'connue', debut: '1887' })
+    expect(resultat.valide ? resultat.valeur?.qualifier : undefined).toBe('annee')
+  })
+
+  it('laissé vide, il repart tel quel — aucun op fantôme', () => {
+    const resultat = valeurAEnvoyer(saisieDepuisBloc(vide))
+    expect(resultat.valide ? resultat.valeur : undefined).toEqual(vide)
+  })
+})

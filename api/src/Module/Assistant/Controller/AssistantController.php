@@ -109,6 +109,8 @@ final class AssistantController extends AbstractController
             );
         }
 
+        $this->relacherLaSession($requete);
+
         return $this->charge($analyse->analyser($entree, $userId, $limite->getRemainingTokens()));
     }
 
@@ -123,6 +125,29 @@ final class AssistantController extends AbstractController
         $userId = $this->verifierQuIlPeutContribuer();
 
         return $this->charge($depot->deposer($userId, $analyseId, $cle, $this->message($requete)), 201);
+    }
+
+    /**
+     * **Libère le fichier de session avant l'appel au modèle** — jusqu'à 90 secondes
+     * (`ReglagesDeLAssistant::DELAI_GLOBAL_SECONDES`).
+     *
+     * Le gestionnaire natif pose un `flock` exclusif sur le fichier de session du
+     * `session_start()` jusqu'à la fin de la requête. Pendant une analyse, **chaque**
+     * autre requête du même navigateur — toutes les routes `/api` passent par la
+     * session — attendait donc ce verrou, en occupant un fil PHP de FrankenPHP (2 par
+     * cœur, par défaut). Quelques requêtes de la SPA suffisaient à les prendre tous :
+     * le site se figeait pour tout le monde, pas seulement pour l'auteur de l'analyse.
+     *
+     * Rien n'est perdu : ce que la requête a lu reste en mémoire, le lecteur du cercle
+     * est déjà résolu (contrôle 2), et une écriture ultérieure — le jeton que
+     * `ContextListener` repose en fin de requête — rouvre la session le temps de
+     * l'écrire, analyse finie.
+     */
+    private function relacherLaSession(Request $requete): void
+    {
+        if ($requete->hasSession() && $requete->getSession()->isStarted()) {
+            $requete->getSession()->save();
+        }
     }
 
     /**

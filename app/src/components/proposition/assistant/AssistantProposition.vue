@@ -64,6 +64,7 @@ import AjusterPortrait from './AjusterPortrait.vue'
 import type { CadreVisage } from '@/components/medias/cadrage'
 import { zoneDepuisCadre } from '@/components/medias/cadrage'
 import { decoderImage, decouperCarre } from '@/components/medias/decoupe'
+import { pivoterFichier } from '@/components/medias/pivotement'
 import DocumentsAssistant, { type DocumentAffiche } from './DocumentsAssistant.vue'
 import {
   TEXTE_MAX,
@@ -134,6 +135,17 @@ function retirerDocument(cle: number): void {
   if (document?.apercu) URL.revokeObjectURL(document.apercu)
   documents.value = documents.value.filter((d) => d.cle !== cle)
   refus.value = []
+}
+
+/** Un quart de tour horaire : le document garde son rang. */
+async function pivoterDocument(cle: number): Promise<void> {
+  const document = documents.value.find((d) => d.cle === cle)
+  if (document === undefined) return
+  const tourne = await pivoterFichier(document.fichier, 90)
+  if (tourne === document.fichier) return
+  if (document.apercu) URL.revokeObjectURL(document.apercu)
+  document.fichier = tourne
+  document.apercu = URL.createObjectURL(tourne)
 }
 
 /* --- Analyse -------------------------------------------------------- */
@@ -497,6 +509,7 @@ onBeforeUnmount(() => {
               :desactive="phase === 'analyse' || suspendu"
               @ajouter="ajouterDocuments"
               @retirer="retirerDocument"
+              @pivoter="pivoterDocument"
             />
           </div>
         </div>

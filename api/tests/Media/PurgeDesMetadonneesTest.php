@@ -86,6 +86,82 @@ final class PurgeDesMetadonneesTest extends TestCase
         self::assertSame(48, $taille[1]);
     }
 
+    /**
+     * Les huit orientations EXIF, sur une image 120 × 80 dont le quart haut-gauche est
+     * rouge : dimensions rendues, et coin où le rouge doit se retrouver.
+     *
+     * @return iterable<string, array{int, int, int, int, int}>
+     */
+    public static function orientations(): iterable
+    {
+        yield '1 — rien' => [1, 120, 80, 10, 10];
+        yield '2 — miroir horizontal' => [2, 120, 80, 110, 10];
+        yield '3 — demi-tour' => [3, 120, 80, 110, 70];
+        yield '4 — miroir vertical' => [4, 120, 80, 10, 70];
+        yield '5 — transposée' => [5, 80, 120, 10, 10];
+        yield '6 — quart de tour horaire (téléphone en portrait)' => [6, 80, 120, 70, 10];
+        yield '7 — transverse' => [7, 80, 120, 70, 110];
+        yield '8 — quart de tour anti-horaire' => [8, 80, 120, 10, 110];
+    }
+
+    /**
+     * Le défaut d'origine : l'orientation partait avec l'EXIF sans être appliquée, et une
+     * photo de téléphone prise en hauteur ressortait couchée.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('orientations')]
+    public function testLOrientationExifEstAppliqueeAuxPixels(int $orientation, int $largeur, int $hauteur, int $x, int $y): void
+    {
+        $chemin = $this->ecrire(FabriqueDeFichiers::jpegOriente($orientation));
+
+        $resultat = $this->purge->purger($chemin, 'image/jpeg');
+        $this->aEffacer[] = $resultat->chemin;
+
+        // Les dimensions rendues sont celles d'après redressement : ce sont elles qui
+        // partent en base.
+        self::assertSame($largeur, $resultat->largeur);
+        self::assertSame($hauteur, $resultat->hauteur);
+
+        $image = imagecreatefromjpeg($resultat->chemin);
+        self::assertNotFalse($image);
+        self::assertSame($largeur, imagesx($image));
+        self::assertSame($hauteur, imagesy($image));
+        self::assertSame('rouge', FabriqueDeFichiers::couleurA($image, $x, $y), 'Le coin rouge n\'est pas là où l\'orientation le met.');
+
+        // Et l'étiquette elle-même est partie : un lecteur qui l'appliquerait encore
+        // tournerait l'image une seconde fois.
+        self::assertFalse(FabriqueDeFichiers::porteUnExif((string) file_get_contents($resultat->chemin)));
+    }
+
+    public function testPivoterTourneDansLeSensHoraire(): void
+    {
+        $chemin = $this->ecrire(FabriqueDeFichiers::jpegAvecCoinRouge(120, 80));
+
+        $resultat = $this->purge->pivoter($chemin, 'image/jpeg', 90);
+        $this->aEffacer[] = $resultat->chemin;
+
+        self::assertSame(80, $resultat->largeur);
+        self::assertSame(120, $resultat->hauteur);
+
+        $image = imagecreatefromjpeg($resultat->chemin);
+        self::assertNotFalse($image);
+        self::assertSame('rouge', FabriqueDeFichiers::couleurA($image, 70, 10), 'Un quart de tour horaire emmène le coin haut-gauche en haut à droite.');
+    }
+
+    public function testPivoterUnPngGardeSaTransparence(): void
+    {
+        $chemin = $this->ecrire(FabriqueDeFichiers::pngTransparent(30, 20));
+
+        $resultat = $this->purge->pivoter($chemin, 'image/png', 270);
+        $this->aEffacer[] = $resultat->chemin;
+
+        self::assertSame(20, $resultat->largeur);
+        self::assertSame(30, $resultat->hauteur);
+
+        $image = imagecreatefrompng($resultat->chemin);
+        self::assertNotFalse($image);
+        self::assertSame(127, imagecolorsforindex($image, (int) imagecolorat($image, 5, 5))['alpha']);
+    }
+
     public function testLaTransparenceDUnPngSurvitALaPurge(): void
     {
         // Le piège du ré-encodage : une toile neuve est noire opaque. Sans la mise en

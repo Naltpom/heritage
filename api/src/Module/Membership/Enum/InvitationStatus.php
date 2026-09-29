@@ -7,9 +7,12 @@ namespace App\Module\Membership\Enum;
 /**
  * L'état d'un lien d'invitation (§ 4.5 du modèle de données).
  *
- * Colonne dénormalisée par rapport à `used_at`/`revoked_at`/`expires_at` : elle rend la
+ * Colonne dénormalisée par rapport à `use_count`/`revoked_at`/`expires_at` : elle rend la
  * liste d'administration lisible d'un coup d'œil et s'indexe. Le service la maintient ;
  * `Expiree` est posée paresseusement à la première lecture après échéance.
+ *
+ * `Utilisee` veut dire **épuisée** (`use_count = max_uses`), pas « a servi » : un lien
+ * illimité, ou plafonné à dix et utilisé trois fois, reste `Active`.
  */
 enum InvitationStatus: string
 {

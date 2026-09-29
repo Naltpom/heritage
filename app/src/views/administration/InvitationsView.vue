@@ -3,40 +3,26 @@
  * Les invitations — § 3.
  *
  * **Aucune inscription ouverte** : on n'entre sur cet arbre que par un lien
- * d'invitation (§ 6.1 du dossier). Cet écran est donc la seule porte, et il en
- * porte deux propriétés que rien d'autre ne rattrape.
+ * d'invitation (§ 6.1 du dossier). Un lien porte une **description**, un
+ * plafond d'inscriptions (ou aucun) et une échéance (ou aucune). Chaque personne
+ * qui l'ouvre se décrit elle-même : le lien ne désigne plus personne à l'avance,
+ * puisqu'il peut servir à toute une branche de la famille.
  *
- * **1. Le lien n'apparaît qu'une fois, et il n'y a pas de bouton « renvoyer ».**
- * Le serveur ne stocke que `hash(jeton)` ; `lien` n'existe que dans la réponse
- * de création, jamais dans la liste — absent, pas `null` (§ 3.2). La route
- * paraît manquante alors qu'elle est **impossible**, et c'est le bouton le plus
- * probable qu'on ajouterait par erreur. Un administrateur qui a perdu le lien
- * révoque et recrée ; l'écran le dit, au moment où ça compte.
+ * **Le lien n'apparaît qu'une fois.** Le serveur ne stocke que `hash(jeton)` ;
+ * `lien` n'existe que dans la réponse de création, jamais dans la liste (§ 3.2).
+ * Il n'y a donc pas de bouton « renvoyer » — il est **impossible**, pas
+ * manquant. Un lien perdu se révoque et se recrée.
  *
- * **2. Le lien s'affiche tel quel, pour copie manuelle.** Il est bâti sur le
- * `Host` de la requête et porte le jeton **dans le chemin**
- * (`/inscription/<jeton>`) — c'est la forme que le serveur émet réellement, je
- * l'ai vérifiée sur l'API. On ne le reconstruit pas : le `tokenPrefix` ne fait
- * que 8 caractères sur 43, et une URL recomposée serait un lien mort.
- *
- * Les deux chemins de remise coexistent, comme le dossier l'exige : copie
- * manuelle **et** envoi par courriel. Un envoi qui échoue ne perd pas
- * l'invitation — elle est créée quand même, `courrielEnvoye` vaut `false`, et
- * le lien reste affiché (§ 3.1).
- *
- * Le pré-lien (`personId`) est le **cas nominal** : le candidat n'aura qu'à
- * confirmer une date de naissance. Sans lui, il passera par la recherche floue,
- * qui est plus fragile pour lui et plus exposée pour l'arbre.
+ * Les révoquées sont masquées par défaut : elles ne servent plus qu'à l'audit.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import {
   creerInvitation,
   listerInvitations,
-  rechercherPersonnes,
   revoquerInvitation,
   type Invitation,
   type InvitationCreee,
-  type ResultatDeRecherche,
+  type StatutInvitation,
 } from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
@@ -49,6 +35,7 @@ import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
 import OngletsAdministration from './OngletsAdministration.vue'
 import LienInvitation from '@/components/administration/LienInvitation.vue'
 import { ecrituresSuspendues, infobulleSuspension, motifSuspension } from '@/components/administration/ecriture'
+import { analyserErreur } from '@/lib/api/erreurs'
 
 const { vueEmpruntee } = useSession()
 
@@ -59,13 +46,17 @@ const erreur = ref<unknown>(null)
 /** L'invitation qui vient d'être créée : le seul instant où le lien existe. */
 const creee = ref<InvitationCreee | null>(null)
 
-const courriel = ref('')
-const note = ref('')
-const envoyerCourriel = ref(false)
-const personneChoisie = ref<ResultatDeRecherche | null>(null)
-const recherche = ref('')
-const resultats = ref<ResultatDeRecherche[]>([])
+const description = ref('')
+/** Chaîne vide : illimité. */
+const plafond = ref('')
+/** `''` : n'expire jamais. */
+const duree = ref<string>('')
 const envoi = ref(false)
+const erreursChamps = ref<Record<string, string>>({})
+
+/** Le filtre de la liste. `sans_revoquees` est le défaut. */
+type Filtre = 'sans_revoquees' | 'toutes' | StatutInvitation
+const filtre = ref<Filtre>('sans_revoquees')
 
 const suspendu = computed(() => ecrituresSuspendues(vueEmpruntee.value))
 const raisonSuspension = computed(() => motifSuspension(vueEmpruntee.value))
@@ -80,16 +71,37 @@ const PASTILLES: Record<string, 'actif' | 'en_attente' | 'refusee' | 'neutre'> =
 
 const LIBELLES: Record<string, string> = {
   active: 'Active',
-  utilisee: 'Utilisée',
+  utilisee: 'Complète',
   expiree: 'Expirée',
   revoquee: 'Révoquée',
+}
+
+const DUREES = [
+  { valeur: '', libelle: 'Jamais' },
+  { valeur: '7', libelle: '7 jours' },
+  { valeur: '30', libelle: '30 jours' },
+  { valeur: '90', libelle: '3 mois' },
+  { valeur: '365', libelle: '1 an' },
+]
+
+const STATUTS_MEMBRE: Record<string, string> = {
+  actif: 'actif',
+  en_attente: 'en attente de validation',
+  suspendu: 'suspendu',
 }
 
 async function charger(): Promise<void> {
   chargement.value = true
   erreur.value = null
   try {
-    invitations.value = (await listerInvitations({ parPage: 100 })).elements
+    const choix = filtre.value
+    invitations.value = (
+      await listerInvitations({
+        parPage: 100,
+        status: choix === 'sans_revoquees' || choix === 'toutes' ? undefined : choix,
+        revoquees: choix === 'sans_revoquees' ? false : undefined,
+      })
+    ).elements
   } catch (cause) {
     erreur.value = cause
   } finally {
@@ -98,45 +110,35 @@ async function charger(): Promise<void> {
 }
 
 onMounted(charger)
-
-async function chercherPersonne(): Promise<void> {
-  // Le serveur exige deux caractères ; ne pas appeler avant est à l'appelant.
-  if (recherche.value.trim().length < 2) {
-    resultats.value = []
-    return
-  }
-  try {
-    resultats.value = (await rechercherPersonnes(recherche.value.trim(), 8)).elements
-  } catch (cause) {
-    erreur.value = cause
-  }
-}
-
-function choisir(personne: ResultatDeRecherche): void {
-  personneChoisie.value = personne
-  resultats.value = []
-  recherche.value = ''
-}
+watch(filtre, charger)
 
 async function creer(): Promise<void> {
   if (suspendu.value || envoi.value) return
+
+  const texte = description.value.trim()
+  const brut = plafond.value.trim()
+  const max = brut === '' ? null : Number(brut)
+  erreursChamps.value = {}
+  if (texte === '') erreursChamps.value['note'] = 'Une description est requise.'
+  if (max !== null && (!Number.isInteger(max) || max < 1)) erreursChamps.value['maxUses'] = 'Un nombre entier, 1 ou plus.'
+  if (Object.keys(erreursChamps.value).length > 0) return
 
   envoi.value = true
   erreur.value = null
   try {
     creee.value = await creerInvitation({
-      personId: personneChoisie.value?.personId,
-      email: courriel.value.trim().length > 0 ? courriel.value.trim() : undefined,
-      envoyerCourriel: envoyerCourriel.value,
-      note: note.value.trim().length > 0 ? note.value.trim() : undefined,
+      note: texte,
+      maxUses: max,
+      expiresInDays: duree.value === '' ? null : Number(duree.value),
     })
-    courriel.value = ''
-    note.value = ''
-    envoyerCourriel.value = false
-    personneChoisie.value = null
+    description.value = ''
+    plafond.value = ''
+    duree.value = ''
     await charger()
   } catch (cause) {
-    erreur.value = cause
+    const champs = analyserErreur(cause).champs
+    if (Object.keys(champs).length > 0) erreursChamps.value = champs
+    else erreur.value = cause
   } finally {
     envoi.value = false
   }
@@ -160,12 +162,14 @@ function dateLisible(valeur: string | null): string {
     ? valeur
     : date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
+
+function compteur(invitation: Invitation): string {
+  const inscrits = `${invitation.useCount} inscrit${invitation.useCount > 1 ? 's' : ''}`
+  return invitation.maxUses === null ? `${inscrits} · illimité` : `${inscrits} / ${invitation.maxUses}`
+}
 </script>
 
 <template>
-  <!-- La barre d'écran de l'administration : les trois sections en onglets,
-       et rien d'autre ici — pas de filtre, donc pas de feuillet ni de bouton
-       filtres sur téléphone. Voir `OngletsAdministration`. -->
   <BarreEcran ecran="Administration" :reinitialisable="false">
     <template #vue><OngletsAdministration /></template>
   </BarreEcran>
@@ -179,83 +183,51 @@ function dateLisible(valeur: string | null): string {
       {{ raisonSuspension }}
     </p>
 
-    <!-- ---------------------------------------------------------------- -->
-    <!-- Le lien fraîchement créé — le seul moment où il existe.           -->
-    <!-- ---------------------------------------------------------------- -->
     <LienInvitation v-if="creee !== null" :invitation="creee" @fermer="creee = null" />
 
-    <PanneauBase titre="Inviter quelqu’un">
-      <form novalidate @submit.prevent="creer">
-        <!-- Le pré-lien : cas nominal. Le candidat n'aura qu'à confirmer une
-             date de naissance, au lieu de passer par la recherche floue. -->
-        <div class="flex flex-col gap-1">
-          <label for="recherche-personne" class="text-sm font-medium">
-            Personne de l’arbre (recommandé)
-          </label>
-          <p id="recherche-personne-aide" class="text-xs text-attenue">
-            Si vous désignez la personne ici, l’invité n’aura qu’à confirmer sa date de
-            naissance. Sinon, il devra se décrire et le serveur cherchera — c’est plus
-            fragile pour lui.
-          </p>
+    <PanneauBase titre="Nouveau lien d’invitation">
+      <form novalidate class="flex flex-col gap-3.5" @submit.prevent="creer">
+        <ChampTexte
+          v-model="description"
+          etiquette="Description"
+          placeholder="Branche Romarin, cousins de Saule…"
+          :erreur="erreursChamps['note'] ?? ''"
+        />
 
-          <div v-if="personneChoisie !== null" class="flex flex-wrap items-center gap-2">
-            <span class="rounded-champ border border-accent bg-accent-doux px-2.5 py-1 text-sm">
-              {{ personneChoisie.displayName }}
-            </span>
-            <BoutonBase variante="discret" @click="personneChoisie = null">Changer</BoutonBase>
-          </div>
-
-          <template v-else>
+        <div class="flex flex-wrap gap-3">
+          <label class="flex min-w-[10rem] flex-1 flex-col gap-1">
+            <span class="text-sm font-medium">Nombre d’inscriptions</span>
             <input
-              id="recherche-personne"
-              v-model="recherche"
-              type="search"
-              aria-describedby="recherche-personne-aide"
-              placeholder="Nom ou prénom"
-              class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
-              @input="chercherPersonne"
+              v-model="plafond"
+              type="number"
+              min="1"
+              inputmode="numeric"
+              placeholder="Illimité"
+              class="rounded-champ border bg-fond px-2.5 py-1.5 text-sm text-texte"
+              :class="erreursChamps['maxUses'] ? 'border-alerte' : 'border-ligne'"
             />
-            <ul v-if="resultats.length > 0" class="mt-1 flex flex-col gap-1">
-              <li v-for="personne in resultats" :key="personne.personId">
-                <button
-                  type="button"
-                  class="w-full rounded-champ border border-ligne px-2.5 py-1.5 text-left text-sm hover:border-accent"
-                  @click="choisir(personne)"
-                >
-                  {{ personne.displayName }}
-                  <span v-if="personne.ligneDates" class="text-attenue">
-                    — {{ personne.ligneDates }}
-                  </span>
-                </button>
-              </li>
-            </ul>
-          </template>
-        </div>
+            <span v-if="erreursChamps['maxUses']" class="text-xs text-alerte">{{ erreursChamps['maxUses'] }}</span>
+          </label>
 
-        <div class="mt-3.5 flex flex-col gap-3.5">
-          <ChampTexte
-            v-model="courriel"
-            etiquette="Adresse de courriel"
-            type="email"
-            aide="Nécessaire seulement si vous demandez l’envoi automatique."
-            autocomplete="off"
-          />
-
-          <ChampTexte
-            v-model="note"
-            etiquette="Note (facultatif)"
-            aide="Un aide-mémoire pour vous : « la cousine de Saule ». L’invité ne la voit pas."
-          />
-
-          <label class="flex items-center gap-2 text-sm">
-            <input v-model="envoyerCourriel" type="checkbox" class="accent-accent" />
-            Envoyer l’invitation par courriel
+          <label class="flex min-w-[10rem] flex-1 flex-col gap-1">
+            <span class="text-sm font-medium">Expire après</span>
+            <select
+              v-model="duree"
+              class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
+            >
+              <option v-for="option in DUREES" :key="option.valeur" :value="option.valeur">
+                {{ option.libelle }}
+              </option>
+            </select>
+            <span v-if="erreursChamps['expiresInDays']" class="text-xs text-alerte">
+              {{ erreursChamps['expiresInDays'] }}
+            </span>
           </label>
         </div>
 
-        <div class="mt-4">
+        <div>
           <BoutonBase type="submit" :chargement="envoi" :desactive="suspendu" :title="infobulle">
-            Créer l’invitation
+            Créer le lien
           </BoutonBase>
         </div>
       </form>
@@ -263,32 +235,43 @@ function dateLisible(valeur: string | null): string {
 
     <MessageErreur v-if="erreur !== null" :erreur="erreur" @action="charger" />
 
-    <!-- ---------------------------------------------------------------- -->
-    <!-- La liste                                                          -->
-    <!-- ---------------------------------------------------------------- -->
-    <PanneauBase titre="Invitations envoyées">
+    <PanneauBase>
+      <template #entete>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-sm font-semibold tracking-tight">Invitations</h2>
+          <select
+            v-model="filtre"
+            aria-label="Filtrer les invitations"
+            class="rounded-champ border border-ligne bg-fond px-2 py-1 text-sm text-texte"
+          >
+            <option value="sans_revoquees">Sans les révoquées</option>
+            <option value="active">Actives</option>
+            <option value="utilisee">Complètes</option>
+            <option value="expiree">Expirées</option>
+            <option value="revoquee">Révoquées</option>
+            <option value="toutes">Toutes</option>
+          </select>
+        </div>
+      </template>
+
       <SqueletteChargement v-if="chargement && invitations.length === 0" :lignes="3" />
 
-      <p v-else-if="invitations.length === 0" class="text-sm text-attenue">
-        Aucune invitation pour l’instant.
-      </p>
+      <p v-else-if="invitations.length === 0" class="text-sm text-attenue">Aucune invitation.</p>
 
       <ul v-else class="flex flex-col divide-y divide-ligne">
-        <li v-for="invitation in invitations" :key="invitation.id" class="py-2.5 first:pt-0 last:pb-0">
+        <li v-for="invitation in invitations" :key="invitation.id" class="py-3 first:pt-0 last:pb-0">
           <div class="flex flex-wrap items-center gap-2">
             <PastilleEtat
               :etat="PASTILLES[invitation.status] ?? 'neutre'"
               :libelle="LIBELLES[invitation.status] ?? invitation.status"
             />
-            <span class="font-mono text-sm">{{ invitation.tokenPrefix }}…</span>
-            <span v-if="invitation.personLabel" class="text-sm font-medium">
-              {{ invitation.personLabel }}
-            </span>
-            <span v-if="invitation.email" class="text-sm text-attenue">{{ invitation.email }}</span>
+            <span class="text-sm font-medium">{{ invitation.note ?? invitation.tokenPrefix + '…' }}</span>
+            <span class="text-sm text-attenue tnum">{{ compteur(invitation) }}</span>
 
             <BoutonBase
               v-if="invitation.status === 'active'"
               variante="discret"
+              class="ml-auto"
               :desactive="suspendu"
               :title="infobulle"
               @click="revoquer(invitation)"
@@ -298,14 +281,24 @@ function dateLisible(valeur: string | null): string {
           </div>
 
           <p class="mt-1 text-xs text-attenue">
-            Créée le {{ dateLisible(invitation.createdAt) }} par {{ invitation.createdByEmail }},
-            expire le {{ dateLisible(invitation.expiresAt) }}.
-            <template v-if="invitation.note"> — {{ invitation.note }}</template>
+            Créé le {{ dateLisible(invitation.createdAt) }} ·
+            <template v-if="invitation.revokedAt">révoqué le {{ dateLisible(invitation.revokedAt) }}</template>
+            <template v-else-if="invitation.expiresAt">expire le {{ dateLisible(invitation.expiresAt) }}</template>
+            <template v-else>sans expiration</template>
+            · <span class="font-mono">{{ invitation.tokenPrefix }}…</span>
           </p>
 
-          <!-- Les tentatives de rattachement de l'heure écoulée : c'est ce qui
-               permet de voir qu'un lien est en train d'être sondé. Les critères
-               soumis, eux, ne sont jamais rendus — et n'ont pas à l'être. -->
+          <ul v-if="invitation.inscrits.length > 0" class="mt-2 flex flex-col gap-1 border-l-2 border-ligne pl-3">
+            <li v-for="inscrit in invitation.inscrits" :key="inscrit.userId" class="text-sm">
+              <span class="font-medium">{{ inscrit.personLabel ?? inscrit.email }}</span>
+              <span v-if="inscrit.personLabel" class="text-attenue"> — {{ inscrit.email }}</span>
+              <span class="text-xs text-attenue">
+                · {{ dateLisible(inscrit.createdAt) }} · {{ STATUTS_MEMBRE[inscrit.memberStatus] ?? inscrit.memberStatus }}
+              </span>
+            </li>
+          </ul>
+
+          <!-- Les tentatives de l'heure : c'est ce qui montre qu'un lien est sondé. -->
           <p v-if="invitation.tentatives > 0" class="mt-1 text-xs text-alerte">
             {{ invitation.tentatives }} tentative{{ invitation.tentatives > 1 ? 's' : '' }} de
             rattachement dans la dernière heure.

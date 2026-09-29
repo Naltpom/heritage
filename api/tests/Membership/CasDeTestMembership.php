@@ -129,7 +129,7 @@ abstract class CasDeTestMembership extends WebTestCase
      *
      * @return array{0: Invitation, 1: string}
      */
-    protected function creerInvitation(User $administrateur, ?int $personId = null, ?string $personLabel = null): array
+    protected function creerInvitation(User $administrateur, ?int $personId = null, ?string $personLabel = null, ?int $maxUses = 1): array
     {
         $jetons = self::getContainer()->get(GenerateurDeJeton::class);
         \assert($jetons instanceof GenerateurDeJeton);
@@ -144,6 +144,7 @@ abstract class CasDeTestMembership extends WebTestCase
             new \DateTimeImmutable('+7 days'),
             $identifiant,
             $administrateur->getEmail(),
+            $maxUses,
         );
 
         if (null !== $personId) {

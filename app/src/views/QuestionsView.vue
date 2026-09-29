@@ -108,6 +108,7 @@ export function mentionDuModele(total: number, redigeesParModele: number): strin
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { estPivotable, pivoterFichier } from '@/components/medias/pivotement'
 
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
@@ -245,8 +246,31 @@ const erreursParQuestion = ref<Record<number, unknown>>({})
 
 function surFichier(question: Question, evenement: Event): void {
   const entree = evenement.target as HTMLInputElement
-  photos.value = { ...photos.value, [question.id]: entree.files?.[0] ?? null }
+  poserPhoto(question.id, entree.files?.[0] ?? null)
 }
+
+/** L'aperçu de chaque photo choisie, pour qu'on voie si elle est couchée. */
+const apercusPhotos = ref<Record<number, string>>({})
+
+function poserPhoto(id: number, fichier: File | null): void {
+  const ancien = apercusPhotos.value[id]
+  if (ancien) URL.revokeObjectURL(ancien)
+  const apercus = { ...apercusPhotos.value }
+  delete apercus[id]
+  if (fichier !== null && estPivotable(fichier)) apercus[id] = URL.createObjectURL(fichier)
+  apercusPhotos.value = apercus
+  photos.value = { ...photos.value, [id]: fichier }
+}
+
+async function pivoterPhoto(id: number): Promise<void> {
+  const fichier = photos.value[id]
+  if (!fichier) return
+  poserPhoto(id, await pivoterFichier(fichier, 90))
+}
+
+onBeforeUnmount(() => {
+  for (const url of Object.values(apercusPhotos.value)) URL.revokeObjectURL(url)
+})
 
 /**
  * Le bouton « Envoyer » n'a de sens qu'avec quelque chose à envoyer.
@@ -355,6 +379,17 @@ onBeforeUnmount(() => avorteur?.abort())
               @change="surFichier(question, $event)"
             />
           </label>
+
+          <div v-if="apercusPhotos[question.id]" class="flex items-center gap-2">
+            <img
+              :src="apercusPhotos[question.id]"
+              alt="La photo choisie"
+              class="size-20 rounded-champ border border-ligne bg-fond object-contain"
+            />
+            <BoutonBase variante="discret" aria-label="Pivoter la photo d’un quart de tour" @click="pivoterPhoto(question.id)">
+              ↻ Pivoter
+            </BoutonBase>
+          </div>
 
           <div class="flex items-center gap-3">
             <BoutonBase

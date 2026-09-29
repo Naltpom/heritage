@@ -227,9 +227,10 @@ final class SchemaSynchroniseTest extends KernelTestCase
     /**
      * Rejoue un historique d'instructions et rend l'état final des colonnes, par table.
      *
-     * Quatre formes, parce que ce sont les quatre que Doctrine produit :
+     * Cinq formes, parce que ce sont celles que Doctrine produit :
      * `CREATE TABLE t (col def, …, PRIMARY KEY (…))`, `ALTER TABLE t ADD col def`,
-     * `ALTER TABLE t DROP col` et `ALTER TABLE t ALTER col TYPE x`. Tout le reste — index,
+     * `ALTER TABLE t DROP col`, `ALTER TABLE t ALTER col TYPE x` et
+     * `ALTER TABLE t ALTER col DROP|SET NOT NULL`. Tout le reste — index,
      * contraintes, données — est ignoré ici et couvert ailleurs.
      *
      * ⚠ **La quatrième manquait, et son absence rendait ce test faux dans un sens qu'on ne
@@ -288,6 +289,15 @@ final class SchemaSynchroniseTest extends KernelTestCase
                 if (isset($tables[$t[1]][$t[2]])) {
                     $tables[$t[1]][$t[2]] = $this->typeRemplace($tables[$t[1]][$t[2]], trim($t[3]));
                 }
+                continue;
+            }
+
+            // La nullité seule — `mbr_invitation.expires_at` (liens sans échéance) l'a
+            // rencontrée la première. Même règle qu'au-dessus pour le trou.
+            if (1 === preg_match('/^ALTER TABLE ([a-z0-9_]+) ALTER ([a-z0-9_]+) (DROP|SET) NOT NULL$/i', $sql, $t)) {
+                if (isset($tables[$t[1]][$t[2]])) {
+                    $tables[$t[1]][$t[2]] = $this->nulliteRemplacee($tables[$t[1]][$t[2]], 'DROP' === strtoupper($t[3]));
+                }
             }
         }
 
@@ -317,6 +327,21 @@ final class SchemaSynchroniseTest extends KernelTestCase
         }
 
         return $type;
+    }
+
+    /**
+     * `X NOT NULL` ⇄ `X DEFAULT NULL`, dans la forme exacte où Doctrine écrit une colonne
+     * nullable sans défaut. Un défaut explicite (`DEFAULT 0`) est conservé tel quel.
+     */
+    private function nulliteRemplacee(string $definition, bool $nullable): string
+    {
+        $base = trim((string) preg_replace('/\s+(?:NOT NULL|DEFAULT NULL)\b/i', '', $definition));
+
+        if ($nullable) {
+            return 1 === preg_match('/\sDEFAULT\s/i', ' '.$base.' ') ? $base : $base.' DEFAULT NULL';
+        }
+
+        return $base.' NOT NULL';
     }
 
     /**

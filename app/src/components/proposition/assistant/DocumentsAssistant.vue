@@ -39,6 +39,8 @@ const { documents, refus, desactive = false } = defineProps<{
 const emit = defineEmits<{
   ajouter: [fichiers: File[]]
   retirer: [cle: number]
+  /** Un quart de tour horaire — c'est le parent qui détient le fichier. */
+  pivoter: [cle: number]
 }>()
 
 /** Les enregistrements, à réécouter avant d'analyser : leur rang reste celui de la grille. */
@@ -156,6 +158,16 @@ function recevoir(evenement: Event): void {
           <span class="text-[10.5px] text-attenue tabular-nums">
             {{ index + 1 }} · {{ tailleLisible(document.fichier.size) }}
           </span>
+          <button
+            v-if="document.apercu !== null"
+            type="button"
+            class="flex min-h-7 min-w-7 items-center justify-center text-sm text-attenue hover:text-texte disabled:opacity-55"
+            :aria-label="`Pivoter ${document.fichier.name} d’un quart de tour`"
+            :disabled="desactive"
+            @click="emit('pivoter', document.cle)"
+          >
+            ↻
+          </button>
         </div>
 
         <!-- Zone de toucher de 44 px, pastille visible plus petite : sur une
