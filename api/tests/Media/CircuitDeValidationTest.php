@@ -236,7 +236,7 @@ final class CircuitDeValidationTest extends CasDeTestMedia
         self::assertSame($media->getId(), $rendus[0]['mediaId']);
         self::assertSame('Livret de famille, p. 2', $rendus[0]['caption']);
         self::assertSame('en_attente', $rendus[0]['status']);
-        self::assertSame(\sprintf('/api/medias/%d/fichier', (int) $media->getId()), $rendus[0]['url']);
+        self::assertStringStartsWith(\sprintf('/api/medias/%d/fichier?v=', (int) $media->getId()), $rendus[0]['url']);
 
         // Et rien pour une autre demande : `#p1` de la demande 12 et `#p1` de la
         // demande 13 ne désignent pas la même personne.

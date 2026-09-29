@@ -59,10 +59,6 @@ async function copier(): Promise<void> {
     <p class="text-sm font-semibold text-alerte">
       Copiez ce lien maintenant : il ne sera plus affiché.
     </p>
-    <p class="mt-1 text-sm text-attenue">
-      Il n’est pas conservé en clair sur le serveur, et il n’existe aucun moyen de le
-      retrouver. Si vous le perdez, révoquez cette invitation et créez-en une autre.
-    </p>
 
     <!-- L'URL entière, en chasse fixe, sélectionnable. Elle sera recopiée à la
          main dans un message : la raccourcir la rendrait inutilisable. -->
@@ -78,21 +74,8 @@ async function copier(): Promise<void> {
       <BoutonBase variante="discret" @click="emit('fermer')">J’ai copié le lien</BoutonBase>
     </div>
 
-    <template #pied>
-      <p v-if="invitation.courrielEnvoye" class="text-sm text-ok">
-        L’invitation a aussi été envoyée à {{ invitation.email }}.
-      </p>
-      <!-- L'invitation existe quand même : seul le courriel n'est pas parti. -->
-      <p v-else-if="invitation.email" class="text-sm text-alerte">
-        Le courriel n’a pas pu être envoyé à {{ invitation.email }}. L’invitation est bien
-        créée — transmettez le lien ci-dessus vous-même.
-      </p>
-      <p v-else class="text-sm text-attenue">
-        Aucun courriel n’a été envoyé : transmettez ce lien vous-même, à la personne
-        concernée et à elle seule.
-      </p>
-
-      <ul v-if="invitation.avertissements.length > 0" class="mt-2 list-disc pl-5 text-sm text-alerte">
+    <template v-if="invitation.avertissements.length > 0" #pied>
+      <ul class="list-disc pl-5 text-sm text-alerte">
         <li v-for="avertissement in invitation.avertissements" :key="avertissement.code">
           {{ avertissement.message }}
         </li>

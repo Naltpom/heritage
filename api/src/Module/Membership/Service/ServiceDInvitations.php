@@ -12,6 +12,7 @@ use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Service\AuditService;
 use App\Module\Core\Service\UrlPublique;
 use App\Module\Membership\Entity\Invitation;
+use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Enum\InvitationStatus;
 use App\Module\Membership\Repository\ClaimAttemptRepository;
 use App\Module\Membership\Repository\InvitationRepository;
@@ -38,9 +39,15 @@ use Doctrine\ORM\EntityManagerInterface;
  * jamais un enregistrement silencieux — la base ne pose plus de clé étrangère
  * inter-module, c'est ici que la cohérence se gagne.
  *
+ * ## Un lien, plusieurs comptes
+ *
+ * Un lien porte un plafond (`maxUses`, `null` = illimité) et une échéance facultative :
+ * c'est ce qui permet de poster un seul lien dans le groupe de la famille. Le pré-lien,
+ * lui, n'a de sens qu'à usage unique — une fiche ne se réclame qu'une fois.
+ *
  * ## La date d'expiration est calculée, le statut est maintenu
  *
- * `status` est une colonne **dénormalisée** par rapport à `used_at` / `revoked_at` /
+ * `status` est une colonne **dénormalisée** par rapport à `use_count` / `revoked_at` /
  * `expires_at` (§ 4.1 du modèle) : elle rend la liste lisible d'un coup d'œil et s'indexe.
  * `expiree` est posée **paresseusement**, à la première lecture après échéance — pas par
  * une tâche de fond, qu'aucun ADR de ce projet n'autorise.
@@ -63,10 +70,14 @@ final readonly class ServiceDInvitations
     ) {
     }
 
+    /** Borne haute de `expiresInDays` : au-delà d'un siècle, « jamais » est le mot juste. */
+    private const int JOURS_MAX = 36_500;
+
     /**
      * @param array<string, mixed> $corps le corps du § 3.1
      *
-     * @throws ValidationException `personId` inexistant, `email` manquant ou mal formé
+     * @throws ValidationException `note` absente, `maxUses`/`expiresInDays` invalides,
+     *                             `personId` inexistant ou hors usage unique, `email` manquant ou mal formé
      * @throws ConflictException   `personne_deja_rattachee`, `invitation_en_cours`
      */
     public function creer(array $corps, User $administrateur): InvitationCreee
@@ -77,6 +88,23 @@ final readonly class ServiceDInvitations
         $note = $this->chaineFacultative($corps, 'note');
 
         $champs = [];
+
+        $maxUses = $this->entierAuMoinsUn($corps, 'maxUses', null, $champs);
+        // Clé absente ⇒ la durée réglée ; `null` explicite ⇒ jamais. La nuance « absent
+        // contre null » du § 1.3, dans le sens de la requête.
+        $jours = $this->entierAuMoinsUn($corps, 'expiresInDays', $this->reglages->ttlDInvitationEnJours(), $champs);
+
+        if (null !== $jours && $jours > self::JOURS_MAX) {
+            $champs['expiresInDays'] = \sprintf('%d jours maximum ; null pour un lien sans échéance.', self::JOURS_MAX);
+        }
+        if (null === $note) {
+            $champs['note'] = 'Une description est requise.';
+        }
+        if (null !== $personId && 1 !== $maxUses) {
+            // Un pré-lien réutilisable enverrait plusieurs personnes confirmer la même fiche,
+            // et `uniq_mbr_member_person` refuserait toutes sauf la première.
+            $champs['personId'] = 'Une fiche désignée n\'a de sens que pour un lien à usage unique.';
+        }
 
         if ($envoyer && null === $email) {
             $champs['email'] = 'Un destinataire est requis pour envoyer le courriel.';
@@ -90,7 +118,7 @@ final readonly class ServiceDInvitations
 
         $personne = null;
 
-        if (null !== $personId) {
+        if (null !== $personId && !isset($champs['personId'])) {
             $personne = $this->arbre->vue()->personne($personId);
 
             if (null === $personne) {
@@ -121,9 +149,10 @@ final readonly class ServiceDInvitations
         $invitation = new Invitation(
             $this->jetons->empreinte($jeton),
             $this->jetons->prefixe($jeton),
-            new \DateTimeImmutable(\sprintf('+%d days', $this->reglages->ttlDInvitationEnJours())),
+            null !== $jours ? new \DateTimeImmutable(\sprintf('+%d days', $jours)) : null,
             $identifiant,
             $administrateur->getEmail(),
+            $maxUses,
         );
 
         $invitation->setEmail($email)->setNote($note);
@@ -156,6 +185,8 @@ final readonly class ServiceDInvitations
                 'tokenPrefix' => $invitation->getTokenPrefix(),
                 'personId' => $invitation->getPersonId(),
                 'email' => $email,
+                'maxUses' => $maxUses,
+                'expiresAt' => $invitation->getExpiresAt()?->format(\DateTimeInterface::ATOM),
                 'courrielEnvoye' => $envoye,
             ],
             $administrateur,
@@ -168,7 +199,7 @@ final readonly class ServiceDInvitations
     /**
      * @return array{elements: array<int, Invitation>, total: int, page: int, parPage: int}
      */
-    public function lister(?string $statut, int $page, int $parPage): array
+    public function lister(?string $statut, int $page, int $parPage, bool $avecRevoquees = true): array
     {
         $filtre = null !== $statut ? InvitationStatus::tryFrom($statut) : null;
 
@@ -181,7 +212,7 @@ final readonly class ServiceDInvitations
         // rabote sert le résultat ; un plafond qui lève apprend à l'appelant où il est.
         $parPage = min(100, max(1, $parPage));
 
-        $resultat = $this->invitations->lister($filtre, $page, $parPage);
+        $resultat = $this->invitations->lister($filtre, $page, $parPage, $avecRevoquees);
 
         foreach ($resultat['elements'] as $invitation) {
             $this->marquerExpireeSiBesoin($invitation);
@@ -197,8 +228,33 @@ final readonly class ServiceDInvitations
     }
 
     /**
+     * Les comptes nés de ces liens, en une requête, rangés par identifiant d'invitation.
+     *
+     * @param array<int, Invitation> $invitations
+     *
+     * @return array<int, list<Member>>
+     */
+    public function inscrits(array $invitations): array
+    {
+        $ids = [];
+
+        foreach ($invitations as $invitation) {
+            $id = $invitation->getId();
+
+            if (null !== $id) {
+                $ids[] = $id;
+            }
+        }
+
+        return $this->membres->parInvitations($ids);
+    }
+
+    /**
+     * Révoquer arrête les inscriptions à venir ; les comptes déjà créés restent. C'est
+     * pourquoi un lien partiellement utilisé se révoque, et un lien épuisé non.
+     *
      * @throws NotFoundException si l'invitation n'existe pas
-     * @throws ConflictException `invitation_deja_consommee`
+     * @throws ConflictException `invitation_deja_consommee` — lien épuisé
      */
     public function revoquer(int $id, User $administrateur): Invitation
     {
@@ -208,10 +264,10 @@ final readonly class ServiceDInvitations
             throw new NotFoundException();
         }
 
-        if (null !== $invitation->getUsedAt()) {
-            // « Révoquer après coup ne défait pas le compte créé, et laisser croire le
-            // contraire serait pire que refuser » (§ 3.3).
-            throw new ConflictException('invitation_deja_consommee', 'Cette invitation a déjà servi à créer un compte ; la révoquer ne le supprimerait pas.');
+        if ($invitation->estEpuisee()) {
+            // Il n'y a plus d'inscription à empêcher. « Révoquer après coup ne défait pas
+            // le compte créé, et laisser croire le contraire serait pire que refuser » (§ 3.3).
+            throw new ConflictException('invitation_deja_consommee', 'Ce lien a déjà servi autant de fois que prévu ; le révoquer ne supprimerait aucun compte.');
         }
 
         $identifiant = $administrateur->getId();
@@ -252,7 +308,7 @@ final readonly class ServiceDInvitations
             return;
         }
 
-        if ($invitation->getExpiresAt() <= new \DateTimeImmutable()) {
+        if ($invitation->estEchue()) {
             $invitation->setStatus(InvitationStatus::Expiree);
         }
     }
@@ -291,6 +347,34 @@ final readonly class ServiceDInvitations
 
         if (!\is_int($valeur)) {
             throw new ValidationException([$cle => 'Un entier est attendu.']);
+        }
+
+        return $valeur;
+    }
+
+    /**
+     * Un entier ≥ 1, `null` explicite, ou `$siAbsent` quand la clé manque. L'erreur est
+     * ajoutée à `$champs` pour que la réponse `422` les donne toutes d'un coup.
+     *
+     * @param array<string, mixed>  $corps
+     * @param array<string, string> $champs
+     */
+    private function entierAuMoinsUn(array $corps, string $cle, ?int $siAbsent, array &$champs): ?int
+    {
+        if (!\array_key_exists($cle, $corps)) {
+            return $siAbsent;
+        }
+
+        $valeur = $corps[$cle];
+
+        if (null === $valeur) {
+            return null;
+        }
+
+        if (!\is_int($valeur) || $valeur < 1) {
+            $champs[$cle] = 'Un entier supérieur ou égal à 1, ou null, est attendu.';
+
+            return $siAbsent;
         }
 
         return $valeur;

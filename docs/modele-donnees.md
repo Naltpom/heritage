@@ -1082,9 +1082,11 @@ permettant d'énumérer les personnes vivantes de l'arbre.
 | `person_label` | `VARCHAR(255)` | oui | `NULL` | Libellé dénormalisé de cette personne. |
 | `email` | `VARCHAR(180)` | oui | `NULL` | Destinataire, quand le lien est envoyé par courriel. `NULL` quand l'administrateur copie le lien à la main — les **deux chemins doivent exister** (§ 6.1 du dossier). |
 | `status` | `VARCHAR(12)` | non | `'active'` | Énum `InvitationStatus` (§ 4.5). Colonne dénormalisée par rapport à `used_at`/`revoked_at`/`expires_at` : elle rend la liste d'administration lisible d'un coup d'œil et s'indexe. Le service la maintient ; `expiree` est posée paresseusement à la première lecture après échéance. |
-| `expires_at` | `TIMESTAMPTZ` | non | — | Échéance. Calculée à la création depuis `invitation.ttl_jours` (7 par défaut). |
-| `used_at` | `TIMESTAMPTZ` | oui | `NULL` | Usage **unique** : dès qu'un compte naît du jeton, la colonne est posée et le jeton ne vaut plus rien. |
-| `used_by_user_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Core\User`). Qui s'en est servi. |
+| `expires_at` | `TIMESTAMPTZ` | oui | — | Échéance. `NULL` = n'expire jamais. Par défaut, calculée à la création depuis `invitation.ttl_jours` (7 par défaut). |
+| `max_uses` | `INT` | oui | `NULL` | Plafond de comptes créés par le lien. `NULL` = illimité ; `1` = invitation nominative, seule forme admise avec un pré-lien. |
+| `use_count` | `INT` | non | `0` | Comptes nés du lien. Comparé au plafond **sous verrou de ligne** (`FOR UPDATE`) à l'inscription, et incrémenté dans la même transaction que le compte. `use_count = max_uses` ⇒ `status = utilisee`. |
+| `used_at` | `TIMESTAMPTZ` | oui | `NULL` | Le **dernier** usage. Les inscrits se lisent sur `mbr_member.invitation_id`. |
+| `used_by_user_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Core\User`). Le dernier inscrit. |
 | `used_by_email` | `VARCHAR(180)` | oui | `NULL` | Libellé dénormalisé. |
 | `revoked_at` | `TIMESTAMPTZ` | oui | `NULL` | Révocation manuelle. |
 | `revoked_by_user_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Core\User`). |
@@ -1110,9 +1112,12 @@ CONSTRAINT ck_mbr_invitation_usage
   CHECK ((used_at IS NULL) = (used_by_user_id IS NULL)),
 CONSTRAINT ck_mbr_invitation_revocation
   CHECK ((revoked_at IS NULL) = (revoked_by_user_id IS NULL)),
--- Une invitation ne peut pas être à la fois consommée et révoquée.
-CONSTRAINT ck_mbr_invitation_exclusif
-  CHECK (used_at IS NULL OR revoked_at IS NULL)
+CONSTRAINT ck_mbr_invitation_plafond
+  CHECK (max_uses IS NULL OR max_uses >= 1),
+CONSTRAINT ck_mbr_invitation_usages
+  CHECK (use_count >= 0 AND (max_uses IS NULL OR use_count <= max_uses))
+-- `ck_mbr_invitation_exclusif` (used_at IS NULL OR revoked_at IS NULL) a été retirée le
+-- 29/09/2026 : un lien collectif peut servir, puis être révoqué.
 ```
 
 > **Le 404 plutôt que le 403.** Le § 6.1 du dossier de mission impose de répondre **404**

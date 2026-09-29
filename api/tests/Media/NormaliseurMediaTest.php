@@ -86,8 +86,12 @@ final class NormaliseurMediaTest extends TestCase
     {
         $charge = $this->normaliseur->normaliser($this->media(), $this->lecteur(8));
 
-        self::assertSame('/api/medias/120/fichier', $charge['url']);
-        self::assertSame('/api/medias/120/vignette', $charge['vignetteUrl']);
+        // Versionnées (`?v=`) pour qu'une image réécrite change d'URL — et la version
+        // n'est ni le `sha256`, réservé, ni le nom de stockage, secret.
+        self::assertMatchesRegularExpression('#^/api/medias/120/fichier\?v=[0-9a-f]{12}$#', $charge['url']);
+        self::assertMatchesRegularExpression('#^/api/medias/120/vignette\?v=[0-9a-f]{12}$#', $charge['vignetteUrl']);
+        self::assertStringNotContainsString(substr($this->media()->getSha256(), 0, 12), $charge['url']);
+        self::assertStringNotContainsString(substr($this->media()->getStorageName(), 0, 12), $charge['url']);
     }
 
     public function testLeBlocDateRendSixClesEtAucunPoint(): void

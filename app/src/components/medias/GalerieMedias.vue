@@ -42,7 +42,7 @@
  * sécurité ; c'est éviter de proposer un geste qui sera refusé.
  */
 import { computed, ref, watch } from 'vue'
-import { listerMedias, supprimerMedia, type Media } from '@/lib/api'
+import { listerMedias, pivoterMedia, supprimerMedia, type Media } from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
@@ -70,6 +70,25 @@ const erreurParMedia = ref<Record<number, unknown>>({})
  */
 const peutDeposer = computed(() => rattache.value && vueEmpruntee.value === null)
 const peutSupprimer = computed(() => administrateur.value && vueEmpruntee.value === null)
+
+/** L'administrateur toujours ; l'auteur tant que la pièce attend — le serveur
+ *  tranche (`403` sinon), l'erreur s'affiche sous la vignette. */
+function peutPivoter(media: Media): boolean {
+  if (vueEmpruntee.value !== null) return false
+  return administrateur.value || (rattache.value && media.status === 'en_attente')
+}
+
+async function pivoter(id: number): Promise<void> {
+  const sansCelui = { ...erreurParMedia.value }
+  delete sansCelui[id]
+  erreurParMedia.value = sansCelui
+  try {
+    const pivote = await pivoterMedia(id, 90)
+    medias.value = medias.value.map((media) => (media.id === id ? pivote : media))
+  } catch (cause) {
+    erreurParMedia.value = { ...erreurParMedia.value, [id]: cause }
+  }
+}
 
 async function charger(): Promise<void> {
   chargement.value = true
@@ -125,9 +144,11 @@ async function supprimer(id: number): Promise<void> {
           <VignetteMedia
             :media="media"
             :supprimable="peutSupprimer"
+            :pivotable="peutPivoter(media)"
             :erreur="erreurParMedia[media.id]"
             @agrandir="emit('agrandir', $event)"
             @supprimer="supprimer"
+            @pivoter="pivoter"
           />
         </li>
       </ul>

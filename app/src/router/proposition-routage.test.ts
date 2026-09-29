@@ -55,14 +55,14 @@ describe('les deux formulaires ont leur route', () => {
     expect(routeur().resolve('/personnes/proposer').name).not.toBe('personne.detail')
   })
 
-  it('ouvre l’écran des liens de parenté sur l’identifiant de la fiche', () => {
-    // La parenté ne se propose pas par `modification_personne` : un op nomme un
-    // champ, et une filiation est une ligne de `tree_child`. C'est une demande
-    // `ajout_lien`, donc un formulaire à part — et il doit être atteignable.
-    const resolue = routeur().resolve('/personnes/17/liens')
+  it('renvoie l’ancienne adresse des liens vers le formulaire de modification', async () => {
+    // La parenté se propose sur le même écran que les champs ; `/liens` ne
+    // doit pas mourir pour autant — des favoris et des liens partagés y mènent.
+    const r = routeur()
+    await r.push('/personnes/17/liens')
 
-    expect(resolue.name).toBe('proposition.liens')
-    expect(resolue.params['id']).toBe('17')
+    expect(r.currentRoute.value.name).toBe('proposition.modification')
+    expect(r.currentRoute.value.params['id']).toBe('17')
   })
 
   it('ouvre l’écran de suppression sur un identifiant réellement numérique', () => {
@@ -90,7 +90,6 @@ describe('proposer est réservé aux membres', () => {
   it.each([
     'proposition.modification',
     'proposition.creation',
-    'proposition.liens',
     'proposition.suppression',
   ])(
     '%s exige un rattachement validé',

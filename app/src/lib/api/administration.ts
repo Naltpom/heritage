@@ -35,7 +35,13 @@ export interface Invitation {
   personLabel: string | null
   email: string | null
   status: StatutInvitation
-  expiresAt: string
+  /** `null` : le lien n'expire jamais. */
+  expiresAt: string | null
+  /** `null` : nombre d'inscriptions illimité. `utilisee` = plafond atteint. */
+  maxUses: number | null
+  useCount: number
+  /** Les comptes nés de ce lien, du plus ancien au plus récent. */
+  inscrits: InscritParInvitation[]
   usedAt: string | null
   usedByEmail: string | null
   revokedAt: string | null
@@ -47,6 +53,17 @@ export interface Invitation {
    *  qu'un lien est en train d'être sondé. Les critères soumis, eux, ne sont
    *  jamais rendus — `query_hash` est une empreinte, pas un texte (§ 16). */
   tentatives: number
+}
+
+/** Un compte créé par un lien. `personId`/`personLabel` : ensemble ou absents
+ *  (porte de sortie n° 8, filtrée comme la personne elle-même). */
+export interface InscritParInvitation {
+  userId: number
+  email: string
+  memberStatus: string
+  createdAt: string
+  personId?: number
+  personLabel?: string
 }
 
 export interface AvertissementApi {
@@ -71,39 +88,42 @@ export interface InvitationCreee extends Invitation {
 
 /** `POST /api/administration/invitations` (§ 3.1). */
 export function creerInvitation(entree: {
-  personId?: number | undefined
-  email?: string | undefined
-  envoyerCourriel?: boolean | undefined
-  note?: string | undefined
+  /** La description du lien — obligatoire. */
+  note: string
+  /** `null` : illimité. */
+  maxUses: number | null
+  /** `null` : n'expire jamais. */
+  expiresInDays: number | null
 }): Promise<InvitationCreee> {
   return requeteApi<InvitationCreee>('/administration/invitations', {
     methode: 'POST',
-    corps: {
-      personId: entree.personId ?? null,
-      email: entree.email ?? null,
-      envoyerCourriel: entree.envoyerCourriel ?? false,
-      note: entree.note ?? null,
-    },
+    corps: { note: entree.note, maxUses: entree.maxUses, expiresInDays: entree.expiresInDays },
   })
 }
 
 /** `GET /api/administration/invitations` — liste paginée, `createdAt DESC`. */
 export function listerInvitations(options: {
   status?: StatutInvitation | undefined
+  /** `false` : les révoquées sont écartées côté serveur. */
+  revoquees?: boolean | undefined
   page?: number | undefined
   parPage?: number | undefined
 }): Promise<ListePaginee<Invitation>> {
   return requeteApi<ListePaginee<Invitation>>('/administration/invitations', {
-    requete: { status: options.status, page: options.page, parPage: options.parPage },
+    requete: {
+      status: options.status,
+      revoquees: options.revoquees === undefined ? undefined : options.revoquees ? 1 : 0,
+      page: options.page,
+      parPage: options.parPage,
+    },
   })
 }
 
 /**
  * `POST /api/administration/invitations/{id}/revoquer`.
  *
- * Sur une invitation **déjà consommée** : `409 invitation_deja_consommee` —
- * révoquer après coup ne défait pas le compte créé, et laisser croire le
- * contraire serait pire que refuser.
+ * Révoquer arrête les inscriptions à venir ; les comptes déjà créés restent.
+ * Sur un lien **complet** : `409 invitation_deja_consommee`.
  */
 export function revoquerInvitation(id: number): Promise<Invitation> {
   return requeteApi<Invitation>(`/administration/invitations/${id}/revoquer`, {

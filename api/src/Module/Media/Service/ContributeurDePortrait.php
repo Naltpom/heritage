@@ -51,8 +51,8 @@ final readonly class ContributeurDePortrait implements SessionPayloadContributor
         return [
             'portrait' => [
                 'mediaId' => $portrait->getId(),
-                'url' => \sprintf('/api/medias/%d/fichier', $portrait->getId()),
-                'vignetteUrl' => \sprintf('/api/medias/%d/vignette', $portrait->getId()),
+                'url' => AdresseDuMedia::fichier($portrait),
+                'vignetteUrl' => AdresseDuMedia::vignette($portrait),
                 'deposeParMoi' => $portrait->getUploadedByUserId() === $userId,
             ],
         ];

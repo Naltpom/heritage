@@ -53,4 +53,41 @@ class MemberRepository extends ServiceEntityRepository
     {
         return $this->findBy(['status' => MemberStatus::EnAttente], ['createdAt' => 'ASC']);
     }
+
+    /**
+     * Les inscrits de plusieurs liens d'invitation, **en une requête** : la liste
+     * d'administration en affiche une page entière, et une requête par ligne ferait payer
+     * chaque lien collectif à toutes les autres.
+     *
+     * @param list<int> $invitationIds
+     *
+     * @return array<int, list<Member>> par identifiant d'invitation, du plus ancien au plus récent
+     */
+    public function parInvitations(array $invitationIds): array
+    {
+        if ([] === $invitationIds) {
+            return [];
+        }
+
+        /** @var list<Member> $membres */
+        $membres = $this->createQueryBuilder('m')
+            ->andWhere('m.invitation IN (:ids)')
+            ->setParameter('ids', $invitationIds)
+            ->orderBy('m.createdAt', 'ASC')
+            ->addOrderBy('m.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        $parInvitation = [];
+
+        foreach ($membres as $membre) {
+            $invitationId = $membre->getInvitation()?->getId();
+
+            if (null !== $invitationId) {
+                $parInvitation[$invitationId][] = $membre;
+            }
+        }
+
+        return $parInvitation;
+    }
 }

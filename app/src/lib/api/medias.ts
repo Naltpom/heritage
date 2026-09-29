@@ -349,6 +349,15 @@ export function televerserPortraitDuCompte(fichier: File, signal?: AbortSignal):
   })
 }
 
+/**
+ * `POST /api/medias/{id}/pivoter` — un angle **horaire**. Réservé à
+ * l'administrateur, ou à l'auteur tant que la pièce attend. La réponse porte des
+ * `url` / `vignetteUrl` versionnées : remplacer le média suffit à rafraîchir.
+ */
+export function pivoterMedia(id: number, angle: 90 | 180 | 270): Promise<Media> {
+  return requeteApi<Media>(`/medias/${id}/pivoter`, { methode: 'POST', corps: { angle } })
+}
+
 export function supprimerMedia(id: number): Promise<{ supprime: boolean; id: number }> {
   return requeteApi<{ supprime: boolean; id: number }>(`/medias/${id}`, { methode: 'DELETE' })
 }

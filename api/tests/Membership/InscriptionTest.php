@@ -393,6 +393,45 @@ final class InscriptionTest extends CasDeTestMembership
     }
 
     /** Rend la `ref` du premier candidat, ou fait échouer le test si la recherche n'a rien rendu. */
+    /**
+     * Un lien plafonné à deux : deux comptes y naissent, le troisième arrivant trouve un
+     * `404` comme sur un jeton inventé, et le lien passe `utilisee`.
+     */
+    public function testUnLienPlafonneServitJusquAuPlafondPuisMeurt(): void
+    {
+        $administrateur = $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
+        [$invitation, $jeton] = $this->creerInvitation($administrateur, maxUses: 2);
+
+        foreach ([['Romarin', 'Natron', '1980-07-27', 'natron@example.net'], ['Thym', 'Spinel', '1982-03-10', 'spinel@example.net']] as [$nom, $prenoms, $naissance, $courriel]) {
+            $reference = $this->rattacher($jeton, $nom, $prenoms, $naissance);
+
+            $this->requete('POST', '/api/inscription/compte', [
+                'jeton' => $jeton,
+                'choix' => $reference,
+                'email' => $courriel,
+                'password' => 'un-mot-de-passe-de-douze-signes',
+            ]);
+            self::assertSame(201, $this->client->getResponse()->getStatusCode());
+            $this->client->getCookieJar()->clear();
+        }
+
+        $depot = self::getContainer()->get(InvitationRepository::class);
+        \assert($depot instanceof InvitationRepository);
+        $relue = $depot->find($invitation->getId());
+        self::assertNotNull($relue);
+        self::assertSame(2, $relue->getUseCount());
+        self::assertSame(InvitationStatus::Utilisee, $relue->getStatus());
+        self::assertSame('spinel@example.net', $relue->getUsedByEmail());
+
+        $membres = self::getContainer()->get(MemberRepository::class);
+        \assert($membres instanceof MemberRepository);
+        $inscrits = $membres->parInvitations([(int) $invitation->getId()]);
+        self::assertCount(2, $inscrits[(int) $invitation->getId()] ?? []);
+
+        $this->requete('POST', '/api/inscription/verifier', ['jeton' => $jeton]);
+        self::assertSame(404, $this->client->getResponse()->getStatusCode());
+    }
+
     private function rattacher(string $jeton, string $nom, string $prenoms, string $naissance): string
     {
         $this->requete('POST', '/api/inscription/rattachement', [

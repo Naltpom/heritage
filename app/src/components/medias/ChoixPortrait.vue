@@ -25,6 +25,7 @@ import { nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { analyserErreur, televerserPortraitDuCompte } from '@/lib/api'
 import { rafraichirSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
+import { pivoterImage } from './pivotement'
 import RecadrageSousCercle from './RecadrageSousCercle.vue'
 
 const { ouvert } = defineProps<{ ouvert: boolean }>()
@@ -181,6 +182,13 @@ function declencher(): void {
 
 const recadrage = ref<InstanceType<typeof RecadrageSousCercle> | null>(null)
 
+/** Un quart de tour horaire : la photo repart dans le recadrage, recentrée. */
+async function pivoter(): Promise<void> {
+  if (!image.value) return
+  const blob = await pivoterImage(image.value, 90, 'image/jpeg')
+  if (blob) await chargerImage(blob)
+}
+
 /* ------------------------------------------------------------------ */
 /* L'envoi                                                             */
 /* ------------------------------------------------------------------ */
@@ -285,10 +293,11 @@ onBeforeUnmount(() => {
 
       <!-- 3. Le cadrage -->
       <template v-else-if="etape === 'cadrage' && image">
-        <RecadrageSousCercle ref="recadrage" :source="image" />
+        <RecadrageSousCercle :key="image.src" ref="recadrage" :source="image" />
         <p class="m-0 text-center text-xs text-attenue">Glissez la photo pour placer votre visage dans le cercle.</p>
         <div class="flex flex-wrap justify-end gap-2">
           <BoutonBase variante="discret" @click="etape = 'choix'">Changer de photo</BoutonBase>
+          <BoutonBase variante="secondaire" aria-label="Pivoter d’un quart de tour" @click="pivoter">↻ Pivoter</BoutonBase>
           <BoutonBase :chargement="envoi" @click="enregistrer">Enregistrer</BoutonBase>
         </div>
       </template>

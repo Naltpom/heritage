@@ -32,6 +32,7 @@ final class RoutesMediaTest extends WebTestCase
         yield 'fichier' => ['GET', '/api/medias/120/fichier'];
         yield 'vignette' => ['GET', '/api/medias/120/vignette'];
         yield 'supprimer' => ['DELETE', '/api/medias/120'];
+        yield 'pivoter' => ['POST', '/api/medias/120/pivoter'];
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('routes')]

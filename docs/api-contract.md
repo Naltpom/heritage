@@ -564,7 +564,7 @@ un lien d'invitation (§ 6.1 du dossier).
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs | Débit |
 |---|---|---|---|---|---|---|
 | `POST` | `/api/administration/invitations` | `ADMIN` | § 3.1 | `201` § 3.2 | `422` `donnees_invalides` · `409` `personne_deja_rattachee` · `409` `invitation_en_cours` · `409` `vue_comme_membre_active` | — |
-| `GET` | `/api/administration/invitations` | `ADMIN` | `?status=&page=&parPage=` | `200` liste paginée | — | — |
+| `GET` | `/api/administration/invitations` | `ADMIN` | `?status=&revoquees=&page=&parPage=` | `200` liste paginée | — | — |
 | `POST` | `/api/administration/invitations/{id}/revoquer` | `ADMIN` | *(vide)* | `200` invitation | `404` `introuvable` · `409` `invitation_deja_consommee` | — |
 
 ### 3.1 Créer une invitation
@@ -574,16 +574,20 @@ un lien d'invitation (§ 6.1 du dossier).
   "personId": 202,
   "email": "cousin.saule@example.net",
   "envoyerCourriel": true,
-  "note": "pour la cousine de Saule"
+  "note": "pour la cousine de Saule",
+  "maxUses": 1,
+  "expiresInDays": 7
 }
 ```
 
 | Champ | Obligatoire | Rôle |
 |---|---|---|
-| `personId` | non | Le **pré-lien** (§ 4.1). C'est le cas nominal : le candidat n'aura qu'à confirmer une date de naissance. `null` ou absent ⇒ recherche floue à l'inscription. |
+| `note` | **oui** | Description du lien, 1 à 255 caractères après `trim`. Absente ou vide ⇒ `422` `champs.note`. |
+| `maxUses` | non | Plafond de comptes créés par le lien : entier ≥ 1. `null` ou absent ⇒ **illimité**. |
+| `expiresInDays` | non | Durée de validité en jours, entier de 1 à 36 500. `null` ⇒ **n'expire jamais** ; clé **absente** ⇒ la durée réglée (`invitation.ttl_jours`). |
+| `personId` | non | Le **pré-lien** (§ 4.1). Le candidat n'aura qu'à confirmer une date de naissance. `null` ou absent ⇒ recherche floue à l'inscription. **Seulement si `maxUses` vaut 1** — sinon `422` `champs.personId` : une fiche ne se réclame qu'une fois. |
 | `email` | oui si `envoyerCourriel` | Destinataire. `null` quand l'administrateur copie le lien à la main. |
 | `envoyerCourriel` | non, défaut `false` | Déclenche l'envoi SMTP synchrone. |
-| `note` | non | Aide-mémoire, 255 caractères. |
 
 Contrôles :
 
@@ -610,10 +614,13 @@ Contrôles :
   "personLabel": "Pyroxène Tilleul",
   "email": "cousin.saule@example.net",
   "status": "active",
+  "maxUses": 1,
+  "useCount": 0,
   "expiresAt": "2026-09-22T20:15:00+02:00",
   "createdByEmail": "natron@example.net",
   "createdAt": "2026-09-15T20:15:00+02:00",
   "note": "pour la cousine de Saule",
+  "inscrits": [],
   "avertissements": []
 }
 ```
@@ -639,8 +646,13 @@ Contrôles :
 ### 3.3 Lister et révoquer
 
 `GET /api/administration/invitations?status=active` — `status` accepte `active`, `utilisee`,
-`expiree`, `revoquee`, ou est omis pour tout. Liste paginée du § 1.5, triée par
+`expiree`, `revoquee`, ou est omis pour tout. `revoquees=0` écarte les liens révoqués (absent
+ou `1` : inclus) ; les deux filtres se combinent. Liste paginée du § 1.5, triée par
 `createdAt DESC`.
+
+Un lien sert jusqu'à `maxUses` comptes (`null` = illimité). `status` vaut `utilisee` quand le
+plafond est atteint (`useCount = maxUses`) — un lien illimité reste `active` tant qu'il n'est
+ni révoqué ni échu ; `expiree` n'arrive que si `expiresAt` n'est pas `null`.
 
 ```json
 {
@@ -652,15 +664,27 @@ Contrôles :
       "personLabel": "Pyroxène Tilleul",
       "email": "cousin.saule@example.net",
       "status": "active",
-      "expiresAt": "2026-09-22T20:15:00+02:00",
-      "usedAt": null,
-      "usedByEmail": null,
+      "maxUses": 10,
+      "useCount": 1,
+      "expiresAt": null,
+      "usedAt": "2026-09-16T09:02:00+02:00",
+      "usedByEmail": "pyroxene@example.net",
       "revokedAt": null,
       "revokedByEmail": null,
       "createdByEmail": "natron@example.net",
       "createdAt": "2026-09-15T20:15:00+02:00",
-      "note": "pour la cousine de Saule",
-      "tentatives": 2
+      "note": "groupe de la famille",
+      "tentatives": 2,
+      "inscrits": [
+        {
+          "userId": 12,
+          "email": "pyroxene@example.net",
+          "memberStatus": "en_attente",
+          "createdAt": "2026-09-16T09:02:00+02:00",
+          "personId": 202,
+          "personLabel": "Pyroxène Tilleul"
+        }
+      ]
     }
   ],
   "total": 1,
@@ -673,8 +697,13 @@ Contrôles :
 à l'administrateur de voir qu'un lien est en train d'être sondé. Les **critères** soumis ne
 sont jamais rendus — `query_hash` est une empreinte, pas un texte (§ 4.3, § 16).
 
+`inscrits` liste les comptes nés du lien (`mbr_member.invitation_id`), du plus ancien au plus
+récent ; `usedAt` / `usedByEmail` désignent le **dernier**. Dans chaque inscrit, `personId` et
+`personLabel` suivent la règle du pré-lien : les deux, ou aucun (§ 0.4, § 16).
+
 `POST .../revoquer` pose `revoked_at` et `status = revoquee`, rend l'invitation à jour, et
-journalise `invitation_revoquee`. Sur une invitation déjà consommée : `409`
+journalise `invitation_revoquee`. Un lien déjà utilisé mais pas épuisé se révoque : cela
+arrête les inscriptions à venir, les comptes créés restent. Sur un lien **épuisé** : `409`
 `invitation_deja_consommee` — révoquer après coup ne défait pas le compte créé, et laisser
 croire le contraire serait pire que refuser.
 
@@ -726,6 +755,8 @@ Réponse, invitation **sans pré-lien** :
   "champsDemandes": ["surname", "givenNames", "birthDate"]
 }
 ```
+
+`expiresAt` vaut `null` pour un lien sans échéance (§ 3.1).
 
 **Ce que cette réponse ne contient pas, et pourquoi.** Ni `personId`, ni `personLabel`, ni
 aucun indice sur la personne pré-liée — pas même une initiale. `mode` dit seulement quel

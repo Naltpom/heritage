@@ -26,8 +26,10 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import { estImage, pastilleDeMedia, tailleLisible, type CibleLoupe } from './medias'
 
-const { media, supprimable = false } = defineProps<{
+const { media, supprimable = false, pivotable = false } = defineProps<{
   media: Media
+  /** Une image que le lecteur peut remettre droite. */
+  pivotable?: boolean
   /** Rendu par l'appelant à partir du rôle : c'est une **action** réservée. */
   supprimable?: boolean
   /** L'erreur de **ce** média, pas celle de la galerie : « un état d'erreur
@@ -38,6 +40,7 @@ const { media, supprimable = false } = defineProps<{
 const emit = defineEmits<{
   agrandir: [cible: CibleLoupe]
   supprimer: [id: number]
+  pivoter: [id: number]
 }>()
 
 const pastille = computed(() => pastilleDeMedia(media.status))
@@ -105,6 +108,12 @@ function agrandir(): void {
       </span>
 
       <MessageErreur v-if="erreur" :erreur="erreur" />
+
+      <div v-if="pivotable && estImage(media.mimeType)" class="mt-0.5">
+        <BoutonBase variante="discret" :aria-label="`Pivoter d’un quart de tour`" @click="emit('pivoter', media.id)">
+          ↻ Pivoter
+        </BoutonBase>
+      </div>
 
       <template v-if="supprimable">
         <div v-if="!confirmation" class="mt-0.5">

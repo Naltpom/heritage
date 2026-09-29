@@ -359,22 +359,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Demander la suppression', parent: { nom: 'arbre', libelle: 'Retour' } },
   },
   {
-    // **Proposer des liens de parenté sur une fiche existante** (§ 6.4 bis).
-    //
-    // Écran séparé de `proposition.modification`, et ce n'est pas un choix de
-    // mise en page : une demande porte **une** nature, et `kind` « dit quelles
-    // tables filles sont peuplées » (§ 5.7 du modèle). Un formulaire qui
-    // déposerait à la fois des ops de champ et des liens déposerait **deux**
-    // demandes sous un seul bouton — deux lignes dans la file, deux décisions,
-    // et un administrateur libre de valider l'une et de refuser l'autre.
-    //
-    // `membre` comme les trois autres formulaires : un compte en attente de
-    // rattachement ne dépose pas, et l'API le lui redirait en
-    // `403 regime_en_attente`.
+    // L'ancienne adresse de l'écran des liens. La parenté se propose désormais
+    // dans le formulaire de modification ; le nom reste pour les liens déjà
+    // partagés et les favoris.
     path: '/personnes/:id(\\d+)/liens',
     name: 'proposition.liens',
-    component: () => import('@/views/PropositionLiensView.vue'),
-    meta: { acces: 'membre', titre: 'Proposer des liens', parent: { nom: 'arbre', libelle: 'Retour' } },
+    redirect: (to) => ({ name: 'proposition.modification', params: to.params, hash: '#parente' }),
   },
   {
     // Pas de `:id` : la personne n'existe pas encore, et n'aura d'identifiant

@@ -24,6 +24,7 @@ use App\Module\Membership\Repository\InvitationRepository;
 use App\Module\Membership\Repository\MemberRepository;
 use App\Module\Membership\Service\Port\PersonneDeLArbre;
 use App\Module\Membership\Service\Port\PortArbre;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
@@ -42,7 +43,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
  *
  * ── 1. `404`, jamais `403`, sur les trois routes publiques ───────────────────────
  *
- * Jeton inconnu, mal formé, expiré, révoqué ou déjà consommé : **`404`**, corps d'erreur
+ * Jeton inconnu, mal formé, expiré, révoqué ou épuisé : **`404`**, corps d'erreur
  * identique dans les cinq cas, même message — `"Ressource introuvable."`, jamais « jeton
  * expiré », qui distinguerait un jeton ayant existé d'un jeton inventé. Un `403`
  * confirmerait que la route existe et que le jeton a une forme valide.
@@ -126,7 +127,7 @@ final readonly class ServiceDInscription
 
         return [
             'mode' => null !== $invitation->getPersonId() ? 'confirmation' : 'recherche',
-            'expiresAt' => $invitation->getExpiresAt()->format(\DateTimeInterface::ATOM),
+            'expiresAt' => $invitation->getExpiresAt()?->format(\DateTimeInterface::ATOM),
             'candidatsMax' => $this->reglages->candidatsMax(),
             // Les deux modes demandent les mêmes trois champs. C'est délibéré : un
             // formulaire qui ne demanderait que la date en mode confirmation dirait au
@@ -279,51 +280,68 @@ final readonly class ServiceDInscription
 
         $nature = $retenu['nature'];
         $actif = $nature->activeLeCompte();
-
         // `displayName` reste **vide** : le § 2.2 point 3 interdit de le renseigner depuis
         // le libellé de la personne avant activation, et le socle de `Core` le fait
         // retomber sur le courriel. Le renseigner ici donnerait à un compte non validé le
         // nom de la personne qu'il prétend être.
+        //
+        // Haché hors transaction : c'est volontairement lent, et le verrou ci-dessous
+        // ferait attendre d'autant chaque inscription concurrente sur le même lien.
         $utilisateur = new User($email);
         $utilisateur
             ->setStatus($actif ? UserStatus::Actif : UserStatus::EnAttente)
             ->setPassword($this->hacheur->hashPassword($utilisateur, $motDePasse));
 
-        $this->em->persist($utilisateur);
-        $this->em->flush();
+        // **Le plafond se garde sous verrou.** Deux inscriptions à la dernière place ont
+        // toutes deux passé `invitationValide()` ; seule la ligne verrouillée (`FOR
+        // UPDATE`) et relue dit laquelle arrive la seconde. Compte, membre et compteur
+        // s'écrivent dans la même transaction : un compte sans usage compté, ou
+        // l'inverse, n'existe jamais.
+        /** @var Member $membre */
+        $membre = $this->em->wrapInTransaction(function () use ($invitation, $utilisateur, $email, $personne, $nature, $actif): Member {
+            $this->em->refresh($invitation, LockMode::PESSIMISTIC_WRITE);
 
-        $identifiant = $utilisateur->getId();
-        \assert(null !== $identifiant);
+            if (null !== $invitation->getRevokedAt() || $invitation->estEpuisee() || $invitation->estEchue()) {
+                throw new NotFoundException();
+            }
 
-        $membre = new Member($identifiant, $email, $personne->id, $personne->libelle, $nature);
-        $membre->setInvitation($invitation);
+            $this->em->persist($utilisateur);
+            $this->em->flush();
 
-        if ($actif) {
-            // Activation automatique : pas d'auteur, `activated_by_user_id` reste nul
-            // (§ 4.5 du modèle).
-            $membre->activer();
-        }
+            $identifiant = $utilisateur->getId();
+            \assert(null !== $identifiant);
 
-        $this->em->persist($membre);
+            $membre = new Member($identifiant, $email, $personne->id, $personne->libelle, $nature);
+            $membre->setInvitation($invitation);
 
-        $invitation->marquerUtilisee($identifiant, $email);
+            if ($actif) {
+                // Activation automatique : pas d'auteur, `activated_by_user_id` reste nul
+                // (§ 4.5 du modèle).
+                $membre->activer();
+            }
 
-        $this->audit->enregistrer(
-            AuditAction::InvitationUtilisee,
-            Invitation::class,
-            (string) $invitation->getId(),
-            // Pas de libellé de personne : le sujet du journal est l'invitation, et
-            // `subject_label` est soumis à la porte de sortie n° 8 comme le reste.
-            null,
-            [
-                'tokenPrefix' => $invitation->getTokenPrefix(),
-                'matchKind' => $nature->value,
-                'memberStatus' => $membre->getStatus()->value,
-            ],
-            $utilisateur,
-        );
+            $this->em->persist($membre);
 
-        $this->em->flush();
+            $invitation->enregistrerUnUsage($identifiant, $email);
+
+            $this->audit->enregistrer(
+                AuditAction::InvitationUtilisee,
+                Invitation::class,
+                (string) $invitation->getId(),
+                // Pas de libellé de personne : le sujet du journal est l'invitation, et
+                // `subject_label` est soumis à la porte de sortie n° 8 comme le reste.
+                null,
+                [
+                    'tokenPrefix' => $invitation->getTokenPrefix(),
+                    'matchKind' => $nature->value,
+                    'memberStatus' => $membre->getStatus()->value,
+                    'useCount' => $invitation->getUseCount(),
+                ],
+                $utilisateur,
+            );
+
+            return $membre;
+        });
 
         if (!$actif) {
             $this->notifications->compteEnAttente($membre);
@@ -375,7 +393,7 @@ final readonly class ServiceDInscription
      * L'invitation derrière un jeton, ou `404`.
      *
      * **Cinq refus, une seule réponse.** Forme invalide, empreinte inconnue, échéance
-     * passée, révocation, consommation : le même `404`, le même corps, le même message.
+     * passée, révocation, plafond atteint : le même `404`, le même corps, le même message.
      * C'est l'unique méthode par laquelle les trois routes publiques lisent une invitation,
      * et c'est ce qui garantit qu'aucune n'inventera un sixième cas plus bavard.
      */
@@ -391,11 +409,11 @@ final readonly class ServiceDInscription
             throw new NotFoundException();
         }
 
-        if (null !== $invitation->getUsedAt() || null !== $invitation->getRevokedAt()) {
+        if (null !== $invitation->getRevokedAt() || $invitation->estEpuisee()) {
             throw new NotFoundException();
         }
 
-        if ($invitation->getExpiresAt() <= new \DateTimeImmutable()) {
+        if ($invitation->estEchue()) {
             // Le statut dénormalisé est mis à jour au passage — c'est la pose
             // « paresseuse » du § 4.1 du modèle. La réponse, elle, ne change pas.
             $invitation->setStatus(InvitationStatus::Expiree);

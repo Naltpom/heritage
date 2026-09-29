@@ -4,16 +4,13 @@
  *
  * Il porte, dans cet ordre :
  *
- * 1. « Proposer des liens » — **sur mobile seulement** (`avecLiens`) : la barre
- *    d'action du bas n'a la place que pour « Proposer une modification », et le
- *    second lien du bandeau desktop descend ici plutôt que de disparaître ;
- * 2. « Ajouter un document » — ouvre l'onglet Preuves et documents, où vit le
+ * 1. « Ajouter un document » — ouvre l'onglet Preuves et documents, où vit le
  *    formulaire de dépôt de la galerie ;
- * 3. « Proposer avec l'assistant » — ouvre « Proposer » en mode assistant, avec
+ * 2. « Proposer avec l'assistant » — ouvre « Proposer » en mode assistant, avec
  *    cette fiche pour contexte (`?mode=assistant&personne=`). Même condition que
  *    les autres propositions (`peutProposer`) : l'analyse est une écriture pour
  *    l'API, refusée sous la bascule comme pour un compte en attente ;
- * 4. **un filet**, puis « Demander la suppression », en couleur d'alerte
+ * 3. **un filet**, puis « Demander la suppression », en couleur d'alerte
  *    (`PointSuppression.vue`). Jamais dans le même bloc que « Proposer une
  *    modification » : ce sont deux gestes, dont un seul détruit.
  *
@@ -33,14 +30,8 @@ import { useGestesFiche } from './gestes'
 import { requeteDOnglet } from './onglets'
 import PointSuppression from './PointSuppression.vue'
 
-const {
-  fiche,
-  avecLiens = false,
-  sens = 'bas',
-} = defineProps<{
+const { fiche, sens = 'bas' } = defineProps<{
   fiche: FichePersonneComplete
-  /** Mobile : « Proposer des liens » passe dans le menu. */
-  avecLiens?: boolean
   /** `haut` : le menu s'ouvre au-dessus du bouton (barre fixée en bas). */
   sens?: 'bas' | 'haut'
 }>()
@@ -110,15 +101,6 @@ onBeforeUnmount(() => {
       :class="sens === 'haut' ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+6px)]'"
       @click="fermer()"
     >
-      <RouterLink
-        v-if="avecLiens && peutProposer"
-        :to="{ name: 'proposition.liens', params: { id: fiche.id } }"
-        role="menuitem"
-        class="flex min-h-11 items-center px-3.5 text-sm hover:bg-accent-doux md:min-h-10"
-      >
-        Proposer des liens
-      </RouterLink>
-
       <RouterLink
         v-if="peutDeposer"
         :to="{

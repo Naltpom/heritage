@@ -232,7 +232,7 @@ function pluriel(n: number, mot: string): string {
     >
       <PointProposition :fiche="fiche" disposition="barre" />
       <span v-if="!peutProposer" class="flex-1" />
-      <MenuFiche :fiche="fiche" avec-liens sens="haut" />
+      <MenuFiche :fiche="fiche" sens="haut" />
     </div>
   </div>
 </template>

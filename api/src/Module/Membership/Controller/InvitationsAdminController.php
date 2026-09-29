@@ -68,12 +68,20 @@ final class InvitationsAdminController extends AbstractController
             $requete->query->get('status'),
             $requete->query->getInt('page', 1),
             $requete->query->getInt('parPage', 25),
+            // `?revoquees=0` les écarte ; absent ou `1`, elles restent — le comportement
+            // d'avant le paramètre.
+            '0' !== $requete->query->get('revoquees'),
         );
 
+        $inscrits = $this->invitations->inscrits($liste['elements']);
         $elements = [];
 
         foreach ($liste['elements'] as $invitation) {
-            $elements[] = $this->normaliseur->ligne($invitation, $this->invitations->tentativesDeLHeure($invitation));
+            $elements[] = $this->normaliseur->ligne(
+                $invitation,
+                $this->invitations->tentativesDeLHeure($invitation),
+                $inscrits[$invitation->getId()] ?? [],
+            );
         }
 
         return new JsonResponse([
@@ -91,7 +99,11 @@ final class InvitationsAdminController extends AbstractController
 
         $invitation = $this->invitations->revoquer($id, $administrateur);
 
-        return new JsonResponse($this->normaliseur->ligne($invitation, $this->invitations->tentativesDeLHeure($invitation)));
+        return new JsonResponse($this->normaliseur->ligne(
+            $invitation,
+            $this->invitations->tentativesDeLHeure($invitation),
+            $this->invitations->inscrits([$invitation])[$id] ?? [],
+        ));
     }
 
     /** @return array<string, mixed> */

@@ -6,6 +6,7 @@ namespace App\Module\Membership\Service;
 
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Membership\Entity\Invitation;
+use App\Module\Membership\Entity\Member;
 
 /**
  * La forme JSON d'une invitation — § 3.2 et § 3.3 du contrat d'API.
@@ -55,10 +56,11 @@ final readonly class NormaliseurDInvitation
             ...$this->personne($invitation),
             'email' => $invitation->getEmail(),
             'status' => $invitation->getStatus()->value,
-            'expiresAt' => $invitation->getExpiresAt()->format(\DateTimeInterface::ATOM),
+            ...$this->usages($invitation),
             'createdByEmail' => $invitation->getCreatedByEmail(),
             'createdAt' => $invitation->getCreatedAt()->format(\DateTimeInterface::ATOM),
             'note' => $invitation->getNote(),
+            'inscrits' => [],
             'avertissements' => $resultat->avertissements,
         ];
     }
@@ -66,9 +68,11 @@ final readonly class NormaliseurDInvitation
     /**
      * Une ligne de la liste d'administration — § 3.3.
      *
+     * @param list<Member> $inscrits les comptes nés du lien, du plus ancien au plus récent
+     *
      * @return array<string, mixed>
      */
-    public function ligne(Invitation $invitation, int $tentatives): array
+    public function ligne(Invitation $invitation, int $tentatives, array $inscrits): array
     {
         return [
             'id' => $invitation->getId(),
@@ -76,7 +80,9 @@ final readonly class NormaliseurDInvitation
             ...$this->personne($invitation),
             'email' => $invitation->getEmail(),
             'status' => $invitation->getStatus()->value,
-            'expiresAt' => $invitation->getExpiresAt()->format(\DateTimeInterface::ATOM),
+            ...$this->usages($invitation),
+            // Le **dernier** inscrit — conservés pour les clients d'avant les liens
+            // multi-usages ; la liste complète est `inscrits`.
             'usedAt' => $invitation->getUsedAt()?->format(\DateTimeInterface::ATOM),
             'usedByEmail' => $invitation->getUsedByEmail(),
             'revokedAt' => $invitation->getRevokedAt()?->format(\DateTimeInterface::ATOM),
@@ -88,7 +94,41 @@ final readonly class NormaliseurDInvitation
             // lien est en train d'être sondé. Les **critères** soumis ne sont jamais
             // rendus — `query_hash` est une empreinte, pas un texte (§ 4.3, § 16).
             'tentatives' => $tentatives,
+            'inscrits' => array_map($this->inscrit(...), $inscrits),
         ];
+    }
+
+    /** @return array{maxUses: int|null, useCount: int, expiresAt: string|null} */
+    private function usages(Invitation $invitation): array
+    {
+        return [
+            'maxUses' => $invitation->getMaxUses(),
+            'useCount' => $invitation->getUseCount(),
+            'expiresAt' => $invitation->getExpiresAt()?->format(\DateTimeInterface::ATOM),
+        ];
+    }
+
+    /**
+     * Un compte né du lien. La fiche rattachée suit la même règle que le pré-lien : les
+     * deux clés ou aucune — `mbr_member.person_label` est la porte de sortie voisine.
+     *
+     * @return array<string, mixed>
+     */
+    private function inscrit(Member $membre): array
+    {
+        $ligne = [
+            'userId' => $membre->getUserId(),
+            'email' => $membre->getUserEmail(),
+            'memberStatus' => $membre->getStatus()->value,
+            'createdAt' => $membre->getCreatedAt()->format(\DateTimeInterface::ATOM),
+        ];
+
+        if ($this->cercle->voitPersonne($membre->getPersonId())) {
+            $ligne['personId'] = $membre->getPersonId();
+            $ligne['personLabel'] = $membre->getPersonLabel();
+        }
+
+        return $ligne;
     }
 
     /**

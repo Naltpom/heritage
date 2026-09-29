@@ -28,6 +28,13 @@
  *    l'inverse : rejouer une demande caduque **écrit deux fois**.
  * ────────────────────────────────────────────────────────────────────
  *
+ * **La parenté est sur le même écran**, parce que pour le contributeur c'est
+ * une valeur de la fiche comme une autre. Pour le modèle, elle ne l'est pas :
+ * une demande porte **une** nature, et les liens sont une `ajout_lien`. Le
+ * bouton dépose donc une ou deux demandes, selon ce qui a changé — champs
+ * d'abord, liens ensuite — et un second clic après un échec partiel ne
+ * redépose pas ce qui est déjà parti.
+ *
  * Une fiche **restreinte** (personne vivante hors du cercle du lecteur) ne se
  * modifie pas : le lecteur n'en voit aucune valeur, il ne peut donc en proposer
  * aucune ancienne. Ce n'est pas une panne — c'est l'impasse cohérente du § 5.1,
@@ -53,9 +60,12 @@ import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import { ecrituresSuspendues, motifSuspension } from '@/components/administration/ecriture'
 import ChampDateIncertaine from '@/components/proposition/ChampDateIncertaine.vue'
 import ChampsIdentite from '@/components/proposition/ChampsIdentite.vue'
+import SectionLiens from '@/components/proposition/SectionLiens.vue'
 import PanneauConflit from '@/components/proposition/PanneauConflit.vue'
 import { etiquetteDeChamp, type ChampPersonne } from '@/components/proposition/champs'
 import { conflitDeDemande, type ConflitDeDemande } from '@/components/proposition/conflit'
+import { erreursParChamp } from '@/components/proposition/creation'
+import { corpsAjoutLien, liensVides, nombreDeLiensProposes, type SaisieLiens } from '@/components/proposition/liens'
 import {
   champsModifies,
   construireOps,
@@ -78,6 +88,11 @@ const fiche = ref<FichePersonneComplete | null>(null)
 const restreinte = ref(false)
 const instantane = ref<InstantaneFiche | null>(null)
 const saisie = ref<SaisieModification | null>(null)
+const liens = ref<SaisieLiens>(liensVides(0))
+const erreursLiens = ref<Record<string, string>>({})
+/** La demande de champs déjà déposée, quand celle des liens a échoué juste
+ *  après : on ne la redépose pas au second clic. */
+const champsDeposes = ref<number | null>(null)
 const message = ref('')
 const avertissements = ref<Avertissement[]>([])
 /** § 6.10 — d'où vient cette demande. Sa seule fonction est de faire suivre les
@@ -119,6 +134,8 @@ async function charger(): Promise<void> {
     fiche.value = recue
     instantane.value = instantaneDeFiche(recue)
     saisie.value = saisieDepuisFiche(recue)
+    liens.value = liensVides(recue.id)
+    champsDeposes.value = null
 
     const demandeReprise = repriseDemandee.value
     if (demandeReprise !== null) await appliquerReprise(demandeReprise)
@@ -194,7 +211,10 @@ const ops = computed(() => {
 })
 
 const modifications = computed(() => champsModifies(ops.value))
-const blocage = computed(() => motifDeBlocage(ops.value))
+const totalLiens = computed(() => nombreDeLiensProposes(liens.value))
+const aEnvoyerChamps = computed(() => champsDeposes.value === null && ops.value.length > 0)
+/** `motifDeBlocage` ne parle que des champs : des liens suffisent à envoyer. */
+const blocage = computed(() => (totalLiens.value > 0 && !aEnvoyerChamps.value ? null : motifDeBlocage(ops.value)))
 
 /** Les erreurs affichées : la validation locale d'abord, le serveur ensuite —
  *  et le message du serveur l'emporte, parce que c'est la règle réellement
@@ -223,26 +243,49 @@ async function deposer(soumettre: boolean): Promise<void> {
   erreur.value = null
   conflit.value = null
   erreursLocales.value = {}
+  erreursLiens.value = {}
 
   try {
-    const options = { message: message.value, soumettre }
-    // `origine` n'est posée que si elle existe : `exactOptionalPropertyTypes`
-    // interdit une clé facultative à `undefined`, et le serveur compte les clés.
-    const provenance = origine.value
-    const corps =
-      provenance === null
-        ? corpsModificationPersonne(cliche, valeurs, options)
-        : corpsModificationPersonne(cliche, valeurs, { ...options, origine: provenance })
+    // Les liens sont validés **avant** tout dépôt : une erreur de saisie ne
+    // doit pas laisser partir les champs seuls.
+    const corpsLiens =
+      totalLiens.value > 0 ? corpsAjoutLien(liens.value, { message: message.value, soumettre }) : null
+    if (corpsLiens !== null && !corpsLiens.valide) {
+      erreursLiens.value = erreursParChamp(corpsLiens.erreurs)
+      return
+    }
 
-    const demande = await creerDemande(corps)
+    const deposees: number[] = champsDeposes.value === null ? [] : [champsDeposes.value]
+
+    if (aEnvoyerChamps.value) {
+      const options = { message: message.value, soumettre }
+      // `origine` n'est posée que si elle existe : `exactOptionalPropertyTypes`
+      // interdit une clé facultative à `undefined`, et le serveur compte les clés.
+      const provenance = origine.value
+      const corps =
+        provenance === null
+          ? corpsModificationPersonne(cliche, valeurs, options)
+          : corpsModificationPersonne(cliche, valeurs, { ...options, origine: provenance })
+      const demande = await creerDemande(corps)
+      champsDeposes.value = demande.id
+      deposees.push(demande.id)
+    }
+
+    if (corpsLiens !== null) {
+      const demande = await creerDemande(corpsLiens.corps)
+      deposees.push(demande.id)
+    }
 
     // Le graphe incorpore les nœuds en attente du lecteur : son `ETag` est
     // périmé dès qu'une demande naît (§ 5.2, § 13.4).
     invaliderGraphe()
 
-    // Le suivi de la demande — et, plus tard, le motif d'un refus — se lit sur
-    // `demande.detail`. Le nom de cette route est cité par le contrat.
-    await routeur.push({ name: 'demande.detail', params: { id: demande.id } })
+    // Le suivi se lit sur `demande.detail` ; deux demandes, sur la liste.
+    if (deposees.length === 1) {
+      await routeur.push({ name: 'demande.detail', params: { id: deposees[0]! } })
+    } else {
+      await routeur.push({ name: 'demandes.miennes' })
+    }
   } catch (cause) {
     const reconnu = conflitDeDemande(cause)
     if (reconnu !== null) conflit.value = reconnu
@@ -287,26 +330,9 @@ function refaire(demandeId: number | null): void {
     <template v-else-if="fiche !== null && saisie !== null">
       <header class="mb-5">
         <h1 class="text-xl font-semibold tracking-tight">
-          Proposer une modification — {{ fiche.displayName }}
+          Modifier {{ fiche.displayName }}
         </h1>
-        <p class="mt-1.5 text-sm text-attenue">
-          Votre proposition part en validation ; rien n’est modifié dans l’arbre avant l’accord
-          d’un administrateur. Vous, vous verrez votre changement signalé sur la fiche en attendant.
-        </p>
-        <!-- Le geste que ce formulaire ne sait pas faire, dit là où on le
-             cherche. Une demande porte **une** nature : les champs et la
-             parenté ne se déposent pas ensemble, et un écran qui laisserait
-             croire le contraire déposerait deux demandes sous un bouton. -->
-        <p class="mt-1.5 text-sm text-attenue">
-          Ce formulaire corrige les <strong class="font-semibold">champs</strong> de la fiche.
-          Pour rattacher des parents, des frères et sœurs, un conjoint ou des enfants, c’est
-          <RouterLink
-            :to="{ name: 'proposition.liens', params: { id: identifiant } }"
-            class="underline"
-          >
-            l’écran des liens de parenté
-          </RouterLink>.
-        </p>
+        <p class="mt-1 text-sm text-attenue">Validé par un administrateur avant d’apparaître dans l’arbre.</p>
       </header>
 
       <!-- La bascule « voir comme un membre » suspend toute écriture. On le dit
@@ -341,19 +367,14 @@ function refaire(demandeId: number | null): void {
         v-if="origine !== null"
         class="mb-4 rounded-panneau border border-ligne bg-panneau px-3.5 py-3 text-sm"
       >
-        {{ phraseOrigine(origine) }} Les valeurs d’origine ont été confrontées à la fiche telle
-        qu’elle est aujourd’hui.
+        {{ phraseOrigine(origine) }}
       </p>
 
       <!-- Le calque est **signalé**, jamais recopié dans les champs. -->
       <PanneauBase v-if="champsEnAttente.length > 0" class="mb-4">
         <p class="flex flex-wrap items-center gap-2 text-sm">
           <PastilleEtat etat="en_attente" />
-          <span>
-            Une demande est déjà en cours sur : {{ champsEnAttente.join(', ') }}. Les champs
-            ci-dessous montrent les valeurs <strong class="font-semibold">validées</strong>,
-            pas celles qui sont proposées.
-          </span>
+          <span>Déjà proposé, en attente : {{ champsEnAttente.join(', ') }}.</span>
         </p>
       </PanneauBase>
 
@@ -393,12 +414,7 @@ function refaire(demandeId: number | null): void {
                 type="checkbox"
                 class="mt-0.5 size-4 accent-[var(--color-accent)]"
               />
-              <span class="text-sm">
-                {{ etiquetteDeChamp('forcePrivacy') }}
-                <span class="block text-xs text-attenue">
-                  Force le masquage de la fiche, quelle que soit la règle automatique.
-                </span>
-              </span>
+              <span class="text-sm">{{ etiquetteDeChamp('forcePrivacy') }}</span>
             </label>
             <ChampTexte
               v-model="saisie.privacyNote"
@@ -408,11 +424,10 @@ function refaire(demandeId: number | null): void {
           </div>
         </PanneauBase>
 
-        <PanneauBase titre="Ce qui changerait">
-          <p v-if="modifications.length === 0" class="text-sm text-attenue">
-            Aucun champ n’a encore été modifié.
-          </p>
-          <ul v-else class="flex flex-wrap gap-1.5">
+        <SectionLiens v-model="liens" :fiche="fiche" :erreurs="erreursLiens" />
+
+        <PanneauBase>
+          <ul v-if="modifications.length > 0 || totalLiens > 0" class="mb-3 flex flex-wrap gap-1.5">
             <li
               v-for="modification in modifications"
               :key="modification.champ"
@@ -420,20 +435,20 @@ function refaire(demandeId: number | null): void {
             >
               {{ modification.etiquette }}
             </li>
+            <li
+              v-if="totalLiens > 0"
+              class="rounded-pastille border border-accent bg-accent-doux px-2 py-0.5 text-[11.5px] font-semibold text-accent"
+            >
+              {{ totalLiens }} lien{{ totalLiens > 1 ? 's' : '' }} de parenté
+            </li>
           </ul>
-
-          <label class="mt-4 flex flex-col gap-1">
-            <span class="text-sm font-medium">Ce que vous voulez dire à l’administrateur</span>
-            <textarea
-              v-model="message"
-              rows="3"
-              placeholder="« C’est ma grand-tante, j’ai l’acte. »"
-              class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
-            />
-            <span class="text-xs text-attenue">
-              Facultatif, mais c’est souvent ce qui emporte la décision.
-            </span>
-          </label>
+          <textarea
+            v-model="message"
+            rows="2"
+            aria-label="Message à l’administrateur"
+            placeholder="Un mot pour l’administrateur (facultatif) — « j’ai l’acte de naissance »"
+            class="w-full rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
+          />
         </PanneauBase>
 
         <div class="flex flex-wrap items-center gap-2">
@@ -442,20 +457,20 @@ function refaire(demandeId: number | null): void {
             :chargement="envoi"
             :desactive="suspendu || blocage !== null"
           >
-            Envoyer la proposition
+            Envoyer
           </BoutonBase>
           <BoutonBase
             variante="secondaire"
             :desactive="suspendu || envoi || blocage !== null"
             @click="deposer(false)"
           >
-            Enregistrer sans envoyer
+            Brouillon
           </BoutonBase>
           <RouterLink
             :to="{ name: 'personne.detail', params: { id: identifiant } }"
             class="text-sm text-attenue underline"
           >
-            Revenir à la fiche
+            Annuler
           </RouterLink>
         </div>
 

@@ -39,6 +39,59 @@ final class FabriqueDeFichiers
         return self::greffer(self::jpegNu($largeur, $hauteur), self::blocExifGps());
     }
 
+    /**
+     * Un JPEG comme en écrit un téléphone : les pixels du capteur, et une étiquette
+     * `Orientation` qui dit comment les tourner.
+     *
+     * Le quart **haut-gauche** est rouge, le reste bleu : c'est ce coin qu'on suit pour
+     * vérifier le sens de la rotation, et non les seules dimensions — une rotation dans le
+     * mauvais sens a les mêmes dimensions que la bonne.
+     */
+    public static function jpegOriente(int $orientation, int $largeur = 120, int $hauteur = 80): string
+    {
+        return self::greffer(self::jpegAvecCoinRouge($largeur, $hauteur), self::blocExifOrientation($orientation));
+    }
+
+    /** Le quart haut-gauche rouge, le reste bleu. */
+    public static function jpegAvecCoinRouge(int $largeur, int $hauteur): string
+    {
+        $image = imagecreatetruecolor($largeur, $hauteur);
+
+        if (false === $image) {
+            throw new \RuntimeException('GD n\'a pas pu créer l\'image d\'essai.');
+        }
+
+        imagefilledrectangle($image, 0, 0, $largeur, $hauteur, (int) imagecolorallocate($image, 0, 0, 255));
+        imagefilledrectangle($image, 0, 0, intdiv($largeur, 2) - 1, intdiv($hauteur, 2) - 1, (int) imagecolorallocate($image, 255, 0, 0));
+
+        ob_start();
+        imagejpeg($image, null, 95);
+        $octets = (string) ob_get_clean();
+
+        return $octets;
+    }
+
+    /**
+     * Un WebP « étendu » réduit à ce que lit le lecteur d'orientation : l'en-tête RIFF,
+     * un morceau quelconque de longueur **impaire** (pour éprouver l'alignement) puis le
+     * morceau `EXIF`. Il n'est pas décodable — il n'a pas à l'être pour ce qu'on teste.
+     */
+    public static function webpAvecOrientation(int $orientation): string
+    {
+        $tiff = substr(self::blocExifOrientation($orientation), 10);
+        $morceaux = 'ICCP'.pack('V', 3)."abc\x00".'EXIF'.pack('V', \strlen($tiff)).$tiff;
+
+        return 'RIFF'.pack('V', 4 + \strlen($morceaux)).'WEBP'.$morceaux;
+    }
+
+    /** Couleur dominante d'un pixel : `rouge` ou `bleu`, robuste aux artefacts JPEG. */
+    public static function couleurA(\GdImage $image, int $x, int $y): string
+    {
+        $c = imagecolorsforindex($image, (int) imagecolorat($image, $x, $y));
+
+        return $c['red'] > $c['blue'] ? 'rouge' : 'bleu';
+    }
+
     /** Un JPEG sans aucune métadonnée ajoutée. */
     public static function jpegNu(int $largeur = 120, int $hauteur = 90): string
     {
@@ -357,6 +410,19 @@ endobj\n"
 
         $tiff = "MM\x00\x2A".pack('N', 8).$ifd0.$ifdGps.$latitude.$longitude;
         $charge = "Exif\x00\x00".$tiff;
+
+        return "\xFF\xE1".pack('n', \strlen($charge) + 2).$charge;
+    }
+
+    /**
+     * Un segment APP1 dont l'IFD principal ne porte que l'étiquette `Orientation`
+     * (0x0112, SHORT, compte 1), en **petit-boutiste** — celui qu'écrivent la plupart
+     * des téléphones, et l'autre moitié du lecteur que le bloc GPS n'éprouve pas.
+     */
+    private static function blocExifOrientation(int $orientation): string
+    {
+        $ifd0 = pack('v', 1).pack('vvV', 0x0112, 3, 1).pack('v', $orientation)."\x00\x00".pack('V', 0);
+        $charge = "Exif\x00\x00II\x2A\x00".pack('V', 8).$ifd0;
 
         return "\xFF\xE1".pack('n', \strlen($charge) + 2).$charge;
     }

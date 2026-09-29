@@ -85,11 +85,29 @@ class Invitation
     #[ORM\Column(length: 12, enumType: InvitationStatus::class, options: ['default' => 'active'])]
     private InvitationStatus $status = InvitationStatus::Active;
 
-    /** Échéance, calculée à la création depuis `invitation.ttl_jours` (7 par défaut). */
-    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
-    private \DateTimeImmutable $expiresAt;
+    /**
+     * Échéance. `null` = le lien n'expire jamais : un lien collectif posté dans le groupe
+     * de la famille doit pouvoir servir aux retardataires. Par défaut, `invitation.ttl_jours`.
+     */
+    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $expiresAt;
 
-    /** Usage **unique** : dès qu'un compte naît du jeton, la colonne est posée. */
+    /**
+     * Plafond d'inscriptions. `null` = illimité ; `1` = l'invitation nominative d'origine,
+     * seule forme compatible avec un pré-lien (une fiche ne se réclame qu'une fois).
+     */
+    #[ORM\Column(nullable: true)]
+    private ?int $maxUses;
+
+    /**
+     * Comptes nés du lien. Compteur et non `COUNT(mbr_member)` : c'est lui que
+     * l'inscription verrouille et compare au plafond, et un membre supprimé ne doit pas
+     * rendre une place (`invitation_id` passe à `NULL` à la suppression).
+     */
+    #[ORM\Column(options: ['default' => 0])]
+    private int $useCount = 0;
+
+    /** Le **dernier** usage. Les inscrits eux-mêmes se lisent sur `mbr_member.invitation_id`. */
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $usedAt = null;
 
@@ -127,13 +145,20 @@ class Invitation
     public function __construct(
         string $tokenHash,
         string $tokenPrefix,
-        \DateTimeImmutable $expiresAt,
+        ?\DateTimeImmutable $expiresAt,
         int $createdByUserId,
         string $createdByEmail,
+        // Usage unique par défaut : l'illimité doit être demandé, jamais obtenu par oubli.
+        ?int $maxUses = 1,
     ) {
+        if (null !== $maxUses && $maxUses < 1) {
+            throw new \InvalidArgumentException('Le plafond d’usages vaut au moins 1.');
+        }
+
         $this->tokenHash = $tokenHash;
         $this->tokenPrefix = $tokenPrefix;
         $this->expiresAt = $expiresAt;
+        $this->maxUses = $maxUses;
         $this->createdByUserId = $createdByUserId;
         $this->createdByEmail = $createdByEmail;
         $this->createdAt = new \DateTimeImmutable();
@@ -196,9 +221,30 @@ class Invitation
         return $this;
     }
 
-    public function getExpiresAt(): \DateTimeImmutable
+    public function getExpiresAt(): ?\DateTimeImmutable
     {
         return $this->expiresAt;
+    }
+
+    public function estEchue(?\DateTimeImmutable $maintenant = null): bool
+    {
+        return null !== $this->expiresAt && $this->expiresAt <= ($maintenant ?? new \DateTimeImmutable());
+    }
+
+    public function getMaxUses(): ?int
+    {
+        return $this->maxUses;
+    }
+
+    public function getUseCount(): int
+    {
+        return $this->useCount;
+    }
+
+    /** Le plafond est atteint : le lien ne crée plus de compte. Jamais vrai s'il est illimité. */
+    public function estEpuisee(): bool
+    {
+        return null !== $this->maxUses && $this->useCount >= $this->maxUses;
     }
 
     public function getUsedAt(): ?\DateTimeImmutable
@@ -217,15 +263,26 @@ class Invitation
     }
 
     /**
+     * Un compte vient de naître du lien. L'appelant tient le verrou de la ligne : c'est ce
+     * qui empêche deux inscriptions simultanées de franchir ensemble la dernière place.
+     *
      * L'horodatage et l'auteur se posent ensemble : `ck_mbr_invitation_usage` refuse en
      * base un `used_at` sans `used_by_user_id`, et réciproquement.
      */
-    public function marquerUtilisee(int $userId, string $email, ?\DateTimeImmutable $le = null): self
+    public function enregistrerUnUsage(int $userId, string $email, ?\DateTimeImmutable $le = null): self
     {
+        if ($this->estEpuisee()) {
+            throw new \LogicException('Invitation épuisée : aucun usage de plus.');
+        }
+
+        ++$this->useCount;
         $this->usedAt = $le ?? new \DateTimeImmutable();
         $this->usedByUserId = $userId;
         $this->usedByEmail = $email;
-        $this->status = InvitationStatus::Utilisee;
+
+        if ($this->estEpuisee()) {
+            $this->status = InvitationStatus::Utilisee;
+        }
 
         return $this;
     }

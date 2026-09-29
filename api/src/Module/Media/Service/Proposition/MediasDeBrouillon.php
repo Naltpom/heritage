@@ -8,6 +8,7 @@ use App\Module\Media\Entity\Media;
 use App\Module\Media\Enum\MediaStatus;
 use App\Module\Media\Enum\MediaSubject;
 use App\Module\Media\Repository\MediaRepository;
+use App\Module\Media\Service\AdresseDuMedia;
 use App\Module\Media\Service\CircuitDeValidationMedia;
 use App\Module\Proposal\Service\Port\PortMedias;
 use Symfony\Component\DependencyInjection\Attribute\AsDecorator;
@@ -125,8 +126,8 @@ final readonly class MediasDeBrouillon implements PortMedias
                 'caption' => $media->getCaption(),
                 // Les deux seules portes de sortie des octets. Jamais de chemin de
                 // disque, jamais de redirection vers un fichier statique (§ 16.1).
-                'url' => \sprintf('/api/medias/%d/fichier', (int) $media->getId()),
-                'vignetteUrl' => \sprintf('/api/medias/%d/vignette', (int) $media->getId()),
+                'url' => AdresseDuMedia::fichier($media),
+                'vignetteUrl' => AdresseDuMedia::vignette($media),
                 'status' => $media->getStatus()->value,
             ],
             $this->medias->pourBrouillon($demandeId, $reference),

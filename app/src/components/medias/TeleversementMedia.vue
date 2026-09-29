@@ -34,11 +34,12 @@
  * validation d'un administrateur. L'écran le dit avant l'envoi, pas seulement
  * après — un contributeur qui l'apprend après coup a déjà cru son acte publié.
  */
-import { computed, ref, useId } from 'vue'
+import { computed, onBeforeUnmount, ref, useId } from 'vue'
 import { analyserErreur, televerserMedia, type Media, type NatureMedia } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import ChampTexte from '@/components/base/ChampTexte.vue'
 import { TAILLE_MAX_PAR_DEFAUT, tailleLisible, verifierAvantEnvoi } from './medias'
+import { estPivotable, pivoterFichier } from './pivotement'
 
 const { personId, nom } = defineProps<{ personId: number; nom: string }>()
 
@@ -51,6 +52,8 @@ const emit = defineEmits<{
 interface EnvoiEnFile {
   cle: number
   fichier: File
+  /** URL d'objet pour l'aperçu d'une image, `null` pour un PDF. */
+  apercu: string | null
   legende: string
   etat: 'attente' | 'en_cours' | 'reussi' | 'echec'
   /** Refus local (la taille), écrit ici. */
@@ -76,6 +79,7 @@ function ajouter(evenement: Event): void {
     file.value.push({
       cle: ++compteur,
       fichier,
+      apercu: estPivotable(fichier) ? URL.createObjectURL(fichier) : null,
       legende: '',
       // Le refus de taille est connu tout de suite : inutile de faire croire
       // que le fichier part.
@@ -91,8 +95,23 @@ function ajouter(evenement: Event): void {
 }
 
 function retirer(cle: number): void {
-  file.value = file.value.filter((envoi) => envoi.cle !== cle)
+  const envoi = file.value.find((e) => e.cle === cle)
+  if (envoi?.apercu) URL.revokeObjectURL(envoi.apercu)
+  file.value = file.value.filter((e) => e.cle !== cle)
 }
+
+/** Un quart de tour horaire — une photo de téléphone arrive parfois couchée. */
+async function pivoter(envoi: EnvoiEnFile): Promise<void> {
+  const tourne = await pivoterFichier(envoi.fichier, 90)
+  if (tourne === envoi.fichier) return
+  if (envoi.apercu) URL.revokeObjectURL(envoi.apercu)
+  envoi.fichier = tourne
+  envoi.apercu = URL.createObjectURL(tourne)
+}
+
+onBeforeUnmount(() => {
+  for (const envoi of file.value) if (envoi.apercu) URL.revokeObjectURL(envoi.apercu)
+})
 
 /**
  * Les envois sont **séquentiels**, et c'est délibéré.
@@ -195,9 +214,23 @@ function reprendre(envoi: EnvoiEnFile): void {
         class="rounded-panneau border border-ligne px-3 py-2"
         :class="envoi.etat === 'echec' ? 'border-alerte-bord bg-alerte-doux' : ''"
       >
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <span class="min-w-0 text-sm break-all">{{ envoi.fichier.name }}</span>
+        <div class="flex flex-wrap items-center gap-2">
+          <img
+            v-if="envoi.apercu !== null"
+            :src="envoi.apercu"
+            alt=""
+            class="size-14 shrink-0 rounded-champ border border-ligne object-contain bg-fond"
+          />
+          <span class="min-w-0 flex-1 text-sm break-all">{{ envoi.fichier.name }}</span>
           <span class="text-xs text-attenue">{{ tailleLisible(envoi.fichier.size) }}</span>
+          <BoutonBase
+            v-if="envoi.apercu !== null && envoi.etat === 'attente'"
+            variante="discret"
+            :aria-label="`Pivoter ${envoi.fichier.name} d’un quart de tour`"
+            @click="pivoter(envoi)"
+          >
+            ↻ Pivoter
+          </BoutonBase>
         </div>
 
         <ChampTexte

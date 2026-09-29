@@ -53,14 +53,20 @@ class InvitationRepository extends ServiceEntityRepository
     /**
      * La liste d'administration du § 3.3, paginée et triée par `createdAt DESC`.
      *
+     * `$avecRevoquees = false` écarte les liens révoqués, qui encombrent la liste sans
+     * rien demander à personne ; il se combine avec `$statut`.
+     *
      * @return array{elements: array<int, Invitation>, total: int}
      */
-    public function lister(?InvitationStatus $statut, int $page, int $parPage): array
+    public function lister(?InvitationStatus $statut, int $page, int $parPage, bool $avecRevoquees = true): array
     {
         $qb = $this->createQueryBuilder('i')->orderBy('i.createdAt', 'DESC')->addOrderBy('i.id', 'DESC');
 
         if (null !== $statut) {
             $qb->andWhere('i.status = :statut')->setParameter('statut', $statut);
+        }
+        if (!$avecRevoquees) {
+            $qb->andWhere('i.status <> :revoquee')->setParameter('revoquee', InvitationStatus::Revoquee);
         }
 
         $total = (int) (clone $qb)

@@ -19,9 +19,11 @@ use App\Module\Media\Enum\MediaSubject;
 use App\Module\Media\Http\BlocDate;
 use App\Module\Media\Security\FabriqueDeLecteur;
 use App\Module\Media\Security\LecteurMedia;
+use App\Module\Media\Service\AdresseDuMedia;
 use App\Module\Media\Service\CatalogueMedia;
 use App\Module\Media\Service\CircuitDeValidationMedia;
 use App\Module\Media\Service\NormaliseurMedia;
+use App\Module\Media\Service\PivotementMedia;
 use App\Module\Media\Service\RequeteDeTeleversement;
 use App\Module\Media\Service\StockageMedia;
 use App\Module\Media\Service\SuppressionMedia;
@@ -39,7 +41,7 @@ use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Les six routes de médias du § 7 du contrat.
+ * Les six routes de médias du § 7 du contrat, plus la rotation d'une image.
  *
  * ## Ce que le contrôleur fait, et ce qu'il ne fait pas
  *
@@ -117,6 +119,7 @@ final class MediaController extends AbstractController
         private readonly BasculeVoirComme $bascule,
         private readonly AnnuaireDesMembresInterface $annuaire,
         private readonly CircuitDeValidationMedia $circuit,
+        private readonly PivotementMedia $pivotement,
     ) {
     }
 
@@ -323,6 +326,33 @@ final class MediaController extends AbstractController
         $this->suppression->supprimer($media, $lecteur);
 
         return $this->charge(['supprime' => true, 'id' => $id]);
+    }
+
+    /**
+     * Quart de tour d'une image, **dans le sens horaire** : `{"angle": 90|180|270}`.
+     *
+     * Rend la même charge que `GET /api/medias/{id}` : `width` et `height` y sont déjà
+     * permutés, et `url` / `vignetteUrl` portent une nouvelle version (`?v=`) — c'est ce
+     * changement d'URL qui fait relire l'image au navigateur, voir {@see AdresseDuMedia}.
+     */
+    #[Route('/{id}/pivoter', name: 'media_pivoter', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function pivoter(int $id, Request $requete): Response
+    {
+        $this->bascule->refuserSiActive();
+
+        $lecteur = $this->lecteur();
+        $media = $this->catalogue->voir($id, $lecteur);
+
+        $corps = json_decode($requete->getContent(), true);
+        $angle = \is_array($corps) ? ($corps['angle'] ?? null) : null;
+
+        if (!\is_int($angle)) {
+            throw new ValidationException(['angle' => 'L\'angle doit valoir 90, 180 ou 270 degrés (sens horaire).']);
+        }
+
+        $this->pivotement->pivoter($media, $angle, $lecteur);
+
+        return $this->charge($this->normaliseur->normaliser($media, $lecteur));
     }
 
     /**
