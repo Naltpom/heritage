@@ -58,3 +58,7 @@ export * from './assistant'
 /* Module `Tirage` : les tirages au sort récurrents — « Noël côté papa ». Le
    serveur ne rend au lecteur que ses propres attributions (ADR 0009). */
 export * from './tirages'
+/* Module `Demarche` : les actes demandés à une mairie ou à des archives, et
+   leur suivi — chaque message avec son texte entier. Le serveur ne rend que
+   les démarches dont le lecteur voit toutes les personnes. */
+export * from './demarches'

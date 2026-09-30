@@ -214,6 +214,7 @@ const classeLigneTiroir =
           </RouterLink>
           <RouterLink :to="{ name: 'questions' }" :class="classeLigneTiroir" class="md:hidden">Questions</RouterLink>
           <RouterLink :to="{ name: 'tirages' }" :class="classeLigneTiroir" class="md:hidden">Tirages au sort</RouterLink>
+          <RouterLink :to="{ name: 'demarches' }" :class="classeLigneTiroir" class="md:hidden">Actes demandés</RouterLink>
         </template>
 
         <template v-if="administrateur">
@@ -300,6 +301,7 @@ const classeLigneTiroir =
             </RouterLink>
             <RouterLink :to="{ name: 'questions' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">Questions</RouterLink>
             <RouterLink :to="{ name: 'tirages' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">Tirages au sort</RouterLink>
+            <RouterLink :to="{ name: 'demarches' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">Actes demandés</RouterLink>
           </template>
           <template v-if="administrateur">
             <div class="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Administration</div>

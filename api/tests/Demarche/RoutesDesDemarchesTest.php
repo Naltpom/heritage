@@ -1,0 +1,317 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Demarche;
+
+use App\Module\Core\Entity\User;
+use App\Module\Core\Enum\UserStatus;
+use App\Module\Membership\Entity\Member;
+use App\Module\Membership\Enum\MatchKind;
+use App\Tests\Membership\Double\ArbreEnMemoire;
+use App\Tests\Tree\ArbreWebTestCase;
+use Psr\Cache\CacheItemPoolInterface;
+use Symfony\Component\HttpFoundation\Response;
+
+/**
+ * Les actes demandés : qui les voit, qui les fait avancer, ce qui en est gardé.
+ *
+ * L'arbre semé est celui d'`ArbreWebTestCase` : `aieule` et `aieul` sont décédés, donc
+ * visibles de tout membre ; `cousin` est vivant, hors du cercle d'`ego`.
+ *
+ * **Le cercle est le vrai**, `Membership\Service\CercleDeVisibilite` ; en test, il lit
+ * l'arbre par `ArbreEnMemoire` et non par la base. On y pose donc le même arbre, aux mêmes
+ * identifiants — sans quoi le cercle ne voit personne et tout est refusé, ce qui ferait
+ * passer un test de masquage pour de mauvaises raisons.
+ */
+final class RoutesDesDemarchesTest extends ArbreWebTestCase
+{
+    private const string OPALE = 'opale@example.invalid';   // rattachée à ego
+    private const string JASPE = 'jaspe@example.invalid';   // rattachée à la conjointe
+    private const string ADMIN = 'admin@example.invalid';
+
+    private const string TEXTE = "Bonjour,\n\nJe me permets de vous solliciter pour obtenir la copie intégrale de l'acte de décès suivant : SUREAU Marne Dolomite, décédée en 1987.\n\nBien cordialement,\nOpale";
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        ArbreEnMemoire::reinitialiser();
+        foreach (['ego' => true, 'conjointe' => true, 'cousin' => true, 'aieule' => false, 'aieul' => false, 'sansDate' => false] as $cle => $vivante) {
+            $nom = $this->personnes[$cle]->getDisplayName();
+            ArbreEnMemoire::ajouterPersonne($this->idDe($cle), $nom, '', $vivante, libelle: $nom);
+        }
+        ArbreEnMemoire::ajouterFamille([$this->idDe('ego'), $this->idDe('conjointe')]);
+
+        foreach (['cache.rate_limiter', 'cache.app'] as $identifiant) {
+            $pool = self::getContainer()->get($identifiant);
+            if ($pool instanceof CacheItemPoolInterface) {
+                $pool->clear();
+            }
+        }
+
+        $this->rattacher(self::OPALE, 'ego');
+        $this->rattacher(self::JASPE, 'conjointe');
+        $this->creerUtilisateur(self::ADMIN, ['ROLE_ADMIN']);
+    }
+
+    protected function tearDown(): void
+    {
+        ArbreEnMemoire::reinitialiser();
+
+        parent::tearDown();
+    }
+
+    /* ───────────────── Le parcours ───────────────── */
+
+    public function testUneDemarcheGardeLeTexteEntierEtSeRetrouveSurLaFiche(): void
+    {
+        $id = $this->demarcheSurLAieule();
+
+        $this->requete("/api/demarches/{$id}");
+        $charge = $this->charge();
+        self::assertSame('Acte de décès de Marne Dolomite Sureau', $charge['intitule']);
+        self::assertSame('envoyee', $charge['statut']);
+        self::assertTrue($charge['enAttente']);
+        self::assertSame([['personId' => $this->idDe('aieule'), 'libelle' => 'Marne Dolomite Sureau']], $charge['personnes']);
+        self::assertCount(1, $charge['messages']);
+        self::assertSame(self::TEXTE, $charge['messages'][0]['texte'], 'Le texte est gardé mot pour mot, retours à la ligne compris.');
+        self::assertSame('mairie@charmille.invalid', $charge['messages'][0]['a']);
+        self::assertIsInt($charge['joursDAttente']);
+
+        $this->requete('/api/demarches?personId='.$this->idDe('aieule'));
+        self::assertSame(1, $this->charge()['total']);
+        self::assertArrayNotHasKey('messages', $this->charge()['elements'][0], 'Une liste ne transporte pas le texte des messages.');
+
+        $this->requete('/api/demarches?personId='.$this->idDe('aieul'));
+        self::assertSame(0, $this->charge()['total']);
+    }
+
+    public function testUnAutreMembreFaitAvancerLaDemarcheSansPouvoirLaSupprimer(): void
+    {
+        $id = $this->demarcheSurLAieule();
+
+        $this->connexionDe(self::JASPE);
+        $this->envoyer('POST', "/api/demarches/{$id}/messages", [
+            'sens' => 'recu',
+            'canal' => 'courriel',
+            'date' => (new \DateTimeImmutable())->format('Y-m-d'),
+            'de' => 'etat.civil@charmille.invalid',
+            'texte' => 'Veuillez trouver ci-joint la copie demandée.',
+        ]);
+        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
+        self::assertCount(2, $this->charge()['messages']);
+        self::assertSame('envoyee', $this->charge()['statut'], 'Une réponse reçue ne change pas le statut d’elle-même.');
+
+        $this->envoyer('PUT', "/api/demarches/{$id}/suivi", ['statut' => 'recue', 'resultat' => 'Copie intégrale reçue, déposée sur la fiche.']);
+        self::assertSame(Response::HTTP_OK, $this->statut());
+        self::assertSame('recue', $this->charge()['statut']);
+        self::assertFalse($this->charge()['enAttente']);
+        self::assertNull($this->charge()['joursDAttente']);
+
+        $messageDOpale = $this->charge()['messages'][0]['id'];
+        self::assertFalse($this->charge()['messages'][0]['peutRetirer']);
+        $this->envoyer('DELETE', "/api/demarches/{$id}/messages/{$messageDOpale}");
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->statut());
+
+        self::assertFalse($this->charge2("/api/demarches/{$id}")['peutSupprimer']);
+        $this->envoyer('DELETE', "/api/demarches/{$id}");
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->statut());
+
+        $this->connexionDe(self::OPALE);
+        $this->envoyer('DELETE', "/api/demarches/{$id}");
+        self::assertSame(Response::HTTP_NO_CONTENT, $this->statut());
+        $this->requete("/api/demarches/{$id}");
+        self::assertSame(Response::HTTP_NOT_FOUND, $this->statut());
+    }
+
+    public function testUneSecondeDemandeEnvoyeeFaitPasserLaDemarcheARelancee(): void
+    {
+        $id = $this->demarcheSurLAieule();
+
+        $this->envoyer('POST', "/api/demarches/{$id}/messages", [
+            'sens' => 'envoye',
+            'canal' => 'courriel',
+            'date' => (new \DateTimeImmutable())->format('Y-m-d'),
+            'texte' => 'Je me permets de revenir vers vous au sujet de ma demande.',
+        ]);
+        self::assertSame(Response::HTTP_CREATED, $this->statut());
+        self::assertSame('relancee', $this->charge()['statut']);
+        self::assertTrue($this->charge()['enAttente']);
+    }
+
+    /* ───────────────── Qui voit ───────────────── */
+
+    public function testUneDemarcheSurUnVivantHorsDuCercleNExistePasPourLeMembre(): void
+    {
+        $this->connexionDe(self::ADMIN);
+        $this->envoyer('POST', '/api/demarches', $this->description('cousin'));
+        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
+        $id = $this->charge()['id'];
+
+        $this->connexionDe(self::OPALE);
+        $this->requete("/api/demarches/{$id}");
+        self::assertSame(Response::HTTP_NOT_FOUND, $this->statut(), 'Masquée et inexistante rendent la même chose.');
+
+        $this->requete('/api/demarches');
+        self::assertSame(0, $this->charge()['total']);
+
+        $this->requete('/api/demarches?personId='.$this->idDe('cousin'));
+        self::assertSame(0, $this->charge()['total']);
+
+        // Et on ne peut pas en créer une qui le concerne : même refus que pour une personne
+        // qui n'existe pas.
+        $this->envoyer('POST', '/api/demarches', $this->description('cousin'));
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        self::assertArrayHasKey('personIds', $this->charge()['erreur']['champs']);
+
+        $this->envoyer('POST', '/api/demarches', ['personIds' => [999999]] + $this->description('aieule'));
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+    }
+
+    public function testUnCompteEnAttenteNAccedePasAuxDemarches(): void
+    {
+        $this->creerUtilisateur('attente@example.invalid', statut: UserStatus::EnAttente);
+        $this->connexionDe('attente@example.invalid');
+
+        $this->requete('/api/demarches');
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->statut());
+    }
+
+    public function testSousLaBasculeLAdministrateurLitSansEcrire(): void
+    {
+        $id = $this->demarcheSurLAieule();
+
+        $this->connexionDe(self::ADMIN);
+        $membre = $this->em()->getRepository(Member::class)->findOneBy(['userId' => $this->userIdDe(self::JASPE)]);
+        self::assertNotNull($membre);
+        $this->envoyer('POST', '/api/administration/voir-comme', ['memberId' => $membre->getId()]);
+        self::assertSame(Response::HTTP_OK, $this->statut());
+
+        $this->requete("/api/demarches/{$id}");
+        self::assertSame(Response::HTTP_OK, $this->statut());
+        self::assertFalse($this->charge()['peutSupprimer'], 'Sous la bascule, pas de droit d’administration.');
+
+        $this->envoyer('PUT', "/api/demarches/{$id}/suivi", ['statut' => 'recue']);
+        self::assertSame(Response::HTTP_CONFLICT, $this->statut());
+    }
+
+    /* ───────────────── Ce qui est refusé ───────────────── */
+
+    public function testUnCorpsInvalideNommeChaqueChampFautif(): void
+    {
+        $this->connexionDe(self::OPALE);
+        $this->envoyer('POST', '/api/demarches', [
+            'nature' => 'bapteme',
+            'forme' => 'copie_integrale',
+            'intitule' => '',
+            'destinataire' => 'Mairie',
+            'personIds' => [],
+            'premierMessage' => ['sens' => 'envoye', 'canal' => 'pigeon', 'date' => '2026-02-30', 'texte' => 'x'],
+        ]);
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        $champs = $this->charge()['erreur']['champs'];
+        self::assertArrayHasKey('nature', $champs);
+        self::assertArrayHasKey('intitule', $champs);
+        self::assertArrayHasKey('personIds', $champs);
+
+        $this->envoyer('POST', '/api/demarches', $this->description('aieule') + [
+            'premierMessage' => ['sens' => 'envoye', 'canal' => 'pigeon', 'date' => '2026-02-30', 'texte' => ' '],
+        ]);
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        $champs = $this->charge()['erreur']['champs'];
+        self::assertArrayHasKey('premierMessage.canal', $champs);
+        self::assertArrayHasKey('premierMessage.date', $champs, 'Le 30 février n’existe pas.');
+        self::assertArrayHasKey('premierMessage.texte', $champs);
+    }
+
+    /* ───────────────── Outils ───────────────── */
+
+    private function demarcheSurLAieule(): int
+    {
+        $this->connexionDe(self::OPALE);
+        $this->envoyer('POST', '/api/demarches', $this->description('aieule') + [
+            'premierMessage' => [
+                'sens' => 'envoye',
+                'canal' => 'courriel',
+                'date' => (new \DateTimeImmutable('-3 days'))->format('Y-m-d'),
+                'de' => self::OPALE,
+                'a' => 'mairie@charmille.invalid',
+                'objet' => 'Demande de copie intégrale d’un acte de décès',
+                'texte' => self::TEXTE,
+            ],
+        ]);
+        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
+
+        $id = $this->charge()['id'];
+        self::assertIsInt($id);
+
+        return $id;
+    }
+
+    /** @return array<string, mixed> */
+    private function description(string $personne): array
+    {
+        return [
+            'nature' => 'deces',
+            'forme' => 'copie_integrale',
+            'intitule' => 'Acte de décès de '.$this->personnes[$personne]->getDisplayName(),
+            'commune' => 'Charmille',
+            'dateDeLActe' => '1987',
+            'destinataire' => 'Mairie de Charmille',
+            'personIds' => [$this->idDe($personne)],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function charge2(string $chemin): array
+    {
+        $this->requete($chemin);
+
+        return $this->charge();
+    }
+
+    /** @param array<string, mixed>|null $corps */
+    private function envoyer(string $methode, string $chemin, ?array $corps = null): void
+    {
+        $this->client->request($methode, $chemin, server: [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT' => 'application/json',
+        ], content: null === $corps ? '' : json_encode($corps, \JSON_THROW_ON_ERROR));
+    }
+
+    private function statut(): int
+    {
+        return $this->client->getResponse()->getStatusCode();
+    }
+
+    private function userIdDe(string $courriel): int
+    {
+        $utilisateur = $this->em()->getRepository(User::class)->findOneBy(['email' => $courriel]);
+        self::assertNotNull($utilisateur);
+
+        return (int) $utilisateur->getId();
+    }
+
+    private function rattacher(string $courriel, string $personne): void
+    {
+        $identifiant = $this->creerUtilisateur($courriel)->getId();
+        self::assertNotNull($identifiant);
+
+        $membre = new Member($identifiant, $courriel, $this->idDe($personne), $this->personnes[$personne]->getDisplayName(), MatchKind::PreLie);
+        $membre->activer();
+
+        $this->em()->persist($membre);
+        $this->em()->flush();
+    }
+
+    private function connexionDe(string $courriel): void
+    {
+        $this->client->request('POST', '/api/connexion', server: [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT' => 'application/json',
+        ], content: json_encode(['email' => $courriel, 'password' => 'motdepasse-de-test'], \JSON_THROW_ON_ERROR));
+
+        self::assertSame(Response::HTTP_OK, $this->statut(), 'La connexion de test doit réussir.');
+    }
+}
