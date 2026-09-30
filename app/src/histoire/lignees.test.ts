@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { AreteGraphe, Graphe, NoeudFamille, NoeudPersonne, Sexe } from '@/lib/api'
-import { anneeDe, disposerLignees, nomDeFamilleDe, prenomDe, type DispositionHistoire } from './lignees'
+import type { AreteGraphe, Branche, Graphe, NoeudFamille, NoeudPersonne, Sexe } from '@/lib/api'
+import {
+  anneeDe,
+  disposerLignees,
+  nomDeFamilleDe,
+  prenomDe,
+  sansFamilleDuConjoint,
+  type DispositionHistoire,
+} from './lignees'
 
 /**
  * Ce que ces tests protègent : les règles de placement de la disposition
@@ -105,7 +112,28 @@ function construire(): { graphe: Graphe; id: Record<string, string> } {
   famille([ego, conjoint], [enfant])
   const beauPere = personne('beauPere', 'Paul Durand', 'masculin', 1970)
   const belleMere = personne('belleMere', 'Anne Lefebvre', 'feminin', 1972)
-  famille([beauPere, belleMere], [conjoint])
+  const beauFrere = personne('beauFrere', 'Hugo Durand', 'masculin', 2001)
+  famille([beauPere, belleMere], [conjoint, beauFrere])
+  // L'ascendance du conjoint, sur deux générations : la famille du conjoint.
+  const gpcp = personne('gpcp', 'Louis Durand', 'masculin', 1940)
+  const gmcp = personne('gmcp', 'Marthe Roux', 'feminin', 1942)
+  famille([gpcp, gmcp], [beauPere])
+  const gpcm = personne('gpcm', 'Henri Lefebvre', 'masculin', 1941)
+  const gmcm = personne('gmcm', 'Irène Colin', 'feminin', 1944)
+  famille([gpcm, gmcm], [belleMere])
+  const brancheDe: Record<string, Branche> = {
+    beauPere: 'cpp',
+    beauFrere: 'cpp',
+    gpcp: 'cpp',
+    gmcp: 'cpm',
+    belleMere: 'cmp',
+    gpcm: 'cmp',
+    gmcm: 'cmm',
+  }
+  for (const n of noeuds) {
+    const cle = Object.keys(id).find((k) => id[k] === n.id)
+    if (n.type === 'personne' && cle !== undefined && brancheDe[cle]) (n as NoeudPersonne).branch = brancheDe[cle]
+  }
 
   // Un îlot, relié à personne.
   personne('ilot', 'Personne Isolée', 'inconnu', null)
@@ -226,6 +254,43 @@ describe('disposition lignees', () => {
     }
   })
 
+  it('pose l’ascendance du conjoint d’un seul tenant, à droite de celle de l’ego', () => {
+    // Constaté en prod, vue d'un père : rattachée famille par famille, l'ascendance de
+    // sa femme s'éparpillait à gauche de ses Provost, en ordre inverse.
+    const famille = ['beauPere', 'belleMere', 'beauFrere', 'gpcp', 'gmcp', 'gpcm', 'gmcm']
+    const ids = new Set(famille.map((c) => id[c]!))
+    for (const cle of famille) {
+      const x = f(cle)
+      const cote = d.fiches.filter((y) => y.rangee === x.rangee && !ids.has(y.id) && !y.detache && y.id !== id['conjoint'])
+      for (const y of cote) expect(x.x, `${cle} à droite de ${y.noeud.displayName}`).toBeGreaterThan(y.x)
+    }
+    // Structurée comme celle de l'ego : côté père à gauche, côté mère à droite.
+    expect(f('gpcp').cx).toBeLessThan(f('gmcp').cx)
+    expect(f('gmcp').cx).toBeLessThan(f('gpcm').cx)
+    expect(f('gpcm').cx).toBeLessThan(f('gmcm').cx)
+    expect(f('beauPere').cx).toBeLessThan(f('belleMere').cx)
+    expect(f('beauPere').rangee).toBe(f('conjoint').rangee - 1)
+    expect(f('gpcp').rangee).toBe(f('conjoint').rangee - 2)
+    // Ni ancêtres de l'ego, ni ligne directe.
+    expect(f('beauPere').directe).toBe(false)
+    expect(f('beauPere').sosa).toBeNull()
+    // Le conjoint reste à côté de l'ego.
+    expect(f('conjoint').rangee).toBe(f('ego').rangee)
+  })
+
+  it('masquer la famille du conjoint la retire et ne déplace rien du côté de l’ego', () => {
+    const sans = sansFamilleDuConjoint(graphe)
+    const d2 = disposerLignees(sans)
+    for (const cle of ['beauPere', 'belleMere', 'beauFrere', 'gpcp', 'gmcm']) expect(d2.parId.has(id[cle]!)).toBe(false)
+    for (const cle of ['conjoint', 'enfant', 'ego', 'pere', 'mere']) expect(d2.parId.has(id[cle]!)).toBe(true)
+    expect(chevauchements(d2)).toEqual([])
+    // Le côté de l'ego est construit avant celui du conjoint : il ne bouge pas.
+    for (const cle of ['ego', 'pere', 'mere', 'gpp', 'gmm', 'agp', 'tante', 'cousin1', 'conjoint', 'enfant']) {
+      expect(d2.parId.get(id[cle]!)!.x, cle).toBeCloseTo(f(cle).x, 6)
+    }
+    expect(d2.largeur).toBeLessThan(d.largeur)
+  })
+
   it('estime la rangée des personnes détachées d’après leurs dates, dans une zone à part', () => {
     // 1912 : la génération des arrière-grands-parents (Alain Provost, 1913).
     expect(f('antoine').rangee).toBe(-3)
@@ -299,3 +364,96 @@ describe('lecture des étiquettes', () => {
     expect(anneeDe(noeud('Jade Tour', '1901-1909 – 1987'))).toBe(1901)
   })
 })
+
+describe('disposition lignees — plusieurs conjoints', () => {
+  // L'ego s'est marié deux fois ; chaque épouse a ses parents, un frère ou une sœur.
+  const noeuds: Graphe['noeuds'] = []
+  const aretes: AreteGraphe[] = []
+  const id: Record<string, string> = {}
+  let n = 1
+  const personne = (cle: string, nom: string, sex: Sexe, annee: number): string => {
+    const p: NoeudPersonne = {
+      id: `p${n}`,
+      type: 'personne',
+      personId: n++,
+      x: 0,
+      y: 0,
+      w: 140,
+      h: 56,
+      displayName: nom,
+      etiquetteNom: nom,
+      sex,
+      generation: 0,
+      branch: 'tr',
+      vivant: false,
+      visibilite: 'complete',
+      etiquetteDates: `${annee} – `,
+    }
+    noeuds.push(p)
+    id[cle] = p.id
+    return p.id
+  }
+  const famille = (epoux: string[], enfants: string[]): void => {
+    const f: NoeudFamille = { id: `f${n++}`, type: 'famille', familyId: n, x: 0, y: 0, w: 10, h: 10, divorced: false }
+    noeuds.push(f)
+    for (const e of epoux) aretes.push({ de: e, vers: f.id, genre: 'union' })
+    for (const e of enfants) aretes.push({ de: f.id, vers: e, genre: 'filiation' })
+  }
+  const ego = personne('ego', 'Laurent Provost', 'masculin', 1960)
+  famille([personne('pere', 'Daniel Provost', 'masculin', 1930), personne('mere', 'Aimée Magnol', 'feminin', 1932)], [ego])
+  const f1 = personne('f1', 'Emma Voulgre', 'feminin', 1962)
+  const f2 = personne('f2', 'Rose Martin', 'feminin', 1965)
+  famille([ego, f1], [personne('e1', 'Nathan Provost', 'masculin', 1990)])
+  famille([ego, f2], [personne('e2', 'Léa Provost', 'feminin', 2000)])
+  famille(
+    [personne('p1', 'Gabriel Voulgre', 'masculin', 1935), personne('m1', 'Marie Figarol', 'feminin', 1937)],
+    [f1, personne('s1', 'Nicole Voulgre', 'feminin', 1958)],
+  )
+  famille(
+    [personne('p2', 'Paul Martin', 'masculin', 1938), personne('m2', 'Anne Colin', 'feminin', 1940)],
+    [f2, personne('s2', 'Hugo Martin', 'masculin', 1968)],
+  )
+  const graphe: Graphe = {
+    empreinte: '0'.repeat(64),
+    ego,
+    boite: { x: 0, y: 0, w: 1000, h: 1000 },
+    calque: { actif: false, demandes: [], proposes: 0, places: 0, nonPlaces: [] },
+    noeuds,
+    aretes,
+  }
+  const d = disposerLignees(graphe)
+  const f = (cle: string) => d.parId.get(id[cle]!)!
+  const bornes = (cles: string[]): [number, number] => [
+    Math.min(...cles.map((c) => f(c).x)),
+    Math.max(...cles.map((c) => f(c).x + f(c).w)),
+  ]
+
+  it('range chaque famille de conjoint en colonne, dans l’ordre des unions', () => {
+    expect(chevauchementsDe(d)).toEqual([])
+    const egoCote = bornes(['pere', 'mere'])
+    const premiere = bornes(['p1', 'm1', 's1'])
+    const seconde = bornes(['p2', 'm2', 's2'])
+    expect(premiere[0]).toBeGreaterThan(egoCote[1])
+    expect(seconde[0]).toBeGreaterThan(premiere[1])
+    // Les épouses restent à côté de l'ego, sur sa rangée.
+    expect(f('f1').rangee).toBe(f('ego').rangee)
+    expect(f('f2').rangee).toBe(f('ego').rangee)
+  })
+
+  it('masque les familles de tous les conjoints, pas seulement la première', () => {
+    const sans = disposerLignees(sansFamilleDuConjoint(graphe))
+    for (const cle of ['p1', 'm1', 's1', 'p2', 'm2', 's2']) expect(sans.parId.has(id[cle]!)).toBe(false)
+    for (const cle of ['ego', 'pere', 'mere', 'f1', 'f2', 'e1', 'e2']) expect(sans.parId.has(id[cle]!)).toBe(true)
+  })
+})
+
+function chevauchementsDe(d: DispositionHistoire): string[] {
+  const fautes: string[] = []
+  const parRangee = new Map<number, typeof d.fiches>()
+  for (const x of d.fiches) parRangee.set(x.rangee, [...(parRangee.get(x.rangee) ?? []), x])
+  for (const r of parRangee.values()) {
+    const tri = [...r].sort((a, b) => a.x - b.x)
+    for (let i = 1; i < tri.length; i++) if (tri[i]!.x < tri[i - 1]!.x + tri[i - 1]!.w) fautes.push(tri[i]!.id)
+  }
+  return fautes
+}

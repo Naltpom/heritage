@@ -280,7 +280,91 @@ function empiler(parties: Forme[], ecart: number): { forme: Forme; ancres: numbe
 /* La disposition                                                      */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Le graphe sans la famille des conjoints de l'ego — leur ascendance, leurs
+ * collatéraux et leurs alliés : ces fiches et les liens qui les touchent sont RETIRÉS
+ * avant la disposition, pour que l'arbre se recompacte (les filtres de branche, eux,
+ * estompent sans rien déplacer). Les conjoints eux-mêmes et les enfants restent.
+ *
+ * Le partage se lit sur les LIENS, pas sur les couleurs : le serveur ne découpe en
+ * branches « conjoint » que l'ascendance d'un seul conjoint, et un second mariage doit
+ * se masquer aussi. Est du côté de l'ego tout ce qu'on atteint depuis lui sans passer
+ * par un de ses conjoints ; est de la famille d'un conjoint ce qu'on atteint depuis ses
+ * parents sans repasser par le côté de l'ego. Une personne des deux côtés (un arbre
+ * endogame) reste.
+ */
+export function sansFamilleDuConjoint(graphe: Graphe): Graphe {
+  const personnes = new Set(graphe.noeuds.filter((n) => n.type === 'personne').map((n) => n.id))
+  const membres = new Map<string, string[]>()
+  const comme = new Map<string, { epoux: string[]; enfant: string[] }>()
+  const ajouter = (m: Map<string, string[]>, k: string, v: string): void => {
+    const l = m.get(k)
+    if (l) l.push(v)
+    else m.set(k, [v])
+  }
+  const roles = (p: string): { epoux: string[]; enfant: string[] } => {
+    let r = comme.get(p)
+    if (!r) comme.set(p, (r = { epoux: [], enfant: [] }))
+    return r
+  }
+  const epouxDe = new Map<string, string[]>()
+  for (const a of graphe.aretes) {
+    const [p, f] = personnes.has(a.de) ? [a.de, a.vers] : [a.vers, a.de]
+    if (!personnes.has(p) || personnes.has(f)) continue
+    ajouter(membres, f, p)
+    if (a.genre === 'union') {
+      roles(p).epoux.push(f)
+      ajouter(epouxDe, f, p)
+    } else roles(p).enfant.push(f)
+  }
+  const ego = graphe.ego
+  const conjoints = new Set(
+    (comme.get(ego)?.epoux ?? []).flatMap((f) => epouxDe.get(f) ?? []).filter((e) => e !== ego),
+  )
+  if (!conjoints.size) return graphe
+
+  const parcourir = (depart: string[], interdits: Set<string>): Set<string> => {
+    const vus = new Set<string>()
+    const file = depart.filter((p) => !interdits.has(p))
+    for (const p of file) vus.add(p)
+    while (file.length) {
+      const p = file.shift()!
+      const r = comme.get(p)
+      for (const f of [...(r?.epoux ?? []), ...(r?.enfant ?? [])]) {
+        for (const v of membres.get(f) ?? []) {
+          if (vus.has(v) || interdits.has(v)) continue
+          vus.add(v)
+          file.push(v)
+        }
+      }
+    }
+    return vus
+  }
+  const coteEgo = parcourir([ego], conjoints)
+  const retires = new Set<string>()
+  for (const c of conjoints) {
+    if (coteEgo.has(c)) continue
+    const parents = (comme.get(c)?.enfant ?? []).flatMap((f) => epouxDe.get(f) ?? [])
+    for (const p of parcourir(parents, new Set([...coteEgo, ...conjoints]))) retires.add(p)
+  }
+  if (!retires.size) return graphe
+  return {
+    ...graphe,
+    noeuds: graphe.noeuds.filter((n) => !retires.has(n.id)),
+    aretes: graphe.aretes.filter((a) => !retires.has(a.de) && !retires.has(a.vers)),
+  }
+}
+
 type Cote = 'G' | 'D'
+
+/** Une ascendance numérotée : Sosa → personne, et Sosa pair → famille du couple. */
+interface Lignee {
+  sosa: Map<number, string>
+  couples: Map<number, string>
+}
+
+/** Au-delà, un bloc rattaché va au bord de l'arbre plutôt que dans un creux. */
+const PETIT_BLOC = 12
 
 export function disposerLignees(graphe: Graphe): DispositionHistoire {
   const index = indexer(graphe)
@@ -317,10 +401,17 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     return [pere, mere]
   }
 
-  /** Numérotation de Sosa depuis une personne. Un ancêtre déjà numéroté (implexe) n'est pas repris. */
-  function sosaDepuis(racine: string): { parNumero: Map<number, string>; couples: Map<number, string> } {
+  /**
+   * Numérotation de Sosa depuis une personne. Un ancêtre déjà numéroté (implexe) n'est
+   * pas repris — ni un de ceux de `dejaNumerotes` (l'ascendance de l'ego, quand on
+   * numérote celle de son conjoint).
+   */
+  function sosaDepuis(
+    racine: string,
+    dejaNumerotes: ReadonlySet<string> = new Set(),
+  ): { parNumero: Map<number, string>; couples: Map<number, string> } {
     const parNumero = new Map<number, string>([[1, racine]])
-    const vus = new Set([racine])
+    const vus = new Set([racine, ...dejaNumerotes])
     const couples = new Map<number, string>()
     const file = [1]
     while (file.length) {
@@ -343,7 +434,44 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
   const { parNumero: sosa, couples } = sosaDepuis(ego)
   const numeroDe = new Map<string, number>()
   for (const [n, id] of sosa) numeroDe.set(id, n)
-  const famillesAncestrales = new Set(couples.values())
+  const lignee: Lignee = { sosa, couples }
+
+  /*
+   * L'ascendance du CONJOINT de l'ego est un arbre à part entière, pas une suite
+   * d'alliés : elle se construit comme celle de l'ego (Sosa, fratries) et se pose d'un
+   * seul tenant à droite de l'arbre de l'ego. Rattachée famille par famille, elle
+   * s'éparpillait dans les creux et s'entremêlait à celle de l'ego (constaté en prod,
+   * vue d'un père : l'ascendance de sa femme à gauche de ses Provost, en ordre inverse).
+   */
+  /** Tous les ancêtres structurés — de l'ego et de ses conjoints : ni collatéraux, ni alliés. */
+  const ancetres = new Set(numeroDe.keys())
+  /*
+   * PLUSIEURS CONJOINTS : chacun dont les parents sont connus a son ascendance en arbre,
+   * dans l'ordre des unions, un bloc après l'autre. Un aïeul commun (arbre endogame)
+   * reste à celui qui l'a numéroté le premier — l'ego d'abord.
+   */
+  const lignees: { conjoint: string; lignee: Lignee }[] = []
+  for (const c of (famillesEpoux.get(ego) ?? []).flatMap((f) => epouxDe(f))) {
+    if (c === ego || ancetres.has(c) || lignees.some((l) => l.conjoint === c)) continue
+    const { parNumero, couples: cc } = sosaDepuis(c, ancetres)
+    if (!cc.size) continue
+    for (const [n, id] of parNumero) if (n > 1) ancetres.add(id)
+    lignees.push({ conjoint: c, lignee: { sosa: parNumero, couples: cc } })
+  }
+  /** Celui dont le serveur a découpé l'ascendance en quarts « conjoint » (un seul). */
+  const ligneeConjoint =
+    lignees.find(({ lignee }) =>
+      [2, 3].some((n) => {
+        const b = personnes.get(lignee.sosa.get(n) ?? '')?.branch
+        return b === 'cpp' || b === 'cmp'
+      }),
+    )?.lignee ??
+    lignees[0]?.lignee ??
+    null
+  /** Les couples de la lignée directe de l'ego : leurs traits sont ceux de la ligne directe. */
+  const famillesDirectes = new Set(couples.values())
+  /** Tous les couples structurés : un collatéral ne les reprend pas. */
+  const famillesAncestrales = new Set([...couples.values(), ...lignees.flatMap(({ lignee }) => [...lignee.couples.values()])])
 
   const poses = new Set<string>()
   const rangeeDe = new Map<string, number>()
@@ -385,7 +513,7 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       if (traitees.has(fam) || famillesAncestrales.has(fam)) continue
       traitees.add(fam)
       let milieu = xPivot
-      const conjoint = epouxDe(fam).find((e) => e !== pivot && !poses.has(e) && !numeroDe.has(e))
+      const conjoint = epouxDe(fam).find((e) => e !== pivot && !poses.has(e) && !ancetres.has(e))
       if (conjoint !== undefined) {
         const pas = largeur(exterieur.id) / 2 + ECART_FRATRIE + largeur(conjoint) / 2
         const x = cote === 'G' ? exterieur.x - pas : exterieur.x + pas
@@ -397,7 +525,7 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
         aTraiter.unshift(...autres.map((f2) => ({ pivot: conjoint, xPivot: x, fam: f2 })))
       }
       const enfants = enfantsDe(fam)
-        .filter((e) => !poses.has(e) && !numeroDe.has(e))
+        .filter((e) => !poses.has(e) && !ancetres.has(e))
         .sort((a, b) => anneeTri(a) - anneeTri(b))
       if (!enfants.length) continue
       const parties = enfants.map((e) => blocDescendance(e, cote, g + 1))
@@ -422,25 +550,37 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     return f
   }
 
+  /**
+   * La place d'une fiche DÉJÀ posée ailleurs : sa rangée est réservée, sans fiche.
+   * C'est le conjoint de l'ego au pied de sa propre ascendance — il est posé à côté de
+   * l'ego, et ses parents se rangent au-dessus de cette place.
+   */
+  function fantome(id: string, g: number): Forme {
+    const w = largeur(id)
+    return { poses: [], rangees: new Map([[g, [-w / 2, w / 2]]]), ancre: 0 }
+  }
+
   /** La forme d'un ancêtre : sa propre ascendance s'il en a une, sinon sa fiche. */
-  function formePersonne(n: number): Forme {
-    if (couples.has(2 * n)) return formeCouple(2 * n)
-    return seule(sosa.get(n)!, -generationSosa(n))
+  function formePersonne(L: Lignee, n: number): Forme {
+    if (L.couples.has(2 * n)) return formeCouple(L, 2 * n)
+    const id = L.sosa.get(n)!
+    return poses.has(id) ? fantome(id, -generationSosa(n)) : seule(id, -generationSosa(n))
   }
 
   /** Le couple d'ancêtres de Sosa `n` (pair) et `n + 1`, avec toute leur fratrie. */
-  function formeCouple(n: number): Forme {
+  function formeCouple(L: Lignee, n: number): Forme {
+    const { sosa, couples } = L
     const m = n >> 1
     const g = -generationSosa(n)
     const cote: 'G' | 'D' | 'C' = m === 1 ? 'C' : m % 2 === 0 ? 'G' : 'D'
     const fam = couples.get(n)!
     const direct = sosa.get(m)!
 
-    const FP = sosa.has(n) ? formePersonne(n) : null
-    const FM = sosa.has(n + 1) ? formePersonne(n + 1) : null
+    const FP = sosa.has(n) ? formePersonne(L, n) : null
+    const FM = sosa.has(n + 1) ? formePersonne(L, n + 1) : null
 
     const fratrie = enfantsDe(fam)
-      .filter((e) => e === direct || (!poses.has(e) && !numeroDe.has(e)))
+      .filter((e) => e === direct || (!poses.has(e) && !ancetres.has(e)))
       .sort((a, b) => anneeTri(a) - anneeTri(b))
     if (!fratrie.includes(direct)) fratrie.push(direct)
     const autres = fratrie.filter((e) => e !== direct)
@@ -448,7 +588,10 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     const iDirect = ordre.indexOf(direct)
 
     const parties = ordre.map((e, i) => {
-      if (e === direct) return m === 1 ? blocDescendance(e, 'D', g + 1) : seule(e, g + 1)
+      if (e === direct) {
+        if (poses.has(e)) return fantome(e, g + 1)
+        return m === 1 ? blocDescendance(e, 'D', g + 1) : seule(e, g + 1)
+      }
       const sens: Cote = cote === 'C' ? (i < iDirect ? 'G' : 'D') : cote
       return blocDescendance(e, sens, g + 1)
     })
@@ -515,8 +658,55 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
 
   /* L'arbre principal. */
   let racine: Forme
-  if (couples.has(2)) racine = formeCouple(2)
+  if (couples.has(2)) racine = formeCouple(lignee, 2)
   else racine = blocDescendance(ego, 'D', 0)
+
+  /*
+   * Les ZONES : 0 pour l'ego, puis une par conjoint. Un allié rattaché plus tard se
+   * pose dans la zone de la personne qui le relie, sans empiéter sur les autres —
+   * sinon la demi-tante de l'ego se glissait dans le creux le plus proche, chez les
+   * beaux-parents.
+   */
+  const bord = (f: Forme, cote: Cote): number => {
+    let v = cote === 'G' ? Infinity : -Infinity
+    for (const [a, b] of f.rangees.values()) v = cote === 'G' ? Math.min(v, a) : Math.max(v, b)
+    return v
+  }
+  const zoneDe = new Map<string, number>()
+  const etendues: Map<number, [number, number]>[] = []
+  const etendre = (zone: number, f: Forme): void => {
+    const e = (etendues[zone] ??= new Map())
+    for (const [g, [a, b]] of f.rangees) {
+      const r = e.get(g)
+      if (r) {
+        r[0] = Math.min(r[0], a)
+        r[1] = Math.max(r[1], b)
+      } else e.set(g, [a, b])
+    }
+    for (const p of f.poses) zoneDe.set(p.id, zone)
+  }
+  etendre(0, racine)
+
+  /*
+   * L'ascendance de chaque conjoint, d'un seul tenant, à droite de ce qui précède —
+   * APRÈS les alliés de l'ego, pour que ceux du bord droit gardent leur place au bord
+   * de sa zone au lieu de buter sur le mur de la suivante.
+   */
+  function poserLesConjoints(): void {
+    for (const { conjoint, lignee: l } of lignees) {
+      if (!poses.has(conjoint) || !l.couples.has(2)) continue
+      const bloc = formeCouple(l, 2)
+      // Strictement à droite de tout ce qui précède, toutes rangées confondues : une
+      // colonne par famille, et des murs nets entre les zones.
+      decaler(bloc, bord(racine, 'D') + ECART_ZONE - bord(bloc, 'G'))
+      etendre(etendues.length, bloc)
+      fusionner(racine, bloc)
+    }
+  }
+  /** Les ancêtres des conjoints : ils attendent leur bloc, aucun allié ne les prend. */
+  const ancetresDesConjoints = new Set(
+    lignees.flatMap(({ lignee: l }) => [...l.sosa].filter(([n]) => n > 1).map(([, id]) => id)),
+  )
 
   const xDe = (): Map<string, number> => {
     const m = new Map<string, number>()
@@ -536,8 +726,8 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
    * Voulgre posés au-dessus des Figarol, l'ascendance d'un allié Destombes chez
    * les Provost). Sans cible — un îlot détaché —, le bloc va au bord.
    */
-  function accrocher(bloc: Forme, cote: Cote, cible?: number): void {
-    if (cible !== undefined) {
+  function accrocher(bloc: Forme, cote: Cote, cible?: number, zone = 0): void {
+    if (cible !== undefined && bloc.poses.length <= PETIT_BLOC) {
       // Ce qui est pris, rangée par rangée : chaque fiche, et l'espace entre deux
       // époux posés — un bloc glissé là couperait leur trait d'union.
       const occupe = new Map<number, [number, number][]>()
@@ -558,6 +748,20 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
           .filter((p): p is Pose => p !== undefined)
         if (ep.length < 2 || ep.some((p) => p.g !== ep[0]!.g)) continue
         prendre(ep[0]!.g, Math.min(...ep.map((p) => p.x)), Math.max(...ep.map((p) => p.x)))
+      }
+      // Les autres zones sont des MURS : le bloc ne les traverse pas pour trouver un creux
+      // plus proche de l'autre côté. Les zones vont de gauche à droite dans l'ordre.
+      let murG = -Infinity
+      let murD = Infinity
+      etendues.forEach((e, z) => {
+        for (const [a, b] of e.values()) {
+          if (z < zone) murG = Math.max(murG, b)
+          if (z > zone) murD = Math.min(murD, a)
+        }
+      })
+      for (const g of new Set(bloc.poses.map((p) => p.g))) {
+        if (murG > -Infinity) prendre(g, -Infinity, murG)
+        if (murD < Infinity) prendre(g, murD, Infinity)
       }
       // Le premier creux libre dans un sens, depuis la cible.
       const chercher = (sens: Cote): number => {
@@ -581,9 +785,14 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       // Le plus proche des deux ; à égalité, vers l'extérieur.
       const depart = cible - bloc.ancre
       const [dExt, dInt] = cote === 'D' ? [chercher('D'), chercher('G')] : [chercher('G'), chercher('D')]
-      decaler(bloc, Math.abs(dInt - depart) < Math.abs(dExt - depart) ? dInt : dExt)
-      fusionner(racine, bloc)
-      return
+      const dx = Math.abs(dInt - depart) < Math.abs(dExt - depart) ? dInt : dExt
+      // Muré des deux côtés sans creux : le bord de l'arbre, comme un grand bloc.
+      if (Number.isFinite(dx)) {
+        decaler(bloc, dx)
+        etendre(zone, bloc)
+        fusionner(racine, bloc)
+        return
+      }
     }
     const besoin = cote === 'G' ? besoinAGauche(racine, bloc, ECART_BLOC) : besoinADroite(racine, bloc, ECART_BLOC)
     if (Number.isFinite(besoin)) decaler(bloc, besoin)
@@ -603,10 +812,11 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       }
       if (Number.isFinite(lo)) decaler(bloc, cote === 'G' ? lo - ECART_BLOC - bhi : hi + ECART_BLOC - blo)
     }
+    etendre(zone, bloc)
     fusionner(racine, bloc)
   }
 
-  function accrocherLesProches(): void {
+  function accrocherLesProches(exclus: ReadonlySet<string> = new Set()): void {
     let progres = true
     while (progres) {
       progres = false
@@ -620,18 +830,20 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
         const epLibres = ep.filter((e) => !poses.has(e))
         const enLibres = en.filter((e) => !poses.has(e))
         if (!epLibres.length && !enLibres.length) continue
+        if ([...epLibres, ...enLibres].some((e) => exclus.has(e))) continue
 
         const attache = epPoses[0] ?? enPoses[0]!
         const cote: Cote = (x.get(attache) ?? 0) < xEgo ? 'G' : 'D'
         const rangee = rangeeDe.get(attache)! + (epPoses.length ? 0 : -1)
 
         const xAttache = x.get(attache) ?? 0
+        const zone = zoneDe.get(attache) ?? 0
         if (epLibres.length) {
           for (const e of epLibres) {
             if (poses.has(e)) continue
             // À côté du conjoint posé, ou au-dessus de l'enfant posé.
             const pas = epPoses.length ? largeur(attache) / 2 + ECART_FRATRIE + largeur(e) / 2 : 0
-            accrocher(blocDescendance(e, cote, rangee), cote, cote === 'G' ? xAttache - pas : xAttache + pas)
+            accrocher(blocDescendance(e, cote, rangee), cote, cote === 'G' ? xAttache - pas : xAttache + pas, zone)
           }
         } else {
           // Les époux sont posés, il reste des enfants : une fratrie issue d'une autre union.
@@ -641,13 +853,15 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
           const { forme, ancres } = empiler(parties, ECART_FRATRIE)
           const milieu = epPoses.length ? epPoses.reduce((s, e) => s + (x.get(e) ?? 0), 0) / epPoses.length : xAttache
           forme.ancre = (ancres[0]! + ancres[ancres.length - 1]!) / 2
-          accrocher(forme, cote, milieu)
+          accrocher(forme, cote, milieu, zone)
         }
         progres = true
         break
       }
     }
   }
+  accrocherLesProches(ancetresDesConjoints)
+  poserLesConjoints()
   accrocherLesProches()
 
   /*
@@ -725,7 +939,8 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
         ? Math.round(decalages[decalages.length >> 1]! + sommet[1])
         : personnes.get(sommet[0])!.generation
       for (const id of relatif.keys()) detaches.add(id)
-      accrocher(blocDescendance(sommet[0], 'D', rangee), 'D')
+      // Chaque îlot est sa propre zone : ses alliés ne retournent pas dans l'arbre.
+      accrocher(blocDescendance(sommet[0], 'D', rangee), 'D', undefined, etendues.length)
       accrocherLesProches()
     }
   }
@@ -854,7 +1069,7 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
   const foyers: EtiquetteFoyer[] = []
   const traces: Trace[] = []
   for (const [fam, noeudFamille] of familles) {
-    const ancestrale = famillesAncestrales.has(fam)
+    const ancestrale = famillesDirectes.has(fam)
     const ep = epouxDe(fam)
       .map((e) => parId.get(e))
       .filter((e): e is FicheHistoire => e !== undefined)
@@ -985,14 +1200,13 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
   if (zoneDetachee) zoneDetachee.cx = (zoneDetachee.x0 + zoneDetachee.x1) / 2
 
   const quarts: Quart[] = []
-  const conjointEgo = (famillesEpoux.get(ego) ?? []).flatMap((f) => epouxDe(f)).find((e) => e !== ego)
-  const sosaConjoint = conjointEgo !== undefined ? sosaDepuis(conjointEgo).parNumero : new Map<number, string>()
+  const sosaConjoint = ligneeConjoint?.sosa ?? new Map<number, string>()
   for (const branche of ['pp', 'pm', 'mp', 'mm', 'cpp', 'cpm', 'cmp', 'cmm'] as const) {
     const membres = fiches.filter((f) => f.noeud.branch === branche)
     if (!membres.length) continue
-    const conjoint = branche.startsWith('c')
-    const cle = (conjoint ? branche.slice(1) : branche) as 'pp' | 'pm' | 'mp' | 'mm'
-    const tete = (conjoint ? sosaConjoint : sosa).get(SOSA_DU_QUART[cle])
+    const duConjoint = branche.startsWith('c')
+    const cle = (duConjoint ? branche.slice(1) : branche) as 'pp' | 'pm' | 'mp' | 'mm'
+    const tete = (duConjoint ? sosaConjoint : sosa).get(SOSA_DU_QUART[cle])
     const noeudTete = tete !== undefined ? personnes.get(tete) : undefined
     quarts.push({
       branche,

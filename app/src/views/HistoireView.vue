@@ -46,6 +46,7 @@ import {
   LIBELLES_QUART,
   disposerLignees,
   prenomDe,
+  sansFamilleDuConjoint,
   type BrancheDeQuart,
   type DispositionHistoire,
   type FicheHistoire,
@@ -76,6 +77,41 @@ const { fermerTiroirs, unTiroirEstOuvert } = useTiroirs()
 /* ------------------------------------------------------------------ */
 
 const disposition = shallowRef<DispositionHistoire | null>(null)
+const grapheCharge = shallowRef<Graphe | null>(null)
+
+/*
+ * La famille du conjoint (son ascendance, ses collatéraux) : affichée par défaut,
+ * retirée AVANT la disposition quand on la masque, pour que l'arbre se recompacte.
+ * Une préférence de ce navigateur seulement.
+ */
+const CLE_CONJOINT = 'heritage.arbre.familleDuConjoint'
+function lirePreferenceConjoint(): boolean {
+  try {
+    return localStorage.getItem(CLE_CONJOINT) !== 'masquee'
+  } catch {
+    return true
+  }
+}
+const avecConjoint = ref(lirePreferenceConjoint())
+const grapheSansConjoint = computed(() => (grapheCharge.value ? sansFamilleDuConjoint(grapheCharge.value) : null))
+const aUneFamilleDeConjoint = computed(() => grapheSansConjoint.value !== grapheCharge.value)
+function disposer(graphe: Graphe): void {
+  disposition.value = disposerLignees(avecConjoint.value ? graphe : sansFamilleDuConjoint(graphe))
+}
+watch(avecConjoint, (avec) => {
+  try {
+    localStorage.setItem(CLE_CONJOINT, avec ? 'affichee' : 'masquee')
+  } catch {
+    /* navigation privée : la bascule vaut pour la visite */
+  }
+  if (!grapheCharge.value) return
+  disposer(grapheCharge.value)
+  const d = disposition.value!
+  if (selection.value !== null && !d.parId.has(selection.value)) selection.value = null
+  const quarts = new Set<string>(d.quarts.map((q) => q.branche))
+  filtres.masquees = filtres.masquees.filter((b) => quarts.has(b))
+  cadrage.value = ajusterLargeur(canevas.value, gouttiere.value)
+})
 const nonPlaces = ref<NoeudNonPlace[]>([])
 const chargement = ref(true)
 const erreur = ref<string | null>(null)
@@ -85,7 +121,8 @@ async function charger(): Promise<void> {
   erreur.value = null
   try {
     const graphe = await requeteApi<Graphe>('/arbre/graphe')
-    disposition.value = disposerLignees(graphe)
+    grapheCharge.value = graphe
+    disposer(graphe)
     nonPlaces.value = graphe.calque.nonPlaces
     await nextTick()
     // Retour d'une fiche : la vue quittée, exactement ; sinon l'arbre ajusté.
@@ -927,6 +964,23 @@ onBeforeUnmount(() => {
             </span>
           </button>
         </div>
+        <template v-if="aUneFamilleDeConjoint">
+          <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Famille du conjoint</div>
+          <button
+            type="button"
+            role="checkbox"
+            :aria-checked="avecConjoint"
+            class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
+            @click="avecConjoint = !avecConjoint"
+          >
+            <span
+              class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
+              :class="avecConjoint ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+            >{{ avecConjoint ? '✓' : '' }}</span>
+            <span class="flex-1 text-sm">Afficher sa famille</span>
+            <span class="text-xs text-attenue">masquée, l’arbre se resserre</span>
+          </button>
+        </template>
         <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Afficher seulement</div>
         <button
           v-for="t in BASCULES"
