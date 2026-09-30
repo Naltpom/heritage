@@ -289,6 +289,7 @@ public, pas un domaine. Le troisième segment tranche, sans ambiguïté possible
 | `/api/administration/invitations`, `/membres` | `Membership` |
 | `/api/administration/demandes` | `Proposal` |
 | `/api/administration/gedcom` | `Gedcom` |
+| `/api/administration/sources` | `Tree` (ADR 0012) |
 
 ### 1.8 En-têtes
 
@@ -4086,6 +4087,49 @@ direction `export`. Le fichier se récupère par `GET .../executions/{id}/fichie
 authentifiée comme celles des médias. **Un export contient l'arbre entier, personnes vivantes
 comprises** : il est réservé à `ROLE_ADMIN`, journalisé `export_gedcom`, et il n'existe
 **aucune route d'export pour un membre** — « pas de liste, pas d'export » (ADR 0003).
+
+### 10.7 Sources
+
+Module `Tree`, ADR 0012. Une source est une notice bibliographique : l'administration la crée
+et la corrige **hors de la file** de l'ADR 0004 ; la citation qui l'emploie, elle, reste une
+demande `ajout_citation` (§ 6.4 bis), qui désigne la source par son `id`.
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/administration/sources` | `ADMIN` | `?q=&page=&parPage=` | `200` liste paginée | — |
+| `POST` | `/api/administration/sources` | `ADMIN` | source | `201` source | `422` · `409` `vue_comme_membre_active` |
+| `GET` | `/api/administration/sources/{id}` | `ADMIN` | — | `200` source | `404` |
+| `PUT` | `/api/administration/sources/{id}` | `ADMIN` | source | `200` source | `404` · `422` · `409` `vue_comme_membre_active` |
+
+- La liste est triée par `title`. `q` filtre sur le titre, **sans accents ni casse** (le
+  repliement de `Core\Service\CleDeRecherche`) : `etat civil` trouve « État civil de Paris ».
+  `parPage` vaut 50 par défaut, 100 au plus.
+- Le corps de `POST` et de `PUT` : `title` (obligatoire, 255 caractères au plus),
+  `sourceKind` (obligatoire : `acte_etat_civil`, `recensement`, `registre_officiel`,
+  `arbre_tiers`, `publication`, `temoignage`, `autre`), et, facultatifs, `author` (255),
+  `publication`, `text`, `note` (10 000 chacun), `mediaType` (60). Un champ blanc vaut `null`.
+  `PUT` **remplace** la notice : un champ facultatif absent est vidé.
+- `gedcomXref` est rendu mais **jamais lu** : il appartient au ré-import GEDCOM, et une
+  source créée ici le garde à `null` (ADR 0012).
+- Pas de `DELETE` (ADR 0012).
+
+```json
+{
+  "id": 29,
+  "gedcomXref": null,
+  "title": "État civil de Paris",
+  "author": "Archives de Paris",
+  "publication": "archives.paris.fr — actes de l'état civil reconstitué et registres depuis 1860",
+  "text": null,
+  "note": null,
+  "mediaType": null,
+  "sourceKind": "acte_etat_civil",
+  "sourceKindLabel": "Acte d'état civil",
+  "citationCount": 3,
+  "createdAt": "2026-09-30T10:12:00+02:00",
+  "updatedAt": "2026-09-30T10:12:00+02:00"
+}
+```
 
 ---
 

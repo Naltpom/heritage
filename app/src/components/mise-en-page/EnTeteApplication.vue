@@ -225,6 +225,7 @@ const classeLigneTiroir =
           </RouterLink>
           <RouterLink :to="{ name: 'administration.invitations' }" :class="classeLigneTiroir" class="md:hidden">Invitations</RouterLink>
           <RouterLink :to="{ name: 'administration.utilisateurs' }" :class="classeLigneTiroir" class="md:hidden">Utilisateurs</RouterLink>
+          <RouterLink :to="{ name: 'administration.sources' }" :class="classeLigneTiroir" class="md:hidden">Sources</RouterLink>
         </template>
       </nav>
 
@@ -311,6 +312,7 @@ const classeLigneTiroir =
             </RouterLink>
             <RouterLink :to="{ name: 'administration.invitations' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">Invitations</RouterLink>
             <RouterLink :to="{ name: 'administration.utilisateurs' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">Utilisateurs</RouterLink>
+            <RouterLink :to="{ name: 'administration.sources' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux" active-class="bg-accent-doux">Sources</RouterLink>
             <RouterLink :to="{ name: 'administration.utilisateurs' }" class="flex h-[38px] items-center px-4 text-[13.5px] hover:bg-accent-doux">Voir comme un membre…</RouterLink>
           </template>
           <div class="my-1 border-t border-ligne" />

@@ -259,6 +259,93 @@ export function quitterIncarnation(): Promise<ChargeDeSession> {
   return requeteApi<ChargeDeSession>('/session/incarnation', { methode: 'DELETE' })
 }
 
+/* ------------------------------------------------------------------ */
+/* § 10.7 — les sources (ADR 0012)                                     */
+/* ------------------------------------------------------------------ */
+
+/** Les valeurs de `SourceKind` côté serveur — `Tree\Enum\SourceKind`. */
+export type GenreDeSource =
+  | 'acte_etat_civil'
+  | 'recensement'
+  | 'registre_officiel'
+  | 'arbre_tiers'
+  | 'publication'
+  | 'temoignage'
+  | 'autre'
+
+/** Les libellés, dans l'ordre de l'énumération PHP (`SourceKind::label()`). */
+export const GENRES_DE_SOURCE: readonly { valeur: GenreDeSource; libelle: string }[] = [
+  { valeur: 'acte_etat_civil', libelle: 'Acte d’état civil' },
+  { valeur: 'recensement', libelle: 'Recensement' },
+  { valeur: 'registre_officiel', libelle: 'Registre officiel' },
+  { valeur: 'arbre_tiers', libelle: 'Arbre d’un autre utilisateur' },
+  { valeur: 'publication', libelle: 'Publication' },
+  { valeur: 'temoignage', libelle: 'Témoignage familial' },
+  { valeur: 'autre', libelle: 'Autre' },
+]
+
+/**
+ * Une source — la **notice** d'un fonds, pas son usage : la page et le `QUAY`
+ * sont portés par la citation. `gedcomXref` n'est jamais envoyé : il appartient
+ * au ré-import GEDCOM, et une source créée à l'écran le garde à `null`.
+ */
+export interface SourceAdministration {
+  id: number
+  gedcomXref: string | null
+  title: string
+  author: string | null
+  publication: string | null
+  text: string | null
+  note: string | null
+  mediaType: string | null
+  sourceKind: GenreDeSource
+  sourceKindLabel: string
+  /** Combien de citations de l'arbre reposent sur cette source. */
+  citationCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** Le corps de `POST` et de `PUT`. `PUT` **remplace** : un champ omis est vidé. */
+export interface NoticeDeSource {
+  title: string
+  sourceKind: GenreDeSource
+  author: string | null
+  publication: string | null
+  note: string | null
+}
+
+/** `GET /api/administration/sources` — triée par titre, `q` sans accents ni casse. */
+export function listerSources(options: {
+  q?: string | undefined
+  page?: number | undefined
+  parPage?: number | undefined
+}): Promise<ListePaginee<SourceAdministration>> {
+  return requeteApi<ListePaginee<SourceAdministration>>('/administration/sources', {
+    requete: { q: options.q, page: options.page, parPage: options.parPage },
+  })
+}
+
+/** `POST /api/administration/sources` — `201`, ou `422` avec `champs`. */
+export function creerSource(notice: NoticeDeSource): Promise<SourceAdministration> {
+  return requeteApi<SourceAdministration>('/administration/sources', { methode: 'POST', corps: notice })
+}
+
+/**
+ * `PUT /api/administration/sources/{id}`. Le `text` et le `mediaType` d'une
+ * source importée ne sont pas éditables à l'écran : on les renvoie tels quels,
+ * sans quoi le remplacement les viderait.
+ */
+export function modifierSource(
+  source: SourceAdministration,
+  notice: NoticeDeSource,
+): Promise<SourceAdministration> {
+  return requeteApi<SourceAdministration>(`/administration/sources/${source.id}`, {
+    methode: 'PUT',
+    corps: { ...notice, text: source.text, mediaType: source.mediaType },
+  })
+}
+
 /** `DELETE /api/administration/voir-comme` — retour à la session normale. */
 export function quitterVueComme(): Promise<ChargeDeSession> {
   return requeteApi<ChargeDeSession>('/administration/voir-comme', { methode: 'DELETE' })
