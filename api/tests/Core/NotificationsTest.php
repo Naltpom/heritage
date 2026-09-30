@@ -151,6 +151,24 @@ final class NotificationsTest extends CoreWebTestCase
         self::assertSame(0, $this->charge()['total'], 'Un membre n’est pas notifié des dépôts.');
     }
 
+    public function testLAdministrateurAuteurNEstPasNotifieDeSaPropreDemande(): void
+    {
+        $auteur = $this->creerUtilisateur('natron@example.net', roles: ['ROLE_ADMIN']);
+        $this->creerUtilisateur('opale@example.net', roles: ['ROLE_ADMIN']);
+
+        $remises = $this->service()->notifierLesAdministrateurs(
+            NotificationKind::DemandeSoumise,
+            'Natron propose une modification.',
+            sauf: (int) $auteur->getId(),
+        );
+
+        self::assertSame(1, $remises, 'Seul l’autre administrateur est prévenu.');
+
+        $this->connexion('natron@example.net');
+        $this->requete('GET', '/api/notifications');
+        self::assertSame(0, $this->charge()['total'], 'L’auteur n’est pas notifié de ce qu’il vient de déposer.');
+    }
+
     /**
      * La propriété qui permet à l'adaptateur de `Proposal` d'être une simple délégation :
      * une notification est produite **après** le `commit`, et ne doit jamais faire échouer

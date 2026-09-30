@@ -52,14 +52,16 @@ final readonly class NotificateurParNotifications implements NotificateurDeDeman
 
     public function demandeSoumise(ChangeRequest $demande): void
     {
-        // Vers les administrateurs, jamais l'auteur : il vient de cliquer. `Proposal` ne
-        // tient pas la liste des comptes — c'est `Core` qui sait qui est administrateur.
+        // Vers les administrateurs, jamais l'auteur : il vient de cliquer — y compris
+        // quand l'auteur est lui-même administrateur. `Proposal` ne tient pas la liste
+        // des comptes — c'est `Core` qui sait qui est administrateur.
         $this->notifications->notifierLesAdministrateurs(
             NotificationKind::DemandeSoumise,
             \sprintf('%s propose une modification%s.', $demande->getAuthorLabel(), $this->sur($demande)),
             $demande->getMessage(),
             'demande.detail',
             ['id' => $demande->getId()],
+            $demande->getAuthorUserId(),
         );
     }
 
