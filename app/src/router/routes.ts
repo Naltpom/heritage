@@ -17,7 +17,6 @@
  */
 
 import type { RouteRecordRaw } from 'vue-router'
-import type { NomDeDisposition } from '@/components/arbre/dispositions'
 import type { NiveauRequis } from './acces'
 import type { ParentDeDetail, Section } from '@/composables/entete'
 
@@ -30,15 +29,6 @@ declare module 'vue-router' {
     titre: string
     /** `false` masque l'en-tête applicatif (connexion, inscription). */
     cadre?: boolean
-    /**
-     * La **disposition** de l'arbre : la transformation appliquée à la charge.
-     *
-     * Elle a servi à distinguer sept maquettes de comparaison ; il n'en reste
-     * qu'une, `ressorts`, et c'est `/arbre` qui la porte. Facultative parce que la
-     * vue reste montable sans route — pas parce qu'une route de l'arbre aurait
-     * encore de bonnes raisons de s'en passer. Voir `components/arbre/dispositions/`.
-     */
-    disposition?: NomDeDisposition
     /** L'onglet d'exploration allumé dans l'en-tête. Par défaut, déduit du nom
      *  de route (`sectionDe`) : la fiche et les formulaires gardent « Arbre ». */
     section?: Section
@@ -57,25 +47,6 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   return 'autre'
 }
 
-/**
- * La disposition déclarée dans `meta`, servie à la vue en prop.
- *
- * Une fonction et non `props: true` : `meta` n'est pas un paramètre d'URL, et
- * c'est bien dans `meta` qu'elle doit vivre — la garde d'accès et le titre de
- * page s'y trouvent déjà, et une disposition en segment d'URL serait un
- * paramètre que n'importe qui pourrait inventer.
- */
-function dispositionEnProp(route: {
-  meta: { disposition?: NomDeDisposition }
-  query: Record<string, unknown>
-}): { disposition: NomDeDisposition | undefined; haut: unknown; bas: unknown } {
-  // La profondeur voyage dans la **chaîne de requête** : une profondeur se juge
-  // en la changeant, et un aller-retour par essai coûterait un déploiement. Les
-  // valeurs sont bornées par `optionsDepuis()`, pas ici — une URL tapée à la main
-  // ne doit pas rendre un écran vide.
-  return { disposition: route.meta.disposition, haut: route.query['haut'], bas: route.query['bas'] }
-}
-
 /** Exportée pour que les tests montent la table sur un historique en mémoire :
  *  `createWebHistory()` a besoin d'un `window`, que la suite de tests n'a pas. */
 export const routes: RouteRecordRaw[] = [
@@ -85,7 +56,7 @@ export const routes: RouteRecordRaw[] = [
     // Le composant n'est jamais rendu : la garde globale redirige selon le
     // régime, une fois la session connue. Une `redirect` de déclaration serait
     // évaluée **avant** la garde, donc avant que la session soit chargée.
-    component: () => import('@/views/ArbreView.vue'),
+    component: () => import('@/views/AccueilView.vue'),
     meta: { acces: 'public', titre: 'Accueil' },
   },
 
@@ -96,14 +67,6 @@ export const routes: RouteRecordRaw[] = [
     name: 'accueil',
     component: () => import('@/views/AccueilView.vue'),
     meta: { acces: 'attente', titre: 'Accueil' },
-  },
-
-  {
-    // L'arbre total, repris de zéro : plein écran, placement propre au client.
-    path: '/tree',
-    name: 'tree',
-    component: () => import('@/views/TreeView.vue'),
-    meta: { acces: 'attente', titre: 'Arbre', cadre: false },
   },
 
   {
@@ -196,18 +159,10 @@ export const routes: RouteRecordRaw[] = [
 
   /* --- Consultation : ouverte au régime « en attente » ------------
    *
-   * **`/arbre` SERT `ressorts`, et c'est la fin de la comparaison.** Les sept
-   * maquettes `/arbre-2` à `/arbre-8` ont été retirées : elles existaient pour que
-   * le commanditaire choisisse, il a choisi, et tant qu'elles vivaient **la route
-   * que tout le monde atteint servait la sortie brute du moteur** — celle qui
-   * n'avait été retenue par personne. `routeParDefaut()` renvoie `{ name: 'arbre' }`
-   * pour tous les régimes : le travail fait sur les dispositions n'était donc servi
-   * à aucun membre.
-   *
-   * La disposition reste posée en `meta` et voyage en **prop** plutôt que par
-   * `useRoute()` : la vue reste montable seule dans un test de rendu, où il n'y a
-   * pas de routeur. `?haut=` et `?bas=` continuent d'être lus et bornés par
-   * `optionsDepuis()`.
+   * Un seul arbre. `/tree` (l'arbre plein écran repris de zéro) et
+   * `/arbre/ancien` (la disposition `ressorts`) ont été retirés le 30/09/2026 :
+   * aucun écran n'y menait, et deux arbres de plus étaient deux façons de plus
+   * de se perdre. Ils tombent désormais sur l'attrape-tout.
    */
   {
     // **`/arbre` sert l'arbre à niveaux de détail** (`HistoireView`) : tout
@@ -217,14 +172,6 @@ export const routes: RouteRecordRaw[] = [
     name: 'arbre',
     component: () => import('@/views/HistoireView.vue'),
     meta: { acces: 'attente', titre: 'Arbre' },
-  },
-  {
-    // L'écran précédent, disposition `ressorts`, gardé à portée de main.
-    path: '/arbre/ancien',
-    name: 'arbre.ancien',
-    component: () => import('@/views/ArbreView.vue'),
-    props: dispositionEnProp,
-    meta: { acces: 'attente', titre: 'Arbre (ancien)', disposition: 'ressorts' },
   },
   {
     // `{id}` est un entier : un identifiant provisoire (`#12/p1`) ne correspond

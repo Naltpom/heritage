@@ -8,9 +8,9 @@ import type { DemandeProposee, PortraitPropose } from '@/lib/api'
  *
  * Trois choses que la logique seule ne prouve pas :
  *
- * 1. **Le formulaire reste le défaut, et il est intact** — le segmenté se pose
- *    au-dessus, rien ne se glisse dedans. Un membre qui ne clique pas sur
- *    « Assistant IA » ne doit rien voir changer.
+ * 1. **L'assistant est la porte d'entrée, sans bascule visible** — le
+ *    formulaire n'est plus servi que par `?mode=formulaire`, une reprise ou la
+ *    vue empruntée, et il y est intact.
  * 2. **Le mode assistant rend la saisie** : le champ de texte, les deux boutons
  *    de documents (dont l'appareil photo arrière) et « Analyser » — et rien de
  *    la relecture tant qu'aucune analyse n'est revenue.
@@ -58,36 +58,17 @@ async function rendreLaVue(requete: Record<string, string>): Promise<string> {
   return rendre(Vue)
 }
 
-describe('le segmenté « Formulaire · Assistant IA »', () => {
+describe('« Proposer » : l’assistant d’abord, le formulaire caché', () => {
   // Le premier import de la vue charge tout le formulaire et l'assistant : à froid,
   // sous la charge de la suite complète, il dépasse seul les 5 s d'un test.
   beforeAll(async () => {
     await import('@/views/PropositionCreationView.vue')
   }, 30_000)
 
-  it('ouvre sur le formulaire, inchangé', async () => {
+  it('ouvre sur l’assistant, sans bascule vers le formulaire', async () => {
     etat.vueEmpruntee = null
-    const html = await rendreLaVue({})
+    const html = await rendreLaVue({ personne: '17' })
 
-    expect(html).toContain('Formulaire')
-    expect(html).toContain('Assistant IA')
-    expect(html).toMatch(/aria-pressed="true"[^>]*>\s*Formulaire/)
-    expect(html).toMatch(/aria-pressed="false"[^>]*>\s*Assistant IA/)
-
-    // Le formulaire, tel qu'il était.
-    expect(html).toContain('Proposer l’ajout d’une personne')
-    expect(html).toContain('Qui est cette personne')
-    expect(html).toContain('Naissance et décès')
-    expect(html).toContain('Envoyer la proposition')
-    expect(html).toContain('Enregistrer sans envoyer')
-    expect(html).not.toContain('Analyser')
-  })
-
-  it('passe à l’assistant avec ?mode=assistant', async () => {
-    etat.vueEmpruntee = null
-    const html = await rendreLaVue({ mode: 'assistant', personne: '17' })
-
-    expect(html).toMatch(/aria-pressed="true"[^>]*>\s*Assistant IA/)
     expect(html).toContain('<textarea')
     expect(html).toContain('Importer')
     expect(html).toContain('Prendre en photo')
@@ -96,6 +77,19 @@ describe('le segmenté « Formulaire · Assistant IA »', () => {
     expect(html).toContain('Analyser')
     expect(html).toContain('20 analyses par jour')
     expect(html).not.toContain('Envoyer la proposition')
+    expect(html).not.toContain('aria-pressed="true"')
+  })
+
+  it('sert encore le formulaire, intact, avec ?mode=formulaire', async () => {
+    etat.vueEmpruntee = null
+    const html = await rendreLaVue({ mode: 'formulaire' })
+
+    expect(html).toContain('Proposer l’ajout d’une personne')
+    expect(html).toContain('Qui est cette personne')
+    expect(html).toContain('Naissance et décès')
+    expect(html).toContain('Envoyer la proposition')
+    expect(html).toContain('Enregistrer sans envoyer')
+    expect(html).not.toContain('Analyser')
   })
 
   it('disparaît sous la bascule « voir comme un membre » : formulaire seul', async () => {

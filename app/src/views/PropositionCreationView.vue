@@ -34,18 +34,19 @@
  * administrateur.
  *
  * ────────────────────────────────────────────────────────────────────
- * **Deux façons de proposer, un segmenté pour choisir.** « Formulaire » est
- * l'écran ci-dessous, inchangé ; « Assistant IA » (`?mode=assistant`) laisse le
- * membre écrire librement et joindre des actes, puis relire les demandes que
- * l'assistant prépare (`components/proposition/assistant/`). Le mode vit dans
- * l'URL : un lien depuis une fiche (`?mode=assistant&personne=17`) ouvre
- * directement le bon, et « retour » ramène au précédent.
+ * **L'assistant IA est la porte d'entrée, le formulaire est caché.** La
+ * famille propose surtout depuis un téléphone, et raconter « mon arrière-
+ * grand-père s'appelait… » en joignant une photo d'acte y est plus naturel
+ * qu'un formulaire à vingt champs (décision du 30/09/2026). L'assistant laisse
+ * écrire librement, puis fait relire les demandes qu'il prépare
+ * (`components/proposition/assistant/`).
  *
- * Le formulaire reste le défaut, et **l'assistant disparaît sous la bascule
- * « voir comme un membre »** : il n'écrit rien lui-même, mais son analyse est
- * une écriture pour l'API (quota, journal), qui la refuserait en `409`. Une
- * reprise (`?refaire=`) force aussi le formulaire : c'est lui qui sait reprendre
- * une demande.
+ * Le formulaire n'a plus de bouton, mais il reste servi dans trois cas :
+ *  - `?mode=formulaire`, écrit à la main ;
+ *  - une reprise (`?refaire=`) : c'est lui qui sait reprendre une demande ;
+ *  - la bascule « voir comme un membre » : l'assistant n'écrit rien lui-même,
+ *    mais son analyse est une écriture pour l'API (quota, journal), qui la
+ *    refuserait en `409`.
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, ref } from 'vue'
@@ -53,7 +54,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { creerDemande, invaliderGraphe, type OrigineReprise } from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
-import Segmente from '@/components/mise-en-page/Segmente.vue'
 import AssistantProposition from '@/components/proposition/assistant/AssistantProposition.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
@@ -90,14 +90,9 @@ const erreurs = ref<Record<string, string>>({})
 const suspendu = computed(() => ecrituresSuspendues(vueEmpruntee.value))
 const motifSuspendu = computed(() => motifSuspension(vueEmpruntee.value))
 
-/* --- Le mode : formulaire ou assistant ---------------------------- */
+/* --- Le mode : l'assistant, sauf reprise ou vue empruntée ------------ */
 
 type Mode = 'formulaire' | 'assistant'
-
-const MODES: readonly { valeur: Mode; libelle: string }[] = [
-  { valeur: 'formulaire', libelle: 'Formulaire' },
-  { valeur: 'assistant', libelle: 'Assistant IA' },
-]
 
 function premiereValeur(brut: unknown): string | undefined {
   const valeur = Array.isArray(brut) ? brut[0] : brut
@@ -106,7 +101,7 @@ function premiereValeur(brut: unknown): string | undefined {
 
 const mode = computed<Mode>(() => {
   if (suspendu.value || repriseDemandee.value !== null) return 'formulaire'
-  return premiereValeur(route.query['mode']) === 'assistant' ? 'assistant' : 'formulaire'
+  return premiereValeur(route.query['mode']) === 'formulaire' ? 'formulaire' : 'assistant'
 })
 
 /** La fiche d'où l'on vient, passée à l'assistant comme contexte. */
@@ -114,13 +109,6 @@ const personneDeContexte = computed(() => {
   const valeur = Number(premiereValeur(route.query['personne']))
   return Number.isInteger(valeur) && valeur > 0 ? valeur : null
 })
-
-function choisirMode(valeur: Mode): void {
-  const requete = { ...route.query }
-  if (valeur === 'assistant') requete['mode'] = 'assistant'
-  else delete requete['mode']
-  void routeur.replace({ query: requete })
-}
 
 const repriseDemandee = computed(() => {
   const brut = route.query['refaire']
@@ -203,16 +191,6 @@ function refaire(demandeId: number | null): void {
 
 <template>
   <div class="mx-auto w-full max-w-3xl px-4 py-8">
-    <div v-if="!suspendu && repriseDemandee === null" class="mb-5 max-md:w-full">
-      <Segmente
-        :options="MODES"
-        :valeur="mode"
-        etiquette="Façon de proposer"
-        :colonnes="2"
-        @choisir="choisirMode"
-      />
-    </div>
-
     <template v-if="mode === 'assistant'">
       <header class="mb-5">
         <h1 class="text-xl font-semibold tracking-tight">Proposer avec l’assistant</h1>

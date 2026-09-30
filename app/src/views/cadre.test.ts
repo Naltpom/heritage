@@ -106,7 +106,7 @@ describe('aucun écran ne refait la formule dans son coin', () => {
    * (`entete-creation.test.ts`).
    */
   const VUES = [
-    'ArbreView.vue',
+    'HistoireView.vue',
     'ChronologieView.vue',
     'CarteView.vue',
     'AnniversairesView.vue',

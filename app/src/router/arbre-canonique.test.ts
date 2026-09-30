@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 // `window.location` : c'est la table seule qu'on importe.
 import { routes } from '@/router/routes'
 import { routeParDefaut } from '@/router/acces'
-import { DISPOSITIONS, PRESENTATIONS, type NomDeDisposition } from '@/components/arbre/dispositions'
 
 /**
  * ════════════════════════════════════════════════════════════════════
@@ -39,13 +38,13 @@ describe('la route de l’arbre', () => {
     expect(routeur.currentRoute.value.meta['disposition']).toBeUndefined()
   })
 
-  it('garde l’écran précédent, `ressorts`, sous `/arbre/ancien`', async () => {
+  it('a retiré `/tree` et `/arbre/ancien` : un seul arbre', async () => {
     const routeur = table()
-    await routeur.push('/arbre/ancien')
 
-    expect(routeur.currentRoute.value.name).toBe('arbre.ancien')
-    // Et non la sortie brute du moteur : c'est le défaut que ce fichier protège.
-    expect(routeur.currentRoute.value.meta['disposition']).toBe('ressorts')
+    for (const chemin of ['/tree', '/arbre/ancien']) {
+      await routeur.push(chemin)
+      expect(routeur.currentRoute.value.name, chemin).toBe('introuvable')
+    }
   })
 
   it('renvoie `/histoire` vers `/arbre`', async () => {
@@ -91,25 +90,5 @@ describe('les maquettes retirées', () => {
     for (const nom of ['arbre.conjoints', 'arbre.bornee', 'arbre.croisements', 'arbre.duplication', 'arbre.ressorts', 'arbre.blocs', 'arbre.quilt']) {
       expect(noms.has(nom), nom).toBe(false)
     }
-  })
-})
-
-describe('le registre et la table ne peuvent plus diverger', () => {
-  /*
-   * `PRESENTATIONS` est un `Record<NomDeDisposition, …>`, donc `vue-tsc` refuse
-   * déjà une entrée dont la clé n'est plus dans `DISPOSITIONS`. Ce qu'il ne voit
-   * pas, c'est une disposition DÉCLARÉE que plus aucune route ne demande : elle
-   * resterait dans le registre sans écran, et rien ne le dirait.
-   */
-  it('chaque disposition déclarée est demandée par une route', () => {
-    const demandees = new Set(
-      table()
-        .getRoutes()
-        .map((r) => r.meta['disposition'])
-        .filter((d): d is NomDeDisposition => d !== undefined),
-    )
-
-    expect([...DISPOSITIONS].sort()).toEqual([...demandees].sort())
-    expect(Object.keys(PRESENTATIONS).sort()).toEqual([...demandees].sort())
   })
 })
