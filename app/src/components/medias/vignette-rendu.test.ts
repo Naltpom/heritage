@@ -114,3 +114,28 @@ describe('supprimer est une action réservée', () => {
     expect(html).toContain('Supprimer')
   })
 })
+
+describe('un PDF n’a pas de vignette serveur — on ne la demande pas', () => {
+  /** Telle que `NormaliseurMedia` la rend pour un PDF : `vignetteUrl` est posée,
+   *  mais `GenerateurDeVignette` n'en produit jamais — elle rend `404`. */
+  const pdf = mediaEnLecture({
+    mimeType: 'application/pdf',
+    width: null,
+    height: null,
+    pageCount: 2,
+    caption: 'Acte de décès n° 230, 1995',
+  })
+
+  it('ne pose pas d’`<img>` sur la vignette introuvable', async () => {
+    const html = await rendre({ media: pdf })
+    expect(html).not.toContain('/api/medias/120/vignette')
+  })
+
+  it('montre une case « PDF » avec son nombre de pages en attendant la première page', async () => {
+    const html = await rendre({ media: pdf })
+    expect(html).toContain('PDF')
+    // Le rendu serveur glisse des commentaires de fragment dans « page<s> ».
+    expect(html.replace(/<!--.*?-->/g, '')).toContain('2 pages')
+    expect(html).toContain('Acte de décès n° 230, 1995')
+  })
+})

@@ -19,8 +19,8 @@
  * vue — « une seule image d'origine décodée à la fois ». Ce composant émet une
  * `CibleLoupe` en mode `direct` : il a déjà la charge du média, donc l'`url` et
  * le type réel, et la loupe n'a pas à les redemander. C'est aussi ce qui fait
- * qu'un **PDF** — la forme courante d'un acte scanné — s'ouvre dans un onglet
- * au lieu d'être poussé dans une `<img>` qui ne l'affichera jamais.
+ * qu'un **PDF** — la forme courante d'un acte scanné — se lit dans la loupe
+ * page par page, au lieu d'être poussé dans une `<img>` qui ne l'affichera jamais.
  *
  * **Un échec de chargement ne remplace pas l'écran.** Le diff reste juste sans
  * la vignette ; c'est la pièce qui manque, pas la demande. On le dit sur une
@@ -30,6 +30,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { lireMedia, type Media } from '@/lib/api'
 import { estImage, type CibleLoupe } from '@/components/medias/medias'
+import ApercuPdf from '@/components/medias/ApercuPdf.vue'
 
 const { mediaId } = defineProps<{ mediaId: number }>()
 
@@ -81,11 +82,15 @@ function agrandir(): void {
       @click="agrandir"
     >
       <img
+        v-if="estImage(media.mimeType)"
         :src="media.vignetteUrl"
         :alt="legende"
         class="max-h-40 rounded-[4px]"
         decoding="async"
       />
+      <div v-else class="w-40">
+        <ApercuPdf :url="media.url" :pages="media.pageCount" />
+      </div>
     </button>
 
     <p v-else-if="echec" class="text-xs text-alerte">
