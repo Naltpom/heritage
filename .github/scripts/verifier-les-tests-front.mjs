@@ -67,10 +67,10 @@ const RAPPORT = resolve(RACINE_APP, 'var', 'vitest.json')
  * sans condition est une permission perpétuelle.
  */
 const BUDGET_DES_SAUTS = {
-  // `describe.runIf(HERITAGE_GRAPHE_CLIENT !== undefined)` — le bloc « sur le
-  // graphe réel ». Tombe à 0 dès que la variable est posée sur un relevé.
-  'src/components/arbre/dispositions/ressorts.test.ts': 16,
-  'src/components/arbre/dispositions/insertionLocale.test.ts': 7,
+  // Vide depuis le 30/09/2026 : les 23 cas budgétés vivaient dans
+  // `components/arbre/dispositions/` (`ressorts.test.ts`, 16, et
+  // `insertionLocale.test.ts`, 7), retirés avec l'ancien arbre `/arbre/ancien`
+  // qu'ils éprouvaient. Plus aucun saut n'est donc permis, nulle part.
 }
 
 /** Posée ⇒ le bloc gardé doit tourner, donc plus aucun saut n'est permis. */
