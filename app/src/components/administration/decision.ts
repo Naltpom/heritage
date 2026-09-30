@@ -191,3 +191,41 @@ export function annonceValidation(resultat: ResultatValidation): AnnonceValidati
     rejoue: false,
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 4. « & suivant » — ce qu'on dit de la décision qu'on vient de quitter */
+/* ------------------------------------------------------------------ */
+
+/**
+ * L'issue d'une décision suivie d'un enchaînement. `rejouee` reste distincte de
+ * `validee` pour la raison du § 3 : l'écran qui s'ouvre ensuite ne montre plus
+ * l'annonce du rejeu, il doit donc la redire.
+ */
+export type IssueDecision = 'validee' | 'rejouee' | 'refusee'
+
+export function issueDeValidation(resultat: ResultatValidation): IssueDecision {
+  return resultat.resultat === 'rejouee' ? 'rejouee' : 'validee'
+}
+
+/** Relit `?issue=` : une valeur inconnue ne dit rien plutôt que de mentir. */
+export function issueDepuisRequete(valeur: unknown): IssueDecision | null {
+  return valeur === 'validee' || valeur === 'rejouee' || valeur === 'refusee' ? valeur : null
+}
+
+/**
+ * La phrase posée en tête de la demande suivante, ou de la file quand il n'y en
+ * a plus : l'administrateur a changé d'écran d'un clic, et doit lire que la
+ * décision précédente est bien partie.
+ */
+export function annonceEnchainement(precedente: number, issue: IssueDecision, finDeFile: boolean): string {
+  const faite =
+    issue === 'refusee'
+      ? `Demande n° ${precedente} refusée.`
+      : issue === 'rejouee'
+        ? `Demande n° ${precedente} validée, après rejeu automatique.`
+        : `Demande n° ${precedente} validée.`
+
+  return finDeFile
+    ? `${faite} Il n’y a plus de demande en attente dans cette file.`
+    : `${faite} Voici la suivante dans la file.`
+}

@@ -29,6 +29,12 @@
  *
  * Le bouton « Valider » suit `resolutionPrevue` (§ 6.7) : sans ce calcul,
  * l'administrateur découvrirait la caducité en cliquant.
+ *
+ * **« Valider & suivant » et « Refuser & suivant »** font exactement le même
+ * appel — même garde, même motif obligatoire — puis demandent au parent
+ * d'ouvrir la demande suivante de la file (`decidee` porte alors l'issue). Ce
+ * n'est pas un second chemin : `valider()` et `refuser()` restent les seuls
+ * appels, un drapeau dit seulement ce qu'on fait après.
  */
 import { computed, ref } from 'vue'
 import {
@@ -43,14 +49,25 @@ import { useSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
-import { actionValidation, annonceValidation, erreurMotifRefus, peutRefuser } from './decision'
+import {
+  actionValidation,
+  annonceValidation,
+  erreurMotifRefus,
+  issueDeValidation,
+  peutRefuser,
+  type IssueDecision,
+} from './decision'
 import { ecrituresSuspendues, infobulleSuspension, motifSuspension } from './ecriture'
 
 const { demande } = defineProps<{ demande: DemandeAdministration }>()
 
 const emit = defineEmits<{
-  /** La demande a changé d'état : le parent la recharge. */
-  decidee: []
+  /**
+   * La demande a changé d'état. Sans argument, le parent la recharge ; avec une
+   * issue, l'administrateur a demandé « & suivant » et le parent ouvre la
+   * demande suivante de la file.
+   */
+  decidee: [enchainement?: IssueDecision]
 }>()
 
 const { vueEmpruntee } = useSession()
@@ -62,6 +79,8 @@ const enRefus = ref(false)
 const motif = ref('')
 const doublonDeId = ref<number | null>(null)
 const aTenteRefus = ref(false)
+/** Le refus en cours enchaînera-t-il sur la demande suivante ? */
+const refusEnchaine = ref(false)
 
 const suspendu = computed(() => ecrituresSuspendues(vueEmpruntee.value))
 const raisonSuspension = computed(() => motifSuspension(vueEmpruntee.value))
@@ -78,7 +97,7 @@ const messageMotif = computed(() => {
   return aTenteRefus.value ? (erreurMotifRefus(motif.value) ?? '') : ''
 })
 
-async function valider(): Promise<void> {
+async function valider(enchainer = false): Promise<void> {
   if (suspendu.value || envoi.value || validation.value.desactive) return
 
   envoi.value = true
@@ -88,12 +107,18 @@ async function valider(): Promise<void> {
     annonce.value = annonceValidation(resultat)
     // L'arbre a changé : l'`ETag` du graphe est périmé (§ 5.2).
     invaliderGraphe()
-    emit('decidee')
+    if (enchainer) emit('decidee', issueDeValidation(resultat))
+    else emit('decidee')
   } catch (cause) {
     erreur.value = cause
   } finally {
     envoi.value = false
   }
+}
+
+function ouvrirRefus(enchainer: boolean): void {
+  refusEnchaine.value = enchainer
+  enRefus.value = true
 }
 
 async function refuser(): Promise<void> {
@@ -111,7 +136,8 @@ async function refuser(): Promise<void> {
     })
     enRefus.value = false
     motif.value = ''
-    emit('decidee')
+    if (refusEnchaine.value) emit('decidee', 'refusee')
+    else emit('decidee')
   } catch (cause) {
     erreur.value = cause
   } finally {
@@ -160,18 +186,39 @@ function suivreConduite(conduite: ConduiteATenir): void {
           :chargement="envoi"
           :desactive="suspendu || validation.desactive"
           :title="infobulle"
-          @click="valider"
+          @click="valider()"
         >
           {{ validation.libelle }}
+        </BoutonBase>
+
+        <!-- Même appel, puis la demande suivante de la file. Éteint dans les
+             mêmes cas que « Valider » : enchaîner ne contourne rien. -->
+        <BoutonBase
+          variante="secondaire"
+          :desactive="suspendu || envoi || validation.desactive"
+          :title="infobulle"
+          @click="valider(true)"
+        >
+          Valider &amp; suivant
         </BoutonBase>
 
         <BoutonBase
           variante="danger"
           :desactive="suspendu || envoi"
           :title="infobulle"
-          @click="enRefus = true"
+          @click="ouvrirRefus(false)"
         >
           Refuser
+        </BoutonBase>
+
+        <!-- Ouvre le même formulaire : le motif reste obligatoire. -->
+        <BoutonBase
+          variante="danger"
+          :desactive="suspendu || envoi"
+          :title="infobulle"
+          @click="ouvrirRefus(true)"
+        >
+          Refuser &amp; suivant
         </BoutonBase>
       </div>
     </template>
@@ -222,15 +269,29 @@ function suivreConduite(conduite: ConduiteATenir): void {
         </select>
       </div>
 
+      <!-- Deux boutons d'envoi pour un seul `refuser()` : le clic pose le
+           drapeau d'enchaînement, puis soumet le formulaire — la garde du
+           motif s'applique aux deux. -->
       <div class="mt-4 flex flex-wrap gap-2">
         <BoutonBase
           type="submit"
           variante="danger"
-          :chargement="envoi"
-          :desactive="suspendu"
+          :chargement="envoi && !refusEnchaine"
+          :desactive="suspendu || (envoi && refusEnchaine)"
           :title="infobulle"
+          @click="refusEnchaine = false"
         >
           Envoyer le refus
+        </BoutonBase>
+        <BoutonBase
+          type="submit"
+          variante="danger"
+          :chargement="envoi && refusEnchaine"
+          :desactive="suspendu || (envoi && !refusEnchaine)"
+          :title="infobulle"
+          @click="refusEnchaine = true"
+        >
+          Refuser &amp; suivant
         </BoutonBase>
         <BoutonBase variante="secondaire" @click="enRefus = false">Annuler</BoutonBase>
       </div>

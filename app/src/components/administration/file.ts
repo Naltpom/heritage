@@ -24,7 +24,7 @@
  *   n'existe pas encore, c'est tout leur objet.
  */
 
-import type { Demande } from '@/lib/api'
+import type { Demande, StatutDemande } from '@/lib/api'
 
 export interface GroupeDemandes {
   /** Clé technique, stable pour un `v-for`. */
@@ -173,4 +173,102 @@ export function trierDemandes(demandes: Demande[], sens: SensDeTri): Demande[] {
  */
 export function ligneAuteur(auteur: string, dateLisible: string): string {
   return dateLisible.length > 0 ? `par ${auteur}, le ${dateLisible}` : `par ${auteur}`
+}
+
+/* ------------------------------------------------------------------ */
+/* « Valider & suivant » — enchaîner dans l'ordre de la file           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * La file telle que l'administrateur la voit : son filtre d'état, son filtre
+ * d'auteur, son tri. Elle voyage dans l'adresse de la demande ouverte depuis la
+ * file (`?etat=&auteur=&tri=`), pour que « & suivant » enchaîne **dans la liste
+ * qu'on avait sous les yeux**, et pas dans une autre.
+ */
+export interface ContexteDeFile {
+  /** `''` : tous les états. */
+  etat: StatutDemande | ''
+  /** `0` : tout le monde. */
+  auteur: number
+  tri: SensDeTri
+}
+
+/** Le défaut de la file : en attente, tout le monde, la plus ancienne d'abord. */
+export const CONTEXTE_PAR_DEFAUT: Readonly<ContexteDeFile> = { etat: 'en_attente', auteur: 0, tri: 'anciennes' }
+
+const ETATS_DE_FILE: readonly StatutDemande[] = ['en_attente', 'validee', 'refusee', 'caduque']
+
+function premiere(valeur: unknown): unknown {
+  return Array.isArray(valeur) ? valeur[0] : valeur
+}
+
+/**
+ * Relit le contexte depuis `route.query`. Une valeur absente ou inconnue vaut
+ * le défaut : une adresse bricolée ne doit pas produire une file vide sans
+ * raison visible.
+ */
+export function contexteDepuisRequete(requete: Record<string, unknown>): ContexteDeFile {
+  const etat = premiere(requete['etat'])
+  const auteur = Number(premiere(requete['auteur']))
+  const tri = premiere(requete['tri'])
+
+  return {
+    etat:
+      etat === 'toutes'
+        ? ''
+        : typeof etat === 'string' && (ETATS_DE_FILE as readonly string[]).includes(etat)
+          ? (etat as StatutDemande)
+          : CONTEXTE_PAR_DEFAUT.etat,
+    auteur: Number.isInteger(auteur) && auteur > 0 ? auteur : CONTEXTE_PAR_DEFAUT.auteur,
+    tri: tri === 'recentes' ? 'recentes' : 'anciennes',
+  }
+}
+
+/**
+ * L'inverse, pour un lien. **Seuls les écarts au défaut** y figurent : la
+ * demande ouverte depuis la file par défaut garde une adresse nue, celle que
+ * portent les notifications.
+ */
+export function requeteDeContexte(contexte: ContexteDeFile): Record<string, string> {
+  const requete: Record<string, string> = {}
+  // `etat` vide (« toutes ») est un écart au défaut, et doit donc s'écrire.
+  if (contexte.etat !== CONTEXTE_PAR_DEFAUT.etat) requete['etat'] = contexte.etat === '' ? 'toutes' : contexte.etat
+  if (contexte.auteur !== CONTEXTE_PAR_DEFAUT.auteur) requete['auteur'] = String(contexte.auteur)
+  if (contexte.tri !== CONTEXTE_PAR_DEFAUT.tri) requete['tri'] = contexte.tri
+  return requete
+}
+
+/**
+ * L'ordre **affiché** : trié, puis regroupé par fiche — une demande qui partage
+ * sa fiche avec une plus ancienne passe juste après elle, comme à l'écran.
+ */
+export function ordreDeLaFile(demandes: Demande[], tri: SensDeTri): Demande[] {
+  return grouperParCible(trierDemandes(demandes, tri)).flatMap((groupe) => groupe.demandes)
+}
+
+/**
+ * La demande à ouvrir après avoir décidé de `courante`, ou `null` si la file
+ * n'a plus rien à décider.
+ *
+ * `liste` est la file **relue après la décision**, avec le même filtre : une
+ * validation peut en avoir rendu d'autres caduques, et elles ne doivent pas
+ * être proposées. La courante n'y figure plus quand le filtre est « en
+ * attente » ; on la replace donc à sa place pour savoir ce qui vient **après**
+ * elle.
+ *
+ * Seules les demandes `en_attente` sont candidates — sous le filtre « toutes »,
+ * enchaîner sur une demande déjà validée ne décide rien. Quand il n'en reste
+ * aucune après la courante, on repart du début de la file plutôt que de
+ * déclarer la file vide alors qu'il en reste en tête.
+ */
+export function demandeSuivante(liste: Demande[], courante: Demande, tri: SensDeTri): number | null {
+  const avecCourante = liste.some((d) => d.id === courante.id) ? liste : [...liste, courante]
+  const ordre = ordreDeLaFile(avecCourante, tri)
+  const position = ordre.findIndex((d) => d.id === courante.id)
+  const decidable = (d: Demande): boolean => d.id !== courante.id && d.status === 'en_attente'
+
+  const apres = ordre.slice(position + 1).find(decidable)
+  if (apres !== undefined) return apres.id
+
+  return ordre.find(decidable)?.id ?? null
 }

@@ -37,6 +37,7 @@
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { definirResume } from '@/composables/entete'
 import {
   listerAuteursDesDemandes,
@@ -56,12 +57,15 @@ import Segmente from '@/components/mise-en-page/Segmente.vue'
 import OngletsAdministration from './OngletsAdministration.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
 import {
+  contexteDepuisRequete,
   grouperParCible,
   ligneAuteur,
   personneDuGroupe,
+  requeteDeContexte,
   trierDemandes,
   type SensDeTri,
 } from '@/components/administration/file'
+import { annonceEnchainement, issueDepuisRequete } from '@/components/administration/decision'
 
 /** Les états proposés au filtre. `''` veut dire « tous ». `court` est le
  *  libellé du segmenté de bureau, où la place est comptée. */
@@ -99,16 +103,36 @@ const LIBELLES_HORS_PASTILLE: Record<string, string> = {
   annulee: 'Retirée par son auteur',
 }
 
-const etat = ref<StatutDemande | ''>('en_attente')
+const route = useRoute()
+
+/** Le filtre et le tri de départ : ceux de l'adresse, quand on revient d'une
+ *  demande par « & suivant » en fin de file ; le défaut sinon. */
+const depart = contexteDepuisRequete(route.query)
+
+/** « Demande n° 12 validée. Il n'y a plus de demande en attente », au retour
+ *  d'un enchaînement qui a épuisé la file. */
+const annonceDeFin = computed(() => {
+  const precedente = Number(route.query['precedente'])
+  const issue = issueDepuisRequete(route.query['issue'])
+  return Number.isInteger(precedente) && precedente > 0 && issue !== null
+    ? annonceEnchainement(precedente, issue, true)
+    : null
+})
+
+const etat = ref<StatutDemande | ''>(depart.etat)
 /** Le filtre par demandeur. `0` vaut « tout le monde », la même convention que
  *  le serveur : un `authorUserId` est toujours strictement positif. */
-const auteur = ref(0)
+const auteur = ref(depart.auteur)
 /** Les auteurs qui ont réellement déposé. Servie par la file elle-même, et non
  *  par la liste des utilisateurs : un sélecteur où presque toutes les entrées ne
  *  donnent aucun résultat est un sélecteur qu'on n'ouvre plus. */
 const auteurs = ref<readonly AuteurDeLaFile[]>([])
 /** Le défaut reprend l'ordre du serveur : la plus ancienne en premier. */
-const tri = ref<SensDeTri>('anciennes')
+const tri = ref<SensDeTri>(depart.tri)
+
+/** Ce que la demande ouverte emporte de la file, pour que « & suivant »
+ *  enchaîne dans la liste qu'on a sous les yeux. */
+const requeteDeLaFile = computed(() => requeteDeContexte({ etat: etat.value, auteur: auteur.value, tri: tri.value }))
 const demandes = ref<Demande[]>([])
 const total = ref(0)
 const chargement = ref(false)
@@ -323,6 +347,14 @@ function dateLisible(valeur: string | null): string {
   </BarreEcran>
 
   <div class="mx-auto w-full max-w-5xl px-4 py-6">
+    <p
+      v-if="annonceDeFin !== null"
+      class="mb-4 rounded-panneau border border-ok-bord bg-ok-doux px-3.5 py-3 text-sm"
+      role="status"
+    >
+      {{ annonceDeFin }}
+    </p>
+
     <PanneauBase v-if="chargement && demandes.length === 0">
       <p class="mb-3 text-sm text-attenue" role="status">Chargement de la file…</p>
       <SqueletteChargement :lignes="4" />
@@ -369,7 +401,7 @@ function dateLisible(valeur: string | null): string {
           <li v-for="demande in groupe.demandes" :key="demande.id" class="py-2.5 first:pt-0 last:pb-0">
             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <RouterLink
-                :to="{ name: 'demande.detail', params: { id: demande.id } }"
+                :to="{ name: 'demande.detail', params: { id: demande.id }, query: requeteDeLaFile }"
                 class="font-semibold text-accent underline"
               >
                 {{ NATURES[demande.kind] ?? demande.kind }}
