@@ -198,7 +198,7 @@ function suivreConduite(conduite: ConduiteATenir): void {
       <div
         role="toolbar"
         aria-label="Décision"
-        class="fixed inset-x-0 bottom-0 z-30 flex justify-center gap-3 border-t border-ligne bg-panneau px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-panneau"
+        class="fixed inset-x-0 bottom-[var(--hauteur-barre-bas,0px)] z-30 flex justify-center gap-3 border-t border-ligne bg-panneau px-4 pt-3 pb-[max(12px,calc(env(safe-area-inset-bottom)_-_var(--hauteur-barre-bas,0px)))] shadow-panneau"
       >
         <button
           type="button"

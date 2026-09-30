@@ -314,9 +314,9 @@ describe('« & suivant »', () => {
     expect(SOURCE.split('validerDemande(').length - 1).toBeLessThanOrEqual(2)
   })
 
-  it('tient les quatre décisions dans une barre fixée en bas, en icônes nommées', () => {
+  it('tient les quatre décisions dans une barre fixée en bas, au-dessus de la barre de navigation, en icônes nommées', () => {
     const barre = SOURCE.slice(SOURCE.indexOf('role="toolbar"'))
-    expect(SOURCE.slice(SOURCE.lastIndexOf('<div', SOURCE.indexOf('role="toolbar"')))).toMatch(/class="fixed inset-x-0 bottom-0/)
+    expect(SOURCE.slice(SOURCE.lastIndexOf('<div', SOURCE.indexOf('role="toolbar"')))).toMatch(/class="fixed inset-x-0 bottom-\[var\(--hauteur-barre-bas,0px\)\]/)
     const ordre = ['@click="valider()"', '@click="valider(true)"', '@click="ouvrirRefus(false)"', '@click="ouvrirRefus(true)"'].map((c) => barre.indexOf(c))
     expect(ordre.every((i) => i > -1)).toBe(true)
     expect([...ordre].sort((a, b) => a - b)).toEqual(ordre)
