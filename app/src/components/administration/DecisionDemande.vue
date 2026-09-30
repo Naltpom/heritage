@@ -36,7 +36,7 @@
  * n'est pas un second chemin : `valider()` et `refuser()` restent les seuls
  * appels, un drapeau dit seulement ce qu'on fait après.
  */
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import {
   analyserErreur,
   invaliderGraphe,
@@ -119,6 +119,12 @@ async function valider(enchainer = false): Promise<void> {
 function ouvrirRefus(enchainer: boolean): void {
   refusEnchaine.value = enchainer
   enRefus.value = true
+  // La barre est en bas, le formulaire dans la page : on y amène le regard.
+  void nextTick(() => {
+    const champ = document.getElementById('motif-refus')
+    champ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    champ?.focus({ preventScroll: true })
+  })
 }
 
 async function refuser(): Promise<void> {
@@ -181,45 +187,66 @@ function suivreConduite(conduite: ConduiteATenir): void {
     </p>
 
     <template v-else-if="!enRefus">
-      <div class="flex flex-wrap gap-2">
-        <BoutonBase
-          :chargement="envoi"
-          :desactive="suspendu || validation.desactive"
-          :title="infobulle"
+      <p class="text-sm text-attenue">Les quatre décisions sont en bas de l’écran.</p>
+      <!-- Réserve la hauteur de la barre : sans elle, la fin de la page
+           passerait dessous. -->
+      <div class="h-20" aria-hidden="true" />
+
+      <!-- La barre de décision, fixée en bas : quatre icônes, dans l'ordre
+           « oui », « oui & suivant », « non », « non & suivant ». Le libellé
+           vit dans `title` (survol) et `aria-label` (lecteur d'écran). -->
+      <div
+        role="toolbar"
+        aria-label="Décision"
+        class="fixed inset-x-0 bottom-0 z-30 flex justify-center gap-3 border-t border-ligne bg-panneau px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] shadow-panneau"
+      >
+        <button
+          type="button"
+          class="bouton-decision border-accent bg-accent text-fond"
+          :disabled="suspendu || envoi || validation.desactive"
+          :aria-busy="envoi"
+          :title="infobulle ?? validation.libelle"
+          :aria-label="validation.libelle"
           @click="valider()"
         >
-          {{ validation.libelle }}
-        </BoutonBase>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+        </button>
 
         <!-- Même appel, puis la demande suivante de la file. Éteint dans les
              mêmes cas que « Valider » : enchaîner ne contourne rien. -->
-        <BoutonBase
-          variante="secondaire"
-          :desactive="suspendu || envoi || validation.desactive"
-          :title="infobulle"
+        <button
+          type="button"
+          class="bouton-decision border-accent bg-panneau text-accent"
+          :disabled="suspendu || envoi || validation.desactive"
+          :title="infobulle ?? 'Valider & suivant'"
+          aria-label="Valider & suivant"
           @click="valider(true)"
         >
-          Valider &amp; suivant
-        </BoutonBase>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12.5l3.5 3.5L13 9" /><path d="M14 7l5 5-5 5" /></svg>
+        </button>
 
-        <BoutonBase
-          variante="danger"
-          :desactive="suspendu || envoi"
-          :title="infobulle"
+        <button
+          type="button"
+          class="bouton-decision border-alerte-bord bg-alerte-doux text-alerte"
+          :disabled="suspendu || envoi"
+          :title="infobulle ?? 'Refuser'"
+          aria-label="Refuser"
           @click="ouvrirRefus(false)"
         >
-          Refuser
-        </BoutonBase>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
 
         <!-- Ouvre le même formulaire : le motif reste obligatoire. -->
-        <BoutonBase
-          variante="danger"
-          :desactive="suspendu || envoi"
-          :title="infobulle"
+        <button
+          type="button"
+          class="bouton-decision border-alerte-bord bg-panneau text-alerte"
+          :disabled="suspendu || envoi"
+          :title="infobulle ?? 'Refuser & suivant'"
+          aria-label="Refuser & suivant"
           @click="ouvrirRefus(true)"
         >
-          Refuser &amp; suivant
-        </BoutonBase>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l7 7M10 8l-7 7" /><path d="M14 7l5 5-5 5" /></svg>
+        </button>
       </div>
     </template>
 
@@ -313,3 +340,40 @@ function suivreConduite(conduite: ConduiteATenir): void {
     <MessageErreur v-if="erreur !== null" class="mt-4" :erreur="erreur" @action="suivreConduite" />
   </PanneauBase>
 </template>
+
+<style scoped>
+.bouton-decision {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-width: 1px;
+  border-radius: 9999px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.bouton-decision:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.bouton-decision:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.bouton-decision[aria-busy='true'] svg {
+  animation: pulse 1s ease-in-out infinite;
+}
+.bouton-decision svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+</style>
