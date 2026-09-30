@@ -43,7 +43,7 @@ import {
   prochaineOccurrence,
 } from '@/components/accueil/jours'
 
-const { rattache, nomAffiche } = useSession()
+const { rattache, nomAffiche, vueEmpruntee } = useSession()
 
 const aujourdhui = decaler(new Date(), 0)
 const prenom = computed(() => nomAffiche.value.split(/\s+/)[0] ?? '')
@@ -177,7 +177,7 @@ function surTouche(e: KeyboardEvent): void {
         Arbre
       </RouterLink>
       <RouterLink
-        v-if="rattache"
+        v-if="rattache && vueEmpruntee === null"
         :to="{ name: 'proposition.creation' }"
         class="flex items-center justify-center gap-2 rounded-panneau border border-accent bg-panneau px-3 py-3.5 text-sm font-semibold text-accent transition-colors hover:bg-accent-doux"
       >
@@ -186,7 +186,7 @@ function surTouche(e: KeyboardEvent): void {
         </svg>
         Modifier l’arbre
       </RouterLink>
-      <p v-else class="flex items-center rounded-panneau border border-dashed border-ligne p-3 text-xs text-attenue">
+      <p v-else-if="!rattache" class="flex items-center rounded-panneau border border-dashed border-ligne p-3 text-xs text-attenue">
         Vous pourrez modifier l’arbre une fois votre rattachement validé.
       </p>
     </nav>

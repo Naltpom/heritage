@@ -14,8 +14,9 @@
  */
 import { readonly, ref } from 'vue'
 
-/** Les quatre onglets d'exploration, plus les zones sans onglet. */
-export type Section = 'arbre' | 'chronologie' | 'carte' | 'anniversaires' | 'autre'
+/** Les quatre entrées de la navigation (barre du bas, onglets du bureau),
+ *  plus les zones qui n'en allument aucune. */
+export type Section = 'accueil' | 'arbre' | 'explorer' | 'moi' | 'autre'
 
 export interface ParentDeDetail {
   /** Nom de route du parent. */

@@ -1,5 +1,5 @@
 /**
- * Les deux tiroirs du mobile.
+ * Les tiroirs de l'en-tête.
  *
  * Aucun DOM ici : la liaison au navigateur passe par `surveillerLargeur()`, à
  * qui l'on tend une `MediaQueryList` écrite à la main. C'est le même procédé
@@ -20,35 +20,35 @@ import {
 } from './tiroirs'
 
 describe('un seul tiroir à la fois', () => {
-  it('ouvre le menu et ferme les outils du même geste', () => {
+  it('ouvre le menu du compte et ferme les outils du même geste', () => {
     const etat = creerEtatTiroirs()
     basculer(etat, 'outils')
 
-    expect(basculer(etat, 'menu')).toBe('menu')
+    expect(basculer(etat, 'compte')).toBe('compte')
   })
 
   it('referme le tiroir déjà ouvert quand on rappuie sur son bouton', () => {
     const etat = creerEtatTiroirs()
-    basculer(etat, 'menu')
+    basculer(etat, 'compte')
 
-    expect(basculer(etat, 'menu')).toBe('aucun')
+    expect(basculer(etat, 'compte')).toBe('aucun')
   })
 
   it('ne sait pas représenter deux tiroirs ouverts', () => {
     /*
      * C'est la propriété, et elle est structurelle : l'état est UNE valeur
-     * parmi trois. Avec deux booléens, `{menu: true, outils: true}` serait
+     * parmi trois. Avec deux booléens, `{compte: true, outils: true}` serait
      * représentable — les deux panneaux se recouvrant, l'un par la gauche et
      * l'autre par la droite — et il faudrait se souvenir de fermer l'autre à
      * chaque ouverture, partout.
      */
     const etat = creerEtatTiroirs()
     const vus = new Set<string>()
-    for (const cible of ['menu', 'outils', 'menu', 'menu', 'outils'] as const) {
+    for (const cible of ['compte', 'outils', 'compte', 'compte', 'outils'] as const) {
       vus.add(basculer(etat, cible))
     }
 
-    expect([...vus].every((v) => v === 'aucun' || v === 'menu' || v === 'outils')).toBe(true)
+    expect([...vus].every((v) => v === 'aucun' || v === 'compte' || v === 'outils')).toBe(true)
   })
 
   it('se ferme sans qu’on ait à dire lequel était ouvert', () => {
@@ -114,14 +114,14 @@ describe('la déclaration d’une barre d’outils', () => {
     expect(etat.ouvert).toBe('aucun')
   })
 
-  it('laisse le menu ouvert quand la dernière barre s’en va', () => {
+  it('laisse le menu du compte ouvert quand la dernière barre s’en va', () => {
     const etat = creerEtatTiroirs()
     declarerOutils(etat)
-    basculer(etat, 'menu')
+    basculer(etat, 'compte')
 
     retirerOutils(etat)
 
-    expect(etat.ouvert).toBe('menu')
+    expect(etat.ouvert).toBe('compte')
   })
 })
 

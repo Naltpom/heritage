@@ -107,7 +107,7 @@ const voir = computed(() =>
 
 <template>
   <BarreEcran
-    ecran="Anniversaires"
+    ecran="Calendrier"
     titre-pastilles="Événements"
     :filtres-actifs="filtresActifs"
     :voir="voir"

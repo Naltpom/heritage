@@ -13,7 +13,7 @@
  * vertical — a été mesuré dans un navigateur, et ne peut pas l'être ici.
  */
 import { afterEach, describe, expect, it } from 'vitest'
-import { hauteurDuCadre } from './cadre'
+import { hauteurDeLaBarreDuBas, hauteurDuCadre } from './cadre'
 
 /** Les deux hauteurs du navigateur, qui ne sont pas la même chose :
  *  `window.innerHeight` **inclut** la bande d'une barre de défilement
@@ -92,6 +92,55 @@ describe('la hauteur posée sur le cadre d’un canevas', () => {
   })
 })
 
+describe('la barre de navigation du bas, sur téléphone', () => {
+  /*
+   * Refonte du 30/09/2026. La barre du bas est `position: fixed` : sans ce
+   * terme, le bas de l'arbre, de la carte et de la chronologie passait
+   * DESSOUS, et le dernier rang de la chronologie n'était plus touchable.
+   * `BarreNavigation` publie sa hauteur mesurée dans `--hauteur-barre-bas`, en
+   * style en ligne sur `<html>` ; la formule la retranche.
+   */
+  function poserBarre(clientHeight: number, variable: string | null): void {
+    Object.defineProperty(globalThis, 'document', {
+      value: {
+        documentElement: {
+          clientHeight,
+          style: { getPropertyValue: (nom: string) => (nom === '--hauteur-barre-bas' ? (variable ?? '') : '') },
+        },
+      },
+      configurable: true,
+      writable: true,
+    })
+  }
+
+  it('retranche la hauteur publiée par la barre', () => {
+    // 800 − 52 (en-tête) − 56 (barre) = 692.
+    poserBarre(800, '56px')
+    expect(hauteurDeLaBarreDuBas()).toBe(56)
+    expect(hauteurDuCadre(52)).toBe('692px')
+  })
+
+  it('compte l’encoche d’un iPhone, puisque la barre la mesure', () => {
+    // 56 + 34 de `safe-area-inset-bottom` ; la fraction reste arrondie vers le bas.
+    poserBarre(844, '90.5px')
+    expect(hauteurDuCadre(52.2)).toBe('701px')
+  })
+
+  it('ne retranche rien quand la barre est absente ou masquée (bureau, connexion)', () => {
+    poserBarre(800, null)
+    expect(hauteurDuCadre(56)).toBe('744px')
+    poserBarre(800, '0px')
+    expect(hauteurDuCadre(56)).toBe('744px')
+  })
+
+  it('ignore une valeur illisible ou négative plutôt que de rendre une hauteur fausse', () => {
+    poserBarre(800, 'auto')
+    expect(hauteurDeLaBarreDuBas()).toBe(0)
+    poserBarre(800, '-20px')
+    expect(hauteurDeLaBarreDuBas()).toBe(0)
+  })
+})
+
 describe('aucun écran ne refait la formule dans son coin', () => {
   /*
    * LE DÉFAUT QUE CELUI-CI TIENT. `ChronologieView` portait sa propre mesure —
@@ -103,7 +152,7 @@ describe('aucun écran ne refait la formule dans son coin', () => {
    * On lit donc le source des vues à canevas. C'est grossier, et c'est exprès :
    * un test qui appellerait la fonction ne dirait rien d'un écran qui ne
    * l'appelle pas. Le `?raw` est déjà l'idiome de la maison
-   * (`entete-creation.test.ts`).
+   * (`app-cadre-rendu.test.ts`, `entete-rendu.test.ts`).
    */
   const VUES = [
     'HistoireView.vue',

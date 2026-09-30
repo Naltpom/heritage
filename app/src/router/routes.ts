@@ -32,9 +32,22 @@ declare module 'vue-router' {
     /** L'onglet d'exploration allumé dans l'en-tête. Par défaut, déduit du nom
      *  de route (`sectionDe`) : la fiche et les formulaires gardent « Arbre ». */
     section?: Section
-    /** Écran de DÉTAIL : sur téléphone, « ‹ {libelle} » remplace le burger. */
+    /** Écran de DÉTAIL : sur téléphone, l'en-tête affiche « ‹ {libelle} » pour y remonter. */
     parent?: ParentDeDetail
   }
+}
+
+/**
+ * Le titre que l'en-tête du téléphone affiche pour une route. C'est celui de la
+ * route, sauf dans Explorer : ses trois onglets sont déjà nommés dans la rangée
+ * juste en dessous, et « Chronologie » au-dessus de l'onglet « Chronologie »
+ * dirait deux fois la même chose. L'en-tête dit donc où l'on est — « Explorer » —
+ * et la rangée, quel onglet. L'onglet du navigateur (`document.title`) garde,
+ * lui, le titre précis de la route : c'est lui qu'on retrouve dans l'historique.
+ */
+export function titreDEntete(nom: string, meta: { section?: Section; titre?: string }): string {
+  if (sectionDe(nom, meta) === 'explorer') return 'Explorer'
+  return typeof meta.titre === 'string' ? meta.titre : ''
 }
 
 const VERS_ARBRE: ParentDeDetail = { nom: 'arbre', libelle: 'Arbre' }
@@ -42,7 +55,9 @@ const VERS_ARBRE: ParentDeDetail = { nom: 'arbre', libelle: 'Arbre' }
 /** L'onglet de l'en-tête pour une route, sans lire la route dans l'en-tête. */
 export function sectionDe(nom: string, meta: { section?: Section }): Section {
   if (meta.section) return meta.section
-  if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires') return nom
+  if (nom === 'accueil') return 'accueil'
+  if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires' || nom === 'explorer') return 'explorer'
+  if (nom === 'moi' || nom === 'compte' || nom.startsWith('demande') || nom.startsWith('tirage') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
 }
@@ -183,28 +198,56 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'attente', titre: 'Fiche', parent: VERS_ARBRE },
   },
   {
-    path: '/chronologie',
-    name: 'chronologie',
-    component: () => import('@/views/ChronologieView.vue'),
-    meta: { acces: 'attente', titre: 'Chronologie' },
+    // **Explorer** : une page, trois onglets qui glissent — Chronologie, Carte,
+    // Calendrier (refonte du 30/09/2026). Les trois écrans deviennent des routes
+    // enfants et **gardent leur nom** (`chronologie`, `carte`, `anniversaires`) :
+    // les noms de route sont un contrat, on n'en renomme aucun. Les anciennes
+    // adresses (`/chronologie`, `/carte`, `/anniversaires`) redirigent plus bas.
+    //
+    // `attente` pour les trois, et pour une raison mécanique : ces écrans sont
+    // bâtis sur des **événements datés**, et une personne vivante hors cercle
+    // n'en fournit aucun. Un compte en attente de validation y voit donc un
+    // écran plein — les défunts de l'arbre, leurs lieux et leurs dates.
+    path: '/explorer',
+    name: 'explorer',
+    component: () => import('@/views/ExplorerView.vue'),
+    meta: { acces: 'attente', titre: 'Explorer' },
+    redirect: { name: 'chronologie' },
+    children: [
+      {
+        path: 'chronologie',
+        name: 'chronologie',
+        component: () => import('@/views/ChronologieView.vue'),
+        meta: { acces: 'attente', titre: 'Chronologie' },
+      },
+      {
+        path: 'carte',
+        name: 'carte',
+        component: () => import('@/views/CarteView.vue'),
+        meta: { acces: 'attente', titre: 'Carte' },
+      },
+      {
+        path: 'calendrier',
+        name: 'anniversaires',
+        component: () => import('@/views/AnniversairesView.vue'),
+        meta: { acces: 'attente', titre: 'Calendrier' },
+      },
+    ],
   },
+  // Les adresses d'avant Explorer : favoris et liens déjà partagés.
+  { path: '/chronologie', redirect: { name: 'chronologie' }, meta: { acces: 'attente', titre: 'Chronologie' } },
+  { path: '/carte', redirect: { name: 'carte' }, meta: { acces: 'attente', titre: 'Carte' } },
+  { path: '/anniversaires', redirect: { name: 'anniversaires' }, meta: { acces: 'attente', titre: 'Calendrier' } },
+
   {
-    // `attente` pour une raison mécanique, et non par analogie avec ses
-    // voisines : ces deux écrans sont bâtis sur des **événements datés**, et
-    // une personne vivante hors cercle n'en fournit aucun. Un compte en attente
-    // de validation y voit donc un écran plein — les 256 défunts de l'arbre,
-    // leurs lieux et leurs dates. Exiger `membre` verrouillerait exactement le
-    // public qui a le plus à voir pendant qu'il patiente.
-    path: '/carte',
-    name: 'carte',
-    component: () => import('@/views/CarteView.vue'),
-    meta: { acces: 'attente', titre: 'Carte' },
-  },
-  {
-    path: '/anniversaires',
-    name: 'anniversaires',
-    component: () => import('@/views/AnniversairesView.vue'),
-    meta: { acces: 'attente', titre: 'Anniversaires' },
+    // **Moi** : la quatrième entrée de la barre du bas. Tout ce qui est
+    // personnel ou rare, en une liste : mon compte, mes demandes, tirages,
+    // actes demandés, questions, administration, déconnexion. `attente` : un
+    // compte en attente y trouve au moins son compte et la déconnexion.
+    path: '/moi',
+    name: 'moi',
+    component: () => import('@/views/MoiView.vue'),
+    meta: { acces: 'attente', titre: 'Moi' },
   },
 
   /* --- Contribution : rattachement validé exigé (§ 12.1) ---------- */

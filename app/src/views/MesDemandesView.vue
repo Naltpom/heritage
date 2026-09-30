@@ -9,10 +9,7 @@
  * proposait, on lui refusait avec un motif, et il n'atteignait ce motif qu'en
  * tapant `/demandes/6` à la main.
  *
- * Cet écran est le chemin qui manquait. La cloche de notifications viendra
- * après : c'est le manque de chemin qui cassait le produit, pas le manque de
- * cloche — un membre qui n'a aucune liste de ses propres demandes ne retrouve
- * pas son refus, avec ou sans pastille dans l'en-tête.
+ * Cet écran est le chemin qui manquait.
  *
  * ────────────────────────────────────────────────────────────────────
  * **Deux lectures, et la seconde est bornée.**

@@ -350,6 +350,14 @@ function surToucheGlobale(ev: KeyboardEvent): void {
   else if (ev.key === 'Escape') selection.value = null
 }
 
+/**
+ * Explorer (`ExplorerView`) appelle `remesurer()` quand cet écran a fini de
+ * glisser en place. La mesure du montage est déjà juste — l'écran sortant a
+ * quitté le flux —, mais une remesure une fois posé ne coûte rien et rattrape
+ * ce que le mouvement aurait pu fausser.
+ */
+defineExpose({ remesurer: mesurerHauteur })
+
 onMounted(() => {
   mesurerHauteur()
   window.addEventListener('resize', mesurerHauteur)
