@@ -64,7 +64,7 @@ final class ArbreEnMemoire implements PortArbre
      * qui permet à un test de `Proposal` d'affirmer **ce qui a été écrit** — la
      * personne visée, la source, la page, le `QUAY` — sans monter de schéma.
      *
-     * @var list<array{id: int, personneId: int, sourceId: int, page: string|null, quay: int|null, dataText: string|null, scope: string}>
+     * @var list<array{id: int, personneId: int, sourceId: int, page: string|null, quay: int|null, dataText: string|null, scope: string, url: string|null}>
      */
     private static array $citationsCreees = [];
 
@@ -373,7 +373,7 @@ final class ArbreEnMemoire implements PortArbre
     /**
      * Les citations qu'une validation a créées, dans l'ordre.
      *
-     * @return list<array{id: int, personneId: int, sourceId: int, page: string|null, quay: int|null, dataText: string|null, scope: string}>
+     * @return list<array{id: int, personneId: int, sourceId: int, page: string|null, quay: int|null, dataText: string|null, scope: string, url: string|null}>
      */
     public function citationsCreees(): array
     {
@@ -463,6 +463,7 @@ final class ArbreEnMemoire implements PortArbre
             'page' => $citation->page,
             'quay' => $citation->quay,
             'dataText' => $citation->dataText,
+            'url' => $citation->url,
         ]);
 
         self::$citationsCreees[] = [
@@ -473,6 +474,7 @@ final class ArbreEnMemoire implements PortArbre
             'quay' => $citation->quay,
             'dataText' => $citation->dataText,
             'scope' => $citation->scope,
+            'url' => $citation->url,
         ];
 
         return new LigneCreee($id, self::$sources[$citation->sourceId]);
@@ -673,7 +675,7 @@ final class ArbreEnMemoire implements PortArbre
         ));
     }
 
-    /** @return list<array{id: int, personneId: int, sourceId: int, page: string|null, quay: int|null, dataText: string|null, scope: string}> */
+    /** @return list<array{id: int, personneId: int, sourceId: int, page: string|null, quay: int|null, dataText: string|null, scope: string, url: string|null}> */
     private function citationsDe(int $personneId): array
     {
         return array_values(array_filter(

@@ -217,7 +217,8 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             ->setPerson($personne)
             ->setPage($citation->page)
             ->setQuay($this->qualite($citation->quay))
-            ->setDataText($citation->dataText);
+            ->setDataText($citation->dataText)
+            ->setUrl($citation->url);
 
         $this->em->persist($ligne);
         $this->em->flush();
@@ -554,6 +555,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             'page' => $ligne->getPage(),
             'quay' => $ligne->getQuay()?->value,
             'dataText' => $ligne->getDataText(),
+            'url' => $ligne->getUrl(),
         ];
     }
 
@@ -1077,6 +1079,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
                 'page' => $citation->setPage($this->texte($valeur)),
                 'quay' => $citation->setQuay($this->qualite($valeur)),
                 'dataText' => $citation->setDataText($this->texte($valeur)),
+                'url' => $citation->setUrl($this->texte($valeur)),
                 default => throw new \InvalidArgumentException(\sprintf('Champ « %s » hors de la surface éditable d’une citation.', $champ)),
             };
         }

@@ -290,6 +290,40 @@ final class AjoutDeCitationTest extends BaseDeDemandes
      * en tête de `App\Tests\Tree\CitationCreeeParUneDemandeTest`. On ne reproduit pas ce
      * chemin : c'est le rôle de `PortArbre::vocabulaireDAnnotation()`.
      */
+    /** Le lien de la visionneuse d'archives voyage de la demande jusqu'à la citation. */
+    public function testLeLienDeLaPieceEstEcritAvecLaCitation(): void
+    {
+        $demande = $this->deposer([
+            'sourceId' => self::SOURCE,
+            'page' => 'AD Sylvanie, 5 MI 118, vue 12',
+            'quay' => 2,
+            'dataText' => null,
+            'scope' => 'naissance',
+            'url' => '  https://archives.sylvanie.example/ark:/12345/vue12  ',
+        ]);
+
+        $this->validation->valider($demande, $this->admin());
+
+        $citations = $this->arbre->citationsCreees();
+        self::assertSame('https://archives.sylvanie.example/ark:/12345/vue12', $citations[0]['url']);
+    }
+
+    /**
+     * Le lien finit en `href` sur la fiche : un `javascript:` ou une adresse sans hôte
+     * est refusé au dépôt, sur le chemin du champ.
+     */
+    public function testUnLienQuiNEstPasUneAdresseWebEstRefuse(): void
+    {
+        foreach (['javascript:alert(1)', 'archives.example/vue', 'ftp://archives.example/x', 'https://'] as $lien) {
+            $op = $this->op(1, self::SOURCE, 'vue 12', 2);
+            $op['newValue']['url'] = $lien;
+
+            $erreur = $this->refusAuDepot($this->corps([$op]));
+
+            self::assertArrayHasKey('ops[0].newValue.url', (array) $erreur->champs(), $lien);
+        }
+    }
+
     public function testUnQuayHorsNormeEstRefuseAuDepot(): void
     {
         $erreur = $this->refusAuDepot($this->corps([$this->op(1, self::SOURCE, 'vue 12', 7)]));

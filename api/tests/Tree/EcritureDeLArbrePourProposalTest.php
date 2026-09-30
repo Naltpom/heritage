@@ -134,7 +134,7 @@ final class EcritureDeLArbrePourProposalTest extends KernelTestCase
 
         $etatCitation = $this->port()->chargerCible(SubjectKind::Citation, $citation);
         self::assertNotNull($etatCitation);
-        self::assertSame(['page', 'quay', 'dataText'], array_keys($etatCitation->valeurs));
+        self::assertSame(['page', 'quay', 'dataText', 'url'], array_keys($etatCitation->valeurs));
         // `quay` traverse en chaîne comme toute énumération au bord du port, bien qu'il
         // soit adossé à `int` — l'exception assumée du § 2.7 du modèle.
         self::assertSame(2, $etatCitation->valeurs['quay']);

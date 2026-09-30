@@ -110,6 +110,7 @@ final class SurfaceEditable
         'page' => ValueKind::Texte,
         'quay' => ValueKind::Entier,
         'dataText' => ValueKind::Texte,
+        'url' => ValueKind::Texte,
     ];
 
     /**
@@ -137,6 +138,7 @@ final class SurfaceEditable
         'page' => 'Page',
         'quay' => 'Qualité de la source',
         'dataText' => 'Transcription',
+        'url' => 'Lien',
     ];
 
     /**

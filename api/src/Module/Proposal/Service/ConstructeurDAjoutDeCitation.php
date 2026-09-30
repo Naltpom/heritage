@@ -213,6 +213,7 @@ final readonly class ConstructeurDAjoutDeCitation implements ConstructeurDeDeman
             'quay' => $valeur['quay'],
             'dataText' => $valeur['dataText'],
             'scope' => $valeur['scope'],
+            'url' => $valeur['url'],
         ]);
 
         return [$op, \sprintf('%d|%d|%s', $personneId, $source->id, $valeur['page'] ?? '')];
@@ -313,7 +314,7 @@ final readonly class ConstructeurDAjoutDeCitation implements ConstructeurDeDeman
      *
      * @param array<string, mixed> $brut la `newValue`, déjà reconnue comme un objet
      *
-     * @return array{page: string|null, quay: int|null, dataText: string|null, scope: string}
+     * @return array{page: string|null, quay: int|null, dataText: string|null, scope: string, url: string|null}
      */
     private function valeur(array $brut, string $chemin): array
     {
@@ -323,6 +324,7 @@ final readonly class ConstructeurDAjoutDeCitation implements ConstructeurDeDeman
         $transcription = $this->texte($brut['dataText'] ?? null, "$chemin.newValue.dataText");
         $quay = $brut['quay'] ?? null;
         $scope = $brut['scope'] ?? 'generale';
+        $url = AdresseDeCitation::controler($this->texte($brut['url'] ?? null, "$chemin.newValue.url"), "$chemin.newValue.url");
 
         if (null !== $quay && (!\is_int($quay) || !\in_array($quay, $vocabulaire->qualites, true))) {
             throw DonneesInvalides::pourChamp("$chemin.newValue.quay", \sprintf('Le niveau de confiance est un entier parmi %s, ou null quand on ne se prononce pas.', implode(', ', array_map(strval(...), $vocabulaire->qualites))));
@@ -339,7 +341,7 @@ final readonly class ConstructeurDAjoutDeCitation implements ConstructeurDeDeman
             throw DonneesInvalides::pourChamp("$chemin.newValue", 'Une citation dit au moins où retrouver la pièce, ce qu\'elle dit, ou quelle confiance lui accorder.');
         }
 
-        return ['page' => $page, 'quay' => $quay, 'dataText' => $transcription, 'scope' => $scope];
+        return ['page' => $page, 'quay' => $quay, 'dataText' => $transcription, 'scope' => $scope, 'url' => $url];
     }
 
     /**

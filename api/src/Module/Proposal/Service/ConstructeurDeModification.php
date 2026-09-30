@@ -276,6 +276,11 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
             $this->normaliseur->versPhp($valueKind, $brut['newValue'], "$chemin.newValue"),
         );
 
+        if (SubjectKind::Citation === $subjectKind && 'url' === $field) {
+            // Le lien finit en `href` sur la fiche : seuls http et https passent.
+            $nouvelle = AdresseDeCitation::controler(\is_string($nouvelle) ? $nouvelle : null, "$chemin.newValue");
+        }
+
         if ($ancienne === $nouvelle) {
             throw DonneesInvalides::pourChamp("$chemin.newValue", 'Une modification qui ne modifie rien n\'a rien à faire dans une demande.');
         }
