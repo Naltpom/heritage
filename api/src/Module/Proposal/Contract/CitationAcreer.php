@@ -25,7 +25,7 @@ namespace App\Module\Proposal\Contract;
  * jour même où le reste du lot attend d'être soldé. Il naît donc à l'arrivée. La
  * frontière passe par `Contract\`, et rien n'oblige les anciens à déménager avant lui.
  *
- * **Ce qu'elle ne porte pas** : ni `evenContext`, ni `role`, ni `dataDateRaw`, ni `url`.
+ * **Ce qu'elle ne porte pas** : ni `evenContext`, ni `role`, ni `dataDateRaw`.
  * Ce sont des colonnes de provenance GEDCOM, écrites par l'import et conservées pour
  * l'export ; un contributeur n'a rien à y mettre, et les ouvrir ici ferait entrer dans
  * l'arbre des valeurs qu'aucun écran ne sait relire. Ni `version`, ni `createdAt`, qui
@@ -57,6 +57,8 @@ final readonly class CitationAcreer
      *                                étaye précisément. Elle traverse en chaîne : c'est une
      *                                énumération de `Tree`, que `Proposal` ne peut pas
      *                                nommer sans enfreindre la règle 3 de l'ADR 0002
+     * @param string|null $url        où la pièce se consulte en ligne (visionneuse
+     *                                d'archives) — contrôlé par `AdresseDeCitation`
      */
     public function __construct(
         public int $personneId,
@@ -65,6 +67,7 @@ final readonly class CitationAcreer
         public ?int $quay,
         public ?string $dataText,
         public string $scope,
+        public ?string $url = null,
     ) {
     }
 }

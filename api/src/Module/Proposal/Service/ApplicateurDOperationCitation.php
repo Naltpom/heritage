@@ -142,6 +142,7 @@ final readonly class ApplicateurDOperationCitation implements ApplicateurDOperat
             $this->quay($valeur['quay'] ?? null, $op->seq),
             $this->texte($valeur['dataText'] ?? null),
             $this->texte($valeur['scope'] ?? null) ?? 'generale',
+            $this->texte($valeur['url'] ?? null),
         );
     }
 
@@ -166,6 +167,7 @@ final readonly class ApplicateurDOperationCitation implements ApplicateurDOperat
             'quay' => ['avant' => null, 'apres' => $valeur['quay'] ?? null],
             'dataText' => ['avant' => null, 'apres' => $valeur['dataText'] ?? null],
             'scope' => ['avant' => null, 'apres' => $valeur['scope'] ?? null],
+            'url' => ['avant' => null, 'apres' => $valeur['url'] ?? null],
         ];
     }
 

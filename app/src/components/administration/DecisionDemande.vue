@@ -90,6 +90,17 @@ const validation = computed(() => actionValidation(demande.resolutionPrevue))
 const decidable = computed(() => demande.status === 'en_attente')
 const doublons = computed(() => demande.doublonsProbables ?? [])
 
+/** La barre fixée en bas porte les quatre décisions tant qu'aucun refus n'est en cours. */
+const barreVisible = computed(() => decidable.value && !enRefus.value)
+const panneauUtile = computed(
+  () =>
+    !barreVisible.value ||
+    raisonSuspension.value !== null ||
+    validation.value.explication !== null ||
+    annonce.value !== null ||
+    erreur.value !== null,
+)
+
 /** Le message du serveur l'emporte ; le nôtre ne parle qu'avant l'envoi. */
 const messageMotif = computed(() => {
   const duServeur = erreur.value === null ? '' : (analyserErreur(erreur.value).champs['message'] ?? '')
@@ -165,7 +176,9 @@ function suivreConduite(conduite: ConduiteATenir): void {
 </script>
 
 <template>
-  <PanneauBase titre="Décision">
+  <!-- Le panneau ne s'affiche que s'il a quelque chose à dire : quand la barre
+       porte les décisions, un panneau vide ne serait qu'un trou dans la page. -->
+  <PanneauBase v-if="panneauUtile" titre="Décision">
     <!-- La bascule suspend toute écriture. On l'écrit ici, à côté des boutons
          éteints : le bandeau permanent dit que la vue est empruntée, celui-ci
          dit ce que ça empêche, là où la question se pose. -->
@@ -186,74 +199,11 @@ function suivreConduite(conduite: ConduiteATenir): void {
       Cette demande a déjà été traitée : elle n’attend plus de décision.
     </p>
 
-    <template v-else-if="!enRefus">
-      <p class="text-sm text-attenue">Les quatre décisions sont en bas de l’écran.</p>
-      <!-- Réserve la hauteur de la barre : sans elle, la fin de la page
-           passerait dessous. -->
-      <div class="h-20" aria-hidden="true" />
-
-      <!-- La barre de décision, fixée en bas : quatre icônes, dans l'ordre
-           « oui », « oui & suivant », « non », « non & suivant ». Le libellé
-           vit dans `title` (survol) et `aria-label` (lecteur d'écran). -->
-      <div
-        role="toolbar"
-        aria-label="Décision"
-        class="fixed inset-x-0 bottom-[var(--hauteur-barre-bas,0px)] z-30 flex justify-center gap-3 border-t border-ligne bg-panneau px-4 pt-3 pb-[max(12px,calc(env(safe-area-inset-bottom)_-_var(--hauteur-barre-bas,0px)))] shadow-panneau"
-      >
-        <button
-          type="button"
-          class="bouton-decision border-accent bg-accent text-fond"
-          :disabled="suspendu || envoi || validation.desactive"
-          :aria-busy="envoi"
-          :title="infobulle ?? validation.libelle"
-          :aria-label="validation.libelle"
-          @click="valider()"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
-        </button>
-
-        <!-- Même appel, puis la demande suivante de la file. Éteint dans les
-             mêmes cas que « Valider » : enchaîner ne contourne rien. -->
-        <button
-          type="button"
-          class="bouton-decision border-accent bg-panneau text-accent"
-          :disabled="suspendu || envoi || validation.desactive"
-          :title="infobulle ?? 'Valider & suivant'"
-          aria-label="Valider & suivant"
-          @click="valider(true)"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12.5l3.5 3.5L13 9" /><path d="M14 7l5 5-5 5" /></svg>
-        </button>
-
-        <button
-          type="button"
-          class="bouton-decision border-alerte-bord bg-alerte-doux text-alerte"
-          :disabled="suspendu || envoi"
-          :title="infobulle ?? 'Refuser'"
-          aria-label="Refuser"
-          @click="ouvrirRefus(false)"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
-
-        <!-- Ouvre le même formulaire : le motif reste obligatoire. -->
-        <button
-          type="button"
-          class="bouton-decision border-alerte-bord bg-panneau text-alerte"
-          :disabled="suspendu || envoi"
-          :title="infobulle ?? 'Refuser & suivant'"
-          aria-label="Refuser & suivant"
-          @click="ouvrirRefus(true)"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l7 7M10 8l-7 7" /><path d="M14 7l5 5-5 5" /></svg>
-        </button>
-      </div>
-    </template>
 
     <!-- ------------------------------------------------------------------ -->
     <!-- Le formulaire de refus. Le motif y est le sujet, pas une option.    -->
     <!-- ------------------------------------------------------------------ -->
-    <form v-else novalidate @submit.prevent="refuser">
+    <form v-else-if="enRefus" novalidate @submit.prevent="refuser">
       <div class="flex flex-col gap-1">
         <label for="motif-refus" class="text-sm font-medium">
           Motif du refus
@@ -339,6 +289,67 @@ function suivreConduite(conduite: ConduiteATenir): void {
 
     <MessageErreur v-if="erreur !== null" class="mt-4" :erreur="erreur" @action="suivreConduite" />
   </PanneauBase>
+
+  <!-- Réserve la hauteur de la barre sous la page : sans elle, la fin de la page
+       (le panneau « Décision » compris) passerait dessous. -->
+  <div v-if="barreVisible" class="h-24" aria-hidden="true" />
+
+    <!-- La barre de décision, fixée en bas : quatre icônes, dans l'ordre
+         « oui », « oui & suivant », « non », « non & suivant ». Le libellé
+         vit dans `title` (survol) et `aria-label` (lecteur d'écran). -->
+    <div
+      role="toolbar"
+      aria-label="Décision"
+      class="fixed inset-x-0 bottom-[var(--hauteur-barre-bas,0px)] z-30 flex justify-center gap-3 border-t border-ligne bg-panneau px-4 pt-3 pb-[max(12px,calc(env(safe-area-inset-bottom)_-_var(--hauteur-barre-bas,0px)))] shadow-panneau"
+    >
+      <button
+        type="button"
+        class="bouton-decision border-accent bg-accent text-fond"
+        :disabled="suspendu || envoi || validation.desactive"
+        :aria-busy="envoi"
+        :title="infobulle ?? validation.libelle"
+        :aria-label="validation.libelle"
+        @click="valider()"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+      </button>
+
+      <!-- Même appel, puis la demande suivante de la file. Éteint dans les
+           mêmes cas que « Valider » : enchaîner ne contourne rien. -->
+      <button
+        type="button"
+        class="bouton-decision border-accent bg-panneau text-accent"
+        :disabled="suspendu || envoi || validation.desactive"
+        :title="infobulle ?? 'Valider & suivant'"
+        aria-label="Valider & suivant"
+        @click="valider(true)"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12.5l3.5 3.5L13 9" /><path d="M14 7l5 5-5 5" /></svg>
+      </button>
+
+      <button
+        type="button"
+        class="bouton-decision border-alerte-bord bg-alerte-doux text-alerte"
+        :disabled="suspendu || envoi"
+        :title="infobulle ?? 'Refuser'"
+        aria-label="Refuser"
+        @click="ouvrirRefus(false)"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+
+      <!-- Ouvre le même formulaire : le motif reste obligatoire. -->
+      <button
+        type="button"
+        class="bouton-decision border-alerte-bord bg-panneau text-alerte"
+        :disabled="suspendu || envoi"
+        :title="infobulle ?? 'Refuser & suivant'"
+        aria-label="Refuser & suivant"
+        @click="ouvrirRefus(true)"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l7 7M10 8l-7 7" /><path d="M14 7l5 5-5 5" /></svg>
+      </button>
+    </div>
 </template>
 
 <style scoped>
