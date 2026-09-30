@@ -292,6 +292,15 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Tirage au sort', parent: { nom: 'tirages', libelle: 'Tirages' } },
   },
   {
+    // Les actes demandés à une mairie ou à des archives, et leur suivi (module
+    // `Demarche`). `membre` : l'API refuse tout compte en attente, et ne rend
+    // que les démarches dont le lecteur voit toutes les personnes.
+    path: '/actes-demandes',
+    name: 'demarches',
+    component: () => import('@/views/DemarchesView.vue'),
+    meta: { acces: 'membre', titre: 'Actes demandés' },
+  },
+  {
     // Nom cité par le contrat (§ 8, `linkRoute: "demande.detail"`). La route
     // existe dès maintenant pour que les notifications aient une cible ; l'écran
     // revient à l'agent des propositions.

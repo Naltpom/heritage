@@ -83,6 +83,12 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Module/Tirage/Entity'
                 prefix: 'App\Module\Tirage\Entity'
                 alias: Tirage
+            Demarche:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Demarche/Entity'
+                prefix: 'App\Module\Demarche\Entity'
+                alias: Demarche
 
 when@test:
     doctrine:

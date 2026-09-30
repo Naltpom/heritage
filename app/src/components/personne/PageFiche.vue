@@ -36,6 +36,7 @@
 import { computed } from 'vue'
 import type { FichePersonneComplete } from '@/lib/api'
 import GalerieMedias from '@/components/medias/GalerieMedias.vue'
+import ListeDemarches from '@/components/demarches/ListeDemarches.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
 import BandeauFiche from './BandeauFiche.vue'
 import { couleurBranche, generationLisible, nomBranche } from './champs'
@@ -153,6 +154,11 @@ function pluriel(n: number, mot: string): string {
             :nom="fiche.displayName"
             @agrandir="emit('agrandir', $event)"
           />
+
+          <!-- Les actes demandés pour cette personne, et où ils en sont : une
+               pièce qui manque ici est peut-être déjà en route. -->
+          <h3 class="mb-2 mt-6 text-[11px] uppercase tracking-wider text-attenue">Actes demandés</h3>
+          <ListeDemarches :personne="{ personId: fiche.id, libelle: fiche.displayName }" />
         </SectionFiche>
 
         <!-- Le calque les signale champ par champ ; cet onglet les rassemble,

@@ -72,8 +72,13 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * **50 depuis le 2026-09-27** : `trg_edition.statut` et `trg_presence.presence`
      * (module `Tirage`, ADR 0009), toutes deux en `VARCHAR(12)` pour une plus longue valeur
      * de dix signes (`a_distance`).
+     *
+     * **55 depuis le 2026-09-30** : le module `Demarche` en porte cinq — `nature`, `forme`
+     * et `statut` sur `dmr_demarche`, `sens` et `canal` sur `dmr_echange`. La plus longue
+     * valeur du lot est `extrait_sans_filiation`, 22 signes, d'où le `VARCHAR(24)` de
+     * `forme`.
      */
-    private const int COLONNES_ENUM_ATTENDUES = 50;
+    private const int COLONNES_ENUM_ATTENDUES = 55;
 
     public function testChaqueColonneAccueilleLaPlusLongueValeurDeSonEnumeration(): void
     {

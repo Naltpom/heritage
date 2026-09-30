@@ -1,0 +1,15 @@
+# Contrat : ce fichier est celui du module Demarche (les actes demandés et leur suivi).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring de config/services/_autoload.yaml couvre toutes les classes du module. On
+# ne déclare ici que l'alias d'interface — lire l'en-tête de `timeline.yaml` sur le piège
+# d'ordre de chargement avant d'y ajouter un service concret.
+
+services:
+    # ── Le port vers `Tree` ────────────────────────────────────────────────────────
+    #
+    # Des noms affichés, rien de plus. La visibilité se décide avant, par le cercle du
+    # noyau. Pas de double en `when@test` : les tests du module sèment un vrai arbre
+    # (`tests/Tree/ArbreWebTestCase`) et éprouvent l'adaptateur réel.
+    App\Module\Demarche\Contract\PortArbrePourDemarches:
+        alias: App\Module\Tree\Service\VueDeLArbrePourDemarches

@@ -84,8 +84,15 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * **décisions** : les présences ont leur table parce qu'elles changent d'une année sur
      * l'autre, et les attributions parce qu'elles sont à la fois le secret de l'année et la
      * mémoire des suivantes.
+     *
+     * **35 depuis le 2026-09-30** : les trois tables `dmr_*` du module `Demarche`
+     * (`migrations/Version20260930140000.php`) — les actes demandés à une mairie ou à des
+     * archives, les personnes qu'ils concernent, et chaque message avec son texte entier.
+     * Ce sont des **décisions** : les personnes ont leur table parce qu'un acte de mariage
+     * en concerne deux et que c'est d'elles que dépend qui voit la démarche ; les messages,
+     * parce qu'une démarche en compte plusieurs — la demande, une relance, la réponse.
      */
-    private const int NOMBRE_DE_TABLES = 32;
+    private const int NOMBRE_DE_TABLES = 35;
 
     public function testLeMappingEstValide(): void
     {
@@ -122,7 +129,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      */
     public function testChaqueTablePorteLePrefixeDeSonModule(): void
     {
-        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_'];
+        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_', 'dmr_'];
 
         foreach ($this->tablesDuMapping() as $table) {
             $porteUnPrefixe = array_filter(

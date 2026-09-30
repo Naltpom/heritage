@@ -1,0 +1,11 @@
+# Contrat : ce fichier est celui du module Demarche (les actes demandés et leur suivi).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# Les routes se déclarent par attributs #[Route] dans les contrôleurs du module ;
+# l'import ci-dessous suffit à les charger.
+
+demarche_controleurs:
+    resource:
+        path: ../../src/Module/Demarche/Controller/
+        namespace: App\Module\Demarche\Controller
+    type: attribute
