@@ -525,8 +525,66 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
   }
   const xEgo = racine.poses.find((p) => p.id === ego)?.x ?? 0
 
-  /* Ce qui reste : remariages, ascendance du conjoint, îlots. */
-  function accrocher(bloc: Forme, cote: Cote): void {
+  /*
+   * Ce qui reste : remariages, ascendance du conjoint, îlots.
+   *
+   * Un bloc RATTACHÉ (le second mari d'une aïeule, les parents d'un allié) se
+   * pose au plus près de la personne qui le relie : son ancre sur `cible`, puis
+   * poussé vers l'extérieur jusqu'au premier creux libre de SES rangées, fiche par
+   * fiche. Le poser au-delà du contour de l'arbre entier l'envoyait au bord
+   * extérieur, dans une autre famille (constaté en prod : les parents d'un allié
+   * Voulgre posés au-dessus des Figarol, l'ascendance d'un allié Destombes chez
+   * les Provost). Sans cible — un îlot détaché —, le bloc va au bord.
+   */
+  function accrocher(bloc: Forme, cote: Cote, cible?: number): void {
+    if (cible !== undefined) {
+      // Ce qui est pris, rangée par rangée : chaque fiche, et l'espace entre deux
+      // époux posés — un bloc glissé là couperait leur trait d'union.
+      const occupe = new Map<number, [number, number][]>()
+      const prendre = (g: number, a: number, b: number): void => {
+        const l = occupe.get(g)
+        if (l) l.push([a, b])
+        else occupe.set(g, [[a, b]])
+      }
+      const xPose = new Map<string, Pose>()
+      for (const p of racine.poses) {
+        const w = largeur(p.id)
+        prendre(p.g, p.x - w / 2, p.x + w / 2)
+        xPose.set(p.id, p)
+      }
+      for (const fam of familles.keys()) {
+        const ep = epouxDe(fam)
+          .map((e) => xPose.get(e))
+          .filter((p): p is Pose => p !== undefined)
+        if (ep.length < 2 || ep.some((p) => p.g !== ep[0]!.g)) continue
+        prendre(ep[0]!.g, Math.min(...ep.map((p) => p.x)), Math.max(...ep.map((p) => p.x)))
+      }
+      // Le premier creux libre dans un sens, depuis la cible.
+      const chercher = (sens: Cote): number => {
+        let dx = cible - bloc.ancre
+        for (let tour = 0; tour < 10_000; tour++) {
+          let pas = 0
+          for (const p of bloc.poses) {
+            const w = largeur(p.id)
+            const lo = p.x + dx - w / 2
+            const hi = p.x + dx + w / 2
+            for (const [a, b] of occupe.get(p.g) ?? []) {
+              if (lo >= b + ECART_BLOC || hi <= a - ECART_BLOC) continue
+              pas = sens === 'D' ? Math.max(pas, b + ECART_BLOC - lo) : Math.min(pas, a - ECART_BLOC - hi)
+            }
+          }
+          if (pas === 0) break
+          dx += pas
+        }
+        return dx
+      }
+      // Le plus proche des deux ; à égalité, vers l'extérieur.
+      const depart = cible - bloc.ancre
+      const [dExt, dInt] = cote === 'D' ? [chercher('D'), chercher('G')] : [chercher('G'), chercher('D')]
+      decaler(bloc, Math.abs(dInt - depart) < Math.abs(dExt - depart) ? dInt : dExt)
+      fusionner(racine, bloc)
+      return
+    }
     const besoin = cote === 'G' ? besoinAGauche(racine, bloc, ECART_BLOC) : besoinADroite(racine, bloc, ECART_BLOC)
     if (Number.isFinite(besoin)) decaler(bloc, besoin)
     else {
@@ -567,17 +625,23 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
         const cote: Cote = (x.get(attache) ?? 0) < xEgo ? 'G' : 'D'
         const rangee = rangeeDe.get(attache)! + (epPoses.length ? 0 : -1)
 
+        const xAttache = x.get(attache) ?? 0
         if (epLibres.length) {
           for (const e of epLibres) {
             if (poses.has(e)) continue
-            accrocher(blocDescendance(e, cote, rangee), cote)
+            // À côté du conjoint posé, ou au-dessus de l'enfant posé.
+            const pas = epPoses.length ? largeur(attache) / 2 + ECART_FRATRIE + largeur(e) / 2 : 0
+            accrocher(blocDescendance(e, cote, rangee), cote, cote === 'G' ? xAttache - pas : xAttache + pas)
           }
         } else {
           // Les époux sont posés, il reste des enfants : une fratrie issue d'une autre union.
           const parties = enLibres
             .sort((a, b) => anneeTri(a) - anneeTri(b))
             .map((e) => blocDescendance(e, cote, rangee + 1))
-          accrocher(empiler(parties, ECART_FRATRIE).forme, cote)
+          const { forme, ancres } = empiler(parties, ECART_FRATRIE)
+          const milieu = epPoses.length ? epPoses.reduce((s, e) => s + (x.get(e) ?? 0), 0) / epPoses.length : xAttache
+          forme.ancre = (ancres[0]! + ancres[ancres.length - 1]!) / 2
+          accrocher(forme, cote, milieu)
         }
         progres = true
         break

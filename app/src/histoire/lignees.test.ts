@@ -69,6 +69,24 @@ function construire(): { graphe: Graphe; id: Record<string, string> } {
   const gmm = personne('gmm', 'Marie Figarol', 'feminin', 1937)
   const tanteM = personne('tanteM', 'Nicole Voulgre', 'feminin', 1958)
   famille([gpm, gmm], [tanteM, mere])
+  // Côté Voulgre : une grand-tante mariée, dont le mari a ses parents (des alliés).
+  const agpV = personne('agpV', 'Pierre Voulgre', 'masculin', 1900)
+  const agmV = personne('agmV', 'Irène Marboeuf', 'feminin', 1903)
+  const grandTanteV = personne('grandTanteV', 'Marie Voulgre', 'feminin', 1927)
+  famille([agpV, agmV], [grandTanteV, gpm])
+  const allie = personne('allie', 'Jean Vallaize', 'masculin', 1925)
+  famille([allie, grandTanteV], [])
+  const pereAllie = personne('pereAllie', 'Léonard Vallaize', 'masculin', 1898)
+  const mereAllie = personne('mereAllie', 'Françoise Nadaud', 'feminin', 1900)
+  famille([pereAllie, mereAllie], [allie])
+  // Côté Figarol, sur la même rangée : les parents de la grand-mère et leur fratrie.
+  const agpF = personne('agpF', 'Louis Figarol', 'masculin', 1905)
+  const agmF = personne('agmF', 'Jeanne Amelot', 'feminin', 1908)
+  const grandOncleF = personne('grandOncleF', 'Paul Figarol', 'masculin', 1934)
+  famille([agpF, agmF], [gmm, grandOncleF])
+  const fratrieF = ['Henri', 'Émile', 'Léon'].map((p, i) => personne(`frF${i}`, `${p} Amelot`, 'masculin', 1904 + i))
+  const bisaieuxF = personne('bisaieuxF', 'Victor Amelot', 'masculin', 1880)
+  famille([bisaieuxF], [agmF, ...fratrieF])
 
   // Arrière-grands-parents du côté du père du père.
   const agp = personne('agp', 'Alain Provost', 'masculin', 1913)
@@ -197,6 +215,17 @@ describe('disposition lignees', () => {
     expect(f('beauPere').y).toBe(f('pere').y)
   })
 
+  it('pose l’ascendance d’un allié au-dessus de lui, pas au bord de l’arbre', () => {
+    // Constaté en prod : les parents d'un allié Voulgre partaient au-delà de la
+    // dernière fiche de leur rangée, au-dessus des Figarol.
+    const enfant = f('allie')
+    for (const cle of ['pereAllie', 'mereAllie']) {
+      expect(f(cle).rangee).toBe(enfant.rangee - 1)
+      // Du côté Voulgre : à gauche des Figarol de la même rangée.
+      expect(f(cle).cx).toBeLessThan(f('agpF').cx)
+    }
+  })
+
   it('estime la rangée des personnes détachées d’après leurs dates, dans une zone à part', () => {
     // 1912 : la génération des arrière-grands-parents (Alain Provost, 1913).
     expect(f('antoine').rangee).toBe(-3)
@@ -227,7 +256,7 @@ describe('disposition lignees', () => {
 
   it('libelle chaque génération relativement à l’ego', () => {
     const libelles = d.generations.map((g) => g.libelle)
-    expect(libelles).toEqual(['Arrière-grands-parents', 'Grands-parents', 'Parents', 'Votre génération', 'Enfants'])
+    expect(libelles).toEqual(['Trisaïeux', 'Arrière-grands-parents', 'Grands-parents', 'Parents', 'Votre génération', 'Enfants'])
     expect(d.generations.find((g) => g.rangee === -1)!.annees).toBe('vers 1970')
   })
 
