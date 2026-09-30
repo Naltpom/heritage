@@ -2,7 +2,15 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { ErreurApi, analyserErreur, type ResultatValidation } from '@/lib/api'
-import { actionValidation, annonceValidation, erreurMotifRefus, peutRefuser } from './decision'
+import {
+  actionValidation,
+  annonceEnchainement,
+  annonceValidation,
+  erreurMotifRefus,
+  issueDeValidation,
+  issueDepuisRequete,
+  peutRefuser,
+} from './decision'
 
 /**
  * Ce que ces tests protègent, dans l'ordre où ça coûte cher :
@@ -284,5 +292,61 @@ describe('un rejeu automatique se voit', () => {
 
     expect(annonce.detail).toMatch(/réexamin/i)
     expect(annonce.detail).toContain('birth')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* 4. « Valider & suivant », « Refuser & suivant »                      */
+/* ------------------------------------------------------------------ */
+
+describe('« & suivant »', () => {
+  const SOURCE = readFileSync(fileURLToPath(new URL('./DecisionDemande.vue', import.meta.url)), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('offre les deux boutons, qui passent par les mêmes fonctions', () => {
+    expect(SOURCE).toContain('Valider &amp; suivant')
+    expect(SOURCE).toContain('Refuser &amp; suivant')
+    expect(SOURCE).toContain('@click="valider(true)"')
+    // « Refuser & suivant » ouvre le formulaire du motif, il ne refuse pas d'un clic.
+    expect(SOURCE).toContain('@click="ouvrirRefus(true)"')
+    expect(SOURCE.split('validerDemande(').length - 1).toBeLessThanOrEqual(2)
+  })
+
+  it('« Valider & suivant » s’éteint dans les mêmes cas que « Valider »', () => {
+    const bouton = SOURCE.slice(0, SOURCE.indexOf('Valider &amp; suivant'))
+    const attributs = bouton.slice(bouton.lastIndexOf('<BoutonBase'))
+    expect(attributs).toContain('validation.desactive')
+    expect(attributs).toContain('suspendu')
+  })
+
+  it('ne rend l’issue qu’après le succès de l’appel', () => {
+    const appel = SOURCE.indexOf('await validerDemande(')
+    const enchainement = SOURCE.indexOf("emit('decidee', issueDeValidation(resultat))")
+    expect(appel).toBeGreaterThan(-1)
+    expect(enchainement).toBeGreaterThan(appel)
+
+    const refus = SOURCE.indexOf('await refuserDemande(')
+    expect(SOURCE.indexOf("emit('decidee', 'refusee')")).toBeGreaterThan(refus)
+  })
+
+  it('distingue un rejeu dans l’issue transmise', () => {
+    expect(issueDeValidation({ resultat: 'rejouee' } as ResultatValidation)).toBe('rejouee')
+    expect(issueDeValidation({ resultat: 'validee' } as ResultatValidation)).toBe('validee')
+  })
+
+  it('relit l’issue de l’adresse sans rien inventer', () => {
+    expect(issueDepuisRequete('refusee')).toBe('refusee')
+    expect(issueDepuisRequete('supprimee')).toBeNull()
+    expect(issueDepuisRequete(undefined)).toBeNull()
+  })
+
+  it('annonce la décision précédente, et la fin de la file', () => {
+    expect(annonceEnchainement(12, 'validee', false)).toBe('Demande n° 12 validée. Voici la suivante dans la file.')
+    expect(annonceEnchainement(12, 'refusee', true)).toBe(
+      'Demande n° 12 refusée. Il n’y a plus de demande en attente dans cette file.',
+    )
+    expect(annonceEnchainement(12, 'rejouee', false)).toMatch(/rejeu automatique/)
   })
 })

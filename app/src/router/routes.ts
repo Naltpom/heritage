@@ -420,6 +420,13 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/administration/UtilisateursView.vue'),
         meta: { acces: 'administration', titre: 'Utilisateurs' },
       },
+      {
+        // Les notices des fonds que les citations désignent (ADR 0012).
+        path: 'sources',
+        name: 'administration.sources',
+        component: () => import('@/views/administration/SourcesView.vue'),
+        meta: { acces: 'administration', titre: 'Sources' },
+      },
     ],
   },
 

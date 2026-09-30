@@ -32,13 +32,16 @@
  * se réécrit pas ici.
  */
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   lireDemande,
   lireDemandeAdministration,
+  listerDemandesAdministration,
   type DemandeAdministration,
   type DependanceDeDemande,
 } from '@/lib/api'
+import { contexteDepuisRequete, demandeSuivante, requeteDeContexte } from '@/components/administration/file'
+import { annonceEnchainement, issueDepuisRequete, type IssueDecision } from '@/components/administration/decision'
 import { useSession } from '@/composables/useSession'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
@@ -82,6 +85,59 @@ async function charger(): Promise<void> {
 }
 
 watch(identifiant, charger, { immediate: true })
+
+/* ------------------------------------------------------------------ */
+/* « Valider & suivant », « Refuser & suivant »                        */
+/* ------------------------------------------------------------------ */
+
+const routeur = useRouter()
+
+/** La file d'où l'on vient — filtre et tri —, portée par l'adresse. */
+const contexte = computed(() => contexteDepuisRequete(route.query))
+
+/** « Demande n° 12 validée. Voici la suivante », si l'on arrive par un enchaînement. */
+const annonceDeLaPrecedente = computed(() => {
+  const precedente = Number(route.query['precedente'])
+  const issue = issueDepuisRequete(route.query['issue'])
+  return Number.isInteger(precedente) && precedente > 0 && issue !== null
+    ? annonceEnchainement(precedente, issue, false)
+    : null
+})
+
+/**
+ * Après une décision. Sans enchaînement, on relit la demande. Avec, on relit la
+ * file **avec le même filtre** — la décision a pu en rendre d'autres caduques —
+ * et on ouvre la suivante dans l'ordre affiché ; s'il n'y en a plus, retour à
+ * la file, qui le dit.
+ */
+async function apresDecision(enchainement?: IssueDecision): Promise<void> {
+  const courante = demande.value
+  if (enchainement === undefined || courante === null) {
+    await charger()
+    return
+  }
+
+  const { etat, auteur, tri } = contexte.value
+  const requete = requeteDeContexte(contexte.value)
+  try {
+    const file = await listerDemandesAdministration({
+      status: etat === '' ? undefined : etat,
+      auteur: auteur === 0 ? undefined : auteur,
+      parPage: 100,
+    })
+    const suivante = demandeSuivante(file.elements, courante, tri)
+    const trace = { precedente: String(courante.id), issue: enchainement }
+
+    await (suivante === null
+      ? routeur.push({ name: 'administration.demandes', query: { ...requete, ...trace } })
+      : routeur.push({ name: 'demande.detail', params: { id: suivante }, query: { ...requete, ...trace } }))
+  } catch (cause) {
+    // La décision est partie ; seule la relecture de la file a échoué. On
+    // reste sur la demande, relue, et l'erreur se voit.
+    await charger()
+    erreur.value = cause
+  }
+}
 
 const NATURES: Record<string, string> = {
   modification_personne: 'Modification d’une fiche',
@@ -205,6 +261,14 @@ function dateLisible(valeur: string | null | undefined): string {
     <MessageErreur v-else-if="erreur !== null" :erreur="erreur" @action="charger" />
 
     <template v-else-if="demande !== null">
+      <p
+        v-if="annonceDeLaPrecedente !== null"
+        class="mb-4 rounded-panneau border border-ok-bord bg-ok-doux px-3.5 py-3 text-sm"
+        role="status"
+      >
+        {{ annonceDeLaPrecedente }}
+      </p>
+
       <header class="mb-5">
         <div class="flex flex-wrap items-center gap-2">
           <h1 class="text-xl font-semibold tracking-tight">
@@ -333,7 +397,9 @@ function dateLisible(valeur: string | null | undefined): string {
 
       <!-- Valider et refuser sont des **actions** réservées, pas des champs de
            données : c'est le seul endroit de cet écran où le rôle décide. -->
-      <DecisionDemande v-if="decidable" :demande="demande" @decidee="charger" />
+      <!-- `:key` : « & suivant » change de demande sans quitter l'écran ; sans
+           clé, le motif et l'annonce de la précédente resteraient affichés. -->
+      <DecisionDemande v-if="decidable" :key="demande.id" :demande="demande" @decidee="apresDecision" />
     </template>
   </div>
 

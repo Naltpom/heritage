@@ -82,6 +82,11 @@ class Source
     // tard, c'est remettre une colonne, une migration de routine. Retirer une valeur
     // d'énumération déjà écrite dans des demandes validées, c'est une migration de
     // données.
+    //
+    // Depuis l'ADR 0012, l'**administration** crée et corrige les sources hors de la
+    // file (`Tree\Service\ServiceDesSources`) : une notice bibliographique n'affirme rien
+    // sur une personne. Toujours sans verrou : un seul écran, réservé aux
+    // administrateurs, en remplacement complet.
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     private \DateTimeImmutable $createdAt;

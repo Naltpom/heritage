@@ -3,10 +3,15 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { Demande } from '@/lib/api'
 import {
+  CONTEXTE_PAR_DEFAUT,
+  contexteDepuisRequete,
+  demandeSuivante,
   grouperParCible,
   groupesEnConcurrence,
   ligneAuteur,
+  ordreDeLaFile,
   personneDuGroupe,
+  requeteDeContexte,
   trierDemandes,
 } from './file'
 
@@ -322,17 +327,22 @@ describe('les onglets de l’administration', () => {
   const lire = (chemin: string): string =>
     readFileSync(fileURLToPath(new URL(chemin, import.meta.url)), 'utf8')
 
-  it('nomment les trois routes enfants, sans construire d’URL', () => {
+  it('nomment les quatre routes enfants, sans construire d’URL', () => {
     const source = lire('../../views/administration/OngletsAdministration.vue')
 
-    for (const nom of ['administration.demandes', 'administration.invitations', 'administration.utilisateurs']) {
+    for (const nom of [
+      'administration.demandes',
+      'administration.invitations',
+      'administration.utilisateurs',
+      'administration.sources',
+    ]) {
       expect(source).toContain(`'${nom}'`)
     }
     expect(source).not.toContain("'/administration")
   })
 
-  it('sont en tête de la barre des trois sous-écrans, et plus dans le cadre', () => {
-    for (const vue of ['FileDemandesView', 'InvitationsView', 'UtilisateursView']) {
+  it('sont en tête de la barre des quatre sous-écrans, et plus dans le cadre', () => {
+    for (const vue of ['FileDemandesView', 'InvitationsView', 'UtilisateursView', 'SourcesView']) {
       expect(lire(`../../views/administration/${vue}.vue`), vue).toContain('<OngletsAdministration />')
     }
     expect(lire('../../views/AdministrationView.vue')).not.toContain('<nav')
@@ -343,5 +353,85 @@ describe('les onglets de l’administration', () => {
 
     expect(source).toContain('id="filtre-auteur" v-model.number="auteur"')
     expect(source).toContain('id="tri-file" v-model="tri"')
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* « Valider & suivant » — la demande suivante, dans l'ordre affiché    */
+/* ------------------------------------------------------------------ */
+
+describe('le contexte de la file voyage dans l’adresse', () => {
+  it('le défaut donne une adresse nue — celle des notifications', () => {
+    expect(requeteDeContexte(CONTEXTE_PAR_DEFAUT)).toEqual({})
+    expect(contexteDepuisRequete({})).toEqual(CONTEXTE_PAR_DEFAUT)
+  })
+
+  it('fait l’aller-retour, « toutes » comprise', () => {
+    const contexte = { etat: '' as const, auteur: 7, tri: 'recentes' as const }
+    const requete = requeteDeContexte(contexte)
+
+    expect(requete).toEqual({ etat: 'toutes', auteur: '7', tri: 'recentes' })
+    expect(contexteDepuisRequete(requete)).toEqual(contexte)
+  })
+
+  it('ramène une adresse bricolée au défaut plutôt qu’à une file vide', () => {
+    expect(contexteDepuisRequete({ etat: 'n_importe', auteur: '-3', tri: 'hasard' })).toEqual(CONTEXTE_PAR_DEFAUT)
+    expect(contexteDepuisRequete({ etat: ['refusee', 'validee'] }).etat).toBe('refusee')
+  })
+})
+
+describe('la demande suivante', () => {
+  // Trois fiches : 17 (deux demandes), 18, et une création sans cible.
+  const A = demande({ id: 1, targetId: 17, submittedAt: '2026-09-10T10:00:00+02:00' })
+  const B = demande({ id: 2, targetId: 18, submittedAt: '2026-09-11T10:00:00+02:00' })
+  const C = demande({ id: 3, targetId: 17, submittedAt: '2026-09-12T10:00:00+02:00' })
+  const D = demande({ id: 4, targetKind: null, targetId: null, submittedAt: '2026-09-13T10:00:00+02:00' })
+
+  it('suit l’ordre affiché, regroupé par fiche, et non l’ordre de dépôt', () => {
+    // À l'écran : [A, C] (fiche 17), [B], [D]. Après A vient C, pas B.
+    expect(ordreDeLaFile([A, B, C, D], 'anciennes').map((d) => d.id)).toEqual([1, 3, 2, 4])
+    expect(demandeSuivante([B, C, D], A, 'anciennes')).toBe(3)
+  })
+
+  it('replace la courante, que le filtre « en attente » a retirée de la file relue', () => {
+    expect(demandeSuivante([A, B, D], C, 'anciennes')).toBe(2)
+  })
+
+  it('respecte le tri choisi', () => {
+    // Plus récentes d'abord : [D], [C, A], [B]. Après D vient C.
+    expect(demandeSuivante([A, B, C], D, 'recentes')).toBe(3)
+  })
+
+  it('saute ce qui n’attend plus de décision — caduques et validées sous « toutes »', () => {
+    const cCaduque = { ...C, status: 'caduque' as const }
+    const bValidee = { ...B, status: 'validee' as const }
+    expect(demandeSuivante([{ ...A, status: 'validee' }, cCaduque, bValidee, D], A, 'anciennes')).toBe(4)
+  })
+
+  it('repart du début quand il n’y a plus rien après la courante', () => {
+    expect(demandeSuivante([A, B, C], D, 'anciennes')).toBe(1)
+  })
+
+  it('rend null quand la file n’a plus rien à décider', () => {
+    expect(demandeSuivante([], A, 'anciennes')).toBeNull()
+    expect(demandeSuivante([{ ...A, status: 'validee' }], A, 'anciennes')).toBeNull()
+  })
+})
+
+describe('la file transmet son contexte à la demande ouverte', () => {
+  const lire = (chemin: string): string =>
+    readFileSync(fileURLToPath(new URL(chemin, import.meta.url)), 'utf8')
+
+  it('le lien de chaque demande porte le filtre et le tri', () => {
+    expect(lire('../../views/administration/FileDemandesView.vue')).toContain(
+      ":to=\"{ name: 'demande.detail', params: { id: demande.id }, query: requeteDeLaFile }\"",
+    )
+  })
+
+  it('le détail enchaîne avec le même filtre, et remet un composant neuf à chaque demande', () => {
+    const vue = lire('../../views/DemandeView.vue')
+    expect(vue).toContain('demandeSuivante(file.elements, courante, tri)')
+    expect(vue).toContain(':key="demande.id"')
+    expect(vue).toContain('@decidee="apresDecision"')
   })
 })
