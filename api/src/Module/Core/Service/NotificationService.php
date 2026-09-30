@@ -98,6 +98,11 @@ final class NotificationService
      * administrateur : `Proposal` ne tient pas la liste des comptes, et une requête sur
      * `core_user` depuis un autre module rouvrirait la frontière de l'ADR 0002.
      *
+     * `$sauf` écarte un compte : l'administrateur qui dépose lui-même une demande n'a
+     * pas à être averti de ce qu'il vient de faire. Sans cela, chaque demande de
+     * l'administrateur remplissait sa propre cloche (constaté le 30/09/2026 : des
+     * dizaines de « Administration propose une modification »).
+     *
      * @param array<string, mixed>|null $linkParams
      *
      * @return int le nombre de destinataires effectivement notifiés
@@ -108,18 +113,28 @@ final class NotificationService
         ?string $corps = null,
         ?string $linkRoute = null,
         ?array $linkParams = null,
+        ?int $sauf = null,
     ): int {
         $remises = 0;
+        $destinataires = 0;
 
         foreach ($this->administrateurs() as $administrateur) {
             $id = $administrateur->getId();
 
-            if (null !== $id && null !== $this->notifier($id, $kind, $titre, $corps, $linkRoute, $linkParams)) {
+            if (null === $id || $id === $sauf) {
+                continue;
+            }
+
+            ++$destinataires;
+
+            if (null !== $this->notifier($id, $kind, $titre, $corps, $linkRoute, $linkParams)) {
                 ++$remises;
             }
         }
 
-        if (0 === $remises) {
+        // L'auteur seul administrateur : personne d'autre à prévenir, et ce n'est pas
+        // une panne — il sait ce qu'il vient de déposer.
+        if (0 === $remises && (0 < $destinataires || null === $sauf)) {
             // Une file d'attente dont personne n'est averti est indistinguable d'une file
             // vide, et c'est le genre de panne qu'on met des semaines à remarquer.
             $this->journal->warning('Aucun administrateur actif à notifier.', ['kind' => $kind->value]);
