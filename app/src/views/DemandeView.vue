@@ -250,7 +250,10 @@ function dateLisible(valeur: string | null | undefined): string {
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-4 py-8">
+  <!-- `overflow-wrap: anywhere` : une adresse web ou une cote sans espace
+       (« https://…/deaths-f-1930-1934.pdf#page=12 ») se coupe au lieu d'élargir
+       la page, qui débordait alors de l'écran sur mobile. -->
+  <div class="mx-auto w-full max-w-3xl min-w-0 px-4 py-8 [overflow-wrap:anywhere]">
     <div v-if="chargement && demande === null">
       <PanneauBase>
         <p class="mb-3 text-sm text-attenue" role="status">Chargement de la demande…</p>
