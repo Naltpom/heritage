@@ -144,3 +144,43 @@ export function erreursDuMessage(champs: Record<string, string>, prefixe = 'prem
   }
   return retenues
 }
+
+/** Minuscules, sans accents ni espaces répétés : « Périgueux » se trouve en tapant « perigueux ». */
+export function normaliser(texte: string): string {
+  return texte
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * La démarche répond-elle à la recherche ? **Chaque mot** doit se trouver
+ * quelque part — intitulé, personnes, commune, date, service, adresses des
+ * messages, statut —, dans n'importe quel ordre : « provost fleurance » trouve
+ * le mariage de 1957.
+ *
+ * Le texte des messages n'y est pas : la liste ne le transporte pas, et
+ * l'adresse de l'expéditeur suffit à retrouver la démarche d'une réponse.
+ */
+export function correspondARecherche(demarche: ResumeDeDemarche, recherche: string): boolean {
+  const mots = normaliser(recherche).split(' ').filter((m) => m.length > 0)
+  if (mots.length === 0) return true
+
+  const botte = normaliser(
+    [
+      demarche.intitule,
+      demarche.natureLibelle,
+      demarche.formeLibelle,
+      demarche.commune ?? '',
+      demarche.dateDeLActe ?? '',
+      demarche.destinataire,
+      demarche.statutLibelle,
+      ...demarche.personnes.map((p) => p.libelle),
+      ...demarche.correspondants,
+    ].join(' '),
+  )
+
+  return mots.every((mot) => botte.includes(mot))
+}

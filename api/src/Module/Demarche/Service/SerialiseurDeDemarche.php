@@ -53,6 +53,12 @@ final readonly class SerialiseurDeDemarche
                 'libelle' => $demarche->getAuteurLibelle(),
                 'estMoi' => $demarche->getAuteurUserId() === $lecteur->userId,
             ],
+            // Les adresses des messages, sans leur texte : c'est par l'expéditeur d'une
+            // réponse qu'on retrouve la démarche qu'elle concerne (« etat.civil@… »).
+            'correspondants' => array_values(array_unique(array_filter(
+                array_merge(...array_map(static fn (Echange $e): array => [$e->getDe(), $e->getA()], $echanges)),
+                static fn (?string $adresse): bool => null !== $adresse,
+            ))),
             'nombreDeMessages' => \count($echanges),
             'dernierEnvoiLe' => $dernierEnvoi?->getDate()->format('Y-m-d'),
             'dernierMessageLe' => $dernier?->getDate()->format('Y-m-d'),

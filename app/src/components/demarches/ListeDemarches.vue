@@ -15,13 +15,17 @@ import { ecrituresSuspendues, motifSuspension } from '@/components/administratio
 import { useSession } from '@/composables/useSession'
 import CarteDemarche from './CarteDemarche.vue'
 import FormulaireDemarche from './FormulaireDemarche.vue'
-import { aRelancer } from './demarches'
+import { aRelancer, correspondARecherche } from './demarches'
 
-const { personne = null, enAttenteSeulement = false } = defineProps<{
+const { personne = null, enAttenteSeulement = false, recherche = '' } = defineProps<{
   /** Présente : les démarches de cette personne seulement. */
   personne?: PersonneDeLaDemarche | null
   enAttenteSeulement?: boolean
+  /** Des mots cherchés dans l'intitulé, les personnes, le service, les adresses. */
+  recherche?: string
 }>()
+
+const emit = defineEmits<{ comptes: [comptes: { total: number; enAttente: number }] }>()
 
 const { vueEmpruntee } = useSession()
 const suspendu = computed(() => ecrituresSuspendues(vueEmpruntee.value))
@@ -32,16 +36,43 @@ const erreur = ref<unknown>(null)
 const enCreation = ref(false)
 let avorteur: AbortController | null = null
 
-const nombreARelancer = computed(() => (demarches.value ?? []).filter((d) => aRelancer(d)).length)
+/**
+ * Tout est chargé une fois, et filtré ici : l'onglet et la recherche se
+ * répondent sans aller-retour, et les deux compteurs restent justes. À
+ * l'échelle d'une famille — quelques dizaines de démarches, sans le texte des
+ * messages —, c'est moins qu'une vignette.
+ *
+ * Une démarche qu'on vient de faire passer à « reçue » **reste affichée** dans
+ * l'onglet « en attente » jusqu'au prochain chargement : la voir disparaître
+ * sous le bouton qu'on vient de presser ferait croire à une perte.
+ */
+const gardees = ref(new Set<number>())
+
+const visibles = computed(() =>
+  (demarches.value ?? []).filter(
+    (d) =>
+      (!enAttenteSeulement || d.enAttente || gardees.value.has(d.id)) && correspondARecherche(d, recherche),
+  ),
+)
+
+const nombreARelancer = computed(() => visibles.value.filter((d) => aRelancer(d)).length)
+
+watch(
+  demarches,
+  (liste) => {
+    if (liste !== null) emit('comptes', { total: liste.length, enAttente: liste.filter((d) => d.enAttente).length })
+  },
+  { deep: true },
+)
 
 async function charger(): Promise<void> {
   avorteur?.abort()
   avorteur = new AbortController()
   erreur.value = null
 
-  const filtre: { personId?: number; enAttente?: boolean } = {}
+  const filtre: { personId?: number } = {}
   if (personne !== null) filtre.personId = personne.personId
-  if (enAttenteSeulement) filtre.enAttente = true
+  gardees.value = new Set()
 
   try {
     demarches.value = (await listerDemarches(filtre, avorteur.signal)).elements
@@ -52,6 +83,7 @@ async function charger(): Promise<void> {
 
 function changee(relue: ResumeDeDemarche): void {
   if (demarches.value === null) return
+  gardees.value = new Set([...gardees.value, relue.id])
   demarches.value = demarches.value.map((d) => (d.id === relue.id ? relue : d))
 }
 
@@ -65,7 +97,13 @@ function enregistree(creee: DetailDeDemarche): void {
   demarches.value = [creee, ...(demarches.value ?? [])]
 }
 
-watch(() => [personne?.personId, enAttenteSeulement], charger, { immediate: true })
+watch(() => personne?.personId, charger, { immediate: true })
+watch(
+  () => enAttenteSeulement,
+  () => {
+    gardees.value = new Set()
+  },
+)
 onBeforeUnmount(() => avorteur?.abort())
 </script>
 
@@ -73,8 +111,8 @@ onBeforeUnmount(() => avorteur?.abort())
   <div class="flex flex-col gap-3">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="text-sm text-attenue">
-        <template v-if="demarches !== null && demarches.length > 0">
-          {{ demarches.length }} démarche{{ demarches.length > 1 ? 's' : '' }}<template v-if="nombreARelancer > 0">
+        <template v-if="demarches !== null && visibles.length > 0">
+          {{ visibles.length }} démarche{{ visibles.length > 1 ? 's' : '' }}<template v-if="nombreARelancer > 0">
             · <span class="font-semibold text-alerte">{{ nombreARelancer }} à relancer</span></template>
         </template>
       </p>
@@ -102,16 +140,20 @@ onBeforeUnmount(() => avorteur?.abort())
 
     <template v-else>
       <p
-        v-if="demarches.length === 0 && !enCreation"
+        v-if="visibles.length === 0 && !enCreation"
         class="rounded-panneau border border-ligne bg-panneau p-4 text-sm text-attenue"
       >
-        <template v-if="personne !== null">Aucun acte demandé pour cette personne.</template>
+        <template v-if="recherche.trim().length > 0">
+          Aucune démarche ne correspond à « {{ recherche.trim() }} »<template v-if="enAttenteSeulement">
+            parmi celles en attente — essayez « Toutes »</template>.
+        </template>
+        <template v-else-if="personne !== null">Aucun acte demandé pour cette personne.</template>
         <template v-else-if="enAttenteSeulement">Aucune démarche en attente de réponse.</template>
         <template v-else>Aucun acte demandé pour l’instant.</template>
       </p>
 
       <ul class="m-0 flex list-none flex-col gap-3 p-0">
-        <li v-for="d in demarches" :key="d.id">
+        <li v-for="d in visibles" :key="d.id">
           <CarteDemarche
             :demarche="d"
             :suspendu="suspendu"
