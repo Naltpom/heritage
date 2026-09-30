@@ -306,17 +306,27 @@ describe('« & suivant »', () => {
     .replace(/(^|[^:])\/\/.*$/gm, '$1')
 
   it('offre les deux boutons, qui passent par les mêmes fonctions', () => {
-    expect(SOURCE).toContain('Valider &amp; suivant')
-    expect(SOURCE).toContain('Refuser &amp; suivant')
+    expect(SOURCE).toContain('aria-label="Valider & suivant"')
+    expect(SOURCE).toContain('aria-label="Refuser & suivant"')
     expect(SOURCE).toContain('@click="valider(true)"')
     // « Refuser & suivant » ouvre le formulaire du motif, il ne refuse pas d'un clic.
     expect(SOURCE).toContain('@click="ouvrirRefus(true)"')
     expect(SOURCE.split('validerDemande(').length - 1).toBeLessThanOrEqual(2)
   })
 
+  it('tient les quatre décisions dans une barre fixée en bas, en icônes nommées', () => {
+    const barre = SOURCE.slice(SOURCE.indexOf('role="toolbar"'))
+    expect(SOURCE.slice(SOURCE.lastIndexOf('<div', SOURCE.indexOf('role="toolbar"')))).toMatch(/class="fixed inset-x-0 bottom-0/)
+    const ordre = ['@click="valider()"', '@click="valider(true)"', '@click="ouvrirRefus(false)"', '@click="ouvrirRefus(true)"'].map((c) => barre.indexOf(c))
+    expect(ordre.every((i) => i > -1)).toBe(true)
+    expect([...ordre].sort((a, b) => a - b)).toEqual(ordre)
+    // Pas de texte visible : chaque bouton se nomme par aria-label et title.
+    expect(barre.slice(0, barre.indexOf('</div>')).split('aria-label=').length - 1).toBeGreaterThanOrEqual(4)
+  })
+
   it('« Valider & suivant » s’éteint dans les mêmes cas que « Valider »', () => {
-    const bouton = SOURCE.slice(0, SOURCE.indexOf('Valider &amp; suivant'))
-    const attributs = bouton.slice(bouton.lastIndexOf('<BoutonBase'))
+    const bouton = SOURCE.slice(0, SOURCE.indexOf('aria-label="Valider & suivant"'))
+    const attributs = bouton.slice(bouton.lastIndexOf('<button'))
     expect(attributs).toContain('validation.desactive')
     expect(attributs).toContain('suspendu')
   })
