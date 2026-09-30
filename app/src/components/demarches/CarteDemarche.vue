@@ -162,7 +162,7 @@ async function supprimer(): Promise<void> {
             <template v-for="(p, i) in detail.personnes" :key="p.personId">
               <RouterLink
                 v-if="avecLiensVersLesFiches"
-                :to="{ name: 'personne.detail', params: { id: p.personId }, query: { onglet: 'documents' } }"
+                :to="{ name: 'personne.detail', params: { id: p.personId }, query: { onglet: 'sources' } }"
                 class="text-accent underline"
               >{{ p.libelle }}</RouterLink>
               <span v-else>{{ p.libelle }}</span><span v-if="i < detail.personnes.length - 1">,</span>

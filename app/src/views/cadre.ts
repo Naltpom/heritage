@@ -50,6 +50,26 @@
  * ────────────────────────────────────────────────────────────────────
  */
 export function hauteurDuCadre(hautDuCadre: number): string {
-  const disponible = document.documentElement.clientHeight - hautDuCadre
+  const disponible = document.documentElement.clientHeight - hautDuCadre - hauteurDeLaBarreDuBas()
   return `${Math.max(0, Math.floor(disponible))}px`
+}
+
+/**
+ * La hauteur de la barre de navigation du bas, sur téléphone (refonte du
+ * 30/09/2026) — ce que le bas de l'écran prend au cadre, comme l'en-tête en
+ * prend le haut.
+ *
+ * `BarreNavigation` la **publie** sur `<html>` dans `--hauteur-barre-bas`, en
+ * style en ligne, mesurée par un `ResizeObserver` : 0 sur bureau (la barre y
+ * est `display: none`), l'encoche comprise sur un iPhone. On la lit dans le
+ * style en ligne et non par `getComputedStyle` : c'est là qu'elle est écrite,
+ * et c'est lisible sans moteur de mise en page.
+ *
+ * Absente, illisible ou négative, elle vaut 0 : un écran sans barre (connexion,
+ * visiteur anonyme) ne doit rien perdre.
+ */
+export function hauteurDeLaBarreDuBas(): number {
+  const brut = document.documentElement.style?.getPropertyValue?.('--hauteur-barre-bas') ?? ''
+  const valeur = Number.parseFloat(brut)
+  return Number.isFinite(valeur) && valeur > 0 ? valeur : 0
 }

@@ -29,9 +29,9 @@
  * charge utile **une fois**, lit l'onglet dans la requête et tient la loupe.
  * Tout le reste est délégué :
  *
- * - `PageFiche` dessine une fiche complète : bandeau, onglets (Identité ·
- *   Famille · Sources et notes · Preuves et documents · Demandes), colonne
- *   « Dans l'arbre », barre d'action mobile ;
+ * - `PageFiche` dessine une fiche complète : bandeau, onglets (Identité et
+ *   famille · Sources et documents · Historique), contenu qui coulisse d'un
+ *   onglet à l'autre, colonne « Dans l'arbre », barre d'action mobile ;
  * - `CarteRestreinte` dessine une fiche réduite : un nom, une raison, une
  *   sortie — ni onglets, ni barre d'action ;
  * - les trois règles ci-dessus vivent dans `components/personne/champs.ts`, un
@@ -39,10 +39,15 @@
  *
  * ## L'onglet voyage dans la requête
  *
- * `?onglet=famille | sources | documents | demandes`, Identité par défaut
- * (`components/personne/onglets.ts`). **Aucun nouveau nom de route** : celui de
- * la fiche, `personne.detail`, est un contrat avec les notifications. Changer
- * d'onglet ne recharge pas la fiche — seul l'identifiant est surveillé.
+ * `?onglet=sources | historique`, Identité par défaut
+ * (`components/personne/onglets.ts`) ; les anciennes clés — `famille`,
+ * `documents`, `demandes` — ouvrent l'onglet qui les a absorbées. **Aucun
+ * nouveau nom de route** : celui de la fiche, `personne.detail`, est un contrat
+ * avec les notifications. Changer d'onglet ne recharge pas la fiche — seul
+ * l'identifiant est surveillé.
+ *
+ * `#depot` (« Joindre un document ») amène la zone de dépôt de la galerie à
+ * l'écran : c'est la vue qui lit la route, c'est donc elle qui y défile.
  *
  * La galerie de preuves charge ses propres médias (§ 7.3) : la fiche ne porte
  * que la vue **validée**, et la moitié de ce qu'il faut montrer est justement ce
@@ -58,7 +63,7 @@
  *
  * Seules les **actions réservées** se cachent, et aucune n'est décidée ici :
  * chacune porte sa condition dans `components/personne/gestes.ts`, et la
- * suppression reste un geste séparé, derrière un filet du menu ⋯.
+ * suppression reste un geste séparé, derrière un filet du menu « Proposer ».
  *
  * ## Ce qui n'est volontairement pas branché
  *
@@ -68,7 +73,7 @@
  * porte déjà — renvoie vers `demande.detail`, qui existe.
  * ────────────────────────────────────────────────────────────────────
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { lireFichePersonne, type FichePersonne, type FichePersonneComplete } from '@/lib/api'
 import { useAppelApi } from '@/composables/useAppelApi'
@@ -117,7 +122,7 @@ const restreinte = computed(() =>
 )
 
 /** L'onglet ouvert, lu dans `?onglet=`. Identité par défaut, et aussi pour
- *  `?onglet=demandes` sur une fiche qui n'en porte plus. */
+ *  `?onglet=historique` sur une fiche qui n'en porte plus. */
 const onglet = computed<OngletFiche>(() =>
   complete.value === null ? 'identite' : ongletDepuisRequete(route.query['onglet'], complete.value),
 )
@@ -125,6 +130,30 @@ const onglet = computed<OngletFiche>(() =>
 /** Une seule image d'origine décodée à la fois, quel que soit le nombre de
  *  vignettes à l'écran. La loupe est tenue ici pour cette raison. */
 const loupe = ref<CibleLoupe | null>(null)
+
+/*
+ * « Joindre un document » mène à `?onglet=sources#depot`. Le routeur remonte en
+ * haut de page à chaque navigation (`router/index.ts`), et la galerie n'existe
+ * qu'une fois la fiche chargée et le nouvel onglet entré : on attend donc la
+ * fin du coulissement (260 ms) avant d'amener la zone de dépôt à l'écran — le
+ * bas du bloc, là où est le formulaire.
+ */
+let minuterieDepot: ReturnType<typeof setTimeout> | undefined
+watch(
+  () => [route.hash, onglet.value, complete.value !== null] as const,
+  ([ancre, ouvert, chargee]) => {
+    if (typeof document === 'undefined' || ancre !== '#depot' || ouvert !== 'sources' || !chargee) return
+    clearTimeout(minuterieDepot)
+    minuterieDepot = setTimeout(() => {
+      document.getElementById('depot')?.scrollIntoView({
+        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'end',
+      })
+    }, 300)
+  },
+  { immediate: true, flush: 'post' },
+)
+onBeforeUnmount(() => clearTimeout(minuterieDepot))
 
 // Changer de fiche pendant qu'une loupe est ouverte laisserait à l'écran
 // l'image de la fiche précédente.

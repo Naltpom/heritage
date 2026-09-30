@@ -1,12 +1,13 @@
 /**
- * Les deux tiroirs du mobile : le menu de navigation et la barre d'outils.
+ * Les tiroirs de l'en-tête : le menu du compte (avatar, sur bureau) et la
+ * barre d'outils (filtres). Le menu de navigation mobile a disparu avec la
+ * refonte : la navigation vit dans la barre du bas (`BarreNavigation`).
  *
  * ────────────────────────────────────────────────────────────────────
  * **Deux tiroirs ouverts en même temps ne sont pas un défaut à éviter : c'est
  * un état qu'on ne sait pas écrire.** L'état est une seule valeur parmi trois,
- * et non deux booléens. Deux booléens rendent représentable `{menu: true,
- * outils: true}` — les deux panneaux se recouvrant, l'un par la gauche et
- * l'autre par la droite — et il faut alors se souvenir de fermer l'autre à
+ * et non deux booléens. Deux booléens rendent représentable `{compte: true,
+ * outils: true}` — les deux panneaux se recouvrant — et il faut alors se souvenir de fermer l'autre à
  * chaque ouverture, à chaque endroit.
  *
  * **Le seuil est écrit une seule fois.** `REQUETE_MOBILE` est, caractère pour
@@ -23,7 +24,7 @@
 /** La requête média du mobile — exactement celle que compile `max-md:`. */
 export const REQUETE_MOBILE = '(width < 48rem)'
 
-export type TiroirOuvert = 'aucun' | 'menu' | 'outils' | 'compte'
+export type TiroirOuvert = 'aucun' | 'outils' | 'compte'
 
 export interface EtatTiroirs {
   ouvert: TiroirOuvert

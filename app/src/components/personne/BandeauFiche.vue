@@ -18,14 +18,19 @@
  * - **La note de confidentialité** : `noteDeConfidentialite()`, commandée par
  *   `vivant` — jamais par `deceased`, ni par l'absence de dates.
  *
- * ## Les actions : ce que la charge et la session permettent, rien d'autre
+ * ## Les actions : un seul bouton, « Proposer »
  *
- * À droite, sans rétrécir : « Proposer une modification » (principal),
- * « Proposer des liens » (secondaire) — tous deux dans `PointProposition` — et
- * le menu ⋯ (`MenuFiche`), qui porte « Ajouter un document » puis, **séparée
- * par un filet** et en couleur d'alerte, « Demander la suppression ». Chaque
- * geste porte sa condition (`gestes.ts`) ; sur mobile, ils descendent dans la
- * barre d'action fixe de `PageFiche`, et le bandeau n'en montre aucun.
+ * À droite, sans rétrécir : le bouton « Proposer » (`MenuFiche`), qui ouvre
+ * « Corriger cette fiche », « Ajouter un parent, un enfant ou un conjoint »,
+ * « Joindre un document » puis, **séparée par un filet** et en couleur
+ * d'alerte, « Demander la suppression ». Chaque geste porte sa condition
+ * (`gestes.ts`) ; sur mobile, le même bouton descend dans la barre d'action
+ * fixe de `PageFiche`, et le bandeau n'en montre aucun.
+ *
+ * ## Les onglets
+ *
+ * `OngletsFiche` : trois onglets dont le soulignement glisse (refonte du
+ * 30/09/2026). Le contenu qui coulisse dessous est l'affaire de `PageFiche`.
  *
  * ## « ‹ Retour à l'arbre »
  *
@@ -42,7 +47,6 @@ import type { CibleLoupe } from '@/components/medias/medias'
 import { noteDeConfidentialite, regimeDocumentaire } from './champs'
 import MenuFiche from './MenuFiche.vue'
 import OngletsFiche from './OngletsFiche.vue'
-import PointProposition from './PointProposition.vue'
 import PortraitFiche from './PortraitFiche.vue'
 import type { OngletFiche } from './onglets'
 
@@ -131,8 +135,7 @@ const confidentialite = computed(() => noteDeConfidentialite(fiche))
         </div>
 
         <!-- Les actions desktop. Sur mobile, elles sont dans la barre du bas. -->
-        <div class="flex flex-none gap-2 self-start whitespace-nowrap max-md:hidden">
-          <PointProposition :fiche="fiche" disposition="bandeau" />
+        <div class="flex flex-none self-start max-md:hidden">
           <MenuFiche :fiche="fiche" />
         </div>
       </div>

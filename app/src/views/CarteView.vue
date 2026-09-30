@@ -159,6 +159,15 @@ async function allerVersPersonne(personId: number): Promise<void> {
   await routeur.push({ name: 'personne.detail', params: { id: personId } })
 }
 
+/**
+ * Explorer (`ExplorerView`) appelle `remesurer()` quand cet écran a fini de
+ * glisser en place. La mesure du montage est déjà juste — l'écran sortant a
+ * quitté le flux —, mais une remesure une fois posé ne coûte rien et rattrape
+ * ce que le mouvement aurait pu fausser. Ici, elle recale aussi Leaflet
+ * (`invalider()`, dans `mesurerHauteur`).
+ */
+defineExpose({ remesurer: mesurerHauteur })
+
 onMounted(() => {
   mesurerHauteur()
   window.addEventListener('resize', mesurerHauteur)

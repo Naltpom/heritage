@@ -24,7 +24,7 @@ import { assurerSessionChargee, useSession } from '@/composables/useSession'
 import { regimeDeSession, resoudreAcces, routeParDefaut } from './acces'
 // La table vit dans `routes.ts` : elle y est importable par un test, alors
 // que ce fichier-ci appelle `createWebHistory()` dès son chargement.
-import { routes, sectionDe } from './routes'
+import { routes, sectionDe, titreDEntete } from './routes'
 import { definirPage } from '@/composables/entete'
 import { useTiroirs } from '@/composables/useTiroirs'
 
@@ -62,14 +62,15 @@ routeur.afterEach((vers) => {
   // Ce que l'en-tête affiche de l'écran : il ne lit pas la route lui-même.
   definirPage({
     section: sectionDe(String(vers.name ?? ''), vers.meta),
-    titre,
+    // Dans Explorer, « Explorer » : la rangée d'onglets nomme déjà l'écran.
+    titre: titreDEntete(String(vers.name ?? ''), vers.meta),
     parent: vers.meta.parent ?? null,
   })
 
   // Les tiroirs du mobile se referment en changeant de page. C'est ici et non
-  // dans l'en-tête : `entete-creation.test.ts` simule `vue-router` en n'en
+  // dans l'en-tête : `entete-rendu.test.ts` simule `vue-router` en n'en
   // exportant que `useRouter`, et un `useRoute()` dans l'en-tête ferait lever
-  // ses dix cas d'un coup. C'est aussi le bon endroit — refermer un tiroir
+  // tous ses cas d'un coup. C'est aussi le bon endroit — refermer un tiroir
   // parce qu'on a navigué est une affaire de navigation.
   fermerLesTiroirs()
 })

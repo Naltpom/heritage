@@ -134,6 +134,13 @@
   --h-ok-doux: color-mix(in srgb, var(--h-ok) 13%, transparent);
   --h-ok-bord: color-mix(in srgb, var(--h-ok) 35%, transparent);
 
+  /* Le violet du cadeau : le seul geste de l'accueil qu'on doit repérer d'un
+     coup d'œil, donc la seule teinte qui n'appartient ni à l'accent ni aux
+     états. Réservé à « Voir à qui je fais le cadeau ». */
+  --h-cadeau: #6b3fa0;
+  --h-cadeau-texte: #ffffff;
+  --h-cadeau-doux: color-mix(in srgb, var(--h-cadeau) 12%, transparent);
+
   --h-ombre-panneau: 0 6px 22px rgb(0 0 0 / 0.14);
 }
 
@@ -150,6 +157,9 @@
 
     --h-alerte: #e08a5a;
     --h-ok: #7db38c;
+
+    --h-cadeau: #b78cf0;
+    --h-cadeau-texte: #1a1024;
 
     --h-homme: #24354a;
     --h-homme-bord: #4a6b90;
@@ -185,6 +195,9 @@
   --color-ok: var(--h-ok);
   --color-ok-doux: var(--h-ok-doux);
   --color-ok-bord: var(--h-ok-bord);
+  --color-cadeau: var(--h-cadeau);
+  --color-cadeau-texte: var(--h-cadeau-texte);
+  --color-cadeau-doux: var(--h-cadeau-doux);
 
   --color-homme: var(--h-homme);
   --color-homme-bord: var(--h-homme-bord);

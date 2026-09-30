@@ -2,25 +2,30 @@
 /**
  * L'accueil — la page où tout lecteur connecté atterrit (`/home`).
  *
- * Trois choses, dans l'ordre où on les cherche en ouvrant l'application :
+ * Trois choses, dans l'ordre où on les cherche en ouvrant l'application
+ * (refonte du 30/09/2026, pensée pour le téléphone) :
  *
- * 1. **les deux portes** — l'arbre, et « proposer une personne » ;
- * 2. **le jour** — les anniversaires, en carrousel : on glisse à gauche ou à
- *    droite (ou les flèches, au clavier comme à la souris) pour voir les jours
- *    suivants et précédents, et les tirages dont c'est le jour y figurent ;
- * 3. **ses tirages** — le prochain rendez-vous de chacun.
+ * 1. **deux boutons sur une ligne** — « Arbre » et « Modifier l'arbre », qui
+ *    ouvre l'assistant ;
+ * 2. **ses tirages** — repliés sur une ligne, dépliés pour régler sa présence ;
+ *    une fois le tirage fait, « Voir à qui je fais le cadeau » en violet, sans
+ *    rien déplier (`CarteTirageAccueil`) ;
+ * 3. **les anniversaires**, en carrousel : on glisse (ou les flèches) pour voir
+ *    les jours voisins. Les vivants d'abord, bien lisibles ; les défunts
+ *    ensuite, en retrait, sous « En mémoire ».
  *
  * Les anniversaires viennent de `GET /api/anniversaires`, l'année entière en une
  * fois : glisser d'un jour à l'autre ne redemande rien. Les tirages exigent un
  * compte rattaché ; un compte en attente ne les demande donc pas.
  *
- * **Aucun receveur n'est nommé ici**, même au lecteur : l'accueil s'ouvre
- * volontiers devant d'autres, et c'est l'écran du tirage qui le dévoile.
+ * **Aucun receveur n'est rendu sans geste**, même au lecteur : l'accueil
+ * s'ouvre volontiers devant d'autres. Le nom n'entre dans le DOM qu'au clic.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import {
   chargerAnniversaires,
   listerTirages,
+  type PersonneDuTirage,
   type ResumeDeTirage,
   type VueAnniversaires,
 } from '@/lib/api'
@@ -28,19 +33,17 @@ import { useSession } from '@/composables/useSession'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import LigneEvenement from '@/components/anniversaires/LigneEvenement.vue'
+import CarteTirageAccueil from '@/components/accueil/CarteTirageAccueil.vue'
 import {
   anniversairesDuJour,
-  dansCombien,
   decaler,
-  etatDuTirageCeJour,
   jourCourt,
   libelleDate,
   libelleRelatif,
   prochaineOccurrence,
-  tiragesDuJour,
 } from '@/components/accueil/jours'
 
-const { rattache, nomAffiche } = useSession()
+const { rattache, nomAffiche, vueEmpruntee } = useSession()
 
 const aujourdhui = decaler(new Date(), 0)
 const prenom = computed(() => nomAffiche.value.split(/\s+/)[0] ?? '')
@@ -50,6 +53,7 @@ const prenom = computed(() => nomAffiche.value.split(/\s+/)[0] ?? '')
 const anniversaires = shallowRef<VueAnniversaires | null>(null)
 const erreurAnniversaires = ref<unknown>(null)
 const tirages = shallowRef<ResumeDeTirage[]>([])
+const moi = shallowRef<PersonneDuTirage | null>(null)
 let avorteur: AbortController | null = null
 
 async function charger(): Promise<void> {
@@ -67,7 +71,10 @@ async function charger(): Promise<void> {
     ),
     rattache.value
       ? listerTirages(signal).then(
-          (liste) => (tirages.value = liste.tirages),
+          (liste) => {
+            tirages.value = liste.tirages
+            moi.value = liste.moi
+          },
           () => (tirages.value = []),
         )
       : Promise.resolve(),
@@ -76,6 +83,21 @@ async function charger(): Promise<void> {
 
 onMounted(charger)
 onBeforeUnmount(() => avorteur?.abort())
+
+/* ───────────────── Mes tirages ───────────────── */
+
+const prochainsTirages = computed(() =>
+  tirages.value
+    .filter((t) => t.suisParticipant || t.organisateur.estMoi)
+    .map((t) => ({ tirage: t, date: prochaineOccurrence(t, aujourdhui) }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .map(({ tirage }) => tirage),
+)
+
+/** La réponse d'un réglage de présence remplace le résumé du tirage. */
+function remplacerTirage(maj: ResumeDeTirage): void {
+  tirages.value = tirages.value.map((t) => (t.id === maj.id ? maj : t))
+}
 
 /* ───────────────── Le carrousel des jours ───────────────── */
 
@@ -96,14 +118,17 @@ function aller(delta: number): void {
 const bandeau = computed(() =>
   [-3, -2, -1, 0, 1, 2, 3].map((d) => {
     const date = decaler(aujourdhui, ecart.value + d)
-    const nombre =
-      anniversairesDuJour(anniversaires.value?.jours ?? [], date).length + tiragesDuJour(tirages.value, date).length
+    const nombre = anniversairesDuJour(anniversaires.value?.jours ?? [], date).length
     return { delta: d, date, nombre, estAujourdhui: ecart.value + d === 0 }
   }),
 )
 
 const evenementsDuJour = computed(() => anniversairesDuJour(anniversaires.value?.jours ?? [], jourAffiche.value))
-const tiragesDuJourAffiche = computed(() => tiragesDuJour(tirages.value, jourAffiche.value))
+
+/** Un événement est « des vivants » dès qu'un de ses sujets l'est : un mariage
+ *  dont un époux vit encore se fête encore. */
+const evenementsVivants = computed(() => evenementsDuJour.value.filter((e) => e.sujets.some((s) => s.vivant)))
+const evenementsEnMemoire = computed(() => evenementsDuJour.value.filter((e) => !e.sujets.some((s) => s.vivant)))
 
 /**
  * Glisser du doigt. `touch-action: pan-y` sur la zone laisse le défilement
@@ -130,15 +155,6 @@ function surTouche(e: KeyboardEvent): void {
   else return
   e.preventDefault()
 }
-
-/* ───────────────── Les prochains tirages ───────────────── */
-
-const prochainsTirages = computed(() =>
-  tirages.value
-    .filter((t) => t.suisParticipant || t.organisateur.estMoi)
-    .map((t) => ({ tirage: t, date: prochaineOccurrence(t, aujourdhui) }))
-    .sort((a, b) => a.date.getTime() - b.date.getTime()),
-)
 </script>
 
 <template>
@@ -148,47 +164,54 @@ const prochainsTirages = computed(() =>
       <p class="mt-1 text-sm text-attenue">{{ libelleRelatif(aujourdhui, aujourdhui) }}, {{ libelleDate(aujourdhui) }}</p>
     </header>
 
-    <!-- ───────── Les deux portes ───────── -->
-    <nav aria-label="Accès rapides" class="mb-6 grid gap-3 sm:grid-cols-2">
+    <!-- ───────── Deux boutons, une ligne ───────── -->
+    <nav aria-label="Accès rapides" class="mb-6 grid grid-cols-2 gap-3">
       <RouterLink
         :to="{ name: 'arbre' }"
-        class="group flex items-center gap-3 rounded-panneau border border-ligne bg-panneau p-4 transition-colors hover:border-accent"
+        class="flex items-center justify-center gap-2 rounded-panneau bg-accent px-3 py-3.5 text-sm font-semibold text-fond transition-opacity hover:opacity-90"
       >
-        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-pastille bg-accent-doux text-accent" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-            <circle cx="10" cy="4" r="2" /><circle cx="4" cy="15" r="2" /><circle cx="16" cy="15" r="2" />
-            <path d="M10 6v4M10 10H4v3M10 10h6v3" />
-          </svg>
-        </span>
-        <span class="min-w-0">
-          <span class="block font-medium text-texte">Explorer l’arbre</span>
-          <span class="block text-xs text-attenue">La famille, génération par génération</span>
-        </span>
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+          <circle cx="10" cy="4" r="2" /><circle cx="4" cy="15" r="2" /><circle cx="16" cy="15" r="2" />
+          <path d="M10 6v4M10 10H4v3M10 10h6v3" />
+        </svg>
+        Arbre
       </RouterLink>
-
       <RouterLink
-        v-if="rattache"
+        v-if="rattache && vueEmpruntee === null"
         :to="{ name: 'proposition.creation' }"
-        class="group flex items-center gap-3 rounded-panneau border border-ligne bg-panneau p-4 transition-colors hover:border-accent"
+        class="flex items-center justify-center gap-2 rounded-panneau border border-accent bg-panneau px-3 py-3.5 text-sm font-semibold text-accent transition-colors hover:bg-accent-doux"
       >
-        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-pastille bg-accent-doux text-accent" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-            <path d="M10 4v12M4 10h12" />
-          </svg>
-        </span>
-        <span class="min-w-0">
-          <span class="block font-medium text-texte">Proposer une personne</span>
-          <span class="block text-xs text-attenue">Ajouter quelqu’un qui manque, relu avant d’entrer</span>
-        </span>
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M13.5 3.5l3 3L7 16H4v-3z" />
+        </svg>
+        Modifier l’arbre
       </RouterLink>
-      <p v-else class="flex items-center rounded-panneau border border-dashed border-ligne p-4 text-xs text-attenue">
-        Vous pourrez proposer des personnes une fois votre rattachement validé.
+      <p v-else-if="!rattache" class="flex items-center rounded-panneau border border-dashed border-ligne p-3 text-xs text-attenue">
+        Vous pourrez modifier l’arbre une fois votre rattachement validé.
       </p>
     </nav>
 
-    <!-- ───────── Le jour, en carrousel ───────── -->
+    <!-- ───────── Mes tirages ───────── -->
+    <section v-if="rattache && prochainsTirages.length > 0" aria-labelledby="titre-tirages" class="mb-6">
+      <div class="mb-2 flex items-baseline justify-between">
+        <h2 id="titre-tirages" class="text-sm font-semibold tracking-tight">Mes tirages</h2>
+        <RouterLink :to="{ name: 'tirages' }" class="text-xs text-accent underline">Tous les tirages</RouterLink>
+      </div>
+      <div class="flex flex-col gap-3">
+        <CarteTirageAccueil
+          v-for="t in prochainsTirages"
+          :key="t.id"
+          :tirage="t"
+          :moi="moi"
+          :aujourdhui="aujourdhui"
+          @maj="remplacerTirage"
+        />
+      </div>
+    </section>
+
+    <!-- ───────── Les anniversaires, en carrousel ───────── -->
     <section
-      class="mb-6 rounded-panneau border border-ligne bg-panneau"
+      class="rounded-panneau border border-ligne bg-panneau"
       aria-roledescription="carrousel"
       aria-label="Anniversaires du jour"
       tabindex="0"
@@ -204,7 +227,7 @@ const prochainsTirages = computed(() =>
           ‹
         </button>
         <div class="min-w-0 flex-1 text-center" aria-live="polite">
-          <p class="truncate text-sm font-semibold text-texte">{{ libelleRelatif(jourAffiche, aujourdhui) }}</p>
+          <p class="truncate text-sm font-semibold text-texte">Anniversaires · {{ libelleRelatif(jourAffiche, aujourdhui) }}</p>
           <p class="truncate text-xs text-attenue">{{ libelleDate(jourAffiche) }}</p>
         </div>
         <button
@@ -248,74 +271,34 @@ const prochainsTirages = computed(() =>
           @action="charger"
         />
         <Transition v-else :name="`glisse-${sens}`" mode="out-in">
-          <div :key="ecart" class="flex flex-col gap-4">
-            <RouterLink
-              v-for="t in tiragesDuJourAffiche"
-              :key="`tirage-${t.id}`"
-              :to="{ name: 'tirage.detail', params: { id: t.id } }"
-              class="flex items-center gap-3 rounded-panneau border border-accent bg-accent-doux p-3"
-            >
-              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-pastille bg-panneau text-accent" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
-                  <rect x="3" y="8" width="14" height="9" rx="1" /><path d="M2 5h16v3H2zM10 5v12" />
-                  <path d="M10 5C8 1 5 2 6.5 4.5 7.2 5.2 10 5 10 5zM10 5c2-4 5-3 3.5-.5C12.8 5.2 10 5 10 5z" />
-                </svg>
-              </span>
-              <span class="min-w-0">
-                <span class="block text-sm font-semibold text-texte">{{ t.nom }}</span>
-                <span class="block text-xs text-attenue">
-                  {{ etatDuTirageCeJour(t, jourAffiche) }}<template v-if="t.lieu"> · {{ t.lieu }}</template>
-                </span>
-              </span>
-            </RouterLink>
-
-            <ul v-if="evenementsDuJour.length > 0" class="flex flex-col gap-3">
-              <li v-for="e in evenementsDuJour" :key="e.cle">
+          <div :key="ecart" class="flex flex-col gap-5">
+            <ul v-if="evenementsVivants.length > 0" class="flex flex-col gap-3">
+              <li v-for="e in evenementsVivants" :key="e.cle">
                 <LigneEvenement :evenement="e" :annee-affichee="jourAffiche.getFullYear()" />
               </li>
             </ul>
-            <p v-else-if="tiragesDuJourAffiche.length === 0" class="py-6 text-center text-sm text-attenue">
+
+            <div v-if="evenementsEnMemoire.length > 0" class="en-memoire">
+              <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-attenue">En mémoire</p>
+              <ul class="flex flex-col gap-3">
+                <li v-for="e in evenementsEnMemoire" :key="e.cle">
+                  <LigneEvenement :evenement="e" :annee-affichee="jourAffiche.getFullYear()" />
+                </li>
+              </ul>
+            </div>
+
+            <p v-if="evenementsDuJour.length === 0" class="py-6 text-center text-sm text-attenue">
               Rien à fêter ce jour-là. Glissez pour voir les jours voisins.
             </p>
           </div>
         </Transition>
       </div>
 
-      <div class="flex items-center justify-between border-t border-ligne px-4 py-2 text-xs">
-        <button v-if="ecart !== 0" type="button" class="font-semibold text-accent underline" @click="aller(-ecart)">
+      <div v-if="ecart !== 0" class="border-t border-ligne px-4 py-2 text-xs">
+        <button type="button" class="font-semibold text-accent underline" @click="aller(-ecart)">
           Revenir à aujourd’hui
         </button>
-        <span v-else class="text-attenue">Glissez ou utilisez les flèches pour changer de jour.</span>
-        <RouterLink :to="{ name: 'anniversaires' }" class="text-accent underline">Tout le calendrier</RouterLink>
       </div>
-    </section>
-
-    <!-- ───────── Les prochains tirages ───────── -->
-    <section v-if="rattache" aria-labelledby="titre-tirages" class="rounded-panneau border border-ligne bg-panneau">
-      <div class="flex items-center justify-between border-b border-ligne px-4 py-2.5">
-        <h2 id="titre-tirages" class="text-sm font-semibold tracking-tight">Vos tirages au sort</h2>
-        <RouterLink :to="{ name: 'tirages' }" class="text-xs text-accent underline">Tous les tirages</RouterLink>
-      </div>
-      <ul v-if="prochainsTirages.length > 0" class="flex flex-col divide-y divide-ligne">
-        <li v-for="{ tirage, date } in prochainsTirages" :key="tirage.id">
-          <RouterLink
-            :to="{ name: 'tirage.detail', params: { id: tirage.id } }"
-            class="flex items-center justify-between gap-3 px-4 py-3 hover:bg-accent-doux"
-          >
-            <span class="min-w-0">
-              <span class="block truncate text-sm font-medium text-texte">{{ tirage.nom }}</span>
-              <span class="block text-xs text-attenue">{{ libelleDate(date) }} · {{ etatDuTirageCeJour(tirage, date) }}</span>
-            </span>
-            <span class="shrink-0 rounded-pastille bg-accent-doux px-2 py-0.5 text-xs font-semibold text-accent">
-              {{ dansCombien(date, aujourdhui) }}
-            </span>
-          </RouterLink>
-        </li>
-      </ul>
-      <p v-else class="px-4 py-4 text-sm text-attenue">
-        Vous ne participez à aucun tirage pour l’instant.
-        <RouterLink :to="{ name: 'tirages' }" class="text-accent underline">En créer ou en rejoindre un</RouterLink>
-      </p>
     </section>
   </div>
 </template>
@@ -323,6 +306,15 @@ const prochainsTirages = computed(() =>
 <style scoped>
 .zone-glisser {
   touch-action: pan-y;
+}
+
+/* Les défunts en retrait : lisibles, mais après les vivants et d'un ton plus bas. */
+.en-memoire {
+  opacity: 0.62;
+}
+.en-memoire:hover,
+.en-memoire:focus-within {
+  opacity: 1;
 }
 
 .glisse-suivant-enter-active,

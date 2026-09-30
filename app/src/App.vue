@@ -9,10 +9,18 @@
  *
  * Le contenu est dans un `<main id="contenu">` unique, cible du lien d'évitement :
  * la navigation du clavier ne doit pas retraverser le menu à chaque écran.
+ *
+ * **La barre du bas** (téléphone, refonte du 30/09/2026) est montée dans le même
+ * bloc que l'en-tête : un écran sans cadre n'a ni l'un ni l'autre. Elle est
+ * `fixed` ; le `<main>` lui réserve donc sa hauteur en marge basse, lue dans
+ * `--hauteur-barre-bas` que la barre publie (0 sur bureau, et 0 tant qu'elle
+ * n'existe pas). Les écrans à canevas la retranchent de leur côté, dans
+ * `hauteurDuCadre()`.
  */
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import EnTeteApplication from '@/components/mise-en-page/EnTeteApplication.vue'
+import BarreNavigation from '@/components/mise-en-page/BarreNavigation.vue'
 import BandeauPortrait from '@/components/mise-en-page/BandeauPortrait.vue'
 import InstallationApplication from '@/components/mise-en-page/InstallationApplication.vue'
 import BandeauRegime from '@/components/mise-en-page/BandeauRegime.vue'
@@ -49,9 +57,10 @@ const avecCadre = computed(() => route.meta.cadre !== false)
           <QuitterIncarnation />
         </template>
       </BandeauRegime>
+      <BarreNavigation />
     </template>
 
-    <main id="contenu" class="flex-1">
+    <main id="contenu" class="flex-1 pb-[var(--hauteur-barre-bas,0px)]">
       <RouterView />
     </main>
   </div>

@@ -17,7 +17,6 @@
  */
 
 import type { RouteRecordRaw } from 'vue-router'
-import type { NomDeDisposition } from '@/components/arbre/dispositions'
 import type { NiveauRequis } from './acces'
 import type { ParentDeDetail, Section } from '@/composables/entete'
 
@@ -30,21 +29,25 @@ declare module 'vue-router' {
     titre: string
     /** `false` masque l'en-tête applicatif (connexion, inscription). */
     cadre?: boolean
-    /**
-     * La **disposition** de l'arbre : la transformation appliquée à la charge.
-     *
-     * Elle a servi à distinguer sept maquettes de comparaison ; il n'en reste
-     * qu'une, `ressorts`, et c'est `/arbre` qui la porte. Facultative parce que la
-     * vue reste montable sans route — pas parce qu'une route de l'arbre aurait
-     * encore de bonnes raisons de s'en passer. Voir `components/arbre/dispositions/`.
-     */
-    disposition?: NomDeDisposition
     /** L'onglet d'exploration allumé dans l'en-tête. Par défaut, déduit du nom
      *  de route (`sectionDe`) : la fiche et les formulaires gardent « Arbre ». */
     section?: Section
-    /** Écran de DÉTAIL : sur téléphone, « ‹ {libelle} » remplace le burger. */
+    /** Écran de DÉTAIL : sur téléphone, l'en-tête affiche « ‹ {libelle} » pour y remonter. */
     parent?: ParentDeDetail
   }
+}
+
+/**
+ * Le titre que l'en-tête du téléphone affiche pour une route. C'est celui de la
+ * route, sauf dans Explorer : ses trois onglets sont déjà nommés dans la rangée
+ * juste en dessous, et « Chronologie » au-dessus de l'onglet « Chronologie »
+ * dirait deux fois la même chose. L'en-tête dit donc où l'on est — « Explorer » —
+ * et la rangée, quel onglet. L'onglet du navigateur (`document.title`) garde,
+ * lui, le titre précis de la route : c'est lui qu'on retrouve dans l'historique.
+ */
+export function titreDEntete(nom: string, meta: { section?: Section; titre?: string }): string {
+  if (sectionDe(nom, meta) === 'explorer') return 'Explorer'
+  return typeof meta.titre === 'string' ? meta.titre : ''
 }
 
 const VERS_ARBRE: ParentDeDetail = { nom: 'arbre', libelle: 'Arbre' }
@@ -52,28 +55,11 @@ const VERS_ARBRE: ParentDeDetail = { nom: 'arbre', libelle: 'Arbre' }
 /** L'onglet de l'en-tête pour une route, sans lire la route dans l'en-tête. */
 export function sectionDe(nom: string, meta: { section?: Section }): Section {
   if (meta.section) return meta.section
-  if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires') return nom
+  if (nom === 'accueil') return 'accueil'
+  if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires' || nom === 'explorer') return 'explorer'
+  if (nom === 'moi' || nom === 'compte' || nom.startsWith('demande') || nom.startsWith('tirage') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
-}
-
-/**
- * La disposition déclarée dans `meta`, servie à la vue en prop.
- *
- * Une fonction et non `props: true` : `meta` n'est pas un paramètre d'URL, et
- * c'est bien dans `meta` qu'elle doit vivre — la garde d'accès et le titre de
- * page s'y trouvent déjà, et une disposition en segment d'URL serait un
- * paramètre que n'importe qui pourrait inventer.
- */
-function dispositionEnProp(route: {
-  meta: { disposition?: NomDeDisposition }
-  query: Record<string, unknown>
-}): { disposition: NomDeDisposition | undefined; haut: unknown; bas: unknown } {
-  // La profondeur voyage dans la **chaîne de requête** : une profondeur se juge
-  // en la changeant, et un aller-retour par essai coûterait un déploiement. Les
-  // valeurs sont bornées par `optionsDepuis()`, pas ici — une URL tapée à la main
-  // ne doit pas rendre un écran vide.
-  return { disposition: route.meta.disposition, haut: route.query['haut'], bas: route.query['bas'] }
 }
 
 /** Exportée pour que les tests montent la table sur un historique en mémoire :
@@ -85,7 +71,7 @@ export const routes: RouteRecordRaw[] = [
     // Le composant n'est jamais rendu : la garde globale redirige selon le
     // régime, une fois la session connue. Une `redirect` de déclaration serait
     // évaluée **avant** la garde, donc avant que la session soit chargée.
-    component: () => import('@/views/ArbreView.vue'),
+    component: () => import('@/views/AccueilView.vue'),
     meta: { acces: 'public', titre: 'Accueil' },
   },
 
@@ -96,14 +82,6 @@ export const routes: RouteRecordRaw[] = [
     name: 'accueil',
     component: () => import('@/views/AccueilView.vue'),
     meta: { acces: 'attente', titre: 'Accueil' },
-  },
-
-  {
-    // L'arbre total, repris de zéro : plein écran, placement propre au client.
-    path: '/tree',
-    name: 'tree',
-    component: () => import('@/views/TreeView.vue'),
-    meta: { acces: 'attente', titre: 'Arbre', cadre: false },
   },
 
   {
@@ -196,18 +174,10 @@ export const routes: RouteRecordRaw[] = [
 
   /* --- Consultation : ouverte au régime « en attente » ------------
    *
-   * **`/arbre` SERT `ressorts`, et c'est la fin de la comparaison.** Les sept
-   * maquettes `/arbre-2` à `/arbre-8` ont été retirées : elles existaient pour que
-   * le commanditaire choisisse, il a choisi, et tant qu'elles vivaient **la route
-   * que tout le monde atteint servait la sortie brute du moteur** — celle qui
-   * n'avait été retenue par personne. `routeParDefaut()` renvoie `{ name: 'arbre' }`
-   * pour tous les régimes : le travail fait sur les dispositions n'était donc servi
-   * à aucun membre.
-   *
-   * La disposition reste posée en `meta` et voyage en **prop** plutôt que par
-   * `useRoute()` : la vue reste montable seule dans un test de rendu, où il n'y a
-   * pas de routeur. `?haut=` et `?bas=` continuent d'être lus et bornés par
-   * `optionsDepuis()`.
+   * Un seul arbre. `/tree` (l'arbre plein écran repris de zéro) et
+   * `/arbre/ancien` (la disposition `ressorts`) ont été retirés le 30/09/2026 :
+   * aucun écran n'y menait, et deux arbres de plus étaient deux façons de plus
+   * de se perdre. Ils tombent désormais sur l'attrape-tout.
    */
   {
     // **`/arbre` sert l'arbre à niveaux de détail** (`HistoireView`) : tout
@@ -219,14 +189,6 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'attente', titre: 'Arbre' },
   },
   {
-    // L'écran précédent, disposition `ressorts`, gardé à portée de main.
-    path: '/arbre/ancien',
-    name: 'arbre.ancien',
-    component: () => import('@/views/ArbreView.vue'),
-    props: dispositionEnProp,
-    meta: { acces: 'attente', titre: 'Arbre (ancien)', disposition: 'ressorts' },
-  },
-  {
     // `{id}` est un entier : un identifiant provisoire (`#12/p1`) ne correspond
     // à aucune route côté API et n'a pas à en avoir une ici non plus. Le détail
     // d'un nœud en attente passe par la demande qui le porte (§ 6.6).
@@ -236,28 +198,56 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'attente', titre: 'Fiche', parent: VERS_ARBRE },
   },
   {
-    path: '/chronologie',
-    name: 'chronologie',
-    component: () => import('@/views/ChronologieView.vue'),
-    meta: { acces: 'attente', titre: 'Chronologie' },
+    // **Explorer** : une page, trois onglets qui glissent — Chronologie, Carte,
+    // Calendrier (refonte du 30/09/2026). Les trois écrans deviennent des routes
+    // enfants et **gardent leur nom** (`chronologie`, `carte`, `anniversaires`) :
+    // les noms de route sont un contrat, on n'en renomme aucun. Les anciennes
+    // adresses (`/chronologie`, `/carte`, `/anniversaires`) redirigent plus bas.
+    //
+    // `attente` pour les trois, et pour une raison mécanique : ces écrans sont
+    // bâtis sur des **événements datés**, et une personne vivante hors cercle
+    // n'en fournit aucun. Un compte en attente de validation y voit donc un
+    // écran plein — les défunts de l'arbre, leurs lieux et leurs dates.
+    path: '/explorer',
+    name: 'explorer',
+    component: () => import('@/views/ExplorerView.vue'),
+    meta: { acces: 'attente', titre: 'Explorer' },
+    redirect: { name: 'chronologie' },
+    children: [
+      {
+        path: 'chronologie',
+        name: 'chronologie',
+        component: () => import('@/views/ChronologieView.vue'),
+        meta: { acces: 'attente', titre: 'Chronologie' },
+      },
+      {
+        path: 'carte',
+        name: 'carte',
+        component: () => import('@/views/CarteView.vue'),
+        meta: { acces: 'attente', titre: 'Carte' },
+      },
+      {
+        path: 'calendrier',
+        name: 'anniversaires',
+        component: () => import('@/views/AnniversairesView.vue'),
+        meta: { acces: 'attente', titre: 'Calendrier' },
+      },
+    ],
   },
+  // Les adresses d'avant Explorer : favoris et liens déjà partagés.
+  { path: '/chronologie', redirect: { name: 'chronologie' }, meta: { acces: 'attente', titre: 'Chronologie' } },
+  { path: '/carte', redirect: { name: 'carte' }, meta: { acces: 'attente', titre: 'Carte' } },
+  { path: '/anniversaires', redirect: { name: 'anniversaires' }, meta: { acces: 'attente', titre: 'Calendrier' } },
+
   {
-    // `attente` pour une raison mécanique, et non par analogie avec ses
-    // voisines : ces deux écrans sont bâtis sur des **événements datés**, et
-    // une personne vivante hors cercle n'en fournit aucun. Un compte en attente
-    // de validation y voit donc un écran plein — les 256 défunts de l'arbre,
-    // leurs lieux et leurs dates. Exiger `membre` verrouillerait exactement le
-    // public qui a le plus à voir pendant qu'il patiente.
-    path: '/carte',
-    name: 'carte',
-    component: () => import('@/views/CarteView.vue'),
-    meta: { acces: 'attente', titre: 'Carte' },
-  },
-  {
-    path: '/anniversaires',
-    name: 'anniversaires',
-    component: () => import('@/views/AnniversairesView.vue'),
-    meta: { acces: 'attente', titre: 'Anniversaires' },
+    // **Moi** : la quatrième entrée de la barre du bas. Tout ce qui est
+    // personnel ou rare, en une liste : mon compte, mes demandes, tirages,
+    // actes demandés, questions, administration, déconnexion. `attente` : un
+    // compte en attente y trouve au moins son compte et la déconnexion.
+    path: '/moi',
+    name: 'moi',
+    component: () => import('@/views/MoiView.vue'),
+    meta: { acces: 'attente', titre: 'Moi' },
   },
 
   /* --- Contribution : rattachement validé exigé (§ 12.1) ---------- */

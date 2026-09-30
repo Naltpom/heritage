@@ -11,8 +11,8 @@
  * Écran **neuf et autonome** : il ne modifie ni `/arbre` ni `/tree`. Il
  * réutilise les briques pures du dépôt — l'API (`/arbre/graphe`,
  * `rechercherPersonnes`, `lireFichePersonne`), `indexer()` et `nomDeFiche()` —
- * et l'en-tête applicatif : sur téléphone, le burger ouvre la navigation
- * existante et le bouton filtres de l'en-tête ouvre le feuillet de cet écran.
+ * et l'en-tête applicatif : sur téléphone, la barre du bas porte la
+ * navigation et le bouton filtres de l'en-tête ouvre le feuillet de cet écran.
  *
  * Les règles de traitement tenues ici :
  *  - le front ne filtre rien pour la confidentialité : « Personnes vivantes »

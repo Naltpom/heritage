@@ -14,27 +14,35 @@
  * `agrandir`, et la vue garde **une seule** cible — une seule image d'origine
  * décodée à la fois —, qu'elle ferme quand on change de fiche.
  *
- * ## Les onglets
+ * ## Les onglets (trois depuis le 30/09/2026)
  *
- * - **Identité** : `IdentiteFiche` (où se dessine le calque « en attente », à
- *   côté de la valeur validée) et les faits ;
- * - **Famille** : `ParenteFiche` ;
- * - **Sources et notes** : `SourcesFiche`, avec `appui` / `appuiLabel` ;
- * - **Preuves et documents** : `GalerieMedias`, qui charge ses propres médias —
- *   monté seulement quand l'onglet est ouvert ;
- * - **Demandes** : les `demandesEnAttente` que la fiche porte, vers
+ * - **Identité et famille** : `IdentiteFiche` (où se dessine le calque « en
+ *   attente », à côté de la valeur validée), les faits, puis `ParenteFiche` ;
+ * - **Sources et documents** : `SourcesFiche` (sources et notes), puis
+ *   `GalerieMedias` — qui charge ses propres médias, monté seulement quand
+ *   l'onglet est ouvert, et dont la zone de dépôt porte l'ancre `#depot` —,
+ *   puis les actes demandés (`ListeDemarches`) ;
+ * - **Historique** : les `demandesEnAttente` que la fiche porte, vers
  *   `demande.detail`. L'onglet n'existe que s'il y en a.
+ *
+ * Le contenu **coulisse** d'un onglet à l'autre (`ContenuGlissant`) : vers la
+ * gauche quand on avance dans la rangée, vers la droite quand on recule — au
+ * clic sur un onglet comme au glissement du doigt, qui changent la même URL.
  *
  * ## Le rôle choisit la route, jamais l'affichage (§ 10.4)
  *
  * Chaque bloc s'affiche parce que la charge le porte. Seules les **actions
  * réservées** se cachent, et chacune porte sa condition (`gestes.ts`). La barre
  * d'action mobile n'existe que si elle a au moins un geste à offrir — elle ne
- * teste pas un rôle, elle additionne ce qui est permis.
+ * teste pas un rôle, elle additionne ce qui est permis. Elle porte le même
+ * bouton « Proposer » que le bandeau desktop (`MenuFiche`), et se pose
+ * au-dessus de la barre de navigation du bas (`--hauteur-barre-bas`).
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import type { FichePersonneComplete } from '@/lib/api'
+import ContenuGlissant from '@/components/mise-en-page/ContenuGlissant.vue'
 import GalerieMedias from '@/components/medias/GalerieMedias.vue'
 import ListeDemarches from '@/components/demarches/ListeDemarches.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
@@ -45,9 +53,7 @@ import { useGestesFiche } from './gestes'
 import IdentiteFiche from './IdentiteFiche.vue'
 import MenuFiche from './MenuFiche.vue'
 import { ongletsDeFiche, ongletVoisin, requeteDOnglet, sensDuGlissement, type OngletFiche } from './onglets'
-import { useRouter } from 'vue-router'
 import ParenteFiche from './ParenteFiche.vue'
-import PointProposition from './PointProposition.vue'
 import SectionFiche from './SectionFiche.vue'
 import SourcesFiche from './SourcesFiche.vue'
 
@@ -59,11 +65,15 @@ const { fiche, onglet, retourMemorise = false } = defineProps<{
 
 const emit = defineEmits<{ agrandir: [cible: CibleLoupe] }>()
 
+const onglets = computed(() => ongletsDeFiche(fiche))
+/** L'ordre de la rangée : c'est lui qui donne son sens au coulissement. */
+const ordre = computed(() => onglets.value.map((o) => o.cle))
+
 /*
  * Téléphone : glisser le doigt à gauche ou à droite sur le contenu passe à
- * l'onglet voisin (Identité → Famille → Sources → Documents → Demandes). Même
- * URL que le clic sur l'onglet ; `replace` pour ne pas remplir l'historique
- * d'un aller-retour par geste.
+ * l'onglet voisin (Identité → Sources → Historique), et le contenu coulisse
+ * dans le sens du doigt. Même URL que le clic sur l'onglet ; `replace` pour ne
+ * pas remplir l'historique d'un aller-retour par geste.
  */
 const routeur = useRouter()
 let depart: { x: number; y: number } | null = null
@@ -77,7 +87,7 @@ function surToucheFin(e: TouchEvent): void {
   const sens = sensDuGlissement(t.clientX - depart.x, t.clientY - depart.y)
   depart = null
   if (sens === 0) return
-  const cible = ongletVoisin(ongletsDeFiche(fiche), onglet, sens)
+  const cible = ongletVoisin(onglets.value, onglet, sens)
   if (cible) void routeur.replace({ name: 'personne.detail', params: { id: fiche.id }, query: requeteDOnglet(cible) })
 }
 
@@ -96,7 +106,7 @@ function pluriel(n: number, mot: string): string {
 </script>
 
 <template>
-  <div class="flex flex-col" :class="barreAction ? 'max-md:pb-[88px]' : ''">
+  <div class="flex flex-col" :class="barreAction ? 'max-md:pb-20' : ''">
     <BandeauFiche
       :fiche="fiche"
       :onglet="onglet"
@@ -117,8 +127,8 @@ function pluriel(n: number, mot: string): string {
       >
         <!-- Mobile : les demandes en attente, au-dessus du contenu. -->
         <RouterLink
-          v-if="demandes.length > 0 && onglet !== 'demandes'"
-          :to="{ name: 'personne.detail', params: { id: fiche.id }, query: requeteDOnglet('demandes') }"
+          v-if="demandes.length > 0 && onglet !== 'historique'"
+          :to="{ name: 'personne.detail', params: { id: fiche.id }, query: requeteDOnglet('historique') }"
           class="flex items-center justify-between gap-3 rounded-panneau bg-accent-doux px-3.5 py-2.5 text-[13px] md:hidden"
         >
           <span>
@@ -127,55 +137,62 @@ function pluriel(n: number, mot: string): string {
           <span class="font-semibold text-accent">Voir</span>
         </RouterLink>
 
-        <template v-if="onglet === 'identite'">
-          <SectionFiche titre="Identité" data-panneau="identite">
-            <IdentiteFiche :fiche="fiche" />
-          </SectionFiche>
-          <SectionFiche v-if="fiche.faits.length > 0" titre="Faits">
-            <FaitsFiche :fiche="fiche" />
-          </SectionFiche>
-        </template>
+        <ContenuGlissant :ordre="ordre" :actif="onglet">
+          <div class="flex flex-col gap-3.5 max-md:gap-3">
+            <template v-if="onglet === 'identite'">
+              <SectionFiche titre="Identité" data-panneau="identite">
+                <IdentiteFiche :fiche="fiche" />
+              </SectionFiche>
+              <SectionFiche v-if="fiche.faits.length > 0" titre="Faits">
+                <FaitsFiche :fiche="fiche" />
+              </SectionFiche>
+              <SectionFiche titre="Famille" data-panneau="famille">
+                <ParenteFiche :fiche="fiche" />
+              </SectionFiche>
+            </template>
 
-        <SectionFiche v-else-if="onglet === 'famille'" titre="Famille" data-panneau="famille">
-          <ParenteFiche :fiche="fiche" />
-        </SectionFiche>
+            <template v-else-if="onglet === 'sources'">
+              <SectionFiche titre="Sources et notes" data-panneau="sources">
+                <SourcesFiche :fiche="fiche" @agrandir="emit('agrandir', $event)" />
+              </SectionFiche>
 
-        <SectionFiche v-else-if="onglet === 'sources'" titre="Sources et notes" data-panneau="sources">
-          <SourcesFiche :fiche="fiche" @agrandir="emit('agrandir', $event)" />
-        </SectionFiche>
+              <SectionFiche titre="Preuves et documents" data-panneau="documents">
+                <!-- `#depot` : « Joindre un document » du bouton Proposer mène
+                     ici. La zone de dépôt est au pied de la galerie : on vise
+                     le bas du bloc (`scroll-mb`). -->
+                <div id="depot" class="scroll-mt-4 scroll-mb-28">
+                  <GalerieMedias
+                    :person-id="fiche.id"
+                    :nom="fiche.displayName"
+                    @agrandir="emit('agrandir', $event)"
+                  />
+                </div>
+              </SectionFiche>
 
-        <SectionFiche
-          v-else-if="onglet === 'documents'"
-          titre="Preuves et documents"
-          data-panneau="documents"
-        >
-          <GalerieMedias
-            :person-id="fiche.id"
-            :nom="fiche.displayName"
-            @agrandir="emit('agrandir', $event)"
-          />
+              <!-- Les actes demandés pour cette personne, et où ils en sont : une
+                   pièce qui manque ici est peut-être déjà en route. -->
+              <SectionFiche titre="Actes demandés" data-panneau="actes">
+                <ListeDemarches :personne="{ personId: fiche.id, libelle: fiche.displayName }" />
+              </SectionFiche>
+            </template>
 
-          <!-- Les actes demandés pour cette personne, et où ils en sont : une
-               pièce qui manque ici est peut-être déjà en route. -->
-          <h3 class="mb-2 mt-6 text-[11px] uppercase tracking-wider text-attenue">Actes demandés</h3>
-          <ListeDemarches :personne="{ personId: fiche.id, libelle: fiche.displayName }" />
-        </SectionFiche>
-
-        <!-- Le calque les signale champ par champ ; cet onglet les rassemble,
-             parce qu'une demande peut porter sur autre chose qu'un champ
-             affiché (un lien, un média). -->
-        <SectionFiche v-else titre="Demandes en attente" data-panneau="demandes">
-          <ul class="m-0 flex list-none flex-col gap-1.5 p-0 text-sm">
-            <li v-for="demande in demandes" :key="demande">
-              <RouterLink
-                :to="{ name: 'demande.detail', params: { id: demande } }"
-                class="font-semibold text-accent underline"
-              >
-                Demande n° {{ demande }}
-              </RouterLink>
-            </li>
-          </ul>
-        </SectionFiche>
+            <!-- Le calque les signale champ par champ ; cet onglet les rassemble,
+                 parce qu'une demande peut porter sur autre chose qu'un champ
+                 affiché (un lien, un média). -->
+            <SectionFiche v-else titre="Demandes en attente" data-panneau="historique">
+              <ul class="m-0 flex list-none flex-col gap-1.5 p-0 text-sm">
+                <li v-for="demande in demandes" :key="demande">
+                  <RouterLink
+                    :to="{ name: 'demande.detail', params: { id: demande } }"
+                    class="font-semibold text-accent underline"
+                  >
+                    Demande n° {{ demande }}
+                  </RouterLink>
+                </li>
+              </ul>
+            </SectionFiche>
+          </div>
+        </ContenuGlissant>
       </div>
 
       <!-- ------------------------------------------------------- -->
@@ -228,17 +245,15 @@ function pluriel(n: number, mot: string): string {
     <!-- ------------------------------------------------------- -->
     <!-- Mobile : la barre d'action fixe                          -->
     <!-- ------------------------------------------------------- -->
-    <!-- La suppression n'y est pas à côté de « Proposer une modification » :
-         elle est dans le menu ⋯, derrière un filet. Deux gestes, dont un seul
-         détruit. -->
+    <!-- Le même bouton « Proposer » que le bandeau desktop ; son menu s'ouvre
+         vers le haut. La barre se pose au-dessus de la navigation du bas
+         (`--hauteur-barre-bas`, 0 tant qu'elle n'est pas là). -->
     <div
       v-if="barreAction"
       data-barre-action
-      class="fixed inset-x-0 bottom-0 z-20 flex gap-2 border-t border-ligne bg-panneau px-4 pt-3 pb-[max(20px,env(safe-area-inset-bottom))] md:hidden"
+      class="fixed inset-x-0 bottom-[var(--hauteur-barre-bas,0px)] z-20 flex gap-2 border-t border-ligne bg-panneau px-4 pt-3 pb-3 md:hidden"
     >
-      <PointProposition :fiche="fiche" disposition="barre" />
-      <span v-if="!peutProposer" class="flex-1" />
-      <MenuFiche :fiche="fiche" sens="haut" />
+      <MenuFiche :fiche="fiche" sens="haut" disposition="barre" />
     </div>
   </div>
 </template>

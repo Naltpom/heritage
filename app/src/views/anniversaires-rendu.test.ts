@@ -499,7 +499,7 @@ describe('la barre d’outils', () => {
       mois: 3,
     })
 
-    expect(html).toContain('Filtres · Anniversaires')
+    expect(html).toContain('Filtres · Calendrier')
     expect(html).toContain('id="tiroir-outils"')
     expect(html).not.toMatch(/>\s*Filtres\s*</)
   })

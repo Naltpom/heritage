@@ -8,14 +8,17 @@ import PageFiche from './PageFiche.vue'
 import PersonneView from '@/views/PersonneView.vue'
 
 /**
- * La page fiche refondue — ce que le dossier de refonte demande d'éprouver :
+ * La page fiche refondue — ce que la refonte du 30/09/2026 demande d'éprouver :
  *
- *  - l'onglet par défaut est Identité ;
- *  - `?onglet=famille` ouvre Famille — prouvé **sur la vue**, avec une route
- *    simulée, parce que c'est elle qui lit la requête ;
+ *  - trois onglets : Identité et famille, Sources et documents, Historique — ce
+ *    dernier seulement si la fiche porte des demandes ; les anciennes clés
+ *    (`famille`, `documents`, `demandes`) restent acceptées ;
+ *  - l'onglet par défaut est Identité, et `?onglet=` est lu **sur la vue**, avec
+ *    une route simulée, parce que c'est elle qui lit la requête ;
  *  - une fiche réduite n'affiche ni onglets ni barre d'action ;
- *  - la barre d'action mobile se remplit par ce qui est permis, et la
- *    suppression n'y est jamais à côté de « Proposer une modification ».
+ *  - un seul bouton « Proposer », dont le menu mène à l'assistant, au dépôt et,
+ *    derrière un filet, à la demande de suppression ; la barre d'action mobile
+ *    porte le même bouton, et se remplit par ce qui est permis.
  *
  * (Le calque « à côté » de la valeur validée est éprouvé dans
  * `fiche-rendu.test.ts`, sur `IdentiteFiche`.)
@@ -49,7 +52,10 @@ vi.mock('@/composables/useSession', async () => {
 vi.mock('vue-router', async () => {
   const { reactive: r } = await import('vue')
   etat.route = r({ params: { id: '17' }, query: {} })
-  return { useRoute: () => etat.route, useRouter: () => ({ push: () => Promise.resolve() }) }
+  return {
+    useRoute: () => etat.route,
+    useRouter: () => ({ push: () => Promise.resolve(), replace: () => Promise.resolve() }),
+  }
 })
 
 /* La vue charge sa fiche par `useAppelApi` : on lui rend une charge déjà là,
@@ -67,10 +73,13 @@ vi.mock('@/composables/useAppelApi', async () => {
   }
 })
 
+/* L'ancre factice écrit sa cible dans `data-vers` : c'est ce qui permet de
+   vérifier où mène chaque entrée du menu « Proposer ». */
 const LienFactice = defineComponent({
   name: 'RouterLink',
   props: { to: { type: [String, Object], default: '' } },
-  setup: (_, { slots }) => () => h('a', { href: '#' }, slots['default']?.()),
+  setup: (props, { slots }) => () =>
+    h('a', { href: '#', 'data-vers': JSON.stringify(props.to) }, slots['default']?.()),
 })
 
 function rendre(composant: Component, props: Record<string, unknown> = {}): Promise<string> {
@@ -134,11 +143,20 @@ const RESTREINTE: FichePersonneRestreinte = {
   visibilite: 'restreinte',
 }
 
+const NOTE = { id: 1, scope: 'personne', body: 'Note', authorLabel: null, createdAt: '2026-01-01' } as const
+
 /** L'onglet marqué courant dans la rangée. */
 function ongletCourant(html: string): string | null {
   const trouve = /<a[^>]*aria-current="page"[^>]*data-onglet="([a-z]+)"/.exec(html)
     ?? /<a[^>]*data-onglet="([a-z]+)"[^>]*aria-current="page"/.exec(html)
   return trouve?.[1] ?? null
+}
+
+/** La cible (`to`) du premier lien qui porte ce `data-geste`. */
+function cibleDuGeste(html: string, geste: string): unknown {
+  const trouve = new RegExp(`<a[^>]*data-vers="([^"]*)"[^>]*data-geste="${geste}"`).exec(html)
+  if (!trouve?.[1]) return null
+  return JSON.parse(trouve[1].replaceAll('&quot;', '"'))
 }
 
 beforeEach(() => {
@@ -150,53 +168,102 @@ beforeEach(() => {
 
 /* ------------------------------------------------------------------ */
 
-describe('onglets.ts — l’onglet voyage dans la requête', () => {
+describe('onglets.ts — trois onglets, et l’onglet voyage dans la requête', () => {
+  it('trois onglets au plus, dans l’ordre, avec leurs libellés courts', () => {
+    const onglets = ongletsDeFiche(ficheComplete({ demandesEnAttente: [12] }))
+    expect(onglets.map((o) => [o.cle, o.libelle, o.libelleCourt])).toEqual([
+      ['identite', 'Identité et famille', 'Identité'],
+      ['sources', 'Sources et documents', 'Sources'],
+      ['historique', 'Historique', 'Historique'],
+    ])
+  })
+
+  it('Sources compte les sources, les notes et les documents que la charge porte', () => {
+    const fiche = ficheComplete({ notes: [NOTE], medias: [{} as never, {} as never] })
+    expect(ongletsDeFiche(fiche).find((o) => o.cle === 'sources')?.compte).toBe(3)
+    expect(ongletsDeFiche(fiche)[0]?.compte).toBeNull()
+  })
+
   it('ouvre Identité par défaut, et pour toute valeur inconnue', () => {
     const fiche = ficheComplete()
     expect(ongletDepuisRequete(undefined, fiche)).toBe('identite')
     expect(ongletDepuisRequete('n-importe-quoi', fiche)).toBe('identite')
-    expect(ongletDepuisRequete(['famille', 'sources'], fiche)).toBe('famille')
+    // Une clé héritée d'`Object.prototype` n'est pas une ancienne clé.
+    expect(ongletDepuisRequete('constructor', fiche)).toBe('identite')
+    expect(ongletDepuisRequete(['sources', 'identite'], fiche)).toBe('sources')
   })
 
-  it('n’ouvre Demandes que si la fiche en porte', () => {
+  it('accepte encore les anciennes clés des liens déjà envoyés', () => {
+    const fiche = ficheComplete({ demandesEnAttente: [12] })
+    expect(ongletDepuisRequete('famille', fiche)).toBe('identite')
+    expect(ongletDepuisRequete('documents', fiche)).toBe('sources')
+    expect(ongletDepuisRequete('demandes', fiche)).toBe('historique')
+  })
+
+  it('n’ouvre Historique que si la fiche porte des demandes', () => {
+    expect(ongletDepuisRequete('historique', ficheComplete())).toBe('identite')
     expect(ongletDepuisRequete('demandes', ficheComplete())).toBe('identite')
-    expect(ongletDepuisRequete('demandes', ficheComplete({ demandesEnAttente: [12] }))).toBe(
-      'demandes',
+    expect(ongletDepuisRequete('historique', ficheComplete({ demandesEnAttente: [12] }))).toBe(
+      'historique',
     )
-    expect(ongletsDeFiche(ficheComplete()).map((o) => o.cle)).not.toContain('demandes')
+    expect(ongletsDeFiche(ficheComplete()).map((o) => o.cle)).toEqual(['identite', 'sources'])
     expect(ongletsDeFiche(ficheComplete({ demandesEnAttente: [12, 14] })).at(-1)).toMatchObject({
-      cle: 'demandes',
+      cle: 'historique',
       compte: 2,
     })
   })
 
   it('Identité n’a pas de clé : l’URL nue reste l’URL canonique', () => {
     expect(requeteDOnglet('identite')).toEqual({})
-    expect(requeteDOnglet('famille')).toEqual({ onglet: 'famille' })
+    expect(requeteDOnglet('sources')).toEqual({ onglet: 'sources' })
   })
 })
 
-describe('La vue — l’onglet par défaut et `?onglet=famille`', () => {
-  it('ouvre Identité quand la requête ne dit rien', async () => {
+describe('La vue — l’onglet par défaut et `?onglet=`', () => {
+  it('ouvre Identité et famille quand la requête ne dit rien', async () => {
     etat.fiche.value = ficheComplete()
     const html = await rendre(PersonneView)
 
     expect(ongletCourant(html)).toBe('identite')
+    // La famille vit désormais dans le même onglet que l'identité.
     expect(html).toContain('data-panneau="identite"')
-    expect(html).not.toContain('data-panneau="famille"')
+    expect(html).toContain('data-panneau="famille"')
+    expect(html).toContain('Galène Bourrache')
+    expect(html).not.toContain('data-panneau="sources"')
     // La fourchette arrive telle quelle jusqu'au HTML.
     expect(html).toContain('entre 1901 et 1909')
   })
 
-  it('ouvre Famille sur `?onglet=famille`', async () => {
+  it('l’ancien `?onglet=famille` ouvre Identité et famille', async () => {
     etat.fiche.value = ficheComplete()
     etat.route.query = { onglet: 'famille' }
     const html = await rendre(PersonneView)
 
-    expect(ongletCourant(html)).toBe('famille')
-    expect(html).toContain('data-panneau="famille"')
+    expect(ongletCourant(html)).toBe('identite')
     expect(html).toContain('Galène Bourrache')
+  })
+
+  it('l’ancien `?onglet=documents` ouvre Sources et documents : sources, galerie, actes', async () => {
+    etat.fiche.value = ficheComplete()
+    etat.route.query = { onglet: 'documents' }
+    const html = await rendre(PersonneView)
+
+    expect(ongletCourant(html)).toBe('sources')
+    expect(html).toContain('data-panneau="sources"')
+    expect(html).toContain('data-panneau="documents"')
+    expect(html).toContain('id="depot"')
+    expect(html).toContain('data-panneau="actes"')
     expect(html).not.toContain('data-panneau="identite"')
+  })
+
+  it('`?onglet=historique` liste les demandes en attente', async () => {
+    etat.fiche.value = ficheComplete({ demandesEnAttente: [12, 14] })
+    etat.route.query = { onglet: 'historique' }
+    const html = await rendre(PersonneView)
+
+    expect(ongletCourant(html)).toBe('historique')
+    expect(html).toContain('data-panneau="historique"')
+    expect(html).toContain('Demande n° 14')
   })
 
   it('rend la carte réduite pour une fiche réduite, pas une erreur', async () => {
@@ -207,7 +274,7 @@ describe('La vue — l’onglet par défaut et `?onglet=famille`', () => {
   })
 })
 
-describe('PageFiche — bandeau, onglets, barre d’action', () => {
+describe('PageFiche — bandeau, onglets, bouton Proposer', () => {
   it('affiche la ligne de dates du serveur, sans la recomposer', async () => {
     const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
     expect(html).toContain('1901-1909 – 1987')
@@ -226,30 +293,80 @@ describe('PageFiche — bandeau, onglets, barre d’action', () => {
     expect(recopie).toContain('Non vérifié')
   })
 
-  it('compte les sources et les documents que la charge porte', async () => {
+  it('écrit les trois libellés, longs et courts, avec les compteurs', async () => {
     const html = await rendre(PageFiche, {
-      fiche: ficheComplete({
-        notes: [{ id: 1, scope: 'personne', body: 'Note', authorLabel: null, createdAt: '2026-01-01' }],
-        demandesEnAttente: [12, 14],
-      }),
+      fiche: ficheComplete({ notes: [NOTE], demandesEnAttente: [12, 14] }),
       onglet: 'identite',
     })
-    expect(html).toContain('Sources et notes')
-    expect(html).toContain('Preuves et documents')
-    expect(html).toContain('data-onglet="demandes"')
+    expect(html).toContain('aria-label="Sections de la fiche"')
+    for (const libelle of ['Identité et famille', 'Sources et documents', 'Historique']) {
+      expect(html).toContain(libelle)
+    }
+    expect(html).toContain('>Identité<')
+    expect(html).toContain('>Sources<')
+    for (const ancien of ['famille', 'documents', 'demandes']) {
+      expect(html).not.toContain(`data-onglet="${ancien}"`)
+    }
+    expect(html).toContain('data-onglet="historique"')
     expect(html).toContain('2 demandes en attente')
   })
 
-  it('la barre d’action se remplit par ce qui est permis', async () => {
+  it('un seul bouton « Proposer » : plus de « Proposer une modification » ni de ⋯', async () => {
+    const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
+    expect(html).not.toContain('Proposer une modification')
+    expect(html).not.toContain('⋯')
+    // Le bandeau desktop et la barre mobile portent le même bouton — l'un est
+    // caché sous `md`, l'autre au-dessus — et il n'y en a pas de troisième.
+    expect(html.match(/data-geste="proposer"/g)).toHaveLength(2)
+  })
+
+  it('le menu Proposer mène à l’assistant, au dépôt et à la suppression', async () => {
+    const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
+    for (const libelle of [
+      'Corriger ou ajouter un proche',
+      'Joindre un document',
+      'Demander la suppression',
+    ]) {
+      expect(html).toContain(libelle)
+    }
+
+    const assistant = { name: 'proposition.creation', query: { personne: '17' } }
+    expect(cibleDuGeste(html, 'corriger')).toEqual(assistant)
+    // Une seule entrée vers l'assistant : deux libellés pour une même porte, non.
+    expect(html).not.toContain('data-geste="ajouter-proche"')
+    expect(cibleDuGeste(html, 'joindre-document')).toEqual({
+      name: 'personne.detail',
+      params: { id: 17 },
+      query: { onglet: 'sources' },
+      hash: '#depot',
+    })
+    expect(cibleDuGeste(html, 'demander-suppression')).toEqual({
+      name: 'proposition.suppression',
+      params: { id: 17 },
+    })
+  })
+
+  it('le menu est fermé au rendu, et la suppression vient en dernier, derrière un filet', async () => {
+    const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
+    expect(html).toContain('aria-expanded="false"')
+    const menu = /<div[^>]*role="menu"[^>]*>/.exec(html)?.[0] ?? ''
+    expect(menu).toContain('display:none')
+
+    const contenu = html.slice(html.indexOf('role="menu"'))
+    const suppression = contenu.indexOf('data-geste="demander-suppression"')
+    expect(suppression).toBeGreaterThan(contenu.indexOf('data-geste="joindre-document"'))
+    expect(suppression).toBeGreaterThan(contenu.indexOf('data-geste="corriger"'))
+  })
+
+  it('la barre d’action et le bouton se remplissent par ce qui est permis', async () => {
     const membre = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
     expect(membre).toContain('data-barre-action')
-    expect(membre).toContain('data-geste="proposer-modification"')
 
-    // Compte en attente : aucun geste n'aboutirait, pas de barre du tout.
+    // Compte en attente : aucun geste n'aboutirait, ni barre ni bouton.
     etat.regime.value = 'en_attente'
     const attente = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
     expect(attente).not.toContain('data-barre-action')
-    expect(attente).not.toContain('data-geste="proposer-modification"')
+    expect(attente).not.toContain('data-geste=')
     // Mais la fiche, elle, s'affiche entière : le rôle ne choisit pas l'affichage.
     expect(attente).toContain('entre 1901 et 1909')
 
@@ -258,14 +375,7 @@ describe('PageFiche — bandeau, onglets, barre d’action', () => {
     etat.vueEmpruntee.value = { memberId: 7, memberLabel: 'Cobalt Romarin' }
     const empruntee = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
     expect(empruntee).not.toContain('data-barre-action')
-  })
-
-  it('la suppression n’est pas dans le bloc de « Proposer une modification »', async () => {
-    // Le menu est fermé au rendu : la suppression n'est même pas dans le HTML,
-    // et en aucun cas voisine du bouton principal.
-    const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
-    expect(html).not.toContain('data-geste="demander-suppression"')
-    expect(html).toContain('aria-haspopup="menu"')
+    expect(empruntee).not.toContain('data-geste="proposer"')
   })
 })
 
@@ -316,12 +426,12 @@ describe('le glissement entre onglets (téléphone)', () => {
     const { ongletVoisin } = await import('./onglets')
     const rangee = [
       { cle: 'identite' as const, libelle: '', libelleCourt: '', compte: null },
-      { cle: 'famille' as const, libelle: '', libelleCourt: '', compte: null },
       { cle: 'sources' as const, libelle: '', libelleCourt: '', compte: 0 },
+      { cle: 'historique' as const, libelle: '', libelleCourt: '', compte: 1 },
     ]
-    expect(ongletVoisin(rangee, 'identite', 1)).toBe('famille')
-    expect(ongletVoisin(rangee, 'famille', -1)).toBe('identite')
+    expect(ongletVoisin(rangee, 'identite', 1)).toBe('sources')
+    expect(ongletVoisin(rangee, 'historique', -1)).toBe('sources')
     expect(ongletVoisin(rangee, 'identite', -1)).toBeNull()
-    expect(ongletVoisin(rangee, 'sources', 1)).toBeNull()
+    expect(ongletVoisin(rangee, 'historique', 1)).toBeNull()
   })
 })

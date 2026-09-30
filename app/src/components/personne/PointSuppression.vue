@@ -5,7 +5,7 @@
  * ────────────────────────────────────────────────────────────────────
  * ## Un lien, et rien d'autre — pour une raison de plus qu'ailleurs
  *
- * `PointProposition.vue` explique déjà pourquoi il ne pousse pas la `version` :
+ * `MenuFiche.vue` explique déjà pourquoi il ne pousse pas la `version` :
  * l'écran cible relit la fiche, et ce qu'il en tire est par construction ce que
  * l'auteur a sous les yeux au moment où il commence. Ici, l'argument est plus
  * fort encore.
@@ -23,16 +23,16 @@
  *
  * « Corriger » et « effacer » ne sont pas deux variantes d'un même geste : un seul
  * détruit — et un doublon d'arbre généalogique ne se corrige pas, il se
- * supprime. Ce lien n'est donc **jamais** dans le même bloc que « Proposer une
- * modification » : il vit dans le menu ⋯ (`MenuFiche.vue`), **séparé par un
- * filet**, en dernier, et en couleur d'alerte. La couleur signale qu'on quitte
+ * supprime. Ce lien n'est donc **jamais** mêlé aux entrées qui corrigent : il
+ * vit en dernier dans le menu « Proposer » (`MenuFiche.vue`), **séparé par un
+ * filet**, et en couleur d'alerte. La couleur signale qu'on quitte
  * le registre de la correction ; le libellé dit « demander », parce que ce lien
  * ne supprime rien — il ouvre un formulaire qui montre d'abord tout ce que la
  * suppression emporterait, puis dépose une demande qu'un administrateur tranche.
  *
  * ## Pourquoi un `v-if` sur le rôle est légitime ici
  *
- * Mêmes deux conditions, mêmes raisons que `PointProposition.vue` (voir `gestes.ts`) : un compte en
+ * Mêmes deux conditions, mêmes raisons que les autres entrées du menu (voir `gestes.ts`) : un compte en
  * attente de rattachement recevrait `403 regime_en_attente`, et toute écriture
  * sous la bascule « voir comme un membre » rend `409`. Masquer le lien n'est pas
  * une mesure de sécurité — la garde de route le double, et l'API double les deux.
