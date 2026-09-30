@@ -1,7 +1,51 @@
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
+
+/**
+ * Les décodeurs d'images de pdf.js — CCITT, JBIG2, JPEG 2000 —, servis sous un
+ * chemin **fixe** de la même origine.
+ *
+ * Depuis pdf.js 6, ces décodeurs ne sont plus dans le worker : il les importe à
+ * l'exécution depuis `wasmUrl` + un nom de fichier qu'il compose lui-même. Un
+ * `import …?url` ne convient donc pas (Vite hacherait le nom). Sans eux, un scan
+ * de mairie — texte en masque CCITT sur fond JPEG — s'affiche **sans son texte**,
+ * sans erreur visible : c'est ce qui a été constaté sur les premiers actes.
+ *
+ * Seules les versions **JavaScript** sont servies : la CSP du site n'autorise pas
+ * le WebAssembly (`'wasm-unsafe-eval'` absent), et `pdf.ts` passe `useWasm: false`.
+ */
+const CHEMIN_DECODEURS_PDF = 'pdfjs-decodeurs/'
+
+function decodeursPdfJs(): Plugin {
+  const dossier = join(dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')), 'wasm')
+  const fichiers = ['jbig2_nowasm_fallback.js', 'openjpeg_nowasm_fallback.js']
+
+  return {
+    name: 'heritage:decodeurs-pdfjs',
+    configureServer(serveur) {
+      serveur.middlewares.use(`/${CHEMIN_DECODEURS_PDF}`, (requete, reponse, suite) => {
+        const nom = (requete.url ?? '').replace(/^\//, '').split('?')[0] ?? ''
+        if (!fichiers.includes(nom)) return suite()
+        reponse.setHeader('Content-Type', 'text/javascript; charset=utf-8')
+        reponse.end(readFileSync(join(dossier, nom)))
+      })
+    },
+    generateBundle() {
+      for (const nom of fichiers) {
+        this.emitFile({
+          type: 'asset',
+          fileName: `${CHEMIN_DECODEURS_PDF}${nom}`,
+          source: readFileSync(join(dossier, nom)),
+        })
+      }
+    },
+  }
+}
 
 export default defineConfig(({ mode }) => {
   // Préfixe vide : on veut aussi les variables passées par le shell ou par
@@ -15,7 +59,7 @@ export default defineConfig(({ mode }) => {
   const cibleApi = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000'
 
   return {
-    plugins: [vue(), tailwindcss()],
+    plugins: [vue(), tailwindcss(), decodeursPdfJs()],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -44,6 +88,19 @@ export default defineConfig(({ mode }) => {
       // Repérer une régression de poids sur le canevas de l'arbre (§ 7.2) avant
       // qu'elle n'arrive chez le commanditaire.
       chunkSizeWarningLimit: 700,
+      rollupOptions: {
+        output: {
+          // Le worker de pdf.js arrive en `.mjs`, une extension que le
+          // `mime.types` de nginx ne garantit pas : servi en
+          // `application/octet-stream`, un worker de module est refusé par le
+          // navigateur. Un worker se déclare module par son option `type`, pas
+          // par son extension — `.js` suffit.
+          assetFileNames: (actif) =>
+            actif.names.some((nom) => nom.endsWith('.mjs'))
+              ? 'assets/[name]-[hash].js'
+              : 'assets/[name]-[hash][extname]',
+        },
+      },
     },
   }
 })

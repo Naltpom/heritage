@@ -21,8 +21,10 @@
  * ────────────────────────────────────────────────────────────────────
  *
  * Un **PDF** ne se met pas dans une balise `<img>` (§ 6.5 du dossier : « acte,
- * document, photo d'archive, PDF »). On l'ouvre dans un nouvel onglet — la
- * visionneuse du navigateur fait mieux que tout ce qu'on écrirait ici.
+ * document, photo d'archive, PDF »). Il se lit ici quand même, page par page,
+ * dans `LecteurPdf` : une copie intégrale d'état civil arrive presque toujours en
+ * PDF, et la renvoyer vers un autre onglet revenait à ne pas la montrer sur la
+ * fiche. Le lien vers l'onglet reste sous le lecteur, pour imprimer.
  *
  * Fermeture au clic sur le fond **et** à la touche Échap : une image en plein
  * écran sans échappement clavier est une impasse pour qui n'emploie pas la souris.
@@ -31,6 +33,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { lireMedia } from '@/lib/api'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
+import LecteurPdf from './LecteurPdf.vue'
 import { estImage, type CibleLoupe } from './medias'
 
 const { cible } = defineProps<{ cible: CibleLoupe | null }>()
@@ -112,20 +115,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', auClavier))
           decoding="async"
         />
 
-        <!-- Un PDF : la visionneuse du navigateur, dans un onglet. Pas de
-             `<embed>` — la CSP du projet est stricte et same-origin, et un
-             cadre imbriqué y ajouterait une directive pour rien. -->
-        <p v-else class="rounded-panneau bg-panneau px-4 py-6 text-center text-sm">
-          Ce document n’est pas une image.
-          <a
-            :href="affichable.url"
-            target="_blank"
-            rel="noopener"
-            class="font-semibold text-accent underline"
-          >
-            L’ouvrir dans un nouvel onglet ↗
-          </a>
-        </p>
+        <!-- Un PDF : ses pages dessinées par pdf.js. Pas d'`<iframe>` — l'API
+             interdit qu'on encadre ses fichiers (`frame-ancestors 'none'`), et
+             c'est voulu ; voir `pdf.ts`. -->
+        <LecteurPdf v-else :url="affichable.url" :legende="legende" />
 
         <p v-if="legende.length > 0" class="mt-2 text-center text-sm text-white/80">
           {{ legende }}

@@ -19,6 +19,7 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "leaflet": "^1.9.4",
+    "pdfjs-dist": "^6.3.289",
     "vue": "^3.5.0",
     "vue-router": "^4.5.0"
   },

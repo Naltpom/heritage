@@ -24,6 +24,7 @@ import type { Media } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
+import ApercuPdf from './ApercuPdf.vue'
 import { estImage, pastilleDeMedia, tailleLisible, type CibleLoupe } from './medias'
 
 const { media, supprimable = false, pivotable = false } = defineProps<{
@@ -65,12 +66,16 @@ function agrandir(): void {
       @click="agrandir"
     >
       <img
+        v-if="estImage(media.mimeType)"
         :src="media.vignetteUrl"
         :alt="media.caption ?? 'Document d’archive'"
         class="block aspect-[4/3] w-full rounded-champ border border-ligne object-cover"
         loading="lazy"
         decoding="async"
       />
+      <!-- Un PDF n'a pas de vignette côté serveur : sa première page est
+           dessinée ici (voir `ApercuPdf`). -->
+      <ApercuPdf v-else :url="media.url" :pages="media.pageCount" />
     </button>
 
     <figcaption class="flex flex-col gap-1">
