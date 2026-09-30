@@ -82,6 +82,11 @@ final class RoutesDesDemarchesTest extends ArbreWebTestCase
         $this->requete('/api/demarches?personId='.$this->idDe('aieule'));
         self::assertSame(1, $this->charge()['total']);
         self::assertArrayNotHasKey('messages', $this->charge()['elements'][0], 'Une liste ne transporte pas le texte des messages.');
+        self::assertSame(
+            [self::OPALE, 'mairie@charmille.invalid'],
+            $this->charge()['elements'][0]['correspondants'],
+            'Les adresses, elles, y sont : c’est par elles qu’on retrouve la démarche d’une réponse.',
+        );
 
         $this->requete('/api/demarches?personId='.$this->idDe('aieul'));
         self::assertSame(0, $this->charge()['total']);

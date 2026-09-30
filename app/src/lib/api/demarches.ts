@@ -45,6 +45,9 @@ export interface ResumeDeDemarche {
   resultat: string | null
   personnes: PersonneDeLaDemarche[]
   auteur: { libelle: string; estMoi: boolean }
+  /** Les adresses des messages (de, à), sans leur texte : c'est par
+   *  l'expéditeur d'une réponse qu'on retrouve la démarche. */
+  correspondants: string[]
   nombreDeMessages: number
   /** `AAAA-MM-JJ` du dernier message envoyé, `null` s'il n'y en a pas. */
   dernierEnvoiLe: string | null

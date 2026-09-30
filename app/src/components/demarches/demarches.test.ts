@@ -7,6 +7,7 @@ import CarteDemarche from './CarteDemarche.vue'
 import {
   aRelancer,
   aujourdhuiIso,
+  correspondARecherche,
   dateLisible,
   descriptionAEnvoyer,
   erreursDuMessage,
@@ -33,6 +34,7 @@ function resume(surcharge: Partial<ResumeDeDemarche> = {}): ResumeDeDemarche {
     resultat: null,
     personnes: [{ personId: 4, libelle: 'Marne Dolomite Sureau' }],
     auteur: { libelle: 'Opale', estMoi: true },
+    correspondants: ['opale@example.invalid', 'etat-civil@charmille.invalid'],
     nombreDeMessages: 1,
     dernierEnvoiLe: '2026-09-30',
     dernierMessageLe: '2026-09-30',
@@ -120,5 +122,26 @@ describe('les dates', () => {
 
   it('« aujourd’hui » est le jour du lecteur, pas celui de Greenwich', () => {
     expect(aujourdhuiIso(new Date(2026, 8, 30, 0, 30))).toBe('2026-09-30')
+  })
+})
+
+describe('retrouver une démarche quand la réponse arrive', () => {
+  it('par un nom, sans se soucier des accents ni de la casse', () => {
+    expect(correspondARecherche(resume(), 'SUREAU')).toBe(true)
+    expect(correspondARecherche(resume(), 'marne dolomite')).toBe(true)
+    expect(correspondARecherche(resume(), 'Sûreau')).toBe(true)
+  })
+
+  it('par l’adresse de la mairie qui répond', () => {
+    expect(correspondARecherche(resume(), 'etat-civil@charmille')).toBe(true)
+  })
+
+  it('chaque mot doit se trouver, dans n’importe quel ordre', () => {
+    expect(correspondARecherche(resume(), 'charmille mariage')).toBe(true)
+    expect(correspondARecherche(resume(), 'charmille deces')).toBe(false)
+  })
+
+  it('une recherche vide garde tout', () => {
+    expect(correspondARecherche(resume(), '   ')).toBe(true)
   })
 })
