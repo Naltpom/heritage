@@ -43,9 +43,9 @@ const avecEtatActuel = computed(() => porteLEtatActuel(lignes.value))
       :key="ligne.seq"
       class="rounded-champ border border-ligne bg-fond px-3.5 py-3"
     >
-      <p class="text-sm font-semibold">{{ ligne.libelle }}</p>
+      <p class="text-sm font-semibold [overflow-wrap:anywhere]">{{ ligne.libelle }}</p>
 
-      <dl class="mt-2 grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-[auto_1fr]">
+      <dl class="mt-2 grid gap-x-4 gap-y-1.5 text-sm [overflow-wrap:anywhere] sm:grid-cols-[auto_minmax(0,1fr)]">
         <dt class="text-attenue">Valeur au dépôt</dt>
         <dd>{{ ligne.ancienne }}</dd>
 
