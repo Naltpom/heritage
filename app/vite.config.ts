@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -60,6 +61,14 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [vue(), tailwindcss(), decodeursPdfJs()],
+    test: {
+      // Les tests de rendu passent par le SSR (`renderToString`), qui ne sait ni
+      // attendre une lecture ni cliquer. Les fichiers `*.client.test.ts` montent
+      // l'écran dans un rendu en mémoire, sans DOM, et il leur faut les `.vue`
+      // compilés **pour le client** — un composant compilé pour le serveur n'a
+      // qu'un `ssrRender`, que rien ne peut monter.
+      testTransformMode: { web: ['**/*.client.test.ts'] },
+    },
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
