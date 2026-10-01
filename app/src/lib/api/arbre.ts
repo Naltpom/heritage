@@ -128,6 +128,12 @@ export interface CitationDeFiche {
   dataText: string | null
   source: SourceDeCitation | null
   medias: MediaDeCitation[]
+  /**
+   * ATOM — quand la citation est **entrée dans l'arbre**, comme `createdAt` d'une
+   * note. C'est la date de la ligne, pas celle de l'acte : une citation importée
+   * du GEDCOM porte la date de l'import. L'onglet Historique range par elle.
+   */
+  createdAt: string
 }
 
 export interface NoteDeFiche {
@@ -145,6 +151,8 @@ export interface MediaDeFiche {
   /** URL **relative** vers une route authentifiée. Jamais un chemin de disque. */
   url: string
   vignetteUrl: string
+  /** ATOM — la date du dépôt, celle de `createdAt` au § 7.2. */
+  createdAt: string
 }
 
 export interface PortraitDeFiche {

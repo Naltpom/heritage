@@ -18,7 +18,8 @@
  * - **Identité et famille** (`identite`) — qui est-ce, et qui sont les siens ;
  * - **Sources et documents** (`sources`) — sur quoi cela repose : sources,
  *   notes, preuves et documents, actes demandés ;
- * - **Historique** (`historique`) — ce qui attend une décision sur cette fiche.
+ * - **Historique** (`historique`) — ce qui attend une décision sur cette fiche,
+ *   puis tout ce qui y a été ajouté ou changé, du plus récent au plus ancien.
  *
  * ## Les anciennes clés restent acceptées
  *
@@ -28,14 +29,17 @@
  * `documents → sources`, `demandes → historique`. Un lien ne casse pas parce que
  * la rangée a changé.
  *
- * **L'onglet Historique n'existe que si la fiche porte des demandes.**
- * `?onglet=historique` (ou l'ancien `demandes`) sur une fiche sans demande en
- * attente — un lien de notification ancien, une demande décidée entre-temps —
- * retombe sur Identité plutôt que d'ouvrir un onglet vide qu'on ne voit pas dans
- * la rangée.
+ * **Les trois onglets sont toujours là** (01/10/2026). L'Historique n'existait
+ * que si la fiche portait des demandes en attente ; il porte désormais la frise
+ * de tout ce qui a été ajouté ou changé sur la fiche, et n'est donc jamais vide
+ * de sens. Son compteur, lui, reste celui des **demandes en attente** — ce qui
+ * appelle une décision — et disparaît quand il n'y en a pas : compter chaque
+ * ajout de la frise ferait d'un chiffre qui alerte un chiffre qui décore.
+ * `?onglet=historique` (ou l'ancien `demandes`) ouvre donc toujours l'onglet,
+ * y compris sur un lien de notification dont la demande a été décidée depuis.
  *
- * Module pur : la décision « quel onglet ouvrir pour cette requête et cette
- * fiche » se prouve sans monter la vue (`fiche-page.test.ts`).
+ * Module pur : la décision « quel onglet ouvrir pour cette requête » se prouve
+ * sans monter la vue (`fiche-page.test.ts`).
  *
  * Les compteurs viennent de la charge utile, et de rien d'autre : ce que la
  * fiche porte, pas ce qu'on suppose exister ailleurs.
@@ -65,7 +69,8 @@ const ANCIENNES: ReadonlyMap<string, OngletFiche> = new Map([
 
 /** Les onglets de **cette** fiche, dans l'ordre de la rangée. */
 export function ongletsDeFiche(fiche: FichePersonneComplete): DescripteurOnglet[] {
-  const onglets: DescripteurOnglet[] = [
+  const enAttente = fiche.demandesEnAttente.length
+  return [
     { cle: 'identite', libelle: 'Identité et famille', libelleCourt: 'Identité', compte: null },
     {
       cle: 'sources',
@@ -73,16 +78,13 @@ export function ongletsDeFiche(fiche: FichePersonneComplete): DescripteurOnglet[
       libelleCourt: 'Sources',
       compte: fiche.citations.length + fiche.notes.length + fiche.medias.length,
     },
-  ]
-  if (fiche.demandesEnAttente.length > 0) {
-    onglets.push({
+    {
       cle: 'historique',
       libelle: 'Historique',
       libelleCourt: 'Historique',
-      compte: fiche.demandesEnAttente.length,
-    })
-  }
-  return onglets
+      compte: enAttente > 0 ? enAttente : null,
+    },
+  ]
 }
 
 /**
@@ -92,15 +94,13 @@ export function ongletsDeFiche(fiche: FichePersonneComplete): DescripteurOnglet[
  * ouvre Identité ; une ancienne clé ouvre l'onglet qui l'a absorbée. Une requête
  * ne fait jamais tomber l'écran.
  */
-export function ongletDepuisRequete(valeur: unknown, fiche: FichePersonneComplete): OngletFiche {
+export function ongletDepuisRequete(valeur: unknown): OngletFiche {
   const brute = Array.isArray(valeur) ? valeur[0] : valeur
   if (typeof brute !== 'string') return 'identite'
   const onglet = (VALEURS as readonly string[]).includes(brute)
     ? (brute as OngletFiche)
     : ANCIENNES.get(brute)
-  if (onglet === undefined) return 'identite'
-  if (onglet === 'historique' && fiche.demandesEnAttente.length === 0) return 'identite'
-  return onglet
+  return onglet ?? 'identite'
 }
 
 /**

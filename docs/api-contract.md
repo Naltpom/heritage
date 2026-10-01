@@ -1824,7 +1824,8 @@ la référence de forme.
       },
       "medias": [
         { "mediaId": 120, "kind": "preuve", "vignetteUrl": "/api/medias/120/vignette" }
-      ]
+      ],
+      "createdAt": "2026-09-12T18:04:00+02:00"
     }
   ],
   "notes": [
@@ -1842,7 +1843,8 @@ la référence de forme.
       "kind": "preuve",
       "caption": "Acte n° 3, Épinaille 1910",
       "url": "/api/medias/120/fichier",
-      "vignetteUrl": "/api/medias/120/vignette"
+      "vignetteUrl": "/api/medias/120/vignette",
+      "createdAt": "2026-09-14T10:22:00+02:00"
     }
   ],
   "enAttente": {},
@@ -1864,6 +1866,10 @@ Notes de forme :
 - `quayLabel` reprend les libellés déjà retenus (§ 3.9) pour que l'interface ne change pas de
   vocabulaire : `recopie non vérifiée`, `index ou déduction`, `acte ou registre`,
   `preuve directe`.
+- **`createdAt` (ATOM) date l'entrée de la ligne dans l'arbre** — citation, note et média
+  de la fiche (révision du 2026-10-01). C'est la date de la ligne, pas celle de l'acte : une
+  citation importée du GEDCOM porte la date de l'import. L'écran la montre sur chaque
+  élément, et l'onglet Historique de la fiche s'en sert pour ranger ce qui a été ajouté.
 - **`appui` dit sur quoi la citation repose réellement** — voir ci-dessous. C'est **cette**
   clé que l'écran affiche, et non `quay`.
 

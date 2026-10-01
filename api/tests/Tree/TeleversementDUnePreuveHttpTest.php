@@ -186,6 +186,12 @@ final class TeleversementDUnePreuveHttpTest extends ArbreWebTestCase
         self::assertSame($mediaId, $fiche['portrait']['mediaId']);
         self::assertSame(self::LEGENDE, $fiche['portrait']['caption']);
 
+        // Les médias de la fiche portent la date du dépôt — la même que la charge du
+        // § 7.2 : l'onglet Historique de la fiche les range par elle.
+        self::assertIsArray($fiche['medias']);
+        self::assertCount(1, $fiche['medias']);
+        self::assertSame($media['createdAt'], $fiche['medias'][0]['createdAt']);
+
         // ── 6. `avecImage` bascule sur le nœud, et sur lui seul.
         $noeuds = $this->noeudsDuGraphe();
 

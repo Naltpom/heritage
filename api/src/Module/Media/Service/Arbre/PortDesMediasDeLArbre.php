@@ -76,6 +76,9 @@ final readonly class PortDesMediasDeLArbre implements PortDesMedias
                 'caption' => $media->getCaption(),
                 'url' => $this->url($media, 'fichier'),
                 'vignetteUrl' => $this->url($media, 'vignette'),
+                // La date du dépôt — celle de la ligne, comme `createdAt` du § 7.2 :
+                // l'onglet Historique de la fiche range les preuves par elle.
+                'createdAt' => $media->getCreatedAt()->format(\DateTimeInterface::ATOM),
             ],
             $medias,
         );

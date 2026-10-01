@@ -10,8 +10,9 @@ import PersonneView from '@/views/PersonneView.vue'
 /**
  * La page fiche refondue — ce que la refonte du 30/09/2026 demande d'éprouver :
  *
- *  - trois onglets : Identité et famille, Sources et documents, Historique — ce
- *    dernier seulement si la fiche porte des demandes ; les anciennes clés
+ *  - trois onglets, toujours, dans cet ordre : Identité et famille, Sources et
+ *    documents, Historique — ce dernier avec ses demandes en attente en tête,
+ *    puis la frise de ce qui a été ajouté ou changé ; les anciennes clés
  *    (`famille`, `documents`, `demandes`) restent acceptées ;
  *  - l'onglet par défaut est Identité, et `?onglet=` est lu **sur la vue**, avec
  *    une route simulée, parce que c'est elle qui lit la requête ;
@@ -169,13 +170,14 @@ beforeEach(() => {
 /* ------------------------------------------------------------------ */
 
 describe('onglets.ts — trois onglets, et l’onglet voyage dans la requête', () => {
-  it('trois onglets au plus, dans l’ordre, avec leurs libellés courts', () => {
-    const onglets = ongletsDeFiche(ficheComplete({ demandesEnAttente: [12] }))
-    expect(onglets.map((o) => [o.cle, o.libelle, o.libelleCourt])).toEqual([
-      ['identite', 'Identité et famille', 'Identité'],
-      ['sources', 'Sources et documents', 'Sources'],
-      ['historique', 'Historique', 'Historique'],
-    ])
+  it('toujours trois onglets, dans l’ordre, avec leurs libellés courts', () => {
+    for (const fiche of [ficheComplete(), ficheComplete({ demandesEnAttente: [12] })]) {
+      expect(ongletsDeFiche(fiche).map((o) => [o.cle, o.libelle, o.libelleCourt])).toEqual([
+        ['identite', 'Identité et famille', 'Identité'],
+        ['sources', 'Sources et documents', 'Sources'],
+        ['historique', 'Historique', 'Historique'],
+      ])
+    }
   })
 
   it('Sources compte les sources, les notes et les documents que la charge porte', () => {
@@ -185,28 +187,23 @@ describe('onglets.ts — trois onglets, et l’onglet voyage dans la requête', 
   })
 
   it('ouvre Identité par défaut, et pour toute valeur inconnue', () => {
-    const fiche = ficheComplete()
-    expect(ongletDepuisRequete(undefined, fiche)).toBe('identite')
-    expect(ongletDepuisRequete('n-importe-quoi', fiche)).toBe('identite')
+    expect(ongletDepuisRequete(undefined)).toBe('identite')
+    expect(ongletDepuisRequete('n-importe-quoi')).toBe('identite')
     // Une clé héritée d'`Object.prototype` n'est pas une ancienne clé.
-    expect(ongletDepuisRequete('constructor', fiche)).toBe('identite')
-    expect(ongletDepuisRequete(['sources', 'identite'], fiche)).toBe('sources')
+    expect(ongletDepuisRequete('constructor')).toBe('identite')
+    expect(ongletDepuisRequete(['sources', 'identite'])).toBe('sources')
   })
 
   it('accepte encore les anciennes clés des liens déjà envoyés', () => {
-    const fiche = ficheComplete({ demandesEnAttente: [12] })
-    expect(ongletDepuisRequete('famille', fiche)).toBe('identite')
-    expect(ongletDepuisRequete('documents', fiche)).toBe('sources')
-    expect(ongletDepuisRequete('demandes', fiche)).toBe('historique')
+    expect(ongletDepuisRequete('famille')).toBe('identite')
+    expect(ongletDepuisRequete('documents')).toBe('sources')
+    expect(ongletDepuisRequete('demandes')).toBe('historique')
   })
 
-  it('n’ouvre Historique que si la fiche porte des demandes', () => {
-    expect(ongletDepuisRequete('historique', ficheComplete())).toBe('identite')
-    expect(ongletDepuisRequete('demandes', ficheComplete())).toBe('identite')
-    expect(ongletDepuisRequete('historique', ficheComplete({ demandesEnAttente: [12] }))).toBe(
-      'historique',
-    )
-    expect(ongletsDeFiche(ficheComplete()).map((o) => o.cle)).toEqual(['identite', 'sources'])
+  it('ouvre Historique même sans demande en attente ; son compteur est celui des demandes', () => {
+    expect(ongletDepuisRequete('historique')).toBe('historique')
+    expect(ongletDepuisRequete('demandes')).toBe('historique')
+    expect(ongletsDeFiche(ficheComplete()).at(-1)).toMatchObject({ cle: 'historique', compte: null })
     expect(ongletsDeFiche(ficheComplete({ demandesEnAttente: [12, 14] })).at(-1)).toMatchObject({
       cle: 'historique',
       compte: 2,
@@ -256,14 +253,31 @@ describe('La vue — l’onglet par défaut et `?onglet=`', () => {
     expect(html).not.toContain('data-panneau="identite"')
   })
 
-  it('`?onglet=historique` liste les demandes en attente', async () => {
+  it('`?onglet=historique` liste les demandes en attente, puis la frise', async () => {
     etat.fiche.value = ficheComplete({ demandesEnAttente: [12, 14] })
     etat.route.query = { onglet: 'historique' }
     const html = await rendre(PersonneView)
 
     expect(ongletCourant(html)).toBe('historique')
+    expect(html).toContain('data-panneau="demandes"')
     expect(html).toContain('data-panneau="historique"')
     expect(html).toContain('Demande n° 14')
+    // Les demandes en attente viennent en tête du panneau.
+    expect(html.indexOf('data-panneau="demandes"')).toBeLessThan(html.indexOf('data-panneau="historique"'))
+  })
+
+  it('`?onglet=historique` sans demande en attente ouvre la frise, sans bloc vide', async () => {
+    etat.fiche.value = ficheComplete({
+      notes: [{ ...NOTE, createdAt: '2026-09-13T21:13:00+02:00', body: 'Recopiée de l’acte.' }],
+    })
+    etat.route.query = { onglet: 'historique' }
+    const html = await rendre(PersonneView)
+
+    expect(ongletCourant(html)).toBe('historique')
+    expect(html).not.toContain('data-panneau="demandes"')
+    expect(html).toContain('data-panneau="historique"')
+    expect(html).toContain('data-entree="note"')
+    expect(html).toContain('Recopiée de l’acte.')
   })
 
   it('rend la carte réduite pour une fiche réduite, pas une erreur', async () => {
@@ -309,6 +323,14 @@ describe('PageFiche — bandeau, onglets, bouton Proposer', () => {
     }
     expect(html).toContain('data-onglet="historique"')
     expect(html).toContain('2 demandes en attente')
+  })
+
+  it('l’onglet Historique est dans la rangée même sans demande en attente', async () => {
+    const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
+    expect(html).toContain('data-onglet="historique"')
+    // Ni bandeau mobile « … en attente sur cette fiche », ni encart latéral.
+    expect(html).not.toContain('en attente sur cette fiche')
+    expect(html.replace(/<!--.*?-->/gs, '')).not.toMatch(/demandes? en attente/)
   })
 
   it('un seul bouton « Proposer » : plus de « Proposer une modification » ni de ⋯', async () => {

@@ -4,6 +4,11 @@
  * notes » de la page. Les faits, eux, sont passés dans l'onglet Identité
  * (`FaitsFiche.vue`) : ils disent ce qu'a été la personne, pas ce qui le prouve.
  *
+ * **Chaque source et chaque note est datée** — date et heure de son entrée dans
+ * l'arbre (`createdAt`), au même format (`horodatageAvecHeure`). La date se lit,
+ * elle ne trie pas les sources : l'ordre chronologique est celui de l'onglet
+ * Historique.
+ *
  * **Les citations sont triées par `appui` décroissant, et non par `quay`.**
  *
  * `quay` dit ce que le contributeur a **déclaré** ; `appui` dit ce que ça **vaut**.
@@ -41,6 +46,7 @@
 import { computed } from 'vue'
 import type { CitationDeFiche, FichePersonneComplete } from '@/lib/api'
 import type { CibleLoupe } from '@/components/medias/medias'
+import { horodatageAvecHeure } from '@/lib/horodatage'
 
 const { fiche } = defineProps<{ fiche: FichePersonneComplete }>()
 
@@ -51,22 +57,14 @@ const notes = computed(() =>
   [...fiche.notes].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id),
 )
 
-function dateDeNote(valeur: string): string {
-  const date = new Date(valeur)
-  return Number.isNaN(date.getTime())
-    ? valeur
-    : date.toLocaleString('fr-FR', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-}
-
 /** Le rang d'affichage des trois niveaux — ce qui tient en premier. */
 const RANG: Record<CitationDeFiche['appui'], number> = { acte: 2, index: 1, arbre: 0 }
 
+/**
+ * Par appui, toujours : la date d'ajout s'affiche sur chaque source, mais ne
+ * la range pas. Ce qui tient passe avant ce qui est récent — l'ordre « du plus
+ * récent au plus ancien » est celui de l'onglet Historique.
+ */
 const citations = computed(() =>
   [...fiche.citations].sort((a, b) => RANG[b.appui] - RANG[a.appui]),
 )
@@ -102,6 +100,11 @@ const PASTILLE: Record<CitationDeFiche['appui'], string> = {
         class="mb-2.5 border-l-[3px] pl-3"
         :class="LISERE[citation.appui]"
       >
+        <!-- Quand la source est entrée dans l'arbre — même forme que la date
+             d'une note. C'est la date de la ligne, pas celle de l'acte. -->
+        <p class="m-0 mb-0.5 text-[11px] text-attenue">
+          Ajoutée le <time :datetime="citation.createdAt">{{ horodatageAvecHeure(citation.createdAt) }}</time>
+        </p>
         <p class="m-0 font-semibold">{{ citation.source?.title ?? 'Source non nommée' }}</p>
         <p v-if="citation.source?.author" class="m-0 text-xs text-attenue">
           {{ citation.source.author }}
@@ -178,7 +181,7 @@ const PASTILLE: Record<CitationDeFiche['appui'], string> = {
           :class="rang === notes.length - 1 && notes.length > 1 ? 'border-accent' : 'border-ligne'"
         >
           <p class="m-0 mb-0.5 text-[11px] text-attenue">
-            <time :datetime="note.createdAt">{{ dateDeNote(note.createdAt) }}</time>
+            <time :datetime="note.createdAt">{{ horodatageAvecHeure(note.createdAt) }}</time>
             <template v-if="note.authorLabel"> · {{ note.authorLabel }}</template>
             <span
               v-if="rang === notes.length - 1 && notes.length > 1"

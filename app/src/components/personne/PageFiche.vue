@@ -22,8 +22,10 @@
  *   `GalerieMedias` — qui charge ses propres médias, monté seulement quand
  *   l'onglet est ouvert, et dont la zone de dépôt porte l'ancre `#depot` —,
  *   puis les actes demandés (`ListeDemarches`) ;
- * - **Historique** : les `demandesEnAttente` que la fiche porte, vers
- *   `demande.detail`. L'onglet n'existe que s'il y en a.
+ * - **Historique**, toujours présent : en tête, les `demandesEnAttente` que la
+ *   fiche porte, vers `demande.detail` (quand il y en a) ; puis la frise de
+ *   `HistoriqueFiche` — sources, notes, documents et révisions appliquées, du
+ *   plus récent au plus ancien —, montée seulement quand l'onglet est ouvert.
  *
  * Le contenu **coulisse** d'un onglet à l'autre (`ContenuGlissant`) : vers la
  * gauche quand on avance dans la rangée, vers la droite quand on recule — au
@@ -49,6 +51,7 @@ import type { CibleLoupe } from '@/components/medias/medias'
 import BandeauFiche from './BandeauFiche.vue'
 import { couleurBranche, generationLisible, nomBranche } from './champs'
 import FaitsFiche from './FaitsFiche.vue'
+import HistoriqueFiche from './HistoriqueFiche.vue'
 import { useGestesFiche } from './gestes'
 import IdentiteFiche from './IdentiteFiche.vue'
 import MenuFiche from './MenuFiche.vue'
@@ -176,21 +179,29 @@ function pluriel(n: number, mot: string): string {
               </SectionFiche>
             </template>
 
-            <!-- Le calque les signale champ par champ ; cet onglet les rassemble,
-                 parce qu'une demande peut porter sur autre chose qu'un champ
-                 affiché (un lien, un média). -->
-            <SectionFiche v-else titre="Demandes en attente" data-panneau="historique">
-              <ul class="m-0 flex list-none flex-col gap-1.5 p-0 text-sm">
-                <li v-for="demande in demandes" :key="demande">
-                  <RouterLink
-                    :to="{ name: 'demande.detail', params: { id: demande } }"
-                    class="font-semibold text-accent underline"
-                  >
-                    Demande n° {{ demande }}
-                  </RouterLink>
-                </li>
-              </ul>
-            </SectionFiche>
+            <template v-else>
+              <!-- Le calque les signale champ par champ ; cet onglet les
+                   rassemble, en tête, parce qu'une demande peut porter sur
+                   autre chose qu'un champ affiché (un lien, un média). -->
+              <SectionFiche v-if="demandes.length > 0" titre="Demandes en attente" data-panneau="demandes">
+                <ul class="m-0 flex list-none flex-col gap-1.5 p-0 text-sm">
+                  <li v-for="demande in demandes" :key="demande">
+                    <RouterLink
+                      :to="{ name: 'demande.detail', params: { id: demande } }"
+                      class="font-semibold text-accent underline"
+                    >
+                      Demande n° {{ demande }}
+                    </RouterLink>
+                  </li>
+                </ul>
+              </SectionFiche>
+
+              <!-- Puis tout ce qui a été ajouté ou changé, du plus récent au
+                   plus ancien. -->
+              <SectionFiche titre="Historique" data-panneau="historique">
+                <HistoriqueFiche :fiche="fiche" @agrandir="emit('agrandir', $event)" />
+              </SectionFiche>
+            </template>
           </div>
         </ContenuGlissant>
       </div>

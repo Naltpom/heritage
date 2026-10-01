@@ -149,6 +149,9 @@ final readonly class NormaliseurDeFamille
                     'sourceKind' => $source->getSourceKind()->value,
                 ],
                 'medias' => [],
+                // Même clé que sur la fiche d'une personne : une citation se date
+                // partout pareil.
+                'createdAt' => $citation->getCreatedAt()->format(\DateTimeInterface::ATOM),
             ];
         }
 

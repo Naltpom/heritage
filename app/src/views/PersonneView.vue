@@ -65,12 +65,16 @@
  * chacune porte sa condition dans `components/personne/gestes.ts`, et la
  * suppression reste un geste séparé, derrière un filet du menu « Proposer ».
  *
- * ## Ce qui n'est volontairement pas branché
+ * ## L'historique de la fiche
  *
- * `GET /api/demandes/historique/personne/{id}` (§ 6.11) : c'est une route du
- * module `Proposal`, dont la fonction d'appel appartient à
- * `lib/api/propositions.ts`. À la place, `demandesEnAttente` — que la fiche
- * porte déjà — renvoie vers `demande.detail`, qui existe.
+ * `GET /api/demandes/historique/personne/{id}` (§ 6.11) est branché depuis le
+ * 01/10/2026 : l'onglet Historique (`HistoriqueFiche`) le charge par
+ * `lireHistoriqueDePersonne()`, de `lib/api/propositions.ts` — c'est une route
+ * du module `Proposal`, sa fonction d'appel vit avec les siennes. Il mêle ces
+ * révisions aux sources, notes et documents de la fiche, du plus récent au plus
+ * ancien, sous les `demandesEnAttente` qui renvoient vers `demande.detail`. La
+ * vue n'en charge rien elle-même : l'onglet ne coûte une requête que s'il est
+ * ouvert.
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -121,10 +125,10 @@ const restreinte = computed(() =>
   fiche.value !== null && fiche.value.visibilite === 'restreinte' ? fiche.value : null,
 )
 
-/** L'onglet ouvert, lu dans `?onglet=`. Identité par défaut, et aussi pour
- *  `?onglet=historique` sur une fiche qui n'en porte plus. */
+/** L'onglet ouvert, lu dans `?onglet=`. Identité par défaut ; les trois
+ *  onglets existent sur toute fiche complète. */
 const onglet = computed<OngletFiche>(() =>
-  complete.value === null ? 'identite' : ongletDepuisRequete(route.query['onglet'], complete.value),
+  complete.value === null ? 'identite' : ongletDepuisRequete(route.query['onglet']),
 )
 
 /** Une seule image d'origine décodée à la fois, quel que soit le nombre de
