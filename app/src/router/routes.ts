@@ -250,6 +250,24 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'attente', titre: 'Moi' },
   },
 
+  {
+    // **Le toucher d'une notification push.** Le NOM et le CHEMIN sont un
+    // contrat avec le service worker (`public/sw.js`), qui ouvre
+    // `/notification/<id>?r=<linkRoute>&p=<linkParams JSON>` : les notifications
+    // déjà affichées sur les téléphones portent cette adresse, et une
+    // notification ne se réécrit pas. On ne renomme ni l'un ni l'autre.
+    //
+    // Écran de passage : il marque lue puis remplace l'adresse par le lien de
+    // la notification (voir la vue). Sans cadre — il ne s'affiche qu'un
+    // instant, et un en-tête qui clignote avant l'écran voulu se verrait.
+    // `attente` : toute session, même en attente de validation, reçoit des
+    // notifications (« compte à valider », « invitation utilisée »…).
+    path: '/notification/:id(\\d+)',
+    name: 'notification.ouvrir',
+    component: () => import('@/views/OuvrirNotificationView.vue'),
+    meta: { acces: 'attente', titre: 'Notification', cadre: false },
+  },
+
   /* --- Contribution : rattachement validé exigé (§ 12.1) ---------- */
   {
     // **La page « Questions »** (ADR 0008).

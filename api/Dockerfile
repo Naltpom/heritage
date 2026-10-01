@@ -25,13 +25,19 @@ FROM dunglas/frankenphp:1-php8.4 AS base
 # exif      : lecture de l'orientation avant ré-encodage.
 # zip       : archives d'export GEDCOM + médias.
 # opcache   : performances en production.
+# bcmath    : les notifications push (minishlink/web-push → web-token/jwt-library,
+#             brick/math). Sans GMP ni BCMath, les calculs de grands entiers retombent
+#             sur une implémentation en PHP pur, et la bibliothèque le signale à chaque
+#             envoi. curl, mbstring et openssl, qu'elle exige aussi, sont déjà compilés
+#             dans l'image PHP officielle.
 RUN install-php-extensions \
     pdo_pgsql \
     intl \
     gd \
     exif \
     zip \
-    opcache
+    opcache \
+    bcmath
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 

@@ -79,6 +79,14 @@ services:
     App\Module\Core\Contract\CalqueEnAttenteInterface:
         alias: App\Module\Core\Contract\CalqueFerme
 
+    # Le port vers les services push (Web Push). En production, l'envoi réel —
+    # VAPID + `aes128gcm`, délai borné. En test, un double en mémoire le remplace (bloc
+    # `when@test` ci-dessous) : aucun test ne sort sur le réseau. Déclaré ici plutôt que
+    # par `#[AsAlias]` pour que la substitution de test l'emporte sans dépendre de l'ordre
+    # entre attributs et YAML — même raison que pour `CalqueEnAttenteInterface`.
+    App\Module\Core\Service\EnvoyeurDeNotificationsPush:
+        alias: App\Module\Core\Service\EnvoyeurWebPush
+
 parameters:
     # L'expéditeur des courriels que Core envoie lui-même — aujourd'hui le seul : le lien
     # de confirmation d'un changement de courriel (§ 2.5). Même variable d'environnement
@@ -95,6 +103,24 @@ parameters:
     app.core.mailer_dsn: '%env(MAILER_DSN)%'
 
 when@test:
+    services:
+        _defaults:
+            autowire: true
+            autoconfigure: true
+            public: true
+
+        # Enregistre les envois au lieu de les faire, et rend les réponses que le test lui
+        # dicte (`410` compris). Voir `tests/Core/Double/EnvoyeurPushEnMemoire.php`.
+        App\Tests\Core\Double\EnvoyeurPushEnMemoire: ~
+
+        App\Module\Core\Service\EnvoyeurDeNotificationsPush:
+            alias: App\Tests\Core\Double\EnvoyeurPushEnMemoire
+            public: true
+
+        # Récupérés par les tests : publics en test seulement.
+        App\Module\Core\Service\ClesVapid: ~
+        App\Module\Core\Service\DiffusionPush: ~
+
     parameters:
         # Un DSN qui n'est pas `null:` : la fonctionnalité existe en test. Le transport
         # effectif est toujours celui de `framework.mailer.dsn`, donc rien ne part.

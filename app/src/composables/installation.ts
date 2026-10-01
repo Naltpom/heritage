@@ -64,12 +64,34 @@ export function useInstallation() {
   }
 }
 
-/** Le service worker : il rend l'application installable (voir `public/sw.js`). */
+/**
+ * Le service worker : il rend l'application installable **et** reçoit les
+ * notifications push (voir `public/sw.js`).
+ *
+ * Enregistré au **démarrage**, par `main.ts`, que l'invitation d'installation
+ * ait lieu ou non : le push s'appuie sur `navigator.serviceWorker.ready`
+ * (`usePush.ts`), qui ne se résout qu'une fois un service worker actif.
+ *
+ * `updateViaCache: 'none'` : le navigateur revérifie `sw.js` sans passer par
+ * son cache HTTP à chaque navigation. Une mise en production remplace donc le
+ * service worker dès la visite suivante — et l'abonnement push, lui, survit au
+ * remplacement : il appartient à l'**enregistrement** (même portée, même
+ * adresse `/sw.js`), pas à la version du script. Ne jamais changer cette
+ * adresse ni cette portée : ce serait un nouvel enregistrement, sans abonnement.
+ *
+ * Production seulement : en développement, un service worker resterait
+ * accroché d'une session de Vite à l'autre. Le push y est donc « indisponible ».
+ */
 export function enregistrerServiceWorker(): void {
   if (!navigateur || !import.meta.env.PROD || !('serviceWorker' in navigator)) return
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // Sans service worker, l'application marche ; elle n'est juste pas installable.
+  const enregistrer = (): void => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => {
+      // Sans service worker, l'application marche ; elle n'est juste ni
+      // installable ni capable de recevoir le push.
     })
-  })
+  }
+  // `load` : ne pas disputer la bande passante du premier écran. Si la page est
+  // déjà chargée (module exécuté tard), on n'attend pas un événement passé.
+  if (document.readyState === 'complete') enregistrer()
+  else window.addEventListener('load', enregistrer, { once: true })
 }

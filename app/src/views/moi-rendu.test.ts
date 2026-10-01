@@ -120,6 +120,13 @@ describe('Moi, selon le régime', () => {
     expect(html).toMatch(/<button[^>]*min-h-12[^>]*>\s*Se déconnecter/)
   })
 
+  it('porte la ligne « Notifications sur ce téléphone », en forme page seulement', async () => {
+    // Le push est un réglage de l'appareil : il vit ici, pas dans le menu de
+    // l'avatar du bureau.
+    expect(await rendre('en_attente')).toContain('Notifications sur ce téléphone')
+    expect(await rendre('membre', 'menu')).not.toContain('Notifications sur ce téléphone')
+  })
+
   it('a une forme « menu » plus serrée, pour l’avatar du bureau, sans titre de page', async () => {
     const html = await rendre('membre', 'menu')
 

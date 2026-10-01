@@ -91,8 +91,15 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * Ce sont des **décisions** : les personnes ont leur table parce qu'un acte de mariage
      * en concerne deux et que c'est d'elles que dépend qui voit la démarche ; les messages,
      * parce qu'une démarche en compte plusieurs — la demande, une relance, la réponse.
+     *
+     * **37 depuis le 2026-09-30** : `core_push_subscription` et `core_vapid_key` (module
+     * `Core`, `migrations/Version20260930180000.php`) portent les notifications sur le
+     * téléphone, application fermée. Ce sont des **décisions** : la paire VAPID est en base
+     * pour qu'un redéploiement ne la change jamais — c'est ce qui rendait les téléphones
+     * muets après chaque mise en production —, et hors de `core_setting` pour que la clé
+     * privée ne sorte par aucune route.
      */
-    private const int NOMBRE_DE_TABLES = 35;
+    private const int NOMBRE_DE_TABLES = 37;
 
     public function testLeMappingEstValide(): void
     {

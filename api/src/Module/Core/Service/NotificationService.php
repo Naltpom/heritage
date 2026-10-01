@@ -26,6 +26,12 @@ use Psr\Log\LoggerInterface;
  * Pas de file d'attente, pas de Redis (§ 3 du dossier) : l'envoi est synchrone et **la
  * notification en base est la source de vérité**.
  *
+ * Depuis le 30/09/2026, chaque notification déposée part aussi **en push** vers les
+ * appareils abonnés du destinataire ({@see DiffusionPush}) — elle sonne sur le téléphone
+ * même application fermée. Le push n'est qu'un réveil : la cloche reste la référence.
+ * Il part **après la réponse**, en une salve pour toute la requête : un tirage qui
+ * notifie vingt comptes ne fait pas attendre l'administrateur vingt fois un service push.
+ *
  * ## `notifier()` ne lève jamais, et c'est un choix de conception
  *
  * Une notification est produite **après** le `commit` de l'écriture qui l'a causée. Si
@@ -58,6 +64,7 @@ final class NotificationService
         private readonly NotificationRepository $depot,
         private readonly UserRepository $utilisateurs,
         private readonly LoggerInterface $journal,
+        private readonly DiffusionPush $push,
     ) {
     }
 
@@ -78,8 +85,6 @@ final class NotificationService
             $notification = new Notification($destinataireUserId, $kind, $titre, $corps, $linkRoute, $linkParams);
             $this->em->persist($notification);
             $this->em->flush();
-
-            return $notification;
         } catch (\Throwable $echec) {
             $this->journal->error('Notification non remise.', [
                 'destinataire' => $destinataireUserId,
@@ -89,6 +94,15 @@ final class NotificationService
 
             return null;
         }
+
+        // Le téléphone, APRÈS le dépôt réussi et HORS du `try` ci-dessus : seulement
+        // programmé ici, envoyé en une salve une fois la réponse partie (`kernel.terminate`,
+        // voir `DiffusionPush`). Envoyer maintenant ferait payer à la requête un délai
+        // réseau **par destinataire** — et les appelants bouclent (tirages,
+        // administrateurs).
+        $this->push->programmer($notification);
+
+        return $notification;
     }
 
     /**

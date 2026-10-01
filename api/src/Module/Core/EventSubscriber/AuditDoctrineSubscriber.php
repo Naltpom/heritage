@@ -50,8 +50,14 @@ use Symfony\Component\Security\Core\Authentication\Token\SwitchUserToken;
 #[AsDoctrineListener(event: Events::postFlush)]
 final class AuditDoctrineSubscriber
 {
-    /** Voir règle 2. Noms de **propriétés Doctrine**, pas de colonnes (§ 1.2 du contrat). */
-    private const array CHAMPS_SENSIBLES = ['password', 'totpSecret', 'tokenHash'];
+    /**
+     * Voir règle 2. Noms de **propriétés Doctrine**, pas de colonnes (§ 1.2 du contrat).
+     *
+     * `p256dh` et `auth` (un abonnement push réattribué) et `privateKey` (la paire VAPID)
+     * sont des secrets de chiffrement : écrits en clair au journal, ils permettraient de
+     * lire ou de signer des notifications à la place du serveur.
+     */
+    private const array CHAMPS_SENSIBLES = ['password', 'totpSecret', 'tokenHash', 'p256dh', 'auth', 'privateKey'];
 
     /** Voir règle 3. */
     private const array CHAMPS_TECHNIQUES = ['updatedAt', 'lastLoginAt'];

@@ -34,6 +34,55 @@ export function lienDeNotification(
   }
 }
 
+/**
+ * Nom de la route que le service worker ouvre au toucher d'une notification
+ * push (`public/sw.js`, chemin `/notification/:id`). **Contrat avec le service
+ * worker** : ne pas le renommer.
+ */
+export const ROUTE_OUVERTURE_NOTIFICATION = 'notification.ouvrir'
+
+/**
+ * Le lien d'une notification ouverte depuis le téléphone, à partir de la
+ * requête que le service worker a écrite : `r` (le `linkRoute`) et `p` (les
+ * `linkParams` en JSON).
+ *
+ * Même règle que `lienDeNotification`, dont c'est l'habillage : ce qui ne se
+ * résout pas n'est **pas un lien** — `null`, et l'appelant retombe sur
+ * l'accueil. Une adresse bricolée à la main (`p` qui n'est pas du JSON, une
+ * route qui renverrait sur elle-même) n'y fait pas exception.
+ */
+export function lienDepuisRequetePush(routeur: Router, r: unknown, p: unknown): RouteLocationRaw | null {
+  if (typeof r !== 'string' || r.length === 0 || r === ROUTE_OUVERTURE_NOTIFICATION) return null
+
+  let parametres: Record<string, string | number> | null = null
+  if (typeof p === 'string' && p.length > 0) {
+    let lu: unknown
+    try {
+      lu = JSON.parse(p)
+    } catch {
+      return null
+    }
+    if (lu !== null && (typeof lu !== 'object' || Array.isArray(lu))) return null
+    if (lu !== null) {
+      parametres = {}
+      for (const [cle, valeur] of Object.entries(lu as Record<string, unknown>)) {
+        if (typeof valeur === 'string' || typeof valeur === 'number') parametres[cle] = valeur
+      }
+    }
+  }
+
+  return lienDeNotification(routeur, {
+    id: 0,
+    kind: '',
+    title: '',
+    body: '',
+    linkRoute: r,
+    linkParams: parametres,
+    readAt: null,
+    createdAt: '',
+  })
+}
+
 /* ------------------------------------------------------------------ */
 /* Ce que la cloche affiche — sans navigateur, donc testable           */
 /* ------------------------------------------------------------------ */

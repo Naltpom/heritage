@@ -22,6 +22,7 @@ import routeur from './router'
 import { assurerSessionChargee, installerRattrapageSession } from './composables/useSession'
 // Importé tôt : l'invitation d'installation peut partir avant le premier écran.
 import { enregistrerServiceWorker } from './composables/installation'
+import { demarrerPush } from './composables/usePush'
 import './styles/main.css'
 
 async function demarrer(): Promise<void> {
@@ -31,6 +32,12 @@ async function demarrer(): Promise<void> {
   await assurerSessionChargee()
 
   createApp(App).use(routeur).mount('#app')
+
+  // 4. Le push, **après** le montage et sans l'attendre : à chaque session
+  //    connectée, l'abonnement du téléphone est vérifié et renvoyé au serveur.
+  //    C'est ce qui l'empêche de « casser » à une mise en production
+  //    (voir l'en-tête de `usePush.ts`).
+  demarrerPush()
 }
 
 void demarrer()
