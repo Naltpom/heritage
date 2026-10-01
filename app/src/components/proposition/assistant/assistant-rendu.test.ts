@@ -75,7 +75,6 @@ describe('« Proposer » : l’assistant d’abord, le formulaire caché', () =>
     expect(html).toContain('capture="environment"')
     expect(html).toContain('accept="image/*,application/pdf,audio/*"')
     expect(html).toContain('Analyser')
-    expect(html).toContain('20 analyses par jour')
     expect(html).not.toContain('Envoyer la proposition')
     expect(html).not.toContain('aria-pressed="true"')
   })

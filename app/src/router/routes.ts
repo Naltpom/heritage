@@ -422,7 +422,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/personnes/proposer',
     name: 'proposition.creation',
     component: () => import('@/views/PropositionCreationView.vue'),
-    meta: { acces: 'membre', titre: 'Proposer une personne', parent: VERS_ARBRE },
+    meta: { acces: 'membre', titre: 'Assistant', parent: VERS_ARBRE },
   },
 
   /* --- Administration -------------------------------------------- */

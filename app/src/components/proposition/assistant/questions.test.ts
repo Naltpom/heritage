@@ -50,7 +50,7 @@ describe('la question', () => {
   })
 
   it('dit le quota du jour', () => {
-    expect(mentionQuotaQuestions(null)).toBe('60 questions par jour')
+    expect(mentionQuotaQuestions(null)).toBe('')
     expect(mentionQuotaQuestions(1)).toBe('Encore 1 question possible aujourd’hui')
     expect(mentionQuotaQuestions(12)).toBe('Encore 12 questions possibles aujourd’hui')
     expect(mentionQuotaQuestions(0)).toBe('Plus aucune question possible aujourd’hui')

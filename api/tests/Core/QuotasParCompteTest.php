@@ -132,6 +132,30 @@ final class QuotasParCompteTest extends CoreWebTestCase
         self::assertSame(1, $quotas->consommation($televersements, $idCobalt), 'Le refus n’a rien compté, et le coup d’avant reste lisible.');
     }
 
+    /**
+     * `GET /api/session/quotas` : chaque compte lit **ses** quotas — limite effective
+     * comprise —, sans rien décompter. C'est ce que l'assistant annonce avant le premier
+     * appel, à la place du chiffre écrit en dur.
+     */
+    public function testUnMembreLitSesPropresQuotasSansLesDecompter(): void
+    {
+        $cobalt = $this->creerUtilisateur('cobalt@example.net');
+        $idCobalt = (int) $cobalt->getId();
+        $quotas = $this->quotas();
+        $quotas->personnaliser($cobalt, ['assistant.analyses' => 100]);
+        $quotas->consommer($this->quota('assistant.analyses'), $idCobalt);
+
+        $this->connexion('cobalt@example.net');
+        foreach ([1, 2] as $lecture) {
+            $this->requete('GET', '/api/session/quotas');
+            self::assertResponseIsSuccessful();
+            $mes = $this->charge()['quotas'];
+            self::assertSame(['assistant.analyses', 'assistant.questions', 'media.televersements'], array_column($mes, 'cle'));
+            self::assertSame([1, 100, true], [$mes[0]['consomme'], $mes[0]['limite'], $mes[0]['personnalisee']], "Lecture $lecture");
+            self::assertSame([0, 60, false], [$mes[1]['consomme'], $mes[1]['limite'], $mes[1]['personnalisee']]);
+        }
+    }
+
     public function testLesRoutesSontReserveesALAdministrateur(): void
     {
         $cobalt = $this->creerUtilisateur('cobalt@example.net');
