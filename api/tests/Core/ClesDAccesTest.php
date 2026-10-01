@@ -55,6 +55,10 @@ final class ClesDAccesTest extends CoreWebTestCase
         self::assertSame(['id' => 'localhost', 'name' => 'Heritage'], $options['rp']);
         self::assertSame('required', $options['authenticatorSelection']['userVerification']);
         self::assertSame('required', $options['authenticatorSelection']['residentKey']);
+        // Aucune clé à `null` : « pas de préférence » s'écrit par l'absence. Un `null`
+        // devient la chaîne « null » dans le navigateur, et Dashlane ne répond plus.
+        self::assertArrayNotHasKey('authenticatorAttachment', $options['authenticatorSelection']);
+        self::assertNotContains(null, $options, 'Aucune option de premier niveau à null.');
         self::assertTrue($options['authenticatorSelection']['requireResidentKey']);
         self::assertSame('none', $options['attestation']);
         self::assertSame(300000, $options['timeout']);

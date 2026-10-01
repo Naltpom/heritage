@@ -83,12 +83,33 @@ function statiques(): StatiquesWebAuthn | null {
 }
 
 /**
+ * Retire récursivement toute clé à `null`.
+ *
+ * `parseCreationOptionsFromJSON()` convertit un `null` en la **chaîne** « null »
+ * (conversion WebIDL d'un `DOMString`) : `authenticatorAttachment: null` devient
+ * un type d'appareil « null ». Chrome l'ignore ; Dashlane, qui remplace
+ * `navigator.credentials`, ferme sa fenêtre et ne répond jamais (constaté le
+ * 01/10/2026). Le serveur ne les envoie plus ; on les retire aussi ici, pour un
+ * serveur plus ancien et pour tout autre champ.
+ */
+export function sansNuls<T>(valeur: T): T {
+  if (Array.isArray(valeur)) return valeur.map((v) => sansNuls(v)) as T
+  if (valeur === null || typeof valeur !== 'object') return valeur
+  const propre: Record<string, unknown> = {}
+  for (const [cle, v] of Object.entries(valeur as Record<string, unknown>)) {
+    if (v !== null) propre[cle] = sansNuls(v)
+  }
+  return propre as T
+}
+
+/**
  * `PublicKeyCredentialCreationOptionsJSON` → options de `credentials.create()`.
  * Trois champs sont binaires : le défi, l'identifiant de l'utilisateur (le
  * « user handle » que la clé découvrable rendra à la connexion) et les clés
  * déjà enregistrées, à exclure.
  */
-export function optionsDeCreation(json: PublicKeyCredentialCreationOptionsJSON): PublicKeyCredentialCreationOptions {
+export function optionsDeCreation(brut: PublicKeyCredentialCreationOptionsJSON): PublicKeyCredentialCreationOptions {
+  const json = sansNuls(brut)
   const natif = statiques()?.parseCreationOptionsFromJSON
   if (natif !== undefined) {
     try {
@@ -108,7 +129,8 @@ export function optionsDeCreation(json: PublicKeyCredentialCreationOptionsJSON):
 }
 
 /** `PublicKeyCredentialRequestOptionsJSON` → options de `credentials.get()`. */
-export function optionsDeRequete(json: PublicKeyCredentialRequestOptionsJSON): PublicKeyCredentialRequestOptions {
+export function optionsDeRequete(brut: PublicKeyCredentialRequestOptionsJSON): PublicKeyCredentialRequestOptions {
+  const json = sansNuls(brut)
   const natif = statiques()?.parseRequestOptionsFromJSON
   if (natif !== undefined) {
     try {

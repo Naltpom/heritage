@@ -203,7 +203,7 @@ final class ClesDAcces
         $this->garderLeDefi(self::SESSION_ENREGISTREMENT, $options->challenge, $json);
 
         /* @var array<string, mixed> */
-        return json_decode($json, true, flags: \JSON_THROW_ON_ERROR);
+        return self::sansNuls(json_decode($json, true, flags: \JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -348,7 +348,7 @@ final class ClesDAcces
         $this->garderLeDefi(self::SESSION_CONNEXION, $options->challenge, $json);
 
         /* @var array<string, mixed> */
-        return json_decode($json, true, flags: \JSON_THROW_ON_ERROR);
+        return self::sansNuls(json_decode($json, true, flags: \JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -621,4 +621,33 @@ final class ClesDAcces
             default => 'Clé d’accès',
         };
     }
+
+    /**
+     * Les options envoyées au navigateur, **sans aucune clé à `null`**.
+     *
+     * La bibliothèque sérialise « pas de préférence » en `"authenticatorAttachment":
+     * null`. Or `PublicKeyCredential.parseCreationOptionsFromJSON()` convertit ce `null`
+     * en la **chaîne** « null » (conversion WebIDL d'un `DOMString`) : Chrome l'ignore,
+     * mais un gestionnaire qui remplace `navigator.credentials` — Dashlane, constaté le
+     * 01/10/2026 — reçoit un type d'appareil inconnu, ferme sa fenêtre et ne répond
+     * jamais à la page. Une clé absente dit « pas de préférence » sans ambiguïté.
+     *
+     * @param array<array-key, mixed> $donnees
+     *
+     * @return array<array-key, mixed>
+     */
+    private static function sansNuls(array $donnees): array
+    {
+        $propres = [];
+
+        foreach ($donnees as $cle => $valeur) {
+            if (null === $valeur) {
+                continue;
+            }
+            $propres[$cle] = \is_array($valeur) ? self::sansNuls($valeur) : $valeur;
+        }
+
+        return $propres;
+    }
+
 }
