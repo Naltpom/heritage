@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Media\Controller;
 
 use App\Module\Core\Contract\AnnuaireDesMembresInterface;
+use App\Module\Core\Contract\QuotasDUsageInterface;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Exception\ConflictException;
 use App\Module\Core\Exception\FichierTropVolumineuxException;
@@ -26,12 +27,12 @@ use App\Module\Media\Service\CatalogueMedia;
 use App\Module\Media\Service\CircuitDeValidationMedia;
 use App\Module\Media\Service\NormaliseurMedia;
 use App\Module\Media\Service\PivotementMedia;
+use App\Module\Media\Service\QuotasDesMedias;
 use App\Module\Media\Service\RequeteDeTeleversement;
 use App\Module\Media\Service\StockageMedia;
 use App\Module\Media\Service\SuppressionMedia;
 use App\Module\Media\Service\TeleversementMedia;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\HeaderUtils;
@@ -39,7 +40,6 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\UnauthorizedHttpException;
-use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -99,21 +99,13 @@ final class MediaController extends AbstractController
          * sa portée exacte et ce qu'il reste de freins sont sur {@see self::limiter()} :
          * les lire avant de raisonner sur ce plafond.
          *
-         * Le limiteur est déclaré dans `config/services/media.yaml` plutôt que sous
-         * `framework.rate_limiter` : un module configure ce qui lui appartient dans SON
-         * fichier (règle 1 de l'ADR 0002), et `framework.yaml` n'est à personne en
-         * particulier. Un `RateLimiterFactory` est un service ordinaire — il n'a rien
-         * qu'un `framework.rate_limiter` saurait faire et qu'une définition explicite ne
-         * sache pas.
-         *
-         * L'identifiant `media.limiteur_televersement` n'est **pas** un nom de classe, et
-         * c'est ce qui le met hors d'atteinte de l'écrasement silencieux décrit sur
-         * {@see StockageMedia} : la ressource `App\: ../src/`
-         * ne réenregistre que des identifiants qui sont des classes de `src/`. Vérifié
-         * avec `bin/console debug:container media.limiteur_televersement`.
+         * Le 20 est le **défaut** (`media.quota.televersements`, `config/services/media.yaml`) :
+         * l'administrateur peut poser une autre limite sur un compte, et c'est elle que
+         * le port de `Core` applique. Le quota lui-même — identifiant du compteur,
+         * fenêtre d'une heure — est décrit par {@see QuotasDesMedias}.
          */
-        #[Autowire(service: 'media.limiteur_televersement')]
-        private readonly RateLimiterFactoryInterface $limiteur,
+        private readonly QuotasDUsageInterface $quotas,
+        private readonly QuotasDesMedias $declares,
         /**
          * La bascule « voir comme un membre » (§ 10.4). Elle n'interdit rien en lecture
          * — c'est tout son intérêt : l'administrateur vérifie ce qu'un membre voit — mais
@@ -514,7 +506,7 @@ final class MediaController extends AbstractController
             return;
         }
 
-        $limite = $this->limiteur->create((string) $lecteur->userId)->consume();
+        $limite = $this->quotas->consommer($this->declares->televersements(), $lecteur->userId);
 
         if (!$limite->isAccepted()) {
             throw new TooManyRequestsException(max(1, $limite->getRetryAfter()->getTimestamp() - time()));

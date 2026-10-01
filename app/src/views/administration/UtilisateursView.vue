@@ -41,6 +41,14 @@
  * `409 dernier_administrateur` : se verrouiller dehors est un incident sans
  * porte de secours autre que la console. Le message vient du serveur.
  *
+ * **Les quotas d'usage** (analyses et questions de l'assistant, médias) : la
+ * colonne « Quotas » lit, pour chaque compte, sa consommation sur sa limite
+ * effective — lue sans être décomptée par le serveur —, et l'icône jauge ouvre
+ * l'éditeur de ses limites personnelles (vide = défaut). Le rattachement
+ * assisté compte sur une clé unique pour toute l'installation : il a son
+ * panneau à lui, sous le tableau, et non une ligne par compte qui laisserait
+ * croire qu'un administrateur a son propre compteur.
+ *
  * **« Voir comme ce membre » a été retiré de cet écran** (01/10/2026) :
  * « Se connecter en tant que » (ADR 0010) montre la même chose, et davantage.
  * Une bascule restée active côté serveur se quitte toujours par le bandeau
@@ -52,9 +60,14 @@ import {
   activerMembre,
   incarnerUtilisateur,
   listerMembresEnAttente,
+  listerQuotasGlobaux,
   listerUtilisateurs,
+  modifierQuotasGlobaux,
+  modifierQuotasUtilisateur,
   modifierUtilisateur,
+  type LimitesDeQuotas,
   type PhotoARattacher,
+  type QuotaGlobal,
   type UtilisateurAdministration,
 } from '@/lib/api'
 import { rafraichirSession, useSession } from '@/composables/useSession'
@@ -67,6 +80,8 @@ import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
 import OngletsAdministration from './OngletsAdministration.vue'
 import MentionDeRattachement from '@/components/administration/MentionDeRattachement.vue'
 import PortraitAValider from '@/components/administration/PortraitAValider.vue'
+import QuotasDuCompte from '@/components/administration/QuotasDuCompte.vue'
+import EditeurDeQuotas, { type EditionDeQuotas } from '@/components/administration/EditeurDeQuotas.vue'
 import {
   ecrituresSuspendues,
   infobulleSuspension,
@@ -82,6 +97,12 @@ const portraits = ref<ReadonlyMap<number, PhotoARattacher>>(new Map())
 const chargement = ref(false)
 const erreur = ref<unknown>(null)
 const enCours = ref<number | null>(null)
+/** Les quotas à clé globale (le rattachement assisté). */
+const quotasGlobaux = ref<QuotaGlobal[]>([])
+/** L'éditeur de quotas ouvert : sur un compte, ou sur les quotas globaux. */
+const edition = ref<(EditionDeQuotas & { cible: number | 'installation' }) | null>(null)
+const enregistrementDesQuotas = ref(false)
+const erreurDesQuotas = ref<unknown>(null)
 
 const suspendu = computed(() => ecrituresSuspendues(vueEmpruntee.value))
 const raisonSuspension = computed(() => motifSuspension(vueEmpruntee.value))
@@ -92,11 +113,13 @@ async function charger(): Promise<void> {
   chargement.value = true
   erreur.value = null
   try {
-    const [liste, file] = await Promise.all([
+    const [liste, file, globaux] = await Promise.all([
       listerUtilisateurs({ parPage: 100 }),
       listerMembresEnAttente(),
+      listerQuotasGlobaux(),
     ])
     utilisateurs.value = liste.elements
+    quotasGlobaux.value = globaux.quotas
     portraits.value = new Map(
       file.elements.flatMap((membre) =>
         membre.portraitEnAttente === null ? [] : [[membre.id, membre.portraitEnAttente] as const],
@@ -214,6 +237,53 @@ function incarnable(utilisateur: UtilisateurAdministration): boolean {
   return utilisateur.id !== moi.value && !estAdministrateur(utilisateur) && utilisateur.status !== 'suspendu'
 }
 
+function editerLesQuotas(utilisateur: UtilisateurAdministration): void {
+  if (suspendu.value || enCours.value !== null) return
+  erreurDesQuotas.value = null
+  edition.value = {
+    cible: utilisateur.id,
+    titre: 'Quotas du compte',
+    precision: `${nomDeLaLigne(utilisateur)} — ${utilisateur.email}`,
+    quotas: utilisateur.quotas,
+  }
+}
+
+function editerLesQuotasGlobaux(): void {
+  if (suspendu.value) return
+  erreurDesQuotas.value = null
+  edition.value = {
+    cible: 'installation',
+    titre: 'Quotas de l’installation',
+    precision: 'Un seul compteur pour tous les administrateurs.',
+    quotas: quotasGlobaux.value,
+  }
+}
+
+/**
+ * Enregistre puis remplace **la seule ligne** concernée par la réponse : pas
+ * de rechargement de la liste, qui ferait clignoter tout le tableau pour un
+ * chiffre.
+ */
+async function enregistrerLesQuotas(limites: LimitesDeQuotas): Promise<void> {
+  const cible = edition.value?.cible
+  if (cible === undefined || enregistrementDesQuotas.value) return
+  enregistrementDesQuotas.value = true
+  erreurDesQuotas.value = null
+  try {
+    if (cible === 'installation') {
+      quotasGlobaux.value = (await modifierQuotasGlobaux(limites)).quotas
+    } else {
+      const ligne = await modifierQuotasUtilisateur(cible, limites)
+      utilisateurs.value = utilisateurs.value.map((u) => (u.id === ligne.id ? ligne : u))
+    }
+    edition.value = null
+  } catch (cause) {
+    erreurDesQuotas.value = cause
+  } finally {
+    enregistrementDesQuotas.value = false
+  }
+}
+
 function dateLisible(valeur: string | null): string {
   if (valeur === null) return ''
   const date = new Date(valeur)
@@ -250,13 +320,17 @@ function dateLisible(valeur: string | null): string {
       <!-- Le tableau défile à l'horizontale sur un écran étroit plutôt que
            d'écraser ses colonnes. -->
       <div v-else class="overflow-x-auto">
-        <table class="w-full min-w-[760px] border-collapse text-sm">
+        <table class="w-full min-w-[940px] border-collapse text-sm">
           <thead>
             <tr class="border-b border-ligne text-left text-xs text-attenue">
               <th scope="col" class="py-2 pr-3 font-semibold">Compte</th>
               <th scope="col" class="py-2 pr-3 font-semibold">État</th>
               <th scope="col" class="py-2 pr-3 font-semibold">Rattachement</th>
               <th scope="col" class="py-2 pr-3 font-semibold whitespace-nowrap">Dernière connexion</th>
+              <th scope="col" class="py-2 pr-3 font-semibold">
+                Quotas
+                <span class="font-normal">(<span class="text-accent" aria-hidden="true">◆</span> personnalisé)</span>
+              </th>
               <th scope="col" class="py-2 text-right font-semibold">Actions</th>
             </tr>
           </thead>
@@ -298,6 +372,10 @@ function dateLisible(valeur: string | null): string {
 
               <td class="py-3 pr-3 whitespace-nowrap text-attenue">
                 {{ utilisateur.lastLoginAt ? dateLisible(utilisateur.lastLoginAt) : '—' }}
+              </td>
+
+              <td class="py-3 pr-3">
+                <QuotasDuCompte :quotas="utilisateur.quotas" />
               </td>
 
               <td class="py-3">
@@ -351,6 +429,17 @@ function dateLisible(valeur: string | null): string {
                     <path d="M15 12H3" />
                   </BoutonIcone>
 
+                  <BoutonIcone
+                    libelle="Modifier les quotas"
+                    :desactive="suspendu || enCours !== null"
+                    :infobulle="infobulle"
+                    @click="editerLesQuotas(utilisateur)"
+                  >
+                    <path d="M4 15a8 8 0 1 1 16 0" />
+                    <path d="M12 15l4-5" />
+                    <path d="M4 19h16" />
+                  </BoutonIcone>
+
                   <!-- On ne se suspend pas soi-même, et on ne se retire pas son
                        propre rôle : les deux sont des façons de se verrouiller
                        dehors, et le serveur n'attrape que la seconde. -->
@@ -388,5 +477,33 @@ function dateLisible(valeur: string | null): string {
         </table>
       </div>
     </PanneauBase>
+
+    <!-- Les quotas à clé globale : un compteur pour toute l'installation. -->
+    <PanneauBase v-if="quotasGlobaux.length > 0" titre="Quotas de l’installation">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex min-w-0 flex-col gap-1">
+          <QuotasDuCompte :quotas="quotasGlobaux.map((q) => ({ ...q, exempte: false }))" class="max-w-80" />
+          <p class="text-xs text-attenue">Partagés par tous les administrateurs, et non comptés par compte.</p>
+        </div>
+        <BoutonIcone
+          libelle="Modifier les quotas de l’installation"
+          :desactive="suspendu"
+          :infobulle="infobulle"
+          @click="editerLesQuotasGlobaux"
+        >
+          <path d="M4 15a8 8 0 1 1 16 0" />
+          <path d="M12 15l4-5" />
+          <path d="M4 19h16" />
+        </BoutonIcone>
+      </div>
+    </PanneauBase>
   </div>
+
+  <EditeurDeQuotas
+    :edition="edition"
+    :chargement="enregistrementDesQuotas"
+    :erreur="erreurDesQuotas"
+    @enregistrer="enregistrerLesQuotas"
+    @annuler="edition = null"
+  />
 </template>

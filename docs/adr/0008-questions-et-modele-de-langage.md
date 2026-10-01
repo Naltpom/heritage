@@ -465,7 +465,8 @@ souvent vivants. Ce qui est décidé :
   paresseusement, à la première consultation de la carte « À rattacher », puis sur « Relancer
   l'analyse ». Une inscription de spam ne coûte donc aucun appel tant que personne ne la
   regarde. Quota distinct : 40 analyses par 24 heures glissantes, tous administrateurs
-  confondus (`assistant.limiteur_rattachements`).
+  confondus (`assistant.limiteur_rattachements` ; depuis le 2026-10-01, quota
+  `assistant.rattachements`, limite globale réglable — `api-contract.md` § 10.1).
 - **Le résultat est gardé sur le compte** (`mbr_member.attachment_suggestion`), puis
   **purgé** avec la description au rattachement ou au refus. Il n'est jamais visible d'un
   autre que les administrateurs, jamais écrit dans le diff d'audit (colonnes sensibles de
@@ -511,4 +512,6 @@ sortie vers le tiers**, et elle diffère des deux autres sur le point qui compte
   réponse cite ses fiches pour que le lecteur vérifie.
 - **La page dit** que les questions partent chez Google Gemini.
 - **Quota** : 60 questions par 24 heures glissantes et par compte
-  (`assistant.limiteur_questions`), distinct des 20 analyses de proposition.
+  (`assistant.limiteur_questions`), distinct des 20 analyses de proposition. Depuis le
+  2026-10-01, ce sont des **défauts** : l'administrateur peut poser une limite par compte
+  (`api-contract.md` § 10.1, « Quotas d'usage »).

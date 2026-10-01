@@ -19,7 +19,9 @@ use App\Tests\Assistant\Double\AccesAuModeleSimule;
 use App\Tests\Assistant\Double\ModeleScripte;
 use App\Tests\Proposal\CasDeTestDemandesHttp;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
-use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
+use App\Module\Assistant\Service\QuotasDeLAssistant;
+use App\Module\Core\Service\QuotasDUsage;
+use Symfony\Component\RateLimiter\LimiterInterface;
 
 /**
  * « Proposer avec l'assistant », **en HTTP et de bout en bout** : contrôleur, boucle
@@ -129,7 +131,7 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
         self::assertResponseStatusCodeSame(503);
         self::assertSame('assistant_indisponible', $this->erreur()['code']);
         self::assertSame([], ModeleScripte::requetes());
-        self::assertSame(20, $this->limiteur()->create((string) $this->idDOpale())->consume(0)->getRemainingTokens(), 'Une installation sans clé ne mange pas le quota du jour.');
+        self::assertSame(20, $this->limiteur($this->idDOpale())->consume(0)->getRemainingTokens(), 'Une installation sans clé ne mange pas le quota du jour.');
     }
 
     public function testUneEntreeInvalideRend422AvantToutAppel(): void
@@ -166,7 +168,7 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
 
         // Les vingt analyses du jour, consommées directement : c'est le même limiteur,
         // la même clé (le compte), le même stockage que la route.
-        $limiteur = $this->limiteur()->create((string) $this->idDOpale());
+        $limiteur = $this->limiteur($this->idDOpale());
         for ($i = 0; $i < 20; ++$i) {
             self::assertTrue($limiteur->consume()->isAccepted());
         }
@@ -179,6 +181,45 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
         self::assertNotNull($apres);
         self::assertGreaterThan(0, (int) $apres);
         self::assertSame([], ModeleScripte::requetes());
+    }
+
+    /**
+     * La limite personnelle posée par l'administrateur remplace le défaut — y compris dans
+     * le message du `429`, qui cite la limite **du compte** et non les 20 de la
+     * configuration.
+     */
+    public function testUneLimitePersonnelleRemplaceLeDefautJusqueDansLeMessage(): void
+    {
+        $this->seConnecterCommeOpale();
+        $this->poserLaLimite($this->idDOpale(), 2);
+
+        $limiteur = $this->limiteur($this->idDOpale());
+        self::assertSame(2, $limiteur->consume(0)->getRemainingTokens());
+        self::assertTrue($limiteur->consume()->isAccepted());
+        self::assertTrue($limiteur->consume()->isAccepted());
+
+        $this->analyser(['texte' => 'Marne est née en 1987.']);
+
+        self::assertResponseStatusCodeSame(429);
+        self::assertStringContainsString('les 2 analyses de la journée', (string) $this->erreur()['message']);
+        self::assertSame([], ModeleScripte::requetes());
+    }
+
+    /** Une limite à 0 ferme l'usage, sans rien décompter. */
+    public function testUneLimiteAZeroFermeLAnalyse(): void
+    {
+        $this->seConnecterCommeOpale();
+        $this->poserLaLimite($this->idDOpale(), 0);
+
+        $this->analyser(['texte' => 'Marne est née en 1987.']);
+
+        self::assertResponseStatusCodeSame(429);
+        self::assertStringContainsString('n’est pas ouverte à votre compte', (string) $this->erreur()['message']);
+        self::assertSame([], ModeleScripte::requetes());
+
+        // Rendue au défaut, la limite retrouve un compteur intact : le refus n'a rien compté.
+        $this->poserLaLimite($this->idDOpale(), null);
+        self::assertSame(20, $this->limiteur($this->idDOpale())->consume(0)->getRemainingTokens());
     }
 
     public function testUnModeleEnPanneRend502(): void
@@ -719,12 +760,28 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
         return $membre->getId();
     }
 
-    private function limiteur(): RateLimiterFactoryInterface
+    /**
+     * Le compteur de la route, à la limite effective — même identifiant, même stockage,
+     * même fenêtre que `QuotasDUsage::consommer()`.
+     */
+    private function limiteur(int $userId): LimiterInterface
     {
-        $limiteur = self::getContainer()->get('assistant.limiteur_analyses');
-        \assert($limiteur instanceof RateLimiterFactoryInterface);
+        $quotas = self::getContainer()->get(QuotasDUsage::class);
+        $declares = self::getContainer()->get(QuotasDeLAssistant::class);
+        \assert($quotas instanceof QuotasDUsage && $declares instanceof QuotasDeLAssistant);
 
-        return $limiteur;
+        return $quotas->limiteur($declares->analyses(), $userId);
+    }
+
+    /** Le geste de l'écran d'administration, sans passer par la route (testée dans `Core`). */
+    private function poserLaLimite(int $userId, ?int $limite): void
+    {
+        $quotas = self::getContainer()->get(QuotasDUsage::class);
+        \assert($quotas instanceof QuotasDUsage);
+        $compte = $this->em()->find(User::class, $userId);
+        \assert($compte instanceof User);
+
+        $quotas->personnaliser($compte, ['assistant.analyses' => $limite]);
     }
 
     private function personne(string $prenoms, string $nom, Sex $sexe, UncertainDate $naissance, bool $decedee): int

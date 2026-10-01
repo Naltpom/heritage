@@ -66,6 +66,35 @@ final class UserAdminController extends AbstractController
     }
 
     /**
+     * Les limites d'usage **personnelles** d'un compte (analyses et questions de
+     * l'assistant, téléversements) : `{"limites": {"assistant.analyses": 30, "media.televersements": null}}`.
+     * Une route à elle plutôt qu'un champ de plus dans le `PATCH` ci-dessus : ce `PATCH`
+     * vérifie le dernier administrateur et le rattachement avant d'écrire, et un réglage
+     * de quota n'a rien à faire dans ces gardes. Elle rend la ligne entière du compte,
+     * comme lui, pour que le tableau la remplace telle quelle.
+     */
+    #[Route(
+        '/api/administration/utilisateurs/{id}/quotas',
+        name: 'core_admin_utilisateur_quotas',
+        methods: ['PATCH'],
+        requirements: ['id' => '\d+'],
+    )]
+    public function personnaliserLesQuotas(int $id, Request $requete): JsonResponse
+    {
+        $this->bascule->refuserSiActive();
+
+        $corps = json_decode($requete->getContent(), true);
+
+        if (!\is_array($corps) || !\array_key_exists('limites', $corps)) {
+            throw new ValidationException(['limites' => 'Un objet { "limites": { clé : limite ou null } } est attendu.']);
+        }
+
+        return new JsonResponse($this->comptes->normaliser(
+            $this->comptes->personnaliserLesQuotas($id, $corps['limites']),
+        ));
+    }
+
+    /**
      * Réinitialise le mot de passe d'un compte, et **rend le nouveau une seule fois**.
      *
      * C'est la seule réponse de l'API qui contienne un mot de passe en clair, et c'est
