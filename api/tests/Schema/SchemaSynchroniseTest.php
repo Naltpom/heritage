@@ -104,8 +104,15 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * Face ID, une empreinte ou Windows Hello. C'est une **décision** : une clé par
      * appareil, donc plusieurs par compte, et la moitié publique seulement — une table à
      * part, que la suppression du compte emporte (`ON DELETE CASCADE`).
+     *
+     * **40 depuis le 2026-10-01 (soir)** : `ast_conversation` et `ast_echange` (module
+     * `Assistant`, préfixe `ast_`, `migrations/Version20261001200000.php`) gardent les
+     * conversations de « Poser une question ». C'est une **décision** : une conversation
+     * se reprend le lendemain — « et son père ? » —, ce qu'un cache de deux heures, comme
+     * celui des analyses, ne permettrait pas ; et une conversation compte plusieurs
+     * échanges, d'où la seconde table.
      */
-    private const int NOMBRE_DE_TABLES = 38;
+    private const int NOMBRE_DE_TABLES = 40;
 
     public function testLeMappingEstValide(): void
     {
@@ -142,7 +149,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      */
     public function testChaqueTablePorteLePrefixeDeSonModule(): void
     {
-        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_', 'dmr_'];
+        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_', 'dmr_', 'ast_'];
 
         foreach ($this->tablesDuMapping() as $table) {
             $porteUnPrefixe = array_filter(

@@ -321,7 +321,8 @@ final readonly class OutilsDeLAssistant
         return $this->vue->voitEnEntier($proche) ? $proche->nomAffiche : $proche->nomAffiche.' (confidentielle)';
     }
 
-    private static function dateLisible(UncertainDate $date): ?string
+    /** Publique, comme {@see dateDetaillee()} : {@see OutilsDeConsultation} écrit les dates de la même façon. */
+    public static function dateLisible(UncertainDate $date): ?string
     {
         $texte = $date->format();
         $lieu = trim($date->getPlace() ?? '');
@@ -340,7 +341,7 @@ final readonly class OutilsDeLAssistant
      *
      * @return array<string, string|null>|null
      */
-    private static function dateDetaillee(UncertainDate $date): ?array
+    public static function dateDetaillee(UncertainDate $date): ?array
     {
         if (!$date->isKnown() && null === $date->getPlace()) {
             return null;

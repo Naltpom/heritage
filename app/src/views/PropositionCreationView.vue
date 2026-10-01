@@ -55,6 +55,7 @@ import { creerDemande, invaliderGraphe, type OrigineReprise } from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import AssistantProposition from '@/components/proposition/assistant/AssistantProposition.vue'
+import QuestionsAssistant from '@/components/proposition/assistant/QuestionsAssistant.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
@@ -92,7 +93,18 @@ const motifSuspendu = computed(() => motifSuspension(vueEmpruntee.value))
 
 /* --- Le mode : l'assistant, sauf reprise ou vue empruntée ------------ */
 
-type Mode = 'formulaire' | 'assistant'
+/**
+ * `question` : « Poser une question » — l'assistant en **lecture seule**, une
+ * conversation sur l'arbre (`?mode=question`). Il vit ici, à côté de la
+ * proposition, parce que c'est le même assistant et la même porte d'entrée : on
+ * demande « qui était le père de Juliette ? », on apprend qu'il manque, on le
+ * propose — un onglet plus loin.
+ *
+ * Sous la bascule « voir comme un membre », il disparaît avec l'assistant : une
+ * question écrit une conversation et consomme le quota, et l'API la refuserait
+ * en `409`.
+ */
+type Mode = 'formulaire' | 'assistant' | 'question'
 
 function premiereValeur(brut: unknown): string | undefined {
   const valeur = Array.isArray(brut) ? brut[0] : brut
@@ -101,7 +113,9 @@ function premiereValeur(brut: unknown): string | undefined {
 
 const mode = computed<Mode>(() => {
   if (suspendu.value || repriseDemandee.value !== null) return 'formulaire'
-  return premiereValeur(route.query['mode']) === 'formulaire' ? 'formulaire' : 'assistant'
+  const demande = premiereValeur(route.query['mode'])
+  if (demande === 'formulaire') return 'formulaire'
+  return demande === 'question' ? 'question' : 'assistant'
 })
 
 /** La fiche d'où l'on vient, passée à l'assistant comme contexte. */
@@ -109,6 +123,11 @@ const personneDeContexte = computed(() => {
   const valeur = Number(premiereValeur(route.query['personne']))
   return Number.isInteger(valeur) && valeur > 0 ? valeur : null
 })
+
+/** Le lien de l'onglet « Proposer » garde la fiche d'où l'on venait. */
+const modeAssistant = computed(() =>
+  personneDeContexte.value === null ? {} : { personne: String(personneDeContexte.value) },
+)
 
 const repriseDemandee = computed(() => {
   const brut = route.query['refaire']
@@ -191,17 +210,53 @@ function refaire(demandeId: number | null): void {
 
 <template>
   <div class="mx-auto w-full max-w-3xl px-4 py-8">
-    <template v-if="mode === 'assistant'">
-      <header class="mb-5">
-        <h1 class="text-xl font-semibold tracking-tight">Proposer avec l’assistant</h1>
-        <p class="mt-1.5 text-sm text-attenue">
-          Racontez ce que vous savez et joignez vos actes : l’assistant retrouve les personnes dans
-          l’arbre et prépare les demandes. Vous relisez, vous choisissez, puis un administrateur
-          valide — comme pour le formulaire.
-        </p>
-      </header>
+    <template v-if="mode === 'assistant' || mode === 'question'">
+      <!-- Deux modes du même assistant. Des liens et non des boutons : chaque mode
+           a son adresse, qu'on met en favori ou qu'on partage. -->
+      <nav aria-label="Assistant" class="mb-4 flex gap-1 rounded-panneau border border-ligne bg-panneau p-1">
+        <RouterLink
+          :to="{ query: modeAssistant }"
+          class="flex min-h-11 flex-1 items-center justify-center rounded-champ px-3 text-sm font-semibold md:min-h-9"
+          :class="mode === 'assistant' ? 'bg-accent text-fond' : 'text-attenue hover:text-texte'"
+          :aria-current="mode === 'assistant' ? 'page' : undefined"
+        >
+          Proposer
+        </RouterLink>
+        <RouterLink
+          :to="{ query: { mode: 'question' } }"
+          class="flex min-h-11 flex-1 items-center justify-center rounded-champ px-3 text-sm font-semibold md:min-h-9"
+          :class="mode === 'question' ? 'bg-accent text-fond' : 'text-attenue hover:text-texte'"
+          :aria-current="mode === 'question' ? 'page' : undefined"
+        >
+          Poser une question
+        </RouterLink>
+      </nav>
 
-      <AssistantProposition :person-id="personneDeContexte" />
+      <template v-if="mode === 'assistant'">
+        <header class="mb-5">
+          <h1 class="text-xl font-semibold tracking-tight">Proposer avec l’assistant</h1>
+          <p class="mt-1.5 text-sm text-attenue">
+            Racontez ce que vous savez et joignez vos actes : l’assistant retrouve les personnes dans
+            l’arbre et prépare les demandes. Vous relisez, vous choisissez, puis un administrateur
+            valide — comme pour le formulaire.
+          </p>
+        </header>
+
+        <AssistantProposition :person-id="personneDeContexte" />
+      </template>
+
+      <template v-else>
+        <header class="mb-5">
+          <h1 class="text-xl font-semibold tracking-tight">Poser une question</h1>
+          <p class="mt-1.5 text-sm text-attenue">
+            Interrogez l’arbre comme vous le feriez avec un cousin qui l’a lu en entier : qui est né
+            où, comment vous êtes liés, ce qu’on sait d’un aïeul. L’assistant répond à partir des
+            fiches, en les citant, et garde le fil pour les questions suivantes.
+          </p>
+        </header>
+
+        <QuestionsAssistant />
+      </template>
     </template>
 
     <template v-else>

@@ -89,6 +89,13 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Module/Demarche/Entity'
                 prefix: 'App\Module\Demarche\Entity'
                 alias: Demarche
+            # Les conversations de « Poser une question » — préfixe `ast_`.
+            Assistant:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Assistant/Entity'
+                prefix: 'App\Module\Assistant\Entity'
+                alias: Assistant
 
 when@test:
     doctrine:

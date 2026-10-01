@@ -29,6 +29,13 @@ services:
     App\Module\Assistant\Contract\ArbrePourLAssistant:
         alias: App\Module\Tree\Service\VueDeLArbrePourLAssistant
 
+    # ⇢ `Tree` : ce que « Poser une question » lit en plus — sources, parenté, recherche
+    #    par lieu ou par période. Sans filtre de cercle, comme le port ci-dessus ; à la
+    #    différence de l'assistant de proposition, le filtre est posé AVANT le modèle
+    #    (`Assistant\Service\OutilsDeConsultation`).
+    App\Module\Assistant\Contract\ArbrePourLaConsultation:
+        alias: App\Module\Tree\Service\VueDeLArbrePourLaConsultation
+
     # ⇢ `Proposal` : compléter (verrous lus en base), valider sans écrire, déposer.
     App\Module\Assistant\Contract\DepotPourLAssistant:
         alias: App\Module\Proposal\Service\DemandesDeLAssistant
@@ -63,6 +70,20 @@ services:
             -   id: 'assistant_analyses'
                 policy: 'sliding_window'
                 limit: 20
+                interval: '24 hours'
+            - '@assistant.stockage_limiteur'
+
+    # ── Le quota de « Poser une question » : 60 questions par 24 heures et par compte ──
+    #
+    # Distinct des 20 analyses : une question coûte moins (pas de documents) et se pose
+    # par rafales — on en enchaîne cinq sur la même famille. Même politique glissante,
+    # même stockage ; l'administrateur est compté, chaque question est un appel payant.
+    assistant.limiteur_questions:
+        class: Symfony\Component\RateLimiter\RateLimiterFactory
+        arguments:
+            -   id: 'assistant_questions'
+                policy: 'sliding_window'
+                limit: 60
                 interval: '24 hours'
             - '@assistant.stockage_limiteur'
 
