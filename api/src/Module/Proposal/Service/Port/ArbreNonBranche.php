@@ -7,6 +7,8 @@ namespace App\Module\Proposal\Service\Port;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\FiliationEtablie;
+use App\Module\Proposal\Contract\FiliationPrevue;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\SourceCitable;
@@ -107,6 +109,21 @@ final readonly class ArbreNonBranche implements PortArbre
     }
 
     public function rattacherEnfant(int $familleId, int $personneId, ?int $rangDansLaFratrie): void
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    public function prevoirFiliation(?int $enfantId, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise): FiliationPrevue
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    public function etablirFiliation(int $enfantId, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise, ?int $rangDansLaFratrie): FiliationEtablie
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    public function supprimerFamilleVide(int $familleId): ?string
     {
         throw new \LogicException(self::MESSAGE);
     }

@@ -149,6 +149,68 @@ final class TraducteurDePropositionsTest extends TestCase
         ], $corps['liens']);
     }
 
+    /**
+     * Les deux parents nommés en **deux** liens à un parent deviennent **un** lien à deux
+     * parents — c'est la forme qui a donné deux familles « fantômes » à Véronique (469)
+     * avant que la validation sache les réunir. `parent_de` est lu dans l'autre sens.
+     */
+    public function testDeuxFiliationsAUnParentSurLeMemeEnfantDeviennentUneFiliationADeuxParents(): void
+    {
+        $traduites = (new TraducteurDePropositions())->traduire([
+            'resume' => 'Véronique, fille de Jean-Marie et d’Hélène.',
+            'demandes' => [
+                [
+                    'nature' => 'creation_personne',
+                    'titre' => 'Ajouter Véronique',
+                    'personnes' => [['ref' => '#p1', 'prenoms' => 'Véronique', 'sexe' => 'feminin']],
+                    'liens' => [
+                        ['nature' => 'enfant_de', 'sujet' => '#p1', 'autre' => '450', 'note' => 'acte de naissance'],
+                        ['nature' => 'conjoint_de', 'sujet' => '#p1', 'autre' => '12'],
+                        ['nature' => 'parent_de', 'sujet' => '468', 'autre' => '#p1'],
+                    ],
+                ],
+                [
+                    'nature' => 'ajout_lien',
+                    'titre' => 'Rattacher Véronique à ses parents',
+                    'personId' => 469,
+                    'liens' => [
+                        ['nature' => 'enfant_de', 'sujet' => '469', 'autre' => '468'],
+                        ['nature' => 'enfant_de', 'sujet' => '469', 'autre' => '450'],
+                    ],
+                ],
+            ],
+        ]);
+
+        self::assertSame([], $traduites->avertissements);
+        self::assertSame([
+            ['seq' => 1, 'kind' => 'enfant_de', 'subjectDraftRef' => '#p1', 'otherPersonId' => 450, 'other2PersonId' => 468, 'note' => 'acte de naissance'],
+            ['seq' => 2, 'kind' => 'conjoint_de', 'subjectDraftRef' => '#p1', 'otherPersonId' => 12],
+        ], $traduites->propositions[0]->corps['liens']);
+        self::assertSame([
+            ['seq' => 1, 'kind' => 'enfant_de', 'subjectPersonId' => 469, 'otherPersonId' => 468, 'other2PersonId' => 450],
+        ], $traduites->propositions[1]->corps['liens']);
+    }
+
+    /** Trois parents pour un même enfant : une question pour le membre, pas une fusion à deviner. */
+    public function testTroisParentsPourUnMemeEnfantNeSeReunissentPas(): void
+    {
+        $traduites = (new TraducteurDePropositions())->traduire([
+            'resume' => 'x',
+            'demandes' => [[
+                'nature' => 'ajout_lien',
+                'titre' => 'Parents de 469',
+                'personId' => 469,
+                'liens' => [
+                    ['nature' => 'enfant_de', 'sujet' => '469', 'autre' => '468'],
+                    ['nature' => 'enfant_de', 'sujet' => '469', 'autre' => '450'],
+                    ['nature' => 'enfant_de', 'sujet' => '469', 'autre' => '12'],
+                ],
+            ]],
+        ]);
+
+        self::assertCount(3, $traduites->propositions[0]->corps['liens']);
+    }
+
     /** Un enfant qui vise le parent nouveau d'une **autre** demande : écarté, et le motif le dit. */
     public function testUneReferenceDUneAutreDemandeEstEcarteeAvecSonMotif(): void
     {

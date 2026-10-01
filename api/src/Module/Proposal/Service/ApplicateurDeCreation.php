@@ -10,11 +10,14 @@ use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\ApplicateurDeDemande;
 use App\Module\Proposal\Contract\DemandeEnCours;
 use App\Module\Proposal\Contract\EcritureDeRevision;
+use App\Module\Proposal\Contract\FiliationEtablie;
+use App\Module\Proposal\Contract\FiliationIncompatible;
 use App\Module\Proposal\Entity\DraftLink;
 use App\Module\Proposal\Entity\DraftPerson;
 use App\Module\Proposal\Enum\LinkKind;
 use App\Module\Proposal\Enum\RequestKind;
 use App\Module\Proposal\Enum\RevisionOperation;
+use App\Module\Proposal\Exception\Conflit;
 use App\Module\Proposal\Repository\ChangeRequestRepository;
 use App\Module\Proposal\Repository\DraftLinkRepository;
 use App\Module\Proposal\Repository\DraftPersonRepository;
@@ -72,7 +75,10 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * - `conjoint_de` → couple (sujet, autre) ;
  * - `enfant_de` avec `family_id` → la famille est donnée, rien à créer ;
- * - `enfant_de` avec un ou deux parents → couple (autre, autre2) ;
+ * - `enfant_de` avec un ou deux parents → couple (autre, autre2) — **mais c'est `Tree`
+ *   qui décide où l'enfant atterrit** ({@see PortArbre::etablirFiliation()}) : la famille
+ *   qu'il a déjà, l'union unique de son parent, ou ce couple-là. Lire le seul lien
+ *   a donné trois familles de parents à Véronique (469), demandes 714 à 727 ;
  * - `parent_de` → couple (sujet, ∅), **sauf** si un autre lien de la même demande
  *   désigne un conjoint : on réutilise alors ce couple-là.
  *
@@ -90,6 +96,7 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
         private DraftPersonRepository $brouillons,
         private DraftLinkRepository $liens,
         private PortMedias $medias,
+        private RattachementDesFiliations $filiations,
     ) {
     }
 
@@ -159,6 +166,20 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
         $famillesParCouple = [];
 
         foreach ($liens as $lien) {
+            // Les filiations passent par `Tree`, qui regarde les familles que l'enfant a
+            // déjà et l'union de son parent — voir `RattachementDesFiliations`. Le chemin
+            // d'avant, « le couple (P, ∅), trouvé ou créé », a donné trois familles de
+            // parents à Véronique (469) entre les demandes 714 et 727.
+            if ($this->filiations->estUneFiliation($lien)) {
+                $famille = $this->etablirLaFiliation($lien, $carte, $resolus, $conjoints, $demandeId, $ecritures);
+
+                if (null !== $famille) {
+                    $lien->setResolvedFamilyId($famille);
+                }
+
+                continue;
+            }
+
             $famille = $this->resoudreLaFamille($lien, $carte, $resolus, $conjoints, $famillesParCouple, $ecritures);
 
             if (null === $famille) {
@@ -258,6 +279,143 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
         }
 
         return $famille->id;
+    }
+
+    /**
+     * Passes 4 et 5 d'une filiation (`enfant_de`, `parent_de`) : `Tree` choisit la
+     * famille, rattache l'enfant et retire ses familles à un parent devenues
+     * incompatibles ; on écrit ici une révision par ligne touchée, puis on supprime ce
+     * qui est resté vide.
+     *
+     * **Pourquoi chaque geste a sa révision.** Une famille complétée, une filiation
+     * retirée, une famille supprimée : ce sont des écritures de l'arbre comme les autres,
+     * et l'historique d'une fiche est ce qu'on relit six mois plus tard pour comprendre
+     * d'où vient une donnée. Une fusion silencieuse ferait disparaître la famille 184 de
+     * l'historique sans que rien dise qu'elle a existé.
+     *
+     * **La règle 3 (union unique) n'est admise que pour un parent existant que la demande
+     * ne marie pas** : c'est ce qui garantit que l'annonce lue par l'administrateur avant
+     * la validation dit ce que la validation fera — voir {@see RattachementDesFiliations}.
+     *
+     * @param array<string, int>       $carte
+     * @param array<int, int>          $resolus
+     * @param array<int, int>          $conjoints
+     * @param list<EcritureDeRevision> $ecritures
+     */
+    private function etablirLaFiliation(
+        DraftLink $lien,
+        array $carte,
+        array $resolus,
+        array $conjoints,
+        int $demandeId,
+        array &$ecritures,
+    ): ?int {
+        $parentDe = LinkKind::ParentDe === $lien->getKind();
+        $enfant = $parentDe ? $this->autre($lien, $carte, $resolus) : $this->sujet($lien, $carte, $resolus);
+
+        if (null !== $lien->getFamilyId()) {
+            [$a, $b] = $this->arbre->epouxDeFamille($lien->getFamilyId()) + [null, null];
+        } else {
+            [$a, $b] = $this->couple($lien, $carte, $resolus, $conjoints);
+        }
+
+        if (null === $enfant || (null === $a && null === $b)) {
+            return null;
+        }
+
+        $parents = array_values(array_filter([$a, $b], static fn (?int $id): bool => null !== $id));
+        $unionUnique = 1 === \count($parents)
+            && !\in_array($parents[0], $carte, true)
+            && !isset($conjoints[$parents[0]]);
+
+        try {
+            $filiation = $this->arbre->etablirFiliation($enfant, $parents[0], $parents[1] ?? null, $unionUnique, $lien->getSiblingOrder());
+        } catch (FiliationIncompatible $incompatible) {
+            // Rien n'est écrit : on est dans la transaction du validateur, et la lever
+            // l'annule tout entière. La demande reste en attente.
+            throw Conflit::filiationIncompatible($demandeId, $incompatible->getMessage());
+        }
+
+        $this->tracerLaFiliation($lien, $filiation, $demandeId, $ecritures);
+
+        return $filiation->familleId;
+    }
+
+    /**
+     * Les révisions d'une filiation établie, dans l'ordre où l'arbre les a vécues :
+     * la famille (créée ou complétée), le lien, les familles quittées, les suppressions.
+     *
+     * @param list<EcritureDeRevision> $ecritures
+     */
+    private function tracerLaFiliation(DraftLink $lien, FiliationEtablie $filiation, int $demandeId, array &$ecritures): void
+    {
+        if ($filiation->creee) {
+            $ecritures[] = new EcritureDeRevision(
+                SubjectKind::Famille,
+                $filiation->familleId,
+                $filiation->libelle,
+                RevisionOperation::Creation,
+                ['couple' => ['avant' => null, 'apres' => $filiation->libelle]],
+            );
+        }
+
+        if (null !== $filiation->libelleAvant) {
+            $ecritures[] = new EcritureDeRevision(
+                SubjectKind::Famille,
+                $filiation->familleId,
+                $filiation->libelle,
+                RevisionOperation::Modification,
+                ['couple' => ['avant' => $filiation->libelleAvant, 'apres' => $filiation->libelle]],
+            );
+        }
+
+        $changes = ['filiation' => ['avant' => null, 'apres' => $lien->getKind()->label()]];
+
+        if ($filiation->motif->seDevineMal()) {
+            $parent = LinkKind::ParentDe === $lien->getKind() ? $lien->getSubjectLabel() : $lien->getOtherLabel();
+            $changes['rattachement'] = ['avant' => null, 'apres' => RattachementDesFiliations::phrase($filiation->motif, $filiation->libelle, $parent)];
+        }
+
+        $ecritures[] = new EcritureDeRevision(
+            SubjectKind::Famille,
+            $filiation->familleId,
+            $this->libelleDuLien($lien),
+            RevisionOperation::LienAjoute,
+            $changes,
+        );
+
+        foreach ($filiation->quittees as $quittee) {
+            $ecritures[] = new EcritureDeRevision(
+                SubjectKind::Famille,
+                $quittee['familleId'],
+                $quittee['libelle'],
+                RevisionOperation::LienRetire,
+                [
+                    'filiation' => ['avant' => $filiation->libelleDeLEnfant, 'apres' => null],
+                    'rattachement' => ['avant' => null, 'apres' => \sprintf('Rattaché·e à « %s ».', $filiation->libelle)],
+                ],
+            );
+
+            // Une famille vidée ne part que si **rien** ne la désigne : ni donnée côté
+            // `Tree` (revérifié par `supprimerFamilleVide()` lui-même), ni média, ni
+            // demande en attente. Celle-ci, sinon, deviendrait caduque par un effet de
+            // bord que personne n'aurait vu passer.
+            if ($this->filiations->familleProtegee($quittee['familleId'], $demandeId)) {
+                continue;
+            }
+
+            $supprimee = $this->arbre->supprimerFamilleVide($quittee['familleId']);
+
+            if (null !== $supprimee) {
+                $ecritures[] = new EcritureDeRevision(
+                    SubjectKind::Famille,
+                    $quittee['familleId'],
+                    $supprimee,
+                    RevisionOperation::Suppression,
+                    ['couple' => ['avant' => $supprimee, 'apres' => null]],
+                );
+            }
+        }
     }
 
     /**

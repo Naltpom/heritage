@@ -52,6 +52,7 @@ final readonly class SerialiseurDeDemande
         private AnalyseDeDemande $analyse,
         private PortMedias $medias,
         private ValeursMasquees $masques,
+        private RattachementDesFiliations $filiations,
     ) {
     }
 
@@ -139,6 +140,24 @@ final readonly class SerialiseurDeDemande
         $cible = $this->cibleDuPlan($demande, $plan);
         if (null !== $cible) {
             $charge['cible'] = $cible;
+        }
+
+        // **Où chaque filiation atterrira**, dit avant le clic. Une filiation à un parent
+        // ne va plus forcément là où le lien se lit : elle peut compléter la famille que
+        // l'enfant a déjà, ou rejoindre l'union unique de son parent. L'administrateur
+        // doit lire « sera rattachée au couple Jean-Marie × Hélène » ici, pas le découvrir
+        // dans l'arbre. Clé absente quand rien ne se prévoit (parent pas encore créé).
+        $annonces = $this->filiations->annonces($demande);
+
+        if ([] !== $annonces && \is_array($charge['liens'])) {
+            foreach ($charge['liens'] as $i => $lien) {
+                $seq = \is_array($lien) ? ($lien['seq'] ?? null) : null;
+
+                if (\is_int($seq) && isset($annonces[$seq]) && \is_array($lien)) {
+                    $lien['filiationPrevue'] = $annonces[$seq];
+                    $charge['liens'][$i] = $lien;
+                }
+            }
         }
 
         $charge['resolutionPrevue'] = $plan->resolution->value;

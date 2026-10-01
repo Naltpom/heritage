@@ -161,6 +161,28 @@ final class Conflit extends ErreurDeDemande
         );
     }
 
+    /**
+     * La règle 4 des filiations : la validation laisserait un enfant dans deux familles
+     * de parents qui partagent un parent ({@see \App\Module\Proposal\Contract\FiliationIncompatible}).
+     *
+     * **Rien n'a été écrit, la demande reste `en_attente`** — mais réessayer ne changerait
+     * rien, et la refaire non plus : c'est l'arbre qu'il faut corriger d'abord (retirer
+     * l'enfant de la famille fautive), puis valider. D'où `rejouable: false` sans passage
+     * en `caduque` : la demande n'est pas morte, elle attend une correction.
+     */
+    public static function filiationIncompatible(int $demandeId, string $motif): self
+    {
+        return new self(
+            'filiation_incompatible',
+            $motif,
+            [
+                'demandeId' => $demandeId,
+                'statut' => RequestStatus::EnAttente->value,
+                'rejouable' => false,
+            ],
+        );
+    }
+
     /** On ne valide pas deux fois : un double clic ne doit pas produire deux révisions. */
     public static function dejaDecidee(RequestStatus $statut): self
     {

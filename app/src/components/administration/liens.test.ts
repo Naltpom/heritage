@@ -240,3 +240,79 @@ describe('la note du lien', () => {
     expect(lienLisible({ ...BASE, note: '' }).note).toBeNull()
   })
 })
+
+describe('ce que la validation fera d’une filiation', () => {
+  /**
+   * Le défaut du 01/10/2026 : « Véronique, enfant de Jean-Marie » a ouvert une
+   * famille à un parent à côté du couple Jean-Marie × Hélène, sans que l'écran
+   * de décision en dise rien. Le serveur annonce désormais la destination ;
+   * l'écran doit la montrer quand elle ne se lit pas dans le lien.
+   */
+  const ENFANT: LienDemande = {
+    ...BASE,
+    kind: 'enfant_de',
+    subjectLabel: 'Véronique Lebrun (proposée)',
+    otherLabel: 'Jean-Marie Lebrun',
+  }
+
+  it('montre la phrase du serveur et les familles quittées quand il y a à signaler', () => {
+    const effet = lienLisible({
+      ...ENFANT,
+      filiationPrevue: {
+        motif: 'union_unique',
+        familleId: 183,
+        libelle: 'Jean-Marie Lebrun × Hélène Lebrun',
+        phrase:
+          'Sera rattaché·e au couple « Jean-Marie Lebrun × Hélène Lebrun », seule union connue de Jean-Marie Lebrun.',
+        aSignaler: true,
+        quittees: [
+          { familleId: 184, libelle: 'Jean-Marie Lebrun', supprimee: true },
+          { familleId: 189, libelle: 'Hélène Lebrun', supprimee: false },
+        ],
+        incompatibilite: null,
+      },
+    }).effet
+
+    expect(effet?.phrase).toContain('seule union connue')
+    expect(effet?.quittees).toEqual([
+      'Quitte « Jean-Marie Lebrun », qui sera supprimée (vide).',
+      'Quitte « Hélène Lebrun », conservée : elle porte encore des données.',
+    ])
+    expect(effet?.refus).toBeNull()
+  })
+
+  it('se tait quand la filiation va là où le lien se lit', () => {
+    const lien = lienLisible({
+      ...ENFANT,
+      filiationPrevue: {
+        motif: 'couple',
+        familleId: 183,
+        libelle: 'Jean-Marie Lebrun × Hélène Lebrun',
+        phrase: 'Rattaché·e au couple « Jean-Marie Lebrun × Hélène Lebrun ».',
+        aSignaler: false,
+        quittees: [],
+        incompatibilite: null,
+      },
+    })
+
+    expect(lien.effet).toBeNull()
+    expect(lienLisible(ENFANT).effet).toBeNull()
+  })
+
+  it('annonce le refus de la règle 4', () => {
+    const effet = lienLisible({
+      ...ENFANT,
+      filiationPrevue: {
+        motif: 'couple',
+        familleId: null,
+        libelle: 'Jean-Marie Lebrun × Hélène Lebrun',
+        phrase: 'Rattaché·e au couple « Jean-Marie Lebrun × Hélène Lebrun ».',
+        aSignaler: true,
+        quittees: [],
+        incompatibilite: 'Véronique Lebrun est déjà enfant de « Jean-Marie Lebrun × Odile Marchal ».',
+      },
+    }).effet
+
+    expect(effet?.refus).toContain('Odile Marchal')
+  })
+})

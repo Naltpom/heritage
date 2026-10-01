@@ -7,6 +7,9 @@ namespace App\Module\Proposal\Service\Port;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\FiliationEtablie;
+use App\Module\Proposal\Contract\FiliationIncompatible;
+use App\Module\Proposal\Contract\FiliationPrevue;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\SourceCitable;
@@ -320,6 +323,71 @@ interface PortArbre
      * pour cette raison serait refusée pour avoir eu raison.
      */
     public function rattacherEnfant(int $familleId, int $personneId, ?int $rangDansLaFratrie): void;
+
+    /**
+     * Ce que {@see etablirFiliation()} ferait — **aucune écriture**, appelée à la lecture
+     * d'administration.
+     *
+     * `$enfantId` vaut `null` quand l'enfant est une fiche que la demande crée : il n'a
+     * alors aucune famille de parents, et seule la règle 3 peut jouer.
+     */
+    public function prevoirFiliation(?int $enfantId, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise): FiliationPrevue;
+
+    /**
+     * Rattache un enfant à ses parents **sans jamais empiler de familles parentales
+     * incompatibles** — passes 4 et 5 du § 9.5 pour `enfant_de` et `parent_de`.
+     *
+     * ## Le défaut qu'elle corrige
+     *
+     * Le chemin d'avant, `trouverOuCreerFamille(P, null)` puis `rattacherEnfant()`, ne
+     * regardait que le lien : « enfant de Jean-Marie » visait le couple `(450, ∅)`, ne le
+     * trouvait pas, le créait. Il ignorait que l'enfant avait déjà une famille, et que
+     * Jean-Marie en avait une avec Hélène. Trois demandes plus tard, Véronique avait trois
+     * familles de parents, chacun en double sur sa fiche (demandes 714 → 727, corrigées à
+     * la main le 01/10/2026).
+     *
+     * ## Les règles, dans l'ordre où elles sont essayées
+     *
+     * **Deux parents** (`A`, `B`) : leur famille de couple, trouvée ou créée — **ou** la
+     * famille à un parent de l'enfant complétée, si elle porte l'un des deux et que
+     * l'enfant y est seul. L'enfant quitte ensuite les familles à un parent de `A` ou de
+     * `B` (règle 2).
+     *
+     * **Un parent** `P` :
+     *
+     * 1. l'enfant est déjà dans une famille dont `P` est l'époux → rien à faire ;
+     * 2. l'enfant a une famille à un seul parent `Q` (règle 1) : si `Q × P` existe déjà,
+     *    il y est rattaché et quitte celle de `Q` ; sinon la place libre reçoit `P` — si
+     *    le sexe le permet, et si l'enfant est seul dans cette famille : compléter une
+     *    famille qui compte d'autres enfants donnerait `P` pour parent à des frères qu'il
+     *    n'a jamais été dit qu'il ait. Dans ce dernier cas, `Q × P` est créé ;
+     * 3. l'enfant n'a aucune famille de parents, `P` a **une seule** union, à deux époux,
+     *    et `$unionUniqueAdmise` (règle 3) → cette union ;
+     * 4. sinon, la famille `(P, ∅)`, comme avant.
+     *
+     * **Règle 4, le garde** : si le résultat laissait l'enfant dans deux familles qui
+     * partagent un parent, rien n'est écrit et {@see FiliationIncompatible} est levée.
+     *
+     * ## Ce qu'elle ne fait pas
+     *
+     * Elle ne supprime aucune famille : elle les vide. La suppression passe par
+     * {@see supprimerFamilleVide()}, après que `Proposal` a vérifié ce que `Tree` ne voit
+     * pas.
+     *
+     * @throws FiliationIncompatible
+     */
+    public function etablirFiliation(int $enfantId, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise, ?int $rangDansLaFratrie): FiliationEtablie;
+
+    /**
+     * Supprime une famille **si et seulement si elle ne porte plus rien** : ni enfant, ni
+     * date d'union ou de rupture, ni note, citation ou fait. Rend son libellé quand elle
+     * est partie, `null` quand elle est restée.
+     *
+     * Le critère est vérifié ici, dans la transaction, et non sur la foi de l'appelant :
+     * une famille qui porte des données ne se supprime jamais, quel que soit le chemin
+     * qui le demande.
+     */
+    public function supprimerFamilleVide(int $familleId): ?string;
 
     /**
      * L'empreinte de l'arbre (§ 2.3 du modèle), recalculée depuis la base.
