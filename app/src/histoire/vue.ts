@@ -8,8 +8,8 @@
  * | Niveau    | `s`         | Ce qu'on dessine                          |
  * |-----------|-------------|-------------------------------------------|
  * | Ensemble  | < 0,16      | rectangles de couleur, lignée directe     |
- * | Familles  | 0,16 – 0,55 | fiches, noms de foyers                    |
- * | Fiches    | ≥ 0,55      | le texte qui tient : voir `texteDeFiche`  |
+ * | Familles  | 0,16 – 0,45 | fiches avec leur photo, noms de foyers     |
+ * | Fiches    | ≥ 0,45      | tout le texte, réduit sous 0,8 (carte)    |
  *
  * **Il y avait un quatrième niveau, « Prénoms », entre 0,42 et 0,75, et il ne
  * tenait pas sa promesse.** Une fiche fait ~132 px de monde, dont 56 pour la
@@ -28,7 +28,18 @@
 
 export type Niveau = 0 | 1 | 2
 
-export const SEUILS = [0.16, 0.55] as const
+export const SEUILS = [0.16, 0.45] as const
+
+/**
+ * Le zoom auquel le texte d'une fiche est écrit à sa taille nominale. En
+ * dessous (niveau Fiches dès 45 %), la fiche se dessine **comme à ce zoom, en
+ * plus petit** : même texte, police réduite avec le zoom, comme une carte.
+ * Au-dessus, la police ne grossit plus et c'est la place qui s'élargit.
+ */
+export const ZOOM_DU_TEXTE = 0.8
+
+/** Le facteur de réduction du texte à l'échelle `s` (1 au-delà de `ZOOM_DU_TEXTE`). */
+export const reductionDuTexte = (s: number): number => Math.min(1, s / ZOOM_DU_TEXTE)
 
 export interface Palier {
   libelle: string

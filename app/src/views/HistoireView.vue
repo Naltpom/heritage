@@ -84,6 +84,7 @@ import {
   borner as bornerEchelle,
   centrerSur,
   jaugeDuZoom,
+  reductionDuTexte,
   type Cadrage,
   type Canevas,
 } from '@/histoire/vue'
@@ -684,6 +685,9 @@ interface LibelleCommun {
   h: number
   directe: boolean
   estompe: boolean
+  /** Le texte est posé à la taille qu'il aurait à 80 % (`w`, `h` en
+   *  coordonnées de ce zoom-là) puis réduit de ce facteur (`reductionDuTexte`). */
+  reduction: number
 }
 /** Compact : la photo à gauche, une ou deux lignes à côté (`texteDeFiche`). */
 interface LibelleCompact extends LibelleCommun {
@@ -706,7 +710,10 @@ type Libelle = LibelleCompact | LibellePortrait
 /** Le texte des fiches visibles, en coordonnées écran (culling). */
 const libelles = computed<Libelle[]>(() => {
   const d = disposition.value
-  if (!d || niveau.value < 2) return []
+  // Familles : les photos seules (si elles existent), sans texte ; Fiches : tout.
+  if (!d || niveau.value < 1) return []
+  const avecTexte = niveau.value >= 2
+  const r = reductionDuTexte(s.value)
   const direct = surligner.value
   const ciblees = idsCibles.value
   const visibles = d.fiches.filter((f) => passe(f) && dansLaFenetre(f.x, f.y, f.w, f.h))
@@ -714,6 +721,7 @@ const libelles = computed<Libelle[]>(() => {
     id: f.id,
     directe: f.directe && direct,
     estompe: ciblees.size > 0 && !ciblees.has(f.id),
+    reduction: r,
   })
   const src = (f: FicheHistoire): string | null => (typeof f.noeud.portrait === 'string' ? f.noeud.portrait : null)
 
@@ -721,24 +729,31 @@ const libelles = computed<Libelle[]>(() => {
     return visibles.map((f): LibellePortrait => {
       const g = geometriePortrait(versEcranX(f.x), versEcranY(f.y), s.value, sy.value)
       const entree = entreePortrait(f.noeud)
+      const w = g.texte.w / r
+      const h = g.texte.h / r
+      const texte = avecTexte ? texteDePortrait(entree, w, h) : { nom: '', prenom: '', dates: [] }
       return {
         ...commun(f),
         forme: 'portrait',
-        ...texteDePortrait(entree, g.texte.w, g.texte.h),
+        ...texte,
         restreinte: entree.restreinte,
         photo: { ...g.photo, src: src(f) },
         ...g.texte,
+        w,
+        h,
       }
     })
   }
 
   const d0 = LARGEUR_PHOTO * Math.min(s.value, sy.value)
   const texte = (ESPACE_PHOTO * 2 + LARGEUR_PHOTO) * s.value
-  return visibles.map(
-    (f): LibelleCompact => ({
+  return visibles.map((f): LibelleCompact => {
+    const w = Math.max(0, f.w * s.value - texte - 4) / r
+    const h = (f.h * sy.value) / r
+    return {
       ...commun(f),
       forme: 'compact',
-      ...texteDeFiche(
+      ...(avecTexte ? texteDeFiche(
         {
           // Un nœud restreint s'écrit « Personne vivante », quoi que porte `etiquetteNom`.
           nom: f.noeud.visibilite === 'restreinte' ? nomEcrit(f.noeud) : nomDeFiche(f.noeud).texte,
@@ -746,9 +761,9 @@ const libelles = computed<Libelle[]>(() => {
           // Absente sur un nœud restreint : ni tiret, ni case vide.
           dates: typeof f.noeud.etiquetteDates === 'string' ? f.noeud.etiquetteDates : '',
         },
-        Math.max(0, f.w * s.value - texte - 4),
-        f.h * sy.value,
-      ),
+        w,
+        h,
+      ) : { t1: '', t2: '', taille: 12 }),
       photo: {
         x: versEcranX(f.x) + ESPACE_PHOTO * s.value,
         y: versEcranY(f.y) + (f.h * sy.value - d0) / 2,
@@ -757,10 +772,10 @@ const libelles = computed<Libelle[]>(() => {
       },
       x: versEcranX(f.x) + texte,
       y: versEcranY(f.y),
-      w: Math.max(0, f.w * s.value - texte - 4),
-      h: f.h * sy.value,
-    }),
-  )
+      w,
+      h,
+    }
+  })
 })
 
 /**
@@ -1349,9 +1364,9 @@ onBeforeUnmount(() => {
         </template>
         <template v-for="t in libelles" :key="t.id">
           <div
-            v-if="t.forme === 'compact'"
-            class="pointer-events-none absolute flex flex-col justify-center overflow-hidden leading-tight"
-            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, opacity: t.estompe ? 0.35 : 1 }"
+            v-if="t.forme === 'compact' && t.t1 !== ''"
+            class="pointer-events-none absolute flex origin-top-left flex-col justify-center overflow-hidden leading-tight"
+            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1 }"
           >
             <span
               class="truncate font-semibold"
@@ -1361,9 +1376,9 @@ onBeforeUnmount(() => {
           </div>
           <!-- Portrait : des hauteurs de ligne fixes (15, 15, 13), celles de `LIGNES_PORTRAIT`. -->
           <div
-            v-else
-            class="pointer-events-none absolute flex flex-col items-center overflow-hidden text-center"
-            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, opacity: t.estompe ? 0.35 : 1 }"
+            v-else-if="t.forme === 'portrait' && t.nom !== ''"
+            class="pointer-events-none absolute flex origin-top-left flex-col items-center overflow-hidden text-center"
+            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1 }"
           >
             <span
               v-if="t.nom"
