@@ -165,6 +165,59 @@ export interface UtilisateurAdministration {
   createdAt: string
   /** `null` pour un compte sans rattachement (le compte d'amorçage). */
   membre: MembreAdministration | null
+  /** Les quotas comptés par compte, dans l'ordre du serveur (§ 10.1, « Quotas d'usage »). */
+  quotas: QuotaDeCompte[]
+}
+
+/**
+ * Un quota d'usage tel que l'administration le lit : consommé sur la fenêtre
+ * glissante (lu sans être décompté) et limite **effective** — la personnelle
+ * si `personnalisee`, sinon le défaut de configuration.
+ *
+ * Le front ne connaît aucune clé d'avance : il affiche ce que le serveur rend,
+ * dans son ordre. Un quota de plus côté serveur apparaît sans une ligne ici.
+ */
+export interface QuotaGlobal {
+  cle: string
+  libelle: string
+  /** « par 24 h », « par heure » — déjà lisible. */
+  fenetre: string
+  consomme: number
+  limite: number
+  limiteParDefaut: number
+  personnalisee: boolean
+}
+
+export interface QuotaDeCompte extends QuotaGlobal {
+  /** L'administrateur n'est pas compté sur ce quota (téléversements). */
+  exempte: boolean
+}
+
+/** `null` rend le défaut ; un entier de 0 à 10 000 devient la limite ; 0 ferme l'usage. */
+export type LimitesDeQuotas = Record<string, number | null>
+
+/** `PATCH /api/administration/utilisateurs/{id}/quotas` — rend la ligne du compte à jour. */
+export function modifierQuotasUtilisateur(
+  id: number,
+  limites: LimitesDeQuotas,
+): Promise<UtilisateurAdministration> {
+  return requeteApi<UtilisateurAdministration>(`/administration/utilisateurs/${id}/quotas`, {
+    methode: 'PATCH',
+    corps: { limites },
+  })
+}
+
+/** `GET /api/administration/quotas` — les quotas à clé globale (rattachement assisté). */
+export function listerQuotasGlobaux(): Promise<{ quotas: QuotaGlobal[] }> {
+  return requeteApi<{ quotas: QuotaGlobal[] }>('/administration/quotas')
+}
+
+/** `PATCH /api/administration/quotas`. */
+export function modifierQuotasGlobaux(limites: LimitesDeQuotas): Promise<{ quotas: QuotaGlobal[] }> {
+  return requeteApi<{ quotas: QuotaGlobal[] }>('/administration/quotas', {
+    methode: 'PATCH',
+    corps: { limites },
+  })
 }
 
 export function listerUtilisateurs(options: {

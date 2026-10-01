@@ -10,7 +10,9 @@ use App\Module\Assistant\Service\AnalyseParLAssistant;
 use App\Module\Assistant\Service\DepotDepuisLAnalyse;
 use App\Module\Assistant\Service\DocumentJoint;
 use App\Module\Assistant\Service\EntreeDAnalyse;
+use App\Module\Assistant\Service\QuotasDeLAssistant;
 use App\Module\Core\Contract\AnnuaireDesMembresInterface;
+use App\Module\Core\Contract\QuotasDUsageInterface;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\Regime;
 use App\Module\Core\Exception\ForbiddenException;
@@ -20,11 +22,9 @@ use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Service\BasculeVoirComme;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -78,11 +78,12 @@ final class AssistantController extends AbstractController
         private readonly Security $securite,
         private readonly AnnuaireDesMembresInterface $annuaire,
         /**
-         * 20 analyses par 24 heures glissantes et par compte. Déclaré dans
-         * `config/services/assistant.yaml`, sur le modèle de `media.limiteur_televersement`.
+         * Les analyses par 24 heures glissantes et par compte : 20 par défaut
+         * (`config/services/assistant.yaml`), ou la limite que l'administrateur a posée
+         * sur le compte (`Core`, table `core_quota_limite`).
          */
-        #[Autowire(service: 'assistant.limiteur_analyses')]
-        private readonly RateLimiterFactoryInterface $limiteur,
+        private readonly QuotasDUsageInterface $quotas,
+        private readonly QuotasDeLAssistant $declares,
     ) {
     }
 
@@ -100,13 +101,12 @@ final class AssistantController extends AbstractController
         // **Tout compte est compté, administrateur compris** — à la différence des
         // téléversements. Chaque analyse est un appel payant chez un tiers, qui porte des
         // documents entiers ; l'exemption du dépôt en volume ne vaut pas ici.
-        $limite = $this->limiteur->create((string) $userId)->consume();
+        $limite = $this->quotas->consommer($this->declares->analyses(), $userId);
 
         if (!$limite->isAccepted()) {
-            throw new TooManyRequestsException(
-                max(1, $limite->getRetryAfter()->getTimestamp() - time()),
-                'Vous avez atteint les 20 analyses de la journée. Le formulaire reste à votre disposition.',
-            );
+            // La limite citée est celle **du compte** — personnelle ou par défaut —, pas
+            // le défaut de configuration : « les 20 analyses » à qui en a 50 serait faux.
+            throw new TooManyRequestsException(max(1, $limite->getRetryAfter()->getTimestamp() - time()), 0 === $limite->getLimit() ? 'L’analyse par l’assistant n’est pas ouverte à votre compte. Le formulaire reste à votre disposition.' : \sprintf('Vous avez atteint les %d analyses de la journée. Le formulaire reste à votre disposition.', $limite->getLimit()));
         }
 
         $this->relacherLaSession($requete);
@@ -224,9 +224,7 @@ final class AssistantController extends AbstractController
             $nom = $fichier->getClientOriginalName();
 
             if (!$fichier->isValid()) {
-                throw new ValidationException(['fichiers' => \in_array($fichier->getError(), [\UPLOAD_ERR_INI_SIZE, \UPLOAD_ERR_FORM_SIZE], true)
-                    ? \sprintf('« %s » dépasse la taille admise (10 Mo).', $nom)
-                    : \sprintf('Le transfert de « %s » a échoué.', $nom)]);
+                throw new ValidationException(['fichiers' => \in_array($fichier->getError(), [\UPLOAD_ERR_INI_SIZE, \UPLOAD_ERR_FORM_SIZE], true) ? \sprintf('« %s » dépasse la taille admise (10 Mo).', $nom) : \sprintf('Le transfert de « %s » a échoué.', $nom)]);
             }
 
             if ($fichier->getSize() > self::TAILLE_MAXIMALE) {

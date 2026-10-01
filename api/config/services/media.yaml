@@ -25,6 +25,30 @@ parameters:
     # numérisé de 18 Mio y échouerait sans message utile.
     app.media.temporaire: '%kernel.project_dir%/var'
 
+    # --- Limitation de débit : la valeur PAR DÉFAUT --------------------------------
+    #
+    # 20 téléversements par heure glissante et par compte (§ 1.9 du contrat). C'est le
+    # plafond d'un membre auquel l'administrateur n'a pas posé de limite personnelle
+    # (Administration → Utilisateurs, table `core_quota_limite` de `Core`). Le décompte
+    # passe par le port `Core\Contract\QuotasDUsageInterface`, qui construit le
+    # limiteur à la limite effective du compte ; le quota est décrit par
+    # `Media\Service\QuotasDesMedias`. Jusqu'au 1er octobre 2026, c'était ici une
+    # `RateLimiterFactory` (`media.limiteur_televersement`), qui ne savait porter qu'une
+    # limite pour tous : même stockage (`cache.app`), même identifiant
+    # (`media_televersement`), même fenêtre — le compteur a été repris tel quel.
+    #
+    # Fenêtre glissante et non fixe : une fenêtre fixe autorise 40 dépôts en deux minutes
+    # à cheval sur l'heure ronde, ce qui vide le plafond de son sens le jour où quelqu'un
+    # s'en aperçoit.
+    #
+    # **Un administrateur n'est pas compté** : `MediaController::limiter()` rend la main
+    # avant de décompter, sur décision du commanditaire du 17 septembre 2026 (import en
+    # volume par le compte d'administration). Ni ce défaut ni une limite personnelle ne
+    # le contraignent ; l'écran des utilisateurs le dit (« non compté »). La portée de
+    # l'exemption et ce qu'il reste comme freins — aucun sur le nombre — sont écrits sur
+    # cette méthode ; c'est là qu'il faut lire avant de toucher à cette valeur.
+    media.quota.televersements: 20
+
 # ATTENTION, PIÈGE PAYÉ ICI : les deux paramètres ci-dessus sont injectés dans
 # `StockageMedia` et `PurgeDesMetadonnees` par un attribut `#[Autowire(param: …)]`, PAS
 # par une définition `arguments:` dans ce fichier. La raison est l'ordre de chargement :
@@ -34,7 +58,7 @@ parameters:
 # perdue en silence, et le conteneur répondrait « Cannot autowire argument $racine ».
 #
 # Ce fichier reste donc le bon endroit pour les **paramètres**, les **alias** et les
-# services à identifiant propre (voir le limiteur plus bas) — mais pas pour reconfigurer
+# services à identifiant propre — mais pas pour reconfigurer
 # une classe de `src/Module/Media/`.
 
 services:
@@ -79,41 +103,6 @@ services:
     # réglages de `Core` quand il existera (§ 10.2 du contrat).
     App\Module\Media\Service\ReglagesMediaInterface:
         alias: App\Module\Media\Service\ReglagesMedia
-
-    # --- Limitation de débit ---------------------------------------------------------
-    #
-    # 20 téléversements par heure et par compte (§ 1.9 du contrat).
-    #
-    # Le plafond ci-dessous est celui d'un membre ordinaire. **Un administrateur n'est
-    # pas compté** : `MediaController::limiter()` rend la main avant de consommer un
-    # jeton, sur décision du commanditaire du 17 septembre 2026 (import en volume par le
-    # compte d'administration). Baisser `limit` ici ne le contraint donc pas, et le
-    # monter ne détend rien pour lui. La portée de l'exemption et ce qu'il reste comme
-    # freins — aucun sur le nombre — sont écrits sur cette méthode ; c'est là qu'il faut
-    # lire avant de toucher à ces valeurs.
-    #
-    # Déclaré ici et non sous `framework.rate_limiter` dans framework.yaml : la règle 1
-    # de l'ADR 0002 veut qu'un module configure ce qui lui appartient dans SON fichier.
-    # Si le socle finit par déclarer `framework.rate_limiter.media_televersement`, c'est
-    # ces deux services-ci qu'il faut retirer — pas les deux définitions qui cohabitent.
-    #
-    # Le compteur vit dans le cache système de fichiers : pas de Redis, pas de table
-    # (§ 3 du dossier — « ne pas ajouter de dépendance qui ne sert pas »).
-    media.stockage_limiteur:
-        class: Symfony\Component\RateLimiter\Storage\CacheStorage
-        arguments: ['@cache.app']
-
-    media.limiteur_televersement:
-        class: Symfony\Component\RateLimiter\RateLimiterFactory
-        arguments:
-            -   id: 'media_televersement'
-                # Fenêtre glissante et non fixe : une fenêtre fixe autorise 40 dépôts en
-                # deux minutes à cheval sur l'heure ronde, ce qui vide le plafond de son
-                # sens le jour où quelqu'un s'en aperçoit.
-                policy: 'sliding_window'
-                limit: 20
-                interval: '1 hour'
-            - '@media.stockage_limiteur'
 
     # --- Le port des médias vu par `Tree` --------------------------------------------
     #

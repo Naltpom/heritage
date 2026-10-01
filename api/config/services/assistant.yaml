@@ -5,7 +5,7 @@
 # L'autowiring déclaré dans config/services/_autoload.yaml couvre déjà toutes les classes
 # de src/Module/Assistant/. On ne déclare ici que ce que le conteneur ne peut pas
 # deviner : les **alias d'interface** (les trois ports que d'autres modules implémentent,
-# et le transport du modèle) et le **limiteur** — un service à identifiant propre.
+# et le transport du modèle) et les **plafonds par défaut** de ses quotas (paramètres).
 #
 # Même piège d'ordre de chargement que `almanach.yaml` et `proposal.yaml` : une
 # définition de service CONCRET posée ici serait écrasée en silence par le prototype
@@ -53,54 +53,35 @@ services:
     App\Module\Assistant\Service\TransportDuModele:
         alias: App\Module\Assistant\Service\TransportGemini
 
-    # ── Le quota : 20 analyses par 24 heures glissantes et par compte ──────────────
-    #
-    # Sur le modèle exact de `media.limiteur_televersement` (config/services/media.yaml) :
-    # fenêtre GLISSANTE — une fenêtre fixe autoriserait 40 analyses à cheval sur minuit —,
-    # compteur dans le cache applicatif, sans Redis ni table. Contrairement aux
-    # téléversements, **l'administrateur est compté** : chaque analyse est un appel
-    # payant chez un tiers (voir `AssistantController::analyser()`).
-    assistant.stockage_limiteur:
-        class: Symfony\Component\RateLimiter\Storage\CacheStorage
-        arguments: ['@cache.app']
+# ── Les trois quotas de l'assistant : leurs valeurs PAR DÉFAUT ─────────────────────
+#
+# Ce sont les plafonds de tout compte auquel l'administrateur n'a pas posé de limite
+# personnelle (Administration → Utilisateurs, table `core_quota_limite` de `Core`). Ils
+# étaient jusqu'au 1er octobre 2026 trois `RateLimiterFactory` déclarées ici ; une
+# fabrique ne porte qu'UNE limite pour toutes ses clés, et ne savait donc pas dire
+# « 20 pour l'un, 50 pour l'autre ». Le décompte passe désormais par le port
+# `Core\Contract\QuotasDUsageInterface`, qui construit le limiteur à la limite effective
+# du compte — même stockage (`cache.app`), même identifiant, même fenêtre glissante de
+# 24 heures : la consommation déjà comptée a été reprise telle quelle. Les quotas sont
+# décrits (libellé, identifiant du compteur) par `Assistant\Service\QuotasDeLAssistant`.
+#
+# Fenêtre GLISSANTE — une fenêtre fixe autoriserait 40 analyses à cheval sur minuit.
+# **L'administrateur est compté** : chaque appel au modèle est payant chez un tiers.
+parameters:
+    # 20 analyses de « Proposer avec l'assistant » par 24 heures, par compte
+    # (`AssistantController::analyser()`).
+    assistant.quota.analyses: 20
 
-    assistant.limiteur_analyses:
-        class: Symfony\Component\RateLimiter\RateLimiterFactory
-        arguments:
-            -   id: 'assistant_analyses'
-                policy: 'sliding_window'
-                limit: 20
-                interval: '24 hours'
-            - '@assistant.stockage_limiteur'
+    # 60 questions de « Poser une question » par 24 heures, par compte. Distinct des
+    # analyses : une question coûte moins (pas de documents) et se pose par rafales.
+    assistant.quota.questions: 60
 
-    # ── Le quota de « Poser une question » : 60 questions par 24 heures et par compte ──
-    #
-    # Distinct des 20 analyses : une question coûte moins (pas de documents) et se pose
-    # par rafales — on en enchaîne cinq sur la même famille. Même politique glissante,
-    # même stockage ; l'administrateur est compté, chaque question est un appel payant.
-    assistant.limiteur_questions:
-        class: Symfony\Component\RateLimiter\RateLimiterFactory
-        arguments:
-            -   id: 'assistant_questions'
-                policy: 'sliding_window'
-                limit: 60
-                interval: '24 hours'
-            - '@assistant.stockage_limiteur'
-
-    # ── Le quota du rattachement assisté : 40 analyses par 24 heures, CLÉ GLOBALE ──
-    #
-    # Un seul compteur pour tous les administrateurs (`RattachementAssisteController`) :
-    # il borne une dépense de l'installation — une vague d'inscriptions partagée sur un
-    # groupe familial —, pas l'activité d'une personne. Séparé des 20 analyses par jour
-    # des membres : l'un ne doit pas épuiser l'autre.
-    assistant.limiteur_rattachements:
-        class: Symfony\Component\RateLimiter\RateLimiterFactory
-        arguments:
-            -   id: 'assistant_rattachements'
-                policy: 'sliding_window'
-                limit: 40
-                interval: '24 hours'
-            - '@assistant.stockage_limiteur'
+    # 40 analyses de rattachement assisté par 24 heures, CLÉ GLOBALE : un seul compteur
+    # pour tous les administrateurs (`RattachementAssisteController`). Il borne une
+    # dépense de l'installation — une vague d'inscriptions partagée sur un groupe
+    # familial —, pas l'activité d'une personne. Sa limite se règle donc globalement
+    # (`PATCH /api/administration/quotas`), jamais par compte.
+    assistant.quota.rattachements: 40
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # EN TEST : un modèle SCRIPTÉ et une clé simulée, rien d'autre.

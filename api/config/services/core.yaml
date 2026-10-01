@@ -87,6 +87,12 @@ services:
     App\Module\Core\Service\EnvoyeurDeNotificationsPush:
         alias: App\Module\Core\Service\EnvoyeurWebPush
 
+    # Les quotas d'usage à la limite de chaque compte (`core_quota_limite`). Le port que
+    # `Assistant` et `Media` consomment ; ses défauts restent dans leurs propres fichiers
+    # (`assistant.yaml`, `media.yaml`), déclarés par `Core\Contract\DeclarationDeQuotasInterface`.
+    App\Module\Core\Contract\QuotasDUsageInterface:
+        alias: App\Module\Core\Service\QuotasDUsage
+
 parameters:
     # L'expéditeur des courriels que Core envoie lui-même — aujourd'hui le seul : le lien
     # de confirmation d'un changement de courriel (§ 2.5). Même variable d'environnement

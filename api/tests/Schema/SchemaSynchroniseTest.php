@@ -111,8 +111,16 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * se reprend le lendemain — « et son père ? » —, ce qu'un cache de deux heures, comme
      * celui des analyses, ne permettrait pas ; et une conversation compte plusieurs
      * échanges, d'où la seconde table.
+     *
+     * **41 depuis le 2026-10-01 (nuit)** : `core_quota_limite` (module `Core`,
+     * `migrations/Version20261001220000.php`) porte les limites d'usage posées à la main
+     * par l'administrateur — analyses et questions de l'assistant, téléversements, par
+     * compte, et la limite globale du rattachement assisté. C'est une **décision** : une
+     * table et non des colonnes sur `core_user`, parce que la liste des quotas est
+     * déclarée par les modules qui les consomment, et qu'un quota de plus ne doit pas
+     * demander une migration du compte.
      */
-    private const int NOMBRE_DE_TABLES = 40;
+    private const int NOMBRE_DE_TABLES = 41;
 
     public function testLeMappingEstValide(): void
     {

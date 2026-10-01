@@ -46,6 +46,7 @@ final class UserAdminService
         private readonly NotificationService $notifications,
         private readonly UserPasswordHasherInterface $hacheur,
         private readonly ClesDAcces $clesDAcces,
+        private readonly QuotasDUsage $quotas,
     ) {
     }
 
@@ -122,6 +123,21 @@ final class UserAdminService
 
         $compte->toucher();
         $this->em->flush();
+
+        return $compte;
+    }
+
+    /**
+     * `PATCH /api/administration/utilisateurs/{id}/quotas` — pose ou retire les limites
+     * personnelles d'un compte. Le journal d'audit mécanique écrit chaque ligne de
+     * `core_quota_limite` créée, changée ou supprimée : rien à consigner à la main.
+     *
+     * @throws NotFoundException|ValidationException
+     */
+    public function personnaliserLesQuotas(int $id, mixed $limites): User
+    {
+        $compte = $this->trouver($id);
+        $this->quotas->personnaliser($compte, $limites);
 
         return $compte;
     }
@@ -227,6 +243,9 @@ final class UserAdminService
             'createdAt' => $compte->getCreatedAt()->format(\DateTimeInterface::ATOM),
             // Rendu tel quel par `Membership` ; `null` tant qu'il n'est pas branché.
             'membre' => null !== $id ? $this->annuaire->membreDuCompte($id) : null,
+            // Chaque quota par compte : consommé (lu sans être décompté) sur la limite
+            // effective, et si cette limite est personnelle. Voir `QuotasDUsage`.
+            'quotas' => $this->quotas->etatDuCompte($compte),
         ];
     }
 
@@ -267,7 +286,7 @@ final class UserAdminService
     }
 
     /**
-     * **On ne rend pas `actif` un compte dont le rattachement n'est pas établi.**
+     * **On ne rend pas `actif` un compte dont le rattachement n'est pas établi.**.
      *
      * `RegimeVoter` décide du régime « membre » sur `core_user.status` **seul** — c'est
      * `Membership\Service\ServiceDesMembres` qui tient les deux statuts ensemble, et c'est

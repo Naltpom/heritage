@@ -20,7 +20,9 @@ use App\Tests\Assistant\Double\AccesAuModeleSimule;
 use App\Tests\Assistant\Double\ComptesARattacherEnMemoire;
 use App\Tests\Assistant\Double\ModeleScripte;
 use App\Tests\Proposal\CasDeTestDemandesHttp;
-use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
+use App\Module\Assistant\Service\QuotasDeLAssistant;
+use App\Module\Core\Service\QuotasDUsage;
+use Symfony\Component\RateLimiter\LimiterInterface;
 
 /**
  * Le rattachement assisté, **en HTTP et de bout en bout** : contrôleur, boucle d'agent
@@ -255,7 +257,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         $this->requete('GET', $this->route('suggestion'));
         self::assertResponseStatusCodeSame(503);
         self::assertSame('assistant_indisponible', $this->erreur()['code']);
-        self::assertSame(40, $this->limiteur()->create('rattachements')->consume(0)->getRemainingTokens());
+        self::assertSame(40, $this->limiteur()->consume(0)->getRemainingTokens());
     }
 
     public function testSansCleUneSuggestionGardeeResteServie(): void
@@ -289,7 +291,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
         self::assertSame('Second.', $this->charge()['resume']);
-        self::assertSame(38, $this->limiteur()->create('rattachements')->consume(0)->getRemainingTokens(), 'Chaque calcul consomme le quota global.');
+        self::assertSame(38, $this->limiteur()->consume(0)->getRemainingTokens(), 'Chaque calcul consomme le quota global.');
     }
 
     public function testUnModeleEnPanneRend502EtLaQuaranteEtUniemeAnalyse429(): void
@@ -301,7 +303,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         self::assertResponseStatusCodeSame(502);
         self::assertSame('assistant_erreur', $this->erreur()['code']);
 
-        $limiteur = $this->limiteur()->create('rattachements');
+        $limiteur = $this->limiteur();
         while ($limiteur->consume()->isAccepted()) {
         }
 
@@ -499,12 +501,17 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         return new UncertainDate((string) $annee, DateQualifier::Annee, new \DateTimeImmutable("$annee-01-01"), new \DateTimeImmutable("$annee-12-31"));
     }
 
-    private function limiteur(): RateLimiterFactoryInterface
+    /**
+     * Le compteur de la route, à la limite effective — même identifiant, même stockage,
+     * même fenêtre que `QuotasDUsage::consommer()`.
+     */
+    private function limiteur(): LimiterInterface
     {
-        $limiteur = self::getContainer()->get('assistant.limiteur_rattachements');
-        \assert($limiteur instanceof RateLimiterFactoryInterface);
+        $quotas = self::getContainer()->get(QuotasDUsage::class);
+        $declares = self::getContainer()->get(QuotasDeLAssistant::class);
+        \assert($quotas instanceof QuotasDUsage && $declares instanceof QuotasDeLAssistant);
 
-        return $limiteur;
+        return $quotas->limiteur($declares->rattachements(), null);
     }
 
     private function personne(string $prenoms, string $nom, Sex $sexe, UncertainDate $naissance, bool $decedee): int
