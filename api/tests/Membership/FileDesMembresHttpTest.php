@@ -53,6 +53,8 @@ final class FileDesMembresHttpTest extends CasDeTestMembership
     private const array CLES_ATTENDUES = [
         'id', 'status', 'matchKind', 'invitationId', 'linkedAt', 'activatedAt',
         'personId', 'personLabel',
+        // ADR 0013 : la photo d'inscription, qui deviendra le portrait de la fiche.
+        'portraitEnAttente',
     ];
 
     public function testLaFileEstFermeeALAnonyme(): void
@@ -123,6 +125,7 @@ final class FileDesMembresHttpTest extends CasDeTestMembership
             self::assertIsArray($element);
             self::assertSame(self::CLES_ATTENDUES, array_keys($element));
             self::assertSame(MemberStatus::EnAttente->value, $element['status']);
+            self::assertNull($element['portraitEnAttente'], 'Aucune photo déposée dans ce scénario.');
         }
 
         // ── Règle 5 : la valeur du contrat est écrite par l'énumération, jamais recopiée.
@@ -206,7 +209,7 @@ final class FileDesMembresHttpTest extends CasDeTestMembership
         self::assertSame(1, $charge['total']);
 
         $ligne = $charge['elements'][0];
-        self::assertSame(['id', 'status', 'matchKind', 'invitationId', 'linkedAt', 'activatedAt'], array_keys($ligne));
+        self::assertSame(['id', 'status', 'matchKind', 'invitationId', 'linkedAt', 'activatedAt', 'portraitEnAttente'], array_keys($ligne));
         self::assertNull($ligne['invitationId']);
 
         // Les deux clés de personne sont ABSENTES, pas nulles : le § 11.3 fait passer
@@ -233,12 +236,20 @@ final class FileDesMembresHttpTest extends CasDeTestMembership
         $this->creerUtilisateur('natron@example.net', roles: ['ROLE_ADMIN']);
 
         $natures = MatchKind::cases();
-        self::assertCount(3, $natures, 'Le § 4.5 du modèle en décrit trois ; une quatrième demande une relecture du § 10.1.');
+        // Quatre depuis le 1er octobre 2026 : `a_rattacher`, le compte sans fiche de
+        // l'ADR 0013. Relu au § 10.1 : il traverse la file **sans** `personId`.
+        self::assertCount(4, $natures, 'Le § 4.5 du modèle et l\'ADR 0013 en décrivent quatre ; une cinquième demande une relecture du § 10.1.');
 
-        $personnes = [ArbreFamilial::COUSIN, ArbreFamilial::TANTE, ArbreFamilial::GRAND_ONCLE];
+        $personnes = [ArbreFamilial::COUSIN, ArbreFamilial::TANTE, ArbreFamilial::GRAND_ONCLE, ArbreFamilial::GRAND_TANTE];
 
         foreach ($natures as $rang => $nature) {
             $compte = $this->creerUtilisateur(\sprintf('attente%d@example.net', $rang), statut: UserStatus::EnAttente);
+
+            if (MatchKind::ARattacher === $nature) {
+                $this->creerMembreSansFiche($compte);
+                continue;
+            }
+
             $this->creerMembre($compte, $personnes[$rang], 'Personne '.$rang, MemberStatus::EnAttente, $nature);
         }
 
@@ -252,6 +263,11 @@ final class FileDesMembresHttpTest extends CasDeTestMembership
 
         $rendues = array_map(static fn (array $ligne): string => (string) $ligne['matchKind'], $charge['elements']);
         self::assertSame(array_map(static fn (MatchKind $n): string => $n->value, $natures), $rendues);
+
+        // Le compte sans fiche : ni `personId` ni `personLabel` — absents, pas nuls.
+        $sansFiche = $charge['elements'][3];
+        self::assertArrayNotHasKey('personId', $sansFiche);
+        self::assertArrayNotHasKey('personLabel', $sansFiche);
     }
 
     /**

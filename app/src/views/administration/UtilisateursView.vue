@@ -17,6 +17,19 @@
  * réduit mais un régime distinct (§ 12). Quelqu'un attend derrière, parfois
  * depuis plusieurs jours.
  *
+ * Sauf pour un compte **`a_rattacher`** (ADR 0013) : inscrit sans s'être
+ * trouvé, il n'a pas de fiche à valider. Sa ligne renvoie à l'onglet
+ * « À rattacher », où se lisent sa description et la suggestion.
+ *
+ * **La photo d'inscription se voit avant de valider.** Un compte en attente a
+ * pu déposer sa photo ; la validation en fait **le portrait de sa fiche**, sans
+ * autre geste. La liste des utilisateurs (servie par `Core`) ne la porte pas :
+ * on lit donc aussi la file des membres en attente (`Membership`), qui la
+ * porte, et la vignette s'affiche sur la ligne, avec la mention « deviendra le
+ * portrait de sa fiche à la validation ». Les deux lectures sont faites
+ * ensemble, et l'écran attend les deux : une ligne affichée sans sa photo
+ * inviterait précisément à la validation à l'aveugle qu'on corrige.
+ *
  * **Suspendre.** `status` accepte `actif` et `suspendu`, **jamais
  * `en_attente`** : on ne remet pas un compte en attente, on le suspend. Un
  * compte suspendu ne s'authentifie plus du tout — `POST /api/connexion` rend
@@ -41,9 +54,11 @@ import {
   activerMembre,
   activerVueComme,
   incarnerUtilisateur,
+  listerMembresEnAttente,
   listerUtilisateurs,
   modifierUtilisateur,
   quitterVueComme,
+  type PhotoARattacher,
   type UtilisateurAdministration,
 } from '@/lib/api'
 import { rafraichirSession, useSession } from '@/composables/useSession'
@@ -55,6 +70,7 @@ import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
 import OngletsAdministration from './OngletsAdministration.vue'
 import MentionDeRattachement from '@/components/administration/MentionDeRattachement.vue'
+import PortraitAValider from '@/components/administration/PortraitAValider.vue'
 import {
   ecrituresSuspendues,
   infobulleSuspension,
@@ -65,6 +81,8 @@ const { session, vueEmpruntee } = useSession()
 const routeur = useRouter()
 
 const utilisateurs = ref<UtilisateurAdministration[]>([])
+/** Les photos d'inscription en attente, par identifiant de **membre**. */
+const portraits = ref<ReadonlyMap<number, PhotoARattacher>>(new Map())
 const chargement = ref(false)
 const erreur = ref<unknown>(null)
 const enCours = ref<number | null>(null)
@@ -78,7 +96,16 @@ async function charger(): Promise<void> {
   chargement.value = true
   erreur.value = null
   try {
-    utilisateurs.value = (await listerUtilisateurs({ parPage: 100 })).elements
+    const [liste, file] = await Promise.all([
+      listerUtilisateurs({ parPage: 100 }),
+      listerMembresEnAttente(),
+    ])
+    utilisateurs.value = liste.elements
+    portraits.value = new Map(
+      file.elements.flatMap((membre) =>
+        membre.portraitEnAttente === null ? [] : [[membre.id, membre.portraitEnAttente] as const],
+      ),
+    )
   } catch (cause) {
     erreur.value = cause
   } finally {
@@ -107,10 +134,41 @@ function estAdministrateur(utilisateur: UtilisateurAdministration): boolean {
   return utilisateur.roles.includes('ROLE_ADMIN')
 }
 
+/** Inscrit sans fiche, pas encore décidé : il se traite dans « À rattacher ». */
+function aRattacher(utilisateur: UtilisateurAdministration): boolean {
+  const membre = utilisateur.membre
+  return membre !== null && membre.status === 'en_attente' && membre.matchKind === 'a_rattacher'
+}
+
+/**
+ * La photo qui deviendra le portrait de la fiche à la validation — seulement
+ * pour un compte encore en attente. Sous une vue empruntée, la vignette se
+ * lirait avec le cercle du membre simulé et ne s'afficherait pas : on ne la
+ * montre pas, et « Valider » y est de toute façon suspendu.
+ */
+function portraitAValider(utilisateur: UtilisateurAdministration): PhotoARattacher | null {
+  const membre = utilisateur.membre
+  if (membre === null || membre.status !== 'en_attente' || vueEmpruntee.value !== null) return null
+  return portraits.value.get(membre.id) ?? null
+}
+
 function valider(utilisateur: UtilisateurAdministration): void {
   const membre = utilisateur.membre
   if (membre === null) return
   void agir(utilisateur.id, () => activerMembre(membre.id))
+}
+
+/**
+ * « Réactiver » n'a de sens que pour un compte dont le rattachement est établi
+ * (membre actif) — ou qui n'a pas de membre du tout. Un compte **refusé**
+ * (membre suspendu, sans fiche) ou un compte en attente qu'on a suspendu ne
+ * redevient pas actif par ce bouton : `core_user` seul passerait `actif`, et le
+ * serveur le refuse (`409 rattachement_non_etabli`). Le compte en attente garde
+ * son propre geste — « Valider le rattachement » ou « Identifier sa fiche ».
+ */
+function suspensionBasculable(utilisateur: UtilisateurAdministration): boolean {
+  const membre = utilisateur.membre
+  return utilisateur.status !== 'suspendu' || membre === null || membre.status === 'actif'
 }
 
 function basculerSuspension(utilisateur: UtilisateurAdministration): void {
@@ -249,9 +307,22 @@ function dateLisible(valeur: string | null): string {
                deviner autrement. Le détail est dans `rattachement.ts`. -->
           <MentionDeRattachement :membre="utilisateur.membre" />
 
+          <PortraitAValider :photo="portraitAValider(utilisateur)" :nom="utilisateur.displayName" />
+
           <div class="mt-2 flex flex-wrap gap-2">
+            <!-- Un compte `a_rattacher` n'a pas de fiche : « Valider » rendrait
+                 `422` faute de `personId`. La décision se prend sur sa carte,
+                 avec la description et la suggestion — on y renvoie. -->
+            <RouterLink
+              v-if="aRattacher(utilisateur)"
+              :to="{ name: 'administration.rattachements' }"
+              class="inline-flex items-center rounded-champ border border-accent px-3 py-1.5 text-sm font-semibold text-accent hover:bg-accent-doux"
+            >
+              Identifier sa fiche
+            </RouterLink>
+
             <BoutonBase
-              v-if="utilisateur.membre !== null && utilisateur.membre.status === 'en_attente'"
+              v-else-if="utilisateur.membre !== null && utilisateur.membre.status === 'en_attente'"
               :chargement="enCours === utilisateur.id"
               :desactive="suspendu"
               :title="infobulle"
@@ -299,6 +370,7 @@ function dateLisible(valeur: string | null): string {
               </BoutonBase>
 
               <BoutonBase
+                v-if="suspensionBasculable(utilisateur)"
                 :variante="utilisateur.status === 'suspendu' ? 'secondaire' : 'danger'"
                 :desactive="suspendu || enCours !== null"
                 :title="infobulle"

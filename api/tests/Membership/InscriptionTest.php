@@ -155,7 +155,10 @@ final class InscriptionTest extends CasDeTestMembership
 
         $etat = $this->charge();
 
-        self::assertSame(['status', 'depuis', 'matchKind', 'regime', 'cequejevois'], array_keys($etat));
+        // `portraitEnAttente` depuis l'ADR 0013 : un booléen, pas l'image — l'écran propose
+        // « Ajouter votre photo » à qui a passé l'étape.
+        self::assertSame(['status', 'depuis', 'matchKind', 'regime', 'cequejevois', 'portraitEnAttente'], array_keys($etat));
+        self::assertFalse($etat['portraitEnAttente']);
         self::assertSame('en_attente', $etat['status']);
         self::assertSame('aucun', $etat['regime']);
         self::assertSame(

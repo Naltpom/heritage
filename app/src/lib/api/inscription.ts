@@ -101,28 +101,82 @@ export function rechercherRattachement(entree: {
 }
 
 /**
+ * Ce que décrit, d'elle-même, une personne qui ne s'est pas trouvée dans l'arbre
+ * (« Je ne me trouve pas » ou « Aucune de ces personnes » à l'étape 1b).
+ *
+ * L'identité est celle **déjà saisie** pour la recherche — nom de naissance,
+ * prénoms dans l'ordre de l'état civil, date ferme `YYYY-MM-DD` — et la
+ * description, en texte libre, dit à l'administrateur de qui elle descend.
+ *
+ * **Ce texte parle de personnes vivantes.** Il ne part que dans le corps de
+ * `POST /inscription/compte`, n'est écrit dans aucun stockage du navigateur, ne
+ * se journalise pas, et ne revient jamais au titulaire : seuls les
+ * administrateurs le relisent, pour identifier ou créer la fiche.
+ */
+export interface DeclarationDeFamille {
+  surname: string
+  givenNames: string
+  /** Date ferme `YYYY-MM-DD`, comme à l'étape 1b. */
+  birthDate: string
+  /** 60 à 4 000 caractères après `trim()` — voir `components/inscription/declaration.ts`. */
+  description: string
+}
+
+/**
+ * Les deux formes, **exclusives**, du rattachement demandé à l'étape 2 : un
+ * candidat retenu (`choix`), ou une famille décrite (`declaration`). Le serveur
+ * refuse les deux à la fois (`422` sur `choix`) ; le type l'interdit en amont.
+ */
+export type RattachementDemande =
+  | { choix: string; declaration?: never }
+  | { declaration: DeclarationDeFamille; choix?: never }
+
+/**
  * § 4.3 — `POST /api/inscription/compte`. Étape 2.
  *
- * `choix` est un `ref` rendu par l'étape 1b, **opaque et à usage unique**, lié à
- * la tentative qui l'a produit et valable 15 minutes. Ce n'est pas un
- * identifiant de personne et il ne doit jamais en devenir un : expiré, inconnu,
- * ou issu d'une autre tentative, il rend `404` — pas `422`, car confirmer
- * « ce `ref` a existé » dirait déjà quelque chose de l'étape précédente.
+ * Deux formes de corps :
+ *
+ * - **`choix`** est un `ref` rendu par l'étape 1b, **opaque et à usage unique**,
+ *   lié à la tentative qui l'a produit et valable 15 minutes. Ce n'est pas un
+ *   identifiant de personne et il ne doit jamais en devenir un : expiré,
+ *   inconnu, ou issu d'une autre tentative, il rend `404` — pas `422`, car
+ *   confirmer « ce `ref` a existé » dirait déjà quelque chose de l'étape
+ *   précédente.
+ * - **`declaration`** ouvre un compte **sans fiche** : en attente, `matchKind`
+ *   `a_rattacher`, régime `aucun`. Un administrateur identifiera la fiche — ou
+ *   la créera — plus tard. Les erreurs de champ reviennent sous des clés
+ *   pointées (`declaration.description`…), et un limiteur par adresse IP
+ *   (5 comptes sans fiche par heure) rend une vraie `429`.
  *
  * Succès : `201`, jeton d'invitation consommé, `mbr_member` créé, **session
  * ouverte**. La charge rendue est celle du § 2.2.
  */
-export function creerCompte(entree: {
-  jeton: string
-  choix: string
-  email: string
-  password: string
-}): Promise<ChargeDeSession> {
+export function creerCompte(
+  entree: {
+    jeton: string
+    email: string
+    password: string
+  } & RattachementDemande,
+): Promise<ChargeDeSession> {
+  // Le corps est écrit champ par champ plutôt que d'étaler `entree` : il ne part
+  // que ce que le contrat attend, et jamais les deux formes à la fois.
+  const rattachement =
+    entree.declaration !== undefined
+      ? {
+          declaration: {
+            surname: entree.declaration.surname,
+            givenNames: entree.declaration.givenNames,
+            birthDate: entree.declaration.birthDate,
+            description: entree.declaration.description,
+          },
+        }
+      : { choix: entree.choix }
+
   return requeteApi<ChargeDeSession>('/inscription/compte', {
     methode: 'POST',
     corps: {
       jeton: entree.jeton,
-      choix: entree.choix,
+      ...rattachement,
       email: entree.email,
       password: entree.password,
     },
@@ -141,6 +195,10 @@ export function creerCompte(entree: {
  *
  * `cequejevois` porte **deux nombres, pas une liste** : c'est ce qui donne du
  * sens à l'attente sans rien exposer. Il disparaît une fois le compte activé.
+ *
+ * `matchKind` vaut `a_rattacher` pour un compte ouvert sans fiche, et
+ * `portraitEnAttente` dit, tant que le compte attend, si sa photo a été déposée :
+ * elle ne deviendra le portrait de la fiche qu'au rattachement.
  */
 export function lireEtatInscription(): Promise<EtatInscription> {
   return requeteApi<EtatInscription>('/inscription/etat')

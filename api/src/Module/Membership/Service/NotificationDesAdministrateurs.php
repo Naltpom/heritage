@@ -70,6 +70,47 @@ final readonly class NotificationDesAdministrateurs
     }
 
     /**
+     * Un compte est né **sans fiche** : le candidat ne s'est pas trouvé dans l'arbre et a
+     * décrit sa famille (ADR 0013).
+     *
+     * La porte de sortie n° 6 vaut ici deux fois : le titre et le corps nomment le
+     * **courriel** du compte, jamais l'identité qu'il a déclarée, et **jamais un mot de sa
+     * description**. Une notification est persistée, lue hors de l'écran qui instruit le
+     * rattachement, et survivrait à la purge de la déclaration — elle deviendrait alors la
+     * seule copie de ce que la purge venait d'effacer.
+     *
+     * Même nature que {@see compteEnAttente()} : c'est la même file d'attente vue de
+     * l'administrateur. Le lien, lui, mène à l'onglet « À rattacher », où la carte du compte
+     * porte tout ce qu'il faut pour décider.
+     */
+    public function compteARattacher(Member $membre): void
+    {
+        foreach ($this->administrateurs() as $administrateur) {
+            $identifiant = $administrateur->getId();
+
+            if (null === $identifiant) {
+                continue;
+            }
+
+            $this->em->persist(new Notification(
+                $identifiant,
+                NotificationKind::CompteEnAttente,
+                'Une inscription attend son rattachement',
+                \sprintf(
+                    '%s s\'est inscrit sans se trouver dans l\'arbre : sa fiche reste à identifier.',
+                    $membre->getUserEmail(),
+                ),
+                'administration.rattachements',
+                // `null` et non `[]` : un tableau PHP vide s'encode `[]` en JSON, pas `{}`,
+                // et le front traite déjà l'absence de paramètres (`linkParams ?? {}`).
+                null,
+            ));
+        }
+
+        $this->em->flush();
+    }
+
+    /**
      * Le compte vient d'être activé : « c'est la notification qui le lui apprend, et le
      * front recharge session et graphe à sa lecture » (§ 12.3).
      *

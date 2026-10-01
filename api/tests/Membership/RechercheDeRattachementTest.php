@@ -213,18 +213,43 @@ final class RechercheDeRattachementTest extends TestCase
     }
 
     /**
-     * Une personne **décédée** reste cherchable, et c'est correct : l'exclure créerait un
-     * oracle inverse — « votre recherche ne rend rien » distinguerait une personne décédée
-     * d'une personne inexistante. Le cercle ne s'applique pas ici : personne n'est encore
-     * connecté.
+     * Une personne **décédée** n'est plus proposée (ADR 0013).
+     *
+     * Elle l'a été, au nom d'un « oracle inverse ». L'argument est tombé avec l'inscription
+     * sans fiche : tout porteur du lien peut créer un compte en attente, et un compte en
+     * attente voit tous les défunts. Reste ce qui décide : un compte ancré sur un mort n'a
+     * pas de sens. Le vivant homonyme, lui, est toujours trouvé.
      */
-    public function testUnePersonneDecedeeResteCherchable(): void
+    public function testUnePersonneDecedeeNEstPlusProposee(): void
     {
         $arbre = $this->arbre([
             new PersonneDeLArbre(1, 'Azurite', 'Romarin', 'Azurite Romarin', 1901, '1901', false),
+            new PersonneDeLArbre(2, 'Azurite', 'Romarin', 'Azurite Romarin', 1998, '1998', true),
         ]);
 
-        self::assertCount(1, $this->chercher($arbre, 'Romarin', 'Azurite', '1901-01-01'));
+        self::assertSame([], $this->chercher($arbre, 'Romarin', 'Azurite', '1901-01-01'));
+        self::assertSame(
+            [2],
+            array_map(static fn (PersonneDeLArbre $p): int => $p->id, $this->chercher($arbre, 'Romarin', 'Azurite', '1998-03-04')),
+        );
+    }
+
+    /**
+     * En mode confirmation, un pré-lien vers un défunt ne se confirme pas, **même avec la
+     * bonne date** : même réponse qu'une date fausse, et la tentative est consommée par
+     * l'appelant de la même façon.
+     */
+    public function testUnPreLienVersUnDefuntNeSeConfirmePas(): void
+    {
+        $arbre = $this->arbre([
+            new PersonneDeLArbre(1, 'Azurite', 'Romarin', 'Azurite Romarin', 1901, '1.2.1901', false),
+            new PersonneDeLArbre(2, 'Jet', 'Romarin', 'Jet Romarin', 2009, '26.9.2009', true),
+        ]);
+
+        $recherche = new RechercheDeRattachement(new NormalisationDeNom(new CleDeRecherche()));
+
+        self::assertSame([], $recherche->confirmer($arbre, 1, $this->criteres('Romarin', 'Azurite', '1901-02-01')));
+        self::assertCount(1, $recherche->confirmer($arbre, 2, $this->criteres('Romarin', 'Jet', '2009-09-26')));
     }
 
     /** @param list<PersonneDeLArbre> $personnes */

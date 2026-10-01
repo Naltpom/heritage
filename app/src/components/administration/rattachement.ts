@@ -66,6 +66,14 @@
  *
  * ── Ce que ce module ne fait pas ────────────────────────────────────────────
  *
+ * ── Le compte `a_rattacher` ─────────────────────────────────────────────────
+ *
+ * Né d'un « Je ne me trouve pas » (ADR 0013) : une ligne `mbr_member` **sans
+ * fiche**, en attente. Il est `inactif` comme tout compte en attente, mais sa
+ * phrase est propre : il ne retombe pas « sur la racine » — il n'a pas de
+ * cercle du tout et ne voit que les défunts — et la décision se prend dans
+ * l'onglet « À rattacher », pas par « Valider le rattachement ».
+ *
  * **Il ne propose aucune réparation pour le cas `absent`**, et ce n'est pas un
  * oubli : il n'existe aujourd'hui aucune route pour rattacher un compte
  * *existant* à une fiche. `activerMembre(id, { personId })` corrige un
@@ -115,14 +123,17 @@ function phrase(texte: string): string {
 /**
  * Comment désigner la fiche visée, sans jamais inventer de libellé.
  *
- * `mbr_member.person_label` est `NOT NULL` côté serveur, donc le cas vide ne
- * devrait pas se produire — mais le type de la charge l'autorise, et une fiche
+ * `mbr_member.person_label` n'est nul que pour un compte `a_rattacher` (un
+ * `CHECK` le lie à `person_id`), traité avant d'arriver ici ; ailleurs, le cas
+ * vide ne devrait pas se produire — mais le type de la charge l'autorise, et une fiche
  * désignée par un identifiant reste diagnosticable là où « Rattaché à  » ne
  * l'est pas.
  */
 function fiche(membre: MembreAdministration): string | null {
-  if (membre.personLabel !== null && membre.personLabel !== '') return membre.personLabel
-  if (membre.personId !== null) return `la fiche n° ${membre.personId}`
+  // `!= null` et non `!== null` : les deux clés sont **absentes** (pas nulles)
+  // quand le cercle ne les laisse pas voir, et toujours pour `a_rattacher`.
+  if (membre.personLabel != null && membre.personLabel !== '') return membre.personLabel
+  if (membre.personId != null) return `la fiche n° ${membre.personId}`
   return null
 }
 
@@ -150,6 +161,21 @@ export function mentionDeRattachement(
   }
 
   const visee = fiche(membre)
+
+  // Inscrit par « Je ne me trouve pas » : **aucune fiche** n'est visée, et la
+  // décision ne se prend pas ici mais sur la carte de l'onglet « À rattacher »,
+  // qui porte la description et la suggestion. « Valider le rattachement » n'a
+  // pas de sens sur ce compte — le serveur le refuserait en `422` faute de
+  // `personId` — et l'écran des utilisateurs le masque.
+  if (membre.matchKind === 'a_rattacher' && membre.status === 'en_attente') {
+    return {
+      etat: 'inactif',
+      etiquette: 'Fiche à identifier : inscrit sans s’être trouvé dans l’arbre',
+      consequence:
+        'Ce compte n’a pas encore de fiche : il ne voit que les personnes décédées. ' +
+        'Rattachez-le depuis l’onglet « À rattacher ».',
+    }
+  }
 
   if (membre.status === 'en_attente') {
     return {

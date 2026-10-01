@@ -103,6 +103,12 @@ final class UserAdminService
         $statut = \array_key_exists('status', $corps) ? $this->statutValide($corps['status']) : null;
         $nom = \array_key_exists('displayName', $corps) ? $this->nomValide($corps['displayName']) : null;
 
+        // **Avant** toute écriture : `appliquerLesRoles()` journalise, donc vide l'unité de
+        // travail — un `409` levé après lui laisserait le changement de rôle écrit.
+        if (UserStatus::Actif === $statut && $statut !== $compte->getStatus()) {
+            $this->refuserUnActifSansRattachementEtabli($compte);
+        }
+
         if (null !== $roles) {
             $this->appliquerLesRoles($compte, $roles, $administrateur);
         }
@@ -247,6 +253,49 @@ final class UserAdminService
             ['roles' => ['avant' => $avant, 'apres' => $compte->getRoles()]],
             $administrateur,
         );
+    }
+
+    /**
+     * **On ne rend pas `actif` un compte dont le rattachement n'est pas établi.**
+     *
+     * `RegimeVoter` décide du régime « membre » sur `core_user.status` **seul** — c'est
+     * `Membership\Service\ServiceDesMembres` qui tient les deux statuts ensemble, et c'est
+     * le seul endroit où ils passent `actif` (ADR 0002 : le voteur n'interroge pas
+     * `Membership`). Ce `PATCH` était la brèche : « Réactiver » un compte **refusé** (membre
+     * `suspendu`, sans fiche, nature `a_rattacher`) ou un compte en attente qu'on avait
+     * suspendu le rendait `actif` côté `core_user` seulement. Le résultat : un compte au
+     * cercle **vide** (la fabrique du lecteur ne voit pas de membre actif) mais admis comme
+     * membre pour écrire — démarches, tirages.
+     *
+     * La règle : si le compte a un membre, ce membre doit être `actif` **et** avoir une
+     * fiche. Sans membre du tout — l'administrateur d'amorçage —, rien ne change. Pour un
+     * compte en attente, le bon geste est l'activation (`POST /api/administration/membres/
+     * {id}/activer`, ou l'onglet « À rattacher ») : elle passe les deux statuts ensemble.
+     * Pour un compte refusé, il n'y a pas de retour : sa déclaration est purgée, la personne
+     * se réinscrit.
+     *
+     * @throws ConflictException `409 rattachement_non_etabli`
+     */
+    private function refuserUnActifSansRattachementEtabli(User $compte): void
+    {
+        $id = $compte->getId();
+        $membre = null !== $id ? $this->annuaire->membreDuCompte($id) : null;
+
+        if (null === $membre) {
+            return;
+        }
+
+        $statutDuMembre = $membre['status'] ?? null;
+
+        if ('actif' === $statutDuMembre && \is_int($membre['personId'] ?? null)) {
+            return;
+        }
+
+        $motif = 'en_attente' === $statutDuMembre
+            ? 'Ce compte attend la validation de son rattachement : activez-le depuis la liste des comptes ou l’onglet « À rattacher », qui rendent les deux statuts actifs ensemble.'
+            : 'L’inscription de ce compte a été refusée : il n’a pas de fiche validée et ne peut pas redevenir actif. La personne peut se réinscrire.';
+
+        throw new ConflictException('rattachement_non_etabli', $motif, ['memberId' => $membre['id'] ?? null]);
     }
 
     private function appliquerLeStatut(User $compte, UserStatus $statut, User $administrateur): void

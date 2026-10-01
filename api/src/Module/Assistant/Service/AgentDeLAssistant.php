@@ -10,7 +10,7 @@ use Psr\Log\LoggerInterface;
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
  *  LA BOUCLE D'AGENT : le modèle lit, cherche, lit une fiche, et finit par PROPOSER.
- * ═══════════════════════════════════════════════════════════════════════════════
+ * ═══════════════════════════════════════════════════════════════════════════════.
  *
  * *Function calling* de Gemini, en `generateContent` :
  *
@@ -220,9 +220,11 @@ final readonly class AgentDeLAssistant
     /**
      * @param array<mixed> $parts
      *
+     * Publique : {@see AgentDeRattachement} lit les réponses du modèle de la même façon
+     *
      * @return list<array{name: string, args: array<string, mixed>}>
      */
-    private static function appelsDeFonction(array $parts): array
+    public static function appelsDeFonction(array $parts): array
     {
         $appels = [];
 
@@ -235,7 +237,7 @@ final readonly class AgentDeLAssistant
 
             $arguments = \is_array($appel['args'] ?? null) ? $appel['args'] : [];
 
-            /** @var array<string, mixed> $arguments */
+            /* @var array<string, mixed> $arguments */
             $appels[] = ['name' => $appel['name'], 'args' => $arguments];
         }
 
@@ -251,9 +253,11 @@ final readonly class AgentDeLAssistant
      *
      * @param array<mixed> $parts
      *
+     * Publique, pour la même raison que {@see appelsDeFonction()}
+     *
      * @return list<mixed>
      */
-    private static function partsRenvoyables(array $parts): array
+    public static function partsRenvoyables(array $parts): array
     {
         $propres = [];
 

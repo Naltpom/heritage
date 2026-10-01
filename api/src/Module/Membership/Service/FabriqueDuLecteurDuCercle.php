@@ -97,11 +97,21 @@ final readonly class FabriqueDuLecteurDuCercle implements SourceDuLecteur
             return LecteurDuCercle::sansCercle($userId);
         }
 
+        $ancre = $membre->getPersonId();
+
+        // Un membre actif sans fiche : `ck_mbr_member_sans_fiche_inactif` l'interdit en base,
+        // `Member::activer()` le refuse en PHP. Si les deux gardes tombaient ensemble, on
+        // ferme quand même — un cercle sans ancre est une absence de cercle, pas un cercle
+        // vide qu'un appelant prendrait pour « rien à montrer, tout va bien » (ADR 0013).
+        if (null === $ancre) {
+            return LecteurDuCercle::sansCercle($userId);
+        }
+
         return new LecteurDuCercle(
             userId: $userId,
             regime: Regime::Cercle,
             memberId: $membre->getId(),
-            personneAncre: $membre->getPersonId(),
+            personneAncre: $ancre,
         );
     }
 
@@ -114,7 +124,11 @@ final readonly class FabriqueDuLecteurDuCercle implements SourceDuLecteur
      */
     private function sousBascule(int $userId, Member $emprunte): LecteurDuCercle
     {
-        if (MemberStatus::Actif !== $emprunte->getStatus()) {
+        $ancre = $emprunte->getPersonId();
+
+        // Un compte sans fiche (`a_rattacher`) n'est jamais actif ; la garde sur l'ancre
+        // double celle du statut pour la même raison qu'au chemin normal : fermer.
+        if (MemberStatus::Actif !== $emprunte->getStatus() || null === $ancre) {
             return new LecteurDuCercle($userId, Regime::Aucun, $emprunte->getId(), sousBascule: true);
         }
 
@@ -122,7 +136,7 @@ final readonly class FabriqueDuLecteurDuCercle implements SourceDuLecteur
             userId: $userId,
             regime: Regime::Cercle,
             memberId: $emprunte->getId(),
-            personneAncre: $emprunte->getPersonId(),
+            personneAncre: $ancre,
             sousBascule: true,
         );
     }

@@ -50,6 +50,14 @@ use Doctrine\ORM\Mapping as ORM;
     columns: ['subject_request_id', 'subject_draft_ref'],
     options: ['where' => '(subject_draft_ref IS NOT NULL)'],
 )]
+// **Au plus un portrait en attente par compte sans fiche** (ADR 0013) : un second dépôt
+// remplace le premier, il ne s'empile pas. L'index est partiel — un portrait déjà
+// rattaché a un `subject_user_id` nul et n'y entre pas.
+#[ORM\UniqueConstraint(
+    name: 'uniq_med_media_portrait_de_compte',
+    columns: ['subject_user_id'],
+    options: ['where' => "(subject_user_id IS NOT NULL AND (status)::text = 'en_attente'::text)"],
+)]
 #[ORM\Index(
     name: 'idx_med_media_attente',
     columns: ['status', 'created_at'],
@@ -86,6 +94,22 @@ class Media
      */
     #[ORM\Column(nullable: true)]
     private ?int $subjectRequestId = null;
+
+    /**
+     * ⇢ inter-module (`Core\User`). **Le troisième sujet possible** : la photo qu'un compte
+     * **sans fiche validée** a déposée pour lui-même, à l'inscription (ADR 0013).
+     *
+     * Ni une personne — il n'en a pas encore —, ni un brouillon de demande — il n'a pas le
+     * droit d'en déposer. La photo attend donc sur le compte, `en_attente`, visible de son
+     * titulaire et des administrateurs seulement (`CatalogueMedia::lisible()`, branche
+     * « sans sujet »). Au rattachement, elle passe sur la fiche et devient son portrait ;
+     * au refus, elle est supprimée.
+     *
+     * Exactement un des trois sujets est renseigné (`ck_med_media_sujet_unique`), et un
+     * portrait de compte n'est jamais actif (`ck_med_media_compte`).
+     */
+    #[ORM\Column(nullable: true)]
+    private ?int $subjectUserId = null;
 
     /** Libellé dénormalisé. Filtré comme la personne elle-même (§ 0.4). */
     #[ORM\Column(length: 255)]
@@ -258,8 +282,28 @@ class Media
         $this->subjectId = $subjectId;
         $this->subjectDraftRef = null;
         $this->subjectRequestId = null;
+        $this->subjectUserId = null;
 
         return $this;
+    }
+
+    /**
+     * Rattache au **compte** qui l'a déposée, faute de fiche (ADR 0013). Les deux autres
+     * sujets sont effacés : `ck_med_media_sujet_unique` n'en admet qu'un.
+     */
+    public function rattacherAuCompte(int $userId): self
+    {
+        $this->subjectUserId = $userId;
+        $this->subjectId = null;
+        $this->subjectDraftRef = null;
+        $this->subjectRequestId = null;
+
+        return $this;
+    }
+
+    public function getSubjectUserId(): ?int
+    {
+        return $this->subjectUserId;
     }
 
     /**
@@ -271,6 +315,7 @@ class Media
         $this->subjectDraftRef = $draftRef;
         $this->subjectRequestId = $requestId;
         $this->subjectId = null;
+        $this->subjectUserId = null;
 
         return $this;
     }

@@ -41,6 +41,12 @@ final readonly class AnnuaireDesMembres implements AnnuaireDesMembresInterface
     ) {
     }
 
+    /**
+     * `null` pour un compte `a_rattacher` : il n'a pas de fiche, donc pas de libellé de
+     * personne (ADR 0013). `Core\Service\BasculeVoirComme` en fait un `404` — « voir comme »
+     * un compte sans cercle n'aurait rien à montrer, et l'emprunter nommerait un membre
+     * par… rien. Le refus est la réponse juste, pas un effet de bord.
+     */
     public function libelleDuMembre(int $memberId): ?string
     {
         return $this->membres->find($memberId)?->getPersonLabel();
@@ -55,6 +61,9 @@ final readonly class AnnuaireDesMembres implements AnnuaireDesMembresInterface
      * décrit y est d'ailleurs `en_attente`. C'est la seule réponse de l'API où le libellé
      * d'un rattachement non validé sort, et c'est parce qu'elle sert la décision de le
      * valider.
+     *
+     * Un compte `a_rattacher` rend `personId` et `personLabel` à `null` : il n'a pas de
+     * fiche — c'est tout le sujet de l'onglet « À rattacher » (ADR 0013).
      *
      * @return array<string, mixed>|null
      */

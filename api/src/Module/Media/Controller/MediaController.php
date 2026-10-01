@@ -171,8 +171,18 @@ final class MediaController extends AbstractController
      * que c'est {@see CircuitDeValidationMedia::valider()} qui l'applique, exactement
      * comme après une validation d'administrateur.
      *
-     * `409 compte_non_rattache` : le compte n'a pas de personne validée. Un compte en
-     * attente ne peut pas poser un portrait sur une fiche qu'il ne fait que réclamer.
+     * ## Un compte en attente dépose aussi — sur lui-même, pas sur une fiche (ADR 0013)
+     *
+     * Un compte qui n'a pas encore de personne **validée** — inscrit sans fiche
+     * (`a_rattacher`), ou dont la recherche confirmée attend un administrateur — ne peut
+     * pas poser un portrait sur une fiche qu'il ne fait que réclamer. Mais sa photo est
+     * attendue dès l'inscription : elle est donc déposée **sur le compte**, `en_attente`,
+     * visible de lui et des administrateurs seulement, et ne rejoindra une fiche qu'au
+     * rattachement. Même route, même champ `fichier`, mêmes contrôles : le front réutilise
+     * le même composant avant et après l'activation.
+     *
+     * `409 compte_non_rattache` reste la réponse d'un compte **sans rattachement du tout**
+     * — le compte d'amorçage — ou **suspendu** : rien à attendre, donc rien à déposer.
      */
     #[Route('/portrait-du-compte', name: 'media_portrait_du_compte', methods: ['POST'])]
     public function portraitDuCompte(Request $requete): Response
@@ -184,7 +194,7 @@ final class MediaController extends AbstractController
 
         $personneId = $this->annuaire->personneDuCompte($lecteur->userId);
 
-        if (null === $personneId) {
+        if (null === $personneId && !$this->compteEnAttente($lecteur->userId)) {
             throw new ConflictException('compte_non_rattache', 'Votre compte n’est rattaché à aucune personne validée.');
         }
 
@@ -195,6 +205,21 @@ final class MediaController extends AbstractController
         }
 
         $this->verifierLeTransfert($fichier);
+
+        if (null === $personneId) {
+            // Sans vérifier le régime : c'est sa propre photo, et elle n'écrit dans aucune
+            // fiche. Le détail des contrôles est sur la méthode appelée.
+            $resultat = $this->televersement->televerserLePortraitDuCompte(
+                $fichier->getPathname(),
+                $fichier->getClientOriginalName(),
+                $lecteur,
+            );
+
+            return $this->charge(
+                $this->normaliseur->normaliser($resultat->media, $lecteur),
+                Response::HTTP_CREATED,
+            );
+        }
 
         $resultat = $this->televersement->televerser(
             new RequeteDeTeleversement(
@@ -353,6 +378,18 @@ final class MediaController extends AbstractController
         $this->pivotement->pivoter($media, $angle, $lecteur);
 
         return $this->charge($this->normaliseur->normaliser($media, $lecteur));
+    }
+
+    /**
+     * Le compte a-t-il un rattachement **en attente** ? — sans fiche validée, mais ni
+     * suspendu ni inexistant. Lu à l'annuaire de `Core` (`membreDuCompte()`), que
+     * `Membership` implémente : aucune dépendance nouvelle vers ce module.
+     */
+    private function compteEnAttente(int $userId): bool
+    {
+        $membre = $this->annuaire->membreDuCompte($userId);
+
+        return null !== $membre && 'en_attente' === ($membre['status'] ?? null);
     }
 
     /**

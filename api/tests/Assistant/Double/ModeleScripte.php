@@ -16,7 +16,7 @@ use App\Module\Assistant\Service\TransportDuModele;
  */
 final class ModeleScripte implements TransportDuModele
 {
-    /** @var list<array<string, mixed>|\Throwable> */
+    /** @var list<array<string, mixed>|\Throwable|(\Closure(): array<string, mixed>)> */
     private static array $reponses = [];
 
     /** @var list<array{modele: string, charge: array<string, mixed>}> */
@@ -28,8 +28,14 @@ final class ModeleScripte implements TransportDuModele
         self::$requetes = [];
     }
 
-    /** @param array<string, mixed>|\Throwable ...$reponses */
-    public static function repondra(array|\Throwable ...$reponses): void
+    /**
+     * Une réponse peut être une **fermeture** : elle est appelée au moment où le modèle
+     * « répond », et rend la réponse. C'est le moyen de faire arriver quelque chose
+     * **pendant** l'analyse — un refus par une autre requête, par exemple.
+     *
+     * @param array<string, mixed>|\Throwable|(\Closure(): array<string, mixed>) ...$reponses
+     */
+    public static function repondra(array|\Throwable|\Closure ...$reponses): void
     {
         foreach ($reponses as $reponse) {
             self::$reponses[] = $reponse;
@@ -51,6 +57,10 @@ final class ModeleScripte implements TransportDuModele
 
         if ($reponse instanceof \Throwable) {
             throw $reponse;
+        }
+
+        if ($reponse instanceof \Closure) {
+            return $reponse();
         }
 
         return $reponse;

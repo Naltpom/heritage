@@ -52,16 +52,25 @@ class Member
     #[ORM\Column(length: 180)]
     private string $userEmail;
 
-    /** ⇢ inter-module (`Tree\Person`). La personne de l'arbre que ce compte **est**. */
-    #[ORM\Column]
-    private int $personId;
+    /**
+     * ⇢ inter-module (`Tree\Person`). La personne de l'arbre que ce compte **est**.
+     *
+     * **Nulle pour un compte `a_rattacher`, et pour lui seul** (`ck_mbr_member_fiche`,
+     * ADR 0013) : le candidat ne s'est pas trouvé dans l'arbre, et c'est un administrateur
+     * qui posera la fiche. Un compte sans fiche n'est jamais actif
+     * (`ck_mbr_member_sans_fiche_inactif`) : il n'a pas de cercle, donc rien à ancrer.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?int $personId;
 
     /**
      * Libellé dénormalisé, rafraîchi par le service `Tree` quand le nom d'affichage
      * change. Sortie de données personnelles : filtrée comme la personne (§ 0.4).
+     *
+     * Nul exactement quand `personId` l'est (`ck_mbr_member_libelle`).
      */
-    #[ORM\Column(length: 255)]
-    private string $personLabel;
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $personLabel;
 
     #[ORM\Column(length: 12, enumType: MemberStatus::class, options: ['default' => 'en_attente'])]
     private MemberStatus $status = MemberStatus::EnAttente;
@@ -93,6 +102,49 @@ class Member
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     private \DateTimeImmutable $updatedAt;
 
+    // ── La déclaration d'un compte « à rattacher » (ADR 0013) ─────────────────────
+    //
+    // Ce que le candidat a saisi faute de s'être trouvé : son identité et un texte libre
+    // qui décrit sa famille. **Des données sur des vivants**, en clair, et c'est pourquoi
+    // elles obéissent à trois règles que ce fichier et la base tiennent ensemble :
+    //
+    // 1. elles n'existent **que** sur un compte `a_rattacher` (`ck_mbr_member_declaration`)
+    //    **en attente** (`ck_mbr_member_declaration_en_attente`) ;
+    // 2. elles sont **purgées** dès que le compte est rattaché ou refusé
+    //    (`rattacherA()`, `purgerLaDeclaration()`) — on ne les garde que le temps de la
+    //    décision ;
+    // 3. elles ne sortent que vers un administrateur : jamais dans une notification, la
+    //    charge de session ou le journal d'audit. `Core\EventSubscriber\AuditDoctrineSubscriber`
+    //    les compte parmi ses champs sensibles — le diff d'une purge y vaut `***`.
+
+    #[ORM\Column(length: 120, nullable: true)]
+    private ?string $declaredSurname = null;
+
+    #[ORM\Column(length: 160, nullable: true)]
+    private ?string $declaredGivenNames = null;
+
+    /** Une date ferme : celle que le candidat a tapée, pas une date de l'arbre. */
+    #[ORM\Column(type: Types::DATE_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $declaredBirthDate = null;
+
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $familyDescription = null;
+
+    /**
+     * La suggestion de rattachement calculée par le module `Assistant`, **mise en cache
+     * ici** pour ne pas rappeler le modèle de langage à chaque ouverture de l'écran.
+     *
+     * `Membership` ne lit pas ce blob : il le stocke et le purge. Son schéma appartient au
+     * seul module qui l'écrit (contrat `Membership\Contract\ComptesARattacher`).
+     *
+     * @var array<string, mixed>|null
+     */
+    #[ORM\Column(type: Types::JSON, nullable: true, options: ['jsonb' => true])]
+    private ?array $attachmentSuggestion = null;
+
+    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $attachmentSuggestionAt = null;
+
     public function __construct(
         int $userId,
         string $userEmail,
@@ -108,6 +160,40 @@ class Member
         $this->linkedAt = new \DateTimeImmutable();
         $this->createdAt = $this->linkedAt;
         $this->updatedAt = $this->linkedAt;
+    }
+
+    /**
+     * Un compte **sans fiche** : le candidat ne s'est pas trouvé dans l'arbre et a décrit
+     * sa famille (ADR 0013, `POST /api/inscription/compte` avec `declaration`).
+     *
+     * Une fabrique plutôt qu'un second constructeur : celui d'origine reste la seule façon
+     * de créer un rattachement **à une fiche**, et ses appelants — fixtures comprises — ne
+     * changent pas.
+     */
+    public static function aRattacher(
+        int $userId,
+        string $userEmail,
+        string $surname,
+        string $givenNames,
+        \DateTimeImmutable $birthDate,
+        string $description,
+    ): self {
+        $membre = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
+
+        $membre->userId = $userId;
+        $membre->userEmail = $userEmail;
+        $membre->personId = null;
+        $membre->personLabel = null;
+        $membre->matchKind = MatchKind::ARattacher;
+        $membre->declaredSurname = $surname;
+        $membre->declaredGivenNames = $givenNames;
+        $membre->declaredBirthDate = $birthDate;
+        $membre->familyDescription = $description;
+        $membre->linkedAt = new \DateTimeImmutable();
+        $membre->createdAt = $membre->linkedAt;
+        $membre->updatedAt = $membre->linkedAt;
+
+        return $membre;
     }
 
     public function getId(): ?int
@@ -132,14 +218,121 @@ class Member
         return $this;
     }
 
-    public function getPersonId(): int
+    /** `null` pour un compte `a_rattacher` — et pour lui seul. */
+    public function getPersonId(): ?int
     {
         return $this->personId;
     }
 
-    public function getPersonLabel(): string
+    public function getPersonLabel(): ?string
     {
         return $this->personLabel;
+    }
+
+    /**
+     * **Pose — ou corrige — la fiche du compte.** Le seul mutateur de `person_id`.
+     *
+     * Il remplace la réflexion qu'utilisait `ServiceDesMembres::rattacherAutrement()` : le
+     * rattachement ne se pose que sur décision explicite d'un administrateur, et un
+     * mutateur nommé se retrouve à la recherche plus sûrement qu'un `ReflectionProperty`.
+     *
+     * La déclaration et la suggestion sont **purgées au passage** : elles n'existaient que
+     * pour trouver cette fiche, et `ck_mbr_member_declaration` les refuse d'ailleurs sur
+     * toute autre nature que `a_rattacher`.
+     */
+    public function rattacherA(int $personId, string $personLabel, MatchKind $nature): self
+    {
+        if (!$nature->aUneFiche()) {
+            throw new \LogicException('Un rattachement à une fiche ne peut pas être de nature « à rattacher ».');
+        }
+
+        $this->personId = $personId;
+        $this->personLabel = $personLabel;
+        $this->matchKind = $nature;
+        $this->linkedAt = new \DateTimeImmutable();
+        $this->updatedAt = $this->linkedAt;
+
+        return $this->purgerLaDeclaration();
+    }
+
+    /**
+     * Efface la déclaration et la suggestion — au rattachement comme au refus.
+     *
+     * La **nature**, elle, reste : un compte refusé demeure `a_rattacher`, sans fiche et
+     * suspendu. On peut donc relire plus tard qu'il s'était inscrit sans se trouver, sans
+     * rien garder de ce qu'il avait écrit.
+     */
+    public function purgerLaDeclaration(): self
+    {
+        $this->declaredSurname = null;
+        $this->declaredGivenNames = null;
+        $this->declaredBirthDate = null;
+        $this->familyDescription = null;
+        $this->attachmentSuggestion = null;
+        $this->attachmentSuggestionAt = null;
+        $this->updatedAt = new \DateTimeImmutable();
+
+        return $this;
+    }
+
+    public function getDeclaredSurname(): ?string
+    {
+        return $this->declaredSurname;
+    }
+
+    public function getDeclaredGivenNames(): ?string
+    {
+        return $this->declaredGivenNames;
+    }
+
+    public function getDeclaredBirthDate(): ?\DateTimeImmutable
+    {
+        return $this->declaredBirthDate;
+    }
+
+    public function getFamilyDescription(): ?string
+    {
+        return $this->familyDescription;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function getAttachmentSuggestion(): ?array
+    {
+        return $this->attachmentSuggestion;
+    }
+
+    public function getAttachmentSuggestionAt(): ?\DateTimeImmutable
+    {
+        return $this->attachmentSuggestionAt;
+    }
+
+    /**
+     * Range la suggestion calculée par l'assistant. Sans effet hors d'un compte **à
+     * rattacher** — nature `a_rattacher` **et** statut `en_attente` ({@see estARattacher()}).
+     *
+     * La nature seule ne suffit pas : un compte **refusé** reste `a_rattacher` (suspendu,
+     * déclaration purgée). Y ranger une suggestion défairait la purge du refus.
+     * `ck_mbr_member_declaration` et `ck_mbr_member_declaration_en_attente` la refuseraient
+     * de toute façon.
+     *
+     * @param array<string, mixed> $suggestion
+     */
+    public function enregistrerLaSuggestion(array $suggestion, \DateTimeImmutable $le): self
+    {
+        if (!$this->estARattacher()) {
+            return $this;
+        }
+
+        $this->attachmentSuggestion = $suggestion;
+        $this->attachmentSuggestionAt = $le;
+
+        return $this;
+    }
+
+    /** Le compte attend-il qu'on lui trouve une fiche ? `a_rattacher` **et** `en_attente`. */
+    public function estARattacher(): bool
+    {
+        return MatchKind::ARattacher === $this->matchKind && MemberStatus::EnAttente === $this->status;
     }
 
     public function setPersonLabel(string $personLabel): self
@@ -203,6 +396,12 @@ class Member
     /** `$parUserId` reste nul quand l'activation est automatique (§ 4.5, `MatchKind`). */
     public function activer(?int $parUserId = null, ?\DateTimeImmutable $le = null): self
     {
+        // `ck_mbr_member_sans_fiche_inactif` le refuserait en base ; on le refuse ici
+        // d'abord, pour que l'erreur dise ce qui s'est passé plutôt qu'un nom de contrainte.
+        if (null === $this->personId) {
+            throw new \LogicException('Un compte sans fiche ne s\'active pas : rattachez-le d\'abord.');
+        }
+
         $this->status = MemberStatus::Actif;
         $this->activatedAt = $le ?? new \DateTimeImmutable();
         $this->activatedByUserId = $parUserId;

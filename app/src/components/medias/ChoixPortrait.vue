@@ -16,6 +16,10 @@
  *
  * L'envoi passe par `POST /api/medias/portrait-du-compte`, comme avant : le
  * portrait de son propre compte est direct, sans circuit de validation.
+ * Exception (ADR 0013) : pour un compte qui n'a pas encore de fiche validée —
+ * inscription en attente, `a_rattacher` compris —, le serveur dépose la photo
+ * **en attente sur le compte** ; elle devient le portrait de la fiche au
+ * rattachement. Le composant n'a rien à en savoir : même route, même `depose`.
  *
  * Le cadrage lui-même (scène, gestes, export du carré) vit dans
  * `RecadrageSousCercle.vue`, partagé avec les portraits repérés par

@@ -186,6 +186,10 @@ describe('aucune reconstitution du plafond côté client', () => {
     '../../views/InscriptionRattachementView.vue',
     './ResultatCandidats.vue',
     './fluxInscription.ts',
+    // « Je ne me trouve pas » s'ouvre après un résultat vide : ni la description
+    // ni ses règles ne doivent devenir un moyen de reconstituer le plafond.
+    './DeclarationFamille.vue',
+    './declaration.ts',
   ] as const
 
   /**

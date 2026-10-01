@@ -430,3 +430,43 @@ pour rien »*. La ligne reste en base, avec son état ; elle ne revient simpleme
 - **Si la famille s'élargit** au point que l'envoi du corpus ne soit plus tenable, ou si le
   fournisseur change ses conditions, la décision est révisée par un nouvel ADR. Elle ne l'est
   pas ici.
+
+## Addendum (1er octobre 2026) — la description de famille d'une inscription sans fiche
+
+Le lien d'invitation illimité, partagé dans le groupe familial, laisse désormais s'inscrire
+une personne **qui ne se trouve pas dans l'arbre** (ADR 0013) : son compte attend, sans
+fiche, avec un texte libre qui décrit sa famille (« mon père est Jean Dupont, né vers 1960
+à Lille… »). Pour aider l'administrateur à la rattacher, le module Assistant soumet ce texte
+au modèle, qui le confronte à l'arbre et conclut « c'est probablement la fiche X » ou
+« elle est absente ; voici la demande de création » (`Assistant\Service\AgentDeRattachement`,
+`GET|POST /api/administration/rattachements/{memberId}/suggestion`).
+
+C'est une **nouvelle donnée transmise au tiers**, et elle ne ressemble pas aux autres : ce
+n'est pas l'arbre, c'est ce qu'une personne vivante a écrit d'elle-même et de ses proches,
+souvent vivants. Ce qui est décidé :
+
+- **Ce qui part** : le nom, les prénoms et la date de naissance déclarés, la description,
+  et, à titre d'indice, l'identifiant de la personne que l'invitation utilisée pré-liait.
+  Les outils de lecture sont ceux de l'assistant de proposition (`chercher_personnes`,
+  `lire_personne`), sur l'arbre entier — la décision de l'ADR sur l'assistant vaut ici.
+- **Ce qui ne part jamais** : le **courriel** du compte. Il n'aide en rien à reconnaître
+  une fiche, et c'est un identifiant de vivant.
+- **La personne est prévenue** avant d'écrire : le formulaire d'inscription dit que seuls
+  les administrateurs lisent le texte, et qu'il peut être analysé automatiquement (Google
+  Gemini). Même principe qu'au § « La page dit à qui lit qu'un modèle a écrit la question ».
+- **L'appel est déclenché par un administrateur**, jamais par l'inscription elle-même :
+  paresseusement, à la première consultation de la carte « À rattacher », puis sur « Relancer
+  l'analyse ». Une inscription de spam ne coûte donc aucun appel tant que personne ne la
+  regarde. Quota distinct : 40 analyses par 24 heures glissantes, tous administrateurs
+  confondus (`assistant.limiteur_rattachements`).
+- **Le résultat est gardé sur le compte** (`mbr_member.attachment_suggestion`), puis
+  **purgé** avec la description au rattachement ou au refus. Il n'est jamais visible d'un
+  autre que les administrateurs, jamais écrit dans le diff d'audit (colonnes sensibles de
+  `AuditDoctrineSubscriber`).
+- **Journal** : `AppelModeleDeLangage`, sujet `Assistant\Rattachement` — des comptes (tours,
+  appels d'outils, verdict), jamais la description ni la réponse du modèle, jamais la clé.
+- **Le modèle ne décide rien.** Aucun rattachement automatique : l'administrateur choisit la
+  fiche, ou crée la fiche par une demande **validée** (ADR 0004). L'identité de la fiche
+  créée vient toujours de la déclaration, jamais d'une « correction » du modèle.
+- **Sans clé, ou en panne**, la carte reste utilisable à la main : rattacher à une fiche
+  choisie, ou créer la fiche depuis la seule déclaration en choisissant ses parents.

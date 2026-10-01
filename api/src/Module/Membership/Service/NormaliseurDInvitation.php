@@ -120,11 +120,18 @@ final readonly class NormaliseurDInvitation
             'userId' => $membre->getUserId(),
             'email' => $membre->getUserEmail(),
             'memberStatus' => $membre->getStatus()->value,
+            // `a_rattacher` dit à l'administrateur que ce compte n'a pas de fiche et l'attend
+            // dans l'onglet « À rattacher » (ADR 0013).
+            'matchKind' => $membre->getMatchKind()->value,
             'createdAt' => $membre->getCreatedAt()->format(\DateTimeInterface::ATOM),
         ];
 
-        if ($this->cercle->voitPersonne($membre->getPersonId())) {
-            $ligne['personId'] = $membre->getPersonId();
+        $personId = $membre->getPersonId();
+
+        // Un compte sans fiche n'a pas de personne à filtrer : les deux clés sont absentes,
+        // comme lorsque le cercle ne la laisse pas voir.
+        if (null !== $personId && $this->cercle->voitPersonne($personId)) {
+            $ligne['personId'] = $personId;
             $ligne['personLabel'] = $membre->getPersonLabel();
         }
 

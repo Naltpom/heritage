@@ -233,6 +233,18 @@ nouvel ADR ; elle ne l'est pas ici.
   relèvent, le second étant le premier cas d'une phrase en français qui contient un nom —
   qu'aucune liste blanche champ par champ n'aurait attrapée, et que seule la règle « tout
   champ dérivé d'une donnée masquée est lui-même une donnée masquée » couvre.
+- **Révision du 2026-10-01 — un compte en attente peut n'avoir aucune fiche
+  ([ADR 0013](0013-inscription-sans-fiche.md)).** Un candidat qui ne se trouve pas dans
+  l'arbre crée désormais un compte `a_rattacher`, dont `mbr_member.person_id` est **nul**. Il
+  relève du régime `Aucun` **sans rien de plus ni de moins** : pas de cercle, les défunts,
+  aucune écriture. Ce qui change est ailleurs : ce régime s'obtient maintenant **sans rien
+  prouver** — il suffit du lien —, si bien que l'argument de l'« oracle inverse » qui gardait
+  les défunts dans la recherche de rattachement ne tient plus, et ils en sont retirés. La
+  formule, la liste blanche, le filtrage dans la sérialisation et l'absence de mode « sans
+  filtre » sont intacts. Une nouvelle colonne relève de la règle des `*_label` sans en porter
+  le nom : `mbr_member.family_description`, un texte libre qui nomme des vivants, réservé aux
+  administrateurs — et refusé même à eux sous la bascule « voir comme un membre », faute de
+  cercle capable de le filtrer.
 - La bascule « voir comme un membre » est **tracée au journal d'audit** : c'est une
   consultation de données personnelles sous une autre identité.
 - **Un test fonctionnel par porte de sortie** (les sept ci-dessus, **plus les libellés

@@ -33,10 +33,27 @@
  * date ; ne demander que celle-ci dirait au porteur « nous savons déjà ton
  * nom ». Le formulaire est donc identique, et le libellé de l'écran ne trahit
  * pas le mode.
+ *
+ * **« Je ne me trouve pas ».** Après toute recherche, un bouton sous le résultat
+ * ouvre la description de famille (`DeclarationFamille.vue`) : le candidat qui
+ * n'a pas de fiche — ou dont la fiche porte d'autres données que les siennes —
+ * peut quand même ouvrir un compte, en attente et **sans fiche**, qu'un
+ * administrateur rattachera. Le bouton vit **ici**, et non dans
+ * `ResultatCandidats.vue` : l'écran du résultat vide reste la même chaîne d'HTML
+ * pour ses trois causes, et le bouton lui-même ne dépend que du nombre de
+ * candidats affichés (`libelleSansFiche()`) — il est donc identique, lui aussi,
+ * quelle que soit la cause d'un résultat vide.
+ *
+ * Les candidats décédés ne sont plus proposés (le serveur les écarte) : un
+ * compte se rattache à une personne vivante, ou se déclare sans fiche.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { rechercherRattachement, type CandidatRattachement } from '@/lib/api'
+import {
+  rechercherRattachement,
+  type CandidatRattachement,
+  type DeclarationDeFamille,
+} from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import ChampTexte from '@/components/base/ChampTexte.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
@@ -44,20 +61,30 @@ import PanneauBase from '@/components/base/PanneauBase.vue'
 import CadreEntree from '@/components/inscription/CadreEntree.vue'
 import LienNonValide from '@/components/inscription/LienNonValide.vue'
 import ResultatCandidats from '@/components/inscription/ResultatCandidats.vue'
+import DeclarationFamille from '@/components/inscription/DeclarationFamille.vue'
+import { libelleSansFiche, normaliserDeclaration } from '@/components/inscription/declaration'
 import { estLienNonValide } from '@/components/inscription/lienInvitation'
 import {
   choisirCandidat,
   fermerFlux,
   retenirCandidats,
+  retenirDeclaration,
   useFluxInscription,
 } from '@/components/inscription/fluxInscription'
 
 const routeur = useRouter()
 const flux = useFluxInscription()
 
-const surname = ref('')
-const givenNames = ref('')
-const birthDate = ref('')
+// Un retour depuis l'étape 2 (bouton « précédent ») retrouve la déclaration
+// retenue : on ne fait pas réécrire au candidat ce qu'il vient de décrire.
+const surname = ref(flux.declaration.value?.surname ?? '')
+const givenNames = ref(flux.declaration.value?.givenNames ?? '')
+const birthDate = ref(flux.declaration.value?.birthDate ?? '')
+/** Le brouillon de la description : il survit à la fermeture du panneau. */
+const description = ref(flux.declaration.value?.description ?? '')
+/** Le panneau « Décrivez votre famille » est-il ouvert ? Il l'est d'emblée au
+ *  retour de l'étape 2 si c'est par lui que le candidat était passé. */
+const declarer = ref(flux.declaration.value !== null)
 
 const envoi = ref(false)
 const erreur = ref<unknown>(null)
@@ -125,6 +152,23 @@ async function chercher(): Promise<void> {
 const candidatRetenu = computed<CandidatRattachement | null>(
   () => flux.candidats.value.find((candidat) => candidat.ref === refChoisi.value) ?? null,
 )
+
+/** Choisir un candidat referme la description : les deux sont exclusifs. */
+watch(refChoisi, (valeur) => {
+  if (valeur !== null) declarer.value = false
+})
+
+function ouvrirDeclaration(): void {
+  refChoisi.value = null
+  declarer.value = true
+}
+
+function continuerSansFiche(entree: DeclarationDeFamille): void {
+  retenirDeclaration(normaliserDeclaration(entree))
+  // Comme le `ref`, la description ne part pas dans l'URL : elle parle de
+  // personnes vivantes.
+  void routeur.push({ name: 'inscription.compte' })
+}
 
 function continuer(): void {
   const candidat = candidatRetenu.value
@@ -205,6 +249,25 @@ function continuer(): void {
 
     <div v-if="candidatRetenu !== null" class="mt-4">
       <BoutonBase pleineLargeur @click="continuer">Continuer</BoutonBase>
+    </div>
+
+    <!-- Le recours « sans fiche », après toute recherche. Son libellé ne dépend
+         que du nombre de candidats affichés. -->
+    <div v-if="resultat !== null && !declarer" class="mt-4">
+      <BoutonBase variante="secondaire" pleineLargeur @click="ouvrirDeclaration">
+        {{ libelleSansFiche(resultat.candidats.length) }}
+      </BoutonBase>
+    </div>
+
+    <div v-if="declarer" class="mt-4">
+      <DeclarationFamille
+        v-model:description="description"
+        :surname="surname"
+        :givenNames="givenNames"
+        :birthDate="birthDate"
+        @continuer="continuerSansFiche"
+        @annuler="declarer = false"
+      />
     </div>
   </CadreEntree>
 </template>

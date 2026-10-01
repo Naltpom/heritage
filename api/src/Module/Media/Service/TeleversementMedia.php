@@ -66,6 +66,14 @@ final class TeleversementMedia
      */
     private const string LIBELLE_BROUILLON = 'Personne proposée';
 
+    /**
+     * Le libellé d'un portrait posé sur un **compte** sans fiche (ADR 0013). Anonyme pour
+     * la même raison que {@see self::LIBELLE_BROUILLON} : l'identité déclarée appartient à
+     * `mbr_member`, et le recopier ici en ferait une copie qui survivrait à sa purge. Le
+     * vrai libellé est posé au rattachement.
+     */
+    public const string LIBELLE_PORTRAIT_DE_COMPTE = 'Portrait en attente de rattachement';
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly MediaRepository $medias,
@@ -96,8 +104,177 @@ final class TeleversementMedia
 
         $this->verifierLaCoherenceDuSujet($requete);
 
-        // 2 — taille.
-        $octets = @filesize($requete->cheminTemporaire);
+        // 2 et 3 — taille, puis type réel.
+        $mime = $this->controlerLeFichier($requete->cheminTemporaire);
+
+        // 4 — le sujet, vu par son module propriétaire.
+        $sujet = $this->resoudreLeSujet($requete);
+
+        // 5 et 6 — purge, empreintes et dépôt.
+        [$nom, $empreinteStockee, $empreinteOrigine, $resultat] = $this->deposerLeFichier($requete->cheminTemporaire, $mime);
+
+        $media = $this->construire(
+            $requete,
+            $deposant,
+            $sujet,
+            $nom,
+            $mime,
+            $this->stockage->taille($nom),
+            $empreinteStockee,
+            $empreinteOrigine,
+            $resultat,
+        );
+
+        // La vignette après le dépôt, sur le fichier déjà purgé : elle n'a donc aucune
+        // métadonnée à hériter, et un échec ici ne coûte pas le média.
+        $media->setThumbnailName($this->vignettes->generer($this->stockage->chemin($nom), $mime));
+
+        $avertissements = $this->avertirDuDoublon(
+            $empreinteStockee,
+            $empreinteOrigine,
+            $deposant,
+        );
+
+        $this->em->persist($media);
+        $this->em->flush();
+
+        // Auto-approbation du dépôt d'administrateur : c'est ici que le portrait
+        // bascule, en passant par le seul service qui sait le faire. Un membre, lui,
+        // repart avec un média `en_attente` — c'est `Proposal` qui l'appellera.
+        if ($deposant->administrateur) {
+            $this->circuit->valider($media);
+        }
+
+        return new ResultatDeTeleversement($media, $avertissements);
+    }
+
+    /**
+     * **La photo d'un compte qui n'a pas encore de fiche validée** — l'étape « Votre
+     * photo » de l'inscription (ADR 0013, `POST /api/medias/portrait-du-compte`).
+     *
+     * ## Ce qui change, et ce qui ne change pas
+     *
+     * **Le contrôle 1 saute** : le compte est au régime `Aucun`, qui n'écrit rien — mais
+     * ce n'est pas une écriture dans l'arbre. La photo ne touche à aucune fiche : elle
+     * attend **sur le compte** (`subject_user_id`), `en_attente`, visible de son titulaire
+     * et des administrateurs seulement. Elle ne rejoindra une fiche qu'au rattachement,
+     * sur décision d'un administrateur (`PortraitsDesComptesEnAttente::rattacherALaFiche()`).
+     *
+     * **Le contrôle 4 saute** aussi : il n'y a pas de sujet de l'arbre à résoudre.
+     *
+     * **Tout le reste est identique** — taille, reniflage du type, purge EXIF par
+     * ré-encodage, nom aléatoire, empreintes, vignette. Une photo de téléphone porte des
+     * coordonnées GPS aussi sûrement à l'inscription qu'après.
+     *
+     * Aucune alerte de doublon : elle nommerait une fiche à un compte qui n'a pas de cercle.
+     *
+     * ## Un seul portrait en attente par compte
+     *
+     * Un second dépôt **remplace** le premier, fichier compris : c'est un choix de photo
+     * qu'on refait, pas une file de propositions. `uniq_med_media_portrait_de_compte` le
+     * garantit en base ; on supprime l'ancien **avant** d'insérer le nouveau.
+     */
+    public function televerserLePortraitDuCompte(
+        string $cheminTemporaire,
+        ?string $nomOrigine,
+        LecteurMedia $deposant,
+    ): ResultatDeTeleversement {
+        $mime = $this->controlerLeFichier($cheminTemporaire);
+
+        [$nom, $empreinteStockee, $empreinteOrigine, $purge] = $this->deposerLeFichier($cheminTemporaire, $mime);
+
+        $media = new Media(
+            kind: MediaKind::Portrait,
+            subjectKind: MediaSubject::Personne,
+            subjectLabel: self::LIBELLE_PORTRAIT_DE_COMPTE,
+            storageName: $nom,
+            mimeType: $mime,
+            byteSize: $this->stockage->taille($nom),
+            sha256: $empreinteStockee,
+            uploadedByUserId: $deposant->userId,
+            uploadedByLabel: $deposant->libelle,
+        );
+
+        $media
+            ->rattacherAuCompte($deposant->userId)
+            ->setOriginalName(null === $nomOrigine ? null : mb_substr($nomOrigine, 0, 255))
+            ->setOriginalSha256($empreinteOrigine)
+            ->setExifStripped($purge->purgee)
+            ->setDimensions($purge->largeur, $purge->hauteur)
+            ->setPageCount($purge->pages)
+            ->setStatus(MediaStatus::EnAttente);
+
+        $media->setThumbnailName($this->vignettes->generer($this->stockage->chemin($nom), $mime));
+
+        // Retrait de l'ancien et insertion du nouveau **dans une même transaction** : deux
+        // `flush()` en autocommit laissaient, sur un échec du second, le compte sans photo
+        // du tout. Et les fichiers de l'ancien ne s'effacent qu'**après** le commit — voir
+        // {@see supprimerLaLigne()}.
+        $effacements = $this->em->wrapInTransaction(function () use ($media, $deposant): array {
+            $effacements = [];
+
+            foreach ($this->medias->portraitsEnAttenteDuCompte($deposant->userId) as $ancien) {
+                $effacements[] = $this->supprimerLaLigne($ancien);
+            }
+
+            // Le retrait d'abord, vidé seul : `uniq_med_media_portrait_de_compte` refuserait
+            // le nouveau tant que l'ancien est encore en base.
+            $this->em->flush();
+
+            $this->em->persist($media);
+            $this->em->flush();
+
+            return $effacements;
+        });
+
+        foreach ($effacements as $effacer) {
+            $effacer();
+        }
+
+        return new ResultatDeTeleversement($media, []);
+    }
+
+    /**
+     * Retire la ligne d'un portrait de compte remplacé ou écarté — qui n'a jamais été
+     * visible de personne d'autre que son titulaire et les administrateurs — et **rend**
+     * l'effacement de ses deux fichiers, sans le faire.
+     *
+     * ## Les fichiers après le commit, jamais avant
+     *
+     * La suppression de la ligne vit dans une transaction ; celle des fichiers, non — un
+     * `unlink()` ne se rejoue pas. Effacer d'abord, c'était, sur une transaction annulée
+     * (un refus qui échoue sur une contrainte, un verrou, une coupure), garder en base une
+     * ligne qui pointe vers un fichier disparu : une photo cassée, au mieux. L'appelant
+     * joue donc la fermeture rendue **une fois la transaction validée**, et l'oublie si
+     * elle échoue — un fichier orphelin vaut mieux qu'une ligne orpheline.
+     *
+     * **Ne vide pas** l'unité de travail : l'appelant le fait.
+     *
+     * @return \Closure(): void l'effacement des deux fichiers, à jouer après le commit
+     */
+    public function supprimerLaLigne(Media $media): \Closure
+    {
+        $original = $media->getStorageName();
+        $vignette = $media->getThumbnailName();
+
+        $this->em->remove($media);
+
+        return function () use ($original, $vignette): void {
+            $this->stockage->supprimer($original);
+
+            if (null !== $vignette) {
+                $this->stockage->supprimer($vignette, vignette: true);
+            }
+        };
+    }
+
+    /**
+     * Contrôles 2 et 3 : la taille, puis le type **réel** — par les octets d'en-tête,
+     * jamais l'extension ni le `Content-Type` annoncé. Rend le type constaté.
+     */
+    private function controlerLeFichier(string $chemin): string
+    {
+        $octets = @filesize($chemin);
 
         if (false === $octets) {
             throw new ValidationException(['fichier' => 'Fichier illisible.']);
@@ -113,25 +290,35 @@ final class TeleversementMedia
             throw new ValidationException(['fichier' => 'Le fichier est vide.']);
         }
 
-        // 3 — type réel. Le reniflage d'abord, la liste blanche ensuite : c'est le
-        // type constaté qu'on confronte à la liste, jamais celui qu'on nous annonce.
-        $mime = $this->detecteur->detecter($requete->cheminTemporaire);
+        // Le reniflage d'abord, la liste blanche ensuite : c'est le type constaté qu'on
+        // confronte à la liste, jamais celui qu'on nous annonce.
+        $mime = $this->detecteur->detecter($chemin);
         $autorises = $this->reglages->mimesAutorises();
 
         if (null === $mime || !\in_array($mime, $autorises, true)) {
             throw new TypeDeFichierRefuseException($autorises);
         }
 
-        // 4 — le sujet, vu par son module propriétaire.
-        $sujet = $this->resoudreLeSujet($requete);
+        return $mime;
+    }
 
-        // 5 — purge. Ce qui est déposé n'est jamais le fichier reçu : c'est sa réécriture.
-        $resultat = $this->purge->purger($requete->cheminTemporaire, $mime);
+    /**
+     * Contrôles 5 et 6 : la purge par ré-encodage — ce qui est déposé n'est jamais le
+     * fichier reçu, c'est sa réécriture —, puis les empreintes et le dépôt sous un nom
+     * aléatoire.
+     *
+     * @return array{0: string, 1: string, 2: string|null, 3: ResultatDePurge} nom de stockage,
+     *                                                                         empreinte stockée,
+     *                                                                         empreinte d'origine,
+     *                                                                         résultat de la purge
+     */
+    private function deposerLeFichier(string $chemin, string $mime): array
+    {
+        $resultat = $this->purge->purger($chemin, $mime);
 
         try {
-            // 6 — empreintes et dépôt.
             $empreinteStockee = hash_file('sha256', $resultat->chemin);
-            $empreinteOrigine = hash_file('sha256', $requete->cheminTemporaire);
+            $empreinteOrigine = hash_file('sha256', $chemin);
 
             if (false === $empreinteStockee) {
                 throw new \RuntimeException('Empreinte du fichier stocké impossible à calculer.');
@@ -145,39 +332,7 @@ final class TeleversementMedia
             throw $erreur;
         }
 
-        $media = $this->construire(
-            $requete,
-            $deposant,
-            $sujet,
-            $nom,
-            $mime,
-            $this->stockage->taille($nom),
-            $empreinteStockee,
-            false === $empreinteOrigine ? null : $empreinteOrigine,
-            $resultat,
-        );
-
-        // La vignette après le dépôt, sur le fichier déjà purgé : elle n'a donc aucune
-        // métadonnée à hériter, et un échec ici ne coûte pas le média.
-        $media->setThumbnailName($this->vignettes->generer($this->stockage->chemin($nom), $mime));
-
-        $avertissements = $this->avertirDuDoublon(
-            $empreinteStockee,
-            false === $empreinteOrigine ? null : $empreinteOrigine,
-            $deposant,
-        );
-
-        $this->em->persist($media);
-        $this->em->flush();
-
-        // Auto-approbation du dépôt d'administrateur : c'est ici que le portrait
-        // bascule, en passant par le seul service qui sait le faire. Un membre, lui,
-        // repart avec un média `en_attente` — c'est `Proposal` qui l'appellera.
-        if ($deposant->administrateur) {
-            $this->circuit->valider($media);
-        }
-
-        return new ResultatDeTeleversement($media, $avertissements);
+        return [$nom, $empreinteStockee, false === $empreinteOrigine ? null : $empreinteOrigine, $resultat];
     }
 
     /**

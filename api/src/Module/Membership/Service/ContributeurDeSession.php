@@ -84,7 +84,11 @@ final readonly class ContributeurDeSession implements SessionPayloadContributorI
         // deux clés se posent ensemble ou pas du tout : un `personId` sans libellé serait
         // un identifiant de personne vivante livré à un compte non validé, ce qui est
         // précisément le début d'une énumération (§ 4.2, divergence 2).
-        if (MemberStatus::Actif === $membre->getStatus()) {
+        //
+        // Un compte sans fiche (`a_rattacher`, ADR 0013) n'est jamais actif — la base le
+        // garantit — et n'entre donc jamais ici ; le test de nullité le redit pour le cas où
+        // la contrainte tomberait.
+        if (MemberStatus::Actif === $membre->getStatus() && null !== $membre->getPersonId()) {
             $charge['personId'] = $membre->getPersonId();
             $charge['personLabel'] = $membre->getPersonLabel();
         }

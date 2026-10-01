@@ -29,10 +29,21 @@
  * rendue est exactement celle du § 2.2. On relit malgré tout `GET /api/session`
  * par `rafraichirSession()` : c'est ce qui met le magasin de session, les gardes
  * de route et l'`ETag` du graphe d'accord entre eux, par un seul chemin.
+ *
+ * **Deux façons d'arriver ici** : avec un candidat retenu (`choix`), ou avec une
+ * famille décrite (`declaration`, « Je ne me trouve pas »). La seconde ouvre un
+ * compte en attente et **sans fiche** ; ses erreurs de champ reviennent sous des
+ * clés `declaration.*`, que cet écran résume en renvoyant à l'étape précédente,
+ * où la description se corrige. Le serveur borne aussi ces comptes à cinq par
+ * heure et par adresse : c'est une vraie `429`, qui passe par `<MessageErreur>`.
+ *
+ * **Après le `201` vient la photo** (`EtapePhoto.vue`) : un panneau « Votre
+ * photo », attendu mais qu'on peut passer d'un lien discret. Qu'elle soit
+ * déposée ou passée, la suite est l'écran d'état.
  */
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { analyserErreur, creerCompte } from '@/lib/api'
+import { analyserErreur, creerCompte, type RattachementDemande } from '@/lib/api'
 import { rafraichirSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import ChampTexte from '@/components/base/ChampTexte.vue'
@@ -40,6 +51,7 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import CadreEntree from '@/components/inscription/CadreEntree.vue'
 import LienNonValide from '@/components/inscription/LienNonValide.vue'
+import EtapePhoto from '@/components/inscription/EtapePhoto.vue'
 import { estLienNonValide } from '@/components/inscription/lienInvitation'
 import { fermerFlux, useFluxInscription } from '@/components/inscription/fluxInscription'
 import {
@@ -60,12 +72,34 @@ const lienRefuse = ref(false)
 /** Vrai après une première soumission refusée : on ne souligne pas un champ
  *  que le candidat n'a pas encore fini de remplir. */
 const aTenteEnvoi = ref(false)
+/** `formulaire`, puis `photo` une fois le compte créé. */
+const phase = ref<'formulaire' | 'photo'>('formulaire')
+/** Le compte créé attend-il sa validation ? Nuance seulement le panneau photo. */
+const compteEnAttente = ref(true)
 
 const analyse = computed(() => (erreur.value === null ? null : analyserErreur(erreur.value)))
 
 /** Le parcours tient-il encore ? Un rechargement de page le perd — rien n'est
  *  stocké, par choix (`fluxInscription.ts`). */
-const parcoursPerdu = computed(() => !flux.ouvert.value || flux.choix.value === null)
+const parcoursPerdu = computed(
+  () => !flux.ouvert.value || (flux.choix.value === null && flux.declaration.value === null),
+)
+
+/** Le candidat vient-il de « Je ne me trouve pas » ? */
+const sansFiche = computed(() => flux.declaration.value !== null)
+
+/**
+ * Les refus du serveur sur la déclaration (`declaration.surname`,
+ * `declaration.description`…). Les champs sont à l'étape précédente : on les
+ * résume ici, avec le chemin pour les corriger, plutôt que de les perdre dans
+ * un message général.
+ */
+const refusDeclaration = computed<string[]>(() => {
+  const champs = analyse.value?.champs ?? {}
+  return Object.entries(champs)
+    .filter(([cle, message]) => cle.startsWith('declaration') && message.length > 0)
+    .map(([, message]) => message)
+})
 
 const refusCourriel = computed(() => erreurCourriel(email.value))
 const refusMotDePasse = computed(() => erreurMotDePasse(motDePasse.value))
@@ -90,7 +124,12 @@ async function soumettre(): Promise<void> {
 
   const jeton = flux.jeton.value
   const choix = flux.choix.value
-  if (jeton === null || choix === null) {
+  const declaration = flux.declaration.value
+  // L'une **ou** l'autre, jamais les deux : `fluxInscription` les tient
+  // exclusives, et le serveur refuserait le mélange.
+  const rattachement: RattachementDemande | null =
+    declaration !== null ? { declaration } : choix !== null ? { choix: choix.ref } : null
+  if (jeton === null || rattachement === null) {
     lienRefuse.value = true
     return
   }
@@ -105,21 +144,22 @@ async function soumettre(): Promise<void> {
   envoi.value = true
   erreur.value = null
   try {
-    await creerCompte({
+    const charge = await creerCompte({
       jeton,
-      choix: choix.ref,
+      ...rattachement,
       email: email.value.trim(),
       password: motDePasse.value,
     })
-    // Le mot de passe et le jeton ont fait leur office : ni l'un ni l'autre n'a
-    // de raison de rester en mémoire. Le jeton vient d'être consommé.
+    // Le mot de passe, le jeton et la description ont fait leur office : aucun
+    // n'a de raison de rester en mémoire. Le jeton vient d'être consommé.
     motDePasse.value = ''
     fermerFlux()
 
     await rafraichirSession()
-    // L'étape 3 dit la suite dans les deux cas — compte actif, ou en attente de
-    // validation par un administrateur.
-    await routeur.replace({ name: 'inscription.etat' })
+    compteEnAttente.value = charge.membre?.status !== 'actif'
+    // La photo d'abord ; l'étape 3 dit ensuite la suite dans tous les cas —
+    // compte actif, ou en attente de validation par un administrateur.
+    phase.value = 'photo'
   } catch (cause) {
     if (estLienNonValide(cause)) {
       fermerFlux()
@@ -140,6 +180,11 @@ async function soumettre(): Promise<void> {
  * `personne_deja_rattachee`, ce qui est périmé, c'est le candidat retenu à
  * l'étape précédente. On y retourne.
  */
+/** Photo déposée ou étape passée : l'écran d'état prend le relais. */
+function allerALEtat(): void {
+  void routeur.replace({ name: 'inscription.etat' })
+}
+
 function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite']): void {
   if (conduite === 'recharger') void routeur.push({ name: 'inscription.rattachement' })
   else void soumettre()
@@ -153,6 +198,17 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
     sousTitre="Reprenez depuis le lien d’invitation que vous avez reçu."
   >
     <LienNonValide />
+  </CadreEntree>
+
+  <!-- Le compte existe : la photo. Placé avant `parcoursPerdu`, que la
+       fermeture du parcours rend vrai dès la création réussie. -->
+  <CadreEntree
+    v-else-if="phase === 'photo'"
+    titre="Votre compte est créé"
+    sousTitre="Une dernière chose avant d’entrer."
+    :etape="2"
+  >
+    <EtapePhoto :enAttente="compteEnAttente" @terminer="allerALEtat" />
   </CadreEntree>
 
   <CadreEntree
@@ -208,8 +264,30 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
       </form>
     </PanneauBase>
 
+    <p v-if="sansFiche" class="mt-3 text-xs text-attenue">
+      Votre compte sera créé sans fiche : une personne qui administre l’arbre la
+      retrouvera, ou la créera, à partir de votre description.
+      <RouterLink :to="{ name: 'inscription.rattachement' }" class="underline">
+        Modifier ma description
+      </RouterLink>
+    </p>
+
+    <!-- Les refus sur la description : elle se corrige à l'étape d'avant. -->
+    <PanneauBase v-if="refusDeclaration.length > 0" class="mt-4">
+      <p class="text-sm font-medium text-alerte">Votre description doit être corrigée :</p>
+      <ul class="mt-1.5 list-disc pl-5 text-sm text-alerte">
+        <li v-for="message in refusDeclaration" :key="message">{{ message }}</li>
+      </ul>
+      <RouterLink
+        :to="{ name: 'inscription.rattachement' }"
+        class="mt-2 inline-block text-sm font-semibold text-accent underline"
+      >
+        Revenir à ma description
+      </RouterLink>
+    </PanneauBase>
+
     <MessageErreur
-      v-if="erreur !== null"
+      v-else-if="erreur !== null"
       class="mt-4"
       :erreur="erreur"
       @action="suivreConduite"

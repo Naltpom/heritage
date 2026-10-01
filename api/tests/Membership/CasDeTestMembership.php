@@ -123,6 +123,38 @@ abstract class CasDeTestMembership extends WebTestCase
     }
 
     /**
+     * Un compte inscrit **sans fiche** (ADR 0013) : `a_rattacher`, `en_attente`, avec sa
+     * déclaration.
+     */
+    protected function creerMembreSansFiche(
+        User $utilisateur,
+        string $nom = 'Romarin',
+        string $prenoms = 'Lave',
+        string $naissance = '1998-04-12',
+        string $description = 'Mon père est Pyrite Romarin, né en 1956 ; ma mère Cobalt Cassis ; mon grand-père paternel Jaspe Romarin.',
+        ?Invitation $invitation = null,
+    ): Member {
+        $identifiant = $utilisateur->getId();
+        \assert(null !== $identifiant);
+
+        $membre = Member::aRattacher(
+            $identifiant,
+            $utilisateur->getEmail(),
+            $nom,
+            $prenoms,
+            new \DateTimeImmutable($naissance),
+            $description,
+        );
+        $membre->setInvitation($invitation);
+
+        $em = $this->em();
+        $em->persist($membre);
+        $em->flush();
+
+        return $membre;
+    }
+
+    /**
      * Crée une invitation **et rend son jeton en clair** — ce que la production ne sait
      * pas faire une seconde fois, et c'est bien le sujet : ici on le fabrique, on ne le
      * relit pas.

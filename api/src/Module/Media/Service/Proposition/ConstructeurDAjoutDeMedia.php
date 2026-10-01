@@ -162,6 +162,15 @@ final readonly class ConstructeurDAjoutDeMedia implements ConstructeurDeDemande
             throw DonneesInvalides::pourChamp("$chemin.newValue.mediaId", 'Ce média a déjà été traité : seul un média en attente peut faire l\'objet d\'une demande.');
         }
 
+        // Un portrait posé sur un **compte** sans fiche (ADR 0013) ne se joint à aucune
+        // demande : il ne rejoint une fiche qu'au rattachement du compte, sur décision d'un
+        // administrateur. Le joindre ici — même par son propre titulaire devenu membre, ou
+        // par un administrateur — le ferait valider hors de ce rattachement. Même message
+        // que « introuvable » : la file de ces portraits n'a pas à se laisser deviner.
+        if (null !== $media->getSubjectUserId()) {
+            throw DonneesInvalides::pourChamp("$chemin.newValue.mediaId", 'Ce média n\'existe pas, ou il ne vous appartient pas.');
+        }
+
         $empreinte = $valeur['sha256'] ?? null;
 
         if (\is_string($empreinte) && $empreinte !== $media->getSha256()) {

@@ -29,8 +29,17 @@
  * surtout pas le `displayName` réel de la fiche, qui peut porter un nom d'usage
  * ou un nom d'épouse qu'il ignore. Le pré-lien n'ouvre aucun accès : « confirmer
  * une date n'est pas la lire ».
+ *
+ * **Le compte sans fiche** (`matchKind: 'a_rattacher'`, « Je ne me trouve pas »)
+ * a son propre texte : il n'y a pas de fiche « à confirmer », mais une fiche à
+ * **identifier** — ou à créer — à partir de la description envoyée. Même régime
+ * que tout compte en attente : les défunts, et rien d'autre.
+ *
+ * **La photo.** Tant que le compte attend, `portraitEnAttente` dit si sa photo a
+ * été déposée. Si elle ne l'a pas été (l'étape a été passée), un bouton
+ * « Ajouter votre photo » ouvre `ChoixPortrait` ; la clé absente ne propose rien.
  */
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { lireEtatInscription } from '@/lib/api'
 import { useAppelApi } from '@/composables/useAppelApi'
 import { rafraichirSession } from '@/composables/useSession'
@@ -39,6 +48,7 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
+import ChoixPortrait from '@/components/medias/ChoixPortrait.vue'
 
 const { donnees: etat, erreur, chargement, executer } = useAppelApi(lireEtatInscription)
 
@@ -46,6 +56,17 @@ onMounted(executer)
 
 const enAttente = computed(() => etat.value?.status === 'en_attente')
 const vu = computed(() => etat.value?.cequejevois ?? null)
+/** Ouvert sans fiche : l'administrateur doit l'identifier, pas la confirmer. */
+const sansFiche = computed(() => etat.value?.matchKind === 'a_rattacher')
+
+const choixPortraitOuvert = ref(false)
+/** Déposée depuis cet écran : on n'attend pas un rechargement pour le dire. */
+const photoDeposeeIci = ref(false)
+/** Proposer la photo seulement quand le serveur dit qu'il n'y en a pas — la clé
+ *  absente (compte actif) ne propose rien. */
+const proposerPhoto = computed(
+  () => enAttente.value && etat.value?.portraitEnAttente === false && !photoDeposeeIci.value,
+)
 
 /** Le compte vient d'être activé : la session ne le sait pas encore. */
 async function entrerDansLArbre(): Promise<void> {
@@ -83,7 +104,13 @@ async function entrerDansLArbre(): Promise<void> {
             </div>
           </template>
 
-          <p class="text-sm">
+          <p v-if="sansFiche" class="text-sm">
+            Votre compte existe et vous êtes bien connecté·e. Il reste une étape, et elle
+            ne dépend pas de vous : une personne qui administre l’arbre va retrouver votre
+            fiche à partir de la description de famille que vous avez envoyée — ou la
+            créer, si vous n’y figurez pas encore.
+          </p>
+          <p v-else class="text-sm">
             Votre compte existe et vous êtes bien connecté·e. Il reste une étape, et elle
             ne dépend pas de vous : une personne qui administre l’arbre doit confirmer
             que la fiche à laquelle vous vous êtes rattaché·e est bien la vôtre.
@@ -95,6 +122,29 @@ async function entrerDansLArbre(): Promise<void> {
             n’y a rien à relancer, et vous pouvez fermer cette page sans rien perdre.
           </p>
         </PanneauBase>
+
+        <!-- La photo, si l'étape a été passée. Elle attendra la validation pour
+             rejoindre la fiche ; d'ici là, seuls les administrateurs la voient. -->
+        <PanneauBase v-if="proposerPhoto" titre="Votre photo" class="mt-4">
+          <p class="text-sm">
+            Ajoutez une photo de vous, bien cadrée sur le visage : elle rejoindra votre
+            fiche à la validation. D’ici là, seules les personnes qui administrent l’arbre
+            la voient.
+          </p>
+          <template #pied>
+            <BoutonBase variante="secondaire" @click="choixPortraitOuvert = true">
+              Ajouter votre photo
+            </BoutonBase>
+          </template>
+        </PanneauBase>
+        <p v-if="photoDeposeeIci" class="mt-4 text-sm" role="status">
+          Photo enregistrée : elle rejoindra votre fiche à la validation.
+        </p>
+        <ChoixPortrait
+          :ouvert="choixPortraitOuvert"
+          @fermer="choixPortraitOuvert = false"
+          @depose="photoDeposeeIci = true"
+        />
 
         <!-- « Un écran vide pousse à l'abandon » : deux nombres suffisent à
              donner du sens à l'attente, là où une liste exposerait des gens. -->
@@ -109,8 +159,9 @@ async function entrerDansLArbre(): Promise<void> {
 
           <p class="mt-2.5 text-sm text-attenue">
             Les fiches des personnes vivantes, elles, restent fermées jusqu’à la
-            validation. C’est vrai pour tout le monde dans cette situation, y compris pour
-            la fiche à laquelle vous vous rattachez.
+            validation. C’est vrai pour tout le monde dans cette situation<template
+              v-if="!sansFiche"
+            >, y compris pour la fiche à laquelle vous vous rattachez</template>.
           </p>
 
           <template #pied>

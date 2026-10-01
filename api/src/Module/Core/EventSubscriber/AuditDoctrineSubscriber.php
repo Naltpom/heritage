@@ -56,8 +56,27 @@ final class AuditDoctrineSubscriber
      * `p256dh` et `auth` (un abonnement push réattribué) et `privateKey` (la paire VAPID)
      * sont des secrets de chiffrement : écrits en clair au journal, ils permettraient de
      * lire ou de signer des notifications à la place du serveur.
+     *
+     * Les cinq dernières sont celles d'un compte inscrit **sans fiche** (`Membership\Member`,
+     * ADR 0013) : la description de famille que le candidat a tapée, l'identité qu'il a
+     * déclarée et la suggestion calculée par l'assistant. Elles parlent de personnes
+     * **vivantes**, et elles sont **purgées** au rattachement comme au refus. Sans cette
+     * liste, la purge elle-même écrirait l'ancienne valeur en clair dans le diff
+     * `avant`/`apres` — le journal garderait pour toujours ce que la table vient d'effacer.
      */
-    private const array CHAMPS_SENSIBLES = ['password', 'totpSecret', 'tokenHash', 'p256dh', 'auth', 'privateKey'];
+    private const array CHAMPS_SENSIBLES = [
+        'password',
+        'totpSecret',
+        'tokenHash',
+        'p256dh',
+        'auth',
+        'privateKey',
+        'familyDescription',
+        'declaredSurname',
+        'declaredGivenNames',
+        'declaredBirthDate',
+        'attachmentSuggestion',
+    ];
 
     /** Voir règle 3. */
     private const array CHAMPS_TECHNIQUES = ['updatedAt', 'lastLoginAt'];
