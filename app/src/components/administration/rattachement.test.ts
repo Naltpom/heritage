@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSSRApp, h } from 'vue'
+import { createSSRApp, defineComponent, h, type PropType } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import type { MembreAdministration, StatutCompte } from '@/lib/api'
 import { mentionDeRattachement } from './rattachement'
@@ -56,6 +56,15 @@ function membre(
 
 function rendre(sujet: MembreAdministration | null): Promise<string> {
   const app = createSSRApp({ render: () => h(MentionDeRattachement, { membre: sujet }) })
+  app.component(
+    'RouterLink',
+    defineComponent({
+      props: { to: { type: Object as PropType<{ name: string; params: { id: number } }>, required: true } },
+      setup(props, { slots }) {
+        return () => h('a', { 'data-vers': props.to.name, 'data-id': props.to.params.id }, slots.default?.())
+      },
+    }),
+  )
   return renderToString(app)
 }
 
@@ -188,8 +197,14 @@ describe('MentionDeRattachement.vue', () => {
     const html = await rendre(membre('actif'))
 
     expect(html).toContain('data-rattachement="actif"')
-    expect(html).toContain('Rattaché à Cobalt Romarin')
+    expect(html.replace(/<[^>]+>|<!--.*?-->/g, '').replace(/\s+/g, ' ')).toContain('Rattaché à Cobalt Romarin')
     expect(html).not.toContain('depuis la racine')
+  })
+
+  it('fait du nom de la fiche un lien vers elle', async () => {
+    const html = await rendre(membre('actif'))
+
+    expect(html).toMatch(/<a data-vers="personne\.detail" data-id="42"[^>]*>Cobalt Romarin<\/a>/)
   })
 
   /**
