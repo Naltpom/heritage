@@ -46,6 +46,24 @@ const { fiche } = defineProps<{ fiche: FichePersonneComplete }>()
 
 const emit = defineEmits<{ agrandir: [cible: CibleLoupe] }>()
 
+/** Les notes de la plus ancienne à la plus récente — l'ordre où les lire. */
+const notes = computed(() =>
+  [...fiche.notes].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id),
+)
+
+function dateDeNote(valeur: string): string {
+  const date = new Date(valeur)
+  return Number.isNaN(date.getTime())
+    ? valeur
+    : date.toLocaleString('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+}
+
 /** Le rang d'affichage des trois niveaux — ce qui tient en premier. */
 const RANG: Record<CitationDeFiche['appui'], number> = { acte: 2, index: 1, arbre: 0 }
 
@@ -149,13 +167,27 @@ const PASTILLE: Record<CitationDeFiche['appui'], string> = {
     <!-- Notes ---------------------------------------------------- -->
     <section v-if="fiche.notes.length > 0">
       <h3 class="mb-2 text-[11px] tracking-wider text-attenue uppercase">Notes</h3>
-      <p
-        v-for="note in fiche.notes"
-        :key="note.id"
-        class="my-1.5 border-l-[3px] border-ligne py-0.5 pl-3 text-xs whitespace-pre-line"
-      >
-        {{ note.body }}
-      </p>
+      <!-- Dans l'ordre où elles ont été écrites, datées : une note récente
+           précise ou corrige souvent une plus ancienne, et la plus récente
+           est signalée. -->
+      <ol class="m-0 list-none p-0">
+        <li
+          v-for="(note, rang) in notes"
+          :key="note.id"
+          class="my-2 border-l-[3px] py-0.5 pl-3 text-xs"
+          :class="rang === notes.length - 1 && notes.length > 1 ? 'border-accent' : 'border-ligne'"
+        >
+          <p class="m-0 mb-0.5 text-[11px] text-attenue">
+            <time :datetime="note.createdAt">{{ dateDeNote(note.createdAt) }}</time>
+            <template v-if="note.authorLabel"> · {{ note.authorLabel }}</template>
+            <span
+              v-if="rang === notes.length - 1 && notes.length > 1"
+              class="ml-1.5 rounded-pastille bg-accent-doux px-1.5 py-px font-semibold text-accent"
+            >la plus récente</span>
+          </p>
+          <p class="m-0 whitespace-pre-line">{{ note.body }}</p>
+        </li>
+      </ol>
     </section>
 
     <p
