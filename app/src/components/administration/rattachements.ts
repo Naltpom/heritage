@@ -70,15 +70,14 @@ export function etatApresErreur(cause: unknown): EtatDAnalyse {
     return {
       etat: 'echec',
       message:
-        'Le quota d’analyses automatiques est atteint pour aujourd’hui. ' +
-        'Vous pouvez rattacher ce compte à la main, ou relancer plus tard.',
+        'Quota d’analyses atteint pour aujourd’hui : rattachez à la main, ou relancez plus tard.',
       attenteSecondes: analyse.attenteSecondes,
     }
   }
   if (analyse.statut === 502) {
     return {
       etat: 'echec',
-      message: 'L’analyse automatique a échoué. Vous pouvez la relancer, ou décider à la main.',
+      message: 'L’analyse a échoué : relancez-la, ou décidez à la main.',
       attenteSecondes: null,
     }
   }

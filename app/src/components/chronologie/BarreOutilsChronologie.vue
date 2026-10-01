@@ -168,7 +168,7 @@ onBeforeUnmount(() => clearTimeout(minuterie))
     <template #vue>
       <div
         class="max-md:w-full"
-        title="Lignes : une ligne par bande, le temps descend. Colonnes : une colonne par bande, le temps va vers la droite."
+        title="Lignes : le temps descend. Colonnes : le temps va vers la droite."
       >
         <Segmente
           :options="ORIENTATIONS"
@@ -314,7 +314,7 @@ onBeforeUnmount(() => clearTimeout(minuterie))
             type="checkbox"
             :checked="vivantsSeuls"
             class="size-4 accent-accent max-md:size-5"
-            title="N’afficher que les personnes vivantes. Ce réglage n’est pas enregistré dans votre préférence."
+            title="N’afficher que les personnes vivantes. Ce réglage n’est pas enregistré."
             @change="emit('vivantsSeuls', ($event.target as HTMLInputElement).checked)"
           />
           <span class="flex-1">Vivants uniquement</span>

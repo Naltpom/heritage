@@ -48,9 +48,8 @@ export function motifSuspension(vueEmpruntee: VueEmpruntee): string | null {
 
   const nom = vueEmpruntee?.memberLabel ?? 'un autre membre'
   return (
-    `Vous regardez l’arbre avec le cercle de visibilité de ${nom}. ` +
-    'Tant que cette vue est active, aucune modification ne peut être enregistrée — ' +
-    'elle porterait votre nom sur ce que quelqu’un d’autre voyait. Quittez la vue empruntée pour décider.'
+    `Vous voyez l’arbre comme ${nom} : aucune modification possible. ` +
+    'Quittez la vue empruntée pour décider.'
   )
 }
 

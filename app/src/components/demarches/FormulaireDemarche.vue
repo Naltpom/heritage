@@ -120,7 +120,7 @@ async function enregistrer(): Promise<void> {
   <form class="flex flex-col gap-4" @submit.prevent="enregistrer">
     <p v-if="precedenteId !== null && modele !== null" class="rounded-champ border border-ligne bg-fond p-2.5 text-sm text-attenue">
       Suite de la démarche n° {{ modele.id }} ({{ modele.statutLibelle.toLowerCase() }}, demandée à {{ modele.destinataire }}).
-      Changez ce qui doit l’être — le service, le canal, le texte de la demande — puis enregistrez.
+      Modifiez ce qui change, puis enregistrez.
     </p>
     <p v-if="champs['precedenteId']" class="text-xs text-alerte">{{ champs['precedenteId'] }}</p>
     <div class="grid gap-3 sm:grid-cols-2">

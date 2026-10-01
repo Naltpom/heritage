@@ -100,8 +100,8 @@ const interroge = ref(false)
 
 const aideParDefaut = computed(() =>
   vivantsSeulement
-    ? 'La recherche porte sur les personnes vivantes de l’arbre que vous pouvez consulter.'
-    : 'La recherche porte sur les personnes de l’arbre que vous pouvez consulter.',
+    ? 'Parmi les personnes vivantes que vous pouvez voir.'
+    : 'Parmi les personnes que vous pouvez voir.',
 )
 
 const identifiant = useId()
@@ -276,8 +276,7 @@ const aucunResultat = computed(
         <p class="flex flex-wrap items-center gap-2 text-xs text-attenue">
           <PastilleEtat etat="en_attente" />
           <span>
-            Proposées et pas encore validées. Les désigner est permis — la demande que vous
-            écrivez attendra simplement que celle-là soit validée.
+            Pas encore validées : votre demande attendra leur validation.
           </span>
         </p>
 

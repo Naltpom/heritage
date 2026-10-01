@@ -192,7 +192,7 @@ function continuer(): void {
   <CadreEntree
     v-else
     titre="Vous situer dans l’arbre"
-    sousTitre="Ces informations servent à retrouver la fiche qui vous concerne, et à vérifier que c’est bien vous."
+    sousTitre="Pour retrouver votre fiche."
     :etape="1"
   >
     <PanneauBase>
@@ -201,7 +201,7 @@ function continuer(): void {
           <ChampTexte
             v-model="surname"
             etiquette="Nom de famille"
-            aide="Le nom de naissance, s’il diffère de celui que vous portez aujourd’hui."
+            aide="Votre nom de naissance."
             autocomplete="family-name"
             requis
           />
@@ -209,7 +209,7 @@ function continuer(): void {
           <ChampTexte
             v-model="givenNames"
             etiquette="Prénom·s"
-            aide="Tous vos prénoms, dans l’ordre de l’état civil."
+            aide="Tous, dans l’ordre de l’état civil."
             autocomplete="given-name"
             requis
           />
@@ -218,7 +218,6 @@ function continuer(): void {
             v-model="birthDate"
             etiquette="Date de naissance"
             type="date"
-            aide="Jour, mois et année."
             autocomplete="bday"
             requis
           />

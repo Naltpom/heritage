@@ -46,7 +46,7 @@ const { photo, nom } = defineProps<{
       />
     </a>
     <p class="text-xs text-attenue">
-      Photo déposée à l’inscription — <strong class="font-semibold text-texte">deviendra le portrait de sa fiche à la validation</strong>.
+      Photo de l’inscription : <strong class="font-semibold text-texte">deviendra le portrait de sa fiche à la validation</strong>.
     </p>
   </div>
 </template>

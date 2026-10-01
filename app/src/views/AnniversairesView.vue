@@ -357,9 +357,7 @@ onBeforeUnmount(() => {
         <section v-if="sansCase.length > 0" class="mt-3">
           <PanneauBase titre="Le 29 février">
             <p class="text-xs text-attenue">
-              {{ affiche.annee }} n’est pas une année bissextile : ces anniversaires n’ont
-              aucune case cette année-là. Ils ne sont déplacés ni au 28 février ni au 1er
-              mars — ce serait inventer une date.
+              {{ affiche.annee }} n’a pas de 29 février : ces anniversaires ne sont pas déplacés.
             </p>
 
             <ul class="mt-3 flex list-none flex-col gap-3">

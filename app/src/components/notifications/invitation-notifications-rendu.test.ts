@@ -50,7 +50,7 @@ describe('la fenêtre « Activer »', () => {
 
   it('dit pourquoi, et propose « Plus tard » puis « Activer »', async () => {
     const html = await rendre('activer')
-    expect(html).toContain('Soyez prévenu quand votre inscription est validée, quand une demande est traitée, quand un tirage est fait.')
+    expect(html).toContain('Soyez prévenu quand une demande est traitée ou qu’un tirage est fait.')
     expect(boutons(html)).toEqual(['Plus tard', 'Activer'])
   })
 
@@ -64,7 +64,7 @@ describe('la fenêtre « Activer »', () => {
 describe('la fenêtre « Installer » (iPhone hors écran d’accueil)', () => {
   it('dit les deux gestes de Safari et n’a qu’un bouton, « Compris »', async () => {
     const html = await rendre('installer')
-    expect(html).toContain('Installez Heritage sur votre écran d’accueil pour recevoir les notifications')
+    expect(html).toContain('C’est nécessaire pour recevoir les notifications')
     expect(html).toContain('Partager')
     expect(html).toContain('Sur l’écran d’accueil')
     expect(boutons(html)).toEqual(['Compris'])

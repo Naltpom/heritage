@@ -232,8 +232,7 @@ onBeforeUnmount(() => {
             Aucun lieu situé pour les événements retenus.
           </p>
           <p class="mt-1 text-xs text-attenue">
-            Choisissez d’autres genres d’événement, ou vérifiez que les lieux de l’arbre ont bien
-            été rapprochés du référentiel.
+            Essayez d’autres genres d’événement.
           </p>
         </PanneauBase>
       </div>
@@ -287,8 +286,7 @@ onBeforeUnmount(() => {
             </div>
           </template>
           <p class="mb-2 text-xs text-attenue">
-            Ces événements portent un lieu que le référentiel n’a pas su placer. Ils ne sont pas
-            perdus : ils n’ont simplement pas de coordonnées.
+            Leur lieu n’a pas pu être placé sur la carte.
           </p>
           <ul class="space-y-1 text-xs">
             <li v-for="evenement in regroupement.nonSitues.slice(0, 40)" :key="evenement.cle">

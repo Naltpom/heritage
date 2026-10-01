@@ -161,7 +161,7 @@ describe('l’écran de décision sous une vue empruntée', () => {
     // l'administrateur cherchera ce qui est cassé avant de se rappeler qu'il a
     // activé la bascule une heure plus tôt.
     expect(html).toContain('Cobalt Romarin')
-    expect(html).toMatch(/aucune modification ne peut être enregistrée/i)
+    expect(html).toMatch(/aucune modification possible/i)
   })
 
   it('les rallume dès que la vue est quittée', async () => {
@@ -239,7 +239,7 @@ describe('le bandeau permanent', () => {
   it('dit que les écritures sont refusées', async () => {
     const html = await rendreBandeau(VUE_EMPRUNTEE)
 
-    expect(html).toMatch(/écriture est refusée|écritures sont refusées/i)
+    expect(html).toMatch(/aucune modification possible/i)
   })
 
   it('ne s’affiche pas quand la bascule est inactive', async () => {
@@ -260,6 +260,6 @@ describe('le bandeau permanent', () => {
     expect(html).toMatch(/connecté en tant que/i)
     expect(html).toContain('Cobalt Romarin')
     expect(html).toContain('Natron')
-    expect(html).toMatch(/tracée/i)
+    expect(html).toMatch(/enregistrée à votre nom/i)
   })
 })

@@ -39,17 +39,17 @@ export const GENRES: readonly DefinitionGenre[] = [
   {
     id: 'naissance',
     libelle: 'Naissances',
-    description: 'Les naissances, telles que les actes les datent.',
+    description: 'Les naissances.',
   },
   {
     id: 'deces',
     libelle: 'Décès',
-    description: 'Les décès. Une personne vivante n’en a pas, et n’apparaît pas ici.',
+    description: 'Les décès.',
   },
   {
     id: 'union',
     libelle: 'Unions',
-    description: 'Mariages et divorces. Une union ne paraît que si ses deux époux sont visibles.',
+    description: 'Mariages et divorces, si les deux époux vous sont visibles.',
   },
   {
     id: 'bapteme',

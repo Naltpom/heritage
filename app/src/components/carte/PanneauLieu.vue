@@ -88,7 +88,7 @@ const graphies = computed(() => bulle.brut.filter((g) => g !== bulle.libelle))
           Écrit aussi : <span class="italic">{{ graphies.join(' · ') }}</span>
         </p>
         <p v-if="bulle.confiance < 100">
-          Ce lieu a été situé avec une confiance de {{ bulle.confiance }} sur 100.
+          Position approximative (fiabilité {{ bulle.confiance }} sur 100).
         </p>
       </div>
     </template>

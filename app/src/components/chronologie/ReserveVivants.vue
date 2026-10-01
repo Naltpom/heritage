@@ -44,12 +44,9 @@
   <div role="note" class="border-b border-ligne bg-panneau px-4 py-2">
     <p class="text-xs text-attenue">
       <strong class="font-semibold text-texte">Les vivants.</strong>
-      Une fiche confidentielle — fermée par décision d’administration — n’expose aucune
-      date, donc aucune barre : elle ne peut pas s’afficher ici, même vivante. Un autre
-      compte ne verra donc pas forcément les mêmes personnes, et cet écart n’est pas une
-      anomalie.
-      « Vivant » est par ailleurs <em>calculé</em> à partir de la fiche : une fiche dont
-      le décès n’a jamais été renseigné reste du côté des vivants.
+      Une fiche confidentielle n’a aucune barre : un autre compte ne verra donc pas forcément
+      les mêmes personnes. « Vivant » est <em>calculé</em> : une fiche dont le décès n’a jamais
+      été renseigné compte comme vivante.
     </p>
   </div>
 </template>

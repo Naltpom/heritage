@@ -102,7 +102,6 @@ const classeSelect = 'h-10 rounded-champ border border-ligne bg-fond px-2 text-s
       />
       <span>
         Les couples ne se tirent pas l’un l’autre
-        <span class="block text-xs text-attenue">Les couples sont lus dans l’arbre.</span>
       </span>
     </label>
 
@@ -116,7 +115,7 @@ const classeSelect = 'h-10 rounded-champ border border-ligne bg-fond px-2 text-s
       <span>
         Ouvert à la famille
         <span class="block text-xs text-attenue">
-          Tout membre rattaché à l’arbre voit ce tirage et peut s’y inscrire. Sinon, vous seul ajoutez les participants.
+          Toute la famille peut le voir et s’y inscrire. Sinon, vous ajoutez les participants.
         </span>
       </span>
     </label>

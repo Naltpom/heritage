@@ -170,11 +170,6 @@ function changerFiltre(valeur: StatutDemande | ''): void {
     </BarreEcran>
 
     <div class="mx-auto w-full max-w-3xl px-4 py-6">
-      <p class="mb-5 text-sm text-attenue">
-        Ce que vous avez proposé, et ce que c’est devenu. Une demande refusée porte
-        toujours le motif de son refus.
-      </p>
-
       <PanneauBase v-if="chargement && vide">
         <p class="mb-3 text-sm text-attenue" role="status">Chargement de vos demandes…</p>
         <SqueletteChargement :lignes="3" />

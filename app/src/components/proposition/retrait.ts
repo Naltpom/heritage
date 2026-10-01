@@ -82,15 +82,15 @@ export function confirmationDeRetrait(
   const trace =
     incarnePar === null
       ? ''
-      : ` Vous êtes connecté en tant que ce membre : le geste sera tracé au nom de ${incarnePar}.`
+      : ` Le geste sera enregistré au nom de ${incarnePar}.`
 
   return {
     titre: `Annuler la demande n° ${demande.id} ?`,
     message:
       (brouillon
         ? 'Ce brouillon ne sera jamais soumis. '
-        : 'Elle quittera la file des administrateurs et ne sera pas examinée. ') +
-      'Elle restera consultable, marquée « Annulée », mais ne pourra pas être rouverte : il faudra en déposer une nouvelle.' +
+        : 'Elle ne sera pas examinée. ') +
+      'Elle restera visible, marquée « Annulée », mais ne pourra pas être rouverte.' +
       trace,
     confirmer: 'Annuler ma demande',
     danger: true,

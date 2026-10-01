@@ -56,7 +56,7 @@ function plusTard(): void {
     role="status"
   >
     <img src="/icons/icone-192.png" alt="" class="h-9 w-9 rounded-lg" />
-    <span class="min-w-0 flex-1">Installez Heritage sur votre téléphone : l'arbre s'ouvrira comme une application.</span>
+    <span class="min-w-0 flex-1">Installez Heritage sur votre téléphone, comme une application.</span>
     <div class="flex gap-2">
       <BoutonBase variante="principal" @click="surInstaller">Installer</BoutonBase>
       <BoutonBase v-if="forme === 'bandeau'" variante="discret" @click="plusTard">Plus tard</BoutonBase>

@@ -175,8 +175,7 @@ async function deposer(): Promise<void> {
           Demander la suppression — {{ apercu.inventaire.displayName }}
         </h1>
         <p class="mt-1.5 text-sm text-attenue">
-          Personne ne supprime une fiche directement. Votre demande part en validation, avec votre
-          motif&nbsp;; un administrateur la lit, voit ce qu’elle emporte, et tranche.
+          Un administrateur lira votre motif avant de décider.
         </p>
       </header>
 
@@ -210,7 +209,7 @@ async function deposer(): Promise<void> {
         </ul>
 
         <p v-else class="m-0 text-sm">
-          Cette fiche ne porte ni note, ni source, ni union&nbsp;: il n’y a que la fiche elle-même.
+          Rien d’autre que la fiche&nbsp;: ni note, ni source, ni union.
         </p>
 
         <ul v-if="bloquantes.length > 0" class="mt-3 m-0 list-disc space-y-1 pl-5 text-sm text-alerte">
@@ -218,8 +217,7 @@ async function deposer(): Promise<void> {
         </ul>
 
         <p class="mt-3 mb-0 text-xs text-attenue">
-          L’historique de la fiche, lui, reste&nbsp;: les révisions déjà écrites survivent à la
-          suppression et disent ce qui est parti.
+          L’historique de la fiche est conservé.
         </p>
       </PanneauBase>
 
@@ -245,8 +243,7 @@ async function deposer(): Promise<void> {
             {{ erreurMotifAffichee }}
           </span>
           <span v-else class="text-xs text-attenue">
-            Une validation ne laisse aucun mot&nbsp;: ce motif est la seule trace écrite de la
-            raison, et il se relira longtemps après.
+            C’est la seule trace écrite de la raison.
           </span>
         </label>
       </PanneauBase>

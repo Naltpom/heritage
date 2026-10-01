@@ -47,7 +47,7 @@ export const EXEMPLE_DESCRIPTION =
  * qui lira ce texte, et qu'un modèle de langage peut l'analyser.
  */
 export const MENTION_DESCRIPTION =
-  'Seuls les administrateurs de l’arbre lisent ce texte ; il peut être analysé automatiquement (Google Gemini) pour les aider à retrouver ou créer votre fiche.'
+  'Lu seulement par les administrateurs, et parfois analysé automatiquement (Google Gemini) pour retrouver votre fiche.'
 
 /** Longueur de la description telle que le serveur la compte. */
 export function longueurDescription(texte: string): number {

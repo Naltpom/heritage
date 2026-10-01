@@ -72,12 +72,12 @@ describe('mentionDuModele', () => {
   /** Elle dit **combien** : deux sur vingt et dix-neuf sur vingt ne sont pas la même information. */
   it('chiffre la part rédigée par un modèle', () => {
     expect(mentionDuModele(20, 2)).toBe(
-      '2 de ces questions sur 20 ont été formulées par un modèle de langage.',
+      '2 de ces questions sur 20 ont été rédigées par l’IA.',
     )
   })
 
   it('se simplifie quand tout vient du modèle', () => {
-    expect(mentionDuModele(20, 20)).toBe('Ces questions ont été formulées par un modèle de langage.')
+    expect(mentionDuModele(20, 20)).toBe('Ces questions ont été rédigées par l’IA.')
   })
 })
 

@@ -29,7 +29,7 @@ const { doublons } = defineProps<{ doublons: DoublonProbable[] }>()
           ? 'Une autre demande en attente décrit peut-être la même personne.'
           : `${doublons.length} autres demandes en attente décrivent peut-être la même personne.`
       }}
-      Vous pouvez en valider une et refuser les autres en les rattachant à celle-ci.
+      Validez-en une, puis refusez les autres comme doublons.
     </p>
 
     <ul class="mt-2.5 flex flex-col gap-1.5">

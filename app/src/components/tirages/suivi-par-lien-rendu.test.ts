@@ -36,7 +36,7 @@ describe('SuiviParLien', () => {
     const html = await rendre({ type: 'invalide' })
 
     expect(html).toContain('Ce lien n’est plus valable')
-    expect(html).toContain('remplacé par un nouveau lien, ou révoqué')
+    expect(html).toContain('Demandez-en un autre')
     expect(html).not.toContain('Ma présence')
   })
 

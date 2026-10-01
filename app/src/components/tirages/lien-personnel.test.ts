@@ -66,7 +66,7 @@ describe('boutonDeCadeauParLien', () => {
 
 describe('confirmations du lien', () => {
   it('régénérer dit que l’ancien lien cesse de marcher', () => {
-    expect(confirmationDeRegeneration('Léa').message).toContain('cessera aussitôt de fonctionner')
+    expect(confirmationDeRegeneration('Léa').message).toContain('ne marchera plus')
   })
 
   it('révoquer est un geste de danger', () => {

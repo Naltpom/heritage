@@ -247,11 +247,11 @@ export const FILTRES: readonly { valeur: StatutDemande | ''; libelle: string }[]
  */
 export function messageQuandVide(filtre: StatutDemande | ''): string {
   if (filtre === '') {
-    return 'Vous n’avez encore rien proposé. Une correction de date, un nom de jeune fille, une personne qui manque à l’arbre : tout part d’ici, et rien n’est écrit sans qu’un administrateur l’ait relu.'
+    return 'Vous n’avez encore rien proposé. Chaque proposition est relue par un administrateur avant d’entrer dans l’arbre.'
   }
 
   const libelle = FILTRES.find((choix) => choix.valeur === filtre)?.libelle ?? ''
-  return `Aucune de vos demandes n’est dans l’état « ${libelle.toLowerCase()} ». Vos autres demandes sont toujours là : choisissez « Toutes ».`
+  return `Aucune demande « ${libelle.toLowerCase()} ». Choisissez « Toutes » pour voir les autres.`
 }
 
 /* ------------------------------------------------------------------ */

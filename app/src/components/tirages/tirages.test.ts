@@ -98,7 +98,7 @@ describe('les phrases', () => {
     expect(avertissementDeMemoire(2, 3)).toBeNull()
     expect(avertissementDeMemoire(3, 3)).toBeNull()
     expect(avertissementDeMemoire(4, 3)).toContain('au-delà de 3 tirages')
-    expect(avertissementDeMemoire(1, 0)).toContain('ne pourra pas être respectée')
+    expect(avertissementDeMemoire(1, 0)).toContain('sera ignorée')
   })
 })
 

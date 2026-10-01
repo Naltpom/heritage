@@ -100,10 +100,10 @@ function surAnnulation(evenement: Event): void {
             {{ forme === 'activer' ? 'Activer les notifications' : 'Installez Heritage sur votre écran d’accueil' }}
           </h2>
           <p v-if="forme === 'activer'" :id="`${id}-message`" class="m-0 text-sm text-attenue">
-            Soyez prévenu quand votre inscription est validée, quand une demande est traitée, quand un tirage est fait.
+            Soyez prévenu quand une demande est traitée ou qu’un tirage est fait.
           </p>
           <div v-else :id="`${id}-message`" class="flex flex-col gap-2 text-sm text-attenue">
-            <p class="m-0">Installez Heritage sur votre écran d’accueil pour recevoir les notifications.</p>
+            <p class="m-0">C’est nécessaire pour recevoir les notifications.</p>
             <ol class="m-0 flex list-decimal flex-col gap-1 pl-5">
               <li>
                 Dans Safari, touchez <strong class="text-texte">Partager</strong>

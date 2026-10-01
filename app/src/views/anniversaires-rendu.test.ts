@@ -434,7 +434,7 @@ describe('la barre d’outils', () => {
       .then((rendu) => rendu.replace(/\s+/g, ' '))
 
     expect(html).toContain('Naissances — 166')
-    expect(html).toContain('et 52 de plus dans les genres que vous n’affichez pas')
+    expect(html).toContain('et 52 dans les genres masqués')
   })
 
   it('désactive un genre que l’arbre ne porte pas, en disant pourquoi', async () => {

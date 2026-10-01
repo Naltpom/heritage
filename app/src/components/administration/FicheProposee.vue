@@ -159,8 +159,7 @@ function nomComplet(brouillon: BrouillonDemande): string {
            l'écran en montre une, c'est un brouillon, et le dire évite de
            chercher ce qui manque. -->
       <p v-else class="mt-2 text-sm text-alerte">
-        Aucun lien proposé : cette demande ne peut pas être soumise en l’état, la personne
-        n’aurait aucune place dans l’arbre.
+        Aucun lien proposé : la personne n’aurait pas de place dans l’arbre.
       </p>
     </section>
   </div>

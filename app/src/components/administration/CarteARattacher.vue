@@ -132,8 +132,8 @@ function demanderRefus(): void {
   confirmation.value = {
     titre: 'Refuser cette inscription ?',
     message:
-      `Le compte ${compte.email} sera suspendu : il ne pourra plus se connecter, et sa ` +
-      'description, son identité déclarée et sa photo seront effacées. Le courriel restera réservé.',
+      `Le compte ${compte.email} ne pourra plus se connecter ; sa description, son identité ` +
+      'et sa photo seront effacées.',
     confirmer: 'Refuser l’inscription',
     danger: true,
   }
@@ -248,7 +248,7 @@ function dateLisible(iso: string): string {
     <div v-if="panneau === 'autre_fiche'" class="rounded-champ border border-ligne p-3">
       <SelecteurPersonne
         etiquette="Rattacher ce compte à…"
-        aide="Cherchez la fiche de cette personne ; le choix rattache et active le compte aussitôt."
+        aide="Le choix rattache et active le compte aussitôt."
         :avec-propositions="false"
         @choisir="choisirAutreFiche"
       />
@@ -296,8 +296,8 @@ function dateLisible(iso: string): string {
         :etiquette="exigences.parentsRequis ? 'Parent (au moins un)' : 'Parents (facultatif)'"
         :aide="
           exigences.parentsRequis
-            ? 'Un ou deux parents déjà dans l’arbre : c’est ce qui rattache la nouvelle fiche.'
-            : 'Choisis ici, ils remplacent les parents que l’analyse propose.'
+            ? 'Un ou deux parents déjà dans l’arbre, pour placer la nouvelle fiche.'
+            : 'Ils remplacent ceux que l’analyse propose.'
         "
         :deja-choisis="parents.map((parent) => `personne:${parent.personId}`)"
         :avec-propositions="false"

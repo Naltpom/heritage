@@ -65,7 +65,7 @@ const CLASSES_TON: Record<'alerte' | 'ok' | 'neutre', string> = {
 
   <div v-else-if="notifications.length === 0" data-vide class="flex flex-col items-center gap-2 px-6 py-10 text-center">
     <span class="text-[15px] font-semibold">Rien de nouveau</span>
-    <span class="text-[13px] text-attenue">Vous serez prévenu ici quand une de vos demandes sera acceptée ou refusée.</span>
+    <span class="text-[13px] text-attenue">Vos demandes acceptées ou refusées s’afficheront ici.</span>
   </div>
 
   <ul v-else class="divide-y divide-ligne">

@@ -70,7 +70,7 @@ function fermer(): void {
     role="status"
   >
     <template v-if="etat === 'aucun'">
-      <span>Votre fiche n'a pas encore de photo. Ajoutez la vôtre : elle apparaîtra sur votre carte dans l'arbre.</span>
+      <span>Ajoutez une photo de vous : elle apparaîtra sur votre carte dans l’arbre.</span>
       <BoutonBase variante="principal" @click="choixOuvert = true">Ajouter ma photo</BoutonBase>
       <BoutonBase variante="discret" @click="fermer">Plus tard</BoutonBase>
     </template>
@@ -82,7 +82,7 @@ function fermer(): void {
         alt=""
         class="h-10 w-10 rounded-full object-cover"
       />
-      <span>Quelqu'un a déjà déposé cette photo de vous. La garder, ou la remplacer par la vôtre ?</span>
+      <span>Quelqu’un a déposé cette photo de vous. La garder ou la remplacer ?</span>
       <BoutonBase variante="secondaire" @click="fermer">Garder</BoutonBase>
       <BoutonBase variante="principal" @click="choixOuvert = true">Remplacer</BoutonBase>
     </template>

@@ -54,13 +54,11 @@ const choixOuvert = ref(false)
       </div>
       <div class="text-sm">
         <p>
-          Ajoutez une photo de vous, bien cadrée sur le visage : c’est elle qui vous
-          représentera dans l’arbre, pour toute la famille.
+          Une photo de vous, bien cadrée sur le visage, pour vous représenter dans l’arbre.
         </p>
         <p class="mt-2 text-attenue">
           <template v-if="enAttente">
-            Tant que votre compte n’est pas validé, seules les personnes qui administrent
-            l’arbre la voient ; elle rejoindra votre fiche à la validation.
+            Seuls les administrateurs la voient jusqu’à la validation de votre compte.
           </template>
           <template v-else>
             Elle devient aussitôt le portrait de votre fiche.

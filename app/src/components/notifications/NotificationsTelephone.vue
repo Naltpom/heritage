@@ -50,13 +50,11 @@ const libelle = computed(() => LIBELLES[etat.value] ?? '')
       </BoutonBase>
     </div>
     <p v-if="etat === 'bloque'" class="m-0 text-sm text-attenue">
-      Pour les recevoir, réautorisez les notifications de Heritage dans les réglages du navigateur (le cadenas à gauche
-      de l’adresse, ou Réglages › Notifications du téléphone), puis revenez ici.
+      Réautorisez-les dans les réglages du navigateur (le cadenas près de l’adresse), puis revenez ici.
     </p>
     <p v-else-if="etat === 'a_installer'" class="m-0 text-sm text-attenue">
-      Sur iPhone, les notifications n’arrivent qu’à l’application installée : dans Safari, touchez
-      <strong class="text-texte">Partager</strong> puis <strong class="text-texte">Sur l’écran d’accueil</strong>, et
-      ouvrez Heritage depuis son icône.
+      Sur iPhone, installez d’abord Heritage : dans Safari, touchez
+      <strong class="text-texte">Partager</strong> puis <strong class="text-texte">Sur l’écran d’accueil</strong>.
     </p>
     <p v-if="erreur" role="alert" class="m-0 text-sm text-alerte">{{ erreur }}</p>
   </div>

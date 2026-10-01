@@ -214,10 +214,6 @@ function dateLisible(iso: string): string {
           <dt class="text-attenue">Courriel</dt>
           <dd>{{ courrielActuel }}</dd>
         </dl>
-        <p class="text-sm text-attenue">
-          Le nom et le prénom sont ceux de votre fiche dans l'arbre. Ils ne se modifient
-          pas ici : proposez une modification, elle sera relue avant d'être appliquée.
-        </p>
         <RouterLink
           v-if="personneId !== null"
           :to="`/personnes/${personneId}/proposer`"
@@ -232,9 +228,7 @@ function dateLisible(iso: string): string {
       <section class="flex flex-col gap-3 p-4">
         <h2 class="text-base font-semibold">Photo de profil</h2>
         <p class="text-sm text-attenue">
-          C'est le portrait de votre fiche : il apparaît sur votre carte dans l'arbre et
-          partout où vous êtes cité. Une nouvelle photo remplace l'ancienne, qui reste
-          visible sur votre fiche.
+          Elle apparaît sur votre carte dans l’arbre.
         </p>
         <div class="flex items-center gap-4">
           <img
@@ -250,7 +244,6 @@ function dateLisible(iso: string): string {
             {{ portrait === null ? 'Ajouter ma photo' : 'Remplacer ma photo' }}
           </BoutonBase>
         </div>
-        <p class="m-0 text-xs text-attenue">Importez une photo ou prenez-la, puis cadrez votre visage dans le cercle.</p>
         <p v-if="portraitDepose" class="text-sm" role="status">Photo enregistrée.</p>
         <ChoixPortrait
           :ouvert="choixPortraitOuvert"
@@ -265,8 +258,7 @@ function dateLisible(iso: string): string {
         <h2 class="text-base font-semibold">Application</h2>
         <InstallationApplication forme="panneau" />
         <p class="m-0 text-xs text-attenue">
-          Déjà installée, ou navigateur qui ne le propose pas ? Ouvrez le menu du navigateur :
-          « Installer l'application » ou « Ajouter à l'écran d'accueil ».
+          Sinon : menu du navigateur, puis « Ajouter à l’écran d’accueil ».
         </p>
       </section>
     </PanneauBase>
@@ -279,8 +271,7 @@ function dateLisible(iso: string): string {
       <form class="flex flex-col gap-3 p-4" novalidate @submit.prevent="soumettreCourriel">
         <h2 class="text-base font-semibold">Changer de courriel</h2>
         <p class="text-sm text-attenue">
-          Un lien de confirmation sera envoyé à la nouvelle adresse. Votre courriel ne
-          changera qu'une fois ce lien ouvert.
+          Un lien de confirmation sera envoyé à la nouvelle adresse.
         </p>
         <ChampTexte
           v-model="nouveauCourriel"
@@ -348,10 +339,10 @@ function dateLisible(iso: string): string {
           :erreur="erreurMotDePasseEnvoi"
         />
         <p v-if="motDePasseChange" class="text-sm" role="status">
-          Mot de passe changé. Vos autres sessions ouvertes devront se reconnecter.
+          Mot de passe changé. Vos autres appareils devront se reconnecter.
           <template v-if="clesRetirees > 0">
             {{ clesRetirees > 1 ? `Vos ${clesRetirees} clés d’accès ont été retirées` : 'Votre clé d’accès a été retirée' }} :
-            ajoutez-en une à nouveau sur cet appareil si vous le souhaitez.
+            vous pouvez en ajouter une à nouveau.
           </template>
         </p>
         <BoutonBase

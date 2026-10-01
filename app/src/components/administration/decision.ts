@@ -45,7 +45,7 @@ import type { ResolutionPrevue, ResultatValidation } from '@/lib/api'
  */
 export function erreurMotifRefus(message: string): string | null {
   if (message.trim().length === 0) {
-    return 'Le motif du refus est obligatoire : il sera envoyé à l’auteur de la demande.'
+    return 'Le motif est obligatoire : il sera envoyé à l’auteur.'
   }
   return null
 }
@@ -94,10 +94,10 @@ export function actionValidation(resolution: ResolutionPrevue | undefined): Acti
       // fréquent — celui des champs disjoints — et le traiter comme un conflit
       // condamnerait la seconde de deux demandes de la même semaine.
       return {
-        libelle: 'Valider (sera rejouée sur la version courante)',
+        libelle: 'Valider (sur la version actuelle)',
         desactive: false,
         explication:
-          'La fiche a changé depuis le dépôt, mais aucune des valeurs que cette demande remplace n’a bougé. La modification sera appliquée sur la version actuelle.',
+          'La fiche a changé, mais pas les valeurs que cette demande remplace : elle s’appliquera sur la version actuelle.',
       }
 
     case 'caducite':
@@ -107,7 +107,7 @@ export function actionValidation(resolution: ResolutionPrevue | undefined): Acti
         libelle: 'Validation impossible',
         desactive: true,
         explication:
-          'Une des valeurs que cette demande remplace a été modifiée depuis son dépôt. La valider écraserait ce changement : elle doit être refaite sur les valeurs actuelles.',
+          'Une valeur que cette demande remplace a changé depuis : elle doit être refaite sur les valeurs actuelles.',
       }
 
     case 'cible_disparue':
@@ -120,7 +120,7 @@ export function actionValidation(resolution: ResolutionPrevue | undefined): Acti
         libelle: 'Validation impossible',
         desactive: true,
         explication:
-          'La fiche visée par cette demande n’existe plus : elle a été supprimée ou fusionnée depuis le dépôt. Il n’y a plus rien à modifier.',
+          'La fiche visée n’existe plus : elle a été supprimée ou fusionnée.',
       }
 
     case 'dependance_en_attente':
@@ -131,7 +131,7 @@ export function actionValidation(resolution: ResolutionPrevue | undefined): Acti
         libelle: 'À valider après l’autre demande',
         desactive: true,
         explication:
-          'Cette demande rattache une personne à une fiche qui est elle-même encore proposée. Validez d’abord la demande qui la propose : celle-ci s’appliquera ensuite telle quelle, sans que son auteur ait à la refaire.',
+          'Elle s’appuie sur une personne encore proposée. Validez d’abord cette autre demande : celle-ci suivra sans que son auteur ait à la refaire.',
       }
 
     case 'dependance_morte':
@@ -139,7 +139,7 @@ export function actionValidation(resolution: ResolutionPrevue | undefined): Acti
         libelle: 'Validation impossible',
         desactive: true,
         explication:
-          'La demande sur laquelle celle-ci s’appuyait n’aboutira pas : la personne qu’elle désignait n’existera jamais. Son auteur peut la refaire en désignant quelqu’un d’autre.',
+          'L’autre demande sur laquelle elle s’appuie n’aboutira pas. Son auteur peut la refaire.',
       }
 
     case undefined:
@@ -147,7 +147,7 @@ export function actionValidation(resolution: ResolutionPrevue | undefined): Acti
         libelle: 'Valider',
         desactive: true,
         explication:
-          'L’état de la fiche visée n’a pas pu être vérifié. Rechargez la demande avant de décider.',
+          'L’état de la fiche n’a pas pu être vérifié : rechargez la demande.',
       }
   }
 }
@@ -177,10 +177,9 @@ export function annonceValidation(resultat: ResultatValidation): AnnonceValidati
     const champs = resultat.rejeu?.champsVerifies ?? []
     const liste = champs.length > 0 ? ` (${champs.join(', ')})` : ''
     return {
-      titre: 'Demande validée, après rejeu automatique',
+      titre: 'Demande validée sur la version actuelle',
       detail:
-        `La fiche avait changé depuis le dépôt. Les valeurs que cette demande remplace${liste} ont été revérifiées une à une, ` +
-        'elles n’avaient pas bougé, et la modification a été appliquée sur la version actuelle. Personne n’a réexaminé ce changement : il est tracé au journal.',
+        `La fiche avait changé, mais pas les valeurs remplacées${liste}. Personne d’autre n’a relu ce changement.`,
       rejoue: true,
     }
   }
@@ -222,10 +221,10 @@ export function annonceEnchainement(precedente: number, issue: IssueDecision, fi
     issue === 'refusee'
       ? `Demande n° ${precedente} refusée.`
       : issue === 'rejouee'
-        ? `Demande n° ${precedente} validée, après rejeu automatique.`
+        ? `Demande n° ${precedente} validée sur la version actuelle.`
         : `Demande n° ${precedente} validée.`
 
   return finDeFile
-    ? `${faite} Il n’y a plus de demande en attente dans cette file.`
+    ? `${faite} Plus aucune demande en attente.`
     : `${faite} Voici la suivante dans la file.`
 }

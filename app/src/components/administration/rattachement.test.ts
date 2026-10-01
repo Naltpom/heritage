@@ -93,7 +93,7 @@ describe('mentionDeRattachement', () => {
     expect(mention.etat).toBe('absent')
     expect(mention.etiquette).toBe('Aucune fiche rattachée')
     expect(mention.consequence).not.toBeNull()
-    expect(mention.consequence).toContain('regarde l’arbre depuis la racine')
+    expect(mention.consequence).toContain('voit l’arbre centré sur le propriétaire')
   })
 
   it('distingue le rattachement en attente du rattachement actif', () => {
@@ -104,7 +104,7 @@ describe('mentionDeRattachement', () => {
     expect(enAttente.etiquette).toContain('Cobalt Romarin')
     // Un rattachement en attente retombe sur la racine lui aussi :
     // `personneDuCompte()` ne rend une personne que pour un membre `actif`.
-    expect(enAttente.consequence).toContain('regarde l’arbre depuis la racine')
+    expect(enAttente.consequence).toContain('voit l’arbre centré sur le propriétaire')
     expect(enAttente.consequence).toContain('Tant qu’il n’est pas validé')
   })
 
@@ -118,7 +118,7 @@ describe('mentionDeRattachement', () => {
 
     expect(mention.etat).toBe('inactif')
     expect(mention.etiquette).toContain('suspendu')
-    expect(mention.consequence).toContain('regarde l’arbre depuis la racine')
+    expect(mention.consequence).toContain('voit l’arbre centré sur le propriétaire')
   })
 
   /**
@@ -132,7 +132,7 @@ describe('mentionDeRattachement', () => {
     )
 
     expect(mention.etat).toBe('inactif')
-    expect(mention.consequence).toContain('regarde l’arbre depuis la racine')
+    expect(mention.consequence).toContain('voit l’arbre centré sur le propriétaire')
   })
 
   /** `person_label` est `NOT NULL` en base ; l'identifiant reste diagnosticable. */
@@ -189,7 +189,7 @@ describe('MentionDeRattachement.vue', () => {
     const html = await rendre(null)
 
     expect(html).toContain('Aucune fiche rattachée')
-    expect(html).toContain('regarde l’arbre depuis la racine')
+    expect(html).toContain('voit l’arbre centré sur le propriétaire')
     expect(html).toContain('data-rattachement="absent"')
   })
 
@@ -218,7 +218,7 @@ describe('MentionDeRattachement.vue', () => {
 
     expect(attente).not.toBe(actif)
     expect(attente).toContain('pas encore validé')
-    expect(attente).toContain('regarde l’arbre depuis la racine')
+    expect(attente).toContain('voit l’arbre centré sur le propriétaire')
     expect(attente).toContain('data-rattachement="inactif"')
   })
 
@@ -251,7 +251,7 @@ describe('MentionDeRattachement.vue', () => {
   it('nomme le compte d’amorçage dans la mention sans rattachement', async () => {
     const html = await rendre(null)
 
-    expect(html).toContain('compte d’amorçage')
+    expect(html).toContain('compte du propriétaire')
     expect(html).toContain('sur tout autre compte')
   })
 })

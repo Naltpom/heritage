@@ -196,7 +196,7 @@ function suivreConduite(conduite: ConduiteATenir): void {
     </p>
 
     <p v-if="!decidable" class="text-sm text-attenue">
-      Cette demande a déjà été traitée : elle n’attend plus de décision.
+      Cette demande a déjà été traitée.
     </p>
 
 
@@ -211,8 +211,7 @@ function suivreConduite(conduite: ConduiteATenir): void {
           <span class="lecteur-ecran">(obligatoire)</span>
         </label>
         <p id="motif-refus-aide" class="text-xs text-attenue">
-          Il sera envoyé à l’auteur de la demande, et restera visible avec elle. Quelques mots
-          suffisent, mais ils comptent : c’est tout ce que cette personne recevra.
+          Envoyé à l’auteur : c’est tout ce qu’il recevra.
         </p>
         <textarea
           id="motif-refus"

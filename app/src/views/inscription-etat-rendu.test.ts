@@ -121,7 +121,7 @@ describe('la page d’attente', () => {
   it('compte sans fiche (404) : dit de contacter un administrateur, sans rien de l’arbre', async () => {
     const html = await rendre(null, new ErreurApi(404, 'introuvable', 'Ressource introuvable.'))
 
-    expect(html).toContain('Compte sans fiche : contactez une personne qui administre l’arbre.')
+    expect(html).toContain('Contactez une personne qui administre l’arbre.')
     expect(html).not.toContain('Réessayer')
     expect(destinations(html)).toEqual(['compte'])
   })

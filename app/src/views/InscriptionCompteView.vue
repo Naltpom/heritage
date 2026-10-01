@@ -219,9 +219,7 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
   >
     <PanneauBase>
       <p class="text-sm text-attenue">
-        Pour votre sécurité, rien de ce que vous saisissez ici n’est conservé d’une page à
-        l’autre. Rouvrez le lien d’invitation que vous avez reçu : votre compte n’a pas
-        encore été créé, rien n’est perdu.
+        Rouvrez le lien d’invitation reçu : votre compte n’est pas encore créé, rien n’est perdu.
       </p>
     </PanneauBase>
   </CadreEntree>
@@ -229,7 +227,7 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
   <CadreEntree
     v-else
     titre="Choisir vos identifiants"
-    sousTitre="Ce sont eux qui vous permettront de revenir sur l’arbre."
+    sousTitre="Pour revenir sur l’arbre."
     :etape="2"
   >
     <PanneauBase>
@@ -239,7 +237,7 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
             v-model="email"
             etiquette="Adresse de courriel"
             type="email"
-            aide="Elle servira à vous connecter, et à vous prévenir si quelque chose vous concerne."
+            aide="Pour vous connecter et être prévenu."
             autocomplete="email"
             :erreur="messageCourriel()"
             requis
@@ -249,7 +247,7 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
             v-model="motDePasse"
             etiquette="Mot de passe"
             type="password"
-            :aide="`${LONGUEUR_MINIMALE} caractères au minimum. Une phrase de quelques mots ordinaires fait un très bon mot de passe, et se retient mieux qu’un mot compliqué.`"
+            :aide="`${LONGUEUR_MINIMALE} caractères au minimum. Une petite phrase fait un bon mot de passe.`"
             autocomplete="new-password"
             :erreur="messageMotDePasse()"
             requis
@@ -265,8 +263,7 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
     </PanneauBase>
 
     <p v-if="sansFiche" class="mt-3 text-xs text-attenue">
-      Votre compte sera créé sans fiche : une personne qui administre l’arbre la
-      retrouvera, ou la créera, à partir de votre description.
+      Votre fiche sera retrouvée ou créée à partir de votre description.
       <RouterLink :to="{ name: 'inscription.rattachement' }" class="underline">
         Modifier ma description
       </RouterLink>

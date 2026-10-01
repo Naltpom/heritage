@@ -53,11 +53,11 @@ export function erreurDeMotif(motif: string): string | null {
   const propre = motif.trim()
 
   if (propre.length === 0) {
-    return 'Dites pourquoi cette fiche doit disparaître : c’est là-dessus que l’administrateur va trancher.'
+    return 'Dites pourquoi cette fiche doit disparaître : l’administrateur va trancher.'
   }
 
   if (propre.length < MOTIF_MINIMUM) {
-    return `Trop court (${propre.length} caractères sur ${MOTIF_MINIMUM}) : « doublon » ne dit pas de quelle autre fiche, et c’est justement ce qu’il faut savoir.`
+    return `Trop court (${propre.length} caractères sur ${MOTIF_MINIMUM}) : si c’est un doublon, de quelle autre fiche ?`
   }
 
   return null
@@ -136,14 +136,14 @@ export function lignesEmportees(inventaire: InventaireDeSuppression): LigneEmpor
   // cercle ni parenté, et son titulaire le découvre en se connectant.
   if (inventaire.membreId !== null) {
     lignes.push({
-      libelle: `la racine du compte membre n° ${inventaire.membreId}, qui perdrait son point de départ dans l’arbre`,
+      libelle: `le compte membre n° ${inventaire.membreId}, qui perdrait son point de départ dans l’arbre`,
       bloquante: true,
     })
   }
 
   if (inventaire.invitationsActives > 0) {
     lignes.push({
-      libelle: 'une invitation en attente, qui créerait un compte sans racine à son acceptation',
+      libelle: 'une invitation en attente, qui créerait à son acceptation un compte sans fiche',
       bloquante: true,
     })
   }

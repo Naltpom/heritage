@@ -72,12 +72,12 @@ const MODES: readonly { valeur: ModeCouleur; libelle: string; description: strin
   {
     valeur: 'date',
     libelle: 'Par date',
-    description: 'La couleur dit l’ancienneté : du plus ancien au plus récent.',
+    description: 'Couleur selon l’ancienneté.',
   },
   {
     valeur: 'nombre',
     libelle: 'Par nombre',
-    description: 'La couleur dit la densité d’événements au même lieu.',
+    description: 'Couleur selon le nombre d’événements.',
   },
 ]
 
@@ -85,12 +85,12 @@ const FONDS: readonly { id: Fond; libelle: string; description: string }[] = [
   {
     id: 'vectoriel',
     libelle: 'Fond sobre',
-    description: 'Les contours des pays, servis par Heritage. Aucune requête extérieure.',
+    description: 'Les contours des pays, sans service extérieur.',
   },
   {
     id: 'tuiles',
     libelle: 'Fond détaillé',
-    description: 'Charge des images depuis openstreetmap.org, et zoome jusqu’à la rue.',
+    description: 'Images d’openstreetmap.org, jusqu’à la rue.',
   },
 ]
 
@@ -178,7 +178,7 @@ function montrerNonSitues(): void {
             />
           </div>
           <p v-for="g in indisponibles" :key="g.id" class="text-xs text-attenue">
-            « {{ g.libelle }} » est grisé : aucun n’est visible dans votre arbre.
+            « {{ g.libelle }} » : rien de visible dans votre arbre.
           </p>
         </section>
 
@@ -199,8 +199,7 @@ function montrerNonSitues(): void {
             </button>
           </div>
           <p class="text-xs text-attenue">
-            Le fond détaillé charge ses images depuis openstreetmap.org : ce serveur voit alors les
-            zones que vous regardez. Il ne reçoit ni nom, ni date, ni fiche.
+            Le fond détaillé vient d’openstreetmap.org : ce site voit les zones regardées, jamais les noms ni les dates.
           </p>
         </section>
 
@@ -208,7 +207,7 @@ function montrerNonSitues(): void {
           v-if="nonSitues > 0"
           type="button"
           class="flex min-h-11 items-center justify-between border-t border-ligne text-left text-sm"
-          title="Ces événements portent un lieu que le référentiel n’a pas su situer."
+          title="Leur lieu n’a pas pu être placé sur la carte"
           @click="montrerNonSitues"
         >
           {{ nonSitues }} événement{{ nonSitues > 1 ? 's' : '' }} sans lieu situé
@@ -230,7 +229,7 @@ function montrerNonSitues(): void {
           v-if="nonSitues > 0"
           type="button"
           class="flex h-8 cursor-pointer items-center rounded-champ border border-ligne px-3 text-[13px] text-attenue hover:border-accent hover:text-texte"
-          title="Ces événements portent un lieu que le référentiel n’a pas su situer."
+          title="Leur lieu n’a pas pu être placé sur la carte"
           @click="emit('nonSitues')"
         >
           {{ nonSitues }} sans lieu situé
@@ -282,8 +281,7 @@ function montrerNonSitues(): void {
       :class="fond === 'tuiles' ? '' : 'absolute inset-x-0 top-full z-20 shadow-panneau'"
       role="note"
     >
-      Le fond détaillé charge ses images depuis openstreetmap.org : ce serveur voit alors les
-      zones que vous regardez. Il ne reçoit ni nom, ni date, ni fiche.
+      Le fond détaillé vient d’openstreetmap.org : ce site voit les zones regardées, jamais les noms ni les dates.
     </p>
   </div>
 </template>

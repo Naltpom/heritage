@@ -99,9 +99,7 @@ function continuer(): void {
     <form novalidate @submit.prevent="continuer">
       <h2 class="text-base font-semibold">Décrivez votre famille</h2>
       <p class="mt-2 text-sm text-attenue">
-        Vous pouvez créer votre compte sans avoir trouvé votre fiche. Une personne qui
-        administre l’arbre la retrouvera — ou la créera — à partir de ce que vous écrivez
-        ici : vos parents, vos grands-parents, des dates et des lieux, même approximatifs.
+        Pas trouvé votre fiche ? Dites ce que vous savez de votre famille, même approximatif.
       </p>
 
       <!-- L'identité reprise de la recherche : elle se corrige au-dessus. -->
@@ -113,14 +111,14 @@ function continuer(): void {
         <dt class="text-attenue">Naissance</dt>
         <dd class="tnum font-medium">{{ dateLisible }}</dd>
       </dl>
-      <p class="mt-1 text-xs text-attenue">Ces informations se corrigent dans le formulaire au-dessus.</p>
+      <p class="mt-1 text-xs text-attenue">À corriger plus haut si besoin.</p>
       <p v-if="erreurIdentite.length > 0" class="mt-1 text-xs text-alerte" role="alert">
         {{ erreurIdentite }}
       </p>
 
       <div class="mt-4 flex flex-col gap-1">
         <label :for="identifiant" class="text-sm font-medium">
-          Décrivez votre famille
+          Votre famille
           <span class="text-alerte" aria-hidden="true">*</span>
           <span class="lecteur-ecran">(obligatoire)</span>
         </label>

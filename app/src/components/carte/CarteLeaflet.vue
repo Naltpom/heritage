@@ -232,8 +232,7 @@ defineExpose({ recadrer, invalider })
       v-if="erreurFond"
       class="absolute inset-x-3 top-3 z-[500] rounded-champ border border-alerte-bord bg-alerte-doux px-3 py-1.5 text-xs text-texte"
     >
-      Le fond de carte n’a pas pu être chargé. Les bulles restent placées ; vous pouvez essayer le
-      fond détaillé.
+      Le fond de carte n’a pas pu être chargé. Essayez le fond détaillé.
     </p>
   </div>
 </template>

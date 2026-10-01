@@ -200,7 +200,7 @@ describe('l’état d’une analyse après une erreur', () => {
     const etat = etatApresErreur(new ErreurApi(429, 'trop_de_tentatives', 'x', null, { retryAfter: 3600 }))
     expect(etat.etat).toBe('echec')
     if (etat.etat !== 'echec') return
-    expect(etat.message).toMatch(/quota/)
+    expect(etat.message).toMatch(/quota/i)
     expect(etat.attenteSecondes).toBe(3600)
   })
 
@@ -332,7 +332,7 @@ describe('la carte « À rattacher »', () => {
 
   it('sans clé : une phrase neutre, et pas de « Relancer » qui échouerait pareil', async () => {
     const html = await rendre(compte(), { etat: 'non_configuree' })
-    expect(html).toContain('n’est pas configurée')
+    expect(html).toContain('indisponible')
     expect(html).not.toContain('Relancer')
   })
 
