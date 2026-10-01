@@ -164,7 +164,7 @@ function surTouche(e: KeyboardEvent): void {
       <p class="mt-1 text-sm text-attenue">{{ libelleRelatif(aujourdhui, aujourdhui) }}, {{ libelleDate(aujourdhui) }}</p>
     </header>
 
-    <!-- ───────── Deux boutons, une ligne ───────── -->
+    <!-- ───────── Accès rapides : deux boutons, puis la question à l'IA ───────── -->
     <nav aria-label="Accès rapides" class="mb-6 grid grid-cols-2 gap-3">
       <RouterLink
         :to="{ name: 'arbre' }"
@@ -189,6 +189,19 @@ function surTouche(e: KeyboardEvent): void {
       <p v-else-if="!rattache" class="flex items-center rounded-panneau border border-dashed border-ligne p-3 text-xs text-attenue">
         Vous pourrez modifier l’arbre une fois votre rattachement validé.
       </p>
+      <!-- L'assistant en mode question : interroger l'arbre en conversation.
+           Sur toute la largeur, sous les deux autres. -->
+      <RouterLink
+        v-if="rattache && vueEmpruntee === null"
+        :to="{ name: 'proposition.creation', query: { mode: 'question' } }"
+        class="col-span-2 flex items-center justify-center gap-2 rounded-panneau border border-ligne bg-panneau px-3 py-3.5 text-sm font-semibold text-texte transition-colors hover:border-accent hover:text-accent"
+      >
+        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 4h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
+          <path d="M8 8a2 2 0 1 1 2.5 1.9c-.3.1-.5.4-.5.7V11" /><path d="M10 12.8v.2" />
+        </svg>
+        Poser une question sur l’arbre
+      </RouterLink>
     </nav>
 
     <!-- ───────── Mes tirages ───────── -->
