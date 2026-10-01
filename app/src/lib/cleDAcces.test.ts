@@ -25,6 +25,7 @@ import {
   optionsDeRequete,
   reponseEnJson,
   sansNuls,
+  sousDelai,
   systemeDeLAgent,
   type IdentifiantBrut,
 } from './cleDAcces'
@@ -276,5 +277,30 @@ describe('ce que veulent dire les erreurs du navigateur', () => {
     expect(messageDeLIssue('annulee', 'connexion')).toContain('mot de passe')
     expect(messageDeLIssue('annulee', 'ajout')).toContain('Rien n’a changé')
     expect(messageDeLIssue('interrompue', 'connexion')).toBeNull()
+  })
+})
+
+describe('sousDelai : un gestionnaire qui ne répond jamais', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('rejette en TimeoutError au plafond et interrompt l’appel', async () => {
+    vi.useFakeTimers()
+    let signalRecu: AbortSignal | null = null
+    const attente = sousDelai((signal) => {
+      signalRecu = signal
+      return new Promise<never>(() => {})
+    }, 1000)
+    const verdict = attente.catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(1000)
+    const erreur = await verdict
+    expect(issueDeLErreur(erreur)).toBe('sans-reponse')
+    expect(signalRecu!.aborted).toBe(true)
+    expect(messageDeLIssue('sans-reponse', 'ajout')).toMatch(/gestionnaire de mots de passe/)
+  })
+
+  it('laisse passer une réponse arrivée à temps', async () => {
+    await expect(sousDelai(() => Promise.resolve('cle'), 1000)).resolves.toBe('cle')
   })
 })

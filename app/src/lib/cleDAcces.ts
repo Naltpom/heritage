@@ -290,7 +290,7 @@ function environnementDuNavigateur(): EnvironnementCleDAcces {
     },
     creer: (options) => {
       if (credentials === undefined) return Promise.reject(new Error('WebAuthn indisponible.'))
-      return credentials.create(options)
+      return sousDelai((signal) => credentials.create({ ...options, signal: options.signal ?? signal }))
     },
     obtenir: (options) => {
       if (credentials === undefined) return Promise.reject(new Error('WebAuthn indisponible.'))
@@ -298,6 +298,30 @@ function environnementDuNavigateur(): EnvironnementCleDAcces {
     },
     agent: fenetre.navigator?.userAgent ?? '',
   }
+}
+
+/**
+ * Au-delà, on n'attend plus. Un gestionnaire de mots de passe (Dashlane, vu en
+ * vrai) peut prendre `credentials.create()` à sa charge, refermer sa fenêtre et
+ * ne **jamais** répondre : sans plafond, le bouton tournerait pour toujours.
+ * Un peu plus que le `timeout` du serveur (60 s), pour ne pas couper une
+ * personne qui cherche son doigt.
+ */
+export const DELAI_SANS_REPONSE_MS = 75_000
+
+/** `appel` reçoit un signal qu'on interrompt au plafond, et la promesse est
+ *  rejetée avec une `TimeoutError` — même si l'appel ignore le signal. */
+export function sousDelai<T>(appel: (signal: AbortSignal) => Promise<T>, delai = DELAI_SANS_REPONSE_MS): Promise<T> {
+  const controleur = new AbortController()
+  let minuterie: ReturnType<typeof setTimeout> | undefined
+  const plafond = new Promise<never>((_, rejeter) => {
+    minuterie = setTimeout(() => {
+      const erreur = Object.assign(new Error('Pas de réponse du navigateur.'), { name: 'TimeoutError' })
+      controleur.abort(erreur)
+      rejeter(erreur)
+    }, delai)
+  })
+  return Promise.race([appel(controleur.signal), plafond]).finally(() => clearTimeout(minuterie))
 }
 
 let environnement: EnvironnementCleDAcces | null = null
@@ -376,6 +400,8 @@ export type IssueWebAuthn =
   | 'deja-presente'
   /** Interrompue par l'application elle-même (`AbortController`) : rien à dire. */
   | 'interrompue'
+  /** Personne n'a répondu dans le délai (`sousDelai`) : un gestionnaire muet. */
+  | 'sans-reponse'
   | 'impossible'
 
 export function issueDeLErreur(cause: unknown): IssueWebAuthn | null {
@@ -386,6 +412,7 @@ export function issueDeLErreur(cause: unknown): IssueWebAuthn | null {
   if (nom === 'NotAllowedError') return 'annulee'
   if (nom === 'InvalidStateError') return 'deja-presente'
   if (nom === 'AbortError') return 'interrompue'
+  if (nom === 'TimeoutError') return 'sans-reponse'
   if (nom === 'SecurityError' || nom === 'NotSupportedError' || nom === 'ConstraintError' || nom === 'UnknownError') {
     return 'impossible'
   }
@@ -403,6 +430,8 @@ export function messageDeLIssue(issue: IssueWebAuthn, contexte: 'connexion' | 'a
       return 'Cet appareil a déjà une clé d’accès pour votre compte.'
     case 'interrompue':
       return null
+    case 'sans-reponse':
+      return 'Votre gestionnaire de mots de passe n’a pas répondu. Réessayez, ou désactivez-le pour ce site afin d’utiliser celui de l’appareil.'
     case 'impossible':
       return contexte === 'connexion'
         ? 'Cet appareil n’a pas pu utiliser de clé d’accès. Utilisez votre mot de passe.'

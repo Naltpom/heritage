@@ -11,9 +11,13 @@
  * les deux fenêtres se suivent (jamais ensemble, voir `fenetresAutomatiques.ts`)
  * et doivent se lire comme la même famille d'offre.
  *
- * - Un `<dialog>` natif ouvert en modal : focus piégé, reste de la page inerte,
- *   Échap qui vaut « Plus tard ». `role` et `aria-modal` redits pour les
- *   lecteurs d'écran anciens.
+ * - Un `<dialog>` natif ouvert **sans** `showModal()`, avec notre propre voile.
+ *   `showModal()` rend inerte tout ce qui est hors de la fenêtre — y compris
+ *   les fenêtres que les gestionnaires de mots de passe (Dashlane…) injectent
+ *   dans la page : elles s'ouvraient et se refermaient aussitôt, pour le mot de
+ *   passe comme pour la clé d'accès. Échap vaut « Plus tard » (écouté à la
+ *   main, un dialogue non modal n'émet pas `cancel`). `role` et `aria-modal`
+ *   restent pour les lecteurs d'écran.
  * - Le focus part sur « Plus tard », pas sur « Activer » ni sur le champ : une
  *   clé créée d'un Entrée réflexe ne serait pas un choix, et un clavier qui
  *   surgit sur une fenêtre qu'on n'a pas demandée non plus.
@@ -87,7 +91,7 @@ watch(
     if (!actuelle) motDePasse.value = ''
     if (element === null) return
     if (actuelle && !element.open) {
-      element.showModal()
+      element.show()
       await nextTick()
       ;(boutonSecondaire.value?.$el as HTMLElement | undefined)?.focus()
     } else if (!actuelle && element.open) {
@@ -122,9 +126,15 @@ function surAnnulation(evenement: Event): void {
   evenement.preventDefault()
   if (!enCours) emit('plus-tard')
 }
+
+function surTouche(evenement: KeyboardEvent): void {
+  if (evenement.key === 'Escape') surAnnulation(evenement)
+}
 </script>
 
 <template>
+  <!-- Le voile : le nôtre, pas `::backdrop`, qui n'existe qu'en modal. -->
+  <div v-if="ouverte" class="fixed inset-0 z-[600] bg-black/50" aria-hidden="true" data-voile-invitation-cle-d-acces />
   <dialog
     ref="dialogue"
     role="dialog"
@@ -132,8 +142,9 @@ function surAnnulation(evenement: Event): void {
     :aria-labelledby="`${id}-titre`"
     :aria-describedby="`${id}-message`"
     data-invitation-cle-d-acces
-    class="mx-0 mt-auto mb-0 w-full max-w-full rounded-t-panneau border border-b-0 border-ligne bg-panneau p-0 text-texte shadow-panneau backdrop:bg-black/50 md:m-auto md:w-[min(26rem,calc(100vw-1.5rem))] md:rounded-panneau md:border-b"
+    class="fixed inset-0 z-[610] mx-0 mt-auto mb-0 h-fit w-full max-w-full rounded-t-panneau border border-b-0 border-ligne bg-panneau p-0 text-texte shadow-panneau md:m-auto md:w-[min(26rem,calc(100vw-1.5rem))] md:rounded-panneau md:border-b"
     @cancel="surAnnulation"
+    @keydown="surTouche"
   >
     <div
       v-if="ouverte"
