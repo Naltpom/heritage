@@ -79,7 +79,6 @@ describe('l’écran de l’assistant : « Poser une question »', () => {
     expect(html).toContain('<textarea')
     expect(html).toContain('maxlength="1000"')
     expect(html).toContain('Envoyer')
-    expect(html).toContain('60 questions par jour')
     expect(html).toContain('Google Gemini')
     expect(html).toContain('ne modifie rien')
     // Rien de la proposition : ni documents, ni « Analyser ».

@@ -236,9 +236,7 @@ function refaire(demandeId: number | null): void {
         <header class="mb-5">
           <h1 class="text-xl font-semibold tracking-tight">Proposer avec l’assistant</h1>
           <p class="mt-1.5 text-sm text-attenue">
-            Racontez ce que vous savez et joignez vos actes : l’assistant retrouve les personnes dans
-            l’arbre et prépare les demandes. Vous relisez, vous choisissez, puis un administrateur
-            valide — comme pour le formulaire.
+            L’assistant prépare les demandes, vous relisez, un administrateur valide.
           </p>
         </header>
 
@@ -249,9 +247,7 @@ function refaire(demandeId: number | null): void {
         <header class="mb-5">
           <h1 class="text-xl font-semibold tracking-tight">Poser une question</h1>
           <p class="mt-1.5 text-sm text-attenue">
-            Interrogez l’arbre comme vous le feriez avec un cousin qui l’a lu en entier : qui est né
-            où, comment vous êtes liés, ce qu’on sait d’un aïeul. L’assistant répond à partir des
-            fiches, en les citant, et garde le fil pour les questions suivantes.
+            L’assistant répond à partir des fiches, en les citant, et garde le fil.
           </p>
         </header>
 

@@ -130,7 +130,7 @@ describe('analyser : il faut quelque chose à lire', () => {
   })
 
   it('annonce la règle avant le premier appel, puis le restant', () => {
-    expect(mentionQuota(null)).toBe('20 analyses par jour')
+    expect(mentionQuota(null)).toBe('')
     expect(mentionQuota(19)).toContain('19 analyses')
     expect(mentionQuota(1)).toContain('1 analyse possible')
     expect(mentionQuota(0)).toContain('Plus aucune')

@@ -620,3 +620,19 @@ export function modifierSource(
 export function quitterVueComme(): Promise<ChargeDeSession> {
   return requeteApi<ChargeDeSession>('/administration/voir-comme', { methode: 'DELETE' })
 }
+
+/**
+ * `GET /api/session/quotas` — **ses propres** quotas, limite effective comprise.
+ * Lire ne décompte rien. Sert aux écrans de l'assistant, qui annoncent ce qui reste
+ * avant le premier appel au lieu d'un chiffre écrit en dur.
+ */
+export function lireMesQuotas(): Promise<{ quotas: QuotaDeCompte[] }> {
+  return requeteApi<{ quotas: QuotaDeCompte[] }>('/session/quotas')
+}
+
+/** Ce qui reste d'un quota, ou `null` s'il est inconnu (lecture en échec, clé absente). */
+export function resteDuQuota(quotas: readonly QuotaDeCompte[], cle: string): number | null {
+  const quota = quotas.find((q) => q.cle === cle)
+  if (quota === undefined || quota.exempte) return null
+  return Math.max(0, quota.limite - quota.consomme)
+}

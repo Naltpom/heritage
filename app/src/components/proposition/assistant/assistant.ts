@@ -46,8 +46,6 @@ export const TEXTE_MAX = 8000
 /** Tous documents confondus. Le trajet est borné à 25 Mo par requête, et le modèle
  *  refuse au-delà d'environ 20 Mo de documents en ligne (voir `reduireImage.ts`). */
 export const TAILLE_MAX_TOTALE = 18 * 1024 * 1024
-/** Le quota annoncé avant le premier appel ; ensuite, `restant` fait foi. */
-export const QUOTA_QUOTIDIEN = 20
 
 export interface VerdictDocuments {
   /** Les fichiers qui entrent, dans l'ordre de sélection. */
@@ -126,9 +124,9 @@ export function peutAnalyser(texte: string, nombreDocuments: number): boolean {
   return texte.trim().length > 0 || nombreDocuments > 0
 }
 
-/** La mention du quota : avant le premier appel on ne sait que la règle. */
+/** La mention du quota, lue sur le serveur (`restant`) ; rien tant qu'on ne la connaît pas. */
 export function mentionQuota(restant: number | null): string {
-  if (restant === null) return `${QUOTA_QUOTIDIEN} analyses par jour`
+  if (restant === null) return ''
   if (restant <= 0) return 'Plus aucune analyse possible aujourd’hui'
   return restant === 1
     ? 'Encore 1 analyse possible aujourd’hui'
