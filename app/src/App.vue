@@ -36,6 +36,10 @@ import QuitterVueEmpruntee from '@/components/administration/QuitterVueEmpruntee
 // que sur un écran avec cadre, mais un passage par un écran sans cadre ne doit
 // pas lui faire perdre sa fenêtre ni son « Notifications activées ».
 import InvitationNotifications from '@/components/notifications/InvitationNotifications.vue'
+// L'invitation à créer une clé d'accès, juste après une connexion par mot de
+// passe. Même montage que la précédente ; elle passe AVANT elle, et les deux ne
+// s'ouvrent jamais ensemble (`composables/fenetresAutomatiques.ts`).
+import InvitationCleDAcces from '@/components/cles-d-acces/InvitationCleDAcces.vue'
 
 const route = useRoute()
 const avecCadre = computed(() => route.meta.cadre !== false)
@@ -70,5 +74,6 @@ const avecCadre = computed(() => route.meta.cadre !== false)
     </main>
   </div>
 
+  <InvitationCleDAcces :avec-cadre="avecCadre" />
   <InvitationNotifications :avec-cadre="avecCadre" />
 </template>

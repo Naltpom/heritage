@@ -9,7 +9,9 @@ use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Http\ErrorEnvelope;
 use App\Module\Core\Service\ChangementDeCourriel;
+use App\Module\Core\Service\ClesDAcces;
 use App\Module\Core\Service\Incarnation;
+use App\Module\Core\Service\PreuveDIdentiteRecente;
 use App\Module\Core\Service\SessionPayloadBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -84,6 +86,10 @@ final class SecurityController extends AbstractController
      * La session en cours survit ; les autres sessions du même compte ne sont pas
      * invalidées — Symfony ne le fait pas par défaut et il n'existe pas de table de
      * session. C'est en feuille de route, pas improvisé ici.
+     *
+     * **Toutes les clés d'accès du compte sont retirées** (`clesDAccesRetirees` dit
+     * combien) : changer son mot de passe, c'est reprendre la main sur son compte, et
+     * une clé est un moyen de connexion qui survivrait au changement.
      */
     #[Route('/api/session/mot-de-passe', name: 'core_session_mot_de_passe', methods: ['POST'])]
     public function changerMotDePasse(
@@ -92,6 +98,8 @@ final class SecurityController extends AbstractController
         UserPasswordHasherInterface $hacheur,
         EntityManagerInterface $em,
         Incarnation $incarnation,
+        ClesDAcces $cles,
+        PreuveDIdentiteRecente $preuve,
     ): JsonResponse {
         // Le mot de passe du membre incarné reste le sien (ADR 0010).
         $incarnation->refuserSiActive();
@@ -121,9 +129,17 @@ final class SecurityController extends AbstractController
         // Le souscripteur d'audit journalise la modification avec `password` à `"***"` :
         // la valeur n'est écrite nulle part, ni l'ancienne ni la nouvelle (§ 2.1).
         $utilisateur->setPassword($hacheur->hashPassword($utilisateur, $nouveau))->toucher();
+        // Les clés d'accès tombent avec l'ancien mot de passe, dans la même écriture :
+        // une clé plantée pendant qu'un autre tenait la session rouvrirait le compte
+        // aussitôt — voir `ClesDAcces::retirerToutes()`.
+        $retirees = $cles->retirerToutes($utilisateur);
         $em->flush();
 
-        return new JsonResponse(['motDePasseChange' => true]);
+        // Le mot de passe vient d'être prouvé : réenregistrer ses clés tout de suite ne
+        // le redemande pas.
+        $preuve->marquer();
+
+        return new JsonResponse(['motDePasseChange' => true, 'clesDAccesRetirees' => $retirees]);
     }
 
     /**

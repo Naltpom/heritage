@@ -70,6 +70,21 @@ async function rendreLeCompte(): Promise<string> {
 }
 
 describe('CompteView', () => {
+  it('porte la section « Clés d’accès », au compte en attente comme au membre', async () => {
+    for (const [membre, regime] of [
+      [{ status: 'actif', personId: 42, personLabel: 'Cobalt Romarin' }, 'membre'],
+      [{ status: 'en_attente' }, 'en_attente'],
+    ] as const) {
+      etat.membre = membre
+      etat.regime = regime
+      const html = await rendreLeCompte()
+      expect(html).toContain('data-section-cles-d-acces')
+      expect(html).toContain('Clés d’accès')
+    }
+    etat.membre = { status: 'actif', personId: 42, personLabel: 'Cobalt Romarin' }
+    etat.regime = 'membre'
+  })
+
   it('montre les trois blocs, et le nom de la fiche pour un compte rattaché', async () => {
     etat.membre = { status: 'actif', personId: 42, personLabel: 'Cobalt Romarin' }
     etat.regime = 'membre'

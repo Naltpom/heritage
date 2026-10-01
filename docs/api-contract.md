@@ -389,9 +389,16 @@ Module `Core`. Session `json_login`, cookie `HttpOnly`, 401 JSON (§ 2 du dossie
 | `POST` | `/api/connexion` | `PUBLIC` | `{email, password}` | `200` charge de session (§ 2.2) | `401` `identifiants_invalides` · `401` `compte_suspendu` · `422` `donnees_invalides` | 5 / 15 min |
 | `POST` | `/api/deconnexion` | `ATTENTE` | *(vide)* | `200` `{"deconnecte": true}` | `401` | — |
 | `GET` | `/api/session` | `ATTENTE` | — | `200` charge de session | `401` | — |
-| `POST` | `/api/session/mot-de-passe` | `ATTENTE` | `{motDePasseActuel, nouveauMotDePasse}` | `200` `{"motDePasseChange": true}` | `401` · `422` `donnees_invalides` | — |
+| `POST` | `/api/session/mot-de-passe` | `ATTENTE` | `{motDePasseActuel, nouveauMotDePasse}` | `200` `{"motDePasseChange": true, "clesDAccesRetirees": n}` — **toutes les clés d'accès du compte sont retirées** (§ 2.4) | `401` · `422` `donnees_invalides` | — |
 | `POST` | `/api/session/courriel` | `ATTENTE` | `{motDePasseActuel, nouveauCourriel}` | `200` `{"courrielEnvoye": true, "expiresAt"}` | `401` · `422` `donnees_invalides` · `409` `courriel_deja_pris` · `409` `courriel_non_envoyable` | — |
 | `POST` | `/api/session/courriel/confirmer` | `PUBLIC` | `{jeton}` | `200` `{"courrielChange": true}` | `404` · `409` `courriel_deja_pris` | — |
+| `POST` | `/api/connexion/cle-d-acces/options` | `PUBLIC` | *(vide)* | `200` `{options}` (§ 2.4) | — | — |
+| `POST` | `/api/connexion/cle-d-acces` | `PUBLIC` | `{reponse}` | `200` charge de session (§ 2.2) | `401` `identifiants_invalides` · `401` `compte_suspendu` · `429` `trop_de_tentatives` | 5 / 15 min, **partagé** avec `/api/connexion` |
+| `POST` | `/api/cles-d-acces/options-d-enregistrement` | `ATTENTE` | *(vide)* ou `{motDePasseActuel}` | `200` `{options}` | `401` · `409` `incarnation_active` · `422` `donnees_invalides` sur `champs.motDePasseActuel` (preuve récente exigée, § 2.4) | — |
+| `POST` | `/api/cles-d-acces` | `ATTENTE` | `{reponse, nom?}` | `201` clé (§ 2.4) | `401` · `409` `incarnation_active` · `409` `cle_deja_enregistree` · `422` `donnees_invalides` | — |
+| `GET` | `/api/cles-d-acces` | `ATTENTE` | — | `200` `[clé]` (les siennes) | `401` | — |
+| `PATCH` | `/api/cles-d-acces/{id}` | `ATTENTE` | `{nom}` | `200` clé | `401` · `404` · `409` `incarnation_active` · `422` `donnees_invalides` | — |
+| `DELETE` | `/api/cles-d-acces/{id}` | `ATTENTE` | — | `204` | `401` · `404` · `409` `incarnation_active` | — |
 
 `POST /api/connexion` est le `check_path` de `json_login` : les clés du corps sont fixées par
 `username_path: email` et `password_path: password`. Elles se trouvent être aussi les noms de
@@ -564,6 +571,158 @@ aucune des deux ne suffit seule :
 
 **Ce qui n'est pas ici** : le nom et le prénom. Ce sont ceux de la fiche rattachée, pas du
 compte, et ils se corrigent par une demande (§ 6) — jamais depuis la page du compte.
+
+### 2.4 Clés d'accès (passkeys, WebAuthn)
+
+Se connecter avec **Face ID, Touch ID, l'empreinte d'un téléphone Android ou Windows
+Hello**, comme dans les autres applications. **Le mot de passe reste**, en secours : rien
+ne le désactive. Bibliothèque serveur `web-auth/webauthn-lib` 5.3 ;
+`Core\Service\ClesDAcces`, `Core\Security\CleDAccesAuthenticator`,
+`Core\Controller\CleDAccesController`. Le pourquoi est dans `docs/securite-comptes.md`
+§ 2 bis.
+
+**La politique**, fixée côté serveur et lisible dans les options :
+
+| Réglage | Valeur |
+|---|---|
+| Partie de confiance | `rp.id` = l'hôte de `HERITAGE_URL_PUBLIQUE` (`heritage.naltpom.fr` en production, `localhost` en développement), `rp.name` = `Heritage` |
+| Vérification de l'utilisateur | `userVerification: "required"` — biométrie ou code de l'appareil, à chaque fois |
+| Clé découvrable | `residentKey: "required"` — on se connecte **sans taper son courriel** |
+| Attestation | `"none"` |
+| Algorithmes | ES256 (`-7`), RS256 (`-257`) |
+| Défi | 32 octets, **en session**, **à usage unique** (consommé à la première réponse, bonne ou mauvaise), **5 minutes** ; `timeout` = 300 000 ms |
+| Origine | même hôte que `rp.id`, sous-domaines refusés ; HTTPS exigé sauf `localhost` / `127.0.0.1` |
+
+Tous les champs binaires des options et des réponses sont en **base64url sans
+remplissage** — la forme de `PublicKeyCredential.toJSON()` et de
+`PublicKeyCredential.parseCreationOptionsFromJSON()` / `parseRequestOptionsFromJSON()`.
+Les options sont rendues **telles que WebAuthn les nomme** (`challenge`, `rp`, `user`,
+`pubKeyCredParams`, `excludeCredentials`, `allowCredentials`…) : ce sont des noms d'une
+norme, pas des noms de propriété du domaine, et la règle du § 1.2 ne s'y applique pas. Il
+en va de même de `reponse`, qui est l'objet `toJSON()` du navigateur tel quel.
+
+Une session peut détenir **jusqu'à cinq défis** d'un même type ; la réponse désigne le sien
+(`clientDataJSON.challenge`). L'écran de connexion peut donc demander un défi pour
+l'autoremplissage à l'affichage, puis un second au clic sur le bouton, sans que le premier
+devienne invalide.
+
+#### Enregistrer une clé — compte connecté
+
+Accès `ATTENTE` : un compte en attente se connecte, il peut se connecter plus vite.
+**Refusé pendant une incarnation** (`409 incarnation_active`, ADR 0010) : une clé ouvre le
+compte, c'est un secret du compte comme le mot de passe. Même refus sur `PATCH` et
+`DELETE` ; la lecture reste permise.
+
+**Preuve d'identité récente.** Une session ne suffit pas : une clé d'accès est un moyen
+de connexion **permanent**, qui survivrait à la session volée (onglet oublié, poste
+partagé) qui l'aurait ajoutée. Le défi d'enregistrement n'est donc délivré que si :
+
+- la session s'est **connectée il y a moins de 10 minutes** (mot de passe ou clé
+  d'accès) — le cas de l'invitation qui suit la connexion ; ou
+- le corps porte **`motDePasseActuel`**, juste. Il vaut alors preuve fraîche pour les
+  10 minutes suivantes (un Face ID annulé se réessaie sans le retaper).
+
+Sinon : `422 donnees_invalides` sur `champs.motDePasseActuel` — « Confirmez votre mot de
+passe pour ajouter une clé d'accès. » s'il manque, « Le mot de passe actuel est
+incorrect. » s'il est faux. `422` et non `401`, comme au § 2.1 : le front ne doit pas
+déconnecter. Une session ouverte avant le 1er octobre 2026 ne porte pas d'heure de
+connexion : elle donne le mot de passe. Changer son mot de passe vaut aussi preuve
+fraîche.
+
+**Avis par courriel.** Chaque ajout envoie au titulaire « Une clé d'accès a été ajoutée
+à votre compte Heritage » (nom, date, quoi faire si ce n'est pas lui). Au mieux : sans
+SMTP configuré, rien ne part ; une panne du relais est journalisée et l'ajout réussit.
+
+**Révocation.** Changer son mot de passe (`POST /api/session/mot-de-passe`) et la
+réinitialisation par l'administrateur
+(`POST /api/administration/utilisateurs/{id}/mot-de-passe`) **retirent toutes les clés d'accès du
+compte**, dans la même écriture. Le titulaire réenregistre les siennes.
+
+1. `POST /api/cles-d-acces/options-d-enregistrement` (corps vide, ou
+   `{ "motDePasseActuel": "…" }`) → `200` :
+
+   ```json
+   { "options": {
+       "challenge": "…43 signes…", "timeout": 300000,
+       "rp": { "id": "heritage.naltpom.fr", "name": "Heritage" },
+       "user": { "id": "…opaque…", "name": "ada@exemple.test", "displayName": "Ada Romarin" },
+       "pubKeyCredParams": [ { "type": "public-key", "alg": -7 }, { "type": "public-key", "alg": -257 } ],
+       "authenticatorSelection": { "userVerification": "required", "residentKey": "required", "requireResidentKey": true },
+       "attestation": "none",
+       "excludeCredentials": [ { "type": "public-key", "id": "…", "transports": ["internal", "hybrid"] } ]
+   } }
+   ```
+
+   `excludeCredentials` liste **les clés existantes du compte** : l'appareil qui en porte
+   déjà une refuse d'en créer une seconde. `user.id` est **opaque** (empreinte stable du
+   compte) : ni courriel ni identifiant lisible — l'appareil le garde et peut l'afficher.
+
+2. `navigator.credentials.create({ publicKey })`, puis
+   `POST /api/cles-d-acces` `{ "reponse": <credential.toJSON()>, "nom": "iPhone d'Ada" }`
+   → `201` :
+
+   ```json
+   { "id": 7, "nom": "iPhone d'Ada", "creeeLe": "2026-10-01T15:00:00+02:00", "derniereUtilisation": null, "appareil": "Trousseau iCloud" }
+   ```
+
+   - `nom` est facultatif (80 signes au plus, espaces resserrés). Absent ou vide : le nom
+     de l'authentificateur s'il est reconnu (`Trousseau iCloud`, `Gestionnaire de mots de
+     passe Google`, `Windows Hello`…), sinon l'appareil lu dans le `User-Agent`
+     (`iPhone`, `Android`, `Windows`…), sinon `Clé d'accès`.
+   - `appareil` : le nom de l'authentificateur reconnu par son AAGUID, ou `null`.
+   - Toute réponse refusée — défi absent, expiré ou déjà utilisé, origine étrangère,
+     vérification de l'utilisateur absente, attestation illisible — rend
+     `422 donnees_invalides` sur `champs.reponse`, **sans détail** : il n'aide pas la
+     personne et renseignerait celui qui fabrique des réponses.
+
+**La forme d'une clé** — `{id, nom, creeeLe, derniereUtilisation, appareil}`. Ni
+l'identifiant de la clé, ni la clé publique : le front n'en a pas l'usage.
+
+- `GET /api/cles-d-acces` → `200 [clé, …]`, les siennes, de la plus ancienne à la plus
+  récente.
+- `PATCH /api/cles-d-acces/{id}` `{nom}` → `200 clé`. Nom absent, vide ou trop long :
+  `422` sur `champs.nom`.
+- `DELETE /api/cles-d-acces/{id}` → `204`. La clé reste dans l'appareil, orpheline : le
+  navigateur la proposera encore, la connexion la refusera.
+- **La clé d'un autre compte rend `404`**, comme une clé inexistante.
+
+#### Se connecter — publique
+
+1. `POST /api/connexion/cle-d-acces/options` → `200` :
+
+   ```json
+   { "options": { "challenge": "…", "timeout": 300000, "rpId": "heritage.naltpom.fr", "allowCredentials": [], "userVerification": "required" } }
+   ```
+
+   `allowCredentials` est **vide** : la clé est découvrable, c'est l'appareil qui propose
+   les comptes qu'il connaît. Utilisable avec `mediation: "conditional"` (autoremplissage
+   sur un champ `autocomplete="username webauthn"`) comme avec le bouton.
+
+2. `navigator.credentials.get({ publicKey })`, puis
+   `POST /api/connexion/cle-d-acces` `{ "reponse": <credential.toJSON()> }`.
+
+**Exactement les réponses de `POST /api/connexion`**, au caractère près, parce que ce sont
+ses gestionnaires qui répondent :
+
+- succès → `200` charge de session (§ 2.2), **session ouverte** (cookie posé, identifiant
+  de session renouvelé) ;
+- clé inconnue, signature fausse, défi absent, expiré ou déjà utilisé, vérification de
+  l'utilisateur absente, **compteur de signatures en recul** (clone), corps inexploitable →
+  `401 identifiants_invalides`, message « Courriel ou mot de passe incorrect. » — **un
+  seul cas observable** ;
+- compte suspendu → `401 compte_suspendu`, après vérification de la signature, comme au
+  mot de passe ;
+- **le limiteur est le même** (§ 1.9) : quand la clé est connue, les essais comptent sous
+  le courriel du compte, cumulés avec ceux du mot de passe — cinq mots de passe faux
+  bloquent aussi la clé. Les clés inconnues comptent sous un identifiant fixe, par IP.
+  Dépassement : `429 trop_de_tentatives` + `Retry-After`.
+
+**Journal** : une ligne `connexion` (ou `connexion_echouee`) comme au mot de passe, avec
+`changes.methode = "cle_d_acces"` — et `"mot_de_passe"` désormais sur les connexions par
+mot de passe. Un échec par clé inconnue porte `actorEmail = "cle_d_acces_inconnue"`.
+Enregistrement et suppression d'une clé : lignes `creation` / `suppression` sur
+`Core\Passkey`, par le souscripteur Doctrine ; le compteur et la date d'usage n'en laissent
+pas, et `publicKey` / `credentialId` sont masqués s'ils devaient apparaître dans un diff.
 
 ## 3. Invitations
 

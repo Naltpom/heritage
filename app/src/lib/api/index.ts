@@ -66,3 +66,7 @@ export * from './demarches'
    l'abonnement de cet appareil. La logique d'abonnement est dans
    `composables/usePush.ts`. */
 export * from './push'
+/* Les clés d'accès (passkeys) : enregistrer, lister, renommer, supprimer, et la
+   connexion sans mot de passe. La conversion JSON ↔ `ArrayBuffer` est dans
+   `lib/cleDAcces.ts`, l'enchaînement dans `composables/useClesDAcces.ts`. */
+export * from './clesDAcces'

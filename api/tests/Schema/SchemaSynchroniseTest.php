@@ -98,8 +98,14 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * pour qu'un redéploiement ne la change jamais — c'est ce qui rendait les téléphones
      * muets après chaque mise en production —, et hors de `core_setting` pour que la clé
      * privée ne sorte par aucune route.
+     *
+     * **38 depuis le 2026-10-01** : `core_passkey` (module `Core`,
+     * `migrations/Version20261001150000.php`) porte les clés d'accès — se connecter avec
+     * Face ID, une empreinte ou Windows Hello. C'est une **décision** : une clé par
+     * appareil, donc plusieurs par compte, et la moitié publique seulement — une table à
+     * part, que la suppression du compte emporte (`ON DELETE CASCADE`).
      */
-    private const int NOMBRE_DE_TABLES = 37;
+    private const int NOMBRE_DE_TABLES = 38;
 
     public function testLeMappingEstValide(): void
     {

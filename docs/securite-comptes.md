@@ -30,6 +30,7 @@ autres :
 |---|---|---|
 | Provider | `entity` sur `Core\Entity\User`, propriété `email` | — |
 | Authentificateur | `json_login` sur la route `core_connexion` | § 2 du contrat |
+| Authentificateur (clé d'accès) | `Core\Security\CleDAccesAuthenticator` sur `core_connexion_cle_d_acces` | § 2.4 du contrat, § 2 bis ci-dessous |
 | Clés du corps | `email` / `password` | fixées par `username_path` / `password_path` ; ce sont aussi des noms de propriété (§ 1.2), il ne faut pas les « franciser » |
 | Anti-force brute | `login_throttling`, 5 tentatives / 15 min | par couple identifiant + IP ; Symfony double d'un compteur par IP seule à 5 × le plafond |
 | Point d'entrée | `Core\Security\JsonAuthenticationEntryPoint` | sans lui, Symfony redirige vers un formulaire |
@@ -44,6 +45,13 @@ autres :
 | `POST` | `/api/deconnexion` | `core_deconnexion` | authentifié |
 | `GET` | `/api/session` | `core_session` | authentifié |
 | `POST` | `/api/session/mot-de-passe` | `core_session_mot_de_passe` | authentifié |
+| `POST` | `/api/connexion/cle-d-acces/options` | `core_connexion_cle_d_acces_options` | public |
+| `POST` | `/api/connexion/cle-d-acces` | `core_connexion_cle_d_acces` | public |
+| `POST` | `/api/cles-d-acces/options-d-enregistrement` | `core_cles_d_acces_options` | authentifié, hors incarnation |
+| `POST` | `/api/cles-d-acces` | `core_cles_d_acces_enregistrer` | authentifié, hors incarnation |
+| `GET` | `/api/cles-d-acces` | `core_cles_d_acces_lister` | authentifié |
+| `PATCH` | `/api/cles-d-acces/{id}` | `core_cles_d_acces_renommer` | authentifié, hors incarnation |
+| `DELETE` | `/api/cles-d-acces/{id}` | `core_cles_d_acces_supprimer` | authentifié, hors incarnation |
 | `GET` | `/api/notifications` | `core_notifications` | authentifié |
 | `GET` | `/api/notifications/compteur` | `core_notifications_compteur` | authentifié |
 | `POST` | `/api/notifications/{id}/lue` | `core_notification_lue` | authentifié |
@@ -73,6 +81,87 @@ sa prochaine connexion. `Core\EventSubscriber\AccountStatusSubscriber` (priorit�
 `kernel.request`, donc après le pare-feu) vide le jeton, invalide la session et rend
 `401 compte_suspendu`. Les deux chemins publics en sont exclus explicitement, sinon
 l'interrogation forcerait l'authentification et annulerait le `lazy: true` du pare-feu.
+
+## 2 bis. Clés d'accès (passkeys, WebAuthn)
+
+Depuis le 1er octobre 2026 : se connecter avec Face ID, Touch ID, l'empreinte d'un
+téléphone Android ou Windows Hello. Le contrat (routes, corps, réponses) est au § 2.4 de
+`docs/api-contract.md` ; ici, les décisions et leurs raisons.
+
+**Bibliothèque : `web-auth/webauthn-lib` 5.3** (Symfony 8 et PHP 8.4 pris en charge). Toute
+la cryptographie est la sienne — attestation, signature COSE, empreinte de la partie de
+confiance, origine, drapeaux. Pas de bundle Symfony : la politique tient dans une classe
+(`Core\Service\ClesDAcces`), et le bundle aurait apporté ses propres routes et son propre
+stockage là où le dépôt veut les siens. Aucune extension PHP de plus dans l'image (bcmath,
+openssl, mbstring y sont déjà) ; EdDSA, qui exigerait sodium, n'est pas proposé.
+
+**Ce qui est gardé : la moitié publique.** `core_passkey` (`Core\Entity\Passkey`) porte
+l'identifiant de la clé, la clé publique COSE, le compteur de signatures, les transports,
+l'AAGUID et un nom. La clé privée ne quitte jamais l'appareil : une fuite de la table
+n'ouvre aucun compte. `ON DELETE CASCADE` vers `core_user`.
+
+**Un authentificateur du pare-feu, pas un contrôleur.** `CleDAccesAuthenticator` est déclaré
+en `custom_authenticators` à côté de `json_login`. Il hérite ainsi, sans rien redire, du
+limiteur, du `UserChecker` (compte suspendu refusé **après** vérification de la signature —
+même raisonnement anti-oracle qu'au § 2), de la migration de session et du journal. Il
+délègue ses réponses aux gestionnaires de `json_login` : succès et échecs sont
+**identiques au caractère près** à ceux du mot de passe.
+
+**Le limiteur est partagé.** L'identifiant que le passeport présente au limiteur est le
+courriel du compte quand la clé est connue : on ne double pas son quota en alternant les
+portes. Une clé inconnue compte sous l'identifiant fixe `cle_d_acces_inconnue` — un
+balayage de clés inventées bute au cinquième essai par IP.
+
+**Les défis.** 32 octets, gardés **en session** avec les options qu'ils accompagnent,
+**consommés avant toute vérification** (un rejeu trouve la place vide, que la première
+tentative ait réussi ou non), valables **5 minutes** (horloge `symfony/clock`, pilotable en
+test). Cinq au plus par session et par cérémonie ; la réponse désigne le sien par
+`clientDataJSON.challenge`, ce qui laisse coexister le défi de l'autoremplissage et celui
+du bouton.
+
+**Les exigences.** `userVerification: required` (une présence seule ne vaut pas un mot de
+passe), `residentKey: required` (clé découvrable, connexion sans courriel), `attestation:
+none` (pas de liste d'appareils agréés à tenir). Le compteur de signatures qui **recule**
+trahit un clone : refus. Un compteur à zéro (Apple, Google) n'est pas contrôlé.
+
+**La partie de confiance** est l'hôte de `HERITAGE_URL_PUBLIQUE`, jamais celui de la requête
+(§ 8 quater). Changer de domaine rend les clés existantes inutilisables — elles sont liées
+à l'hôte par l'appareil lui-même — sans toucher au mot de passe.
+
+**Incarnation.** Enregistrer, renommer, supprimer une clé est refusé pendant une
+incarnation (`409 incarnation_active`) : comme le mot de passe et le courriel, c'est un
+secret du compte (ADR 0010).
+
+**Une session ne suffit pas pour ajouter une clé.** Une clé d'accès est un moyen de
+connexion **permanent** : ajoutée depuis une session volée (onglet oublié, poste
+partagé), elle transformerait un accès temporaire en accès durable, et rouvrirait le
+compte juste après un changement de mot de passe fait en urgence. Trois mesures :
+
+- **Preuve d'identité récente** (`Core\Service\PreuveDIdentiteRecente`) pour obtenir un
+  défi d'enregistrement : connexion de moins de **10 minutes** — l'heure en est notée en
+  session à chaque `LoginSuccessEvent` (`PreuveDIdentiteSubscriber`), mot de passe comme
+  clé —, ou `motDePasseActuel` juste dans le corps (`422` sinon, comme au § 2.1). Sans
+  défi, aucune réponse d'enregistrement ne passe.
+- **Avis par courriel** à chaque ajout (`Core\Service\AvisDeCleDAcces`), au mieux : sans
+  SMTP rien ne part, une panne est journalisée sans faire échouer l'ajout.
+- **Révocation** : changer son mot de passe et la réinitialisation par l'administrateur
+  retirent **toutes** les clés du compte (`ClesDAcces::retirerToutes()`), dans la même
+  écriture que le mot de passe, une ligne de suppression au journal par clé. On ne sait
+  pas distinguer la clé plantée des légitimes ; le titulaire réenregistre les siennes.
+
+Limite connue : une session volée **dans les dix minutes** d'une connexion peut encore
+ajouter une clé sans mot de passe. L'avis par courriel et la révocation au changement de
+mot de passe sont là pour ce cas.
+
+**Journal.** `changes.methode` (`mot_de_passe` / `cle_d_acces`) sur `connexion` et
+`connexion_echouee`. `publicKey` et `credentialId` sont dans `CHAMPS_SENSIBLES`,
+`lastUsedAt` et `signCount` dans `CHAMPS_TECHNIQUES` : une connexion par clé ne laisse pas
+de ligne `modification`.
+
+**Tests.** `api/tests/Core/ClesDAccesTest.php`, avec `Double\AuthentificateurSimule` : une
+vraie paire P-256, de vrais `authenticatorData` / `attestationObject` CBOR, de vraies
+signatures ECDSA. La bibliothèque les vérifie sans rien savoir du test — aucun contrôle
+n'est doublé.
 
 ---
 

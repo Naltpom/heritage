@@ -45,6 +45,7 @@ final class UserAdminService
         private readonly AuditService $audit,
         private readonly NotificationService $notifications,
         private readonly UserPasswordHasherInterface $hacheur,
+        private readonly ClesDAcces $clesDAcces,
     ) {
     }
 
@@ -156,6 +157,11 @@ final class UserAdminService
      * détenteur resterait connecté avec un mot de passe qui n'existe plus — une
      * réinitialisation faite en urgence ne servirait à rien.
      *
+     * ## Les clés d'accès tombent aussi
+     *
+     * Même raison : une clé d'accès est un moyen de connexion permanent, qui survit au
+     * mot de passe. Le titulaire réenregistre les siennes à sa prochaine connexion.
+     *
      * @return string le mot de passe en clair, à ne journaliser nulle part
      *
      * @throws NotFoundException|ConflictException
@@ -166,6 +172,11 @@ final class UserAdminService
         $enClair = $this->motDePasseAleatoire();
 
         $compte->setPassword($this->hacheur->hashPassword($compte, $enClair))->toucher();
+        // Les clés d'accès tombent aussi, dans la même écriture : sans cela, une clé
+        // plantée par celui qui tenait le compte le rouvrirait aussitôt, et la
+        // réinitialisation faite en urgence ne servirait à rien. Chaque clé retirée a sa
+        // ligne de suppression au journal (souscripteur d'audit).
+        $this->clesDAcces->retirerToutes($compte);
         $this->em->flush();
 
         // `password` n'apparaît pas dans `changes` : ni l'ancienne empreinte, ni la

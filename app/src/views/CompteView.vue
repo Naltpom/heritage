@@ -28,6 +28,12 @@
  * requête (`User::isEqualTo`) : sans cette reconnexion, la requête suivante
  * rendrait `401` et la personne serait mise dehors par le changement qu'elle
  * vient de faire.
+ *
+ * ── Clés d'accès ─────────────────────────────────────────────────────────────
+ *
+ * Face ID, empreinte, Windows Hello : la section vit dans son propre composant
+ * (`SectionClesDAcces`), qui charge sa liste au montage. Elle est ouverte au
+ * compte en attente comme au membre — se connecter n'attend pas la validation.
  */
 import { computed, ref } from 'vue'
 import {
@@ -43,6 +49,8 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import ChoixPortrait from '@/components/medias/ChoixPortrait.vue'
 import InstallationApplication from '@/components/mise-en-page/InstallationApplication.vue'
+import SectionClesDAcces from '@/components/cles-d-acces/SectionClesDAcces.vue'
+import { oublierToutesLesClesDeCetAppareil } from '@/composables/useClesDAcces'
 
 const { session, rattache } = useSession()
 
@@ -126,6 +134,10 @@ const confirmation = ref('')
 const envoiMotDePasse = ref(false)
 const erreurMotDePasseEnvoi = ref<unknown>(null)
 const motDePasseChange = ref(false)
+/** Combien de clés d'accès le changement a retirées — dit dans la confirmation. */
+const clesRetirees = ref(0)
+/** Remonte `SectionClesDAcces` (clé `:key`) : sa liste est relue. */
+const versionClesDAcces = ref(0)
 
 const controleNouveau = computed(() =>
   nouveauMotDePasse.value === '' ? null : erreurMotDePasse(nouveauMotDePasse.value),
@@ -150,13 +162,20 @@ async function soumettreMotDePasse(): Promise<void> {
   envoiMotDePasse.value = true
   erreurMotDePasseEnvoi.value = null
   motDePasseChange.value = false
+  clesRetirees.value = 0
   const nouveau = nouveauMotDePasse.value
   try {
-    await changerMotDePasse(motDePasseActuel.value, nouveau)
+    const { clesDAccesRetirees = 0 } = await changerMotDePasse(motDePasseActuel.value, nouveau)
     // Voir l'en-tête : la session doit être rouverte avec le nouveau mot de passe.
     // `connecter()` range lui-même la charge de session rendue — rien à relire.
     await connecter(courrielActuel.value, nouveau)
     motDePasseChange.value = true
+    // Le serveur a retiré toutes les clés d'accès du compte (§ 2.4) : la mémoire
+    // de cet appareil les oublie, et la section se recharge — vide.
+    clesRetirees.value = clesDAccesRetirees
+    const utilisateurId = session.value?.utilisateur.id ?? null
+    if (utilisateurId !== null) oublierToutesLesClesDeCetAppareil(utilisateurId)
+    versionClesDAcces.value++
   } catch (e) {
     erreurMotDePasseEnvoi.value = e
   } finally {
@@ -253,6 +272,10 @@ function dateLisible(iso: string): string {
     </PanneauBase>
 
     <PanneauBase>
+      <SectionClesDAcces :key="versionClesDAcces" />
+    </PanneauBase>
+
+    <PanneauBase>
       <form class="flex flex-col gap-3 p-4" novalidate @submit.prevent="soumettreCourriel">
         <h2 class="text-base font-semibold">Changer de courriel</h2>
         <p class="text-sm text-attenue">
@@ -326,6 +349,10 @@ function dateLisible(iso: string): string {
         />
         <p v-if="motDePasseChange" class="text-sm" role="status">
           Mot de passe changé. Vos autres sessions ouvertes devront se reconnecter.
+          <template v-if="clesRetirees > 0">
+            {{ clesRetirees > 1 ? `Vos ${clesRetirees} clés d’accès ont été retirées` : 'Votre clé d’accès a été retirée' }} :
+            ajoutez-en une à nouveau sur cet appareil si vous le souhaitez.
+          </template>
         </p>
         <BoutonBase
           type="submit"
