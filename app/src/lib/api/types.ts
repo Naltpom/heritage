@@ -370,7 +370,9 @@ interface NoeudCommun {
   x: number
   y: number
   /** Mesurés par le moteur, **identiques pour tous les lecteurs**, déjà entiers.
-   *  Le client ne les recalcule jamais (§ 5.2, ADR 0005). */
+   *  Le client ne les recalcule jamais (§ 5.2, ADR 0005) ; seule la vue `/histoire`
+   *  peut leur substituer, en format Portrait, une boîte CONSTANTE
+   *  (`auFormat`, `histoire/cartes.ts`), qui ne lit aucune donnée. */
   w: number
   h: number
   /** Présent et à `true` sur un nœud issu du calque ; absent sinon (§ 13.4). */

@@ -1,6 +1,7 @@
 /**
- * Les deux fenêtres automatiques **ensemble**, à l'arrivée : « Se connecter
- * plus vite ? » (clé d'accès) et « Activer les notifications ».
+ * Les fenêtres automatiques **ensemble** : « Se connecter plus vite ? » (clé
+ * d'accès) et « Activer les notifications » à l'arrivée, puis « Comment
+ * afficher les fiches de l'arbre ? » sur l'arbre, depuis un téléphone.
  *
  * Chacune a ses tests (`clesDAcces.test.ts`, `invitationPush.test.ts`) ; ici on
  * monte les **deux pilotes** sur le même chargement, comme `App.vue`, et on
@@ -10,7 +11,9 @@
  *   ouvertes en même temps**, à aucun instant ;
  * - les notifications passent dans le **même** chargement dès que la première
  *   est réglée (« Plus tard », clé créée) ou écartée (clé déjà là, pas de
- *   Face ID).
+ *   Face ID) ;
+ * - le format des fiches passe **en dernier** ; et s'il est déjà ouvert, ce
+ *   sont les notifications qui attendent qu'il soit fermé.
  *
  * Même montage que les deux autres fichiers : navigateur écrit à la main, API
  * et session simulées, `localStorage` en `Map`, minuteries simulées.
@@ -62,6 +65,11 @@ import {
   reinitialiserPush,
 } from './usePush'
 import { invitationCleDAccesEnCours } from './fenetresAutomatiques'
+import {
+  DELAI_INVITATION_FORMAT_MS,
+  piloterInvitationFormat,
+  reinitialiserFormatDesCartes,
+} from './formatDesCartes'
 import { definirEnvironnementCleDAcces } from '@/lib/cleDAcces'
 import { ErreurApi } from '@/lib/api/erreurs'
 
@@ -117,6 +125,9 @@ function navigateurPush(): void {
 }
 
 const cadre = shallowRef(true)
+/** Le cadre vu des seules notifications : pour les faire arriver **après**
+ *  l'ouverture du format, sans toucher à la clé d'accès. */
+const cadreNotifications = shallowRef(true)
 let portee: EffectScope | null = null
 
 /** Un chargement de l'application : les deux pilotes, comme `App.vue`. */
@@ -137,6 +148,43 @@ async function charger(): Promise<{
   }))
   if (!pilotes) throw new Error('portée arrêtée')
   return pilotes
+}
+
+type Pilotes3 = Awaited<ReturnType<typeof charger>> & { format: ReturnType<typeof piloterInvitationFormat> }
+
+/** Un chargement **sur l'arbre**, depuis un téléphone : les trois pilotes. */
+async function chargerSurLArbre(): Promise<Pilotes3> {
+  reinitialiserClesDAcces()
+  reinitialiserPush()
+  reinitialiserFormatDesCartes()
+  navigateurPush()
+  await evaluerPush()
+  portee?.stop()
+  portee = effectScope()
+  const pilotes = portee.run(() => ({
+    cle: piloterInvitationCleDAcces(() => cadre.value),
+    push: piloterInvitationPush(() => cadre.value && cadreNotifications.value),
+    // L'arbre est dessiné d'emblée : le format n'attend que sa place.
+    format: piloterInvitationFormat(() => true, () => true),
+  }))
+  if (!pilotes) throw new Error('portée arrêtée')
+  return pilotes
+}
+
+/** Combien de fenêtres automatiques sont ouvertes en ce moment. */
+function ouvertes(p: Pilotes3): number {
+  return [p.cle.ouverte.value, p.push.forme.value !== null, p.format.ouverte.value].filter(Boolean).length
+}
+
+/** `avancer`, pour les trois : jamais plus d'une ouverte, à aucun pas. */
+async function avancer3(ms: number, p: Pilotes3): Promise<void> {
+  const pas = 100
+  for (let t = 0; t < ms; t += pas) {
+    await vi.advanceTimersByTimeAsync(pas)
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    await nextTick()
+    expect(ouvertes(p)).toBeLessThanOrEqual(1)
+  }
 }
 
 /** Avance le temps par petits pas, en vérifiant à chacun que les deux
@@ -165,6 +213,7 @@ beforeEach(() => {
   })
   navigateurCle()
   cadre.value = true
+  cadreNotifications.value = true
   session.connecte.value = true
   api.lireOptionsEnregistrementCleDAcces.mockReset().mockResolvedValue({ options: OPTIONS_CREATION })
   api.listerClesDAcces.mockReset().mockResolvedValue([])
@@ -181,6 +230,7 @@ afterEach(() => {
   portee = null
   reinitialiserClesDAcces()
   reinitialiserPush()
+  reinitialiserFormatDesCartes()
   definirEnvironnementCleDAcces(null)
   definirEnvironnementPush(null)
   vi.unstubAllGlobals()
@@ -247,6 +297,71 @@ describe('à l’arrivée : la clé d’accès d’abord, les notifications ensu
     const p = await charger()
     await avancer(DELAI_INVITATION_CLE_MS + DELAI_INVITATION_MS + 200, p)
     expect(p.cle.ouverte.value).toBe(false)
+    expect(p.push.forme.value).toBe('activer')
+  })
+})
+
+describe('sur l’arbre, depuis un téléphone : le format des fiches passe en dernier', () => {
+  it('clé d’accès, puis notifications, puis format — jamais deux ensemble', async () => {
+    const p = await chargerSurLArbre()
+
+    await avancer3(DELAI_INVITATION_CLE_MS + 100, p)
+    expect(p.cle.ouverte.value).toBe(true)
+    await avancer3(DELAI_INVITATION_FORMAT_MS * 5, p)
+    expect(p.format.ouverte.value).toBe(false)
+
+    p.cle.plusTard()
+    await avancer3(DELAI_INVITATION_MS + 100, p)
+    expect(p.push.forme.value).toBe('activer')
+    // Les notifications tiennent leur place : le format attend encore.
+    await avancer3(DELAI_INVITATION_FORMAT_MS * 5, p)
+    expect(p.format.ouverte.value).toBe(false)
+
+    p.push.plusTard()
+    await avancer3(DELAI_INVITATION_FORMAT_MS + 100, p)
+    expect(p.format.ouverte.value).toBe(true)
+
+    p.format.garder()
+    await avancer3(DELAI_INVITATION_FORMAT_MS * 5, p)
+    expect(ouvertes(p)).toBe(0)
+  })
+
+  it('pendant l’attente des notifications, le format ne s’ouvre pas', async () => {
+    // Clé déjà là : pas de première fenêtre. Les notifications et le format
+    // sont prêts au même instant, avec le même délai : les notifications
+    // passent, parce qu'elles réservent dès leur attente.
+    retenirCleSurCetAppareil(7, 31)
+    api.listerClesDAcces.mockResolvedValue([
+      { id: 31, nom: 'iPhone', creeeLe: '2026-03-12T10:00:00+01:00', derniereUtilisation: null },
+    ])
+    const p = await chargerSurLArbre()
+    await avancer3(DELAI_INVITATION_CLE_MS + DELAI_INVITATION_MS + 200, p)
+    expect(p.push.forme.value).toBe('activer')
+    expect(p.format.ouverte.value).toBe(false)
+
+    p.push.plusTard()
+    await avancer3(DELAI_INVITATION_FORMAT_MS + 100, p)
+    expect(p.format.ouverte.value).toBe(true)
+  })
+
+  it('le format déjà ouvert : les notifications ne démarrent pas, et passent après lui', async () => {
+    retenirCleSurCetAppareil(7, 31)
+    api.listerClesDAcces.mockResolvedValue([
+      { id: 31, nom: 'iPhone', creeeLe: '2026-03-12T10:00:00+01:00', derniereUtilisation: null },
+    ])
+    cadreNotifications.value = false
+    const p = await chargerSurLArbre()
+    await avancer3(DELAI_INVITATION_CLE_MS + DELAI_INVITATION_FORMAT_MS + 200, p)
+    expect(p.format.ouverte.value).toBe(true)
+
+    // Les notifications deviendraient possibles : elles attendent.
+    cadreNotifications.value = true
+    await avancer3(DELAI_INVITATION_MS * 5, p)
+    expect(p.push.forme.value).toBeNull()
+
+    p.format.choisir('portrait')
+    await avancer3(DELAI_INVITATION_MS + 100, p)
+    expect(p.format.ouverte.value).toBe(false)
     expect(p.push.forme.value).toBe('activer')
   })
 })
