@@ -1,6 +1,6 @@
 /**
- * Les clés d'accès — la mémoire de l'appareil, l'invitation qui suit une
- * connexion par mot de passe, et la connexion par clé. Sans navigateur.
+ * Les clés d'accès — la mémoire de l'appareil, l'invitation qui s'ouvre à
+ * l'arrivée, et la connexion par clé. Sans navigateur.
  *
  * Même montage que `invitationPush.test.ts` : le navigateur est un
  * `EnvironnementCleDAcces` écrit à la main, l'API et la session sont simulées,
@@ -8,11 +8,17 @@
  *
  * Ce qui compte :
  *
- * - l'invitation ne s'ouvre **qu'après une connexion par mot de passe**, sur un
- *   appareil qui a Face ID / une empreinte, à un compte sans clé **ici**, pas
- *   avant trente jours après « Plus tard », jamais pendant une incarnation ;
+ * - l'invitation s'ouvre **à l'arrivée**, sans qu'il y ait eu de connexion dans
+ *   ce chargement, une fois par chargement, sur un appareil qui a Face ID / une
+ *   empreinte, à un compte sans clé **ici** (mémoire locale corrigée par la
+ *   liste du serveur), pas avant trente jours après « Plus tard », jamais
+ *   pendant une incarnation ;
+ * - une session trop ancienne pour le serveur ouvre la fenêtre sur le mot de
+ *   passe : « Confirmer », puis « Activer » — deux gestes, le second sans
+ *   attente (Safari) ;
  * - elle tient la priorité sur les notifications tant qu'elle n'est pas réglée,
- *   et la rend ensuite — quelle que soit l'issue ;
+ *   et la rend ensuite — quelle que soit l'issue (le passage de l'une à
+ *   l'autre est dans `fenetresAutomatiques.test.ts`) ;
  * - à la connexion, un refus du navigateur se dit en clair, un refus du serveur
  *   remonte à l'écran comme celui du mot de passe, et l'autoremplissage ne
  *   tourne pas en boucle.
@@ -24,6 +30,7 @@ const api = vi.hoisted(() => ({
   lireOptionsEnregistrementCleDAcces: vi.fn(),
   enregistrerCleDAcces: vi.fn(),
   lireOptionsConnexionCleDAcces: vi.fn(),
+  listerClesDAcces: vi.fn(),
 }))
 vi.mock('@/lib/api', () => api)
 
@@ -53,9 +60,9 @@ vi.mock('@/composables/useSession', async () => {
 import {
   DELAI_INVITATION_CLE_MS,
   DUREE_OPTIONS_MS,
+  MESSAGE_MOT_DE_PASSE_REFUSE,
   SILENCE_INVITATION_CLE_MS,
   ajouterCleDAccesSurCetAppareil,
-  annoncerConnexionParMotDePasse,
   cetAppareilAUneCle,
   clesDeCetAppareil,
   confirmerMotDePassePourAjout,
@@ -76,6 +83,7 @@ import {
 import { invitationCleDAccesEnCours } from './fenetresAutomatiques'
 import { definirEnvironnementCleDAcces, type EnvironnementCleDAcces } from '@/lib/cleDAcces'
 import { ErreurApi } from '@/lib/api/erreurs'
+import type { CleDAcces } from '@/lib/api'
 
 /** Le refus du serveur quand la connexion date de plus de dix minutes (§ 2.4). */
 function preuveRequise(): ErreurApi {
@@ -184,10 +192,17 @@ function piloterInvitation(horloge: () => number = () => MAINTENANT): ReturnType
   return dansUnePortee(() => piloterInvitationCleDAcces(() => cadre.value, horloge))
 }
 
-/** Laisse passer le délai **et** la question asynchrone au navigateur. */
+/** Laisse passer le délai **et** les questions asynchrones (navigateur, liste
+ *  du serveur, défi préparé). */
 async function laisserDecider(): Promise<void> {
   await vi.advanceTimersByTimeAsync(DELAI_INVITATION_CLE_MS)
+  for (let i = 0; i < 10; i++) await Promise.resolve()
   await nextTick()
+}
+
+/** Une clé telle que la rend `GET /api/cles-d-acces`. */
+function cleServeur(id: number): CleDAcces {
+  return { id, nom: 'Clé', creeeLe: '2026-03-12T10:00:00+01:00', derniereUtilisation: null }
 }
 
 beforeEach(() => {
@@ -204,6 +219,7 @@ beforeEach(() => {
   session.connecterParCleDAcces.mockResolvedValue({ utilisateur: { id: 7 } })
   api.lireOptionsEnregistrementCleDAcces.mockReset().mockResolvedValue({ options: OPTIONS_CREATION })
   api.lireOptionsConnexionCleDAcces.mockReset().mockResolvedValue({ options: OPTIONS_REQUETE })
+  api.listerClesDAcces.mockReset().mockResolvedValue([])
   api.enregistrerCleDAcces.mockReset().mockImplementation((_r: unknown, nom: string | null) =>
     Promise.resolve({ id: 31, nom: nom ?? 'Clé', creeeLe: '2026-10-01T12:00:00+02:00', derniereUtilisation: null }),
   )
@@ -305,93 +321,176 @@ describe('invitationCleDAccesPossible()', () => {
 /* Le pilote de l'invitation                                           */
 /* ------------------------------------------------------------------ */
 
-describe('piloterInvitationCleDAcces()', () => {
-  it('ne s’ouvre jamais sans connexion par mot de passe (session rouverte au chargement)', async () => {
-    const { ouverte } = piloterInvitation()
-    await vi.advanceTimersByTimeAsync(DELAI_INVITATION_CLE_MS * 5)
-    expect(ouverte.value).toBe(false)
-  })
-
-  it('s’ouvre après la connexion, et prépare tout de suite le défi (Safari)', async () => {
-    const { ouverte } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
+describe('piloterInvitationCleDAcces() — à l’arrivée', () => {
+  it('s’ouvre à l’arrivée, sans connexion récente, après le délai — le défi préparé avant', async () => {
+    // Aucune connexion dans ce chargement : la session était déjà là.
+    const { ouverte, etape } = piloterInvitation()
+    // La priorité est prise tout de suite, avant même le délai.
     expect(invitationCleDAccesEnCours.value).toBe(true)
-    await nextTick()
     await vi.advanceTimersByTimeAsync(DELAI_INVITATION_CLE_MS - 1)
     expect(ouverte.value).toBe(false)
+    expect(api.lireOptionsEnregistrementCleDAcces).not.toHaveBeenCalled()
     await laisserDecider()
     expect(ouverte.value).toBe(true)
+    expect(etape.value).toBe('activer')
     expect(api.lireOptionsEnregistrementCleDAcces).toHaveBeenCalledTimes(1)
     expect(invitationCleDAccesEnCours.value).toBe(true)
+  })
+
+  it('le délai est celui des notifications : 1,5 s', () => {
+    expect(DELAI_INVITATION_CLE_MS).toBe(1_500)
+  })
+
+  it('une seule fois par chargement — un nouveau chargement la rend possible', async () => {
+    const premier = piloterInvitation()
+    await laisserDecider()
+    expect(premier.ouverte.value).toBe(true)
+
+    // Le composant est remonté dans le même chargement : rien.
+    const second = piloterInvitation()
+    await laisserDecider()
+    expect(second.ouverte.value).toBe(false)
+    expect(invitationCleDAccesEnCours.value).toBe(false)
+
+    reinitialiserClesDAcces()
+    const apresRechargement = piloterInvitation()
+    await laisserDecider()
+    expect(apresRechargement.ouverte.value).toBe(true)
+  })
+
+  it('se connecter après le chargement : la priorité est prise sur l’écran de connexion, la fenêtre suit', async () => {
+    session.connecte.value = false
+    session.courante.value = null
+    cadre.value = false
+    const { ouverte } = piloterInvitation()
+    await laisserDecider()
+    expect(ouverte.value).toBe(false)
+    expect(invitationCleDAccesEnCours.value).toBe(false)
+
+    session.connecte.value = true
+    session.courante.value = { utilisateur: { id: 7 } }
+    await nextTick()
+    expect(invitationCleDAccesEnCours.value).toBe(true)
+    await laisserDecider()
+    expect(ouverte.value).toBe(false)
+
+    cadre.value = true
+    await nextTick()
+    await laisserDecider()
+    expect(ouverte.value).toBe(true)
   })
 
   it('renonce — et rend la main aux notifications — sans authentificateur de l’appareil', async () => {
     environnement({ plateforme: false })
     const { ouverte } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
     await laisserDecider()
     expect(ouverte.value).toBe(false)
     expect(invitationCleDAccesEnCours.value).toBe(false)
+    expect(api.lireOptionsEnregistrementCleDAcces).not.toHaveBeenCalled()
   })
 
-  it('renonce sans WebAuthn du tout', async () => {
+  it('sans WebAuthn du tout : ne prend même pas la priorité', async () => {
     environnement({ webauthn: false })
     const { ouverte } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
+    expect(invitationCleDAccesEnCours.value).toBe(false)
+    await laisserDecider()
+    expect(ouverte.value).toBe(false)
+  })
+
+  it('pas de fenêtre si ce compte a une clé sur cet appareil (et que le serveur la connaît)', async () => {
+    retenirCleSurCetAppareil(7, 31)
+    api.listerClesDAcces.mockResolvedValue([cleServeur(31)])
+    const { ouverte } = piloterInvitation()
+    await laisserDecider()
+    expect(ouverte.value).toBe(false)
+    expect(invitationCleDAccesEnCours.value).toBe(false)
+    expect(clesDeCetAppareil(7)).toEqual([31])
+  })
+
+  it('« une clé sert ici, on ne sait pas laquelle » + des clés au serveur : pas de fenêtre', async () => {
+    retenirCleSurCetAppareil(7, null)
+    api.listerClesDAcces.mockResolvedValue([cleServeur(40)])
+    const { ouverte } = piloterInvitation()
+    await laisserDecider()
+    expect(ouverte.value).toBe(false)
+  })
+
+  it('une clé ici pour un autre compte n’empêche rien', async () => {
+    retenirCleSurCetAppareil(8, 31)
+    const { ouverte } = piloterInvitation()
+    await laisserDecider()
+    expect(ouverte.value).toBe(true)
+    // La mémoire dit « rien ici » pour ce compte : le serveur n'est pas interrogé.
+    expect(api.listerClesDAcces).not.toHaveBeenCalled()
+  })
+
+  it('la liste du serveur, vide, corrige une mémoire périmée : la fenêtre s’ouvre', async () => {
+    retenirCleSurCetAppareil(7, null)
+    api.listerClesDAcces.mockResolvedValue([])
+    const { ouverte } = piloterInvitation()
+    await laisserDecider()
+    expect(ouverte.value).toBe(true)
+    expect(cetAppareilAUneCle(7)).toBe(false)
+  })
+
+  it('une clé retenue ici mais supprimée ailleurs est oubliée : la fenêtre s’ouvre', async () => {
+    retenirCleSurCetAppareil(7, 31)
+    api.listerClesDAcces.mockResolvedValue([cleServeur(32)])
+    const { ouverte } = piloterInvitation()
+    await laisserDecider()
+    expect(ouverte.value).toBe(true)
+    expect(cetAppareilAUneCle(7)).toBe(false)
+  })
+
+  it('une liste illisible laisse la mémoire locale faire foi', async () => {
+    retenirCleSurCetAppareil(7, 31)
+    api.listerClesDAcces.mockRejectedValue(new Error('réseau'))
+    const { ouverte } = piloterInvitation()
     await laisserDecider()
     expect(ouverte.value).toBe(false)
     expect(invitationCleDAccesEnCours.value).toBe(false)
   })
 
-  it('renonce si ce compte a déjà une clé ici — mais pas pour un autre compte', async () => {
-    retenirCleSurCetAppareil(7, 31)
+  it('« Plus tard » : trente jours de silence pour ce compte, pas un de plus', async () => {
+    ecrirePlusTardCleDAcces(7, MAINTENANT - 29 * 24 * 3600 * 1000)
     const premier = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
+    // Su sans rien demander : la priorité n'est même pas prise.
+    expect(invitationCleDAccesEnCours.value).toBe(false)
     await laisserDecider()
     expect(premier.ouverte.value).toBe(false)
 
-    session.courante.value = { utilisateur: { id: 8 } }
+    reinitialiserClesDAcces()
+    ecrirePlusTardCleDAcces(7, MAINTENANT - SILENCE_INVITATION_CLE_MS)
     const second = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
     await laisserDecider()
     expect(second.ouverte.value).toBe(true)
   })
 
-  it('renonce moins de trente jours après « Plus tard », revient après', async () => {
-    ecrirePlusTardCleDAcces(7, MAINTENANT - 29 * 24 * 3600 * 1000)
-    const premier = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
+  it('« Plus tard » ferme, retient la date pour ce compte et rend la main ; le chargement suivant se tait', async () => {
+    const { ouverte, plusTard } = piloterInvitation()
     await laisserDecider()
-    expect(premier.ouverte.value).toBe(false)
+    plusTard()
+    expect(ouverte.value).toBe(false)
+    expect(lirePlusTardCleDAcces(7)).toBe(MAINTENANT)
+    expect(invitationCleDAccesEnCours.value).toBe(false)
 
-    ecrirePlusTardCleDAcces(7, MAINTENANT - SILENCE_INVITATION_CLE_MS)
-    const second = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
+    reinitialiserClesDAcces()
+    const suivant = piloterInvitation(() => MAINTENANT + 24 * 3600 * 1000)
     await laisserDecider()
-    expect(second.ouverte.value).toBe(true)
+    expect(suivant.ouverte.value).toBe(false)
   })
 
   it('jamais pendant une incarnation', async () => {
     session.incarnation.value = { administrateur: 'a@exemple.test' }
     const { ouverte } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
+    expect(invitationCleDAccesEnCours.value).toBe(false)
     await laisserDecider()
     expect(ouverte.value).toBe(false)
-    expect(invitationCleDAccesEnCours.value).toBe(false)
   })
 
   it('attend un écran avec cadre, en gardant la priorité', async () => {
     cadre.value = false
     const { ouverte } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
     await vi.advanceTimersByTimeAsync(DELAI_INVITATION_CLE_MS * 5)
     expect(ouverte.value).toBe(false)
     expect(invitationCleDAccesEnCours.value).toBe(true)
@@ -404,30 +503,16 @@ describe('piloterInvitationCleDAcces()', () => {
 
   it('une déconnexion pendant l’attente annule tout et rend la main', async () => {
     const { ouverte } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
     session.connecte.value = false
+    session.courante.value = null
     await nextTick()
     await laisserDecider()
     expect(ouverte.value).toBe(false)
-    expect(invitationCleDAccesEnCours.value).toBe(false)
-  })
-
-  it('« Plus tard » ferme, retient la date pour ce compte et rend la main', async () => {
-    const { ouverte, plusTard } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
-    await laisserDecider()
-    plusTard()
-    expect(ouverte.value).toBe(false)
-    expect(lirePlusTardCleDAcces(7)).toBe(MAINTENANT)
     expect(invitationCleDAccesEnCours.value).toBe(false)
   })
 
   it('« Activer » : la clé est créée avec le défi préparé, nommée d’après l’appareil, et retenue ici', async () => {
     const { ouverte, accepter, confirmation } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
     await laisserDecider()
     await accepter()
 
@@ -438,15 +523,13 @@ describe('piloterInvitationCleDAcces()', () => {
     expect(nom).toBe('iPhone')
     expect(clesDeCetAppareil(7)).toEqual([31])
     expect(ouverte.value).toBe(false)
-    expect(confirmation.value).toContain('Clé d’accès ajoutée')
+    expect(confirmation.value).toBe('Clé d’accès activée')
     expect(invitationCleDAccesEnCours.value).toBe(false)
   })
 
   it('« Activer » annulé dans Face ID : la fenêtre reste, avec une phrase, et la priorité aussi', async () => {
     env.creer.mockRejectedValueOnce(nonPermis())
     const { ouverte, accepter, message } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
     await laisserDecider()
     await accepter()
     expect(ouverte.value).toBe(true)
@@ -458,8 +541,6 @@ describe('piloterInvitationCleDAcces()', () => {
   it('« Activer » sur un appareil qui a déjà une clé de ce compte : fermé, et retenu', async () => {
     env.creer.mockRejectedValueOnce(new DOMException('déjà', 'InvalidStateError'))
     const { ouverte, accepter, confirmation } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
     await laisserDecider()
     await accepter()
     expect(ouverte.value).toBe(false)
@@ -471,12 +552,119 @@ describe('piloterInvitationCleDAcces()', () => {
     const refus = Object.assign(new Error('Refusé.'), { name: 'ErreurApi' })
     api.enregistrerCleDAcces.mockRejectedValueOnce(refus)
     const { ouverte, accepter, erreur } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
     await laisserDecider()
     await accepter()
     expect(ouverte.value).toBe(true)
     expect(erreur.value).toBe(refus)
+  })
+})
+
+describe('piloterInvitationCleDAcces() — la preuve d’identité dans la fenêtre', () => {
+  /** Une session de plus de dix minutes : le serveur refuse le défi sans
+   *  mot de passe, puis l'accorde avec. */
+  function sessionAncienne(): void {
+    api.lireOptionsEnregistrementCleDAcces.mockImplementation((motDePasse: string | null = null) =>
+      motDePasse === 'le-bon'
+        ? Promise.resolve({ options: OPTIONS_CREATION })
+        : Promise.reject(
+            motDePasse === null
+              ? preuveRequise()
+              : new ErreurApi(422, 'donnees_invalides', 'x', { motDePasseActuel: 'Le mot de passe actuel est incorrect.' }),
+          ),
+    )
+  }
+
+  it('session ancienne : la fenêtre s’ouvre sur l’étape « mot de passe », et « Activer » n’y fait rien', async () => {
+    sessionAncienne()
+    const { ouverte, etape, accepter } = piloterInvitation()
+    await laisserDecider()
+    expect(ouverte.value).toBe(true)
+    expect(etape.value).toBe('mot-de-passe')
+    await accepter()
+    expect(env.creer).not.toHaveBeenCalled()
+  })
+
+  it('« Confirmer » puis « Activer » : deux gestes, et le second part sans attendre le serveur', async () => {
+    sessionAncienne()
+    const { etape, motDePasseConfirme, confirmerMotDePasse, accepter, confirmation, ouverte } = piloterInvitation()
+    await laisserDecider()
+
+    await confirmerMotDePasse('le-bon')
+    expect(api.lireOptionsEnregistrementCleDAcces).toHaveBeenLastCalledWith('le-bon')
+    expect(etape.value).toBe('activer')
+    expect(motDePasseConfirme.value).toBe(true)
+    expect(env.creer).not.toHaveBeenCalled()
+    const appelsAvantLeGeste = api.lireOptionsEnregistrementCleDAcces.mock.calls.length
+
+    await accepter()
+    // Le défi obtenu avec le mot de passe a servi : aucun appel de plus.
+    expect(api.lireOptionsEnregistrementCleDAcces).toHaveBeenCalledTimes(appelsAvantLeGeste)
+    expect(env.creer).toHaveBeenCalledTimes(1)
+    expect(ouverte.value).toBe(false)
+    expect(confirmation.value).toBe('Clé d’accès activée')
+    expect(invitationCleDAccesEnCours.value).toBe(false)
+  })
+
+  it('mot de passe faux : un message clair sous le champ, on reste à l’étape', async () => {
+    sessionAncienne()
+    const { etape, erreurMotDePasse, erreur, confirmerMotDePasse, ouverte } = piloterInvitation()
+    await laisserDecider()
+    await confirmerMotDePasse('faux')
+    expect(ouverte.value).toBe(true)
+    expect(etape.value).toBe('mot-de-passe')
+    expect(erreurMotDePasse.value).toBe(MESSAGE_MOT_DE_PASSE_REFUSE)
+    expect(erreur.value).toBeNull()
+
+    // Le bon, ensuite : le message s'efface.
+    await confirmerMotDePasse('le-bon')
+    expect(erreurMotDePasse.value).toBeNull()
+    expect(etape.value).toBe('activer')
+  })
+
+  it('un autre refus (trop d’essais) va à `MessageErreur`, pas sous le champ', async () => {
+    sessionAncienne()
+    const { erreur, erreurMotDePasse, confirmerMotDePasse } = piloterInvitation()
+    await laisserDecider()
+    const plafond = new ErreurApi(429, 'trop_de_requetes', 'Trop de tentatives.')
+    api.lireOptionsEnregistrementCleDAcces.mockRejectedValueOnce(plafond)
+    await confirmerMotDePasse('le-bon')
+    expect(erreur.value).toBe(plafond)
+    expect(erreurMotDePasse.value).toBeNull()
+  })
+
+  it('un mot de passe vide n’est pas envoyé', async () => {
+    sessionAncienne()
+    const { confirmerMotDePasse } = piloterInvitation()
+    await laisserDecider()
+    const appels = api.lireOptionsEnregistrementCleDAcces.mock.calls.length
+    await confirmerMotDePasse('')
+    expect(api.lireOptionsEnregistrementCleDAcces).toHaveBeenCalledTimes(appels)
+  })
+
+  it('la preuve a expiré pendant que la fenêtre attendait : « Activer » ramène au mot de passe', async () => {
+    const { etape, accepter, ouverte, message } = piloterInvitation(Date.now)
+    await laisserDecider()
+    expect(ouverte.value).toBe(true)
+    expect(etape.value).toBe('activer')
+
+    // Le défi préparé a vieilli ; le serveur, lui, veut maintenant le mot de passe.
+    vi.setSystemTime(Date.now() + DUREE_OPTIONS_MS)
+    api.lireOptionsEnregistrementCleDAcces.mockRejectedValueOnce(preuveRequise())
+    await accepter()
+    expect(ouverte.value).toBe(true)
+    expect(etape.value).toBe('mot-de-passe')
+    expect(message.value).toBeNull()
+    expect(env.creer).not.toHaveBeenCalled()
+  })
+
+  it('« Plus tard » depuis l’étape mot de passe vaut trente jours, comme ailleurs', async () => {
+    sessionAncienne()
+    const { plusTard, ouverte } = piloterInvitation()
+    await laisserDecider()
+    plusTard()
+    expect(ouverte.value).toBe(false)
+    expect(lirePlusTardCleDAcces(7)).toBe(MAINTENANT)
+    expect(invitationCleDAccesEnCours.value).toBe(false)
   })
 })
 
@@ -542,19 +730,6 @@ describe('la preuve d’identité récente', () => {
     await expect(confirmerMotDePassePourAjout('faux')).rejects.toBe(faux)
     await ajouterCleDAccesSurCetAppareil()
     expect(api.lireOptionsEnregistrementCleDAcces).toHaveBeenCalledTimes(2)
-  })
-
-  it('« Activer » longtemps après la connexion : la fenêtre renvoie vers Mon compte', async () => {
-    api.lireOptionsEnregistrementCleDAcces.mockRejectedValue(preuveRequise())
-    const { ouverte, accepter, message, erreur } = piloterInvitation()
-    annoncerConnexionParMotDePasse()
-    await nextTick()
-    await laisserDecider()
-    await accepter()
-    expect(ouverte.value).toBe(true)
-    expect(message.value).toContain('Mon compte')
-    expect(erreur.value).toBeNull()
-    expect(env.creer).not.toHaveBeenCalled()
   })
 
   it('après un changement de mot de passe, l’appareil redevient « sans clé »', () => {

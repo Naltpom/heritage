@@ -5,8 +5,11 @@
  * Ce qu'on tient ici :
  *
  * - la fenêtre est une vraie **boîte de dialogue** (rôle, modalité, titre et
- *   description reliés), dit ce qu'elle propose, « Plus tard » avant
- *   « Activer », et **rien** quand elle est fermée ;
+ *   description reliés), dit ce qu'elle propose (Windows Hello sur un PC),
+ *   « Plus tard » avant « Activer », et **rien** quand elle est fermée ;
+ * - à l'étape « mot de passe » : un vrai champ de mot de passe (que le
+ *   gestionnaire sait remplir), « Confirmer », le refus sous le champ ; puis le
+ *   second geste dit ce qu'il ouvre ;
  * - la liste dit, pour chaque clé, son nom, sa création, sa dernière
  *   utilisation (ou « jamais »), et laquelle vit sur cet appareil ;
  * - le bouton d'ajout n'existe que si le navigateur sait faire, et jamais
@@ -77,15 +80,54 @@ afterEach(() => {
 
 /* ------------------------------------------------------------------ */
 
-describe('la fenêtre « Se connecter plus vite la prochaine fois ? »', () => {
+describe('la fenêtre « Se connecter plus vite ? »', () => {
   it('est une boîte de dialogue modale, titrée et décrite', async () => {
     const html = await rendre(FenetreInvitationCleDAcces, { ouverte: true })
     expect(html).toMatch(/<dialog[^>]*role="dialog"/)
     expect(html).toMatch(/<dialog[^>]*aria-modal="true"/)
     const titre = /aria-labelledby="([^"]+)"/.exec(html)?.[1]
     const message = /aria-describedby="([^"]+)"/.exec(html)?.[1]
-    expect(html).toMatch(new RegExp(`<h2[^>]*id="${titre}"[^>]*>\\s*Se connecter plus vite la prochaine fois \\?`))
-    expect(html).toMatch(new RegExp(`id="${message}"[^>]*>\\s*Utilisez Face ID ou votre empreinte.`))
+    expect(html).toMatch(new RegExp(`<h2[^>]*id="${titre}"[^>]*>\\s*Se connecter plus vite \\?`))
+    expect(html).toMatch(
+      new RegExp(
+        `id="${message}"[^>]*>\\s*Activez Face ID ou l’empreinte de ce téléphone pour vous connecter sans mot de passe\\.`,
+      ),
+    )
+  })
+
+  it('sur un PC : Windows Hello', async () => {
+    const html = await rendre(FenetreInvitationCleDAcces, { ouverte: true, systeme: 'windows' })
+    expect(html).toContain('Activez Windows Hello')
+    expect(html).not.toContain('Face ID')
+  })
+
+  it('étape « mot de passe » : un champ de mot de passe, « Plus tard » puis « Confirmer »', async () => {
+    const html = await rendre(FenetreInvitationCleDAcces, { ouverte: true, etape: 'mot-de-passe' })
+    expect(html).toContain('Pour votre sécurité, confirmez votre mot de passe')
+    expect(html).toMatch(/<input[^>]*type="password"/)
+    expect(html).toMatch(/<input[^>]*autocomplete="current-password"/)
+    expect(html).toMatch(/<label[^>]*>\s*Mot de passe/)
+    expect(boutons(html)).toEqual(['Plus tard', 'Confirmer'])
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*>[\s\S]*?Confirmer/)
+  })
+
+  it('étape « mot de passe » : le refus s’écrit sous le champ', async () => {
+    const html = await rendre(FenetreInvitationCleDAcces, {
+      ouverte: true,
+      etape: 'mot-de-passe',
+      erreurMotDePasse: 'Ce mot de passe ne correspond pas. Vérifiez-le et réessayez.',
+    })
+    expect(html).toContain('aria-invalid="true"')
+    expect(html).toContain('Ce mot de passe ne correspond pas.')
+  })
+
+  it('mot de passe confirmé : le second geste dit ce qu’il ouvre', async () => {
+    expect(
+      boutons(await rendre(FenetreInvitationCleDAcces, { ouverte: true, motDePasseConfirme: true })),
+    ).toEqual(['Plus tard', 'Activer Face ID / empreinte'])
+    expect(
+      boutons(await rendre(FenetreInvitationCleDAcces, { ouverte: true, motDePasseConfirme: true, systeme: 'windows' })),
+    ).toEqual(['Plus tard', 'Activer Windows Hello'])
   })
 
   it('propose « Plus tard » puis « Activer »', async () => {

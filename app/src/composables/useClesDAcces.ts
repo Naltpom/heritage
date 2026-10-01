@@ -1,6 +1,6 @@
 /**
  * Les clés d'accès (passkeys) — l'enchaînement des cérémonies, la mémoire de
- * l'appareil, et l'invitation qui suit une connexion par mot de passe.
+ * l'appareil, et l'invitation qui s'ouvre à l'arrivée dans l'application.
  *
  * Trois couches, trois fichiers :
  *
@@ -15,7 +15,7 @@
  * part **dans** le geste (le toucher du bouton). Un `await fetch(options)`
  * entre le toucher et l'appel suffit, sur un iPhone, à faire refuser la
  * cérémonie (`NotAllowedError`, comme si on avait annulé). Les options sont
- * donc **préparées d'avance** — à l'ouverture de l'invitation, au montage de la
+ * donc **préparées d'avance** — juste avant d'ouvrir l'invitation, au montage de la
  * connexion — et l'appel au navigateur part sans attente. Le serveur garde le
  * défi cinq minutes : on le renouvelle à quatre.
  *
@@ -33,6 +33,7 @@ import {
   enregistrerCleDAcces,
   lireOptionsConnexionCleDAcces,
   lireOptionsEnregistrementCleDAcces,
+  listerClesDAcces,
   type ChargeDeSession,
   type CleDAcces,
 } from '@/lib/api'
@@ -50,6 +51,7 @@ import {
   reponseEnJson,
   systemeDeLAgent,
   type IdentifiantBrut,
+  type SystemeAppareil,
 } from '@/lib/cleDAcces'
 import { libererApresLaCleDAcces, reserverPourLaCleDAcces } from './fenetresAutomatiques'
 
@@ -441,51 +443,59 @@ export function piloterConnexionCleDAcces(
   }
 }
 
+
 /* ------------------------------------------------------------------ */
-/* L'invitation après une connexion par mot de passe                   */
+/* L'invitation à l'arrivée                                            */
 /* ------------------------------------------------------------------ */
 
 /*
- * « Se connecter plus vite la prochaine fois ? » — proposé **une fois**, juste
- * après une connexion par mot de passe réussie, et seulement :
+ * « Se connecter plus vite ? » — proposé **de lui-même**, à l'arrivée dans
+ * l'application, comme l'invitation aux notifications : personne n'a à
+ * trouver la section de Mon compte pour découvrir que Face ID suffirait.
+ *
+ * À chaque chargement de l'application (une fois par compte et par
+ * chargement), sur un écran avec cadre, et seulement :
  *
  * - si l'appareil a un authentificateur à lui (Face ID, Touch ID, empreinte,
  *   Windows Hello) — proposer une clé USB qu'on n'a pas serait absurde ;
- * - si ce compte n'a pas déjà une clé **ici** (mémoire locale) ;
+ * - si ce compte n'a pas déjà une clé **ici** (mémoire locale — corrigée par la
+ *   liste du serveur quand elle est lisible : une clé supprimée ailleurs, ou un
+ *   compte qui n'a plus aucune clé, rend l'appareil « sans clé ») ;
  * - si ce compte n'a pas répondu « Plus tard » ici depuis moins de trente jours ;
- * - sur un écran avec cadre, hors incarnation.
+ * - hors incarnation.
  *
  * Elle passe **avant** l'invitation aux notifications, qui attend qu'elle soit
- * réglée (`fenetresAutomatiques.ts`).
+ * réglée (`fenetresAutomatiques.ts`) : la priorité est prise dès que la session
+ * est là — avant de savoir si la fenêtre s'ouvrira, ce qui demande une
+ * question asynchrone au navigateur — et rendue dès que c'est tranché.
+ *
+ * ── La preuve d'identité ────────────────────────────────────────────────────
+ *
+ * Le serveur ne délivre un défi d'enregistrement qu'à une session de moins de
+ * dix minutes, ou contre le mot de passe (§ 2.4). À l'arrivée, la session a
+ * souvent des jours : le défi est demandé **avant** d'ouvrir, et s'il est
+ * refusé pour cette raison, la fenêtre s'ouvre sur l'étape « mot de passe ».
+ * Deux gestes alors, à cause de Safari (voir l'en-tête) : « Confirmer » envoie
+ * le mot de passe et obtient le défi ; « Activer Face ID / empreinte » part
+ * ensuite, sans attente, dans son propre geste. Le mot de passe ne vit que le
+ * temps de la requête : le champ est vidé à l'envoi, rien n'est retenu.
  */
 
-/** Le temps de laisser l'écran d'arrivée s'afficher avant de le couvrir. */
-export const DELAI_INVITATION_CLE_MS = 800
+/** Le temps de laisser l'écran d'arrivée s'afficher avant de le couvrir — le
+ *  même que pour les notifications. */
+export const DELAI_INVITATION_CLE_MS = 1_500
 
 /** Durée du message qui suit l'ajout. */
 const DUREE_CONFIRMATION_CLE_MS = 4_000
 
-const aProposer = shallowRef(false)
+/** Les comptes déjà invités (ou écartés) depuis le chargement de l'application :
+ *  une fois par chargement, quoi qu'il arrive. */
+const examinesCeChargement = new Set<number>()
 
-/**
- * À appeler par l'écran de connexion **juste après** une connexion par mot de
- * passe réussie. Lève tout de suite la priorité sur les notifications — avant
- * de savoir si l'invitation s'ouvrira, ce qui demande une question asynchrone
- * au navigateur.
- */
-export function annoncerConnexionParMotDePasse(): void {
-  aProposer.value = true
-  reserverPourLaCleDAcces()
-}
-
-function renoncer(): void {
-  aProposer.value = false
-  libererApresLaCleDAcces()
-}
-
-/** Remet l'état à zéro — pour les tests, qui partagent le module. */
+/** Remet l'état à zéro — un « chargement » neuf, pour les tests. */
 export function reinitialiserClesDAcces(): void {
-  renoncer()
+  examinesCeChargement.clear()
+  libererApresLaCleDAcces()
   optionsDAjoutPreparees = null
 }
 
@@ -502,7 +512,9 @@ export interface ContexteInvitationCleDAcces {
   maintenant: number
 }
 
-/** Fonction pure : c'est elle que les tests passent au crible. */
+/** Fonction pure : c'est elle que les tests passent au crible. Ne tient **pas**
+ *  compte du « une fois par chargement » ni du cadre — c'est l'affaire de
+ *  `piloterInvitationCleDAcces()`. */
 export function invitationCleDAccesPossible(c: ContexteInvitationCleDAcces): boolean {
   if (!c.webauthn || !c.plateforme) return false
   if (!c.connecte || c.incarnation) return false
@@ -511,53 +523,141 @@ export function invitationCleDAccesPossible(c: ContexteInvitationCleDAcces): boo
   return true
 }
 
+/**
+ * La mémoire locale dit « une clé de ce compte sert ici » : on la confronte à
+ * la liste du serveur. Liste vide → plus aucune clé, donc pas ici non plus ;
+ * des identifiants retenus qui n'y sont plus → supprimés ailleurs, oubliés.
+ * Une liste illisible (réseau, serveur) laisse la mémoire telle quelle.
+ */
+async function corrigerLaMemoireAvecLeServeur(utilisateurId: number): Promise<void> {
+  let cles: CleDAcces[]
+  try {
+    cles = await listerClesDAcces()
+  } catch {
+    return
+  }
+  // Une autre session a pu s'ouvrir pendant la question : on ne corrige pas
+  // la mémoire d'un compte avec la liste d'un autre.
+  if (useSession().session.value?.utilisateur.id !== utilisateurId) return
+  if (cles.length === 0) {
+    oublierToutesLesClesDeCetAppareil(utilisateurId)
+    return
+  }
+  const existantes = new Set(cles.map((cle) => cle.id))
+  for (const cleId of clesDeCetAppareil(utilisateurId) ?? []) {
+    if (!existantes.has(cleId)) oublierCleDeCetAppareil(utilisateurId, cleId)
+  }
+}
+
+/** Ce que la fenêtre montre : le bouton qui crée la clé, ou d'abord le mot de
+ *  passe que le serveur exige. */
+export type EtapeInvitationCleDAcces = 'activer' | 'mot-de-passe'
+
 export interface PilotageInvitationCleDAcces {
   ouverte: Readonly<Ref<boolean>>
+  etape: Readonly<Ref<EtapeInvitationCleDAcces>>
+  /** Le mot de passe vient d'être confirmé : le bouton dit ce qu'il va ouvrir
+   *  (« Activer Face ID / empreinte »), c'est le second geste. */
+  motDePasseConfirme: Readonly<Ref<boolean>>
+  /** Pour les mots : Windows Hello sur un PC, Face ID ou l'empreinte ailleurs. */
+  systeme: Readonly<Ref<SystemeAppareil>>
   enCours: Readonly<Ref<boolean>>
   /** Réponse du navigateur, en clair : la fenêtre reste ouverte pour réessayer. */
   message: Readonly<Ref<string | null>>
+  /** Le mot de passe refusé, en clair, sous le champ. */
+  erreurMotDePasse: Readonly<Ref<string | null>>
   /** Erreur du serveur, pour `MessageErreur`. */
   erreur: Readonly<Ref<unknown>>
-  /** Montré brièvement après la fermeture : « Clé d'accès ajoutée »… */
+  /** Montré brièvement après la fermeture : « Clé d'accès activée »… */
   confirmation: Readonly<Ref<string | null>>
   /** « Activer » — à appeler **dans** le clic. */
   accepter: () => Promise<void>
+  /** « Confirmer » de l'étape mot de passe. Le texte n'est pas gardé. */
+  confirmerMotDePasse: (motDePasse: string) => Promise<void>
   /** « Plus tard » ou Échap : trente jours de silence pour ce compte, ici. */
   plusTard: () => void
 }
 
+/** Le mot de passe refusé à la confirmation. */
+export const MESSAGE_MOT_DE_PASSE_REFUSE = 'Ce mot de passe ne correspond pas. Vérifiez-le et réessayez.'
+
 /**
  * Le pilote de la fenêtre, pour `InvitationCleDAcces`. À appeler dans un
  * `setup` : les minuteries tombent avec lui.
+ *
+ * Il observe la session et le cadre ; quand tout y est, il prend la priorité
+ * sur les notifications, attend `DELAI_INVITATION_CLE_MS`, interroge le
+ * navigateur (et, au besoin, le serveur), prépare le défi, puis ouvre — ou
+ * renonce et rend la main.
  */
 export function piloterInvitationCleDAcces(
   lireAvecCadre: () => boolean,
   horloge: () => number = Date.now,
 ): PilotageInvitationCleDAcces {
   const ouverte = shallowRef(false)
+  const etape = shallowRef<EtapeInvitationCleDAcces>('activer')
+  const motDePasseConfirme = shallowRef(false)
+  const systeme = shallowRef<SystemeAppareil>('autre')
   const enCours = shallowRef(false)
   const message = shallowRef<string | null>(null)
+  const erreurMotDePasse = shallowRef<string | null>(null)
   const erreur = shallowRef<unknown>(null)
   const confirmation = shallowRef<string | null>(null)
   let attente: ReturnType<typeof setTimeout> | null = null
   let minuterieConfirmation: ReturnType<typeof setTimeout> | null = null
+  /** Augmente à chaque changement de situation : une décision asynchrone
+   *  partie avant n'a plus le droit d'ouvrir. */
+  let tour = 0
   const session = useSession()
+
+  function utilisateurCourant(): number | null {
+    return session.session.value?.utilisateur.id ?? null
+  }
 
   function annulerAttente(): void {
     if (attente !== null) clearTimeout(attente)
     attente = null
   }
 
-  async function decider(): Promise<void> {
+  /** Ce qu'on sait sans rien demander : le navigateur sait-il faire, pas
+   *  d'incarnation, pas de « Plus tard » récent. L'authentificateur et la clé
+   *  ici se vérifient après le délai. */
+  function conditionsImmediates(utilisateurId: number): boolean {
+    return invitationCleDAccesPossible({
+      webauthn: environnementCleDAcces().webauthn,
+      plateforme: true,
+      connecte: session.connecte.value,
+      incarnation: session.incarnation?.value != null,
+      cleSurCetAppareil: false,
+      plusTardLe: lirePlusTardCleDAcces(utilisateurId),
+      maintenant: horloge(),
+    })
+  }
+
+  /** Ce compte ne sera plus invité dans ce chargement ; les notifications
+   *  peuvent passer. */
+  function renoncer(utilisateurId: number): void {
+    examinesCeChargement.add(utilisateurId)
+    libererApresLaCleDAcces()
+  }
+
+  async function decider(utilisateurId: number): Promise<void> {
+    const numero = tour
     const env = environnementCleDAcces()
     const plateforme = env.webauthn ? await env.plateforme() : false
     // La situation a pu changer pendant la question au navigateur.
-    if (!aProposer.value || ouverte.value) return
-    if (!lireAvecCadre()) return // le `watch` repartira à l'écran suivant
+    if (numero !== tour) return
+    if (!plateforme) {
+      renoncer(utilisateurId)
+      return
+    }
 
-    const utilisateurId = session.session.value?.utilisateur.id ?? null
+    if (cetAppareilAUneCle(utilisateurId)) {
+      await corrigerLaMemoireAvecLeServeur(utilisateurId)
+      if (numero !== tour) return
+    }
     const possible =
-      utilisateurId !== null &&
+      lireAvecCadre() &&
       invitationCleDAccesPossible({
         webauthn: env.webauthn,
         plateforme,
@@ -568,41 +668,67 @@ export function piloterInvitationCleDAcces(
         maintenant: horloge(),
       })
     if (!possible) {
-      renoncer()
+      renoncer(utilisateurId)
       return
     }
+
+    // Le défi d'abord (Safari, voir l'en-tête) — et c'est sa réponse qui dit
+    // sur quelle étape ouvrir. Un autre refus (réseau…) ouvre quand même :
+    // « Activer » redemandera, et dira l'erreur.
+    const refus = await preparerAjoutCleDAcces(horloge)
+    if (numero !== tour) return
+
+    examinesCeChargement.add(utilisateurId)
+    systeme.value = systemeDeLAgent(env.agent)
+    etape.value = preuveDIdentiteRequise(refus) ? 'mot-de-passe' : 'activer'
+    motDePasseConfirme.value = false
     message.value = null
+    erreurMotDePasse.value = null
     erreur.value = null
     ouverte.value = true
-    void preparerAjoutCleDAcces(horloge)
   }
-
-  const arreterSurveillance = watch(
-    () => [aProposer.value, session.connecte.value, lireAvecCadre()] as const,
-    ([proposer, connecte, avecCadre]) => {
-      annulerAttente()
-      if (!proposer || ouverte.value) return
-      // Déconnecté entre-temps : l'occasion est passée.
-      if (!connecte) {
-        renoncer()
-        return
-      }
-      // Arrivé sur un écran sans cadre (lien de tirage…) : on attend le suivant.
-      if (!avecCadre) return
-      attente = setTimeout(() => {
-        attente = null
-        void decider()
-      }, DELAI_INVITATION_CLE_MS)
-    },
-    { immediate: true },
-  )
 
   function fermer(): void {
     ouverte.value = false
     message.value = null
+    erreurMotDePasse.value = null
     erreur.value = null
-    renoncer()
+    motDePasseConfirme.value = false
+    libererApresLaCleDAcces()
   }
+
+  const arreterSurveillance = watch(
+    () => [session.connecte.value, session.incarnation?.value != null, lireAvecCadre(), utilisateurCourant()] as const,
+    ([connecte, incarnation, avecCadre, utilisateurId]) => {
+      annulerAttente()
+      tour++
+      if (ouverte.value) {
+        // Déconnecté, ou incarnation commencée, fenêtre ouverte : elle n'a
+        // plus lieu d'être — sans valoir « Plus tard ».
+        if (!connecte || incarnation) fermer()
+        return
+      }
+      if (!connecte || utilisateurId === null || examinesCeChargement.has(utilisateurId)) {
+        libererApresLaCleDAcces()
+        return
+      }
+      if (!conditionsImmediates(utilisateurId)) {
+        renoncer(utilisateurId)
+        return
+      }
+      // La priorité, tout de suite : les notifications s'abstiennent tant que
+      // ce n'est pas tranché.
+      reserverPourLaCleDAcces()
+      // Écran sans cadre (connexion, lien de tirage…) : on attend le suivant,
+      // en gardant la priorité.
+      if (!avecCadre) return
+      attente = setTimeout(() => {
+        attente = null
+        void decider(utilisateurId)
+      }, DELAI_INVITATION_CLE_MS)
+    },
+    { immediate: true },
+  )
 
   function confirmer(texte: string): void {
     confirmation.value = texte
@@ -613,29 +739,55 @@ export function piloterInvitationCleDAcces(
     }, DUREE_CONFIRMATION_CLE_MS)
   }
 
+  async function confirmerMotDePasse(motDePasse: string): Promise<void> {
+    if (!ouverte.value || enCours.value || etape.value !== 'mot-de-passe' || motDePasse === '') return
+    enCours.value = true
+    message.value = null
+    erreurMotDePasse.value = null
+    erreur.value = null
+    try {
+      // Le défi est préparé ici : « Activer » partira sans attente.
+      await confirmerMotDePassePourAjout(motDePasse, horloge)
+      etape.value = 'activer'
+      motDePasseConfirme.value = true
+    } catch (cause) {
+      // Le mot de passe est toujours envoyé non vide : ce `422` veut dire faux.
+      if (preuveDIdentiteRequise(cause)) erreurMotDePasse.value = MESSAGE_MOT_DE_PASSE_REFUSE
+      else erreur.value = cause
+    } finally {
+      enCours.value = false
+    }
+  }
+
   async function accepter(): Promise<void> {
-    if (!ouverte.value || enCours.value) return
+    if (!ouverte.value || enCours.value || etape.value !== 'activer') return
     enCours.value = true
     message.value = null
     erreur.value = null
     try {
       await ajouterCleDAccesSurCetAppareil(null, horloge)
       fermer()
-      confirmer('Clé d’accès ajoutée : la prochaine fois, plus besoin du mot de passe.')
+      confirmer('Clé d’accès activée')
     } catch (cause) {
       const issue = issueDeLErreur(cause)
       if (preuveDIdentiteRequise(cause)) {
-        // La connexion date de plus de dix minutes : le serveur veut le mot de
-        // passe. Mon compte sait le demander ; une fenêtre surgie, non.
-        message.value =
-          'Pour ajouter une clé d’accès, passez par Mon compte : il faudra confirmer votre mot de passe.'
+        // La preuve a vieilli pendant que la fenêtre attendait (ou le défi
+        // n'a pas pu être préparé) : on redemande le mot de passe, ici.
+        etape.value = 'mot-de-passe'
+        motDePasseConfirme.value = false
       } else if (issue === 'deja-presente') {
         fermer()
         confirmer(messageDeLIssue(issue, 'ajout') ?? '')
       } else if (issue !== null) {
         message.value = messageDeLIssue(issue, 'ajout')
-        // Le défi a pu servir (ou non) : on en prépare un neuf pour l'essai suivant.
-        void preparerAjoutCleDAcces(horloge)
+        // Le défi a pu servir (ou non) : on en prépare un neuf pour l'essai
+        // suivant. S'il exige désormais le mot de passe, l'étape suit.
+        void preparerAjoutCleDAcces(horloge).then((refus) => {
+          if (preuveDIdentiteRequise(refus) && ouverte.value && !enCours.value) {
+            etape.value = 'mot-de-passe'
+            motDePasseConfirme.value = false
+          }
+        })
       } else {
         erreur.value = cause
       }
@@ -646,7 +798,7 @@ export function piloterInvitationCleDAcces(
 
   function plusTard(): void {
     if (!ouverte.value || enCours.value) return
-    const utilisateurId = session.session.value?.utilisateur.id ?? null
+    const utilisateurId = utilisateurCourant()
     if (utilisateurId !== null) ecrirePlusTardCleDAcces(utilisateurId, horloge())
     fermer()
   }
@@ -655,17 +807,25 @@ export function piloterInvitationCleDAcces(
     onScopeDispose(() => {
       arreterSurveillance()
       annulerAttente()
+      tour++
       if (minuterieConfirmation !== null) clearTimeout(minuterieConfirmation)
+      // Le pilote s'en va : il ne doit pas retenir les notifications avec lui.
+      libererApresLaCleDAcces()
     })
   }
 
   return {
     ouverte: readonly(ouverte),
+    etape: readonly(etape),
+    motDePasseConfirme: readonly(motDePasseConfirme),
+    systeme: readonly(systeme),
     enCours: readonly(enCours),
     message: readonly(message),
+    erreurMotDePasse: readonly(erreurMotDePasse),
     erreur: readonly(erreur),
     confirmation: readonly(confirmation),
     accepter,
+    confirmerMotDePasse,
     plusTard,
   }
 }

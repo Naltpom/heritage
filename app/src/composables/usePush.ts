@@ -478,10 +478,10 @@ export function usePush(): EtatPushExpose {
  * Le compte **en attente** est invité aussi : c'est lui qui a le plus à gagner,
  * la validation de son inscription peut arriver n'importe quand.
  *
- * Elle **cède le pas** à l'invitation à créer une clé d'accès, qui passe juste
- * après une connexion par mot de passe : jamais deux fenêtres automatiques en
- * même temps (`fenetresAutomatiques.ts`). Elle s'ouvre ensuite, dans le même
- * chargement si celle-là a été réglée, sinon au suivant.
+ * Elle **cède le pas** à l'invitation à créer une clé d'accès, qui passe
+ * d'abord à l'arrivée : jamais deux fenêtres automatiques en même temps
+ * (`fenetresAutomatiques.ts`). Elle s'ouvre ensuite, dans le même chargement,
+ * dès que celle-là est réglée ou écartée.
  */
 
 /** Ce que la fenêtre propose : activer d'un clic, ou installer d'abord. */
@@ -534,9 +534,8 @@ export interface ContexteInvitationPush {
   /** Le dernier « Plus tard », ou `null`. */
   plusTardLe: number | null
   maintenant: number
-  /** Une autre fenêtre automatique passe d'abord — la clé d'accès, juste après
-   *  une connexion par mot de passe (`fenetresAutomatiques.ts`). Facultatif :
-   *  absent vaut « non ». */
+  /** Une autre fenêtre automatique passe d'abord — la clé d'accès, à
+   *  l'arrivée (`fenetresAutomatiques.ts`). Facultatif : absent vaut « non ». */
   autreFenetre?: boolean
 }
 

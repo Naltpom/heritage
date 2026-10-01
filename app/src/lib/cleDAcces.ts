@@ -317,6 +317,21 @@ export function libelleConnexionCleDAcces(plateforme: boolean, systeme: SystemeA
   return 'Se connecter avec Face ID / empreinte'
 }
 
+/** La phrase de l'invitation « Se connecter plus vite ? ». Ne s'affiche que si
+ *  `plateforme()` a dit oui : on peut nommer le geste. Sur un PC, c'est Windows
+ *  Hello ; partout ailleurs, Face ID ou l'empreinte. */
+export function texteInvitationCleDAcces(systeme: SystemeAppareil): string {
+  return systeme === 'windows'
+    ? 'Activez Windows Hello sur cet ordinateur pour vous connecter sans mot de passe.'
+    : 'Activez Face ID ou l’empreinte de ce téléphone pour vous connecter sans mot de passe.'
+}
+
+/** Le bouton du second geste, après le mot de passe : il dit ce qui va
+ *  s'ouvrir. */
+export function libelleActivationCleDAcces(systeme: SystemeAppareil): string {
+  return systeme === 'windows' ? 'Activer Windows Hello' : 'Activer Face ID / empreinte'
+}
+
 /** Le nom proposé pour une clé créée ici : ce que la personne reconnaîtra dans
  *  la liste de Mon compte, sans avoir à le taper. `null` si on ne sait pas — le
  *  serveur en choisit un. */
