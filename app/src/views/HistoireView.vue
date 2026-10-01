@@ -83,10 +83,12 @@ import {
   zoomAutour,
   borner as bornerEchelle,
   centrerSur,
+  jaugeDuZoom,
   type Cadrage,
   type Canevas,
 } from '@/histoire/vue'
 import { memoriserVue, reprendreVue, type VueMemorisee } from '@/histoire/retour'
+import { useSession } from '@/composables/useSession'
 
 const estMobile = useEstMobile()
 const { fermerTiroirs, unTiroirEstOuvert, ouvert: ouvertTiroir } = useTiroirs()
@@ -278,6 +280,11 @@ const canevas = computed<Canevas>(() => ({
 const s = computed(() => cadrage.value.s)
 const sy = computed(() => syDe(cadrage.value.s, canevas.value))
 const niveau = computed(() => niveauDe(cadrage.value.s))
+
+/** La jauge de zoom, pour l'administration seulement : un repère chiffré sur
+ *  les captures d'écran (« à 30 % les noms se chevauchent »), pas un réglage. */
+const { administrateur } = useSession()
+const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(cadrage.value.s, canevas.value) : null))
 const ensemble = computed(() => niveau.value === 0)
 
 const versEcranX = (x: number): number => cadrage.value.tx + x * s.value
@@ -1427,6 +1434,28 @@ onBeforeUnmount(() => {
               <span v-if="b.etiquette.sous" class="text-[11px] text-attenue">{{ b.etiquette.sous }}</span>
             </div>
           </template>
+        </div>
+
+        <!-- Jauge de zoom (administration) : le pourcentage et sa place entre
+             le zoom minimal et le maximal, avec les seuils Familles et Fiches. -->
+        <div
+          v-if="jauge"
+          class="pointer-events-none absolute z-[2] flex items-center gap-2 rounded-pastille border border-ligne bg-panneau/95 px-2.5 py-1 font-mono text-[11px] text-texte"
+          :style="{ left: `${gouttiere + 8}px`, top: `${(estMobile ? 30 : 40) + 6}px` }"
+          data-jauge-zoom
+          aria-hidden="true"
+        >
+          <span class="tabular-nums">{{ jauge.pourcent }} %</span>
+          <span class="relative h-1.5 w-24 rounded-full bg-ligne">
+            <span class="absolute inset-y-0 left-0 rounded-full bg-accent" :style="{ width: `${jauge.position * 100}%` }" />
+            <span
+              v-for="(seuil, i) in jauge.seuils"
+              :key="i"
+              class="absolute -inset-y-0.5 w-px bg-attenue"
+              :style="{ left: `${seuil * 100}%` }"
+            />
+          </span>
+          <span class="text-attenue">{{ PALIERS[niveau]!.libelle }}</span>
         </div>
 
         <!-- Gouttière des générations -->

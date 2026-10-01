@@ -163,3 +163,26 @@ export function trajectoire(
     return centrerSur(s, c, centre.x + (x - centre.x) * e, centre.y + (y - centre.y) * e, px, py)
   }
 }
+
+/**
+ * La jauge de zoom réservée à l'administration : le zoom en pour cent (100 % =
+ * le palier Fiches, une unité du monde par pixel) et sa place entre le zoom
+ * minimal et `ECHELLE_MAX`, sur une échelle logarithmique — chaque cran de
+ * molette avance d'autant. Elle sert à dire « à 30 % les noms se chevauchent »
+ * sur une capture, sans deviner.
+ */
+export interface JaugeDuZoom {
+  pourcent: number
+  /** 0 au zoom minimal, 1 à `ECHELLE_MAX`. */
+  position: number
+  /** Les seuils des niveaux Familles et Fiches, à la même échelle. */
+  seuils: readonly [number, number]
+}
+
+export function jaugeDuZoom(s: number, c: Canevas): JaugeDuZoom {
+  const min = echelleMin(c.largeur, c.largeurMonde)
+  const etendue = Math.log(ECHELLE_MAX) - Math.log(min)
+  const place = (e: number): number =>
+    etendue <= 0 ? 1 : Math.min(1, Math.max(0, (Math.log(e) - Math.log(min)) / etendue))
+  return { pourcent: Math.round(s * 100), position: place(s), seuils: [place(SEUILS[0]), place(SEUILS[1])] }
+}
