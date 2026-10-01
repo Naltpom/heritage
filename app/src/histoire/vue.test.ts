@@ -3,6 +3,7 @@ import {
   ECHELLE_MAX,
   echelleMin,
   jaugeDuZoom,
+  reductionDuTexte,
   echelleVerticale,
   niveau,
   syDe,
@@ -16,12 +17,13 @@ import {
 const canevas: Canevas = { largeur: 1200, hauteur: 700, largeurMonde: 24000, hauteurMonde: 900 }
 
 describe('niveaux de détail', () => {
-  it('suit les seuils 0,16 / 0,55 : Ensemble, Familles, Fiches', () => {
+  it('suit les seuils 0,16 / 0,45 : Ensemble, Familles, Fiches', () => {
     expect(niveau(0.05)).toBe(0)
     expect(niveau(0.159)).toBe(0)
     expect(niveau(0.16)).toBe(1)
-    expect(niveau(0.549)).toBe(1)
-    expect(niveau(0.55)).toBe(2)
+    expect(niveau(0.449)).toBe(1)
+    expect(niveau(0.45)).toBe(2)
+    expect(niveau(0.44)).toBe(1)
     expect(niveau(1.8)).toBe(2)
   })
 })
@@ -122,5 +124,13 @@ describe('la jauge de zoom (administration)', () => {
     expect(seuils[0]).toBeLessThan(position)
     expect(position).toBeLessThan(seuils[1])
     expect(seuils[1]).toBeLessThan(1)
+  })
+})
+
+describe('la réduction du texte sous 80 %', () => {
+  it('écrit à 45 % la fiche de 80 % en plus petit, et ne grossit plus au-delà', () => {
+    expect(reductionDuTexte(0.4)).toBeCloseTo(0.5)
+    expect(reductionDuTexte(0.8)).toBe(1)
+    expect(reductionDuTexte(1.5)).toBe(1)
   })
 })
