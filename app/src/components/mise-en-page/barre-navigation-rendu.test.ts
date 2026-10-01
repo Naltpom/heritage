@@ -17,6 +17,7 @@ import { useTiroirs } from '@/composables/useTiroirs'
 
 const etat = vi.hoisted(() => ({
   regime: null as unknown as { value: string },
+  portrait: null as string | null,
 }))
 
 vi.mock('@/composables/useSession', async () => {
@@ -29,6 +30,7 @@ vi.mock('@/composables/useSession', async () => {
       rattache: c(() => etat.regime.value === 'membre' || etat.regime.value === 'administrateur'),
       administrateur: c(() => etat.regime.value === 'administrateur'),
       nomAffiche: c(() => 'Cobalt Romarin'),
+      session: c(() => (etat.portrait === null ? null : { portrait: { vignetteUrl: etat.portrait } })),
     }),
   }
 })
@@ -98,10 +100,21 @@ describe('la barre du bas', () => {
     expect(await rendre('membre', 'autre')).not.toContain('aria-current')
   })
 
-  it('montre les initiales du compte sur Moi', async () => {
+  it('montre sur Moi une silhouette tant que la fiche n’a pas de photo', async () => {
+    etat.portrait = null
     const html = await rendre()
 
-    expect(html).toMatch(/>CR<\/span>/)
+    expect(html).toContain('data-avatar="silhouette"')
+    expect(html).not.toMatch(/>CR<\/span>/)
+  })
+
+  it('montre sur Moi la photo de la fiche du compte', async () => {
+    etat.portrait = '/api/medias/7/vignette?v=1'
+    const html = await rendre()
+    etat.portrait = null
+
+    expect(html).toContain('data-avatar="photo"')
+    expect(html).toContain('src="/api/medias/7/vignette?v=1"')
   })
 
   it('n’existe pas pour un visiteur anonyme', async () => {

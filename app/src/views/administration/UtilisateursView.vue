@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * Les utilisateurs — § 10.1, et la bascule « voir comme un membre » (§ 10.4).
+ * Les utilisateurs — § 10.1, en tableau : une ligne par compte, les gestes en
+ * icônes (libellé au survol et pour les lecteurs d'écran).
  *
  * **C'est aussi le seul écran où se diagnostique un compte qui regarde l'arbre
  * de quelqu'un d'autre.** Le point de vue d'un visiteur se choisit d'après la
@@ -40,29 +41,24 @@
  * `409 dernier_administrateur` : se verrouiller dehors est un incident sans
  * porte de secours autre que la console. Le message vient du serveur.
  *
- * **La bascule.** Elle **remplace un cercle par un autre**, elle n'en supprime
- * jamais un : l'administrateur n'a pas de mode « sans filtre », il passe par un
- * cercle complet (ADR 0003). Deux conséquences qu'il faut traiter ici et pas
- * ailleurs : recharger la session (elle porte `voirComme` et le cercle) **et**
- * oublier l'`ETag` du graphe, qui incorpore le membre emprunté — sans quoi on
- * revalide, on reçoit `304`, et on regarde son propre graphe non filtré en
- * croyant tester celui de quelqu'un d'autre. `rafraichirSession()` fait les deux.
+ * **« Voir comme ce membre » a été retiré de cet écran** (01/10/2026) :
+ * « Se connecter en tant que » (ADR 0010) montre la même chose, et davantage.
+ * Une bascule restée active côté serveur se quitte toujours par le bandeau
+ * permanent du cadre.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   activerMembre,
-  activerVueComme,
   incarnerUtilisateur,
   listerMembresEnAttente,
   listerUtilisateurs,
   modifierUtilisateur,
-  quitterVueComme,
   type PhotoARattacher,
   type UtilisateurAdministration,
 } from '@/lib/api'
 import { rafraichirSession, useSession } from '@/composables/useSession'
-import BoutonBase from '@/components/base/BoutonBase.vue'
+import BoutonIcone from '@/components/base/BoutonIcone.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
@@ -130,6 +126,12 @@ async function agir(id: number, geste: () => Promise<unknown>): Promise<void> {
   }
 }
 
+/** Le nom de la fiche rattachée quand le cercle la laisse voir, sinon celui du compte. */
+function nomDeLaLigne(utilisateur: UtilisateurAdministration): string {
+  const fiche = utilisateur.membre?.personLabel
+  return fiche != null && fiche.trim() !== '' ? fiche : utilisateur.displayName
+}
+
 function estAdministrateur(utilisateur: UtilisateurAdministration): boolean {
   return utilisateur.roles.includes('ROLE_ADMIN')
 }
@@ -188,25 +190,6 @@ function basculerRole(utilisateur: UtilisateurAdministration): void {
 }
 
 /**
- * Entrer dans la vue d'un membre.
- *
- * `rafraichirSession()` est indispensable et n'est pas une précaution : c'est
- * lui qui pose `voirComme` dans le magasin — donc le bandeau permanent et les
- * boutons éteints — **et** qui oublie l'`ETag` du graphe.
- */
-async function voirComme(utilisateur: UtilisateurAdministration): Promise<void> {
-  const membre = utilisateur.membre
-  if (membre === null || suspendu.value) return
-  erreur.value = null
-  try {
-    await activerVueComme(membre.id)
-    await rafraichirSession()
-  } catch (cause) {
-    erreur.value = cause
-  }
-}
-
-/**
  * Se connecter **en tant que** ce compte (ADR 0010) : on devient le membre,
  * avec ses droits et rien de plus — donc plus cet écran, réservé à
  * l'administration. D'où le départ vers l'arbre, qu'il voit comme lui.
@@ -231,22 +214,12 @@ function incarnable(utilisateur: UtilisateurAdministration): boolean {
   return utilisateur.id !== moi.value && !estAdministrateur(utilisateur) && utilisateur.status !== 'suspendu'
 }
 
-async function quitter(): Promise<void> {
-  erreur.value = null
-  try {
-    await quitterVueComme()
-    await rafraichirSession()
-  } catch (cause) {
-    erreur.value = cause
-  }
-}
-
 function dateLisible(valeur: string | null): string {
   if (valeur === null) return ''
   const date = new Date(valeur)
   return Number.isNaN(date.getTime())
     ? valeur
-    : date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 </script>
 
@@ -258,130 +231,162 @@ function dateLisible(valeur: string | null): string {
     <template #vue><OngletsAdministration /></template>
   </BarreEcran>
 
-  <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6">
-    <!-- La bascule est active : on le redit ici, avec le moyen d'en sortir.
-         Le bandeau du socle le dit déjà en haut de toutes les pages ; ce
-         rappel-ci est à côté des boutons qu'il éteint. -->
-    <div
+  <div class="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6">
+    <!-- Une vue empruntée encore active éteint les gestes : on le redit ici, à
+         côté des boutons éteints. On en sort par le bandeau du cadre. -->
+    <p
       v-if="raisonSuspension !== null"
       class="rounded-panneau border border-accent bg-accent-doux px-3.5 py-3 text-sm text-accent"
       role="status"
     >
-      <p>{{ raisonSuspension }}</p>
-      <div class="mt-2">
-        <BoutonBase variante="secondaire" @click="quitter">Quitter la vue empruntée</BoutonBase>
-      </div>
-    </div>
+      {{ raisonSuspension }}
+    </p>
 
     <MessageErreur v-if="erreur !== null" :erreur="erreur" @action="charger" />
 
     <PanneauBase titre="Comptes">
       <SqueletteChargement v-if="chargement && utilisateurs.length === 0" :lignes="4" />
 
-      <ul v-else class="flex flex-col divide-y divide-ligne">
-        <li
-          v-for="utilisateur in utilisateurs"
-          :key="utilisateur.id"
-          class="py-3 first:pt-0 last:pb-0"
-        >
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="font-medium">{{ utilisateur.displayName }}</span>
-            <!-- Les trois valeurs de `StatutCompte` sont celles de la pastille,
-                 et la valeur affichée reste celle du modèle (§ 1.2). -->
-            <PastilleEtat :etat="utilisateur.status" />
-            <span v-if="estAdministrateur(utilisateur)" class="text-xs font-semibold text-accent">
-              Administrateur
-            </span>
-          </div>
+      <!-- Le tableau défile à l'horizontale sur un écran étroit plutôt que
+           d'écraser ses colonnes. -->
+      <div v-else class="overflow-x-auto">
+        <table class="w-full min-w-[760px] border-collapse text-sm">
+          <thead>
+            <tr class="border-b border-ligne text-left text-xs text-attenue">
+              <th scope="col" class="py-2 pr-3 font-semibold">Compte</th>
+              <th scope="col" class="py-2 pr-3 font-semibold">État</th>
+              <th scope="col" class="py-2 pr-3 font-semibold">Rattachement</th>
+              <th scope="col" class="py-2 pr-3 font-semibold whitespace-nowrap">Dernière connexion</th>
+              <th scope="col" class="py-2 text-right font-semibold">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-ligne">
+            <tr v-for="utilisateur in utilisateurs" :key="utilisateur.id" class="align-top">
+              <td class="py-3 pr-3">
+                <!-- Rattaché : le nom de **sa fiche** (prénoms et nom de l'arbre),
+                     celui du compte en second s'il diffère. -->
+                <p class="font-medium">{{ nomDeLaLigne(utilisateur) }}</p>
+                <p
+                  v-if="
+                    nomDeLaLigne(utilisateur) !== utilisateur.displayName &&
+                    utilisateur.displayName !== utilisateur.email
+                  "
+                  class="text-xs text-attenue"
+                >
+                  compte « {{ utilisateur.displayName }} »
+                </p>
+                <p class="text-xs text-attenue [overflow-wrap:anywhere]">{{ utilisateur.email }}</p>
+              </td>
 
-          <p class="mt-0.5 text-sm text-attenue">
-            {{ utilisateur.email }}
-            <template v-if="utilisateur.lastLoginAt">
-              — dernière connexion le {{ dateLisible(utilisateur.lastLoginAt) }}
-            </template>
-          </p>
+              <td class="py-3 pr-3">
+                <div class="flex flex-col items-start gap-1">
+                  <!-- Les trois valeurs de `StatutCompte` sont celles de la
+                       pastille, et la valeur affichée reste celle du modèle (§ 1.2). -->
+                  <PastilleEtat :etat="utilisateur.status" />
+                  <span v-if="estAdministrateur(utilisateur)" class="text-xs font-semibold text-accent">
+                    Administrateur
+                  </span>
+                </div>
+              </td>
 
-          <!-- Le rattachement, dans ses trois états — y compris celui où il n'y
-               en a aucun. Ce bloc était auparavant sous `v-if="membre !== null"`
-               et ne montrait donc **rien** pour le seul cas qu'on ne peut pas
-               deviner autrement. Le détail est dans `rattachement.ts`. -->
-          <MentionDeRattachement :membre="utilisateur.membre" />
+              <td class="max-w-80 py-3 pr-3">
+                <!-- Le rattachement, dans ses trois états — y compris celui où
+                     il n'y en a aucun. Le détail est dans `rattachement.ts`. -->
+                <MentionDeRattachement :membre="utilisateur.membre" />
+                <PortraitAValider :photo="portraitAValider(utilisateur)" :nom="utilisateur.displayName" />
+              </td>
 
-          <PortraitAValider :photo="portraitAValider(utilisateur)" :nom="utilisateur.displayName" />
+              <td class="py-3 pr-3 whitespace-nowrap text-attenue">
+                {{ utilisateur.lastLoginAt ? dateLisible(utilisateur.lastLoginAt) : '—' }}
+              </td>
 
-          <div class="mt-2 flex flex-wrap gap-2">
-            <!-- Un compte `a_rattacher` n'a pas de fiche : « Valider » rendrait
-                 `422` faute de `personId`. La décision se prend sur sa carte,
-                 avec la description et la suggestion — on y renvoie. -->
-            <RouterLink
-              v-if="aRattacher(utilisateur)"
-              :to="{ name: 'administration.rattachements' }"
-              class="inline-flex items-center rounded-champ border border-accent px-3 py-1.5 text-sm font-semibold text-accent hover:bg-accent-doux"
-            >
-              Identifier sa fiche
-            </RouterLink>
+              <td class="py-3">
+                <div class="flex justify-end gap-1.5">
+                  <!-- Un compte `a_rattacher` n'a pas de fiche : « Valider »
+                       rendrait `422` faute de `personId`. La décision se prend
+                       sur sa carte, avec la description et la suggestion. -->
+                  <RouterLink
+                    v-if="aRattacher(utilisateur)"
+                    :to="{ name: 'administration.rattachements' }"
+                    class="inline-flex size-8 items-center justify-center rounded-champ border border-accent text-accent hover:bg-accent-doux"
+                    aria-label="Identifier sa fiche"
+                    title="Identifier sa fiche"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      class="size-4"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      aria-hidden="true"
+                    >
+                      <circle cx="11" cy="11" r="6" />
+                      <path d="M20 20l-4.5-4.5" />
+                    </svg>
+                  </RouterLink>
 
-            <BoutonBase
-              v-else-if="utilisateur.membre !== null && utilisateur.membre.status === 'en_attente'"
-              :chargement="enCours === utilisateur.id"
-              :desactive="suspendu"
-              :title="infobulle"
-              @click="valider(utilisateur)"
-            >
-              Valider le rattachement
-            </BoutonBase>
+                  <BoutonIcone
+                    v-else-if="utilisateur.membre !== null && utilisateur.membre.status === 'en_attente'"
+                    libelle="Valider le rattachement"
+                    variante="accent"
+                    :chargement="enCours === utilisateur.id"
+                    :desactive="suspendu"
+                    :infobulle="infobulle"
+                    @click="valider(utilisateur)"
+                  >
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </BoutonIcone>
 
-            <BoutonBase
-              v-if="
-                utilisateur.membre !== null &&
-                utilisateur.membre.status === 'actif' &&
-                vueEmpruntee === null
-              "
-              variante="secondaire"
-              :desactive="suspendu"
-              :title="infobulle"
-              @click="voirComme(utilisateur)"
-            >
-              Voir comme ce membre
-            </BoutonBase>
+                  <BoutonIcone
+                    v-if="incarnable(utilisateur) && vueEmpruntee === null"
+                    libelle="Se connecter en tant que"
+                    :chargement="enCours === utilisateur.id"
+                    :desactive="suspendu || enCours !== null"
+                    :infobulle="infobulle"
+                    @click="incarner(utilisateur)"
+                  >
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                    <path d="M10 17l5-5-5-5" />
+                    <path d="M15 12H3" />
+                  </BoutonIcone>
 
-            <BoutonBase
-              v-if="incarnable(utilisateur) && vueEmpruntee === null"
-              variante="secondaire"
-              :chargement="enCours === utilisateur.id"
-              :desactive="suspendu || enCours !== null"
-              :title="infobulle"
-              @click="incarner(utilisateur)"
-            >
-              Se connecter en tant que
-            </BoutonBase>
+                  <!-- On ne se suspend pas soi-même, et on ne se retire pas son
+                       propre rôle : les deux sont des façons de se verrouiller
+                       dehors, et le serveur n'attrape que la seconde. -->
+                  <template v-if="utilisateur.id !== moi">
+                    <BoutonIcone
+                      :libelle="estAdministrateur(utilisateur) ? 'Retirer l’administration' : 'Rendre administrateur'"
+                      :desactive="suspendu || enCours !== null"
+                      :infobulle="infobulle"
+                      @click="basculerRole(utilisateur)"
+                    >
+                      <path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z" />
+                      <path v-if="estAdministrateur(utilisateur)" d="M9 12h6" />
+                      <path v-else d="M12 9v6M9 12h6" />
+                    </BoutonIcone>
 
-            <!-- On ne se suspend pas soi-même, et on ne se retire pas son propre
-                 rôle : les deux sont des façons de se verrouiller dehors, et le
-                 serveur n'attrape que la seconde. -->
-            <template v-if="utilisateur.id !== moi">
-              <BoutonBase
-                variante="secondaire"
-                :desactive="suspendu || enCours !== null"
-                :title="infobulle"
-                @click="basculerRole(utilisateur)"
-              >
-                {{ estAdministrateur(utilisateur) ? 'Retirer l’administration' : 'Rendre administrateur' }}
-              </BoutonBase>
-
-              <BoutonBase
-                v-if="suspensionBasculable(utilisateur)"
-                :variante="utilisateur.status === 'suspendu' ? 'secondaire' : 'danger'"
-                :desactive="suspendu || enCours !== null"
-                :title="infobulle"
-                @click="basculerSuspension(utilisateur)"
-              >
-                {{ utilisateur.status === 'suspendu' ? 'Réactiver' : 'Suspendre' }}
-              </BoutonBase>
-            </template>
-          </div>
-        </li>
-      </ul>
+                    <BoutonIcone
+                      v-if="suspensionBasculable(utilisateur)"
+                      :libelle="utilisateur.status === 'suspendu' ? 'Réactiver' : 'Suspendre'"
+                      :variante="utilisateur.status === 'suspendu' ? 'neutre' : 'danger'"
+                      :desactive="suspendu || enCours !== null"
+                      :infobulle="infobulle"
+                      @click="basculerSuspension(utilisateur)"
+                    >
+                      <path v-if="utilisateur.status === 'suspendu'" d="M8 5v14l11-7z" />
+                      <template v-else>
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M10 9v6M14 9v6" />
+                      </template>
+                    </BoutonIcone>
+                  </template>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </PanneauBase>
   </div>
 </template>
