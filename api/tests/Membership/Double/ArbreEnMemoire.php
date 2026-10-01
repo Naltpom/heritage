@@ -36,13 +36,29 @@ final class ArbreEnMemoire implements PortArbre
     /** @var list<FamilleDeLArbre> */
     private static array $familles = [];
 
-    private static string $empreinte = 'arbre-de-test';
+    /**
+     * L'empreinte **forcée** par {@see self::changerLEmpreinte()} ; `null`, elle se calcule
+     * sur le contenu.
+     *
+     * Elle était une constante, `arbre-de-test`, quel que soit l'arbre posé. Or le cercle se
+     * met en cache (`cache.app`, 24 h) sous `cercle.{empreinte}.{memberId}.{ancre}.{N}`, et
+     * ce pool est un répertoire **par processus** qui survit d'un test à l'autre. Deux
+     * tests qui posent deux arbres différents produisaient donc la même clé dès que le
+     * membre et l'ancre avaient les mêmes identifiants — ce qui arrive toujours, la base
+     * étant remontée à l'identique : le second recevait le cercle du premier. C'est ainsi
+     * que `RoutesDeLArbreTest`, exécuté après les tests des tirages, servait au membre le
+     * cercle d'`ego` des tirages (frères, conjointe…) et non le sien.
+     *
+     * En production l'empreinte est recalculée depuis les tables `tree_*` : un arbre
+     * différent donne une clé différente. Le double doit tenir la même promesse.
+     */
+    private static ?string $empreinte = null;
 
     public static function reinitialiser(): void
     {
         self::$personnes = [];
         self::$familles = [];
-        self::$empreinte = 'arbre-de-test';
+        self::$empreinte = null;
     }
 
     public static function ajouterPersonne(
@@ -87,6 +103,6 @@ final class ArbreEnMemoire implements PortArbre
 
     public function empreinte(): string
     {
-        return self::$empreinte;
+        return self::$empreinte ?? 'arbre-de-test.'.hash('xxh128', serialize([self::$personnes, self::$familles]));
     }
 }
