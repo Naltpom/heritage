@@ -144,6 +144,35 @@ describe('une seule porte d’entrée', () => {
   })
 })
 
+describe('un compte en attente (ADR 0003, révision du 01/10/2026)', () => {
+  // Il ne lit plus rien de l'arbre avant sa validation : une entrée qui le
+  // mènerait à un refus est pire qu'absente.
+  it('n’a qu’un onglet, son inscription — ni Accueil, ni Arbre, ni Explorer', async () => {
+    const html = await rendre('en_attente')
+
+    expect(liensVers(html, 'inscription.etat')).toBe(1)
+    expect(html).toContain('Mon inscription')
+    for (const nom of ['accueil', 'arbre', 'explorer']) {
+      expect(liensVers(html, nom), nom).toBe(0)
+    }
+  })
+
+  it('n’a ni recherche ni loupe : elles interrogent l’arbre', async () => {
+    const html = await rendre('en_attente')
+
+    expect(html).not.toContain('type="search"')
+    expect(html).not.toContain('id="recherche-entete"')
+    expect(html).not.toContain('Rechercher une personne')
+  })
+
+  it('garde la cloche et l’avatar : ses notifications et son compte sont à lui', async () => {
+    const html = await rendre('en_attente')
+
+    expect(html).toContain('data-test="cloche"')
+    expect(html).toContain('aria-label="Moi"')
+  })
+})
+
 describe('ce que l’en-tête garde', () => {
   it('monte la cloche pour un compte connecté, y compris en attente', async () => {
     expect(await rendre('membre')).toContain('data-test="cloche"')

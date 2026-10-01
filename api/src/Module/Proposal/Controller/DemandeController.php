@@ -6,6 +6,7 @@ namespace App\Module\Proposal\Controller;
 
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Security\ReserveAuxMembres;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Enum\RequestStatus;
@@ -289,11 +290,12 @@ final class DemandeController extends AbstractController
     /**
      * L'historique d'une fiche (§ 6.11) — les révisions **effectivement appliquées**.
      *
-     * Accessible au régime `ATTENTE` : ce sont des faits historiques sur des lignes que
-     * le lecteur a déjà le droit de voir. Le filtrage par le cercle de visibilité est
-     * appliqué en amont par le normaliseur de `Tree`, qui rend `404` sur une personne
-     * vivante hors cercle — « il porte des dates et des lieux, c'est-à-dire tout ce que
-     * la liste blanche exclut ».
+     * **Réservée aux membres** depuis le 01/10/2026 : un compte en attente ne lit plus
+     * rien de l'arbre, défunts compris (ADR 0003 révisée), et un historique de fiche en
+     * est une lecture — `403 regime_en_attente`. Pour un membre, le filtrage par le
+     * cercle reste appliqué en amont par le normaliseur de `Tree`, qui rend `404` sur une
+     * personne vivante hors cercle — « il porte des dates et des lieux, c'est-à-dire tout
+     * ce que la liste blanche exclut ».
      */
     #[Route(
         '/historique/{subjectKind}/{subjectId}',
@@ -301,6 +303,7 @@ final class DemandeController extends AbstractController
         requirements: ['subjectId' => '\d+'],
         methods: ['GET'],
     )]
+    #[ReserveAuxMembres]
     public function historique(
         string $subjectKind,
         int $subjectId,
@@ -360,6 +363,9 @@ final class DemandeController extends AbstractController
         requirements: ['personneId' => '\d+'],
         methods: ['GET'],
     )]
+    // L'inventaire décrit une fiche de l'arbre : lecture réservée aux membres (ADR 0003,
+    // révision du 01/10/2026). Un compte en attente ne dépose de toute façon rien.
+    #[ReserveAuxMembres]
     public function apercuDeSuppression(int $personneId, InventaireDeLaSuppression $inventaires): JsonResponse
     {
         $this->lecteurs->courant();

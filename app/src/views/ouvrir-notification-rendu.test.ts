@@ -15,6 +15,8 @@ const etat = vi.hoisted(() => ({
   replace: vi.fn(),
   marquer: vi.fn(),
   compteur: vi.fn(),
+  regime: 'membre' as string,
+  rafraichirSession: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -30,6 +32,10 @@ vi.mock('vue-router', () => ({
 }))
 vi.mock('@/lib/api', () => ({ marquerNotificationLue: etat.marquer }))
 vi.mock('@/composables/useNotifications', () => ({ rafraichirCompteur: etat.compteur }))
+vi.mock('@/composables/useSession', () => ({
+  useSession: () => ({ regime: { value: etat.regime } }),
+  rafraichirSession: etat.rafraichirSession,
+}))
 
 import OuvrirNotificationView from './OuvrirNotificationView.vue'
 
@@ -46,6 +52,8 @@ beforeEach(() => {
   etat.replace.mockResolvedValue(undefined)
   etat.marquer.mockResolvedValue({})
   etat.compteur.mockResolvedValue(undefined)
+  etat.rafraichirSession.mockResolvedValue(undefined)
+  etat.regime = 'membre'
 })
 
 describe('ouvrir une notification depuis le téléphone', () => {
@@ -73,5 +81,26 @@ describe('ouvrir une notification depuis le téléphone', () => {
     etat.marquer.mockRejectedValue(new Error('panne'))
     await ouvrir({ id: '7' }, { r: 'demande.detail', p: '{"id":6}' })
     expect(etat.replace).toHaveBeenCalledWith({ name: 'demande.detail', params: { id: 6 } })
+  })
+
+  it('ne relit pas la session d’un membre', async () => {
+    await ouvrir({ id: '7' }, { r: 'accueil', p: '{}' })
+    expect(etat.rafraichirSession).not.toHaveBeenCalled()
+  })
+
+  it('relit la session d’un compte en attente avant de partir — « Votre compte est activé »', async () => {
+    etat.regime = 'en_attente'
+    const ordre: string[] = []
+    etat.rafraichirSession.mockImplementation(async () => { ordre.push('session') })
+    etat.replace.mockImplementation(async () => { ordre.push('navigation') })
+    await ouvrir({ id: '7' }, { r: 'accueil', p: '{}' })
+    expect(ordre).toEqual(['session', 'navigation'])
+  })
+
+  it('navigue quand même si la relecture de session échoue', async () => {
+    etat.regime = 'en_attente'
+    etat.rafraichirSession.mockRejectedValue(new Error('panne'))
+    await ouvrir({ id: '7' }, { r: 'accueil', p: '{}' })
+    expect(etat.replace).toHaveBeenCalledWith({ name: 'accueil' })
   })
 })

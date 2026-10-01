@@ -28,7 +28,7 @@ describe('la pastille', () => {
 })
 
 describe('le type', () => {
-  it('a une étiquette lisible pour chacun des dix types du serveur', () => {
+  it('a une étiquette lisible pour chacun des onze types du serveur', () => {
     const types = [
       'demande_soumise',
       'demande_validee',
@@ -37,6 +37,7 @@ describe('le type', () => {
       'doublon_probable',
       'invitation_utilisee',
       'compte_en_attente',
+      'compte_active',
       'media_valide',
       'media_refuse',
       'tirage_effectue',
@@ -54,6 +55,7 @@ describe('le type', () => {
   it('marque un refus en alerte et une acceptation en ok', () => {
     expect(tonDeType('demande_refusee')).toBe('alerte')
     expect(tonDeType('demande_validee')).toBe('ok')
+    expect(tonDeType('compte_active')).toBe('ok')
     expect(tonDeType('tirage_effectue')).toBe('neutre')
   })
 })

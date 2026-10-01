@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Assistant;
 
 use App\Module\Core\Entity\AuditLog;
+use App\Module\Core\Entity\Notification;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\DateQualifier;
+use App\Module\Core\Enum\NotificationKind;
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Enum\UserStatus;
@@ -169,6 +171,19 @@ final class RattachementAssisteIntegrationTest extends CasDeTestDemandesHttp
         self::assertNull($membre->getDeclaredSurname());
         self::assertNull($membre->getAttachmentSuggestion());
         self::assertSame(UserStatus::Actif, $this->utilisateur(self::COURRIEL_INSCRIT)->getStatus());
+
+        // Le compte l'apprend par une notification **à lui**, `compte_active`, qui mène à
+        // l'accueil — et part aussi sur son téléphone, puisqu'elle passe par
+        // `NotificationService` (révision du 01/10/2026 : un compte en attente ne voit
+        // plus rien de l'arbre, cette notification est la seule à lui dire qu'il peut
+        // revenir).
+        $notifications = $this->em()->getRepository(Notification::class)->findBy([
+            'recipientUserId' => $this->utilisateur(self::COURRIEL_INSCRIT)->getId(),
+            'kind' => NotificationKind::CompteActive,
+        ]);
+        self::assertCount(1, $notifications, 'Une seule notification « Votre compte est activé ».');
+        self::assertSame('Votre compte est activé', $notifications[0]->getTitle());
+        self::assertSame('accueil', $notifications[0]->getLinkRoute());
 
         // La photo de l'inscription est devenue le portrait actif de la fiche neuve.
         $media = $this->em()->find(Media::class, $photo['id']);

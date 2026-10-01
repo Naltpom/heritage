@@ -19,8 +19,10 @@
  * Ce qui ne change pas :
  *
  * - **La liste suit le régime, pas le rôle.** Un compte en attente ne voit que
- *   son compte, l'installation et la déconnexion — l'API lui refuserait le
- *   reste, et la garde de route le renverrait vers l'écran d'attente.
+ *   son inscription, son compte, l'installation et la déconnexion — il ne lit
+ *   plus rien de l'arbre (ADR 0003, révision du 01/10/2026), l'API lui
+ *   refuserait le reste, et la garde de route le renverrait vers l'écran
+ *   d'attente.
  *   L'administration n'apparaît qu'à un administrateur. Masquer n'est pas une
  *   mesure de sécurité : les gardes de route doublent, le serveur double tout.
  * - **Lignes tactiles de 48 px au moins** (`min-h-12`) en forme page : c'est la
@@ -94,7 +96,11 @@ interface Entree {
 }
 
 const entrees = computed<Entree[]>(() => {
-  const liste: Entree[] = [{ nom: 'compte', libelle: 'Mon compte' }]
+  const liste: Entree[] = []
+  // Un compte en attente retrouve ici son écran d'attente — la seule autre
+  // page qui lui serve tant que l'arbre lui est fermé (ADR 0003, 01/10/2026).
+  if (!rattache.value) liste.push({ nom: 'inscription.etat', libelle: 'Mon inscription' })
+  liste.push({ nom: 'compte', libelle: 'Mon compte' })
   if (rattache.value) {
     liste.push(
       { nom: 'demandes.miennes', libelle: 'Mes demandes', compte: demandesEnAttente.value },

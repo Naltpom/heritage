@@ -12,6 +12,14 @@
  * initiales du compte, et une pastille quand la file de validation attend un
  * administrateur.
  *
+ * **Un compte en attente n'en voit que deux** : Inscription · Moi (ADR 0003,
+ * révision du 01/10/2026). Il ne lit plus rien de l'arbre avant sa validation :
+ * Accueil, Arbre et Explorer ne le mèneraient qu'à un refus, et la garde le
+ * renverrait aussitôt à l'écran d'attente. « Inscription » est cet écran — sa
+ * page à lui, d'où l'icône de la maison et la section `accueil` qui l'allume
+ * (`sectionDe`). La barre se règle sur le régime, pas sur le rôle : la
+ * validation venue, la session relue rend les quatre entrées.
+ *
  * Ce qui est moins visible, et pourquoi :
  *
  * - **Cachée au-delà de `md`** (`md:hidden`) : sur bureau, les onglets de
@@ -41,7 +49,7 @@ import { useEntete, type Section } from '@/composables/entete'
 import { useTiroirs } from '@/composables/useTiroirs'
 import { listerDemandesAdministration } from '@/lib/api'
 
-const { connecte, administrateur, nomAffiche } = useSession()
+const { connecte, rattache, administrateur, nomAffiche } = useSession()
 const { section } = useEntete()
 const { ouvert } = useTiroirs()
 
@@ -54,6 +62,14 @@ const ENTREES: Entree[] = [
   { section: 'explorer', nom: 'explorer', libelle: 'Explorer' },
   { section: 'moi', nom: 'moi', libelle: 'Moi' },
 ]
+
+/** Un compte en attente : son inscription et Moi, rien qui lise l'arbre. */
+const ENTREES_EN_ATTENTE: Entree[] = [
+  { section: 'accueil', nom: 'inscription.etat', libelle: 'Inscription' },
+  { section: 'moi', nom: 'moi', libelle: 'Moi' },
+]
+
+const entrees = computed(() => (rattache.value ? ENTREES : ENTREES_EN_ATTENTE))
 
 const initiales = computed(() => {
   const mots = nomAffiche.value.split(/[\s@.]+/).filter(Boolean)
@@ -117,8 +133,8 @@ onBeforeUnmount(() => {
     :class="{ invisible: ouvert === 'outils' }"
     class="barre-navigation fixed inset-x-0 bottom-0 z-30 border-t border-ligne bg-panneau pb-[env(safe-area-inset-bottom)] md:hidden"
   >
-    <ul class="m-0 grid h-14 list-none grid-cols-4 p-0">
-      <li v-for="e in ENTREES" :key="e.nom" class="flex">
+    <ul class="m-0 grid h-14 list-none p-0" :class="entrees.length === 4 ? 'grid-cols-4' : 'grid-cols-2'">
+      <li v-for="e in entrees" :key="e.nom" class="flex">
         <RouterLink
           :to="{ name: e.nom }"
           class="flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] leading-none"

@@ -211,6 +211,24 @@ describe('le bandeau permanent', () => {
     return renderToString(app)
   }
 
+  /**
+   * ADR 0003, révision du 01/10/2026 — un compte en attente ne voit plus rien
+   * de l'arbre : le bandeau ne doit plus lui promettre « les fiches des
+   * personnes décédées ».
+   */
+  it('dit au compte en attente que l’arbre lui sera ouvert à la validation', async () => {
+    etat.vueEmpruntee.value = null
+    etat.incarnation.value = null
+    etat.regime.value = 'en_attente'
+    const app = createSSRApp({ render: () => h(BandeauRegime) })
+    app.component('RouterLink', RouterLinkBouchon)
+    const html = await renderToString(app)
+
+    expect(html).toContain('Inscription en cours de vérification')
+    expect(html).toMatch(/sera ouvert dès qu’elle sera validée/)
+    expect(html).not.toMatch(/décédées/)
+  })
+
   it('annonce la vue empruntée et qui est emprunté', async () => {
     const html = await rendreBandeau(VUE_EMPRUNTEE)
 

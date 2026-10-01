@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Demarche\Controller;
 
-use App\Module\Core\Security\RegimeVoter;
+use App\Module\Core\Security\ReserveAuxMembres;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Demarche\Entity\Demarche;
 use App\Module\Demarche\Exception\ErreurDeDemarche;
@@ -17,7 +17,6 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * Les actes demandés — à une mairie, à des archives — et leur suivi.
@@ -37,7 +36,10 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * bascule « voir comme un membre ». Chaque réponse d'écriture est la démarche relue.
  */
 #[Route('/api/demarches')]
-#[IsGranted(RegimeVoter::MEMBRE)]
+// `ReserveAuxMembres` plutôt que `IsGranted(RegimeVoter::MEMBRE)` : même décision, mais
+// un compte en attente reçoit `403 regime_en_attente`, et non un `acces_refuse` muet
+// (ADR 0003, révision du 01/10/2026).
+#[ReserveAuxMembres]
 final class DemarcheController extends AbstractController
 {
     public function __construct(

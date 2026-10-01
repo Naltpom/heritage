@@ -5,17 +5,16 @@ declare(strict_types=1);
 namespace App\Module\Almanach\Controller;
 
 use App\Module\Almanach\Service\NormaliseurDeLaCarte;
-use App\Module\Core\Security\RegimeVoter;
+use App\Module\Core\Security\ReserveAuxMembres;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * La route de la carte des lieux.
  *
  * ```
- * GET /api/carte     ATTENTE   200
+ * GET /api/carte     MEMBRE   200   (compte en attente : 403 regime_en_attente)
  * ```
  *
  * ## Ce contrôleur ne filtre rien
@@ -26,12 +25,12 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * le jour où un `if` de confidentialité apparaîtrait ici, il y aurait deux endroits qui en
  * décident, et le second serait celui qu'on oublierait de corriger.
  *
- * ## `ATTENTE`, comme la chronologie
+ * ## `MEMBRE`, comme la chronologie — révision du 01/10/2026
  *
- * Un compte en attente de validation lit l'arbre ancien pendant plusieurs jours (§ 12.1) ;
- * son régime `Regime::Aucun` ne lui montre que des personnes décédées, et sa carte ne porte
- * donc que des lieux de défunts. Ce n'est pas une faveur : c'est ce que le cercle décide,
- * en un seul endroit, sans qu'aucune ligne de ce module n'ait à connaître les régimes.
+ * Un compte en attente de validation voyait la carte des défunts. Depuis l'ADR 0003
+ * révisée, il ne lit plus rien de l'arbre avant sa validation : {@see ReserveAuxMembres}
+ * lui rend `403 regime_en_attente` avant que le flux soit chargé. Pour un membre, rien ne
+ * change : c'est toujours le cercle qui décide, en un seul endroit.
  *
  * ## Aucun paramètre de requête — et c'est une décision, pas un manque
  *
@@ -42,7 +41,7 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * après mon filtre ? ». Ici la réponse est écrite et ne bouge pas : **avant tout filtre
  * client, après le cercle**.
  */
-#[IsGranted(RegimeVoter::ATTENTE)]
+#[ReserveAuxMembres]
 final class CarteController extends AbstractController
 {
     /**

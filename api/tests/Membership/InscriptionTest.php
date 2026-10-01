@@ -157,15 +157,12 @@ final class InscriptionTest extends CasDeTestMembership
 
         // `portraitEnAttente` depuis l'ADR 0013 : un booléen, pas l'image — l'écran propose
         // « Ajouter votre photo » à qui a passé l'étape.
-        self::assertSame(['status', 'depuis', 'matchKind', 'regime', 'cequejevois', 'portraitEnAttente'], array_keys($etat));
+        // Plus de `cequejevois` : un compte en attente ne lit plus aucun chiffre de l'arbre
+        // (ADR 0003, révision du 2026-10-01).
+        self::assertSame(['status', 'depuis', 'matchKind', 'regime', 'portraitEnAttente'], array_keys($etat));
         self::assertFalse($etat['portraitEnAttente']);
         self::assertSame('en_attente', $etat['status']);
         self::assertSame('aucun', $etat['regime']);
-        self::assertSame(
-            ['personnesDecedees' => 5, 'personnesTotales' => 15],
-            $etat['cequejevois'],
-            'Deux nombres, comptés sur la propriété calculée « vivant », jamais sur une colonne.',
-        );
     }
 
     /** Un mot de passe de moins de douze signes est refusé — § 6.1 du dossier. */

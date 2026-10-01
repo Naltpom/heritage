@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Tirage\Controller;
 
-use App\Module\Core\Security\RegimeVoter;
+use App\Module\Core\Security\ReserveAuxMembres;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Tirage\Entity\Tirage;
 use App\Module\Tirage\Service\IdentiteDuLecteur;
@@ -17,7 +17,6 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * Les tirages au sort récurrents — ADR 0009.
@@ -53,7 +52,10 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * {@see LienDeTirageController}.
  */
 #[Route('/api/tirages')]
-#[IsGranted(RegimeVoter::MEMBRE)]
+// `ReserveAuxMembres` plutôt que `IsGranted(RegimeVoter::MEMBRE)` : même décision, mais
+// un compte en attente reçoit `403 regime_en_attente`, et non un `acces_refuse` muet
+// (ADR 0003, révision du 01/10/2026).
+#[ReserveAuxMembres]
 final class TirageController extends AbstractController
 {
     public function __construct(

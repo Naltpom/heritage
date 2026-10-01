@@ -54,7 +54,7 @@
  * l'environnement de vitest est `node`, sans `Notification` ni service worker.
  */
 
-import { readonly, shallowRef, watch, type Ref } from 'vue'
+import { getCurrentScope, onScopeDispose, readonly, shallowRef, watch, type Ref } from 'vue'
 import { enregistrerAbonnementPush, lireClePush, supprimerAbonnementPush } from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import { useInstallation } from '@/composables/installation'
@@ -170,6 +170,9 @@ const erreur = shallowRef<string | null>(null)
 /** Le lecteur a touché « Désactiver » sur cet appareil : on ne le lui repropose
  *  qu'à l'endroit où il l'a dit (Moi), jamais ailleurs. */
 const refuse = shallowRef(false)
+/** L'invitation automatique a-t-elle déjà été montrée depuis le chargement de
+ *  l'application ? Voir « L'invitation automatique », en fin de module. */
+let invitationProposee = false
 
 /** Remet l'état à zéro — pour les tests, qui partagent le module. */
 export function reinitialiserPush(): void {
@@ -178,6 +181,7 @@ export function reinitialiserPush(): void {
   erreur.value = null
   refuse.value = false
   file = Promise.resolve()
+  invitationProposee = false
 }
 
 /**
@@ -447,5 +451,202 @@ export function usePush(): EtatPushExpose {
     activer: activerPush,
     desactiver: desactiverPush,
     synchroniser: synchroniserPush,
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* L'invitation automatique                                            */
+/* ------------------------------------------------------------------ */
+
+/*
+ * « Activer les notifications », proposé **de lui-même**, sans que le lecteur
+ * ait à trouver la ligne de « Moi » ou le lien de la cloche.
+ *
+ * Les navigateurs interdisent `requestPermission()` hors geste : la fenêtre
+ * système ne peut pas s'ouvrir seule. On ouvre donc **notre** fenêtre, et c'est
+ * son bouton « Activer » qui appelle `activerPush()` — dans le geste.
+ *
+ * Elle n'insiste pas. Elle ne s'ouvre qu'à qui un clic suffit (`desactive`) ou
+ * à qui il suffit d'installer l'application (`a_installer`, iPhone) ; jamais à
+ * qui a touché « Désactiver » dans Moi, jamais à qui le navigateur a bloqué
+ * (aucun bouton n'y peut plus rien), jamais pendant une incarnation (ce serait
+ * abonner le téléphone de l'administrateur au compte d'un autre). « Plus tard »
+ * la fait taire **sept jours** sur cet appareil ; et une seule fois par
+ * chargement de l'application, quoi qu'il arrive.
+ *
+ * Le compte **en attente** est invité aussi : c'est lui qui a le plus à gagner,
+ * la validation de son inscription peut arriver n'importe quand.
+ */
+
+/** Ce que la fenêtre propose : activer d'un clic, ou installer d'abord. */
+export type FormeInvitationPush = 'activer' | 'installer'
+
+/** Clé `localStorage` : quand le lecteur a répondu « Plus tard » (ms epoch). */
+const CLE_PLUS_TARD = 'heritage.push.invitation.plus-tard'
+
+/** Silence après « Plus tard ». */
+export const SILENCE_INVITATION_MS = 7 * 24 * 60 * 60 * 1000
+
+/** Le temps de laisser l'écran s'afficher avant de le couvrir : une fenêtre
+ *  qui surgit avec la page coupe la lecture avant qu'elle commence. */
+export const DELAI_INVITATION_MS = 1_500
+
+/** Durée du « Notifications activées ». */
+const DUREE_CONFIRMATION_MS = 3_000
+
+/** Lu protégé : stockage bloqué (navigation privée de Safari) = jamais répondu. */
+export function lirePlusTardInvitation(): number | null {
+  try {
+    const brut = globalThis.localStorage?.getItem(CLE_PLUS_TARD)
+    if (brut == null) return null
+    const date = Number(brut)
+    return Number.isFinite(date) ? date : null
+  } catch {
+    return null
+  }
+}
+
+export function ecrirePlusTardInvitation(date: number): void {
+  try {
+    globalThis.localStorage?.setItem(CLE_PLUS_TARD, String(date))
+  } catch {
+    // Stockage bloqué : la fenêtre reviendra au prochain chargement, et non
+    // dans sept jours. « Une fois par chargement » reste tenu.
+  }
+}
+
+/** Tout ce dont dépend la décision — rien d'autre n'est lu. */
+export interface ContexteInvitationPush {
+  etat: EtatPush
+  /** « Désactiver » touché dans Moi, sur cet appareil. */
+  refuse: boolean
+  /** Session ouverte, compte en attente compris. */
+  connecte: boolean
+  incarnation: boolean
+  /** Écran avec en-tête : pas la connexion, l'inscription, ni `/t/…`. */
+  avecCadre: boolean
+  /** Le dernier « Plus tard », ou `null`. */
+  plusTardLe: number | null
+  maintenant: number
+}
+
+/**
+ * La fenêtre doit-elle s'ouvrir, et sous quelle forme ? Fonction pure : c'est
+ * elle que les tests passent au crible, cas par cas. Ne tient **pas** compte
+ * du « une fois par chargement » — c'est l'affaire de `piloterInvitationPush()`.
+ */
+export function formeInvitationPush(c: ContexteInvitationPush): FormeInvitationPush | null {
+  if (!c.connecte || c.incarnation || !c.avecCadre || c.refuse) return null
+  if (c.plusTardLe !== null && c.maintenant - c.plusTardLe < SILENCE_INVITATION_MS) return null
+  // `active`, `bloque`, `indisponible`, `inconnu` : rien à proposer.
+  if (c.etat === 'desactive') return 'activer'
+  if (c.etat === 'a_installer') return 'installer'
+  return null
+}
+
+export interface PilotageInvitationPush {
+  /** La forme ouverte, ou `null` quand la fenêtre est fermée. */
+  forme: Readonly<Ref<FormeInvitationPush | null>>
+  /** « Notifications activées », montré brièvement après un accord. */
+  confirmation: Readonly<Ref<boolean>>
+  enCours: Readonly<Ref<boolean>>
+  /** « Activer » — à appeler **dans** le clic (voir `activerPush()`). */
+  accepter: () => Promise<void>
+  /** « Plus tard », « Compris » ou Échap : sept jours de silence. */
+  plusTard: () => void
+}
+
+/**
+ * Le pilote de la fenêtre, pour le composant `InvitationNotifications`.
+ *
+ * Il observe les conditions ; quand elles sont réunies, il attend
+ * `DELAI_INVITATION_MS`, **revérifie** (le lecteur a pu changer d'écran, la
+ * session a pu tomber) et ouvre. Une condition qui tombe pendant l'attente
+ * annule l'ouverture. À appeler dans un `setup` (ou un `effectScope`) : les
+ * minuteries tombent avec lui.
+ *
+ * Le « Plus tard » est relu à chaque calcul et non mis en cache : un autre
+ * onglet a pu répondre entre-temps.
+ */
+export function piloterInvitationPush(
+  lireAvecCadre: () => boolean,
+  horloge: () => number = Date.now,
+): PilotageInvitationPush {
+  const forme = shallowRef<FormeInvitationPush | null>(null)
+  const confirmation = shallowRef(false)
+  let attente: ReturnType<typeof setTimeout> | null = null
+  let minuterieConfirmation: ReturnType<typeof setTimeout> | null = null
+
+  function calculer(): FormeInvitationPush | null {
+    const session = useSession()
+    return formeInvitationPush({
+      etat: etat.value,
+      refuse: refuse.value,
+      connecte: session.connecte.value,
+      incarnation: session.incarnation?.value != null,
+      avecCadre: lireAvecCadre(),
+      plusTardLe: lirePlusTardInvitation(),
+      maintenant: horloge(),
+    })
+  }
+
+  function annulerAttente(): void {
+    if (attente !== null) clearTimeout(attente)
+    attente = null
+  }
+
+  const arreter = watch(
+    calculer,
+    (prevue) => {
+      annulerAttente()
+      if (prevue === null || invitationProposee || forme.value !== null) return
+      attente = setTimeout(() => {
+        attente = null
+        const confirmee = calculer()
+        if (confirmee === null || invitationProposee) return
+        invitationProposee = true
+        forme.value = confirmee
+      }, DELAI_INVITATION_MS)
+    },
+    { immediate: true },
+  )
+
+  function plusTard(): void {
+    if (forme.value === null) return
+    ecrirePlusTardInvitation(horloge())
+    forme.value = null
+  }
+
+  function accepter(): Promise<void> {
+    // `activerPush()` d'abord, de façon synchrone : la demande de permission
+    // doit partir dans le même tour que le clic.
+    return activerPush().then((accorde) => {
+      // Refusé par le navigateur : l'état devient `bloque`, et c'est Moi qui
+      // explique comment le rendre. Rien de plus à dire ici.
+      forme.value = null
+      if (!accorde) return
+      confirmation.value = true
+      if (minuterieConfirmation !== null) clearTimeout(minuterieConfirmation)
+      minuterieConfirmation = setTimeout(() => {
+        confirmation.value = false
+        minuterieConfirmation = null
+      }, DUREE_CONFIRMATION_MS)
+    })
+  }
+
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      arreter()
+      annulerAttente()
+      if (minuterieConfirmation !== null) clearTimeout(minuterieConfirmation)
+    })
+  }
+
+  return {
+    forme: readonly(forme),
+    confirmation: readonly(confirmation),
+    enCours: readonly(enCours),
+    accepter,
+    plusTard,
   }
 }

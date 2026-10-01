@@ -31,6 +31,11 @@ import BandeauRegime from '@/components/mise-en-page/BandeauRegime.vue'
 // sous une identité qu'il a oubliée (§ 10.4).
 import QuitterIncarnation from '@/components/administration/QuitterIncarnation.vue'
 import QuitterVueEmpruntee from '@/components/administration/QuitterVueEmpruntee.vue'
+// L'invitation automatique à activer les notifications du téléphone. Montée
+// HORS du bloc du cadre, qui lui passe seulement `avec-cadre` : elle ne s'ouvre
+// que sur un écran avec cadre, mais un passage par un écran sans cadre ne doit
+// pas lui faire perdre sa fenêtre ni son « Notifications activées ».
+import InvitationNotifications from '@/components/notifications/InvitationNotifications.vue'
 
 const route = useRoute()
 const avecCadre = computed(() => route.meta.cadre !== false)
@@ -64,4 +69,6 @@ const avecCadre = computed(() => route.meta.cadre !== false)
       <RouterView />
     </main>
   </div>
+
+  <InvitationNotifications :avec-cadre="avecCadre" />
 </template>

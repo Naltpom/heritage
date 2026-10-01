@@ -69,7 +69,9 @@ describe('où l’on atterrit après la connexion', () => {
     // c'est la garde globale qui emmènera ce compte vers l'écran d'état — pas
     // vers la connexion, où il conclurait que sa session est tombée.
     expect(destinationApresConnexion('/demandes/14', 'en_attente')).toBe('/demandes/14')
-    expect(destinationApresConnexion(undefined, 'en_attente')).toEqual({ name: 'accueil' })
+    // Sans destination, il atterrit sur l'écran d'attente : l'accueil lit
+    // l'arbre, qui lui est fermé (ADR 0003, révision du 01/10/2026).
+    expect(destinationApresConnexion(undefined, 'en_attente')).toEqual({ name: 'inscription.etat' })
   })
 })
 

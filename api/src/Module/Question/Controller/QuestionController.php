@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Question\Controller;
 
 use App\Module\Core\Entity\User;
+use App\Module\Core\Security\ReserveAuxMembres;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Question\Entity\Question;
 use App\Module\Question\Exception\QuestionIntrouvable;
@@ -61,6 +62,10 @@ use Symfony\Component\Routing\Attribute\Route;
  * l'objet est chargé d'abord et jugé ensuite. Ici l'objet ne se charge pas du tout.
  */
 #[Route('/api/questions')]
+// Une question **nomme une personne de l'arbre** : un compte en attente n'en lit aucune,
+// `403 regime_en_attente` (ADR 0003, révision du 01/10/2026). La page n'était déjà ouverte
+// qu'aux membres côté front ; la porte est maintenant fermée côté serveur aussi.
+#[ReserveAuxMembres]
 final class QuestionController extends AbstractController
 {
     public function __construct(

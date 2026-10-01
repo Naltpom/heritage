@@ -63,10 +63,24 @@ describe('la barre du bas', () => {
     }
   })
 
-  it('les porte à un compte en attente comme à un membre', async () => {
+  it('ne porte à un compte en attente que son inscription et Moi', async () => {
+    // ADR 0003, révision du 01/10/2026 : il ne lit plus rien de l'arbre.
+    // Accueil, Arbre et Explorer ne le mèneraient qu'à un refus.
     const html = await rendre('en_attente')
+    const vers = [...html.matchAll(/data-vers="([^"]+)"/g)].map((m) => m[1])
 
-    expect((html.match(/data-vers=/g) ?? []).length).toBe(4)
+    expect(vers).toEqual(['inscription.etat', 'moi'])
+    expect(html).toMatch(/<span>Inscription<\/span>/)
+    expect(html).not.toMatch(/<span>(Accueil|Arbre|Explorer)<\/span>/)
+    expect(html).toContain('grid-cols-2')
+  })
+
+  it('allume « Inscription » sur l’écran d’attente', async () => {
+    const html = await rendre('en_attente', 'accueil')
+    const actifs = [...html.matchAll(/<a[^>]*aria-current="page"[^>]*>/g)].map((m) => m[0])
+
+    expect(actifs).toHaveLength(1)
+    expect(actifs[0]).toContain('data-vers="inscription.etat"')
   })
 
   it('marque l’entrée de la section courante, et elle seule', async () => {

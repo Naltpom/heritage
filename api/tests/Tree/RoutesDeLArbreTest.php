@@ -55,9 +55,11 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
     }
 
     /**
-     * **Le défaut fermé, vu de l'extérieur.** Le compte de ce test n'a aucun `mbr_member`
-     * actif : il n'a donc pas de cercle, et ne reçoit que les sept clés sur une personne
-     * vivante — quoi qu'il arrive au reste de la configuration.
+     * **Le défaut fermé, vu de l'extérieur.** Le compte de ce test est un membre dont le
+     * cercle est vide (ancré hors de l'arbre, {@see creerLecteurHorsCercle()}) : il ne
+     * reçoit que les sept clés sur une personne vivante — quoi qu'il arrive au reste de la
+     * configuration. (Un compte sans `mbr_member` du tout ne lit plus rien depuis le
+     * 01/10/2026 : `403 regime_en_attente`.)
      *
      * C'est la propriété qu'il faut garder quand on remaniera le câblage des services :
      * une erreur d'alias doit rendre des fiches muettes, jamais des dates de naissance.
@@ -94,28 +96,66 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
     }
 
     /**
-     * Le régime du § 12, de bout en bout : un compte `en_attente` lit l'arbre ancien et
-     * **aucune personne vivante**.
+     * **Un compte `en_attente` ne lit plus rien de l'arbre** — ni vivants, ni défunts
+     * (ADR 0003, révision du 01/10/2026).
+     *
+     * Jusque-là, il lisait l'arbre ancien, et chaque vivant lui sortait en nœud
+     * restreint : nom complet, sexe, génération, branche. Le lien d'invitation circule
+     * dans un groupe de messagerie ; un faux inscrit lisait donc la liste des vivants.
+     * Les quatre routes lui répondent désormais `403 regime_en_attente`, dans l'enveloppe
+     * du § 15.1 — la fiche d'un défunt comprise, et la recherche d'un nom de défunt aussi.
      */
-    public function testUnCompteEnAttenteLitLesDecedesEtRienDeVivant(): void
+    public function testUnCompteEnAttenteNeLitRienDeLArbre(): void
     {
         $this->creerUtilisateur('attente@heritage.test', statut: UserStatus::EnAttente);
         $this->connexionDe('attente@heritage.test');
 
-        $this->requete('/api/arbre/personnes/'.$this->idDe('aieule'));
+        $famille = $this->familles['mixte']->getId();
+        self::assertNotNull($famille);
+
+        foreach ([
+            'graphe' => '/api/arbre/graphe',
+            'fiche d’un défunt' => '/api/arbre/personnes/'.$this->idDe('aieule'),
+            'fiche d’un vivant' => '/api/arbre/personnes/'.$this->idDe('cousin'),
+            'famille' => '/api/arbre/familles/'.$famille,
+            'recherche d’un défunt' => '/api/arbre/recherche?q=sureau',
+            'recherche d’un vivant' => '/api/arbre/recherche?q=tilleul',
+        ] as $cas => $chemin) {
+            $this->requete($chemin);
+
+            self::assertSame(Response::HTTP_FORBIDDEN, $this->client->getResponse()->getStatusCode(), $cas);
+            self::assertSame('regime_en_attente', $this->charge()['erreur']['code'], $cas);
+            self::assertStringContainsString('en cours de vérification', $this->charge()['erreur']['message'], $cas);
+            // Rien ne sort : pas un nom, pas un identifiant de nœud.
+            self::assertStringNotContainsStringIgnoringCase('sureau', (string) $this->client->getResponse()->getContent(), $cas);
+            self::assertStringNotContainsStringIgnoringCase('tilleul', (string) $this->client->getResponse()->getContent(), $cas);
+        }
+    }
+
+    /**
+     * Le refus passe **avant** la revalidation : un compte en attente qui présente un
+     * `ETag` — celui d'un graphe vu avant une suspension de régime, ou recopié d'un autre
+     * navigateur — reçoit `403`, jamais `304`, qui l'autoriserait à garder l'arbre à
+     * l'écran.
+     */
+    public function testUnCompteEnAttenteNeRevalidePasLeGraphe(): void
+    {
+        $this->connexionDe('membre@heritage.test');
+        $this->requete('/api/arbre/graphe');
         self::assertSame(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
-        self::assertSame('complete', $this->charge()['visibilite']);
+        $etag = (string) $this->client->getResponse()->headers->get('ETag');
+        self::assertNotSame('', $etag);
 
-        $this->requete('/api/arbre/personnes/'.$this->idDe('cousin'));
-        self::assertSame(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
-        self::assertSame('restreinte', $this->charge()['visibilite']);
+        $this->creerUtilisateur('attente@heritage.test', statut: UserStatus::EnAttente);
+        $this->connexionDe('attente@heritage.test');
+        $this->client->request('GET', '/api/arbre/graphe', server: [
+            'HTTP_ACCEPT' => 'application/json',
+            'HTTP_IF_NONE_MATCH' => $etag,
+        ]);
 
-        // Et la recherche ne l'énumère pas davantage.
-        $this->requete('/api/arbre/recherche?q=tilleul');
-        self::assertSame([], $this->charge()['elements']);
-
-        $this->requete('/api/arbre/recherche?q=sureau');
-        self::assertCount(1, $this->charge()['elements'], 'L’arbre ancien reste consultable : c’est ce qui donne du sens à l’attente.');
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->client->getResponse()->getStatusCode());
+        self::assertSame('regime_en_attente', $this->charge()['erreur']['code']);
+        self::assertNull($this->client->getResponse()->headers->get('ETag'));
     }
 
     public function testLaFicheDeFamilleReduitLEpouxMasqueEtGardeLaDateDUnion(): void
@@ -527,12 +567,16 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
         try {
             $this->creerUtilisateur('admin@heritage.test', ['ROLE_ADMIN']);
             $this->rattacherAUnePersonne('membre@heritage.test', 'ego');
-            $this->creerUtilisateur('attente@heritage.test', statut: UserStatus::EnAttente);
+            // Le troisième lecteur sans cercle était un compte `en_attente`, puis un compte
+            // actif sans rattachement ; depuis le 01/10/2026 ni l'un ni l'autre ne lit le
+            // graphe (ADR 0003, voter `MEMBRE`). Un membre validé **au cercle vide** tient
+            // le même rôle : aucun vivant visible.
+            $this->creerLecteurHorsCercle('sans-cercle@heritage.test');
 
             // Trois lecteurs nommés un par un, et non découverts : la liste est le sujet
             // du test. `assertCount` sur les valeurs distinctes est ce qui rougit le jour
             // où deux d'entre elles se confondent.
-            $comptes = ['admin@heritage.test', 'membre@heritage.test', 'attente@heritage.test'];
+            $comptes = ['admin@heritage.test', 'membre@heritage.test', 'sans-cercle@heritage.test'];
             $etags = [];
             $charges = [];
             $empreintes = [];
@@ -570,7 +614,7 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
             );
 
             // ── La conséquence observable, celle qui a été mesurée sur la pile ──
-            $this->connexionDe('attente@heritage.test');
+            $this->connexionDe('sans-cercle@heritage.test');
             $this->client->request('GET', '/api/arbre/graphe', server: [
                 'HTTP_ACCEPT' => 'application/json',
                 'HTTP_IF_NONE_MATCH' => $etags['admin@heritage.test'],
@@ -579,7 +623,7 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
             self::assertSame(
                 Response::HTTP_OK,
                 $this->client->getResponse()->getStatusCode(),
-                'Un compte en attente qui présente l’`ETag` de l’administrateur doit recevoir 200 et sa propre charge — jamais 304, qui le laisserait afficher le graphe d’un autre.',
+                'Un compte sans cercle qui présente l’`ETag` de l’administrateur doit recevoir 200 et sa propre charge — jamais 304, qui le laisserait afficher le graphe d’un autre.',
             );
         } finally {
             ArbreEnMemoire::reinitialiser();
@@ -744,7 +788,7 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
     private function connexionDe(string $courriel): void
     {
         if (null === $this->em()->getRepository(\App\Module\Core\Entity\User::class)->findOneBy(['email' => $courriel])) {
-            $this->creerUtilisateur($courriel);
+            $this->creerLecteurHorsCercle($courriel);
         }
 
         $this->client->request('POST', '/api/connexion', server: [

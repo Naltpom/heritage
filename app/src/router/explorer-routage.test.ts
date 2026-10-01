@@ -100,16 +100,21 @@ describe('la section de l’en-tête', () => {
 
 describe('le niveau d’accès', () => {
   it.each(['/explorer/chronologie', '/explorer/carte', '/explorer/calendrier'])(
-    '%s est ouvert au compte en attente, fermé à l’anonyme',
+    '%s est réservé aux membres : fermé au compte en attente et à l’anonyme',
     (chemin) => {
-      // Ces écrans sont faits d'événements datés : une personne vivante hors
-      // cercle n'en fournit aucun, et le compte en attente voit un écran plein
-      // de défunts. L'anonyme, lui, repart vers la connexion.
+      // ADR 0003, révision du 01/10/2026 : un compte en attente ne voit plus
+      // rien de l'arbre, ses dates et ses lieux compris. La garde l'emmène à
+      // l'écran d'attente ; l'anonyme, lui, repart vers la connexion.
       const niveau = routeur().resolve(chemin).meta['acces'] as NiveauRequis
 
-      expect(niveau).toBe('attente')
-      expect(resoudreAcces(niveau, 'en_attente', chemin).autorise).toBe(true)
+      expect(niveau).toBe('membre')
+      expect(resoudreAcces(niveau, 'en_attente', chemin)).toEqual({
+        autorise: false,
+        motif: 'rattachement_non_valide',
+        redirection: { name: 'inscription.etat' },
+      })
       expect(resoudreAcces(niveau, 'anonyme', chemin).autorise).toBe(false)
+      expect(resoudreAcces(niveau, 'membre', chemin).autorise).toBe(true)
     },
   )
 })

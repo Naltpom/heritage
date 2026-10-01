@@ -321,11 +321,6 @@ export interface EtatInscription {
   depuis: string
   matchKind: TypeRattachement
   regime: 'aucun' | 'cercle'
-  /** Deux nombres, pas une liste : donner du sens à l'attente sans rien exposer. */
-  cequejevois?: {
-    personnesDecedees: number
-    personnesTotales: number
-  }
   /**
    * Le compte a-t-il déposé sa photo, qui attend le rattachement pour devenir le
    * portrait de sa fiche ? Présente seulement tant que `status` vaut

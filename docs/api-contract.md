@@ -251,13 +251,21 @@ Deux rôles, et **deux régimes qui ne sont pas des rôles** :
 | Code d'accès employé dans les tableaux | Ce que c'est |
 |---|---|
 | `PUBLIC` | Aucune session. Trois routes seulement (§ 4). |
-| `ATTENTE` | `ROLE_USER` + `core_user.status = 'en_attente'`. **Pas de cercle** — régime distinct, jamais « un cercle avec N = 0 » (§ 4.5, ADR 0003). Voir § 12. |
+| `ATTENTE` | `ROLE_USER` + `core_user.status = 'en_attente'`. **Pas de cercle** — régime distinct, jamais « un cercle avec N = 0 » (§ 4.5, ADR 0003). **Ne lit rien de l'arbre** depuis le 2026-10-01 : ce code ne figure plus que sur les routes **du compte** (session, notifications, push, inscription). Voir § 12. |
 | `MEMBRE` | `ROLE_USER` + `status = 'actif'` + un `mbr_member` actif. Implique `ATTENTE`. |
 | `ADMIN` | `ROLE_ADMIN`. Implique `MEMBRE`. |
 
 - `role_hierarchy: ROLE_ADMIN: [ROLE_USER]`.
 - Un compte `suspendu` **ne s'authentifie pas** : `POST /api/connexion` rend `401`
   `compte_suspendu`. Il n'obtient pas de session qu'il faudrait ensuite filtrer.
+- Toute route de **lecture de l'arbre** porte `MEMBRE` et répond `403` `regime_en_attente`
+  à un compte en attente — et non `acces_refuse` : le front y reconnaît l'attente et mène à
+  l'écran d'attente (révision du 2026-10-01, § 12). Côté code : l'attribut
+  `Core\Security\ReserveAuxMembres`, qui consulte le voter avant le contrôleur. Le voter
+  lit le statut du compte **puis le régime du cercle** (`cercle.regime` de la session) :
+  un compte actif sans `mbr_member` actif — ancien administrateur rétrogradé, compte créé
+  en ligne de commande — reçoit le même `403` (correction du 2026-10-01). Son
+  `GET /api/inscription/etat` rend `404` ; l'écran d'attente le dit « compte sans fiche ».
 - La distinction `ATTENTE` / `MEMBRE` n'est **pas** portée par un rôle. Un `ROLE_MEMBRE`
   qu'on retire à l'activation serait une seconde source de vérité à côté de
   `core_user.status` et de `mbr_member.status`. Elle est portée par un **voter**, appelé
@@ -995,11 +1003,7 @@ jamais journalisée, et **purgée** au rattachement comme au refus.
   "status": "en_attente",
   "depuis": "2026-09-15T20:31:02+02:00",
   "matchKind": "recherche_confirmee",
-  "regime": "aucun",
-  "cequejevois": {
-    "personnesDecedees": 256,
-    "personnesTotales": 274
-  }
+  "regime": "aucun"
 }
 ```
 
@@ -1007,10 +1011,10 @@ jamais journalisée, et **purgée** au rattachement comme au refus.
   § 2.2 point 2). Le candidat a vu `"P. Romarin, 1980"` à l'étape 1b ; il ne reverra pas
   ce libellé ici, et surtout pas le `display_name` réel de la fiche, qui peut porter un nom
   d'usage ou un nom d'épouse qu'il ignore.
-- `cequejevois` existe pour donner du sens à l'attente sans rien exposer : deux nombres, pas
-  une liste. C'est la mise en œuvre du motif du commanditaire — « un écran vide pousse à
-  l'abandon » (§ 4.5).
-- Une fois activé : `status: "actif"`, `regime: "cercle"`, et `cequejevois` disparaît. Le
+- **Aucun chiffre de l'arbre** (révision du 2026-10-01) : la clé `cequejevois` (nombre de
+  défunts, nombre de fiches) est retirée — un compte en attente ne lit plus rien de l'arbre
+  (ADR 0003).
+- Une fois activé : `status: "actif"`, `regime: "cercle"`. Le
   front bascule alors sur `GET /api/session`, qui porte désormais `membre.personId`.
 - `matchKind` peut valoir `"a_rattacher"` : le compte n'a pas encore de fiche (§ 4.3,
   seconde forme), et l'écran le dit.
@@ -1024,7 +1028,6 @@ jamais journalisée, et **purgée** au rattachement comme au refus.
   "depuis": "2026-10-01T09:12:00+02:00",
   "matchKind": "a_rattacher",
   "regime": "aucun",
-  "cequejevois": { "personnesDecedees": 256, "personnesTotales": 274 },
   "portraitEnAttente": true
 }
 ```
@@ -1037,10 +1040,10 @@ Module `Tree`.
 
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs | Débit |
 |---|---|---|---|---|---|---|
-| `GET` | `/api/arbre/graphe` | `ATTENTE` | — | `200` § 5.2 · **`304`** | `401` | — |
-| `GET` | `/api/arbre/personnes/{id}` | `ATTENTE` | — | `200` § 5.3 | `401` · `404` `introuvable` | — |
-| `GET` | `/api/arbre/familles/{id}` | `ATTENTE` | — | `200` § 5.4 | `401` · `404` | — |
-| `GET` | `/api/arbre/recherche` | `ATTENTE` | `?q=&limite=&vivants=` | `200` § 5.5 | `401` · `422` `donnees_invalides` | — |
+| `GET` | `/api/arbre/graphe` | `MEMBRE` | — | `200` § 5.2 · **`304`** | `401` · `403` `regime_en_attente` | — |
+| `GET` | `/api/arbre/personnes/{id}` | `MEMBRE` | — | `200` § 5.3 | `401` · `403` `regime_en_attente` · `404` `introuvable` | — |
+| `GET` | `/api/arbre/familles/{id}` | `MEMBRE` | — | `200` § 5.4 | `401` · `403` `regime_en_attente` · `404` | — |
+| `GET` | `/api/arbre/recherche` | `MEMBRE` | `?q=&limite=&vivants=` | `200` § 5.5 | `401` · `403` `regime_en_attente` · `422` `donnees_invalides` | — |
 
 `{id}` porte `requirements: ['id' => '\d+']`. Conséquence utile et voulue : un identifiant
 provisoire (`#12/p1`, § 5.2) **ne correspond tout simplement pas à la route** et produit une
@@ -1840,7 +1843,7 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `GET` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | — | `200` § 6.6 | `403` · `404` | — |
 | `GET` | `/api/demandes/brouillons/recherche` | `MEMBRE` | `?q=&limite=` | `200` § 6.6 bis | `422` (`q` < 2) | — |
 | `GET` | `/api/demandes/brouillons/{brouillonId}` | `MEMBRE` | — | `200` une ligne du § 6.6 bis | `404` | — |
-| `GET` | `/api/demandes/historique/{subjectKind}/{subjectId}` | `ATTENTE` | `?page=&parPage=` | `200` liste paginée | `404` | — |
+| `GET` | `/api/demandes/historique/{subjectKind}/{subjectId}` | `MEMBRE` | `?page=&parPage=` | `200` liste paginée | `403` `regime_en_attente` · `404` | — |
 | `GET` | `/api/administration/demandes` | `ADMIN` | `?status=&kind=&targetId=&auteur=&page=` | `200` liste paginée | — | — |
 | `GET` | `/api/administration/demandes/auteurs` | `ADMIN` | — | `200` `{elements}` | — | — |
 | `GET` | `/api/administration/demandes/{id}` | `ADMIN` | — | `200` § 6.7 | `404` | — |
@@ -3323,11 +3326,17 @@ authentifiée qui applique le cercle (§ 6.5 du dossier).
 |---|---|---|---|---|---|---|
 | `POST` | `/api/medias` | `MEMBRE` | `multipart/form-data`, § 7.1 | `201` § 7.2 | `413` `fichier_trop_volumineux` · `415` `type_de_fichier_refuse` · `422` · `403` `regime_en_attente` · `429` | 20 / h |
 | `POST` | `/api/medias/portrait-du-compte` | `ATTENTE` | `multipart/form-data`, champ `fichier` seul | `201` § 7.2 | `409` `compte_non_rattache` · `409` `vue_comme_membre_active` · `413` · `415` · `422` · `429` | 20 / h |
-| `GET` | `/api/medias` | `ATTENTE` | `?subjectKind=&subjectId=&kind=&status=` | `200` liste non paginée | `404` · `422` | — |
-| `GET` | `/api/medias/{id}` | `ATTENTE` | — | `200` § 7.2 | `404` | — |
-| `GET` | `/api/medias/{id}/fichier` | `ATTENTE` | — | `200` **octets** | `404` | — |
-| `GET` | `/api/medias/{id}/vignette` | `ATTENTE` | — | `200` **octets** | `404` | — |
+| `GET` | `/api/medias` | `MEMBRE` | `?subjectKind=&subjectId=&kind=&status=` | `200` liste non paginée | `403` `regime_en_attente` · `404` · `422` | — |
+| `GET` | `/api/medias/{id}` | `MEMBRE` ¹ | — | `200` § 7.2 | `403` `regime_en_attente` · `404` | — |
+| `GET` | `/api/medias/{id}/fichier` | `MEMBRE` ¹ | — | `200` **octets** | `403` `regime_en_attente` · `404` | — |
+| `GET` | `/api/medias/{id}/vignette` | `MEMBRE` ¹ | — | `200` **octets** | `403` `regime_en_attente` · `404` | — |
 | `DELETE` | `/api/medias/{id}` | `ADMIN` | — | `200` `{"supprime": true, "id": 120}` | `404` · `409` | — |
+
+¹ **Révision du 2026-10-01 (§ 12).** Un compte en attente ne lit qu'un média **qu'il a
+déposé lui-même** — sa photo d'inscription, que l'écran d'attente lui remontre. Tout autre
+identifiant lui rend `403` `regime_en_attente`, **qu'il existe ou non** : un `404` sur
+l'inexistant et un `403` sur l'existant feraient de la route un oracle d'énumération. La liste
+(`GET /api/medias`) lui est fermée en entier.
 
 ### 7.1 Téléverser
 
@@ -3650,9 +3659,9 @@ n'utilise pas le moteur de placement : elle place sur un axe de temps (ADR 0005)
 
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs |
 |---|---|---|---|---|---|
-| `GET` | `/api/chronologie` | `ATTENTE` | `?bande=&orientation=&branches=` | `200` § 9.1 | `422` `donnees_invalides` |
-| `GET` | `/api/chronologie/preferences` | `ATTENTE` | — | `200` préférence | `401` |
-| `PUT` | `/api/chronologie/preferences` | `ATTENTE` | § 9.2 | `200` préférence | `422` |
+| `GET` | `/api/chronologie` | `MEMBRE` | `?bande=&orientation=&branches=` | `200` § 9.1 | `403` `regime_en_attente` · `422` `donnees_invalides` |
+| `GET` | `/api/chronologie/preferences` | `MEMBRE` | — | `200` préférence | `401` · `403` `regime_en_attente` |
+| `PUT` | `/api/chronologie/preferences` | `MEMBRE` | § 9.2 | `200` préférence | `403` `regime_en_attente` · `422` |
 
 ### 9.1 Les données de la vue
 
@@ -4699,46 +4708,57 @@ Le front branche sur `regime`. Il ne teste **jamais** `taille === 0` : les deux 
 **Un compte inscrit sans fiche (`a_rattacher`, ADR 0013) est dans ce régime, et rien de plus
 ni de moins.** Il n'a pas de `person_id` : il n'y a donc même pas d'ancre à laquelle un
 cercle se rattacherait, et la base interdit qu'un compte sans fiche soit actif
-(`ck_mbr_member_sans_fiche_inactif`). Il voit les défunts, n'écrit rien — sa propre photo
-mise à part (§ 7.1) —, et n'obtient un cercle qu'au rattachement (§ 10.1).
+(`ck_mbr_member_sans_fiche_inactif`). Il ne lit rien de l'arbre, n'écrit rien — sa propre
+photo mise à part (§ 7.1) —, et n'obtient l'arbre et un cercle qu'au rattachement (§ 10.1).
 
 ### 12.1 Ce que ce régime voit, route par route
 
-Il accède aux **personnes décédées uniquement** — 256 fiches sur 274 — et à **aucune personne
-vivante, y compris celle à laquelle il prétend se rattacher**. Confirmer une date n'est pas la
-lire, et le pré-lien n'ouvre aucun accès (§ 4.5).
+**Rien de l'arbre** — ni les personnes vivantes, ni les décédées (révision du 2026-10-01,
+ADR 0003). Toute lecture de l'arbre lui répond `403` `regime_en_attente`, dans l'enveloppe du
+§ 15.1, avec le message :
+`"Votre inscription est en cours de vérification. L’arbre vous sera ouvert dès qu’elle sera validée."`
+Le refus est rendu **avant** le contrôleur : aucune donnée n'est chargée, et aucun `ETag`
+n'est revalidé (un `304` serait une autorisation de garder l'arbre à l'écran).
 
 | Route | Réponse pour un compte `en_attente` |
 |---|---|
 | `POST /api/connexion`, `/api/deconnexion`, `GET /api/session` | **normal** |
-| `POST /api/session/mot-de-passe` | **normal** |
+| `POST /api/session/mot-de-passe`, `POST /api/session/courriel` | **normal** |
 | `GET /api/inscription/etat` | **normal** — l'écran d'attente (§ 4.4) |
-| `GET /api/arbre/graphe` | **`200`**, les 377 nœuds. Toute personne **vivante** y est `visibilite: "restreinte"` — sans exception, y compris celle qu'il prétend être |
-| `GET /api/arbre/personnes/{id}` — décédée | **`200`, fiche complète**, médias et citations compris |
-| `GET /api/arbre/personnes/{id}` — vivante | **`200`, fiche réduite** (7 clés, § 11.1) |
-| `GET /api/arbre/familles/{id}` | `200`, avec les époux vivants réduits |
-| `GET /api/arbre/recherche` | `200`, **personnes décédées uniquement** (§ 5.5) |
-| `GET /api/chronologie` et `/preferences`, `PUT /preferences` | `200`, **barres de personnes décédées uniquement** |
-| `GET /api/medias` — sujet décédé | `200` |
-| `GET /api/medias/{id}/fichier` — sujet vivant | **`404`** |
-| `GET /api/notifications`, `/compteur`, `POST .../lue` | **normal** — il reçoit la notification de son activation |
-| `GET /api/demandes/historique/...` — sujet décédé | `200` |
-| **`POST /api/demandes`** | **`403` `regime_en_attente`** |
-| **`POST /api/medias`** | **`403` `regime_en_attente`** |
+| `GET /api/notifications`, `/compteur`, `POST .../lue`, `POST /lues` | **normal** — il reçoit la notification de son activation |
+| `GET /api/push/cle`, `PUT`/`DELETE /api/push/abonnement` | **normal** — elle lui arrive aussi sur le téléphone |
+| `POST /api/medias/portrait-du-compte` | **normal** — sa photo d'inscription (§ 7.1) |
+| `GET /api/medias/{id}`, `/fichier`, `/vignette` — **sa** photo d'inscription | `200` |
+| `GET /api/arbre/graphe`, `/personnes/{id}`, `/familles/{id}`, `/recherche` | **`403` `regime_en_attente`** |
+| `GET /api/chronologie`, `GET`/`PUT /api/chronologie/preferences` | **`403` `regime_en_attente`** |
+| `GET /api/carte`, `GET /api/anniversaires` | **`403` `regime_en_attente`** |
+| `GET /api/medias`, et `GET /api/medias/{id}` (`/fichier`, `/vignette`) de tout autre média, existant ou non | **`403` `regime_en_attente`** |
+| `GET /api/demandes/historique/...`, `GET /api/demandes/suppression/personne/{id}` | **`403` `regime_en_attente`** |
+| `GET /api/questions`, `/api/tirages`, `/api/demarches` (et leurs sous-routes) | **`403` `regime_en_attente`** |
+| **`POST /api/demandes`**, **`POST /api/medias`** | **`403` `regime_en_attente`** |
 | Toute route `/api/administration/*` | `403` (`access_control`, `ROLE_ADMIN`) |
 
-### 12.2 Pourquoi la lecture est ouverte et l'écriture fermée
+### 12.2 Pourquoi rien n'est ouvert — ni la lecture, ni l'écriture
 
-La lecture : « l'attente peut durer plusieurs jours, et un écran vide pousse à l'abandon ;
-l'arbre ancien donne du sens à l'attente sans rien exposer de sensible » (§ 6.1 du dossier).
-256 fiches sur 274 sont des personnes décédées, l'état civil de plus de 75 ans est public,
-c'est même d'où viennent la plupart de ces fiches.
+**La lecture — révision du 2026-10-01.** La rédaction initiale l'ouvrait : « l'attente peut
+durer plusieurs jours, et un écran vide pousse à l'abandon ; l'arbre ancien donne du sens à
+l'attente sans rien exposer de sensible » (§ 6.1 du dossier). C'était vrai des **fiches**,
+faux du **graphe** : il sert chaque personne en nœud, et un vivant hors cercle y garde, par la
+liste blanche du § 11, son **nom complet**, son sexe, sa génération et sa branche. Or le lien
+d'invitation circule dans un groupe de messagerie : n'importe qui pouvait s'inscrire sous un
+faux nom — sans même se trouver dans l'arbre depuis l'ADR 0013 — et lire la liste des vivants
+de la famille. Décision du commanditaire : un compte en attente ne voit **rien** de l'arbre.
+Le prix, assumé : l'écran d'attente reste vide de l'arbre pendant la vérification ; c'est la
+notification d'activation (§ 12.3) qui fait revenir la personne.
 
 L'écriture : contribuer suppose d'être rattaché. Une demande porte `author_user_id` et
 `author_label` ; une demande déposée par un compte dont le rattachement n'est pas établi
 serait une contribution sans auteur identifié, et l'administrateur devrait arbitrer deux
 choses à la fois. `403 regime_en_attente`, avec un message qui dit quoi faire :
 `"Votre rattachement est en cours de vérification. Vous pourrez proposer des modifications une fois votre compte activé."`
+
+**Un seul code pour les deux refus**, deux messages : le front n'a qu'un cas à reconnaître,
+et il mène au même écran.
 
 ### 12.3 Le moment de bascule
 
@@ -4749,7 +4769,11 @@ suivante, mis en cache sous `cercle.{empreinte}.{memberId}.{N}` (§ 9.3).
 
 Le compte concerné doit **recharger sa session** pour voir le changement : rien ne le lui
 pousse (pas de Redis, pas de file — § 3 du dossier). C'est la notification qui le lui apprend,
-et le front recharge session et graphe à sa lecture.
+et le front recharge session et graphe à sa lecture. Elle est de nature **`compte_active`**
+(« Votre compte est activé », lien `accueil`) et passe par `NotificationService` : elle part
+donc **aussi sur le téléphone** (Web Push). Même notification après « Créer la fiche et
+rattacher » (§ 10.1). Révision du 2026-10-01 : elle partait sous `compte_en_attente`, sans
+lien (`session` n'est le nom d'aucune route du front) et sans push.
 
 **Il n'y a aucun cache à invalider à l'activation.** Le nouveau membre a une clé de cercle qui
 lui est propre ; il n'existait aucune entrée sous cette clé (§ 2.3, troisième ligne du
@@ -5137,7 +5161,7 @@ agent recopiera la référence :
 | `identifiants_invalides` | 401 | `POST /api/connexion` | — |
 | `compte_suspendu` | 401 | `POST /api/connexion` | — |
 | `acces_refuse` | 403 | voters — demande d'autrui, média d'autrui | — |
-| `regime_en_attente` | 403 | `POST /api/demandes`, `POST /api/medias` | — |
+| `regime_en_attente` | 403 | `POST /api/demandes`, `POST /api/medias` ; depuis le 2026-10-01, **toute lecture de l'arbre** par un compte en attente (§ 12.1) | — |
 | `introuvable` | 404 | partout, **et sur tout ce que le lecteur n'a pas le droit de voir** | — |
 | `methode_non_autorisee` | 405 | routeur | `{"autorisees": ["GET"]}` |
 | `conflit` | 409 | générique — état incompatible | variable |
@@ -5545,7 +5569,7 @@ Module **`Almanach`**. Une bulle par lieu situé : où la famille a vécu ses é
 
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs |
 |---|---|---|---|---|---|
-| `GET` | `/api/carte` | `attente` | — | `200` | `401` |
+| `GET` | `/api/carte` | `membre` | — | `200` | `401`, `403` `regime_en_attente` |
 
 **Aucun paramètre, et c'est une décision.** Les filtres de genre et la bascule du
 dégradé sont des **réglages de rendu** : ils ne changent pas ce que le serveur
@@ -5664,7 +5688,7 @@ Module **`Almanach`**. Le calendrier des dates qui reviennent.
 
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs |
 |---|---|---|---|---|---|
-| `GET` | `/api/anniversaires` | `attente` | — | `200` | `401` |
+| `GET` | `/api/anniversaires` | `membre` | — | `200` | `401`, `403` `regime_en_attente` |
 
 **L'année entière, en une fois, et sans paramètre.** Naviguer de mois en mois ne
 redemande donc rien — ce qui est tout l'intérêt des deux flèches.

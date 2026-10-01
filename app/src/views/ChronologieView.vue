@@ -38,11 +38,15 @@
  * **Ce qu'il ne faut pas prendre pour un bogue.** Un membre voit **moins de
  * barres que de nœuds dans l'arbre** : les personnes vivantes hors de son
  * cercle sont absentes de `barres`, par décision du § 9.1 — une barre *est*
- * faite de dates, et une personne vivante hors cercle n'en expose aucune. Un
- * compte `en_attente` ne voit que des personnes décédées. C'est voulu, et cet
+ * faite de dates, et une personne vivante hors cercle n'en expose aucune. C'est voulu, et cet
  * écran ne le « corrige » pas. Il n'affiche non plus **aucun décompte** de
  * barres : un compteur trahirait, par soustraction, le nombre de personnes
  * qu'on n'a pas le droit de voir.
+ *
+ * Un compte `en_attente` n'arrive jamais ici : la route exige `membre`, et
+ * l'API lui répond `403 regime_en_attente` (ADR 0003, révision du 01/10/2026).
+ * Un compte actif **sans fiche rattachée**, lui, n'a pas de cercle : il ne voit
+ * que des personnes décédées.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
 import { hauteurDuCadre } from '@/views/cadre'

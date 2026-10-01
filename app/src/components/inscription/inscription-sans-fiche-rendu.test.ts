@@ -30,9 +30,13 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: () => Promise.resolve(), replace: () => Promise.resolve() }),
 }))
 
-vi.mock('@/composables/useSession', () => ({
-  rafraichirSession: () => Promise.resolve(),
-}))
+vi.mock('@/composables/useSession', async () => {
+  const { computed } = await import('vue')
+  return {
+    rafraichirSession: () => Promise.resolve(),
+    useSession: () => ({ rattache: computed(() => false) }),
+  }
+})
 
 const etatServi: { valeur: EtatInscription | null } = { valeur: null }
 
@@ -158,7 +162,6 @@ describe('InscriptionEtatView', () => {
     depuis: '2026-10-01T09:12:00+02:00',
     matchKind: 'a_rattacher',
     regime: 'aucun',
-    cequejevois: { personnesDecedees: 256, personnesTotales: 274 },
   }
 
   it('a un texte propre au compte sans fiche', async () => {
@@ -169,7 +172,8 @@ describe('InscriptionEtatView', () => {
     expect(html).toContain('description de famille')
     expect(html).not.toContain('à laquelle vous vous êtes rattaché')
     expect(html).not.toContain('y compris pour la fiche')
-    expect(html).toContain('256')
+    // Plus rien de l'arbre, pas même les deux nombres (ADR 0003, 01/10/2026).
+    expect(html).not.toContain('256')
   })
 
   it('garde le texte de confirmation pour un candidat qui s’est trouvé', async () => {

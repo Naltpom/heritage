@@ -71,12 +71,14 @@ describe('Moi, selon le régime', () => {
     expect(vers(await rendre('membre'))).toEqual(['compte', 'demandes.miennes', 'tirages', 'demarches', 'questions'])
   })
 
-  it('ne donne à un compte en attente que son compte — et la déconnexion', async () => {
+  it('ne donne à un compte en attente que son inscription, son compte — et la déconnexion', async () => {
     // L'API lui refuserait le reste, et la garde de route le renverrait vers
     // l'écran d'attente : une entrée qui mène à un refus est pire qu'absente.
+    // Son écran d'attente, lui, est en tête (ADR 0003, révision du 01/10/2026).
     const html = await rendre('en_attente')
 
-    expect(vers(html)).toEqual(['compte'])
+    expect(vers(html)).toEqual(['inscription.etat', 'compte'])
+    expect(html).toContain('Mon inscription')
     expect(html).toContain('En attente de validation')
     expect(html).toContain('Se déconnecter')
   })

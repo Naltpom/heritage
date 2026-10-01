@@ -211,33 +211,23 @@ final class RoutesDesQuestionsTest extends ArbreWebTestCase
     }
 
     /**
-     * **Un compte sans rattachement n'a pas de cercle**, donc aucune question sur une
-     * personne vivante — le défaut fermé de l'ADR 0003, vu de l'extérieur.
+     * **Un compte sans rattachement n'a pas de cercle**, donc aucune question — le défaut
+     * fermé de l'ADR 0003, vu de l'extérieur.
      *
-     * Il peut en recevoir sur les **personnes décédées**, qui sont un fait historique
-     * visible de tout compte connecté (règle 1 du contrat du cercle). Ce qu'on vérifie
-     * donc n'est pas « zéro question » mais « aucune question sur un vivant » — et c'est
-     * la formulation juste, celle qui ne devient pas fausse le jour où une aïeule décédée
-     * produit une lacune.
+     * Il recevait jusqu'ici des questions sur les **personnes décédées**. Depuis la
+     * correction du 01/10/2026, un compte actif sans membre actif (ancien administrateur
+     * rétrogradé, compte créé en ligne de commande) est refusé comme un compte en
+     * attente : le voter `MEMBRE` lit le cercle, plus seulement le statut. Une question
+     * nomme une personne de l'arbre : il n'en reçoit plus aucune.
      */
-    public function testUnCompteSansRattachementNObtientAucuneQuestionSurUnVivant(): void
+    public function testUnCompteSansRattachementNObtientAucuneQuestion(): void
     {
         $this->connexionDe(self::TUF);
 
         $this->requete('/api/questions');
-        self::assertSame(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
-
-        $vivants = [$this->idDe('ego'), $this->idDe('conjointe'), $this->idDe('cousin')];
-
-        foreach ($this->charge()['questions'] as $question) {
-            self::assertIsArray($question);
-            self::assertIsArray($question['sujet']);
-            self::assertNotContains(
-                $question['sujet']['id'],
-                $vivants,
-                \sprintf('Un compte sans cercle a reçu une question sur un vivant : « %s ».', $question['texte']),
-            );
-        }
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->client->getResponse()->getStatusCode());
+        self::assertSame('regime_en_attente', $this->charge()['erreur']['code']);
+        self::assertArrayNotHasKey('questions', $this->charge());
     }
 
     /* ───────────────── Les trois écritures ───────────────── */
@@ -360,6 +350,9 @@ final class RoutesDesQuestionsTest extends ArbreWebTestCase
     {
         $idDOpale = $this->premiereQuestion();
 
+        // Tuf est un membre rattaché : sans rattachement, il serait refusé avant même
+        // qu'on regarde à qui est la question (`403 regime_en_attente`, cas plus haut).
+        $this->rattacher(self::TUF, 'cousin');
         $this->connexionDe(self::TUF);
         $this->poster("/api/questions/$idDOpale/je-ne-sais-pas");
 

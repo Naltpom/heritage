@@ -193,8 +193,8 @@ export function creerCompte(
  * « P. Romarin, 1980 » à l'étape 1b, il ne reverra pas ce libellé ici, et
  * surtout pas le `displayName` réel de la fiche.
  *
- * `cequejevois` porte **deux nombres, pas une liste** : c'est ce qui donne du
- * sens à l'attente sans rien exposer. Il disparaît une fois le compte activé.
+ * Aucun chiffre de l'arbre : un compte en attente n'en lit plus aucun (ADR 0003,
+ * révision du 2026-10-01 — `cequejevois` est retiré).
  *
  * `matchKind` vaut `a_rattacher` pour un compte ouvert sans fiche, et
  * `portraitEnAttente` dit, tant que le compte attend, si sa photo a été déposée :

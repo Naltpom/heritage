@@ -6,6 +6,7 @@ namespace App\Tests\Almanach;
 
 use App\Module\Almanach\Contract\TypeDEvenement;
 use App\Module\Core\Enum\Sex;
+use App\Module\Core\Enum\UserStatus;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -347,11 +348,24 @@ final class CarteTest extends CasDeTestAlmanach
         self::assertSame('Cookie', $reponse->headers->get('Vary'));
     }
 
-    /** Sans session, la route est fermée — `RegimeVoter::ATTENTE` exige un compte. */
+    /** Sans session, la route est fermée — elle exige un compte. */
     public function testLaCarteEstFermeeAUnVisiteurNonConnecte(): void
     {
         $this->requete('GET', '/api/carte');
 
         self::assertSame(Response::HTTP_UNAUTHORIZED, $this->client->getResponse()->getStatusCode());
+    }
+
+    /**
+     * **Un compte en attente ne lit plus la carte** (ADR 0003, révision du 01/10/2026) :
+     * `403 regime_en_attente`, pas même les lieux des défunts.
+     */
+    public function testLaCarteEstFermeeAUnCompteEnAttente(): void
+    {
+        $this->connecterUnMembre(UserStatus::EnAttente);
+        $this->requete('GET', '/api/carte');
+
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->client->getResponse()->getStatusCode());
+        self::assertSame('regime_en_attente', $this->charge()['erreur']['code']);
     }
 }

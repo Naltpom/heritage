@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Membership;
 
 use App\Module\Core\Entity\AuditLog;
+use App\Module\Core\Entity\Notification;
 use App\Module\Core\Entity\User;
+use App\Module\Core\Enum\NotificationKind;
 use App\Module\Core\Enum\UserStatus;
 use App\Module\Core\Repository\UserRepository;
 use App\Module\Media\Entity\Media;
@@ -178,6 +180,19 @@ final class RattachementDesComptesSansFicheTest extends CasDeTestMembership
         self::assertNull($membre->getAttachmentSuggestion());
 
         self::assertSame(UserStatus::Actif, $this->utilisateur('lave@example.net')->getStatus());
+
+        // Le compte l'apprend par une notification **à lui**, `compte_active`, qui mène à
+        // l'accueil — et part aussi sur son téléphone, puisqu'elle passe par
+        // `NotificationService` (révision du 01/10/2026 : un compte en attente ne voit
+        // plus rien de l'arbre, cette notification est la seule à lui dire qu'il peut
+        // revenir).
+        $notifications = $this->em()->getRepository(Notification::class)->findBy([
+            'recipientUserId' => $this->utilisateur('lave@example.net')->getId(),
+            'kind' => NotificationKind::CompteActive,
+        ]);
+        self::assertCount(1, $notifications, 'Une seule notification « Votre compte est activé ».');
+        self::assertSame('Votre compte est activé', $notifications[0]->getTitle());
+        self::assertSame('accueil', $notifications[0]->getLinkRoute());
 
         // La purge est un changement que le journal mécanique consigne — en `***`.
         $this->aucunJournalNeContient(['Pyrite', 'Lave', '1998-04-12']);

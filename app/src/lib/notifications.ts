@@ -104,6 +104,8 @@ const LIBELLES_DE_TYPE: Readonly<Record<string, string>> = {
   doublon_probable: 'Doublon probable',
   invitation_utilisee: 'Invitation utilisée',
   compte_en_attente: 'Compte à valider',
+  // Au compte lui-même, à sa validation (ADR 0003, révision du 01/10/2026).
+  compte_active: 'Compte activé',
   media_valide: 'Média accepté',
   media_refuse: 'Média refusé',
   tirage_effectue: 'Tirage au sort',
@@ -118,7 +120,7 @@ export function tonDeType(kind: string): 'alerte' | 'ok' | 'neutre' {
   if (kind === 'demande_refusee' || kind === 'media_refuse' || kind === 'demande_caduque' || kind === 'doublon_probable') {
     return 'alerte'
   }
-  if (kind === 'demande_validee' || kind === 'media_valide') return 'ok'
+  if (kind === 'demande_validee' || kind === 'media_valide' || kind === 'compte_active') return 'ok'
   return 'neutre'
 }
 

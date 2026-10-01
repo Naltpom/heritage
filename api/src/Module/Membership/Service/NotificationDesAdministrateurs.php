@@ -7,6 +7,7 @@ namespace App\Module\Membership\Service;
 use App\Module\Core\Entity\Notification;
 use App\Module\Core\Enum\NotificationKind;
 use App\Module\Core\Repository\UserRepository;
+use App\Module\Core\Service\NotificationService;
 use App\Module\Membership\Entity\Member;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -37,6 +38,7 @@ final readonly class NotificationDesAdministrateurs
     public function __construct(
         private EntityManagerInterface $em,
         private UserRepository $utilisateurs,
+        private NotificationService $service,
     ) {
     }
 
@@ -117,18 +119,32 @@ final readonly class NotificationDesAdministrateurs
      * Rien ne pousse le changement au client — pas de Redis, pas de file (§ 3 du dossier).
      * Sans cette notification, le nouveau membre resterait devant l'écran d'attente
      * jusqu'à ce qu'il pense à recharger.
+     *
+     * ## Révision du 01/10/2026
+     *
+     * Depuis qu'un compte en attente ne voit **plus rien** de l'arbre (ADR 0003 révisée),
+     * cette notification est la seule chose qui lui annonce que l'attente est finie. Trois
+     * corrections, donc :
+     *
+     * - **Par {@see NotificationService}**, et non par un `persist()` direct : c'est lui
+     *   qui programme l'envoi **sur le téléphone**. Écrite à la main, la notification
+     *   restait dans la cloche d'une application que la personne n'avait aucune raison
+     *   de rouvrir. Le service ne lève jamais : un échec de dépôt ne défait pas
+     *   l'activation, qui est la décision qui compte.
+     * - **Sa propre nature**, `compte_active` : `compte_en_attente` s'affichait
+     *   « Compte à valider » — le contraire de ce qu'elle annonce.
+     * - **Un lien vers l'accueil** (`accueil`), et non `session`, qui n'est le nom
+     *   d'aucune route du front : la notification n'avait pas de lien du tout.
      */
     public function compteActive(Member $membre): void
     {
-        $this->em->persist(new Notification(
+        $this->service->notifier(
             $membre->getUserId(),
-            NotificationKind::CompteEnAttente,
+            NotificationKind::CompteActive,
             'Votre compte est activé',
-            'Votre rattachement a été validé : vous avez désormais accès à votre cercle de l\'arbre.',
-            'session',
-        ));
-
-        $this->em->flush();
+            'Votre inscription a été validée : l’arbre de la famille vous est ouvert.',
+            'accueil',
+        );
     }
 
     /** @return list<\App\Module\Core\Entity\User> */

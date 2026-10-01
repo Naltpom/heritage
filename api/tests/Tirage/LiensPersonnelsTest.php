@@ -241,8 +241,10 @@ final class LiensPersonnelsTest extends CasDeTestTirages
         $this->envoyer('DELETE', "/api/tirages/{$id}/participants/{$this->idDe('tante')}/lien");
         self::assertSame(Response::HTTP_FORBIDDEN, $this->statut());
 
-        // Un tirage fermé reste introuvable pour qui n'en est pas — lien compris.
-        $this->connexionDe(self::TUF);
+        // Un tirage fermé reste introuvable pour qui n'en est pas — lien compris. Grenat,
+        // membre rattaché mais hors du tirage : Tuf, sans rattachement, est refusé avant
+        // même (`403 regime_en_attente`, correction du 01/10/2026).
+        $this->connexionDe(self::GRENAT);
         $this->envoyer('POST', "/api/tirages/{$id}/participants/{$this->idDe('tante')}/lien");
         self::assertSame(Response::HTTP_NOT_FOUND, $this->statut());
 

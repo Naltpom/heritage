@@ -8,9 +8,11 @@ use App\Module\Core\Contract\AnnuaireDesMembresInterface;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Exception\ConflictException;
 use App\Module\Core\Exception\FichierTropVolumineuxException;
+use App\Module\Core\Exception\ForbiddenException;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\TooManyRequestsException;
 use App\Module\Core\Exception\ValidationException;
+use App\Module\Core\Security\RegimeVoter;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Media\Entity\Media;
 use App\Module\Media\Enum\MediaKind;
@@ -50,6 +52,11 @@ use Symfony\Component\Routing\Attribute\Route;
  * services et la sérialisation, jamais dans le contrôleur (§ 8 du dossier). Un
  * contrôleur qui déciderait produirait une seconde source de vérité, et les deux
  * finiraient par diverger sur la route qu'on oublie de relire.
+ *
+ * **Une exception, et elle porte sur le régime, pas sur le cercle** : un compte en
+ * attente ne lit plus rien de l'arbre (ADR 0003, révision du 01/10/2026). La liste lui
+ * est fermée, et un média par identifiant ne lui est rendu que s'il l'a déposé lui-même
+ * — sa photo d'inscription. C'est {@see RegimeVoter} qui tranche ; voir {@see voir()}.
  *
  * ## Les octets ne sortent que par ici
  *
@@ -248,6 +255,13 @@ final class MediaController extends AbstractController
     {
         $lecteur = $this->lecteur();
 
+        // La liste est celle **d'un sujet de l'arbre** : un compte en attente n'en lit
+        // aucune (ADR 0003, révision du 01/10/2026). Sa propre photo d'inscription n'a pas
+        // de sujet et ne passe jamais par ici — elle se relit par son identifiant.
+        if (!$this->isGranted(RegimeVoter::MEMBRE)) {
+            throw ForbiddenException::regimeEnAttenteEnLecture();
+        }
+
         $sujetKind = $this->enumObligatoire(MediaSubject::class, $requete->query->get('subjectKind'), 'subjectKind');
         $sujetId = $this->entier($requete->query->get('subjectId'), 'subjectId');
 
@@ -274,7 +288,37 @@ final class MediaController extends AbstractController
     {
         $lecteur = $this->lecteur();
 
-        return $this->charge($this->normaliseur->normaliser($this->catalogue->voir($id, $lecteur), $lecteur));
+        return $this->charge($this->normaliseur->normaliser($this->voir($id, $lecteur), $lecteur));
+    }
+
+    /**
+     * Un média par son identifiant, **selon le régime du lecteur**.
+     *
+     * Un membre passe par {@see CatalogueMedia::voir()}, inchangé : l'état, puis le cercle.
+     *
+     * Un compte **en attente** ne lit plus rien de l'arbre (ADR 0003, révision du
+     * 01/10/2026) — sauf ce qu'il a lui-même déposé, c'est-à-dire sa photo d'inscription,
+     * que l'écran d'attente doit pouvoir lui remontrer. Tout le reste rend
+     * `403 regime_en_attente`, **que le média existe ou non** : un `404` sur l'inexistant
+     * et un `403` sur l'existant feraient de cette route un oracle d'énumération.
+     */
+    private function voir(int $id, LecteurMedia $lecteur): Media
+    {
+        if ($this->isGranted(RegimeVoter::MEMBRE)) {
+            return $this->catalogue->voir($id, $lecteur);
+        }
+
+        try {
+            $media = $this->catalogue->voir($id, $lecteur);
+        } catch (NotFoundException) {
+            throw ForbiddenException::regimeEnAttenteEnLecture();
+        }
+
+        if ($media->getUploadedByUserId() !== $lecteur->userId) {
+            throw ForbiddenException::regimeEnAttenteEnLecture();
+        }
+
+        return $media;
     }
 
     #[Route('/{id}/fichier', name: 'media_fichier', requirements: ['id' => '\d+'], methods: ['GET'])]
@@ -283,7 +327,7 @@ final class MediaController extends AbstractController
         // `voir()` d'abord, **toujours** : il lève `404` si le lecteur n'a rien à voir
         // ici, et la revalidation d'`ETag` n'a donc jamais lieu avant le cercle.
         $lecteur = $this->lecteur();
-        $media = $this->catalogue->voir($id, $lecteur);
+        $media = $this->voir($id, $lecteur);
 
         return $this->repondre(
             $requete,
@@ -299,7 +343,7 @@ final class MediaController extends AbstractController
     #[Route('/{id}/vignette', name: 'media_vignette', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function vignette(int $id, Request $requete): Response
     {
-        $media = $this->catalogue->voir($id, $this->lecteur());
+        $media = $this->voir($id, $this->lecteur());
         $vignette = $media->getThumbnailName();
 
         if (null === $vignette) {
@@ -346,7 +390,7 @@ final class MediaController extends AbstractController
         $this->bascule->refuserSiActive();
 
         $lecteur = $this->lecteur();
-        $media = $this->catalogue->voir($id, $lecteur);
+        $media = $this->voir($id, $lecteur);
 
         $this->suppression->supprimer($media, $lecteur);
 
@@ -366,7 +410,7 @@ final class MediaController extends AbstractController
         $this->bascule->refuserSiActive();
 
         $lecteur = $this->lecteur();
-        $media = $this->catalogue->voir($id, $lecteur);
+        $media = $this->voir($id, $lecteur);
 
         $corps = json_decode($requete->getContent(), true);
         $angle = \is_array($corps) ? ($corps['angle'] ?? null) : null;

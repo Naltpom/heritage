@@ -56,6 +56,9 @@ const VERS_ARBRE: ParentDeDetail = { nom: 'arbre', libelle: 'Arbre' }
 export function sectionDe(nom: string, meta: { section?: Section }): Section {
   if (meta.section) return meta.section
   if (nom === 'accueil') return 'accueil'
+  // L'écran d'attente est l'accueil d'un compte en attente : c'est l'entrée
+  // « Inscription » de sa barre du bas qui s'allume (ADR 0003, 01/10/2026).
+  if (nom === 'inscription.etat') return 'accueil'
   if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires' || nom === 'explorer') return 'explorer'
   if (nom === 'moi' || nom === 'compte' || nom.startsWith('demande') || nom.startsWith('tirage') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
@@ -76,12 +79,14 @@ export const routes: RouteRecordRaw[] = [
   },
 
   {
-    // La page d'accueil de tout lecteur connecté (`routeParDefaut`) : les
-    // anniversaires du jour en carrousel, ses tirages, l'arbre et « proposer ».
+    // La page d'accueil d'un membre (`routeParDefaut`) : les anniversaires du
+    // jour en carrousel, ses tirages, l'arbre et « proposer ». `membre` : elle
+    // lit l'arbre, et un compte en attente n'en voit plus rien (ADR 0003,
+    // révision du 01/10/2026) — sa page à lui est `inscription.etat`.
     path: '/home',
     name: 'accueil',
     component: () => import('@/views/AccueilView.vue'),
-    meta: { acces: 'attente', titre: 'Accueil' },
+    meta: { acces: 'membre', titre: 'Accueil' },
   },
 
   {
@@ -90,7 +95,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/histoire',
     name: 'histoire',
     redirect: { name: 'arbre' },
-    meta: { acces: 'attente', titre: 'Arbre' },
+    meta: { acces: 'membre', titre: 'Arbre' },
   },
 
   /* --- Entrée : connexion et inscription (§ 2, § 4) --------------- */
@@ -138,8 +143,9 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     // Étape 3 : elle exige une **session**, pas l'anonymat — le compte existe
-    // déjà, il attend sa validation (§ 4.4). C'est la destination des refus de
-    // niveau « membre » pour un compte en attente.
+    // déjà, il attend sa validation (§ 4.4). C'est la **page d'attente** : la
+    // page par défaut d'un compte en attente (`routeParDefaut`) et la
+    // destination de tous ses refus de niveau « membre » — l'arbre compris.
     path: '/inscription/etat',
     name: 'inscription.etat',
     component: () => import('@/views/InscriptionEtatView.vue'),
@@ -172,7 +178,15 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'public', titre: 'Changement de courriel', cadre: false },
   },
 
-  /* --- Consultation : ouverte au régime « en attente » ------------
+  /* --- Consultation : membres validés seulement -------------------
+   *
+   * **Révision du 01/10/2026 (ADR 0003).** Ces écrans étaient ouverts au
+   * compte en attente — « l'arbre ancien » : les défunts, et les vivants en
+   * nœuds restreints, nom complet compris. Le lien d'invitation circule dans un
+   * groupe de messagerie : n'importe qui pouvait s'inscrire sous un faux nom et
+   * lire les noms des vivants de la famille. Un compte en attente ne voit donc
+   * plus **rien** de l'arbre : tous ces écrans exigent `membre`, la garde
+   * l'emmène à l'écran d'attente, et l'API lui répond `403 regime_en_attente`.
    *
    * Un seul arbre. `/tree` (l'arbre plein écran repris de zéro) et
    * `/arbre/ancien` (la disposition `ressorts`) ont été retirés le 30/09/2026 :
@@ -186,7 +200,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/arbre',
     name: 'arbre',
     component: () => import('@/views/HistoireView.vue'),
-    meta: { acces: 'attente', titre: 'Arbre' },
+    meta: { acces: 'membre', titre: 'Arbre' },
   },
   {
     // `{id}` est un entier : un identifiant provisoire (`#12/p1`) ne correspond
@@ -195,7 +209,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/personnes/:id(\\d+)',
     name: 'personne.detail',
     component: () => import('@/views/PersonneView.vue'),
-    meta: { acces: 'attente', titre: 'Fiche', parent: VERS_ARBRE },
+    meta: { acces: 'membre', titre: 'Fiche', parent: VERS_ARBRE },
   },
   {
     // **Explorer** : une page, trois onglets qui glissent — Chronologie, Carte,
@@ -204,46 +218,47 @@ export const routes: RouteRecordRaw[] = [
     // les noms de route sont un contrat, on n'en renomme aucun. Les anciennes
     // adresses (`/chronologie`, `/carte`, `/anniversaires`) redirigent plus bas.
     //
-    // `attente` pour les trois, et pour une raison mécanique : ces écrans sont
-    // bâtis sur des **événements datés**, et une personne vivante hors cercle
-    // n'en fournit aucun. Un compte en attente de validation y voit donc un
-    // écran plein — les défunts de l'arbre, leurs lieux et leurs dates.
+    // `membre` pour les trois, comme l'arbre : ils lisent les personnes de
+    // l'arbre, leurs dates et leurs lieux, et un compte en attente n'en voit
+    // plus rien (ADR 0003, révision du 01/10/2026). Chaque enfant porte son
+    // niveau explicitement — la garde lit le `meta` de la route résolue.
     path: '/explorer',
     name: 'explorer',
     component: () => import('@/views/ExplorerView.vue'),
-    meta: { acces: 'attente', titre: 'Explorer' },
+    meta: { acces: 'membre', titre: 'Explorer' },
     redirect: { name: 'chronologie' },
     children: [
       {
         path: 'chronologie',
         name: 'chronologie',
         component: () => import('@/views/ChronologieView.vue'),
-        meta: { acces: 'attente', titre: 'Chronologie' },
+        meta: { acces: 'membre', titre: 'Chronologie' },
       },
       {
         path: 'carte',
         name: 'carte',
         component: () => import('@/views/CarteView.vue'),
-        meta: { acces: 'attente', titre: 'Carte' },
+        meta: { acces: 'membre', titre: 'Carte' },
       },
       {
         path: 'calendrier',
         name: 'anniversaires',
         component: () => import('@/views/AnniversairesView.vue'),
-        meta: { acces: 'attente', titre: 'Calendrier' },
+        meta: { acces: 'membre', titre: 'Calendrier' },
       },
     ],
   },
   // Les adresses d'avant Explorer : favoris et liens déjà partagés.
-  { path: '/chronologie', redirect: { name: 'chronologie' }, meta: { acces: 'attente', titre: 'Chronologie' } },
-  { path: '/carte', redirect: { name: 'carte' }, meta: { acces: 'attente', titre: 'Carte' } },
-  { path: '/anniversaires', redirect: { name: 'anniversaires' }, meta: { acces: 'attente', titre: 'Calendrier' } },
+  { path: '/chronologie', redirect: { name: 'chronologie' }, meta: { acces: 'membre', titre: 'Chronologie' } },
+  { path: '/carte', redirect: { name: 'carte' }, meta: { acces: 'membre', titre: 'Carte' } },
+  { path: '/anniversaires', redirect: { name: 'anniversaires' }, meta: { acces: 'membre', titre: 'Calendrier' } },
 
   {
     // **Moi** : la quatrième entrée de la barre du bas. Tout ce qui est
     // personnel ou rare, en une liste : mon compte, mes demandes, tirages,
     // actes demandés, questions, administration, déconnexion. `attente` : un
-    // compte en attente y trouve au moins son compte et la déconnexion.
+    // compte en attente y trouve son inscription, son compte et la
+    // déconnexion — rien qui lise l'arbre.
     path: '/moi',
     name: 'moi',
     component: () => import('@/views/MoiView.vue'),
@@ -272,12 +287,9 @@ export const routes: RouteRecordRaw[] = [
   {
     // **La page « Questions »** (ADR 0008).
     //
-    // `membre` et non `attente` : un compte dont le rattachement n'est pas
-    // validé n'a **pas de cercle du tout** (ADR 0003), donc aucune question sur
-    // une personne vivante — et il ne peut de toute façon rien déposer, l'API
-    // lui refusant l'écriture (§ 12.2). Lui ouvrir un écran qui ne montrerait
-    // que des aïeux sans qu'il puisse y répondre serait lui promettre une
-    // contribution impossible.
+    // `membre` et non `attente` : une question nomme une personne de l'arbre,
+    // et un compte en attente n'en lit aucune (ADR 0003, révision du
+    // 01/10/2026) — l'API lui répond `403 regime_en_attente`.
     path: '/questions',
     name: 'questions',
     component: () => import('@/views/QuestionsView.vue'),

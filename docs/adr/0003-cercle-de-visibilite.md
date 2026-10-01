@@ -1,6 +1,7 @@
 # ADR 0003 — Confidentialité : le cercle de visibilité
 
-Date : 2026-09-15 · Statut : acceptée
+Date : 2026-09-15 · Statut : acceptée · Révisée le 2026-10-01 (régime en attente : plus
+rien de l'arbre)
 
 ## Contexte
 
@@ -56,11 +57,12 @@ Règles d'application :
   envoyé puis caché : il n'est pas envoyé.
 - **La recherche ne renvoie jamais une personne vivante hors cercle.** Ni en résultat, ni en
   suggestion, ni en libellé de rapprochement de doublon.
-- Un compte **sans rattachement validé** (inscription en attente) **n'a pas de cercle** : il
-  ne voit que les personnes décédées, et **aucune personne vivante — pas même celle à
-  laquelle il prétend se rattacher**. Il obtient un cercle à l'activation par
-  l'administrateur. *Décision du commanditaire ; motif : l'attente peut durer des jours, un
-  écran vide pousse à l'abandon, et l'arbre ancien n'expose rien de sensible.*
+- Un compte **sans rattachement validé** (inscription en attente) **n'a pas de cercle**, et
+  **ne lit rien de l'arbre** — ni vivants, ni défunts : toute route de lecture lui répond
+  `403 regime_en_attente`. Il obtient l'arbre et son cercle à l'activation par
+  l'administrateur. *Rédaction initiale : il voyait les personnes décédées (« l'attente peut
+  durer des jours, un écran vide pousse à l'abandon ») ; révisée le 2026-10-01 — voir
+  « Conséquences ».*
   **Ce n'est pas un cercle réduit, c'est un régime distinct** : ni une liste vide, ni
   surtout « un cercle avec `N = 0` » — un `N = 0` reste un cercle, il contient encore `u` et
   ses conjoints, donc il laisserait sortir une fiche vivante. La nuance disparaîtrait au
@@ -245,6 +247,36 @@ nouvel ADR ; elle ne l'est pas ici.
   le nom : `mbr_member.family_description`, un texte libre qui nomme des vivants, réservé aux
   administrateurs — et refusé même à eux sous la bascule « voir comme un membre », faute de
   cercle capable de le filtrer.
+- **Révision du 2026-10-01 — le régime en attente ne voit plus rien de l'arbre.** Décision
+  du commanditaire, après un essai : un compte de test inscrit par le lien d'invitation, sous
+  une fausse date de naissance, voyait l'arbre.
+  *Ce qui fuyait.* Le régime `Aucun` filtrait bien les fiches, mais le graphe sert **chaque**
+  personne en nœud — et un vivant hors cercle y garde, par la liste blanche, son **nom
+  complet**, son sexe, sa génération et sa branche. Ce qui est acceptable pour un membre
+  validé — un cousin dont le cercle s'arrête avant vous sait déjà que vous existez — ne l'est
+  pas pour un inconnu. Or le lien d'invitation **circule dans un groupe de messagerie** :
+  n'importe qui peut s'inscrire sous un faux nom, et lisait alors la liste des vivants de la
+  famille, sans rien avoir prouvé (l'ADR 0013 a même retiré l'obligation de se trouver dans
+  l'arbre). L'argument « l'arbre ancien n'expose rien de sensible » était juste pour les
+  fiches, faux pour le graphe.
+  *Ce qui change.* Un compte en attente — avec ou sans fiche, `a_rattacher` compris — reçoit
+  `403 regime_en_attente` sur **toute** lecture de l'arbre : graphe, fiches, familles,
+  recherche, chronologie et ses préférences, carte, anniversaires, médias d'une personne,
+  historique d'une fiche, inventaire d'une suppression, questions, tirages, actes demandés.
+  Le refus est rendu **avant** le contrôleur (`Core\Security\ReserveAuxMembres`), donc avant
+  tout chargement et toute revalidation d'`ETag`. Seule exception : un média qu'il a
+  lui-même déposé — sa photo d'inscription —, que l'écran d'attente lui remontre ; tout autre
+  média lui rend le même `403`, qu'il existe ou non. Lui restent ouvertes les routes **du
+  compte** : session, Mon compte, notifications, push, état de l'inscription, déconnexion.
+  Côté front, l'écran d'attente devient sa page par défaut, et la navigation ne lui montre
+  que son inscription, Mon compte et la déconnexion.
+  *Ce qui ne change pas.* La formule `C(u)`, la liste blanche, le filtrage dans la
+  sérialisation et le régime `Aucun` lui-même, qui sert encore au compte **actif sans
+  rattachement** (le défaut fermé de `Membership`). Le filtrage des vivants pour un membre
+  validé est inchangé.
+  *Le prix, assumé.* L'écran d'attente est vide de l'arbre pendant plusieurs jours. C'est la
+  notification « Votre compte est activé » (`compte_active`, envoyée aussi sur le téléphone,
+  lien vers l'accueil) qui le fait revenir.
 - La bascule « voir comme un membre » est **tracée au journal d'audit** : c'est une
   consultation de données personnelles sous une autre identité.
 - **Un test fonctionnel par porte de sortie** (les sept ci-dessus, **plus les libellés
