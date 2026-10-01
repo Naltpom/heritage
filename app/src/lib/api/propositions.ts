@@ -212,6 +212,41 @@ export interface LienDemande {
   siblingOrder?: number | null
   note?: string | null
   resolvedFamilyId?: number | null
+  /**
+   * **Où cette filiation atterrira**, calculé par le serveur sur l'arbre
+   * courant — vue d'administration seulement, et absent quand rien ne se
+   * prévoit (un parent encore à créer).
+   *
+   * Une filiation à un parent ne va plus forcément là où le lien se lit : elle
+   * peut compléter la famille que l'enfant a déjà, ou rejoindre l'union unique
+   * de son parent. « Enfant de Jean-Marie » qui atterrit chez « Jean-Marie ×
+   * Hélène » doit se lire avant le clic — c'est l'absence de ce bloc qui a
+   * laissé trois familles de parents à une même personne sans que personne le
+   * voie venir.
+   */
+  filiationPrevue?: FiliationPrevue
+}
+
+/** Voir `LienDemande.filiationPrevue`. Les phrases viennent du serveur, telles quelles. */
+export interface FiliationPrevue {
+  motif:
+    | 'deja_rattache'
+    | 'couple'
+    | 'famille_completee'
+    | 'couple_existant'
+    | 'couple_forme'
+    | 'union_unique'
+    | 'parent_seul'
+  familleId: number | null
+  libelle: string
+  /** « Sera rattaché·e au couple « Jean-Marie × Hélène », seule union connue de Jean-Marie. » */
+  phrase: string
+  /** Vrai quand la destination ne se devine pas du lien, ou qu'une famille est quittée. */
+  aSignaler: boolean
+  /** Les familles à un seul parent que l'enfant quittera ; `supprimee` si elle part, vide. */
+  quittees: { familleId: number; libelle: string; supprimee: boolean }[]
+  /** Non nul : la validation sera refusée (deux familles de parents partageant un parent). */
+  incompatibilite: string | null
 }
 
 /** § 6.5 — ce que la validation a réellement produit. */

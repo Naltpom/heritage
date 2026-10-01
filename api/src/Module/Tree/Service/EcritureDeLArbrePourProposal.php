@@ -8,7 +8,11 @@ use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\FiliationEtablie;
+use App\Module\Proposal\Contract\FiliationIncompatible;
+use App\Module\Proposal\Contract\FiliationPrevue;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
+use App\Module\Proposal\Contract\MotifDeRattachement;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
@@ -24,6 +28,7 @@ use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Note;
 use App\Module\Tree\Entity\Person;
 use App\Module\Tree\Entity\Source;
+use App\Module\Tree\Enum\ChildRelation;
 use App\Module\Tree\Enum\CitationQuality;
 use App\Module\Tree\Enum\NoteScope;
 use Doctrine\ORM\EntityManagerInterface;
@@ -440,6 +445,117 @@ final class EcritureDeLArbrePourProposal implements PortArbre
 
         $this->derivees->recalculer();
         $this->em->flush();
+    }
+
+    public function prevoirFiliation(?int $enfantId, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise): FiliationPrevue
+    {
+        $enfant = null === $enfantId ? null : $this->em->find(Person::class, $enfantId);
+        $enfant = $enfant instanceof Person ? $enfant : null;
+        $plan = $this->planifier($enfant, $parentA, $parentB, $unionUniqueAdmise);
+
+        return new FiliationPrevue(
+            $plan['motif'],
+            $plan['famille']?->getId(),
+            $this->libelleDe($plan['mari'], $plan['femme']),
+            array_map(
+                fn (Family $famille): array => [
+                    'familleId' => (int) $famille->getId(),
+                    'libelle' => $this->libelleDuCouple($famille),
+                    'seraVide' => $this->seraVideSans($famille, $enfant),
+                ],
+                $plan['quittees'],
+            ),
+            $plan['incompatibilite'],
+        );
+    }
+
+    public function etablirFiliation(int $enfantId, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise, ?int $rangDansLaFratrie): FiliationEtablie
+    {
+        $enfant = $this->em->find(Person::class, $enfantId);
+
+        if (!$enfant instanceof Person) {
+            throw new \RuntimeException(\sprintf('Personne %d introuvable.', $enfantId));
+        }
+
+        $plan = $this->planifier($enfant, $parentA, $parentB, $unionUniqueAdmise);
+
+        if (null !== $plan['incompatibilite']) {
+            throw new FiliationIncompatible($plan['incompatibilite']);
+        }
+
+        $famille = $plan['famille'];
+        $creee = false;
+        $libelleAvant = null;
+
+        if (null === $famille) {
+            $famille = new Family($plan['mari'], $plan['femme']);
+            $this->em->persist($famille);
+            $this->em->flush();
+            $famille->setGedcomXref($this->xref('F', (int) $famille->getId()));
+            $creee = true;
+        } elseif ($plan['completer']) {
+            // Règle 1 : la place libre reçoit le parent nommé. La famille garde son
+            // identifiant, son `xref` et son historique — c'est **elle** que l'enfant
+            // avait, on la complète au lieu d'en ouvrir une seconde à côté.
+            $libelleAvant = $this->libelleDuCouple($famille);
+            $famille->setHusband($plan['mari'])->setWife($plan['femme'])->toucher();
+        }
+
+        $familleId = (int) $famille->getId();
+
+        if (!$this->dejaRattache($familleId, $enfantId)) {
+            $this->em->persist(new Child($famille, $enfant, $rangDansLaFratrie ?? $this->prochainRang($familleId)));
+        }
+
+        $quittees = [];
+
+        foreach ($plan['quittees'] as $quittee) {
+            // `remove()` ligne à ligne et non un `DELETE` en DQL : le journal d'audit
+            // écoute les événements de l'ORM, et une filiation retirée par requête
+            // directe n'y laisserait aucune trace.
+            foreach ($this->filiationsDe($enfant, $quittee) as $filiation) {
+                $this->em->remove($filiation);
+            }
+
+            $quittees[] = ['familleId' => (int) $quittee->getId(), 'libelle' => $this->libelleDuCouple($quittee)];
+        }
+
+        // Même ordre que `rattacherEnfant()` : le `flush` d'abord, sinon le recalcul relit
+        // l'arbre d'avant et l'enfant reste au rang de génération de son ancienne famille.
+        $this->em->flush();
+        $this->derivees->recalculer();
+        $this->em->flush();
+
+        return new FiliationEtablie(
+            $familleId,
+            $this->libelleDuCouple($famille),
+            $creee,
+            $plan['motif'],
+            $enfant->getDisplayName(),
+            $libelleAvant,
+            $quittees,
+        );
+    }
+
+    public function supprimerFamilleVide(int $familleId): ?string
+    {
+        $famille = $this->em->find(Family::class, $familleId);
+
+        // Le critère est revérifié **ici**, sur l'état de la transaction, et non pris sur
+        // la foi de l'appelant : une famille qui porte des données ne se supprime jamais,
+        // quel que soit le chemin qui le demande.
+        if (!$famille instanceof Family || !$this->seraVideSans($famille, null)) {
+            return null;
+        }
+
+        $libelle = $this->libelleDuCouple($famille);
+
+        $this->em->remove($famille);
+        $this->em->flush();
+        $this->derivees->recalculer();
+        $this->em->flush();
+
+        return $libelle;
     }
 
     public function empreinteDeLArbre(): string
@@ -1147,10 +1263,14 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         $femme = null;
         $indetermines = [];
 
+        // Une place déjà prise renvoie la seconde personne du même sexe vers la place
+        // libre, comme une personne de sexe inconnu. Le `??=` d'avant la **perdait** :
+        // deux hommes désignés comme parents donnaient la famille du premier seul, et
+        // l'autre parent disparaissait sans un mot.
         foreach ($personnes as $personne) {
             match ($personne->getSex()) {
-                Sex::Masculin => $mari ??= $personne,
-                Sex::Feminin => $femme ??= $personne,
+                Sex::Masculin => null === $mari ? $mari = $personne : $indetermines[] = $personne,
+                Sex::Feminin => null === $femme ? $femme = $personne : $indetermines[] = $personne,
                 Sex::Inconnu => $indetermines[] = $personne,
             };
         }
@@ -1214,6 +1334,308 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         ))->setParameter('famille', $familleId)->getSingleScalarResult();
 
         return \is_numeric($maximum) ? (int) $maximum + 1 : 0;
+    }
+
+    // ------------------------------------------------------------------ filiations
+
+    /**
+     * Où une filiation atterrit — le calcul commun à la prévision et à l'écriture.
+     *
+     * **Un seul calcul pour les deux**, délibérément : si l'annonce faite à
+     * l'administrateur et l'écriture suivaient deux chemins, ils finiraient par diverger,
+     * et l'écran promettrait « sera rattachée au couple Jean-Marie × Hélène » pendant que
+     * la validation ouvrirait une famille à un parent. Les règles sont décrites en tête de
+     * {@see PortArbre::etablirFiliation()} ; ce qui suit les applique dans l'ordre.
+     *
+     * `famille` vaut `null` quand la destination est à créer, avec `mari` et `femme`.
+     * `completer` dit que la famille existe mais reçoit le parent à sa place libre.
+     *
+     * @return array{motif: MotifDeRattachement, famille: ?Family, mari: ?Person, femme: ?Person, completer: bool, quittees: list<Family>, incompatibilite: ?string}
+     */
+    private function planifier(?Person $enfant, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise): array
+    {
+        [$mari, $femme] = $this->rangerLeCouple($parentA, $parentB);
+        $familles = null === $enfant ? [] : $this->famillesParentales($enfant);
+
+        if (null !== $mari && null !== $femme) {
+            $plan = $this->versLeCouple($enfant, $familles, $mari, $femme);
+        } elseif (null !== ($parent = $mari ?? $femme)) {
+            $plan = $this->versLeParent($enfant, $familles, $parent, $unionUniqueAdmise);
+        } else {
+            throw new \InvalidArgumentException('Une filiation sans aucun parent n’est pas une filiation.');
+        }
+
+        // Règle 2, appliquée à **toutes** les destinations et pas seulement aux couples :
+        // l'enfant quitte toute famille à un seul parent dont ce parent figure aussi dans
+        // la destination. C'est ce qui nettoie un état déjà dégradé — les familles 184 et
+        // 189 de Véronique, restées après la demande 727 — au lieu de s'y ajouter.
+        $epoux = array_values(array_filter([$plan['mari'], $plan['femme']]));
+        $plan['quittees'] = array_values(array_filter(
+            $familles,
+            fn (Family $famille): bool => $famille !== $plan['famille']
+                && 1 === \count($this->epouxDe($famille))
+                && $this->partagentUnParent($this->epouxDe($famille), $epoux),
+        ));
+
+        $plan['incompatibilite'] = $this->incompatibilite($enfant, $familles, $plan);
+
+        return $plan;
+    }
+
+    /**
+     * Deux parents : leur famille de couple — ou, si elle n'existe pas, la famille à un
+     * parent de l'enfant **complétée**, quand elle porte l'un des deux et que l'enfant y
+     * est seul. La compléter plutôt qu'en ouvrir une seconde garde ses données et son
+     * historique, et ne laisse rien à supprimer derrière.
+     *
+     * @param list<Family> $familles
+     *
+     * @return array{motif: MotifDeRattachement, famille: ?Family, mari: ?Person, femme: ?Person, completer: bool, quittees: list<Family>, incompatibilite: ?string}
+     */
+    private function versLeCouple(?Person $enfant, array $familles, Person $mari, Person $femme): array
+    {
+        $couple = $this->familleDuCouple($mari, $femme);
+        $plan = ['motif' => MotifDeRattachement::Couple, 'famille' => $couple, 'mari' => $mari, 'femme' => $femme, 'completer' => false, 'quittees' => [], 'incompatibilite' => null];
+
+        if (null !== $couple) {
+            return $plan;
+        }
+
+        foreach ($familles as $famille) {
+            $completable = ($famille->getHusband() === $mari && null === $famille->getWife())
+                || ($famille->getWife() === $femme && null === $famille->getHusband());
+
+            if ($completable && $this->seulEnfant($famille, $enfant)) {
+                return ['motif' => MotifDeRattachement::FamilleCompletee, 'famille' => $famille, 'completer' => true] + $plan;
+            }
+        }
+
+        return $plan;
+    }
+
+    /**
+     * Un parent : déjà là, puis la règle 1, puis la règle 3, puis le repli.
+     *
+     * @param list<Family> $familles
+     *
+     * @return array{motif: MotifDeRattachement, famille: ?Family, mari: ?Person, femme: ?Person, completer: bool, quittees: list<Family>, incompatibilite: ?string}
+     */
+    private function versLeParent(?Person $enfant, array $familles, Person $parent, bool $unionUniqueAdmise): array
+    {
+        $reste = ['completer' => false, 'quittees' => [], 'incompatibilite' => null];
+
+        // Déjà enfant de ce parent : rien à créer. Une famille à deux époux est préférée
+        // à une famille à un parent — c'est la plus complète qui doit rester, la règle 2
+        // videra l'autre.
+        $dejaLa = array_values(array_filter($familles, fn (Family $f): bool => \in_array($parent, $this->epouxDe($f), true)));
+        usort($dejaLa, fn (Family $a, Family $b): int => \count($this->epouxDe($b)) <=> \count($this->epouxDe($a)));
+
+        if ([] !== $dejaLa) {
+            return ['motif' => MotifDeRattachement::DejaRattache, 'famille' => $dejaLa[0], 'mari' => $dejaLa[0]->getHusband(), 'femme' => $dejaLa[0]->getWife()] + $reste;
+        }
+
+        // Règle 1 : une famille à un seul parent Q, dont la place libre convient à P.
+        foreach ($familles as $famille) {
+            $couple = $this->completerAvec($famille, $parent);
+
+            if (null === $couple) {
+                continue;
+            }
+
+            [$mari, $femme] = $couple;
+            $existante = $this->familleDuCouple($mari, $femme);
+
+            if (null !== $existante) {
+                return ['motif' => MotifDeRattachement::CoupleExistant, 'famille' => $existante, 'mari' => $mari, 'femme' => $femme] + $reste;
+            }
+
+            // Compléter une famille qui compte d'autres enfants donnerait P pour parent à
+            // des frères dont rien ne dit qu'il le soit : le couple se forme alors à
+            // côté, et seul cet enfant-ci y passe.
+            return $this->seulEnfant($famille, $enfant)
+                ? ['motif' => MotifDeRattachement::FamilleCompletee, 'famille' => $famille, 'mari' => $mari, 'femme' => $femme, 'completer' => true] + $reste
+                : ['motif' => MotifDeRattachement::CoupleForme, 'famille' => null, 'mari' => $mari, 'femme' => $femme] + $reste;
+        }
+
+        // Règle 3 : aucune famille de parents, et une seule union chez P, à deux époux.
+        if ([] === $familles && $unionUniqueAdmise) {
+            $unions = $this->famillesDe((int) $parent->getId());
+
+            if (1 === \count($unions) && 2 === \count($this->epouxDe($unions[0]))) {
+                return ['motif' => MotifDeRattachement::UnionUnique, 'famille' => $unions[0], 'mari' => $unions[0]->getHusband(), 'femme' => $unions[0]->getWife()] + $reste;
+            }
+        }
+
+        [$mari, $femme] = $this->rangerLeCouple($parent->getId(), null);
+
+        return ['motif' => MotifDeRattachement::ParentSeul, 'famille' => $this->familleDuCouple($mari, $femme), 'mari' => $mari, 'femme' => $femme] + $reste;
+    }
+
+    /**
+     * Le couple que formerait cette famille à un parent si P prenait la place libre —
+     * ou `null` si elle n'a pas exactement un parent, ou si le sexe de P ne convient pas
+     * à la place.
+     *
+     * Le sexe inconnu convient à toutes les places, comme dans {@see rangerLeCouple()}.
+     * Deux parents de même sexe connu ne se complètent pas : sur cet arbre, c'est bien
+     * plus souvent une fiche mal sexuée qu'un couple, et deviner l'un pour l'autre
+     * écrirait un couple que personne n'a proposé.
+     *
+     * @return array{0: Person, 1: Person}|null
+     */
+    private function completerAvec(Family $famille, Person $parent): ?array
+    {
+        $mari = $famille->getHusband();
+        $femme = $famille->getWife();
+
+        if (null !== $mari && null === $femme && Sex::Masculin !== $parent->getSex()) {
+            return [$mari, $parent];
+        }
+
+        if (null === $mari && null !== $femme && Sex::Feminin !== $parent->getSex()) {
+            return [$parent, $femme];
+        }
+
+        return null;
+    }
+
+    /**
+     * Règle 4 : la destination ne partage un parent avec **aucune** autre famille de
+     * parents de l'enfant, une fois les familles quittées retirées.
+     *
+     * Ce qui reste après la règle 2 ne peut être qu'une famille **à deux époux** — un
+     * autre couple complet qui porte déjà l'un des parents. Deux couples, deux mères ou
+     * deux pères possibles : aucune fusion ne se fait sans perdre une donnée, et ce n'est
+     * pas à la validation de choisir.
+     *
+     * @param list<Family>                                                                   $familles
+     * @param array{famille: ?Family, mari: ?Person, femme: ?Person, quittees: list<Family>} $plan
+     */
+    private function incompatibilite(?Person $enfant, array $familles, array $plan): ?string
+    {
+        $epoux = array_values(array_filter([$plan['mari'], $plan['femme']]));
+
+        foreach ($familles as $famille) {
+            if ($famille === $plan['famille'] || \in_array($famille, $plan['quittees'], true)) {
+                continue;
+            }
+
+            if ($this->partagentUnParent($this->epouxDe($famille), $epoux)) {
+                return \sprintf(
+                    '%s est déjà enfant de « %s », qui partage un parent avec « %s » : un enfant ne peut pas avoir deux familles de parents qui partagent un parent. Corrigez d’abord ses familles de parents dans l’arbre.',
+                    $enfant?->getDisplayName() ?? 'Cette personne',
+                    $this->libelleDuCouple($famille),
+                    $this->libelleDe($plan['mari'], $plan['femme']),
+                );
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Les familles de **parents** d'une personne — celles où elle est enfant, hors
+     * adoption.
+     *
+     * L'adoption est écartée parce qu'elle est le seul cas légitime d'un enfant dans deux
+     * familles qui partagent un parent : la mère, et le beau-père qui adopte. Les autres
+     * relations (`naissance`, `reconnaissance`, `presume`) disent toutes « voici ses
+     * parents », et deux réponses à cette question pour un même parent sont un doublon,
+     * pas une histoire.
+     *
+     * @return list<Family>
+     */
+    private function famillesParentales(Person $enfant): array
+    {
+        /** @var list<Child> $filiations */
+        $filiations = $this->em->createQuery(\sprintf(
+            'SELECT c, f FROM %s c JOIN c.family f WHERE c.person = :enfant AND c.relation <> :adoption ORDER BY f.id ASC',
+            Child::class,
+        ))->setParameter('enfant', $enfant)->setParameter('adoption', ChildRelation::Adoption)->getResult();
+
+        return array_map(static fn (Child $filiation): Family => $filiation->getFamily(), $filiations);
+    }
+
+    /** @return list<Child> */
+    private function filiationsDe(Person $enfant, Family $famille): array
+    {
+        /** @var list<Child> $filiations */
+        $filiations = $this->em->createQuery(\sprintf(
+            'SELECT c FROM %s c WHERE c.person = :enfant AND c.family = :famille',
+            Child::class,
+        ))->setParameter('enfant', $enfant)->setParameter('famille', $famille)->getResult();
+
+        return $filiations;
+    }
+
+    /** @return list<Person> */
+    private function epouxDe(Family $famille): array
+    {
+        return array_values(array_filter([$famille->getHusband(), $famille->getWife()]));
+    }
+
+    /**
+     * @param list<Person> $uns
+     * @param list<Person> $autres
+     */
+    private function partagentUnParent(array $uns, array $autres): bool
+    {
+        foreach ($uns as $personne) {
+            if (\in_array($personne, $autres, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** L'enfant est-il le seul de cette famille ? Un enfant encore à créer n'y est pas. */
+    private function seulEnfant(Family $famille, ?Person $enfant): bool
+    {
+        $enfants = array_column($this->enfantsDeLaFamille((int) $famille->getId()), 'personneId');
+
+        return null !== $enfant && [$enfant->getId()] === $enfants;
+    }
+
+    /**
+     * La famille ne porterait-elle plus rien, cet enfant parti ?
+     *
+     * « Rien » au sens strict : aucun autre enfant, aucune date d'union ni de rupture,
+     * aucune note, citation ni fait. Une famille qui porte la moindre de ces données ne se
+     * supprime jamais — c'est alors elle qui fait preuve, et la fiche « fantôme » ne l'est
+     * que vide.
+     */
+    private function seraVideSans(Family $famille, ?Person $enfant): bool
+    {
+        $id = (int) $famille->getId();
+        $enfants = array_column($this->enfantsDeLaFamille($id), 'personneId');
+        $restants = array_diff($enfants, null === $enfant ? [] : [$enfant->getId()]);
+
+        if ([] !== $restants
+            || $famille->getMarriage()->isKnown()
+            || $famille->getDivorce()->isKnown()
+            || $famille->isDivorced()) {
+            return false;
+        }
+
+        foreach ([Note::class, Citation::class, Fact::class] as $entite) {
+            $nombre = $this->em->createQuery(\sprintf('SELECT COUNT(x.id) FROM %s x WHERE IDENTITY(x.family) = :famille', $entite))
+                ->setParameter('famille', $id)
+                ->getSingleScalarResult();
+
+            if (\is_numeric($nombre) && (int) $nombre > 0) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function libelleDe(?Person $mari, ?Person $femme): string
+    {
+        $noms = array_filter([$mari?->getDisplayName(), $femme?->getDisplayName()]);
+
+        return [] === $noms ? 'Union' : implode(' × ', $noms);
     }
 
     // ------------------------------------------------------------------ conversions

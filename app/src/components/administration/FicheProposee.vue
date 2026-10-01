@@ -131,6 +131,27 @@ function nomComplet(brouillon: BrouillonDemande): string {
           <span v-if="lien.union !== null" class="text-attenue">{{ ` — ${lien.union}` }}</span>
           <span v-if="lien.rupture !== null" class="text-attenue">{{ ` — ${lien.rupture}` }}</span>
           <p v-if="lien.note !== null" class="mt-1 text-xs text-attenue">{{ lien.note }}</p>
+          <!--
+            Ce que la validation fera de cette filiation, quand ça ne se lit pas
+            dans le lien : « Véronique, enfant de Jean-Marie » qui atterrit chez
+            « Jean-Marie × Hélène ». À lire avant de cliquer, pas à découvrir dans
+            l'arbre après.
+          -->
+          <div
+            v-if="lien.effet !== null"
+            class="mt-1.5 border-l-2 pl-2.5 text-xs"
+            :class="lien.effet.refus !== null ? 'border-alerte-bord' : 'border-ligne'"
+            data-test="effet-filiation"
+          >
+            <p>{{ lien.effet.phrase }}</p>
+            <p v-for="quittee in lien.effet.quittees" :key="quittee" class="text-attenue">
+              {{ quittee }}
+            </p>
+            <p v-if="lien.effet.refus !== null" class="mt-1 text-alerte" role="status">
+              <strong class="font-semibold">La validation sera refusée.</strong>
+              {{ ` ${lien.effet.refus}` }}
+            </p>
+          </div>
         </li>
       </ul>
 

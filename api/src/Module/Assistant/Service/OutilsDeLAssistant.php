@@ -153,7 +153,7 @@ final readonly class OutilsDeLAssistant
                                                 'nature' => ['type' => 'string', 'enum' => ['enfant_de', 'parent_de', 'conjoint_de']],
                                                 'sujet' => ['type' => 'string', 'description' => '« #p1 » pour une personne nouvelle de CETTE demande (une référence ne vaut que dans sa demande), ou l’identifiant numérique d’une personne de l’arbre (« 12 »).'],
                                                 'autre' => ['type' => 'string', 'description' => 'Même forme que sujet.'],
-                                                'autre2' => ['type' => 'string', 'description' => 'enfant_de seulement : le second parent, même forme.'],
+                                                'autre2' => ['type' => 'string', 'description' => 'enfant_de seulement : le second parent, même forme. Quand les deux parents sont nommés, ils vont dans CE lien (autre + autre2), jamais dans deux liens enfant_de séparés.'],
                                                 'mariage' => $date,
                                                 'divorce' => ['type' => 'boolean', 'description' => 'conjoint_de seulement.'],
                                                 'note' => ['type' => 'string'],

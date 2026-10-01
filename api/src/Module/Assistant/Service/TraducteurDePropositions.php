@@ -499,7 +499,132 @@ final class TraducteurDePropositions
             $liens[] = $construit;
         }
 
-        return $liens;
+        return self::reunirLesParents($liens);
+    }
+
+    /**
+     * Deux filiations à un parent sur le même enfant deviennent **une** filiation à deux
+     * parents.
+     *
+     * Le modèle a la consigne d'écrire « #p1 enfant_de 12 et 57 », et il lui arrive
+     * d'écrire « #p1 enfant_de 12 » puis « #p1 enfant_de 57 » — ou « 57 parent_de #p1 »
+     * pour le second. Les deux formes disent la même chose au membre qui relit ; elles ne
+     * disent pas la même chose à l'arbre. Deux liens à un parent donnaient deux familles
+     * à un parent, côte à côte, au lieu du couple : c'est la mécanique exacte qui a donné
+     * trois familles de parents à Véronique (469) entre les demandes 714 et 727. La
+     * validation sait désormais réparer ce cas, mais une demande qui dit d'emblée « ces
+     * deux-là sont ses parents » s'annonce mieux et se valide sans détour.
+     *
+     * On ne réunit que quand c'est **sans ambiguïté** : exactement deux parents distincts
+     * pour cet enfant, chacun désigné par un lien à un seul parent, sans `family_id`. Trois
+     * parents nommés pour un même enfant, c'est une question pour le membre, pas une
+     * fusion à deviner : les liens restent tels quels.
+     *
+     * @param list<array<string, mixed>> $liens
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function reunirLesParents(array $liens): array
+    {
+        $parEnfant = [];
+
+        foreach ($liens as $i => $lien) {
+            $filiation = self::filiationAUnParent($lien);
+
+            if (null !== $filiation) {
+                $parEnfant[$filiation['enfant']][$i] = $filiation['parent'];
+            }
+        }
+
+        $retires = [];
+
+        foreach ($parEnfant as $parents) {
+            if (2 !== \count($parents) || 2 !== \count(array_unique(array_map(serialize(...), $parents)))) {
+                continue;
+            }
+
+            [$premier, $second] = array_keys($parents);
+            $enfant = self::filiationAUnParent($liens[$premier]);
+            \assert(null !== $enfant);
+
+            // Le premier lien devient la filiation à deux parents, écrite dans le sens
+            // `enfant_de` quelle que soit la forme reçue ; le second disparaît, sa note
+            // rejoint la première plutôt que d'être perdue.
+            $fusion = ['seq' => $liens[$premier]['seq'], 'kind' => 'enfant_de']
+                + $enfant['enfantCle']
+                + self::renommer($parents[$premier], 'other')
+                + self::renommer($parents[$second], 'other2');
+
+            $notes = array_filter([$liens[$premier]['note'] ?? null, $liens[$second]['note'] ?? null], \is_string(...));
+
+            if ([] !== $notes) {
+                $fusion['note'] = mb_substr(implode("\n", array_unique($notes)), 0, 2000);
+            }
+
+            $liens[$premier] = $fusion;
+            $retires[$second] = true;
+        }
+
+        $reunis = [];
+
+        foreach ($liens as $i => $lien) {
+            if (!isset($retires[$i])) {
+                $lien['seq'] = \count($reunis) + 1;
+                $reunis[] = $lien;
+            }
+        }
+
+        return $reunis;
+    }
+
+    /**
+     * Une filiation à un seul parent, lue dans les deux sens — ou `null`.
+     *
+     * @param array<string, mixed> $lien
+     *
+     * @return array{enfant: string, enfantCle: array<string, mixed>, parent: array<string, mixed>}|null
+     */
+    private static function filiationAUnParent(array $lien): ?array
+    {
+        $extremite = static function (string $prefixe) use ($lien): ?array {
+            foreach (['PersonId', 'DraftRef'] as $forme) {
+                if (isset($lien[$prefixe.$forme])) {
+                    return [$forme => $lien[$prefixe.$forme]];
+                }
+            }
+
+            return null;
+        };
+
+        [$enfant, $parent] = match ($lien['kind'] ?? null) {
+            'enfant_de' => isset($lien['other2PersonId']) || isset($lien['other2DraftRef']) ? [null, null] : [$extremite('subject'), $extremite('other')],
+            'parent_de' => [$extremite('other'), $extremite('subject')],
+            default => [null, null],
+        };
+
+        if (null === $enfant || null === $parent) {
+            return null;
+        }
+
+        return ['enfant' => serialize($enfant), 'enfantCle' => self::renommer($enfant, 'subject'), 'parent' => $parent];
+    }
+
+    /**
+     * `['PersonId' => 12]` → `['otherPersonId' => 12]`.
+     *
+     * @param array<string, mixed> $extremite
+     *
+     * @return array<string, mixed>
+     */
+    private static function renommer(array $extremite, string $prefixe): array
+    {
+        $renomme = [];
+
+        foreach ($extremite as $forme => $valeur) {
+            $renomme[$prefixe.$forme] = $valeur;
+        }
+
+        return $renomme;
     }
 
     /**

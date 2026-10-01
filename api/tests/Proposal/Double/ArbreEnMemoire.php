@@ -7,7 +7,10 @@ namespace App\Tests\Proposal\Double;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\CitationAcreer;
+use App\Module\Proposal\Contract\FiliationEtablie;
+use App\Module\Proposal\Contract\FiliationPrevue;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
+use App\Module\Proposal\Contract\MotifDeRattachement;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
@@ -698,6 +701,46 @@ final class ArbreEnMemoire implements PortArbre
         }
 
         return $compte;
+    }
+
+    /**
+     * Le double ne connaît ni le sexe ni `tree_child` au-delà d'un index : il rend la
+     * famille du couple désigné, comme le faisait le chemin d'avant. Les règles de
+     * rattachement (complément, union unique, retrait des familles à un parent) sont
+     * éprouvées contre le **vrai** port, dans `tests/Tree/FiliationSansDoublonTest` —
+     * les réécrire ici donnerait un second moteur à maintenir, qui finirait par mentir
+     * dans la direction rassurante.
+     */
+    public function prevoirFiliation(?int $enfantId, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise): FiliationPrevue
+    {
+        $membres = array_values(array_filter([$parentA, $parentB], static fn (?int $id): bool => null !== $id));
+        sort($membres);
+        $id = self::$couples[implode(':', $membres)] ?? null;
+
+        return new FiliationPrevue(
+            2 === \count($membres) ? MotifDeRattachement::Couple : MotifDeRattachement::ParentSeul,
+            $id,
+            null === $id ? implode(' × ', $membres) : self::$lignes[EtatCible::cleDe(SubjectKind::Famille, $id)]['libelle'],
+        );
+    }
+
+    public function etablirFiliation(int $enfantId, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise, ?int $rangDansLaFratrie): FiliationEtablie
+    {
+        $famille = $this->trouverOuCreerFamille($parentA, $parentB);
+        $this->rattacherEnfant($famille->id, $enfantId, $rangDansLaFratrie);
+
+        return new FiliationEtablie(
+            $famille->id,
+            $famille->libelle,
+            $famille->creee,
+            null !== $parentA && null !== $parentB ? MotifDeRattachement::Couple : MotifDeRattachement::ParentSeul,
+            self::$lignes[EtatCible::cleDe(SubjectKind::Personne, $enfantId)]['libelle'] ?? 'p'.$enfantId,
+        );
+    }
+
+    public function supprimerFamilleVide(int $familleId): ?string
+    {
+        return null;
     }
 
     /**

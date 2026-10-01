@@ -18,7 +18,7 @@
  *    l'effacerait de l'écran.
  */
 
-import type { LienDemande, NatureLien } from '@/lib/api'
+import type { FiliationPrevue, LienDemande, NatureLien } from '@/lib/api'
 
 /**
  * Le libellé d'une nature de lien.
@@ -86,6 +86,43 @@ export interface LienLisible {
   /** « séparés en 1943 », « séparés (date inconnue) », ou `null`. */
   rupture: string | null
   note: string | null
+  /**
+   * **Ce que la validation fera de cette filiation**, quand ça mérite d'être lu
+   * avant le clic — `null` sinon. Voir {@link effetLisible}.
+   */
+  effet: EffetLisible | null
+}
+
+/**
+ * L'annonce d'une filiation, prête à afficher.
+ *
+ * `null` quand il n'y a rien à dire : une filiation qui atterrit exactement là
+ * où le lien se lit (« enfant de Jean-Marie et Hélène » → leur couple) n'a pas
+ * besoin d'une ligne de plus. Une ligne affichée partout cesserait d'être lue —
+ * et c'est celle qui dit « sera rattachée au couple Jean-Marie × Hélène » qu'on
+ * veut voir lue.
+ */
+export interface EffetLisible {
+  /** La phrase du serveur, telle quelle. */
+  phrase: string
+  /** « quitte « Jean-Marie Lebrun », supprimée (vide) » — une par famille quittée. */
+  quittees: string[]
+  /** Non nul : la validation sera refusée, et voici pourquoi. */
+  refus: string | null
+}
+
+export function effetLisible(prevue: FiliationPrevue | undefined): EffetLisible | null {
+  if (prevue === undefined || !prevue.aSignaler) return null
+
+  return {
+    phrase: prevue.phrase,
+    quittees: prevue.quittees.map((quittee) =>
+      quittee.supprimee
+        ? `Quitte « ${quittee.libelle} », qui sera supprimée (vide).`
+        : `Quitte « ${quittee.libelle} », conservée : elle porte encore des données.`,
+    ),
+    refus: prevue.incompatibilite,
+  }
 }
 
 /** Un libellé non vide, ou `null`. Jamais une chaîne vide, qui s'affiche comme un trou. */
@@ -140,6 +177,7 @@ export function lienLisible(lien: LienDemande): LienLisible {
     union: dateUnion === null ? null : `mariés ${dateUnion}`,
     rupture,
     note: nomOuRien(lien.note),
+    effet: effetLisible(lien.filiationPrevue),
   }
 }
 
