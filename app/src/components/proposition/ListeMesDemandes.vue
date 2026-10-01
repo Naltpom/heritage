@@ -35,6 +35,13 @@
  *
  * Les compteurs sont ceux que la vue connaît (`comptesDepuisListe()`) ; un
  * compte inconnu ne s'affiche pas, il ne vaut pas zéro.
+ *
+ * **Annuler une demande** (`retrait.ts`) : une icône à droite de la pastille,
+ * sur les seules lignes que le serveur accepterait de retirer — les siennes, en
+ * brouillon ou en attente. Le composant n'appelle toujours rien : il émet
+ * `retirer`, et la vue pose la question puis envoie. Une icône seule porte son
+ * libellé deux fois, en `title` pour le survol et en `aria-label` pour le
+ * lecteur d'écran — c'est la convention de la barre de décision.
  */
 import { computed } from 'vue'
 import type { ResumeDemande, StatutDemande } from '@/lib/api'
@@ -43,6 +50,7 @@ import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
+import { peutRetirer } from './retrait'
 import Segmente from '@/components/mise-en-page/Segmente.vue'
 import {
   LIBELLES_NATURE,
@@ -62,6 +70,11 @@ const {
   chargement = false,
   erreur = null,
   comptes = {},
+  lecteurId = null,
+  suspendu = false,
+  infobulle = undefined,
+  retraitEnCours = null,
+  erreurRetrait = null,
 } = defineProps<{
   demandes: readonly ResumeDemande[]
   /**
@@ -76,6 +89,15 @@ const {
   erreur?: unknown
   /** Le compte connu de chaque filtre, pour le segmenté. Clé absente : inconnu. */
   comptes?: ComptesParFiltre
+  /** L'utilisateur de la session : seul l'auteur annule (`peutRetirer()`). */
+  lecteurId?: number | null
+  /** Écritures suspendues (vue empruntée) : l'icône reste, éteinte. */
+  suspendu?: boolean
+  infobulle?: string | undefined
+  /** La demande dont l'annulation est en cours d'envoi. */
+  retraitEnCours?: number | null
+  /** Le dernier échec d'annulation, affiché sous sa ligne. */
+  erreurRetrait?: { id: number; cause: unknown } | null
 }>()
 
 const emit = defineEmits<{
@@ -83,6 +105,8 @@ const emit = defineEmits<{
   filtrer: [valeur: StatutDemande | '']
   /** Reprendre l'appel après un échec. */
   recharger: []
+  /** Le lecteur veut annuler cette demande. La vue confirme, puis envoie. */
+  retirer: [demande: ResumeDemande]
 }>()
 
 const vide = computed(() => demandes.length === 0)
@@ -191,11 +215,48 @@ function changerFiltre(valeur: StatutDemande | ''): void {
                   :etat="pastilleDeStatut(demande.status).etat"
                   :libelle="pastilleDeStatut(demande.status).libelle"
                 />
+                <!-- Annuler : une icône, son libellé en `title` et en
+                     `aria-label`. Éteinte, et non cachée, sous la vue
+                     empruntée : le motif est dans l'infobulle. -->
+                <button
+                  v-if="peutRetirer(demande, lecteurId)"
+                  type="button"
+                  data-retirer
+                  class="inline-flex size-8 flex-none cursor-pointer items-center justify-center self-center rounded-champ border border-ligne bg-panneau text-attenue transition-colors hover:border-alerte hover:text-alerte disabled:cursor-not-allowed disabled:opacity-55"
+                  :disabled="suspendu || retraitEnCours !== null"
+                  :aria-busy="retraitEnCours === demande.id"
+                  :title="infobulle ?? `Annuler la demande n° ${demande.id}`"
+                  :aria-label="`Annuler la demande n° ${demande.id}`"
+                  @click="emit('retirer', demande)"
+                >
+                  <span
+                    v-if="retraitEnCours === demande.id"
+                    class="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                    aria-hidden="true"
+                  />
+                  <svg
+                    v-else
+                    viewBox="0 0 24 24"
+                    class="size-4 fill-none stroke-current stroke-2 [stroke-linecap:round]"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="8.5" />
+                    <path d="M9 9l6 6M15 9l-6 6" />
+                  </svg>
+                </button>
                 <span class="text-sm text-attenue">
                   <template v-if="demande.targetLabel">sur {{ demande.targetLabel }} — </template>
                   déposée le {{ dateLisible(demande.submittedAt ?? demande.createdAt) }}
                 </span>
               </div>
+
+              <MessageErreur
+                v-if="erreurRetrait !== null && erreurRetrait.id === demande.id"
+                class="mt-3"
+                :erreur="erreurRetrait.cause"
+                titre="Cette demande n’a pas pu être annulée."
+                @action="emit('recharger')"
+              />
 
               <p v-if="demande.message" class="mt-1.5 text-sm text-attenue">
                 « {{ demande.message }} »

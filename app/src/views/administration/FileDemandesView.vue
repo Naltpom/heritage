@@ -100,7 +100,7 @@ const PASTILLES = ['en_attente', 'validee', 'refusee', 'caduque'] as const
  *  reste celle du modèle, jamais traduite (§ 1.2). */
 const LIBELLES_HORS_PASTILLE: Record<string, string> = {
   brouillon: 'Brouillon',
-  annulee: 'Retirée par son auteur',
+  annulee: 'Annulée par son auteur',
 }
 
 const route = useRoute()
