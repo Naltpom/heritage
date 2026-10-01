@@ -18,14 +18,19 @@
  * - **La note de confidentialité** : `noteDeConfidentialite()`, commandée par
  *   `vivant` — jamais par `deceased`, ni par l'absence de dates.
  *
- * ## Les actions : un seul bouton, « Proposer »
+ * ## Les actions : une rangée d'icônes, posée par `PageFiche`
  *
- * À droite, sans rétrécir : le bouton « Proposer » (`MenuFiche`), qui ouvre
- * « Corriger cette fiche », « Ajouter un parent, un enfant ou un conjoint »,
- * « Joindre un document » puis, **séparée par un filet** et en couleur
- * d'alerte, « Demander la suppression ». Chaque geste porte sa condition
- * (`gestes.ts`) ; sur mobile, le même bouton descend dans la barre d'action
- * fixe de `PageFiche`, et le bandeau n'en montre aucun.
+ * À droite, sans rétrécir : l'emplacement `actions`, que `PageFiche` remplit de
+ * `ActionsFiche` — poubelle, assistant, document, crayon ; ou, en mode édition,
+ * Annuler et Corriger. Le bandeau ne les tient pas : l'état du mode édition vit
+ * dans la page, qui pose **les mêmes** icônes dans la barre fixe du téléphone. Sur
+ * mobile, le bandeau n'en montre aucune.
+ *
+ * ## Le mode édition
+ *
+ * `edition` passe le bandeau au violet (`--color-edition`) — un liseré et un fond
+ * teinté, les mêmes que les panneaux — et retire la rangée d'onglets : on corrige
+ * l'identité et la famille, et changer d'onglet au milieu ne mènerait nulle part.
  *
  * ## Les onglets
  *
@@ -45,16 +50,17 @@ import { computed } from 'vue'
 import type { FichePersonneComplete } from '@/lib/api'
 import type { CibleLoupe } from '@/components/medias/medias'
 import { noteDeConfidentialite, regimeDocumentaire } from './champs'
-import MenuFiche from './MenuFiche.vue'
 import OngletsFiche from './OngletsFiche.vue'
 import PortraitFiche from './PortraitFiche.vue'
 import type { OngletFiche } from './onglets'
 
-const { fiche, onglet, retourMemorise = false } = defineProps<{
+const { fiche, onglet, retourMemorise = false, edition = false } = defineProps<{
   fiche: FichePersonneComplete
   onglet: OngletFiche
   /** L'arbre a mémorisé la vue qu'on a quittée : le retour la restaurera. */
   retourMemorise?: boolean
+  /** Le mode édition (crayon) : bandeau violet, sans onglets. */
+  edition?: boolean
 }>()
 
 const emit = defineEmits<{ agrandir: [cible: CibleLoupe] }>()
@@ -64,7 +70,11 @@ const confidentialite = computed(() => noteDeConfidentialite(fiche))
 </script>
 
 <template>
-  <div class="border-b border-ligne bg-panneau">
+  <div
+    class="border-b"
+    :class="edition ? 'border-b-2 border-edition bg-edition-doux' : 'border-ligne bg-panneau'"
+    :data-edition="edition ? '' : undefined"
+  >
     <div
       class="mx-auto flex w-full max-w-[1040px] flex-col gap-3.5 px-8 pt-[18px] max-md:gap-3 max-md:px-5 max-md:pt-1"
     >
@@ -136,11 +146,21 @@ const confidentialite = computed(() => noteDeConfidentialite(fiche))
 
         <!-- Les actions desktop. Sur mobile, elles sont dans la barre du bas. -->
         <div class="flex flex-none self-start max-md:hidden">
-          <MenuFiche :fiche="fiche" />
+          <slot name="actions" />
         </div>
       </div>
 
-      <OngletsFiche :fiche="fiche" :actif="onglet" />
+      <p
+        v-if="edition"
+        class="m-0 flex items-center gap-2 pb-3 text-[13px] font-semibold text-edition"
+        role="status"
+      >
+        <svg viewBox="0 0 24 24" class="size-4 flex-none" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />
+        </svg>
+        Mode édition — vos corrections partiront en demandes, rien ne change avant « Corriger ».
+      </p>
+      <OngletsFiche v-else :fiche="fiche" :actif="onglet" />
     </div>
   </div>
 </template>

@@ -37,9 +37,11 @@ use App\Module\Proposal\Service\Port\PortArbre;
  *   différentes, méthode de port différente, agrégats pour l'une et pas pour l'autre,
  *   auteur porté par l'une et pas par l'autre. La factorisation ne partagerait qu'une
  *   boucle `foreach` ;
- * - `retrait_citation`, `retrait_media`, `ajout_lien` et `retrait_lien` restent à
- *   brancher. Une classe fourre-tout par module deviendrait le fourre-tout de six
- *   natures, et c'est exactement ce que le point de greffe existe pour éviter.
+ * - `retrait_citation`, `retrait_media` et `ajout_lien` (comme nature d'op) restent à
+ *   brancher ; `retrait_lien` l'est, par sa propre classe
+ *   ({@see ApplicateurDOperationRetraitDeLien}). Une classe fourre-tout par module
+ *   deviendrait le fourre-tout de six natures, et c'est exactement ce que le point de
+ *   greffe existe pour éviter.
  *
  * ## L'auteur inscrit sur la note est le demandeur, pas le valideur
  *

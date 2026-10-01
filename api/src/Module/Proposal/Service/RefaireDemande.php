@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Module\Proposal\Service;
 
+use App\Module\Proposal\Contract\RetraitDeLien;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Enum\LinkKind;
+use App\Module\Proposal\Enum\OpKind;
 use App\Module\Proposal\Enum\RequestStatus;
 use App\Module\Proposal\Enum\ValueKind;
 use App\Module\Proposal\Exception\Conflit;
@@ -114,6 +116,10 @@ final readonly class RefaireDemande
             // là où il n'y en a pas, on reprend ce qui était proposé.
             'brouillons' => $this->brouillonsRefaits($demande),
             'liens' => $this->liensRefaits($demande),
+            // Un retrait de lien se refait **sans sa mesure** : le corps de dépôt ne porte
+            // que les liens désignés, et c'est le serveur qui remesurera ce qu'ils font —
+            // sur l'arbre d'aujourd'hui, qui est la raison même de la reprise.
+            'retraits' => $this->retraitsRefaits($demande),
             // `origine` est rendu tel quel dans le `POST` suivant, qui le stocke dans
             // `message` : il n'y a pas de colonne pour le chaînage d'une demande refaite,
             // et il n'en faut pas — `duplicate_of_id` sert au rapprochement de doublons,
@@ -123,6 +129,36 @@ final readonly class RefaireDemande
                 'statut' => $demande->getStatus()->value,
             ],
         ];
+    }
+
+    /**
+     * Les liens qu'une demande `retrait_lien` défaisait, dans la forme du corps de dépôt.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function retraitsRefaits(ChangeRequest $demande): array
+    {
+        $retraits = [];
+
+        foreach ($this->ops->pourDemande($demande) as $op) {
+            $mesure = $op->getOldValue();
+
+            if (OpKind::RetraitLien !== $op->getOpKind() || !\is_array($mesure)) {
+                continue;
+            }
+
+            /** @var array<string, mixed> $mesure */
+            $lien = RetraitDeLien::depuisJson($mesure)->lien();
+            $retrait = ['kind' => $lien->nature->value, 'personId' => $lien->personneId, 'familyId' => $lien->familleId];
+
+            if (null !== $lien->parentId) {
+                $retrait['parentId'] = $lien->parentId;
+            }
+
+            $retraits[] = $retrait;
+        }
+
+        return $retraits;
     }
 
     /**

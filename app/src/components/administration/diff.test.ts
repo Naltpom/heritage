@@ -525,3 +525,62 @@ describe('valeur d’avant masquée', () => {
   })
 })
 
+
+describe('un lien retiré (`retrait_lien`, § 6.4 quinquies)', () => {
+  const MESURE = {
+    nature: 'enfant_de',
+    personneId: 17,
+    personneLibelle: 'Pivoine Sureau',
+    familleId: 4,
+    familleLibelle: 'Cobalt Sureau × Marne Bourrache',
+    parentId: 30,
+    parentLibelle: 'Cobalt Sureau',
+    conjointRestant: null,
+    rattacheA: 'Marne Bourrache',
+    enfantsRestants: 1,
+    familleSupprimee: false,
+    blocage: null,
+  }
+  const OP_RETRAIT: OpDemande = {
+    seq: 1,
+    opKind: 'retrait_lien',
+    subjectKind: 'famille',
+    subjectId: 4,
+    field: null as unknown as string,
+    valueKind: 'lien',
+    oldValue: MESURE as unknown as OpDemande['newValue'],
+    newValue: null,
+    baseVersion: 3,
+  }
+
+  it('se lit en phrase, depuis les libellés — jamais « famille 4 »', () => {
+    const ligne = ligneDeDiff(OP_RETRAIT)
+    expect(ligne.libelle).toBe('Lien retiré')
+    expect(ligne.ancienne).toBe('Pivoine Sureau n’est plus enfant de Cobalt Sureau ; reste enfant de « Marne Bourrache »')
+    expect(ligne.proposee).toBe('(retiré)')
+    expect(ligne.field).toBe('retrait_lien')
+  })
+
+  it('un conjoint dit ce que deviennent les enfants, et l’union supprimée se dit', () => {
+    const conjoint = {
+      ...MESURE,
+      nature: 'conjoint_de',
+      personneLibelle: 'Marne Bourrache',
+      parentId: null,
+      parentLibelle: null,
+      conjointRestant: 'Cobalt Sureau',
+      rattacheA: null,
+      enfantsRestants: 2,
+    }
+    expect(formaterValeur(conjoint as unknown as OpDemande['newValue'])).toBe(
+      'Marne Bourrache ne fait plus partie de l’union « Cobalt Sureau × Marne Bourrache » ; ses 2 enfants n’y gardent que Cobalt Sureau pour parent',
+    )
+    expect(formaterValeur({ ...conjoint, enfantsRestants: 0, familleSupprimee: true } as unknown as OpDemande['newValue'])).toContain(
+      'l’union, qui ne porte plus rien, est supprimée',
+    )
+  })
+
+  it('laisse la main au libellé du serveur sur la charge d’administration', () => {
+    expect(ligneDeDiff({ ...OP_RETRAIT, libelleDiff: 'Lien retiré : …' }).libelle).toBe('Lien retiré : …')
+  })
+})

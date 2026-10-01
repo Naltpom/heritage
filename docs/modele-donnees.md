@@ -1683,7 +1683,8 @@ compensation 2). C'est le prix de la frontière, et il est explicitement accept�
 | `ajout_media` | `prp_change_op` (`op_kind = 'ajout_media'`) | Portrait ou preuve. |
 | `ajout_citation` | `prp_change_op` (`op_kind = 'ajout_citation'`) | « Cette fiche repose sur cet acte ». |
 | `ajout_note` | `prp_change_op` (`op_kind = 'ajout_note'`) | Le raisonnement derrière une correction, sur une fiche existante. |
-| `suppression_personne` | `prp_change_op` (`op_kind = 'suppression_personne'`) | Effacer une fiche — **la seule nature qui retire**. `message` y est **obligatoire**, et l'op porte dans `old_value` l'inventaire de ce qu'elle emporte (§ 6.4 quater du contrat d'API). |
+| `suppression_personne` | `prp_change_op` (`op_kind = 'suppression_personne'`) | Effacer une fiche — **la première nature qui retire**. `message` y est **obligatoire**, et l'op porte dans `old_value` l'inventaire de ce qu'elle emporte (§ 6.4 quater du contrat d'API). |
+| `retrait_lien` | `prp_change_op` (`op_kind = 'retrait_lien'`, sujet `famille`) | Défaire un lien de parenté — un enfant qui n'est pas celui de ce couple, un conjoint qui n'en est pas un. Un op par lien ; `old_value` porte la **mesure** de ce que le retrait fera (union conservée ou supprimée, enfants qui ne gardent qu'un parent), comparée à la validation (§ 6.4 quinquies du contrat d'API). |
 
 **`RequestStatus`**
 
@@ -1709,8 +1710,8 @@ valeurs sont ouvertes à `prp_change_op.subject_kind` et à `prp_revision.subjec
 touchés *par* une demande qui vise la personne ou la famille qui les porte.
 
 **`ValueKind`** — `texte`, `entier`, `booleen`, `enum`, `date_incertaine`, `reference`,
-`lien`, `media`, `citation`, `note`, `suppression`. Le dernier est le seul qui vive dans
-`old_value` **sans jumeau** dans `new_value` : une suppression n'a pas d'« après », et son
+`lien`, `media`, `citation`, `note`, `suppression`. `suppression` — et `lien` quand il porte
+la mesure d'un `retrait_lien` — vivent dans `old_value` **sans jumeau** dans `new_value` : une suppression n'a pas d'« après », et son
 « avant » n'est pas la valeur d'un champ mais le décompte de ce qui disparaîtra.
 
 **`LinkKind`** — `enfant_de`, `parent_de`, `conjoint_de`.
