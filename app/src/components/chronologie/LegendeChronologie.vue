@@ -128,9 +128,9 @@ const { enTiroir = false } = defineProps<{
         le lecteur n'a pas le droit de voir (§ 9.1).
       -->
       <p class="mt-1 border-t border-ligne pt-2 text-[11.5px] leading-snug text-attenue">
-        Une barre est faite de dates. Les personnes vivantes hors de votre cercle de
-        visibilité n’en ont pas : elles n’apparaissent pas ici, alors qu’elles sont dans
-        l’arbre.
+        Une barre est faite de dates. Les fiches confidentielles, fermées par décision
+        d’administration, n’en exposent pas : elles n’apparaissent pas ici, alors qu’elles
+        sont dans l’arbre.
       </p>
     </div>
   </details>

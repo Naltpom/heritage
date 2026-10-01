@@ -65,7 +65,7 @@ final class RechercheDeRattachementTest extends TestCase
      */
     public function testLeLibelleNePorteJamaisLaDateExacte(): void
     {
-        $personne = new PersonneDeLArbre(202, 'Pyroxène', 'Tilleul', 'Pyroxène Tilleul', 1934, '4.5.1934', true);
+        $personne = new PersonneDeLArbre(202, 'Pyroxène', 'Tilleul', 'Pyroxène Tilleul', 1934, '4.5.1934', true, false);
 
         self::assertSame('P. Tilleul, 1934', $personne->libelleMinimal());
         self::assertStringNotContainsString('4.5', $personne->libelleMinimal());
@@ -223,8 +223,8 @@ final class RechercheDeRattachementTest extends TestCase
     public function testUnePersonneDecedeeNEstPlusProposee(): void
     {
         $arbre = $this->arbre([
-            new PersonneDeLArbre(1, 'Azurite', 'Romarin', 'Azurite Romarin', 1901, '1901', false),
-            new PersonneDeLArbre(2, 'Azurite', 'Romarin', 'Azurite Romarin', 1998, '1998', true),
+            new PersonneDeLArbre(1, 'Azurite', 'Romarin', 'Azurite Romarin', 1901, '1901', false, false),
+            new PersonneDeLArbre(2, 'Azurite', 'Romarin', 'Azurite Romarin', 1998, '1998', true, false),
         ]);
 
         self::assertSame([], $this->chercher($arbre, 'Romarin', 'Azurite', '1901-01-01'));
@@ -242,8 +242,8 @@ final class RechercheDeRattachementTest extends TestCase
     public function testUnPreLienVersUnDefuntNeSeConfirmePas(): void
     {
         $arbre = $this->arbre([
-            new PersonneDeLArbre(1, 'Azurite', 'Romarin', 'Azurite Romarin', 1901, '1.2.1901', false),
-            new PersonneDeLArbre(2, 'Jet', 'Romarin', 'Jet Romarin', 2009, '26.9.2009', true),
+            new PersonneDeLArbre(1, 'Azurite', 'Romarin', 'Azurite Romarin', 1901, '1.2.1901', false, false),
+            new PersonneDeLArbre(2, 'Jet', 'Romarin', 'Jet Romarin', 2009, '26.9.2009', true, false),
         ]);
 
         $recherche = new RechercheDeRattachement(new NormalisationDeNom(new CleDeRecherche()));
@@ -281,6 +281,6 @@ final class RechercheDeRattachementTest extends TestCase
         string $etiquette = '',
         int $id = 1,
     ): PersonneDeLArbre {
-        return new PersonneDeLArbre($id, $prenoms, $nom, trim($prenoms.' '.$nom), $annee, $etiquette, true);
+        return new PersonneDeLArbre($id, $prenoms, $nom, trim($prenoms.' '.$nom), $annee, $etiquette, true, false);
     }
 }

@@ -24,7 +24,8 @@ final class AnniversairesTest extends CasDeTestAlmanach
 
         $this->poserPersonne(self::LECTEUR, 'Natron Romarin', vivant: true, sexe: Sex::Masculin);
         $this->poserPersonne(self::PERE, 'Père Romarin', vivant: true, sexe: Sex::Masculin);
-        $this->poserPersonne(self::HORS_CERCLE, 'Cousin Éloigné', vivant: true, sexe: Sex::Masculin);
+        // Confidentiel : sans cela, depuis le 2026-10-01, un membre le verrait (ADR 0003).
+        $this->poserPersonne(self::HORS_CERCLE, 'Cousin Éloigné', vivant: true, sexe: Sex::Masculin, confidentielle: true);
         $this->poserPersonne(self::SUREAU, 'Marne Dolomite Sureau', vivant: false);
         $this->poserPersonne(self::SARRIETTE, 'Émeri Sarriette', vivant: false, sexe: Sex::Masculin);
 

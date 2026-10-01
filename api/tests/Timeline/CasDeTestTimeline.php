@@ -93,6 +93,9 @@ abstract class CasDeTestTimeline extends WebTestCase
         ?string $naissance = null,
         ?string $deces = null,
         ?string $lieuNaissance = null,
+        // `force_privacy` côté `Membership` : depuis la révision du 2026-10-01 de
+        // l'ADR 0003, seule une fiche confidentielle hors cercle est fermée à un membre.
+        bool $confidentielle = false,
     ): void {
         ArbreDeChronologieEnMemoire::ajouterPersonne(
             $id,
@@ -108,7 +111,7 @@ abstract class CasDeTestTimeline extends WebTestCase
         // Le même individu côté `Membership`, pour que le vrai cercle puisse décider.
         // `prenoms`/`nom` ne servent qu'au libellé minimal de la recherche de
         // rattachement, qui n'a pas cours ici : seul `vivante` compte pour le filtrage.
-        ArbreEnMemoire::ajouterPersonne($id, $displayName, '', $vivant, libelle: $displayName);
+        ArbreEnMemoire::ajouterPersonne($id, $displayName, '', $vivant, libelle: $displayName, confidentielle: $confidentielle);
     }
 
     /**

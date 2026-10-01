@@ -55,10 +55,13 @@ use App\Module\Core\Enum\Regime;
  *
  * 1. Une personne **décédée** est un fait historique : visible de tout compte connecté,
  *    sans restriction (§ 6.2 du dossier de mission).
- * 2. Une personne **vivante** n'est visible que dans le cercle du lecteur, et **jamais**
- *    en régime {@see Regime::Aucun} — y compris la personne à laquelle ce lecteur
- *    prétend se rattacher. Confirmer une date de naissance n'est pas la lire, et le
- *    pré-lien d'invitation n'ouvre aucun accès (§ 12.1 du contrat d'API).
+ * 2. Une personne **vivante** est visible de tout lecteur en régime {@see Regime::Cercle}
+ *    — membre validé, administrateur —, **sauf** si sa fiche est à confidentialité
+ *    forcée (`force_privacy`) : celle-là n'est visible que dans le cercle du lecteur
+ *    (révision du 2026-10-01 de l'ADR 0003 ; jusque-là, tout vivant était soumis au
+ *    cercle). **Jamais** en régime {@see Regime::Aucun} — y compris la personne à
+ *    laquelle ce lecteur prétend se rattacher. Confirmer une date de naissance n'est pas
+ *    la lire, et le pré-lien d'invitation n'ouvre aucun accès (§ 12.1 du contrat d'API).
  * 3. **Un décès inconnu vaut vivant, donc masqué.** *« On ne sait pas si elle est morte »
  *    n'est pas une autorisation de publier ses dates.*
  *
@@ -78,6 +81,11 @@ interface CercleDeVisibiliteInterface
     /**
      * **Le seul nom qu'une personne vivante hors cercle expose** — révision du 2026-10-01
      * de l'ADR 0003.
+     *
+     * *Seconde révision du même jour* : un membre validé voit désormais tous les vivants,
+     * et ce masque ne couvre plus, pour lui, que les **fiches confidentielles** hors de son
+     * cercle. Il reste aussi le nom que rend tout lecteur du régime `Aucun`. La mécanique
+     * ci-dessous est inchangée ; c'est la population qu'elle couvre qui a rétréci.
      *
      * Jusque-là, la liste blanche laissait sortir son **nom d'affichage**. Décision du
      * commanditaire : une personne vivante hors du cercle du lecteur n'expose plus son
@@ -102,6 +110,9 @@ interface CercleDeVisibiliteInterface
     /**
      * Le lecteur courant a-t-il le droit de voir les **données protégées** de cette
      * personne — dates, lieux, sources, citations, médias, portrait ?
+     *
+     * Pour un lecteur en régime `Cercle`, `false` ne se rend plus que pour une fiche
+     * confidentielle hors de son cercle (révision du 2026-10-01).
      *
      * `false` ne veut pas dire « le nœud disparaît » : hors cercle, une personne vivante
      * expose encore son identifiant, son sexe, sa génération, sa branche, le booléen

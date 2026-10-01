@@ -304,8 +304,9 @@ onBeforeUnmount(() => clearTimeout(minuterie))
           `deceased`, ni sur l'étiquette « vivant·e » affichée ailleurs.
 
           L'infobulle dit les deux choses qu'on découvrirait autrement de travers :
-          que ce réglage n'est pas retenu, et qu'il montre les vivants **du cercle
-          du lecteur**, les seuls dont l'API expose une date. La mention « non
+          que ce réglage n'est pas retenu. Il ne dit plus « de votre cercle » depuis
+          le 2026-10-01 : un membre voit tous les vivants, hors fiches confidentielles
+          (ADR 0003). La mention « non
           enregistré » le dit aussi à qui ne survole rien — sur téléphone, personne.
         -->
         <label class="flex min-h-9 cursor-pointer items-center gap-2.5 text-[13px] max-md:min-h-11 max-md:text-[15px]">
@@ -313,7 +314,7 @@ onBeforeUnmount(() => clearTimeout(minuterie))
             type="checkbox"
             :checked="vivantsSeuls"
             class="size-4 accent-accent max-md:size-5"
-            title="N’afficher que les personnes vivantes de votre cercle de visibilité. Ce réglage n’est pas enregistré dans votre préférence."
+            title="N’afficher que les personnes vivantes. Ce réglage n’est pas enregistré dans votre préférence."
             @change="emit('vivantsSeuls', ($event.target as HTMLInputElement).checked)"
           />
           <span class="flex-1">Vivants uniquement</span>

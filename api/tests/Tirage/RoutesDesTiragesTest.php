@@ -328,7 +328,7 @@ final class RoutesDesTiragesTest extends CasDeTestTirages
      * Et le refus est **mot pour mot** celui d'une personne inconnue : un message propre au
      * « hors cercle » dirait, identifiant après identifiant, quelles personnes existent.
      */
-    public function testUnVivantHorsDuCercleNEntrePasDansUnTirageEtSonNomNeSortPas(): void
+    public function testUneFicheConfidentielleHorsDuCercleNEntrePasDansUnTirageEtSonNomNeSortPas(): void
     {
         $nom = $this->personnes['voisine']->getDisplayName();
         $this->connexionDe(self::OPALE);
@@ -359,6 +359,20 @@ final class RoutesDesTiragesTest extends CasDeTestTirages
         $this->requete("/api/tirages/{$id}");
         self::assertSame(Response::HTTP_OK, $this->statut());
         self::assertStringNotContainsString($nom, (string) $this->client->getResponse()->getContent());
+    }
+
+    /**
+     * **La règle du 2026-10-01** : `voisine`, hors du cercle mais non confidentielle, est
+     * visible d'un membre — elle entre dans un tirage comme n'importe quel vivant.
+     */
+    public function testUnVivantHorsDuCercleNonConfidentielEntreDansUnTirage(): void
+    {
+        $this->semerLeCercle(voisineConfidentielle: false);
+        $this->connexionDe(self::OPALE);
+
+        $this->envoyer('POST', '/api/tirages', $this->regles() + ['participants' => [$this->idDe('ego'), $this->idDe('voisine')]]);
+        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
+        self::assertContains($this->personnes['voisine']->getDisplayName(), array_column($this->charge()['participants'], 'libelle'));
     }
 
     /* ───────────────── Les défunts ───────────────── */

@@ -40,6 +40,16 @@ use App\Module\Core\Security\CercleDeVisibiliteInterface;
  * l'établit par {@see EtatVivant}. Le défaut fermé porte sur les **personnes vivantes**,
  * et il le reste : sans adaptateur, aucune d'elles n'est visible.
  *
+ * ## Révision du 2026-10-01 : ce que « voir » veut dire en production
+ *
+ * En production, {@see self::voit()} délègue au contrat du noyau, qui répond désormais
+ * « oui » pour **tout vivant non confidentiel** quand le lecteur est en régime `Cercle`
+ * (ADR 0003, « les vivants visibles des membres ») : une fiche réduite, pour un membre,
+ * n'est plus qu'une fiche à confidentialité forcée hors de son cercle. La construction
+ * pré-résolue {@see self::de()}, réservée aux tests des normaliseurs, ne connaît pas le
+ * drapeau et garde l'ancienne lecture « dans la liste ou masqué » : c'est ce dont ces
+ * tests ont besoin pour prouver la liste blanche, qui sert toujours.
+ *
  * ## Le régime `Aucun` n'est pas un cercle vide
  *
  * Un compte en attente de validation n'a **pas de cercle du tout** : aucune personne

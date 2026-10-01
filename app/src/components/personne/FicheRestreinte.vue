@@ -51,14 +51,17 @@ const { regime } = useSession()
 <template>
   <PanneauBase titre="Fiche à diffusion restreinte" class="mb-4">
     <p class="text-sm leading-relaxed">
-      <strong class="font-semibold">Cette personne est vivante.</strong>
       <template v-if="regime === 'en_attente'">
+        <strong class="font-semibold">Cette personne est vivante.</strong>
         Tant que votre rattachement n’est pas validé, aucune personne vivante ne vous est
         accessible — y compris celle à laquelle vous vous rattachez.
       </template>
+      <!-- Depuis le 2026-10-01, un membre validé voit tous les vivants : une fiche
+           réduite est, pour lui, une fiche à confidentialité forcée (ADR 0003). -->
       <template v-else>
-        Elle ne fait pas partie de votre cercle de visibilité : ni dates, ni lieux, ni sources,
-        ni photos, ni parenté ne vous sont communiqués.
+        <strong class="font-semibold">Fiche confidentielle.</strong>
+        Sa diffusion est restreinte par décision d’administration : ni dates, ni lieux, ni
+        sources, ni photos, ni parenté ne vous sont communiqués.
       </template>
     </p>
 

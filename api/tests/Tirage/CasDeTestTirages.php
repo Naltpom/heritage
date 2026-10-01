@@ -186,8 +186,12 @@ abstract class CasDeTestTirages extends ArbreWebTestCase
         $this->em()->flush();
     }
 
-    /** Voir l'en-tête : le cercle d'`ego` couvre tout le monde, sauf `voisine`. */
-    private function semerLeCercle(): void
+    /**
+     * Voir l'en-tête : le cercle d'`ego` couvre tout le monde, sauf `voisine` — posée
+     * **confidentielle** par défaut, puisque depuis la révision du 2026-10-01 de l'ADR 0003
+     * un membre voit tout vivant non confidentiel, hors cercle compris.
+     */
+    protected function semerLeCercle(bool $voisineConfidentielle = true): void
     {
         ArbreEnMemoire::reinitialiser();
 
@@ -196,7 +200,7 @@ abstract class CasDeTestTirages extends ArbreWebTestCase
             'aieule' => false, 'aieul' => false, 'sansDate' => false,
         ] as $cle => $vivante) {
             $nom = $this->personnes[$cle]->getDisplayName();
-            ArbreEnMemoire::ajouterPersonne($this->idDe($cle), $nom, '', $vivante, libelle: $nom);
+            ArbreEnMemoire::ajouterPersonne($this->idDe($cle), $nom, '', $vivante, libelle: $nom, confidentielle: $voisineConfidentielle && 'voisine' === $cle);
         }
 
         ArbreEnMemoire::ajouterFamille([$this->idDe('aieul'), $this->idDe('aieule')], [$this->idDe('ego'), $this->idDe('cousin'), $this->idDe('oncle')]);

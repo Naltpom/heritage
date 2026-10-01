@@ -14,12 +14,20 @@ namespace App\Module\Membership\Service\Port;
  * cette liste est fermée ici, par absence de champ, plutôt que par la vigilance du
  * normaliseur.
  *
- * Trois champs demandent une explication.
+ * Quatre champs demandent une explication.
  *
  * **`vivante`** est la propriété calculée du § 9.2 du modèle, **jamais une colonne**.
  * Elle est calculée par `Tree` — c'est lui qui possède la règle, le seuil
  * `tree.seuil_vivant_annees` et la médiane par génération —, et `Membership` ne la
  * recalcule pas : *une règle de confidentialité ne se trompe qu'une fois pour fuir*.
+ *
+ * **`confidentielle`** est `tree_person.force_privacy`, la confidentialité **forcée** par
+ * décision d'administration. Elle n'est pas redondante avec `vivante` — qu'elle implique
+ * déjà, § 9.2 — et c'est depuis le 2026-10-01 la seule chose qui ferme encore une fiche à
+ * un membre validé : un vivant ordinaire est visible de tout membre, une fiche
+ * confidentielle ne l'est que de son cercle (ADR 0003, révision du 2026-10-01 — « les
+ * vivants visibles des membres »). Lue telle quelle, sans règle à recalculer : c'est un
+ * drapeau posé à la main, pas une propriété calculée.
  *
  * **`anneeNaissance`** est l'année affichée dans le libellé minimal `P. Romarin, 1980`.
  * Une année, pas une date : le § 4.2 interdit de rendre la date exacte à quelqu'un qui
@@ -43,6 +51,9 @@ final readonly class PersonneDeLArbre
      * @param int|null $anneeNaissance     l'année de naissance, `null` si inconnue
      * @param string   $etiquetteNaissance la date de naissance compacte, chaîne vide si inconnue
      * @param bool     $vivante            la propriété calculée du § 9.2, calculée par `Tree`
+     * @param bool     $confidentielle     `tree_person.force_privacy` — **sans valeur par
+     *                                     défaut** : un appelant qui l'oublierait ouvrirait
+     *                                     en silence une fiche que l'administration a fermée
      */
     public function __construct(
         public int $id,
@@ -52,6 +63,7 @@ final readonly class PersonneDeLArbre
         public ?int $anneeNaissance,
         public string $etiquetteNaissance,
         public bool $vivante,
+        public bool $confidentielle,
     ) {
     }
 

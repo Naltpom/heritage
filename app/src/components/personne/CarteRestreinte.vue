@@ -2,6 +2,12 @@
 /**
  * La page d'une **fiche réduite** — personne vivante hors du cercle du lecteur.
  *
+ * Depuis la révision du 2026-10-01 de l'ADR 0003 (« les vivants visibles des
+ * membres »), un membre validé voit tous les vivants : la seule fiche réduite qu'il
+ * puisse encore recevoir est une fiche à **confidentialité forcée** hors de son
+ * cercle. La phrase le dit — « confidentielle », et non plus « hors de votre
+ * cercle », qui laisserait croire qu'un vivant ordinaire lui est caché.
+ *
  * ────────────────────────────────────────────────────────────────────
  * **Ce n'est pas une erreur.** Le serveur rend `200` avec sept clés (§ 11.1),
  * parce que le nœud est visible dans le graphe et qu'il faut pouvoir cliquer
@@ -74,9 +80,9 @@ const LIGNES = ['sex', 'generation'] as const
           dans l’arbre reste visible.
         </template>
         <template v-else>
-          <b>Personne vivante.</b> Elle ne fait pas partie de votre cercle de visibilité : ni dates,
-          ni lieux, ni sources, ni photos ne vous sont communiqués. Sa place dans l’arbre reste
-          visible.
+          <b>Fiche confidentielle.</b> Sa diffusion est restreinte par décision d’administration :
+          ni dates, ni lieux, ni sources, ni photos ne vous sont communiqués. Sa place dans l’arbre
+          reste visible.
         </template>
       </p>
 

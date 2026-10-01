@@ -94,6 +94,13 @@ C'est un changement de nature, et c'est pour cela qu'il a fallu un ADR et pas un
 | Un compte en attente n'a **pas de cercle** | intacte |
 | Les colonnes `*_label` filtrées comme la personne | intacte, **et elle s'applique à `qst_question.sujet_label` et à `qst_question.texte`** |
 
+> *Révision du 2026-10-01 de l'ADR 0003* : un membre validé voit désormais tous les
+> vivants, et le cercle ne ferme plus, pour lui, que les fiches à confidentialité forcée.
+> Le tableau reste vrai mot pour mot — c'est la population « hors cercle » qui a rétréci,
+> pas une règle qu'on relâche ici : le second contrôle de la lecture (§ 3) s'applique
+> désormais aux seules questions dont le sujet est une fiche confidentielle hors du cercle
+> du lecteur.
+
 Le point le plus important de ce tableau est le dernier, et il mérite d'être écrit en clair
 parce qu'un lecteur pressé conclurait l'inverse de ce qui est décidé :
 

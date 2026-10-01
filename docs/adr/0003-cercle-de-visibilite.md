@@ -1,7 +1,17 @@
 # ADR 0003 — Confidentialité : le cercle de visibilité
 
 Date : 2026-09-15 · Statut : acceptée · Révisée le 2026-10-01 (régime en attente : plus
-rien de l'arbre ; vivants hors cercle anonymes)
+rien de l'arbre ; vivants hors cercle anonymes ; **puis, le même jour, vivants visibles de
+tout membre validé — le cercle ne ferme plus que les fiches confidentielles**)
+
+> **À lire d'abord — révision du 2026-10-01, « les vivants visibles des membres ».** Depuis
+> cette date, un membre validé (régime `Cercle`) et l'administrateur voient **toutes** les
+> personnes de l'arbre, vivants compris. La formule `C(u)` ci-dessous est conservée, mais
+> elle ne décide plus que du sort des fiches à **confidentialité forcée** (`force_privacy`).
+> Le compte en attente ne voit toujours rien de l'arbre. Partout où ce texte écrit
+> « personne vivante hors cercle », lire, pour un membre : *fiche confidentielle hors de
+> son cercle*. Le détail, le motif et ce qui reste protégé : dernière révision de la
+> section « Conséquences ».
 
 ## Contexte
 
@@ -330,6 +340,67 @@ nouvel ADR ; elle ne l'est pas ici.
   mode « sans filtre » : l'administrateur hors bascule voit tous les noms, par un cercle
   complet. Sous la bascule « voir comme un membre », il voit ce que le membre voit — le
   masque.
+- **Révision du 2026-10-01 — les vivants visibles des membres.** Décision du
+  commanditaire, le même jour que les deux précédentes et après elles : **les membres
+  sont de la famille.** Un compte validé a été invité nommément, rattaché à sa fiche et
+  activé par l'administrateur ; lui cacher le nom et la date de naissance de la fille
+  d'un petit-cousin, c'est traiter en suspect quelqu'un qu'on a choisi de faire entrer.
+  Le modèle de menace écrit plus haut — « un cousin curieux » — est maintenu, et l'arbitrage
+  est rendu en connaissance de cause : le cousin curieux lit désormais tout ce que l'arbre
+  sait des vivants, sauf ce que l'administration a explicitement fermé.
+  *Ce qui devient visible à un membre validé* (et à l'administrateur sous la bascule) :
+  **toute personne vivante**, partout où elle sort — nom (`displayName`, `etiquetteNom`),
+  dates, lieux, sources, citations, notes, fiche complète, références d'une fiche ou d'une
+  famille, nœud complet du graphe, résultats de recherche, barres de la chronologie,
+  anniversaires, carte, historique d'une fiche, médias et portraits, libellés `*_label`
+  des demandes, des tirages et des actes demandés, personnes citées par l'assistant et
+  textes qu'il rédige, questions.
+  *Ce qui reste protégé, explicitement :*
+  1. **Le compte en attente ne voit rien de l'arbre** — `403 regime_en_attente` avant le
+     contrôleur, révision précédente du même jour, inchangée. Le régime `Aucun` lui-même
+     non plus : aucune personne vivante, confidentielle ou non, pour quiconque y relève
+     (compte actif sans rattachement valide, bascule sur un compte inactif).
+  2. **La fiche à confidentialité forcée** (`tree_person.force_privacy`, avec son
+     `privacy_note` obligatoire) reste **réduite** — sous « Personne vivante », liste
+     blanche, `404` sur l'historique et les médias, absente de la recherche et de la
+     chronologie — pour tout lecteur qui ne l'a pas dans son cercle `C(u)`. **Exactement
+     comme avant** : `force_privacy` faisait déjà de la fiche une fiche « vivante » au sens
+     du § 9.2, soumise au cercle ; la voient donc, comme hier, les membres dont le cercle
+     généalogique la contient, et l'administrateur par son cercle complet.
+  *Où c'est écrit, et pourquoi là.* Une ligne de
+  `Membership\Service\CercleDeVisibilite::voitPersonne()` et de `filtrerPersonnes()` :
+  en régime `Cercle`, un vivant **non confidentiel** est visible ; sinon, le cercle
+  décide. Tous les modules — `Tree`, `Media`, `Timeline`, `Proposal`, `Assistant`,
+  `Question`, `Tirage`, `Demarche`, `Almanach` — posent leur question à ce contrat-là et
+  à lui seul ; la réponse change donc partout d'un coup, sans un `if` de plus chez eux.
+  Le drapeau traverse le port de `Membership` (`PersonneDeLArbre::$confidentielle`,
+  **sans valeur par défaut**) et se lit dans la vue de l'arbre, rechargée à chaque
+  requête ; un identifiant inconnu vaut confidentiel. *Ce n'est pas un mode « sans
+  filtre »* : la fiche confidentielle passe toujours par le cercle, le normaliseur reste
+  le seul point de filtrage, `NOM_MASQUE` et toute la mécanique de masquage restent en
+  service pour elle.
+  *Les caches.* La valeur mise en cache sous `cercle.{empreinte}.{memberId}.{ancre}.{N}`
+  reste le cercle **généalogique** : son sens ne change pas, les entrées écrites avant le
+  déploiement restent justes, et il n'y a aucune version de clé à monter. Le drapeau
+  `force_privacy` n'y entre pas : il est lu dans la vue de l'arbre, rechargée à chaque
+  requête (et le poser change de toute façon l'empreinte, qui couvre toutes les colonnes
+  de `tree_person`). L'`ETag` du graphe hache l'ensemble des fiches
+  servies **complètes** (`CercleDuLecteur::empreinte()`) : il change de lui-même pour tout
+  membre au déploiement — aucun `304` ne resservira une charge masquée. La mémoire de
+  l'assistant (`MemoireDesAnalyses`, deux heures) garde des titres et justifications
+  **déjà masqués** sous l'ancienne règle, sans rien dans la clé qui le dise : son préfixe
+  passe à `assistant.analyse.v2`.
+  *Ce qui ne change pas, et qu'il faut savoir.* La largeur constante (215) des fiches de
+  vivants et le jeu de placement sans texte des vivants (`sansTexteDesVivants()`) sont
+  conservés : le placement est partagé et doit le rester (ADR 0005), et la fiche
+  confidentielle en a toujours besoin. Les **notifications déjà écrites** gardent le
+  masque qu'elles portaient le jour de leur composition : elles sont composées à
+  l'écriture (contrat d'API § 16.2), et on ne réécrit pas l'historique.
+  *L'alternative « drapeau privé par fiche »*, écartée plus haut comme règle principale,
+  devient ainsi la seule fermeture restante pour un membre. L'objection d'origine tient
+  toujours — c'est un binaire, maintenu à la main — et c'est précisément ce que le
+  commanditaire choisit : fermer à la main les rares fiches qui doivent l'être, plutôt que
+  fermer par défaut toutes les autres.
 - La bascule « voir comme un membre » est **tracée au journal d'audit** : c'est une
   consultation de données personnelles sous une autre identité.
 - **Un test fonctionnel par porte de sortie** (les sept ci-dessus, **plus les libellés

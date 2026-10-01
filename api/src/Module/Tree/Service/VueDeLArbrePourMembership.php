@@ -108,6 +108,9 @@ final class VueDeLArbrePourMembership implements PortArbre
                 // « Un décès inconnu vaut vivant, donc masqué » : c'est la règle qui
                 // tranche, jamais l'absence de date lue ici.
                 vivante: $vivants[$id] ?? true,
+                // Le drapeau brut : c'est lui, et non l'état vivant, qui ferme encore une
+                // fiche à un membre validé (ADR 0003, révision du 2026-10-01).
+                confidentielle: $personne->isForcePrivacy(),
             );
         }
 

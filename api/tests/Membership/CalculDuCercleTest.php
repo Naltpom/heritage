@@ -161,6 +161,6 @@ final class CalculDuCercleTest extends TestCase
 
     private function personne(int $id, string $prenoms, string $nom): PersonneDeLArbre
     {
-        return new PersonneDeLArbre($id, $prenoms, $nom, $prenoms.' '.$nom, null, '', true);
+        return new PersonneDeLArbre($id, $prenoms, $nom, $prenoms.' '.$nom, null, '', true, false);
     }
 }

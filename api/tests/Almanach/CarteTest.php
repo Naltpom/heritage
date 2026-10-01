@@ -28,7 +28,8 @@ final class CarteTest extends CasDeTestAlmanach
 
         $this->poserPersonne(self::LECTEUR, 'Natron Romarin', vivant: true, sexe: Sex::Masculin);
         $this->poserPersonne(self::PERE, 'Père Romarin', vivant: true, sexe: Sex::Masculin);
-        $this->poserPersonne(self::HORS_CERCLE, 'Cousin Éloigné', vivant: true, sexe: Sex::Masculin);
+        // Confidentiel : sans cela, depuis le 2026-10-01, un membre le verrait (ADR 0003).
+        $this->poserPersonne(self::HORS_CERCLE, 'Cousin Éloigné', vivant: true, sexe: Sex::Masculin, confidentielle: true);
         $this->poserPersonne(self::SUREAU, 'Marne Dolomite Sureau', vivant: false);
         $this->poserPersonne(self::SARRIETTE, 'Émeri Sarriette', vivant: false, sexe: Sex::Masculin);
 
@@ -47,6 +48,21 @@ final class CarteTest extends CasDeTestAlmanach
      * Le test vérifie l'absence de la **clé**, et pas seulement l'absence de dates : un
      * événement présent avec `annee: null` serait déjà l'aveu qu'une personne existe.
      */
+    /**
+     * **La règle du 2026-10-01** : un vivant hors du cercle, fiche non confidentielle, est
+     * visible d'un membre validé — ses événements sortent sur la carte.
+     */
+    public function testUnVivantHorsCercleNonConfidentielEstVisibleDUnMembre(): void
+    {
+        $this->poserPersonne(self::HORS_CERCLE + 100, 'Cousine Lointaine', vivant: true);
+        $this->poserEvenement(self::HORS_CERCLE + 100, TypeDEvenement::Naissance, '1981', 'Saule, Ombrage, Sylvanie');
+
+        $this->connecterUnMembre();
+        $this->requete('GET', '/api/carte');
+
+        self::assertArrayHasKey('naissance:'.(self::HORS_CERCLE + 100), $this->evenementsDeLaCarte());
+    }
+
     public function testUnVivantHorsCercleEstAbsentDesEvenementsEtDesCompteurs(): void
     {
         $this->poserEvenement(self::HORS_CERCLE, TypeDEvenement::Naissance, '1979', 'Saule, Ombrage, Sylvanie');

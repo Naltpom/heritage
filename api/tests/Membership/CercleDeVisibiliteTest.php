@@ -20,12 +20,16 @@ use Symfony\Component\Cache\Adapter\ArrayAdapter;
 /**
  * La règle de confidentialité, au point où les quatre autres modules la consultent.
  *
- * Quatre propriétés, et ce sont exactement celles que le dossier de mission demande de
- * tester :
+ * Les propriétés que le dossier de mission demande de tester, **relues le 2026-10-01**
+ * (ADR 0003, révision « les vivants visibles des membres ») :
  *
- * 1. une personne vivante hors cercle est masquée ;
- * 2. une personne décédée ne l'est pas — **même en régime `Aucun`** ;
- * 3. `N` modifié en réglage change le résultat, sans redéploiement ;
+ * 1. un membre validé voit une personne vivante **hors de sa branche** — la décision du
+ *    commanditaire ; seule une fiche à confidentialité forcée hors de son cercle reste
+ *    masquée ;
+ * 2. une personne décédée est visible — **même en régime `Aucun`** —, et une personne
+ *    vivante ne l'est jamais en régime `Aucun`, confidentielle ou non ;
+ * 3. `N` modifié en réglage change le résultat, sans redéploiement — observable désormais
+ *    sur les seules fiches confidentielles ;
  * 4. l'administrateur passe par un cercle complet, jamais par un court-circuit.
  *
  * Aucune n'a besoin de pare-feu ni de base : c'est ce que la couture
@@ -44,7 +48,12 @@ final class CercleDeVisibiliteTest extends TestCase
         ArbreEnMemoire::reinitialiser();
     }
 
-    public function testUnVivantHorsCercleEstMasqueUnDecedeNeLEstPas(): void
+    /**
+     * **La décision du 2026-10-01** : un membre validé voit une personne vivante sans
+     * aucun lien avec sa branche. C'est le test qui fige la nouvelle règle — il tombait
+     * sous l'ancienne, qui masquait l'étranger.
+     */
+    public function testUnMembreVoitUnVivantHorsDeSaBranche(): void
     {
         $cercle = $this->cercleDUnMembre(ArbreFamilial::EGO);
 
@@ -52,15 +61,46 @@ final class CercleDeVisibiliteTest extends TestCase
 
         self::assertTrue($cercle->voitPersonne(ArbreFamilial::COUSIN), 'Le cousin issu de germain est dans le cercle.');
         self::assertTrue($cercle->voitPersonne(ArbreFamilial::CONJOINT), 'Le conjoint est dans le cercle.');
-
-        self::assertFalse(
+        self::assertTrue(
             $cercle->voitPersonne(ArbreFamilial::ETRANGER),
-            'Une personne vivante sans lien avec le lecteur est masquée.',
+            'Une personne vivante sans lien avec le lecteur est visible d’un membre validé.',
         );
         self::assertTrue(
             $cercle->voitPersonne(ArbreFamilial::ANCETRE_ETRANGER),
             'Une personne décédée est un fait historique : visible de tout compte connecté.',
         );
+    }
+
+    /**
+     * **Ce qui reste protégé** : une fiche à confidentialité forcée hors du cercle d'un
+     * membre lui reste masquée — sous `voitPersonne()` comme sous `filtrerPersonnes()`,
+     * les deux portes que les modules consultent.
+     */
+    public function testUneFicheConfidentielleHorsCercleResteMasqueeAUnMembre(): void
+    {
+        ArbreFamilial::poser([ArbreFamilial::ETRANGER]);
+
+        $cercle = $this->cercleDUnMembre(ArbreFamilial::EGO);
+
+        self::assertFalse($cercle->voitPersonne(ArbreFamilial::ETRANGER));
+        self::assertSame([ArbreFamilial::COUSIN], $cercle->filtrerPersonnes([ArbreFamilial::ETRANGER, ArbreFamilial::COUSIN]));
+    }
+
+    /**
+     * Et qui la voit : **comme avant la révision**, le membre dont le cercle généalogique
+     * la contient, et l'administrateur par son cercle complet. `force_privacy` faisait
+     * déjà de la fiche une fiche « vivante » soumise au cercle ; la révision n'y touche pas.
+     */
+    public function testUneFicheConfidentielleResteVisibleDeSonCercleEtDeLAdministrateur(): void
+    {
+        ArbreFamilial::poser([ArbreFamilial::COUSIN]);
+
+        self::assertTrue($this->cercleDUnMembre(ArbreFamilial::EGO)->voitPersonne(ArbreFamilial::COUSIN), 'Le cousin est dans le cercle de l’ego.');
+        self::assertFalse(
+            $this->cercleDUnMembre(ArbreFamilial::ETRANGER)->voitPersonne(ArbreFamilial::COUSIN),
+            'Hors du cercle de l’étranger, la fiche confidentielle reste masquée.',
+        );
+        self::assertTrue($this->cercle(new LecteurDuCercle(userId: 1, regime: Regime::Cercle, cercleComplet: true))->voitPersonne(ArbreFamilial::COUSIN));
     }
 
     /**
@@ -111,6 +151,9 @@ final class CercleDeVisibiliteTest extends TestCase
      */
     public function testLeReglageDesGenerationsChangeLeCercleSansRedeploiement(): void
     {
+        // Seule une fiche confidentielle rend `N` observable depuis le 2026-10-01.
+        ArbreFamilial::poser([ArbreFamilial::TANTE]);
+
         $reglages = new ReglagesFiges(generations: 3);
         $cache = new ArrayAdapter();
 
@@ -134,6 +177,8 @@ final class CercleDeVisibiliteTest extends TestCase
      */
     public function testUnChangementDEmpreinteRecalculeLeCercle(): void
     {
+        ArbreFamilial::poser([ArbreFamilial::ETRANGER]);
+
         $cache = new ArrayAdapter();
 
         self::assertFalse($this->cercle($this->membre(ArbreFamilial::EGO), cache: $cache)->voitPersonne(ArbreFamilial::ETRANGER));
@@ -167,12 +212,15 @@ final class CercleDeVisibiliteTest extends TestCase
     /**
      * La bascule « voir comme un membre » **remplace un cercle par un autre**.
      *
-     * L'administrateur, sous la bascule, cesse de voir l'étranger : c'est la moitié
+     * L'administrateur, sous la bascule, cesse de voir l'étranger **confidentiel** — et
+     * continue de voir les vivants ordinaires, comme le membre emprunté : c'est la moitié
      * observable de l'outil, et celle qui donne son sens à l'autre — l'`ETag` du graphe,
      * qui incorpore le membre emprunté (§ 10.4, règle 1).
      */
     public function testLaBasculeRemplaceLeCercleDeLAdministrateur(): void
     {
+        ArbreFamilial::poser([ArbreFamilial::ETRANGER]);
+
         $cercle = $this->cercle(new LecteurDuCercle(
             userId: 1,
             regime: Regime::Cercle,
@@ -186,12 +234,28 @@ final class CercleDeVisibiliteTest extends TestCase
     }
 
     /**
+     * La bascule sur un compte **inactif** rend le régime `Aucun` : l'administrateur n'y
+     * voit plus aucun vivant, confidentiel ou non. Le relâchement du 2026-10-01 ne vaut
+     * que pour le régime `Cercle`.
+     */
+    public function testLeRelachementNeVautPasEnRegimeAucun(): void
+    {
+        $cercle = $this->cercle(new LecteurDuCercle(userId: 1, regime: Regime::Aucun, memberId: 7, sousBascule: true));
+
+        self::assertFalse($cercle->voitPersonne(ArbreFamilial::ETRANGER));
+        self::assertFalse($cercle->voitPersonne(ArbreFamilial::COUSIN));
+        self::assertSame([ArbreFamilial::ANCETRE_ETRANGER], $cercle->filtrerPersonnes([ArbreFamilial::ETRANGER, ArbreFamilial::ANCETRE_ETRANGER]));
+    }
+
+    /**
      * `filtrerPersonnes()` rend les visibles **dans l'ordre reçu, doublons retirés** — le
      * contrat de `Core\Security\CercleDeVisibiliteInterface`. Elle existe pour que le
      * graphe résolve un cercle au lieu de 274.
      */
     public function testFiltrerPersonnesRespecteSonContrat(): void
     {
+        ArbreFamilial::poser([ArbreFamilial::ETRANGER]);
+
         $visibles = $this->cercleDUnMembre(ArbreFamilial::EGO)->filtrerPersonnes([
             ArbreFamilial::ETRANGER,
             ArbreFamilial::COUSIN,
