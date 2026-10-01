@@ -958,7 +958,7 @@ Module `Tree`.
 | `GET` | `/api/arbre/graphe` | `ATTENTE` | — | `200` § 5.2 · **`304`** | `401` | — |
 | `GET` | `/api/arbre/personnes/{id}` | `ATTENTE` | — | `200` § 5.3 | `401` · `404` `introuvable` | — |
 | `GET` | `/api/arbre/familles/{id}` | `ATTENTE` | — | `200` § 5.4 | `401` · `404` | — |
-| `GET` | `/api/arbre/recherche` | `ATTENTE` | `?q=&limite=` | `200` § 5.5 | `401` · `422` `donnees_invalides` | — |
+| `GET` | `/api/arbre/recherche` | `ATTENTE` | `?q=&limite=&vivants=` | `200` § 5.5 | `401` · `422` `donnees_invalides` | — |
 
 `{id}` porte `requirements: ['id' => '\d+']`. Conséquence utile et voulue : un identifiant
 provisoire (`#12/p1`, § 5.2) **ne correspond tout simplement pas à la route** et produit une
@@ -5707,6 +5707,10 @@ année, qui offre à qui. Décision, secret et règles du tirage :
 | `PUT` | `/api/tirages/{id}/editions/{annee}/presences/{personId}` | organisateur, soi, référent | `{presence}` | `200` | `403`, `404`, `409`, `422` |
 | `POST` | `/api/tirages/{id}/editions/{annee}/tirage` | organisateur | — | `200` | `403`, `404`, `409` |
 | `DELETE` | `/api/tirages/{id}/editions/{annee}/tirage` | organisateur | — | `200` | `403`, `404`, `409` |
+| `POST` | `/api/tirages/{id}/participants/{personId}/lien` | référent ; organisateur si ni compte ni référent | — | `201` `{cle, url}` | `403`, `404`, `409` |
+| `DELETE` | `/api/tirages/{id}/participants/{personId}/lien` | référent ; organisateur si ni compte ni référent | — | `204` | `403`, `404`, `409` |
+| `GET` | `/api/tirages/lien/{cle}` | **public** (la clé) | — | `200` | `404`, `429` |
+| `PUT` | `/api/tirages/lien/{cle}/presence` | **public** (la clé) | `{presence}` | `200` | `404`, `409`, `422`, `429` |
 
 « Organisateur » vaut aussi pour un administrateur. **Règles** :
 `{nom, jour, mois, lieu?, ouvert?, memoire?, exclureConjoints?}` — `memoire` de 0 à 10
@@ -5724,7 +5728,8 @@ lecteur ou un participant dont il est le référent. Aucune autre clé ne porte 
 pour aucun lecteur — organisateur et administrateur compris. Sous la bascule « voir comme
 un membre », la lecture se fait **comme ce membre** : tirages visibles, attributions et
 `moi` sont les siens, et `peutGerer` ne vaut `true` que s'il organise (ADR 0009, révision du
-2026-09-27).
+2026-09-27). Le lien personnel d'un participant (§ 22.4) lit sous la même règle, pour la
+personne qu'il désigne.
 
 ### 22.2 Les codes d'erreur
 
@@ -5742,6 +5747,10 @@ un membre », la lecture se fait **comme ce membre** : tirages visibles, attribu
 | `participants_insuffisants` | `409` | Moins de trois présents ; `details.minimum`. |
 | `tirage_impossible` | `409` | Aucune attribution possible, même sans mémoire. |
 | `donnees_invalides` | `422` | `champs` nomme chaque champ fautif. |
+| `participant_decede` | `422` | Inscrire (création, ajout, rejoindre) une personne qui n'est pas vivante au sens de la règle unique ; `champs` nomme `participants` ou `personId`. |
+| `lien_invalide` | `404` | Lien personnel mal formé, inconnu, révoqué, remplacé, participant retiré ou tirage supprimé — **un seul corps** pour tous. |
+| `presence_figee` | `409` | Présence réglée par le lien alors que l'édition est tirée, passée, ou absente. |
+| `trop_de_tentatives` | `429` | Limiteur des liens publics, par IP : 20 clés invalides / h, 300 requêtes / h. `Retry-After`. |
 
 ### 22.3 La mémoire relâchée
 
@@ -5749,6 +5758,49 @@ un membre », la lecture se fait **comme ce membre** : tirages visibles, attribu
 même personne pendant N tirages » rend le tirage impossible, les années les plus anciennes
 sont oubliées une à une. `memoireConseillee` (détail) dit, pour le nombre de participants,
 jusqu'où la règle se tient à coup sûr.
+
+### 22.4 Le lien personnel d'un participant
+
+Pour qu'une personne **sans compte** suive son tirage : `/t/<cle>` côté front. Un seul lien
+actif par participant, valable pour toutes les éditions ; il meurt quand le participant est
+retiré ou le tirage supprimé. Seule l'empreinte `sha256` est stockée : la clé (43 caractères
+base64url) n'est rendue **qu'une fois**, par le `POST`, qui **régénère** si un lien existait
+— l'ancienne clé cesse alors de valoir. Il n'existe aucune route pour relire une clé.
+
+Le détail d'un tirage ajoute à chaque participant `lienActif` (booléen, jamais la clé) et
+`peutPartagerLien` : le lecteur est le **référent** de ce participant, ou il organise (ou
+administre) le tirage **et** le participant n'a ni compte rattaché ni référent. Créer le lien,
+c'est pouvoir lire l'attribution : l'organisateur ne le fait donc jamais pour un participant
+qui a son compte, dont le secret tient contre lui (ADR 0009, révision du 2026-10-01). Hors de
+cette règle, `POST` et `DELETE` rendent `403 acces_refuse`. La règle se relit à chaque
+ouverture : le lien d'un participant qui a, depuis, un compte et pas de référent rend `404`.
+
+`GET /api/tirages/lien/{cle}` — **uniquement ce participant** ; ni les autres participants,
+ni leurs présences, ni l'organisateur, ni un identifiant de tirage :
+
+```json
+{
+  "tirage": {"nom": "Noël côté papa", "lieu": "Chez les grands-parents"},
+  "edition": {"annee": 2026, "date": "2026-12-24", "statut": "ouverte", "passee": false},
+  "participant": {"personId": 12, "libelle": "…", "presence": "sur_place", "peutChangerPresence": true},
+  "attributions": []
+}
+```
+
+`edition` est l'édition courante (la prochaine à venir, sinon la plus récente) ou `null` ;
+`participant.presence` est alors `null`. `attributions` n'est rempli qu'une fois l'édition
+tirée, selon la règle de `mesAttributions` appliquée à la personne du lien (la sienne, et
+celles des participants dont elle est le référent) — même forme que `mesAttributions`.
+`PUT …/presence` rend la même charge ; il n'est permis que si `peutChangerPresence` (édition
+ouverte et non passée). `Cache-Control: private, no-store`.
+
+### 22.5 Les défunts
+
+On ne tire pas au sort un cadeau pour une personne disparue : l'API refuse de l'inscrire
+(`422 participant_decede`), et la recherche des tirages passe `GET /api/arbre/recherche?vivants=1`,
+qui écarte les personnes non vivantes **au sens de la règle unique** (§ 9.2 du modèle — la
+même qui donne le champ `vivant` des résultats). Sans ce paramètre, la recherche est
+inchangée. Les participants inscrits avant cette règle ne sont pas retirés d'office.
 
 ## 23. Incarnation d'un compte
 

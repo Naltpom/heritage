@@ -282,6 +282,26 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Tirage au sort', parent: { nom: 'tirages', libelle: 'Tirages' } },
   },
   {
+    // **Le lien personnel d'un participant** (ADR 0009, révision du 30/09/2026) :
+    // une personne sans compte suit SON tirage — sa présence, son cadeau — par
+    // une clé que l'organisateur ou son référent lui a envoyée.
+    //
+    // `public` et non `anonyme` : le lien s'ouvre aussi sur le téléphone d'un
+    // membre connecté, à qui on l'a transféré pour un enfant ; `anonyme` le
+    // renverrait vers l'accueil sans rien montrer. `cadre: false` : ni en-tête
+    // ni barre du bas, rien qui suppose un compte. Chemin court (`/t/`) : il se
+    // recopie dans un SMS.
+    //
+    // La clé n'est pas filtrée ici : une forme invalide doit tomber sur le même
+    // « ce lien n'est plus valable » qu'une clé inconnue, pas sur « page
+    // introuvable ». Passée en prop, pour que la vue reste rendable hors routeur.
+    path: '/t/:cle',
+    name: 'tirage.lien',
+    component: () => import('@/views/TirageLienView.vue'),
+    props: true,
+    meta: { acces: 'public', titre: 'Mon tirage au sort', cadre: false },
+  },
+  {
     // Les actes demandés à une mairie ou à des archives, et leur suivi (module
     // `Demarche`). `membre` : l'API refuse tout compte en attente, et ne rend
     // que les démarches dont le lecteur voit toutes les personnes.

@@ -156,6 +156,11 @@ final class ArbreController extends AbstractController
      * La recherche. Liste **non paginée** et **sans `total`** : une recherche qui se
      * pagine est une énumération déguisée, et un décompte avant filtrage dirait combien
      * de personnes on cache (§ 5.5).
+     *
+     * `vivants=1` ne garde que les personnes **vivantes** : les tirages au sort la passent,
+     * parce qu'on n'y inscrit pas une personne disparue (ADR 0009, révision du
+     * 2026-10-01). Toute autre valeur, ou son absence, laisse la recherche telle qu'elle
+     * était — les propositions et les actes demandés cherchent aussi les défunts.
      */
     #[Route('/api/arbre/recherche', name: 'tree_recherche', methods: ['GET'])]
     public function recherche(
@@ -179,6 +184,7 @@ final class ArbreController extends AbstractController
             $requetes->limite($requete->query->get('limite')),
             $this->cercles->pour($lecteur),
             $this->vivants,
+            '1' === $requete->query->get('vivants'),
         ));
     }
 

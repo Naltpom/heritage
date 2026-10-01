@@ -3,7 +3,7 @@
  * sans navigateur. Suite : `tirages.test.ts`.
  */
 
-import type { DetailDeTirage, MonAttribution, PresenceAuTirage, ResumeDeTirage } from '@/lib/api'
+import type { DetailDeTirage, LectureParLien, MonAttribution, PresenceAuTirage, ResumeDeTirage } from '@/lib/api'
 
 const MOIS = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
@@ -191,6 +191,68 @@ export function confirmationDeSuppression(nom: string): Confirmation {
     titre: `Supprimer « ${nom} » ?`,
     message: 'Le tirage, toutes ses années et leur historique seront définitivement perdus.',
     confirmer: 'Supprimer définitivement',
+    danger: true,
+  }
+}
+
+/* ───────────────── Le lien personnel ───────────────── */
+
+/**
+ * L'adresse complète à envoyer, depuis l'`url` relative rendue par l'API.
+ *
+ * Absolue sur l'origine de l'écran : c'est la même que celle de l'API (proxy
+ * Vite en développement, nginx en production), et c'est celle qu'on colle dans
+ * un message. Une URL déjà absolue est rendue telle quelle.
+ */
+export function adresseDuLien(url: string, origine: string): string {
+  if (/^https?:\/\//.test(url)) return url
+  return `${origine.replace(/\/+$/, '')}${url.startsWith('/') ? url : `/${url}`}`
+}
+
+/**
+ * La ligne d'état d'un tirage vu par son lien : où en est l'année, dit à la
+ * personne elle-même.
+ */
+export function etatVuParLien(lecture: LectureParLien): string {
+  const e = lecture.edition
+  if (e === null) return 'Aucune année n’est ouverte pour l’instant : l’organisateur l’ouvrira avant le jour J.'
+  if (e.statut === 'tiree') {
+    if (lecture.attributions.length > 0) return 'Le tirage est fait.'
+    return lecture.participant.presence === 'absente'
+      ? 'Le tirage est fait. Vous n’y participez pas cette année.'
+      : 'Le tirage est fait, sans vous : l’organisateur doit le refaire pour vous y inclure.'
+  }
+  if (e.passee) return 'Cette année est passée.'
+  return 'Le tirage n’a pas encore eu lieu. Dites si vous venez : ceux qui ne participent pas n’y entrent pas.'
+}
+
+/**
+ * « Voir à qui je fais le cadeau », ou, pour un participant qu'on accompagne,
+ * « Voir à qui Léa fait le cadeau ».
+ *
+ * On reconnaît sa propre attribution au `personId` que le lien rend pour le
+ * participant — jamais au libellé : deux homonymes se confondraient.
+ */
+export function boutonDeCadeauParLien(attribution: MonAttribution, personIdDuParticipant: number): string {
+  return attribution.donneur.personId === personIdDuParticipant
+    ? 'Voir à qui je fais le cadeau'
+    : `Voir à qui ${attribution.donneur.libelle} fait le cadeau`
+}
+
+/** Créer un lien alors qu'un autre est actif : l'ancien meurt, il faut le dire. */
+export function confirmationDeRegeneration(libelle: string): Confirmation {
+  return {
+    titre: `Nouveau lien pour ${libelle} ?`,
+    message: `Le lien déjà envoyé à ${libelle} cessera aussitôt de fonctionner. Vous devrez lui envoyer le nouveau.`,
+    confirmer: 'Régénérer le lien',
+  }
+}
+
+export function confirmationDeRevocation(libelle: string): Confirmation {
+  return {
+    titre: `Révoquer le lien de ${libelle} ?`,
+    message: `${libelle} ne pourra plus suivre le tirage par ce lien. Vous pourrez en créer un nouveau plus tard.`,
+    confirmer: 'Révoquer',
     danger: true,
   }
 }

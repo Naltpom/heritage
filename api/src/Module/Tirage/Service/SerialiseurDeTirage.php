@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Tirage\Service;
 
+use App\Module\Tirage\Entity\Attribution;
 use App\Module\Tirage\Entity\Edition;
 use App\Module\Tirage\Entity\Participant;
 use App\Module\Tirage\Entity\Tirage;
@@ -18,18 +19,23 @@ use App\Module\Tirage\Entity\Tirage;
  * autre clé ne porte un receveur : ni un compte, ni un « qui a déjà tiré qui », ni une
  * liste réservée à l'organisateur. Le jour où l'on voudrait dévoiler le tirage après la
  * fête, c'est ici qu'il faudra l'écrire — et nulle part ailleurs.
+ *
+ * Le lien personnel d'un participant ({@see self::lien()}) lit sous la même règle, pour la
+ * personne qu'il désigne : il est écrit ici pour la même raison.
  */
 final readonly class SerialiseurDeTirage
 {
-    public function __construct(private ServiceDesTirages $service)
-    {
+    public function __construct(
+        private ServiceDesTirages $service,
+        private ServiceDesLiens $liens,
+    ) {
     }
 
     /** @return array<string, mixed> */
     public function resume(Tirage $tirage, LecteurDuTirage $lecteur, \DateTimeImmutable $aujourdhui): array
     {
         $suisParticipant = null !== $lecteur->personId && null !== $tirage->participant($lecteur->personId);
-        $prochaine = $this->prochaineEdition($tirage, $aujourdhui);
+        $prochaine = $this->service->editionCourante($tirage, $aujourdhui);
 
         return [
             'id' => $tirage->getId(),
@@ -71,11 +77,79 @@ final readonly class SerialiseurDeTirage
                 ],
                 'estMoi' => $participant->getPersonId() === $lecteur->personId,
                 'suivi' => \in_array($participant->getPersonId(), $suivies, true),
+                // Qu'un lien existe, jamais sa clé : elle n'est rendue qu'à sa création.
+                'lienActif' => $participant->aUnLienActif(),
+                'peutPartagerLien' => $this->liens->peutPartager($tirage, $lecteur, $participant),
             ], $participants),
             'editions' => array_map(
                 fn (Edition $edition): array => $this->edition($edition, $tirage, $lecteur, $aujourdhui),
                 $tirage->getEditions(),
             ),
+        ];
+    }
+
+    /**
+     * Ce que montre le lien personnel `/t/<clé>` : **ce participant, et rien d'autre**.
+     *
+     * Ni la liste des participants, ni leurs présences, ni l'organisateur, ni un identifiant
+     * de tirage — rien qui permette de rebondir ailleurs. Le seul autre nom est celui du
+     * **receveur**, sans lequel le lien ne servirait à rien.
+     *
+     * Les attributions suivent la règle de `mesAttributions`
+     * ({@see ServiceDesTirages::personnesSuiviesPar()}) appliquée à la personne du lien : la
+     * sienne, et celles des participants dont elle est le référent. Elles n'apparaissent
+     * qu'une fois l'édition tirée.
+     *
+     * @return array<string, mixed>
+     */
+    public function lien(Participant $participant, \DateTimeImmutable $aujourdhui): array
+    {
+        $tirage = $participant->getTirage();
+        $edition = $this->service->editionCourante($tirage, $aujourdhui);
+        $attributions = [];
+
+        if (null !== $edition && $edition->estTiree()) {
+            $suivies = $this->service->personnesSuiviesPar($tirage, $participant->getPersonId());
+
+            foreach ($edition->getAttributions() as $attribution) {
+                if (\in_array($attribution->getDonneurPersonId(), $suivies, true)) {
+                    $attributions[] = $this->attribution($attribution, $edition);
+                }
+            }
+        }
+
+        return [
+            'tirage' => [
+                'nom' => $tirage->getNom(),
+                'lieu' => $tirage->getLieu(),
+            ],
+            'edition' => null === $edition ? null : [
+                'annee' => $edition->getAnnee(),
+                'date' => $edition->getDate()->format('Y-m-d'),
+                'statut' => $edition->getStatut()->value,
+                'passee' => $edition->getDate() < $aujourdhui->setTime(0, 0),
+            ],
+            'participant' => [
+                // Son propre identifiant de personne, pour que la page reconnaisse SA ligne
+                // parmi les attributions (la sienne, ou celle d'un participant qu'il
+                // accompagne) sans comparer des libellés — deux homonymes se confondraient.
+                // Rien de neuf n'est dévoilé : les attributions portent déjà des `personId`.
+                'personId' => $participant->getPersonId(),
+                'libelle' => $participant->getPersonLabel(),
+                'presence' => $edition?->presenceDe($participant->getPersonId())->value,
+                'peutChangerPresence' => $this->liens->peutChangerPresence($participant, $aujourdhui),
+            ],
+            'attributions' => $attributions,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function attribution(Attribution $attribution, Edition $edition): array
+    {
+        return [
+            'donneur' => ['personId' => $attribution->getDonneurPersonId(), 'libelle' => $attribution->getDonneurLabel()],
+            'receveur' => ['personId' => $attribution->getReceveurPersonId(), 'libelle' => $attribution->getReceveurLabel()],
+            'presenceDuDonneur' => $edition->presenceDe($attribution->getDonneurPersonId())->value,
         ];
     }
 
@@ -90,11 +164,7 @@ final readonly class SerialiseurDeTirage
                 continue;
             }
 
-            $mesAttributions[] = [
-                'donneur' => ['personId' => $attribution->getDonneurPersonId(), 'libelle' => $attribution->getDonneurLabel()],
-                'receveur' => ['personId' => $attribution->getReceveurPersonId(), 'libelle' => $attribution->getReceveurLabel()],
-                'presenceDuDonneur' => $edition->presenceDe($attribution->getDonneurPersonId())->value,
-            ];
+            $mesAttributions[] = $this->attribution($attribution, $edition);
         }
 
         $presences = [];
@@ -127,17 +197,5 @@ final readonly class SerialiseurDeTirage
             'arrivesApresLeTirage' => $arrivesApres,
             'mesAttributions' => $mesAttributions,
         ];
-    }
-
-    /** L'édition à venir la plus proche ; à défaut, la plus récente. */
-    private function prochaineEdition(Tirage $tirage, \DateTimeImmutable $aujourdhui): ?Edition
-    {
-        $editions = $tirage->getEditions();
-        $aVenir = array_values(array_filter(
-            $editions,
-            static fn (Edition $edition): bool => $edition->getDate() >= $aujourdhui->setTime(0, 0),
-        ));
-
-        return [] !== $aVenir ? end($aVenir) : ($editions[0] ?? null);
     }
 }

@@ -79,6 +79,12 @@ security:
         # raison que l'inscription : on clique depuis le courriel, souvent sur un autre
         # appareil, sans session. Sa protection est le jeton, et son refus un `404`.
         - { path: ^/api/session/courriel/confirmer, roles: PUBLIC_ACCESS }
+        # Le lien personnel d'un participant de tirage (ADR 0009, révision du 2026-10-01) :
+        # une personne sans compte y suit son tirage. Public pour la même raison que
+        # l'inscription ; sa protection est la clé, son refus un `404` unique, et un
+        # limiteur par IP (`Tirage\Service\LimiteurDesLiens`). Le `/` final compte : il
+        # n'ouvre rien d'autre sous `/api/tirages`.
+        - { path: ^/api/tirages/lien/, roles: PUBLIC_ACCESS }
         # Avant `^/api`, faute de quoi cette règle ne serait jamais atteinte. Le journal
         # d'audit, les réglages, la bascule « voir comme un membre » et la gestion des
         # comptes vivent tous derrière.

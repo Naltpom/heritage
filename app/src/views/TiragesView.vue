@@ -167,8 +167,9 @@ onBeforeUnmount(() => avorteur?.abort())
           <p v-else class="text-xs text-attenue">Personne pour l’instant. Vous pourrez aussi en ajouter plus tard.</p>
           <SelecteurPersonne
             etiquette="Ajouter une personne de l’arbre"
-            aide="Un enfant sans compte peut participer : un parent lira son tirage pour lui."
+            aide="Seules les personnes vivantes sont proposées. Un enfant sans compte peut participer : un parent lira son tirage pour lui."
             :avec-propositions="false"
+            vivants-seulement
             :deja-choisis="dejaChoisis"
             @choisir="ajouter"
           />

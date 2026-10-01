@@ -10,6 +10,7 @@ use App\Module\Tirage\Entity\Tirage;
 use App\Module\Tirage\Service\IdentiteDuLecteur;
 use App\Module\Tirage\Service\LectureDesRequetes;
 use App\Module\Tirage\Service\SerialiseurDeTirage;
+use App\Module\Tirage\Service\ServiceDesLiens;
 use App\Module\Tirage\Service\ServiceDesTirages;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -29,6 +30,8 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * DELETE /api/tirages/{id}                                      supprimer       204
  * POST   /api/tirages/{id}/participants                         ajouter         201
  * DELETE /api/tirages/{id}/participants/{personId}              retirer
+ * POST   /api/tirages/{id}/participants/{personId}/lien         lien personnel  201
+ * DELETE /api/tirages/{id}/participants/{personId}/lien         révoquer        204
  * POST   /api/tirages/{id}/rejoindre                            se joindre      201
  * POST   /api/tirages/{id}/editions                             ouvrir l'année  201
  * PUT    /api/tirages/{id}/editions/{annee}/presences/{personId}
@@ -45,7 +48,9 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * attribution comprise — voir {@see IdentiteDuLecteur}.
  *
  * Chaque réponse est le tirage relu, sérialisé pour le lecteur : le front n'a jamais à
- * recoller une réponse partielle.
+ * recoller une réponse partielle — sauf le lien personnel, dont la réponse est la clé,
+ * rendue une seule fois. Ce que ce lien ouvre, sans session, vit dans
+ * {@see LienDeTirageController}.
  */
 #[Route('/api/tirages')]
 #[IsGranted(RegimeVoter::MEMBRE)]
@@ -57,6 +62,7 @@ final class TirageController extends AbstractController
         private readonly SerialiseurDeTirage $serialiseur,
         private readonly LectureDesRequetes $lecture,
         private readonly BasculeVoirComme $bascule,
+        private readonly ServiceDesLiens $liens,
     ) {
     }
 
@@ -153,6 +159,43 @@ final class TirageController extends AbstractController
             $personId,
             new \DateTimeImmutable(),
         ));
+    }
+
+    /**
+     * Crée le lien personnel du participant, ou le **régénère** : l'ancienne clé cesse de
+     * valoir. La clé en clair n'est rendue qu'ici — il n'existe aucune route pour la relire,
+     * et « copier son lien » après coup, c'est en régénérer un.
+     */
+    #[Route(
+        '/{id}/participants/{personId}/lien',
+        name: 'tirage_lien_creer',
+        requirements: ['id' => '\d+', 'personId' => '\d+'],
+        methods: ['POST'],
+    )]
+    public function creerLien(int $id, int $personId): JsonResponse
+    {
+        $this->bascule->refuserSiActive();
+        $lecteur = $this->identite->lecteur();
+        $cle = $this->liens->creer($this->service->trouver($id, $lecteur), $lecteur, $personId);
+
+        // Le chemin **du front**, relatif : l'API ne connaît pas l'origine sous laquelle
+        // l'application est servie, et le front la préfixe au moment de copier.
+        return $this->charge(['cle' => $cle, 'url' => '/t/'.$cle], Response::HTTP_CREATED);
+    }
+
+    #[Route(
+        '/{id}/participants/{personId}/lien',
+        name: 'tirage_lien_revoquer',
+        requirements: ['id' => '\d+', 'personId' => '\d+'],
+        methods: ['DELETE'],
+    )]
+    public function revoquerLien(int $id, int $personId): Response
+    {
+        $this->bascule->refuserSiActive();
+        $lecteur = $this->identite->lecteur();
+        $this->liens->revoquer($this->service->trouver($id, $lecteur), $lecteur, $personId);
+
+        return new Response(status: Response::HTTP_NO_CONTENT);
     }
 
     #[Route('/{id}/rejoindre', name: 'tirage_rejoindre', requirements: ['id' => '\d+'], methods: ['POST'])]

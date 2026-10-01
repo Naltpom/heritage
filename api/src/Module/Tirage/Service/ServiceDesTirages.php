@@ -87,19 +87,41 @@ final readonly class ServiceDesTirages
      */
     public function personnesSuivies(Tirage $tirage, LecteurDuTirage $lecteur): array
     {
-        if (null === $lecteur->personId) {
-            return [];
-        }
+        return null === $lecteur->personId ? [] : $this->personnesSuiviesPar($tirage, $lecteur->personId);
+    }
 
+    /**
+     * La même règle, pour une **personne** plutôt qu'un compte : c'est ainsi que lit le lien
+     * personnel, qui n'a pas de compte derrière lui.
+     *
+     * @return list<int>
+     */
+    public function personnesSuiviesPar(Tirage $tirage, int $personId): array
+    {
         $suivies = [];
 
         foreach ($tirage->getParticipants() as $participant) {
-            if ($participant->getPersonId() === $lecteur->personId || $participant->getReferentPersonId() === $lecteur->personId) {
+            if ($participant->getPersonId() === $personId || $participant->getReferentPersonId() === $personId) {
                 $suivies[] = $participant->getPersonId();
             }
         }
 
         return $suivies;
+    }
+
+    /**
+     * L'édition dont on parle « maintenant » : l'édition à venir la plus proche ; à défaut,
+     * la plus récente. C'est celle que la liste résume et que le lien personnel montre.
+     */
+    public function editionCourante(Tirage $tirage, \DateTimeImmutable $aujourdhui): ?Edition
+    {
+        $editions = $tirage->getEditions();
+        $aVenir = array_values(array_filter(
+            $editions,
+            static fn (Edition $edition): bool => $edition->getDate() >= $aujourdhui->setTime(0, 0),
+        ));
+
+        return [] !== $aVenir ? end($aVenir) : ($editions[0] ?? null);
     }
 
     /**
@@ -124,7 +146,7 @@ final readonly class ServiceDesTirages
         $tirage = new Tirage($regles->nom, $regles->jour, $regles->mois, $lecteur->userId, $lecteur->libelle);
         $this->appliquer($tirage, $regles);
 
-        $libelles = $this->libellesExistants($personIds, 'participants');
+        $libelles = $this->libellesDeVivants($personIds, 'participants');
 
         foreach ($libelles as $personId => $libelle) {
             $tirage->ajouterParticipant(new Participant($tirage, $personId, $libelle, $lecteur->userId));
@@ -161,7 +183,7 @@ final readonly class ServiceDesTirages
             throw ErreurDeTirage::dejaParticipant();
         }
 
-        $libelle = $this->libellesExistants([$personId], 'personId')[$personId];
+        $libelle = $this->libellesDeVivants([$personId], 'personId')[$personId];
         $participant = new Participant($tirage, $personId, $libelle, $lecteur->userId);
 
         if (null !== $referentPersonId) {
@@ -196,7 +218,7 @@ final readonly class ServiceDesTirages
             throw ErreurDeTirage::dejaParticipant();
         }
 
-        $libelle = $this->libellesExistants([$lecteur->personId], 'personId')[$lecteur->personId];
+        $libelle = $this->libellesDeVivants([$lecteur->personId], 'personId')[$lecteur->personId];
         $tirage->ajouterParticipant(new Participant($tirage, $lecteur->personId, $libelle, $lecteur->userId));
         $tirage->toucher();
         $this->em->flush();
@@ -394,6 +416,33 @@ final readonly class ServiceDesTirages
 
         if (\count($libelles) !== \count($personIds)) {
             throw ErreurDeTirage::donneesInvalides([$champ => 'Une personne désignée n’existe pas dans l’arbre.']);
+        }
+
+        return $libelles;
+    }
+
+    /**
+     * {@see self::libellesExistants()}, et **vivantes** : on ne tire pas au sort un cadeau
+     * pour une personne disparue. La recherche des tirages ne les propose déjà plus
+     * (`GET /api/arbre/recherche?vivants=1`) ; ce refus-ci tient la règle pour un appel qui
+     * ne passerait pas par elle.
+     *
+     * Les participants **déjà inscrits** avant cette règle ne sont pas touchés : les retirer
+     * est un geste de l'organisateur, pas un effet de bord d'une mise à jour.
+     *
+     * @param list<int> $personIds
+     *
+     * @return array<int, string>
+     */
+    private function libellesDeVivants(array $personIds, string $champ): array
+    {
+        $libelles = $this->libellesExistants($personIds, $champ);
+        $disparues = $this->arbre->nonVivantes(array_keys($libelles));
+
+        if ([] !== $disparues) {
+            $noms = array_map(static fn (int $personId): string => $libelles[$personId], $disparues);
+
+            throw ErreurDeTirage::participantDecede($champ, array_values($noms));
         }
 
         return $libelles;

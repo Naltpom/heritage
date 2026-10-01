@@ -7,6 +7,7 @@ namespace App\Module\Tree\Service;
 use App\Module\Tirage\Contract\PortArbrePourTirages;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Serializer\EtatVivant;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -15,11 +16,17 @@ use Doctrine\ORM\EntityManagerInterface;
  * Il ne lit que la liste blanche — le nom affiché et le lien d'union —, ce que l'arbre
  * sert déjà à tout compte connecté pour une personne vivante hors cercle (ADR 0003). Il
  * n'a donc rien à filtrer, et ne doit rien lire de plus.
+ *
+ * L'état « vivante ou non » s'y ajoute, **sans la date** qui l'établit : c'est la valeur
+ * que la recherche rend déjà à côté de chaque nom. Il passe par {@see EtatVivant}, qui
+ * applique la règle unique du produit — un tirage n'en invente pas une seconde.
  */
 final readonly class VueDeLArbrePourTirages implements PortArbrePourTirages
 {
-    public function __construct(private EntityManagerInterface $em)
-    {
+    public function __construct(
+        private EntityManagerInterface $em,
+        private EtatVivant $vivants,
+    ) {
     }
 
     public function libelles(array $personIds): array
@@ -70,5 +77,26 @@ final readonly class VueDeLArbrePourTirages implements PortArbrePourTirages
             static fn (array $ligne): array => [(int) $ligne['mari'], (int) $ligne['epouse']],
             $lignes,
         );
+    }
+
+    public function nonVivantes(array $personIds): array
+    {
+        if ([] === $personIds) {
+            return [];
+        }
+
+        /** @var list<Person> $personnes */
+        $personnes = $this->em->getRepository(Person::class)->findBy(['id' => $personIds]);
+        $nonVivantes = [];
+
+        foreach ($personnes as $personne) {
+            $id = $personne->getId();
+
+            if (null !== $id && !$this->vivants->estVivante($personne)) {
+                $nonVivantes[] = $id;
+            }
+        }
+
+        return $nonVivantes;
     }
 }

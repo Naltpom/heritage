@@ -108,6 +108,52 @@ Ce qui change, dit sans détour : **le secret d'un participant n'est plus garant
 administrateur.** Il l'est toujours contre l'organisateur, les autres participants, les
 notifications et la liste.
 
+## Révision du 2026-10-01 — les défunts, et le lien personnel
+
+**Pas de défunts.** On ne tire pas au sort un cadeau pour une personne disparue. L'API refuse
+de l'inscrire (`422 participant_decede`) et la recherche des tirages ne la propose plus
+(`GET /api/arbre/recherche?vivants=1`). « Disparue » se lit par la **règle unique** du produit
+(`Tree\Service\ReglePersonneVivante`), à travers le port — `PortArbrePourTirages::nonVivantes()` :
+une seconde définition ferait proposer par la recherche des personnes que l'API refuserait.
+Les participants déjà inscrits ne sont pas retirés d'office.
+
+**Un lien personnel par participant**, pour qu'une personne **sans compte** suive son tirage :
+`/t/<clé>`. C'est la seule surface **publique** du module, et elle est bornée ainsi :
+
+- **qui le crée** (et le régénère, le révoque) : le **référent** du participant, toujours —
+  `mesAttributions` lui montre déjà ce que le lien ouvre ; l'**organisateur** (ou un
+  administrateur), **seulement pour un participant sans compte et sans référent** ; et
+  personne pour un participant qui a son compte sans référent. Créer le lien, c'est tenir la
+  clé, donc pouvoir lire l'attribution : laisser l'organisateur le créer pour tous lui
+  permettrait d'en créer un par participant après le tirage et de reconstituer toutes les
+  paires, sans qu'un participant qui a son compte ne s'en aperçoive ;
+- la règle se relit **à chaque ouverture** : le lien d'un participant qui, depuis, a un
+  compte et pas de référent ne vaut plus (`404`) — l'organisateur qui l'avait créé ne lit
+  plus rien ;
+
+- la clé fait 256 bits, et **seule son empreinte est stockée** (`trg_participant.lien_token_hash`),
+  comme le jeton d'invitation ; elle n'est rendue qu'à la création — la « recopier », c'est
+  en régénérer une, qui tue l'ancienne ;
+- un seul lien actif par participant, valable pour toutes les éditions, qui meurt avec la
+  ligne du participant ;
+- le lien ne montre **que ce participant** : le tirage, l'édition courante, sa présence, et
+  — une fois tiré — son attribution, selon la règle de `mesAttributions`. Aucun autre
+  participant, aucune donnée de l'arbre ; le receveur est le seul autre nom ;
+- il n'écrit que sa présence, tant que l'édition est ouverte et à venir ;
+- tout refus est la **même** `404`, et un limiteur par IP compte à part les clés invalides.
+
+Ce que cela change au secret, dit sans détour : **quiconque détient le lien lit
+l'attribution du participant** — et celui qui le crée le détient. Concrètement :
+
+- **l'organisateur peut lire l'attribution d'un participant sans compte et sans référent**,
+  puisque c'est lui qui en crée le lien. C'est la condition même du service : personne
+  d'autre ne peut transmettre son tirage à cette personne. Le secret contre l'organisateur
+  ne tient donc plus que pour les participants **qui ont un compte ou un référent** — pour
+  eux, il tient entier ;
+- le référent ne lit par le lien rien qu'il ne lise déjà ;
+- celui à qui la clé est transmise lit ce qu'elle ouvre : l'écran de gestion le dit à celui
+  qui copie le lien.
+
 ## Conséquences
 
 - Neuf modules au lieu de huit ; 32 tables ; 50 colonnes d'énumération. Les tests de garde

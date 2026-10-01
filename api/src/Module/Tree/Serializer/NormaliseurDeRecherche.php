@@ -57,7 +57,7 @@ final readonly class NormaliseurDeRecherche
     /**
      * @return array{elements: list<array<string, mixed>>, tronque: bool}
      */
-    public function resultats(string $terme, int $limite, CercleDuLecteur $cercle, EtatVivant $vivants): array
+    public function resultats(string $terme, int $limite, CercleDuLecteur $cercle, EtatVivant $vivants, bool $vivantsSeulement = false): array
     {
         // Les **mots** et non la clé entière : la clé s'écrit « patronyme, prénoms », et
         // un terme « Prénom Nom » n'en est ni un préfixe ni un infixe. Voir
@@ -72,9 +72,19 @@ final readonly class NormaliseurDeRecherche
         $elements = [];
         $tronque = false;
 
-        foreach ($this->lecture->candidatsDeRecherche($mots, $limite) as $personne) {
-            if (!$cercle->voit($personne->getId(), $vivants->estVivante($personne))) {
+        foreach ($this->lecture->candidatsDeRecherche($mots, $limite, $vivantsSeulement) as $personne) {
+            $vivante = $vivants->estVivante($personne);
+
+            if (!$cercle->voit($personne->getId(), $vivante)) {
                 // **Absente**, et non réduite. C'est toute la règle de l'ADR 0003.
+                continue;
+            }
+
+            // Le filtre des tirages : une personne qui n'est pas vivante au sens de la
+            // règle unique est écartée **avant** le décompte, comme le cercle — `tronque`
+            // reste calculé sur le jeu filtré. Retirer des défunts n'apprend rien : ils
+            // sont visibles de tous.
+            if ($vivantsSeulement && !$vivante) {
                 continue;
             }
 

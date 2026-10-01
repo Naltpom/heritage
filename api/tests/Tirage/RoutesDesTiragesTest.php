@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\Tests\Tirage;
 
 use App\Module\Core\Entity\Notification;
-use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\NotificationKind;
 use App\Module\Core\Enum\UserStatus;
 use App\Module\Membership\Entity\Member;
-use App\Module\Membership\Enum\MatchKind;
 use App\Module\Tirage\Entity\Attribution;
-use App\Tests\Tree\ArbreWebTestCase;
+use App\Module\Tree\Serializer\CercleDuLecteur;
+use App\Module\Tree\Serializer\EtatVivant;
+use App\Module\Tree\Serializer\NormaliseurDeRecherche;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -19,31 +19,14 @@ use Symfony\Component\HttpFoundation\Response;
  * contrôleur, service, adaptateur réel de `Tree` et annuaire réel de `Membership`, sur la
  * vraie base.
  *
- * L'arbre est celui du harnais, entièrement inventé. On s'y sert de deux couples :
- * `aieul` + `aieule`, et `cousin` + `conjointe`.
+ * L'arbre est celui du harnais, entièrement inventé, et les trois vivants de
+ * {@see CasDeTestTirages}. Le couple qui compte ici est `cousin` + `conjointe`.
  *
  * Le cœur de ce fichier est **le secret** : chacun ne lit que son attribution, et celle de
  * qui il accompagne — l'organisateur pas plus qu'un autre.
  */
-final class RoutesDesTiragesTest extends ArbreWebTestCase
+final class RoutesDesTiragesTest extends CasDeTestTirages
 {
-    private const string OPALE = 'opale@example.invalid';   // ego, organisateur
-    private const string JASPE = 'jaspe@example.invalid';   // conjointe
-    private const string ONYX = 'onyx@example.invalid';     // cousin
-    private const string AMBRE = 'ambre@example.invalid';   // aieul, hors du tirage
-    private const string TUF = 'tuf@example.invalid';       // aucun rattachement
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->rattacher(self::OPALE, 'ego');
-        $this->rattacher(self::JASPE, 'conjointe');
-        $this->rattacher(self::ONYX, 'cousin');
-        $this->rattacher(self::AMBRE, 'aieul');
-        $this->creerUtilisateur(self::TUF);
-    }
-
     /* ───────────────── Le secret ───────────────── */
 
     public function testChacunNeVoitQueSonAttributionEtCelleDeQuiIlAccompagne(): void
@@ -62,9 +45,9 @@ final class RoutesDesTiragesTest extends ArbreWebTestCase
         self::assertSame('tiree', $edition['statut']);
         self::assertSame(5, $edition['nombreDAttributions']);
 
-        // L'organisateur lit la sienne et celle de `sansDate`, qu'il accompagne — rien de plus.
+        // L'organisateur lit la sienne et celle de `enfant`, qu'il accompagne — rien de plus.
         self::assertEqualsCanonicalizing(
-            [$this->idDe('ego'), $this->idDe('sansDate')],
+            [$this->idDe('ego'), $this->idDe('enfant')],
             array_map(static fn (array $a): int => $a['donneur']['personId'], $edition['mesAttributions']),
         );
 
@@ -118,7 +101,7 @@ final class RoutesDesTiragesTest extends ArbreWebTestCase
         foreach ($notifications as $notification) {
             self::assertSame('tirage.detail', $notification->getLinkRoute());
 
-            foreach (['ego', 'conjointe', 'cousin', 'aieule', 'sansDate'] as $personne) {
+            foreach (['ego', 'conjointe', 'cousin', 'oncle', 'enfant'] as $personne) {
                 $nom = $this->personnes[$personne]->getDisplayName();
                 self::assertStringNotContainsString($nom, $notification->getTitle().' '.$notification->getBody());
             }
@@ -165,7 +148,7 @@ final class RoutesDesTiragesTest extends ArbreWebTestCase
 
         // Un tirage fermé dont le membre n'est pas reste introuvable, même pour l'administrateur.
         $this->envoyer('DELETE', '/api/administration/voir-comme');
-        $this->envoyer('POST', '/api/tirages', $this->regles() + ['participants' => [$this->idDe('aieule'), $this->idDe('aieul'), $this->idDe('sansDate')]]);
+        $this->envoyer('POST', '/api/tirages', $this->regles() + ['participants' => [$this->idDe('oncle'), $this->idDe('tante'), $this->idDe('cousin')]]);
         $autre = $this->charge()['id'];
         $this->envoyer('POST', '/api/administration/voir-comme', ['memberId' => $membreDeJaspe->getId()]);
         $this->requete("/api/tirages/{$autre}");
@@ -195,7 +178,7 @@ final class RoutesDesTiragesTest extends ArbreWebTestCase
 
         $this->connexionDe(self::AMBRE);
         $this->requete('/api/tirages');
-        self::assertSame(['personId' => $this->idDe('aieul'), 'libelle' => 'Émeri Sarriette'], $this->charge()['moi']);
+        self::assertSame(['personId' => $this->idDe('tante'), 'libelle' => 'Ardoise Tilleul'], $this->charge()['moi']);
         $liste = $this->charge()['tirages'];
         self::assertCount(1, $liste);
         self::assertTrue($liste[0]['peutRejoindre']);
@@ -243,7 +226,7 @@ final class RoutesDesTiragesTest extends ArbreWebTestCase
         $this->connexionDe(self::OPALE);
         $this->envoyer('POST', "/api/tirages/{$id}/editions", ['annee' => 2026]);
 
-        $this->envoyer('PUT', "/api/tirages/{$id}/editions/2026/presences/{$this->idDe('aieule')}", ['presence' => 'absente']);
+        $this->envoyer('PUT', "/api/tirages/{$id}/editions/2026/presences/{$this->idDe('oncle')}", ['presence' => 'absente']);
         self::assertSame(Response::HTTP_OK, $this->statut());
 
         $this->envoyer('POST', "/api/tirages/{$id}/editions/2026/tirage");
@@ -330,90 +313,72 @@ final class RoutesDesTiragesTest extends ArbreWebTestCase
         self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
     }
 
-    /* ───────────────── Outils ───────────────── */
+    /* ───────────────── Les défunts ───────────────── */
 
     /**
-     * « Noël côté papa » : ego, conjointe, cousin et aieule, puis `sansDate` — qui n'a pas
-     * de compte — accompagné par ego.
+     * On ne tire pas au sort un cadeau pour une personne disparue — ni à la création, ni à
+     * l'ajout, ni en rejoignant. « Disparue » au sens de la règle unique : `aieule` a un
+     * décès enregistré, `sansDate` n'en a pas mais le repli par génération la classe.
      */
-    private function tirageDeNoel(bool $ouvert = false): int
+    public function testUnDefuntNEntreDansAucunTirage(): void
     {
         $this->connexionDe(self::OPALE);
-        $this->envoyer('POST', '/api/tirages', ['ouvert' => $ouvert] + $this->regles() + ['participants' => [
-            $this->idDe('ego'),
-            $this->idDe('conjointe'),
-            $this->idDe('cousin'),
-            $this->idDe('aieule'),
-        ]]);
-        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
 
-        $id = $this->charge()['id'];
-        self::assertIsInt($id);
-
-        $this->envoyer('POST', "/api/tirages/{$id}/participants", [
-            'personId' => $this->idDe('sansDate'),
-            'referentPersonId' => $this->idDe('ego'),
-        ]);
-        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
-
-        return $id;
-    }
-
-    /** @return array<string, mixed> */
-    private function regles(): array
-    {
-        return ['nom' => 'Noël côté papa', 'jour' => 24, 'mois' => 12, 'lieu' => 'Chez les grands-parents', 'memoire' => 2, 'exclureConjoints' => true];
-    }
-
-    /** @param array<string, mixed>|null $corps */
-    private function envoyer(string $methode, string $chemin, ?array $corps = null): void
-    {
-        $this->client->request($methode, $chemin, server: [
-            'CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT' => 'application/json',
-        ], content: null === $corps ? '' : json_encode($corps, \JSON_THROW_ON_ERROR));
-    }
-
-    private function statut(): int
-    {
-        return $this->client->getResponse()->getStatusCode();
-    }
-
-    private function codeDErreur(): mixed
-    {
-        $erreur = $this->charge()['erreur'] ?? null;
+        $this->envoyer('POST', '/api/tirages', $this->regles() + ['participants' => [$this->idDe('ego'), $this->idDe('aieule')]]);
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        self::assertSame('participant_decede', $this->codeDErreur());
+        $erreur = $this->charge()['erreur'];
         self::assertIsArray($erreur);
+        self::assertArrayHasKey('participants', $erreur['champs']);
+        self::assertStringContainsString('Marne Dolomite Sureau', $erreur['message'], 'Le message nomme la personne refusée.');
 
-        return $erreur['code'] ?? null;
+        $id = $this->tirageDeNoel(ouvert: true);
+
+        foreach (['aieule', 'sansDate'] as $defunt) {
+            $this->envoyer('POST', "/api/tirages/{$id}/participants", ['personId' => $this->idDe($defunt)]);
+            self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut(), $defunt);
+            self::assertSame('participant_decede', $this->codeDErreur());
+        }
+
+        // Un compte rattaché à une personne décédée ne s'inscrit pas davantage.
+        $this->connexionDe(self::GRENAT);
+        $this->envoyer('POST', "/api/tirages/{$id}/rejoindre");
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        self::assertSame('participant_decede', $this->codeDErreur());
     }
 
-    private function userIdDe(string $courriel): int
+    /**
+     * `?vivants=1` — le paramètre de la recherche des tirages. Sans lui, la recherche reste
+     * celle des propositions et des actes demandés, qui cherchent aussi les défunts.
+     */
+    public function testLaRechercheDesTiragesNeProposeQueDesVivants(): void
     {
-        $utilisateur = $this->em()->getRepository(User::class)->findOneBy(['email' => $courriel]);
-        self::assertNotNull($utilisateur);
+        $this->connexionDe(self::OPALE);
 
-        return (int) $utilisateur->getId();
-    }
+        // Décès enregistré : écarté dès le SQL.
+        $this->requete('/api/arbre/recherche?q=Sarriette');
+        self::assertCount(1, $this->charge()['elements']);
+        $this->requete('/api/arbre/recherche?q=Sarriette&vivants=1');
+        self::assertSame([], $this->charge()['elements']);
 
-    private function rattacher(string $courriel, string $personne): void
-    {
-        $identifiant = $this->creerUtilisateur($courriel)->getId();
-        self::assertNotNull($identifiant);
+        // Aucun décès enregistré, mais la règle la classe : écartée après coup.
+        $this->requete('/api/arbre/recherche?q=Fenouil');
+        self::assertCount(1, $this->charge()['elements']);
+        $this->requete('/api/arbre/recherche?q=Fenouil&vivants=1');
+        self::assertSame([], $this->charge()['elements']);
+        self::assertFalse($this->charge()['tronque']);
 
-        $membre = new Member($identifiant, $courriel, $this->idDe($personne), $this->personnes[$personne]->getDisplayName(), MatchKind::PreLie);
-        $membre->activer();
+        // Les vivants, eux, restent — vus ici à travers un cercle qui couvre tout l'arbre :
+        // celui du harnais n'en montre aucun, ce qui ne dirait rien du filtre.
+        $normaliseur = self::getContainer()->get(NormaliseurDeRecherche::class);
+        $etat = self::getContainer()->get(EtatVivant::class);
+        \assert($normaliseur instanceof NormaliseurDeRecherche && $etat instanceof EtatVivant);
+        $tous = CercleDuLecteur::de(array_values(array_map(fn (string $cle): int => $this->idDe($cle), array_keys($this->personnes))));
 
-        $this->em()->persist($membre);
-        $this->em()->flush();
-    }
-
-    private function connexionDe(string $courriel): void
-    {
-        $this->client->request('POST', '/api/connexion', server: [
-            'CONTENT_TYPE' => 'application/json',
-            'HTTP_ACCEPT' => 'application/json',
-        ], content: json_encode(['email' => $courriel, 'password' => 'motdepasse-de-test'], \JSON_THROW_ON_ERROR));
-
-        self::assertSame(Response::HTTP_OK, $this->statut(), 'La connexion de test doit réussir.');
+        $noms = array_map(
+            static fn (array $e): mixed => $e['displayName'],
+            $normaliseur->resultats('Romarin', 20, $tous, $etat, vivantsSeulement: true)['elements'],
+        );
+        self::assertEqualsCanonicalizing(['Natron Romarin', 'Cobalt Romarin', 'Basalte Romarin', 'Mica Romarin'], $noms);
     }
 }

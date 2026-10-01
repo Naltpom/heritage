@@ -65,6 +65,7 @@ const {
   aide = '',
   dejaChoisis = [],
   avecPropositions = true,
+  vivantsSeulement = false,
 } = defineProps<{
   etiquette: string
   aide?: string
@@ -75,6 +76,14 @@ const {
   /** `false` n'interroge pas les propositions. Le seul cas est un écran où une
    *  fiche en attente n'aurait pas de sens ; on ne le devine pas, on le dit. */
   avecPropositions?: boolean
+  /**
+   * `true` ne propose que des personnes vivantes (`?vivants=1`, filtré par le
+   * serveur). **Seuls les tirages au sort le posent** : on ne tire pas au sort
+   * un défunt. Ce composant sert aussi les formulaires de proposition et les
+   * actes demandés, où désigner un défunt est le cas courant — d'où une option
+   * explicite, jamais un défaut.
+   */
+  vivantsSeulement?: boolean
 }>()
 
 const emit = defineEmits<{ choisir: [personne: ChoixDePersonne] }>()
@@ -88,6 +97,12 @@ const erreur = ref<unknown>(null)
 /** Une recherche a-t-elle abouti depuis la dernière frappe ? Sans ce drapeau,
  *  « aucun résultat » s'afficherait avant même le premier appel. */
 const interroge = ref(false)
+
+const aideParDefaut = computed(() =>
+  vivantsSeulement
+    ? 'La recherche porte sur les personnes vivantes de l’arbre que vous pouvez consulter.'
+    : 'La recherche porte sur les personnes de l’arbre que vous pouvez consulter.',
+)
 
 const identifiant = useId()
 const idAide = computed(() => `${identifiant}-aide`)
@@ -113,7 +128,7 @@ async function chercher(q: string): Promise<void> {
 
   // Les deux appels partent **en parallèle** : ils n'ont rien à s'apprendre, et
   // les enchaîner doublerait le temps d'attente sous la frappe.
-  const arbre = rechercherPersonnes(q, 10, controleur.signal)
+  const arbre = rechercherPersonnes(q, 10, controleur.signal, vivantsSeulement)
   const enAttente = avecPropositions
     ? rechercherBrouillons(q, 10, controleur.signal)
     : Promise.resolve({ elements: [], tronque: false })
@@ -211,7 +226,7 @@ const aucunResultat = computed(
     />
 
     <p :id="idAide" class="text-xs text-attenue">
-      {{ aide.length > 0 ? aide : 'La recherche porte sur les personnes de l’arbre que vous pouvez consulter.' }}
+      {{ aide.length > 0 ? aide : aideParDefaut }}
     </p>
 
     <p v-if="chargement" class="text-xs text-attenue" role="status">Recherche…</p>
