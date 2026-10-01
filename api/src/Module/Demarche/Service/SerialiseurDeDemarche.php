@@ -7,6 +7,7 @@ namespace App\Module\Demarche\Service;
 use App\Module\Demarche\Entity\Demarche;
 use App\Module\Demarche\Entity\Echange;
 use App\Module\Demarche\Entity\PersonneConcernee;
+use App\Module\Demarche\Enum\StatutDeDemarche;
 
 /**
  * La forme JSON d'une démarche.
@@ -16,10 +17,24 @@ use App\Module\Demarche\Entity\PersonneConcernee;
  *
  * `joursDAttente` est calculé ici plutôt qu'à l'écran : « en attente depuis 40 jours » est
  * ce qui décide de relancer, et deux écrans qui le calculeraient chacun finiraient par ne
- * pas dire la même chose.
+ * pas dire la même chose. `aRelancer` l'est pour la même raison (révision du 2026-10-01) :
+ * il ne suffit plus de compter les jours, il faut aussi savoir **qui** on attend — une
+ * démarche « expédiée par courrier » attend le facteur, pas la mairie, et ne se relance pas
+ * ({@see StatutDeDemarche::attendUneReponse()}).
+ *
+ * `precedente` et `suites` disent le lien « refaite autrement » : la démarche reprise, et
+ * celles qui la reprennent. **Seules celles que le lecteur voit** y figurent — même règle
+ * que pour les listes ; une démarche liée masquée n'apparaît pas plus ici qu'ailleurs.
  */
 final readonly class SerialiseurDeDemarche
 {
+    /**
+     * Au-delà, une démarche qui attend une réponse est « à relancer ». Un mois : c'est le
+     * délai au-delà duquel une mairie qui n'a pas répondu a le plus souvent perdu la
+     * demande, pas seulement pris du retard.
+     */
+    public const int JOURS_AVANT_RELANCE = 30;
+
     public function __construct(private ServiceDesDemarches $service)
     {
     }
@@ -30,6 +45,13 @@ final readonly class SerialiseurDeDemarche
         $dernierEnvoi = $demarche->getDernierEnvoiOuNull();
         $echanges = $demarche->getEchanges();
         $dernier = [] === $echanges ? null : $echanges[\count($echanges) - 1];
+        $statut = $demarche->getStatut();
+        $joursDAttente = $statut->enAttente() && null !== $dernierEnvoi
+            ? (int) $dernierEnvoi->getDate()->diff($aujourdhui->setTime(0, 0))->format('%r%a')
+            : null;
+
+        $precedente = $demarche->getPrecedente();
+        $precedente = null === $precedente ? null : ($this->service->visiblesParmi([$precedente])[0] ?? null);
 
         return [
             'id' => $demarche->getId(),
@@ -43,7 +65,8 @@ final readonly class SerialiseurDeDemarche
             'destinataire' => $demarche->getDestinataire(),
             'statut' => $demarche->getStatut()->value,
             'statutLibelle' => $demarche->getStatut()->libelle(),
-            'enAttente' => $demarche->getStatut()->enAttente(),
+            'enAttente' => $statut->enAttente(),
+            'attendUneReponse' => $statut->attendUneReponse(),
             'resultat' => $demarche->getResultat(),
             'personnes' => array_map(
                 static fn (PersonneConcernee $p): array => ['personId' => $p->getPersonId(), 'libelle' => $p->getPersonLabel()],
@@ -62,9 +85,17 @@ final readonly class SerialiseurDeDemarche
             'nombreDeMessages' => \count($echanges),
             'dernierEnvoiLe' => $dernierEnvoi?->getDate()->format('Y-m-d'),
             'dernierMessageLe' => $dernier?->getDate()->format('Y-m-d'),
-            'joursDAttente' => $demarche->getStatut()->enAttente() && null !== $dernierEnvoi
-                ? (int) $dernierEnvoi->getDate()->diff($aujourdhui->setTime(0, 0))->format('%r%a')
-                : null,
+            'joursDAttente' => $joursDAttente,
+            'aRelancer' => $statut->attendUneReponse() && null !== $joursDAttente && $joursDAttente >= self::JOURS_AVANT_RELANCE,
+            'precedente' => null === $precedente ? null : [
+                'id' => $precedente->getId(),
+                'statut' => $precedente->getStatut()->value,
+                'demandeeA' => $precedente->getDestinataire(),
+            ],
+            'suites' => array_map(
+                static fn (Demarche $suite): array => ['id' => $suite->getId(), 'statut' => $suite->getStatut()->value],
+                $this->service->visiblesParmi($demarche->getSuites()),
+            ),
             'peutSupprimer' => $this->service->peutSupprimer($demarche, $lecteur),
             'creeeLe' => $demarche->getCreatedAt()->format(\DATE_ATOM),
             'modifieeLe' => $demarche->getUpdatedAt()->format(\DATE_ATOM),

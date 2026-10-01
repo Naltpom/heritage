@@ -89,6 +89,31 @@ class Demarche
     #[ORM\OrderBy(['date' => 'ASC', 'id' => 'ASC'])]
     private Collection $echanges;
 
+    /**
+     * La démarche que celle-ci **reprend autrement** — révision du 2026-10-01.
+     *
+     * Une mairie refuse les demandes par courriel ; on lui écrit par la poste. C'est une
+     * **nouvelle** démarche — autre canal, autre texte, autre attente —, mais elle doit
+     * dire d'où elle vient : sans ce lien, la première reste « refusée » sans suite visible
+     * et quelqu'un la refait une troisième fois.
+     *
+     * Une auto-référence, en `ON DELETE SET NULL` : supprimer la première ne supprime pas
+     * la seconde, qui perd seulement le lien. Fixée à la création, jamais modifiée.
+     */
+    #[ORM\ManyToOne(targetEntity: self::class, inversedBy: 'suites')]
+    #[ORM\JoinColumn(name: 'precedente_id', nullable: true, onDelete: 'SET NULL')]
+    private ?Demarche $precedente = null;
+
+    /**
+     * Les démarches qui reprennent celle-ci. Côté inverse, en lecture seule : c'est
+     * {@see $precedente} qui s'écrit.
+     *
+     * @var Collection<int, Demarche>
+     */
+    #[ORM\OneToMany(targetEntity: self::class, mappedBy: 'precedente')]
+    #[ORM\OrderBy(['id' => 'ASC'])]
+    private Collection $suites;
+
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     private \DateTimeImmutable $createdAt;
 
@@ -111,6 +136,7 @@ class Demarche
         $this->auteurLibelle = $auteurLibelle;
         $this->personnes = new ArrayCollection();
         $this->echanges = new ArrayCollection();
+        $this->suites = new ArrayCollection();
         $this->createdAt = new \DateTimeImmutable();
         $this->updatedAt = $this->createdAt;
     }
@@ -192,6 +218,36 @@ class Demarche
         usort($echanges, static fn (Echange $a, Echange $b): int => [$a->getDate(), $a->getId() ?? \PHP_INT_MAX] <=> [$b->getDate(), $b->getId() ?? \PHP_INT_MAX]);
 
         return $echanges;
+    }
+
+    public function getPrecedente(): ?Demarche
+    {
+        return $this->precedente;
+    }
+
+    /** @return list<Demarche> */
+    public function getSuites(): array
+    {
+        return array_values($this->suites->toArray());
+    }
+
+    /**
+     * Rattache cette démarche à celle qu'elle reprend. Les deux côtés sont tenus, pour que
+     * la réponse relue dans la même requête dise déjà le lien.
+     */
+    public function reprendre(Demarche $precedente): void
+    {
+        $this->precedente = $precedente;
+        if (!$precedente->suites->contains($this)) {
+            $precedente->suites->add($this);
+        }
+    }
+
+    /** La démarche reprise est supprimée : celle-ci reste, sans le lien. */
+    public function oublierPrecedente(): void
+    {
+        $this->precedente?->suites->removeElement($this);
+        $this->precedente = null;
     }
 
     public function getCreatedAt(): \DateTimeImmutable

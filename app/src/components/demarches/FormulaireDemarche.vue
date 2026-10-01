@@ -6,6 +6,12 @@
  * enregistre une démarche au moment où l'on vient d'envoyer la demande, et son
  * texte est alors sous la main. Le demander à part ferait un second geste que
  * personne ne fait.
+ *
+ * **Refaire autrement** (`modele`) : après un refus ou un abandon, la nouvelle
+ * démarche part préremplie de l'ancienne — acte, forme, intitulé, commune,
+ * date, service, personnes — et porte le lien « suite de » (`precedenteId`).
+ * Seuls le canal et le texte changent d'ordinaire, et ils sont dans le premier
+ * message, laissé vide.
  */
 import { computed, ref } from 'vue'
 import {
@@ -16,6 +22,7 @@ import {
   type DetailDeDemarche,
   type MessageASaisir,
   type PersonneDeLaDemarche,
+  type ResumeDeDemarche,
 } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import ChampTexte from '@/components/base/ChampTexte.vue'
@@ -27,15 +34,18 @@ import {
   FORMES,
   NATURES,
   descriptionAEnvoyer,
+  descriptionPourRefaire,
   descriptionVide,
   erreursDuMessage,
   messageAEnvoyer,
   messageVide,
 } from './demarches'
 
-const { existante = null, personnesInitiales = [], suspendu = false } = defineProps<{
+const { existante = null, modele = null, personnesInitiales = [], suspendu = false } = defineProps<{
   /** Présente : on corrige sa description, sans premier message. */
   existante?: DetailDeDemarche | null
+  /** À la création : la démarche refusée ou abandonnée que celle-ci refait autrement. */
+  modele?: ResumeDeDemarche | null
   /** À la création depuis une fiche : la personne de la fiche, déjà désignée. */
   personnesInitiales?: PersonneDeLaDemarche[]
   suspendu?: boolean
@@ -45,7 +55,9 @@ const emit = defineEmits<{ enregistree: [demarche: DetailDeDemarche]; annuler: [
 
 const description = ref<DescriptionDeDemarche>(
   existante === null
-    ? descriptionVide(personnesInitiales.map((p) => p.personId))
+    ? modele !== null
+      ? descriptionPourRefaire(modele)
+      : descriptionVide(personnesInitiales.map((p) => p.personId))
     : {
         nature: existante.nature,
         forme: existante.forme,
@@ -56,7 +68,11 @@ const description = ref<DescriptionDeDemarche>(
         personIds: existante.personnes.map((p) => p.personId),
       },
 )
-const personnes = ref<PersonneDeLaDemarche[]>(existante === null ? [...personnesInitiales] : [...existante.personnes])
+const personnes = ref<PersonneDeLaDemarche[]>(
+  existante !== null ? [...existante.personnes] : modele !== null ? [...modele.personnes] : [...personnesInitiales],
+)
+/** Le lien « suite de » : seulement à la création, et seulement depuis une démarche refaite. */
+const precedenteId = existante === null && modele !== null ? modele.id : null
 const avecMessage = ref(existante === null)
 const message = ref<MessageASaisir>(messageVide())
 
@@ -89,7 +105,7 @@ async function enregistrer(): Promise<void> {
   try {
     const relue =
       existante === null
-        ? await creerDemarche(corps, avecMessage.value ? messageAEnvoyer(message.value) : null)
+        ? await creerDemarche(corps, avecMessage.value ? messageAEnvoyer(message.value) : null, precedenteId)
         : await decrireDemarche(existante.id, corps)
     emit('enregistree', relue)
   } catch (e) {
@@ -102,6 +118,11 @@ async function enregistrer(): Promise<void> {
 
 <template>
   <form class="flex flex-col gap-4" @submit.prevent="enregistrer">
+    <p v-if="precedenteId !== null && modele !== null" class="rounded-champ border border-ligne bg-fond p-2.5 text-sm text-attenue">
+      Suite de la démarche n° {{ modele.id }} ({{ modele.statutLibelle.toLowerCase() }}, demandée à {{ modele.destinataire }}).
+      Changez ce qui doit l’être — le service, le canal, le texte de la demande — puis enregistrez.
+    </p>
+    <p v-if="champs['precedenteId']" class="text-xs text-alerte">{{ champs['precedenteId'] }}</p>
     <div class="grid gap-3 sm:grid-cols-2">
       <div class="flex flex-col gap-1">
         <label class="text-sm font-medium" for="demarche-nature">Pièce demandée</label>

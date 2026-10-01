@@ -20,13 +20,26 @@ import { requeteApi } from './client'
 
 export type NatureDActe = 'naissance' | 'mariage' | 'deces' | 'autre'
 export type FormeDActe = 'copie_integrale' | 'extrait_filiation' | 'extrait_sans_filiation' | 'autre'
-export type StatutDeDemarche = 'envoyee' | 'relancee' | 'recue' | 'refusee' | 'sans_suite'
+/**
+ * `expediee` (révision du 2026-10-01) : la mairie a répondu « traité, l'acte
+ * part par la poste ». La démarche attend encore la pièce (`enAttente`), mais
+ * plus la mairie (`attendUneReponse` faux) : elle n'est jamais « à relancer ».
+ */
+export type StatutDeDemarche = 'envoyee' | 'relancee' | 'expediee' | 'recue' | 'refusee' | 'sans_suite'
 export type SensDeMessage = 'envoye' | 'recu'
 export type CanalDeMessage = 'courriel' | 'service_public' | 'courrier' | 'guichet' | 'telephone' | 'autre'
 
 export interface PersonneDeLaDemarche {
   personId: number
   libelle: string
+}
+
+/** Le lien « suite de » : la démarche reprise, en court. */
+export interface LienDeDemarche {
+  id: number
+  statut: StatutDeDemarche
+  /** Le service à qui elle avait été demandée. */
+  demandeeA: string
 }
 
 export interface ResumeDeDemarche {
@@ -41,7 +54,11 @@ export interface ResumeDeDemarche {
   destinataire: string
   statut: StatutDeDemarche
   statutLibelle: string
+  /** La pièce n'est pas encore là : envoyée, relancée ou expédiée. */
   enAttente: boolean
+  /** Le service n'a pas encore répondu : envoyée ou relancée — la seule
+   *  attente qui se relance. */
+  attendUneReponse: boolean
   resultat: string | null
   personnes: PersonneDeLaDemarche[]
   auteur: { libelle: string; estMoi: boolean }
@@ -54,6 +71,14 @@ export interface ResumeDeDemarche {
   dernierMessageLe: string | null
   /** Depuis le dernier envoi, tant que la démarche attend ; `null` sinon. */
   joursDAttente: number | null
+  /** Calculé par le serveur : sans réponse depuis un mois ou plus. Une
+   *  démarche expédiée par courrier ne l'est jamais. */
+  aRelancer: boolean
+  /** La démarche que celle-ci reprend autrement (« suite de »), si le lecteur
+   *  la voit. */
+  precedente: LienDeDemarche | null
+  /** Les démarches qui reprennent celle-ci, parmi celles que le lecteur voit. */
+  suites: Array<{ id: number; statut: StatutDeDemarche }>
   peutSupprimer: boolean
   creeeLe: string
   modifieeLe: string
@@ -120,13 +145,23 @@ export function lireDemarche(id: number, signal?: AbortSignal): Promise<DetailDe
   return requeteApi<DetailDeDemarche>(`/demarches/${id}`, signal === undefined ? {} : { signal })
 }
 
+/**
+ * `precedenteId` : la démarche que celle-ci **reprend autrement** — après un
+ * refus, par un autre canal. Une démarche que le lecteur ne voit pas est
+ * refusée en `422` sur ce champ.
+ */
 export function creerDemarche(
   description: DescriptionDeDemarche,
   premierMessage: MessageASaisir | null,
+  precedenteId: number | null = null,
 ): Promise<DetailDeDemarche> {
   return requeteApi<DetailDeDemarche>('/demarches', {
     methode: 'POST',
-    corps: premierMessage === null ? description : { ...description, premierMessage },
+    corps: {
+      ...description,
+      ...(premierMessage === null ? {} : { premierMessage }),
+      ...(precedenteId === null ? {} : { precedenteId }),
+    },
   })
 }
 
