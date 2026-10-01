@@ -24,6 +24,7 @@ import {
   optionsDeCreation,
   optionsDeRequete,
   reponseEnJson,
+  sansNuls,
   systemeDeLAgent,
   type IdentifiantBrut,
 } from './cleDAcces'
@@ -109,6 +110,30 @@ describe('options de création', () => {
     })
     vi.stubGlobal('PublicKeyCredential', Object.assign(function () {}, { parseCreationOptionsFromJSON: natif }))
     expect(lire(optionsDeCreation(CREATION).challenge)).toEqual([4, 5, 6])
+  })
+
+  it('ne transmet jamais un `null` au navigateur (Dashlane ne répond plus sinon)', () => {
+    // `parseCreationOptionsFromJSON` ferait de ce `null` la chaîne « null ».
+    const natif = vi.fn((o: unknown) => o as PublicKeyCredentialCreationOptions)
+    vi.stubGlobal('PublicKeyCredential', Object.assign(function () {}, { parseCreationOptionsFromJSON: natif }))
+    const avecNul = {
+      ...CREATION,
+      authenticatorSelection: { ...CREATION.authenticatorSelection, authenticatorAttachment: null },
+    } as unknown as typeof CREATION
+    optionsDeCreation(avecNul)
+    const recu = natif.mock.calls[0]![0] as { authenticatorSelection: Record<string, unknown> }
+    expect('authenticatorAttachment' in recu.authenticatorSelection).toBe(false)
+    expect(recu.authenticatorSelection).toEqual({ residentKey: 'required', userVerification: 'required' })
+  })
+})
+
+describe('sansNuls', () => {
+  it('retire les clés à null à toute profondeur, garde le reste', () => {
+    expect(sansNuls({ a: null, b: 1, c: { d: null, e: [] }, f: [{ g: null, h: 'x' }] })).toEqual({
+      b: 1,
+      c: { e: [] },
+      f: [{ h: 'x' }],
+    })
   })
 })
 
