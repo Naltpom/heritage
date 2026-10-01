@@ -11,7 +11,10 @@ use App\Module\Proposal\Contract\FiliationEtablie;
 use App\Module\Proposal\Contract\FiliationIncompatible;
 use App\Module\Proposal\Contract\FiliationPrevue;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
+use App\Module\Proposal\Contract\LienARetirer;
+use App\Module\Proposal\Contract\LienRetire;
 use App\Module\Proposal\Contract\NoteAcreer;
+use App\Module\Proposal\Contract\RetraitDeLien;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 
@@ -388,6 +391,60 @@ interface PortArbre
      * qui le demande.
      */
     public function supprimerFamilleVide(int $familleId): ?string;
+
+    /**
+     * Ce que défaire ce lien ferait — **aucune écriture**, appelée au dépôt, à la lecture
+     * d'administration et au contrôle préalable.
+     *
+     * ## Pourquoi c'est l'arbre qui mesure
+     *
+     * Parce que l'effet dépend de ce que seul `Tree` sait lire : qui sont les époux de
+     * l'union et à quelle place, quels enfants elle compte dans `tree_child`, si elle
+     * porte une date, une note, une citation ou un fait, si le couple restant entrerait en
+     * collision avec une famille déjà là (`uniq_tree_family_couple`, `NULLS NOT
+     * DISTINCT`), et où un enfant qui ne perd qu'un parent atterrirait chez l'autre — les
+     * règles de {@see etablirFiliation()}, appliquées comme si l'enfant avait déjà quitté
+     * la famille.
+     *
+     * `$familleProtegee` est ce que `Tree` ne voit pas : un média rattaché à l'union, ou —
+     * à la validation seulement — une autre demande en attente qui la désigne. Une famille
+     * protégée n'est jamais annoncée supprimée.
+     *
+     * Rend `null` quand la famille **ou** la personne n'existe plus : c'est le cas
+     * `cible_disparue`, une caducité et non une panne. Un lien qui n'existe pas (ou plus)
+     * entre les deux rend une mesure **bloquée**, pas `null` : c'est elle qui fait la
+     * différence entre « la ligne a disparu » et « le lien a déjà été défait ».
+     */
+    public function prevoirRetraitDeLien(LienARetirer $lien, bool $familleProtegee): ?RetraitDeLien;
+
+    /**
+     * Défait le lien, et rend ce qui a été réellement fait.
+     *
+     * ## Ce qu'elle écrit
+     *
+     * - `enfant_de` : les filiations de l'enfant dans cette famille partent. Avec un
+     *   `parentId` et un second époux, l'enfant est ensuite rattaché à ce dernier par
+     *   {@see etablirFiliation()} — jamais par une famille créée à côté, ce qui
+     *   reconstruirait les familles parentales doublées que cette méthode existe pour
+     *   empêcher ;
+     * - `conjoint_de` : la place de l'époux dans l'union est vidée, et l'union garde ses
+     *   enfants, ses dates et ses notes ;
+     * - dans les deux cas, l'union est **supprimée** si et seulement si elle ne porte plus
+     *   rien — revérifié ici, dans la transaction.
+     *
+     * ## Les refus, qui sont des pannes et non des caducités
+     *
+     * La famille ou la personne a disparu, ou la mesure est bloquée : l'implémentation
+     * **lève**. Le contrôle préalable a déjà rendu la demande caduque dans ces cas, et
+     * arriver ici veut dire qu'un chemin l'a contourné. Elle laisse aussi remonter
+     * {@see FiliationIncompatible}, que l'appelant traduit comme un ajout le fait.
+     *
+     * Appelée **dans la transaction** du validateur ; elle `flush()` sans en ouvrir.
+     *
+     * @throws \RuntimeException     si la ligne a disparu ou si le retrait est bloqué
+     * @throws FiliationIncompatible si l'enfant ne peut pas rester celui de l'autre parent
+     */
+    public function retirerLien(LienARetirer $lien, bool $familleProtegee): LienRetire;
 
     /**
      * L'empreinte de l'arbre (§ 2.3 du modèle), recalculée depuis la base.

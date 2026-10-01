@@ -2129,7 +2129,7 @@ où oublier le message obligatoire au refus** (ADR 0004).
 
 | Champ | Rôle |
 |---|---|
-| `kind` | Une des neuf valeurs de `RequestKind` (§ 5.7). |
+| `kind` | Une des dix valeurs de `RequestKind` (§ 5.7). |
 | `message` | Le mot du demandeur. Facultatif — **sauf pour `suppression_personne`**, où il est obligatoire et où il n'a pas d'autre place (§ 6.4 quater). |
 | `soumettre` | `true` ⇒ la demande naît en `en_attente` (`submitted_at` posé, notification à l'administrateur). `false` ⇒ `brouillon`, visible de son seul auteur, absent de la file. Défaut `true`. |
 
@@ -2843,6 +2843,114 @@ plutôt que de le traiter à moitié.
 explicite » ; c'est le refus qui est livré. Réattribuer les unions d'une fiche à une autre
 est la moitié structurelle d'une fusion, et elle échoue sur le même écueil : le couple
 réattribué peut entrer en collision avec une union existante, au milieu de la transaction.
+
+### 6.4 quinquies `kind = retrait_lien` — défaire un lien de parenté
+
+**Le pendant de `ajout_lien`, qui n'existait pas.** `OpKind::RetraitLien` est déclaré depuis la
+première migration, et rien ne l'appliquait : un enfant rattaché au mauvais couple, un
+conjoint saisi deux fois ne se défaisaient qu'en base, à la main — le chemin d'écriture sans
+demande, sans révision et sans relecture que l'ADR 0004 interdit. C'est la **dixième** nature.
+
+```json
+{
+  "kind": "retrait_lien",
+  "message": "Acte de naissance relu : Pivoine est la fille de Marne seule.",
+  "soumettre": true,
+  "targetKind": "personne",
+  "targetId": 17,
+  "retraits": [
+    { "kind": "enfant_de", "personId": 17, "familyId": 4, "parentId": 30 },
+    { "kind": "conjoint_de", "personId": 52, "familyId": 9 }
+  ]
+}
+```
+
+| Clé de `retraits[i]` | Obligatoire | Ce qu'elle porte |
+|---|:-:|---|
+| `kind` | **oui** | `enfant_de` ou `conjoint_de`. `parent_de` ⇒ `422` : « X n'est plus le parent de C » s'écrit depuis l'enfant, `enfant_de` + `parentId` |
+| `personId` | **oui** | `enfant_de` : l'enfant ; `conjoint_de` : l'époux qui **quitte** l'union |
+| `familyId` | **oui** | la famille de parents de l'enfant, ou l'union |
+| `parentId` | non | `enfant_de` seulement : **le** parent que l'enfant perd. Absent, l'enfant perd les deux parents du couple |
+
+**Plusieurs liens dans une demande** : c'est le regroupement que dépose le mode édition de la
+fiche — une décision pour l'administrateur, pas cinq. Le même lien deux fois ⇒ `422`.
+
+`targetKind` vaut `personne` (autre chose ⇒ `422`) ; `targetId` est facultatif et, comme pour
+`ajout_lien`, doit être **une des personnes que les liens touchent** — l'enfant, le parent nommé,
+un époux d'une des familles —, sinon `422`. Absent, c'est la personne du premier retrait.
+
+**Le corps ne porte aucun `ops`.** La demande dit ce qu'elle vise ; le serveur **mesure** ce que
+défaire chaque lien ferait, et écrit cette mesure dans l'op qu'il fabrique — un op par lien,
+`opKind: "retrait_lien"`, `subjectKind: "famille"`, `subjectId` = la famille, `baseVersion` =
+sa version, `valueKind: "lien"`, `newValue: null`, et `oldValue` :
+
+```json
+{
+  "nature": "enfant_de",
+  "personneId": 17, "personneLibelle": "Pivoine Sureau",
+  "familleId": 4, "familleLibelle": "Cobalt Sureau × Marne Bourrache",
+  "parentId": 30, "parentLibelle": "Cobalt Sureau",
+  "conjointRestant": null,
+  "rattacheA": "Marne Bourrache",
+  "enfantsRestants": 1,
+  "familleSupprimee": false,
+  "blocage": null
+}
+```
+
+**L'ordre des clés est un contrat**, comme pour l'inventaire d'une suppression (§ 6.4 quater) :
+la comparaison porte sur le tableau entier.
+
+#### Ce que fait chaque retrait
+
+| Retrait | Effet |
+|---|---|
+| `enfant_de` sans `parentId` | l'enfant quitte la famille : il n'est plus l'enfant d'**aucun** des deux époux |
+| `enfant_de` avec `parentId`, union à deux époux | l'enfant quitte la famille, puis est rattaché à **l'autre** parent par les règles de `etablirFiliation()` — la famille qu'il a déjà, ou `(∅, autre)` trouvée ou créée : jamais de familles parentales doublées (demandes 714 → 727). `rattacheA` l'annonce avant le clic |
+| `conjoint_de` | la place de l'époux dans l'union est vidée ; l'union garde ses enfants, ses dates, ses notes. `enfantsRestants` dit combien d'enfants n'y gardent que `conjointRestant` pour parent |
+
+**Une famille qui porte des données n'est jamais supprimée.** L'union ne disparaît
+(`familleSupprimee: true`) que si, après le retrait, elle ne porte **plus rien** : aucun autre
+enfant, aucune date d'union ni de rupture, aucune note, citation ni fait, aucun média, et **au
+plus un époux** — `X × Y` sans enfant reste une union : rien dans « il n'est pas leur enfant » ne
+dit qu'ils n'étaient pas mariés. Une autre demande en attente qui désigne l'union la protège aussi,
+à la validation seulement (elle ne peut que faire **conserver** une union annoncée supprimée,
+jamais l'inverse).
+
+#### Les refus, au dépôt
+
+| Cas | Réponse |
+|---|---|
+| le lien n'existe pas — pas enfant de cette famille, pas époux de cette union, `parentId` qui n'en est pas un époux | `422` sur `retraits[i]`, phrase de l'arbre |
+| **le seul époux** d'une union qui porte des données | `422` : l'union resterait sans personne (`ck_tree_family_au_moins_un_epoux`) |
+| le couple restant **existe déjà** (`(X, ∅)` à côté de `(X, Y)`) | `422` : `uniq_tree_family_couple` porte `NULLS NOT DISTINCT`. On ne fusionne pas deux familles à la place de l'administrateur |
+| l'enfant ne peut pas rester celui de l'autre parent (règle 4 de `etablirFiliation`) | `422`, la phrase de l'incompatibilité |
+| la famille ou la personne n'existe pas | `404` |
+
+#### À la validation — caducité et rejeu
+
+À la lecture d'administration (§ 6.7), l'op porte `valeurCourante` — la mesure **d'aujourd'hui**
+— et `libelleDiff`, la phrase prête à afficher : « Lien retiré : Pivoine Sureau n'est plus enfant
+de Cobalt Sureau ; reste enfant de « Marne Bourrache ». ». **Si les deux mesures diffèrent,
+`resolutionPrevue` vaut `caducite`** et la validation rend `409 demande_caduque`, avec
+`champs[].field` = `"retrait_lien"` : un enfant arrivé dans l'union, une date posée, un lien déjà
+défait par une autre demande changent ce que le retrait ferait. Une famille dont seule la
+`version` a bougé, la mesure restant la même, se **rejoue**. Une famille disparue rend
+`cible_disparue`.
+
+#### Ce que la validation écrit
+
+Par lien : une révision `lien_retire` sur **la famille** (`versionBefore`, `versionAfter` —
+`null` si elle est supprimée), une `lien_retire` sur **chaque fiche** que le lien reliait —
+l'enfant et ses parents, ou les deux époux — pour que l'historique de la fiche (§ 6.11) le
+montre, une `suppression` sur la famille quand elle part, et, quand l'enfant est rattaché à
+l'autre parent, les révisions d'un ajout (`creation` ou `modification` de la famille d'arrivée,
+`lien_ajoute`). `changes` vaut `{"lien": {"avant": "<la phrase>", "apres": null}}`.
+
+#### `GET /api/demandes/{id}/refaire`
+
+Rend `retraits` — les mêmes liens, **sans leur mesure** : c'est le serveur qui remesure, sur
+l'arbre d'aujourd'hui, qui est la raison même de la reprise.
 
 ### 6.5 Une demande vue par son auteur
 

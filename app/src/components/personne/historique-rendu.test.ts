@@ -174,6 +174,15 @@ describe('historique.ts — une seule frise, du plus récent au plus ancien', ()
     ])
   })
 
+  it('un lien retiré se lit par sa phrase, telle que l’administrateur l’a lue', () => {
+    expect(
+      lignesDeRevision({
+        operation: 'lien_retire',
+        changes: { lien: { avant: 'Lien retiré : Pivoine Sureau n’est plus enfant de Cobalt Sureau.', apres: null } },
+      }),
+    ).toEqual(['Lien retiré : Pivoine Sureau n’est plus enfant de Cobalt Sureau.'])
+  })
+
   it('une note se résume à son début, coupé à un mot', () => {
     const long = 'mot '.repeat(80)
     const court = extrait(long, 40)

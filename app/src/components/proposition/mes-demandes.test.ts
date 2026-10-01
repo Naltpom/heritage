@@ -217,13 +217,15 @@ describe('refaire une suppression', () => {
 })
 
 describe('les libellés, et l’exhaustivité qui les tient', () => {
-  it('nomme les neuf natures du contrat', () => {
+  it('nomme les dix natures du contrat', () => {
     // `Record<NatureDemande, string>` fait échouer la **compilation** le jour où
     // le contrat en ajoute une : ce test garde le compte, le typeur garde la
-    // liste. Neuf depuis `suppression_personne`, la première qui retire.
-    expect(Object.keys(LIBELLES_NATURE)).toHaveLength(9)
+    // liste. Neuf depuis `suppression_personne`, la première qui retire ; dix
+    // depuis `retrait_lien`, que dépose le mode édition de la fiche.
+    expect(Object.keys(LIBELLES_NATURE)).toHaveLength(10)
     expect(LIBELLES_NATURE.creation_personne).toBe('Ajout d’une personne')
     expect(LIBELLES_NATURE.suppression_personne).toBe('Suppression d’une fiche')
+    expect(LIBELLES_NATURE.retrait_lien).toBe('Retrait d’un lien')
   })
 
   it('donne une pastille aux six statuts, et un libellé aux deux que la pastille ignore', () => {

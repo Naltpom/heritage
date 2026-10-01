@@ -17,9 +17,11 @@ import PersonneView from '@/views/PersonneView.vue'
  *  - l'onglet par défaut est Identité, et `?onglet=` est lu **sur la vue**, avec
  *    une route simulée, parce que c'est elle qui lit la requête ;
  *  - une fiche réduite n'affiche ni onglets ni barre d'action ;
- *  - un seul bouton « Proposer », dont le menu mène à l'assistant, au dépôt et,
- *    derrière un filet, à la demande de suppression ; la barre d'action mobile
- *    porte le même bouton, et se remplit par ce qui est permis.
+ *  - quatre icônes à la place du bouton « Proposer » (02/10/2026) — poubelle,
+ *    assistant, document, crayon —, chacune nommée (`aria-label`, `title`), dans
+ *    le bandeau desktop comme dans la barre d'action mobile, qui se remplit par
+ *    ce qui est permis. Le mode édition lui-même est éprouvé par
+ *    `edition.test.ts`, `edition-session.test.ts` et `edition-rendu.test.ts`.
  *
  * (Le calque « à côté » de la valeur validée est éprouvé dans
  * `fiche-rendu.test.ts`, sur `IdentiteFiche`.)
@@ -160,6 +162,11 @@ function cibleDuGeste(html: string, geste: string): unknown {
   return JSON.parse(trouve[1].replaceAll('&quot;', '"'))
 }
 
+/** La balise ouvrante du premier élément qui porte ce `data-geste`. */
+function baliseDuGeste(html: string, geste: string): string {
+  return new RegExp(`<(a|button)[^>]*data-geste="${geste}"[^>]*>`).exec(html)?.[0] ?? ''
+}
+
 beforeEach(() => {
   etat.regime.value = 'membre'
   etat.vueEmpruntee.value = null
@@ -288,7 +295,7 @@ describe('La vue — l’onglet par défaut et `?onglet=`', () => {
   })
 })
 
-describe('PageFiche — bandeau, onglets, bouton Proposer', () => {
+describe('PageFiche — bandeau, onglets, icônes', () => {
   it('affiche la ligne de dates du serveur, sans la recomposer', async () => {
     const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
     expect(html).toContain('1901-1909 – 1987')
@@ -333,51 +340,44 @@ describe('PageFiche — bandeau, onglets, bouton Proposer', () => {
     expect(html.replace(/<!--.*?-->/gs, '')).not.toMatch(/demandes? en attente/)
   })
 
-  it('un seul bouton « Proposer » : plus de « Proposer une modification » ni de ⋯', async () => {
+  it('quatre icônes à la place de « Proposer », dans le bandeau et dans la barre du bas', async () => {
     const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
+    expect(html).not.toContain('data-geste="proposer"')
+    expect(html).not.toContain('role="menu"')
     expect(html).not.toContain('Proposer une modification')
-    expect(html).not.toContain('⋯')
-    // Le bandeau desktop et la barre mobile portent le même bouton — l'un est
-    // caché sous `md`, l'autre au-dessus — et il n'y en a pas de troisième.
-    expect(html.match(/data-geste="proposer"/g)).toHaveLength(2)
+    // Le bandeau desktop et la barre mobile portent les mêmes icônes — l'une est
+    // cachée sous `md`, l'autre au-dessus — et il n'y en a pas de troisième jeu.
+    for (const geste of ['demander-suppression', 'assistant', 'joindre-document', 'editer']) {
+      expect(html.match(new RegExp(`data-geste="${geste}"`, 'g'))).toHaveLength(2)
+    }
+    // Pas encore en édition.
+    expect(html).not.toContain('data-mode-edition')
+    expect(html).not.toContain('data-geste="corriger"')
   })
 
-  it('le menu Proposer mène à l’assistant, au dépôt et à la suppression', async () => {
+  it('chaque icône a un nom : aria-label et title', async () => {
     const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
-    for (const libelle of [
-      'Corriger ou ajouter un proche',
-      'Joindre un document',
-      'Demander la suppression',
-    ]) {
-      expect(html).toContain(libelle)
+    for (const geste of ['demander-suppression', 'assistant', 'joindre-document', 'editer']) {
+      const balise = baliseDuGeste(html, geste)
+      expect(balise).toMatch(/aria-label="[^"]+"/)
+      expect(balise).toMatch(/title="[^"]+"/)
     }
+    expect(baliseDuGeste(html, 'editer')).toContain('aria-label="Corriger la fiche"')
+    expect(baliseDuGeste(html, 'demander-suppression')).toContain('aria-label="Demander la suppression de cette fiche"')
+  })
 
-    const assistant = { name: 'proposition.creation', query: { personne: '17' } }
-    expect(cibleDuGeste(html, 'corriger')).toEqual(assistant)
-    // Une seule entrée vers l'assistant : deux libellés pour une même porte, non.
-    expect(html).not.toContain('data-geste="ajouter-proche"')
+  it('les icônes mènent à la suppression, à l’assistant pré-ciblé et au dépôt ; le crayon reste sur la fiche', async () => {
+    const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
+    expect(cibleDuGeste(html, 'demander-suppression')).toEqual({ name: 'proposition.suppression', params: { id: 17 } })
+    expect(cibleDuGeste(html, 'assistant')).toEqual({ name: 'proposition.creation', query: { personne: '17' } })
     expect(cibleDuGeste(html, 'joindre-document')).toEqual({
       name: 'personne.detail',
       params: { id: 17 },
       query: { onglet: 'sources' },
       hash: '#depot',
     })
-    expect(cibleDuGeste(html, 'demander-suppression')).toEqual({
-      name: 'proposition.suppression',
-      params: { id: 17 },
-    })
-  })
-
-  it('le menu est fermé au rendu, et la suppression vient en dernier, derrière un filet', async () => {
-    const html = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
-    expect(html).toContain('aria-expanded="false"')
-    const menu = /<div[^>]*role="menu"[^>]*>/.exec(html)?.[0] ?? ''
-    expect(menu).toContain('display:none')
-
-    const contenu = html.slice(html.indexOf('role="menu"'))
-    const suppression = contenu.indexOf('data-geste="demander-suppression"')
-    expect(suppression).toBeGreaterThan(contenu.indexOf('data-geste="joindre-document"'))
-    expect(suppression).toBeGreaterThan(contenu.indexOf('data-geste="corriger"'))
+    // Le crayon est un bouton, pas un lien : la fiche elle-même devient le formulaire.
+    expect(baliseDuGeste(html, 'editer')).toMatch(/^<button/)
   })
 
   it('la barre d’action et le bouton se remplissent par ce qui est permis', async () => {
@@ -397,7 +397,8 @@ describe('PageFiche — bandeau, onglets, bouton Proposer', () => {
     etat.vueEmpruntee.value = { memberId: 7, memberLabel: 'Cobalt Romarin' }
     const empruntee = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
     expect(empruntee).not.toContain('data-barre-action')
-    expect(empruntee).not.toContain('data-geste="proposer"')
+    expect(empruntee).not.toContain('data-geste="editer"')
+    expect(empruntee).not.toContain('data-actions-fiche')
   })
 })
 
@@ -427,7 +428,7 @@ describe('CarteRestreinte — ni onglets, ni barre d’action', () => {
     expect(html).not.toContain('data-onglet')
     expect(html).not.toContain('data-barre-action')
     expect(html).not.toContain('data-geste=')
-    expect(html).not.toContain('aria-haspopup="menu"')
+    expect(html).not.toContain('data-actions-fiche')
   })
 
   it('ne dit pas « votre cercle » à un compte en attente, qui n’en a pas', async () => {

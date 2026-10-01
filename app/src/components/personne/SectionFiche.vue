@@ -8,15 +8,30 @@
  * enchaîne plusieurs panneaux dans une colonne, et des titres discrets s'y
  * lisent mieux que des barres. Le titre reste un `<h2>`, pour la structure que
  * lit un lecteur d'écran.
+ *
+ * `edition` le passe au violet du mode édition (`--color-edition`) : un liseré à
+ * gauche et un fond teinté, les mêmes que l'en-tête. C'est la seule différence
+ * visuelle entre lire la fiche et la corriger, et elle doit se voir sans lire.
  */
-const { titre } = defineProps<{ titre: string }>()
+const { titre, edition = false } = defineProps<{ titre: string; edition?: boolean }>()
 </script>
 
 <template>
   <section
-    class="flex flex-col gap-3 rounded-panneau border border-ligne bg-panneau px-5 py-4 max-md:px-4 max-md:py-3.5"
+    class="flex flex-col gap-3 rounded-panneau border px-5 py-4 max-md:px-4 max-md:py-3.5"
+    :class="
+      edition
+        ? 'border-edition-bord border-l-4 border-l-edition bg-edition-doux'
+        : 'border-ligne bg-panneau'
+    "
+    :data-edition="edition ? '' : undefined"
   >
-    <h2 class="m-0 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">{{ titre }}</h2>
+    <h2
+      class="m-0 text-[11px] font-semibold tracking-[.08em] uppercase"
+      :class="edition ? 'text-edition' : 'text-attenue'"
+    >
+      {{ titre }}
+    </h2>
     <slot />
   </section>
 </template>

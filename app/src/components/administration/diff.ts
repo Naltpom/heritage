@@ -62,6 +62,12 @@ const LIBELLES_DE_CHAMP: Record<string, string> = {
   marriage: 'Mariage',
   divorce: 'Séparation',
   divorced: 'Séparés',
+  // La clé des révisions d'un retrait de lien (§ 6.4 quinquies) : `changes.lien`
+  // porte la phrase de ce qui a été défait.
+  lien: 'Lien',
+  filiation: 'Filiation',
+  rattachement: 'Rattachement',
+  couple: 'Union',
 }
 
 /** Le nom lisible d'un champ, ou le nom technique si on ne le connaît pas. */
@@ -168,6 +174,13 @@ export function formaterValeur(valeur: ValeurOp | undefined): string {
         .concat(mentionDePortee(valeur['scope']))
     }
 
+    // ── Un lien retiré (`retrait_lien`) : la mesure du serveur ────────────
+    // On en refait la phrase depuis ses libellés, jamais depuis des identifiants :
+    // la charge de l'auteur ne porte pas `libelleDiff`, et « famille 104 » ne se
+    // relit pas.
+    const retrait = phraseDeRetrait(valeur)
+    if (retrait !== null) return retrait
+
     // ── Un document (`ajout_media`) ───────────────────────────────────
     // La légende, ou le genre à défaut. **Jamais l'empreinte seule** : un sha256 ne
     // se relit pas, et l'identifiant non plus. L'image elle-même est rendue par
@@ -183,6 +196,49 @@ export function formaterValeur(valeur: ValeurOp | undefined): string {
   }
 
   return VIDE
+}
+
+/**
+ * La phrase d'un lien retiré, depuis la mesure qu'en a prise le serveur
+ * (`old_value` d'un op `retrait_lien`, § 6.4 quinquies) — ou `null` si la
+ * valeur n'en est pas une.
+ *
+ * La version du serveur (`libelleDiff`) l'emporte quand elle est là ; celle-ci
+ * sert la charge de l'auteur, qui n'en porte pas, et dit la même chose avec les
+ * mêmes libellés.
+ */
+export function phraseDeRetrait(valeur: unknown): string | null {
+  if (!estObjet(valeur)) return null
+  const nature = valeur['nature']
+  const personne = chaineNonVide(valeur['personneLibelle'])
+  const famille = chaineNonVide(valeur['familleLibelle'])
+  if ((nature !== 'enfant_de' && nature !== 'conjoint_de') || personne === null || famille === null) {
+    return null
+  }
+
+  const parent = chaineNonVide(valeur['parentLibelle'])
+  const tete =
+    nature === 'conjoint_de'
+      ? `${personne} ne fait plus partie de l’union « ${famille} »`
+      : parent !== null
+        ? `${personne} n’est plus enfant de ${parent}`
+        : `${personne} n’est plus enfant de « ${famille} »`
+
+  const suites: string[] = []
+  const rattache = chaineNonVide(valeur['rattacheA'])
+  if (rattache !== null) suites.push(`reste enfant de « ${rattache} »`)
+  const enfants = valeur['enfantsRestants']
+  const reste = chaineNonVide(valeur['conjointRestant'])
+  if (nature === 'conjoint_de' && typeof enfants === 'number' && enfants > 0 && reste !== null) {
+    suites.push(
+      enfants === 1
+        ? `son enfant n’y garde que ${reste} pour parent`
+        : `ses ${enfants} enfants n’y gardent que ${reste} pour parent`,
+    )
+  }
+  if (valeur['familleSupprimee'] === true) suites.push('l’union, qui ne porte plus rien, est supprimée')
+
+  return [tete, ...suites].join(' ; ')
 }
 
 /**
@@ -227,19 +283,24 @@ export function ligneDeDiff(op: OpDemande): LigneDiff {
   // Le libellé du serveur d'abord — il porte le contexte et les valeurs déjà
   // formatées. La table française n'est qu'un repli pour la charge de l'auteur,
   // qui n'en fournit pas.
+  const retrait = op.opKind === 'retrait_lien'
   const libelle =
     typeof op.libelleDiff === 'string' && op.libelleDiff.length > 0
       ? op.libelleDiff
-      : libelleDeChamp(op.field)
+      : retrait
+        ? 'Lien retiré'
+        : libelleDeChamp(op.field ?? '')
 
   return {
     seq: op.seq,
-    field: op.field,
+    field: op.field ?? op.opKind,
     libelle,
     // Absente (et non `null`) : la valeur d'avant est MASQUÉE à l'auteur — une
     // demande de l'assistant sur une personne hors de son cercle (§ 1.3).
     ancienne: 'oldValue' in op ? formaterValeur(op.oldValue) : '(valeur masquée)',
-    proposee: formaterValeur(op.newValue),
+    // Un retrait n'a pas d'« après » : le lien n'est plus. « (vide) » laisserait
+    // croire à une valeur effacée.
+    proposee: retrait ? '(retiré)' : formaterValeur(op.newValue),
     // `'valeurCourante' in op` et non `op.valeurCourante !== undefined` : la
     // distinction absent / null porte une règle, ici comme ailleurs (§ 1.3).
     courante: 'valeurCourante' in op ? formaterValeur(op.valeurCourante) : null,

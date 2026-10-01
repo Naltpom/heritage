@@ -6,6 +6,8 @@ namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
+use App\Module\Proposal\Contract\LienARetirer;
+use App\Module\Proposal\Contract\RetraitDeLien;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
 use App\Module\Proposal\Entity\DraftLink;
@@ -73,6 +75,7 @@ final readonly class AnalyseDeDemande
         private NormaliseurDeValeur $normaliseur,
         private SurfaceEditable $surface,
         private InventaireDeLaSuppression $inventaire,
+        private MesureDesRetraits $retraits,
     ) {
     }
 
@@ -381,6 +384,16 @@ final readonly class AnalyseDeDemande
             return null === $sujet ? null : $this->inventaire->de($sujet)?->versJson();
         }
 
+        if (OpKind::RetraitLien === $op->getOpKind()) {
+            // La mesure **d'aujourd'hui** : ce que défaire ce lien ferait maintenant —
+            // union conservée ou supprimée, enfants qui ne garderaient qu'un parent, lien
+            // déjà défait par quelqu'un d'autre. C'est elle que l'écran d'administration
+            // affiche à côté de la mesure du dépôt.
+            $lien = $this->lienARetirer($op);
+
+            return null === $lien ? null : $this->retraits->de($lien)?->versJson();
+        }
+
         $champ = $op->getField();
 
         if (OpKind::Champ !== $op->getOpKind() || null === $champ) {
@@ -397,7 +410,7 @@ final readonly class AnalyseDeDemande
     /**
      * La valeur de cet op a-t-elle bougé sous les pieds de son auteur ?
      *
-     * ── Deux natures d'op se comparent, et pas les six autres ────────────────────────
+     * ── Trois natures d'op se comparent, et pas les six autres ───────────────────────
      *
      * `champ` se compare parce que c'est tout ce qu'elle est : une ancienne valeur et une
      * nouvelle. `suppression_personne` se compare pour une raison différente et plus
@@ -411,6 +424,11 @@ final readonly class AnalyseDeDemande
      * bon sens de l'erreur — une suppression qu'on redemande coûte un clic, une
      * suppression qui emporte une ligne non annoncée coûte la ligne.
      *
+     * `retrait_lien` se compare pour la même raison que la suppression : sa mesure dit ce
+     * que le retrait **fera** — l'union conservée ou supprimée, les enfants qui ne
+     * garderont qu'un parent —, et un enfant arrivé ou une date posée depuis le dépôt lui
+     * ferait faire autre chose que ce que l'administrateur a lu.
+     *
      * Les six autres natures ne se comparent pas : elles **ajoutent**, et ce qu'elles
      * ajoutent n'existe pas encore. Il n'y a rien à confronter à l'état courant.
      */
@@ -419,6 +437,7 @@ final readonly class AnalyseDeDemande
         return match ($op->getOpKind()) {
             OpKind::Champ => $valeurCourante !== $this->normaliserStocke($op),
             OpKind::SuppressionPersonne => $valeurCourante !== $this->inventaireStocke($op),
+            OpKind::RetraitLien => $valeurCourante !== $this->retraitStocke($op),
             default => false,
         };
     }
@@ -442,6 +461,35 @@ final readonly class AnalyseDeDemande
 
         /* @var array<string, mixed> $stocke */
         return InventaireDeSuppression::depuisJson($stocke)->versJson();
+    }
+
+    /**
+     * La mesure du dépôt d'un retrait de lien, repassée par son propre constructeur —
+     * même détour, même raison que {@see inventaireStocke()}.
+     */
+    private function retraitStocke(ChangeRequestOp $op): mixed
+    {
+        $stocke = $op->getOldValue();
+
+        if (!\is_array($stocke)) {
+            return null;
+        }
+
+        /* @var array<string, mixed> $stocke */
+        return RetraitDeLien::depuisJson($stocke)->versJson();
+    }
+
+    /** Le lien qu'un op `retrait_lien` désigne, relu depuis sa mesure du dépôt. */
+    private function lienARetirer(ChangeRequestOp $op): ?LienARetirer
+    {
+        $stocke = $op->getOldValue();
+
+        if (!\is_array($stocke)) {
+            return null;
+        }
+
+        /** @var array<string, mixed> $stocke */
+        return RetraitDeLien::depuisJson($stocke)->lien();
     }
 
     /**
@@ -480,6 +528,18 @@ final readonly class AnalyseDeDemande
             $source = $courant ?? $stocke;
 
             return InventaireDeSuppression::depuisJson($source)->enUneLigne();
+        }
+
+        if (OpKind::RetraitLien === $op->getOpKind()) {
+            // La phrase que l'administrateur lit avant de cliquer, composée depuis la
+            // mesure courante quand elle existe — la même sera journalisée après.
+            $courant = \is_array($valeurCourante) ? $valeurCourante : null;
+            $stocke = \is_array($op->getOldValue()) ? $op->getOldValue() : [];
+
+            /** @var array<string, mixed> $source */
+            $source = $courant ?? $stocke;
+
+            return RetraitDeLien::depuisJson($source)->enUneLigne();
         }
 
         $champ = $op->getField();

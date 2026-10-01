@@ -10,7 +10,10 @@ use App\Module\Proposal\Contract\CitationAcreer;
 use App\Module\Proposal\Contract\FiliationEtablie;
 use App\Module\Proposal\Contract\FiliationPrevue;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
+use App\Module\Proposal\Contract\LienARetirer;
+use App\Module\Proposal\Contract\LienRetire;
 use App\Module\Proposal\Contract\NoteAcreer;
+use App\Module\Proposal\Contract\RetraitDeLien;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 
@@ -124,6 +127,16 @@ final readonly class ArbreNonBranche implements PortArbre
     }
 
     public function supprimerFamilleVide(int $familleId): ?string
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    public function prevoirRetraitDeLien(LienARetirer $lien, bool $familleProtegee): ?RetraitDeLien
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    public function retirerLien(LienARetirer $lien, bool $familleProtegee): LienRetire
     {
         throw new \LogicException(self::MESSAGE);
     }

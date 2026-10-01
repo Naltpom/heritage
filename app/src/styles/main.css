@@ -141,6 +141,16 @@
   --h-cadeau-texte: #ffffff;
   --h-cadeau-doux: color-mix(in srgb, var(--h-cadeau) 12%, transparent);
 
+  /* Le violet du MODE ÉDITION de la fiche (crayon) : liseré et fond teinté des
+     panneaux qu'on est en train de corriger. Un violet à part, plus froid que celui
+     du cadeau et jamais employé ailleurs : l'œil doit savoir d'un coup que la fiche
+     n'est plus en lecture — et qu'il est en train d'écrire une demande, pas l'arbre.
+     Les teintes dérivées passent par `color-mix`, comme celles des états. */
+  --h-edition: #5b3fb0;
+  --h-edition-texte: #ffffff;
+  --h-edition-doux: color-mix(in srgb, var(--h-edition) 8%, transparent);
+  --h-edition-bord: color-mix(in srgb, var(--h-edition) 38%, transparent);
+
   --h-ombre-panneau: 0 6px 22px rgb(0 0 0 / 0.14);
 }
 
@@ -160,6 +170,9 @@
 
     --h-cadeau: #b78cf0;
     --h-cadeau-texte: #1a1024;
+
+    --h-edition: #a891f2;
+    --h-edition-texte: #160f2b;
 
     --h-homme: #24354a;
     --h-homme-bord: #4a6b90;
@@ -198,6 +211,10 @@
   --color-cadeau: var(--h-cadeau);
   --color-cadeau-texte: var(--h-cadeau-texte);
   --color-cadeau-doux: var(--h-cadeau-doux);
+  --color-edition: var(--h-edition);
+  --color-edition-texte: var(--h-edition-texte);
+  --color-edition-doux: var(--h-edition-doux);
+  --color-edition-bord: var(--h-edition-bord);
 
   --color-homme: var(--h-homme);
   --color-homme-bord: var(--h-homme-bord);

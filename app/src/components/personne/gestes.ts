@@ -5,11 +5,11 @@
  *
  * Un **champ** s'affiche parce que la charge utile le porte. Une **action**, elle,
  * se cache quand elle serait vouée au refus — et c'est la seule chose que la
- * session décide sur cette page. Elles servent le bouton « Proposer »
- * (`MenuFiche.vue`, sur le bandeau desktop et dans la barre d'action mobile),
- * `PointSuppression.vue` et la barre elle-même ; `GalerieMedias.vue` porte la
- * même que `peutDeposer`. Elles sont rassemblées ici pour qu'aucun de ces
- * endroits n'en écrive une variante.
+ * session décide sur cette page. Elles servent les icônes de la fiche
+ * (`ActionsFiche.vue`, sur le bandeau desktop et dans la barre d'action mobile)
+ * et la barre elle-même ; `GalerieMedias.vue` porte la même que `peutDeposer`.
+ * Elles sont rassemblées ici pour qu'aucun de ces endroits n'en écrive une
+ * variante.
  *
  * - **proposer** (modification, liens) et **demander la suppression** exigent un
  *   rattachement validé : un compte en attente recevrait `403 regime_en_attente`,
@@ -42,9 +42,9 @@ export function useGestesFiche() {
   return {
     /** « Corriger cette fiche », « Ajouter un parent, un enfant ou un conjoint ». */
     peutProposer: computed(() => ecritureOuverte.value),
-    /** « Demander la suppression » — un geste séparé, jamais dans le même bloc. */
+    /** La poubelle : « demander la suppression » — un écran à part, qui montre d'abord ce qu'elle emporte. */
     peutDemanderSuppression: computed(() => ecritureOuverte.value),
-    /** « Joindre un document » : même condition que le dépôt de la galerie. */
+    /** L'envoi de document : même condition que le dépôt de la galerie. */
     peutDeposer: computed(() => ecritureOuverte.value),
   }
 }

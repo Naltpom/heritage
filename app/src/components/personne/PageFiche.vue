@@ -36,25 +36,48 @@
  * Chaque bloc s'affiche parce que la charge le porte. Seules les **actions
  * réservées** se cachent, et chacune porte sa condition (`gestes.ts`). La barre
  * d'action mobile n'existe que si elle a au moins un geste à offrir — elle ne
- * teste pas un rôle, elle additionne ce qui est permis. Elle porte le même
- * bouton « Proposer » que le bandeau desktop (`MenuFiche`), et se pose
- * au-dessus de la barre de navigation du bas (`--hauteur-barre-bas`).
+ * teste pas un rôle, elle additionne ce qui est permis. Elle porte les mêmes
+ * icônes que le bandeau desktop (`ActionsFiche`), et se pose au-dessus de la
+ * barre de navigation du bas (`--hauteur-barre-bas`).
+ *
+ * ## Le mode édition (crayon, 02/10/2026)
+ *
+ * C'est **ici** qu'il vit, parce qu'il touche tout l'écran : le bandeau et les
+ * panneaux passent au violet, l'identité et la famille deviennent des champs
+ * (`EditionIdentite`, `EditionParente`), les onglets se retirent, et les icônes
+ * deviennent « Annuler » et « Corriger » — au même endroit, sur ordinateur comme
+ * sur téléphone. L'état, le récapitulatif et les corps des demandes sont dans
+ * `edition.ts`, un module pur ; la session — entrer, abandonner, déposer — dans
+ * `useEditionFiche`. Cette page ne fait que les afficher.
+ *
+ * « Confirmer » dépose les demandes **une par une, dans l'ordre** (champs,
+ * retraits, ajouts), et retient celles qui sont parties : un second clic après un
+ * échec partiel ne redépose pas ce qui est déjà dans la file. Au succès, on sort
+ * du mode édition et on annonce les demandes, avec un lien vers chacune ; la
+ * fiche est relue, pour que le calque « en attente » montre ce qui vient d'être
+ * proposé.
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FichePersonneComplete } from '@/lib/api'
+import DialogueConfirmation from '@/components/base/DialogueConfirmation.vue'
 import ContenuGlissant from '@/components/mise-en-page/ContenuGlissant.vue'
 import GalerieMedias from '@/components/medias/GalerieMedias.vue'
 import ListeDemarches from '@/components/demarches/ListeDemarches.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
+import ActionsFiche from './ActionsFiche.vue'
 import BandeauFiche from './BandeauFiche.vue'
 import { couleurBranche, generationLisible, nomBranche } from './champs'
+import { LIBELLES_DEPOT } from './edition'
+import EditionIdentite from './EditionIdentite.vue'
+import EditionParente from './EditionParente.vue'
 import FaitsFiche from './FaitsFiche.vue'
 import HistoriqueFiche from './HistoriqueFiche.vue'
 import { useGestesFiche } from './gestes'
 import IdentiteFiche from './IdentiteFiche.vue'
-import MenuFiche from './MenuFiche.vue'
+import ModaleCorrection from './ModaleCorrection.vue'
+import { useEditionFiche } from './useEditionFiche'
 import { ongletsDeFiche, ongletVoisin, requeteDOnglet, sensDuGlissement, type OngletFiche } from './onglets'
 import ParenteFiche from './ParenteFiche.vue'
 import SectionFiche from './SectionFiche.vue'
@@ -66,7 +89,11 @@ const { fiche, onglet, retourMemorise = false } = defineProps<{
   retourMemorise?: boolean
 }>()
 
-const emit = defineEmits<{ agrandir: [cible: CibleLoupe] }>()
+const emit = defineEmits<{
+  agrandir: [cible: CibleLoupe]
+  /** Des demandes viennent d'être déposées : la fiche doit être relue (calque). */
+  recharger: []
+}>()
 
 const onglets = computed(() => ongletsDeFiche(fiche))
 /** L'ordre de la rangée : c'est lui qui donne son sens au coulissement. */
@@ -81,6 +108,8 @@ const ordre = computed(() => onglets.value.map((o) => o.cle))
 const routeur = useRouter()
 let depart: { x: number; y: number } | null = null
 function surToucheDebut(e: TouchEvent): void {
+  // En édition, un glissement de doigt dans un champ ne doit pas changer d'onglet.
+  if (edition.value !== null) return
   const t = e.touches[0]
   depart = e.touches.length === 1 && t ? { x: t.clientX, y: t.clientY } : null
 }
@@ -103,19 +132,62 @@ const barreAction = computed(
 
 const demandes = computed(() => fiche.demandesEnAttente)
 
+/* --- Le mode édition ------------------------------------------------ */
+
+/*
+ * La session vit dans `useEditionFiche` (éprouvée seule) ; la page ne fait que
+ * l'afficher. Entrer amène l'onglet Identité, qui porte ce qu'on corrige ;
+ * déposer fait relire la fiche, pour que le calque montre ce qui vient de partir.
+ */
+const {
+  edition,
+  recap,
+  message,
+  envoi,
+  erreurEnvoi,
+  erreursSaisie,
+  erreursChamps,
+  annonce,
+  confirmationAnnulation,
+  entrer,
+  quitter,
+  annuler,
+  corriger,
+  confirmer,
+} = useEditionFiche(() => fiche, {
+  surEntree: () => {
+    if (onglet !== 'identite') {
+      void routeur.replace({ name: 'personne.detail', params: { id: fiche.id }, query: requeteDOnglet('identite') })
+    }
+  },
+  surDepot: () => emit('recharger'),
+})
+
 function pluriel(n: number, mot: string): string {
   return `${n} ${mot}${n > 1 ? 's' : ''}`
 }
 </script>
 
 <template>
-  <div class="flex flex-col" :class="barreAction ? 'max-md:pb-20' : ''">
+  <div class="flex flex-col" :class="barreAction ? 'max-md:pb-20' : ''" :data-mode-edition="edition !== null ? '' : undefined">
     <BandeauFiche
       :fiche="fiche"
       :onglet="onglet"
       :retour-memorise="retourMemorise"
+      :edition="edition !== null"
       @agrandir="emit('agrandir', $event)"
-    />
+    >
+      <template #actions>
+        <ActionsFiche
+          :fiche="fiche"
+          :en-edition="edition !== null"
+          :envoi="envoi"
+          @editer="entrer"
+          @annuler="annuler"
+          @corriger="corriger"
+        />
+      </template>
+    </BandeauFiche>
 
     <div
       class="mx-auto grid w-full max-w-[1040px] grid-cols-[minmax(0,1fr)_300px] items-start gap-5 px-8 py-5 max-md:grid-cols-1 max-md:gap-3 max-md:px-4 max-md:py-3.5"
@@ -128,9 +200,31 @@ function pluriel(n: number, mot: string): string {
         @touchstart.passive="surToucheDebut"
         @touchend.passive="surToucheFin"
       >
+        <!-- L'annonce de fin d'édition : ce qui est parti, et où le suivre. -->
+        <section
+          v-if="annonce.length > 0"
+          class="flex flex-col gap-1.5 rounded-panneau border border-edition-bord bg-edition-doux px-4 py-3 text-[13.5px]"
+          role="status"
+          data-annonce-depot
+        >
+          <p class="m-0 font-semibold">
+            {{ annonce.length > 1 ? 'Vos corrections sont parties en demandes' : 'Votre correction est partie en demande' }}
+            — un administrateur la validera ou la refusera.
+          </p>
+          <ul class="m-0 flex list-none flex-col gap-0.5 p-0">
+            <li v-for="depot in annonce" :key="depot.id">
+              {{ LIBELLES_DEPOT[depot.kind] }} :
+              <RouterLink :to="{ name: 'demande.detail', params: { id: depot.id } }" class="font-semibold text-edition underline">
+                demande n° {{ depot.id }}
+              </RouterLink>
+            </li>
+          </ul>
+          <button type="button" class="self-start text-xs text-attenue underline" @click="annonce = []">Fermer</button>
+        </section>
+
         <!-- Mobile : les demandes en attente, au-dessus du contenu. -->
         <RouterLink
-          v-if="demandes.length > 0 && onglet !== 'historique'"
+          v-if="demandes.length > 0 && onglet !== 'historique' && edition === null"
           :to="{ name: 'personne.detail', params: { id: fiche.id }, query: requeteDOnglet('historique') }"
           class="flex items-center justify-between gap-3 rounded-panneau bg-accent-doux px-3.5 py-2.5 text-[13px] md:hidden"
         >
@@ -140,9 +234,19 @@ function pluriel(n: number, mot: string): string {
           <span class="font-semibold text-accent">Voir</span>
         </RouterLink>
 
-        <ContenuGlissant :ordre="ordre" :actif="onglet">
+        <ContenuGlissant :ordre="ordre" :actif="edition !== null ? 'identite' : onglet">
           <div class="flex flex-col gap-3.5 max-md:gap-3">
-            <template v-if="onglet === 'identite'">
+            <!-- Le mode édition : les mêmes panneaux, en violet, devenus des champs. -->
+            <template v-if="edition !== null">
+              <SectionFiche titre="Identité" edition data-panneau="identite">
+                <EditionIdentite v-model="edition.saisie" :fiche="fiche" :erreurs="erreursChamps" />
+              </SectionFiche>
+              <SectionFiche titre="Famille" edition data-panneau="famille">
+                <EditionParente v-model:retraits="edition.retraits" v-model:ajouts="edition.ajouts" :fiche="fiche" />
+              </SectionFiche>
+            </template>
+
+            <template v-else-if="onglet === 'identite'">
               <SectionFiche titre="Identité" data-panneau="identite">
                 <IdentiteFiche :fiche="fiche" />
               </SectionFiche>
@@ -256,15 +360,39 @@ function pluriel(n: number, mot: string): string {
     <!-- ------------------------------------------------------- -->
     <!-- Mobile : la barre d'action fixe                          -->
     <!-- ------------------------------------------------------- -->
-    <!-- Le même bouton « Proposer » que le bandeau desktop ; son menu s'ouvre
-         vers le haut. La barre se pose au-dessus de la navigation du bas
-         (`--hauteur-barre-bas`, 0 tant qu'elle n'est pas là). -->
+    <!-- Les mêmes icônes que le bandeau desktop, réparties sur la largeur. La
+         barre se pose au-dessus de la navigation du bas (`--hauteur-barre-bas`,
+         0 tant qu'elle n'est pas là), et passe au violet en mode édition. -->
     <div
       v-if="barreAction"
       data-barre-action
-      class="fixed inset-x-0 bottom-[var(--hauteur-barre-bas,0px)] z-20 flex gap-2 border-t border-ligne bg-panneau px-4 pt-3 pb-3 md:hidden"
+      class="fixed inset-x-0 bottom-[var(--hauteur-barre-bas,0px)] z-20 flex gap-2 px-4 pt-3 pb-3 md:hidden"
+      :class="edition !== null ? 'border-t-2 border-edition bg-panneau' : 'border-t border-ligne bg-panneau'"
     >
-      <MenuFiche :fiche="fiche" sens="haut" disposition="barre" />
+      <ActionsFiche
+        :fiche="fiche"
+        disposition="barre"
+        :en-edition="edition !== null"
+        :envoi="envoi"
+        @editer="entrer"
+        @annuler="annuler"
+        @corriger="corriger"
+      />
     </div>
+
+    <ModaleCorrection
+      v-model:message="message"
+      :changements="recap"
+      :envoi="envoi"
+      :erreur="erreurEnvoi"
+      :erreurs-saisie="erreursSaisie"
+      @confirmer="confirmer"
+      @annuler="recap = null"
+    />
+    <DialogueConfirmation
+      :demande="confirmationAnnulation"
+      @confirmer="quitter"
+      @annuler="confirmationAnnulation = null"
+    />
   </div>
 </template>

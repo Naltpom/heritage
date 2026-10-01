@@ -54,6 +54,7 @@
  * réservée à l'auteur par le serveur comme elles le sont à l'administration.
  * ────────────────────────────────────────────────────────────────────
  */
+import { LIBELLES_NATURE } from '@/components/proposition/mes-demandes'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -167,14 +168,9 @@ async function apresDecision(enchainement?: IssueDecision): Promise<void> {
   }
 }
 
-const NATURES: Record<string, string> = {
-  modification_personne: 'Modification d’une fiche',
-  modification_famille: 'Modification d’une famille',
-  modification_citation: 'Modification d’une source',
-  creation_personne: 'Ajout d’une personne',
-  ajout_lien: 'Ajout d’un lien',
-  ajout_media: 'Ajout d’un document',
-}
+/** Les libellés de nature, partagés avec « Mes demandes » : une seule table, complète
+ *  par construction (`Record<NatureDemande, string>`). */
+const NATURES: Record<string, string> = LIBELLES_NATURE
 
 /** Les statuts que `PastilleEtat` connaît ; les autres passent en neutre avec
  *  leur libellé propre. La **valeur** reste celle du modèle dans tous les cas. */
