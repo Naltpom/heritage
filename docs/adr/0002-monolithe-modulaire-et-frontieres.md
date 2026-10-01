@@ -30,6 +30,7 @@ traiter en face plutôt que découvrir à l'implémentation.
 | `Timeline` | vue chronologique | `tml_` (une seule table : `tml_preference`) |
 | `Gedcom` | import / export GEDCOM | `ged_` |
 | `Almanach` | carte des lieux, anniversaires | `alm_` (réservé — **aucune table dans cette livraison**) |
+| `Assistant` | l'assistant IA : propositions, rattachement assisté, questions sur l'arbre | `ast_` (depuis le 2026-10-01 : les conversations de « Poser une question ») |
 
 Règles de frontière :
 

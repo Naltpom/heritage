@@ -4938,6 +4938,7 @@ Ce document donne les listes exactes, pour que le test soit une recopie :
 | 6 — notification | `GET /api/notifications` | aucun `title`/`body` ne nomme la personne |
 | 7 — diff | `GET /api/demandes/{id}`, `/api/administration/demandes/{id}` | `…Label` et `…Id` de cette personne absents |
 | 7 bis — assistant | `POST /api/assistant/analyses` (`personnes[]`, `personne`, lignes de changement) | `personId`, `displayName` = `"Personne vivante"`, `visibilite` ; aucune date |
+| 7 ter — questions à l'assistant | `GET`/`POST /api/assistant/conversations…` (`echanges[].personnes[]`, mentions de `reponse`) | `personId`, `displayName` = `"Personne vivante"`, `visibilite` ; aucune date ; libellé de mention = `"Personne vivante"` |
 | 8 — libellés | `Proposal`, `Membership`, `Media` (§ 11.3) | idem |
 
 Le test compare **l'ensemble exact des clés** de l'objet, pas un sous-ensemble : un champ en
@@ -6449,3 +6450,72 @@ l'absence de lien.
 | `reserve_a_l_auteur` | `403` | Supprimer la démarche d'un autre, retirer le message d'un autre. |
 | `regime_en_attente` | `403` | Compte en attente (§ 16.3). |
 | `donnees_invalides` | `422` | `champs` nomme chaque champ fautif ; ceux du premier message sont préfixés `premierMessage.`. |
+
+## 25. Poser une question à l'assistant
+
+Module **`Assistant`**. Un membre interroge l'arbre en langage naturel — « Qui est né à
+Étaples ? », « Comment suis-je lié à Marie Becquelin ? » — dans une **conversation suivie** :
+l'assistant répond à partir des fiches, cite celles qu'il a lues, et relit les échanges
+précédents pour les questions de suivi. **Lecture seule** : aucune demande n'est déposée,
+rien n'est écrit dans l'arbre. Décision et données transmises : addendum du 1er octobre 2026
+de l'[ADR 0008](adr/0008-questions-et-modele-de-langage.md).
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/assistant/conversations` | connecté | — | `200` `{elements: ResumeConversation[]}` | — |
+| `POST` | `/api/assistant/conversations` | `membre` | `{question}` | `201` `{conversation, restant}` | `403`, `409`, `422`, `429`, `502`, `503` |
+| `GET` | `/api/assistant/conversations/{id}` | auteur | — | `200` `{conversation}` | `404` |
+| `POST` | `/api/assistant/conversations/{id}/questions` | auteur, `membre` | `{question}` | `201` `{conversation, restant}` | `403`, `404`, `409`, `422`, `429`, `502`, `503` |
+| `DELETE` | `/api/assistant/conversations/{id}` | auteur, `membre` | — | `204` | `403`, `404`, `409` |
+
+```json
+{
+  "conversation": {
+    "id": 4, "titre": "Qui est né à Étaples ?",
+    "createdAt": "2026-10-01T14:05:12+02:00", "updatedAt": "2026-10-01T14:07:40+02:00",
+    "nombreDEchanges": 2,
+    "echanges": [{
+      "id": 9, "question": "Qui est né à Étaples ?",
+      "reponse": "D'après l'arbre, [Marie Becquelin](personne:12) est née à Étaples vers 1850 (repris d'un arbre en ligne, non vérifié).",
+      "personnes": [{ "personId": 12, "displayName": "Marie Becquelin", "visibilite": "complete", "ligneDates": "~1850 – 1921" }],
+      "createdAt": "2026-10-01T14:05:12+02:00"
+    }]
+  },
+  "restant": 58
+}
+```
+
+- **Une conversation ne se crée pas vide** : `POST /conversations` porte la première
+  question, et la conversation n'existe qu'au retour de la réponse. Un `502` ne laisse rien.
+- `titre` est la première question, coupée à 120 signes ; il ne change jamais.
+  `ResumeConversation` est le même objet sans `echanges`. La liste en sert au plus 50, la
+  plus récemment poursuivie d'abord.
+- `reponse` est un **texte** où chaque fiche citée s'écrit `[Libellé](personne:12)` ; le
+  front le découpe en texte et en liens vers `/personnes/{id}` et ne l'interprète jamais
+  comme du HTML. Une mention vers une fiche inexistante a perdu son lien côté serveur.
+- `personnes` est une liste de `PersonneCitee` (§ 11.4, porte 7 ter) : relue **à chaque
+  lecture** à travers le cercle du moment, comme les libellés des mentions. Une personne
+  sortie du cercle depuis la réponse apparaît masquée.
+- **Une conversation n'existe que pour son auteur** — `404` pour celle d'un autre, y
+  compris pour un administrateur.
+- Question : 1 à 1 000 caractères (`422`, `champs.question`). Une conversation compte au
+  plus 50 échanges ; au-delà, `422` invite à en ouvrir une nouvelle.
+- Quota : **60 questions par 24 heures glissantes et par compte**, administrateur compris
+  (`assistant.limiteur_questions`) ; `429` avec `Retry-After`. `restant` le décompte.
+- `409 vue_comme_membre_active` sur les trois écritures sous la bascule ; les lectures
+  restent ouvertes. **Sous une incarnation** (§ 23), on écrit : la conversation appartient
+  au compte incarné, et le journal nomme l'administrateur.
+- `403 regime_en_attente` pour un compte en attente ; `503 assistant_indisponible` sans
+  clé ; `502 assistant_erreur` si le modèle échoue ou ne conclut pas en huit tours ou
+  90 secondes. Une réponse prend en général 20 à 60 secondes.
+- `Cache-Control: private, no-store`, `Vary: Cookie`.
+
+**Ce que le modèle voit** : uniquement ce que le lecteur a le droit de voir. Ses outils
+(`chercher_personnes`, `lire_personne`, `chercher_par_lieu`) appliquent les portes de sortie
+de l'ADR 0003 **avant** de lui répondre — un vivant hors cercle est absent des recherches et
+réduit, partout ailleurs, à son identifiant et « Personne vivante ». C'est la différence avec
+l'assistant de proposition, qui voit l'arbre entier.
+
+**Journal** : une ligne `appel_modele_langage`, sujet `Assistant\Question`, par question —
+des comptes (tours, appels d'outils, échanges transmis, fiches citées), **jamais** la
+question, la réponse ni un nom.

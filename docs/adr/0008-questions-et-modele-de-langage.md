@@ -470,3 +470,38 @@ souvent vivants. Ce qui est décidé :
   créée vient toujours de la déclaration, jamais d'une « correction » du modèle.
 - **Sans clé, ou en panne**, la carte reste utilisable à la main : rattacher à une fiche
   choisie, ou créer la fiche depuis la seule déclaration en choisissant ses parents.
+
+## Addendum (1er octobre 2026, soir) — « Poser une question » à l'assistant
+
+Un membre connecté interroge l'arbre en langage naturel, dans une conversation suivie
+(`Assistant\Service\AgentDeConsultation`, `docs/api-contract.md` § 25). C'est une **troisième
+sortie vers le tiers**, et elle diffère des deux autres sur le point qui compte.
+
+- **Le modèle ne voit que le cercle du lecteur.** L'assistant de proposition reçoit l'arbre
+  entier, vivants hors cercle compris, parce qu'il doit les reconnaître pour ne pas les
+  proposer en double ; il rend des demandes, que le serveur filtre champ par champ. Ici, le
+  modèle rend **une phrase libre** au lecteur, et une phrase ne se filtre pas : s'il
+  connaissait le nom d'un vivant caché, il pourrait l'écrire, ou le laisser deviner. Les
+  outils (`Assistant\Service\OutilsDeConsultation`) appliquent donc les portes de sortie de
+  l'ADR 0003 **avant** de répondre au modèle : un vivant hors cercle est absent des
+  recherches, et réduit partout ailleurs à son identifiant et à « Personne vivante ». La
+  décision du § 1 (« le corpus part entier ») **ne s'applique pas** à ce mode.
+- **Ce qui part** : la question du membre ; les derniers échanges de la conversation (six au
+  plus, 9 000 signes au plus), réponses repassées au cercle du moment ; le numéro de la
+  fiche du membre ; ce que les outils rendent — fiches visibles, faits, notes, sources avec
+  leur niveau d'appui (acte, index, arbre en ligne), adresses d'arbres en ligne retirées.
+- **Ce qui ne part jamais** : le courriel du membre, une donnée d'un vivant hors de son
+  cercle, les réponses aux questions de la page « Questions » (§ 1, inchangé).
+- **Ce qui est gardé** : la conversation, côté serveur, pour son auteur seul
+  (`ast_conversation`, `ast_echange`), jusqu'à ce qu'il la supprime. Elle ne contient rien
+  qu'il n'ait eu le droit de lire ; les noms des fiches citées sont relus à chaque lecture.
+- **Journal** : `AppelModeleDeLangage`, sujet `Assistant\Question` — des comptes, jamais la
+  question, la réponse ni un nom. Le journal mécanique n'écrit des deux tables que le type et
+  l'identifiant : aucune colonne de contenu n'y est jamais modifiée.
+- **Le modèle ne décide rien et n'écrit rien** : aucun outil d'écriture, aucune demande
+  déposée. Il doit dire « je ne sais pas » plutôt qu'inventer, et distinguer ce qu'un acte
+  établit de ce qu'un arbre en ligne affirme — c'est sa consigne, pas une garantie : la
+  réponse cite ses fiches pour que le lecteur vérifie.
+- **La page dit** que les questions partent chez Google Gemini.
+- **Quota** : 60 questions par 24 heures glissantes et par compte
+  (`assistant.limiteur_questions`), distinct des 20 analyses de proposition.

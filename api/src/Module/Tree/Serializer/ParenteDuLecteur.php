@@ -82,6 +82,19 @@ final class ParenteDuLecteur
     }
 
     /**
+     * Le même libellé, depuis un ego **déjà choisi par l'appelant** — pour « Poser une
+     * question » (`Assistant`), qui le tient de `AnnuaireDesMembresInterface::personneDuCompte()`
+     * comme {@see PersonneDuLecteur}, et qui a déjà refusé le compte en attente.
+     *
+     * Même calcul, même mémoire : ce n'est pas une seconde parenté, c'est la porte d'entrée
+     * d'un appelant qui ne connaît pas `LecteurDeLArbre`.
+     */
+    public function depuis(int $egoPersonneId, int $personneId): ?string
+    {
+        return $this->libelles($egoPersonneId)[IdentifiantDeNoeud::personne($personneId)] ?? null;
+    }
+
+    /**
      * @return array<string, string>
      */
     private function libelles(int $egoPersonneId): array

@@ -2136,6 +2136,26 @@ Les clés étrangères sont toutes internes au module, en `ON DELETE CASCADE`. L
 vers `tree_person` et `core_user` sont des identifiants nus avec libellé dénormalisé
 (ADR 0002, règle 2) : une attribution garde le nom de l'année où elle a été tirée.
 
+## 8 quater. Module `Assistant` — préfixe `ast_`
+
+Les conversations de « Poser une question » (`docs/api-contract.md` § 25, addendum du
+1er octobre 2026 de l'ADR 0008). Migration : `Version20261001200000`. Les analyses de
+l'assistant de proposition, elles, n'ont **pas** de table : elles vivent deux heures en cache
+(`MemoireDesAnalyses`).
+
+| Table | Colonnes principales | Contraintes |
+|---|---|---|
+| `ast_conversation` | `user_id` ⇢ `core_user`, `titre` (`VARCHAR(120)`, la première question, jamais réécrite), `created_at`, `updated_at` | `idx_ast_conversation_user (user_id, updated_at)` |
+| `ast_echange` | `conversation_id`, `question` (`TEXT`), `reponse` (`TEXT`, mentions `[Nom](personne:12)` comprises), `personnes_citees` (`JSONB`, identifiants ⇢ `tree_person`), `created_at` | `ck_ast_echange_question`, `ck_ast_echange_reponse` (non vides), FK interne en `ON DELETE CASCADE` |
+
+- `user_id` est un identifiant nu, **sans libellé** : seul l'auteur lit sa conversation.
+- `personnes_citees` ne porte **aucun nom** : les noms et les dates sont relus à chaque
+  lecture à travers le cercle du moment. Les mentions du texte de `reponse` repassent par le
+  même filtre (une personne sortie du cercle est servie masquée).
+- Aucune ligne n'est modifiée après écriture (sauf `updated_at`, champ technique) : le diff
+  du journal mécanique ne recopie donc jamais une question. Rien ne purge ces tables
+  d'office ; c'est l'auteur qui supprime ses conversations.
+
 ## 9. Décisions et pièges
 
 Neuf points. Les huit premiers sont ceux que la mission désigne comme faisant la valeur du

@@ -55,6 +55,9 @@ export * from './administration'
    prêtes à déposer ; le dépôt passe par l'analyse gardée côté serveur, jamais
    par `creerDemande()` — voir l'en-tête du module. */
 export * from './assistant'
+/* « Poser une question » : des conversations suivies avec l'assistant, en
+   lecture seule sur l'arbre, gardées côté serveur par compte. */
+export * from './conversations'
 /* Module `Tirage` : les tirages au sort récurrents — « Noël côté papa ». Le
    serveur ne rend au lecteur que ses propres attributions (ADR 0009). */
 export * from './tirages'
