@@ -19,7 +19,6 @@ use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\RetraitDeLien;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
-use App\Module\Proposal\Enum\LinkKind;
 use App\Module\Proposal\Service\Port\EcritureAppliquee;
 use App\Module\Proposal\Service\Port\EtatCible;
 use App\Module\Proposal\Service\Port\LigneCreee;
@@ -602,7 +601,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         // Lu **avant** d'écrire : une famille supprimée n'a plus d'époux à interroger.
         $autre = $this->autreParent($lien, $famille);
 
-        if (LinkKind::EnfantDe === $lien->nature) {
+        if ($lien->estUneFiliation()) {
             // `remove()` ligne à ligne et non un `DELETE` en DQL : le journal d'audit écoute
             // l'ORM, et une filiation retirée par requête directe n'y laisserait rien.
             foreach ($this->filiationsDe($personne, $famille) as $ligne) {
@@ -629,7 +628,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         // « déjà rattaché » resterait sans famille.
         $this->em->flush();
 
-        if (LinkKind::EnfantDe === $lien->nature && null !== $autre) {
+        if ($lien->estUneFiliation() && null !== $autre) {
             $filiation = $this->etablirFiliation((int) $personne->getId(), $autre->getId(), null, false, null);
         } else {
             $this->derivees->recalculer();
@@ -1766,7 +1765,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             'familleLibelle' => $this->libelleDuCouple($famille),
         ];
 
-        if (LinkKind::ConjointDe === $lien->nature) {
+        if (!$lien->estUneFiliation()) {
             return $this->mesurerUnConjoint($base, $famille, $personne, $epoux, \count($enfants), $familleProtegee);
         }
 
@@ -1861,7 +1860,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
      */
     private function autreParent(LienARetirer $lien, Family $famille): ?Person
     {
-        if (LinkKind::EnfantDe !== $lien->nature || null === $lien->parentId) {
+        if (!$lien->estUneFiliation() || null === $lien->parentId) {
             return null;
         }
 

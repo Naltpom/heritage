@@ -50,6 +50,19 @@ final readonly class LienARetirer
     }
 
     /**
+     * `enfant_de` (vrai) ou `conjoint_de` (faux) — **la question que `Tree` pose**.
+     *
+     * Elle existe pour la frontière : `LinkKind` est une énumération **de** `Proposal`, et
+     * `Tree` n'a le droit de nommer que son `Contract` (ADR 0002, vérifié par
+     * `FrontieresInterModulesTest`). Le contrat répond donc à la question au lieu
+     * d'exposer le type.
+     */
+    public function estUneFiliation(): bool
+    {
+        return LinkKind::EnfantDe === $this->nature;
+    }
+
+    /**
      * Le lien, relu depuis l'`old_value` d'un op — la seule chose que l'applicateur a
      * entre les mains.
      *
