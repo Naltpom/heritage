@@ -43,12 +43,14 @@
  * démontage : un aperçu oublié garde l'image entière en mémoire jusqu'à la
  * fermeture de l'onglet.
  */
-import { computed, onBeforeUnmount, ref, shallowRef, triggerRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, triggerRef } from 'vue'
 import {
   analyserAvecAssistant,
   analyserErreur,
   deposerDemandeAssistant,
   invaliderGraphe,
+  lireMesQuotas,
+  resteDuQuota,
   televerserMedia,
   type AnalyseAssistant,
   type PortraitPropose,
@@ -156,6 +158,15 @@ const analyse = shallowRef<AnalyseAssistant | null>(null)
 const erreur = ref<unknown>(null)
 const restant = ref<number | null>(null)
 const secondes = ref(0)
+
+// Ce qui reste, lu sur le serveur : la limite est réglable compte par compte.
+onMounted(() => {
+  lireMesQuotas()
+    .then(({ quotas }) => {
+      if (restant.value === null) restant.value = resteDuQuota(quotas, 'assistant.analyses')
+    })
+    .catch(() => undefined)
+})
 
 let controleur: AbortController | null = null
 let minuterie: ReturnType<typeof setInterval> | null = null
@@ -483,17 +494,13 @@ onBeforeUnmount(() => {
       <PanneauBase titre="Racontez ce que vous savez">
         <div class="flex flex-col gap-4">
           <label class="flex flex-col gap-1">
-            <span class="text-sm text-attenue">
-              Écrivez librement : qui, quand, où, et d’où vous le tenez. Vous pouvez aussi
-              enregistrer un témoignage, joint comme un document. L’assistant retrouvera les
-              personnes dans l’arbre.
-            </span>
+            <span class="lecteur-ecran">Ce que vous savez</span>
             <textarea
               v-model="texte"
               rows="7"
               :maxlength="TEXTE_MAX"
               :disabled="phase === 'analyse' || suspendu"
-              placeholder="« Ma grand-tante Marie Dupont est née le 3 mars 1921 à Brest, fille de Jean Dupont. J’ai son acte de naissance. »"
+              placeholder="Qui, quand, où, et d’où vous le tenez. Ex. : « Ma grand-tante Marie Dupont est née le 3 mars 1921 à Brest. J’ai son acte. »"
               class="min-h-40 rounded-champ border border-ligne bg-fond px-3 py-2 text-[15px] leading-relaxed text-texte disabled:opacity-60"
             />
             <span class="self-end text-[11px] text-attenue tabular-nums">
@@ -555,9 +562,7 @@ onBeforeUnmount(() => {
       </div>
 
       <p class="m-0 text-xs text-attenue">
-        L’assistant ne modifie rien : il prépare des demandes que vous relisez, puis qu’un
-        administrateur valide. Vos documents ne sont conservés que si vous les joignez comme
-        preuves au moment du dépôt.
+        Vos documents ne sont gardés que si vous les joignez comme preuves.
       </p>
     </template>
 

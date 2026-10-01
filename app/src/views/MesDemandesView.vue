@@ -36,10 +36,20 @@
  * se déduisent des réponses **déjà reçues** (`comptesDepuisListe()`) — aucune
  * lecture de plus — et se cumulent d'un filtre à l'autre. Le résumé d'une ligne
  * de l'en-tête mobile (« 7 demandes ») est publié ici.
+ *
+ * **Annuler une demande** (`retrait.ts`). La liste émet, cette vue confirme
+ * (`DialogueConfirmation`, jamais `window.confirm`) puis envoie. Une fois
+ * annulée, **la ligne change sur place** — le serveur rend la demande, on en
+ * reprend le statut — et les compteurs connus suivent : relire toute la liste
+ * pour un statut qu'on vient de recevoir serait une lecture pour rien. En cas
+ * d'échec, au contraire, on relit : un `409` dit que l'état a bougé sous nos
+ * pieds, et c'est la liste du serveur qui fait foi.
  */
 import { onMounted, ref, watch } from 'vue'
 import { lireDemande, listerDemandes, type ResumeDemande, type StatutDemande } from '@/lib/api'
+import DialogueConfirmation from '@/components/base/DialogueConfirmation.vue'
 import ListeMesDemandes from '@/components/proposition/ListeMesDemandes.vue'
+import { comptesApresRetrait, useRetraitDeDemande } from '@/components/proposition/retrait'
 import {
   comptesDepuisListe,
   motifDepuisDemande,
@@ -113,8 +123,28 @@ async function chargerMotifs(elements: readonly ResumeDemande[]): Promise<void> 
   )
 }
 
+const retrait = useRetraitDeDemande(async (id, retiree) => {
+  if (retiree === null) {
+    await charger()
+    return
+  }
+  const ancienne = demandes.value.find((demande) => demande.id === id)
+  if (ancienne === undefined) return
+  comptes.value = comptesApresRetrait(comptes.value, ancienne.status)
+  demandes.value = demandes.value.map((demande) =>
+    demande.id === id ? { ...demande, status: retiree.status } : demande,
+  )
+})
+const { confirmation, envoi: retraitEnCours, erreur: erreurRetrait, suspendu, infobulle, lecteurId } = retrait
+
 function filtrer(valeur: StatutDemande | ''): void {
+  erreurRetrait.value = null
   filtre.value = valeur
+  void charger()
+}
+
+function recharger(): void {
+  erreurRetrait.value = null
   void charger()
 }
 
@@ -142,7 +172,20 @@ watch(
     :chargement="chargement"
     :erreur="erreur"
     :comptes="comptes"
+    :lecteur-id="lecteurId"
+    :suspendu="suspendu"
+    :infobulle="infobulle"
+    :retrait-en-cours="retraitEnCours"
+    :erreur-retrait="erreurRetrait"
     @filtrer="filtrer"
-    @recharger="charger"
+    @recharger="recharger"
+    @retirer="retrait.demander"
+  />
+
+  <DialogueConfirmation
+    :demande="confirmation"
+    :chargement="retraitEnCours !== null"
+    @confirmer="retrait.confirmer"
+    @annuler="retrait.abandonner"
   />
 </template>

@@ -81,7 +81,7 @@ const PASTILLES: Record<StatutDemande, Pastille> = {
   validee: { etat: 'validee', libelle: '' },
   refusee: { etat: 'refusee', libelle: '' },
   caduque: { etat: 'caduque', libelle: '' },
-  annulee: { etat: 'neutre', libelle: 'Retirée par vous' },
+  annulee: { etat: 'neutre', libelle: 'Annulée par vous' },
 }
 
 export function pastilleDeStatut(statut: StatutDemande): Pastille {

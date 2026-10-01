@@ -9,7 +9,9 @@ use App\Module\Assistant\Entity\Conversation;
 use App\Module\Assistant\Exception\AssistantIndisponible;
 use App\Module\Assistant\Repository\ConversationRepository;
 use App\Module\Assistant\Service\ConsultationParLAssistant;
+use App\Module\Assistant\Service\QuotasDeLAssistant;
 use App\Module\Assistant\Service\SerialiseurDeConversation;
+use App\Module\Core\Contract\QuotasDUsageInterface;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\Regime;
 use App\Module\Core\Exception\ForbiddenException;
@@ -21,11 +23,9 @@ use App\Module\Core\Service\BasculeVoirComme;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -88,9 +88,12 @@ final class ConversationController extends AbstractController
         private readonly Security $securite,
         private readonly ConversationRepository $conversations,
         private readonly SerialiseurDeConversation $serialiseur,
-        /** 60 questions par 24 heures glissantes et par compte (`config/services/assistant.yaml`). */
-        #[Autowire(service: 'assistant.limiteur_questions')]
-        private readonly RateLimiterFactoryInterface $limiteur,
+        /**
+         * Les questions par 24 heures glissantes et par compte : 60 par défaut
+         * (`config/services/assistant.yaml`), ou la limite personnelle du compte.
+         */
+        private readonly QuotasDUsageInterface $quotas,
+        private readonly QuotasDeLAssistant $declares,
     ) {
     }
 
@@ -159,13 +162,10 @@ final class ConversationController extends AbstractController
         }
 
         $question = $this->question($requete);
-        $limite = $this->limiteur->create((string) $userId)->consume();
+        $limite = $this->quotas->consommer($this->declares->questions(), $userId);
 
         if (!$limite->isAccepted()) {
-            throw new TooManyRequestsException(
-                max(1, $limite->getRetryAfter()->getTimestamp() - time()),
-                'Vous avez posé les 60 questions de la journée. L’assistant vous répondra de nouveau demain.',
-            );
+            throw new TooManyRequestsException(max(1, $limite->getRetryAfter()->getTimestamp() - time()), 0 === $limite->getLimit() ? 'Les questions à l’assistant ne sont pas ouvertes à votre compte.' : \sprintf('Vous avez posé les %d questions de la journée. L’assistant vous répondra de nouveau demain.', $limite->getLimit()));
         }
 
         $this->relacherLaSession($requete);

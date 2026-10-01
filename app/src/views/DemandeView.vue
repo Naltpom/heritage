@@ -30,8 +30,31 @@
  * peut relire ; une demande **caduque** n'a été refusée par personne — la fiche
  * a changé sous elle (ADR 0004). Le libellé des pastilles vient du socle et ne
  * se réécrit pas ici.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **« Voir la fiche »** (`fiche-de-la-demande.ts`). La demande se juge contre la
+ * fiche qu'elle touche, et cet écran ne la montrait pas. Le bouton l'ouvre :
+ *
+ * - **sur téléphone**, en modale plein écran — la fiche en lecture seule, un
+ *   lien vers la vraie page, et « × » pour revenir à la demande ;
+ * - **sur ordinateur**, l'écran se **partage** : la fiche à gauche, la demande
+ *   — « Ce qui changerait » et le reste — à droite. La colonne de la fiche est
+ *   collante et défile seule, et s'arrête au-dessus de la barre de décision
+ *   fixée en bas, qui reste à portée de main.
+ *
+ * Les deux présentations sont dans le gabarit (`md:hidden` / `max-md:hidden`)
+ * et lisent **le même état** : une seule lecture, et une fenêtre qu'on élargit
+ * passe de l'une à l'autre sans rien relire. Le bouton n'existe que si la
+ * demande désigne une fiche (`ficheVisee()`) ; une création encore en attente
+ * montre celle du parent ou du conjoint auquel elle se rattache.
+ *
+ * **« Annuler ma demande »** (`retrait.ts`), à droite de la pastille : pour son
+ * auteur seulement, tant que le statut le permet. Ce n'est pas un test de rôle
+ * sur l'affichage — c'est une **action**, comme valider et refuser, et elle est
+ * réservée à l'auteur par le serveur comme elles le sont à l'administration.
+ * ────────────────────────────────────────────────────────────────────
  */
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   lireDemande,
@@ -42,7 +65,11 @@ import {
 } from '@/lib/api'
 import { contexteDepuisRequete, demandeSuivante, requeteDeContexte } from '@/components/administration/file'
 import { annonceEnchainement, issueDepuisRequete, type IssueDecision } from '@/components/administration/decision'
+import { legendeDeLaFiche, useFicheDeLaDemande } from '@/components/administration/fiche-de-la-demande'
+import { peutRetirer, useRetraitDeDemande } from '@/components/proposition/retrait'
 import { useSession } from '@/composables/useSession'
+import BoutonBase from '@/components/base/BoutonBase.vue'
+import DialogueConfirmation from '@/components/base/DialogueConfirmation.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
@@ -50,6 +77,7 @@ import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import DecisionDemande from '@/components/administration/DecisionDemande.vue'
 import DiffDemande from '@/components/administration/DiffDemande.vue'
 import DoublonsProbables from '@/components/administration/DoublonsProbables.vue'
+import FicheDeLaDemande from '@/components/administration/FicheDeLaDemande.vue'
 import FicheProposee from '@/components/administration/FicheProposee.vue'
 import LoupeMedia from '@/components/medias/LoupeMedia.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
@@ -162,7 +190,7 @@ const etatPastille = computed<EtatPastille>(() => {
 
 const LIBELLES_HORS_PASTILLE: Record<string, string> = {
   brouillon: 'Brouillon',
-  annulee: 'Retirée par son auteur',
+  annulee: 'Annulée par son auteur',
 }
 
 const libellePastille = computed(() =>
@@ -240,6 +268,63 @@ const decidable = computed(
   () => administrateur.value && demande.value !== null && demande.value.status === 'en_attente',
 )
 
+/* ------------------------------------------------------------------ */
+/* « Voir la fiche »                                                   */
+/* ------------------------------------------------------------------ */
+
+const ficheDeLaDemande = useFicheDeLaDemande(demande)
+const {
+  visee: ficheVisee,
+  ouverte: ficheOuverte,
+  fiche,
+  chargement: chargementFiche,
+  erreur: erreurFiche,
+} = ficheDeLaDemande
+
+/** Ouverte **et** désignée : une demande sans fiche ne garde pas un partage vide. */
+const ficheAffichee = computed(() => ficheOuverte.value && ficheVisee.value !== null)
+const legende = computed(() => (ficheVisee.value === null ? '' : legendeDeLaFiche(ficheVisee.value.raison)))
+
+/** Échap ferme la modale du téléphone — et le partage, qui est le même état. Un
+ *  dialogue ouvert par-dessus (confirmation, loupe) prend Échap pour lui. */
+function auClavier(evenement: KeyboardEvent): void {
+  if (evenement.key !== 'Escape' || !ficheAffichee.value) return
+  if (loupe.value !== null || retrait.confirmation.value !== null) return
+  ficheDeLaDemande.fermer()
+}
+watch(ficheAffichee, (affichee) => {
+  if (affichee) window.addEventListener('keydown', auClavier)
+  else window.removeEventListener('keydown', auClavier)
+})
+onBeforeUnmount(() => window.removeEventListener('keydown', auClavier))
+
+/* ------------------------------------------------------------------ */
+/* « Annuler ma demande »                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Réussi : le serveur rend la demande, on en reprend le statut — sans relire,
+ * et sans perdre les blocs que seule la charge d'administration porte. Échoué
+ * (`409 demande_deja_decidee`, le plus souvent) : on relit, pour que la
+ * pastille dise ce qui s'est réellement passé.
+ */
+const retrait = useRetraitDeDemande(async (_id, retiree) => {
+  if (retiree !== null && demande.value !== null) {
+    demande.value = { ...demande.value, status: retiree.status }
+    return
+  }
+  await charger()
+})
+const { confirmation, envoi: retraitEnCours, erreur: erreurRetrait, suspendu, infobulle, lecteurId } = retrait
+
+const retirable = computed(() => demande.value !== null && peutRetirer(demande.value, lecteurId.value))
+
+// Une autre demande (« & suivant », lien d'une dépendance) : l'échec de la
+// précédente n'a plus rien à faire à l'écran.
+watch(identifiant, () => {
+  erreurRetrait.value = null
+})
+
 function dateLisible(valeur: string | null | undefined): string {
   if (typeof valeur !== 'string' || valeur.length === 0) return ''
   const date = new Date(valeur)
@@ -253,7 +338,12 @@ function dateLisible(valeur: string | null | undefined): string {
   <!-- `overflow-wrap: anywhere` : une adresse web ou une cote sans espace
        (« https://…/deaths-f-1930-1934.pdf#page=12 ») se coupe au lieu d'élargir
        la page, qui débordait alors de l'écran sur mobile. -->
-  <div class="mx-auto w-full max-w-3xl min-w-0 px-4 py-8 [overflow-wrap:anywhere]">
+  <!-- Partagé, l'écran s'élargit (`max-w-6xl`) : deux colonnes de la largeur
+       d'une seule auraient tassé la demande comme la fiche. -->
+  <div
+    class="mx-auto w-full min-w-0 px-4 py-8 [overflow-wrap:anywhere]"
+    :class="ficheAffichee ? 'max-w-3xl md:max-w-6xl' : 'max-w-3xl'"
+  >
     <div v-if="chargement && demande === null">
       <PanneauBase>
         <p class="mb-3 text-sm text-attenue" role="status">Chargement de la demande…</p>
@@ -278,6 +368,20 @@ function dateLisible(valeur: string | null | undefined): string {
             {{ NATURES[demande.kind] ?? demande.kind }}
           </h1>
           <PastilleEtat :etat="etatPastille" :libelle="libellePastille" />
+          <!-- Une action de l'auteur, pas un champ : éteinte, et non cachée,
+               sous la vue empruntée — le motif est dans l'infobulle. -->
+          <BoutonBase
+            v-if="retirable"
+            variante="danger"
+            data-retirer
+            class="px-2.5 py-1 text-[13px]"
+            :desactive="suspendu"
+            :chargement="retraitEnCours === demande.id"
+            :title="infobulle"
+            @click="retrait.demander(demande)"
+          >
+            Annuler ma demande
+          </BoutonBase>
         </div>
 
         <p class="mt-1.5 text-sm text-attenue">
@@ -287,7 +391,62 @@ function dateLisible(valeur: string | null | undefined): string {
           </template>
           <template v-if="demande.targetLabel"> — sur {{ demande.targetLabel }}</template>
         </p>
+
+        <!-- Sur téléphone, il ouvre la modale ; sur ordinateur, il ouvre et
+             ferme le partage — d'où l'état annoncé (`aria-expanded`). -->
+        <BoutonBase
+          v-if="ficheVisee !== null"
+          variante="secondaire"
+          data-voir-fiche
+          class="mt-3"
+          :aria-expanded="ficheAffichee"
+          @click="ficheDeLaDemande.basculer()"
+        >
+          <svg viewBox="0 0 24 24" class="size-4 fill-none stroke-current stroke-2" aria-hidden="true">
+            <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+            <path d="M10 4.5v15" />
+          </svg>
+          <span class="md:hidden">Voir la fiche</span>
+          <span class="max-md:hidden">{{ ficheAffichee ? 'Masquer la fiche' : 'Voir la fiche' }}</span>
+        </BoutonBase>
       </header>
+
+      <MessageErreur
+        v-if="erreurRetrait !== null && erreurRetrait.id === demande.id"
+        class="mb-4"
+        :erreur="erreurRetrait.cause"
+        titre="Votre demande n’a pas pu être annulée."
+        @action="charger"
+      />
+
+      <div
+        :class="
+          ficheAffichee ? 'md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-start md:gap-6' : ''
+        "
+      >
+        <!-- Ordinateur : la fiche à gauche, collante, qui défile seule. Sa
+             hauteur s'arrête au-dessus de la barre de décision fixée en bas
+             (h-24 réservés par `DecisionDemande`) quand elle est là. -->
+        <aside
+          v-if="ficheAffichee"
+          data-fiche-partagee
+          class="max-md:hidden md:sticky md:top-4 md:overflow-y-auto md:overscroll-contain md:pr-1"
+          :class="decidable ? 'md:max-h-[calc(100dvh-8rem)]' : 'md:max-h-[calc(100dvh-2rem)]'"
+          aria-label="Fiche de la personne"
+        >
+          <FicheDeLaDemande
+            :fiche="fiche"
+            :legende="legende"
+            :chargement="chargementFiche"
+            :erreur="erreurFiche"
+            @fermer="ficheDeLaDemande.fermer()"
+            @recharger="ficheDeLaDemande.charger()"
+            @agrandir="loupe = $event"
+          />
+        </aside>
+
+        <!-- « Ce qui changerait », et tout ce que la demande porte. -->
+        <div class="min-w-0">
 
       <!-- « Une écriture qu'aucun humain n'a réexaminée doit se voir » (§ 2.7).
            `autoValidated` couvre les deux cas où cela arrive : valider sa propre
@@ -403,8 +562,38 @@ function dateLisible(valeur: string | null | undefined): string {
       <!-- `:key` : « & suivant » change de demande sans quitter l'écran ; sans
            clé, le motif et l'annonce de la précédente resteraient affichés. -->
       <DecisionDemande v-if="decidable" :key="demande.id" :demande="demande" @decidee="apresDecision" />
+        </div>
+      </div>
+
+      <!-- Téléphone : la même fiche, en plein écran, par-dessus la barre du
+           bas et la barre de décision (`z-40`, sous la loupe en `z-50`). -->
+      <div
+        v-if="ficheAffichee"
+        data-fiche-modale
+        class="fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-fond px-4 pt-[max(16px,env(safe-area-inset-top))] pb-[max(16px,env(safe-area-inset-bottom))] md:hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Fiche de la personne"
+      >
+        <FicheDeLaDemande
+          :fiche="fiche"
+          :legende="legende"
+          :chargement="chargementFiche"
+          :erreur="erreurFiche"
+          @fermer="ficheDeLaDemande.fermer()"
+          @recharger="ficheDeLaDemande.charger()"
+          @agrandir="loupe = $event"
+        />
+      </div>
     </template>
   </div>
+
+  <DialogueConfirmation
+    :demande="confirmation"
+    :chargement="retraitEnCours !== null"
+    @confirmer="retrait.confirmer"
+    @annuler="retrait.abandonner"
+  />
 
   <LoupeMedia :cible="loupe" @fermer="loupe = null" />
 </template>

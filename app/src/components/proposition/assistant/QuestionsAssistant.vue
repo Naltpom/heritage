@@ -28,8 +28,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   analyserErreur,
   lireConversation,
+  lireMesQuotas,
   listerConversations,
   poserQuestion,
+  resteDuQuota,
   supprimerConversation,
   type ConversationAssistant,
   type ResumeConversation,
@@ -234,6 +236,12 @@ async function defilerVersLaFin(): Promise<void> {
 
 onMounted(() => {
   void chargerListe()
+  // Ce qui reste, lu sur le serveur : la limite est réglable compte par compte.
+  lireMesQuotas()
+    .then(({ quotas }) => {
+      if (restant.value === null) restant.value = resteDuQuota(quotas, 'assistant.questions')
+    })
+    .catch(() => undefined)
 })
 
 onBeforeUnmount(() => {
@@ -313,12 +321,7 @@ onBeforeUnmount(() => {
         <MessageErreur v-else-if="erreurConversation !== null" :erreur="erreurConversation" />
 
         <PanneauBase v-else-if="courante === null && enAttente === null" titre="Que voulez-vous savoir ?">
-          <p class="m-0 text-sm text-attenue">
-            Posez une question sur l’arbre : l’assistant cherche dans les fiches et vous répond en
-            citant celles qu’il a lues. Il dit d’où vient chaque information — un acte ou un arbre en
-            ligne — et répond « je ne sais pas » plutôt que d’inventer.
-          </p>
-          <ul class="m-0 mt-3 flex list-none flex-col gap-1.5 p-0">
+          <ul class="m-0 flex list-none flex-col gap-1.5 p-0">
             <li v-for="exemple in EXEMPLES_DE_QUESTIONS" :key="exemple">
               <button
                 type="button"
@@ -423,9 +426,8 @@ onBeforeUnmount(() => {
         </template>
 
         <p class="m-0 text-xs text-attenue">
-          L’assistant ne voit que ce que vous avez le droit de voir, et ne modifie rien. Vos
-          questions et les fiches qu’il consulte sont transmises à Google Gemini pour rédiger la
-          réponse ; la conversation est gardée pour vous seul, jusqu’à ce que vous la supprimiez.
+          L’assistant ne modifie rien. Vos questions passent par Google Gemini ; vos conversations
+          ne sont visibles que par vous.
         </p>
       </section>
     </div>

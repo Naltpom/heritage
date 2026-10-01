@@ -20,7 +20,9 @@ use App\Module\Tree\Entity\Person;
 use App\Tests\Assistant\Double\AccesAuModeleSimule;
 use App\Tests\Assistant\Double\ModeleScripte;
 use App\Tests\Proposal\CasDeTestDemandesHttp;
-use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
+use App\Module\Assistant\Service\QuotasDeLAssistant;
+use App\Module\Core\Service\QuotasDUsage;
+use Symfony\Component\RateLimiter\LimiterInterface;
 
 /**
  * « Poser une question », **en HTTP et de bout en bout** : contrôleur, boucle d'agent
@@ -123,7 +125,7 @@ final class ConversationHttpTest extends CasDeTestDemandesHttp
         self::assertResponseStatusCodeSame(503);
         self::assertSame('assistant_indisponible', $this->erreur()['code']);
         self::assertSame([], ModeleScripte::requetes());
-        self::assertSame(60, $this->limiteur()->create((string) $this->idDOpale())->consume(0)->getRemainingTokens());
+        self::assertSame(60, $this->limiteur($this->idDOpale())->consume(0)->getRemainingTokens());
     }
 
     public function testUneQuestionInvalideRend422AvantToutAppel(): void
@@ -137,14 +139,14 @@ final class ConversationHttpTest extends CasDeTestDemandesHttp
         }
 
         self::assertSame([], ModeleScripte::requetes());
-        self::assertSame(60, $this->limiteur()->create((string) $this->idDOpale())->consume(0)->getRemainingTokens());
+        self::assertSame(60, $this->limiteur($this->idDOpale())->consume(0)->getRemainingTokens());
     }
 
     public function testLaSoixanteEtUniemeQuestionDuJourRend429(): void
     {
         $this->seConnecterCommeOpale();
 
-        $limiteur = $this->limiteur()->create((string) $this->idDOpale());
+        $limiteur = $this->limiteur($this->idDOpale());
         for ($i = 0; $i < 60; ++$i) {
             self::assertTrue($limiteur->consume()->isAccepted());
         }
@@ -443,12 +445,17 @@ final class ConversationHttpTest extends CasDeTestDemandesHttp
         return $membre->getId();
     }
 
-    private function limiteur(): RateLimiterFactoryInterface
+    /**
+     * Le compteur de la route, à la limite effective — même identifiant, même stockage,
+     * même fenêtre que `QuotasDUsage::consommer()`.
+     */
+    private function limiteur(int $userId): LimiterInterface
     {
-        $limiteur = self::getContainer()->get('assistant.limiteur_questions');
-        \assert($limiteur instanceof RateLimiterFactoryInterface);
+        $quotas = self::getContainer()->get(QuotasDUsage::class);
+        $declares = self::getContainer()->get(QuotasDeLAssistant::class);
+        \assert($quotas instanceof QuotasDUsage && $declares instanceof QuotasDeLAssistant);
 
-        return $limiteur;
+        return $quotas->limiteur($declares->questions(), $userId);
     }
 
     private function personne(string $prenoms, string $nom, Sex $sexe, UncertainDate $naissance, bool $decedee): int

@@ -13,8 +13,6 @@ import { analyserErreur, type PersonneCitee } from '@/lib/api'
 /** Le contrat de la route : 1 à 1 000 caractères. */
 export const QUESTION_MAX = 1000
 
-/** Le quota du contrat : 60 questions par 24 heures glissantes. */
-export const QUOTA_QUESTIONS = 60
 
 /** La même forme que `MentionsDeFiches::MOTIF` côté serveur. */
 const MENTION = /\[([^[\]\n]{1,160})\]\(personne:(\d{1,9})\)/gu
@@ -71,7 +69,7 @@ export function peutPoser(question: string): boolean {
 }
 
 export function mentionQuotaQuestions(restant: number | null): string {
-  if (restant === null) return `${QUOTA_QUESTIONS} questions par jour`
+  if (restant === null) return ''
   if (restant <= 0) return 'Plus aucune question possible aujourd’hui'
   return restant === 1
     ? 'Encore 1 question possible aujourd’hui'

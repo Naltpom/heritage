@@ -7,7 +7,9 @@ namespace App\Module\Assistant\Controller;
 use App\Module\Assistant\Contract\AccesAuModele;
 use App\Module\Assistant\Exception\AssistantIndisponible;
 use App\Module\Assistant\Service\CreationEtRattachement;
+use App\Module\Assistant\Service\QuotasDeLAssistant;
 use App\Module\Assistant\Service\SuggestionsDeRattachement;
+use App\Module\Core\Contract\QuotasDUsageInterface;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Exception\ForbiddenException;
 use App\Module\Core\Exception\NotFoundException;
@@ -18,10 +20,8 @@ use App\Module\Membership\Contract\ComptesARattacher;
 use App\Module\Membership\Contract\DeclarationDuCompte;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Bundle\SecurityBundle\Security;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -63,13 +63,13 @@ final class RattachementAssisteController extends AbstractController
         private readonly SuggestionsDeRattachement $suggestions,
         private readonly AccesAuModele $acces,
         /**
-         * 40 analyses par 24 heures glissantes, **tous administrateurs confondus**.
-         * Séparé du quota des membres (`assistant.limiteur_analyses`) : une vague
-         * d'inscriptions ne doit pas priver la famille de ses analyses du jour, ni
-         * l'inverse.
+         * 40 analyses par 24 heures glissantes par défaut, **tous administrateurs
+         * confondus** — limite réglable globalement (`PATCH /api/administration/quotas`).
+         * Séparé du quota des membres (les analyses) : une vague d'inscriptions ne doit
+         * pas priver la famille de ses analyses du jour, ni l'inverse.
          */
-        #[Autowire(service: 'assistant.limiteur_rattachements')]
-        private readonly RateLimiterFactoryInterface $limiteur,
+        private readonly QuotasDUsageInterface $quotas,
+        private readonly QuotasDeLAssistant $declares,
     ) {
     }
 
@@ -134,10 +134,10 @@ final class RattachementAssisteController extends AbstractController
 
         // Une seule clé pour tous les administrateurs : le quota borne une dépense de
         // l'installation, pas l'activité d'une personne.
-        $limite = $this->limiteur->create('rattachements')->consume();
+        $limite = $this->quotas->consommer($this->declares->rattachements(), null);
 
         if (!$limite->isAccepted()) {
-            throw new TooManyRequestsException(max(1, $limite->getRetryAfter()->getTimestamp() - time()), 'Les 40 analyses de rattachement de la journée sont atteintes. Rattachez ce compte à la main, ou réessayez plus tard.');
+            throw new TooManyRequestsException(max(1, $limite->getRetryAfter()->getTimestamp() - time()), 0 === $limite->getLimit() ? 'L’analyse automatique des rattachements est fermée sur cette installation. Rattachez ce compte à la main.' : \sprintf('Les %d analyses de rattachement de la journée sont atteintes. Rattachez ce compte à la main, ou réessayez plus tard.', $limite->getLimit()));
         }
 
         if ($requete->hasSession() && $requete->getSession()->isStarted()) {

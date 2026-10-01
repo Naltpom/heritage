@@ -40,7 +40,7 @@ use Symfony\Component\HttpFoundation\Response;
  * ── Le compteur doit être vidé ici, et pas seulement par le socle ───────────────
  *
  * `CoreWebTestCase` vide `cache.rate_limiter` ; le limiteur de ce module vit dans
- * `cache.app` (voir `config/services/media.yaml`, `media.stockage_limiteur`). Et la clé
+ * `cache.app` (celui de `Core\Service\QuotasDUsage`, repris de l'ancien `media.stockage_limiteur`). Et la clé
  * du compteur est l'identifiant du compte — or la base repart vierge à chaque test, donc
  * les identifiants repartent de 1. Sans le vidage ci-dessous, le premier test léguerait
  * ses vingt et un jetons au second sous la même clé, et l'ordre d'exécution déciderait du
@@ -159,9 +159,11 @@ final class PlafondDeDepotTest extends CoreWebTestCase
         $identifiant = $utilisateur->getId();
         self::assertNotNull($identifiant);
 
-        $limiteur = self::getContainer()->get('media.limiteur_televersement');
-        self::assertInstanceOf(\Symfony\Component\RateLimiter\RateLimiterFactoryInterface::class, $limiteur);
+        $quotas = self::getContainer()->get(\App\Module\Core\Service\QuotasDUsage::class);
+        $declares = self::getContainer()->get(\App\Module\Media\Service\QuotasDesMedias::class);
+        self::assertInstanceOf(\App\Module\Core\Service\QuotasDUsage::class, $quotas);
+        self::assertInstanceOf(\App\Module\Media\Service\QuotasDesMedias::class, $declares);
 
-        return $limiteur->create((string) $identifiant)->consume(0)->getRemainingTokens();
+        return $quotas->limiteur($declares->televersements(), $identifiant)->consume(0)->getRemainingTokens();
     }
 }

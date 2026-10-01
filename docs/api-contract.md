@@ -366,13 +366,20 @@ composant `RateLimiter` stockant ses compteurs dans le cache (§ 0.6 — pas de 
 | `POST /api/inscription/verifier` | IP | 20 / heure | `429` `trop_de_tentatives` |
 | `POST /api/inscription/rattachement` | **jeton** | `invitation.tentatives_par_heure`, défaut **5** | **`200` indistinguable d'une recherche infructueuse** — voir § 4.2 |
 | `POST /api/inscription/rattachement` | IP | 30 / heure | `429` `trop_de_tentatives` |
-| `POST /api/medias` | compte | 20 / heure | `429` `trop_de_tentatives` |
+| `POST /api/medias` | compte (administrateur exempté) | 20 / heure **par défaut**, réglable par compte (§ 10.1) | `429` `trop_de_tentatives` |
 | `POST /api/demandes` | compte | 30 / heure | `429` `trop_de_tentatives` |
 
 Le plafond par jeton est le garde-fou du § 6.1 du dossier ; le plafond par IP est là pour le
 balayage distribué sur plusieurs jetons, que le premier ne voit pas. Les deux coexistent et
 ne se répondent **pas** de la même façon : c'est le point le plus délicat du document, il est
 traité au § 4.2 et au § 17.1.
+
+**Les quotas d'usage réglables** (depuis le 1er octobre 2026) — téléversements, analyses et
+questions de l'assistant, rattachement assisté — ont un plafond **par défaut** en
+configuration (`media.yaml`, `assistant.yaml`) et, pour chaque compte, une limite
+**personnelle** facultative posée par l'administrateur (§ 10.1, « Quotas d'usage »). La
+limite effective est la personnelle, sinon le défaut ; le message du `429` cite la limite
+effective. Une limite à `0` ferme l'usage (`429` aussitôt, rien n'est décompté).
 
 **Symfony ne rend pas spontanément l'enveloppe d'erreur du § 15.** `login_throttling` émet sa
 propre réponse : il faut un `AuthenticationFailureHandler` qui la normalise. Sans lui, la
@@ -4472,8 +4479,8 @@ l'analyse est calculée, stockée, puis rendue. `POST` sur la même adresse forc
 calcul (« Relancer l'analyse »). Sur les trois routes de ce préfixe : `409`
 `vue_comme_membre_active` d'abord, `404` si le compte n'est plus `a_rattacher` / `en_attente`,
 et la session est **relâchée** avant tout appel au modèle. Quota séparé :
-`assistant.limiteur_rattachements`, **40 analyses par 24 heures glissantes, clé globale** pour
-tous les administrateurs. `503` `assistant_indisponible` (pas de clé et pas de cache) ·
+`assistant.rattachements`, **40 analyses par 24 heures glissantes par défaut, clé globale**
+pour tous les administrateurs — limite réglable globalement (« Quotas d'usage » ci-dessous). `503` `assistant_indisponible` (pas de clé et pas de cache) ·
 `502` `assistant_erreur` · `429` avec `Retry-After`.
 
 ```json
@@ -4519,6 +4526,55 @@ activation du compte. `201 {membre, personId, demandeId}`. Erreurs : `422 {champ
 (plus de deux, ou inexistant), `422` `demande_sans_lien` quand aucun lien ne rattache `#p1` à
 l'arbre, les autres `422` / `409` de `Proposal`, `404` si le compte a été traité entre-temps.
 **Dans tous les cas d'erreur, rien n'est écrit.**
+
+#### Quotas d'usage — par compte, et le compteur global
+
+Chaque élément de `GET /api/administration/utilisateurs` (et la réponse de
+`GET`/`PATCH /api/administration/utilisateurs/{id}`) porte `quotas`, un élément par quota
+**compté par compte** :
+
+```json
+"quotas": [
+  { "cle": "assistant.analyses", "libelle": "Analyses IA", "fenetre": "par 24 h", "consomme": 3, "limite": 20, "limiteParDefaut": 20, "personnalisee": false, "exempte": false },
+  { "cle": "assistant.questions", "libelle": "Questions IA", "fenetre": "par 24 h", "consomme": 12, "limite": 15, "limiteParDefaut": 60, "personnalisee": true, "exempte": false },
+  { "cle": "media.televersements", "libelle": "Médias", "fenetre": "par heure", "consomme": 0, "limite": 20, "limiteParDefaut": 20, "personnalisee": false, "exempte": false }
+]
+```
+
+| `cle` | Fenêtre glissante | Défaut | Où le défaut est écrit |
+|---|---|---|---|
+| `assistant.analyses` | 24 h | 20 | `assistant.quota.analyses` (`config/services/assistant.yaml`) |
+| `assistant.questions` | 24 h | 60 | `assistant.quota.questions` |
+| `media.televersements` | 1 h | 20 | `media.quota.televersements` (`config/services/media.yaml`) |
+| `assistant.rattachements` | 24 h, **clé globale** | 40 | `assistant.quota.rattachements` |
+
+- `consomme` est **lu sans être décompté** : la lecture n'ajoute aucun coup au compteur.
+  Il peut dépasser `limite` quand l'administrateur a baissé la limite sous ce qui était
+  déjà consommé.
+- `limite` est la limite **effective** : la personnelle si `personnalisee`, sinon
+  `limiteParDefaut`. Une limite changée s'applique aussitôt aux coups déjà comptés.
+- `exempte` : l'administrateur n'est pas compté sur les téléversements (§ 7.1) — ni le défaut
+  ni une limite personnelle ne le contraignent.
+- Ordre : celui des déclarations des modules. Le front n'a aucune clé à connaître d'avance.
+
+`PATCH /api/administration/utilisateurs/{id}/quotas` pose ou retire des limites
+personnelles, corps `{"limites": {"assistant.analyses": 30, "assistant.questions": null}}` :
+
+- une clé absente ne change rien ; `null` rend le défaut (la ligne de `core_quota_limite`
+  est supprimée) ; un **entier de 0 à 10 000** devient la limite. `0` ferme l'usage. Il n'y a
+  pas d'« illimité » : la borne haute en tient lieu et garde le compteur ;
+- `422 donnees_invalides`, `champs["limites.<clé>"]` : valeur hors bornes ou non entière, clé
+  inconnue, ou quota global ; `422 {limites}` si le corps n'a pas `limites` ou si ce n'est
+  pas un objet. **Un lot dont une valeur est invalide n'écrit rien** ;
+- `404` si le compte n'existe pas, `409 vue_comme_membre_active` sous la bascule ;
+- réponse `200` : la charge du compte (ci-dessus), `quotas` à jour. Le journal d'audit
+  mécanique écrit chaque création, modification ou suppression de limite.
+
+Le **rattachement assisté** compte sur **une** clé pour toute l'installation : il n'a pas de
+limite par compte. `GET /api/administration/quotas` rend `{"quotas": [ … ]}` — les quotas
+globaux, même forme sans `exempte` — et `PATCH /api/administration/quotas` prend le même corps
+`{"limites": {"assistant.rattachements": 60}}` (mêmes règles ; une clé par compte y rend
+`422`). Toutes ces routes sont réservées à l'administrateur (`403` sinon).
 
 ### 10.2 Réglages
 
@@ -6636,8 +6692,9 @@ de l'[ADR 0008](adr/0008-questions-et-modele-de-langage.md).
   compris pour un administrateur.
 - Question : 1 à 1 000 caractères (`422`, `champs.question`). Une conversation compte au
   plus 50 échanges ; au-delà, `422` invite à en ouvrir une nouvelle.
-- Quota : **60 questions par 24 heures glissantes et par compte**, administrateur compris
-  (`assistant.limiteur_questions`) ; `429` avec `Retry-After`. `restant` le décompte.
+- Quota : **60 questions par 24 heures glissantes et par compte** par défaut, administrateur
+  compris (`assistant.questions`, réglable par compte au § 10.1) ; `429` avec `Retry-After`,
+  dont le message cite la limite du compte. `restant` le décompte.
 - `409 vue_comme_membre_active` sur les trois écritures sous la bascule ; les lectures
   restent ouvertes. **Sous une incarnation** (§ 23), on écrit : la conversation appartient
   au compte incarné, et le journal nomme l'administrateur.
