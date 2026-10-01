@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * La rangée d'onglets de la fiche : Identité et famille · Sources et documents ·
- * {n} · Historique · {n} (ce dernier seulement si la fiche porte des demandes).
+ * {n} · Historique — toujours trois, dans cet ordre. Le compteur d'Historique
+ * est celui des demandes en attente, et n'apparaît que s'il y en a.
  *
  * Depuis la refonte du 30/09/2026, la rangée est `OngletsGlissants`, partagée
  * avec Explorer : un seul trait souligne l'onglet courant et **glisse** vers le

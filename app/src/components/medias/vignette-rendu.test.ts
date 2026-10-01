@@ -2,6 +2,7 @@ import { createSSRApp, h } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { describe, expect, it } from 'vitest'
 import type { Media } from '@/lib/api'
+import { horodatageAvecHeure } from '@/lib/horodatage'
 import VignetteMedia from './VignetteMedia.vue'
 
 /**
@@ -137,5 +138,14 @@ describe('un PDF n’a pas de vignette serveur — on ne la demande pas', () => 
     // Le rendu serveur glisse des commentaires de fragment dans « page<s> ».
     expect(html.replace(/<!--.*?-->/g, '')).toContain('2 pages')
     expect(html).toContain('Acte de décès n° 230, 1995')
+  })
+})
+
+describe('la date du dépôt', () => {
+  it('s’affiche avec son heure, dans un `<time datetime>`, au format des notes', async () => {
+    const html = await rendre({ media: mediaEnLecture() })
+    expect(html).toContain('<time datetime="2026-09-15T21:04:00+02:00">')
+    expect(html).toContain(horodatageAvecHeure('2026-09-15T21:04:00+02:00'))
+    expect(html).toContain('Ajouté le')
   })
 })

@@ -960,3 +960,92 @@ export function soumettreDemande(id: number): Promise<Demande> {
 export function retirerDemande(id: number): Promise<Demande> {
   return requeteApi<Demande>(`/demandes/${id}/retirer`, { methode: 'POST' })
 }
+
+/* ------------------------------------------------------------------ */
+/* L'historique d'une fiche — § 6.11                                   */
+/* ------------------------------------------------------------------ */
+
+/** § 5.7 — ce qu'une révision a fait à l'arbre. Valeurs du modèle, non traduites. */
+export type OperationDeRevision =
+  | 'creation'
+  | 'modification'
+  | 'suppression'
+  | 'lien_ajoute'
+  | 'lien_retire'
+
+/**
+ * Une révision **effectivement appliquée** (§ 6.11) — le sérialiseur
+ * `SerialiseurDeDemande::revision()`, relu dans son code.
+ *
+ * `changes` est rendu **formaté** côté serveur, champ par champ :
+ * `{ "birth": { "avant": "1987", "apres": "entre 1901 et 1909" } }`. Pour une
+ * création, `avant` vaut `null` partout ; sur une fiche masquée, `avant` est
+ * **retiré** — d'où les deux clés facultatives. `requestId` à `null` signale un
+ * import GEDCOM, jamais un raccourci d'écriture (§ 5.5).
+ */
+export interface RevisionDeFiche {
+  id: number
+  /** Une valeur inconnue s'affiche telle quelle plutôt que de disparaître. */
+  operation: OperationDeRevision | (string & {})
+  subjectKind: NatureSujet
+  subjectId: number
+  subjectLabel: string | null
+  changes: Record<string, unknown>
+  versionBefore: number | null
+  versionAfter: number | null
+  actorLabel: string | null
+  requestId: number | null
+  /** ATOM. */
+  appliedAt: string
+}
+
+/**
+ * `GET /api/demandes/historique/{kind}/{id}` — une page de l'historique d'une
+ * fiche, du plus récent au plus ancien (§ 6.11).
+ *
+ * **Réservée aux membres** : un compte en attente reçoit `403 regime_en_attente`,
+ * et une personne vivante hors cercle rend `404`, comme une fiche inconnue.
+ * `parPage` est plafonné à 100 côté serveur.
+ */
+export function listerHistoriqueDeFiche(
+  subjectKind: NatureSujet,
+  subjectId: number,
+  options: { page?: number | undefined; parPage?: number | undefined } = {},
+  requete: OptionsRequete = {},
+): Promise<ListePaginee<RevisionDeFiche>> {
+  return requeteApi<ListePaginee<RevisionDeFiche>>(
+    `/demandes/historique/${subjectKind}/${subjectId}`,
+    { ...requete, requete: { page: options.page, parPage: options.parPage } },
+  )
+}
+
+/** Au-delà, l'historique est rendu tronqué — et l'écran le dit. */
+const PAGES_D_HISTORIQUE_AU_PLUS = 10
+
+/**
+ * L'historique **entier** d'une personne : les pages de 100 l'une après
+ * l'autre, jusqu'au `total` annoncé.
+ *
+ * Pourquoi tout charger plutôt que paginer à l'écran : l'onglet Historique
+ * **mêle** ces révisions aux sources, notes et documents de la fiche, rangés par
+ * date. Avec une seule page, une source vieille de deux ans s'afficherait entre
+ * deux révisions récentes, sans les révisions d'entre-deux qu'on n'a pas encore
+ * chargées — une frise qui ment par omission. Une fiche en porte quelques
+ * dizaines : une ou deux requêtes. Le plafond (`PAGES_D_HISTORIQUE_AU_PLUS`,
+ * soit 1 000 révisions) ne sert qu'à ne jamais boucler sans fin ; `complet`
+ * dit s'il a été atteint.
+ */
+export async function lireHistoriqueDePersonne(
+  personId: number,
+  requete: OptionsRequete = {},
+): Promise<{ elements: RevisionDeFiche[]; total: number; complet: boolean }> {
+  const elements: RevisionDeFiche[] = []
+  let total = 0
+  for (let page = 1; page <= PAGES_D_HISTORIQUE_AU_PLUS; page++) {
+    const reponse = await listerHistoriqueDeFiche('personne', personId, { page, parPage: 100 }, requete)
+    total = reponse.total
+    elements.push(...reponse.elements)
+    if (reponse.elements.length === 0 || elements.length >= total) break
+  }
+  return { elements, total, complet: elements.length >= total }
+}

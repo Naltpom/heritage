@@ -45,7 +45,7 @@ interface PortDesMedias
      * Tous les médias actifs rattachés à la personne, portrait compris — c'est la clé
      * `medias` du § 5.3, et le portrait y figure aussi, sous son `kind`.
      *
-     * @return list<array{mediaId: int, kind: string, caption: string|null, url: string, vignetteUrl: string}>
+     * @return list<array{mediaId: int, kind: string, caption: string|null, url: string, vignetteUrl: string, createdAt: string}>
      */
     public function mediasDePersonne(int $personneId, LecteurDeLArbre $lecteur): array;
 

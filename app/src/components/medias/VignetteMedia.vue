@@ -15,6 +15,9 @@
  * propose — parce qu'il s'agit d'une **action**, pas d'un champ de données. Le
  * serveur ne compte d'ailleurs pas dessus : il refuse de son côté.
  *
+ * **Chaque pièce est datée** : date et heure du dépôt (`createdAt`, § 7.2), au
+ * même format que les sources et les notes de la fiche (`horodatageAvecHeure`).
+ *
  * **Jamais de `confirm()`.** La confirmation est un second bouton qui apparaît à
  * la place du premier : elle se style, se lit au lecteur d'écran, et ne bloque
  * pas le fil du navigateur.
@@ -26,6 +29,7 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import ApercuPdf from './ApercuPdf.vue'
 import { estImage, pastilleDeMedia, tailleLisible, type CibleLoupe } from './medias'
+import { horodatageAvecHeure } from '@/lib/horodatage'
 
 const { media, supprimable = false, pivotable = false } = defineProps<{
   media: Media
@@ -83,6 +87,12 @@ function agrandir(): void {
 
       <span v-if="media.caption" class="text-xs leading-snug break-words">
         {{ media.caption }}
+      </span>
+
+      <!-- La date du dépôt, au même format que les sources et les notes de la
+           fiche : c'est par elle que l'onglet Historique range les documents. -->
+      <span class="text-[11px] text-attenue">
+        Ajouté le <time :datetime="media.createdAt">{{ horodatageAvecHeure(media.createdAt) }}</time>
       </span>
 
       <span class="text-[11px] text-attenue">

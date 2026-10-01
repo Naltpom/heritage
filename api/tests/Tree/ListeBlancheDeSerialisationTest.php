@@ -115,6 +115,24 @@ final class ListeBlancheDeSerialisationTest extends ArbreWebTestCase
     }
 
     /**
+     * Une citation se date comme une note : `createdAt`, au format ATOM, celui de la
+     * ligne. L'écran l'affiche sur chaque source, et l'onglet Historique de la fiche
+     * range par elle ce qui a été ajouté — une clé absente y ferait disparaître la
+     * citation, sans erreur.
+     */
+    public function testUneCitationDeLaFichePorteSaDateDAjout(): void
+    {
+        $fiche = $this->fiche('cousin', $this->membre(), CercleDuLecteur::de([$this->idDe('cousin')]));
+
+        $citation = $fiche['citations'][0];
+        self::assertArrayHasKey('createdAt', $citation);
+        $date = \DateTimeImmutable::createFromFormat(\DateTimeInterface::ATOM, $citation['createdAt']);
+        self::assertNotFalse($date, 'La date d’une citation est rendue au format ATOM, comme celle d’une note.');
+        self::assertSame($citation['createdAt'], $date->format(\DateTimeInterface::ATOM));
+        self::assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/', $fiche['notes'][0]['createdAt']);
+    }
+
+    /**
      * « Une personne décédée est un fait historique : visible de tout membre connecté,
      * sans restriction » — y compris d'un compte **sans cercle**, ce qui est tout l'objet
      * du régime en attente.
