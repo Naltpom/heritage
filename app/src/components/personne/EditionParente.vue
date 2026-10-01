@@ -276,9 +276,7 @@ function aideParent(nom: string, familleId: number): string {
         <li v-for="membre in fiche.fratrie" :key="membre.personId" class="py-0.5">{{ membre.displayName }}</li>
       </ul>
       <p class="m-0 mt-1 text-xs text-attenue" data-aide-fratrie>
-        Les frères et sœurs se déduisent des parents : ils n’ont pas de lien propre à retirer. Pour
-        en détacher un, ouvrez sa fiche et retirez-y le lien avec ses parents ; pour en ajouter un,
-        ajoutez cet enfant au couple depuis la fiche d’un parent.
+        Ils viennent des parents : modifiez leur lien depuis leur fiche ou celle d’un parent.
       </p>
     </section>
   </div>

@@ -199,7 +199,7 @@ describe('EditionParente — une croix par lien, aucune sur la fratrie', () => {
     })
     expect(html).toContain('Jaspe Sureau')
     expect(html).toContain('data-aide-fratrie')
-    expect(html).toContain('se déduisent des parents')
+    expect(html).toContain('Ils viennent des parents')
     expect(html).not.toContain('data-croix="fratrie"')
   })
 

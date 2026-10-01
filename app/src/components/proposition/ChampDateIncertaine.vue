@@ -202,7 +202,7 @@ const classeChamp = computed(() => [
       <input
         :value="saisie.lieu"
         type="text"
-        placeholder="Saule, Ombrage, Sylvanie"
+        placeholder="Commune, département, pays"
         class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
         @input="modifier('lieu', ($event.target as HTMLInputElement).value)"
       />
