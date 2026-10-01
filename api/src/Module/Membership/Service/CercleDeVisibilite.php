@@ -23,17 +23,45 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  * 1. **Une personne décédée est un fait historique**, visible de tout compte connecté :
  *    {@see self::voitPersonne()} rend `true` avant même de regarder le cercle. 256 fiches
  *    sur 274 ne franchissent jamais le reste de ce fichier.
- * 2. **Une personne vivante n'est visible que dans le cercle du lecteur, et jamais en
- *    régime `Aucun`** — y compris celle à laquelle ce lecteur prétend se rattacher.
- *    `mbr_invitation.person_id` et `mbr_member.person_id` ne sont **pas lus** tant que le
- *    membre n'est pas actif : c'est {@see FabriqueDuLecteurDuCercle} qui ferme, en amont,
- *    et ce fichier n'a aucun moyen de rouvrir. *Confirmer une date de naissance n'est pas
- *    la lire.*
+ * 2. **Une personne vivante est visible de tout membre validé — sauf fiche
+ *    confidentielle —, et jamais en régime `Aucun`** — y compris celle à laquelle ce
+ *    lecteur prétend se rattacher. `mbr_invitation.person_id` et `mbr_member.person_id`
+ *    ne sont **pas lus** tant que le membre n'est pas actif : c'est
+ *    {@see FabriqueDuLecteurDuCercle} qui ferme, en amont, et ce fichier n'a aucun moyen
+ *    de rouvrir. *Confirmer une date de naissance n'est pas la lire.* Une fiche à
+ *    confidentialité **forcée** (`force_privacy`) reste, elle, réservée au cercle du
+ *    lecteur — l'administrateur compris, par son cercle complet. Voir plus bas.
  * 3. **Un décès inconnu vaut vivant, donc masqué.** La question est posée à la vue de
  *    l'arbre, dont `estVivante()` rend `true` pour un identifiant qu'elle ne connaît pas.
  *
  * Et la quatrième, sur la forme des refus : ces méthodes ne distinguent pas « n'existe
  * pas » de « pas le droit ». L'appelant rend `404` dans les deux cas (§ 15.3).
+ *
+ * ## Révision du 2026-10-01 : le cercle ne garde plus que les fiches confidentielles
+ *
+ * Décision du commanditaire : *les membres sont de la famille*. Tout lecteur en régime
+ * `Cercle` — un membre validé, l'administrateur, et l'administrateur sous la bascule —
+ * voit désormais **toutes** les personnes vivantes, nom, dates, lieux, médias compris.
+ * Une seule exception : la fiche dont l'administration a forcé la confidentialité
+ * ({@see VueDeLArbre::estConfidentielle()}), qui reste servie réduite, sous
+ * {@see CercleDeVisibiliteInterface::NOM_MASQUE}, à quiconque n'a pas la personne dans son
+ * cercle **généalogique** — exactement comme avant la révision, puisque `force_privacy`
+ * faisait déjà de la fiche une fiche « vivante » soumise au cercle (§ 9.2).
+ *
+ * Le changement tient en **une ligne** de {@see self::voitPersonne()} et de
+ * {@see self::filtrerPersonnes()} — et non dans les douze appelants : tous posent leur
+ * question ici, la réponse change ici. Ce qui n'a **pas** bougé, et c'est voulu :
+ *
+ * - la **formule** `C(u)`, son calcul et son cache. La valeur mise en cache est toujours
+ *   le cercle généalogique, pas « tout sauf les confidentielles » : son sens n'a pas
+ *   changé, les entrées écrites avant le déploiement restent donc justes et il n'y avait
+ *   aucune version de clé à monter. Le drapeau est lu dans la vue de l'arbre, rechargée à
+ *   chaque requête — et le poser change de toute façon l'empreinte, qui couvre toutes
+ *   les colonnes de `tree_person` ;
+ * - le régime `Aucun` : rien de vivant, et l'ordre du test l'assure — on ne regarde le
+ *   drapeau qu'en régime `Cercle` ;
+ * - l'absence de mode « sans filtre » : ce n'est pas un `if ($estMembre) return true`, la
+ *   fiche confidentielle continue de passer par le cercle.
  *
  * ## L'administrateur passe par un cercle complet
  *
@@ -124,10 +152,16 @@ final class CercleDeVisibilite implements CercleDeVisibiliteInterface
     public function voitPersonne(int $personId): bool
     {
         // **Règle 1 du contrat, et elle passe avant tout le reste.** Une personne décédée
-        // est visible de tout compte connecté, y compris en régime `Aucun` : c'est ce qui
-        // donne au compte en attente ses 256 fiches (§ 12.1), et ce n'est pas une
-        // exception à la règle mais sa conséquence mécanique.
+        // est visible de tout compte connecté, y compris en régime `Aucun` — qui n'atteint
+        // plus l'arbre depuis le 2026-10-01 (`ReserveAuxMembres`), mais la règle reste la
+        // sienne. Ce n'est pas une exception, c'est sa conséquence mécanique.
         if (!$this->vue()->estVivante($personId)) {
+            return true;
+        }
+
+        // **Révision du 2026-10-01** : un vivant est visible de tout membre validé, sauf
+        // fiche confidentielle. Voir l'en-tête.
+        if ($this->membreVoitLesVivants() && !$this->vue()->estConfidentielle($personId)) {
             return true;
         }
 
@@ -137,6 +171,7 @@ final class CercleDeVisibilite implements CercleDeVisibiliteInterface
     public function filtrerPersonnes(array $personIds): array
     {
         $vue = $this->vue();
+        $membre = $this->membreVoitLesVivants();
         $cercle = $this->personnesDuCercle();
 
         $visibles = [];
@@ -146,7 +181,9 @@ final class CercleDeVisibilite implements CercleDeVisibiliteInterface
                 continue;
             }
 
-            if (!$vue->estVivante($id) || isset($cercle[$id])) {
+            if (!$vue->estVivante($id)
+                || ($membre && !$vue->estConfidentielle($id))
+                || isset($cercle[$id])) {
                 $visibles[$id] = true;
             }
         }
@@ -155,7 +192,22 @@ final class CercleDeVisibilite implements CercleDeVisibiliteInterface
     }
 
     /**
-     * La taille annoncée dans la charge de session (§ 2.2 du contrat) — **absente** du
+     * Le lecteur relève-t-il du régime où les vivants **non confidentiels** sont ouverts ?
+     *
+     * Le régime `Cercle`, et lui seul : un membre actif rattaché, l'administrateur, et
+     * l'administrateur sous la bascule quand le membre emprunté est actif. Le régime `Aucun`
+     * — compte en attente, compte actif sans rattachement valide, bascule sur un compte
+     * inactif — n'y entre pas : le défaut fermé reste fermé.
+     */
+    private function membreVoitLesVivants(): bool
+    {
+        return Regime::Cercle === $this->regime();
+    }
+
+    /**
+     * La taille annoncée dans la charge de session (§ 2.2 du contrat) — celle du cercle
+     * **généalogique** `C(u)`, qui ne décide plus, depuis le 2026-10-01, que des fiches
+     * confidentielles ; elle n'est pas le nombre de vivants que le lecteur voit. **Absente** du
      * régime `Aucun`, d'où le `null` plutôt que `0` : « le front branche sur `regime`,
      * jamais sur `taille === 0` », et il ne peut le faire que si lire `taille` rend
      * `undefined`.

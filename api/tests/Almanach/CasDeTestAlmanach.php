@@ -103,14 +103,19 @@ abstract class CasDeTestAlmanach extends WebTestCase
      * par personne rendrait illisibles les tests de compteurs, où le nombre exact
      * d'événements est ce qu'on affirme.
      */
-    protected function poserPersonne(int $id, string $displayName, bool $vivant, Sex $sexe = Sex::Feminin): void
+    /**
+     * `$confidentielle` pose `force_privacy` côté `Membership` : depuis la révision du
+     * 2026-10-01 de l'ADR 0003, un membre validé voit tous les vivants, et seule une fiche
+     * confidentielle hors de son cercle lui reste fermée.
+     */
+    protected function poserPersonne(int $id, string $displayName, bool $vivant, Sex $sexe = Sex::Feminin, bool $confidentielle = false): void
     {
         FluxDEvenementsEnMemoire::ajouterSujet($id, $displayName, $sexe, $vivant);
 
         // Le même individu côté `Membership`, pour que le vrai cercle puisse décider.
         // `prenoms`/`nom` ne servent qu'au libellé minimal de la recherche de
         // rattachement, qui n'a pas cours ici : seul `vivante` compte pour le filtrage.
-        ArbreEnMemoire::ajouterPersonne($id, $displayName, '', $vivant, libelle: $displayName);
+        ArbreEnMemoire::ajouterPersonne($id, $displayName, '', $vivant, libelle: $displayName, confidentielle: $confidentielle);
     }
 
     /**

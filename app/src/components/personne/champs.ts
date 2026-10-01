@@ -472,5 +472,7 @@ export function noteDeConfidentialite(fiche: FichePersonne): string | null {
       ? `Fiche protégée par décision d’administration : ${fiche.privacyNote}`
       : 'Fiche protégée par décision d’administration.'
   }
-  return 'Personne vivante : sa fiche n’est communiquée qu’aux membres de son cercle de visibilité.'
+  // Depuis le 2026-10-01, tout membre validé voit les vivants (ADR 0003) : seule
+  // une fiche à confidentialité forcée reste réservée à son cercle.
+  return 'Personne vivante : sa fiche n’est communiquée qu’aux membres de la famille.'
 }

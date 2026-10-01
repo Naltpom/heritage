@@ -265,16 +265,18 @@ describe('BarreOutilsChronologie — la case « Vivants uniquement »', () => {
 /* ==================================================================== */
 
 describe('ReserveVivants', () => {
-  it('dit que les vivants hors cercle ne peuvent pas s’afficher', async () => {
+  it('dit que les fiches confidentielles ne peuvent pas s’afficher', async () => {
     // La réserve exigée à l'écran : sans elle, deux comptes qui comparent leurs
-    // écrans concluent au bogue.
+    // écrans concluent au bogue. Depuis le 2026-10-01, un membre voit tous les
+    // vivants : seule une fiche confidentielle manque (ADR 0003).
     const html = await rendre(ReserveVivants)
-    expect(html).toContain('cercle de visibilité')
+    expect(html).toContain('fiche confidentielle')
     expect(html).toContain('aucune barre')
+    expect(html).not.toContain('cercle de visibilité')
   })
 
-  it('dit que deux comptes ne verront pas les mêmes personnes', async () => {
-    expect(await rendre(ReserveVivants)).toContain('ne verra donc pas les mêmes personnes')
+  it('dit que deux comptes ne verront pas forcément les mêmes personnes', async () => {
+    expect(await rendre(ReserveVivants)).toContain('ne verra donc pas forcément les mêmes personnes')
   })
 
   it('dit que « vivant » est calculé, pas relevé', async () => {

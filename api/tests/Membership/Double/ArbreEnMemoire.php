@@ -69,6 +69,7 @@ final class ArbreEnMemoire implements PortArbre
         ?int $anneeNaissance = null,
         string $etiquetteNaissance = '',
         ?string $libelle = null,
+        bool $confidentielle = false,
     ): void {
         self::$personnes[] = new PersonneDeLArbre(
             $id,
@@ -78,6 +79,7 @@ final class ArbreEnMemoire implements PortArbre
             $anneeNaissance,
             $etiquetteNaissance,
             $vivante,
+            $confidentielle,
         );
     }
 

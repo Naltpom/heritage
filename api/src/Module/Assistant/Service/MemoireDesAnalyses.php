@@ -121,8 +121,20 @@ final readonly class MemoireDesAnalyses
         $this->cache->save($element);
     }
 
+    /**
+     * `assistant.analyse.v2.{compte}.{analyse}`.
+     *
+     * **`v2` : la révision du 2026-10-01 de l'ADR 0003** (les vivants visibles des
+     * membres). Les titres et justifications gardés ici sont **déjà masqués** au moment de
+     * l'analyse, sous la règle du jour — un vivant hors cercle y valait « Personne
+     * vivante ». Rien dans la clé ne porte la règle : sans ce segment, une analyse faite
+     * avant le déploiement aurait déposé, pendant encore deux heures, des demandes
+     * intitulées sous l'ancien masque. Le prix est d'avoir à relancer une analyse en
+     * cours au moment du déploiement. Toute règle future qui change ce qui est masqué
+     * dans ces textes change ce segment.
+     */
     private static function cle(int $userId, string $identifiant): string
     {
-        return \sprintf('assistant.analyse.%d.%s', $userId, $identifiant);
+        return \sprintf('assistant.analyse.v2.%d.%s', $userId, $identifiant);
     }
 }

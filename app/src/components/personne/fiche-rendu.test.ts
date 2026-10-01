@@ -206,7 +206,8 @@ describe('§ 1.3 — une valeur nulle garde sa ligne, un champ interdit n’en a
   it('dit pourquoi, et propose une sortie — ce n’est pas un écran d’erreur', async () => {
     const html = await rendre(FicheRestreinte, { fiche: RESTREINTE })
 
-    expect(html).toContain('Cette personne est vivante')
+    // Depuis le 2026-10-01, un membre ne reçoit plus de fiche réduite que confidentielle.
+    expect(html).toContain('Fiche confidentielle')
     // La phrase qui distingue « masqué à l'écran » de « pas envoyé » : c'est
     // toute la différence entre une règle appliquée et une règle affichée.
     expect(html).toContain('le serveur ne les a pas envoyées')

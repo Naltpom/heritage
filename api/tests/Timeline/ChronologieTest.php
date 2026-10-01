@@ -50,7 +50,8 @@ final class ChronologieTest extends CasDeTestTimeline
 
         $this->poserPersonne(self::LECTEUR, 'Natron Romarin', Branch::Tr, 0, Sex::Masculin, vivant: true, naissance: '26 SEP 2012');
         $this->poserPersonne(self::PERE, 'Père Romarin', Branch::Pp, -1, Sex::Masculin, vivant: true, naissance: '1981');
-        $this->poserPersonne(self::HORS_CERCLE, 'Cousin Éloigné', Branch::Mm, -1, Sex::Masculin, vivant: true, naissance: '1979');
+        // Confidentiel : sans cela, depuis le 2026-10-01, un membre le verrait (ADR 0003).
+        $this->poserPersonne(self::HORS_CERCLE, 'Cousin Éloigné', Branch::Mm, -1, Sex::Masculin, vivant: true, naissance: '1979', confidentielle: true);
         $this->poserPersonne(self::SUREAU, 'Marne Dolomite Sureau', Branch::Pm, -3, Sex::Feminin, vivant: false, naissance: 'BET 1901 AND 1909', deces: '1987');
 
         // Le lecteur est l'enfant du père ; Sureau est une aïeule de la branche `pm`, sans
@@ -109,6 +110,20 @@ final class ChronologieTest extends CasDeTestTimeline
         $contenu = $this->client->getResponse()->getContent();
         self::assertIsString($contenu);
         self::assertStringNotContainsString('Cousin Éloigné', $contenu, 'Le nom d\'une personne hors cercle ne sort par aucune clé.');
+    }
+
+    /**
+     * **La règle du 2026-10-01** : un vivant hors du cercle, fiche non confidentielle, a sa
+     * barre pour un membre validé.
+     */
+    public function testUnVivantHorsCercleNonConfidentielAUneBarrePourUnMembre(): void
+    {
+        $this->poserPersonne(31, 'Cousine Lointaine', Branch::Mp, -1, Sex::Feminin, vivant: true, naissance: '1983');
+
+        $this->connecterUnMembre();
+        $this->requete('GET', '/api/chronologie');
+
+        self::assertArrayHasKey(31, $this->barresParPersonne());
     }
 
     /** Les personnes du cercle, elles, sont bien là — sans quoi le cas précédent serait vert par cécité. */

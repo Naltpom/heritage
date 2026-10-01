@@ -5,9 +5,11 @@
  * ────────────────────────────────────────────────────────────────────
  * **POURQUOI CETTE PHRASE EST À L'ÉCRAN ET PAS SEULEMENT DANS LE CODE.**
  *
- * Deux comptes qui allument ce filtre verront deux ensembles différents, et
+ * Deux comptes qui allument ce filtre peuvent voir deux ensembles différents, et
  * c'est **légitime** : une barre est faite de dates, et « les personnes vivantes
- * hors cercle sont absentes de `barres` » (§ 9.1). Elles manquent donc *avant*
+ * hors cercle sont absentes de `barres` » (§ 9.1). Depuis la révision du
+ * 2026-10-01 de l'ADR 0003, pour un membre validé, ce ne sont plus que les fiches
+ * à confidentialité forcée hors de son cercle — la phrase à l'écran le dit ainsi. Elles manquent donc *avant*
  * que ce filtre s'applique — il ne peut pas les faire revenir, et aucun réglage
  * de cet écran ne le pourra.
  *
@@ -41,10 +43,11 @@
 <template>
   <div role="note" class="border-b border-ligne bg-panneau px-4 py-2">
     <p class="text-xs text-attenue">
-      <strong class="font-semibold text-texte">Les vivants de votre cercle.</strong>
-      Une personne vivante hors de votre cercle de visibilité n’expose aucune date, donc
-      aucune barre : elle ne peut pas s’afficher ici, même vivante. Un autre compte ne
-      verra donc pas les mêmes personnes, et cet écart n’est pas une anomalie.
+      <strong class="font-semibold text-texte">Les vivants.</strong>
+      Une fiche confidentielle — fermée par décision d’administration — n’expose aucune
+      date, donc aucune barre : elle ne peut pas s’afficher ici, même vivante. Un autre
+      compte ne verra donc pas forcément les mêmes personnes, et cet écart n’est pas une
+      anomalie.
       « Vivant » est par ailleurs <em>calculé</em> à partir de la fiche : une fiche dont
       le décès n’a jamais été renseigné reste du côté des vivants.
     </p>

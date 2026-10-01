@@ -6,6 +6,7 @@ namespace App\Tests\Tree;
 
 use App\Module\Core\Entity\Setting;
 use App\Module\Core\Enum\UserStatus;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Service\SettingService;
 use App\Module\Media\Entity\Media;
 use App\Module\Media\Enum\MediaKind;
@@ -732,6 +733,64 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
     }
 
     /**
+     * **La règle du 2026-10-01** (ADR 0003, « les vivants visibles des membres »), de bout en
+     * bout et par le vrai cercle : un membre rattaché à `ego` voit `cousin` — vivant, hors
+     * de sa branche — **en entier** sur la fiche, dans le graphe et dans la recherche ; et
+     * la même personne, posée confidentielle, lui revient réduite, sous le masque.
+     */
+    public function testUnMembreVoitUnVivantHorsDeSaBrancheSaufFicheConfidentielle(): void
+    {
+        try {
+            // `cousin` est une fiche ordinaire, comme ego et la conjointe.
+            ArbreEnMemoire::reinitialiser();
+            foreach (['ego' => true, 'conjointe' => true, 'cousin' => true, 'aieule' => false, 'aieul' => false, 'sansDate' => false] as $cle => $vivante) {
+                ArbreEnMemoire::ajouterPersonne($this->idDe($cle), $cle, '', vivante: $vivante);
+            }
+            ArbreEnMemoire::ajouterFamille([$this->idDe('aieul'), $this->idDe('aieule')], [$this->idDe('ego')]);
+
+            $this->rattacherAUnePersonne('membre@heritage.test', 'ego');
+            $this->connexionDe('membre@heritage.test');
+            $nom = $this->personnes['cousin']->getDisplayName();
+
+            $this->requete('/api/arbre/personnes/'.$this->idDe('cousin'));
+            self::assertSame(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
+            self::assertSame('complete', $this->charge()['visibilite']);
+            self::assertSame($nom, $this->charge()['displayName']);
+
+            $this->requete('/api/arbre/graphe');
+            $noeud = null;
+            foreach ($this->charge()['noeuds'] as $candidat) {
+                if (($candidat['personId'] ?? null) === $this->idDe('cousin')) {
+                    $noeud = $candidat;
+                }
+            }
+            self::assertIsArray($noeud);
+            self::assertSame('complete', $noeud['visibilite']);
+            self::assertSame($nom, $noeud['displayName']);
+
+            $this->requete('/api/arbre/recherche?q=tilleul');
+            self::assertContains($this->idDe('cousin'), array_column($this->charge()['elements'], 'personId'));
+
+            // La même fiche, confidentielle : réduite, masquée, absente de la recherche.
+            ArbreEnMemoire::reinitialiser();
+            foreach (['ego' => true, 'conjointe' => true, 'cousin' => true, 'aieule' => false, 'aieul' => false, 'sansDate' => false] as $cle => $vivante) {
+                ArbreEnMemoire::ajouterPersonne($this->idDe($cle), $cle, '', vivante: $vivante, confidentielle: 'cousin' === $cle);
+            }
+            ArbreEnMemoire::ajouterFamille([$this->idDe('aieul'), $this->idDe('aieule')], [$this->idDe('ego')]);
+
+            $this->requete('/api/arbre/personnes/'.$this->idDe('cousin'));
+            self::assertSame('restreinte', $this->charge()['visibilite']);
+            self::assertSame(CercleDeVisibiliteInterface::NOM_MASQUE, $this->charge()['displayName']);
+            self::assertStringNotContainsString($nom, (string) $this->client->getResponse()->getContent());
+
+            $this->requete('/api/arbre/recherche?q=tilleul');
+            self::assertNotContains($this->idDe('cousin'), array_column($this->charge()['elements'], 'personId'));
+        } finally {
+            ArbreEnMemoire::reinitialiser();
+        }
+    }
+
+    /**
      * L'arbre du socle, **tel que `Membership` le voit** : mêmes personnes, mêmes unions,
      * mêmes états vivants que la base de ce test.
      *
@@ -744,9 +803,13 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
     {
         ArbreEnMemoire::reinitialiser();
 
-        ArbreEnMemoire::ajouterPersonne($this->idDe('ego'), 'Natron', 'Romarin', vivante: true);
-        ArbreEnMemoire::ajouterPersonne($this->idDe('conjointe'), 'Cobalt', 'Romarin', vivante: true);
-        ArbreEnMemoire::ajouterPersonne($this->idDe('cousin'), 'Pyroxène', 'Tilleul', vivante: true);
+        // Les trois vivants sont posés **confidentiels** : depuis la révision du 2026-10-01
+        // de l'ADR 0003, un membre voit tout vivant non confidentiel, et les lecteurs que
+        // ces tests distinguent ne différeraient plus que par leur point de vue. C'est le
+        // cercle qu'on veut voir décider, et il ne décide plus que des fiches confidentielles.
+        ArbreEnMemoire::ajouterPersonne($this->idDe('ego'), 'Natron', 'Romarin', vivante: true, confidentielle: true);
+        ArbreEnMemoire::ajouterPersonne($this->idDe('conjointe'), 'Cobalt', 'Romarin', vivante: true, confidentielle: true);
+        ArbreEnMemoire::ajouterPersonne($this->idDe('cousin'), 'Pyroxène', 'Tilleul', vivante: true, confidentielle: true);
         ArbreEnMemoire::ajouterPersonne($this->idDe('aieule'), 'Marne Dolomite', 'Sureau', vivante: false);
         ArbreEnMemoire::ajouterPersonne($this->idDe('aieul'), 'Émeri', 'Sarriette', vivante: false);
         ArbreEnMemoire::ajouterPersonne($this->idDe('sansDate'), 'Lapis', 'Fenouil', vivante: false);

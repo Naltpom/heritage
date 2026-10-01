@@ -17,7 +17,9 @@ use Symfony\Component\HttpFoundation\Response;
  * Les actes demandés : qui les voit, qui les fait avancer, ce qui en est gardé.
  *
  * L'arbre semé est celui d'`ArbreWebTestCase` : `aieule` et `aieul` sont décédés, donc
- * visibles de tout membre ; `cousin` est vivant, hors du cercle d'`ego`.
+ * visibles de tout membre ; `cousin` est vivant, hors du cercle d'`ego`, et sa fiche est
+ * posée **confidentielle** : depuis la révision du 2026-10-01 de l'ADR 0003, c'est la seule
+ * chose qui ferme encore un vivant à un membre validé.
  *
  * **Le cercle est le vrai**, `Membership\Service\CercleDeVisibilite` ; en test, il lit
  * l'arbre par `ArbreEnMemoire` et non par la base. On y pose donc le même arbre, aux mêmes
@@ -36,12 +38,7 @@ final class RoutesDesDemarchesTest extends ArbreWebTestCase
     {
         parent::setUp();
 
-        ArbreEnMemoire::reinitialiser();
-        foreach (['ego' => true, 'conjointe' => true, 'cousin' => true, 'aieule' => false, 'aieul' => false, 'sansDate' => false] as $cle => $vivante) {
-            $nom = $this->personnes[$cle]->getDisplayName();
-            ArbreEnMemoire::ajouterPersonne($this->idDe($cle), $nom, '', $vivante, libelle: $nom);
-        }
-        ArbreEnMemoire::ajouterFamille([$this->idDe('ego'), $this->idDe('conjointe')]);
+        $this->poserLArbre(cousinConfidentiel: true);
 
         foreach (['cache.rate_limiter', 'cache.app'] as $identifiant) {
             $pool = self::getContainer()->get($identifiant);
@@ -53,6 +50,16 @@ final class RoutesDesDemarchesTest extends ArbreWebTestCase
         $this->rattacher(self::OPALE, 'ego');
         $this->rattacher(self::JASPE, 'conjointe');
         $this->creerUtilisateur(self::ADMIN, ['ROLE_ADMIN']);
+    }
+
+    private function poserLArbre(bool $cousinConfidentiel): void
+    {
+        ArbreEnMemoire::reinitialiser();
+        foreach (['ego' => true, 'conjointe' => true, 'cousin' => true, 'aieule' => false, 'aieul' => false, 'sansDate' => false] as $cle => $vivante) {
+            $nom = $this->personnes[$cle]->getDisplayName();
+            ArbreEnMemoire::ajouterPersonne($this->idDe($cle), $nom, '', $vivante, libelle: $nom, confidentielle: $cousinConfidentiel && 'cousin' === $cle);
+        }
+        ArbreEnMemoire::ajouterFamille([$this->idDe('ego'), $this->idDe('conjointe')]);
     }
 
     protected function tearDown(): void
@@ -221,7 +228,7 @@ final class RoutesDesDemarchesTest extends ArbreWebTestCase
     {
         $visible = $this->demarcheSurLAieule();
 
-        // Une démarche sur le cousin, vivant hors du cercle d'Opale.
+        // Une démarche sur le cousin, fiche confidentielle hors du cercle d'Opale.
         $this->connexionDe(self::ADMIN);
         $this->envoyer('POST', '/api/demarches', $this->description('cousin'));
         self::assertSame(Response::HTTP_CREATED, $this->statut());
@@ -266,7 +273,28 @@ final class RoutesDesDemarchesTest extends ArbreWebTestCase
 
     /* ───────────────── Qui voit ───────────────── */
 
-    public function testUneDemarcheSurUnVivantHorsDuCercleNExistePasPourLeMembre(): void
+    /**
+     * **La règle du 2026-10-01** : un vivant hors du cercle, mais dont la fiche n'est pas
+     * confidentielle, est visible du membre — sa démarche aussi.
+     */
+    public function testUneDemarcheSurUnVivantHorsDuCercleEstVisibleDuMembre(): void
+    {
+        $this->poserLArbre(cousinConfidentiel: false);
+
+        $this->connexionDe(self::ADMIN);
+        $this->envoyer('POST', '/api/demarches', $this->description('cousin'));
+        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
+        $id = $this->charge()['id'];
+
+        $this->connexionDe(self::OPALE);
+        $this->requete("/api/demarches/{$id}");
+        self::assertSame(Response::HTTP_OK, $this->statut());
+
+        $this->requete('/api/demarches?personId='.$this->idDe('cousin'));
+        self::assertSame(1, $this->charge()['total']);
+    }
+
+    public function testUneDemarcheSurUneFicheConfidentielleHorsDuCercleNExistePasPourLeMembre(): void
     {
         $this->connexionDe(self::ADMIN);
         $this->envoyer('POST', '/api/demarches', $this->description('cousin'));

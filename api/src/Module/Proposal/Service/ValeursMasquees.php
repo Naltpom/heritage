@@ -35,6 +35,12 @@ use App\Module\Proposal\Service\Port\PortArbre;
  * décédée est un fait historique, visible de tout compte connecté, et c'est l'immense
  * majorité des cibles — la question du cercle ne se pose alors même pas.
  *
+ * *Depuis la révision du 2026-10-01 de l'ADR 0003*, le contrat répond « visible » pour
+ * tout vivant non confidentiel quand le lecteur est un membre validé : ce service ne
+ * masque donc plus, pour un membre, que les valeurs et libellés d'une fiche à
+ * confidentialité forcée hors de son cercle. Rien à changer ici — la question est posée
+ * au contrat, et c'est sa réponse qui a changé.
+ *
  * ── Et, depuis le 2026-10-01, les **noms** ──────────────────────────────────────
  *
  * La révision du 2026-10-01 de l'ADR 0003 retire le nom d'affichage de la liste blanche :

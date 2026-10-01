@@ -112,6 +112,22 @@ final readonly class VueDeLArbre
         return null === $personne || $personne->vivante;
     }
 
+    /**
+     * « Cette fiche est-elle à confidentialité **forcée** ? » (`tree_person.force_privacy`),
+     * et, comme pour {@see self::estVivante()}, **l'inconnu vaut oui**.
+     *
+     * Depuis la révision du 2026-10-01 de l'ADR 0003, c'est la question qui décide si un
+     * membre validé voit un vivant hors de son cercle généalogique : oui, sauf fiche
+     * confidentielle. Un identifiant pendant ou une vue non branchée ne doit donc pas
+     * répondre « non » : ce serait ouvrir par ignorance ce que l'administration a fermé.
+     */
+    public function estConfidentielle(int $id): bool
+    {
+        $personne = $this->personnes[$id] ?? null;
+
+        return null === $personne || $personne->confidentielle;
+    }
+
     /** @return list<int> */
     public function parentsDe(int $id): array
     {

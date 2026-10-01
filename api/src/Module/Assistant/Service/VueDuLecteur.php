@@ -19,8 +19,10 @@ use App\Module\Core\ValueObject\UncertainDate;
  * graphe** (`GET /api/arbre/graphe`, ADR 0003) :
  *
  * - une personne **décédée** est un fait historique, visible de tout compte connecté ;
- * - une personne **vivante** n'est visible en entier que dans le cercle du lecteur ;
- * - hors cercle, elle garde son identifiant — `visibilite: "restreinte"` —, **plus son
+ * - une personne **vivante** est visible en entier de tout membre validé — révision du
+ *   2026-10-01 de l'ADR 0003 —, **sauf** fiche à confidentialité forcée, qui ne l'est que
+ *   dans le cercle du lecteur ;
+ * - hors de ce que le lecteur voit, elle garde son identifiant — `visibilite: "restreinte"` —, **plus son
  *   nom** (révision du 2026-10-01 de l'ADR 0003 : `displayName` vaut
  *   {@see CercleDeVisibiliteInterface::NOM_MASQUE}), et **rien de daté** : ni ligne de
  *   dates, ni valeur d'avant dans un changement, ni `oldValue` dans le corps affiché.

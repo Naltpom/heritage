@@ -461,6 +461,10 @@ Membre actif :
 }
 ```
 
+`cercle.taille` est la taille du cercle **généalogique** `C(u)` (§ 11). Depuis la révision du
+2026-10-01 de l'ADR 0003, ce n'est plus le nombre de vivants que le membre voit — il les voit
+tous —, mais l'étendue sur laquelle il voit aussi les fiches à confidentialité forcée.
+
 Compte en attente de validation — **noter les trois différences**, elles ne sont pas
 cosmétiques :
 
@@ -1209,6 +1213,10 @@ provisoire (`#12/p1`, § 5.2) **ne correspond tout simplement pas à la route** 
 `404` du routeur, sans qu'aucun code n'ait à s'en soucier.
 
 ### 5.1 Ce que « le cercle est appliqué ici » veut dire, route par route
+
+Depuis le 2026-10-01, pour un membre validé, la quatrième colonne ne concerne plus que les
+fiches **confidentielles** (`forcePrivacy`) hors de son cercle ; tout autre vivant suit la
+troisième (§ 11, révision du 2026-10-01).
 
 | Route | Personne décédée | Personne vivante **dans** le cercle | Personne vivante **hors** cercle |
 |---|---|---|---|
@@ -4679,6 +4687,22 @@ Et surtout : **le cercle ne décide que du sort des personnes vivantes.** Une pe
 est un fait historique, visible de tout compte connecté, sans restriction — 256 fiches sur 274
 ne sont jamais concernées.
 
+> **Révision du 2026-10-01 — les vivants visibles des membres (ADR 0003).** Décision du
+> commanditaire : les membres sont de la famille. Un lecteur du régime `cercle` — membre
+> validé, administrateur, administrateur sous la bascule « voir comme un membre » — reçoit
+> **toutes** les personnes vivantes **complètes** : nom, dates, lieux, fiche, recherche,
+> graphe, chronologie, historique, médias, assistant. Le cercle `C(u)` ci-dessus ne décide
+> plus, pour lui, que du sort des fiches à **confidentialité forcée** (`forcePrivacy`) :
+> une telle fiche reste servie **réduite**, sous `"Personne vivante"`, à quiconque ne l'a
+> pas dans son cercle — comme avant la révision.
+>
+> **Comment lire le reste de ce document.** Partout où il écrit « personne vivante hors
+> cercle », il faut lire, pour un lecteur du régime `cercle` : *fiche confidentielle hors de
+> son cercle*. Les règles de masquage, la liste blanche, les `404` et l'absence de la
+> recherche ou de la chronologie s'appliquent à ces fiches-là, inchangées. Le régime
+> `aucun` (§ 12) n'est pas touché : aucune personne vivante, confidentielle ou non — et le
+> compte en attente n'atteint de toute façon plus l'arbre (`403 regime_en_attente`).
+
 ### 11.1 La même fiche, sérialisée deux fois
 
 Pyroxène Tilleul, `tree_person.id = 202`, né vers 1934, **vivant** (§ 9.2 : la règle le classe
@@ -5567,6 +5591,10 @@ produit » (arbitrage **C**).
 > deux sorties lues côte à côte.
 
 ### 16.2 Jamais, pour un lecteur hors cercle
+
+*Depuis le 2026-10-01, pour un membre validé, « hors cercle » ne vise plus que les fiches à
+confidentialité forcée hors de son cercle (§ 11, révision du 2026-10-01). Les interdits
+ci-dessous valent pour elles, sans changement.*
 
 **Aucune donnée d'une personne vivante hors du cercle du lecteur**, au-delà des sept clés du
 § 11.1 — et cela comprend, explicitement :
