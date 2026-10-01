@@ -46,9 +46,10 @@
  * compte, et le formulaire reste là. La mécanique est dans
  * `piloterConnexionCleDAcces()`.
  *
- * Après une connexion **par mot de passe**, `annoncerConnexionParMotDePasse()`
- * prévient l'invitation « Se connecter plus vite la prochaine fois ? », qui
- * s'ouvrira sur l'écran d'arrivée si l'appareil s'y prête.
+ * L'invitation « Se connecter plus vite ? » n'est pas l'affaire de cet écran :
+ * elle s'ouvre d'elle-même à l'arrivée dans l'application, quelle que soit la
+ * façon dont la session s'est ouverte (`InvitationCleDAcces`, monté par
+ * `App.vue`).
  */
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -60,7 +61,7 @@ import ChampTexte from '@/components/base/ChampTexte.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import CadreEntree from '@/components/inscription/CadreEntree.vue'
-import { annoncerConnexionParMotDePasse, piloterConnexionCleDAcces } from '@/composables/useClesDAcces'
+import { piloterConnexionCleDAcces } from '@/composables/useClesDAcces'
 import { delaiAvantNouvelEssai, destinationApresConnexion } from './connexion'
 
 const route = useRoute()
@@ -123,9 +124,6 @@ async function soumettre(): Promise<void> {
     await connecter(email.value.trim(), motDePasse.value)
     // Le mot de passe ne traîne pas en mémoire au-delà de son usage.
     motDePasse.value = ''
-    // Avant de quitter l'écran : l'invitation doit savoir, dès l'arrivée, que
-    // la session vient d'un mot de passe — et passer avant les notifications.
-    annoncerConnexionParMotDePasse()
     await poursuivre()
   } catch (cause) {
     erreur.value = cause
