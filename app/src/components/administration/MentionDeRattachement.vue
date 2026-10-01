@@ -42,6 +42,14 @@ const { membre } = defineProps<{
 
 const mention = computed(() => mentionDeRattachement(membre))
 
+/** La fiche visée, pour le lien — quand le cercle laisse voir son identifiant. */
+const fiche = computed(() => {
+  const id = membre?.personId
+  if (id == null) return null
+  const nom = membre?.personLabel
+  return { id, libelle: nom != null && nom.trim() !== '' ? nom : `la fiche n° ${id}` }
+})
+
 const TONS: Record<Exclude<EtatDuRattachement, 'actif'>, string> = {
   absent: 'border-ligne text-attenue',
   inactif: 'border-accent bg-accent-doux text-accent',
@@ -49,12 +57,20 @@ const TONS: Record<Exclude<EtatDuRattachement, 'actif'>, string> = {
 </script>
 
 <template>
+  <!-- Rattaché : le nom de la fiche est un lien vers elle. -->
   <p
     v-if="mention.etat === 'actif'"
     class="mt-0.5 text-sm text-attenue"
     :data-rattachement="mention.etat"
   >
-    {{ mention.etiquette }}
+    <template v-if="fiche !== null">
+      Rattaché à
+      <RouterLink
+        :to="{ name: 'personne.detail', params: { id: fiche.id } }"
+        class="font-medium text-accent underline"
+      >{{ fiche.libelle }}</RouterLink>
+    </template>
+    <template v-else>{{ mention.etiquette }}</template>
   </p>
 
   <div
