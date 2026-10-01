@@ -1,0 +1,18 @@
+# Posé par la recette de `php-http/discovery`, arrivé avec `minishlink/web-push`
+# (notifications push, module Core).
+#
+# Il rend injectables les fabriques PSR-17. `Core\Service\EnvoyeurWebPush` ne s'en sert
+# pas : il construit lui-même son client (celui du framework, délai borné) et ses
+# fabriques (`nyholm/psr7`), pour ne dépendre d'aucune découverte automatique dont le
+# choix changerait avec les paquets installés. Le fichier est gardé parce que la recette
+# le recréerait à la prochaine mise à jour.
+services:
+    Psr\Http\Message\RequestFactoryInterface: '@http_discovery.psr17_factory'
+    Psr\Http\Message\ResponseFactoryInterface: '@http_discovery.psr17_factory'
+    Psr\Http\Message\ServerRequestFactoryInterface: '@http_discovery.psr17_factory'
+    Psr\Http\Message\StreamFactoryInterface: '@http_discovery.psr17_factory'
+    Psr\Http\Message\UploadedFileFactoryInterface: '@http_discovery.psr17_factory'
+    Psr\Http\Message\UriFactoryInterface: '@http_discovery.psr17_factory'
+
+    http_discovery.psr17_factory:
+        class: Http\Discovery\Psr17Factory

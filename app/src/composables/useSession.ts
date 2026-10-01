@@ -88,6 +88,15 @@ export async function connecter(email: string, motDePasse: string): Promise<Char
  *  l'appel échoue, le cookie peut déjà être mort, et garder l'interface d'un
  *  membre serait pire que de redemander une connexion. */
 export async function deconnecter(): Promise<void> {
+  // Ce téléphone cesse de recevoir les notifications push de ce compte — il
+  // faut la session pour le dire au serveur, donc avant `POST /deconnexion`.
+  // Import différé : `usePush` importe ce module-ci. Ne lève jamais.
+  try {
+    const { oublierPushAvantDeconnexion } = await import('./usePush')
+    await oublierPushAvantDeconnexion()
+  } catch {
+    // Au pire, une notification de plus pour l'ancien compte.
+  }
   try {
     await seDeconnecter()
   } finally {

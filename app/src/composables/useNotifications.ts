@@ -8,8 +8,11 @@
  * fois la requête la plus chaude de l'API pour le même nombre.
  *
  * ────────────────────────────────────────────────────────────────────
- * **Quand le compteur est-il relu ?** Il n'y a ni file, ni Redis, ni push
- * (voir l'en-tête de `NotificationController.php`) : le front **va chercher**.
+ * **Quand le compteur est-il relu ?** Il n'y a ni file, ni Redis (voir
+ * l'en-tête de `NotificationController.php`) : le front **va chercher**. Le
+ * push du téléphone (`usePush.ts`) n'y change rien, sauf un raccourci : quand
+ * le service worker reçoit une notification, il prévient les fenêtres ouvertes,
+ * qui relisent le compteur sans attendre le battement.
  *
  * 1. Au montage de la cloche ;
  * 2. toutes les 60 s, **tant que l'onglet est visible** — un onglet oublié en

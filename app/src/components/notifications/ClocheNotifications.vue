@@ -40,6 +40,7 @@ import { useNotifications } from '@/composables/useNotifications'
 import { useEstMobile } from '@/composables/useTiroirs'
 import { etiquetteCloche, texteCompteur } from '@/lib/notifications'
 import ListeNotifications from './ListeNotifications.vue'
+import NotificationsTelephone from './NotificationsTelephone.vue'
 
 const { connecte } = useSession()
 const { nonLues, notifications, etatListe, charger, marquerLue, toutMarquerLu } = useNotifications()
@@ -196,6 +197,10 @@ onBeforeUnmount(() => {
         <p v-if="echecToutLu" role="alert" class="flex-none px-4 pt-3 text-[13px] text-alerte">
           Impossible de tout marquer comme lu pour l’instant. Réessayez dans un moment.
         </p>
+
+        <!-- « Recevoir aussi sur ce téléphone » : ne se montre que si un clic
+             suffit à activer le push (voir `NotificationsTelephone`). -->
+        <NotificationsTelephone forme="lien" />
 
         <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain max-md:pb-[max(16px,env(safe-area-inset-bottom))]">
           <ListeNotifications

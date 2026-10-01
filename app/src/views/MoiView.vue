@@ -25,6 +25,9 @@
  *   mesure de sécurité : les gardes de route doublent, le serveur double tout.
  * - **Lignes tactiles de 48 px au moins** (`min-h-12`) en forme page : c'est la
  *   cible recommandée pour un pouce.
+ * - **Les notifications sur ce téléphone** (Web Push) ont leur ligne, en forme
+ *   page seulement : c'est un réglage de l'appareil, et le menu du bureau n'a
+ *   pas de téléphone à régler (`NotificationsTelephone`).
  * - **La déconnexion** est celle de l'ancien en-tête : on referme les tiroirs,
  *   on déconnecte, on part vers la connexion.
  */
@@ -34,6 +37,7 @@ import { deconnecter, useSession } from '@/composables/useSession'
 import { useTiroirs } from '@/composables/useTiroirs'
 import { listerDemandesAdministration } from '@/lib/api'
 import InstallationApplication from '@/components/mise-en-page/InstallationApplication.vue'
+import NotificationsTelephone from '@/components/notifications/NotificationsTelephone.vue'
 
 const { forme = 'page' } = defineProps<{
   /** `page` : l'écran `/moi`. `menu` : le menu déroulant de l'avatar, sur bureau. */
@@ -175,6 +179,12 @@ const classePastille = (urgent: boolean | undefined): string =>
         </ul>
       </nav>
     </template>
+
+    <!-- Les notifications push de CET appareil : un réglage par téléphone, pas
+         par compte — d'où sa place à part, hors de la liste des écrans. -->
+    <div v-if="page" class="mt-6 overflow-hidden rounded-panneau border border-ligne bg-panneau">
+      <NotificationsTelephone forme="ligne" />
+    </div>
 
     <!-- Installer l'application : le panneau ne se montre que s'il y a quelque
          chose à installer (navigateur qui le propose, ou iPhone). -->

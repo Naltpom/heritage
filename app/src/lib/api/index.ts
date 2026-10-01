@@ -62,3 +62,7 @@ export * from './tirages'
    leur suivi — chaque message avec son texte entier. Le serveur ne rend que
    les démarches dont le lecteur voit toutes les personnes. */
 export * from './demarches'
+/* Les notifications sur le téléphone (Web Push) : la clé publique du serveur et
+   l'abonnement de cet appareil. La logique d'abonnement est dans
+   `composables/usePush.ts`. */
+export * from './push'
