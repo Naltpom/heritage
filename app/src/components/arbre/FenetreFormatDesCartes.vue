@@ -128,6 +128,8 @@ function garderLeFocus(evenement: KeyboardEvent): void {
     data-voile-format-des-cartes
     @click="emit('garder')"
   />
+  <!-- La fenêtre défile si l'écran est trop bas (téléphone couché : ~360 px de
+       haut, moins que les deux aperçus) — sans quoi le titre sortirait par le haut. -->
   <dialog
     ref="dialogue"
     role="dialog"
@@ -135,7 +137,7 @@ function garderLeFocus(evenement: KeyboardEvent): void {
     :aria-labelledby="`${id}-titre`"
     :aria-describedby="`${id}-message`"
     data-format-des-cartes
-    class="fixed inset-0 z-[610] mx-0 mt-auto mb-0 h-fit w-full max-w-full rounded-t-panneau border border-b-0 border-ligne bg-panneau p-0 text-texte shadow-panneau md:m-auto md:w-[min(28rem,calc(100vw-1.5rem))] md:rounded-panneau md:border-b"
+    class="fixed inset-0 z-[610] mx-0 mt-auto mb-0 h-fit max-h-[100dvh] w-full max-w-full overflow-y-auto overscroll-contain rounded-t-panneau border border-b-0 border-ligne bg-panneau p-0 text-texte shadow-panneau md:m-auto md:w-[min(28rem,calc(100vw-1.5rem))] md:rounded-panneau md:border-b"
     @cancel="surAnnulation"
     @keydown="surTouche"
   >
