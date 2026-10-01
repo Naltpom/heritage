@@ -17,7 +17,7 @@ use App\Module\Core\ValueObject\UncertainDate;
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
  *  UNE ANALYSE, DE BOUT EN BOUT : l'agent propose, `Proposal` vérifie, le cercle filtre.
- * ═══════════════════════════════════════════════════════════════════════════════
+ * ═══════════════════════════════════════════════════════════════════════════════.
  *
  * 1. {@see AgentDeLAssistant} fait tourner le modèle jusqu'à `proposer` ;
  * 2. {@see TraducteurDePropositions} met ses arguments à la forme d'un corps de demande ;
@@ -167,9 +167,16 @@ final readonly class AnalyseParLAssistant
     }
 
     /**
+     * Une demande gardée, telle que le front la reçoit (`DemandeProposee` de
+     * `lib/api/assistant.ts`).
+     *
+     * Publique : {@see SuggestionsDeRattachement} présente la demande de création d'un
+     * compte « à rattacher » exactement de la même façon — mêmes personnes citées, mêmes
+     * lignes de changement —, pour que l'administrateur lise les deux écrans pareil.
+     *
      * @return array<string, mixed>
      */
-    private function presenter(string $cle, PropositionTraduite $proposition, DemandeVerifiee $verifiee): array
+    public function presenter(string $cle, PropositionTraduite $proposition, DemandeVerifiee $verifiee): array
     {
         $corps = $verifiee->corps;
         $personnes = $this->personnesExistantes($corps);

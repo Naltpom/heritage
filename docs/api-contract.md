@@ -720,8 +720,15 @@ d'invitation ne doit jamais devenir un moyen d'énumérer les personnes vivantes
 |---|---|---|---|---|---|---|
 | `POST` | `/api/inscription/verifier` | `PUBLIC` | `{jeton}` | `200` § 4.1 | **`404` `introuvable`** · `429` | 20 / h / IP |
 | `POST` | `/api/inscription/rattachement` | `PUBLIC` | `{jeton, surname, givenNames, birthDate}` | `200` § 4.2 | **`404` `introuvable`** · `429` (IP seulement) | 5 / h / **jeton** + 30 / h / IP |
-| `POST` | `/api/inscription/compte` | `PUBLIC` | `{jeton, choix, email, password}` | `201` § 4.3 | **`404`** · `409` `courriel_deja_pris` · `409` `personne_deja_rattachee` · `422` | — |
+| `POST` | `/api/inscription/compte` | `PUBLIC` | `{jeton, choix, email, password}` **ou** `{jeton, declaration, email, password}` | `201` § 4.3 | **`404`** · `409` `courriel_deja_pris` · `409` `personne_deja_rattachee` · `422` · `429` (avec `declaration`) | 5 / h / IP **avec `declaration`** |
 | `GET` | `/api/inscription/etat` | `ATTENTE` | — | `200` § 4.4 | `401` | — |
+
+> **Depuis le 1er octobre 2026 : l'inscription sans fiche (ADR 0013).** Un candidat qui ne se
+> trouve pas — ou pas avec ses données exactes — décrit sa famille en texte libre et crée
+> quand même son compte : `en_attente`, **sans fiche** (`matchKind: "a_rattacher"`), régime
+> `aucun`. Un administrateur le rattache ensuite depuis l'onglet « À rattacher » (§ 10.1).
+> Les quatre règles de cette section ne bougent pas ; la recherche, elle, **ne propose plus
+> de défunts** (§ 4.2).
 
 > **404, jamais 403 — sur les trois routes publiques.** Jeton inconnu, mal formé, expiré,
 > révoqué ou déjà consommé : **`404`**, corps d'erreur identique dans les cinq cas, même
@@ -863,6 +870,18 @@ En mode confirmation, une date de naissance qui ne correspond pas à la personne
 rend `candidats: []` — et **surtout pas** un message du genre « la date attendue est en
 1934 ». `result = echec_date` côté journal.
 
+#### Les défunts ne sont pas proposés — depuis le 1er octobre 2026
+
+Les personnes **non vivantes** (la propriété calculée du § 9.2 du modèle) sont exclues des
+candidats, **dans les deux modes**. En confirmation, un pré-lien vers un défunt rend
+`candidats: []` et consomme sa tentative, exactement comme une date fausse.
+
+Elles étaient cherchables au nom d'un « oracle inverse » : les exclure faisait dire à une
+réponse vide « cette personne est morte » plutôt que « elle n'existe pas ». L'argument est
+tombé avec l'inscription sans fiche (ADR 0013) : tout porteur du lien peut désormais créer
+un compte en attente, et un compte en attente **voit tous les défunts** (§ 12). Ce qui reste
+vrai, et qui décide : un compte ancré sur un mort n'a pas de sens.
+
 ### 4.3 Étape 2 — créer le compte
 
 ```json
@@ -920,6 +939,53 @@ confirmée (§ 4.5). La charge porte alors `status: "actif"`, `matchKind: "pre_l
 `cercle` complet. Dans l'autre cas (`recherche_confirmee`), le compte reste `en_attente` et
 une notification `compte_en_attente` part vers l'administrateur.
 
+#### Seconde forme : « Je ne me trouve pas » (ADR 0013)
+
+Quand l'étape 1b ne rend rien — ou rien qui lui ressemble —, le candidat décrit sa famille :
+
+```json
+{
+  "jeton": "kJ8s-2Qb1nR7xTmA0vL5wYcE9hP3dZfG6uIoN4jXqSs",
+  "declaration": {
+    "surname": "Dupont",
+    "givenNames": "Léa Marie",
+    "birthDate": "1998-04-12",
+    "description": "Mon père est Jean Dupont, né vers 1960 à Lille ; ma mère Marie Martin ; ma grand-mère paternelle Jeanne Dupont."
+  },
+  "email": "lea@example.net",
+  "password": "douze-caracteres-min"
+}
+```
+
+Les deux formes sont **exclusives**. Ordre des contrôles :
+
+1. avec `declaration` : **limiteur par IP** `inscription_sans_fiche`, 5 / h — au-delà `429`
+   avec `Retry-After`. Il passe **avant** le jeton : il ne dit rien du jeton ;
+2. jeton ⇒ `404` uniforme ;
+3. ni `choix` ni `declaration` ⇒ `404`, comme avant ;
+4. les deux ⇒ `422` `{champs: {choix: "Choisissez une fiche ou décrivez votre famille, pas les deux."}}` ;
+5. **un seul `422`** regroupe toutes les erreurs de champ : `email`, `password` (règles
+   ci-dessus), `declaration.surname` (1 à 120 caractères après nettoyage des blancs),
+   `declaration.givenNames` (1 à 160), `declaration.birthDate` (`YYYY-MM-DD` d'une date qui
+   existe, de 1900 à aujourd'hui), `declaration.description` (60 à 4 000 caractères après
+   nettoyage) ;
+6. `409` `courriel_deja_pris`, inchangé.
+
+Succès : `core_user` `en_attente`, `mbr_member` **sans fiche** (`person_id` nul,
+`match_kind = a_rattacher`), un usage d'invitation compté sous le même verrou que l'autre
+forme. L'audit `invitation_utilisee` porte `matchKind: "a_rattacher"` et **aucun contenu de
+la déclaration** ; la notification `compte_en_attente` des administrateurs nomme le courriel,
+jamais la description, et mène à l'onglet « À rattacher » (`linkRoute:
+"administration.rattachements"`).
+
+`201` : la charge de session du § 2.2, avec
+`membre: {id, status: "en_attente", matchKind: "a_rattacher", activatedAt: null}` et
+`cercle: {regime: "aucun"}`. Le compte voit les défunts, comme tout compte en attente, et
+n'écrit rien — sauf **sa propre photo** (§ 7.1, « le portrait du compte »).
+
+La déclaration parle de personnes **vivantes** : elle n'est lisible que des administrateurs,
+jamais journalisée, et **purgée** au rattachement comme au refus.
+
 ### 4.4 Étape 3 — l'état d'activation
 
 `GET /api/inscription/etat`, accessible dès que la session existe.
@@ -946,6 +1012,22 @@ une notification `compte_en_attente` part vers l'administrateur.
   l'abandon » (§ 4.5).
 - Une fois activé : `status: "actif"`, `regime: "cercle"`, et `cequejevois` disparaît. Le
   front bascule alors sur `GET /api/session`, qui porte désormais `membre.personId`.
+- `matchKind` peut valoir `"a_rattacher"` : le compte n'a pas encore de fiche (§ 4.3,
+  seconde forme), et l'écran le dit.
+- `portraitEnAttente` (booléen) : le compte a-t-il déposé sa photo (§ 7.1) ? Présente
+  **seulement tant que `status` vaut `en_attente`** — le front propose « Ajouter votre
+  photo » à qui a passé l'étape.
+
+```json
+{
+  "status": "en_attente",
+  "depuis": "2026-10-01T09:12:00+02:00",
+  "matchKind": "a_rattacher",
+  "regime": "aucun",
+  "cequejevois": { "personnesDecedees": 256, "personnesTotales": 274 },
+  "portraitEnAttente": true
+}
+```
 
 ---
 
@@ -3240,6 +3322,7 @@ authentifiée qui applique le cercle (§ 6.5 du dossier).
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs | Débit |
 |---|---|---|---|---|---|---|
 | `POST` | `/api/medias` | `MEMBRE` | `multipart/form-data`, § 7.1 | `201` § 7.2 | `413` `fichier_trop_volumineux` · `415` `type_de_fichier_refuse` · `422` · `403` `regime_en_attente` · `429` | 20 / h |
+| `POST` | `/api/medias/portrait-du-compte` | `ATTENTE` | `multipart/form-data`, champ `fichier` seul | `201` § 7.2 | `409` `compte_non_rattache` · `409` `vue_comme_membre_active` · `413` · `415` · `422` · `429` | 20 / h |
 | `GET` | `/api/medias` | `ATTENTE` | `?subjectKind=&subjectId=&kind=&status=` | `200` liste non paginée | `404` · `422` | — |
 | `GET` | `/api/medias/{id}` | `ATTENTE` | — | `200` § 7.2 | `404` | — |
 | `GET` | `/api/medias/{id}/fichier` | `ATTENTE` | — | `200` **octets** | `404` | — |
@@ -3328,6 +3411,25 @@ Le média naît `status: "en_attente"` et suit **le même circuit de validation*
 modifications : il n'est visible que de son déposant et des administrateurs jusqu'à ce qu'une
 `ChangeRequest` de nature `ajout_media` (§ 6.4) soit validée. Un dépôt direct d'administrateur
 naît `actif`.
+
+#### Le portrait du compte — `POST /api/medias/portrait-du-compte`
+
+Un seul champ, `fichier`. Le portrait de **sa propre** personne, sans demande : c'est une
+décision du commanditaire (« c'est ton visage »). Les contrôles d'entrée sont ceux ci-dessus,
+sans exception. Le comportement dépend du compte :
+
+| Situation du compte | Comportement |
+|---|---|
+| Personne validée (membre `actif`) | Le portrait est posé sur la fiche et **devient actif** ; l'ancien passe `remplace`. |
+| Rattachement **en attente** — sans fiche (`a_rattacher`) ou recherche confirmée non validée | **Dépôt sur le compte** (ADR 0013) : `status: "en_attente"`, `subjectId: null`, `subjectLabel: "Portrait en attente de rattachement"`. Aucun contrôle de régime : c'est sa propre photo, elle n'écrit dans aucune fiche. Un portrait en attente plus ancien du même compte est **supprimé**, fichier compris. |
+| Pas de rattachement (compte d'amorçage), ou membre suspendu | `409` `compte_non_rattache`. |
+| Sous la bascule « voir comme » | `409` `vue_comme_membre_active`. |
+
+Un portrait posé sur un compte n'est visible que de **son titulaire et des administrateurs**
+(la règle ordinaire d'un média sans sujet, § 7.4). Il n'entre **ni** dans la file de
+validation **ni** dans une demande `ajout_media` (`422`) : il ne rejoint une fiche qu'au
+rattachement du compte, où il devient le portrait actif (§ 10.1). Au refus de l'inscription,
+il est supprimé.
 
 ### 7.2 La charge d'un média
 
@@ -3829,8 +3931,13 @@ première règle qui correspond est appliquée »).
 |---|---|---|---|---|---|
 | `GET` | `/api/administration/utilisateurs` | `ADMIN` | `?status=&page=` | `200` liste paginée | — |
 | `GET` | `/api/administration/utilisateurs/{id}` | `ADMIN` | — | `200` § 10.1 | `404` |
-| `PATCH` | `/api/administration/utilisateurs/{id}` | `ADMIN` | `{roles?, status?, displayName?}` | `200` utilisateur | `422` · `409` `dernier_administrateur` · `404` |
-| `POST` | `/api/administration/membres/{id}/activer` | `ADMIN` | `{personId?}` | `200` membre | `404` · `409` `personne_deja_rattachee` · `422` |
+| `PATCH` | `/api/administration/utilisateurs/{id}` | `ADMIN` | `{roles?, status?, displayName?}` | `200` utilisateur | `422` · `409` `dernier_administrateur`, `rattachement_non_etabli` · `404` |
+| `POST` | `/api/administration/membres/{id}/activer` | `ADMIN` | `{personId?}` — **obligatoire** pour un compte `a_rattacher` | `200` membre | `404` · `409` `personne_deja_rattachee`, `compte_deja_decide` · `409` `vue_comme_membre_active` · `422` |
+| `POST` | `/api/administration/membres/{id}/refuser` | `ADMIN` | *(vide)* | `200` membre | `404` · `409` `compte_deja_decide` · `409` `vue_comme_membre_active` |
+| `GET` | `/api/administration/rattachements` | `ADMIN` | — | `200` liste § 10.1 | `409` `vue_comme_membre_active` |
+| `GET` | `/api/administration/rattachements/{memberId}/suggestion` | `ADMIN` | — | `200` suggestion § 10.1 | `404` · `409` `vue_comme_membre_active` · `429` · `502` `assistant_erreur` · `503` `assistant_indisponible` |
+| `POST` | `/api/administration/rattachements/{memberId}/suggestion` | `ADMIN` | *(vide)* | `200` suggestion § 10.1 | *(idem)* |
+| `POST` | `/api/administration/rattachements/{memberId}/creer-et-rattacher` | `ADMIN` | `{parents?, message?}` | `201` `{membre, personId, demandeId}` | `404` · `409` `personne_deja_rattachee`, `compte_deja_decide` · `422` |
 | `GET` | `/api/administration/reglages` | `ADMIN` | — | `200` tableau nu | — |
 | `PATCH` | `/api/administration/reglages/{cle}` | `ADMIN` | `{value}` | `200` réglage | `404` · `422` `valeur_hors_bornes` |
 | `POST` | `/api/administration/voir-comme` | `ADMIN` | `{memberId}` | `200` session | `404` · `422` |
@@ -3876,12 +3983,163 @@ première règle qui correspond est appliquée »).
 - Retirer `ROLE_ADMIN` au dernier administrateur ⇒ `409` `dernier_administrateur`. Il n'y a
   qu'un administrateur (ADR 0004) ; se verrouiller dehors est un incident sans porte de
   secours autre que la console.
+- Passer `actif` un compte dont le membre n'est pas **actif avec une fiche** ⇒ `409`
+  `rattachement_non_etabli` (`details.memberId`). `RegimeVoter` décide du régime « membre » sur
+  `core_user.status` seul : « Réactiver » un compte **refusé** (ADR 0013) ou un compte en
+  attente qu'on avait suspendu en faisait un compte sans cercle mais admis à écrire. Un compte
+  en attente s'active par la route ci-dessous, qui passe les deux statuts ensemble ; un compte
+  refusé ne revient pas. Un compte sans membre (l'administrateur d'amorçage) n'est pas concerné.
 
 `POST /api/administration/membres/{id}/activer` fait passer `mbr_member.status` et
 `core_user.status` à `actif`, pose `activated_at` et `activated_by_user_id`, et **le compte
 obtient un cercle** — c'est le moment exact où le régime change (§ 12). `personId` facultatif
 corrige au passage un rattachement erroné (`match_kind` devient `manuel_admin`). L'auteur
 reçoit une notification.
+
+Depuis l'inscription sans fiche (ADR 0013), l'activation rejoue trois contrôles sur toute
+fiche désignée par `personId` : elle doit **exister** (`422`), être **vivante**
+(`422 {personId: "Cette personne est décédée."}`) et n'être **réclamée par aucun autre
+compte** (`409` `personne_deja_rattachee`). Pour un compte `a_rattacher`, `personId` est
+**obligatoire** (`422 {personId: "Choisissez la fiche à laquelle rattacher ce compte."}`) ; la
+déclaration et la suggestion sont **purgées** au rattachement. Pour **tout** compte activé qui
+avait déposé sa photo (§ 7.1), elle passe sur la fiche et en devient le portrait actif. Le
+tout tient dans une transaction.
+
+La charge `membre` rendue (`MembreAdministration`) :
+
+```json
+{
+  "id": 14,
+  "status": "actif",
+  "matchKind": "manuel_admin",
+  "invitationId": 3,
+  "linkedAt": "2026-10-01T10:02:11+02:00",
+  "activatedAt": "2026-10-01T10:02:11+02:00",
+  "personId": 812,
+  "personLabel": "Léa Dupont"
+}
+```
+
+`personId` et `personLabel` sont **absents** quand le cercle ne les laisse pas voir, et
+toujours absents pour un compte `a_rattacher`.
+
+#### Refuser une inscription — `POST /api/administration/membres/{id}/refuser`
+
+Corps vide. Accepte tout membre `en_attente`, `a_rattacher` compris. Le compte est
+**suspendu** — `mbr_member.status` et `core_user.status` passent `suspendu`, la connexion est
+refusée (`401 compte_suspendu`) —, et la déclaration, la suggestion et la photo en attente
+sont **purgées**. Audit `compte_suspendu` avec `{memberId, matchKind}`, sans contenu. Réponse
+`200` : la charge `membre`. `409` `compte_deja_decide` si le membre n'est plus en attente.
+
+On suspend plutôt que de supprimer : `Core` n'a aucun chemin de suppression de compte, et
+`core_user` est référencé par le journal, les notifications et les sessions. Les données
+personnelles partent quand même ; le courriel reste réservé (ADR 0013).
+
+#### L'onglet « À rattacher » — `GET /api/administration/rattachements`
+
+Les comptes `a_rattacher` **et** `en_attente`, du plus ancien au plus récent. Refusée sous la
+bascule « voir comme » (`409` `vue_comme_membre_active`) — **bien que ce soit une lecture** :
+la description est un texte libre qu'aucun cercle ne sait filtrer.
+
+```json
+{
+  "elements": [
+    {
+      "memberId": 14,
+      "userId": 22,
+      "email": "lea@example.net",
+      "inscritLe": "2026-10-01T09:12:00+02:00",
+      "invitationId": 3,
+      "invitationPersonId": null,
+      "invitationPersonLabel": null,
+      "declaration": {
+        "surname": "Dupont",
+        "givenNames": "Léa Marie",
+        "birthDate": "1998-04-12",
+        "description": "Mon père est Jean Dupont, né vers 1960 à Lille ; ma mère Marie Martin…"
+      },
+      "photo": { "mediaId": 91, "url": "/api/medias/91/fichier?v=1a2b3c4d", "vignetteUrl": "/api/medias/91/vignette?v=1a2b3c4d" },
+      "suggestionCalculeeLe": null
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "parPage": 1
+}
+```
+
+`photo` vaut `null` sans photo ; `suggestionCalculeeLe` est une date ISO ou `null`. Les
+comptes `a_rattacher` figurent aussi dans `GET /api/administration/membres`, sans `personId`.
+
+Chaque élément de `GET /api/administration/membres` (la file des comptes `en_attente`) porte
+en plus `portraitEnAttente` — `{mediaId, url, vignetteUrl}` ou `null` : la photo déposée à
+l'inscription, qui **deviendra le portrait de la fiche à la validation**. L'écran
+Utilisateurs la montre sur la ligne du compte, à côté de « Valider le rattachement » :
+l'administrateur voit ce qu'il publie avant de le publier.
+
+Une décision ne se prend qu'une fois. `activer`, `refuser` et `creer-et-rattacher` relisent
+le compte **sous verrou** dans leur transaction : un compte refusé (ou activé) entre-temps,
+par un autre administrateur ou un autre onglet, rend `409 compte_deja_decide` — et
+`creer-et-rattacher` le vérifie **avant** de créer la fiche : rien n'est créé.
+Dans la liste des invitations (§ 3.3), chaque ligne de `inscrits[]` porte désormais
+`matchKind`.
+
+#### La suggestion de rattachement (module `Assistant`)
+
+`GET /api/administration/rattachements/{memberId}/suggestion` rend la suggestion **en cache**
+sur le compte s'il y en a une — même si le modèle n'est pas configuré ; ses champs volatils
+(`displayName`, `ligneDates`, `dejaRattachee`) sont recalculés à chaque lecture. Sinon
+l'analyse est calculée, stockée, puis rendue. `POST` sur la même adresse force un nouveau
+calcul (« Relancer l'analyse »). Sur les trois routes de ce préfixe : `409`
+`vue_comme_membre_active` d'abord, `404` si le compte n'est plus `a_rattacher` / `en_attente`,
+et la session est **relâchée** avant tout appel au modèle. Quota séparé :
+`assistant.limiteur_rattachements`, **40 analyses par 24 heures glissantes, clé globale** pour
+tous les administrateurs. `503` `assistant_indisponible` (pas de clé et pas de cache) ·
+`502` `assistant_erreur` · `429` avec `Retry-After`.
+
+```json
+{
+  "memberId": 14,
+  "calculeeLe": "2026-10-01T09:15:40+02:00",
+  "modele": "gemini-pro-latest",
+  "verdict": "fiche_existante",
+  "resume": "La description correspond à la fiche de Léa Dupont, fille de Jean Dupont.",
+  "avertissements": [],
+  "fiche": {
+    "personId": 812,
+    "displayName": "Léa Dupont",
+    "ligneDates": "n. 1998",
+    "confiance": "haute",
+    "justification": "Même prénom, même père, année de naissance compatible.",
+    "dejaRattachee": false
+  },
+  "alternatives": [],
+  "creation": null
+}
+```
+
+- `verdict` : `fiche_existante` · `absente` · `indecise`. `fiche` est non nul **si et
+  seulement si** `verdict = fiche_existante` ; `alternatives` porte 0 à 3 fiches.
+- `creation` est non nul si `verdict = absente`, facultatif si `indecise` :
+  `{titre, justification, confiance, corps, changements, personnes, recevable,
+  motifIrrecevable}`. `corps` est un corps `creation_personne` exact (§ 6.3) dont `#p1` est
+  le titulaire du compte — **son identité vient toujours de la déclaration** ; `#p2`… sont des
+  parents absents de l'arbre.
+- Le prompt contient le nom, les prénoms, la date déclarée, la description et le pré-lien de
+  l'invitation à titre d'indice ; **jamais le courriel**. Le journal ne reçoit que des
+  compteurs. Aucun rattachement n'est jamais automatique.
+
+`POST /api/administration/rattachements/{memberId}/creer-et-rattacher`, corps
+`{"parents": [12, 57], "message": "facultatif"}` : `parents` porte 0 à 2 personnes existantes.
+Le corps de la demande est construit **côté serveur** — `suggestion.creation.corps` s'il
+existe, sinon un corps minimal tiré de la déclaration (`#p1` : prénoms, nom, sexe
+`inconnu`, non décédé, naissance exacte) ; si `parents` n'est pas vide, le lien de filiation
+de `#p1` est remplacé par `enfant_de` ces parents. Dans **une transaction englobante** : dépôt
+de la demande `creation_personne`, validation au nom de l'administrateur, puis rattachement et
+activation du compte. `201 {membre, personId, demandeId}`. Erreurs : `422 {champs: {parents}}`
+(plus de deux, ou inexistant), `422` `demande_sans_lien` quand aucun lien ne rattache `#p1` à
+l'arbre, les autres `422` / `409` de `Proposal`, `404` si le compte a été traité entre-temps.
+**Dans tous les cas d'erreur, rien n'est écrit.**
 
 ### 10.2 Réglages
 
@@ -4438,6 +4696,12 @@ Le front branche sur `regime`. Il ne teste **jamais** `taille === 0` : les deux 
 `generations` et `taille` sont **absents** du régime `aucun`, et les lire produirait
 `undefined`, pas `0`.
 
+**Un compte inscrit sans fiche (`a_rattacher`, ADR 0013) est dans ce régime, et rien de plus
+ni de moins.** Il n'a pas de `person_id` : il n'y a donc même pas d'ancre à laquelle un
+cercle se rattacherait, et la base interdit qu'un compte sans fiche soit actif
+(`ck_mbr_member_sans_fiche_inactif`). Il voit les défunts, n'écrit rien — sa propre photo
+mise à part (§ 7.1) —, et n'obtient un cercle qu'au rattachement (§ 10.1).
+
 ### 12.1 Ce que ce régime voit, route par route
 
 Il accède aux **personnes décédées uniquement** — 256 fiches sur 274 — et à **aucune personne
@@ -4891,6 +5155,7 @@ agent recopiera la référence :
 | `courriel_deja_pris` | 409 | `POST /api/inscription/compte` | — |
 | `vue_comme_membre_active` | 409 | **toute écriture** pendant la bascule | `{memberId, memberLabel}` |
 | `dernier_administrateur` | 409 | `PATCH` utilisateur | — |
+| `rattachement_non_etabli` | 409 | `PATCH` utilisateur (`status: actif`) | `{memberId}` |
 | `media_reference` | 409 | `DELETE` média | `{citationIds}` |
 | `import_en_cours` | 409 | import GEDCOM | `{runId}` |
 | `fichier_trop_volumineux` | 413 | téléversement | `{maxOctets}` |

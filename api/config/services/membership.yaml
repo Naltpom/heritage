@@ -89,6 +89,19 @@ services:
     App\Module\Membership\Service\Port\PortArbre:
         alias: App\Module\Tree\Service\VueDeLArbrePourMembership
 
+    # ── Les comptes « à rattacher », demandés par `Assistant` (ADR 0013) ─────────────
+    #
+    # `Membership\Contract\ComptesARattacher` n'a **volontairement pas d'alias ici**. Sa
+    # seule implémentation, `Service\ComptesARattacherParMembership`, est câblée par le
+    # prototype de `_autoload.yaml` (interface implémentée une seule fois ⇒ alias
+    # automatique). Un alias explicite posé dans CE fichier passerait après
+    # `assistant.yaml` dans le glob trié, et écraserait en silence le double que ce module
+    # installe en test (`when@test`). Vérification :
+    #     bin/console debug:container App\\Module\\Membership\\Contract\\ComptesARattacher
+    #
+    # `Membership\Contract\PortraitsDesComptes`, lui, est aliasé par `media.yaml`, qui
+    # l'implémente.
+
 when@test:
     services:
         # Public **en test seulement**, et pour la même raison que le bloc équivalent de

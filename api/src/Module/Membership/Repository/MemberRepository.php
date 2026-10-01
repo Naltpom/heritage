@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Membership\Repository;
 
 use App\Module\Membership\Entity\Member;
+use App\Module\Membership\Enum\MatchKind;
 use App\Module\Membership\Enum\MemberStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -52,6 +53,24 @@ class MemberRepository extends ServiceEntityRepository
     public function enAttente(): array
     {
         return $this->findBy(['status' => MemberStatus::EnAttente], ['createdAt' => 'ASC']);
+    }
+
+    /**
+     * Les comptes **sans fiche** qui attendent leur rattachement (ADR 0013), du plus ancien
+     * au plus récent — l'onglet « À rattacher » de l'administration. Servi, lui aussi, par
+     * `idx_mbr_member_status`.
+     *
+     * @return list<Member>
+     */
+    public function aRattacher(): array
+    {
+        /** @var list<Member> $membres */
+        $membres = $this->findBy(
+            ['status' => MemberStatus::EnAttente, 'matchKind' => MatchKind::ARattacher],
+            ['createdAt' => 'ASC', 'id' => 'ASC'],
+        );
+
+        return $membres;
     }
 
     /**

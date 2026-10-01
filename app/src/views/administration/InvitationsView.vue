@@ -295,6 +295,15 @@ function compteur(invitation: Invitation): string {
               <span class="text-xs text-attenue">
                 · {{ dateLisible(inscrit.createdAt) }} · {{ STATUTS_MEMBRE[inscrit.memberStatus] ?? inscrit.memberStatus }}
               </span>
+              <!-- Inscrit sans s'être trouvé (ADR 0013) : sa fiche se décide
+                   dans l'onglet « À rattacher ». -->
+              <RouterLink
+                v-if="inscrit.matchKind === 'a_rattacher' && inscrit.memberStatus === 'en_attente'"
+                :to="{ name: 'administration.rattachements' }"
+                class="ml-1 text-xs font-semibold text-accent underline"
+              >
+                fiche à identifier
+              </RouterLink>
             </li>
           </ul>
 

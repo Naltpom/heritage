@@ -133,6 +133,33 @@ describe('mentionDeRattachement', () => {
     expect(mention.etat).toBe('actif')
     expect(mention.etiquette).toBe('Rattaché à la fiche n° 42')
   })
+
+  /**
+   * ADR 0013 — inscrit sans s'être trouvé. La charge **omet** `personId` et
+   * `personLabel` (pas `null` : absents) ; la mention ne doit ni écrire « la
+   * fiche n° undefined », ni promettre « Valider », mais renvoyer à l'onglet.
+   */
+  it('nomme le compte sans fiche et renvoie à « À rattacher »', () => {
+    const sansFiche: MembreAdministration = {
+      id: 14,
+      status: 'en_attente',
+      matchKind: 'a_rattacher',
+      invitationId: 3,
+      linkedAt: null,
+      activatedAt: null,
+    }
+    const mention = mentionDeRattachement(sansFiche)
+
+    expect(mention.etat).toBe('inactif')
+    expect(mention.etiquette).toContain('Fiche à identifier')
+    expect(mention.consequence).toContain('À rattacher')
+    expect(`${mention.etiquette} ${mention.consequence}`).not.toContain('undefined')
+  })
+
+  it('désigne la fiche quand les clés sont absentes plutôt que nulles', () => {
+    const { personId: _id, personLabel: _libelle, ...sansCles } = membre('suspendu')
+    expect(mentionDeRattachement(sansCles).etiquette).toBe('Rattachement suspendu')
+  })
 })
 
 /* ==================================================================== */

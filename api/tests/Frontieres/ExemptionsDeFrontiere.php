@@ -333,6 +333,14 @@ final class ExemptionsDeFrontiere
                 'fichier' => 'Core/Contract/SessionPayloadContributorInterface.php',
                 'cible' => \App\Module\Core\Entity\User::class,
             ],
+            // Même motif, même entité du noyau : `rattacherAFicheCreee()` reçoit
+            // l'administrateur qui décide, pour l'activation et son journal (ADR 0013).
+            // Aucune entité de `Membership` ne traverse le contrat — la déclaration sort
+            // par l'objet valeur `DeclarationDuCompte`.
+            [
+                'fichier' => 'Membership/Contract/ComptesARattacher.php',
+                'cible' => \App\Module\Core\Entity\User::class,
+            ],
         ];
     }
 

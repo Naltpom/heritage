@@ -13,6 +13,7 @@ use App\Module\Core\Exception\TooManyRequestsException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Repository\UserRepository;
 use App\Module\Core\Service\AuditService;
+use App\Module\Membership\Contract\PortraitsDesComptes;
 use App\Module\Membership\Entity\ClaimAttempt;
 use App\Module\Membership\Entity\Invitation;
 use App\Module\Membership\Entity\Member;
@@ -80,6 +81,15 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
  * Une date fausse en mode confirmation **consomme une tentative** — sinon le plafond ne
  * protège rien, on teste 365 dates par an gratuitement — et rend `candidats: []`, jamais
  * un message qui rapprocherait de la bonne date.
+ *
+ * ── Depuis le 1er octobre 2026 : l'inscription sans fiche (ADR 0013) ─────────────
+ *
+ * Un candidat qui ne se trouve pas peut créer son compte quand même, en décrivant sa
+ * famille. Les quatre règles ci-dessus **ne bougent pas** : la route de recherche rend la
+ * même réponse qu'avant, et le bouton « Je ne me trouve pas » est le même quelle que soit
+ * la cause d'un résultat vide — plafond, date fausse ou personne absente. Ce qui change,
+ * c'est que la recherche n'est plus le seul passage : elle n'a donc plus rien à garder
+ * sur les **défunts**, que tout compte en attente voit (voir {@see RechercheDeRattachement}).
  */
 final readonly class ServiceDInscription
 {
@@ -104,6 +114,7 @@ final readonly class ServiceDInscription
         private NotificationDesAdministrateurs $notifications,
         private UserPasswordHasherInterface $hacheur,
         private AuditService $audit,
+        private PortraitsDesComptes $portraits,
     ) {
     }
 
@@ -212,25 +223,52 @@ final readonly class ServiceDInscription
      * Rend l'utilisateur créé ; c'est au contrôleur d'ouvrir la session et de composer la
      * charge du § 2.2. Le service ne connaît pas le pare-feu.
      *
+     * ## Deux formes de corps, exclusives
+     *
+     * `{choix}` — la fiche retenue à l'étape 1b, comme depuis le premier jour ; ou
+     * `{declaration}` — « Je ne me trouve pas » : l'identité et la description de la famille,
+     * pour un compte **sans fiche** (ADR 0013, {@see self::creerLeCompteSansFiche()}). L'ordre
+     * des contrôles est celui du § 3.1 du contrat d'inscription sans fiche : limiteur par IP
+     * (déclaration seulement), jeton, présence d'une des deux formes, exclusivité, champs,
+     * courriel déjà pris.
+     *
      * @param array<string, mixed> $corps
      *
-     * @throws NotFoundException   jeton ou `choix` invalide — « on ne confirme rien sur le
-     *                             contenu de l'étape précédente » (§ 4.3)
-     * @throws ConflictException   `courriel_deja_pris`, `personne_deja_rattachee`
-     * @throws ValidationException courriel ou mot de passe refusés
+     * @throws NotFoundException        jeton ou `choix` invalide — « on ne confirme rien sur le
+     *                                  contenu de l'étape précédente » (§ 4.3)
+     * @throws ConflictException        `courriel_deja_pris`, `personne_deja_rattachee`
+     * @throws ValidationException      courriel, mot de passe ou déclaration refusés
+     * @throws TooManyRequestsException plus de cinq comptes sans fiche par heure depuis cette IP
      */
     public function creerLeCompte(string $jeton, array $corps, Request $requete): User
     {
+        $avecDeclaration = \array_key_exists('declaration', $corps) && null !== $corps['declaration'];
+
+        // 1 — le limiteur par IP de l'inscription sans fiche, **avant** le jeton : il ne
+        // dit rien du jeton, et il protège le reste du chemin d'une création en série.
+        if ($avecDeclaration) {
+            $this->consommerLeLimiteurParIp($this->limiteurs->inscriptionSansFicheParIp(), $requete);
+        }
+
+        // 2 — le jeton.
         $invitation = $this->invitationValide($jeton);
 
         $choix = $corps['choix'] ?? null;
         $email = $corps['email'] ?? null;
         $motDePasse = $corps['password'] ?? null;
+        $avecChoix = \is_string($choix) && '' !== $choix;
 
-        if (!\is_string($choix) || '' === $choix) {
+        // 3 — ni l'un ni l'autre : le même `404` qu'avant l'inscription sans fiche.
+        if (!$avecChoix && !$avecDeclaration) {
             throw new NotFoundException();
         }
 
+        // 4 — les deux : on ne devine pas lequel le candidat voulait dire.
+        if ($avecChoix && $avecDeclaration) {
+            throw new ValidationException(['choix' => 'Choisissez une fiche ou décrivez votre famille, pas les deux.']);
+        }
+
+        // 5 — un seul `422` pour toutes les erreurs de champ.
         $champs = [];
 
         if (!\is_string($email) || false === filter_var($email, \FILTER_VALIDATE_EMAIL)) {
@@ -239,6 +277,14 @@ final readonly class ServiceDInscription
         if (!\is_string($motDePasse) || mb_strlen($motDePasse) < self::LONGUEUR_MINIMALE_MOT_DE_PASSE) {
             $champs['password'] = \sprintf('%d caractères minimum.', self::LONGUEUR_MINIMALE_MOT_DE_PASSE);
         }
+
+        $declaration = null;
+
+        if ($avecDeclaration) {
+            [$declaration, $erreurs] = DeclarationDeFamille::lire($corps['declaration']);
+            $champs = [...$champs, ...$erreurs];
+        }
+
         if ([] !== $champs) {
             throw new ValidationException($champs);
         }
@@ -255,6 +301,12 @@ final readonly class ServiceDInscription
             // est borné — il faut un jeton d'invitation valide pour poser la question. »
             throw new ConflictException('courriel_deja_pris', 'Un compte existe déjà pour ce courriel.');
         }
+
+        if (null !== $declaration) {
+            return $this->creerLeCompteSansFiche($invitation, $email, $motDePasse, $declaration);
+        }
+
+        \assert(\is_string($choix));
 
         $retenu = $this->references->consommer($this->jetons->empreinte($jeton), $choix);
 
@@ -351,6 +403,83 @@ final readonly class ServiceDInscription
     }
 
     /**
+     * Étape 2, **sans fiche** — le candidat ne s'est pas trouvé et a décrit sa famille
+     * (ADR 0013).
+     *
+     * Le compte naît `en_attente`, rattaché à **aucune** personne : `mbr_member.person_id`
+     * est nul, `match_kind` vaut `a_rattacher`. Il a le régime `Aucun` de tout compte en
+     * attente — il voit les défunts, n'écrit rien — et c'est un administrateur qui lui
+     * trouvera, ou lui créera, sa fiche.
+     *
+     * Même transaction, même verrou et même compteur d'usages que le chemin avec fiche :
+     * un lien plafonné à dix comptes compte ceux-ci comme les autres.
+     *
+     * **Ce que le journal ne reçoit pas** : un mot de la déclaration. L'audit
+     * `invitation_utilisee` porte la nature `a_rattacher` et les compteurs, rien de ce que
+     * le candidat a écrit ; la notification des administrateurs ne nomme que le courriel.
+     */
+    private function creerLeCompteSansFiche(
+        Invitation $invitation,
+        string $email,
+        string $motDePasse,
+        DeclarationDeFamille $declaration,
+    ): User {
+        $utilisateur = new User($email);
+        $utilisateur
+            ->setStatus(UserStatus::EnAttente)
+            ->setPassword($this->hacheur->hashPassword($utilisateur, $motDePasse));
+
+        /** @var Member $membre */
+        $membre = $this->em->wrapInTransaction(function () use ($invitation, $utilisateur, $email, $declaration): Member {
+            $this->em->refresh($invitation, LockMode::PESSIMISTIC_WRITE);
+
+            if (null !== $invitation->getRevokedAt() || $invitation->estEpuisee() || $invitation->estEchue()) {
+                throw new NotFoundException();
+            }
+
+            $this->em->persist($utilisateur);
+            $this->em->flush();
+
+            $identifiant = $utilisateur->getId();
+            \assert(null !== $identifiant);
+
+            $membre = Member::aRattacher(
+                $identifiant,
+                $email,
+                $declaration->nom,
+                $declaration->prenoms,
+                $declaration->naissance,
+                $declaration->description,
+            );
+            $membre->setInvitation($invitation);
+
+            $this->em->persist($membre);
+
+            $invitation->enregistrerUnUsage($identifiant, $email);
+
+            $this->audit->enregistrer(
+                AuditAction::InvitationUtilisee,
+                Invitation::class,
+                (string) $invitation->getId(),
+                null,
+                [
+                    'tokenPrefix' => $invitation->getTokenPrefix(),
+                    'matchKind' => MatchKind::ARattacher->value,
+                    'memberStatus' => $membre->getStatus()->value,
+                    'useCount' => $invitation->getUseCount(),
+                ],
+                $utilisateur,
+            );
+
+            return $membre;
+        });
+
+        $this->notifications->compteARattacher($membre);
+
+        return $utilisateur;
+    }
+
+    /**
      * Étape 3 — `GET /api/inscription/etat`.
      *
      * **Aucune clé `personId` ni `personLabel`** tant que `status` vaut `en_attente`. « Le
@@ -384,6 +513,14 @@ final readonly class ServiceDInscription
 
         if ($enAttente) {
             $etat['cequejevois'] = $this->deuxNombres();
+        }
+
+        // La photo déposée à l'inscription — un booléen, pas l'image : l'écran d'attente
+        // n'en a besoin que pour proposer « Ajouter votre photo » à qui l'a passée. La clé
+        // n'existe que tant que le compte attend : une fois rattachée, la photo est un
+        // portrait de fiche comme un autre, et la charge de session en parle déjà.
+        if (MemberStatus::EnAttente === $membre->getStatus()) {
+            $etat['portraitEnAttente'] = null !== $this->portraits->portraitEnAttente($membre->getUserId());
         }
 
         return $etat;

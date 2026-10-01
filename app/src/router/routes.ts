@@ -437,6 +437,15 @@ export const routes: RouteRecordRaw[] = [
         meta: { acces: 'administration', titre: 'File de validation' },
       },
       {
+        // Les inscriptions sans fiche (ADR 0013). Le nom est un contrat : la
+        // notification `compte_en_attente` d'une inscription à rattacher y mène
+        // (`linkRoute: 'administration.rattachements'`).
+        path: 'rattachements',
+        name: 'administration.rattachements',
+        component: () => import('@/views/administration/RattachementsView.vue'),
+        meta: { acces: 'administration', titre: 'À rattacher' },
+      },
+      {
         path: 'invitations',
         name: 'administration.invitations',
         component: () => import('@/views/administration/InvitationsView.vue'),

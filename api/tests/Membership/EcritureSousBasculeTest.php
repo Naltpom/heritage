@@ -45,6 +45,31 @@ final class EcritureSousBasculeTest extends CasDeTestMembership
         self::assertSame('vue_comme_membre_active', $this->charge()['erreur']['code']);
     }
 
+    public function testRefuserUneInscriptionSousBasculeEstRefuse(): void
+    {
+        $membre = $this->activerLaBascule();
+
+        $this->requete('POST', \sprintf('/api/administration/membres/%d/refuser', $membre));
+
+        self::assertSame(409, $this->client->getResponse()->getStatusCode());
+        self::assertSame('vue_comme_membre_active', $this->charge()['erreur']['code']);
+    }
+
+    /**
+     * **L'exception à la règle** : l'onglet « À rattacher » est une lecture, et il est
+     * refusé quand même. La description de famille est un texte libre qu'aucun cercle ne
+     * sait filtrer (ADR 0013).
+     */
+    public function testLaListeDesComptesARattacherEstRefuseeSousBascule(): void
+    {
+        $this->activerLaBascule();
+
+        $this->requete('GET', '/api/administration/rattachements');
+
+        self::assertSame(409, $this->client->getResponse()->getStatusCode());
+        self::assertSame('vue_comme_membre_active', $this->charge()['erreur']['code']);
+    }
+
     /**
      * **La lecture, elle, reste ouverte** — et c'est tout l'intérêt de la bascule : on
      * explore l'arbre sous une autre identité. Seules les écritures sont fermées.

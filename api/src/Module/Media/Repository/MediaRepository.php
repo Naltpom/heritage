@@ -158,6 +158,11 @@ class MediaRepository extends ServiceEntityRepository
     {
         $requete = $this->createQueryBuilder('m')
             ->andWhere('m.status = :attente')
+            // **Jamais un portrait de compte** (ADR 0013). Il n'entre pas dans le circuit de
+            // validation : il ne passe sur une fiche qu'au rattachement du compte. Le montrer
+            // ici offrirait de le « valider » hors de ce rattachement — c'est-à-dire de
+            // poser un portrait sur une fiche que personne n'a désignée.
+            ->andWhere('m.subjectUserId IS NULL')
             ->setParameter('attente', MediaStatus::EnAttente)
             ->addOrderBy('m.createdAt', 'DESC')
             ->addOrderBy('m.id', 'DESC')
@@ -168,6 +173,27 @@ class MediaRepository extends ServiceEntityRepository
         }
 
         return array_values($requete->getQuery()->getResult());
+    }
+
+    /**
+     * Les portraits en attente posés sur un **compte** sans fiche (ADR 0013). Au plus un
+     * d'ordinaire — `uniq_med_media_portrait_de_compte` y veille —, mais la méthode rend une
+     * liste : c'est ce qui permet au dépôt suivant de tout nettoyer, même si l'index
+     * partiel n'existait pas (SQLite de test, base restaurée à la main).
+     *
+     * @return list<Media>
+     */
+    public function portraitsEnAttenteDuCompte(int $userId): array
+    {
+        return array_values($this->createQueryBuilder('m')
+            ->andWhere('m.subjectUserId = :compte')
+            ->andWhere('m.status = :attente')
+            ->setParameter('compte', $userId)
+            ->setParameter('attente', MediaStatus::EnAttente)
+            ->addOrderBy('m.createdAt', 'DESC')
+            ->addOrderBy('m.id', 'DESC')
+            ->getQuery()
+            ->getResult());
     }
 
     /**

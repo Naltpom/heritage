@@ -18,6 +18,8 @@
 
 import { requeteApi } from './client'
 import type { ChargeDeSession, ListePaginee, StatutCompte, TypeRattachement } from './types'
+import type { CorpsCreationPersonne } from './propositions'
+import type { ChangementPropose, PersonneCitee } from './assistant'
 
 /* ------------------------------------------------------------------ */
 /* § 3 — invitations                                                   */
@@ -64,6 +66,9 @@ export interface InscritParInvitation {
   createdAt: string
   personId?: number
   personLabel?: string
+  /** `a_rattacher` : inscrit sans s'être trouvé dans l'arbre, fiche à
+   *  identifier dans l'onglet « À rattacher ». */
+  matchKind?: TypeRattachement
 }
 
 export interface AvertissementApi {
@@ -138,8 +143,11 @@ export function revoquerInvitation(id: number): Promise<Invitation> {
 export interface MembreAdministration {
   id: number
   status: StatutCompte
-  personId: number | null
-  personLabel: string | null
+  /** **Absents** quand le cercle ne les laisse pas voir, et toujours absents
+   *  pour un compte `a_rattacher` (il n'a pas de fiche). `null` reste admis :
+   *  les deux se lisent `!= null`. */
+  personId?: number | null
+  personLabel?: string | null
   matchKind: TypeRattachement
   invitationId: number | null
   linkedAt: string | null
@@ -192,6 +200,25 @@ export function modifierUtilisateur(
 }
 
 /**
+ * Une ligne de `GET /api/administration/membres` — la file des comptes
+ * `en_attente` : la charge membre, plus la photo déposée à l'inscription.
+ *
+ * `portraitEnAttente` est la raison d'être de cette lecture côté front : à la
+ * validation, cette photo **devient le portrait de la fiche** (ADR 0013). Un
+ * compte qui s'est trouvé (`recherche_confirmee`) se valide depuis l'écran
+ * Utilisateurs, dont la liste — servie par `Core` — ne la porte pas ; sans
+ * elle, l'administrateur publierait une photo qu'il n'a jamais vue.
+ */
+export interface MembreDeLaFile extends MembreAdministration {
+  portraitEnAttente: PhotoARattacher | null
+}
+
+/** `GET /api/administration/membres` — les comptes en attente, du plus ancien au plus récent. */
+export function listerMembresEnAttente(): Promise<ListePaginee<MembreDeLaFile>> {
+  return requeteApi<ListePaginee<MembreDeLaFile>>('/administration/membres')
+}
+
+/**
  * `POST /api/administration/membres/{id}/activer` (§ 10.1).
  *
  * **C'est le moment exact où le régime change** : `mbr_member.status` et
@@ -206,6 +233,196 @@ export function activerMembre(
   return requeteApi<MembreAdministration>(`/administration/membres/${id}/activer`, {
     methode: 'POST',
     corps: { personId: options.personId ?? null },
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/* Les inscriptions à rattacher (ADR 0013)                             */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Un compte `a_rattacher` est né d'un « Je ne me trouve pas » : la personne a
+ * décrit sa famille en texte libre au lieu de désigner une fiche. Son compte
+ * est `en_attente`, **sans fiche**, donc sans cercle — et c'est à
+ * l'administrateur de dire qui elle est.
+ *
+ * **La description parle de vivants.** Elle n'est rendue qu'ici, sous
+ * `/api/administration` ; le front ne l'écrit dans aucun stockage, et le
+ * serveur la purge au rattachement comme au refus. Sous la bascule « voir
+ * comme », la liste rend `409 vue_comme_membre_active` : une description ne se
+ * filtre pas par un cercle.
+ *
+ * Les types sont **préfixés** (`…ARattacher`, `…DeRattachement`) : ce module
+ * est ré-exporté par `export *`, et un `Declaration` ou un `Suggestion` nu
+ * entrerait en collision avec ceux de l'inscription ou de l'assistant.
+ */
+
+/** Ce que la personne a saisi en s'inscrivant — nom, prénoms, date **exacte**. */
+export interface DeclarationARattacher {
+  surname: string
+  givenNames: string
+  /** `YYYY-MM-DD`. */
+  birthDate: string
+  /** Texte libre : « Mon père est… ». 60 à 4 000 caractères. */
+  description: string
+}
+
+/** La photo déposée à l'inscription, visible des seuls administrateurs (et du
+ *  titulaire). URL écrites par le serveur, jamais reconstruites ici. */
+export interface PhotoARattacher {
+  mediaId: number
+  url: string
+  vignetteUrl: string
+}
+
+/** Une ligne de `GET /api/administration/rattachements`. */
+export interface CompteARattacher {
+  memberId: number
+  userId: number
+  email: string
+  inscritLe: string
+  invitationId: number | null
+  /** La personne pré-liée par le lien utilisé, s'il en désignait une — un
+   *  indice, pas une preuve : la personne ne s'y est justement pas reconnue. */
+  invitationPersonId: number | null
+  invitationPersonLabel: string | null
+  declaration: DeclarationARattacher
+  photo: PhotoARattacher | null
+  /** ISO 8601, ou `null` si aucune analyse n'est encore en cache. */
+  suggestionCalculeeLe: string | null
+}
+
+export type ConfianceDeRattachement = 'haute' | 'moyenne' | 'faible'
+
+/** Une fiche que l'analyse désigne ou cite. `ligneDates` vaut `''` sans date. */
+export interface FicheSuggeree {
+  personId: number
+  displayName: string
+  ligneDates: string
+  justification: string
+}
+
+/** Ce que l'analyse propose de créer quand la personne n'est pas dans l'arbre. */
+export interface CreationSuggeree {
+  titre: string
+  justification: string
+  confiance: ConfianceDeRattachement
+  /** `#p1` est le titulaire du compte ; `#p2`… des parents absents de l'arbre. */
+  corps: CorpsCreationPersonne
+  changements: ChangementPropose[]
+  personnes: PersonneCitee[]
+  /** Le résultat de la préparation côté serveur : `false` = il manque un
+   *  lien vers l'arbre, et l'administrateur doit choisir un parent. */
+  recevable: boolean
+  motifIrrecevable: string | null
+}
+
+/**
+ * La suggestion calculée par le module Assistant (Gemini) — § 4 du contrat du
+ * chantier. **Aucun rattachement n'en découle automatiquement** : elle éclaire
+ * une décision que l'administrateur prend.
+ *
+ * `displayName`, `ligneDates` et `dejaRattachee` sont recalculés à chaque
+ * lecture, même en cache : une fiche réclamée entre-temps éteint « Rattacher ».
+ */
+export interface SuggestionDeRattachement {
+  memberId: number
+  calculeeLe: string
+  modele: string
+  verdict: 'fiche_existante' | 'absente' | 'indecise'
+  resume: string
+  avertissements: string[]
+  /** Non nul ⇔ `verdict === 'fiche_existante'`. */
+  fiche:
+    | null
+    | (FicheSuggeree & {
+        confiance: ConfianceDeRattachement
+        /** Réclamée par un autre compte : « Rattacher » est grisé. */
+        dejaRattachee: boolean
+      })
+  /** 0 à 3 autres fiches plausibles. */
+  alternatives: FicheSuggeree[]
+  /** Non nul si `absente`, facultatif si `indecise`. */
+  creation: CreationSuggeree | null
+}
+
+/** `201` de « Créer la fiche et rattacher ». */
+export interface ResultatCreationEtRattachement {
+  membre: MembreAdministration
+  personId: number
+  demandeId: number
+}
+
+/** `GET /api/administration/rattachements` — du plus ancien au plus récent. */
+export function listerRattachements(): Promise<ListePaginee<CompteARattacher>> {
+  return requeteApi<ListePaginee<CompteARattacher>>('/administration/rattachements')
+}
+
+/**
+ * `GET …/rattachements/{memberId}/suggestion` — la suggestion en cache, ou
+ * calculée à la première lecture (20 à 60 s : le serveur relâche la session
+ * avant d'appeler le modèle, le reste du site ne se bloque pas).
+ *
+ * `503 assistant_indisponible` : pas de clé et rien en cache. `502` : le modèle
+ * a échoué. `429` : quota global des administrateurs atteint (`Retry-After`).
+ *
+ * **L'appelant les enchaîne l'une après l'autre**, jamais en parallèle : dix
+ * cartes ouvertes d'un coup feraient dix analyses simultanées sur un quota
+ * commun de 40 par jour.
+ */
+export function lireSuggestionDeRattachement(
+  memberId: number,
+  signal?: AbortSignal,
+): Promise<SuggestionDeRattachement> {
+  return requeteApi<SuggestionDeRattachement>(
+    `/administration/rattachements/${memberId}/suggestion`,
+    signal === undefined ? {} : { signal },
+  )
+}
+
+/** `POST` sur la même route : « Relancer l'analyse ». Consomme le quota. */
+export function relancerSuggestionDeRattachement(
+  memberId: number,
+  signal?: AbortSignal,
+): Promise<SuggestionDeRattachement> {
+  return requeteApi<SuggestionDeRattachement>(
+    `/administration/rattachements/${memberId}/suggestion`,
+    signal === undefined ? { methode: 'POST' } : { methode: 'POST', signal },
+  )
+}
+
+/**
+ * `POST …/rattachements/{memberId}/creer-et-rattacher` — dépose la demande de
+ * création, la valide, rattache et active le compte, **en une transaction** :
+ * une erreur n'écrit rien.
+ *
+ * Le corps de la demande est construit **côté serveur** (suggestion, sinon
+ * déclaration) : le front ne transmet que les parents choisis, 0 à 2.
+ * `422 demande_sans_lien` : ni la suggestion ni `parents` ne rattachent la
+ * fiche à l'arbre.
+ */
+export function creerFicheEtRattacher(
+  memberId: number,
+  options: { parents?: number[] | undefined; message?: string | undefined } = {},
+): Promise<ResultatCreationEtRattachement> {
+  const corps: { parents: number[]; message?: string } = { parents: options.parents ?? [] }
+  const message = options.message?.trim() ?? ''
+  if (message !== '') corps.message = message
+  return requeteApi<ResultatCreationEtRattachement>(
+    `/administration/rattachements/${memberId}/creer-et-rattacher`,
+    { methode: 'POST', corps },
+  )
+}
+
+/**
+ * `POST /api/administration/membres/{id}/refuser` — refuser une inscription
+ * en attente. Le compte est **suspendu** (il ne se connecte plus) et sa
+ * déclaration, la suggestion et la photo en attente sont purgées. Le courriel
+ * reste réservé. `409 compte_deja_decide` si le compte n'est plus en attente.
+ */
+export function refuserInscription(memberId: number): Promise<MembreAdministration> {
+  return requeteApi<MembreAdministration>(`/administration/membres/${memberId}/refuser`, {
+    methode: 'POST',
   })
 }
 

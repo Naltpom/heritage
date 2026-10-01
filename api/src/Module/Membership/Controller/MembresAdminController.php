@@ -7,6 +7,7 @@ namespace App\Module\Membership\Controller;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Service\BasculeVoirComme;
+use App\Module\Membership\Contract\PortraitsDesComptes;
 use App\Module\Membership\Service\ServiceDesMembres;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,6 +31,7 @@ final class MembresAdminController extends AbstractController
         // « Toute route d'écriture rend `409 vue_comme_membre_active` » (§ 10.4, règle 2).
         // La garde vit dans `Core`, qui possède la bascule.
         private readonly BasculeVoirComme $bascule,
+        private readonly PortraitsDesComptes $portraits,
     ) {
     }
 
@@ -46,7 +48,15 @@ final class MembresAdminController extends AbstractController
         $elements = [];
 
         foreach ($this->membres->enAttente() as $membre) {
-            $elements[] = $this->membres->normaliser($membre);
+            // La photo déposée à l'inscription (ADR 0013) : elle **deviendra le portrait de
+            // la fiche** à la validation — `ServiceDesMembres::finaliserLActivation()` la
+            // transfère, recherche confirmée comprise. L'administrateur qui valide depuis
+            // l'écran Utilisateurs doit donc la voir avant de cliquer : un transfert
+            // automatique de ce qu'il n'a pas regardé serait une publication à l'aveugle.
+            // Hors de `normaliser()` : les réponses d'`activer` et `refuser` n'en ont
+            // que faire — la photo, à ce moment-là, est déjà sur la fiche ou effacée.
+            $elements[] = $this->membres->normaliser($membre)
+                + ['portraitEnAttente' => $this->portraits->portraitEnAttente($membre->getUserId())];
         }
 
         return new JsonResponse(['elements' => $elements, 'total' => \count($elements), 'page' => 1, 'parPage' => \count($elements)]);
@@ -60,6 +70,19 @@ final class MembresAdminController extends AbstractController
         $membre = $this->membres->activer($id, $this->corpsJson($requete), $administrateur);
 
         return new JsonResponse($this->membres->normaliser($membre));
+    }
+
+    /**
+     * Refuser une inscription en attente — **suspension** et purge de la déclaration, de la
+     * suggestion et de la photo (ADR 0013). Corps vide. Le détail, et pourquoi on suspend
+     * plutôt que de supprimer, est sur {@see ServiceDesMembres::refuser()}.
+     */
+    #[Route('/{id}/refuser', name: 'membership_admin_membre_refuser', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function refuser(int $id, #[CurrentUser] User $administrateur): JsonResponse
+    {
+        $this->bascule->refuserSiActive();
+
+        return new JsonResponse($this->membres->normaliser($this->membres->refuser($id, $administrateur)));
     }
 
     /** @return array<string, mixed> */

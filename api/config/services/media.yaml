@@ -129,3 +129,14 @@ services:
     # en le lisant.
     App\Module\Tree\Serializer\PortDesMedias:
         alias: App\Module\Media\Service\Arbre\PortDesMediasDeLArbre
+
+    # --- La photo d'un compte sans fiche, demandée par `Membership` -------------------
+    #
+    # `Membership\Contract\PortraitsDesComptes` (ADR 0013) : le portrait qu'un compte en
+    # attente a déposé à l'inscription, déplacé sur sa fiche au rattachement, supprimé au
+    # refus. Déclaré par `Membership`, qui décide du moment ; implémenté ici, qui possède la
+    # table, le fichier et la règle « un seul portrait actif ». Même motif d'ordre que le
+    # port de `Tree` ci-dessus : `media` passe avant `membership`, qui ne déclare rien pour
+    # ce contrat.
+    App\Module\Membership\Contract\PortraitsDesComptes:
+        alias: App\Module\Media\Service\PortraitsDesComptesEnAttente

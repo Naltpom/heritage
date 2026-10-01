@@ -1138,8 +1138,8 @@ ajoutée de cette table est le **rattachement**.
 | `id` | `INT` | non | identité | PK |
 | `user_id` | `INT` | non | — | **⇢ inter-module** (`Core\User`). |
 | `user_email` | `VARCHAR(180)` | non | — | Libellé dénormalisé : permet d'afficher la liste des membres sans charger `Core`. |
-| `person_id` | `INT` | non | — | **⇢ inter-module** (`Tree\Person`). La personne de l'arbre que ce compte **est**. C'est le point d'ancrage du cercle de visibilité (§ 9.3). |
-| `person_label` | `VARCHAR(255)` | non | — | Libellé dénormalisé. Rafraîchi par le service `Tree` quand le nom d'affichage change. |
+| `person_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Tree\Person`). La personne de l'arbre que ce compte **est**. C'est le point d'ancrage du cercle de visibilité (§ 9.3). **Nul pour un compte `a_rattacher`, et pour lui seul** (ADR 0013, `ck_mbr_member_fiche`). |
+| `person_label` | `VARCHAR(255)` | oui | `NULL` | Libellé dénormalisé. Rafraîchi par le service `Tree` quand le nom d'affichage change. Nul exactement quand `person_id` l'est. |
 | `status` | `VARCHAR(12)` | non | `'en_attente'` | Énum `MemberStatus` (§ 4.5). |
 | `invitation_id` | `INT` | oui | `NULL` | **FK intra-module** → `mbr_invitation(id)`, `ON DELETE SET NULL`. D'où vient ce membre. `NULL` pour le compte d'amorçage créé en console. |
 | `match_kind` | `VARCHAR(24)` | non | — | Énum `MatchKind` : comment le rattachement a été établi (`pre_lie`, `recherche_confirmee`, `manuel_admin`). Déterminé l'activation automatique : seul `pre_lie` avec date de naissance confirmée donne un compte `actif` sans intervention (§ 6.1 du dossier, étape 3). **24 et non 16** : `recherche_confirmee` fait 19 signes. |
@@ -1148,6 +1148,12 @@ ajoutée de cette table est le **rattachement**.
 | `activated_by_user_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Core\User`). `NULL` si l'activation était automatique. |
 | `created_at` | `TIMESTAMPTZ` | non | `now()` | — |
 | `updated_at` | `TIMESTAMPTZ` | non | `now()` | — |
+| `declared_surname` | `VARCHAR(120)` | oui | `NULL` | Compte `a_rattacher` seulement : le nom déclaré à l'inscription. **Purgé** au rattachement et au refus. |
+| `declared_given_names` | `VARCHAR(160)` | oui | `NULL` | Idem : les prénoms déclarés. |
+| `declared_birth_date` | `DATE` | oui | `NULL` | Idem : la date de naissance déclarée — une date **ferme**, ce que le candidat dit de lui-même, pas une donnée de l'arbre. |
+| `family_description` | `TEXT` | oui | `NULL` | Idem : « Mon père est… ». Des données de **vivants**, lisibles des seuls administrateurs, jamais journalisées (`CHAMPS_SENSIBLES` du journal mécanique). |
+| `attachment_suggestion` | `JSONB` | oui | `NULL` | La suggestion de rattachement calculée par `Assistant`, **mise en cache**. `Membership` ne la lit pas : il la stocke et la purge. |
+| `attachment_suggestion_at` | `TIMESTAMPTZ` | oui | `NULL` | Date du calcul de la suggestion. |
 
 **Clés et index**
 
@@ -1156,7 +1162,43 @@ ajoutée de cette table est le **rattachement**.
 | PK | `(id)` | — |
 | `uniq_mbr_member_user` | `UNIQUE (user_id)` | « Un compte est rattaché à **une** personne » (§ 6.1 du dossier). La base le garantit, pas le code. |
 | `uniq_mbr_member_person` | `UNIQUE (person_id)` | « Une personne ne peut être réclamée que par **un** compte » (§ 6.1 du dossier). Même raison : c'est une règle métier dure, elle se met dans le schéma. Sans cette contrainte, deux invitations envoyées par erreur à la même personne créent deux comptes qui se voient l'un l'autre comme soi-même. |
-| `idx_mbr_member_status` | `(status)` partiel `WHERE status = 'en_attente'` | File d'activation de l'administrateur. |
+| `idx_mbr_member_status` | `(status)` partiel `WHERE status = 'en_attente'` | File d'activation de l'administrateur, et onglet « À rattacher ». |
+
+`uniq_mbr_member_person` reste tel quel pour les comptes sans fiche : PostgreSQL comme SQLite
+admettent plusieurs `NULL` dans un index unique.
+
+**Contraintes — l'inscription sans fiche (ADR 0013, `Version20261001120000`)**
+
+```sql
+-- Pas de fiche ⇔ nature « à rattacher ».
+CONSTRAINT ck_mbr_member_fiche CHECK ((person_id IS NULL) = (match_kind = 'a_rattacher')),
+-- Une fiche et son libellé vont ensemble.
+CONSTRAINT ck_mbr_member_libelle CHECK ((person_id IS NULL) = (person_label IS NULL)),
+-- Pas d'ancre, pas de cercle : un compte sans fiche n'est jamais actif.
+CONSTRAINT ck_mbr_member_sans_fiche_inactif CHECK (person_id IS NOT NULL OR status <> 'actif'),
+-- La déclaration et la suggestion ne survivent pas à un changement de nature.
+CONSTRAINT ck_mbr_member_declaration CHECK (match_kind = 'a_rattacher' OR (family_description IS NULL
+  AND declared_surname IS NULL AND declared_given_names IS NULL AND declared_birth_date IS NULL
+  AND attachment_suggestion IS NULL)),
+-- … ni à la fin de l'attente : un compte refusé reste `a_rattacher` (suspendu), et une
+-- analyse de l'assistant qui se termine après le refus ne doit pas y réécrire sa suggestion.
+CONSTRAINT ck_mbr_member_declaration_en_attente CHECK (status = 'en_attente' OR (family_description IS NULL
+  AND declared_surname IS NULL AND declared_given_names IS NULL AND declared_birth_date IS NULL
+  AND attachment_suggestion IS NULL AND attachment_suggestion_at IS NULL)),
+```
+
+Un compte refusé reste `a_rattacher`, sans fiche, **suspendu** — et sa déclaration est vide.
+L'écriture de la suggestion relit la ligne sous verrou (`SELECT … FOR UPDATE`) avant
+d'écrire : l'analyse dure jusqu'à 90 s, et le compte a pu être refusé ou rattaché entre-temps.
+Les décisions de l'administrateur — activer, refuser, « créer la fiche et rattacher » — font
+de même, dans leur transaction : la seconde de deux décisions croisées rend `409
+compte_deja_decide`, et « créer la fiche » le vérifie avant de créer quoi que ce soit.
+
+La redescente de `Version20261001120000` s'arrête tant qu'une inscription sans fiche attend
+(rattachez-la ou refusez-la d'abord), et **définitivement** dès qu'un compte a été refusé :
+l'ancien schéma ne sait pas représenter ce compte suspendu sans fiche, et la migration ne le
+supprime pas à la place de l'exploitant — supprimer la ligne rendrait son courriel à
+l'inscription.
 
 ### 4.3 `mbr_claim_attempt`
 
@@ -1237,6 +1279,7 @@ et l'arbre ancien n'expose rien de sensible.
 | `pre_lie` | L'administrateur avait désigné la personne sur l'invitation, le candidat a confirmé la date de naissance. | Oui, automatiquement. |
 | `recherche_confirmee` | Pas de pré-lien ; la recherche floue a renvoyé un candidat, le candidat l'a retenu. | Non — `en_attente` + notification à l'administrateur. |
 | `manuel_admin` | Rattachement posé ou corrigé à la main par un administrateur. | Oui. |
+| `a_rattacher` | **Pas de fiche** : le candidat ne s'est pas trouvé et a décrit sa famille (ADR 0013). `person_id` est nul. | Non — `en_attente` + notification ; un administrateur le rattache (il passe alors `manuel_admin`) ou le refuse (suspendu). |
 
 **`ClaimResult`**
 
@@ -1693,6 +1736,7 @@ porter leurs **résultats**, sinon on ne peut pas prouver qu'ils ont eu lieu.
 | `subject_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Tree\Person`, `Tree\Family`, `Tree\Citation`). |
 | `subject_draft_ref` | `VARCHAR(8)` | oui | `NULL` | La référence provisoire (`#p1`) quand le média est joint à une personne **pas encore créée**. Exactement un des deux est renseigné. C'est la réponse à « comment référencer la personne proposée depuis ses médias » (§ 9.5). |
 | `subject_request_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Proposal\ChangeRequest`). Obligatoire quand `subject_draft_ref` est posé : une référence provisoire n'a de sens que dans le contexte de **sa** demande. `#p1` de la demande 12 et `#p1` de la demande 13 ne désignent pas la même personne. |
+| `subject_user_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Core\User`). Le troisième sujet possible (ADR 0013) : la photo qu'un compte **sans fiche validée** dépose pour lui-même à l'inscription. Toujours un portrait `en_attente` (ou `refuse`), jamais actif ; au rattachement il passe sur la fiche (`subject_id`), au refus il est supprimé. Libellé anonyme : « Portrait en attente de rattachement ». |
 | `subject_label` | `VARCHAR(255)` | non | — | Libellé dénormalisé. |
 | `storage_name` | `VARCHAR(80)` | non | — | Nom du fichier sur disque : **aléatoire**, sans rapport avec le nom d'origine ni avec le sujet. Un nom devinable rend le stockage énumérable, même hors racine web. |
 | `original_name` | `VARCHAR(255)` | oui | `NULL` | Nom fourni au téléversement. Affiché, jamais utilisé pour lire ou écrire un fichier. |
@@ -1724,13 +1768,20 @@ porter leurs **résultats**, sinon on ne peut pas prouver qu'ils ont eu lieu.
 | `uniq_med_portrait_actif` | `UNIQUE (subject_kind, subject_id)` partiel `WHERE kind = 'portrait' AND is_active_portrait = true` | **« Un seul portrait actif par personne »** (§ 6.5 du dossier). Règle métier dure, donc contrainte, pas discipline de service. Un index partiel unique est exactement l'outil : il n'empêche pas d'empiler dix portraits remplacés. |
 | `idx_med_media_sha` | `(sha256)` | Détection de doublon au téléversement. **Non unique** : le même acte de mariage étaye légitimement les fiches des deux époux et de leurs quatre parents. Le doublon est un avertissement à l'utilisateur (« ce fichier est déjà dans l'arbre, sur la fiche X »), pas un refus. |
 | `idx_med_media_brouillon` | `(subject_request_id, subject_draft_ref)` partiel `WHERE subject_draft_ref IS NOT NULL` | Résolution des références provisoires à la validation (§ 9.5), et affichage du nœud en attente avec sa preuve. |
-| `idx_med_media_attente` | `(status, created_at)` partiel `WHERE status = 'en_attente'` | File de validation des médias. |
+| `idx_med_media_attente` | `(status, created_at)` partiel `WHERE status = 'en_attente'` | File de validation des médias — **sans** les portraits de compte, qui n'y entrent pas. |
+| `uniq_med_media_portrait_de_compte` | `UNIQUE (subject_user_id)` partiel `WHERE subject_user_id IS NOT NULL AND status = 'en_attente'` | Au plus **un** portrait en attente par compte : un second dépôt remplace le premier (ADR 0013). |
 
 **Contraintes**
 
 ```sql
+-- Trois sujets possibles depuis l'ADR 0013 : une ligne, un brouillon, un compte.
 CONSTRAINT ck_med_media_sujet_unique
-  CHECK (num_nonnulls(subject_id, subject_draft_ref) = 1),
+  CHECK (num_nonnulls(subject_id, subject_draft_ref, subject_user_id) = 1),
+
+-- Un média posé sur un compte est un portrait de personne, jamais actif.
+CONSTRAINT ck_med_media_compte
+  CHECK (subject_user_id IS NULL OR (kind = 'portrait' AND subject_kind = 'personne'
+         AND status IN ('en_attente', 'refuse'))),
 
 -- Une référence provisoire n'existe que dans le contexte de sa demande.
 CONSTRAINT ck_med_media_brouillon_contexte
@@ -1762,6 +1813,7 @@ CONSTRAINT ck_med_media_taken_intervalle CHECK (taken_qualifier <> 'entre' OR (t
 | `med_media` | `subject_id` (+ `subject_kind`) | `Tree\Person` / `Tree\Family` / `Tree\Citation` | `subject_label` |
 | `med_media` | `subject_request_id`, `change_request_id` | `Proposal\ChangeRequest` | — |
 | `med_media` | `uploaded_by_user_id` | `Core\User` | `uploaded_by_label` |
+| `med_media` | `subject_user_id` | `Core\User` | — (libellé anonyme, ADR 0013) |
 
 ### 6.3 Énumérations de `Media`
 
@@ -2644,7 +2696,7 @@ composite :
 | `prp_draft_link` | `subject_person_id` / `subject_draft_ref` / `subject_draft_person_id` | `ck_prp_link_sujet_unique` |
 | `prp_draft_link` | `other_person_id` / `other_draft_ref` / `other_draft_person_id` | `ck_prp_link_cible` |
 | `prp_draft_link` | `other2_person_id` / `other2_draft_ref` / `other2_draft_person_id` | `ck_prp_link_second_parent_unique` |
-| `med_media` | `subject_id` / `subject_draft_ref` | `ck_med_media_sujet_unique` |
+| `med_media` | `subject_id` / `subject_draft_ref` / `subject_user_id` | `ck_med_media_sujet_unique` |
 
 *Pourquoi une paire et pas une chaîne `"personne:42"` / `"brouillon:#p1"`.* Une chaîne
 unique serait plus élégante à écrire et bien pire à exploiter : elle interdit tout index

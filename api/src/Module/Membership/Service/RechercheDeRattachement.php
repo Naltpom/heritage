@@ -30,12 +30,27 @@ use App\Module\Membership\Service\Port\VueDeLArbre;
  * D'où la forme de {@see self::chercher()} : elle **tronque avant de rendre**, et ne rend
  * jamais le total. L'appelant n'a donc pas le moyen de le divulguer.
  *
- * ## Les personnes décédées sont-elles cherchables ?
+ * ## Les personnes décédées ne sont PAS cherchables — depuis le 1er octobre 2026
  *
- * Oui, et c'est correct : le rattachement d'un compte à une personne décédée n'a pas de
- * sens fonctionnel, mais l'exclure créerait un oracle inverse — « votre recherche ne rend
- * rien » distinguerait une personne décédée d'une personne inexistante. Le cercle de
- * visibilité, lui, ne s'applique pas ici : personne n'est encore connecté.
+ * Elles l'ont été, au nom d'un « oracle inverse » : les exclure faisait dire à « votre
+ * recherche ne rend rien » qu'une personne était décédée plutôt qu'inexistante. **Cet
+ * argument ne tient plus**, et la raison est écrite dans l'ADR 0013 : tout porteur du lien
+ * peut désormais créer un compte en attente sans prouver quoi que ce soit (« Je ne me trouve
+ * pas »), et un compte en attente **voit tous les défunts** — c'est la conséquence
+ * mécanique d'un cercle vide (ADR 0003, `MemberStatus`). L'état civil des morts n'est donc
+ * plus un secret que ce formulaire aurait à garder ; l'oracle protégeait une information
+ * qu'on obtient, deux écrans plus loin, en toutes lettres.
+ *
+ * Ce qui reste vrai, en revanche, et qui décide : **le rattachement d'un compte à une
+ * personne décédée n'a pas de sens fonctionnel.** Le proposer, c'était laisser un
+ * candidat se reconnaître dans son arrière-grand-père homonyme et créer un compte ancré
+ * sur un mort. Les deux modes les écartent — la recherche comme la confirmation d'un
+ * pré-lien, qui rend alors `candidats: []` et consomme sa tentative comme une date fausse.
+ *
+ * La propriété « vivante » est celle que calcule `Tree` (§ 9.2 du modèle), portée par
+ * {@see PersonneDeLArbre::$vivante} : une personne sans décès connu et née il y a moins
+ * de cent ans est vivante, et reste donc proposée. Le cercle de visibilité, lui, ne
+ * s'applique pas ici : personne n'est encore connecté.
  *
  * ## La date, et pourquoi elle se compare sur l'étiquette compacte
  *
@@ -70,6 +85,12 @@ final readonly class RechercheDeRattachement
         $trouves = [];
 
         foreach ($arbre->personnes as $personne) {
+            // Un défunt n'est pas un titulaire de compte possible. Voir l'en-tête : l'argument
+            // de l'oracle inverse est tombé avec l'inscription sans fiche.
+            if (!$personne->vivante) {
+                continue;
+            }
+
             if (!$this->noms->proche($nom, $this->noms->normaliser($personne->nom))) {
                 continue;
             }
@@ -112,7 +133,9 @@ final readonly class RechercheDeRattachement
     {
         $personne = $arbre->personne($personId);
 
-        if (null === $personne || !$this->correspondALaDate($personne, $criteres)) {
+        // Une personne pré-liée décédée — une erreur de l'administrateur, ou un décès saisi
+        // depuis l'envoi du lien — ne se confirme pas : même réponse qu'une date fausse.
+        if (null === $personne || !$personne->vivante || !$this->correspondALaDate($personne, $criteres)) {
             return [];
         }
 

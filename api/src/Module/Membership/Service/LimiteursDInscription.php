@@ -10,13 +10,14 @@ use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\RateLimiter\Storage\CacheStorage;
 
 /**
- * Les trois limiteurs du parcours d'inscription (§ 1.9 du contrat d'API).
+ * Les quatre limiteurs du parcours d'inscription (§ 1.9 du contrat d'API).
  *
  * | Route | Clé | Plafond | Réponse au dépassement |
  * |---|---|---|---|
  * | `POST /api/inscription/verifier` | IP | 20 / h | `429 trop_de_tentatives` |
  * | `POST /api/inscription/rattachement` | **jeton** | `invitation.tentatives_par_heure`, défaut 5 | **`200` indistinguable d'une recherche infructueuse** |
  * | `POST /api/inscription/rattachement` | IP | 30 / h | `429 trop_de_tentatives` |
+ * | `POST /api/inscription/compte` avec `declaration` | IP | 5 / h | `429 trop_de_tentatives` |
  *
  * **Les deux limiteurs de `rattachement` coexistent et ne se répondent pas de la même
  * façon.** Ce n'est pas une incohérence, c'est le point le plus délicat du contrat : le
@@ -48,6 +49,17 @@ final readonly class LimiteursDInscription
 {
     public const int VERIFIER_PAR_IP = 20;
     public const int RATTACHEMENT_PAR_IP = 30;
+
+    /**
+     * Comptes **sans fiche** créés par heure et par IP (ADR 0013).
+     *
+     * L'inscription sans fiche ne demande aucune preuve : n'importe quel porteur du lien
+     * peut créer un compte en attente et voir les défunts. C'est assumé, mais un lien posté
+     * dans un groupe peut fuiter, et ce plafond borne ce qu'un seul poste peut en faire.
+     * Cinq, parce qu'une famille derrière la même box peut légitimement inscrire deux ou
+     * trois cousins le même soir.
+     */
+    public const int SANS_FICHE_PAR_IP = 5;
 
     private CacheStorage $stockage;
 
@@ -84,6 +96,16 @@ final readonly class LimiteursDInscription
     public function rattachementParIp(): RateLimiterFactory
     {
         return $this->fabrique('inscription_rattachement_ip', self::RATTACHEMENT_PAR_IP);
+    }
+
+    /**
+     * 5 / heure / IP sur `POST /api/inscription/compte` **avec `declaration`** — et rend,
+     * lui, un vrai `429` avec `Retry-After` : il ne dit rien d'une personne de l'arbre,
+     * seulement qu'une adresse crée des comptes en série.
+     */
+    public function inscriptionSansFicheParIp(): RateLimiterFactory
+    {
+        return $this->fabrique('inscription_sans_fiche', self::SANS_FICHE_PAR_IP);
     }
 
     private function fabrique(string $identifiant, int $plafond): RateLimiterFactory

@@ -37,6 +37,11 @@ services:
     App\Module\Assistant\Contract\AccesAuModele:
         alias: App\Module\Question\Service\AccesAuModelePourLAssistant
 
+    # ⇢ `Proposal` : déposer puis valider la fiche d'un compte « à rattacher »
+    #    (« Créer la fiche et rattacher »). Même règle que les trois ports ci-dessus.
+    App\Module\Assistant\Contract\CreationDeFichePourLeRattachement:
+        alias: App\Module\Proposal\Service\CreationDeFicheAuRattachement
+
     # ── Le transport du modèle ─────────────────────────────────────────────────────
     App\Module\Assistant\Service\TransportDuModele:
         alias: App\Module\Assistant\Service\TransportGemini
@@ -58,6 +63,21 @@ services:
             -   id: 'assistant_analyses'
                 policy: 'sliding_window'
                 limit: 20
+                interval: '24 hours'
+            - '@assistant.stockage_limiteur'
+
+    # ── Le quota du rattachement assisté : 40 analyses par 24 heures, CLÉ GLOBALE ──
+    #
+    # Un seul compteur pour tous les administrateurs (`RattachementAssisteController`) :
+    # il borne une dépense de l'installation — une vague d'inscriptions partagée sur un
+    # groupe familial —, pas l'activité d'une personne. Séparé des 20 analyses par jour
+    # des membres : l'un ne doit pas épuiser l'autre.
+    assistant.limiteur_rattachements:
+        class: Symfony\Component\RateLimiter\RateLimiterFactory
+        arguments:
+            -   id: 'assistant_rattachements'
+                policy: 'sliding_window'
+                limit: 40
                 interval: '24 hours'
             - '@assistant.stockage_limiteur'
 
@@ -86,4 +106,14 @@ when@test:
 
         App\Module\Assistant\Contract\AccesAuModele:
             alias: App\Tests\Assistant\Double\AccesAuModeleSimule
+            public: true
+
+        # Les comptes « à rattacher » : un double COMMUTABLE. Par défaut il délègue à
+        # l'implémentation réelle de `Membership` (le test d'intégration du parcours) ;
+        # `oublierTout()` le passe en mémoire, pour éprouver la suggestion et « Créer la
+        # fiche et rattacher » sans dépendre du schéma de `Membership`.
+        App\Tests\Assistant\Double\ComptesARattacherEnMemoire: ~
+
+        App\Module\Membership\Contract\ComptesARattacher:
+            alias: App\Tests\Assistant\Double\ComptesARattacherEnMemoire
             public: true

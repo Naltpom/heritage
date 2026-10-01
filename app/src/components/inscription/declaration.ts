@@ -1,0 +1,176 @@
+/**
+ * « Je ne me trouve pas » : les règles de la description de famille, vérifiées
+ * **avant** l'envoi.
+ *
+ * Quand la recherche de l'étape 1b ne rend pas la bonne personne, le candidat
+ * peut quand même ouvrir son compte : il décrit sa famille en quelques phrases,
+ * et un administrateur identifiera sa fiche — ou la créera — plus tard. Le
+ * compte naît **en attente et sans fiche** (`matchKind: 'a_rattacher'`) : il
+ * voit les défunts, comme tout compte en attente, et n'écrit rien.
+ *
+ * Même doctrine que `reglesMotDePasse.ts` :
+ *
+ * - **le serveur fait foi.** Ses messages (`champs["declaration.description"]`…)
+ *   l'emportent à l'affichage ; ce module évite seulement un aller-retour qui
+ *   reviendrait dire la même chose, et permet de compter pendant la saisie ;
+ * - **on compte les points de code**, après `trim()`, comme le validateur du
+ *   serveur : « é » composé ou un emoji comptent pour un caractère.
+ *
+ * Les bornes (60 à 4 000) viennent du contrat. Soixante caractères, c'est une
+ * phrase : « Mon père est Jean Dupont, né vers 1960 à Lille. » en fait déjà
+ * cinquante. En dessous, l'administrateur n'aurait rien pour chercher.
+ *
+ * **Ce texte parle de personnes vivantes.** Rien ici ne le stocke ni ne le
+ * journalise : ce module ne fait que compter.
+ */
+
+import type { DeclarationDeFamille } from '@/lib/api'
+import { longueurVisible } from './reglesMotDePasse'
+
+/** § 4.3 : bornes de la description, après `trim()`. */
+export const DESCRIPTION_MINIMALE = 60
+export const DESCRIPTION_MAXIMALE = 4000
+
+/** Bornes de l'identité déclarée (colonnes de `mbr_member`). */
+export const NOM_MAXIMAL = 120
+export const PRENOMS_MAXIMAL = 160
+
+/** La première année admise pour une date de naissance déclarée. */
+export const ANNEE_MINIMALE = 1900
+
+/** L'exemple du champ : il montre la forme attendue mieux qu'une consigne. */
+export const EXEMPLE_DESCRIPTION =
+  'Mon père est Jean Dupont, né vers 1960 à Lille ; ma mère Marie Martin ; ma grand-mère paternelle …'
+
+/**
+ * La mention qui accompagne le champ, **obligatoire** : le candidat doit savoir
+ * qui lira ce texte, et qu'un modèle de langage peut l'analyser.
+ */
+export const MENTION_DESCRIPTION =
+  'Seuls les administrateurs de l’arbre lisent ce texte ; il peut être analysé automatiquement (Google Gemini) pour les aider à retrouver ou créer votre fiche.'
+
+/** Longueur de la description telle que le serveur la compte. */
+export function longueurDescription(texte: string): number {
+  return longueurVisible(texte.trim())
+}
+
+/**
+ * Le message sous le champ, ou `null` si la description convient.
+ *
+ * Comme pour le mot de passe, il dit **ce qu'il manque** : « encore
+ * 23 caractères » se corrige, « trop court » se subit.
+ */
+export function erreurDescription(texte: string): string | null {
+  const longueur = longueurDescription(texte)
+  if (longueur === 0) return 'Décrivez votre famille en quelques phrases.'
+  if (longueur < DESCRIPTION_MINIMALE) {
+    const manquants = DESCRIPTION_MINIMALE - longueur
+    return manquants === 1
+      ? `Encore un caractère : il en faut ${DESCRIPTION_MINIMALE} au minimum.`
+      : `Encore ${manquants} caractères : il en faut ${DESCRIPTION_MINIMALE} au minimum.`
+  }
+  if (longueur > DESCRIPTION_MAXIMALE) {
+    return `Ce texte dépasse ${DESCRIPTION_MAXIMALE.toLocaleString('fr-FR')} caractères : resserrez-le un peu.`
+  }
+  return null
+}
+
+/**
+ * Le compteur affiché sous le champ : « 42 / 60 caractères au minimum » tant
+ * qu'il en manque, puis « 180 / 4 000 ».
+ *
+ * (Aucun rapport avec les recherches de l'étape 1b, dont rien ne se compte côté
+ * client : ce compteur-ci mesure le texte que le candidat est en train d'écrire.)
+ */
+export function compteurDescription(texte: string): string {
+  const longueur = longueurDescription(texte)
+  const fmt = (n: number): string => n.toLocaleString('fr-FR')
+  return longueur < DESCRIPTION_MINIMALE
+    ? `${fmt(longueur)} / ${fmt(DESCRIPTION_MINIMALE)} caractères au minimum`
+    : `${fmt(longueur)} / ${fmt(DESCRIPTION_MAXIMALE)} caractères`
+}
+
+/** `YYYY-MM-DD` d'une date locale : ce que rend un `<input type="date">`. */
+function jourLocal(date: Date): string {
+  const a = String(date.getFullYear()).padStart(4, '0')
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const j = String(date.getDate()).padStart(2, '0')
+  return `${a}-${m}-${j}`
+}
+
+/**
+ * La date de naissance déclarée : `YYYY-MM-DD` valide, pas avant 1900, pas dans
+ * le futur. `aujourdhui` est un paramètre pour que les tests ne dépendent pas
+ * du jour où ils tournent.
+ */
+export function erreurDateDeNaissance(valeur: string, aujourdhui: Date = new Date()): string | null {
+  const forme = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valeur)
+  if (forme === null) return 'Indiquez votre date de naissance : jour, mois et année.'
+
+  const [annee, mois, jour] = [Number(forme[1]), Number(forme[2]), Number(forme[3])]
+  // Un 31 avril ou un 29 février d'année ordinaire : `Date` le fait déborder sur
+  // le mois suivant, et c'est ce débordement qui le trahit.
+  const date = new Date(annee, mois - 1, jour)
+  if (date.getFullYear() !== annee || date.getMonth() !== mois - 1 || date.getDate() !== jour) {
+    return 'Cette date n’existe pas.'
+  }
+  if (annee < ANNEE_MINIMALE) return `La date doit être postérieure à ${ANNEE_MINIMALE}.`
+  // Comparaison de chaînes `YYYY-MM-DD` : l'ordre lexical est l'ordre des dates.
+  if (valeur > jourLocal(aujourdhui)) return 'Cette date est dans le futur.'
+  return null
+}
+
+/** Les erreurs de toute la déclaration, par clé du contrat (`declaration.*`). */
+export function erreursDeclaration(
+  declaration: DeclarationDeFamille,
+  aujourdhui: Date = new Date(),
+): Partial<Record<keyof DeclarationDeFamille, string>> {
+  const erreurs: Partial<Record<keyof DeclarationDeFamille, string>> = {}
+
+  const nom = longueurVisible(declaration.surname.trim())
+  if (nom === 0) erreurs.surname = 'Indiquez votre nom de famille.'
+  else if (nom > NOM_MAXIMAL) erreurs.surname = `${NOM_MAXIMAL} caractères au plus.`
+
+  const prenoms = longueurVisible(declaration.givenNames.trim())
+  if (prenoms === 0) erreurs.givenNames = 'Indiquez vos prénoms.'
+  else if (prenoms > PRENOMS_MAXIMAL) erreurs.givenNames = `${PRENOMS_MAXIMAL} caractères au plus.`
+
+  const date = erreurDateDeNaissance(declaration.birthDate, aujourdhui)
+  if (date !== null) erreurs.birthDate = date
+
+  const description = erreurDescription(declaration.description)
+  if (description !== null) erreurs.description = description
+
+  return erreurs
+}
+
+/** La déclaration peut-elle partir ? La garde qui passe avant l'envoi. */
+export function declarationAcceptable(
+  declaration: DeclarationDeFamille,
+  aujourdhui: Date = new Date(),
+): boolean {
+  return Object.keys(erreursDeclaration(declaration, aujourdhui)).length === 0
+}
+
+/** La déclaration telle qu'elle part : espaces de bord retirés, rien d'autre. */
+export function normaliserDeclaration(declaration: DeclarationDeFamille): DeclarationDeFamille {
+  return {
+    surname: declaration.surname.trim(),
+    givenNames: declaration.givenNames.trim(),
+    birthDate: declaration.birthDate,
+    description: declaration.description.trim(),
+  }
+}
+
+/**
+ * Le libellé du bouton qui ouvre la description, sous le résultat d'une
+ * recherche.
+ *
+ * Il ne dépend **que** du nombre de candidats affichés — donc de ce que le
+ * candidat voit déjà. Un résultat vide donne toujours « Je ne me trouve pas »,
+ * quelle qu'en soit la cause : recherche infructueuse, plafond horaire, date non
+ * confirmée. Aucune entrée ne permettrait d'ailleurs de les distinguer ici.
+ */
+export function libelleSansFiche(nombreDeCandidats: number): string {
+  return nombreDeCandidats === 0 ? 'Je ne me trouve pas' : 'Aucune de ces personnes'
+}

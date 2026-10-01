@@ -1027,6 +1027,27 @@ données n'a jamais écrit `Account` ailleurs que dans les phrases qui l'écarte
 s'appelait déjà `mbr_member` et l'entité `Member`. Le schéma reste à **23 tables**,
 inchangé.
 
+### Addendum du 2026-10-01 — le compte en attente peut n'avoir aucune fiche
+
+**Décidé par le commanditaire** ([ADR 0013](adr/0013-inscription-sans-fiche.md)). La
+première décision ci-dessus est **prolongée, pas rouverte** : un compte en attente voit
+l'arbre ancien et rien d'autre — y compris quand il n'a **aucune** fiche, parce que le
+candidat ne s'est pas trouvé et a décrit sa famille en texte libre (`match_kind =
+a_rattacher`, `person_id` nul).
+
+Deux conséquences qu'un relecteur doit trouver ici :
+
+1. **Le point N du § 1 change de prémisse.** Voir les défunts n'exigeait qu'un lien et une
+   reconnaissance de soi dans un candidat ; il n'exige plus qu'un lien. C'est assumé — l'état
+   civil des morts « n'expose rien de sensible », c'était déjà le motif —, et c'est ce qui fait
+   tomber l'« oracle inverse » qui gardait les défunts dans la recherche de rattachement : ils
+   n'y sont plus proposés.
+2. **Refuser une inscription, c'est suspendre et purger**, pas supprimer. Le courriel reste
+   réservé ; la description, l'identité déclarée, la suggestion et la photo disparaissent.
+
+*Appliqué dans* : `modele-donnees.md` §§ 4.2, 4.5, 6.1 · `api-contract.md` §§ 4, 7.1, 10.1, 12 ·
+`adr/0003`, `adr/0013`.
+
 ---
 
 ## 4. Ce sur quoi les deux corpus étaient déjà d'accord

@@ -28,7 +28,7 @@
 export type StatutCompte = 'actif' | 'en_attente' | 'suspendu'
 
 /** `mbr_member.match_kind` — comment le rattachement a été établi. */
-export type TypeRattachement = 'pre_lie' | 'recherche_confirmee' | 'manuel_admin'
+export type TypeRattachement = 'pre_lie' | 'recherche_confirmee' | 'manuel_admin' | 'a_rattacher'
 
 export type Sexe = 'masculin' | 'feminin' | 'inconnu'
 
@@ -326,6 +326,12 @@ export interface EtatInscription {
     personnesDecedees: number
     personnesTotales: number
   }
+  /**
+   * Le compte a-t-il déposé sa photo, qui attend le rattachement pour devenir le
+   * portrait de sa fiche ? Présente seulement tant que `status` vaut
+   * `en_attente` : absente, elle ne dit rien — elle ne vaut pas `false`.
+   */
+  portraitEnAttente?: boolean
 }
 
 /* ------------------------------------------------------------------ */
