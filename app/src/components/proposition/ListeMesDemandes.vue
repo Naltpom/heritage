@@ -149,7 +149,7 @@ function changerFiltre(valeur: StatutDemande | ''): void {
         </div>
 
         <!-- Téléphone : les mêmes états, en pastilles qui défilent. -->
-        <div class="flex gap-2 md:hidden" role="group" aria-label="État des demandes affichées">
+        <div class="flex flex-wrap gap-2 md:hidden" role="group" aria-label="État des demandes affichées">
           <button
             v-for="o in choix"
             :key="o.libelle"
@@ -196,7 +196,7 @@ function changerFiltre(valeur: StatutDemande | ''): void {
       </PanneauBase>
 
       <template v-else>
-        <ul class="flex flex-col gap-3">
+        <ul class="flex min-w-0 flex-col gap-3 [overflow-wrap:anywhere]">
           <li v-for="demande in demandes" :key="demande.id">
             <PanneauBase>
               <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
