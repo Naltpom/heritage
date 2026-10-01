@@ -11,12 +11,15 @@ namespace App\Module\Tirage\Contract;
  * que des identifiants et des chaînes : aucune entité ne franchit la frontière
  * (ADR 0002).
  *
- * ## Ce qui sort d'ici est de la liste blanche
+ * ## Ce qui sort d'ici : des noms **que l'appelant a passés au cercle**
  *
- * Le nom affiché d'une personne, **même vivante et hors cercle**, fait partie de ce que
- * l'arbre expose à tout compte connecté (ADR 0003, § 11.1 du contrat). Le fait « ces deux
- * personnes forment un couple » est la position dans le graphe, qui y figure aussi. Aucune
- * date, aucun lieu : ce module n'en a pas besoin.
+ * Le port ne décide d'aucune visibilité : il rend le **vrai** nom affiché de chaque
+ * personne demandée. Depuis la révision du 2026-10-01 de l'ADR 0003, ce nom ne fait plus
+ * partie de la liste blanche d'une personne vivante hors cercle — c'est donc à `Tirage`
+ * de ne demander que des personnes du cercle du lecteur
+ * (`ServiceDesTirages::dansLeCercle()`) avant d'enregistrer ou de rendre un nom. Le fait
+ * « ces deux personnes forment un couple » est la position dans le graphe, qui reste dans
+ * la liste blanche. Aucune date, aucun lieu : ce module n'en a pas besoin.
  *
  * « Cette personne est décédée » n'en dit pas plus : c'est l'état que la recherche rend
  * déjà à côté de chaque nom (`vivant`), et le port le rend **sans la date** qui l'établit.
@@ -27,6 +30,8 @@ interface PortArbrePourTirages
      * Le nom affiché de chaque personne **qui existe** parmi celles demandées.
      *
      * Une personne inconnue est absente du résultat : c'est ainsi que l'appelant la refuse.
+     * Aucun filtre de cercle ici : l'appelant ne demande que des personnes que le lecteur
+     * voit (voir l'en-tête).
      *
      * @param list<int> $personIds
      *

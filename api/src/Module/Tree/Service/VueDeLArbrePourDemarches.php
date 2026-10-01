@@ -12,8 +12,9 @@ use Doctrine\ORM\EntityManagerInterface;
  * Le nom affiché des personnes qu'une démarche concerne.
  *
  * Aucune décision de visibilité ici : `Demarche` a déjà passé la liste au cercle avant
- * d'appeler. Le nom affiché fait d'ailleurs partie de la liste blanche que l'arbre expose
- * à tout compte connecté (ADR 0003).
+ * d'appeler (`ServiceDesDemarches::personnesAutorisees()`). Ce filtre est **nécessaire** :
+ * depuis la révision du 2026-10-01 de l'ADR 0003, le nom d'une personne vivante hors
+ * cercle ne fait plus partie de la liste blanche, et ce port rend le vrai nom.
  */
 final readonly class VueDeLArbrePourDemarches implements PortArbrePourDemarches
 {

@@ -31,4 +31,41 @@ final readonly class JeuDePlacement
         public string $egoId,
     ) {
     }
+
+    /**
+     * **Le jeu tel que la géométrie partagée a le droit de le lire** : les personnes
+     * vivantes y perdent leur nom, leur nom d'usage et leur date de naissance.
+     *
+     * ── POURQUOI ─────────────────────────────────────────────────────────────────
+     *
+     * Révision du 2026-10-01 de l'ADR 0003 : un vivant hors cercle n'expose plus son nom.
+     * L'affinage mesure déjà toute fiche vivante à une constante
+     * ({@see \App\Module\Tree\Service\MesureDeFiche::LARGEUR_AFFICHEE_VIVANT}) — mais il
+     * **part des abscisses du moteur**, qui mesure, lui, sur le nom (`graphe.py`, preuve
+     * des 377 positions). Mesuré sur l'arbre synthétique : changer le nom d'un cousin
+     * vivant déplaçait encore quatre fiches d'environ 10⁻⁷. Infime à l'écran, et pourtant
+     * une fonction du nom masqué — exactement ce que la règle « tout champ dérivé d'une
+     * donnée masquée est masqué » interdit.
+     *
+     * Le moteur n'est pas modifié : c'est **son entrée** qui l'est, dans le seul chemin
+     * qui sert le graphe ({@see \App\Module\Tree\Service\PlacementPartage}). La preuve de
+     * non-régression, qui appelle le moteur sur le jeu de référence entier, n'est pas
+     * touchée.
+     *
+     * L'année de naissance (`anNais`) reste : elle n'entre dans aucune largeur, seulement
+     * dans l'ordre d'une fratrie, que la fiche d'un parent visible donne déjà
+     * (`siblingOrder`). Le décès aussi : une personne vivante n'en a pas.
+     */
+    public function sansTexteDesVivants(): self
+    {
+        $personnes = [];
+
+        foreach ($this->personnes as $p) {
+            $personnes[] = $p->vivant
+                ? new PersonnePlacable($p->id, '', '', '', $p->sexe, '', $p->deces, $p->anNais, true, $p->generation)
+                : $p;
+        }
+
+        return new self($personnes, $this->familles, $this->egoId);
+    }
 }

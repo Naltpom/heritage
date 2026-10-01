@@ -66,7 +66,11 @@ final class ListeBlancheDeSerialisationTest extends ArbreWebTestCase
 
         self::assertSame(self::SEPT_CLES, array_keys($fiche), 'La fiche réduite doit porter exactement les sept clés de la liste blanche.');
         self::assertSame('restreinte', $fiche['visibilite']);
-        self::assertSame('Pyroxène Tilleul', $fiche['displayName'], 'Le nom d’affichage est la seule colonne nominative qui sort hors cercle.');
+        // Révision du 2026-10-01 de l'ADR 0003 : la clé reste, la valeur est le masque.
+        // Plus aucune colonne nominative ne sort hors cercle.
+        self::assertSame('Personne vivante', $fiche['displayName'], 'Hors cercle, une personne vivante n’expose plus son nom.');
+        self::assertStringNotContainsString('Pyroxène', json_encode($fiche, \JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsString('Tilleul', json_encode($fiche, \JSON_THROW_ON_ERROR));
         self::assertTrue($fiche['vivant'], '`vivant` sort même hors cercle : `.fiche.prive` en dépend (ADR 0007).');
     }
 
@@ -238,8 +242,61 @@ final class ListeBlancheDeSerialisationTest extends ArbreWebTestCase
         self::assertSame('restreinte', $fiche['husband']['visibilite'], 'Pyroxène est vivant et hors cercle.');
         self::assertSame('complete', $fiche['wife']['visibilite']);
         self::assertSame(['personId', 'displayName', 'visibilite'], array_keys($fiche['husband']));
+        self::assertSame('Personne vivante', $fiche['husband']['displayName'], 'L’époux masqué garde sa place, plus son nom (révision du 2026-10-01).');
+        self::assertSame('Cobalt Romarin', $fiche['wife']['displayName'], 'L’épouse est dans le cercle : son nom sort.');
         self::assertIsArray($fiche['marriage']);
         self::assertSame('1962', $fiche['marriage']['texte'], 'La date d’union appartient à la famille, pas à l’époux masqué.');
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     *  LA PORTE QUI FUYAIT SANS BRUIT : LA FICHE VISIBLE D'UN PROCHE.
+     * ═══════════════════════════════════════════════════════════════════════════.
+     *
+     * La fiche réduite d'un vivant ne disait rien de plus que son nom ; la fiche
+     * **complète** de son aïeule défunte, visible de tous, le listait parmi ses enfants
+     * — `unions[].enfants[]`, `unions[].conjoint`, `parents[]`, `fratrie[]`. Depuis la
+     * révision du 2026-10-01 de l'ADR 0003, une référence suit le cercle : la personne
+     * reste dans la liste (une fratrie amputée serait fausse), sous le masque.
+     */
+    public function testLaFicheDUnDefuntNeNommePasSesProchesVivantsHorsCercle(): void
+    {
+        $fiche = $this->fiche('aieule', $this->membre(), CercleDuLecteur::de([]));
+
+        self::assertSame('complete', $fiche['visibilite'], 'L’aïeule est décédée : sa fiche est entière.');
+
+        $enfants = array_merge(...array_map(static fn (array $u): array => $u['enfants'], $fiche['unions']));
+        $ego = array_values(array_filter($enfants, fn (array $e): bool => $e['personId'] === $this->idDe('ego')));
+
+        self::assertCount(1, $ego, 'L’enfant vivant reste dans la liste : une fratrie amputée serait fausse.');
+        self::assertSame('Personne vivante', $ego[0]['displayName']);
+        self::assertStringNotContainsString('Natron', json_encode($fiche, \JSON_THROW_ON_ERROR), 'Le prénom de l’enfant vivant hors cercle n’est nulle part dans la fiche.');
+
+        // Dans le cercle, la même référence porte le vrai nom.
+        $ouverte = $this->fiche('aieule', $this->membre(), CercleDuLecteur::de([$this->idDe('ego')]));
+        $noms = array_column(array_merge(...array_map(static fn (array $u): array => $u['enfants'], $ouverte['unions'])), 'displayName');
+        self::assertContains('Natron Romarin', $noms);
+    }
+
+    /**
+     * Les **enfants** d'une famille sortaient sous leur vrai nom sans aucun contrôle de
+     * cercle. Ils restent listés — `siblingOrder` et `relation` sont des faits de la
+     * famille —, leur nom suit le cercle.
+     */
+    public function testLesEnfantsVivantsHorsCercleDUneFamilleSontMasques(): void
+    {
+        $fiche = $this->normaliseurDeFamille()->fiche(
+            $this->familles['aieux'],
+            $this->membre(),
+            CercleDuLecteur::de([]),
+            $this->regle(),
+        );
+
+        $ego = array_values(array_filter($fiche['enfants'], fn (array $e): bool => $e['personId'] === $this->idDe('ego')));
+        self::assertCount(1, $ego);
+        self::assertSame('Personne vivante', $ego[0]['displayName']);
+        self::assertStringNotContainsString('Natron', json_encode($fiche, \JSON_THROW_ON_ERROR));
+        self::assertSame('Marne Dolomite Sureau', $fiche['wife']['displayName'], 'Une défunte garde son nom.');
     }
 
     /**

@@ -16,9 +16,13 @@
  * de parenté est faux » (ADR 0003).
  *
  * Cet écran sera donc vu souvent — une fois par clic sur chacune des personnes
- * vivantes hors cercle du lecteur. Il doit rendre trois choses, et rien d'autre :
- * un **nom**, une **raison**, et une **sortie**. Ni écran d'erreur, ni chargement
- * qui ne finit pas, ni case vide qu'on prendrait pour un bogue.
+ * vivantes hors cercle du lecteur. Il doit rendre deux choses, et rien d'autre :
+ * une **raison** et une **sortie**. Ni écran d'erreur, ni chargement qui ne finit
+ * pas, ni case vide qu'on prendrait pour un bogue.
+ *
+ * **Pas de nom** (révision du 2026-10-01, ADR 0003) : le serveur n'envoie plus que le
+ * libellé neutre « Personne vivante » dans `displayName`, et cet écran ne l'écrit pas
+ * — le titre du panneau et la phrase disent déjà tout.
  *
  * **Le front ne filtre rien et n'a rien à filtrer.** Les champs manquants ne
  * sont pas cachés ici : ils ne sont pas arrivés. C'est la différence que le

@@ -155,16 +155,32 @@ export interface PortraitDeFiche {
 }
 
 /**
+ * Ce qu'on écrit à la place du nom d'une personne vivante hors du cercle du lecteur —
+ * fiche réduite, carte restreinte, fiche de l'arbre. Le même libellé que le serveur
+ * pose dans `displayName`/`etiquetteNom` d'un nœud restreint (ADR 0003, révision du
+ * 2026-10-01) : le front l'écrit lui-même, il ne relit pas le nom reçu.
+ */
+export const NOM_D_UNE_PERSONNE_VIVANTE = 'Personne vivante'
+
+/**
  * La fiche d'une personne **vivante hors du cercle du lecteur** : sept clés.
  *
  * Ce n'est pas une erreur et ce n'est pas une panne — le serveur rend `200`,
  * « parce que le nœud est visible dans le graphe : cliquer dessus doit donner
  * quelque chose de cohérent (un nom, et l'impossibilité d'aller plus loin) »
  * (§ 5.1). L'écran doit donc l'afficher proprement, sans case vide.
+ *
+ * **Révision du 2026-10-01 : elle n'a plus de nom.** « Un nom, et l'impossibilité
+ * d'aller plus loin » est devenu « Personne vivante, et l'impossibilité d'aller plus
+ * loin » : le serveur pose ce libellé neutre dans `displayName` (et `etiquetteNom` sur
+ * le nœud du graphe), et n'envoie plus le vrai nom (ADR 0003, révision datée).
  */
 export interface FichePersonneRestreinte {
   visibilite: 'restreinte'
   id: number
+  /** Le libellé neutre {@link NOM_D_UNE_PERSONNE_VIVANTE}, jamais le vrai nom. L'écran
+   *  ne l'affiche pas : il écrit la constante, pour ne rien dessiner d'autre même face
+   *  à un serveur antérieur à la révision. */
   displayName: string
   sex: Sexe
   generation: number

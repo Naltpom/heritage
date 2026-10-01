@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Tree\Service;
 
 use App\Module\Core\Enum\Branch;
+use App\Module\Tree\Enum\ParenteDansLArbre;
 use App\Module\Tree\ValueObject\IdentifiantDeNoeud;
 use App\Module\Tree\ValueObject\JeuDePlacement;
 use App\Module\Tree\ValueObject\PersonnePlacable;
@@ -124,6 +125,39 @@ final class ArbreVuDepuis
         return $branches;
     }
 
+    /**
+     * La parenté de chaque personne **vue depuis ce lecteur** — famille, conjoint ou
+     * alliance —, et pour une personne `alliance`, l'identifiant de nœud de son pont
+     * (`p123`), indexées par **identifiant de personne**. Voir {@see ParenteDansLArbre}.
+     *
+     * `[]` quand aucun recalcul n'a eu lieu (pas de racine réglée) : le sérialiseur sert
+     * alors `famille` partout — sans lecteur, il n'y a pas de « famille de qui ».
+     *
+     * @return array<int, array{parente: ParenteDansLArbre, pont: string|null}>
+     */
+    public function parentes(?int $egoPersonneId): array
+    {
+        $this->jeu($egoPersonneId);
+
+        $logique = $this->logiques[$this->cle($egoPersonneId)] ?? null;
+
+        if (null === $logique) {
+            return [];
+        }
+
+        $parentes = [];
+
+        foreach ($logique->parentes as $noeudId => $parente) {
+            $id = IdentifiantDeNoeud::estPersonne($noeudId) ? IdentifiantDeNoeud::identifiantBase($noeudId) : null;
+
+            if (null !== $id) {
+                $parentes[$id] = ['parente' => $parente, 'pont' => $logique->ponts[$noeudId] ?? null];
+            }
+        }
+
+        return $parentes;
+    }
+
     private function cle(?int $egoPersonneId): string
     {
         return null === $egoPersonneId ? '' : 'p'.$egoPersonneId;
@@ -153,7 +187,10 @@ final class ArbreVuDepuis
         }
 
         $vu = new JeuDePlacement($jeu->personnes, $jeu->familles, $ego);
-        $logique = $this->ascendance->pourLeJeu($vu);
+        // `vuDuLecteur()` et non `pourLeJeu()` : mêmes générations, mais des branches qui
+        // ne débordent plus par alliance, et la parenté de chacun (famille, conjoint,
+        // alliance). La colonne persistée garde l'autre règle — voir la méthode.
+        $logique = $this->ascendance->vuDuLecteur($vu);
 
         $this->logiques[$this->cle($egoPersonneId)] = $logique;
 

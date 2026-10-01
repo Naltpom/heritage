@@ -15,12 +15,16 @@ use App\Module\Core\ValueObject\UncertainDate;
  *
  * ── Les outils lisent TOUT l'arbre, et disent au modèle ce qu'il ne doit pas répéter ──
  *
- * Décision du commanditaire : le modèle reconnaît les personnes sur l'arbre entier. Mais
- * chaque personne qu'il reçoit porte `confidentielle: true` quand le membre qui l'a
- * sollicité ne voit pas ses données datées (vivante, hors de son cercle). La consigne
- * système lui interdit de citer quoi que ce soit de ces personnes au-delà de leur nom ;
- * c'est une **seconde** ligne de défense — la première est que rien de ce qu'on renvoie
- * au navigateur ne vient des outils sans passer par {@see VueDuLecteur}.
+ * Décision du commanditaire : le modèle reconnaît les personnes sur l'arbre entier — il
+ * reçoit donc leur vrai nom, sans quoi il ne retrouverait pas celle que le membre cite.
+ * Mais chaque personne qu'il reçoit porte `confidentielle: true` quand le membre qui l'a
+ * sollicité ne la voit pas (vivante, hors de son cercle), et un parent ou un conjoint
+ * confidentiel est suffixé « (confidentielle) ». Depuis la révision du 2026-10-01 de
+ * l'ADR 0003, la consigne système lui interdit de **nommer** ces personnes dans ce qu'il
+ * écrit, et de citer quoi que ce soit d'elles ; c'est une ligne de défense. Les autres :
+ * rien de ce qu'on renvoie au navigateur ne vient des outils sans passer par
+ * {@see VueDuLecteur}, et chaque nom confidentiel croisé ici entre dans son carnet, qui
+ * l'efface des textes libres du modèle ({@see VueDuLecteur::sansNomMasque()}).
  *
  * `proposer` n'est pas exécuté ici : c'est l'outil final, et ses arguments sont la
  * réponse de l'agent ({@see AgentDeLAssistant}).
@@ -292,16 +296,29 @@ final readonly class OutilsDeLAssistant
             'vivant' => $personne->vivante,
             'naissance' => self::dateLisible($personne->naissance),
             'deces' => self::dateLisible($personne->deces),
-            // Le drapeau qui gouverne la consigne : « nomme-la, ne cite rien d'autre ».
+            // Le drapeau qui gouverne la consigne : « vise-la par son identifiant, ne la
+            // nomme pas, ne cite rien d'elle ». `voitEnEntier()` inscrit au passage son nom
+            // au carnet des noms masqués.
             'confidentielle' => !$this->vue->voitEnEntier($personne),
         ];
 
         if ($avecParente) {
-            $vue['parents'] = $personne->parents;
-            $vue['conjoints'] = $personne->conjoints;
+            $vue['parents'] = array_map($this->nomDUnProche(...), $personne->parents);
+            $vue['conjoints'] = array_map($this->nomDUnProche(...), $personne->conjoints);
         }
 
         return $vue;
+    }
+
+    /**
+     * Le nom d'un parent ou d'un conjoint dans un résultat de recherche : de quoi départager
+     * deux homonymes. Un proche confidentiel porte la mention, pour que la consigne s'y
+     * applique comme à la personne trouvée — et passe par `voitEnEntier()`, qui inscrit son
+     * nom au carnet des noms masqués.
+     */
+    private function nomDUnProche(PersonneDeLArbre $proche): string
+    {
+        return $this->vue->voitEnEntier($proche) ? $proche->nomAffiche : $proche->nomAffiche.' (confidentielle)';
     }
 
     private static function dateLisible(UncertainDate $date): ?string

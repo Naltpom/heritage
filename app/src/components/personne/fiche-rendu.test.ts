@@ -212,4 +212,11 @@ describe('§ 1.3 — une valeur nulle garde sa ligne, un champ interdit n’en a
     expect(html).toContain('le serveur ne les a pas envoyées')
     expect(html).toContain('Revenir à l’arbre')
   })
+
+  it('n’écrit aucun nom : ni le libellé reçu, ni un vrai nom qu’un serveur ancien enverrait', async () => {
+    // Révision du 2026-10-01 (ADR 0003) : une personne vivante hors cercle n'a plus de nom.
+    const html = await rendre(FicheRestreinte, { fiche: RESTREINTE })
+    // Le prénom seul : « Tilleul » est aussi le nom d'une branche (`champs.ts`).
+    expect(html).not.toContain('Pyroxène')
+  })
 })

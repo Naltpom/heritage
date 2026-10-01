@@ -23,6 +23,7 @@ use App\Module\Proposal\Service\InventaireDeLaSuppression;
 use App\Module\Proposal\Service\RechercheDeBrouillons;
 use App\Module\Proposal\Service\RefaireDemande;
 use App\Module\Proposal\Service\SerialiseurDeDemande;
+use App\Module\Proposal\Service\ValeursMasquees;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -309,12 +310,21 @@ final class DemandeController extends AbstractController
         int $subjectId,
         Request $requete,
         RevisionRepository $revisions,
+        ValeursMasquees $masques,
     ): JsonResponse {
         $this->lecteurs->courant();
         $kind = SubjectKind::tryFrom($subjectKind);
 
         if (null === $kind) {
             throw new Introuvable('Portée inconnue.');
+        }
+
+        // « L'historique d'une personne vivante hors cercle n'est pas accessible : 404 »
+        // (§ 6.11) — écrit au contrat, et que rien ne tenait : la route rendait ses
+        // révisions, dates d'avant et d'après comprises, à tout membre. Le même `404`
+        // qu'une fiche inconnue (§ 15.3).
+        if ($masques->sujetFerme($kind, $subjectId)) {
+            throw new Introuvable('Historique introuvable.');
         }
 
         [$page, $parPage] = $this->pagination($requete);

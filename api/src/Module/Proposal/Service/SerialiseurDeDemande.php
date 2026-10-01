@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Proposal\Service;
 
+use App\Module\Core\Enum\SubjectKind;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\DraftPerson;
 use App\Module\Proposal\Entity\Revision;
@@ -69,7 +70,9 @@ final readonly class SerialiseurDeDemande
             'authorLabel' => $demande->getAuthorLabel(),
             'targetKind' => $demande->getTargetKind()?->value,
             'targetId' => $demande->getTargetId(),
-            'targetLabel' => $demande->getTargetLabel(),
+            // Le libellé stocké est le vrai `display_name` : une demande de l'assistant
+            // peut viser un vivant hors du cercle de son auteur, qui n'en lit que le masque.
+            'targetLabel' => $this->masques->libelle($demande->getTargetKind(), $demande->getTargetId(), $demande->getTargetLabel()),
             'message' => $demande->getMessage(),
             'decisionMessage' => $demande->getDecisionMessage(),
             'decidedByLabel' => $demande->getDecidedByLabel(),
@@ -101,7 +104,9 @@ final readonly class SerialiseurDeDemande
             'authorLabel' => $demande->getAuthorLabel(),
             'targetKind' => $demande->getTargetKind()?->value,
             'targetId' => $demande->getTargetId(),
-            'targetLabel' => $demande->getTargetLabel(),
+            // Le libellé stocké est le vrai `display_name` : une demande de l'assistant
+            // peut viser un vivant hors du cercle de son auteur, qui n'en lit que le masque.
+            'targetLabel' => $this->masques->libelle($demande->getTargetKind(), $demande->getTargetId(), $demande->getTargetLabel()),
             'message' => $demande->getMessage(),
             'autoValidated' => $demande->isAutoValidated(),
             'submittedAt' => $this->horodatage($demande->getSubmittedAt()),
@@ -250,13 +255,24 @@ final readonly class SerialiseurDeDemande
      */
     public function revision(Revision $revision): array
     {
+        $kind = $revision->getSubjectKind();
+        $changes = $revision->getChanges();
+
+        // Une révision **sur un vivant hors cercle** ne se lit que dans la vue auteur d'une
+        // demande de l'assistant (l'historique d'une telle fiche est un `404`, § 6.11). Son
+        // nom y vaut le masque, et chaque valeur `avant` en est retirée — c'est l'`oldValue`
+        // que {@see self::opsSimples()} omet déjà, et qu'une révision recopie.
+        if ($this->masques->masquee($kind, $revision->getSubjectId())) {
+            $changes = self::sansValeursDAvant($changes);
+        }
+
         return [
             'id' => $revision->getId(),
             'operation' => $revision->getOperation()->value,
-            'subjectKind' => $revision->getSubjectKind()->value,
+            'subjectKind' => $kind->value,
             'subjectId' => $revision->getSubjectId(),
-            'subjectLabel' => $revision->getSubjectLabel(),
-            'changes' => $revision->getChanges(),
+            'subjectLabel' => $this->masques->libelle($kind, $revision->getSubjectId(), $revision->getSubjectLabel()),
+            'changes' => $changes,
             'versionBefore' => $revision->getVersionBefore(),
             'versionAfter' => $revision->getVersionAfter(),
             'actorLabel' => $revision->getActorLabel(),
@@ -456,11 +472,11 @@ final readonly class SerialiseurDeDemande
                 'kind' => $lien->getKind()->value,
                 'subjectPersonId' => $lien->getSubjectPersonId(),
                 'subjectDraftRef' => $lien->getSubjectDraftRef(),
-                'subjectLabel' => $this->nommerLExtremite($lien->getSubjectDraftRef(), $lien->getSubjectLabel(), $noms, $lien->getSubjectDraftPersonId()),
+                'subjectLabel' => $this->nommerLExtremite($lien->getSubjectDraftRef(), $lien->getSubjectLabel(), $noms, $lien->getSubjectDraftPersonId(), $lien->getSubjectPersonId()),
                 'subjectDraftPersonId' => $lien->getSubjectDraftPersonId(),
                 'otherPersonId' => $lien->getOtherPersonId(),
                 'otherDraftRef' => $lien->getOtherDraftRef(),
-                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms, $lien->getOtherDraftPersonId()),
+                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms, $lien->getOtherDraftPersonId(), $lien->getOtherPersonId()),
                 // La fiche proposée par une **autre** demande. Sans cette clé, elle se
                 // lisait comme une personne de l'arbre dont l'identifiant manquait — et
                 // le front n'avait aucun moyen de dire « proposée par la demande n° 12 ».
@@ -471,13 +487,17 @@ final readonly class SerialiseurDeDemande
                 // l'arbre ou une autre fiche de la même demande.
                 'other2DraftRef' => $lien->getOther2DraftRef(),
                 'other2DraftPersonId' => $lien->getOther2DraftPersonId(),
-                'other2Label' => $this->nommerLExtremite($lien->getOther2DraftRef(), $lien->getOther2Label(), $noms, $lien->getOther2DraftPersonId()),
+                'other2Label' => $this->nommerLExtremite($lien->getOther2DraftRef(), $lien->getOther2Label(), $noms, $lien->getOther2DraftPersonId(), $lien->getOther2PersonId()),
                 'familyId' => $lien->getFamilyId(),
                 // Le couple d'ancrage est stocké avec son libellé depuis
                 // `designerCoupleExistant()`. Ne rendre que `familyId` affichait un
                 // entier nu — « rattaché à la famille 2 » — là où la base porte le nom
                 // des deux époux.
-                'familyLabel' => $lien->getFamilyLabel(),
+                // Et le libellé est fait du nom des deux époux : un époux vivant hors du
+                // cercle du lecteur y prend le masque (révision du 2026-10-01).
+                'familyLabel' => null === $lien->getFamilyId()
+                    ? $lien->getFamilyLabel()
+                    : $this->masques->libelleDeFamille($lien->getFamilyId(), $lien->getFamilyLabel()),
                 'marriage' => $this->normaliseur->dateAvecTexte($lien->getMarriage()),
                 'divorced' => $lien->isDivorced(),
                 'divorce' => $lien->getDivorce()->isKnown()
@@ -513,7 +533,7 @@ final readonly class SerialiseurDeDemande
                 'otherPersonId' => $lien->getOtherPersonId(),
                 'otherDraftRef' => $lien->getOtherDraftRef(),
                 'otherDraftPersonId' => $lien->getOtherDraftPersonId(),
-                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms, $lien->getOtherDraftPersonId()),
+                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms, $lien->getOtherDraftPersonId(), $lien->getOtherPersonId()),
                 'note' => $lien->getNote(),
             ];
         }
@@ -569,6 +589,13 @@ final readonly class SerialiseurDeDemande
      * de l'arbre n'a pas de `draftRef`, et son libellé est filtré comme la personne
      * (§ 0.4) — le relire ici court-circuiterait ce filtre.
      *
+     * ── Une personne de l'arbre hors du cercle ne se nomme pas ──────────────────────
+     *
+     * Le libellé stocké d'une extrémité `personId` est son vrai `display_name`. Depuis la
+     * révision du 2026-10-01 de l'ADR 0003, un vivant hors du cercle du lecteur n'expose
+     * plus que le masque — et une demande de l'assistant peut en citer un : le libellé
+     * passe donc par {@see ValeursMasquees::libelle()}.
+     *
      * ── Une fiche proposée **ailleurs** se relit aussi ─────────────────────────────
      *
      * Et pour la même raison : le libellé stocké est une photographie du dépôt, or la
@@ -583,7 +610,12 @@ final readonly class SerialiseurDeDemande
         ?string $stocke,
         array $noms,
         ?int $draftPersonId = null,
+        ?int $personId = null,
     ): ?string {
+        if (null !== $personId && null === $draftRef && null === $draftPersonId) {
+            return $this->masques->libelle(SubjectKind::Personne, $personId, $stocke);
+        }
+
         if (null !== $draftRef) {
             return $noms[$draftRef] ?? $stocke;
         }
@@ -595,6 +627,28 @@ final readonly class SerialiseurDeDemande
         $brouillon = $this->brouillons->find($draftPersonId);
 
         return null === $brouillon ? $stocke : $brouillon->nomPropose().' (proposée)';
+    }
+
+    /**
+     * Les `changes` d'une révision, privés de chaque valeur `avant`.
+     *
+     * Forme du § 6.11 : `{ champ: { avant, apres } }`. Clé **omise**, jamais mise à
+     * `null` — `null` est une valeur de champ, et l'écran la lirait « vide » (§ 1.3).
+     *
+     * @param array<string, mixed> $changes
+     *
+     * @return array<string, mixed>
+     */
+    private static function sansValeursDAvant(array $changes): array
+    {
+        foreach ($changes as $champ => $changement) {
+            if (\is_array($changement)) {
+                unset($changement['avant']);
+                $changes[$champ] = $changement;
+            }
+        }
+
+        return $changes;
     }
 
     /**

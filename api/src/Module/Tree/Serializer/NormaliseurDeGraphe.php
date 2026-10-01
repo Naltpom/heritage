@@ -7,6 +7,8 @@ namespace App\Module\Tree\Serializer;
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
 use App\Module\Core\Contract\ProjectionEnAttente;
 use App\Module\Core\Enum\Branch;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
+use App\Module\Tree\Enum\ParenteDansLArbre;
 use App\Module\Tree\Service\ArbreVuDepuis;
 use App\Module\Tree\Service\MesureDeFiche;
 use App\Module\Tree\Service\PlacementPartage;
@@ -34,14 +36,20 @@ use Doctrine\DBAL\Connection;
  * propre nœud en attente, c'est-à-dire la seule chose que ce calque existe pour
  * produire (arbitrage **B**).
  *
- * **Il ne recalcule aucune largeur.** `w` et `h` viennent du moteur et sont **identiques
- * pour tous les lecteurs**. On pourrait croire que `w` encode la longueur de la ligne de
- * dates d'une personne masquée : **elle ne l'encode pas**, parce que
- * {@see MesureDeFiche::ligneDates()} court-circuite sur l'état vivant et rend la
- * constante « vivant·e ». Mesurer autrement pour un nœud restreint casserait le critère
- * d'égalité exacte des 377 positions **pour colmater un trou inexistant**, et rendrait
- * la largeur dépendante du lecteur — donc le placement partagé impossible, donc un
- * graphe en cache par compte, c'est-à-dire l'architecture que le projet a écartée.
+ * **Il ne recalcule aucune largeur.** `w` et `h` viennent du placement partagé et sont
+ * **identiques pour tous les lecteurs** — c'est ce qui rend ce placement partageable ; une
+ * largeur qui dépendrait du lecteur imposerait un graphe en cache par compte, l'architecture
+ * que le projet a écartée.
+ *
+ * ⚠ **Révision du 2026-10-01 : la largeur d'une fiche vivante ne dépend plus de rien.**
+ * L'ancien raisonnement disait « `w` n'encode pas la ligne de dates masquée, parce que
+ * le moteur mesure la constante « vivant·e » ». C'était vrai du **moteur**, et devenu faux
+ * du **graphe servi** depuis que l'affinage remesure la fiche affichée — naissance des
+ * vivants comprise — avec {@see MesureDeFiche::largeurAffichee()}. Et depuis que le nom
+ * d'un vivant hors cercle ne sort plus, la longueur de ce nom en était une seconde fuite,
+ * par `w` et par l'écart des `x`. La largeur affichée d'un vivant est donc une constante,
+ * pour tout le monde ({@see MesureDeFiche::LARGEUR_AFFICHEE_VIVANT}) ; le moteur, lui, n'a
+ * pas changé, et sa preuve des 377 positions non plus.
  *
  * **Il ne reconstruit jamais `ligneDates`.** Il appelle `MesureDeFiche::ligneDates()`,
  * sur le **même** `PersonnePlacable` que celui qui a servi à mesurer `w`. C'est ce qui
@@ -120,6 +128,9 @@ final readonly class NormaliseurDeGraphe
         // autres — voir {@see ArbreVuDepuis} et {@see PersonneDuLecteur}.
         $partage = $this->partage->placement($pointDeVue);
         $libelles = $this->libelles($this->arbre->branches($pointDeVue));
+        // Famille, conjoint ou alliance, vu de ce lecteur — et le pont de chaque famille
+        // par alliance. Calculés par le même parcours que les branches.
+        $parentes = $this->arbre->parentes($pointDeVue);
 
         // Le calque et le cercle sont deux filtres **composés** (ADR 0004) : celui-ci
         // décide *quelles* propositions ce lecteur a le droit de voir — les siennes, ou
@@ -183,7 +194,7 @@ final readonly class NormaliseurDeGraphe
                 'places' => \count($projection->noeuds) - \count($nonPlaces),
                 'nonPlaces' => $nonPlaces,
             ],
-            'noeuds' => $this->noeuds($placement, $placables, $proposesParId, $libelles, $renommage, $cercle, $avecImage, $vignettes),
+            'noeuds' => $this->noeuds($placement, $placables, $proposesParId, $libelles, $parentes, $renommage, $cercle, $avecImage, $vignettes),
             'aretes' => $this->aretes($placement, $renommage),
         ];
     }
@@ -251,6 +262,7 @@ final readonly class NormaliseurDeGraphe
      * @param array<string, PersonnePlacable>                                                                                                                   $placables
      * @param array<string, NoeudProposePlacable>                                                                                                               $proposes
      * @param array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, bool>} $libelles
+     * @param array<int, array{parente: ParenteDansLArbre, pont: string|null}>                                                                                $parentes
      * @param array<string, string>                                                                                                                             $renommage
      * @param array<int, true>                                                                                                                                  $avecImage
      * @param array<int, string>                                                                                                                                $vignettes personne visible → URL de la vignette de son portrait
@@ -262,6 +274,7 @@ final readonly class NormaliseurDeGraphe
         array $placables,
         array $proposes,
         array $libelles,
+        array $parentes,
         array $renommage,
         CercleDuLecteur $cercle,
         array $avecImage,
@@ -287,7 +300,7 @@ final readonly class NormaliseurDeGraphe
             $base = IdentifiantDeNoeud::identifiantBase($noeud->id);
 
             if (IdentifiantDeNoeud::estPersonne($noeud->id) && null !== $base) {
-                $sortie[] = $this->noeudDePersonne($noeud, $base, $placables[$noeud->id] ?? null, $libelles['personnes'][$base] ?? null, $cercle, $avecImage, $vignettes);
+                $sortie[] = $this->noeudDePersonne($noeud, $base, $placables[$noeud->id] ?? null, $libelles['personnes'][$base] ?? null, $parentes[$base] ?? null, $cercle, $avecImage, $vignettes);
 
                 continue;
             }
@@ -315,6 +328,7 @@ final readonly class NormaliseurDeGraphe
 
     /**
      * @param array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}|null $libelle
+     * @param array{parente: ParenteDansLArbre, pont: string|null}|null                                    $parente   `null` sans point de vue calculé : la personne est alors servie `famille`
      * @param array<int, true>                                                                             $avecImage
      * @param array<int, string>                                                                           $vignettes personne visible → URL de la vignette de son portrait
      *
@@ -325,6 +339,7 @@ final readonly class NormaliseurDeGraphe
         int $personneId,
         ?PersonnePlacable $placable,
         ?array $libelle,
+        ?array $parente,
         CercleDuLecteur $cercle,
         array $avecImage,
         array $vignettes,
@@ -339,6 +354,7 @@ final readonly class NormaliseurDeGraphe
         // en cache et cette requête), on le tient pour **vivant** : c'est le côté qui
         // ferme, et une fiche muette de trop coûte moins qu'une date de trop.
         $vivante = null === $placable || $placable->vivant;
+        $visible = $cercle->voit($personneId, $vivante);
 
         $charge = [
             'id' => $noeud->id,
@@ -348,24 +364,52 @@ final readonly class NormaliseurDeGraphe
             'y' => $noeud->y,
             // Recopiés tels quels : le moteur les produit déjà entiers, par troncature.
             // La sérialisation n'arrondit ni ne tronque, elle recopie (§ 1.4).
+            //
+            // ⚠ **Pour une personne vivante, `w` est une constante** — révision du
+            // 2026-10-01 : l'affinage mesure toute fiche vivante à
+            // `MesureDeFiche::LARGEUR_AFFICHEE_VIVANT`, pour tout le monde. Avant, elle
+            // était mesurée sur le vrai nom et sur la naissance : une fiche restreinte,
+            // dont on n'envoie plus le nom, en aurait encore livré la longueur — et, par
+            // l'écart avec sa voisine, `x` aussi.
             'w' => $noeud->w,
             'h' => $noeud->h,
-            'displayName' => $libelle['displayName'] ?? '?',
-            // **`etiquetteNom` reste sur un nœud restreint, `etiquetteDates` non.** Les
-            // deux règles vont en sens opposés, et ce n'est pas intuitif : la première est
-            // une **troncature** de `displayName`, donc strictement moins d'information
-            // qu'une clé déjà dans la liste blanche ; la seconde est du formatage **de
-            // dates**, c'est-à-dire la naissance sous une autre orthographe.
-            'etiquetteNom' => null !== $placable ? $this->noms->pour($placable) : ($libelle['displayName'] ?? '?'),
+            // ── LE NOM NE SORT QUE SI LE CERCLE LE PERMET ──────────────────────────
+            //
+            // Révision du 2026-10-01 de l'ADR 0003 : une personne vivante hors cercle
+            // n'expose plus son nom. Le masque est posé **ici, à la construction**, et
+            // jamais par un remplacement après coup : une charge remplie avec le vrai nom
+            // puis corrigée laisse passer le premier champ nominatif ajouté demain.
+            'displayName' => $visible ? ($libelle['displayName'] ?? '?') : CercleDeVisibiliteInterface::NOM_MASQUE,
+            // `etiquetteNom` est le nom que le canevas dessine. Hors cercle, c'est le même
+            // masque : une troncature du vrai nom en dirait autant que le nom.
+            'etiquetteNom' => match (true) {
+                !$visible => CercleDeVisibiliteInterface::NOM_MASQUE,
+                null !== $placable => $this->noms->pour($placable),
+                default => $libelle['displayName'] ?? '?',
+            },
             'sex' => $placable?->sexe->value ?? 'inconnu',
             'generation' => $placable?->generation,
             'branch' => $libelle['branch'] ?? null,
             'vivant' => $vivante,
+            // **Famille, conjoint ou alliance, vu de ce lecteur** (décision du
+            // 2026-10-01, {@see ParenteDansLArbre}). Se déduit des arêtes, que tout
+            // lecteur reçoit : sur un nœud restreint, il n'apprend rien de plus que
+            // `branch`. Sans point de vue calculé, tout le monde est `famille` — rien
+            // n'est masqué au hasard.
+            'parente' => ($parente['parente'] ?? ParenteDansLArbre::Famille)->value,
         ];
 
-        if (!$cercle->voit($personneId, $vivante)) {
-            // Les quatorze clés du § 11.4, et rien de plus. Quatre champs tombent ici,
-            // pour deux raisons distinctes :
+        // Le pont n'existe que sur une famille par alliance : le conjoint « famille » par
+        // lequel ce groupe se rattache au lecteur — la clé de son bloc côté canevas.
+        // Toujours un identifiant : l'îlot qu'aucun chemin ne relie est `famille`, pas
+        // `alliance` (CalculAscendance::parentes()). Absent ailleurs (§ 1.3).
+        if (null !== $parente && ParenteDansLArbre::Alliance === $parente['parente']) {
+            $charge['pont'] = $parente['pont'];
+        }
+
+        if (!$visible) {
+            // Les clés du § 11.4, et rien de plus. Quatre champs tombent ici, pour deux
+            // raisons distinctes :
             //
             // - `etiquetteDates` est du formatage **de dates** — la laisser reviendrait à
             //   envoyer la naissance sous une autre orthographe. Le canevas ne dessine
@@ -430,6 +474,11 @@ final readonly class NormaliseurDeGraphe
             'generation' => $propose->mesure->generation,
             'branch' => $propose->branche?->value,
             'vivant' => $propose->mesure->vivant,
+            // Toujours `famille` : le nœud n'est servi qu'à son auteur et aux
+            // administrateurs, et un brouillon masqué par défaut serait une contribution
+            // qu'on ne voit pas — « une création qu'on ne voit pas dans l'arbre n'est pas
+            // une contribution ».
+            'parente' => ParenteDansLArbre::Famille->value,
             // Le nœud n'est servi qu'à son auteur et aux administrateurs : le cercle n'a
             // rien à trancher ici, il porte sur des personnes **validées** (§ 9.3).
             'visibilite' => NiveauDeVisibilite::Complete->value,
@@ -529,8 +578,16 @@ final readonly class NormaliseurDeGraphe
             // n'est rattaché à personne, et `$branchesVues` est alors vide. Pour un lecteur
             // rattaché, la branche a été recalculée depuis lui — « paternelle » doit
             // vouloir dire *son* côté paternel.
-            $branche = $branchesVues[(int) $ligne['id']]
-                ?? (\is_string($ligne['branch']) ? Branch::tryFrom($ligne['branch']) : null);
+            //
+            // ⚠ **Quand la vue est calculée, elle seule fait foi — absente veut dire
+            // `null`.** Le repli sur la colonne servait jusqu'ici aussi aux personnes que
+            // la vue laissait sans branche, et leur rendait le quart de **la racine** :
+            // faux sans en avoir l'air. Depuis le 2026-10-01, les familles par alliance
+            // sortent exprès sans branche ; le repli leur aurait rendu la branche de la
+            // racine — celle-là même qui les rangeait dans la bande d'une tante.
+            $branche = [] !== $branchesVues
+                ? ($branchesVues[(int) $ligne['id']] ?? null)
+                : (\is_string($ligne['branch']) ? Branch::tryFrom($ligne['branch']) : null);
 
             $personnes[(int) $ligne['id']] = [
                 'displayName' => \is_string($ligne['display_name']) ? $ligne['display_name'] : '?',

@@ -76,6 +76,22 @@ use App\Module\Core\Enum\Regime;
 interface CercleDeVisibiliteInterface
 {
     /**
+     * **Le seul nom qu'une personne vivante hors cercle expose** — révision du 2026-10-01
+     * de l'ADR 0003.
+     *
+     * Jusque-là, la liste blanche laissait sortir son **nom d'affichage**. Décision du
+     * commanditaire : une personne vivante hors du cercle du lecteur n'expose plus son
+     * nom. Partout où une telle personne est sérialisée — nœud du graphe, fiche réduite,
+     * référence dans la fiche d'un proche, époux et enfants d'une famille, personne citée
+     * par l'assistant —, `displayName` (et `etiquetteNom` sur un nœud) valent cette
+     * constante, **et le vrai nom ne quitte jamais le serveur**.
+     *
+     * Une constante et non un « libellé par module » : deux orthographes du même masque
+     * se distingueraient à l'écran, et la seconde finirait par porter une initiale.
+     */
+    public const string NOM_MASQUE = 'Personne vivante';
+
+    /**
      * Le régime de lecture du lecteur courant.
      *
      * `Regime::Aucun` — personnes décédées uniquement, aucune personne vivante.
@@ -88,9 +104,10 @@ interface CercleDeVisibiliteInterface
      * personne — dates, lieux, sources, citations, médias, portrait ?
      *
      * `false` ne veut pas dire « le nœud disparaît » : hors cercle, une personne vivante
-     * expose encore son identifiant, son nom d'affichage, son sexe, sa génération, sa
-     * branche, le booléen `vivant` et sa position dans le graphe (ADR 0003). C'est la
-     * liste blanche du § 11.1 du contrat, et c'est à l'appelant de l'appliquer.
+     * expose encore son identifiant, son sexe, sa génération, sa branche, le booléen
+     * `vivant` et sa position dans le graphe (ADR 0003) — **mais plus son nom** : son
+     * `displayName` vaut {@see NOM_MASQUE} (révision du 2026-10-01). C'est la liste
+     * blanche du § 11.1 du contrat, et c'est à l'appelant de l'appliquer.
      */
     public function voitPersonne(int $personId): bool;
 

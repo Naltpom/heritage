@@ -6,6 +6,7 @@ namespace App\Module\Tree\Serializer;
 
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
 
@@ -18,8 +19,12 @@ use App\Module\Tree\Entity\Person;
  * ## Ce qui est filtré ici, et ce qui ne l'est pas
  *
  * **Une famille n'est ni vivante ni décédée** : le cercle de visibilité ne porte pas sur
- * elle. Ce sont ses **époux** qui sont filtrés, chacun pour son compte, et réduits à
- * `{personId, displayName, visibilite}` quand ils sont vivants hors cercle.
+ * elle. Ce sont ses **époux** et ses **enfants** qui sont filtrés, chacun pour son compte :
+ * un époux vivant hors cercle est réduit à `{personId, displayName, visibilite}`, et depuis
+ * la révision du 2026-10-01 de l'ADR 0003, son `displayName` — comme celui d'un enfant
+ * vivant hors cercle — vaut {@see CercleDeVisibiliteInterface::NOM_MASQUE}. Les enfants
+ * sortaient jusque-là sous leur vrai nom **sans aucun contrôle** : la famille d'aïeux
+ * défunts était l'annuaire de leurs descendants vivants.
  *
  * **Les dates d'union restent visibles**, y compris quand un époux est masqué. C'est
  * écrit noir sur blanc au § 5.4, et la raison mérite d'être retenue : elles appartiennent
@@ -58,7 +63,11 @@ final readonly class NormaliseurDeFamille
 
             $lignesEnfants[] = [
                 'personId' => $personne->getId(),
-                'displayName' => $personne->getDisplayName(),
+                // L'enfant reste dans la liste — une fratrie amputée serait fausse —, son
+                // nom suit le cercle.
+                'displayName' => $cercle->voit($personne->getId(), $vivants->estVivante($personne))
+                    ? $personne->getDisplayName()
+                    : CercleDeVisibiliteInterface::NOM_MASQUE,
                 'siblingOrder' => $ligne->getSiblingOrder(),
                 'relation' => $ligne->getRelation()->value,
             ];
@@ -106,7 +115,9 @@ final readonly class NormaliseurDeFamille
 
         return [
             'personId' => $personne->getId(),
-            'displayName' => $personne->getDisplayName(),
+            'displayName' => NiveauDeVisibilite::Complete === $niveau
+                ? $personne->getDisplayName()
+                : CercleDeVisibiliteInterface::NOM_MASQUE,
             'visibilite' => $niveau->value,
         ];
     }

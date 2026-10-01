@@ -4,10 +4,12 @@ import {
   anneeDe,
   disposerLignees,
   nomDeFamilleDe,
+  nomEcrit,
   prenomDe,
   sansFamilleDuConjoint,
   type DispositionHistoire,
 } from './lignees'
+import { sansFamillesParAlliance } from './alliances'
 
 /**
  * Ce que ces tests protègent : les règles de placement de la disposition
@@ -243,15 +245,38 @@ describe('disposition lignees', () => {
     expect(f('beauPere').y).toBe(f('pere').y)
   })
 
-  it('pose l’ascendance d’un allié au-dessus de lui, pas au bord de l’arbre', () => {
-    // Constaté en prod : les parents d'un allié Voulgre partaient au-delà de la
-    // dernière fiche de leur rangée, au-dessus des Figarol.
+  it('range l’ascendance d’un allié dans son propre bloc, à droite, au-dessus de sa rangée', () => {
+    // L'allié (le mari d'une grand-tante Voulgre) est de la famille : conjoint d'une
+    // descendante d'ancêtre. Ses parents ne le sont pas : famille par alliance
+    // (décision du 2026-10-01). Rattachés dans les creux, ils s'intercalaient chez les
+    // Voulgre et les Figarol ; ils ont désormais leur bloc, à droite de tout l'arbre
+    // du lecteur, à leur génération.
     const enfant = f('allie')
+    expect(enfant.parente).toBe('famille')
+    const bord = Math.max(...d.fiches.filter((x) => x.parente !== 'alliance' && !x.detache).map((x) => x.x + x.w))
     for (const cle of ['pereAllie', 'mereAllie']) {
+      expect(f(cle).parente).toBe('alliance')
+      expect(f(cle).pont).toBe(id['allie'])
       expect(f(cle).rangee).toBe(enfant.rangee - 1)
-      // Du côté Voulgre : à gauche des Figarol de la même rangée.
-      expect(f(cle).cx).toBeLessThan(f('agpF').cx)
+      expect(f(cle).x).toBeGreaterThan(bord)
     }
+    // Comme sa propre généalogie : le père à gauche de la mère.
+    expect(f('pereAllie').cx).toBeLessThan(f('mereAllie').cx)
+    // Aucune bande de quart ne s'étire sur eux.
+    for (const q of d.quarts) expect(q.x1).toBeLessThan(f('pereAllie').x)
+    expect(d.alliances.map((a) => a.pont)).toEqual([id['allie']])
+    expect(d.alliances[0]!.nom).toBe('Vallaize')
+  })
+
+  it('masque par défaut les familles par alliance, et rien d’autre', () => {
+    const d2 = disposerLignees(sansFamillesParAlliance(graphe))
+    for (const cle of ['pereAllie', 'mereAllie']) expect(d2.parId.has(id[cle]!)).toBe(false)
+    // L'allié lui-même reste : il est de la famille, à côté de sa femme.
+    for (const cle of ['allie', 'grandTanteV', 'secondeEpouse', 'demiTante', 'beauPere', 'gpcm', 'tanteAlliee'])
+      expect(d2.parId.has(id[cle]!), cle).toBe(true)
+    expect(d2.fiches).toHaveLength(d.fiches.length - 2)
+    expect(d2.alliances).toEqual([])
+    expect(chevauchements(d2)).toEqual([])
   })
 
   it('pose l’ascendance du conjoint d’un seul tenant, à droite de celle de l’ego', () => {
@@ -356,6 +381,16 @@ describe('lecture des étiquettes', () => {
     const n = noeud('Jade de la Tour')
     expect(prenomDe(n)).toBe('Jade')
     expect(nomDeFamilleDe(n)).toBe('de la Tour')
+  })
+
+  it('écrit « Personne vivante » sur un nœud restreint, sans relire le nom reçu', () => {
+    // Révision du 2026-10-01 (ADR 0003) : un serveur antérieur y mettait le vrai nom.
+    const restreint: NoeudPersonne = { ...noeud('Jade Tour'), visibilite: 'restreinte', vivant: true }
+    expect(nomEcrit(restreint)).toBe('Personne vivante')
+    expect(prenomDe(restreint)).toBe('')
+    // Pas de nom de famille : un foyer ne s'étiquette pas « vivante », ni « Tour ».
+    expect(nomDeFamilleDe(restreint)).toBe('')
+    expect(nomEcrit(noeud('Jade Tour'))).toBe('Jade Tour')
   })
 
   it('ne lit aucune année sur un nœud restreint ou vivant', () => {

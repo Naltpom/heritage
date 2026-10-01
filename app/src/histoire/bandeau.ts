@@ -12,6 +12,7 @@
  *
  * Pur, sans DOM : les coordonnées d'entrée sont déjà projetées à l'écran.
  */
+import { largeurDuTexte, poserEtiquettes, type DemandeDEtiquette } from './etiquettes'
 
 export interface BrancheDuBandeau {
   cle: string
@@ -34,11 +35,19 @@ export interface SegmentDuBandeau {
   etiquette: { x: number; nom: string; sous: string } | null
 }
 
-/** Largeur estimée d'un nom, en pixels, à la taille du bandeau. */
+/** Largeur estimée d'un nom, en pixels, à la taille du bandeau (gras, capitales comprises). */
 export function largeurDuNom(nom: string, taille: number): number {
-  return nom.length * taille * 0.6
+  return largeurDuTexte(nom, taille)
 }
 
+/**
+ * Deux noms ne se recouvrent JAMAIS. Chaque branche calcule d'abord sa part visible et
+ * la place voulue de son nom ; puis les noms se posent ensemble (`poserEtiquettes`), la
+ * branche la plus visible d'abord : une autre qui la chevaucherait se décale dans sa
+ * propre part visible, perd sa seconde ligne, se tronque, ou se tait — son trait de
+ * couleur, lui, reste. Deux bandes qui se recouvrent calaient leurs deux noms
+ * « collants » sur le même bord d'écran, au même pixel (« Voulgre@1365 Figarol@1365 »).
+ */
 export function bandeauDesFamilles(
   branches: readonly BrancheDuBandeau[],
   bordGauche: number,
@@ -47,25 +56,32 @@ export function bandeauDesFamilles(
   marge = 8,
 ): SegmentDuBandeau[] {
   const segments: SegmentDuBandeau[] = []
+  const demandes: DemandeDEtiquette[] = []
 
   for (const b of branches) {
     const gauche = Math.max(b.x0, bordGauche)
     const droite = Math.min(b.x1, bordDroit)
     if (droite - gauche < 4) continue
 
-    const demi = largeurDuNom(b.nom, taille) / 2
-    const place = droite - gauche >= 2 * (demi + marge)
-    const centre = (b.x0 + b.x1) / 2
-    const x = Math.min(droite - demi - marge, Math.max(gauche + demi + marge, centre))
-
-    segments.push({
+    segments.push({ cle: b.cle, couleur: b.couleur, gauche, largeur: droite - gauche, etiquette: null })
+    demandes.push({
       cle: b.cle,
-      couleur: b.couleur,
-      gauche,
-      largeur: droite - gauche,
-      etiquette: place ? { x, nom: b.nom, sous: droite - gauche >= 2 * (largeurDuNom(b.sous, 11) / 2 + marge) ? b.sous : '' } : null,
+      // Le milieu de la branche entière : collé au bord tant qu'elle déborde de l'écran.
+      x: (b.x0 + b.x1) / 2,
+      y: 0,
+      nom: b.nom,
+      taille,
+      sous: b.sous,
+      tailleSous: 11,
+      min: gauche + marge,
+      max: droite - marge,
+      priorite: droite - gauche,
     })
   }
 
+  for (const e of poserEtiquettes(demandes, { marge })) {
+    const s = segments.find((x) => x.cle === e.cle)
+    if (s) s.etiquette = { x: e.x, nom: e.nom, sous: e.sous }
+  }
   return segments
 }

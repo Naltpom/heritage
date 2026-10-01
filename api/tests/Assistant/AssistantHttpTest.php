@@ -8,6 +8,7 @@ use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\DateQualifier;
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Service\CleDeRecherche;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Membership\Entity\Member;
@@ -243,7 +244,7 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
         self::assertArrayNotHasKey('baseVersion', $tuf['corps']['ops'][0]);
         self::assertSame('Tutu', $tuf['corps']['ops'][0]['newValue']);
         self::assertSame([['libelle' => 'Surnom', 'avant' => null, 'apres' => 'Tutu']], $tuf['changements'], '`avant` à null : le front écrit « (valeur masquée) ».');
-        self::assertSame([['personId' => $this->tuf, 'displayName' => 'Tuf Sureau', 'visibilite' => 'restreinte']], $tuf['personnes'], 'Restreinte : le nom, pas de dates — la clé est absente.');
+        self::assertSame([['personId' => $this->tuf, 'displayName' => 'Personne vivante', 'visibilite' => 'restreinte']], $tuf['personnes'], 'Restreinte : le masque, ni nom ni dates — la clé est absente (révision du 2026-10-01 de l’ADR 0003).');
 
         // ── d3 : la création de Paul, enfant de Marne et de Tuf. ─────────────────
         self::assertSame('creation_personne', $paul['corps']['kind']);
@@ -255,7 +256,7 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
         self::assertSame(['complete', 'restreinte'], array_column($paul['personnes'], 'visibilite'));
         self::assertSame([
             ['libelle' => 'Nouvelle personne', 'avant' => null, 'apres' => 'Paul Sureau — naissance : 2012'],
-            ['libelle' => 'Lien de parenté', 'avant' => null, 'apres' => 'Paul Sureau (proposée) enfant de Marne Dolomite Sureau et Tuf Sureau'],
+            ['libelle' => 'Lien de parenté', 'avant' => null, 'apres' => 'Paul Sureau (proposée) enfant de Marne Dolomite Sureau et Personne vivante'],
         ], $paul['changements']);
 
         // ── La règle, sur les octets : aucune donnée datée de Tuf dans la réponse. ─
@@ -335,7 +336,7 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
 
         // ── Un vivant hors cercle : le nom, sans dates — comme dans `personnes[]`. ─
         self::assertSame($this->tuf, $tuf['personId']);
-        self::assertSame(['personId' => $this->tuf, 'displayName' => 'Tuf Sureau', 'visibilite' => 'restreinte'], $tuf['personne']);
+        self::assertSame(['personId' => $this->tuf, 'displayName' => 'Personne vivante', 'visibilite' => 'restreinte'], $tuf['personne']);
 
         // ── Une personne proposée : la demande gardée, la référence sans dièse. ────
         self::assertNull($paul['personId']);
@@ -477,7 +478,109 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
         self::assertSame('creation_personne', $this->charge()['kind']);
 
         self::assertSame(3, $this->em()->getRepository(ChangeRequest::class)->count([]));
-        self::assertCount(3, $this->notificateur()->de('demande_soumise'),'Trois demandes soumises, trois notifications — le circuit habituel.');
+        self::assertCount(3, $this->notificateur()->de('demande_soumise'), 'Trois demandes soumises, trois notifications — le circuit habituel.');
+    }
+
+    /**
+     * Révision du 2026-10-01 de l'ADR 0003 : un vivant hors cercle n'expose plus son nom.
+     *
+     * L'aperçu de l'assistant masquait déjà Tuf ; mais une demande déposée **enregistre**
+     * ses libellés — `targetLabel`, et le nom de chaque extrémité de ses liens —, et
+     * « Mes demandes » les relisait tels quels. Relue par son auteur, sous toutes ses
+     * formes, la demande ne nomme plus Tuf : le masque à la place, l'identifiant intact.
+     * L'historique de sa fiche, qui porte ses dates, est un `404` (§ 6.11).
+     */
+    public function testUneDemandeDeposeeSurUnVivantHorsCercleNeLeNommePlusASonAuteur(): void
+    {
+        $this->seConnecterCommeOpale();
+        $this->scenarioComplet();
+        $analyseId = $this->analyserLeScenario();
+
+        $this->requete('POST', \sprintf('/api/assistant/analyses/%s/demandes/d2', $analyseId));
+        self::assertResponseStatusCodeSame(201);
+        self::assertStringNotContainsString('Tuf Sureau', (string) $this->client->getResponse()->getContent());
+        $surTuf = $this->charge();
+        self::assertSame($this->tuf, $surTuf['targetId'], 'L’identifiant reste : c’est par lui que la demande vise sa fiche.');
+        self::assertSame(CercleDeVisibiliteInterface::NOM_MASQUE, $surTuf['targetLabel']);
+
+        $this->requete('POST', \sprintf('/api/assistant/analyses/%s/demandes/d3', $analyseId));
+        self::assertResponseStatusCodeSame(201);
+        $creation = $this->charge();
+
+        // Le détail, relu par l'auteur.
+        $this->requete('GET', '/api/demandes/'.$surTuf['id']);
+        self::assertResponseIsSuccessful();
+        self::assertStringNotContainsString('Tuf Sureau', (string) $this->client->getResponse()->getContent());
+        self::assertSame(CercleDeVisibiliteInterface::NOM_MASQUE, $this->charge()['targetLabel']);
+
+        // La création : Tuf y est le second parent du fils proposé.
+        $this->requete('GET', '/api/demandes/'.$creation['id']);
+        self::assertResponseIsSuccessful();
+        self::assertStringNotContainsString('Tuf Sureau', (string) $this->client->getResponse()->getContent());
+        $lien = $this->charge()['liens'][0];
+        self::assertSame($this->tuf, $lien['other2PersonId']);
+        self::assertSame(CercleDeVisibiliteInterface::NOM_MASQUE, $lien['other2Label']);
+        self::assertSame('Marne Dolomite Sureau', $lien['otherLabel'], 'Une défunte se nomme toujours.');
+
+        // La liste « Mes demandes » et le détail du nœud en attente.
+        $this->requete('GET', '/api/demandes');
+        self::assertResponseIsSuccessful();
+        self::assertStringNotContainsString('Tuf Sureau', (string) $this->client->getResponse()->getContent());
+        $this->requete('GET', \sprintf('/api/demandes/%d/brouillons/p1', $creation['id']));
+        self::assertResponseIsSuccessful();
+        self::assertStringNotContainsString('Tuf Sureau', (string) $this->client->getResponse()->getContent());
+
+        // L'historique de sa fiche : fermé, comme une fiche inconnue.
+        $this->requete('GET', '/api/demandes/historique/personne/'.$this->tuf);
+        self::assertResponseStatusCodeSame(404);
+        $this->requete('GET', '/api/demandes/historique/personne/'.$this->marne);
+        self::assertResponseIsSuccessful();
+
+        // En base, le libellé est intact : c'est le rendu au membre qui masque.
+        $enBase = $this->em()->getRepository(ChangeRequest::class)->find($surTuf['id']);
+        self::assertInstanceOf(ChangeRequest::class, $enBase);
+        self::assertSame('Tuf Sureau', $enBase->getTargetLabel());
+    }
+
+    /**
+     * Les textes libres du modèle — titre, justification, résumé, avertissements — ne
+     * nomment pas un vivant hors cercle, même quand le modèle désobéit à la consigne.
+     *
+     * Le modèle connaît le vrai nom de Tuf (il en a besoin pour le reconnaître) ; il l'écrit
+     * ici partout, en capitales comme d'après un acte. Le serveur remplace chaque recopie
+     * par le masque avant de rendre l'analyse — et avant de garder la justification, qui
+     * devient le message de la demande déposée.
+     */
+    public function testLesTextesDuModeleNeNommentPasUnVivantHorsCercle(): void
+    {
+        $this->seConnecterCommeOpale();
+        ModeleScripte::repondra(
+            ModeleScripte::appel('chercher_personnes', ['requete' => 'Sureau']),
+            ModeleScripte::appel('proposer', [
+                'resume' => 'Le membre parle de Tuf Sureau.',
+                'avertissements' => ['Homonymie possible avec TUF SUREAU.'],
+                'demandes' => [[
+                    'nature' => 'modification_personne', 'titre' => 'Le surnom de Tuf Sureau',
+                    'justification' => 'Le membre écrit que tuf sureau est surnommé Tutu.', 'confiance' => 'moyenne',
+                    'personId' => $this->tuf,
+                    'changements' => [['champ' => 'nickname', 'texte' => 'Tutu']],
+                ]],
+            ]),
+        );
+
+        $analyseId = $this->analyserLeScenario();
+        $brut = (string) $this->client->getResponse()->getContent();
+        self::assertStringNotContainsStringIgnoringCase('Tuf Sureau', $brut);
+        $analyse = $this->charge();
+        self::assertSame('Le membre parle de '.CercleDeVisibiliteInterface::NOM_MASQUE.'.', $analyse['resume']);
+        self::assertSame('Le surnom de '.CercleDeVisibiliteInterface::NOM_MASQUE, $analyse['demandes'][0]['titre']);
+        self::assertSame(['Homonymie possible avec '.CercleDeVisibiliteInterface::NOM_MASQUE.'.'], $analyse['avertissements']);
+
+        // Déposée sans mot : la justification de l'assistant devient le message.
+        $this->requete('POST', \sprintf('/api/assistant/analyses/%s/demandes/d1', $analyseId));
+        self::assertResponseStatusCodeSame(201);
+        self::assertStringNotContainsStringIgnoringCase('Tuf Sureau', (string) $this->client->getResponse()->getContent());
+        self::assertStringContainsString(CercleDeVisibiliteInterface::NOM_MASQUE, (string) $this->charge()['message']);
     }
 
     public function testLAnalyseDUnAutreEstIntrouvable(): void

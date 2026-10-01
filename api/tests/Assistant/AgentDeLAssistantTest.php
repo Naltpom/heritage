@@ -133,7 +133,7 @@ final class AgentDeLAssistantTest extends TestCase
         self::assertSame(['Marne Dolomite Sureau', 'Tuf Sureau'], array_column($trouvees, 'nom'));
         self::assertFalse($trouvees[17]['confidentielle'], 'Une défunte n’a rien de confidentiel.');
         self::assertTrue($trouvees[18]['confidentielle'], 'Un vivant hors du cercle du lecteur est signalé au modèle.');
-        self::assertSame(['Tuf Sureau'], $trouvees[17]['conjoints']);
+        self::assertSame(['Tuf Sureau (confidentielle)'], $trouvees[17]['conjoints'], 'Un conjoint vivant hors cercle est signalé lui aussi.');
         self::assertSame('1987, Brest', $trouvees[17]['naissance']);
 
         // Tour 3 : la fiche lue, avec sa version et ses champs éditables.
@@ -289,7 +289,7 @@ final class ArbreDeDeuxPersonnes implements ArbrePourLAssistant
 {
     public function chercher(string $requete, int $limite): array
     {
-        return [$this->marne(['Tuf Sureau']), $this->tuf()];
+        return [$this->marne([$this->tuf()]), $this->tuf()];
     }
 
     public function personne(int $personneId): ?PersonneDeLArbre
@@ -308,7 +308,7 @@ final class ArbreDeDeuxPersonnes implements ArbrePourLAssistant
             : null;
     }
 
-    /** @param list<string> $conjoints */
+    /** @param list<PersonneDeLArbre> $conjoints */
     private function marne(array $conjoints = []): PersonneDeLArbre
     {
         return new PersonneDeLArbre(

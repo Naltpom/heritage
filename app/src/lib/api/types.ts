@@ -53,6 +53,14 @@ export type Sexe = 'masculin' | 'feminin' | 'inconnu'
  * non vides AUGMENTE (médiane 2 → 3, maximum 6 → 9). Mais un dessin qui suppose treize
  * blocs à peu près équilibrés se trompera : c'est quand le conjoint du lecteur a une
  * ascendance connue qu'ils se remplissent.
+ *
+ * **Révision du 2026-10-01 — l'arbitrage du 23/09 est levé pour les familles par
+ * alliance.** L'ascendance du mari d'une tante n'a aucun lien de sang avec le lecteur :
+ * rangée dans le bloc de son partenaire, elle gonflait la bande « Voulgre » de toute une
+ * généalogie étrangère (captures « voir comme Camille », 581 personnes). Ces nœuds portent
+ * désormais `parente: 'alliance'` ; le front ne lit JAMAIS leur `branch` pour les ranger —
+ * quelle que soit la valeur que le serveur y met (ancienne branche, `null`, ou une valeur
+ * dédiée) — et leur donne la teinte `hors`.
  */
 export type Branche =
   | 'pp'
@@ -405,9 +413,11 @@ export interface NoeudPersonne extends NoeudCommun {
    * `displayName` fait **déborder 220 boîtes**, jusqu'à 169 unités de trop sur
    * une boîte de 149 : trois fiches voisines se chevauchent.
    *
-   * **Présente aussi sur un nœud restreint** : c'est une troncature de
-   * `displayName`, qui est déjà dans la liste blanche — donc strictement moins
-   * d'information (§ 11.2).
+   * **Présente aussi sur un nœud restreint** — et, depuis la révision du
+   * 2026-10-01 (ADR 0003), elle y vaut le libellé neutre « Personne vivante »,
+   * comme `displayName` : le vrai nom d'une personne vivante hors cercle n'est plus
+   * envoyé. Le canevas n'en dépend pas : il écrit lui-même ce libellé sur tout nœud
+   * restreint (`nomEcrit()`, `histoire/lignees.ts`), même face à un serveur antérieur.
    *
    * Trois clés de nom, trois usages : `displayName` pour lire, `etiquetteNom`
    * pour dessiner, `surname`/`givenNames` pour éditer.
@@ -471,7 +481,32 @@ export interface NoeudPersonne extends NoeudCommun {
    * boîte reste dimensionnée par le moteur.
    */
   etiquetteDates?: string
+  /**
+   * **Ce que cette personne est pour le lecteur** — calculé par le serveur, pour
+   * le point de vue servi (révision du 2026-10-01, « familles par alliance ») :
+   *
+   *  - `famille` : ses ancêtres, les descendants de ses ancêtres (lui et sa
+   *    descendance compris), et les conjoints de toutes ces personnes — le
+   *    conjoint LUI-MÊME, pas sa famille ;
+   *  - `conjoint` : la famille du conjoint du lecteur (« Famille du conjoint ») ;
+   *  - `alliance` : tout le reste qui est relié — l'ascendance et la parenté d'un
+   *    conjoint de collatéral (vu de la nièce, les Provost du mari de sa tante).
+   *
+   * Ces deux clés se DÉDUISENT des liens, que tout lecteur reçoit déjà : elles
+   * n'apprennent rien de plus. Absentes d'un serveur antérieur : le front les
+   * recalcule alors sur les liens (`classerParente()`, `histoire/alliances.ts`).
+   */
+  parente?: Parente
+  /**
+   * Présente sur un nœud `alliance` seulement : le conjoint « famille » par
+   * lequel ce groupe est rattaché (le mari de la tante). Clé de bloc : chaque
+   * famille par alliance est mise en page à part, comme sa propre généalogie.
+   */
+  pont?: IdentifiantNoeud
 }
+
+/** Voir `NoeudPersonne.parente`. */
+export type Parente = 'famille' | 'conjoint' | 'alliance'
 
 export interface NoeudFamille extends NoeudCommun {
   type: 'famille'

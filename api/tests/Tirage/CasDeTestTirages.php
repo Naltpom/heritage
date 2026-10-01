@@ -13,15 +13,16 @@ use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Enum\MatchKind;
 use App\Module\Tree\Entity\Person;
+use App\Tests\Membership\Double\ArbreEnMemoire;
 use App\Tests\Tree\ArbreWebTestCase;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Le socle des tests du module `Tirage` : l'arbre du harnais, **plus trois vivants**, et les
+ * Le socle des tests du module `Tirage` : l'arbre du harnais, **plus quatre vivants**, et les
  * outils HTTP que tous ces tests partagent.
  *
- * ## Pourquoi trois personnes de plus
+ * ## Pourquoi quatre personnes de plus
  *
  * L'arbre de {@see ArbreWebTestCase} compte trois vivants — `ego`, `conjointe`, `cousin` — et
  * trois personnes que la règle unique déclare **non vivantes** : `aieule` et `aieul`
@@ -34,9 +35,24 @@ use Symfony\Component\HttpFoundation\Response;
  * | `oncle` | Basalte Romarin, né 1965 | −1 | participant ordinaire |
  * | `enfant` | Mica Romarin, née 2019 | 1 | **sans compte**, accompagné par `ego` |
  * | `tante` | Ardoise Tilleul, née 1968 | −1 | hors du « Noël côté papa » |
+ * | `voisine` | Galène Tilleul, née 1970 | −1 | vivante **hors du cercle** d'`ego` |
  *
  * Les trois générations qu'ils occupent n'ont que des vivants : ils ne déplacent aucune
  * médiane dont dépend l'état des six personnes du harnais.
+ *
+ * ## Le cercle d'`ego`, et pourquoi `tante` en est exclue
+ *
+ * Un tirage n'inscrit que des personnes **du cercle** de qui les désigne (révision du
+ * 2026-10-01 de l'ADR 0003 : le nom d'un vivant hors cercle ne sort plus, et un tirage
+ * enregistre des noms). **Le cercle est le vrai**, `Membership\Service\CercleDeVisibilite`,
+ * qui lit en test l'arbre par `ArbreEnMemoire` — comme les tests des démarches. On y pose
+ * une parenté où `cousin` et `oncle` sont les frères d'`ego` (enfants d'`aieul` et
+ * d'`aieule`), et `enfant` la fille d'`ego` et de `conjointe` : tous dans le cercle d'`ego`.
+ * `tante` est l'épouse d'`oncle`, donc du cercle elle aussi (conjointe d'un collatéral).
+ * `voisine` n'est rattachée à personne : vivante **hors** du cercle d'`ego`, c'est le cas que
+ * {@see RoutesDesTiragesTest::testUnVivantHorsDuCercleNEntrePasDansUnTirageEtSonNomNeSortPas()}
+ * éprouve. Cette parenté n'existe qu'en mémoire : la base, et donc le graphe, n'en savent
+ * rien — seuls le cercle et ses refus en dépendent.
  *
  * ## Le limiteur
  *
@@ -62,6 +78,7 @@ abstract class CasDeTestTirages extends ArbreWebTestCase
         }
 
         $this->semerLesVivants();
+        $this->semerLeCercle();
 
         $this->rattacher(self::OPALE, 'ego');
         $this->rattacher(self::JASPE, 'conjointe');
@@ -69,6 +86,13 @@ abstract class CasDeTestTirages extends ArbreWebTestCase
         $this->rattacher(self::AMBRE, 'tante');
         $this->rattacher(self::GRENAT, 'aieul');
         $this->creerUtilisateur(self::TUF);
+    }
+
+    protected function tearDown(): void
+    {
+        ArbreEnMemoire::reinitialiser();
+
+        parent::tearDown();
     }
 
     /**
@@ -162,6 +186,31 @@ abstract class CasDeTestTirages extends ArbreWebTestCase
         $this->em()->flush();
     }
 
+    /** Voir l'en-tête : le cercle d'`ego` couvre tout le monde, sauf `voisine`. */
+    private function semerLeCercle(): void
+    {
+        ArbreEnMemoire::reinitialiser();
+
+        foreach ([
+            'ego' => true, 'conjointe' => true, 'cousin' => true, 'oncle' => true, 'enfant' => true, 'tante' => true, 'voisine' => true,
+            'aieule' => false, 'aieul' => false, 'sansDate' => false,
+        ] as $cle => $vivante) {
+            $nom = $this->personnes[$cle]->getDisplayName();
+            ArbreEnMemoire::ajouterPersonne($this->idDe($cle), $nom, '', $vivante, libelle: $nom);
+        }
+
+        ArbreEnMemoire::ajouterFamille([$this->idDe('aieul'), $this->idDe('aieule')], [$this->idDe('ego'), $this->idDe('cousin'), $this->idDe('oncle')]);
+        ArbreEnMemoire::ajouterFamille([$this->idDe('ego'), $this->idDe('conjointe')], [$this->idDe('enfant')]);
+        ArbreEnMemoire::ajouterFamille([$this->idDe('oncle'), $this->idDe('tante')]);
+
+        // Un cercle se met en cache (`cache.app`, 24 h) sous une clé que l'empreinte de
+        // l'arbre en mémoire ne fait pas bouger d'un test à l'autre.
+        $pool = self::getContainer()->get('cache.app');
+        if ($pool instanceof CacheItemPoolInterface) {
+            $pool->clear();
+        }
+    }
+
     private function semerLesVivants(): void
     {
         $em = $this->em();
@@ -170,6 +219,7 @@ abstract class CasDeTestTirages extends ArbreWebTestCase
             'oncle' => ['Basalte', 'Romarin', Sex::Masculin, -1, 1965],
             'enfant' => ['Mica', 'Romarin', Sex::Feminin, 1, 2019],
             'tante' => ['Ardoise', 'Tilleul', Sex::Feminin, -1, 1968],
+            'voisine' => ['Galène', 'Tilleul', Sex::Feminin, -1, 1970],
         ] as $cle => [$prenom, $nom, $sexe, $generation, $annee]) {
             $personne = new Person($prenom.' '.$nom);
             $personne

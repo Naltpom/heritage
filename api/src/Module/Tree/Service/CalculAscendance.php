@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Tree\Service;
 
 use App\Module\Core\Enum\Branch;
+use App\Module\Tree\Enum\ParenteDansLArbre;
 use App\Module\Tree\ValueObject\FamillePlacable;
 use App\Module\Tree\ValueObject\JeuDePlacement;
 use App\Module\Tree\ValueObject\PlacementLogique;
@@ -71,6 +72,61 @@ final class CalculAscendance
             $jeu->familles,
             $jeu->egoId,
         );
+    }
+
+    /**
+     * **L'arbre tel que le lecteur le lit** : les mêmes générations, la parenté de chaque
+     * personne ({@see ParenteDansLArbre}), et des branches qui **ne débordent plus par
+     * alliance**.
+     *
+     * ── POURQUOI UNE SECONDE ENTRÉE, ET PAS UNE CORRECTION DE {@see calculer()} ─────
+     *
+     * Décision du commanditaire du 2026-10-01 : une personne est « de la famille » si elle
+     * est un ancêtre, un descendant d'ancêtre, ou le conjoint de l'un d'eux ; tout le reste
+     * relève d'une **famille par alliance**, masquée par défaut et dessinée à part. Elle
+     * remplace, **pour la vue du lecteur**, l'arbitrage du 23/09 — « tous dans un des 13
+     * blocs ; les conjoints vont avec leur partenaire », puis leur famille suit — qui
+     * rangeait l'ascendance entière du mari d'une tante dans la branche de la tante :
+     * 252 fiches sur 281 dans la bande « Voulgre » de l'arbre synthétique des captures,
+     * 446 croisements de traits.
+     *
+     * La colonne persistée `tree_person.branch`, elle, **garde l'ancienne règle**, et c'est
+     * délibéré :
+     *
+     * - la chronologie en fait ses colonnes, et une barre sans branche **disparaît**
+     *   (`NormaliseurDeChronologie::barre()`). Appliquer la règle à la colonne retirerait
+     *   de la frise toutes les familles par alliance de la racine, ce que personne n'a
+     *   demandé ;
+     * - réécrire la colonne de centaines de fiches incrémenterait leur `#[ORM\Version]` et
+     *   **périmerait les demandes en attente** qui les visent ({@see ArbreVuDepuis} : une
+     *   lecture de l'arbre ne doit jamais faire mourir une proposition — et une commande
+     *   de recalcul non plus, pour un changement de présentation).
+     *
+     * Le graphe, lui, ne lit jamais la colonne quand un lecteur est réglé : il sert ce que
+     * rend cette méthode (`NormaliseurDeGraphe::libelles()`).
+     */
+    public function vuDuLecteur(JeuDePlacement $jeu): PlacementLogique
+    {
+        $idsPersonnes = array_map(static fn (object $personne): string => $personne->id, $jeu->personnes);
+        $familles = $jeu->familles;
+        $ego = $jeu->egoId;
+
+        $adjacence = $this->adjacence($familles);
+        $generations = $this->generations($idsPersonnes, $familles, $adjacence, $ego);
+        [$parentes, $ponts] = $this->parentes($idsPersonnes, $adjacence, $ego);
+
+        $exclus = [];
+
+        foreach ($parentes as $id => $parente) {
+            if (ParenteDansLArbre::Alliance === $parente) {
+                $exclus[$id] = true;
+            }
+        }
+
+        $branches = $this->branches($idsPersonnes, $adjacence, $ego, $exclus);
+        [$generationsFamille, $rangs] = $this->familles($familles, $generations);
+
+        return new PlacementLogique($generations, $branches, $generationsFamille, $rangs, $parentes, $ponts);
     }
 
     /**
@@ -232,6 +288,161 @@ final class CalculAscendance
     }
 
     /**
+     * **Famille, conjoint ou alliance**, pour chaque personne — {@see ParenteDansLArbre}.
+     *
+     * Quatre parcours, chacun borné et sans point fixe :
+     *
+     * 1. **le sang** — l'ascendance du lecteur (lui compris), puis toute la descendance de
+     *    cette ascendance : sa fratrie, ses oncles, ses cousins à tout degré, ses enfants ;
+     * 2. **la famille** — le sang, plus les conjoints du sang, **en une seule passe** : le
+     *    conjoint entre, sa famille à lui non. C'est la forme du cercle de l'ADR 0003 (« les
+     *    conjoints sont ajoutés en une seule passe, en dernier, et ne propagent rien »),
+     *    sans sa borne de `N` générations ;
+     * 3. **la famille du conjoint du lecteur** — tout ce qu'on atteint depuis ses
+     *    conjoints, par n'importe quel lien, **sans repasser par la famille** : leurs
+     *    parents et leur ascendance, leur fratrie, les enfants d'une autre union. C'est ce
+     *    que le filtre « Famille du conjoint » couvrait déjà côté client, conservé tel quel ;
+     * 4. **le reste est alliance**, et chacun y reçoit son **pont** : la personne
+     *    non-alliance la plus proche par les liens, celle par laquelle son groupe se
+     *    rattache — le mari de la tante, pour toute l'ascendance du mari de la tante. Le
+     *    parcours part de **tous** les ponts à la fois (largeur d'abord, sources dans
+     *    l'ordre de la liste) : un groupe touché par deux ponts va au plus proche, et à
+     *    égalité au premier dans l'ordre des identifiants. Déterministe.
+     *
+     * Une personne qu'**aucun chemin** ne relie au lecteur — l'îlot détaché — n'est **pas**
+     * `alliance` : la décision vise « tout le reste **qui est relié** », et l'îlot n'est
+     * relié à rien. Elle est servie `famille`, sans pont, et garde son sort d'avant (pas de
+     * branche, la zone « sans lien connu » du canevas) : la masquer par défaut cacherait les
+     * fiches flottantes qu'on cherche justement à rattacher. Même règle côté client
+     * (`classerParente()`, `app/src/histoire/alliances.ts`).
+     *
+     * Sans lecteur (`$ego` vide), personne n'est rangé : « famille de qui ? » n'a pas de
+     * réponse, et le sérialiseur sert alors `famille` partout plutôt que de masquer au
+     * hasard.
+     *
+     * @param list<string>                                                                                                              $idsPersonnes
+     * @param array{parents: array<string, list<string>>, enfants: array<string, list<string>>, conjoints: array<string, list<string>>} $adjacence
+     *
+     * @return array{0: array<string, ParenteDansLArbre>, 1: array<string, string>}
+     */
+    private function parentes(array $idsPersonnes, array $adjacence, string $ego): array
+    {
+        if ('' === $ego) {
+            return [[], []];
+        }
+
+        $voisins = static fn (string $p): array => array_merge(
+            $adjacence['parents'][$p] ?? [],
+            $adjacence['enfants'][$p] ?? [],
+            $adjacence['conjoints'][$p] ?? [],
+        );
+
+        // 1. Le sang : l'ascendance, puis la descendance de chacun de ses membres. Le
+        //    tableau sert de registre des vus — un implexe ne fait pas boucler.
+        $sang = [];
+        $pile = $this->remonte($adjacence['parents'], $ego);
+
+        while ([] !== $pile) {
+            $courant = array_pop($pile);
+
+            if (isset($sang[$courant])) {
+                continue;
+            }
+
+            $sang[$courant] = true;
+
+            foreach ($adjacence['enfants'][$courant] ?? [] as $enfant) {
+                $pile[] = $enfant;
+            }
+        }
+
+        // 2. La famille : le sang et ses conjoints, une seule passe.
+        $famille = $sang;
+
+        foreach (array_keys($sang) as $personne) {
+            foreach ($adjacence['conjoints'][$personne] ?? [] as $conjoint) {
+                $famille[$conjoint] = true;
+            }
+        }
+
+        // 3. La famille du conjoint du lecteur : depuis chacun de ses conjoints, sans
+        //    jamais repasser par la famille. Le conjoint lui-même est « famille » (2.).
+        $cote = [];
+        $pile = [];
+
+        foreach ($adjacence['conjoints'][$ego] ?? [] as $conjoint) {
+            foreach ($voisins($conjoint) as $voisin) {
+                $pile[] = $voisin;
+            }
+        }
+
+        while ([] !== $pile) {
+            $courant = array_pop($pile);
+
+            if (isset($famille[$courant]) || isset($cote[$courant])) {
+                continue;
+            }
+
+            $cote[$courant] = true;
+
+            foreach ($voisins($courant) as $voisin) {
+                $pile[] = $voisin;
+            }
+        }
+
+        $parentes = [];
+
+        foreach ($idsPersonnes as $id) {
+            $parentes[$id] = match (true) {
+                isset($famille[$id]) => ParenteDansLArbre::Famille,
+                isset($cote[$id]) => ParenteDansLArbre::Conjoint,
+                default => ParenteDansLArbre::Alliance,
+            };
+        }
+
+        // 4. Les ponts. Toutes les sources sont posées AVANT que la file ne tourne : c'est
+        //    ce qui en fait un vrai parcours multi-sources, où chacun va au pont le plus
+        //    proche, et non au premier qui l'a atteint de proche en proche.
+        $ponts = [];
+        $file = [];
+        $estAlliance = static fn (string $p): bool => ParenteDansLArbre::Alliance === ($parentes[$p] ?? null);
+
+        foreach ($idsPersonnes as $id) {
+            if ($estAlliance($id)) {
+                continue;
+            }
+
+            foreach ($voisins($id) as $voisin) {
+                if ($estAlliance($voisin) && !\array_key_exists($voisin, $ponts)) {
+                    $ponts[$voisin] = $id;
+                    $file[] = $voisin;
+                }
+            }
+        }
+
+        for ($i = 0; $i < \count($file); ++$i) {
+            $courant = $file[$i];
+
+            foreach ($voisins($courant) as $voisin) {
+                if ($estAlliance($voisin) && !\array_key_exists($voisin, $ponts)) {
+                    $ponts[$voisin] = $ponts[$courant];
+                    $file[] = $voisin;
+                }
+            }
+        }
+
+        // L'îlot : aucun pont ne l'a atteint — il n'est relié à rien, il n'est donc pas
+        // « par alliance ». Rendu à `famille`, sans pont (voir le docbloc).
+        foreach ($idsPersonnes as $id) {
+            if ($estAlliance($id) && !\array_key_exists($id, $ponts)) {
+                $parentes[$id] = ParenteDansLArbre::Famille;
+            }
+        }
+
+        return [$parentes, $ponts];
+    }
+
+    /**
      * De laquelle des quatre lignes de grands-parents chaque personne relève.
      *
      * Les quatre souches sont **déduites de l'ego**, et non écrites en dur comme dans
@@ -240,12 +451,26 @@ final class CalculAscendance
      * exactement sur les quatre `xref` que le script codait en dur — et elle continue de
      * marcher le jour où `tree.personne_racine_id` change.
      *
+     * **`$exclus` : les familles par alliance, que rien ne classe.** Vide pour la colonne
+     * persistée ({@see calculer()}), qui garde l'arbitrage du 23/09 ; rempli par
+     * {@see vuDuLecteur()}. Une personne exclue n'hérite d'aucune branche **et n'en
+     * transmet aucune** : sans la seconde moitié, le mari de la tante reprendrait la
+     * branche de ses propres parents s'ils en avaient reçu une par un autre chemin. Les
+     * souches, le tronc et les quarts du conjoint ne sont pas filtrés : ils ne parcourent
+     * que l'ascendance du lecteur et de son conjoint, sa descendance et ses conjoints —
+     * jamais une personne `alliance`, par définition.
+     *
+     * Le mari de la tante, lui, n'est pas exclu : il est « famille », et il reçoit la
+     * branche de sa femme par la boucle d'héritage — c'est le pont, et il reste à côté
+     * d'elle.
+     *
      * @param list<string>                                                                                                              $idsPersonnes
      * @param array{parents: array<string, list<string>>, enfants: array<string, list<string>>, conjoints: array<string, list<string>>} $adjacence
+     * @param array<string, true>                                                                                                       $exclus
      *
      * @return array<string, Branch>
      */
-    private function branches(array $idsPersonnes, array $adjacence, string $ego): array
+    private function branches(array $idsPersonnes, array $adjacence, string $ego, array $exclus = []): array
     {
         if ('' === $ego) {
             // Sans racine, « branche paternelle du père » ne veut rien dire. On ne pose
@@ -313,7 +538,7 @@ final class CalculAscendance
         // ────────────────────────────────────────────────────────────────────
         for ($passage = 0; $passage < self::ITERATIONS_HERITAGE; ++$passage) {
             foreach ($idsPersonnes as $id) {
-                if (isset($branche[$id])) {
+                if (isset($branche[$id]) || isset($exclus[$id])) {
                     continue;
                 }
 
@@ -324,6 +549,10 @@ final class CalculAscendance
                 );
 
                 foreach ($voisins as $voisin) {
+                    if (isset($exclus[$voisin])) {
+                        continue;
+                    }
+
                     if (isset($branche[$voisin]) && Branch::Tr !== $branche[$voisin]) {
                         $branche[$id] = $branche[$voisin];
                         break;
@@ -332,7 +561,7 @@ final class CalculAscendance
             }
         }
 
-        $this->parAlliance($idsPersonnes, $adjacence, $branche);
+        $this->parAlliance($idsPersonnes, $adjacence, $branche, $exclus);
 
         return $branche;
     }
@@ -345,6 +574,14 @@ final class CalculAscendance
      * être dans un des 13 blocs ; si c'est les conjoints d'une personne de ma famille, ils
      * vont avec leur partenaire »*. Puis leur famille suit, de proche en proche, depuis ce
      * point d'ancrage.
+     *
+     * ⚠ **RÉVISÉ LE 2026-10-01, POUR LA VUE DU LECTEUR SEULEMENT.** Le commanditaire a
+     * remplacé « puis leur famille suit » par les **familles par alliance**
+     * ({@see vuDuLecteur()}, {@see ParenteDansLArbre}) : le conjoint d'une personne de la
+     * famille prend toujours le bloc de son partenaire, mais **sa** famille ne suit plus —
+     * elle ne reçoit aucune branche et se dessine à part, sur demande. Ce qui suit reste la
+     * règle de la colonne persistée, que la chronologie consomme. Dans la vue du lecteur,
+     * l'invariant devient : *aucune personne sans bloc hors alliance et hors îlot*.
      *
      * ── CE QU'ELLE REMPLACE, ET POURQUOI CE N'EST PAS LE MÊME GESTE ──────────────
      *
@@ -445,8 +682,9 @@ final class CalculAscendance
      * @param list<string>                                                                                                              $idsPersonnes
      * @param array{parents: array<string, list<string>>, enfants: array<string, list<string>>, conjoints: array<string, list<string>>} $adjacence
      * @param array<string, Branch>                                                                                                     $branche      modifié sur place
+     * @param array<string, true>                                                                                                       $exclus       les familles par alliance de la vue du lecteur : ni amorcées, ni relais — {@see branches()}
      */
-    private function parAlliance(array $idsPersonnes, array $adjacence, array &$branche): void
+    private function parAlliance(array $idsPersonnes, array $adjacence, array &$branche, array $exclus = []): void
     {
         // Le plafond ne peut pas mordre : chaque passe sert au moins une personne ou sort.
         for ($passage = 0, $filet = \count($idsPersonnes); $passage <= $filet; ++$passage) {
@@ -454,12 +692,12 @@ final class CalculAscendance
 
             // L'amorce, pour tout le monde d'abord : le bloc du partenaire.
             foreach ($idsPersonnes as $id) {
-                if (isset($branche[$id])) {
+                if (isset($branche[$id]) || isset($exclus[$id])) {
                     continue;
                 }
 
                 foreach ($adjacence['conjoints'][$id] ?? [] as $conjoint) {
-                    if (isset($branche[$conjoint])) {
+                    if (isset($branche[$conjoint]) && !isset($exclus[$conjoint])) {
                         $branche[$id] = $branche[$conjoint];
                         $bouge = true;
                         break;
@@ -470,7 +708,7 @@ final class CalculAscendance
             // Puis la famille autour de cette amorce — une belle-famille est une famille
             // entière, pas une personne.
             foreach ($idsPersonnes as $id) {
-                if (isset($branche[$id])) {
+                if (isset($branche[$id]) || isset($exclus[$id])) {
                     continue;
                 }
 
@@ -480,7 +718,7 @@ final class CalculAscendance
                 );
 
                 foreach ($voisins as $voisin) {
-                    if (isset($branche[$voisin])) {
+                    if (isset($branche[$voisin]) && !isset($exclus[$voisin])) {
                         $branche[$id] = $branche[$voisin];
                         $bouge = true;
                         break;

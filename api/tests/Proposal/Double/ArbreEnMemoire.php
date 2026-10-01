@@ -306,9 +306,11 @@ final class ArbreEnMemoire implements PortArbre
                 continue;
             }
 
+            // `(string)` : la clé d'un couple à un seul époux (« 7 ») est devenue un entier
+            // en entrant dans le tableau — PHP convertit les clés numériques.
             return array_values(array_map(
                 static fn (string $membre): int => (int) $membre,
-                array_filter(explode(':', $cle), static fn (string $membre): bool => '' !== $membre),
+                array_filter(explode(':', (string) $cle), static fn (string $membre): bool => '' !== $membre),
             ));
         }
 

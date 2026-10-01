@@ -19,12 +19,21 @@
  *    lit `vivant` tel qu'il est reçu ;
  *  - un nœud restreint n'a pas de ligne de dates, et on ne la reconstitue pas ;
  *  - la recherche passe par l'API, jamais par un index local ;
- *  - un filtre **estompe**, il ne retire rien : la forme de l'arbre ne bouge pas ;
+ *  - un filtre **estompe**, il ne retire rien : la forme de l'arbre ne bouge pas —
+ *    sauf deux bascules qui RETIRENT avant la disposition, pour que l'arbre se
+ *    resserre : « Famille du conjoint » et « Familles par alliance » ;
+ *  - les familles par alliance (l'ascendance du mari d'une tante, vue de la nièce)
+ *    sont masquées par défaut ; affichées, chacune a son bloc, à droite des branches
+ *    du lecteur (`histoire/alliances.ts`, décision du 2026-10-01) ;
+ *  - une personne vivante hors du cercle s'écrit « Personne vivante » : le serveur
+ *    n'envoie plus son nom, et l'écran ne relit pas celui qu'il recevrait ;
+ *  - deux étiquettes ne se recouvrent jamais (`histoire/etiquettes.ts`) ;
  *  - aucun texte sous 10 px à l'écran.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  NOM_D_UNE_PERSONNE_VIVANTE,
   lireFichePersonne,
   rechercherPersonnes,
   requeteApi,
@@ -45,6 +54,7 @@ import FichesMonde from '@/histoire/FichesMonde.vue'
 import {
   LIBELLES_QUART,
   disposerLignees,
+  nomEcrit,
   prenomDe,
   sansFamilleDuConjoint,
   type BrancheDeQuart,
@@ -52,6 +62,8 @@ import {
   type FicheHistoire,
 } from '@/histoire/lignees'
 import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
+import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
+import { poserEtiquettes } from '@/histoire/etiquettes'
 import {
   DUREE_VOL,
   PALIERS,
@@ -80,30 +92,52 @@ const disposition = shallowRef<DispositionHistoire | null>(null)
 const grapheCharge = shallowRef<Graphe | null>(null)
 
 /*
- * La famille du conjoint (son ascendance, ses collatéraux) : affichée par défaut,
- * retirée AVANT la disposition quand on la masque, pour que l'arbre se recompacte.
- * Une préférence de ce navigateur seulement.
+ * Deux bascules RETIRENT des fiches avant la disposition, pour que l'arbre se
+ * recompacte (les autres filtres estompent sans rien déplacer). Ce sont des
+ * préférences de ce navigateur seulement.
+ *
+ *  - La famille du conjoint (son ascendance, ses collatéraux) : affichée par défaut.
+ *  - Les familles PAR ALLIANCE (décision du 2026-10-01) : masquées par défaut. Vue
+ *    de la nièce, l'ascendance du mari de sa tante n'a aucun lien de sang avec elle ;
+ *    affichée, chacune a son propre bloc, à droite des branches du lecteur.
  */
 const CLE_CONJOINT = 'heritage.arbre.familleDuConjoint'
-function lirePreferenceConjoint(): boolean {
+const CLE_ALLIANCES = 'heritage.arbre.famillesParAlliance'
+function lirePreference(cle: string, parDefaut: boolean): boolean {
   try {
-    return localStorage.getItem(CLE_CONJOINT) !== 'masquee'
+    const v = localStorage.getItem(cle)
+    return v === null ? parDefaut : v !== 'masquee'
   } catch {
-    return true
+    return parDefaut
   }
 }
-const avecConjoint = ref(lirePreferenceConjoint())
-const grapheSansConjoint = computed(() => (grapheCharge.value ? sansFamilleDuConjoint(grapheCharge.value) : null))
-const aUneFamilleDeConjoint = computed(() => grapheSansConjoint.value !== grapheCharge.value)
-function disposer(graphe: Graphe): void {
-  disposition.value = disposerLignees(avecConjoint.value ? graphe : sansFamilleDuConjoint(graphe))
-}
-watch(avecConjoint, (avec) => {
+function ecrirePreference(cle: string, affichee: boolean): void {
   try {
-    localStorage.setItem(CLE_CONJOINT, avec ? 'affichee' : 'masquee')
+    localStorage.setItem(cle, affichee ? 'affichee' : 'masquee')
   } catch {
     /* navigation privée : la bascule vaut pour la visite */
   }
+}
+const avecConjoint = ref(lirePreference(CLE_CONJOINT, true))
+const avecAlliances = ref(lirePreference(CLE_ALLIANCES, false))
+const grapheSansConjoint = computed(() => (grapheCharge.value ? sansFamilleDuConjoint(grapheCharge.value) : null))
+const aUneFamilleDeConjoint = computed(() => grapheSansConjoint.value !== grapheCharge.value)
+const aDesAlliances = computed(() => (grapheCharge.value ? aDesFamillesParAlliance(grapheCharge.value) : false))
+/** Le nombre de personnes par alliance, pour le libellé de la bascule. */
+const effectifAlliances = computed(() => {
+  const g = grapheCharge.value
+  if (!g) return 0
+  let n = 0
+  for (const c of classerParente(g).values()) if (c.parente === 'alliance') n++
+  return n
+})
+function disposer(graphe: Graphe): void {
+  // Les alliances d'abord, classées sur le graphe ENTIER : c'est lui que le serveur a classé.
+  const sansAlliances = avecAlliances.value ? graphe : sansFamillesParAlliance(graphe)
+  disposition.value = disposerLignees(avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances))
+}
+/** Après une bascule : la disposition refaite, et ce qui n'existe plus oublié. */
+function redisposer(): void {
   if (!grapheCharge.value) return
   disposer(grapheCharge.value)
   const d = disposition.value!
@@ -111,7 +145,31 @@ watch(avecConjoint, (avec) => {
   const quarts = new Set<string>(d.quarts.map((q) => q.branche))
   filtres.masquees = filtres.masquees.filter((b) => quarts.has(b))
   cadrage.value = ajusterLargeur(canevas.value, gouttiere.value)
+}
+watch(avecConjoint, (avec) => {
+  ecrirePreference(CLE_CONJOINT, avec)
+  redisposer()
 })
+/*
+ * La bascule des alliances se refait tout de suite (pas d'observateur) : la recherche
+ * l'allume puis cherche la fiche dans la disposition, dans la même foulée.
+ */
+function basculerAlliances(avec: boolean): void {
+  if (avecAlliances.value === avec) return
+  avecAlliances.value = avec
+  ecrirePreference(CLE_ALLIANCES, avec)
+  redisposer()
+}
+/**
+ * Une personne qu'on cherche alors que sa famille par alliance est masquée : la
+ * recherche la trouve (l'API ne sait rien de l'affichage) ; la choisir allume la
+ * bascule, et la disposition refaite la contient.
+ */
+function afficherSonAlliance(personId: number): void {
+  const g = grapheCharge.value
+  if (!g || avecAlliances.value || disposition.value?.parPersonId.has(personId)) return
+  if (estParAlliance(g, personId)) basculerAlliances(true)
+}
 const nonPlaces = ref<NoeudNonPlace[]>([])
 const chargement = ref(true)
 const erreur = ref<string | null>(null)
@@ -122,6 +180,12 @@ async function charger(): Promise<void> {
   try {
     const graphe = await requeteApi<Graphe>('/arbre/graphe')
     grapheCharge.value = graphe
+    // « Voir dans l'arbre » vers une personne d'une famille par alliance masquée : on l'affiche.
+    const demandee = Number(route.query['personne']) || null
+    if (demandee !== null && !avecAlliances.value && estParAlliance(graphe, demandee)) {
+      avecAlliances.value = true
+      ecrirePreference(CLE_ALLIANCES, true)
+    }
     disposer(graphe)
     nonPlaces.value = graphe.calque.nonPlaces
     await nextTick()
@@ -448,8 +512,14 @@ const BASCULES = [
   { cle: 'vivants', libelle: 'Personnes vivantes', sous: '' },
 ] as const
 
+/**
+ * La branche d'une fiche pour la TEINTE et les filtres : une fiche par alliance n'est
+ * d'aucune branche du lecteur, quelle que soit celle que le serveur lui donne.
+ */
+const brancheDe = (f: FicheHistoire): string => (f.parente === 'alliance' ? 'hors' : f.noeud.branch)
+
 function passe(f: FicheHistoire): boolean {
-  if ((filtres.masquees as Branche[]).includes(f.noeud.branch)) return false
+  if (f.parente !== 'alliance' && (filtres.masquees as Branche[]).includes(f.noeud.branch)) return false
   if (filtres.ligneDirecte && !f.directe) return false
   if (filtres.vivants && !f.noeud.vivant) return false
   if (filtres.qualite) {
@@ -508,7 +578,7 @@ const stylesFiches = computed(() => {
       opacity: !passe(f) ? '0.1' : ciblees.size && !ciblees.has(f.id) ? '0.25' : '1',
     }
     if (loin) {
-      base.background = f.directe && direct ? 'var(--hi-direct-plein)' : `color-mix(in srgb, ${couleurBranche(n.branch)} 70%, transparent)`
+      base.background = f.directe && direct ? 'var(--hi-direct-plein)' : `color-mix(in srgb, ${couleurBranche(brancheDe(f))} 70%, transparent)`
       return base
     }
     base.background = `var(--h-${sexe})`
@@ -517,7 +587,7 @@ const stylesFiches = computed(() => {
       : n.enAttente
         ? '1px dashed var(--h-accent)'
         : `1px ${n.vivant ? 'dashed' : 'solid'} var(--h-${sexe}-bord)`
-    base.borderLeft = `4px solid ${couleurBranche(n.branch)}`
+    base.borderLeft = `4px solid ${couleurBranche(brancheDe(f))}`
     base.borderRadius = '7px'
     return base
   })
@@ -571,7 +641,8 @@ const libelles = computed<Libelle[]>(() => {
       id: f.id,
       ...texteDeFiche(
         {
-          nom: nomDeFiche(f.noeud).texte,
+          // Un nœud restreint s'écrit « Personne vivante », quoi que porte `etiquetteNom`.
+          nom: f.noeud.visibilite === 'restreinte' ? nomEcrit(f.noeud) : nomDeFiche(f.noeud).texte,
           prenom: prenomDe(f.noeud),
           // Absente sur un nœud restreint : ni tiret, ni case vide.
           dates: typeof f.noeud.etiquetteDates === 'string' ? f.noeud.etiquetteDates : '',
@@ -595,12 +666,42 @@ const libelles = computed<Libelle[]>(() => {
     }))
 })
 
+/**
+ * Les noms de foyer du niveau Familles. Ils ne se recouvrent jamais : posés par
+ * priorité — les couples d'ancêtres, puis les plus larges —, chacun dans la largeur
+ * de son couple et seulement là où rien n'est déjà écrit ; un nom qui ne tient pas
+ * se tronque (« Ducat… ») ou se tait (`histoire/etiquettes.ts`).
+ */
 const libellesFoyers = computed(() => {
   const d = disposition.value
   if (!d || niveau.value !== 1) return []
-  return d.foyers
+  const fort = surligner.value
+  const demandes = d.foyers
     .filter((c) => (c.ancetres || s.value > 0.25) && c.envergure * s.value > 44 && dansLaFenetre(c.x - 40, c.y - 20, 80, 20))
-    .map((c, i) => ({ cle: i, x: versEcranX(c.x), y: versEcranY(c.y) - 15, nom: c.nom, ancetres: c.ancetres }))
+    .map((c, i) => {
+      const x = versEcranX(c.x)
+      // Un peu plus large que le couple : un nom court déborde volontiers de deux fiches serrées.
+      const demi = (c.envergure * s.value) / 2 + 12
+      return {
+        cle: String(i),
+        x,
+        y: versEcranY(c.y) - 15,
+        nom: c.nom,
+        taille: c.ancetres && fort ? 11.5 : 10.5,
+        min: x - demi,
+        max: x + demi,
+        priorite: (c.ancetres ? 1e9 : 0) + c.envergure,
+        ancetres: c.ancetres,
+      }
+    })
+  const ancetres = new Map(demandes.map((x) => [x.cle, x.ancetres]))
+  return poserEtiquettes(demandes, { marge: 6, hauteur: 14 }).map((e) => ({
+    cle: e.cle,
+    x: e.x,
+    y: e.y,
+    nom: e.nom,
+    ancetres: ancetres.get(e.cle) ?? false,
+  }))
 })
 
 /**
@@ -621,6 +722,16 @@ const bandeauFamilles = computed(() => {
     x0: versEcranX(q.x0),
     x1: versEcranX(q.x1),
   }))
+  for (const a of d.alliances) {
+    branches.push({
+      cle: `alliance-${a.pont}`,
+      couleur: 'var(--h-attenue)',
+      nom: a.nom !== '' ? a.nom : 'Par alliance',
+      sous: mobile ? '' : `famille par alliance · ${a.effectif}`,
+      x0: versEcranX(a.x0),
+      x1: versEcranX(a.x1),
+    })
+  }
   const z = d.zoneDetachee
   if (z) {
     branches.push({
@@ -691,10 +802,11 @@ const miniCarte = computed(() => {
   return {
     bandes: d.quarts
       .filter((q) => !q.branche.startsWith('c'))
-      .map((q) => ({ branche: q.branche as string, x: q.x0 * k, w: Math.max(2, (q.x1 - q.x0) * k) }))
+      .map((q) => ({ cle: q.branche as string, branche: q.branche as string, x: q.x0 * k, w: Math.max(2, (q.x1 - q.x0) * k) }))
       .concat(
+        d.alliances.map((a) => ({ cle: `alliance-${a.pont}`, branche: 'hors', x: a.x0 * k, w: Math.max(2, (a.x1 - a.x0) * k) })),
         d.zoneDetachee
-          ? [{ branche: 'hors', x: d.zoneDetachee.x0 * k, w: Math.max(2, (d.zoneDetachee.x1 - d.zoneDetachee.x0) * k) }]
+          ? [{ cle: 'detaches', branche: 'hors', x: d.zoneDetachee.x0 * k, w: Math.max(2, (d.zoneDetachee.x1 - d.zoneDetachee.x0) * k) }]
           : [],
       ),
     vue: { x: x0 * k, w: Math.max(6, (x1 - x0) * k) },
@@ -814,6 +926,8 @@ function surCurseur(i: number): void {
 }
 
 function allerA(r: ResultatDeRecherche): void {
+  // Une personne d'une famille par alliance masquée : la choisir allume la bascule.
+  afficherSonAlliance(r.personId)
   const f = disposition.value?.parPersonId.get(r.personId)
   recherche.value = ''
   resultats.value = []
@@ -979,6 +1093,25 @@ onBeforeUnmount(() => {
             >{{ avecConjoint ? '✓' : '' }}</span>
             <span class="flex-1 text-sm">Afficher sa famille</span>
             <span class="text-xs text-attenue">masquée, l’arbre se resserre</span>
+          </button>
+        </template>
+        <template v-if="aDesAlliances">
+          <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Familles par alliance</div>
+          <button
+            type="button"
+            role="checkbox"
+            :aria-checked="avecAlliances"
+            class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
+            @click="basculerAlliances(!avecAlliances)"
+          >
+            <span
+              class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
+              :class="avecAlliances ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+            >{{ avecAlliances ? '✓' : '' }}</span>
+            <span class="flex flex-1 flex-col leading-tight">
+              <span class="text-sm">Les afficher · {{ effectifAlliances }}</span>
+              <span class="text-xs text-attenue">la famille des conjoints de vos proches, chacune à part, à droite</span>
+            </span>
           </button>
         </template>
         <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Afficher seulement</div>
@@ -1201,7 +1334,7 @@ onBeforeUnmount(() => {
           <div class="relative h-[18px] overflow-hidden rounded bg-ligne/60">
             <div
               v-for="b in miniCarte.bandes"
-              :key="b.branche"
+              :key="b.cle"
               class="absolute inset-y-0 opacity-75"
               :style="{ left: `${b.x}px`, width: `${b.w}px`, background: couleurBranche(b.branche) }"
             />
@@ -1228,13 +1361,15 @@ onBeforeUnmount(() => {
           v-if="ficheChoisie"
           class="absolute z-10 flex flex-col gap-2 rounded-panneau border border-ligne bg-panneau px-4 py-3.5 shadow-[0_10px_30px_rgba(0,0,0,.5)]"
           :class="estMobile ? 'inset-x-3 bottom-3' : 'top-4 right-4 w-[300px]'"
-          :style="{ borderTop: `3px solid ${couleurBranche(ficheChoisie.noeud.branch)}` }"
+          :style="{ borderTop: `3px solid ${couleurBranche(brancheDe(ficheChoisie))}` }"
           aria-live="polite"
           @pointerdown.stop
         >
           <div class="flex items-start gap-2">
             <div class="flex flex-1 flex-col leading-snug">
-              <span class="text-[17px] font-semibold">{{ ficheChoisie.noeud.displayName }}</span>
+              <span class="text-[17px] font-semibold">{{
+                ficheChoisie.noeud.visibilite === 'restreinte' ? NOM_D_UNE_PERSONNE_VIVANTE : ficheChoisie.noeud.displayName
+              }}</span>
               <span v-if="typeof ficheChoisie.noeud.etiquetteDates === 'string'" class="font-mono text-xs text-attenue">{{
                 ficheChoisie.noeud.etiquetteDates
               }}</span>
@@ -1251,7 +1386,12 @@ onBeforeUnmount(() => {
           <div class="flex flex-wrap gap-1.5">
             <span v-if="ficheChoisie.id === disposition.ego" class="rounded-pastille bg-accent-doux px-2.5 py-0.5 text-xs font-semibold text-accent">vous</span>
             <span v-else-if="parente" class="rounded-pastille bg-accent-doux px-2.5 py-0.5 text-xs font-semibold text-accent">{{ parente }}</span>
-            <span class="rounded-pastille border border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]">{{
+            <span
+              v-if="ficheChoisie.parente === 'alliance'"
+              class="rounded-pastille border border-dashed border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]"
+              title="Ni ancêtre, ni descendant d’un de vos ancêtres, ni leur conjoint : sa famille est alliée à la vôtre par un mariage."
+            >famille par alliance</span>
+            <span v-else class="rounded-pastille border border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]">{{
               libelleBranche(ficheChoisie.noeud.branch)
             }}</span>
             <span
