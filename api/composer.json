@@ -35,7 +35,8 @@
         "symfony/security-bundle": "8.1.*",
         "symfony/serializer": "8.1.*",
         "symfony/validator": "8.1.*",
-        "symfony/yaml": "8.1.*"
+        "symfony/yaml": "8.1.*",
+        "web-auth/webauthn-lib": "^5.3"
     },
     "config": {
         "allow-plugins": {

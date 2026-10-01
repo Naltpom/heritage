@@ -59,6 +59,7 @@ import { enregistrerAbonnementPush, lireClePush, supprimerAbonnementPush } from 
 import { useSession } from '@/composables/useSession'
 import { useInstallation } from '@/composables/installation'
 import { rafraichirCompteur } from '@/composables/useNotifications'
+import { invitationCleDAccesEnCours } from '@/composables/fenetresAutomatiques'
 
 export type EtatPush = 'inconnu' | 'indisponible' | 'a_installer' | 'desactive' | 'active' | 'bloque'
 
@@ -476,6 +477,11 @@ export function usePush(): EtatPushExpose {
  *
  * Le compte **en attente** est invité aussi : c'est lui qui a le plus à gagner,
  * la validation de son inscription peut arriver n'importe quand.
+ *
+ * Elle **cède le pas** à l'invitation à créer une clé d'accès, qui passe juste
+ * après une connexion par mot de passe : jamais deux fenêtres automatiques en
+ * même temps (`fenetresAutomatiques.ts`). Elle s'ouvre ensuite, dans le même
+ * chargement si celle-là a été réglée, sinon au suivant.
  */
 
 /** Ce que la fenêtre propose : activer d'un clic, ou installer d'abord. */
@@ -528,6 +534,10 @@ export interface ContexteInvitationPush {
   /** Le dernier « Plus tard », ou `null`. */
   plusTardLe: number | null
   maintenant: number
+  /** Une autre fenêtre automatique passe d'abord — la clé d'accès, juste après
+   *  une connexion par mot de passe (`fenetresAutomatiques.ts`). Facultatif :
+   *  absent vaut « non ». */
+  autreFenetre?: boolean
 }
 
 /**
@@ -536,7 +546,7 @@ export interface ContexteInvitationPush {
  * du « une fois par chargement » — c'est l'affaire de `piloterInvitationPush()`.
  */
 export function formeInvitationPush(c: ContexteInvitationPush): FormeInvitationPush | null {
-  if (!c.connecte || c.incarnation || !c.avecCadre || c.refuse) return null
+  if (!c.connecte || c.incarnation || !c.avecCadre || c.refuse || c.autreFenetre === true) return null
   if (c.plusTardLe !== null && c.maintenant - c.plusTardLe < SILENCE_INVITATION_MS) return null
   // `active`, `bloque`, `indisponible`, `inconnu` : rien à proposer.
   if (c.etat === 'desactive') return 'activer'
@@ -587,6 +597,7 @@ export function piloterInvitationPush(
       avecCadre: lireAvecCadre(),
       plusTardLe: lirePlusTardInvitation(),
       maintenant: horloge(),
+      autreFenetre: invitationCleDAccesEnCours.value,
     })
   }
 

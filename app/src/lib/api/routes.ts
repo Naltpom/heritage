@@ -51,12 +51,16 @@ export function seDeconnecter(): Promise<{ deconnecte: boolean }> {
  * Un mot de passe actuel erroné rend **`422` sur `champs.motDePasseActuel`**, et
  * non `401` : le compte est authentifié, c'est la donnée soumise qui est mauvaise
  * (§ 2.1). L'écran affiche donc une erreur de champ, il ne déconnecte pas.
+ *
+ * **Toutes les clés d'accès du compte tombent** avec l'ancien mot de passe
+ * (`clesDAccesRetirees` dit combien, § 2.4) : une clé plantée par celui qui
+ * tenait la session rouvrirait sinon le compte aussitôt.
  */
 export function changerMotDePasse(
   motDePasseActuel: string,
   nouveauMotDePasse: string,
-): Promise<{ motDePasseChange: boolean }> {
-  return requeteApi<{ motDePasseChange: boolean }>('/session/mot-de-passe', {
+): Promise<{ motDePasseChange: boolean; clesDAccesRetirees?: number }> {
+  return requeteApi<{ motDePasseChange: boolean; clesDAccesRetirees?: number }>('/session/mot-de-passe', {
     methode: 'POST',
     corps: { motDePasseActuel, nouveauMotDePasse },
   })

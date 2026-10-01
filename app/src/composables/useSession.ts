@@ -21,10 +21,12 @@ import {
   lireSession,
   oublierEtag,
   seConnecter,
+  seConnecterParCleDAcces,
   seDeconnecter,
   surSessionPerdue,
   type ChargeDeSession,
 } from '@/lib/api'
+import type { ReponseCleDAccesJson } from '@/lib/cleDAcces'
 import { regimeDeSession, type RegimeAcces } from '@/router/acces'
 
 const session = shallowRef<ChargeDeSession | null>(null)
@@ -78,6 +80,17 @@ export async function rafraichirSession(): Promise<void> {
  *  qui les passe à `analyserErreur()`. */
 export async function connecter(email: string, motDePasse: string): Promise<ChargeDeSession> {
   const charge = await seConnecter(email, motDePasse)
+  session.value = charge
+  premierChargement = Promise.resolve()
+  oublierEtag()
+  return charge
+}
+
+/** `POST /api/connexion/cle-d-acces` : la même charge, les mêmes erreurs que
+ *  `connecter()`, et la même suite — rien ne distingue ensuite une session
+ *  ouverte par clé d'accès d'une session ouverte par mot de passe. */
+export async function connecterParCleDAcces(reponse: ReponseCleDAccesJson): Promise<ChargeDeSession> {
+  const charge = await seConnecterParCleDAcces(reponse)
   session.value = charge
   premierChargement = Promise.resolve()
   oublierEtag()

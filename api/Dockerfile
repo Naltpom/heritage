@@ -30,6 +30,10 @@ FROM dunglas/frankenphp:1-php8.4 AS base
 #             sur une implémentation en PHP pur, et la bibliothèque le signale à chaque
 #             envoi. curl, mbstring et openssl, qu'elle exige aussi, sont déjà compilés
 #             dans l'image PHP officielle.
+#             Les clés d'accès (web-auth/webauthn-lib → spomky-labs/pki-framework,
+#             brick/math) s'appuient sur les mêmes : bcmath, openssl, mbstring. Aucune
+#             extension de plus — vérifié le 1er octobre 2026. EdDSA, qui demanderait
+#             sodium, n'est volontairement pas proposé (voir Core\Service\ClesDAcces).
 RUN install-php-extensions \
     pdo_pgsql \
     intl \

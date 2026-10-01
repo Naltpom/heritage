@@ -57,12 +57,18 @@ final class AuditDoctrineSubscriber
      * sont des secrets de chiffrement : écrits en clair au journal, ils permettraient de
      * lire ou de signer des notifications à la place du serveur.
      *
-     * Les cinq dernières sont celles d'un compte inscrit **sans fiche** (`Membership\Member`,
+     * Les cinq qui suivent `privateKey` sont celles d'un compte inscrit **sans fiche** (`Membership\Member`,
      * ADR 0013) : la description de famille que le candidat a tapée, l'identité qu'il a
      * déclarée et la suggestion calculée par l'assistant. Elles parlent de personnes
      * **vivantes**, et elles sont **purgées** au rattachement comme au refus. Sans cette
      * liste, la purge elle-même écrirait l'ancienne valeur en clair dans le diff
      * `avant`/`apres` — le journal garderait pour toujours ce que la table vient d'effacer.
+     *
+     * `publicKey` et `credentialId` sont ceux d'une clé d'accès (`Core\Passkey`). Rien de
+     * secret — la clé privée ne quitte jamais l'appareil —, mais du matériel de clé n'a
+     * rien à faire dans un journal qu'on ne purge jamais. Aucune route ne les modifie :
+     * s'ils apparaissaient un jour dans un diff, ce serait une écriture à regarder, pas
+     * une valeur à relire.
      */
     private const array CHAMPS_SENSIBLES = [
         'password',
@@ -76,10 +82,18 @@ final class AuditDoctrineSubscriber
         'declaredGivenNames',
         'declaredBirthDate',
         'attachmentSuggestion',
+        'publicKey',
+        'credentialId',
     ];
 
-    /** Voir règle 3. */
-    private const array CHAMPS_TECHNIQUES = ['updatedAt', 'lastLoginAt'];
+    /**
+     * Voir règle 3.
+     *
+     * `lastUsedAt` et `signCount` sont ceux d'une clé d'accès (`Core\Passkey`) : chaque
+     * connexion par clé les avance. Sans eux ici, chaque connexion laisserait une ligne
+     * `modification` à côté de sa ligne `connexion`.
+     */
+    private const array CHAMPS_TECHNIQUES = ['updatedAt', 'lastLoginAt', 'lastUsedAt', 'signCount'];
 
     /** @var list<AuditLog> */
     private array $enAttente = [];

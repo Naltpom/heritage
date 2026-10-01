@@ -27,8 +27,30 @@
  * passe est la bonne conduite : quelqu'un qui hésite entre deux mots de passe
  * doit comprendre qu'il est refusé **pour l'instant**, et savoir quand revenir,
  * sans quoi il conclut que son compte est perdu.
+ *
+ * ── La clé d'accès (Face ID, empreinte, Windows Hello) ────────────────────────
+ *
+ * Deux portes de plus, **à côté** du mot de passe, qui reste en secours :
+ *
+ * - un **bouton**, montré seulement si le navigateur sait faire du WebAuthn ;
+ *   son libellé ne promet Face ID ou l'empreinte que si l'appareil a de quoi ;
+ * - l'**autoremplissage** : quand le navigateur le permet, le champ courriel
+ *   porte `autocomplete="username webauthn"` et propose les clés du site dans
+ *   sa liste de suggestions — on touche le champ, on choisit son nom, Face ID,
+ *   c'est fini.
+ *
+ * Les deux mènent à la **même** suite que le mot de passe (`?suite=`), et
+ * leurs refus serveur (`401`, `429`) s'affichent au même endroit, de la même
+ * façon : `surErreur` les range dans `erreur`. Ce que dit le **navigateur**
+ * (« annulé ») s'écrit à part, en une phrase : ce n'est pas une erreur du
+ * compte, et le formulaire reste là. La mécanique est dans
+ * `piloterConnexionCleDAcces()`.
+ *
+ * Après une connexion **par mot de passe**, `annoncerConnexionParMotDePasse()`
+ * prévient l'invitation « Se connecter plus vite la prochaine fois ? », qui
+ * s'ouvrira sur l'écran d'arrivée si l'appareil s'y prête.
  */
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { analyserErreur } from '@/lib/api'
 import { connecter, useSession } from '@/composables/useSession'
@@ -38,6 +60,7 @@ import ChampTexte from '@/components/base/ChampTexte.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import CadreEntree from '@/components/inscription/CadreEntree.vue'
+import { annoncerConnexionParMotDePasse, piloterConnexionCleDAcces } from '@/composables/useClesDAcces'
 import { delaiAvantNouvelEssai, destinationApresConnexion } from './connexion'
 
 const route = useRoute()
@@ -63,20 +86,47 @@ const peutEnvoyer = computed(
   () => email.value.trim().length > 0 && motDePasse.value.length > 0 && !envoi.value,
 )
 
+/** La suite, commune aux deux portes. `?suite=` vient de l'URL, donc de
+ *  n'importe qui : `destinationApresConnexion` n'accepte qu'un chemin interne.
+ *  Voir `connexion.ts`. */
+async function poursuivre(): Promise<void> {
+  await routeur.replace(destinationApresConnexion(route.query['suite'], regimeDeSession(session.value)))
+}
+
+const cle = piloterConnexionCleDAcces({
+  apres: poursuivre,
+  surErreur: (cause) => {
+    erreur.value = cause
+  },
+  surDebut: () => {
+    erreur.value = null
+  },
+})
+const cleEnCours = cle.enCours
+const messageCle = cle.message
+const libelleCle = cle.libelle
+const autoremplissage = cle.conditionnel
+
+/** `webauthn` en fin de liste : c'est ce jeton qui fait proposer les clés dans
+ *  les suggestions du champ. Seulement si l'autoremplissage est armé. */
+const autocompleteCourriel = computed(() => (autoremplissage.value ? 'username webauthn' : 'username'))
+
+onMounted(() => void cle.demarrer())
+
 async function soumettre(): Promise<void> {
   if (!peutEnvoyer.value) return
 
   envoi.value = true
   erreur.value = null
+  cle.effacerMessage()
   try {
     await connecter(email.value.trim(), motDePasse.value)
     // Le mot de passe ne traîne pas en mémoire au-delà de son usage.
     motDePasse.value = ''
-    // `?suite=` vient de l'URL, donc de n'importe qui : `destinationApresConnexion`
-    // n'accepte qu'un chemin interne. Voir `connexion.ts`.
-    await routeur.replace(
-      destinationApresConnexion(route.query['suite'], regimeDeSession(session.value)),
-    )
+    // Avant de quitter l'écran : l'invitation doit savoir, dès l'arrivée, que
+    // la session vient d'un mot de passe — et passer avant les notifications.
+    annoncerConnexionParMotDePasse()
+    await poursuivre()
   } catch (cause) {
     erreur.value = cause
   } finally {
@@ -94,7 +144,7 @@ async function soumettre(): Promise<void> {
             v-model="email"
             etiquette="Adresse de courriel"
             type="email"
-            autocomplete="username"
+            :autocomplete="autocompleteCourriel"
             :erreur="erreurDeChamp('email')"
             requis
           />
@@ -143,6 +193,28 @@ async function soumettre(): Promise<void> {
           </BoutonBase>
         </div>
       </form>
+
+      <!-- La clé d'accès : seulement si le navigateur sait faire. Hors du
+           `<form>` — Entrée dans le mot de passe ne doit pas la déclencher. -->
+      <div v-if="cle.possible" class="mt-4 flex flex-col gap-3" data-connexion-cle-d-acces>
+        <div class="flex items-center gap-3 text-xs text-attenue" aria-hidden="true">
+          <span class="h-px flex-1 bg-ligne" />
+          ou
+          <span class="h-px flex-1 bg-ligne" />
+        </div>
+        <BoutonBase
+          variante="secondaire"
+          :chargement="cleEnCours"
+          :desactive="envoi"
+          pleineLargeur
+          @click="cle.seConnecter"
+        >
+          {{ libelleCle }}
+        </BoutonBase>
+        <!-- Annulé, ou impossible sur cet appareil : une phrase, sans alarme.
+             Le mot de passe est juste au-dessus. -->
+        <p v-if="messageCle !== null" class="m-0 text-sm text-attenue" role="status">{{ messageCle }}</p>
+      </div>
     </PanneauBase>
 
     <template #pied>

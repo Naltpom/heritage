@@ -56,6 +56,15 @@ security:
                 success_handler: App\Module\Core\Security\AuthenticationSuccessHandler
                 failure_handler: App\Module\Core\Security\AuthenticationFailureHandler
 
+            # Connexion par CLÉ D'ACCÈS (passkey, WebAuthn) — `POST /api/connexion/cle-d-acces`,
+            # § 2.6 du contrat. Un authentificateur du pare-feu, à côté de `json_login`, pour
+            # hériter de tout ce qui suit sans le redire : le limiteur ci-dessous (les essais
+            # par clé et par mot de passe d'un même compte se cumulent), le `user_checker`
+            # (compte suspendu), la migration de session et le journal d'audit. Ses réponses
+            # sont celles des gestionnaires de `json_login`, au caractère près.
+            custom_authenticators:
+                - App\Module\Core\Security\CleDAccesAuthenticator
+
             # Anti-force brute : 5 tentatives par couple identifiant+IP sur 15 minutes,
             # compteur remis à zéro à chaque connexion réussie. Symfony double la mesure
             # d'un limiteur par IP seule, à 5 × le plafond, qui attrape le balayage sur

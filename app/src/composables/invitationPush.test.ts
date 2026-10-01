@@ -53,6 +53,7 @@ import {
   type EnvironnementPush,
   type PermissionPush,
 } from './usePush'
+import { libererApresLaCleDAcces, reserverPourLaCleDAcces } from './fenetresAutomatiques'
 
 /* ------------------------------------------------------------------ */
 /* Montage                                                             */
@@ -360,5 +361,56 @@ describe('le « Plus tard » stocké', () => {
     stockageBloque()
     expect(lirePlusTardInvitation()).toBeNull()
     expect(() => ecrirePlusTardInvitation(MAINTENANT)).not.toThrow()
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Jamais en même temps que l'invitation à la clé d'accès               */
+/* ------------------------------------------------------------------ */
+
+describe('la clé d’accès passe d’abord', () => {
+  it('la décision se tait quand une autre fenêtre automatique a la priorité', () => {
+    const base: ContexteInvitationPush = {
+      etat: 'desactive',
+      refuse: false,
+      connecte: true,
+      incarnation: false,
+      avecCadre: true,
+      plusTardLe: null,
+      maintenant: MAINTENANT,
+    }
+    expect(formeInvitationPush({ ...base, autreFenetre: true })).toBeNull()
+    expect(formeInvitationPush({ ...base, autreFenetre: false })).toBe('activer')
+  })
+
+  it('attend que l’invitation à la clé d’accès soit réglée, puis s’ouvre dans le même chargement', async () => {
+    await charger()
+    reserverPourLaCleDAcces()
+    try {
+      const { forme } = piloter()
+      vi.advanceTimersByTime(DELAI_INVITATION_MS * 5)
+      expect(forme.value).toBeNull()
+
+      libererApresLaCleDAcces()
+      await nextTick()
+      vi.advanceTimersByTime(DELAI_INVITATION_MS)
+      expect(forme.value).toBe('activer')
+    } finally {
+      libererApresLaCleDAcces()
+    }
+  })
+
+  it('renonce à une ouverture déjà programmée si la clé d’accès prend la main', async () => {
+    await charger()
+    try {
+      const { forme } = piloter()
+      vi.advanceTimersByTime(DELAI_INVITATION_MS - 100)
+      reserverPourLaCleDAcces()
+      await nextTick()
+      vi.advanceTimersByTime(DELAI_INVITATION_MS * 3)
+      expect(forme.value).toBeNull()
+    } finally {
+      libererApresLaCleDAcces()
+    }
   })
 })
