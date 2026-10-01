@@ -51,17 +51,25 @@ final class LectureDesRequetes
      * s'enregistre le plus souvent au moment où l'on envoie la demande, et son texte est
      * alors sous la main — le demander à part ferait un second geste que personne ne fait.
      *
-     * @return array{0: DescriptionDeDemarche, 1: ?MessageSaisi}
+     * `precedenteId`, facultatif : la démarche que celle-ci **reprend autrement** — après
+     * un refus, par un autre canal. Sa visibilité se vérifie dans le service.
+     *
+     * @return array{0: DescriptionDeDemarche, 1: ?MessageSaisi, 2: ?int}
      */
     public function creation(Request $requete): array
     {
         $corps = $this->corps($requete);
         $description = $this->lireDescription($corps);
 
+        $precedenteId = $corps['precedenteId'] ?? null;
+        if (null !== $precedenteId && (!\is_int($precedenteId) || $precedenteId < 1)) {
+            throw ErreurDeDemarche::donneesInvalides(['precedenteId' => 'Un identifiant de démarche est attendu.']);
+        }
+
         $brut = $corps['premierMessage'] ?? null;
 
         if (null === $brut) {
-            return [$description, null];
+            return [$description, null, $precedenteId];
         }
 
         if (!\is_array($brut)) {
@@ -69,7 +77,7 @@ final class LectureDesRequetes
         }
 
         /** @var array<string, mixed> $brut */
-        return [$description, $this->lireMessage($brut, 'premierMessage.')];
+        return [$description, $this->lireMessage($brut, 'premierMessage.'), $precedenteId];
     }
 
     public function message(Request $requete): MessageSaisi

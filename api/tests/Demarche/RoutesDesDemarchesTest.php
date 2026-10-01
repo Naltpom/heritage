@@ -145,6 +145,125 @@ final class RoutesDesDemarchesTest extends ArbreWebTestCase
         self::assertTrue($this->charge()['enAttente']);
     }
 
+    /* ───────────────── Expédiée par courrier (révision du 2026-10-01) ───────────────── */
+
+    public function testUneDemarcheExpedieeAttendLaPieceSansEtreARelancer(): void
+    {
+        $id = $this->demarcheSurLAieule('-40 days');
+
+        $this->requete("/api/demarches/{$id}");
+        self::assertTrue($this->charge()['attendUneReponse']);
+        self::assertTrue($this->charge()['aRelancer'], 'Quarante jours sans réponse : à relancer.');
+
+        $this->envoyer('PUT', "/api/demarches/{$id}/suivi", ['statut' => 'expediee', 'resultat' => 'La mairie a traité la demande, l’acte part par la poste.']);
+        self::assertSame(Response::HTTP_OK, $this->statut(), (string) $this->client->getResponse()->getContent());
+        $charge = $this->charge();
+        self::assertSame('expediee', $charge['statut']);
+        self::assertSame('Expédiée par courrier, en attente de réception', $charge['statutLibelle']);
+        self::assertTrue($charge['enAttente'], 'La pièce n’est pas encore là : la démarche attend toujours.');
+        self::assertFalse($charge['attendUneReponse'], 'Mais plus la mairie : elle a répondu.');
+        self::assertFalse($charge['aRelancer'], 'On ne relance pas une mairie qui a déjà traité la demande.');
+        self::assertGreaterThanOrEqual(40, $charge['joursDAttente']);
+
+        // Elle reste dans la liste « en attente ».
+        $this->requete('/api/demarches?enAttente=1');
+        self::assertSame([$id], array_column($this->charge()['elements'], 'id'));
+
+        // Un message envoyé de plus ne la fait pas passer « relancée » : seule une
+        // démarche « envoyée » le devient.
+        $this->envoyer('POST', "/api/demarches/{$id}/messages", [
+            'sens' => 'envoye',
+            'canal' => 'courriel',
+            'date' => (new \DateTimeImmutable())->format('Y-m-d'),
+            'texte' => 'Merci, je guette le courrier.',
+        ]);
+        self::assertSame(Response::HTTP_CREATED, $this->statut());
+        self::assertSame('expediee', $this->charge()['statut']);
+    }
+
+    /* ───────────────── Refaite autrement (révision du 2026-10-01) ───────────────── */
+
+    public function testUneDemarcheRefaiteAutrementDitDOuElleVientEtPerdLeLienSiLaPremiereEstSupprimee(): void
+    {
+        $premiere = $this->demarcheSurLAieule();
+        $this->envoyer('PUT', "/api/demarches/{$premiere}/suivi", ['statut' => 'refusee', 'resultat' => 'La mairie ne traite pas les demandes par courriel.']);
+        self::assertSame(Response::HTTP_OK, $this->statut());
+        self::assertNull($this->charge()['precedente']);
+        self::assertSame([], $this->charge()['suites']);
+
+        $this->envoyer('POST', '/api/demarches', $this->description('aieule') + ['precedenteId' => $premiere]);
+        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
+        $seconde = $this->charge()['id'];
+        self::assertSame(
+            ['id' => $premiere, 'statut' => 'refusee', 'demandeeA' => 'Mairie de Charmille'],
+            $this->charge()['precedente'],
+        );
+
+        $this->requete("/api/demarches/{$premiere}");
+        self::assertSame([['id' => $seconde, 'statut' => 'envoyee']], $this->charge()['suites']);
+
+        // Dans la liste aussi : c'est là que la carte dit « Refaite : démarche n° … ».
+        $this->requete('/api/demarches');
+        $parId = array_column($this->charge()['elements'], null, 'id');
+        self::assertSame($premiere, $parId[$seconde]['precedente']['id']);
+        self::assertSame([['id' => $seconde, 'statut' => 'envoyee']], $parId[$premiere]['suites']);
+
+        // Supprimer la première ne supprime pas la seconde : elle perd seulement le lien.
+        $this->envoyer('DELETE', "/api/demarches/{$premiere}");
+        self::assertSame(Response::HTTP_NO_CONTENT, $this->statut());
+
+        $this->requete("/api/demarches/{$seconde}");
+        self::assertSame(Response::HTTP_OK, $this->statut(), (string) $this->client->getResponse()->getContent());
+        self::assertNull($this->charge()['precedente']);
+    }
+
+    public function testOnNeReprendQuUneDemarcheQueLOnVoit(): void
+    {
+        $visible = $this->demarcheSurLAieule();
+
+        // Une démarche sur le cousin, vivant hors du cercle d'Opale.
+        $this->connexionDe(self::ADMIN);
+        $this->envoyer('POST', '/api/demarches', $this->description('cousin'));
+        self::assertSame(Response::HTTP_CREATED, $this->statut());
+        $masquee = $this->charge()['id'];
+
+        // L'administrateur la reprend par une démarche sur l'aïeule, que tous voient…
+        $this->envoyer('POST', '/api/demarches', $this->description('aieule') + ['precedenteId' => $masquee]);
+        self::assertSame(Response::HTTP_CREATED, $this->statut());
+        $suiteDeLaMasquee = $this->charge()['id'];
+
+        // … et il reprend celle d'Opale par une démarche sur le cousin.
+        $this->envoyer('POST', '/api/demarches', $this->description('cousin') + ['precedenteId' => $visible]);
+        self::assertSame(Response::HTTP_CREATED, $this->statut());
+
+        $this->connexionDe(self::OPALE);
+
+        // Ce qu'Opale ne voit pas n'apparaît pas dans les liens…
+        $this->requete("/api/demarches/{$suiteDeLaMasquee}");
+        self::assertSame(Response::HTTP_OK, $this->statut());
+        self::assertNull($this->charge()['precedente'], 'La démarche reprise est masquée : le lien l’est aussi.');
+        $this->requete("/api/demarches/{$visible}");
+        self::assertSame([], $this->charge()['suites'], 'La suite porte sur le cousin : Opale ne la voit pas.');
+
+        // … et ne se reprend pas : même refus pour « masquée » et « inexistante ».
+        $this->envoyer('POST', '/api/demarches', $this->description('aieule') + ['precedenteId' => $masquee]);
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        $refusMasquee = $this->charge()['erreur']['champs'];
+
+        $this->envoyer('POST', '/api/demarches', $this->description('aieule') + ['precedenteId' => 999999]);
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        self::assertSame($refusMasquee, $this->charge()['erreur']['champs']);
+        self::assertArrayHasKey('precedenteId', $refusMasquee);
+
+        $this->envoyer('POST', '/api/demarches', $this->description('aieule') + ['precedenteId' => 'trois']);
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        self::assertArrayHasKey('precedenteId', $this->charge()['erreur']['champs']);
+
+        // Rien n'a été écrit par ces refus.
+        $this->requete('/api/demarches?personId='.$this->idDe('aieule'));
+        self::assertSame(2, $this->charge()['total']);
+    }
+
     /* ───────────────── Qui voit ───────────────── */
 
     public function testUneDemarcheSurUnVivantHorsDuCercleNExistePasPourLeMembre(): void
@@ -234,14 +353,14 @@ final class RoutesDesDemarchesTest extends ArbreWebTestCase
 
     /* ───────────────── Outils ───────────────── */
 
-    private function demarcheSurLAieule(): int
+    private function demarcheSurLAieule(string $envoyeeIlYA = '-3 days'): int
     {
         $this->connexionDe(self::OPALE);
         $this->envoyer('POST', '/api/demarches', $this->description('aieule') + [
             'premierMessage' => [
                 'sens' => 'envoye',
                 'canal' => 'courriel',
-                'date' => (new \DateTimeImmutable('-3 days'))->format('Y-m-d'),
+                'date' => (new \DateTimeImmutable($envoyeeIlYA))->format('Y-m-d'),
                 'de' => self::OPALE,
                 'a' => 'mairie@charmille.invalid',
                 'objet' => 'Demande de copie intégrale d’un acte de décès',

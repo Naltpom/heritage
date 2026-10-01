@@ -6266,3 +6266,78 @@ Se connecter **en tant qu'un autre compte**, et en revenir. Décision et garde-f
   `409 incarnation_active`.
 - `GET /api/administration/journal` expose `impersonatorUserId` et `impersonatorEmail` sur
   chaque ligne, `null` hors incarnation.
+
+## 24. Actes demandés
+
+Module **`Demarche`**. Les pièces demandées à une mairie, à des archives, à un notaire — et
+leur suivi, chaque message gardé avec son texte entier. Décision, visibilité et révisions :
+[`docs/adr/0011-actes-demandes.md`](adr/0011-actes-demandes.md).
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/demarches?personId=&enAttente=` | `membre` | — | `200` `{elements, total}` (résumés) | `403`, `422` |
+| `POST` | `/api/demarches` | `membre` | description + `premierMessage?` + `precedenteId?` | `201` (détail) | `409`, `422` |
+| `GET` | `/api/demarches/{id}` | `membre` | — | `200` (détail) | `404` |
+| `PUT` | `/api/demarches/{id}` | `membre` | description | `200` | `404`, `409`, `422` |
+| `PUT` | `/api/demarches/{id}/suivi` | `membre` | `{statut, resultat?}` | `200` | `404`, `409`, `422` |
+| `DELETE` | `/api/demarches/{id}` | auteur, administrateur | — | `204` | `403`, `404`, `409` |
+| `POST` | `/api/demarches/{id}/messages` | `membre` | message | `201` | `404`, `409`, `422` |
+| `DELETE` | `/api/demarches/{id}/messages/{messageId}` | qui l'a saisi, administrateur | — | `200` | `403`, `404`, `409` |
+
+**Description** : `{nature, forme, intitule, commune?, dateDeLActe?, destinataire,
+personIds: int[]}`. **Message** : `{sens, canal, date (AAAA-MM-JJ), de?, a?, objet?, texte,
+reference?}`. Chaque écriture rend la **démarche relue** ; chacune rend `409` sous la bascule
+« voir comme un membre ». `Cache-Control: private, no-store`, `Vary: Cookie`.
+
+**Qui voit** : une démarche n'existe que pour qui voit **toutes** les personnes qu'elle
+concerne — masquée et inexistante rendent `404` au détail, absence en liste.
+
+### 24.1 Les statuts
+
+| `statut` | `statutLibelle` | `enAttente` | `attendUneReponse` |
+|---|---|---|---|
+| `envoyee` | Envoyée, en attente | `true` | `true` |
+| `relancee` | Relancée, en attente | `true` | `true` |
+| `expediee` | Expédiée par courrier, en attente de réception | `true` | **`false`** |
+| `recue` | Reçue | `false` | `false` |
+| `refusee` | Refusée | `false` | `false` |
+| `sans_suite` | Abandonnée | `false` | `false` |
+
+`expediee` (2026-10-01) : la mairie a répondu « traité, l'acte part par la poste ». La
+démarche attend encore la pièce — elle sort dans `?enAttente=1`, et `joursDAttente` reste
+compté —, mais **plus la mairie** : `aRelancer` y vaut toujours `false`.
+
+`aRelancer` est calculé par le serveur : `attendUneReponse` **et** `joursDAttente ≥ 30`. Le
+front ne recompte pas.
+
+### 24.2 Refaire autrement — `precedente` et `suites`
+
+Après un refus (« nous ne traitons pas les demandes par courriel »), on crée une **nouvelle**
+démarche par un autre canal, en passant `precedenteId` au `POST`. Elle porte alors :
+
+```json
+"precedente": { "id": 12, "statut": "refusee", "demandeeA": "Mairie de Charmille" },
+"suites": []
+```
+
+et la démarche reprise, `"suites": [{ "id": 15, "statut": "envoyee" }]`. Les deux clés sont
+présentes sur les résumés comme sur le détail ; `precedente` vaut `null` et `suites` `[]` en
+l'absence de lien.
+
+- **Seules les démarches que le lecteur voit** figurent dans ces liens : une démarche liée
+  masquée n'y apparaît pas, comme dans les listes.
+- `precedenteId` d'une démarche inexistante **ou** masquée : `422 donnees_invalides`,
+  `champs.precedenteId`, même message dans les deux cas — comme une personne masquée dans
+  `personIds`. Une valeur qui n'est pas un entier positif : même code, même clé.
+- Le lien se fixe à la création et ne se modifie pas. **Supprimer la démarche reprise** ne
+  supprime pas celle qui la reprend : son `precedente` repasse à `null`
+  (`ON DELETE SET NULL`).
+
+### 24.3 Les codes d'erreur
+
+| Code | Statut | Quand |
+|---|---|---|
+| `ressource_introuvable` | `404` | Démarche ou message inconnu, **ou** démarche masquée — indistinguables (§ 15.3). |
+| `reserve_a_l_auteur` | `403` | Supprimer la démarche d'un autre, retirer le message d'un autre. |
+| `regime_en_attente` | `403` | Compte en attente (§ 16.3). |
+| `donnees_invalides` | `422` | `champs` nomme chaque champ fautif ; ceux du premier message sont préfixés `premierMessage.`. |

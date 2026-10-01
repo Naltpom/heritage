@@ -30,13 +30,93 @@ export const FORMES: ReadonlyArray<{ valeur: FormeDActe; libelle: string }> = [
   { valeur: 'autre', libelle: 'Autre forme' },
 ]
 
-export const STATUTS: ReadonlyArray<{ valeur: StatutDeDemarche; libelle: string }> = [
-  { valeur: 'envoyee', libelle: 'Envoyée, en attente' },
-  { valeur: 'relancee', libelle: 'Relancée, en attente' },
-  { valeur: 'recue', libelle: 'Reçue' },
-  { valeur: 'refusee', libelle: 'Refusée' },
-  { valeur: 'sans_suite', libelle: 'Abandonnée' },
+/**
+ * Les statuts, dans l'ordre de la vie d'une démarche. `court` sert aux
+ * pastilles de filtre, où la place manque sur un téléphone ; `libelle` aux
+ * listes de choix, où l'on doit lire ce que le statut veut dire.
+ */
+export const STATUTS: ReadonlyArray<{ valeur: StatutDeDemarche; libelle: string; court: string }> = [
+  { valeur: 'envoyee', libelle: 'Envoyée, en attente', court: 'Envoyée' },
+  { valeur: 'relancee', libelle: 'Relancée, en attente', court: 'Relancée' },
+  { valeur: 'expediee', libelle: 'Expédiée par courrier, en attente de réception', court: 'Expédiée par courrier' },
+  { valeur: 'recue', libelle: 'Reçue', court: 'Reçue' },
+  { valeur: 'refusee', libelle: 'Refusée', court: 'Refusée' },
+  { valeur: 'sans_suite', libelle: 'Abandonnée', court: 'Abandonnée' },
 ]
+
+/** Tous les statuts, dans l’ordre de {@link STATUTS}. */
+export const TOUS_LES_STATUTS: readonly StatutDeDemarche[] = STATUTS.map((s) => s.valeur)
+
+/**
+ * Ce qui attend encore la pièce — la sélection par défaut de la page « Actes
+ * demandés » : c'est la question qu'on vient y poser. `expediee` en est : la
+ * mairie a répondu, mais rien n'est arrivé.
+ */
+export const STATUTS_EN_ATTENTE: readonly StatutDeDemarche[] = ['envoyee', 'relancee', 'expediee']
+
+/** Une démarche refusée ou abandonnée se **refait autrement** — autre canal, autre service. */
+export function peutEtreRefaite(statut: StatutDeDemarche): boolean {
+  return statut === 'refusee' || statut === 'sans_suite'
+}
+
+/** Combien de démarches par statut — les compteurs des pastilles. */
+export type ComptesDeDemarches = { total: number; parStatut: Record<StatutDeDemarche, number> }
+
+export function compterParStatut(demarches: ReadonlyArray<Pick<ResumeDeDemarche, 'statut'>>): ComptesDeDemarches {
+  const parStatut = Object.fromEntries(TOUS_LES_STATUTS.map((s) => [s, 0])) as Record<StatutDeDemarche, number>
+  for (const d of demarches) parStatut[d.statut] += 1
+  return { total: demarches.length, parStatut }
+}
+
+/** Le total d'une sélection : « En attente (5) » = envoyées + relancées + expédiées. */
+export function compteDe(comptes: ComptesDeDemarches, statuts: readonly StatutDeDemarche[]): number {
+  return statuts.reduce((n, s) => n + comptes.parStatut[s], 0)
+}
+
+/** Deux sélections identiques, à l'ordre près. */
+export function memesStatuts(a: readonly StatutDeDemarche[], b: readonly StatutDeDemarche[]): boolean {
+  return a.length === b.length && a.every((s) => b.includes(s))
+}
+
+/** Une sélection rangée dans l'ordre de {@link STATUTS}, sans doublon. */
+export function rangerStatuts(statuts: readonly StatutDeDemarche[]): StatutDeDemarche[] {
+  return TOUS_LES_STATUTS.filter((s) => statuts.includes(s))
+}
+
+/**
+ * Le filtre dans l'adresse — `?statuts=` —, pour qu'un lien partagé montre la
+ * même chose à qui l'ouvre :
+ *
+ * - **absent** : la sélection par défaut, ce qui attend ({@link STATUTS_EN_ATTENTE}) ;
+ * - `toutes` : tous les statuts ;
+ * - une liste séparée par des virgules : `?statuts=recue,refusee` ;
+ * - **vide** (`?statuts=`) : aucun statut coché.
+ *
+ * Une valeur inconnue est ignorée ; une liste qui n'en contient aucune de
+ * connue retombe sur le défaut, plutôt que d'afficher une page vide sans
+ * raison lisible.
+ */
+export function lireStatuts(valeur: unknown): StatutDeDemarche[] {
+  const brute = Array.isArray(valeur) ? valeur[0] : valeur
+  if (typeof brute !== 'string') return [...STATUTS_EN_ATTENTE]
+  if (brute === 'toutes') return [...TOUS_LES_STATUTS]
+  if (brute.trim() === '') return []
+
+  const connus = rangerStatuts(brute.split(',').map((s) => s.trim()) as StatutDeDemarche[])
+  return connus.length === 0 ? [...STATUTS_EN_ATTENTE] : connus
+}
+
+/** L'inverse de {@link lireStatuts} : `undefined` quand c'est le défaut — l'adresse reste nue. */
+export function ecrireStatuts(statuts: readonly StatutDeDemarche[]): string | undefined {
+  if (memesStatuts(statuts, STATUTS_EN_ATTENTE)) return undefined
+  if (memesStatuts(statuts, TOUS_LES_STATUTS)) return 'toutes'
+  return rangerStatuts(statuts).join(',')
+}
+
+/** Coche ou décoche un statut. */
+export function basculerStatut(statuts: readonly StatutDeDemarche[], statut: StatutDeDemarche): StatutDeDemarche[] {
+  return statuts.includes(statut) ? statuts.filter((s) => s !== statut) : rangerStatuts([...statuts, statut])
+}
 
 export const SENS: ReadonlyArray<{ valeur: SensDeMessage; libelle: string }> = [
   { valeur: 'envoye', libelle: 'Envoyé au service' },
@@ -53,15 +133,10 @@ export const CANAUX: ReadonlyArray<{ valeur: CanalDeMessage; libelle: string }> 
 ]
 
 /**
- * Au-delà, une démarche en attente est signalée « à relancer ». Un mois : c'est
- * le délai au-delà duquel une mairie qui n'a pas répondu a le plus souvent
- * perdu la demande, pas seulement pris du retard.
+ * « À relancer » n'est **pas** calculé ici : le serveur le dit (`aRelancer`),
+ * parce qu'il ne suffit pas de compter les jours — une démarche expédiée par
+ * courrier attend le facteur, pas la mairie, et ne se relance pas.
  */
-export const JOURS_AVANT_RELANCE = 30
-
-export function aRelancer(demarche: Pick<ResumeDeDemarche, 'enAttente' | 'joursDAttente'>): boolean {
-  return demarche.enAttente && demarche.joursDAttente !== null && demarche.joursDAttente >= JOURS_AVANT_RELANCE
-}
 
 /** « en attente depuis aujourd'hui », « depuis 1 jour », « depuis 12 jours ». */
 export function libelleDAttente(jours: number | null): string | null {
@@ -90,6 +165,26 @@ export function aujourdhuiIso(maintenant: Date = new Date()): string {
 
 export function messageVide(sens: SensDeMessage = 'envoye'): MessageASaisir {
   return { sens, canal: 'courriel', date: aujourdhuiIso(), de: null, a: null, objet: null, texte: '', reference: null }
+}
+
+/**
+ * La description d'une démarche **refaite autrement** : même acte, mêmes
+ * personnes, même service par défaut — le cas courant est la même mairie, par
+ * un autre canal (« nous ne traitons pas les demandes par courriel »). Tout se
+ * corrige avant d'enregistrer.
+ */
+export function descriptionPourRefaire(
+  demarche: Pick<ResumeDeDemarche, 'nature' | 'forme' | 'intitule' | 'commune' | 'dateDeLActe' | 'destinataire' | 'personnes'>,
+): DescriptionDeDemarche {
+  return {
+    nature: demarche.nature,
+    forme: demarche.forme,
+    intitule: demarche.intitule,
+    commune: demarche.commune,
+    dateDeLActe: demarche.dateDeLActe,
+    destinataire: demarche.destinataire,
+    personIds: demarche.personnes.map((p) => p.personId),
+  }
 }
 
 export function descriptionVide(personIds: number[] = []): DescriptionDeDemarche {

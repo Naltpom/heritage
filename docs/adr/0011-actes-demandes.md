@@ -1,6 +1,6 @@
 # ADR 0011 — Les actes demandés et leur suivi
 
-Date : 2026-09-30 · Statut : acceptée
+Date : 2026-09-30 · Statut : acceptée · Révisée le 2026-10-01 (voir en fin de document)
 
 ## Contexte
 
@@ -78,3 +78,67 @@ une démarche « envoyée » à « relancée ».
 - Une démarche en attente depuis trente jours est signalée « à relancer ».
 - Aucune intégration à une messagerie : les messages se saisissent. C'est un choix de
   périmètre, pas une impossibilité ; il se rouvre si la saisie se révèle être le frein.
+
+## Révision du 2026-10-01 — « expédiée par courrier », filtres par statut, « refaire autrement »
+
+Trois manques relevés à l'usage de la page « Actes demandés ».
+
+### Un sixième statut : `expediee`
+
+Une mairie répond « votre demande est traitée, l'acte part par la poste ». La démarche
+n'est pas reçue, et pas non plus sans réponse : la laisser « envoyée » la faisait signaler
+**« à relancer »** au bout d'un mois, alors qu'il n'y a plus personne à relancer — on
+attend le facteur. Le statut `expediee` (« Expédiée par courrier, en attente de
+réception ») distingue les deux attentes :
+
+- `enAttente()` — la pièce n'est pas là : `envoyee`, `relancee`, **`expediee`**. C'est ce
+  que la page montre par défaut, et ce que `?enAttente=1` rend.
+- `attendUneReponse()` — le service n'a pas répondu : `envoyee`, `relancee` seulement.
+  C'est la seule attente qui se relance.
+
+**`aRelancer` est désormais calculé par le serveur** (`attendUneReponse` et trente jours
+depuis le dernier envoi), et non plus par l'écran : la règle dépend du statut autant que des
+jours, et deux écrans qui la recalculeraient finiraient par diverger. La contrainte
+`ck_dmr_demarche_statut` est reposée avec la nouvelle valeur
+(`migrations/Version20261001170000.php`). Le statut reste **posé** : aucune transition
+automatique ne mène à `expediee`, et une démarche expédiée ne repasse pas « relancée »
+quand on écrit encore à la mairie.
+
+### Des filtres par statut
+
+« En attente / Toutes » ne suffisait plus — on voulait voir « les refusées, à refaire », ou
+« ce qui est parti par la poste ». La page propose **tous les statuts, cochables
+ensemble**, chacun avec son compteur, et deux raccourcis : « En attente » (envoyée,
+relancée, expédiée — la sélection par défaut) et « Toutes ». La sélection **vit dans
+l'adresse** (`?statuts=recue,refusee`, `?statuts=toutes`, absente pour le défaut) : un lien
+partagé montre la même chose à qui l'ouvre. Le filtrage reste côté écran — la liste
+entière est chargée une fois, sans le texte des messages —, et la recherche s'applique
+par-dessus. Le compteur « N à relancer » demeure.
+
+### Refaire autrement : le lien « suite de »
+
+Une mairie refuse les demandes par courriel ; on lui écrit par la poste. C'est une
+**nouvelle démarche** — autre canal, autre texte, autre attente —, pas un message de plus
+sur la première : la première est bel et bien refusée, et l'historique doit le dire. Mais
+sans lien, la première reste « refusée » sans suite visible, et quelqu'un la refait une
+troisième fois.
+
+- `dmr_demarche.precedente_id`, **auto-référence nullable en `ON DELETE SET NULL`** :
+  supprimer la démarche reprise ne supprime pas celle qui la reprend, qui perd seulement le
+  lien. Une clé étrangère interne au module (ADR 0002, règle 2). Une démarche ne peut pas se
+  reprendre elle-même (`CHECK`).
+- `POST /api/demarches` accepte `precedenteId`, **sous la règle de visibilité** : une
+  démarche que le lecteur ne voit pas, ou qui n'existe pas, est refusée en `422` sur ce
+  champ, avec le même message — comme une personne masquée dans `personIds`. Le lien se
+  fixe à la création et ne se modifie pas.
+- La démarche sérialisée porte `precedente` (`{id, statut, demandeeA}` ou `null`) et
+  `suites` (`[{id, statut}]`), **filtrés par la même règle** : un lien vers une démarche
+  masquée n'apparaît pas.
+- À l'écran, une démarche refusée ou abandonnée propose **« Refaire autrement »** : le
+  formulaire de création s'ouvre prérempli (acte, forme, intitulé, commune, date, service,
+  personnes) ; la carte dit « Suite de la démarche n° X » et « Refaite : démarche n° Y »,
+  liens qui font défiler jusqu'à la carte visée et l'ouvrent.
+
+**Alternative écartée** : rouvrir la démarche refusée et y ajouter le nouveau courrier.
+Elle mêlerait deux demandes dans un même fil, et ferait perdre le refus — qui est
+justement l'information utile à qui écrira la prochaine fois à cette mairie.

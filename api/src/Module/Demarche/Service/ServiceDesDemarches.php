@@ -80,9 +80,18 @@ final readonly class ServiceDesDemarches
         return $demarche;
     }
 
-    public function creer(LecteurDeDemarche $lecteur, DescriptionDeDemarche $description, ?MessageSaisi $premier): Demarche
+    /**
+     * @param int|null $precedenteId la démarche que celle-ci reprend autrement (« suite
+     *                               de »). **Elle doit être visible du lecteur** : une
+     *                               démarche qu'il ne voit pas, ou qui n'existe pas,
+     *                               refuse la création sur le champ `precedenteId`, avec
+     *                               le même message dans les deux cas — comme une personne
+     *                               masquée dans `personIds`.
+     */
+    public function creer(LecteurDeDemarche $lecteur, DescriptionDeDemarche $description, ?MessageSaisi $premier, ?int $precedenteId = null): Demarche
     {
         $libelles = $this->personnesAutorisees($description->personIds);
+        $precedente = null === $precedenteId ? null : $this->precedenteAutorisee($precedenteId);
 
         $demarche = new Demarche(
             $description->nature,
@@ -101,6 +110,10 @@ final readonly class ServiceDesDemarches
             $description->destinataire,
         );
         $demarche->concerner($libelles);
+
+        if (null !== $precedente) {
+            $demarche->reprendre($precedente);
+        }
 
         if (null !== $premier) {
             $demarche->ajouterEchange($this->echange($demarche, $premier, $lecteur));
@@ -186,8 +199,30 @@ final readonly class ServiceDesDemarches
             throw ErreurDeDemarche::reserveALAuteur();
         }
 
+        // Celles qui la reprenaient restent, et perdent seulement le lien. La base le fait
+        // d'elle-même (`ON DELETE SET NULL`) ; on le fait aussi ici, pour que les entités
+        // déjà chargées ne pointent pas vers une démarche disparue, et pour que la
+        // suppression ne dépende pas d'une base qui applique ses clés étrangères.
+        foreach ($demarche->getSuites() as $suite) {
+            $suite->oublierPrecedente();
+        }
+
         $this->em->remove($demarche);
         $this->em->flush();
+    }
+
+    /**
+     * Celles des démarches données que le lecteur voit — pour les liens « suite de » et
+     * « refaite » : une démarche liée qu'il ne voit pas n'apparaît pas plus dans le lien
+     * que dans la liste.
+     *
+     * @param list<Demarche> $demarches
+     *
+     * @return list<Demarche>
+     */
+    public function visiblesParmi(array $demarches): array
+    {
+        return [] === $demarches ? [] : $this->filtrer($demarches);
     }
 
     public function peutSupprimer(Demarche $demarche, LecteurDeDemarche $lecteur): bool
@@ -253,6 +288,17 @@ final readonly class ServiceDesDemarches
         }
 
         return $libelles;
+    }
+
+    private function precedenteAutorisee(int $id): Demarche
+    {
+        try {
+            return $this->trouver($id);
+        } catch (ErreurDeDemarche) {
+            // `422` sur le champ, et non `404` : c'est le corps de la requête qui est fautif,
+            // pas l'adresse. Le message est le même pour « inexistante » et « masquée ».
+            throw ErreurDeDemarche::donneesInvalides(['precedenteId' => 'La démarche reprise est introuvable.']);
+        }
     }
 
     private function echange(Demarche $demarche, MessageSaisi $message, LecteurDeDemarche $lecteur): Echange

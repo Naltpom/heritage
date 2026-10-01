@@ -24,6 +24,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * ```
  * GET    /api/demarches?personId=&enAttente=          liste (résumés)
  * POST   /api/demarches                               créer, premier message compris   201
+ *                                                     (`precedenteId` : « suite de »)
  * GET    /api/demarches/{id}                          détail, messages en entier
  * PUT    /api/demarches/{id}                          corriger la description
  * PUT    /api/demarches/{id}/suivi                    statut et résultat
@@ -85,10 +86,10 @@ final class DemarcheController extends AbstractController
     public function creer(Request $requete): JsonResponse
     {
         $this->bascule->refuserSiActive();
-        [$description, $premier] = $this->lecture->creation($requete);
+        [$description, $premier, $precedenteId] = $this->lecture->creation($requete);
 
         return $this->detail(
-            $this->service->creer($this->identite->lecteur(), $description, $premier),
+            $this->service->creer($this->identite->lecteur(), $description, $premier, $precedenteId),
             Response::HTTP_CREATED,
         );
     }

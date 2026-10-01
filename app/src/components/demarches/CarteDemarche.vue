@@ -9,8 +9,14 @@
  * Tout membre qui la voit peut la faire avancer — ajouter la réponse reçue,
  * changer le statut. Seuls les gestes qui effacent sont réservés, et c'est le
  * serveur qui dit à qui (`peutSupprimer`, `peutRetirer`).
+ *
+ * Sous l'en-tête, toujours visibles : le lien « suite de » (la démarche que
+ * celle-ci reprend), les démarches qui l'ont refaite, et — refusée ou
+ * abandonnée — le bouton « Refaire autrement ». Ces gestes remontent à la
+ * liste, qui seule sait faire défiler jusqu'à une autre carte ou ouvrir le
+ * formulaire de création.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   ajouterMessageADemarche,
   analyserErreur,
@@ -29,16 +35,38 @@ import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import FormulaireDemarche from './FormulaireDemarche.vue'
 import FormulaireMessage from './FormulaireMessage.vue'
-import { STATUTS, aRelancer, dateLisible, libelleDAttente, messageAEnvoyer, messageVide, nulSiVide } from './demarches'
+import {
+  STATUTS,
+  dateLisible,
+  libelleDAttente,
+  messageAEnvoyer,
+  messageVide,
+  nulSiVide,
+  peutEtreRefaite,
+} from './demarches'
 
-const { demarche, suspendu = false, avecLiensVersLesFiches = true } = defineProps<{
+const { demarche, suspendu = false, avecLiensVersLesFiches = true, ouverture = 0 } = defineProps<{
   demarche: ResumeDeDemarche
   suspendu?: boolean
   /** Sur la fiche d'une personne, la lier à elle-même n'apporte rien. */
   avecLiensVersLesFiches?: boolean
+  /** Chaque incrément demande d'ouvrir la carte — on l'a rejointe par un lien. */
+  ouverture?: number
 }>()
 
-const emit = defineEmits<{ changee: [demarche: ResumeDeDemarche]; supprimee: [id: number] }>()
+const emit = defineEmits<{
+  changee: [demarche: ResumeDeDemarche]
+  supprimee: [id: number]
+  /** Refaire autrement : ouvrir le formulaire de création prérempli d'elle. */
+  refaire: [demarche: ResumeDeDemarche]
+  /** Rejoindre une démarche liée, par son numéro. */
+  aller: [id: number]
+}>()
+
+/** « refusée », « reçue »… : le statut d'une démarche liée, dans une phrase. */
+function statutEnPhrase(valeur: StatutDeDemarche): string {
+  return (STATUTS.find((s) => s.valeur === valeur)?.court ?? valeur).toLowerCase()
+}
 
 const ouverte = ref(false)
 const detail = ref<DetailDeDemarche | null>(null)
@@ -62,6 +90,14 @@ const pastille = computed<{ etat: 'en_attente' | 'validee' | 'refusee' | 'neutre
 })
 
 const attente = computed(() => libelleDAttente(demarche.joursDAttente))
+const refaisable = computed(() => peutEtreRefaite(demarche.statut))
+
+watch(
+  () => ouverture,
+  async (n) => {
+    if (n > 0 && !ouverte.value) await basculer()
+  },
+)
 
 async function basculer(): Promise<void> {
   ouverte.value = !ouverte.value
@@ -135,17 +171,42 @@ async function supprimer(): Promise<void> {
       <span class="min-w-0 flex-1">
         <span class="block font-medium text-texte">{{ demarche.intitule }}</span>
         <span class="mt-0.5 block text-xs text-attenue">
-          {{ demarche.natureLibelle }} · {{ demarche.formeLibelle }} · demandée à {{ demarche.destinataire }}
+          n° {{ demarche.id }} · {{ demarche.natureLibelle }} · {{ demarche.formeLibelle }} · demandée à {{ demarche.destinataire }}
           <template v-if="demarche.dernierEnvoiLe"> le {{ dateLisible(demarche.dernierEnvoiLe) }}</template>
         </span>
       </span>
       <span class="flex flex-col items-end gap-1">
         <PastilleEtat :etat="pastille.etat" :libelle="pastille.libelle" />
-        <span v-if="attente" class="text-[11px]" :class="aRelancer(demarche) ? 'font-semibold text-alerte' : 'text-attenue'">
-          {{ attente }}<template v-if="aRelancer(demarche)"> — à relancer</template>
+        <span v-if="attente" class="text-[11px]" :class="demarche.aRelancer ? 'font-semibold text-alerte' : 'text-attenue'">
+          {{ attente }}<template v-if="demarche.aRelancer"> — à relancer</template>
         </span>
       </span>
     </button>
+
+    <div
+      v-if="demarche.precedente !== null || demarche.suites.length > 0 || refaisable"
+      class="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pb-3 text-xs text-attenue"
+    >
+      <span v-if="demarche.precedente !== null">
+        Suite de la
+        <a
+          :href="`#demarche-${demarche.precedente.id}`"
+          class="text-accent underline"
+          @click.prevent="emit('aller', demarche.precedente.id)"
+        >démarche n° {{ demarche.precedente.id }}</a>
+        ({{ statutEnPhrase(demarche.precedente.statut) }}, demandée à {{ demarche.precedente.demandeeA }})
+      </span>
+      <span v-if="demarche.suites.length > 0">
+        Refaite :
+        <template v-for="(s, i) in demarche.suites" :key="s.id">
+          <a :href="`#demarche-${s.id}`" class="text-accent underline" @click.prevent="emit('aller', s.id)">démarche n° {{ s.id }}</a>
+          ({{ statutEnPhrase(s.statut) }})<template v-if="i < demarche.suites.length - 1">, </template>
+        </template>
+      </span>
+      <BoutonBase v-if="refaisable" variante="discret" :desactive="suspendu" @click="emit('refaire', demarche)">
+        Refaire autrement
+      </BoutonBase>
+    </div>
 
     <div v-if="ouverte" class="border-t border-ligne px-4 pb-4 pt-3">
       <SqueletteChargement v-if="detail === null && erreur === null" :lignes="3" />
