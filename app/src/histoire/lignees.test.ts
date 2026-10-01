@@ -10,6 +10,9 @@ import {
   type DispositionHistoire,
 } from './lignees'
 import { sansFamillesParAlliance } from './alliances'
+import { auFormat, FORMATS_DE_CARTE, GABARIT_PORTRAIT } from './cartes'
+
+const { w: LARGEUR_PORTRAIT, h: HAUTEUR_PORTRAIT } = GABARIT_PORTRAIT
 
 /**
  * Ce que ces tests protègent : les règles de placement de la disposition
@@ -492,3 +495,162 @@ function chevauchementsDe(d: DispositionHistoire): string[] {
   }
   return fautes
 }
+
+/** Les segments `M x y L x y` d'un tracé, tels que la disposition les écrit. */
+function segments(trace: string): [number, number, number, number][] {
+  const r: [number, number, number, number][] = []
+  for (const m of trace.matchAll(/M(-?[\d.]+) (-?[\d.]+)L(-?[\d.]+) (-?[\d.]+)/g))
+    r.push([Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])])
+  return r
+}
+
+/** Les traits qui passent DERRIÈRE une fiche (au-delà d'un pixel de ses bords). */
+function traitsSousLesFiches(d: DispositionHistoire): string[] {
+  const fautes: string[] = []
+  const tous = [d.traces.ordinaires, d.traces.directs, d.traces.divorces, d.traces.attente].flatMap(segments)
+  for (const [x1, y1, x2, y2] of tous) {
+    const [xa, xb] = [Math.min(x1, x2) + 1, Math.max(x1, x2) - 1]
+    const [ya, yb] = [Math.min(y1, y2) + 1, Math.max(y1, y2) - 1]
+    for (const f of d.fiches) {
+      const dedansX = x1 === x2 ? f.x + 1 < x1 && x1 < f.x + f.w - 1 : f.x < xb && f.x + f.w > xa
+      const dedansY = y1 === y2 ? f.y + 1 < y1 && y1 < f.y + f.h - 1 : f.y < yb && f.y + f.h > ya
+      if (dedansX && dedansY) fautes.push(`${f.noeud.displayName} : M${x1} ${y1}L${x2} ${y2}`)
+    }
+  }
+  return fautes
+}
+
+describe('disposition lignees — mode portrait', () => {
+  const { graphe, id } = construire()
+  const portrait = auFormat(graphe, 'portrait')
+  const d = disposerLignees(portrait)
+  const f = (cle: string) => d.parId.get(id[cle]!)!
+
+  it('donne à chaque fiche la même boîte, étroite et haute, sans toucher aux familles', () => {
+    for (const n of portrait.noeuds) {
+      if (n.type === 'personne') expect([n.w, n.h]).toEqual([LARGEUR_PORTRAIT, HAUTEUR_PORTRAIT])
+      else expect(n).toBe(graphe.noeuds.find((m) => m.id === n.id))
+    }
+    expect(portrait.aretes).toBe(graphe.aretes)
+    for (const fiche of d.fiches) expect([fiche.w, fiche.h]).toEqual([LARGEUR_PORTRAIT, HAUTEUR_PORTRAIT])
+  })
+
+  it('ne modifie pas le graphe reçu', () => {
+    expect(graphe.noeuds.filter((n) => n.type === 'personne').every((n) => n.h === 56)).toBe(true)
+  })
+
+  it('pose chaque personne une fois, sans chevauchement sur une rangée', () => {
+    expect(d.fiches).toHaveLength(graphe.noeuds.filter((n) => n.type === 'personne').length)
+    expect(chevauchements(d)).toEqual([])
+    expect(chevauchementsDe(d)).toEqual([])
+  })
+
+  it('ne fait se chevaucher aucune rangée, et le monde contient toutes les fiches', () => {
+    expect(d.pasRangee).toBe(HAUTEUR_PORTRAIT + 60)
+    const rangees = [...new Set(d.fiches.map((x) => x.rangee))].sort((a, b) => a - b)
+    for (let i = 1; i < rangees.length; i++) {
+      const haut = d.fiches.filter((x) => x.rangee === rangees[i - 1])
+      const bas = d.fiches.filter((x) => x.rangee === rangees[i])
+      expect(Math.min(...bas.map((x) => x.y))).toBeGreaterThan(Math.max(...haut.map((x) => x.y + x.h)))
+    }
+    expect(Math.max(...d.fiches.map((x) => x.y + x.h))).toBeLessThanOrEqual(d.hauteur)
+    expect(Math.max(...d.fiches.map((x) => x.x + x.w))).toBeLessThanOrEqual(d.largeur)
+  })
+
+  it('ne fait passer aucun trait derrière une fiche, et garde les barres entre les rangées', () => {
+    expect(segments(d.traces.ordinaires).length + segments(d.traces.directs).length).toBeGreaterThan(20)
+    expect(traitsSousLesFiches(d)).toEqual([])
+    expect(traitsSousLesFiches(disposerLignees(graphe))).toEqual([])
+  })
+
+  it('garde les règles de placement : Sosa, côtés, enfant direct sous ses parents', () => {
+    expect(f('ego').sosa).toBe(1)
+    expect(f('gmm').sosa).toBe(7)
+    expect(f('pere').cx).toBeLessThan(f('mere').cx)
+    expect(f('gpm').cx).toBeLessThan(f('gmm').cx)
+    expect(f('tante').cx).toBeLessThan(f('pere').cx)
+    expect(f('tanteM').cx).toBeGreaterThan(f('mere').cx)
+    for (const [p, m, e] of [['gpp', 'gmp', 'pere'], ['gpm', 'gmm', 'mere']] as const) {
+      expect(f(e).cx).toBeGreaterThan(f(p).x + f(p).w)
+      expect(f(e).cx).toBeLessThan(f(m).x)
+    }
+  })
+
+  it('est plus étroit que l’arbre classique', () => {
+    expect(d.largeur).toBeLessThan(disposerLignees(graphe).largeur)
+  })
+
+  it('ne bouge pas quand on dépose un portrait', () => {
+    const avecPhoto: Graphe = {
+      ...graphe,
+      noeuds: graphe.noeuds.map((n) => (n.id === id['gpp'] ? { ...n, portrait: '/media/1.jpg' } : n)),
+    }
+    const d2 = disposerLignees(auFormat(avecPhoto, 'portrait'))
+    for (const x of d.fiches) expect(d2.parId.get(x.id)!.x, x.noeud.displayName).toBe(x.x)
+  })
+
+  it('se combine avec les bascules de famille, sans chevauchement', () => {
+    for (const g of [sansFamilleDuConjoint(graphe), sansFamillesParAlliance(graphe), sansFamilleDuConjoint(sansFamillesParAlliance(graphe))]) {
+      const d2 = disposerLignees(auFormat(g, 'portrait'))
+      expect(chevauchements(d2)).toEqual([])
+      expect(traitsSousLesFiches(d2)).toEqual([])
+      expect(d2.fiches.every((x) => x.w === LARGEUR_PORTRAIT && x.h === HAUTEUR_PORTRAIT)).toBe(true)
+    }
+    // L'ordre des deux transformations n'y change rien.
+    const a = disposerLignees(auFormat(sansFamilleDuConjoint(graphe), 'portrait'))
+    const b = disposerLignees(sansFamilleDuConjoint(auFormat(graphe, 'portrait')))
+    expect(b.fiches.map((x) => [x.id, x.x, x.y])).toEqual(a.fiches.map((x) => [x.id, x.x, x.y]))
+  })
+})
+
+/**
+ * Les mêmes garde-fous dans les deux formats de fiche : quoi que le lecteur ait
+ * choisi, aucune fiche n'en recouvre une autre — sur TOUT le monde, pas seulement
+ * rangée par rangée —, et chaque lien de filiation arrive au haut de la carte de
+ * l'enfant, chaque union part du bord ou du bas de la carte d'un parent.
+ */
+describe.each(FORMATS_DE_CARTE)('disposition lignees — format %s', (format) => {
+  const { graphe } = construire()
+  const variantes: [string, Graphe][] = [
+    ['entier', graphe],
+    ['sans la famille du conjoint', sansFamilleDuConjoint(graphe)],
+    ['sans les familles par alliance', sansFamillesParAlliance(graphe)],
+  ]
+
+  it.each(variantes)('%s : aucune carte n’en recouvre une autre, nulle part', (_, g) => {
+    const d = disposerLignees(auFormat(g, format))
+    const fautes: string[] = []
+    for (let i = 0; i < d.fiches.length; i++) {
+      for (let j = i + 1; j < d.fiches.length; j++) {
+        const [a, b] = [d.fiches[i]!, d.fiches[j]!]
+        if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) fautes.push(`${a.id} / ${b.id}`)
+      }
+    }
+    expect(fautes).toEqual([])
+    expect(traitsSousLesFiches(d)).toEqual([])
+  })
+
+  it.each(variantes)('%s : chaque enfant reçoit son trait au haut de SA carte', (_, g) => {
+    const d = disposerLignees(auFormat(g, format))
+    const tous = [d.traces.ordinaires, d.traces.directs, d.traces.divorces, d.traces.attente].flatMap(segments)
+    const filiations = g.aretes.filter((a) => a.genre === 'filiation')
+    expect(filiations.length).toBeGreaterThan(10)
+    // Une famille dont aucun parent n'est dessiné (ascendance d'un allié masquée) n'a pas de trait.
+    const dessinees = new Set(g.aretes.filter((a) => a.genre === 'union' && d.parId.has(a.de)).map((a) => a.vers))
+    for (const a of filiations) {
+      const e = d.parId.get(a.vers)
+      if (!e || !dessinees.has(a.de)) continue
+      // Un segment vertical, à l'aplomb du centre de la carte, qui s'arrête pile sur son bord haut.
+      const arrive = tous.some(([x1, y1, x2, y2]) => x1 === x2 && Math.abs(x1 - e.cx) < 0.5 && Math.abs(Math.max(y1, y2) - e.y) < 0.5)
+      expect(arrive, e.noeud.displayName).toBe(true)
+    }
+  })
+
+  it('les noms de foyer tombent dans l’interligne, jamais sur une carte', () => {
+    const d = disposerLignees(auFormat(graphe, format))
+    for (const e of d.foyers) {
+      const dessous = d.fiches.filter((f) => Math.abs(f.cx - e.x) < f.w / 2)
+      for (const f of dessous) expect(e.y < f.y || e.y > f.y + f.h, `${e.nom} sur ${f.id}`).toBe(true)
+    }
+  })
+})

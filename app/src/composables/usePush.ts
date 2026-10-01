@@ -59,7 +59,7 @@ import { enregistrerAbonnementPush, lireClePush, supprimerAbonnementPush } from 
 import { useSession } from '@/composables/useSession'
 import { useInstallation } from '@/composables/installation'
 import { rafraichirCompteur } from '@/composables/useNotifications'
-import { invitationCleDAccesEnCours } from '@/composables/fenetresAutomatiques'
+import { liberer, occuper, uneAutreFenetreQue } from '@/composables/fenetresAutomatiques'
 
 export type EtatPush = 'inconnu' | 'indisponible' | 'a_installer' | 'desactive' | 'active' | 'bloque'
 
@@ -183,6 +183,7 @@ export function reinitialiserPush(): void {
   refuse.value = false
   file = Promise.resolve()
   invitationProposee = false
+  liberer('notifications')
 }
 
 /**
@@ -481,7 +482,9 @@ export function usePush(): EtatPushExpose {
  * Elle **cède le pas** à l'invitation à créer une clé d'accès, qui passe
  * d'abord à l'arrivée : jamais deux fenêtres automatiques en même temps
  * (`fenetresAutomatiques.ts`). Elle s'ouvre ensuite, dans le même chargement,
- * dès que celle-là est réglée ou écartée.
+ * dès que celle-là est réglée ou écartée. Elle-même **tient sa place** dès que
+ * son attente démarre et jusqu'à sa fermeture : le choix du format des fiches
+ * de l'arbre, qui ne réserve qu'en s'ouvrant, passe après elle.
  */
 
 /** Ce que la fenêtre propose : activer d'un clic, ou installer d'abord. */
@@ -534,8 +537,9 @@ export interface ContexteInvitationPush {
   /** Le dernier « Plus tard », ou `null`. */
   plusTardLe: number | null
   maintenant: number
-  /** Une autre fenêtre automatique passe d'abord — la clé d'accès, à
-   *  l'arrivée (`fenetresAutomatiques.ts`). Facultatif : absent vaut « non ». */
+  /** Une autre fenêtre automatique est en route — la clé d'accès à
+   *  l'arrivée, ou le format des fiches ouvert sur l'arbre
+   *  (`fenetresAutomatiques.ts`). Facultatif : absent vaut « non ». */
   autreFenetre?: boolean
 }
 
@@ -596,7 +600,9 @@ export function piloterInvitationPush(
       avecCadre: lireAvecCadre(),
       plusTardLe: lirePlusTardInvitation(),
       maintenant: horloge(),
-      autreFenetre: invitationCleDAccesEnCours.value,
+      // Toute autre que **la sienne** : sa propre réservation (prise pendant
+      // l'attente) annulerait l'attente, qui la libérerait, qui la relancerait…
+      autreFenetre: uneAutreFenetreQue('notifications'),
     })
   }
 
@@ -605,18 +611,30 @@ export function piloterInvitationPush(
     attente = null
   }
 
+  /** La place est tenue tant qu'une attente court ou que la fenêtre est
+   *  ouverte, et rendue dès que ni l'une ni l'autre. Appelée après chaque
+   *  changement de l'une des deux. */
+  function tenirLaPlace(): void {
+    if (attente !== null || forme.value !== null) occuper('notifications')
+    else liberer('notifications')
+  }
+
   const arreter = watch(
     calculer,
     (prevue) => {
       annulerAttente()
-      if (prevue === null || invitationProposee || forme.value !== null) return
-      attente = setTimeout(() => {
-        attente = null
-        const confirmee = calculer()
-        if (confirmee === null || invitationProposee) return
-        invitationProposee = true
-        forme.value = confirmee
-      }, DELAI_INVITATION_MS)
+      if (prevue !== null && !invitationProposee && forme.value === null) {
+        attente = setTimeout(() => {
+          attente = null
+          const confirmee = calculer()
+          if (confirmee !== null && !invitationProposee) {
+            invitationProposee = true
+            forme.value = confirmee
+          }
+          tenirLaPlace()
+        }, DELAI_INVITATION_MS)
+      }
+      tenirLaPlace()
     },
     { immediate: true },
   )
@@ -625,6 +643,7 @@ export function piloterInvitationPush(
     if (forme.value === null) return
     ecrirePlusTardInvitation(horloge())
     forme.value = null
+    tenirLaPlace()
   }
 
   function accepter(): Promise<void> {
@@ -634,6 +653,7 @@ export function piloterInvitationPush(
       // Refusé par le navigateur : l'état devient `bloque`, et c'est Moi qui
       // explique comment le rendre. Rien de plus à dire ici.
       forme.value = null
+      tenirLaPlace()
       if (!accorde) return
       confirmation.value = true
       if (minuterieConfirmation !== null) clearTimeout(minuterieConfirmation)
@@ -648,6 +668,7 @@ export function piloterInvitationPush(
     onScopeDispose(() => {
       arreter()
       annulerAttente()
+      liberer('notifications')
       if (minuterieConfirmation !== null) clearTimeout(minuterieConfirmation)
     })
   }

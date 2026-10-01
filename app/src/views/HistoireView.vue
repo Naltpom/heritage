@@ -28,6 +28,9 @@
  *  - une personne vivante hors du cercle s'écrit « Personne vivante » : le serveur
  *    n'envoie plus son nom, et l'écran ne relit pas celui qu'il recevrait ;
  *  - deux étiquettes ne se recouvrent jamais (`histoire/etiquettes.ts`) ;
+ *  - deux formats de fiche, « Compact » et « Portrait » (`histoire/cartes.ts`), au
+ *    choix du lecteur : une préférence de l'appareil, proposée d'elle-même sur
+ *    téléphone à la première visite (`InvitationFormatDesCartes`) ;
  *  - aucun texte sous 10 px à l'écran.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
@@ -61,6 +64,10 @@ import {
   type DispositionHistoire,
   type FicheHistoire,
 } from '@/histoire/lignees'
+import { auFormat, entreePortrait, geometriePortrait, texteDePortrait } from '@/histoire/cartes'
+import { useFormatDesCartes } from '@/composables/formatDesCartes'
+import ReglageFormatDesCartes from '@/components/arbre/ReglageFormatDesCartes.vue'
+import InvitationFormatDesCartes from '@/components/arbre/InvitationFormatDesCartes.vue'
 import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
 import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
 import { poserEtiquettes } from '@/histoire/etiquettes'
@@ -82,7 +89,7 @@ import {
 import { memoriserVue, reprendreVue, type VueMemorisee } from '@/histoire/retour'
 
 const estMobile = useEstMobile()
-const { fermerTiroirs, unTiroirEstOuvert } = useTiroirs()
+const { fermerTiroirs, unTiroirEstOuvert, ouvert: ouvertTiroir } = useTiroirs()
 
 /* ------------------------------------------------------------------ */
 /* Chargement                                                          */
@@ -131,10 +138,20 @@ const effectifAlliances = computed(() => {
   for (const c of classerParente(g).values()) if (c.parente === 'alliance') n++
   return n
 })
+/*
+ * Le format des fiches : `compact` (photo à gauche, la boîte du moteur) ou
+ * `portrait` (photo en haut, plus grande ; boîte fixe, `histoire/cartes.ts`). Il
+ * change la TAILLE des boîtes, donc la disposition se refait, comme pour une bascule.
+ * La préférence est partagée avec le réglage des filtres et la fenêtre de choix.
+ */
+const { format: formatDesCartes } = useFormatDesCartes()
+const enPortrait = computed(() => formatDesCartes.value === 'portrait')
 function disposer(graphe: Graphe): void {
   // Les alliances d'abord, classées sur le graphe ENTIER : c'est lui que le serveur a classé.
   const sansAlliances = avecAlliances.value ? graphe : sansFamillesParAlliance(graphe)
-  disposition.value = disposerLignees(avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances))
+  const filtre = avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
+  // Les boîtes en dernier : le tri des familles ne lit que les liens, jamais `w` ni `h`.
+  disposition.value = disposerLignees(auFormat(filtre, formatDesCartes.value))
 }
 /** Après une bascule : la disposition refaite, et ce qui n'existe plus oublié. */
 function redisposer(): void {
@@ -150,6 +167,41 @@ watch(avecConjoint, (avec) => {
   ecrirePreference(CLE_CONJOINT, avec)
   redisposer()
 })
+/*
+ * Changer de format refait la disposition — les coordonnées du monde changent
+ * toutes. Pour ne pas perdre le lecteur, on garde à l'écran la personne qu'il
+ * regardait : la sélection s'il y en a une, sinon la fiche la plus proche du
+ * centre ; au même zoom, à la même place. Sans arbre affiché (ou au niveau
+ * Ensemble), on repart de l'arbre ajusté, comme après une bascule.
+ */
+watch(formatDesCartes, () => {
+  const d = disposition.value
+  if (!d || !grapheCharge.value) return
+  const avant = cadrage.value
+  let repere: { id: string; px: number; py: number } | null = null
+  const choisie = selection.value !== null ? d.parId.get(selection.value) : undefined
+  const ancre = choisie ?? (niveau.value > 0 ? ficheLaPlusProche(d, centreMonde()) : undefined)
+  if (ancre) repere = { id: ancre.id, px: versEcranX(ancre.cx), py: versEcranY(ancre.y + ancre.h / 2) }
+  arreterVol()
+  redisposer()
+  const f = repere ? disposition.value?.parId.get(repere.id) : undefined
+  if (!f || !repere) return
+  const c = canevas.value
+  // Le même point d'écran, sauf s'il était sorti de la fenêtre : alors au centre.
+  const dedans = repere.px > 0 && repere.px < taille.value.l && repere.py > 0 && repere.py < taille.value.h
+  const [px, py] = dedans ? [repere.px, repere.py] : [taille.value.l / 2, taille.value.h / 2]
+  cadrage.value = centrerSur(bornerEchelle(avant.s, c), c, f.cx, f.y + f.h / 2, px, py)
+})
+/** La fiche dont le centre est le plus près d'un point du monde. */
+function ficheLaPlusProche(d: DispositionHistoire, p: { x: number; y: number }): FicheHistoire | undefined {
+  let meilleure: FicheHistoire | undefined
+  let distance = Infinity
+  for (const f of d.fiches) {
+    const e = Math.hypot(f.cx - p.x, f.y + f.h / 2 - p.y)
+    if (e < distance) [meilleure, distance] = [f, e]
+  }
+  return meilleure
+}
 /*
  * La bascule des alliances se refait tout de suite (pas d'observateur) : la recherche
  * l'allume puis cherche la fiche dans la disposition, dans la même foulée.
@@ -567,6 +619,7 @@ const stylesFiches = computed(() => {
   const loin = ensemble.value
   const direct = surligner.value
   const ciblees = idsCibles.value
+  const portrait = enPortrait.value
   return d.fiches.map((f) => {
     const n = f.noeud
     const sexe = n.sex === 'masculin' ? 'homme' : n.sex === 'feminin' ? 'femme' : 'inconnu'
@@ -587,8 +640,9 @@ const stylesFiches = computed(() => {
       : n.enAttente
         ? '1px dashed var(--h-accent)'
         : `1px ${n.vivant ? 'dashed' : 'solid'} var(--h-${sexe}-bord)`
-    base.borderLeft = `4px solid ${couleurBranche(brancheDe(f))}`
-    base.borderRadius = '7px'
+    // Le liseré de branche : à gauche d'une fiche couchée, en haut d'une fiche debout.
+    base[portrait ? 'borderTop' : 'borderLeft'] = `4px solid ${couleurBranche(brancheDe(f))}`
+    base.borderRadius = portrait ? '10px' : '7px'
     return base
   })
 })
@@ -613,19 +667,34 @@ function dansLaFenetre(x: number, y: number, w: number, h: number): boolean {
 const LARGEUR_PHOTO = 40
 const ESPACE_PHOTO = 8
 
-interface Libelle {
+interface LibelleCommun {
   id: string
+  /** `src` : le portrait s'il y en a un (clé absente sur une fiche restreinte), la silhouette sinon. */
   photo: { x: number; y: number; d: number; src: string | null }
   x: number
   y: number
   w: number
   h: number
-  t1: string
-  t2: string
-  taille: number
   directe: boolean
   estompe: boolean
 }
+/** Compact : la photo à gauche, une ou deux lignes à côté (`texteDeFiche`). */
+interface LibelleCompact extends LibelleCommun {
+  forme: 'compact'
+  t1: string
+  t2: string
+  taille: number
+}
+/** Portrait : la photo en haut, NOM, prénom et dates dessous (`texteDePortrait`). */
+interface LibellePortrait extends LibelleCommun {
+  forme: 'portrait'
+  nom: string
+  prenom: string
+  dates: string[]
+  /** « Personne vivante » : ni capitales, ni rien d'autre. */
+  restreinte: boolean
+}
+type Libelle = LibelleCompact | LibellePortrait
 
 /** Le texte des fiches visibles, en coordonnées écran (culling). */
 const libelles = computed<Libelle[]>(() => {
@@ -633,12 +702,35 @@ const libelles = computed<Libelle[]>(() => {
   if (!d || niveau.value < 2) return []
   const direct = surligner.value
   const ciblees = idsCibles.value
+  const visibles = d.fiches.filter((f) => passe(f) && dansLaFenetre(f.x, f.y, f.w, f.h))
+  const commun = (f: FicheHistoire) => ({
+    id: f.id,
+    directe: f.directe && direct,
+    estompe: ciblees.size > 0 && !ciblees.has(f.id),
+  })
+  const src = (f: FicheHistoire): string | null => (typeof f.noeud.portrait === 'string' ? f.noeud.portrait : null)
+
+  if (enPortrait.value) {
+    return visibles.map((f): LibellePortrait => {
+      const g = geometriePortrait(versEcranX(f.x), versEcranY(f.y), s.value, sy.value)
+      const entree = entreePortrait(f.noeud)
+      return {
+        ...commun(f),
+        forme: 'portrait',
+        ...texteDePortrait(entree, g.texte.w, g.texte.h),
+        restreinte: entree.restreinte,
+        photo: { ...g.photo, src: src(f) },
+        ...g.texte,
+      }
+    })
+  }
+
   const d0 = LARGEUR_PHOTO * Math.min(s.value, sy.value)
   const texte = (ESPACE_PHOTO * 2 + LARGEUR_PHOTO) * s.value
-  return d.fiches
-    .filter((f) => passe(f) && dansLaFenetre(f.x, f.y, f.w, f.h))
-    .map((f) => ({
-      id: f.id,
+  return visibles.map(
+    (f): LibelleCompact => ({
+      ...commun(f),
+      forme: 'compact',
       ...texteDeFiche(
         {
           // Un nœud restreint s'écrit « Personne vivante », quoi que porte `etiquetteNom`.
@@ -650,20 +742,18 @@ const libelles = computed<Libelle[]>(() => {
         Math.max(0, f.w * s.value - texte - 4),
         f.h * sy.value,
       ),
-      // Le portrait s'il y en a un (clé absente sur une fiche restreinte), la silhouette sinon.
       photo: {
         x: versEcranX(f.x) + ESPACE_PHOTO * s.value,
         y: versEcranY(f.y) + (f.h * sy.value - d0) / 2,
         d: d0,
-        src: typeof f.noeud.portrait === 'string' ? f.noeud.portrait : null,
+        src: src(f),
       },
       x: versEcranX(f.x) + texte,
       y: versEcranY(f.y),
       w: Math.max(0, f.w * s.value - texte - 4),
       h: f.h * sy.value,
-      directe: f.directe && direct,
-      estompe: ciblees.size > 0 && !ciblees.has(f.id),
-    }))
+    }),
+  )
 })
 
 /**
@@ -1055,7 +1145,9 @@ onBeforeUnmount(() => {
       </template>
       <template #compteur>{{ effectifAffiche }} fiches sur {{ disposition?.fiches.length ?? 0 }}</template>
       <template v-if="disposition" #filtres>
-        <div v-if="disposition.quarts.length" class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Branches</div>
+        <!-- Pas un filtre : la forme des fiches. Ni dans « Filtres · n », ni dans « Réinitialiser ». -->
+        <ReglageFormatDesCartes />
+        <div v-if="disposition.quarts.length" class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Branches</div>
         <div class="grid grid-cols-2 gap-2">
           <button
             v-for="q in disposition.quarts"
@@ -1225,18 +1317,21 @@ onBeforeUnmount(() => {
 
         <!-- Photos et textes, en coordonnées écran : seules les fiches visibles en reçoivent -->
         <template v-for="t in libelles" :key="`photo-${t.id}`">
+          <!-- Compact : un rond ; Portrait : un carré aux coins arrondis, le cadre d'une photo. -->
           <img
             v-if="t.photo.src"
             :src="t.photo.src"
             alt=""
             loading="lazy"
             decoding="async"
-            class="pointer-events-none absolute rounded-full object-cover"
+            class="pointer-events-none absolute object-cover"
+            :class="t.forme === 'portrait' ? 'rounded-[14%]' : 'rounded-full'"
             :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1 }"
           />
           <svg
             v-else
             class="pointer-events-none absolute"
+            :class="t.forme === 'portrait' ? 'cadre-portrait rounded-[14%]' : ''"
             viewBox="0 0 40 40"
             aria-hidden="true"
             :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1 }"
@@ -1245,18 +1340,43 @@ onBeforeUnmount(() => {
             <path d="M6.8,36.8 a13.2,13.2 0 0 1 26.4,0 Z" class="silhouette" />
           </svg>
         </template>
-        <div
-          v-for="t in libelles"
-          :key="t.id"
-          class="pointer-events-none absolute flex flex-col justify-center overflow-hidden leading-tight"
-          :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, opacity: t.estompe ? 0.35 : 1 }"
-        >
-          <span
-            class="truncate font-semibold"
-            :style="{ fontSize: `${t.taille}px`, color: t.directe ? 'var(--hi-direct-texte)' : 'var(--h-texte)' }"
-          >{{ t.t1 }}</span>
-          <span v-if="t.t2" class="truncate font-mono text-[10.5px] text-attenue">{{ t.t2 }}</span>
-        </div>
+        <template v-for="t in libelles" :key="t.id">
+          <div
+            v-if="t.forme === 'compact'"
+            class="pointer-events-none absolute flex flex-col justify-center overflow-hidden leading-tight"
+            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, opacity: t.estompe ? 0.35 : 1 }"
+          >
+            <span
+              class="truncate font-semibold"
+              :style="{ fontSize: `${t.taille}px`, color: t.directe ? 'var(--hi-direct-texte)' : 'var(--h-texte)' }"
+            >{{ t.t1 }}</span>
+            <span v-if="t.t2" class="truncate font-mono text-[10.5px] text-attenue">{{ t.t2 }}</span>
+          </div>
+          <!-- Portrait : des hauteurs de ligne fixes (15, 15, 13), celles de `LIGNES_PORTRAIT`. -->
+          <div
+            v-else
+            class="pointer-events-none absolute flex flex-col items-center overflow-hidden text-center"
+            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, opacity: t.estompe ? 0.35 : 1 }"
+          >
+            <span
+              v-if="t.nom"
+              class="block h-[15px] max-w-full truncate text-xs leading-[15px] font-semibold"
+              :class="t.restreinte ? 'text-attenue' : 'tracking-[.02em] uppercase'"
+              :style="t.restreinte ? undefined : { color: t.directe ? 'var(--hi-direct-texte)' : 'var(--h-texte)' }"
+            >{{ t.nom }}</span>
+            <span
+              v-if="t.prenom"
+              class="block h-[15px] max-w-full truncate text-[11.5px] leading-[15px]"
+              :class="t.restreinte ? 'font-semibold text-attenue' : ''"
+              :style="t.restreinte ? undefined : { color: t.directe ? 'var(--hi-direct-texte)' : 'var(--h-texte)' }"
+            >{{ t.prenom }}</span>
+            <span
+              v-for="(ligne, i) in t.dates"
+              :key="i"
+              class="block h-[13px] max-w-full truncate font-mono text-[10.5px] leading-[13px] text-attenue"
+            >{{ ligne }}</span>
+          </div>
+        </template>
 
         <div
           v-for="c in libellesFoyers"
@@ -1481,6 +1601,8 @@ onBeforeUnmount(() => {
       <button type="button" class="h-11 rounded-pastille bg-accent px-3.5 font-semibold text-fond" @click="meTrouver">Moi</button>
     </div>
 
+    <!-- Téléphone, première visite : Compact ou Portrait ? Une fois, jamais avec une autre fenêtre. -->
+    <InvitationFormatDesCartes :pret="disposition !== null && !chargement && ouvertTiroir === 'aucun'" />
   </div>
 </template>
 
@@ -1513,6 +1635,10 @@ onBeforeUnmount(() => {
 .silhouette {
   fill: var(--h-attenue);
   fill-opacity: 0.35;
+}
+/* L'emplacement d'une photo absente, en Portrait : le cadre se voit, à la taille d'une vraie. */
+.cadre-portrait {
+  background: color-mix(in srgb, var(--h-attenue) 14%, transparent);
 }
 .gouttiere {
   background: linear-gradient(90deg, var(--h-fond) 62%, transparent);

@@ -34,8 +34,11 @@
  * creux, cette ascendance s'intercalait dans la branche Voulgre (446 croisements de
  * traits sur l'arbre du diagnostic, `diagnostic-alliance.test.ts`).
  *
- * **La largeur d'une fiche est celle du moteur** (`w`, `h`) : la disposition
- * change la position des boîtes, jamais leur taille.
+ * **La taille d'une fiche est celle du nœud reçu** (`w`, `h`) : celle du moteur
+ * en format Compact, ou la boîte fixe du format Portrait posée par `auFormat`
+ * (`histoire/cartes.ts`).
+ * La disposition change la position des boîtes, jamais leur taille ; tout le reste
+ * (pas des rangées, barres, étiquettes de foyer) se déduit de ces boîtes.
  *
  * Pur, sans DOM : tout ce fichier se vérifie dans `lignees.test.ts`.
  */

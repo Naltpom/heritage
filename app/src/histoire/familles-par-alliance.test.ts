@@ -3,6 +3,7 @@ import type { AreteGraphe, Branche, Graphe, NoeudFamille, NoeudPersonne, Sexe } 
 import { classerParente, sansFamillesParAlliance } from './alliances'
 import { bandeauDesFamilles, type BrancheDuBandeau } from './bandeau'
 import { largeurDuTexte, poserEtiquettes, type EtiquettePosee } from './etiquettes'
+import { auFormat } from './cartes'
 import { disposerLignees, type DispositionHistoire, type FicheHistoire } from './lignees'
 
 /**
@@ -321,5 +322,73 @@ describe('familles par alliance — l’ascendance du mari de la tante, vue de l
           }
         }
     })
+  })
+})
+
+/**
+ * Les mêmes garde-fous en format Portrait (`histoire/cartes.ts`) : des cartes plus
+ * étroites et trois fois plus hautes, sur le même arbre de 281 personnes. La
+ * disposition se refait sur ces boîtes ; rien ne doit se recouvrir pour autant —
+ * ni les cartes, ni les noms de foyer du niveau Familles, ni ceux du bandeau.
+ */
+describe('familles par alliance — en format Portrait', () => {
+  const { graphe, alliance } = construire()
+  const d = disposerLignees(auFormat(graphe, 'portrait'))
+  const bordFamille = Math.max(...d.fiches.filter((f) => f.parente !== 'alliance').map((f) => f.x + f.w))
+
+  it('garde l’alliance à droite, et aucune carte n’en recouvre une autre', () => {
+    expect(d.fiches).toHaveLength(281)
+    for (const id of alliance) expect(d.parId.get(id)!.x).toBeGreaterThan(bordFamille)
+    const fautes: string[] = []
+    for (let i = 0; i < d.fiches.length; i++)
+      for (let j = i + 1; j < d.fiches.length; j++) {
+        const [a, b] = [d.fiches[i]!, d.fiches[j]!]
+        if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) fautes.push(`${a.id} / ${b.id}`)
+      }
+    expect(fautes).toEqual([])
+    expect(croisements(d, bordFamille)).toBe(0)
+    expect(croisements(disposerLignees(auFormat(sansFamillesParAlliance(graphe), 'portrait')))).toBe(0)
+  })
+
+  it('ne recouvre aucune étiquette de foyer, à aucune échelle du niveau Familles', () => {
+    for (const s of [0.18, 0.3, 0.4, 0.5, 0.8]) {
+      const demandes = d.foyers
+        .filter((c) => (c.ancetres || s > 0.25) && c.envergure * s > 44)
+        .map((c, i) => ({
+          cle: String(i),
+          x: c.x * s,
+          y: c.y * s,
+          nom: c.nom,
+          taille: 10.5,
+          min: c.x * s - (c.envergure * s) / 2 - 12,
+          max: c.x * s + (c.envergure * s) / 2 + 12,
+          priorite: (c.ancetres ? 1e9 : 0) + c.envergure,
+        }))
+      const posees = poserEtiquettes(demandes, { marge: 6, hauteur: 14 })
+      expect(recouvrements(posees), `s = ${s}`).toEqual([])
+      expect(posees.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('ne recouvre jamais deux noms du bandeau, sur tout un balayage (écran de téléphone)', () => {
+    const largeurEcran = 390
+    for (const s of [0.05, 0.1, 0.2, 0.3, 0.6, 1])
+      for (let centre = 0; centre < d.largeur; centre += 150) {
+        const tx = largeurEcran / 2 - centre * s
+        const branches: BrancheDuBandeau[] = [
+          ...d.quarts.map((q) => ({ cle: q.branche, couleur: '', nom: q.nom || q.branche, sous: '', x0: q.x0 * s + tx, x1: q.x1 * s + tx })),
+          ...d.alliances.map((a) => ({ cle: `alliance-${a.pont}`, couleur: '', nom: a.nom, sous: '', x0: a.x0 * s + tx, x1: a.x1 * s + tx })),
+        ]
+        const segs = bandeauDesFamilles(branches, 64, largeurEcran, 12).filter((x) => x.etiquette)
+        const posees: EtiquettePosee[] = segs.map((x) => ({
+          cle: x.cle,
+          x: x.etiquette!.x,
+          y: 0,
+          nom: x.etiquette!.nom,
+          sous: '',
+          largeur: largeurDuTexte(x.etiquette!.nom, 12),
+        }))
+        expect(recouvrements(posees), `s = ${s}, centre = ${centre}`).toEqual([])
+      }
   })
 })
