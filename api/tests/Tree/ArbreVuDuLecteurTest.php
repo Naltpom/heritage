@@ -184,6 +184,43 @@ final class ArbreVuDuLecteurTest extends ArbreWebTestCase
         return $rangees;
     }
 
+    /**
+     * **`parente` et `pont` sur chaque nœud de personne** (décision du 2026-10-01, § 5.2).
+     *
+     * Vu de l'ego de l'arbre de test : ses parents sont « famille » ; le couple mixte
+     * (Pyroxène × Cobalt, et leur enfant) n'est relié à l'ego par **aucun** chemin — c'est
+     * l'îlot. Il n'est **pas** `alliance` — la décision vise « tout le reste qui est
+     * relié », et l'îlot n'est relié à rien : il est servi `famille`, sans pont, pour rester
+     * affiché comme avant. Et sans branche : le repli sur la colonne persistée, qui lui
+     * aurait rendu le quart de la racine, ne joue plus.
+     */
+    public function testChaqueNoeudDitSaParenteVueDuLecteur(): void
+    {
+        $this->rattacher('depuis-ego@heritage.test', 'ego');
+        $this->connexionDe('depuis-ego@heritage.test');
+        $this->requete('/api/arbre/graphe');
+
+        $noeuds = [];
+        foreach ($this->charge()['noeuds'] as $noeud) {
+            if ('personne' === $noeud['type']) {
+                $noeuds[$noeud['id']] = $noeud;
+            }
+        }
+
+        foreach (['ego', 'aieule', 'aieul'] as $cle) {
+            $noeud = $noeuds['p'.$this->idDe($cle)];
+            self::assertSame('famille', $noeud['parente'], $cle);
+            self::assertArrayNotHasKey('pont', $noeud, '`pont` n’existe que sur une famille par alliance.');
+        }
+
+        foreach (['cousin', 'conjointe', 'sansDate'] as $cle) {
+            $noeud = $noeuds['p'.$this->idDe($cle)];
+            self::assertSame('famille', $noeud['parente'], $cle.' : un îlot n’est relié à rien, il n’est pas « par alliance ».');
+            self::assertArrayNotHasKey('pont', $noeud, 'Un îlot n’a pas de pont.');
+            self::assertNull($noeud['branch'], 'L’îlot ne reçoit aucune branche du lecteur.');
+        }
+    }
+
     private function etagVuDe(string $courriel): string
     {
         $this->connexionDe($courriel);

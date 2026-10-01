@@ -149,8 +149,13 @@ final readonly class VueDeLArbrePourLAssistant implements ArbrePourLAssistant
     }
 
     /**
-     * La personne avec les **noms** de ses parents et conjoints : c'est ce qui départage
-     * deux « Jean Dupont » dans une liste de résultats.
+     * La personne avec ses parents et conjoints : leurs noms départagent deux « Jean
+     * Dupont » dans une liste de résultats.
+     *
+     * Des personnes et non des noms : ce fichier ne sait pas qui lit, et c'est l'assistant
+     * qui décide, d'après `vivante` et le cercle du lecteur, si un parent ou un conjoint
+     * est confidentiel — un conjoint vivant hors cercle doit l'être aussi bien que la
+     * personne trouvée.
      */
     private function avecSaParente(Person $personne): PersonneDeLArbre
     {
@@ -160,7 +165,7 @@ final readonly class VueDeLArbrePourLAssistant implements ArbrePourLAssistant
 
             foreach ([$famille->getHusband(), $famille->getWife()] as $parent) {
                 if (null !== $parent) {
-                    $parents[] = $parent->getDisplayName();
+                    $parents[] = $this->seule($parent);
                 }
             }
         }
@@ -170,7 +175,7 @@ final readonly class VueDeLArbrePourLAssistant implements ArbrePourLAssistant
             $conjoint = $union->getHusband() === $personne ? $union->getWife() : $union->getHusband();
 
             if (null !== $conjoint) {
-                $conjoints[] = $conjoint->getDisplayName();
+                $conjoints[] = $this->seule($conjoint);
             }
         }
 
@@ -178,8 +183,8 @@ final readonly class VueDeLArbrePourLAssistant implements ArbrePourLAssistant
     }
 
     /**
-     * @param list<string> $parents
-     * @param list<string> $conjoints
+     * @param list<PersonneDeLArbre> $parents
+     * @param list<PersonneDeLArbre> $conjoints
      */
     private function seule(Person $personne, array $parents = [], array $conjoints = []): PersonneDeLArbre
     {

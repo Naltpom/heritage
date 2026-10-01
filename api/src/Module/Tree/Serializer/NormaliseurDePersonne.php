@@ -6,6 +6,7 @@ namespace App\Module\Tree\Serializer;
 
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Tree\Entity\Child;
 use App\Module\Tree\Entity\Citation;
 use App\Module\Tree\Entity\Fact;
@@ -52,6 +53,15 @@ use App\Module\Tree\Service\AdressesDArbresEnLigne;
  * sur cette fiche : sans `baseVersion`, `POST /api/demandes` rend `422`. Le contrôle
  * d'écriture devient redondant avec celui de lecture — c'est de la défense en
  * profondeur, pas un effet de bord.
+ *
+ * ## Le quatrième piège, depuis le 2026-10-01 : le nom
+ *
+ * **Une personne vivante hors cercle n'expose plus son nom** (révision de l'ADR 0003) :
+ * `displayName` vaut {@see CercleDeVisibiliteInterface::NOM_MASQUE}, sur sa fiche réduite
+ * **et partout où elle est citée** — parents, fratrie, conjoint et enfants de la fiche
+ * **visible** d'un proche. C'est cette seconde moitié qui fuyait sans bruit : la fiche
+ * réduite d'un cousin ne disait rien, la fiche complète de sa mère défunte listait son nom
+ * parmi les enfants. Une référence se construit donc toujours **avec le cercle**.
  */
 final readonly class NormaliseurDePersonne
 {
@@ -83,7 +93,24 @@ final readonly class NormaliseurDePersonne
     }
 
     /**
+     * Le nom qu'on a le droit de servir pour cette personne : le sien si le cercle la
+     * montre, le masque sinon. **Le seul chemin** par lequel ce fichier écrit un
+     * `displayName` — un second, et le jour où l'un des deux oublie le cercle, la fiche
+     * d'un défunt redevient l'annuaire de ses descendants vivants.
+     */
+    private function nomVisible(Person $personne, CercleDuLecteur $cercle, EtatVivant $vivants): string
+    {
+        return $cercle->voit($personne->getId(), $vivants->estVivante($personne))
+            ? $personne->getDisplayName()
+            : CercleDeVisibiliteInterface::NOM_MASQUE;
+    }
+
+    /**
      * Les **sept clés** de la liste blanche de l'ADR 0003, et pas une de plus.
+     *
+     * `displayName` est le masque, jamais le vrai nom (révision du 2026-10-01). La clé
+     * reste — le front la lit pour titrer la fiche, et son absence le ferait tomber sur
+     * un `undefined` —, la valeur ne dit plus rien.
      *
      * Aucune clé à `null` pour un champ interdit : les champs interdits sont **absents**
      * (§ 1.3). Un `"birth": null` dirait « on ne sait pas » là où la vérité est « tu n'as
@@ -99,7 +126,7 @@ final readonly class NormaliseurDePersonne
     {
         return [
             'id' => $personne->getId(),
-            'displayName' => $personne->getDisplayName(),
+            'displayName' => CercleDeVisibiliteInterface::NOM_MASQUE,
             'sex' => $personne->getSex()->value,
             'generation' => $personne->getGeneration(),
             'branch' => $personne->getBranch()?->value,
@@ -159,9 +186,9 @@ final readonly class NormaliseurDePersonne
             // rattachement.
             'parente' => $this->parente->pour($lecteur, $id),
             'portrait' => null !== $id ? $this->medias->portraitDe($id, $lecteur) : null,
-            'parents' => $this->parents($filiations, $personne),
-            'fratrie' => $this->fratrie($personne, $famillesDOrigine),
-            'unions' => $this->unions($personne, $unions, $enfantsParFamille),
+            'parents' => $this->parents($filiations, $personne, $cercle, $vivants),
+            'fratrie' => $this->fratrie($personne, $famillesDOrigine, $cercle, $vivants),
+            'unions' => $this->unions($personne, $unions, $enfantsParFamille, $cercle, $vivants),
             'faits' => $this->faits($this->lecture->faitsDe($personne)),
             'citations' => $this->citations($citations, $lecteur),
             'notes' => $this->notes($this->lecture->notesDePersonne($personne)),
@@ -185,18 +212,23 @@ final readonly class NormaliseurDePersonne
      * La référence courte d'une personne : `personId` et `displayName`, et **rien
      * d'autre**.
      *
-     * Les deux clés sont dans la liste blanche, donc cette forme est servie telle quelle
-     * que la personne désignée soit visible ou non. C'est ce qui permet à une fratrie de
-     * rester une fratrie quand l'un de ses membres est masqué : la retirer rendrait la
-     * fratrie fausse, ce que l'ADR 0003 refuse explicitement.
+     * Les deux clés sont dans la liste blanche, donc cette forme est servie que la
+     * personne désignée soit visible ou non. C'est ce qui permet à une fratrie de rester
+     * une fratrie quand l'un de ses membres est masqué : la retirer rendrait la fratrie
+     * fausse, ce que l'ADR 0003 refuse explicitement.
+     *
+     * **Le nom, lui, suit le cercle** (révision du 2026-10-01) : un vivant hors cercle
+     * reste dans la liste, sous {@see CercleDeVisibiliteInterface::NOM_MASQUE}. D'où le
+     * cercle dans la signature — une référence construite sans lui était exactement la
+     * fuite.
      *
      * @return array{personId: int|null, displayName: string}
      */
-    public function reference(Person $personne): array
+    public function reference(Person $personne, CercleDuLecteur $cercle, EtatVivant $vivants): array
     {
         return [
             'personId' => $personne->getId(),
-            'displayName' => $personne->getDisplayName(),
+            'displayName' => $this->nomVisible($personne, $cercle, $vivants),
         ];
     }
 
@@ -205,7 +237,7 @@ final readonly class NormaliseurDePersonne
      *
      * @return list<array{personId: int|null, displayName: string, relation: string, familyId: int|null}>
      */
-    private function parents(array $filiations, Person $personne): array
+    private function parents(array $filiations, Person $personne, CercleDuLecteur $cercle, EtatVivant $vivants): array
     {
         $sortie = [];
 
@@ -219,7 +251,7 @@ final readonly class NormaliseurDePersonne
 
                 $sortie[] = [
                     'personId' => $parent->getId(),
-                    'displayName' => $parent->getDisplayName(),
+                    'displayName' => $this->nomVisible($parent, $cercle, $vivants),
                     // `relation` appartient au **lien**, pas à la personne : elle suit la
                     // même logique que les dates d'union du § 5.4, qui restent visibles
                     // même quand un époux est masqué.
@@ -237,7 +269,7 @@ final readonly class NormaliseurDePersonne
      *
      * @return list<array{personId: int|null, displayName: string, siblingOrder: int}>
      */
-    private function fratrie(Person $personne, array $famillesDOrigine): array
+    private function fratrie(Person $personne, array $famillesDOrigine, CercleDuLecteur $cercle, EtatVivant $vivants): array
     {
         $sortie = [];
 
@@ -246,7 +278,7 @@ final readonly class NormaliseurDePersonne
 
             $sortie[] = [
                 'personId' => $frereOuSoeur->getId(),
-                'displayName' => $frereOuSoeur->getDisplayName(),
+                'displayName' => $this->nomVisible($frereOuSoeur, $cercle, $vivants),
                 'siblingOrder' => $ligne->getSiblingOrder(),
             ];
         }
@@ -260,7 +292,7 @@ final readonly class NormaliseurDePersonne
      *
      * @return list<array<string, mixed>>
      */
-    private function unions(Person $personne, array $unions, array $enfantsParFamille): array
+    private function unions(Person $personne, array $unions, array $enfantsParFamille, CercleDuLecteur $cercle, EtatVivant $vivants): array
     {
         $sortie = [];
 
@@ -270,7 +302,7 @@ final readonly class NormaliseurDePersonne
 
             $enfants = [];
             foreach ($enfantsParFamille[$familleId] ?? [] as $ligne) {
-                $enfants[] = $this->reference($ligne->getPerson());
+                $enfants[] = $this->reference($ligne->getPerson(), $cercle, $vivants);
             }
 
             $sortie[] = [
@@ -278,7 +310,7 @@ final readonly class NormaliseurDePersonne
                 // `null` quand l'union n'a qu'un époux connu : 3 familles réelles n'ont
                 // qu'une `WIFE`. Ce n'est pas une donnée manquante, c'est l'état du
                 // travail généalogique.
-                'conjoint' => null !== $conjoint ? $this->reference($conjoint) : null,
+                'conjoint' => null !== $conjoint ? $this->reference($conjoint, $cercle, $vivants) : null,
                 // Les dates d'union restent visibles même si le conjoint est masqué :
                 // elles appartiennent à la famille, pas à la personne — et une union
                 // dont un membre est masqué reste une union, sans quoi la fratrie

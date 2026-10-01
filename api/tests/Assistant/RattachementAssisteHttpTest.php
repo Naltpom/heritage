@@ -10,6 +10,7 @@ use App\Module\Core\Enum\DateQualifier;
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Exception\ConflictException;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Service\CleDeRecherche;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Membership\Contract\DeclarationDuCompte;
@@ -222,7 +223,12 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         self::assertSame(['#p1', 'Léa Marie', 'Dupont', 'feminin', false], [$p1['localRef'], $p1['givenNames'], $p1['surname'], $p1['sex'], $p1['deceased']]);
         self::assertSame(['exacte', '1998-04-12', '1998-04-12', 'Lille'], [$p1['birth']['qualifier'], $p1['birth']['min'], $p1['birth']['max'], $p1['birth']['place']]);
         self::assertSame($this->jean, $creation['corps']['liens'][0]['otherPersonId']);
-        self::assertContains('Jean Dupont', array_column($creation['personnes'], 'displayName'));
+        // Jean Dupont est vivant, et un compte en attente n'a personne dans son cercle :
+        // depuis la révision du 2026-10-01 de l'ADR 0003, la personne citée garde son
+        // identifiant et sa place dans la proposition, mais plus son nom.
+        $nomsCites = array_column($creation['personnes'], 'displayName');
+        self::assertContains(CercleDeVisibiliteInterface::NOM_MASQUE, $nomsCites);
+        self::assertNotContains('Jean Dupont', $nomsCites, 'Le vrai nom d’un vivant hors cercle ne sort pas.');
         self::assertNotEmpty($creation['changements']);
     }
 

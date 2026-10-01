@@ -55,9 +55,13 @@ final class IncarnationTest extends ArbreWebTestCase
         self::assertSame($this->idDe('conjointe'), $this->charge()['membre']['personId']);
 
         // Il agit comme le membre : il crée un tirage, dont il devient l'organisateur…
+        // Sans participants : un tirage n'inscrit que des personnes du cercle de qui les
+        // désigne (révision du 2026-10-01 de l'ADR 0003), et ce test ne pose pas de cercle
+        // — `cousin` en est d'ailleurs exclu par construction. Ce qui compte ici est la
+        // trace au journal, pas la liste.
         $this->envoyer('POST', '/api/tirages', [
             'nom' => 'Noël côté maman', 'jour' => 25, 'mois' => 12,
-            'participants' => [$this->idDe('conjointe'), $this->idDe('cousin'), $this->idDe('ego')],
+            'participants' => [],
         ]);
         self::assertSame(Response::HTTP_CREATED, $this->statut());
         self::assertTrue($this->charge()['organisateur']['estMoi']);

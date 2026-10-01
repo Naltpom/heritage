@@ -25,13 +25,24 @@
  * posé ensuite, bloc par bloc, contre le bord extérieur de l'arbre, du côté de
  * la personne déjà placée qui le rattache.
  *
+ * **Les familles par alliance ont chacune leur bloc** (décision du 2026-10-01). Ce
+ * que `histoire/alliances.ts` classe « par alliance » — l'ascendance du mari d'une
+ * tante, vue de la nièce — n'entre pas dans les règles ci-dessus : chaque groupe est
+ * mis en page À PART, comme sa propre généalogie (une disposition `lignees` dont le
+ * pont est l'ego), puis posé d'un seul tenant à droite des branches du lecteur. Le
+ * pont lui-même reste à côté de son conjoint. Rattachée famille par famille dans les
+ * creux, cette ascendance s'intercalait dans la branche Voulgre (446 croisements de
+ * traits sur l'arbre du diagnostic, `diagnostic-alliance.test.ts`).
+ *
  * **La largeur d'une fiche est celle du moteur** (`w`, `h`) : la disposition
  * change la position des boîtes, jamais leur taille.
  *
  * Pur, sans DOM : tout ce fichier se vérifie dans `lignees.test.ts`.
  */
 import { indexer } from '@/components/arbre/graphe'
-import type { Branche, Graphe, IdentifiantNoeud, NoeudFamille, NoeudPersonne } from '@/lib/api'
+import type { Branche, Graphe, IdentifiantNoeud, NoeudFamille, NoeudPersonne, Parente } from '@/lib/api'
+import { NOM_D_UNE_PERSONNE_VIVANTE } from '@/lib/api/arbre'
+import { classerParente, familleDesConjoints, groupesParAlliance } from './alliances'
 
 /* ------------------------------------------------------------------ */
 /* Constantes de placement (celles de la maquette)                     */
@@ -74,12 +85,18 @@ export interface FicheHistoire {
   sosa: number | null
   /** Aucun lien connu avec l'ego : la rangée est estimée d'après les dates. */
   detache: boolean
+  /** Ce qu'elle est pour le lecteur (`histoire/alliances.ts`). */
+  parente: Parente
+  /** Sur une fiche `alliance` : le conjoint « famille » qui rattache son bloc. */
+  pont: IdentifiantNoeud | null
 }
 
 export interface EtiquetteFoyer {
   x: number
   y: number
   nom: string
+  /** La personne dont le nom est écrit : une seule étiquette par personne et par rangée. */
+  personne: IdentifiantNoeud
   /** Un couple d'ancêtres. */
   ancetres: boolean
   /** Largeur du couple dans le monde, pour décider s'il a la place. */
@@ -97,6 +114,18 @@ export interface Quart {
   /** Barycentre horizontal des fiches du quart. */
   cx: number
   /** Étendue horizontale, pour la mini-carte. */
+  x0: number
+  x1: number
+}
+
+/** Le bloc d'une famille par alliance, à droite des branches du lecteur. */
+export interface BlocAlliance {
+  /** Le conjoint « famille » qui le rattache — il est posé, lui, dans l'arbre du lecteur. */
+  pont: IdentifiantNoeud
+  /** Nom de famille du pont : « Provost » ; vide s'il n'est pas lisible. */
+  nom: string
+  effectif: number
+  cx: number
   x0: number
   x1: number
 }
@@ -126,6 +155,8 @@ export interface DispositionHistoire {
   traces: TracesHistoire
   foyers: EtiquetteFoyer[]
   quarts: Quart[]
+  /** Les familles par alliance présentes dans le graphe, de gauche à droite. */
+  alliances: BlocAlliance[]
   /** La zone des personnes détachées, au-delà du bord droit ; `null` s'il n'y en a pas. */
   zoneDetachee: { cx: number; x0: number; x1: number; effectif: number } | null
   generations: GenerationHistoire[]
@@ -140,17 +171,33 @@ export interface DispositionHistoire {
 /* ------------------------------------------------------------------ */
 
 /**
+ * Le nom qu'une fiche écrit : `etiquetteNom`, sauf sur un nœud RESTREINT, qui n'en a
+ * plus (révision du 2026-10-01, ADR 0003) — on y écrit « Personne vivante », sans
+ * relire ce que le serveur a envoyé : un serveur antérieur y mettait le vrai nom.
+ */
+export function nomEcrit(noeud: NoeudPersonne): string {
+  if (noeud.visibilite === 'restreinte') return NOM_D_UNE_PERSONNE_VIVANTE
+  return typeof noeud.etiquetteNom === 'string' ? noeud.etiquetteNom : ''
+}
+
+/**
  * Le prénom dessiné : premier mot de `etiquetteNom`. Le nom de famille peut
- * contenir des espaces, le prénom non — par construction (§ 5.2).
+ * contenir des espaces, le prénom non — par construction (§ 5.2). Vide sur un nœud
+ * restreint : « Personne » seul ne voudrait rien dire.
  */
 export function prenomDe(noeud: NoeudPersonne): string {
+  if (noeud.visibilite === 'restreinte') return ''
   const nom = typeof noeud.etiquetteNom === 'string' ? noeud.etiquetteNom : ''
   const espace = nom.indexOf(' ')
   return espace < 0 ? nom : nom.slice(0, espace)
 }
 
-/** Le nom de famille : ce qui suit le premier mot de `etiquetteNom`. */
+/**
+ * Le nom de famille : ce qui suit le premier mot de `etiquetteNom`. Vide sur un nœud
+ * restreint — sans quoi un foyer s'étiquetterait « vivante ».
+ */
 export function nomDeFamilleDe(noeud: NoeudPersonne): string {
+  if (noeud.visibilite === 'restreinte') return ''
   const nom = typeof noeud.etiquetteNom === 'string' ? noeud.etiquetteNom : ''
   const espace = nom.indexOf(' ')
   return espace < 0 ? '' : nom.slice(espace + 1).trim()
@@ -294,59 +341,8 @@ function empiler(parties: Forme[], ecart: number): { forme: Forme; ancres: numbe
  * endogame) reste.
  */
 export function sansFamilleDuConjoint(graphe: Graphe): Graphe {
-  const personnes = new Set(graphe.noeuds.filter((n) => n.type === 'personne').map((n) => n.id))
-  const membres = new Map<string, string[]>()
-  const comme = new Map<string, { epoux: string[]; enfant: string[] }>()
-  const ajouter = (m: Map<string, string[]>, k: string, v: string): void => {
-    const l = m.get(k)
-    if (l) l.push(v)
-    else m.set(k, [v])
-  }
-  const roles = (p: string): { epoux: string[]; enfant: string[] } => {
-    let r = comme.get(p)
-    if (!r) comme.set(p, (r = { epoux: [], enfant: [] }))
-    return r
-  }
-  const epouxDe = new Map<string, string[]>()
-  for (const a of graphe.aretes) {
-    const [p, f] = personnes.has(a.de) ? [a.de, a.vers] : [a.vers, a.de]
-    if (!personnes.has(p) || personnes.has(f)) continue
-    ajouter(membres, f, p)
-    if (a.genre === 'union') {
-      roles(p).epoux.push(f)
-      ajouter(epouxDe, f, p)
-    } else roles(p).enfant.push(f)
-  }
-  const ego = graphe.ego
-  const conjoints = new Set(
-    (comme.get(ego)?.epoux ?? []).flatMap((f) => epouxDe.get(f) ?? []).filter((e) => e !== ego),
-  )
-  if (!conjoints.size) return graphe
-
-  const parcourir = (depart: string[], interdits: Set<string>): Set<string> => {
-    const vus = new Set<string>()
-    const file = depart.filter((p) => !interdits.has(p))
-    for (const p of file) vus.add(p)
-    while (file.length) {
-      const p = file.shift()!
-      const r = comme.get(p)
-      for (const f of [...(r?.epoux ?? []), ...(r?.enfant ?? [])]) {
-        for (const v of membres.get(f) ?? []) {
-          if (vus.has(v) || interdits.has(v)) continue
-          vus.add(v)
-          file.push(v)
-        }
-      }
-    }
-    return vus
-  }
-  const coteEgo = parcourir([ego], conjoints)
-  const retires = new Set<string>()
-  for (const c of conjoints) {
-    if (coteEgo.has(c)) continue
-    const parents = (comme.get(c)?.enfant ?? []).flatMap((f) => epouxDe.get(f) ?? [])
-    for (const p of parcourir(parents, new Set([...coteEgo, ...conjoints]))) retires.add(p)
-  }
+  // Le parcours des liens vit dans `alliances.ts`, avec la classification qu'il nourrit.
+  const retires = familleDesConjoints(graphe)
   if (!retires.size) return graphe
   return {
     ...graphe,
@@ -366,25 +362,45 @@ interface Lignee {
 /** Au-delà, un bloc rattaché va au bord de l'arbre plutôt que dans un creux. */
 const PETIT_BLOC = 12
 
-export function disposerLignees(graphe: Graphe): DispositionHistoire {
+export interface OptionsDeDisposition {
+  /**
+   * La mise en page d'UNE famille par alliance, depuis son pont : tout y est « de la
+   * famille » de ce pont, on ne reclasse rien (sinon chaque groupe se viderait).
+   */
+  interne?: boolean
+}
+
+export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = {}): DispositionHistoire {
   const index = indexer(graphe)
   const personnes = new Map<string, NoeudPersonne>()
   for (const p of index.personnes) personnes.set(p.id, p)
   const familles = new Map<string, NoeudFamille>()
   for (const f of index.familles) familles.set(f.id, f)
 
-  const enfantsDe = (f: string): string[] =>
-    (index.enfantsParFamille.get(f) ?? []).filter((id) => personnes.has(id))
+  /*
+   * Les familles par alliance, par pont. Tant qu'elles ne sont pas posées, elles sont
+   * HORS JEU : aucune règle de placement ne les voit — ni la descendance d'un
+   * collatéral, ni le rattrapage dans les creux. Elles entrent d'un bloc, après.
+   */
+  const classes = options.interne ? null : classerParente(graphe)
+  const groupes = options.interne ? new Map<string, string[]>() : groupesParAlliance(graphe)
+  const horsJeu = new Set([...groupes.values()].flat())
+  const enJeu = (id: string): boolean => personnes.has(id) && !horsJeu.has(id)
+
+  const enfantsDe = (f: string): string[] => (index.enfantsParFamille.get(f) ?? []).filter(enJeu)
   const epouxDe = (f: string): string[] => {
     const enfants = new Set(index.enfantsParFamille.get(f) ?? [])
-    return (index.membresParFamille.get(f) ?? []).filter((id) => !enfants.has(id) && personnes.has(id))
+    return (index.membresParFamille.get(f) ?? []).filter((id) => !enfants.has(id) && enJeu(id))
   }
   const famillesEnfant = new Map<string, string[]>()
   const famillesEpoux = new Map<string, string[]>()
-  for (const f of familles.keys()) {
-    for (const e of enfantsDe(f)) famillesEnfant.set(e, [...(famillesEnfant.get(e) ?? []), f])
-    for (const e of epouxDe(f)) famillesEpoux.set(e, [...(famillesEpoux.get(e) ?? []), f])
+  function indexerLesFamilles(): void {
+    for (const f of familles.keys()) {
+      for (const e of enfantsDe(f)) famillesEnfant.set(e, [...(famillesEnfant.get(e) ?? []), f])
+      for (const e of epouxDe(f)) famillesEpoux.set(e, [...(famillesEpoux.get(e) ?? []), f])
+    }
   }
+  indexerLesFamilles()
   const largeur = (id: string): number => personnes.get(id)?.w ?? 132
   const hauteurFiche = Math.max(48, ...index.personnes.map((p) => p.h || 0))
 
@@ -560,11 +576,38 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     return { poses: [], rangees: new Map([[g, [-w / 2, w / 2]]]), ancre: 0 }
   }
 
+  /**
+   * Un ancêtre et ses AUTRES unions : un remariage (le second conjoint du côté
+   * extérieur, les demi-frères et sœurs dessous), ou un enfant qu'il ou elle a eu
+   * seul·e. Rattachées après coup, ces familles ne trouvaient pas de creux dans une
+   * ascendance dense et partaient loin, d'où des barres de fratrie qui traversaient
+   * tout le bloc (diagnostic du 01/10 : 413 croisements sur une ascendance de six
+   * générations, 0 sans ces familles). Posées ici, elles font partie de la forme et
+   * l'empilement par contours leur fait la place. L'union des ancêtres, elle, est
+   * ancestrale : `blocDescendance` ne la reprend pas.
+   */
+  function ancetreEtSesUnions(id: string, n: number, g: number): Forme {
+    if (n === 1 || !aLExterieur(n)) return seule(id, g)
+    return blocDescendance(id, n % 2 === 0 ? 'G' : 'D', g)
+  }
+
+  /**
+   * L'ancêtre `n` est-il du côté EXTÉRIEUR de son couple ? Le père d'un couple du côté
+   * père de l'arbre (et des parents de l'ego), la mère d'un couple du côté mère. De
+   * l'autre côté, l'extérieur du couple, c'est son conjoint : un second conjoint ou des
+   * demi-frères posés là s'intercaleraient entre les deux époux.
+   */
+  function aLExterieur(n: number): boolean {
+    const couple = n >> 1
+    if (couple === 1) return true
+    return n % 2 === 0 ? couple % 2 === 0 : couple % 2 === 1
+  }
+
   /** La forme d'un ancêtre : sa propre ascendance s'il en a une, sinon sa fiche. */
   function formePersonne(L: Lignee, n: number): Forme {
     if (L.couples.has(2 * n)) return formeCouple(L, 2 * n)
     const id = L.sosa.get(n)!
-    return poses.has(id) ? fantome(id, -generationSosa(n)) : seule(id, -generationSosa(n))
+    return poses.has(id) ? fantome(id, -generationSosa(n)) : ancetreEtSesUnions(id, n, -generationSosa(n))
   }
 
   /** Le couple d'ancêtres de Sosa `n` (pair) et `n + 1`, avec toute leur fratrie. */
@@ -590,7 +633,7 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     const parties = ordre.map((e, i) => {
       if (e === direct) {
         if (poses.has(e)) return fantome(e, g + 1)
-        return m === 1 ? blocDescendance(e, 'D', g + 1) : seule(e, g + 1)
+        return m === 1 ? blocDescendance(e, 'D', g + 1) : ancetreEtSesUnions(e, m, g + 1)
       }
       const sens: Cote = cote === 'C' ? (i < iDirect ? 'G' : 'D') : cote
       return blocDescendance(e, sens, g + 1)
@@ -619,16 +662,26 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       if (FP && FM) {
         const dm = besoinADroite(FP, FM, ECART_BLOC)
         decaler(FM, Number.isFinite(dm) ? dm : 0)
-        fx = FP.ancre
-        mx = FM.ancre
-        forme = fusionner(FP, FM)
-      } else if (FP) {
-        fx = FP.ancre
-        forme = FP
-      } else {
-        mx = FM!.ancre
-        forme = FM!
       }
+      /*
+       * La fratrie se pose ENTRE ce que chaque parent porte sous sa rangée : à droite
+       * de ce qui pend sous le père (ses demi-enfants, les enfants de ses frères et
+       * sœurs, rangés à sa gauche), à gauche de ce qui pend sous la mère. Contre la
+       * forme des deux réunis, elle était repoussée au-delà de TOUT ce qui pend d'un
+       * côté — un remariage du père, côté mère de l'arbre, envoyait l'enfant direct
+       * loin à gauche de l'union de ses parents. Sans la place, la mère s'écarte.
+       */
+      const borne = (v: number, defaut: number): number => (Number.isFinite(v) ? v : defaut)
+      const lo = FP ? borne(besoinADroite(FP, G, ECART_BLOC), -Infinity) : -Infinity
+      let hi = FM ? borne(besoinAGauche(FM, G, ECART_BLOC), Infinity) : Infinity
+      if (lo > hi && FM) {
+        decaler(FM, lo - hi)
+        hi = lo
+      }
+      fx = FP ? FP.ancre : null
+      mx = FM ? FM.ancre : null
+      if (FP && FM) forme = fusionner(FP, FM)
+      else forme = (FP ?? FM)!
       // L'enfant direct se pose du côté INTÉRIEUR de l'union de ses parents, sous
       // elle : son trait descend tout droit, et son propre couple reste court.
       const milieu = fx !== null && mx !== null ? (fx + mx) / 2 : (fx ?? mx)!
@@ -639,21 +692,55 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
             ? Math.min(milieu, fx + largeur(sosa.get(n)!) / 2 + ECART_BLOC)
             : Math.max(milieu, mx - largeur(sosa.get(n + 1)!) / 2 - ECART_BLOC)
       }
-      const pref = cibleX - ancres[iDirect]!
-      let dx: number
-      if (cote === 'D') {
-        const besoin = besoinAGauche(forme, G, ECART_BLOC)
-        dx = Math.min(Number.isFinite(besoin) ? besoin : Infinity, pref)
-      } else {
-        const besoin = besoinADroite(forme, G, ECART_BLOC)
-        dx = Math.max(Number.isFinite(besoin) ? besoin : -Infinity, pref)
-      }
+      const dx = Math.min(hi, Math.max(lo, cibleX - ancres[iDirect]!))
       decaler(G, dx)
       for (let i = 0; i < ancres.length; i++) ancres[i]! += dx
       fusionner(forme, G)
     }
+    /*
+     * Les autres unions du parent INTÉRIEUR (le père quand l'enfant direct est une
+     * mère, la mère quand c'est un père) : posées à son côté extérieur, elles
+     * s'intercaleraient entre lui et son conjoint, et ses demi-enfants entre l'enfant
+     * direct et le sien. Elles vont donc au-delà de tout le couple, du côté extérieur
+     * de la fratrie : l'union contourne par le dessous, un seul trait la croise (celui
+     * qui descend du couple). Rattachées dans les creux, elles en croisaient des dizaines.
+     */
+    const interieur = cote === 'D' ? sosa.get(n) : cote === 'G' ? sosa.get(n + 1) : undefined
+    if (interieur !== undefined && poses.has(interieur)) {
+      const autres = autresUnions(interieur, g, cote as Cote)
+      if (autres) {
+        const d = cote === 'D' ? besoinADroite(forme, autres, ECART_BLOC) : besoinAGauche(forme, autres, ECART_BLOC)
+        decaler(autres, Number.isFinite(d) ? d : 0)
+        fusionner(forme, autres)
+      }
+    }
     forme.ancre = ancres[iDirect]!
     return forme
+  }
+
+  /**
+   * Les unions non ancestrales d'un ancêtre déjà posé, d'un seul bloc : chaque autre
+   * conjoint avec sa descendance (`blocDescendance`), ou les enfants qu'il a eus seul.
+   */
+  function autresUnions(id: string, g: number, sens: Cote): Forme | null {
+    const parties: Forme[] = []
+    for (const fam of famillesEpoux.get(id) ?? []) {
+      if (famillesAncestrales.has(fam)) continue
+      const conjoint = epouxDe(fam).find((e) => e !== id && !poses.has(e) && !ancetres.has(e))
+      if (conjoint !== undefined) {
+        parties.push(blocDescendance(conjoint, sens, g))
+        continue
+      }
+      const enfants = enfantsDe(fam)
+        .filter((e) => !poses.has(e) && !ancetres.has(e))
+        .sort((a, b) => anneeTri(a) - anneeTri(b))
+      if (!enfants.length) continue
+      parties.push(empiler(enfants.map((e) => blocDescendance(e, sens, g + 1)), ECART_FRATRIE).forme)
+    }
+    if (!parties.length) return null
+    // Du plus proche au plus lointain : vers l'extérieur, dans l'ordre des unions.
+    const ordre = sens === 'D' ? parties : parties.reverse()
+    return empiler(ordre, ECART_BLOC).forme
   }
 
   /* L'arbre principal. */
@@ -865,6 +952,74 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
   accrocherLesProches()
 
   /*
+   * Les FAMILLES PAR ALLIANCE, une colonne chacune, à droite de tout ce qui précède,
+   * dans l'ordre de leurs ponts de gauche à droite. Chacune est mise en page comme sa
+   * propre généalogie — une disposition `lignees` dont le pont est l'ego : son
+   * ascendance en Sosa, ses fratries, ses remariages —, puis posée d'un seul tenant.
+   * Le pont n'y figure qu'en place réservée : il est déjà posé à côté de son conjoint,
+   * et ses parents se rangent au-dessus de cette place, comme ceux du conjoint de l'ego.
+   */
+  const pontDe = new Map<string, string>()
+  const blocsAlliance: { pont: string; ids: string[] }[] = []
+  function poserLesAlliances(): void {
+    const x = xDe()
+    const ordre = [...groupes].filter(([pont]) => poses.has(pont)).sort(([a], [b]) => x.get(a)! - x.get(b)!)
+    for (const [pont, membres] of ordre) {
+      const sous = disposerLignees(sousGraphe(pont, membres), { interne: true })
+      const g0 = rangeeDe.get(pont)!
+      const bloc = vide()
+      const ids: string[] = []
+      for (const fi of sous.fiches) {
+        const g = fi.rangee + g0
+        if (fi.id === pont) {
+          // La place du pont : réservée, sans fiche.
+          const r = bloc.rangees.get(g)
+          const [a, b] = [fi.cx - fi.w / 2, fi.cx + fi.w / 2]
+          if (r) {
+            r[0] = Math.min(r[0], a)
+            r[1] = Math.max(r[1], b)
+          } else bloc.rangees.set(g, [a, b])
+          continue
+        }
+        // Ni le pont, ni un membre déjà posé (par un autre chemin) : pas deux fois la même fiche.
+        if (poses.has(fi.id)) continue
+        poser(bloc, fi.id, fi.cx, g)
+        ids.push(fi.id)
+        pontDe.set(fi.id, pont)
+      }
+      if (!ids.length) continue
+      decaler(bloc, bord(racine, 'D') + ECART_ZONE - bord(bloc, 'G'))
+      etendre(etendues.length, bloc)
+      fusionner(racine, bloc)
+      blocsAlliance.push({ pont, ids })
+    }
+    // Ce qui reste (un groupe dont le pont n'est pas dans l'arbre) rentre dans le jeu
+    // ordinaire : rattaché comme avant plutôt que perdu.
+    horsJeu.clear()
+    famillesEnfant.clear()
+    famillesEpoux.clear()
+    indexerLesFamilles()
+    accrocherLesProches()
+  }
+
+  /** Le pont, son groupe, et les familles qui touchent le groupe — rien d'autre. */
+  function sousGraphe(pont: string, membres: string[]): Graphe {
+    const estMembre = new Set(membres)
+    const garde = new Set([pont, ...membres])
+    for (const a of graphe.aretes) {
+      if (estMembre.has(a.de) && familles.has(a.vers)) garde.add(a.vers)
+      if (estMembre.has(a.vers) && familles.has(a.de)) garde.add(a.de)
+    }
+    return {
+      ...graphe,
+      ego: pont,
+      noeuds: graphe.noeuds.filter((n) => garde.has(n.id)),
+      aretes: graphe.aretes.filter((a) => garde.has(a.de) && garde.has(a.vers)),
+    }
+  }
+  if (groupes.size) poserLesAlliances()
+
+  /*
    * Les personnes DÉTACHÉES : aucun chemin ne les relie à l'ego. Leur génération
    * servie ne dit rien de leur place ; on l'ESTIME d'après leurs dates, sur la
    * droite « année ↔ rangée » tirée de la lignée directe, en attendant le vrai
@@ -989,6 +1144,8 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       directe: numero !== null,
       sosa: numero,
       detache: detaches.has(p.id),
+      parente: pontDe.has(p.id) ? 'alliance' : (classes?.get(p.id)?.parente ?? 'famille'),
+      pont: pontDe.get(p.id) ?? null,
     }
     fiches.push(fiche)
     parId.set(p.id, fiche)
@@ -1111,19 +1268,27 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       portee = [p.x + 12, p.x + p.w - 12]
     }
 
-    if (ep.length) {
-      const tete =
-        ep.find((e) => e.noeud.sex === 'masculin') ?? ep.find((e) => e.noeud.sex === 'feminin') ?? ep[0]!
-      const nom = nomDeFamilleDe(tete.noeud)
-      if (nom !== '' && milieuX !== null) {
+    if (ep.length && milieuX !== null) {
+      // Le mari, sinon l'épouse, sinon qui reste — le premier dont le nom se lit (un
+      // nœud restreint n'en a pas).
+      const tete = [
+        ...ep.filter((e) => e.noeud.sex === 'masculin'),
+        ...ep.filter((e) => e.noeud.sex === 'feminin'),
+        ...ep.filter((e) => e.noeud.sex !== 'masculin' && e.noeud.sex !== 'feminin'),
+      ].find((e) => nomDeFamilleDe(e.noeud) !== '')
+      if (tete) {
         const gauche = ep[0]!
         const droite = ep[ep.length - 1]!
+        // Une union qui contourne a ses époux loin l'un de l'autre : centrée entre eux,
+        // l'étiquette tombait sur les fiches intercalées. Elle se pose sur la tête.
+        const [x, envergure] = detour ? [tete.cx, tete.w] : [milieuX, droite.x + droite.w - gauche.x]
         foyers.push({
-          x: milieuX,
-          y: hautRangee(gauche.rangee) - 8,
-          nom,
+          x,
+          y: hautRangee(tete.rangee) - 8,
+          nom: nomDeFamilleDe(tete.noeud),
+          personne: tete.id,
           ancetres: ancestrale,
-          envergure: droite.x + droite.w - gauche.x,
+          envergure,
         })
       }
     }
@@ -1147,6 +1312,21 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     }
     traces.push({ fam, ancestrale, style, ep, en, detour, milieuX, milieuY, portee, barre, departX, direct })
   }
+
+  /*
+   * UNE étiquette par personne et par rangée. Un homme remarié, ou une mère dont un
+   * enfant est né hors union (un foyer à elle seule), écrivait son nom deux fois à une
+   * demi-fiche d'écart : « Provos Provost », « Delobe Delobel » (captures du 01/10).
+   * On garde le foyer des ancêtres, sinon le plus large.
+   */
+  const unParPersonne = new Map<string, EtiquetteFoyer>()
+  for (const e of foyers) {
+    const cle = `${e.personne}|${e.y}`
+    const deja = unParPersonne.get(cle)
+    if (!deja || Number(e.ancetres) - Number(deja.ancetres) > 0 || (e.ancetres === deja.ancetres && e.envergure > deja.envergure))
+      unParPersonne.set(cle, e)
+  }
+  foyers.splice(0, foyers.length, ...unParPersonne.values())
 
   // Les couloirs, rangée par rangée.
   const parRangee = <T extends { rangee: number }>(liste: T[]): Map<number, T[]> => {
@@ -1202,7 +1382,9 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
   const quarts: Quart[] = []
   const sosaConjoint = ligneeConjoint?.sosa ?? new Map<number, string>()
   for (const branche of ['pp', 'pm', 'mp', 'mm', 'cpp', 'cpm', 'cmp', 'cmm'] as const) {
-    const membres = fiches.filter((f) => f.noeud.branch === branche)
+    // Une fiche par alliance n'est d'aucun quart, quelle que soit la branche servie : la
+    // bande « Voulgre » s'étirait sur toute l'ascendance du mari de la tante.
+    const membres = fiches.filter((f) => f.noeud.branch === branche && f.parente !== 'alliance')
     if (!membres.length) continue
     const duConjoint = branche.startsWith('c')
     const cle = (duConjoint ? branche.slice(1) : branche) as 'pp' | 'pm' | 'mp' | 'mm'
@@ -1218,6 +1400,14 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
       x1: Math.max(...membres.map((f) => f.x + f.w)),
     })
   }
+
+  /* Les blocs des familles par alliance, de gauche à droite. */
+  const alliances: BlocAlliance[] = blocsAlliance.map(({ pont, ids }) => {
+    const membres = ids.map((id) => parId.get(id)!)
+    const x0 = Math.min(...membres.map((f) => f.x))
+    const x1 = Math.max(...membres.map((f) => f.x + f.w))
+    return { pont, nom: nomDeFamilleDe(personnes.get(pont)!), effectif: membres.length, cx: (x0 + x1) / 2, x0, x1 }
+  })
 
   /* La gouttière des générations. */
   const generations: GenerationHistoire[] = []
@@ -1244,6 +1434,7 @@ export function disposerLignees(graphe: Graphe): DispositionHistoire {
     traces: traits,
     foyers,
     quarts,
+    alliances,
     zoneDetachee,
     generations,
     largeur: maxX - minX + 2 * MARGE_X,

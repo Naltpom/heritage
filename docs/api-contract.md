@@ -1271,9 +1271,9 @@ pas.
 #### La charge utile
 
 Ci-dessous, `noeuds` et `aretes` sont **des extraits** : la réponse réelle porte les 377 nœuds
-et les 377 arêtes de l'arbre, plus les nœuds en attente du lecteur. Les six nœuds retenus
-couvrent les six formes possibles — personne complète, personne restreinte, famille, personne
-proposée, famille provisoire, et l'ego.
+et les 377 arêtes de l'arbre, plus les nœuds en attente du lecteur. Les sept nœuds retenus
+couvrent les sept formes possibles — personne complète, personne restreinte, personne d'une
+famille par alliance, famille, personne proposée, famille provisoire, et l'ego.
 
 ```json
 {
@@ -1306,6 +1306,7 @@ proposée, famille provisoire, et l'ego.
       "generation": 0,
       "branch": "tr",
       "vivant": true,
+      "parente": "famille",
       "visibilite": "complete",
       "bestQuay": 2,
       "citationCount": 3,
@@ -1326,6 +1327,7 @@ proposée, famille provisoire, et l'ego.
       "generation": -4,
       "branch": "pm",
       "vivant": false,
+      "parente": "famille",
       "visibilite": "complete",
       "bestQuay": 2,
       "citationCount": 6,
@@ -1340,13 +1342,36 @@ proposée, famille provisoire, et l'ego.
       "y": -300,
       "w": 133,
       "h": 40,
-      "displayName": "Pyroxène Tilleul",
-      "etiquetteNom": "Pyroxène Tilleul",
+      "displayName": "Personne vivante",
+      "etiquetteNom": "Personne vivante",
       "sex": "masculin",
       "generation": -2,
       "branch": "mm",
       "vivant": true,
+      "parente": "famille",
       "visibilite": "restreinte"
+    },
+    {
+      "id": "p311",
+      "type": "personne",
+      "personId": 311,
+      "x": 2410,
+      "y": -450,
+      "w": 107,
+      "h": 40,
+      "displayName": "Orpin Basalte Lichen",
+      "etiquetteNom": "Orpin Lichen",
+      "sex": "masculin",
+      "generation": -3,
+      "branch": null,
+      "vivant": false,
+      "parente": "alliance",
+      "pont": "p64",
+      "visibilite": "complete",
+      "bestQuay": 1,
+      "citationCount": 1,
+      "avecImage": false,
+      "etiquetteDates": "1868 – 1931"
     },
     {
       "id": "f28",
@@ -1375,6 +1400,7 @@ proposée, famille provisoire, et l'ego.
       "generation": -5,
       "branch": "pm",
       "vivant": false,
+      "parente": "famille",
       "visibilite": "complete",
       "bestQuay": null,
       "citationCount": 0,
@@ -1462,7 +1488,39 @@ Lecture, point par point :
   droit de voir (§ 13.3), et `displayName` serait sur le nœud si le nœud avait été placé.
 - **`visibilite`** vaut `"complete"` ou `"restreinte"`. Sur un nœud `"restreinte"`,
   **quatre clés sont absentes** — pas à `null` (§ 1.3) : `etiquetteDates`, `bestQuay`,
-  `citationCount`, `avecImage`. `etiquetteNom`, elle, reste (§ 11.2 explique l'asymétrie).
+  `citationCount`, `avecImage`. `displayName` et `etiquetteNom` restent, mais **valent
+  toutes deux `"Personne vivante"`** : depuis la révision du 2026-10-01 de l'ADR 0003, le
+  vrai nom d'un vivant hors cercle ne quitte pas le serveur (§ 11.2). Le canevas dessine
+  `etiquetteNom` tel quel ; il ne cherche jamais le nom ailleurs.
+- **`parente`** — *ajouté le 2026-10-01* — dit, **vu du lecteur**, à quelle famille la
+  personne appartient. Présent sur **tout** nœud de personne, restreint compris :
+
+  | `parente` | qui |
+  |---|---|
+  | `"famille"` | les ancêtres du lecteur, **les descendants de ses ancêtres** (lui-même, sa descendance, sa fratrie, ses cousins à tout degré), et **les conjoints de toutes ces personnes** — le conjoint lui-même, pas sa famille. Le mari d'une tante est `famille` : c'est le pont. |
+  | `"conjoint"` | la famille du conjoint **du lecteur** : tout ce qu'on atteint depuis ses conjoints, par n'importe quel lien, sans repasser par la famille — ce que le filtre « Famille du conjoint » couvrait déjà. |
+  | `"alliance"` | **tout le reste** : l'ascendance et la parenté d'un conjoint de collatéral, de proche en proche. L'îlot qu'aucun chemin ne relie au lecteur n'en est **pas** : il n'est relié à rien, et il est servi `"famille"` (sans branche, comme avant). |
+
+  Un nœud proposé (`enAttente`) vaut toujours `"famille"`. Sans racine ni rattachement — aucun
+  point de vue —, tous les nœuds valent `"famille"`. La clé se déduit des arêtes, que tout
+  lecteur reçoit : elle n'apprend rien de plus que `branch` (ADR 0003, révision du
+  2026-10-01). **Sur une fiche, `parente` désigne autre chose** — la phrase « arrière-grand-
+  mère » (§ 5.3) ; sur un nœud, c'est l'une des trois valeurs ci-dessus, jamais une phrase.
+- **`pont`** — *ajouté le 2026-10-01* — **présent seulement quand `parente` vaut
+  `"alliance"`**, absent sinon (§ 1.3). C'est l'identifiant de nœud (`"p64"`) de la personne
+  **non-alliance** la plus proche par les liens, celle par laquelle ce groupe se rattache au
+  lecteur : pour toute l'ascendance du mari d'une tante, c'est le mari de la tante. Il sert de
+  **clé de bloc** au canevas : une famille par alliance = l'ensemble des nœuds qui partagent
+  un `pont`. Le pont lui-même est `famille` (ou `conjoint`) et reste dans les branches du
+  lecteur. Plus proche au sens du nombre de liens (parent, enfant, conjoint) ; à égalité, le
+  premier dans l'ordre des personnes de l'arbre — stable d'un appel à l'autre tant que l'arbre
+  ne change pas. Jamais `null` : un îlot détaché n'est pas `"alliance"`.
+- **`branch` d'un nœud `alliance` vaut `null`.** Les branches sont recalculées pour le lecteur,
+  et une famille par alliance n'appartient à aucune d'elles : l'ascendance du mari d'une tante
+  ne prend plus la branche de la tante. Le mari, lui, garde la branche de sa femme. Quand un
+  point de vue est calculé, `branch` ne retombe **jamais** sur la colonne `tree_person.branch`
+  (la vue de la racine) : absente de la vue, elle vaut `null`. La colonne persistée garde
+  l'ancienne règle (la chronologie en fait ses colonnes).
 - **`bestQuay`, `citationCount` et `avecImage`** servent les filtres du visualiseur —
   « Non vérifiés » (`bestQuay` à 0 ou `null`), « Sans source » (`citationCount` à 0),
   « Avec portrait ». Ils sont sur le **nœud** et non chargés fiche par fiche : un filtre
@@ -1478,6 +1536,14 @@ Lecture, point par point :
   `ligne_dates()` rend la **constante `"vivant·e"`**, de sorte que la mesure ne lit jamais une
   date masquée. Le client ne recalcule ni l'une ni l'autre : le test de non-régression porte
   sur ces valeurs au centième (ADR 0005). Voir § 11.2.
+
+  **Ce que le graphe sert réellement** : la fiche **affichée**, remesurée par l'affinage —
+  la formule ci-dessus sur `etiquetteNom` et `etiquetteDates`, **plus 48** (photo 40 et son
+  espace 8), `h = 56`. Et depuis le 2026-10-01, **pour toute personne vivante, vue ou non,
+  `w = 215`**, constante : ni son nom ni sa date n'entrent dans sa largeur, ni dans les `x` de
+  personne (le moteur reçoit un jeu où les vivants n'ont ni nom ni date). C'est ce qui empêche
+  `w` et l'écart entre deux fiches de redonner la longueur d'un nom qu'on ne sert plus. Un nom
+  de vivant de plus de 21 signes est tronqué par le canevas.
 #### Les deux chaînes mesurées
 
 > **La largeur d'un nœud dépend de deux chaînes, et de deux seulement : `etiquetteNom` et
@@ -1884,6 +1950,13 @@ MyHeritage — reconnaissables à leur hébergeur, pas à leur titre. Elle ne to
   `baseVersion` (§ 6.1). Sans lui, le verrou optimiste inter-requêtes du § 9.6 n'a pas de
   valeur d'entrée.
 
+**Les références d'une fiche suivent le cercle** (révision du 2026-10-01 de l'ADR 0003) :
+dans `parents`, `fratrie`, `unions[].conjoint` et `unions[].enfants`, une personne vivante
+hors du cercle du lecteur **reste listée** — une fratrie amputée serait fausse —, avec son
+`personId`, mais son `displayName` vaut `"Personne vivante"`. Le front n'affiche pas d'autre
+nom et ne propose pas de lien qui laisserait croire le contraire : la fiche ouverte sera la
+forme réduite du § 11.1.
+
 ### 5.4 La fiche d'une famille
 
 `GET /api/arbre/familles/28` — nécessaire parce que `modification_famille` est une nature de
@@ -1917,7 +1990,10 @@ demande (§ 5.7).
 ```
 
 Si l'un des époux est vivant hors cercle, son objet est réduit à
-`{ "personId": …, "displayName": …, "visibilite": "restreinte" }`. **Les dates d'union
+`{ "personId": …, "displayName": "Personne vivante", "visibilite": "restreinte" }` ; un
+**enfant** vivant hors cercle reste dans `enfants`, avec `"displayName": "Personne vivante"`
+(révision du 2026-10-01 de l'ADR 0003 — les enfants sortaient jusque-là sous leur vrai nom
+sans contrôle de cercle). **Les dates d'union
 restent visibles** : elles appartiennent à la famille, pas à la personne — et une union dont
 un membre est masqué reste une union, sans quoi la fratrie devient fausse (ADR 0003).
 
@@ -3472,7 +3548,20 @@ raccourci d'écriture — « il n'existe aucun chemin d'écriture applicatif qui
 mécanisme » (§ 5.5).
 
 L'historique d'une personne **vivante hors cercle** n'est pas accessible : `404`. Il porte des
-dates et des lieux, c'est-à-dire tout ce que la liste blanche exclut.
+dates et des lieux, c'est-à-dire tout ce que la liste blanche exclut. Même `404` pour
+l'historique d'une **famille** dont un époux l'est : ses révisions datent l'union. *(La route
+servait ces révisions jusqu'au 2026-10-01 ; le refus est désormais tenu par
+`ValeursMasquees::sujetFerme()`.)*
+
+**Les libellés d'une demande suivent le cercle du lecteur** (révision du 2026-10-01 de
+l'ADR 0003). `targetLabel`, `liens[].subjectLabel` / `otherLabel` / `other2Label`,
+`liens[].familyLabel` et `revisions[].subjectLabel` sont **enregistrés** au dépôt avec le
+vrai nom ; une demande de l'assistant peut viser un vivant hors du cercle de son auteur. Relue
+par un membre (§ 6.5, la liste, le détail d'un nœud en attente), chaque libellé qui désigne un
+tel vivant vaut `"Personne vivante"` — dans `familyLabel`, l'époux concerné seulement
+(`"Personne vivante × Marne Dolomite Sureau"`). Une révision sur un tel vivant perd en outre
+la clé `avant` de chacun de ses `changes`, comme l'op perd `oldValue`. L'administrateur, dont
+le cercle est complet, lit les libellés stockés.
 
 ---
 
@@ -4706,7 +4795,7 @@ instant, `200` :
 ```json
 {
   "id": 202,
-  "displayName": "Pyroxène Tilleul",
+  "displayName": "Personne vivante",
   "sex": "masculin",
   "generation": -2,
   "branch": "mm",
@@ -4715,12 +4804,15 @@ instant, `200` :
 }
 ```
 
-**Sept clés. C'est tout.** Pas une clé de plus, et surtout aucune clé à `null` : les champs
+**Sept clés. C'est tout.** Et `displayName` ne porte plus le nom : depuis la révision du
+2026-10-01 de l'ADR 0003, il vaut le libellé neutre `"Personne vivante"` — la clé reste pour
+que l'écran ait de quoi titrer la fiche, la valeur ne dit rien. Pas une clé de plus, et surtout aucune clé à `null` : les champs
 interdits sont **absents**, non pas vides (§ 1.3). Un `"birth": null` dirait « on ne sait
 pas » là où la vérité est « tu n'as pas le droit de savoir », et le front afficherait un tiret
 au lieu de ne rien afficher.
 
-Ce qui a disparu, nommément, et qu'aucune implémentation ne doit réintroduire : `gedcomXref`,
+Ce qui a disparu, nommément, et qu'aucune implémentation ne doit réintroduire : **le nom**
+(sous quelque clé que ce soit), `gedcomXref`,
 `givenNames`, `surname`, `marriedName`, `nickname`, `deceased`, `birth`, `death`,
 `ligneDates`, `bestQuay`, `citationCount`, `forcePrivacy`, `privacyNote`, `version`,
 `parente`, `portrait`, `parents`, `fratrie`, `unions`, `faits`, `citations`, `notes`,
@@ -4757,13 +4849,14 @@ arbre : « les branches flottent, les fratries sont fausses, le calcul de parent
 liées, et enfreindre la première casse la seconde.
 
 Dans le nœud, **quatre clés tombent** — `etiquetteDates`, `bestQuay`, `citationCount` et
-`avecImage` — et neuf restent : `x`, `y`, `w`, `h`, `displayName`, `etiquetteNom`, `sex`,
-`generation`, `branch`, `vivant`.
+`avecImage` — et les autres restent : `x`, `y`, `w`, `h`, `displayName`, `etiquetteNom`,
+`sex`, `generation`, `branch`, `vivant`, `parente` (et `pont` sur une famille par alliance).
 
-L'asymétrie n'est pas intuitive et il faut la lire deux fois : **`etiquetteNom` reste,
-`etiquetteDates` tombe.** La première est une **troncature de `displayName`**, déjà dans la
-liste blanche — strictement moins d'information que ce qu'on envoie déjà. La seconde porterait
-des dates. Quant aux trois champs de filtre, le § 16.2 interdit nommément `bestQuay` et
+**`displayName` et `etiquetteNom` valent `"Personne vivante"`** — révision du 2026-10-01 de
+l'ADR 0003. Elles restaient jusque-là avec le vrai nom, au motif que la seconde n'est qu'une
+troncature de la première ; c'est le nom lui-même qui a quitté la liste blanche. Le masque est
+posé à la construction de la charge, jamais par remplacement après coup. `etiquetteDates`,
+elle, tombe toujours : elle porterait des dates. Quant aux trois champs de filtre, le § 16.2 interdit nommément `bestQuay` et
 `citationCount` pour une personne vivante hors cercle, et `avecImage` révélerait qu'elle a des
 médias — c'est-à-dire qu'il existe des photographies d'elle, ce qui est précisément le genre
 de fait qu'on ne veut pas voir sortir.
@@ -4772,6 +4865,13 @@ de fait qu'on ne veut pas voir sortir.
 qui en a six est un mensonge ; une clé absente est une frontière.
 
 > **`w` est identique pour tous les lecteurs, et il ne faut surtout pas la traiter à part.**
+>
+> *Révision du 2026-10-01* : le raisonnement qui suit vaut pour **le moteur**. Le graphe sert
+> la fiche affichée, remesurée par l'affinage — et celle-là lisait la naissance des vivants,
+> puis, une fois le nom retiré de la charge, sa longueur restait lisible dans `w` et dans
+> l'écart des `x`. La largeur affichée d'un vivant est donc **une constante, 215, pour tout
+> le monde** (§ 5.2) : elle reste identique pour tous les lecteurs, ce qui est la propriété
+> que ce paragraphe défend, et ne dépend plus d'aucune donnée masquée.
 
 La largeur de fiche est calculée sur le texte — `max(104, max(len(nom) × 6.6,
 len(ligneDates) × 5.8) + 2 × 14)`, **tronquée** à l'entier — et l'on pourrait croire qu'elle
@@ -4823,13 +4923,15 @@ Ce document donne les listes exactes, pour que le test soit une recopie :
 
 | Porte | Route | Liste blanche pour une personne vivante hors cercle |
 |---|---|---|
-| 1 — fiche | `GET /api/arbre/personnes/{id}` | `id`, `displayName`, `sex`, `generation`, `branch`, `vivant`, `visibilite` |
-| 2 — graphe | `GET /api/arbre/graphe` (nœud) | `id`, `type`, `personId`, `x`, `y`, `w`, `h`, `displayName`, `etiquetteNom`, `sex`, `generation`, `branch`, `vivant`, `visibilite` — **`etiquetteDates`, `bestQuay`, `citationCount` et `avecImage` absents** |
+| 1 — fiche | `GET /api/arbre/personnes/{id}` | `id`, `displayName`, `sex`, `generation`, `branch`, `vivant`, `visibilite` — **`displayName` vaut `"Personne vivante"`** ; et dans la fiche **visible** d'un proche, ses références (`parents`, `fratrie`, `unions[].conjoint`, `unions[].enfants`) portent le même masque |
+| 1 bis — famille | `GET /api/arbre/familles/{id}` | époux : `personId`, `displayName`, `visibilite` ; enfant : `personId`, `displayName`, `siblingOrder`, `relation` — **`displayName` vaut `"Personne vivante"`** |
+| 2 — graphe | `GET /api/arbre/graphe` (nœud) | `id`, `type`, `personId`, `x`, `y`, `w`, `h`, `displayName`, `etiquetteNom`, `sex`, `generation`, `branch`, `vivant`, `parente`, `pont` (si `parente` vaut `"alliance"`), `visibilite` — **`displayName` et `etiquetteNom` valent `"Personne vivante"`, `w` vaut 215** ; **`etiquetteDates`, `bestQuay`, `citationCount` et `avecImage` absents** |
 | 3 — recherche | `GET /api/arbre/recherche` | **aucune entrée** — la personne est absente |
 | 4 — chronologie | `GET /api/chronologie` | **aucune barre** — la personne est absente |
 | 5 — média | `GET /api/medias`, `/api/medias/{id}` | **aucun élément** ; le fichier rend `404` |
 | 6 — notification | `GET /api/notifications` | aucun `title`/`body` ne nomme la personne |
 | 7 — diff | `GET /api/demandes/{id}`, `/api/administration/demandes/{id}` | `…Label` et `…Id` de cette personne absents |
+| 7 bis — assistant | `POST /api/assistant/analyses` (`personnes[]`, `personne`, lignes de changement) | `personId`, `displayName` = `"Personne vivante"`, `visibilite` ; aucune date |
 | 8 — libellés | `Proposal`, `Membership`, `Media` (§ 11.3) | idem |
 
 Le test compare **l'ensemble exact des clés** de l'objet, pas un sous-ensemble : un champ en
@@ -6194,7 +6296,7 @@ personne qu'il désigne.
 | `edition_non_tiree` | `409` | Annuler un tirage qui n'a pas eu lieu. |
 | `participants_insuffisants` | `409` | Moins de trois présents ; `details.minimum`. |
 | `tirage_impossible` | `409` | Aucune attribution possible, même sans mémoire. |
-| `donnees_invalides` | `422` | `champs` nomme chaque champ fautif. |
+| `donnees_invalides` | `422` | `champs` nomme chaque champ fautif. Une personne désignée (création, ajout) **inconnue ou vivante hors du cercle du lecteur** donne ce code, avec **le même texte** dans les deux cas : un tirage enregistre et rend le nom de ses participants, et le nom d'un vivant hors cercle ne sort plus (révision du 2026-10-01 de l'ADR 0003). Rejoindre n'est pas concerné : on n'y inscrit que sa propre fiche. |
 | `participant_decede` | `422` | Inscrire (création, ajout, rejoindre) une personne qui n'est pas vivante au sens de la règle unique ; `champs` nomme `participants` ou `personId`. |
 | `lien_invalide` | `404` | Lien personnel mal formé, inconnu, révoqué, remplacé, participant retiré ou tirage supprimé — **un seul corps** pour tous. |
 | `presence_figee` | `409` | Présence réglée par le lien alors que l'édition est tirée, passée, ou absente. |

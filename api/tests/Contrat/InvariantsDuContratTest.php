@@ -259,12 +259,26 @@ final class InvariantsDuContratTest extends TestCase
      *
      * C'est celui qui aurait rougi sur `ligneDates` dans un nœud, et il ferme
      * dans l'autre sens la confusion des trois clés de date (§ 14.4).
+     *
+     * **`parente` a quitté la liste le 2026-10-01**, et pas parce que la confusion
+     * serait devenue permise : la clé porte sur un nœud un **autre objet** que sur la
+     * fiche — une catégorie fermée, `famille` / `conjoint` / `alliance` (§ 5.2), là où
+     * la fiche porte une phrase, « arrière-grand-mère ». Le test vérifie donc la
+     * **valeur** : une phrase de fiche sur un nœud rougirait toujours.
      */
     public function testUnNoeudNePorteAucuneCleDeFiche(): void
     {
-        $interdites = ['ligneDates', 'birth', 'death', 'texte', 'parente', 'unions', 'parents'];
+        $interdites = ['ligneDates', 'birth', 'death', 'texte', 'unions', 'parents'];
 
         foreach ($this->noeudsPersonne() as [$chemin, $noeud]) {
+            if (\array_key_exists('parente', $noeud)) {
+                self::assertContains(
+                    $noeud['parente'],
+                    ['famille', 'conjoint', 'alliance'],
+                    $chemin.' : sur un nœud, `parente` est une catégorie (§ 5.2), jamais la phrase de parenté de la fiche.',
+                );
+            }
+
             foreach ($interdites as $cle) {
                 self::assertArrayNotHasKey(
                     $cle,

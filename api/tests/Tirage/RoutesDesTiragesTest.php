@@ -319,6 +319,48 @@ final class RoutesDesTiragesTest extends CasDeTestTirages
         self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
     }
 
+    /**
+     * Révision du 2026-10-01 de l'ADR 0003 : un vivant hors du cercle du lecteur n'expose
+     * plus son nom. Un tirage **enregistre** le nom de chacun de ses participants et le rend
+     * à tous : désigner `voisine` — vivante, hors du cercle d'`ego` — par son identifiant ne
+     * doit ni l'inscrire ni rendre son nom.
+     *
+     * Et le refus est **mot pour mot** celui d'une personne inconnue : un message propre au
+     * « hors cercle » dirait, identifiant après identifiant, quelles personnes existent.
+     */
+    public function testUnVivantHorsDuCercleNEntrePasDansUnTirageEtSonNomNeSortPas(): void
+    {
+        $nom = $this->personnes['voisine']->getDisplayName();
+        $this->connexionDe(self::OPALE);
+
+        // Le refus d'une personne inexistante, pour comparer.
+        $this->envoyer('POST', '/api/tirages', $this->regles() + ['participants' => [$this->idDe('ego'), 999999]]);
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        $inconnue = $this->charge()['erreur'];
+
+        // À la création.
+        $this->envoyer('POST', '/api/tirages', $this->regles() + ['participants' => [$this->idDe('ego'), $this->idDe('voisine')]]);
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        self::assertSame($inconnue, $this->charge()['erreur'], 'Hors cercle et inexistante : le même refus.');
+        self::assertStringNotContainsString($nom, (string) $this->client->getResponse()->getContent());
+
+        // À l'ajout, dans un tirage que l'organisateur gère.
+        $id = $this->tirageDeNoel();
+        $this->envoyer('POST', "/api/tirages/{$id}/participants", ['personId' => $this->idDe('voisine')]);
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+        self::assertStringNotContainsString($nom, (string) $this->client->getResponse()->getContent());
+
+        $this->envoyer('POST', "/api/tirages/{$id}/participants", ['personId' => 999999]);
+        $inconnueALAjout = $this->charge()['erreur'];
+        $this->envoyer('POST', "/api/tirages/{$id}/participants", ['personId' => $this->idDe('voisine')]);
+        self::assertSame($inconnueALAjout, $this->charge()['erreur']);
+
+        // Et le tirage ne la compte pas : son nom n'est nulle part dans le détail.
+        $this->requete("/api/tirages/{$id}");
+        self::assertSame(Response::HTTP_OK, $this->statut());
+        self::assertStringNotContainsString($nom, (string) $this->client->getResponse()->getContent());
+    }
+
     /* ───────────────── Les défunts ───────────────── */
 
     /**

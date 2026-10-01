@@ -327,9 +327,12 @@ final readonly class AgentDeLAssistant
           (« acte de naissance, document 1 : née le 3 mars 1921 à Brest »). N’y recopie JAMAIS
           une information venue de l’arbre qui ne figure pas dans les documents ou le texte.
         - Les personnes marquées « confidentielle » dans les résultats des outils sont des
-          vivants que ce membre n’a pas le droit de connaître en détail : tu peux les
-          reconnaître, les viser et les nommer, mais tu ne cites jamais leurs dates, lieux ou
-          autres données, nulle part.
+          vivants que ce membre n’a pas le droit de connaître : tu peux les reconnaître et
+          les viser par leur identifiant (« 12 »), mais tu ne les NOMMES JAMAIS dans ce que
+          tu écris (« titre », « justification », « resume », « avertissements ») — écris
+          « une personne vivante » ou « la personne n° 12 » — et tu ne cites jamais leurs
+          dates, lieux ou autres données, nulle part. Une personne nommée « Personne
+          vivante » dans les résultats est confidentielle elle aussi.
         - « confiance » : haute si un acte officiel lisible l’établit, moyenne pour un
           témoignage précis ou un document partiellement lisible, faible sinon.
         - Un enregistrement audio est un TÉMOIGNAGE (le membre ou un proche qui raconte) :

@@ -13,6 +13,7 @@ use App\Module\Media\Enum\MediaStatus;
 use App\Module\Media\Enum\MediaSubject;
 use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Enum\MatchKind;
+use App\Module\Tree\Service\MesureDeFiche;
 use App\Tests\Membership\Double\ArbreEnMemoire;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\HttpFoundation\Response;
@@ -286,9 +287,10 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
      * nœuds n'est plus un arbre : les branches flottent, les fratries sont fausses, le
      * calcul de parenté est faux (ADR 0003). Seule `ligneDates` tombe.
      *
-     * Et `w` ne bouge pas : la largeur est mesurée sur le nom et sur la **constante**
-     * « vivant·e », jamais sur des dates. Elle est donc identique pour tous les lecteurs,
-     * et c'est précisément ce qui permet à l'étage 1 du cache d'être partagé.
+     * Et `w` ne bouge pas : depuis le 2026-10-01, la largeur affichée d'un vivant est
+     * une **constante** (`MesureDeFiche::LARGEUR_AFFICHEE_VIVANT`) — ni son nom, qu'on
+     * n'envoie plus, ni sa date. Elle est identique pour tous les lecteurs, et c'est ce
+     * qui permet à l'étage 1 du cache d'être partagé.
      */
     public function testUnNoeudRestreintGardeSaPositionEtPerdSaSeuleLigneDeDates(): void
     {
@@ -306,14 +308,22 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
         $restreint = $noeuds['p'.$this->idDe('cousin')] ?? null;
         self::assertIsArray($restreint, 'Le nœud d’une personne masquée reste dans le graphe.');
 
+        // `pont` n'existe que sur une famille par alliance (§ 5.2) : la liste blanche le
+        // tolère à cette condition, et à cette condition seulement.
+        $attendues = ['id', 'type', 'personId', 'x', 'y', 'w', 'h', 'displayName', 'etiquetteNom', 'sex', 'generation', 'branch', 'vivant', 'parente'];
+        if ('alliance' === ($restreint['parente'] ?? null)) {
+            $attendues[] = 'pont';
+        }
+        $attendues[] = 'visibilite';
+
         self::assertSame(
-            ['id', 'type', 'personId', 'x', 'y', 'w', 'h', 'displayName', 'etiquetteNom', 'sex', 'generation', 'branch', 'vivant', 'visibilite'],
+            $attendues,
             array_keys($restreint),
-            'La liste blanche du § 11.4 pour un nœud restreint : quatorze clés, exactement.',
+            'La liste blanche du § 11.4 pour un nœud restreint : quinze clés (seize avec `pont`), exactement.',
         );
         self::assertSame('restreinte', $restreint['visibilite']);
         self::assertTrue($restreint['vivant']);
-        self::assertGreaterThanOrEqual(104, $restreint['w'], 'Aucune fiche n’est plus étroite que la largeur minimale du moteur.');
+        self::assertSame(MesureDeFiche::LARGEUR_AFFICHEE_VIVANT, $restreint['w'], 'La largeur d’un vivant est une constante : elle ne dit rien de son nom ni de sa date.');
 
         // Le test **dans l'autre sens**, champ par champ : une liste qui ne vérifierait
         // que la présence laisserait passer exactement la fuite qu'elle est censée garder.
@@ -323,10 +333,12 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
             self::assertArrayNotHasKey($interdit, $restreint, \sprintf('`%s` ne doit pas sortir sur un nœud restreint.', $interdit));
         }
 
-        // **`etiquetteNom` reste**, elle, et c'est l'asymétrie qui n'est pas intuitive :
-        // c'est une troncature de `displayName`, donc strictement moins d'information
-        // qu'une clé déjà servie.
-        self::assertSame('Pyroxène Tilleul', $restreint['etiquetteNom']);
+        // **Le nom ne sort plus** (révision du 2026-10-01 de l'ADR 0003) : `displayName`
+        // et `etiquetteNom` valent le masque, et le vrai nom n'est nulle part dans les
+        // octets de la réponse — pas même dans une autre clé.
+        self::assertSame('Personne vivante', $restreint['displayName']);
+        self::assertSame('Personne vivante', $restreint['etiquetteNom']);
+        self::assertStringNotContainsString('Pyroxène', (string) $this->client->getResponse()->getContent());
 
         $complet = $noeuds['p'.$this->idDe('aieule')] ?? null;
         self::assertIsArray($complet);
@@ -413,6 +425,14 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
                 // Un nœud restreint ne porte pas de quoi refaire le calcul, et c'est
                 // précisément ce qu'on veut : la largeur vient du moteur, le client ne la
                 // recalcule jamais.
+                continue;
+            }
+
+            if (true === $noeud['vivant']) {
+                // Une fiche vivante, vue ou non, a la largeur constante (révision du
+                // 2026-10-01) : la mesurer sur ses étiquettes rouvrirait la fuite par `w`.
+                self::assertSame(MesureDeFiche::LARGEUR_AFFICHEE_VIVANT, $noeud['w'], $noeud['id']);
+
                 continue;
             }
 

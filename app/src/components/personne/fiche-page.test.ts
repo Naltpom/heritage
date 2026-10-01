@@ -380,10 +380,14 @@ describe('PageFiche — bandeau, onglets, bouton Proposer', () => {
 })
 
 describe('CarteRestreinte — ni onglets, ni barre d’action', () => {
-  it('rend le nom, la phrase mot pour mot, Sexe et Génération seulement', async () => {
+  it('rend « Personne vivante », la phrase mot pour mot, Sexe et Génération seulement', async () => {
     const html = await rendre(CarteRestreinte, { fiche: RESTREINTE })
 
-    expect(html).toContain('Pyroxène Tilleul')
+    // Révision du 2026-10-01 (ADR 0003) : plus de nom. Même face à un serveur antérieur
+    // qui l'enverrait encore, la carte écrit le libellé neutre, jamais `displayName`.
+    expect(html).toContain('>Personne vivante<')
+    // Le prénom seul : « Tilleul » est aussi le nom d'une branche (`champs.ts`).
+    expect(html).not.toContain('Pyroxène')
     expect(html).toContain(
       '<b>Personne vivante.</b> Elle ne fait pas partie de votre cercle de visibilité : ni dates, ni lieux, ni sources, ni photos ne vous sont communiqués. Sa place dans l’arbre reste visible.',
     )

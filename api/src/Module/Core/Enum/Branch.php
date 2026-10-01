@@ -37,6 +37,12 @@ namespace App\Module\Core\Enum;
  * d'autre, et rien ne le signale. Le seul reste admis est l'îlot qu'aucun chemin ne relie
  * au lecteur — 28 personnes sur 468 du graphe servi.
  *
+ * ⚠ **Révisé le 2026-10-01 pour la vue du lecteur** (`CalculAscendance::vuDuLecteur()`) :
+ * les **familles par alliance** — l'ascendance et la parenté d'un conjoint de collatéral —
+ * ne reçoivent plus aucune branche (`branch: null` dans le graphe, `parente: "alliance"`).
+ * Le conjoint lui-même garde celle de son partenaire. La colonne persistée garde la règle
+ * du 23/09.
+ *
  * **Une valeur ne se retire donc jamais d'ici sans dire où vont ceux qui la portaient.**
  * `Bf`, la belle-famille, a été retirée le 23/09/2026 : ses membres prennent le bloc de
  * leur partenaire.

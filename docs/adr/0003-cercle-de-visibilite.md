@@ -1,7 +1,7 @@
 # ADR 0003 — Confidentialité : le cercle de visibilité
 
 Date : 2026-09-15 · Statut : acceptée · Révisée le 2026-10-01 (régime en attente : plus
-rien de l'arbre)
+rien de l'arbre ; vivants hors cercle anonymes)
 
 ## Contexte
 
@@ -39,14 +39,16 @@ Règles d'application :
 
 - **La règle ne concerne que les personnes vivantes** (`mort = false`). Une personne décédée
   est visible de tout membre connecté, sans restriction.
-- Hors cercle, une personne vivante n'expose que : son **identifiant**, son **nom
-  d'affichage**, son **sexe**, sa **génération**, sa **branche**, le booléen **`vivant`**, sa
-  **position dans le graphe** et ses **arêtes**. Ni date, ni lieu, ni source, ni citation, ni
-  média, ni portrait, ni rattachement à un compte. En colonnes et champs calculés : `id`,
-  `display_name`, `sex`, `generation`, `branch`, `vivant`. C'est la liste blanche que
-  recopient les tests des portes de sortie.
+- Hors cercle, une personne vivante n'expose que : son **identifiant**, son **sexe**, sa
+  **génération**, sa **branche**, le booléen **`vivant`**, sa **parenté vue du lecteur**
+  (`parente`, `pont`), sa **position dans le graphe** et ses **arêtes**. **Ni nom**, ni date,
+  ni lieu, ni source, ni citation, ni média, ni portrait, ni rattachement à un compte. La clé
+  `displayName` reste dans les charges, mais elle vaut le libellé neutre **« Personne
+  vivante »** — partout où la personne apparaît, y compris dans la fiche visible d'un proche.
+  En colonnes et champs calculés : `id`, `sex`, `generation`, `branch`, `vivant`. C'est la
+  liste blanche que recopient les tests des portes de sortie.
   *La branche et `vivant` ont été ajoutés à cette liste après coup, pour deux motifs
-  différents — voir « Conséquences ».*
+  différents ; le nom en a été retiré le 2026-10-01 — voir « Conséquences ».*
 - **Tout champ dérivé d'une donnée masquée est lui-même une donnée masquée.** Une liste
   blanche raisonne champ par champ ; elle ne voit pas un champ *légitime* dont la **valeur**
   est calculée sur un champ interdit. Cas concret : la largeur d'un nœud du graphe se calcule
@@ -277,6 +279,57 @@ nouvel ADR ; elle ne l'est pas ici.
   *Le prix, assumé.* L'écran d'attente est vide de l'arbre pendant plusieurs jours. C'est la
   notification « Votre compte est activé » (`compte_active`, envoyée aussi sur le téléphone,
   lien vers l'accueil) qui le fait revenir.
+- **Révision du 2026-10-01 — le nom d'un vivant hors cercle ne sort plus.** Décision du
+  commanditaire, en préparant l'ouverture aux membres invités : *« une personne vivante hors
+  du cercle du lecteur n'expose plus son nom »*.
+  *Ce qui sortait.* La liste blanche laissait passer `display_name`, et le graphe le
+  servait sur chaque nœud restreint, avec sa troncature `etiquetteNom`. La justification
+  d'origine — « un cousin dont le cercle s'arrête avant vous sait déjà que vous existez » —
+  tient pour **l'existence**, pas pour le nom : le graphe est la liste nominative des
+  vivants de toute la famille, cercle ou pas. Et la porte n'était pas seulement le graphe :
+  la **fiche visible d'un défunt** nommait ses enfants, son conjoint, sa fratrie vivants
+  (`parents`, `fratrie`, `unions[].conjoint`, `unions[].enfants`) sans consulter le cercle,
+  la fiche de famille nommait ses enfants sans aucun contrôle, et l'assistant citait les
+  personnes restreintes « par leur nom seul ».
+  *Ce qui change.* Partout où une personne vivante hors cercle est sérialisée — nœud du
+  graphe, fiche réduite, références d'une fiche visible, époux et enfants d'une famille,
+  personnes citées par l'assistant —, `displayName` (et `etiquetteNom` sur un nœud) valent
+  **« Personne vivante »** (`Core\Security\CercleDeVisibiliteInterface::NOM_MASQUE`). Le
+  vrai nom ne quitte pas le serveur. La personne **reste** dans les listes et dans le
+  graphe, à sa place : une fratrie amputée serait fausse, et le cercle masque des champs,
+  pas des nœuds. La recherche, elle, l'omettait déjà ; inchangée.
+  *Les noms enregistrés, pas seulement les noms servis.* Trois modules **recopient** un nom
+  au moment d'écrire, et le rendaient ensuite tel quel : un **tirage** au sort enregistre
+  le nom de chaque participant (`Participant.personLabel`), une **demande** ses libellés
+  (`targetLabel`, l'extrémité de chaque lien, `familyLabel`, le sujet de ses révisions), et
+  l'**assistant** laisse le modèle — qui connaît le vrai nom pour reconnaître la personne
+  citée — rédiger titre, justification, résumé et avertissements. Désormais : un tirage
+  n'inscrit que des personnes **du cercle** de qui les désigne (refus identique à celui
+  d'une personne inconnue, pour ne pas servir d'oracle) ; une demande relue par un membre
+  rend le masque à la place de chaque libellé d'un vivant hors de son cercle (le libellé
+  stocké reste intact, l'administrateur le lit) ; la consigne de l'assistant lui interdit de
+  nommer une personne confidentielle, et le serveur remplace dans ses textes libres le nom
+  de chaque personne restreinte croisée pendant l'analyse. Et l'historique d'une fiche
+  vivante hors cercle — `404` au contrat (§ 6.11) depuis l'origine — est enfin refusé par
+  la route, qui le servait.
+  *Le champ dérivé — la règle qu'il fallait relire.* Une fois le nom retiré, sa **longueur**
+  restait servie : la largeur `w` d'une fiche était mesurée sur le nom (et, depuis
+  l'affichage de la naissance des vivants, sur la date), et l'écart entre deux fiches
+  voisines la redonnait par les `x`. La largeur affichée de **toute** fiche vivante est
+  désormais une constante (215), pour tous les lecteurs — elle ne peut pas dépendre du
+  lecteur, le placement est partagé (ADR 0005) —, et le moteur reçoit un jeu où les vivants
+  n'ont ni nom ni date (`JeuDePlacement::sansTexteDesVivants()`), si bien que même ses
+  abscisses de départ ne les lisent plus. Le moteur lui-même et sa preuve des 377 positions
+  sont inchangés. Le prix : des fiches de vivants un peu plus larges pour tout le monde, et
+  le nom d'un vivant **visible** tronqué au-delà de 21 signes.
+  *Ce qui entre en même temps dans la liste blanche du graphe* : `parente` (famille,
+  conjoint, alliance — vu du lecteur) et `pont`, qui rangent les **familles par alliance**
+  (décision du même jour, contrat d'API § 5.2). Même motif que `branch` : ils se déduisent
+  des arêtes que tout lecteur reçoit.
+  *Ce qui ne change pas.* La formule `C(u)`, le filtrage dans la sérialisation, l'absence de
+  mode « sans filtre » : l'administrateur hors bascule voit tous les noms, par un cercle
+  complet. Sous la bascule « voir comme un membre », il voit ce que le membre voit — le
+  masque.
 - La bascule « voir comme un membre » est **tracée au journal d'audit** : c'est une
   consultation de données personnelles sous une autre identité.
 - **Un test fonctionnel par porte de sortie** (les sept ci-dessus, **plus les libellés

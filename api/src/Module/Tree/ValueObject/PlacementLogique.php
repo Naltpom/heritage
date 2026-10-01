@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Tree\ValueObject;
 
 use App\Module\Core\Enum\Branch;
+use App\Module\Tree\Enum\ParenteDansLArbre;
 
 /**
  * Les colonnes dérivées que l'arbre attend : génération et branche par personne,
@@ -27,12 +28,22 @@ final class PlacementLogique
      * @param array<string, Branch> $branches           xref de personne → quart d'ascendance
      * @param array<string, int>    $generationsFamille xref de famille → rang
      * @param array<string, int>    $rangs              xref de famille → `2 × génération + 1`
+     * @param array<string, ParenteDansLArbre> $parentes xref de personne → famille, conjoint ou
+     *                                                   alliance, **vu du lecteur**. Vide hors
+     *                                                   de {@see \App\Module\Tree\Service\CalculAscendance::vuDuLecteur()} :
+     *                                                   la colonne persistée n'en a pas l'usage
+     * @param array<string, string> $ponts xref d'une personne `alliance` → xref du
+     *                                     conjoint « famille » qui la rattache au
+     *                                     lecteur (un îlot qu'aucun chemin ne relie
+     *                                     n'est pas `alliance` : il n'a pas de pont)
      */
     public function __construct(
         public readonly array $generations,
         public readonly array $branches,
         public readonly array $generationsFamille,
         public readonly array $rangs,
+        public readonly array $parentes = [],
+        public readonly array $ponts = [],
     ) {
     }
 

@@ -10,7 +10,10 @@
  *
  * La carte rend, dans l'ordre de la maquette :
  *
- * 1. le nom (et une case de portrait vide, teintée du sexe) ;
+ * 1. « Personne vivante » à la place du nom (et une case de portrait vide, teintée du
+ *    sexe) — révision du 2026-10-01 : le vrai nom d'une personne vivante hors cercle
+ *    n'est plus envoyé, et l'écran écrit la constante plutôt que de relire
+ *    `displayName` (ADR 0003) ;
  * 2. la phrase du dossier, **mot pour mot**, dans un bloc d'alerte ;
  * 3. Sexe et Génération, **seulement** ;
  * 4. « Voir dans l'arbre ».
@@ -34,7 +37,7 @@
  * `FicheRestreinte.vue` reste la forme compacte de l'aperçu d'administration.
  * ────────────────────────────────────────────────────────────────────
  */
-import type { FichePersonneRestreinte } from '@/lib/api'
+import { NOM_D_UNE_PERSONNE_VIVANTE, type FichePersonneRestreinte } from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import IdentiteFiche from './IdentiteFiche.vue'
 import PortraitFiche from './PortraitFiche.vue'
@@ -54,11 +57,11 @@ const LIGNES = ['sex', 'generation'] as const
       class="mx-auto flex w-full max-w-[640px] flex-col gap-3.5 px-8 pt-[18px] pb-6 max-md:px-5 max-md:pt-2"
     >
       <div class="flex items-center gap-3.5">
-        <PortraitFiche :portrait="null" :nom="fiche.displayName" :sexe="fiche.sex" />
+        <PortraitFiche :portrait="null" :nom="NOM_D_UNE_PERSONNE_VIVANTE" :sexe="fiche.sex" />
         <h1
           class="m-0 text-[28px] leading-[1.1] font-bold tracking-[-.02em] break-words max-md:text-[22px]"
         >
-          {{ fiche.displayName }}
+          {{ NOM_D_UNE_PERSONNE_VIVANTE }}
         </h1>
       </div>
 

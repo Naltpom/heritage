@@ -13,9 +13,11 @@ use Doctrine\ORM\EntityManagerInterface;
 /**
  * L'adaptateur de `Tree` pour le module `Tirage` (ADR 0009) : des noms, et des couples.
  *
- * Il ne lit que la liste blanche — le nom affiché et le lien d'union —, ce que l'arbre
- * sert déjà à tout compte connecté pour une personne vivante hors cercle (ADR 0003). Il
- * n'a donc rien à filtrer, et ne doit rien lire de plus.
+ * Il lit le nom affiché et le lien d'union, rien de plus. Il ne filtre **rien** : le nom
+ * d'une personne vivante hors cercle ne fait plus partie de la liste blanche depuis la
+ * révision du 2026-10-01 de l'ADR 0003, et c'est `Tirage` qui passe la liste au cercle du
+ * lecteur avant d'appeler (`ServiceDesTirages::dansLeCercle()`). Un appelant qui
+ * l'oublierait servirait un vrai nom : ne pas brancher ce port ailleurs sans ce filtre.
  *
  * L'état « vivante ou non » s'y ajoute, **sans la date** qui l'établit : c'est la valeur
  * que la recherche rend déjà à côté de chaque nom. Il passe par {@see EtatVivant}, qui

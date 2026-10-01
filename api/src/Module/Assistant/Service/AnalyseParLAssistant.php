@@ -11,6 +11,7 @@ use App\Module\Assistant\Contract\DepotPourLAssistant;
 use App\Module\Assistant\Contract\PersonneDeLArbre;
 use App\Module\Core\Enum\AuditAction;
 use App\Module\Core\Enum\DateQualifier;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Service\AuditService;
 use App\Module\Core\ValueObject\UncertainDate;
 
@@ -34,14 +35,18 @@ use App\Module\Core\ValueObject\UncertainDate;
  * Pour une personne existante que le lecteur ne voit qu'en restreint (vivante, hors de
  * son cercle) :
  *
- * - `personnes[]` la décrit par son nom seul, `visibilite: "restreinte"`, sans dates ;
+ * - `personnes[]` la décrit par le masque (« Personne vivante », révision du 2026-10-01
+ *   de l'ADR 0003), `visibilite: "restreinte"`, sans dates ;
  * - `changements[].avant` vaut `null` — le front écrit « (valeur masquée) » ;
  * - le `corps` rendu est une **vue d'affichage** : `oldValue` et `baseVersion` de ses ops
  *   sont retirés. Le corps complet, lui, ne quitte pas le serveur.
  *
  * `titre`, `justification` et `resume` sont écrits par le modèle, à qui la consigne
  * interdit d'y recopier une donnée de l'arbre — et chaque personne confidentielle lui a
- * été signalée comme telle par les outils.
+ * été signalée comme telle par les outils. Depuis la révision du 2026-10-01 de l'ADR 0003,
+ * la consigne lui interdit aussi d'y **nommer** une personne confidentielle, et ces
+ * textes — avertissements compris — passent par {@see VueDuLecteur::sansNomMasque()}
+ * avant de partir : le vrai nom de chaque personne restreinte croisée y devient le masque.
  */
 final readonly class AnalyseParLAssistant
 {
@@ -100,16 +105,36 @@ final readonly class AnalyseParLAssistant
             }
         }
 
+        // Les textes libres du modèle, passés au carnet des noms masqués **après** les
+        // boucles : `presenter()` et `portrait()` y ont ajouté les personnes restreintes
+        // qu'ils citent. Les gardées aussi — leur justification devient le message de la
+        // demande déposée, que « Mes demandes » relit.
+        $masquer = $this->vue->sansNomMasque(...);
+
+        foreach ($gardees as $cle => $gardee) {
+            $gardees[$cle]['titre'] = $masquer($gardee['titre']);
+            $gardees[$cle]['justification'] = $masquer($gardee['justification']);
+        }
+
+        foreach ($rendues as $rang => $rendue) {
+            $rendues[$rang]['titre'] = $masquer($rendue['titre']);
+            $rendues[$rang]['justification'] = $masquer($rendue['justification']);
+        }
+
+        foreach ($portraits as $rang => $portrait) {
+            $portraits[$rang]['justification'] = $masquer($portrait['justification']);
+        }
+
         $analyseId = $this->memoire->garder($userId, $gardees);
 
         $this->consignerLAppel($entree, $resultat, \count($traduites->propositions), \count($rendues), \count($portraits));
 
         return [
             'analyseId' => $analyseId,
-            'resume' => '' === $traduites->resume ? 'L’assistant n’a pas rédigé de résumé.' : $traduites->resume,
+            'resume' => '' === $traduites->resume ? 'L’assistant n’a pas rédigé de résumé.' : $masquer($traduites->resume),
             'demandes' => $rendues,
             'portraits' => $portraits,
-            'avertissements' => array_values($avertissements),
+            'avertissements' => array_values(array_map($masquer, $avertissements)),
             'restant' => $restant,
         ];
     }
@@ -119,7 +144,7 @@ final readonly class AnalyseParLAssistant
      * pourquoi il est écarté.
      *
      * - fiche existante : `personId` + `personne`, décrite **par le cercle du lecteur**
-     *   (mêmes règles que `personnes[]` : restreinte ⇒ le nom, sans dates) ;
+     *   (mêmes règles que `personnes[]` : restreinte ⇒ le masque, sans dates) ;
      * - brouillon : `demandeCle` (la demande de création **gardée**) + `brouillonRef`
      *   sans dièse (`p1`), que le front passe tel quel au téléversement.
      *
@@ -304,9 +329,9 @@ final readonly class AnalyseParLAssistant
                 continue;
             }
 
-            $sujet = self::extremite($lien, 'subjectPersonId', 'subjectDraftRef', $personnes, $noms);
-            $autre = self::extremite($lien, 'otherPersonId', 'otherDraftRef', $personnes, $noms);
-            $second = self::extremite($lien, 'other2PersonId', 'other2DraftRef', $personnes, $noms);
+            $sujet = self::extremite($lien, 'subjectPersonId', 'subjectDraftRef', $personnes, $noms, $restreintes);
+            $autre = self::extremite($lien, 'otherPersonId', 'otherDraftRef', $personnes, $noms, $restreintes);
+            $second = self::extremite($lien, 'other2PersonId', 'other2DraftRef', $personnes, $noms, $restreintes);
 
             $lignes[] = [
                 'libelle' => 'Lien de parenté',
@@ -331,12 +356,18 @@ final readonly class AnalyseParLAssistant
      * @param array<mixed>                 $lien
      * @param array<int, PersonneDeLArbre> $personnes
      * @param array<string, string>        $noms
+     * @param array<int, true>             $restreintes
      */
-    private static function extremite(array $lien, string $clePersonne, string $cleBrouillon, array $personnes, array $noms): ?string
+    private static function extremite(array $lien, string $clePersonne, string $cleBrouillon, array $personnes, array $noms, array $restreintes): ?string
     {
         $id = $lien[$clePersonne] ?? null;
         if (\is_int($id)) {
-            // Le nom seul : il fait partie de ce qu'une personne restreinte expose.
+            // Plus même le nom pour une personne restreinte : depuis la révision du
+            // 2026-10-01 de l'ADR 0003, un vivant hors cercle n'expose que le masque.
+            if (isset($restreintes[$id])) {
+                return CercleDeVisibiliteInterface::NOM_MASQUE;
+            }
+
             return isset($personnes[$id]) ? $personnes[$id]->nomAffiche : 'la personne n° '.$id;
         }
 

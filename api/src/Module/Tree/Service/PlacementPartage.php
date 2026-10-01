@@ -68,7 +68,14 @@ final class PlacementPartage implements EmpreinteDeLaMiseEnPage
      */
     public const int TTL = 86400;
 
-    public const string PREFIXE_CLE = 'placement.';
+    /**
+     * `v2` depuis le 2026-10-01 : la largeur des fiches vivantes est devenue constante et
+     * le moteur ne lit plus leur nom ({@see \App\Module\Tree\ValueObject\JeuDePlacement::sansTexteDesVivants()}).
+     * Un changement de **code** ne change pas l'empreinte de l'arbre ; sans ce suffixe, un
+     * placement d'avant le déploiement — mesuré sur les noms des vivants — resterait
+     * servi jusqu'à la première écriture de l'arbre.
+     */
+    public const string PREFIXE_CLE = 'placement.v2.';
 
     /**
      * Le chargement de l'arbre n'est plus ici : il vit dans {@see ArbreVuDepuis}, qui sait
@@ -146,7 +153,11 @@ final class PlacementPartage implements EmpreinteDeLaMiseEnPage
         // L'arbre vu depuis ce point de vue — mêmes fiches, mêmes largeurs, générations
         // recalculées. Le moteur, lui, ne sait rien de tout cela : il reçoit un jeu et son
         // ego, comme toujours. Voir {@see ArbreVuDepuis}.
-        $jeu = $this->arbre->jeu($egoPersonneId);
+        //
+        // `sansTexteDesVivants()` : la géométrie partagée ne lit ni le nom ni la date d'un
+        // vivant — ni par la largeur, ni par les abscisses de départ du moteur. Révision du
+        // 2026-10-01 de l'ADR 0003 ; voir {@see \App\Module\Tree\ValueObject\JeuDePlacement::sansTexteDesVivants()}.
+        $jeu = $this->arbre->jeu($egoPersonneId)->sansTexteDesVivants();
 
         // Puis l'affinage : le moteur donne les générations et la structure
         // d'ascendance — ce qui met le lecteur au centre et fonctionne —, l'affinage

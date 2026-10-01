@@ -6,6 +6,7 @@ namespace App\Module\Tirage\Service;
 
 use App\Module\Core\Contract\AnnuaireDesMembresInterface;
 use App\Module\Core\Enum\NotificationKind;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Service\NotificationService;
 use App\Module\Tirage\Contract\PortArbrePourTirages;
 use App\Module\Tirage\Entity\Attribution;
@@ -37,6 +38,12 @@ use Random\Randomizer;
  */
 final readonly class ServiceDesTirages
 {
+    /**
+     * Le refus d'une personne désignée qu'on n'inscrit pas — inconnue **ou** vivante hors
+     * cercle : un seul texte pour les deux, sans quoi la réponse sert d'oracle d'existence.
+     */
+    private const string PERSONNE_INCONNUE = 'Une personne désignée n’existe pas dans l’arbre.';
+
     public function __construct(
         private EntityManagerInterface $em,
         private TirageRepository $tirages,
@@ -44,6 +51,7 @@ final readonly class ServiceDesTirages
         private AnnuaireDesMembresInterface $annuaire,
         private NotificationService $notifications,
         private TirageAuSort $tirageAuSort,
+        private CercleDeVisibiliteInterface $cercle,
     ) {
     }
 
@@ -146,7 +154,7 @@ final readonly class ServiceDesTirages
         $tirage = new Tirage($regles->nom, $regles->jour, $regles->mois, $lecteur->userId, $lecteur->libelle);
         $this->appliquer($tirage, $regles);
 
-        $libelles = $this->libellesDeVivants($personIds, 'participants');
+        $libelles = $this->libellesDeVivants($this->dansLeCercle($personIds, 'participants'), 'participants');
 
         foreach ($libelles as $personId => $libelle) {
             $tirage->ajouterParticipant(new Participant($tirage, $personId, $libelle, $lecteur->userId));
@@ -183,7 +191,7 @@ final readonly class ServiceDesTirages
             throw ErreurDeTirage::dejaParticipant();
         }
 
-        $libelle = $this->libellesDeVivants([$personId], 'personId')[$personId];
+        $libelle = $this->libellesDeVivants($this->dansLeCercle([$personId], 'personId'), 'personId')[$personId];
         $participant = new Participant($tirage, $personId, $libelle, $lecteur->userId);
 
         if (null !== $referentPersonId) {
@@ -400,6 +408,44 @@ final readonly class ServiceDesTirages
     }
 
     /**
+     * Les personnes désignées par le lecteur, **toutes dans son cercle** — ou le refus en
+     * bloc.
+     *
+     * Révision du 2026-10-01 de l'ADR 0003 : une personne vivante hors du cercle du lecteur
+     * n'expose plus son nom. Or un tirage **enregistre** le nom de chaque participant
+     * (`Participant.personLabel`) et le rend à l'organisateur comme aux participants : sans
+     * ce filtre, `POST /api/tirages` avec un identifiant pris au hasard rendrait le vrai
+     * nom de n'importe quel vivant de l'arbre — énumérer les identifiants donnerait
+     * l'annuaire. La recherche des tirages ne propose déjà que le cercle ; ce refus-ci tient
+     * la règle pour un appel qui ne passerait pas par elle, comme
+     * `ServiceDesDemarches::personnesAutorisees()`.
+     *
+     * Le message est **celui d'une personne inconnue**, mot pour mot : distinguer « hors
+     * cercle » d'« inexistante » dirait au lecteur quelles personnes existent (règle 4 de
+     * {@see CercleDeVisibiliteInterface}). Une personne décédée est visible de tous : elle
+     * passe ici, et c'est {@see self::libellesDeVivants()} qui la refuse, nommée — son nom
+     * n'a rien de confidentiel.
+     *
+     * Seuls `creer()` et `ajouterParticipant()` passent par ici : `rejoindre()` n'inscrit
+     * que la personne du lecteur, qui est toujours dans son propre cercle.
+     *
+     * @param list<int> $personIds
+     *
+     * @return list<int>
+     */
+    private function dansLeCercle(array $personIds, string $champ): array
+    {
+        $personIds = array_values(array_unique($personIds));
+        $visibles = $this->cercle->filtrerPersonnes($personIds);
+
+        if (\count($visibles) !== \count($personIds)) {
+            throw ErreurDeTirage::donneesInvalides([$champ => self::PERSONNE_INCONNUE]);
+        }
+
+        return $visibles;
+    }
+
+    /**
      * @param list<int> $personIds
      *
      * @return array<int, string>
@@ -415,7 +461,7 @@ final readonly class ServiceDesTirages
         $libelles = $this->arbre->libelles($personIds);
 
         if (\count($libelles) !== \count($personIds)) {
-            throw ErreurDeTirage::donneesInvalides([$champ => 'Une personne désignée n’existe pas dans l’arbre.']);
+            throw ErreurDeTirage::donneesInvalides([$champ => self::PERSONNE_INCONNUE]);
         }
 
         return $libelles;

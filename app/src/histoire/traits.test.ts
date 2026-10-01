@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AreteGraphe, Graphe, NoeudFamille, NoeudPersonne, Sexe } from '@/lib/api'
+import { sansFamillesParAlliance } from './alliances'
 import { disposerLignees, type DispositionHistoire, type FicheHistoire } from './lignees'
 
 /**
@@ -129,14 +130,23 @@ describe('les traits de l’arbre', () => {
   const d = disposerLignees(graphe)
   const f = (cle: string) => d.parId.get(id[cle]!)!
 
-  it('pose l’autre compagnon d’une épouse à côté d’elle, pas au bord de l’arbre', () => {
-    const entre = d.fiches.filter(
-      (x) =>
-        x.rangee === f('epouse1').rangee &&
-        x.cx > Math.min(f('epouse1').cx, f('compagnon').cx) &&
-        x.cx < Math.max(f('epouse1').cx, f('compagnon').cx),
-    )
-    expect(entre.map((x) => x.noeud.displayName)).toEqual([])
+  it('range l’autre compagnon d’une épouse dans une famille par alliance, à part', () => {
+    // Décision du 2026-10-01 : le compagnon de la femme de l'oncle n'est ni du sang du
+    // lecteur, ni le conjoint de quelqu'un de son sang — il est « par alliance », comme
+    // sa fille. Masqués par défaut ; affichés, ils ont leur bloc, à droite de l'arbre,
+    // et leur union avec l'épouse contourne par le dessous (le test suivant le tient).
+    expect(f('compagnon').parente).toBe('alliance')
+    expect(f('compagnon').pont).toBe(id['epouse1'])
+    expect(f('demiCousine').parente).toBe('alliance')
+    expect(f('epouse1').parente).toBe('famille')
+    const bord = Math.max(...d.fiches.filter((x) => x.parente !== 'alliance').map((x) => x.x + x.w))
+    expect(f('compagnon').x).toBeGreaterThan(bord)
+    expect(f('compagnon').rangee).toBe(f('epouse1').rangee)
+    expect(f('demiCousine').rangee).toBe(f('epouse1').rangee + 1)
+    const sans = disposerLignees(sansFamillesParAlliance(graphe))
+    expect(sans.parId.has(id['compagnon']!)).toBe(false)
+    expect(sans.parId.has(id['demiCousine']!)).toBe(false)
+    expect(sans.parId.has(id['epouse1']!)).toBe(true)
   })
 
   it('ne fait passer aucun trait derrière une fiche', () => {
@@ -169,7 +179,7 @@ describe('les traits de l’arbre', () => {
 
   it('fait contourner par le dessous une union que d’autres fiches séparent', () => {
     // L'oncle et sa seconde épouse ne peuvent pas être voisins : sa première
-    // épouse et le compagnon de celle-ci sont entre eux.
+    // épouse est entre eux.
     const oncle = f('oncle')
     const epouse2 = f('epouse2')
     // Le contournement : un trait horizontal dans la bande juste sous la rangée

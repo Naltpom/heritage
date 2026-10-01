@@ -144,11 +144,47 @@ final class MesureDeFiche
     }
 
     /**
+     * **La largeur affichée de TOUTE fiche vivante** — révision du 2026-10-01.
+     *
+     * ── POURQUOI UNE CONSTANTE ──────────────────────────────────────────────────────
+     *
+     * ADR 0003 : *tout champ dérivé d'une donnée masquée est lui-même une donnée masquée*.
+     * Mesurée sur son texte, la fiche d'un vivant encodait deux choses qu'un lecteur hors
+     * cercle n'a pas le droit de lire : la longueur de sa **date de naissance** (la ligne
+     * affichée « n. 3.4.1960 · vivant·e »), et — depuis que son nom n'est plus servi hors
+     * cercle — la longueur de son **nom**. Et pas seulement par `w` : l'écart entre deux
+     * fiches voisines la redonne par les `x`.
+     *
+     * La largeur ne peut pas dépendre du lecteur (le placement est partagé, ADR 0005). Elle
+     * ne dépend donc plus de rien : **même boîte pour tous les vivants, vus ou non**.
+     *
+     * ── LA VALEUR ───────────────────────────────────────────────────────────────────
+     *
+     * La formule de {@see largeurAffichee()}, appliquée à la fiche vivante **la plus
+     * longue qu'on veuille afficher sans troncature** : une date complète,
+     * « n. 12.12.1985 · vivant·e » (24 signes × 5,8 = 139,2), et un nom de 21 signes
+     * (× 6,6 = 138,6). `(int) (139,2 + 28) = 167` de texte, plus 48 de photo : **215**.
+     * Un nom plus long est tronqué par le canevas, qui retombe sur le prénom (le texte des
+     * fiches s'adapte déjà à sa boîte) ; une date plus longue n'existe pas sous la forme
+     * compacte.
+     *
+     * Le prix, assumé : les fiches de vivants s'élargissent un peu pour tout le monde
+     * (≈ 180 → 215 pour une naissance en année seule), et l'arbre avec elles.
+     * `MesureDeFicheTest` refait le calcul pour que la constante ne dérive pas en silence.
+     */
+    public const int LARGEUR_AFFICHEE_VIVANT = 215;
+
+    /**
      * La largeur **affichée** : le texte, mesuré sur la ligne de dates affichée, plus
-     * l'emplacement photo et ses deux marges.
+     * l'emplacement photo et ses deux marges. Pour une personne vivante, la constante
+     * {@see LARGEUR_AFFICHEE_VIVANT} — elle ne lit ni le nom ni la date.
      */
     public function largeurAffichee(PersonnePlacable $p): int
     {
+        if ($p->vivant) {
+            return self::LARGEUR_AFFICHEE_VIVANT;
+        }
+
         $largeurNom = self::longueur($this->etiquetteNom($p)) * MoteurDePlacement::LARG_CAR;
         $largeurDates = self::longueur($this->ligneDatesAffichee($p)) * MoteurDePlacement::LARG_CAR_DATES;
 

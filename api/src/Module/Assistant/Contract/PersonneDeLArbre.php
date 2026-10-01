@@ -17,9 +17,14 @@ use App\Module\Core\ValueObject\UncertainDate;
 final readonly class PersonneDeLArbre
 {
     /**
-     * @param list<string> $parents   les noms affichés des parents — vides quand la
-     *                                personne est rendue comme parente d'une autre
-     * @param list<string> $conjoints les noms affichés des conjoints, même remarque
+     * @param list<PersonneDeLArbre> $parents   les parents, **sans** leur propre parenté —
+     *                                          des personnes et non des noms : l'assistant
+     *                                          confronte chacune au cercle du lecteur
+     *                                          (`vivante`) avant d'en écrire le nom, comme pour
+     *                                          la personne elle-même (révision du 2026-10-01
+     *                                          de l'ADR 0003). Vides quand la
+     *                                          personne est rendue comme parente d'une autre
+     * @param list<PersonneDeLArbre> $conjoints les conjoints, mêmes remarques
      */
     public function __construct(
         public int $id,
