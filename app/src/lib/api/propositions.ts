@@ -29,7 +29,7 @@ import type { BlocDate, BlocDateOp, ListePaginee, Sexe } from './types'
 /* Les types du § 6                                                    */
 /* ------------------------------------------------------------------ */
 
-/** § 5.7 — les huit natures de `RequestKind`. Valeurs du modèle, non traduites. */
+/** § 5.7 — les dix natures de `RequestKind`. Valeurs du modèle, non traduites. */
 export type NatureDemande =
   | 'modification_personne'
   | 'modification_famille'
@@ -70,6 +70,13 @@ export type NatureDemande =
    * doublon qu'il faut viser.
    */
   | 'suppression_personne'
+  /**
+   * Le **retrait d'un lien de parenté** (§ 6.4 quinquies du contrat) — le pendant
+   * de `ajout_lien`. Un op par lien, sur la famille ; c'est le serveur qui mesure
+   * ce que le retrait fera (union conservée ou supprimée), jamais le front.
+   * Déposée par le mode édition de la fiche (`components/personne/edition.ts`).
+   */
+  | 'retrait_lien'
 
 /**
  * `caduque` n'est **pas** `refusee` : personne n'a refusé, le monde a bougé
@@ -793,11 +800,39 @@ export interface CorpsSuppressionPersonne extends CorpsCommun {
   message: string
 }
 
+/**
+ * Un lien à défaire (§ 6.4 quinquies).
+ *
+ * `enfant_de` : `personId` est l'enfant, `familyId` sa famille de parents, et
+ * `parentId` — facultatif — **le** parent qu'il perd ; sans lui, il perd les deux.
+ * `conjoint_de` : `personId` est l'époux qui **quitte** l'union `familyId`.
+ * `parent_de` n'existe pas ici : le serveur le refuse, on le lit depuis l'enfant.
+ */
+export type RetraitPropose =
+  | { kind: 'enfant_de'; personId: number; familyId: number; parentId?: number }
+  | { kind: 'conjoint_de'; personId: number; familyId: number }
+
+/**
+ * § 6.4 quinquies — **défaire des liens de parenté**, plusieurs en une demande.
+ *
+ * Le corps ne porte aucun `ops` : la demande dit ce qu'elle vise, le serveur
+ * mesure ce que chaque retrait fera et l'écrit dans l'op qu'il fabrique. Un lien
+ * qui n'existe pas, le seul époux d'une union qui porte des enfants, un couple
+ * restant qui en doublerait un autre rendent `422` sur `retraits[i]`.
+ */
+export interface CorpsRetraitLien extends CorpsCommun {
+  kind: 'retrait_lien'
+  targetKind: 'personne'
+  targetId: number
+  retraits: RetraitPropose[]
+}
+
 export type CorpsDemande =
   | CorpsModificationPersonne
   | CorpsCreationPersonne
   | CorpsAjoutLien
   | CorpsSuppressionPersonne
+  | CorpsRetraitLien
 
 /**
  * `POST /api/demandes` — **réservé aux membres**.

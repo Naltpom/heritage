@@ -86,6 +86,26 @@ enum RequestKind: string
      */
     case SuppressionPersonne = 'suppression_personne';
 
+    /**
+     * « Il n'est pas son enfant », « ils n'ont jamais été mariés » → `prp_change_op` avec
+     * `op_kind = 'retrait_lien'`, **un op par lien**.
+     *
+     * ## La dixième, et le pendant de `ajout_lien`
+     *
+     * `OpKind::RetraitLien` était déclaré depuis le premier jour et rien ne l'appliquait :
+     * un lien faux ne se défaisait qu'en base, à la main, exactement le chemin que l'en-tête
+     * de `ChangeRequest` interdit. Elle porte des **ops** et non des `prp_draft_link` comme
+     * son pendant : défaire un lien est une écriture **sur une famille qui existe**, qui
+     * doit entrer en conflit avec les autres (`base_version`) et dont l'effet — l'union
+     * conservée ou supprimée, les enfants qui ne gardent qu'un parent — se mesure au dépôt et
+     * se remesure à la validation. C'est le modèle de `suppression_personne`, pas celui de
+     * l'ajout.
+     *
+     * Plusieurs liens se retirent dans **une** demande — c'est le regroupement que le mode
+     * édition de la fiche dépose : une décision pour l'administrateur, pas cinq.
+     */
+    case RetraitLien = 'retrait_lien';
+
     public function label(): string
     {
         return match ($this) {
@@ -98,6 +118,7 @@ enum RequestKind: string
             self::AjoutCitation => "Ajout d'une source",
             self::AjoutNote => "Ajout d'une note",
             self::SuppressionPersonne => "Suppression d'une fiche",
+            self::RetraitLien => "Retrait d'un lien",
         };
     }
 }

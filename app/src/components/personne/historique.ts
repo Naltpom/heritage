@@ -101,6 +101,10 @@ export function lignesDeRevision(revision: Pick<RevisionDeFiche, 'operation' | '
       return seule === null ? libelle : `${libelle} : ${seule}`
     }
     const { avant, apres } = diff as { avant?: unknown; apres?: unknown }
+    // Un lien retiré (§ 6.4 quinquies) porte sa phrase entière dans `avant` —
+    // « Lien retiré : X n’est plus enfant de Y » — et rien après : on la lit telle
+    // quelle, plutôt que « Lien : … → (vide) ».
+    if (champ === 'lien' && typeof avant === 'string' && (apres === null || apres === undefined)) return avant
     const nouvelle = valeurLisible(apres)
     if (nouvelle === null) return libelle
     // Une création n'a pas d'« avant » ; une fiche masquée n'en rend pas.

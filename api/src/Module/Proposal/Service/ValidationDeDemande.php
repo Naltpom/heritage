@@ -497,12 +497,13 @@ final readonly class ValidationDeDemande
      * Le point de greffe des natures d'op — un lien, un média, une citation.
      *
      * La nature `champ` est traitée en ligne, parce qu'elle seule se regroupe par ligne
-     * visée. Les autres passent par ici, découvertes par le tag. **Deux sont branchées** :
-     * `ajout_media`, par `Media\Service\Proposition\ApplicateurDOperationMedia`, et
-     * `ajout_citation`, par {@see ApplicateurDOperationCitation}. Les cinq restantes —
-     * `ajout_lien`, `retrait_lien`, `retrait_media`, `retrait_citation`, `ajout_note` —
-     * viendront avec leur module. *(`ajout_lien` est branchée comme **nature de
-     * demande**, par `ApplicateurDeCreation` ; comme nature d'**op**, elle ne l'est pas.)*
+     * visée. Les autres passent par ici, découvertes par le tag : `ajout_media`, par
+     * `Media\Service\Proposition\ApplicateurDOperationMedia`, `ajout_citation`, par
+     * {@see ApplicateurDOperationCitation}, `ajout_note`, `suppression_personne` et
+     * `retrait_lien`, par leurs applicateurs respectifs. `ajout_lien` (comme nature d'op),
+     * `retrait_media` et `retrait_citation` viendront avec leur module. *(`ajout_lien`
+     * est branchée comme **nature de demande**, par `ApplicateurDeCreation` ; comme
+     * nature d'**op**, elle ne l'est pas.)*
      *
      * Le message nomme celle qui manque, plutôt que de laisser passer une validation qui
      * n'écrirait rien. **Ne pas remplacer cette levée par un `continue`** : c'est la

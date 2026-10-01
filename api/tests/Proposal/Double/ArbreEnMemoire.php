@@ -10,10 +10,14 @@ use App\Module\Proposal\Contract\CitationAcreer;
 use App\Module\Proposal\Contract\FiliationEtablie;
 use App\Module\Proposal\Contract\FiliationPrevue;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
+use App\Module\Proposal\Contract\LienARetirer;
+use App\Module\Proposal\Contract\LienRetire;
 use App\Module\Proposal\Contract\MotifDeRattachement;
 use App\Module\Proposal\Contract\NoteAcreer;
+use App\Module\Proposal\Contract\RetraitDeLien;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
+use App\Module\Proposal\Enum\LinkKind;
 use App\Module\Proposal\Service\Port\EcritureAppliquee;
 use App\Module\Proposal\Service\Port\EtatCible;
 use App\Module\Proposal\Service\Port\LigneCreee;
@@ -359,6 +363,70 @@ final class ArbreEnMemoire implements PortArbre
         // Rattacher deux fois le même enfant ne lève pas : la validation peut rejouer un
         // lien que l'arbre porte déjà, et le port l'exige explicitement.
         self::$filiations[$familleId][$personneId] = $rangDansLaFratrie;
+    }
+
+    /**
+     * La mesure d'un retrait, **réduite à ce que le double sait** : la présence du lien.
+     *
+     * Le double ne connaît ni les dates d'une union, ni ses notes, ni le sexe des époux :
+     * il n'annonce donc jamais une union supprimée, ni un enfant rattaché à l'autre parent.
+     * Ce qu'un retrait fait réellement à l'arbre est éprouvé contre le vrai port
+     * (`tests/Tree/LienRetireParUneDemandeTest`).
+     */
+    public function prevoirRetraitDeLien(LienARetirer $lien, bool $familleProtegee): ?RetraitDeLien
+    {
+        $famille = self::$lignes[EtatCible::cleDe(SubjectKind::Famille, $lien->familleId)] ?? null;
+        $personne = self::$lignes[EtatCible::cleDe(SubjectKind::Personne, $lien->personneId)] ?? null;
+
+        if (null === $famille || null === $personne) {
+            return null;
+        }
+
+        $present = LinkKind::ConjointDe === $lien->nature
+            ? \in_array($lien->personneId, $this->epouxDeFamille($lien->familleId), true)
+            : \array_key_exists($lien->personneId, self::$filiations[$lien->familleId] ?? []);
+
+        return new RetraitDeLien(
+            $lien->nature->value,
+            $lien->personneId,
+            $personne['libelle'],
+            $lien->familleId,
+            $famille['libelle'],
+            $lien->parentId,
+            blocage: $present ? null : 'Ce lien n’existe pas.',
+        );
+    }
+
+    public function retirerLien(LienARetirer $lien, bool $familleProtegee): LienRetire
+    {
+        ++self::$ecritures;
+
+        $retrait = $this->prevoirRetraitDeLien($lien, $familleProtegee);
+
+        if (null === $retrait || $retrait->estBloque()) {
+            throw new \RuntimeException('Le lien ne peut pas être retiré.');
+        }
+
+        if (LinkKind::EnfantDe === $lien->nature) {
+            unset(self::$filiations[$lien->familleId][$lien->personneId]);
+        } else {
+            foreach (self::$couples as $cle => $id) {
+                if ($id === $lien->familleId) {
+                    unset(self::$couples[$cle]);
+                    $restants = array_values(array_filter(
+                        explode(':', (string) $cle),
+                        static fn (string $membre): bool => '' !== $membre && (int) $membre !== $lien->personneId,
+                    ));
+                    self::$couples[implode(':', $restants)] = $id;
+                }
+            }
+        }
+
+        $cle = EtatCible::cleDe(SubjectKind::Famille, $lien->familleId);
+        $avant = self::$lignes[$cle]['version'];
+        ++self::$lignes[$cle]['version'];
+
+        return new LienRetire($retrait, $avant, self::$lignes[$cle]['version']);
     }
 
     /** @return list<int> les enfants rattachés à cette famille, dans l'ordre d'ajout */

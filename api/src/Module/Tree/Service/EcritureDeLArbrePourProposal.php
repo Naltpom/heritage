@@ -12,8 +12,11 @@ use App\Module\Proposal\Contract\FiliationEtablie;
 use App\Module\Proposal\Contract\FiliationIncompatible;
 use App\Module\Proposal\Contract\FiliationPrevue;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
+use App\Module\Proposal\Contract\LienARetirer;
+use App\Module\Proposal\Contract\LienRetire;
 use App\Module\Proposal\Contract\MotifDeRattachement;
 use App\Module\Proposal\Contract\NoteAcreer;
+use App\Module\Proposal\Contract\RetraitDeLien;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 use App\Module\Proposal\Service\Port\EcritureAppliquee;
@@ -556,6 +559,88 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         $this->em->flush();
 
         return $libelle;
+    }
+
+    public function prevoirRetraitDeLien(LienARetirer $lien, bool $familleProtegee): ?RetraitDeLien
+    {
+        $famille = $this->em->find(Family::class, $lien->familleId);
+        $personne = $this->em->find(Person::class, $lien->personneId);
+
+        if (!$famille instanceof Family || !$personne instanceof Person) {
+            // `null` et non une exception : une ligne disparue est le cas `cible_disparue`,
+            // une caducité prévue. L'appelant en fait un `404` au dépôt.
+            return null;
+        }
+
+        return $this->mesurerRetrait($lien, $famille, $personne, $familleProtegee);
+    }
+
+    public function retirerLien(LienARetirer $lien, bool $familleProtegee): LienRetire
+    {
+        $famille = $this->em->find(Family::class, $lien->familleId);
+        $personne = $this->em->find(Person::class, $lien->personneId);
+
+        if (!$famille instanceof Family || !$personne instanceof Person) {
+            throw new \RuntimeException(\sprintf('La famille %d ou la personne %d a disparu pendant la validation : il n’y a plus de lien à retirer.', $lien->familleId, $lien->personneId));
+        }
+
+        // La mesure est refaite **ici**, sur l'état de la transaction : c'est elle que le
+        // journal garde, et c'est elle qui décide de la suppression de l'union — jamais
+        // celle du dépôt, qui date de trois jours.
+        $retrait = $this->mesurerRetrait($lien, $famille, $personne, $familleProtegee);
+
+        if ($retrait->estBloque()) {
+            // Le dernier filet : le contrôle préalable a déjà rendu la demande caduque
+            // dans ce cas. Écrire quand même produirait une famille sans époux ou une
+            // collision sur `uniq_tree_family_couple`, au milieu de la transaction.
+            throw new \RuntimeException(\sprintf('Le lien ne peut pas être retiré : %s', (string) $retrait->blocage));
+        }
+
+        $versionAvant = $famille->getVersion();
+        $filiation = null;
+        // Lu **avant** d'écrire : une famille supprimée n'a plus d'époux à interroger.
+        $autre = $this->autreParent($lien, $famille);
+
+        if ($lien->estUneFiliation()) {
+            // `remove()` ligne à ligne et non un `DELETE` en DQL : le journal d'audit écoute
+            // l'ORM, et une filiation retirée par requête directe n'y laisserait rien.
+            foreach ($this->filiationsDe($personne, $famille) as $ligne) {
+                $this->em->remove($ligne);
+            }
+        } elseif ($famille->getHusband() === $personne) {
+            $famille->setHusband(null);
+        } else {
+            $famille->setWife(null);
+        }
+
+        if ($retrait->familleSupprimee) {
+            $this->em->remove($famille);
+        } else {
+            // `toucher()` pour que `#[ORM\Version]` voie l'écriture : un enfant retiré
+            // vit dans `tree_child`, et la famille garderait sinon le numéro d'avant — la
+            // prochaine demande qui la vise ne verrait pas qu'elle a changé.
+            $famille->toucher();
+        }
+
+        // Le `flush` **avant** le rattachement à l'autre parent : `etablirFiliation()` lit
+        // les familles de l'enfant par une requête, et la filiation retirée doit déjà
+        // être partie de la base — sinon l'autre parent y serait trouvé, et l'enfant
+        // « déjà rattaché » resterait sans famille.
+        $this->em->flush();
+
+        if ($lien->estUneFiliation() && null !== $autre) {
+            $filiation = $this->etablirFiliation((int) $personne->getId(), $autre->getId(), null, false, null);
+        } else {
+            $this->derivees->recalculer();
+            $this->em->flush();
+        }
+
+        return new LienRetire(
+            $retrait,
+            $versionAvant,
+            $retrait->familleSupprimee ? null : $famille->getVersion(),
+            $filiation,
+        );
     }
 
     public function empreinteDeLArbre(): string
@@ -1352,10 +1437,17 @@ final class EcritureDeLArbrePourProposal implements PortArbre
      *
      * @return array{motif: MotifDeRattachement, famille: ?Family, mari: ?Person, femme: ?Person, completer: bool, quittees: list<Family>, incompatibilite: ?string}
      */
-    private function planifier(?Person $enfant, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise): array
+    private function planifier(?Person $enfant, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise, ?Family $quittee = null): array
     {
         [$mari, $femme] = $this->rangerLeCouple($parentA, $parentB);
         $familles = null === $enfant ? [] : $this->famillesParentales($enfant);
+
+        // La prévision d'un retrait (`parentId`) se calcule **comme si l'enfant avait
+        // déjà quitté** la famille qu'il quitte : sinon l'autre parent y serait trouvé
+        // (« déjà rattaché ») et l'annonce promettrait de ne rien faire.
+        if (null !== $quittee) {
+            $familles = array_values(array_filter($familles, static fn (Family $famille): bool => $famille !== $quittee));
+        }
 
         if (null !== $mari && null !== $femme) {
             $plan = $this->versLeCouple($enfant, $familles, $mari, $femme);
@@ -1629,6 +1721,156 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         }
 
         return true;
+    }
+
+    // ------------------------------------------------------------------ retrait d'un lien
+
+    /**
+     * Ce que défaire ce lien ferait, mesuré sur l'état courant — **le seul calcul**, pour
+     * la prévision comme pour l'écriture.
+     *
+     * Un seul calcul pour les deux, pour la raison que {@see planifier()} donne déjà : si
+     * l'annonce faite à l'administrateur et l'écriture suivaient deux chemins, ils
+     * finiraient par diverger, et l'écran promettrait « l'union est conservée » pendant
+     * que la validation l'effacerait.
+     *
+     * ## Quand l'union disparaît
+     *
+     * Seulement quand elle **ne porte plus rien** après le retrait : aucun autre enfant,
+     * aucune date d'union ni de rupture, aucune note, citation ni fait
+     * ({@see seraVideSans()}), aucun média ni demande qui la désigne
+     * (`$familleProtegee`), **et au plus un époux**. Ce dernier critère compte pour un
+     * enfant retiré d'un couple : `X × Y` sans enfant reste une union, et rien dans « il
+     * n'est pas leur enfant » ne dit qu'ils n'étaient pas mariés.
+     *
+     * ## Les deux blocages d'un conjoint
+     *
+     * - **le seul époux** d'une union qui porte des données : `ck_tree_family_au_moins_un_epoux`
+     *   interdit la famille sans personne, et la supprimer emporterait ses enfants et ses
+     *   dates — exactement ce qu'un retrait de lien ne doit jamais faire ;
+     * - **le couple restant existe déjà** ailleurs (`(X, ∅)` quand l'union est `(X, Y)`) :
+     *   `uniq_tree_family_couple` porte `NULLS NOT DISTINCT`, et vider la place de `Y`
+     *   violerait l'index au milieu de la transaction. On ne fusionne pas les deux familles
+     *   à la place de l'administrateur : on le dit.
+     */
+    private function mesurerRetrait(LienARetirer $lien, Family $famille, Person $personne, bool $familleProtegee): RetraitDeLien
+    {
+        $epoux = $this->epouxDe($famille);
+        $enfants = array_column($this->enfantsDeLaFamille((int) $famille->getId()), 'personneId');
+        $base = [
+            'nature' => $lien->nature->value,
+            'personneId' => (int) $personne->getId(),
+            'personneLibelle' => $personne->getDisplayName(),
+            'familleId' => (int) $famille->getId(),
+            'familleLibelle' => $this->libelleDuCouple($famille),
+        ];
+
+        if (!$lien->estUneFiliation()) {
+            return $this->mesurerUnConjoint($base, $famille, $personne, $epoux, \count($enfants), $familleProtegee);
+        }
+
+        $parent = null === $lien->parentId ? null : $this->em->find(Person::class, $lien->parentId);
+        $parent = $parent instanceof Person ? $parent : null;
+        $base += [
+            'parentId' => $lien->parentId,
+            'parentLibelle' => $parent?->getDisplayName(),
+        ];
+
+        if (!\in_array($personne->getId(), $enfants, true)) {
+            return $this->retrait($base + ['blocage' => \sprintf('%s n’est pas (ou plus) l’enfant de « %s ».', $personne->getDisplayName(), $base['familleLibelle'])]);
+        }
+
+        if (null !== $lien->parentId && (null === $parent || !\in_array($parent, $epoux, true))) {
+            return $this->retrait($base + ['blocage' => \sprintf('Cette personne n’est pas un parent de « %s ».', $base['familleLibelle'])]);
+        }
+
+        $base['enfantsRestants'] = \count($enfants) - 1;
+        $autre = $this->autreParent($lien, $famille);
+
+        if (null !== $autre) {
+            // L'enfant ne perd que ce parent : il reste celui de l'autre, à l'endroit où
+            // les règles d'une filiation le mettraient — calculées comme s'il avait déjà
+            // quitté cette famille-ci.
+            $plan = $this->planifier($personne, $autre->getId(), null, false, $famille);
+
+            if (null !== $plan['incompatibilite']) {
+                return $this->retrait($base + ['blocage' => $plan['incompatibilite']]);
+            }
+
+            $base['rattacheA'] = $this->libelleDe($plan['mari'], $plan['femme']);
+        }
+
+        $base['familleSupprimee'] = null === $autre
+            && \count($epoux) <= 1
+            && !$familleProtegee
+            && $this->seraVideSans($famille, $personne);
+
+        return $this->retrait($base);
+    }
+
+    /**
+     * @param array<string, mixed> $base
+     * @param list<Person>         $epoux
+     */
+    private function mesurerUnConjoint(array $base, Family $famille, Person $personne, array $epoux, int $enfants, bool $familleProtegee): RetraitDeLien
+    {
+        if (!\in_array($personne, $epoux, true)) {
+            return $this->retrait($base + ['blocage' => \sprintf('%s n’est pas (ou plus) un époux de l’union « %s ».', $personne->getDisplayName(), $base['familleLibelle'])]);
+        }
+
+        $mari = $famille->getHusband() === $personne ? null : $famille->getHusband();
+        $femme = $famille->getWife() === $personne ? null : $famille->getWife();
+        $reste = $mari ?? $femme;
+        $vide = !$familleProtegee && $this->seraVideSans($famille, null);
+
+        $base += [
+            'conjointRestant' => $reste?->getDisplayName(),
+            'enfantsRestants' => $enfants,
+            'familleSupprimee' => $vide,
+        ];
+
+        if ($vide) {
+            // L'union ne porte rien d'autre que ce couple : elle part entière, et la
+            // collision avec un couple déjà là ne peut plus se produire.
+            return $this->retrait($base);
+        }
+
+        if (null === $reste) {
+            return $this->retrait($base + ['blocage' => \sprintf('%s est le seul époux de cette union, qui porte des données (enfants, dates ou notes) : la vider la laisserait sans personne. Retirez d’abord ce qu’elle porte.', $personne->getDisplayName())]);
+        }
+
+        $jumelle = $this->familleDuCouple($mari, $femme);
+
+        if (null !== $jumelle && $jumelle !== $famille) {
+            return $this->retrait($base + ['blocage' => \sprintf('%s a déjà une famille sans conjoint (« %s ») : retirer ce conjoint donnerait deux familles identiques. Rattachez d’abord les enfants à l’une des deux.', $reste->getDisplayName(), $this->libelleDuCouple($jumelle))]);
+        }
+
+        return $this->retrait($base);
+    }
+
+    /** @param array<string, mixed> $champs */
+    private function retrait(array $champs): RetraitDeLien
+    {
+        return RetraitDeLien::depuisJson($champs);
+    }
+
+    /**
+     * Le parent qu'un enfant garde quand il n'en perd qu'un : l'autre époux de l'union,
+     * ou `null` si le retrait n'en nomme pas, ou si l'union n'en a qu'un.
+     */
+    private function autreParent(LienARetirer $lien, Family $famille): ?Person
+    {
+        if (!$lien->estUneFiliation() || null === $lien->parentId) {
+            return null;
+        }
+
+        foreach ($this->epouxDe($famille) as $epoux) {
+            if ($epoux->getId() !== $lien->parentId) {
+                return $epoux;
+            }
+        }
+
+        return null;
     }
 
     private function libelleDe(?Person $mari, ?Person $femme): string

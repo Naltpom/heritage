@@ -62,8 +62,11 @@
  * du serveur — et il n'afficherait de toute façon qu'un `undefined`.
  *
  * Seules les **actions réservées** se cachent, et aucune n'est décidée ici :
- * chacune porte sa condition dans `components/personne/gestes.ts`, et la
- * suppression reste un geste séparé, derrière un filet du menu « Proposer ».
+ * chacune porte sa condition dans `components/personne/gestes.ts` — les quatre
+ * icônes de `ActionsFiche` : suppression, assistant, document, et le crayon du
+ * mode édition, que `PageFiche` tient. Quand l'édition dépose ses demandes, la
+ * page demande une relecture (`recharger`) : le calque « en attente » doit
+ * montrer tout de suite ce qui vient d'être proposé.
  *
  * ## L'historique de la fiche
  *
@@ -193,6 +196,7 @@ watch(identifiant, () => {
       :onglet="onglet"
       :retour-memorise="retourArbre"
       @agrandir="loupe = $event"
+      @recharger="executer"
     />
   </div>
 

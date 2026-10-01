@@ -90,6 +90,7 @@ const NATURES: Record<string, string> = {
   creation_personne: 'Ajout d’une personne',
   ajout_lien: 'Ajout d’un lien',
   ajout_media: 'Ajout d’un document',
+  retrait_lien: 'Retrait d’un lien',
 }
 
 const PASTILLES = ['en_attente', 'validee', 'refusee', 'caduque'] as const
