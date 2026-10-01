@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   ECHELLE_MAX,
+  echelleMin,
+  jaugeDuZoom,
   echelleVerticale,
   niveau,
   syDe,
@@ -102,5 +104,23 @@ describe('vol vers une personne', () => {
     expect(fin.s).toBeCloseTo(1)
     expect(fin.tx + 5000 * fin.s).toBeCloseTo(600)
     expect(fin.ty + 400 * syDe(fin.s, canevas)).toBeCloseTo(350)
+  })
+})
+
+describe('la jauge de zoom (administration)', () => {
+  it('donne le zoom en pour cent et sa place entre le minimum et le maximum', () => {
+    const min = echelleMin(canevas.largeur, canevas.largeurMonde)
+    expect(jaugeDuZoom(1, canevas).pourcent).toBe(100)
+    expect(jaugeDuZoom(0.304, canevas).pourcent).toBe(30)
+    expect(jaugeDuZoom(min, canevas).position).toBe(0)
+    expect(jaugeDuZoom(ECHELLE_MAX, canevas).position).toBe(1)
+  })
+
+  it('range les seuils des niveaux dans l’ordre, à l’intérieur de la jauge', () => {
+    const { seuils, position } = jaugeDuZoom(0.3, canevas)
+    expect(seuils[0]).toBeGreaterThan(0)
+    expect(seuils[0]).toBeLessThan(position)
+    expect(position).toBeLessThan(seuils[1])
+    expect(seuils[1]).toBeLessThan(1)
   })
 })
