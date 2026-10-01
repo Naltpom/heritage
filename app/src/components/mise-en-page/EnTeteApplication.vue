@@ -44,6 +44,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import AvatarCompte from '@/components/mise-en-page/AvatarCompte.vue'
 import { useSession } from '@/composables/useSession'
 import { useTiroirs } from '@/composables/useTiroirs'
 import { useEntete, type Section } from '@/composables/entete'
@@ -52,7 +53,7 @@ import MoiView from '@/views/MoiView.vue'
 import RechercheEntete from './RechercheEntete.vue'
 
 const routeur = useRouter()
-const { connecte, rattache, nomAffiche } = useSession()
+const { connecte, rattache } = useSession()
 const { ouvert, outilsDisponibles, basculerTiroir, fermerTiroirs } = useTiroirs()
 const { section, titre, resume, parent, filtresActifs } = useEntete()
 
@@ -76,10 +77,6 @@ const ONGLETS_EN_ATTENTE: { section: Section; nom: string; libelle: string }[] =
 
 const onglets = computed(() => (rattache.value ? ONGLETS : ONGLETS_EN_ATTENTE))
 
-const initiales = computed(() => {
-  const mots = nomAffiche.value.split(/[\s@.]+/).filter(Boolean)
-  return ((mots[0]?.[0] ?? '') + (mots[1]?.[0] ?? '')).toUpperCase() || '?'
-})
 
 /* ───────────────── La recherche du téléphone ───────────────── */
 
@@ -262,7 +259,7 @@ const classeBoutonIcone =
           aria-label="Moi"
           @click="basculerTiroir('compte')"
         >
-          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-accent-doux text-xs font-bold text-accent">{{ initiales }}</span>
+          <AvatarCompte :taille="32" />
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" class="text-attenue">
             <path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>

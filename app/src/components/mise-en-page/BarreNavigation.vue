@@ -9,7 +9,7 @@
  * ouvert depuis l'accueil et la fiche ; les notifications sont à la cloche de
  * l'en-tête. Une icône et un petit libellé par entrée ; l'entrée active est
  * marquée par la couleur d'accent et `aria-current="page"`. Moi montre les
- * initiales du compte, et une pastille quand la file de validation attend un
+ * photo de sa fiche (ou une silhouette), et une pastille quand la file de validation attend un
  * administrateur.
  *
  * **Un compte en attente n'en voit que deux** : Inscription · Moi (ADR 0003,
@@ -44,12 +44,13 @@
  *   dans `entete.ts`, que le routeur publie à chaque navigation.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import AvatarCompte from '@/components/mise-en-page/AvatarCompte.vue'
 import { useSession } from '@/composables/useSession'
 import { useEntete, type Section } from '@/composables/entete'
 import { useTiroirs } from '@/composables/useTiroirs'
 import { listerDemandesAdministration } from '@/lib/api'
 
-const { connecte, rattache, administrateur, nomAffiche } = useSession()
+const { connecte, rattache, administrateur } = useSession()
 const { section } = useEntete()
 const { ouvert } = useTiroirs()
 
@@ -71,10 +72,6 @@ const ENTREES_EN_ATTENTE: Entree[] = [
 
 const entrees = computed(() => (rattache.value ? ENTREES : ENTREES_EN_ATTENTE))
 
-const initiales = computed(() => {
-  const mots = nomAffiche.value.split(/[\s@.]+/).filter(Boolean)
-  return ((mots[0]?.[0] ?? '') + (mots[1]?.[0] ?? '')).toUpperCase() || '?'
-})
 
 /** La file de validation, pour la pastille de Moi. Même requête que Moi :
  *  une ligne, le total seul. */
@@ -170,11 +167,7 @@ onBeforeUnmount(() => {
                 stroke-linejoin="round"
               />
             </svg>
-            <span
-              v-else
-              class="flex h-[26px] w-[26px] items-center justify-center rounded-full text-[10.5px] font-bold"
-              :class="section === e.section ? 'bg-accent text-fond' : 'bg-accent-doux text-accent'"
-            >{{ initiales }}</span>
+            <AvatarCompte v-else :taille="26" :actif="section === e.section" />
             <span
               v-if="e.section === 'moi' && fileEnAttente > 0"
               class="pastille-moi absolute -top-1 -right-2 flex h-4 min-w-4 items-center justify-center rounded-pastille bg-accent px-1 text-[10px] font-bold text-fond tnum ring-2 ring-panneau"
