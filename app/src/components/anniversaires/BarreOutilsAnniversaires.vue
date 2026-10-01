@@ -167,13 +167,12 @@ const voir = computed(() =>
               {{ libelleDuGenre(ligne.genre) }} — {{ ligne.compte }}
             </li>
             <li v-if="masques > 0" class="tnum">
-              et {{ masques }} de plus dans les genres que vous n’affichez pas
+              et {{ masques }} dans les genres masqués
             </li>
           </ul>
 
           <p class="mt-1.5">
-            Ces événements sont datés d’une année, parfois d’un mois, mais personne
-            n’en a noté le jour : aucune case du calendrier ne peut les porter.
+            Sans jour connu, ils n’ont pas de case dans le calendrier.
           </p>
         </div>
       </details>
@@ -194,13 +193,12 @@ const voir = computed(() =>
             {{ libelleDuGenre(ligne.genre) }} — {{ ligne.compte }}
           </li>
           <li v-if="masques > 0" class="tnum">
-            et {{ masques }} de plus dans les genres que vous n’affichez pas
+            et {{ masques }} dans les genres masqués
           </li>
         </ul>
 
         <p class="mt-1.5 text-xs">
-          Ces événements sont datés d’une année, parfois d’un mois, mais personne
-          n’en a noté le jour : aucune case du calendrier ne peut les porter.
+          Sans jour connu, ils n’ont pas de case dans le calendrier.
         </p>
       </details>
     </template>

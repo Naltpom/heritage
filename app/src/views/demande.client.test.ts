@@ -362,6 +362,6 @@ describe('« Annuler ma demande »', () => {
 
     await cliquer(un(racine, parAttribut('data-retirer')))
 
-    expect(texte(un(racine, (n) => n.tag === 'dialog')!)).toContain('tracé au nom de Natron')
+    expect(texte(un(racine, (n) => n.tag === 'dialog')!)).toContain('enregistré au nom de Natron')
   })
 })

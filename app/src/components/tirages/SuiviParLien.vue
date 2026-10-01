@@ -91,8 +91,7 @@ const LIBELLES: Record<PresenceAuTirage, string> = {
     >
       <h1 class="text-lg font-semibold text-texte">Ce lien n’est plus valable</h1>
       <p class="text-sm text-texte">
-        Il a peut-être été remplacé par un nouveau lien, ou révoqué. Demandez à la personne qui
-        vous l’a envoyé de vous en donner un autre.
+        Demandez-en un autre à la personne qui vous l’a envoyé.
       </p>
     </section>
 
@@ -168,7 +167,7 @@ const LIBELLES: Record<PresenceAuTirage, string> = {
       </section>
 
       <p class="mt-auto text-xs text-attenue">
-        Ce lien est personnel : il donne accès à votre présence et à votre cadeau. Ne le transférez pas.
+        Ce lien est personnel : ne le transférez pas.
       </p>
     </template>
   </div>

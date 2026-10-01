@@ -74,21 +74,12 @@ const aucun = computed(() => aCherche.value && candidats.value.length === 0)
     <div v-if="aucun" role="status">
       <h2 class="text-base font-semibold">Aucune correspondance trouvée</h2>
 
-      <p class="mt-2 text-sm text-attenue">
-        Nous n’avons trouvé personne qui corresponde à ce que vous avez indiqué.
-      </p>
 
       <!-- Les trois pistes : voir le commentaire de tête. -->
       <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-attenue">
-        <li>
-          Vérifiez l’orthographe du nom et des prénoms, tels qu’ils figurent à l’état
-          civil — un nom de naissance plutôt qu’un nom d’usage, par exemple.
-        </li>
-        <li>Vérifiez la date de naissance, jour, mois et année.</li>
-        <li>
-          Si tout vous semble juste, écrivez à la personne qui vous a envoyé cette
-          invitation : elle saura sous quel nom la fiche est enregistrée.
-        </li>
+        <li>Vérifiez l’orthographe du nom de naissance et des prénoms.</li>
+        <li>Vérifiez la date de naissance.</li>
+        <li>Sinon, demandez à la personne qui vous a envoyé l’invitation sous quel nom vous figurez.</li>
       </ul>
     </div>
 
@@ -101,8 +92,7 @@ const aucun = computed(() => aCherche.value && candidats.value.length === 0)
       </legend>
 
       <p class="mt-2 text-sm text-attenue">
-        Ces informations sont volontairement réduites : tant que votre rattachement n’est
-        pas confirmé, nous n’affichons rien de plus.
+        Le détail s’affichera une fois votre inscription validée.
       </p>
 
       <div class="mt-3 flex flex-col gap-2">

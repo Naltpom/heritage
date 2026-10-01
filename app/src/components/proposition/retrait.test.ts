@@ -33,14 +33,14 @@ describe('confirmationDeRetrait()', () => {
   it('nomme la demande, dit qu’elle reste consultable, et agit par un verbe', () => {
     const question = confirmationDeRetrait({ id: 12, status: 'en_attente' })
     expect(question.titre).toBe('Annuler la demande n° 12 ?')
-    expect(question.message).toMatch(/restera consultable/)
+    expect(question.message).toMatch(/restera visible/)
     expect(question.confirmer).toBe('Annuler ma demande')
     expect(question.danger).toBe(true)
   })
 
   it('sous incarnation, dit au nom de qui le geste s’écrit', () => {
     expect(confirmationDeRetrait({ id: 12, status: 'en_attente' }, 'Natron').message).toContain(
-      'tracé au nom de Natron',
+      'enregistré au nom de Natron',
     )
   })
 })

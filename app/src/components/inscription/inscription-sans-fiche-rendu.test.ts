@@ -78,7 +78,7 @@ describe('DeclarationFamille', () => {
   it('porte la mention : administrateurs seulement, analyse possible par Gemini', async () => {
     const html = await rendre(DeclarationFamille, { ...IDENTITE, description: '' })
 
-    expect(html).toContain('Seuls les administrateurs de l’arbre lisent ce texte')
+    expect(html).toContain('Lu seulement par les administrateurs')
     expect(html).toContain('Google Gemini')
   })
 
@@ -114,7 +114,7 @@ describe('EtapePhoto', () => {
 
   it('dit qui la voit tant que le compte attend', async () => {
     expect(await rendre(EtapePhoto, { enAttente: true })).toContain(
-      'seules les personnes qui administrent',
+      'Seuls les administrateurs la voient',
     )
     expect(await rendre(EtapePhoto, { enAttente: false })).toContain('aussitôt le portrait')
   })
@@ -142,7 +142,7 @@ describe('InscriptionCompteView, venue de « Je ne me trouve pas »', () => {
     const html = await rendre(InscriptionCompteView)
 
     expect(html).toContain('Choisir vos identifiants')
-    expect(html).toContain('créé sans fiche')
+    expect(html).toContain('à partir de votre description')
     expect(html).toContain('Modifier ma description')
     // La description reste en mémoire, pour l'envoi : elle ne s'affiche pas ici.
     expect(html).not.toContain('Jean Dupont')
@@ -168,9 +168,8 @@ describe('InscriptionEtatView', () => {
     etatServi.valeur = { ...BASE, portraitEnAttente: true }
     const html = await rendre(InscriptionEtatView)
 
-    expect(html).toContain('retrouver votre')
-    expect(html).toContain('description de famille')
-    expect(html).not.toContain('à laquelle vous vous êtes rattaché')
+    expect(html).toContain('à partir de votre description')
+    expect(html).not.toContain('la fiche choisie')
     expect(html).not.toContain('y compris pour la fiche')
     // Plus rien de l'arbre, pas même les deux nombres (ADR 0003, 01/10/2026).
     expect(html).not.toContain('256')
@@ -180,8 +179,8 @@ describe('InscriptionEtatView', () => {
     etatServi.valeur = { ...BASE, matchKind: 'recherche_confirmee', portraitEnAttente: true }
     const html = await rendre(InscriptionEtatView)
 
-    expect(html).toContain('à laquelle vous vous êtes rattaché')
-    expect(html).not.toContain('description de famille')
+    expect(html).toContain('la fiche choisie')
+    expect(html).not.toContain('à partir de votre description')
   })
 
   it('propose la photo seulement quand le serveur dit qu’il n’y en a pas', async () => {

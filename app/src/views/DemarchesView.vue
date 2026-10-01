@@ -45,9 +45,7 @@ function choisir(selection: StatutDeDemarche[]): void {
     <header class="mb-5">
       <h1 class="text-xl font-semibold text-texte">Actes demandés</h1>
       <p class="mt-1 text-sm text-attenue">
-        Les pièces demandées à une mairie ou à des archives, avec le texte de chaque message. Une réponse arrive :
-        retrouvez la démarche par un nom, une commune ou l’adresse de la mairie. Avant d’écrire à une mairie, vérifiez
-        ici que personne ne l’a déjà fait.
+        Avant d’écrire à une mairie ou aux archives, vérifiez ici que personne ne l’a déjà fait.
       </p>
     </header>
 

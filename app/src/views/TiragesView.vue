@@ -129,7 +129,7 @@ onBeforeUnmount(() => avorteur?.abort())
       <div>
         <h1 class="text-xl font-semibold text-texte">Tirages au sort</h1>
         <p class="mt-1 text-sm text-attenue">
-          Chaque année, un tirage désigne à qui chacun offre un cadeau. Vous ne voyez que le vôtre.
+          Chacun tire au sort à qui offrir un cadeau. Vous ne voyez que le vôtre.
         </p>
       </div>
       <BoutonBase v-if="!enCreation && liste !== null" :desactive="suspendu" @click="ouvrirLaCreation">
@@ -164,10 +164,10 @@ onBeforeUnmount(() => avorteur?.abort())
               </button>
             </li>
           </ul>
-          <p v-else class="text-xs text-attenue">Personne pour l’instant. Vous pourrez aussi en ajouter plus tard.</p>
+          <p v-else class="text-xs text-attenue">Personne pour l’instant : vous pourrez en ajouter plus tard.</p>
           <SelecteurPersonne
             etiquette="Ajouter une personne de l’arbre"
-            aide="Seules les personnes vivantes sont proposées. Un enfant sans compte peut participer : un parent lira son tirage pour lui."
+            aide="Un enfant sans compte peut participer : un parent lira son tirage."
             :avec-propositions="false"
             vivants-seulement
             :deja-choisis="dejaChoisis"
@@ -200,7 +200,7 @@ onBeforeUnmount(() => avorteur?.abort())
         v-if="liste.tirages.length === 0 && !enCreation"
         class="rounded-panneau border border-ligne bg-panneau p-6 text-sm text-attenue"
       >
-        Aucun tirage pour l’instant. Créez celui de Noël, d’un anniversaire, ou de toute fête qui revient chaque année.
+        Aucun tirage pour l’instant. Créez celui de Noël ou d’une autre fête.
       </p>
 
       <ul class="flex flex-col gap-3">

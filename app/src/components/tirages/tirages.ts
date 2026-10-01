@@ -58,8 +58,8 @@ export function avertissementDeMemoire(memoire: number, conseillee: number): str
   if (memoire <= conseillee) return null
 
   return conseillee === 0
-    ? 'Avec si peu de participants, cette règle ne pourra pas être respectée : le tirage l’ignorera.'
-    : `Avec ce nombre de participants, au-delà de ${conseillee} tirage${conseillee > 1 ? 's' : ''} la règle ne pourra pas toujours être respectée : le tirage oubliera alors les années les plus anciennes.`
+    ? 'Trop peu de participants : cette règle sera ignorée.'
+    : `Avec ce nombre de participants, la règle ne tiendra pas au-delà de ${conseillee} tirage${conseillee > 1 ? 's' : ''}.`
 }
 
 /** « Vous offrez un cadeau à… » ou, pour un participant accompagné, « Léa offre un cadeau à… ». */
@@ -72,7 +72,7 @@ export function phraseDAttribution(attribution: MonAttribution, monPersonId: num
 /** Ce que le donneur doit faire du cadeau, selon qu'il vient ou non. */
 export function consigneDeRemise(presenceDuDonneur: PresenceAuTirage): string {
   return presenceDuDonneur === 'a_distance'
-    ? 'Vous ne serez pas là : faites transmettre le cadeau pour qu’il soit au rendez-vous le jour J.'
+    ? 'Vous ne serez pas là : faites transmettre le cadeau.'
     : 'À apporter le jour J.'
 }
 
@@ -157,13 +157,13 @@ export function confirmationDeRetrait(libelle: string, estMoi: boolean): Confirm
   return estMoi
     ? {
         titre: 'Quitter ce tirage ?',
-        message: 'Vous ne serez plus dans les prochains tirages. Les années passées gardent leur historique.',
+        message: 'Vous ne serez plus dans les prochains tirages. Les années passées restent.',
         confirmer: 'Quitter le tirage',
         danger: true,
       }
     : {
         titre: `Retirer ${libelle} ?`,
-        message: `${libelle} ne sera plus dans les prochains tirages. Les années passées gardent leur historique.`,
+        message: `${libelle} ne sera plus dans les prochains tirages. Les années passées restent.`,
         confirmer: 'Retirer',
         danger: true,
       }
@@ -172,7 +172,7 @@ export function confirmationDeRetrait(libelle: string, estMoi: boolean): Confirm
 export function confirmationDuTirage(annee: number, participants: number): Confirmation {
   return {
     titre: `Lancer le tirage ${annee} ?`,
-    message: `${participants} participant${participants > 1 ? 's' : ''} ${participants > 1 ? 'seront prévenus' : 'sera prévenu'}. Vérifiez d’abord qui vient : changer d’avis ensuite demandera d’annuler et de refaire le tirage.`,
+    message: `${participants} participant${participants > 1 ? 's' : ''} ${participants > 1 ? 'seront prévenus' : 'sera prévenu'}. Vérifiez d’abord qui vient : ensuite, il faudra annuler et refaire le tirage.`,
     confirmer: 'Lancer le tirage',
   }
 }
@@ -180,7 +180,7 @@ export function confirmationDuTirage(annee: number, participants: number): Confi
 export function confirmationDAnnulation(annee: number): Confirmation {
   return {
     titre: `Annuler le tirage ${annee} ?`,
-    message: 'Toutes les attributions de cette année seront effacées. Il faudra relancer le tirage, et chacun découvrira une nouvelle personne.',
+    message: 'Les résultats de cette année seront effacés. Il faudra relancer le tirage.',
     confirmer: 'Annuler le tirage',
     danger: true,
   }
@@ -215,15 +215,15 @@ export function adresseDuLien(url: string, origine: string): string {
  */
 export function etatVuParLien(lecture: LectureParLien): string {
   const e = lecture.edition
-  if (e === null) return 'Aucune année n’est ouverte pour l’instant : l’organisateur l’ouvrira avant le jour J.'
+  if (e === null) return 'Aucune année n’est ouverte pour l’instant.'
   if (e.statut === 'tiree') {
     if (lecture.attributions.length > 0) return 'Le tirage est fait.'
     return lecture.participant.presence === 'absente'
       ? 'Le tirage est fait. Vous n’y participez pas cette année.'
-      : 'Le tirage est fait, sans vous : l’organisateur doit le refaire pour vous y inclure.'
+      : 'Le tirage est fait, sans vous : l’organisateur doit le refaire pour vous inclure.'
   }
   if (e.passee) return 'Cette année est passée.'
-  return 'Le tirage n’a pas encore eu lieu. Dites si vous venez : ceux qui ne participent pas n’y entrent pas.'
+  return 'Le tirage n’a pas encore eu lieu : dites si vous venez.'
 }
 
 /**
@@ -243,7 +243,7 @@ export function boutonDeCadeauParLien(attribution: MonAttribution, personIdDuPar
 export function confirmationDeRegeneration(libelle: string): Confirmation {
   return {
     titre: `Nouveau lien pour ${libelle} ?`,
-    message: `Le lien déjà envoyé à ${libelle} cessera aussitôt de fonctionner. Vous devrez lui envoyer le nouveau.`,
+    message: `Le lien envoyé à ${libelle} ne marchera plus : il faudra lui envoyer le nouveau.`,
     confirmer: 'Régénérer le lien',
   }
 }

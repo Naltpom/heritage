@@ -425,15 +425,15 @@ const classeSelect = 'h-9 rounded-champ border border-ligne bg-fond px-2 text-sm
               Le tirage est fait. Vous n’y participez pas cette année.
             </p>
             <p v-if="jeSuisArriveApres" class="text-sm text-attenue">
-              Vous avez rejoint le tirage après qu’il a eu lieu : l’organisateur doit le refaire pour vous y inclure.
+              Vous avez rejoint après le tirage : l’organisateur doit le refaire pour vous inclure.
             </p>
             <p v-if="memoireRelachee !== null && tirage.peutGerer" class="text-xs text-attenue">
-              Cette année, le tirage n’a pu éviter les personnes que de {{ memoireRelachee }}
-              année{{ memoireRelachee > 1 ? 's' : '' }} passée{{ memoireRelachee > 1 ? 's' : '' }} : le groupe est trop petit pour la règle choisie.
+              Groupe trop petit pour la règle choisie : le tirage n’a évité que {{ memoireRelachee }}
+              année{{ memoireRelachee > 1 ? 's' : '' }} passée{{ memoireRelachee > 1 ? 's' : '' }}.
             </p>
           </template>
           <p v-else class="text-sm text-attenue">
-            Le tirage n’a pas encore eu lieu. Dites si vous venez : ceux qui ne participent pas cette année n’y entrent pas.
+            Le tirage n’a pas encore eu lieu : dites si vous venez.
           </p>
 
           <div>
@@ -476,7 +476,7 @@ const classeSelect = 'h-9 rounded-champ border border-ligne bg-fond px-2 text-sm
               Annuler le tirage
             </BoutonBase>
             <p class="w-full text-xs text-attenue">
-              Vous organisez ce tirage, mais vous ne voyez que votre propre attribution — comme tout le monde.
+              Comme tout le monde, vous ne voyez que votre propre tirage.
             </p>
           </div>
         </div>
@@ -538,13 +538,10 @@ const classeSelect = 'h-9 rounded-champ border border-ligne bg-fond px-2 text-sm
         </ul>
 
         <p v-if="gestionDeLiens" class="mt-3 text-xs text-attenue">
-          Le lien personnel permet à quelqu’un sans compte de dire s’il vient et de découvrir à qui il
-          offre. Il n’est affiché qu’une fois, à sa création : pour le renvoyer, régénérez-le — l’ancien
-          cessera de fonctionner. Il donne accès à sa présence et à son cadeau : ne le partagez qu’avec lui.
+          Le lien personnel sert à quelqu’un sans compte. Il ne s’affiche qu’une fois : ne le partagez qu’avec cette personne.
         </p>
         <p v-if="tirage.peutGerer" class="mt-2 text-xs text-attenue">
-          Un participant qui a son compte n’a pas de lien : son tirage reste secret, même pour
-          l’organisateur. Celui d’une personne accompagnée, c’est son référent qui le partage.
+          Avec un compte, pas besoin de lien : le tirage reste secret, même pour vous.
         </p>
 
         <div v-if="tirage.peutGerer" class="mt-4 flex flex-col gap-2 border-t border-ligne pt-4">
@@ -555,10 +552,10 @@ const classeSelect = 'h-9 rounded-champ border border-ligne bg-fond px-2 text-sm
               :value="referent ?? ''"
               @change="referent = ($event.target as HTMLSelectElement).value === '' ? null : Number(($event.target as HTMLSelectElement).value)"
             >
-              <option value="">Personne — il ou elle a son propre compte</option>
+              <option value="">Personne (a son propre compte)</option>
               <option v-for="p in tirage.participants" :key="p.personId" :value="p.personId">{{ p.libelle }}</option>
             </select>
-            <span class="text-xs text-attenue">Pour un enfant sans compte : son référent lira son tirage.</span>
+            <span class="text-xs text-attenue">Pour un enfant sans compte : cette personne lira son tirage.</span>
           </label>
           <SelecteurPersonne
             etiquette="Ajouter une personne de l’arbre"

@@ -51,8 +51,7 @@ onMounted(async () => {
 
         <template v-else-if="etat === 'confirme'">
           <p class="text-sm" role="status">
-            Votre nouvelle adresse est confirmée : c'est elle qui vous identifie désormais.
-            Les sessions ouvertes sur d'autres appareils devront se reconnecter avec elle.
+            Votre nouvelle adresse est confirmée. Vos autres appareils devront se reconnecter.
           </p>
           <RouterLink :to="{ name: 'connexion' }" class="self-start">
             <BoutonBase variante="principal">Se connecter</BoutonBase>
@@ -61,8 +60,7 @@ onMounted(async () => {
 
         <template v-else-if="etat === 'refuse'">
           <p class="text-sm">
-            Ce lien n'est plus valable. Il a peut-être déjà servi, ou son délai est passé :
-            depuis votre compte, demandez un nouveau lien.
+            Ce lien n’est plus valable : demandez-en un nouveau depuis votre compte.
           </p>
           <RouterLink :to="{ name: 'connexion' }" class="self-start">
             <BoutonBase variante="secondaire">Se connecter</BoutonBase>

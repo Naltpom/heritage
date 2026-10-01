@@ -285,7 +285,7 @@ async function supprimer(): Promise<void> {
 
         <form v-else-if="geste === 'message'" class="flex flex-col gap-3" @submit.prevent="ajouterLeMessage">
           <p class="text-sm text-attenue">
-            Une relance, ou la réponse du service. Une seconde demande envoyée fait passer la démarche à « relancée ».
+            Une relance, ou la réponse reçue.
           </p>
           <FormulaireMessage v-model="nouveauMessage" :erreurs="champs" />
           <div class="flex gap-2">

@@ -67,8 +67,7 @@ async function copier(): Promise<void> {
       Ce lien donne accès à sa présence et à son cadeau : ne le partagez qu’avec {{ libelle }}.
     </p>
     <p class="text-xs text-attenue">
-      Il ne sera plus affiché une fois ce cadre fermé. Pour le renvoyer, régénérez-le : l’ancien
-      cessera de fonctionner.
+      Il ne s’affichera plus : pour le renvoyer, régénérez-le.
     </p>
   </div>
 </template>

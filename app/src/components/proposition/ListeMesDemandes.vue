@@ -149,7 +149,7 @@ function changerFiltre(valeur: StatutDemande | ''): void {
         </div>
 
         <!-- Téléphone : les mêmes états, en pastilles qui défilent. -->
-        <div class="flex gap-2 md:hidden" role="group" aria-label="État des demandes affichées">
+        <div class="flex flex-wrap gap-2 md:hidden" role="group" aria-label="État des demandes affichées">
           <button
             v-for="o in choix"
             :key="o.libelle"
@@ -170,11 +170,6 @@ function changerFiltre(valeur: StatutDemande | ''): void {
     </BarreEcran>
 
     <div class="mx-auto w-full max-w-3xl px-4 py-6">
-      <p class="mb-5 text-sm text-attenue">
-        Ce que vous avez proposé, et ce que c’est devenu. Une demande refusée porte
-        toujours le motif de son refus.
-      </p>
-
       <PanneauBase v-if="chargement && vide">
         <p class="mb-3 text-sm text-attenue" role="status">Chargement de vos demandes…</p>
         <SqueletteChargement :lignes="3" />
@@ -201,7 +196,7 @@ function changerFiltre(valeur: StatutDemande | ''): void {
       </PanneauBase>
 
       <template v-else>
-        <ul class="flex flex-col gap-3">
+        <ul class="flex min-w-0 flex-col gap-3 [overflow-wrap:anywhere]">
           <li v-for="demande in demandes" :key="demande.id">
             <PanneauBase>
               <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">

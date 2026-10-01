@@ -37,14 +37,11 @@ import PanneauBase from '@/components/base/PanneauBase.vue'
            sort côté serveur : « coupé en chemin » n'apprend rien à personne,
            « il n'est plus actif » dirait qu'il l'a été. -->
       <p class="mt-2 text-sm text-attenue">
-        Nous ne pouvons pas ouvrir d’inscription avec ce lien. Il a peut-être été coupé
-        en chemin : certains logiciels de courriel tronquent les liens longs, et un
-        lien recopié à la main perd facilement un caractère.
+        Il a peut-être été coupé en chemin, ou mal recopié.
       </p>
 
       <p class="mt-2 text-sm text-attenue">
-        Le plus simple est d’écrire à la personne qui vous a envoyé cette invitation :
-        elle pourra vérifier, et vous en adresser une autre si besoin.
+        Écrivez à la personne qui vous a envoyé l’invitation.
       </p>
     </div>
   </PanneauBase>

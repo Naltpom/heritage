@@ -160,8 +160,7 @@ async function quitter(): Promise<void> {
     >
       <p>{{ raisonSuspension }}</p>
       <p class="mt-1">
-        Les inscriptions à rattacher ne s’affichent pas sous une vue empruntée : leurs descriptions
-        ne se filtrent pas par un cercle.
+        Les inscriptions ne s’affichent pas sous une vue empruntée.
       </p>
       <div class="mt-2">
         <BoutonBase variante="secondaire" @click="quitter">Quitter la vue empruntée</BoutonBase>
@@ -169,9 +168,7 @@ async function quitter(): Promise<void> {
     </div>
 
     <p v-else class="text-sm text-attenue">
-      Ces personnes se sont inscrites sans se trouver dans l’arbre. Leur compte attend, sans fiche :
-      rattachez-le à une fiche existante, créez la sienne, ou refusez l’inscription. L’analyse
-      automatique propose une piste ; elle ne décide rien.
+      Ces personnes ne se sont pas trouvées dans l’arbre : rattachez-les à une fiche, créez la leur, ou refusez.
     </p>
 
     <MessageErreur v-if="erreur !== null" :erreur="erreur" @action="charger" />

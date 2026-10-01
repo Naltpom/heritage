@@ -367,7 +367,7 @@ function dateLisible(valeur: string | null): string {
       <p class="text-sm text-attenue">
         {{
           etat === 'en_attente'
-            ? 'Rien n’attend de décision. La file est vide.'
+            ? 'Rien n’attend de décision.'
             : 'Aucune demande ne correspond à ce filtre.'
         }}
       </p>
@@ -393,7 +393,7 @@ function dateLisible(valeur: string | null): string {
             <!-- Deux demandes sur la même fiche : l'ordre de décision compte,
                  et le dire ici évite de le découvrir en cliquant. -->
             <span v-if="!groupe.sansCible && groupe.demandes.length > 1" class="text-xs text-alerte">
-              {{ groupe.demandes.length }} demandes sur cette fiche — décidez-les ensemble
+              {{ groupe.demandes.length }} demandes sur cette fiche : décidez-les ensemble
             </span>
           </div>
         </template>

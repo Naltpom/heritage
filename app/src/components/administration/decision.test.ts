@@ -193,7 +193,7 @@ describe('ce que propose le bouton « Valider »', () => {
   it('sur `rejeu` : valider, en annonçant le rejeu', () => {
     const action = actionValidation('rejeu')
     expect(action.desactive).toBe(false)
-    expect(action.libelle).toMatch(/rejouée/i)
+    expect(action.libelle).toMatch(/version actuelle/i)
     expect(action.explication).not.toBeNull()
   })
 
@@ -273,7 +273,7 @@ describe('un rejeu automatique se voit', () => {
 
     expect(annonce.rejoue).toBe(true)
     expect(annonce.titre).not.toBe('Demande validée')
-    expect(annonce.titre).toMatch(/rejeu/i)
+    expect(annonce.titre).toMatch(/version actuelle/i)
   })
 
   it('dit qu’aucun humain n’a réexaminé l’écriture', () => {
@@ -290,7 +290,7 @@ describe('un rejeu automatique se voit', () => {
       },
     })
 
-    expect(annonce.detail).toMatch(/réexamin/i)
+    expect(annonce.detail).toMatch(/Personne d’autre n’a relu/i)
     expect(annonce.detail).toContain('birth')
   })
 })
@@ -355,8 +355,8 @@ describe('« & suivant »', () => {
   it('annonce la décision précédente, et la fin de la file', () => {
     expect(annonceEnchainement(12, 'validee', false)).toBe('Demande n° 12 validée. Voici la suivante dans la file.')
     expect(annonceEnchainement(12, 'refusee', true)).toBe(
-      'Demande n° 12 refusée. Il n’y a plus de demande en attente dans cette file.',
+      'Demande n° 12 refusée. Plus aucune demande en attente.',
     )
-    expect(annonceEnchainement(12, 'rejouee', false)).toMatch(/rejeu automatique/)
+    expect(annonceEnchainement(12, 'rejouee', false)).toMatch(/sur la version actuelle/)
   })
 })

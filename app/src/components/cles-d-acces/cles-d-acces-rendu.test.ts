@@ -200,7 +200,7 @@ describe('la section « Clés d’accès » de Mon compte', () => {
     navigateur(true)
     const html = await rendre(SectionClesDAcces)
     expect(html).toContain('Clés d’accès')
-    expect(html).toContain('mot de passe reste valable')
+    expect(html).toContain('sans mot de passe')
     // `onMounted` ne tourne pas en SSR : on voit le chargement, jamais une
     // liste vide inventée.
     expect(html).not.toContain('Aucune clé d’accès')
@@ -219,7 +219,7 @@ describe('la section « Clés d’accès » de Mon compte', () => {
     etat.incarnation = { administrateur: 'admin@exemple.test' }
     const html = await rendre(SectionClesDAcces)
     expect(boutons(html)).not.toContain('Ajouter une clé d’accès sur cet appareil')
-    expect(html).toContain('Pendant une incarnation')
+    expect(html).toContain('à la place de ce membre')
   })
 })
 

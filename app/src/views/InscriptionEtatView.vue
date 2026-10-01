@@ -131,13 +131,10 @@ async function entrerDansLArbre(): Promise<void> {
         <h2 class="text-sm font-semibold tracking-tight">Votre compte n’est relié à aucune fiche</h2>
       </template>
       <p class="text-base font-semibold" role="status">
-        Compte sans fiche : contactez une personne qui administre l’arbre.
+        Contactez une personne qui administre l’arbre.
       </p>
       <p class="mt-2.5 text-sm text-attenue">
-        Votre compte existe, mais il n’est rattaché à aucune personne de l’arbre, et
-        aucune demande de rattachement n’est en cours. Tant que ce n’est pas fait,
-        l’arbre de la famille vous reste fermé, pour protéger les personnes qui y
-        figurent.
+        D’ici là, l’arbre vous reste fermé.
       </p>
       <template #pied>
         <RouterLink :to="{ name: 'compte' }" class="text-sm font-semibold text-accent underline">
@@ -169,20 +166,14 @@ async function entrerDansLArbre(): Promise<void> {
           </p>
 
           <p v-if="sansFiche" class="mt-2.5 text-sm">
-            Une personne qui administre l’arbre va retrouver votre fiche à partir de la
-            description de famille que vous avez envoyée — ou la créer, si vous n’y
-            figurez pas encore.
+            Votre fiche sera retrouvée, ou créée, à partir de votre description.
           </p>
           <p v-else class="mt-2.5 text-sm">
-            Une personne qui administre l’arbre doit confirmer que la fiche à laquelle
-            vous vous êtes rattaché·e est bien la vôtre.
+            Un administrateur vérifie que la fiche choisie est bien la vôtre.
           </p>
 
           <p class="mt-2.5 text-sm text-attenue">
-            Cette vérification est faite à la main, par quelqu’un de la famille, et peut
-            prendre quelques jours. L’arbre de la famille vous sera ouvert à ce moment-là :
-            d’ici là, il reste fermé, pour protéger les personnes qui y figurent. Il n’y a
-            rien à relancer, et vous pouvez fermer cette page sans rien perdre.
+            Cela peut prendre quelques jours. Rien à relancer : vous pouvez fermer cette page.
           </p>
         </PanneauBase>
 
@@ -190,9 +181,7 @@ async function entrerDansLArbre(): Promise<void> {
              rejoindre la fiche ; d'ici là, seuls les administrateurs la voient. -->
         <PanneauBase v-if="proposerPhoto" titre="Votre photo" class="mt-4">
           <p class="text-sm">
-            Ajoutez une photo de vous, bien cadrée sur le visage : elle rejoindra votre
-            fiche à la validation. D’ici là, seules les personnes qui administrent l’arbre
-            la voient.
+            Bien cadrée sur le visage. Seuls les administrateurs la voient jusqu’à la validation.
           </p>
           <template #pied>
             <BoutonBase variante="secondaire" @click="choixPortraitOuvert = true">
@@ -212,8 +201,7 @@ async function entrerDansLArbre(): Promise<void> {
         <!-- En attendant : ce qui est à lui, et rien de l'arbre. -->
         <PanneauBase titre="En attendant" class="mt-4">
           <p class="text-sm">
-            Vous pouvez déjà vérifier votre adresse de courriel ou changer votre mot de
-            passe.
+            Vous pouvez déjà vérifier votre courriel ou changer votre mot de passe.
           </p>
           <template #pied>
             <RouterLink :to="{ name: 'compte' }" class="text-sm font-semibold text-accent underline">
@@ -235,8 +223,7 @@ async function entrerDansLArbre(): Promise<void> {
         </template>
 
         <p class="text-sm">
-          Votre rattachement est confirmé. L’arbre vous est ouvert : les personnes
-          décédées, et les personnes vivantes de votre entourage familial.
+          Votre rattachement est confirmé : l’arbre vous est ouvert.
         </p>
 
         <template #pied>

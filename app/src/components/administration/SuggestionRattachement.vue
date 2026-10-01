@@ -81,13 +81,12 @@ function horodatage(iso: string): string {
       En file : les analyses passent l’une après l’autre.
     </p>
     <p v-else-if="analyse.etat === 'en_cours'" class="text-attenue" role="status">
-      Analyse en cours — comptez 20 à 60 secondes. Vous pouvez décider sans l’attendre.
+      Analyse en cours (20 à 60 secondes). Vous pouvez décider sans l’attendre.
     </p>
 
     <!-- ── Pas de clé : un réglage, pas une panne ─────────────────────── -->
     <p v-else-if="analyse.etat === 'non_configuree'" class="text-attenue">
-      L’analyse automatique n’est pas configurée sur ce serveur. Rattachez ce compte à la main :
-      choisissez une fiche, ou créez-la.
+      Analyse automatique indisponible : choisissez une fiche, ou créez-la.
     </p>
 
     <!-- ── Échec : le message, et de quoi relancer ────────────────────── -->

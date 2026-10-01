@@ -424,14 +424,14 @@ export function messageDeLIssue(issue: IssueWebAuthn, contexte: 'connexion' | 'a
   switch (issue) {
     case 'annulee':
       return contexte === 'connexion'
-        ? 'La connexion par clé d’accès a été annulée. Vous pouvez réessayer, ou utiliser votre mot de passe.'
-        : 'L’ajout de la clé d’accès a été annulé. Rien n’a changé sur votre compte.'
+        ? 'Connexion annulée. Réessayez, ou utilisez votre mot de passe.'
+        : 'Ajout annulé. Rien n’a changé.'
     case 'deja-presente':
       return 'Cet appareil a déjà une clé d’accès pour votre compte.'
     case 'interrompue':
       return null
     case 'sans-reponse':
-      return 'Votre gestionnaire de mots de passe n’a pas répondu. Réessayez, ou désactivez-le pour ce site afin d’utiliser celui de l’appareil.'
+      return 'Votre gestionnaire de mots de passe n’a pas répondu. Réessayez, ou désactivez-le pour ce site.'
     case 'impossible':
       return contexte === 'connexion'
         ? 'Cet appareil n’a pas pu utiliser de clé d’accès. Utilisez votre mot de passe.'

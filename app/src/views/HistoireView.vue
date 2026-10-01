@@ -1159,7 +1159,7 @@ onBeforeUnmount(() => {
           v-for="f in FILTRES"
           :key="f.id"
           :libelle="f.libelle"
-          :titre="qualitesDisponibles.has(f.id) ? f.description : 'Donnée absente de l’arbre servi'"
+          :titre="qualitesDisponibles.has(f.id) ? f.description : 'Rien de tel dans l’arbre'"
           :actif="filtres.qualite === f.id"
           :disponible="qualitesDisponibles.has(f.id)"
           @basculer="basculerQualite(f.id)"
@@ -1224,7 +1224,7 @@ onBeforeUnmount(() => {
             >{{ avecAlliances ? '✓' : '' }}</span>
             <span class="flex flex-1 flex-col leading-tight">
               <span class="text-sm">Les afficher · {{ effectifAlliances }}</span>
-              <span class="text-xs text-attenue">la famille des conjoints de vos proches, chacune à part, à droite</span>
+              <span class="text-xs text-attenue">les familles des conjoints de vos proches</span>
             </span>
           </button>
         </template>
@@ -1246,7 +1246,7 @@ onBeforeUnmount(() => {
           <span class="text-xs text-attenue">{{ t.sous }}</span>
         </button>
         <p class="m-0 text-xs text-attenue">
-          Les fiches filtrées restent visibles, estompées · {{ effectifAffiche }} sur {{ disposition.fiches.length }}.
+          Les autres fiches restent visibles, estompées.
         </p>
       </template>
       <template #actions>
@@ -1553,7 +1553,7 @@ onBeforeUnmount(() => {
             <span
               v-if="ficheChoisie.parente === 'alliance'"
               class="rounded-pastille border border-dashed border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]"
-              title="Ni ancêtre, ni descendant d’un de vos ancêtres, ni leur conjoint : sa famille est alliée à la vôtre par un mariage."
+              title="Sa famille est liée à la vôtre par un mariage."
             >famille par alliance</span>
             <span v-else class="rounded-pastille border border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]">{{
               libelleBranche(ficheChoisie.noeud.branch)
@@ -1561,7 +1561,7 @@ onBeforeUnmount(() => {
             <span
               v-if="ficheChoisie.detache"
               class="rounded-pastille border border-dashed border-ligne px-2.5 py-px text-xs text-attenue"
-              title="Aucun lien connu avec vous : la génération est estimée d'après les dates."
+              title="Sans lien connu avec vous : génération estimée d’après les dates."
             >sans lien connu · position estimée</span>
             <span v-if="ficheChoisie.noeud.enAttente" class="rounded-pastille border border-accent px-2.5 py-px text-xs text-accent">en attente</span>
           </div>

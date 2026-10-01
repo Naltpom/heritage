@@ -167,11 +167,7 @@ async function soumettre(): Promise<void> {
         >
           <p class="font-semibold">Trop d’essais successifs</p>
           <p class="mt-1">
-            Par sécurité, les connexions depuis cet appareil sont suspendues un moment.
-            Vous pourrez réessayer {{ delaiAvantNouvelEssai(analyse?.attenteSecondes ?? null) }}.
-          </p>
-          <p class="mt-1.5 text-attenue">
-            Votre compte n’est ni bloqué ni supprimé : seule cette attente s’applique.
+            Réessayez {{ delaiAvantNouvelEssai(analyse?.attenteSecondes ?? null) }}. Votre compte n’est pas bloqué.
           </p>
         </div>
 
@@ -219,8 +215,7 @@ async function soumettre(): Promise<void> {
       <!-- Pas de « créer un compte » : il n'y a pas d'inscription ouverte, et
            proposer un lien qui n'existe pas ferait chercher pour rien. -->
       <p class="mt-5 text-center text-xs text-attenue">
-        On entre sur cet arbre par une invitation personnelle. Si vous en attendez une,
-        écrivez à la personne qui tient l’arbre.
+        Pas de compte ? Demandez une invitation à la personne qui tient l’arbre.
       </p>
     </template>
   </CadreEntree>

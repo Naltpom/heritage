@@ -79,7 +79,7 @@ export const DESCRIPTIONS_BRANCHE: Record<Branche, string> = {
   pm: 'Bourrache — maternelle du père',
   mp: 'Chardon — paternelle de la mère',
   mm: 'Tilleul — maternelle de la mère',
-  tr: 'Tronc — l’ego, sa fratrie, son conjoint, et qui entre par alliance',
+  tr: 'Tronc — vous, vos frères et sœurs, et les conjoints',
   cpp: 'Romarin du conjoint — paternelle de son père',
   cpm: 'Bourrache du conjoint — maternelle de son père',
   cmp: 'Chardon du conjoint — paternelle de sa mère',

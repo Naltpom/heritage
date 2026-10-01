@@ -239,7 +239,7 @@ onBeforeUnmount(() => {
       <!-- 1. Choisir la source -->
       <template v-if="etape === 'choix'">
         <p class="m-0 text-sm text-attenue">
-          Elle apparaîtra en rond sur votre carte dans l'arbre. Vous pourrez la cadrer pour que votre visage soit bien au centre.
+          Vous pourrez ensuite la cadrer sur votre visage.
         </p>
         <div class="grid grid-cols-2 gap-3">
           <label

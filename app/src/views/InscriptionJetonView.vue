@@ -87,7 +87,7 @@ function commencer(): void {
 <template>
   <CadreEntree
     titre="Vous êtes invité·e"
-    sousTitre="Heritage est l’arbre généalogique de la famille. Il est privé : on y entre sur invitation."
+    sousTitre="L’arbre généalogique privé de la famille."
   >
     <PanneauBase v-if="chargement">
       <p class="mb-3 text-sm text-attenue" role="status">Vérification de votre lien…</p>
@@ -104,17 +104,14 @@ function commencer(): void {
       <h2 class="text-base font-semibold">Avant de commencer</h2>
 
       <p class="mt-2 text-sm text-attenue">
-        Nous allons vous demander de vous situer dans l’arbre, puis de choisir un mot de
-        passe. Cela prend deux minutes.
+        Retrouvez-vous dans l’arbre, puis choisissez un mot de passe : deux minutes suffisent.
       </p>
 
       <!-- Dire d'emblée que la fiche existe peut-être déjà évite le malentendu
            le plus courant : « je crée mon profil ». Non — on rattache une
            personne déjà présente dans l'arbre à un compte. -->
       <p class="mt-2 text-sm text-attenue">
-        Vous ne créez pas une fiche : vous vous rattachez à celle qui vous concerne déjà
-        dans l’arbre. C’est pour cela que nous vous demanderons votre date de naissance —
-        elle sert à vérifier que c’est bien vous, et n’est pas conservée à d’autres fins.
+        Votre date de naissance sert seulement à vérifier que c’est bien vous.
       </p>
 
       <div class="mt-5">

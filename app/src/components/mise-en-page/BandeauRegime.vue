@@ -79,8 +79,7 @@ watch(
       <template v-else>
         <strong class="font-semibold">Connecté en tant que {{ nomAffiche }}</strong>
         <span>
-          Vous voyez et faites tout comme ce membre. Chaque action est tracée à votre nom,
-          {{ incarnation.par.displayName }}.
+          Chaque action est enregistrée à votre nom, {{ incarnation.par.displayName }}.
         </span>
         <slot name="quitter-incarnation" />
         <button
@@ -104,9 +103,9 @@ watch(
     >
       <strong class="font-semibold">Vue empruntée</strong>
       <span>
-        Vous voyez l'arbre avec le cercle de visibilité de
+        Vous voyez l’arbre comme
         <span class="font-semibold">{{ vueEmpruntee.memberLabel }}</span
-        >. Toute écriture est refusée tant que cette bascule est active.
+        >. Aucune modification possible pendant ce temps.
       </span>
       <slot name="quitter-vue" />
     </div>
@@ -118,7 +117,7 @@ watch(
     >
       <strong class="font-semibold">Inscription en cours de vérification</strong>
       <span class="text-attenue">
-        L’arbre vous sera ouvert dès qu’elle sera validée. Vous serez prévenu.
+        L’arbre vous sera ouvert dès qu’elle sera validée.
       </span>
       <RouterLink :to="{ name: 'inscription.etat' }" class="font-semibold text-accent underline">
         Voir l'état de mon inscription

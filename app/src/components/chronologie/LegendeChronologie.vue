@@ -67,8 +67,7 @@ const { enTiroir = false } = defineProps<{
           </g>
         </svg>
         <span class="text-attenue">
-          Date incertaine — la hachure couvre toute la fourchette, de l’année la plus tôt à la
-          plus tard
+          Date incertaine : la hachure couvre la fourchette
         </span>
       </div>
 
@@ -80,7 +79,7 @@ const { enTiroir = false } = defineProps<{
           </g>
         </svg>
         <span class="text-attenue">
-          Personne vivante — la barre reste ouverte et s’arrête à l’année courante
+          Personne vivante : la barre reste ouverte
         </span>
       </div>
 
@@ -92,8 +91,7 @@ const { enTiroir = false } = defineProps<{
           </g>
         </svg>
         <span class="text-attenue">
-          Date non bornée (« avant 1888 ») — la barre s’échappe vers le passé, elle ne
-          prétend à aucune date d’origine
+          Date « avant 1888 » : la barre file vers le passé
         </span>
       </div>
 
@@ -104,8 +102,7 @@ const { enTiroir = false } = defineProps<{
           </g>
         </svg>
         <span class="text-attenue">
-          Décès non daté — la barre s’arrête à ce qu’on sait, son bord en tirets ne prétend
-          pas être une date
+          Décès non daté : bord en tirets
         </span>
       </div>
 
@@ -117,8 +114,7 @@ const { enTiroir = false } = defineProps<{
           <circle class="jalon" cx="17" cy="7" r="3.2" />
         </svg>
         <span class="text-attenue">
-          Fait daté — recensement, résidence. La barre s’étend jusqu’au dernier fait connu ;
-          un trait le rattache à sa piste s’il tombe en dehors
+          Fait daté (recensement, résidence) : la barre va jusqu’au dernier fait connu
         </span>
       </div>
 
@@ -128,9 +124,7 @@ const { enTiroir = false } = defineProps<{
         le lecteur n'a pas le droit de voir (§ 9.1).
       -->
       <p class="mt-1 border-t border-ligne pt-2 text-[11.5px] leading-snug text-attenue">
-        Une barre est faite de dates. Les fiches confidentielles, fermées par décision
-        d’administration, n’en exposent pas : elles n’apparaissent pas ici, alors qu’elles
-        sont dans l’arbre.
+        Les fiches confidentielles n’apparaissent pas ici.
       </p>
     </div>
   </details>

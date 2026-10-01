@@ -112,8 +112,7 @@ export interface MentionDeRattachement {
  * recopier trois fois serait la laisser diverger.
  */
 const DEPUIS_LA_RACINE =
-  'ce compte regarde l’arbre depuis la racine : l’arbre lui est servi centré sur le ' +
-  'propriétaire, et les parentés affichées (« ta grand-mère ») sont celles du propriétaire'
+  'ce compte voit l’arbre centré sur le propriétaire, avec les liens de parenté du propriétaire'
 
 /** Première lettre en capitale — `DEPUIS_LA_RACINE` se compose aussi en incise. */
 function phrase(texte: string): string {
@@ -154,9 +153,8 @@ export function mentionDeRattachement(
       // Le second membre de phrase est ce qui empêche cette mention de devenir
       // une fausse alerte permanente : voir l'en-tête du module.
       consequence:
-        `${phrase(DEPUIS_LA_RACINE)} C’est l’état attendu du compte d’amorçage du ` +
-        'propriétaire, dont la racine est justement la fiche ; sur tout autre compte, ' +
-        'c’est un défaut.',
+        `${phrase(DEPUIS_LA_RACINE)} Normal pour le compte du propriétaire ; ` +
+        'sur tout autre compte, c’est une anomalie.',
     }
   }
 
@@ -170,10 +168,9 @@ export function mentionDeRattachement(
   if (membre.matchKind === 'a_rattacher' && membre.status === 'en_attente') {
     return {
       etat: 'inactif',
-      etiquette: 'Fiche à identifier : inscrit sans s’être trouvé dans l’arbre',
+      etiquette: 'Fiche à identifier : ne s’est pas trouvé dans l’arbre',
       consequence:
-        'Ce compte n’a pas encore de fiche : il ne voit que les personnes décédées. ' +
-        'Rattachez-le depuis l’onglet « À rattacher ».',
+        'Sans fiche, il ne voit que les personnes décédées. Rattachez-le depuis « À rattacher ».',
     }
   }
 

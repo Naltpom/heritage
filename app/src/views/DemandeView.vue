@@ -242,9 +242,9 @@ const dependances = computed(() => demande.value?.dependances ?? [])
 
 /** Ce que chaque état veut dire, en une phrase qui tient sur la ligne. */
 const ETATS_DE_DEPENDANCE: Record<DependanceDeDemande['etat'], string> = {
-  resolue: 'validée : la personne existe désormais dans l’arbre',
-  en_attente: 'encore en attente — à valider avant celle-ci',
-  morte: 'refusée, retirée ou caduque : la personne n’existera jamais',
+  resolue: 'validée : la personne est dans l’arbre',
+  en_attente: 'en attente : à valider avant celle-ci',
+  morte: 'refusée ou annulée : la personne ne sera pas créée',
   disparue: 'la fiche proposée n’existe plus',
 }
 /** Présent uniquement sur la charge d'administration : on teste la clé. */
@@ -455,8 +455,7 @@ function dateLisible(valeur: string | null | undefined): string {
         role="status"
       >
         <strong class="font-semibold">Validée par son propre auteur.</strong>
-        Personne d’autre n’a relu cette modification avant qu’elle soit écrite dans
-        l’arbre. C’est tracé au journal.
+        Personne d’autre ne l’a relue.
       </p>
 
       <!-- Le mot du demandeur. Souvent la pièce qui emporte la décision. -->
@@ -473,8 +472,7 @@ function dateLisible(valeur: string | null | undefined): string {
         role="status"
       >
         <strong class="font-semibold">Cette fiche a changé depuis le dépôt de la demande.</strong>
-        Elle était en version {{ cible.versionALaSoumission }}, elle est aujourd’hui en version
-        {{ cible.version }}. Les valeurs concernées sont signalées ci-dessous.
+        Les valeurs concernées sont signalées ci-dessous.
       </p>
 
       <PanneauBase v-if="proposeUneParente" :titre="titreDeLaParente" class="mb-4">

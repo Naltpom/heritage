@@ -135,7 +135,7 @@ describe('le vide parle', () => {
   it('dit à celui qui filtre que ses autres demandes sont toujours là', async () => {
     const html = await rendre({ demandes: [], total: 0, filtre: 'refusee' })
 
-    expect(html).toContain('Aucune de vos demandes n’est dans l’état')
+    expect(html).toContain('Choisissez « Toutes » pour voir les autres')
     // Pas d'invitation à proposer ici : ce n'est pas qu'il n'a rien proposé.
     expect(html).not.toContain('Vous n’avez encore rien proposé')
   })

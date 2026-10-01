@@ -48,11 +48,10 @@ function dateLisible(valeur: string | null): string {
 
 <template>
   <!-- ── Rien n'a été écrit ─────────────────────────────────────────── -->
-  <PanneauBase v-if="conflit.sorte === 'rejouable'" titre="Écriture concurrente">
+  <PanneauBase v-if="conflit.sorte === 'rejouable'" titre="Enregistrement interrompu">
     <p class="text-sm">{{ conflit.message }}</p>
     <p class="mt-2 text-sm text-attenue">
-      Deux enregistrements se sont croisés. <strong class="font-semibold">Rien n’a été écrit</strong>,
-      et votre saisie est intacte : le même envoi peut être refait tel quel.
+      <strong class="font-semibold">Rien n’a été enregistré</strong> et votre saisie est intacte : réessayez.
     </p>
     <div class="mt-3">
       <BoutonBase @click="emit('reessayer')">{{ conflit.libelleAction }}</BoutonBase>
@@ -69,13 +68,12 @@ function dateLisible(valeur: string | null): string {
     <p class="mt-1 text-sm">{{ conflit.message }}</p>
 
     <p class="mt-2 text-sm">
-      Personne ne l’a refusée : la fiche a changé pendant qu’elle attendait. Rien n’a été
-      appliqué à l’arbre, et <strong class="font-semibold">la relancer telle quelle
-      l’écrirait deux fois</strong> — il faut la reprendre sur les valeurs d’aujourd’hui.
+      La fiche a changé entre-temps et rien n’a été appliqué : <strong class="font-semibold">refaites-la
+      sur les valeurs actuelles</strong>.
     </p>
 
     <p v-if="conflit.cible !== null" class="mt-2 text-sm">
-      La cible visée — {{ conflit.cible.label }} — n’existe plus dans l’arbre.
+      {{ conflit.cible.label }} n’existe plus dans l’arbre.
     </p>
 
     <!-- Trois valeurs par champ. Le tableau défile seul sous 400 px plutôt que

@@ -462,23 +462,18 @@ onBeforeUnmount(() => {
         <PanneauBase titre="Aucune barre à afficher">
           <template v-if="vivantsSeuls">
             <p class="text-sm">
-              Aucune personne vivante de votre cercle de visibilité ne porte de date sur
-              cette période.
+              Aucune personne vivante visible n’a de date sur cette période.
             </p>
             <p class="mt-2 text-xs text-attenue">
-              Le filtre « Vivants uniquement » est actif. L’éteindre rendra les barres des
-              personnes décédées ; il ne fera pas apparaître d’autres vivants — ceux qui
-              sont hors de votre cercle n’exposent aucune date, donc aucune barre.
+              Éteignez « Vivants uniquement » pour revoir les personnes décédées.
             </p>
           </template>
           <template v-else>
             <p class="text-sm">
-              Aucune des personnes que vous pouvez voir ne porte de date sur cette période.
+              Aucune personne visible n’a de date sur cette période.
             </p>
             <p class="mt-2 text-xs text-attenue">
-              Une barre est faite de dates : une personne vivante hors de votre cercle de
-              visibilité n’en a pas. Essayez d’élargir les branches affichées ou de changer la
-              largeur des bandes.
+              Essayez d’autres branches ou une autre largeur de bande.
             </p>
           </template>
         </PanneauBase>
@@ -525,7 +520,7 @@ onBeforeUnmount(() => {
             {{ selection.generation }}
           </p>
           <p v-if="selection.ouverte" class="mt-2 text-xs text-attenue">
-            Barre ouverte : la personne est vivante, le trait s’arrête à l’année courante.
+            Personne vivante : la barre s’arrête à l’année en cours.
           </p>
 
           <template #pied>

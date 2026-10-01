@@ -64,9 +64,9 @@ export function etatDeLEcran(questions: Question[] | null, erreur: unknown): Eta
  */
 export function mentionDuModele(total: number, redigeesParModele: number): string | null {
   if (redigeesParModele <= 0) return null
-  if (redigeesParModele >= total) return 'Ces questions ont été formulées par un modèle de langage.'
+  if (redigeesParModele >= total) return 'Ces questions ont été rédigées par l’IA.'
 
-  return `${redigeesParModele} de ces questions sur ${total} ont été formulées par un modèle de langage.`
+  return `${redigeesParModele} de ces questions sur ${total} ont été rédigées par l’IA.`
 }
 </script>
 
@@ -295,8 +295,7 @@ onBeforeUnmount(() => avorteur?.abort())
     <header class="mb-6">
       <h1 class="text-xl font-semibold text-texte">Questions</h1>
       <p class="mt-1 text-sm text-attenue">
-        Voici ce que l’arbre ne sait pas encore, et que vous pourriez savoir.
-        Chaque réponse est relue avant d’entrer dans l’arbre.
+        Ce que l’arbre ne sait pas encore. Chaque réponse est relue avant d’être ajoutée.
       </p>
       <p v-if="mention !== null" class="mt-2 text-xs text-attenue">{{ mention }}</p>
     </header>
@@ -319,8 +318,7 @@ onBeforeUnmount(() => avorteur?.abort())
     />
 
     <p v-else-if="etat.corps === 'vide'" class="rounded-panneau border border-ligne bg-panneau p-6 text-sm text-attenue">
-      Rien à vous demander pour l’instant. Revenez quand l’arbre aura grandi —
-      ou proposez vous-même une correction depuis une fiche.
+      Rien à vous demander pour l’instant.
     </p>
 
     <ul v-else class="flex flex-col gap-4">

@@ -182,7 +182,7 @@ describe('la barre d’écran de la carte', () => {
   it('présente Fond sobre · Fond détaillé en segmenté, avec l’hôte dans l’infobulle', async () => {
     const html = await rendreLaBarre()
     expect(html).toMatch(/role="group"[^>]*aria-label="Fond de carte"/)
-    expect(html).toMatch(/aria-pressed="false"[^>]*title="Charge des images depuis openstreetmap\.org/)
+    expect(html).toMatch(/aria-pressed="false"[^>]*title="Images d’openstreetmap\.org/)
   })
 
   it('écrit l’avertissement sous la barre une fois le fond détaillé choisi', async () => {
@@ -191,6 +191,6 @@ describe('la barre d’écran de la carte', () => {
     const avant = await rendreLaBarre()
     expect(avant).not.toContain('role="note"')
     const apres = await rendreLaBarre({ fond: 'tuiles' })
-    expect(apres).toMatch(/role="note"[^>]*>[^<]*openstreetmap\.org : ce serveur voit alors/)
+    expect(apres).toMatch(/role="note"[^>]*>[^<]*openstreetmap\.org : ce site voit les zones/)
   })
 })

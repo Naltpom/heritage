@@ -104,12 +104,9 @@ function modifier<K extends keyof MessageASaisir>(cle: K, valeur: MessageASaisir
         required
         :aria-invalid="erreurs['texte'] ? 'true' : undefined"
         :class="[classeChamp, erreurs['texte'] ? 'border-alerte' : '']"
-        placeholder="Collez le message en entier, tel qu’il a été envoyé ou reçu."
+        placeholder="Collez le message en entier : les autres n’ont pas accès à votre boîte."
         @input="modifier('texte', ($event.target as HTMLTextAreaElement).value)"
       />
-      <p class="text-xs text-attenue">
-        En entier : celui qui reprendra la démarche n’aura pas accès à la boîte d’où elle est partie.
-      </p>
       <p v-if="erreurs['texte']" class="text-xs text-alerte">{{ erreurs['texte'] }}</p>
     </div>
   </div>

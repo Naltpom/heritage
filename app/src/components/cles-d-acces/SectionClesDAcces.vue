@@ -83,7 +83,7 @@ const demandeSuppression = computed<DemandeDeConfirmation | null>(() =>
     : {
         titre: `Supprimer « ${aSupprimer.value.nom} » ?`,
         message:
-          'L’appareil qui garde cette clé ne pourra plus vous connecter sans mot de passe. Votre mot de passe ne change pas.',
+          'Cet appareil ne pourra plus vous connecter sans mot de passe.',
         confirmer: 'Supprimer la clé',
         danger: true,
       },
@@ -187,8 +187,7 @@ async function confirmerSuppression(): Promise<void> {
   <section class="flex flex-col gap-3 p-4" data-section-cles-d-acces>
     <h2 class="text-base font-semibold">Clés d’accès</h2>
     <p class="m-0 text-sm text-attenue">
-      Connectez-vous avec Face ID, Touch ID, votre empreinte ou Windows Hello, sans taper votre
-      mot de passe. Votre mot de passe reste valable, en secours.
+      Connectez-vous avec Face ID, votre empreinte ou Windows Hello, sans mot de passe.
     </p>
 
     <SqueletteChargement v-if="cles === null && erreurChargement === null" :lignes="2" />
@@ -210,7 +209,7 @@ async function confirmerSuppression(): Promise<void> {
     <p v-if="message !== null" class="m-0 text-sm" role="status">{{ message }}</p>
 
     <p v-if="enIncarnation" class="m-0 text-sm text-attenue">
-      Pendant une incarnation, les clés d’accès de ce compte ne se modifient pas.
+      Vous êtes connecté à la place de ce membre : ses clés d’accès ne se modifient pas.
     </p>
     <form
       v-else-if="possible && motDePasseRequis"
@@ -220,8 +219,7 @@ async function confirmerSuppression(): Promise<void> {
       @submit.prevent="confirmerMotDePasse"
     >
       <p class="m-0 text-sm">
-        Pour ajouter une clé d’accès, confirmez d’abord votre mot de passe : une clé permet
-        de se connecter sans lui.
+        Confirmez d’abord votre mot de passe.
       </p>
       <ChampTexte
         v-model="motDePasse"
@@ -252,8 +250,7 @@ async function confirmerSuppression(): Promise<void> {
       Ajouter une clé d’accès sur cet appareil
     </BoutonBase>
     <p v-else class="m-0 text-sm text-attenue">
-      Ce navigateur ne gère pas les clés d’accès. Vous pouvez en ajouter une depuis votre
-      téléphone ou un navigateur récent.
+      Ce navigateur ne gère pas les clés d’accès : essayez depuis votre téléphone.
     </p>
 
     <DialogueConfirmation
