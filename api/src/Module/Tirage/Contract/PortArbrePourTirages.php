@@ -17,6 +17,9 @@ namespace App\Module\Tirage\Contract;
  * l'arbre expose à tout compte connecté (ADR 0003, § 11.1 du contrat). Le fait « ces deux
  * personnes forment un couple » est la position dans le graphe, qui y figure aussi. Aucune
  * date, aucun lieu : ce module n'en a pas besoin.
+ *
+ * « Cette personne est décédée » n'en dit pas plus : c'est l'état que la recherche rend
+ * déjà à côté de chaque nom (`vivant`), et le port le rend **sans la date** qui l'établit.
  */
 interface PortArbrePourTirages
 {
@@ -39,4 +42,20 @@ interface PortArbrePourTirages
      * @return list<array{0: int, 1: int}>
      */
     public function couples(array $personIds): array;
+
+    /**
+     * Les personnes **qui ne sont pas vivantes**, parmi celles demandées.
+     *
+     * « Vivante » au sens de la règle unique du produit (`Tree\Service\ReglePersonneVivante`,
+     * § 9.2 du modèle) — celle-là même qui décide du champ `vivant` de la recherche. Un
+     * tirage ne demande pas une autre définition : s'il en avait une à lui, la recherche
+     * des tirages proposerait des personnes que l'API refuserait ensuite, ou l'inverse.
+     *
+     * Une personne inconnue n'est pas dans le résultat : {@see self::libelles()} la refuse.
+     *
+     * @param list<int> $personIds
+     *
+     * @return list<int>
+     */
+    public function nonVivantes(array $personIds): array;
 }

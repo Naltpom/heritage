@@ -372,14 +372,25 @@ export function lireFicheFamille(id: number, signal?: AbortSignal): Promise<Fich
  *
  * `q` doit faire au moins deux caractères, sinon `422` : c'est à l'appelant de
  * ne pas appeler avant.
+ *
+ * `vivantsSeulement` pose `?vivants=1` : le serveur écarte alors les défunts.
+ * Seuls les tirages au sort le demandent — on n'offre pas de cadeau à un aïeul.
+ * Les formulaires de proposition et les actes demandés, eux, doivent continuer
+ * de désigner des défunts : le filtre n'est jamais un défaut.
  */
 export function rechercherPersonnes(
   q: string,
   limite?: number,
   signal?: AbortSignal,
+  vivantsSeulement = false,
 ): Promise<ReponseDeRecherche> {
   const o = options(signal)
-  o.requete = limite === undefined ? { q } : { q, limite }
+  o.requete = {
+    q,
+    ...(limite === undefined ? {} : { limite }),
+    // Absent plutôt que `vivants=0` : la requête d'hier reste la requête d'aujourd'hui.
+    ...(vivantsSeulement ? { vivants: 1 } : {}),
+  }
   return requeteApi<ReponseDeRecherche>('/arbre/recherche', o)
 }
 

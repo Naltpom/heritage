@@ -49,6 +49,15 @@ final class ErreurDeTirage extends DomainException
         return new self('acces_refuse', 'Vous ne pouvez pas modifier la participation de cette personne.', Response::HTTP_FORBIDDEN);
     }
 
+    public static function nonAutorisePourLeLien(): self
+    {
+        return new self(
+            'acces_refuse',
+            'Seul le référent de cette personne peut gérer son lien — ou l’organisateur, si elle n’a ni compte ni référent : son tirage reste secret.',
+            Response::HTTP_FORBIDDEN,
+        );
+    }
+
     public static function sansRattachement(): self
     {
         return new self(
@@ -116,6 +125,51 @@ final class ErreurDeTirage extends DomainException
         return new self(
             'tirage_impossible',
             'Aucun tirage ne respecte les règles, même sans tenir compte des années passées. Ajoutez des participants ou autorisez les conjoints à se tirer.',
+            Response::HTTP_CONFLICT,
+        );
+    }
+
+    /**
+     * On ne tire pas au sort un cadeau pour quelqu'un qui n'est plus là. `422` et non
+     * `409` : c'est la valeur envoyée qui est fautive, pas l'état du tirage — et le champ
+     * est nommé, comme pour une personne inconnue de l'arbre.
+     *
+     * @param list<string> $noms
+     */
+    public static function participantDecede(string $champ, array $noms): self
+    {
+        $message = 1 === \count($noms)
+            ? \sprintf('%s est décédé·e : on ne tire pas au sort un cadeau pour une personne disparue.', $noms[0])
+            : \sprintf('%s sont décédé·e·s : on ne tire pas au sort un cadeau pour une personne disparue.', implode(', ', $noms));
+
+        return new self('participant_decede', $message, Response::HTTP_UNPROCESSABLE_ENTITY, [$champ => $message]);
+    }
+
+    /**
+     * Le lien personnel est inconnu, révoqué, remplacé, ou son participant a quitté le
+     * tirage — **une seule réponse pour tous ces cas**, et la même pour une clé mal formée.
+     * Distinguer « révoqué » d'« inconnu » dirait au porteur d'une vieille clé qu'elle a
+     * existé, donc qu'il a trouvé la bonne forme.
+     */
+    public static function lienInvalide(): self
+    {
+        return new self(
+            'lien_invalide',
+            'Ce lien n’est plus valide. Demandez-en un nouveau à l’organisateur du tirage.',
+            Response::HTTP_NOT_FOUND,
+        );
+    }
+
+    /**
+     * Par le lien personnel, la présence ne se règle que tant que l'édition est ouverte et
+     * à venir. Après le tirage, un changement touche l'organisation de quelqu'un d'autre :
+     * il passe par un compte, pas par un lien.
+     */
+    public static function presenceFigee(): self
+    {
+        return new self(
+            'presence_figee',
+            'La présence ne peut plus être modifiée par ce lien : le tirage est fait ou la date est passée. Voyez avec l’organisateur.',
             Response::HTTP_CONFLICT,
         );
     }

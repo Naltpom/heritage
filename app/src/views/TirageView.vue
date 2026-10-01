@@ -21,6 +21,7 @@ import {
   ajouterParticipant,
   analyserErreur,
   annulerLeTirage,
+  creerLienDuParticipant,
   definirPresence,
   lancerLeTirage,
   lireTirage,
@@ -28,6 +29,7 @@ import {
   reglerTirage,
   rejoindreTirage,
   retirerParticipant,
+  revoquerLienDuParticipant,
   supprimerTirage,
   type DetailDeTirage,
   type EditionDuTirage,
@@ -45,12 +47,17 @@ import { estFicheProposee, type ChoixDePersonne } from '@/components/proposition
 import { ecrituresSuspendues, motifSuspension } from '@/components/administration/ecriture'
 import CarteAttribution from '@/components/tirages/CarteAttribution.vue'
 import FormulaireReglages from '@/components/tirages/FormulaireReglages.vue'
+import ActionsDuLien from '@/components/tirages/ActionsDuLien.vue'
+import LienDuParticipant from '@/components/tirages/LienDuParticipant.vue'
 import {
   PRESENCES,
+  adresseDuLien,
   anneeProposee,
   confirmationDAnnulation,
   confirmationDePresence,
+  confirmationDeRegeneration,
   confirmationDeRetrait,
+  confirmationDeRevocation,
   confirmationDeSuppression,
   confirmationDuTirage,
   dateLongue,
@@ -226,6 +233,93 @@ function ajouter(choix: ChoixDePersonne): void {
 function retirer(participant: ParticipantDuTirage): void {
   demander(confirmationDeRetrait(participant.libelle, participant.estMoi), async () => {
     await agir(`retirer-${participant.personId}`, () => retirerParticipant(id.value, participant.personId))
+  })
+}
+
+/* ───────────────── Le lien personnel d'un participant ─────────────────
+ *
+ * Pour qu'une personne sans compte suive SON tirage (`/t/<clé>`). Le référent
+ * du participant le crée, le régénère ou le révoque ; l'organisateur aussi, mais
+ * seulement pour un participant sans compte ni référent — tenir la clé, c'est
+ * lire l'attribution (ADR 0009). Le serveur en décide, l'écran ne fait que ne
+ * pas proposer un geste qu'il refuserait.
+ *
+ * **La clé n'est rendue qu'à la création** : le serveur n'en garde qu'une
+ * empreinte. « Copier son lien » sur un participant qui en a déjà un, c'est
+ * donc en fabriquer un nouveau — l'ancien meurt, d'où la confirmation. Le
+ * panneau `LienDuParticipant` montre le lien tant qu'on ne l'a pas fermé.
+ */
+
+/**
+ * Pas pour soi : on a déjà son compte. Pour les autres, c'est le serveur qui
+ * dit (`peutPartagerLien`) : le référent, ou l'organisateur pour qui n'a ni
+ * compte ni référent.
+ */
+function peutGererLeLien(p: ParticipantDuTirage): boolean {
+  return !p.estMoi && p.peutPartagerLien
+}
+
+const gestionDeLiens = computed(() => (tirage.value?.participants ?? []).some(peutGererLeLien))
+
+const lienAffiche = ref<{ personId: number; libelle: string; adresse: string; copie: boolean } | null>(null)
+
+/** La réponse du lien n'est pas le tirage relu : on ne touche que le drapeau. */
+function marquerLien(personId: number, actif: boolean): void {
+  const p = tirage.value?.participants.find((x) => x.personId === personId)
+  if (p !== undefined) p.lienActif = actif
+}
+
+async function fabriquerLien(p: ParticipantDuTirage): Promise<void> {
+  if (enCours.value !== null) return
+  enCours.value = `lien-${p.personId}`
+  erreur.value = null
+
+  try {
+    const lien = await creerLienDuParticipant(id.value, p.personId)
+    marquerLien(p.personId, true)
+    const adresse = adresseDuLien(lien.url, window.location.origin)
+
+    // Copie tentée d'office : c'est ce qu'on est venu faire. Refusée (Safari
+    // après un appel réseau, contexte non sécurisé), le panneau garde le lien
+    // affiché et son propre bouton.
+    let copie = false
+    try {
+      await navigator.clipboard.writeText(adresse)
+      copie = true
+    } catch {
+      copie = false
+    }
+    lienAffiche.value = { personId: p.personId, libelle: p.libelle, adresse, copie }
+  } catch (e) {
+    erreur.value = e
+  } finally {
+    enCours.value = null
+  }
+}
+
+function copierLien(p: ParticipantDuTirage): void {
+  if (suspendu.value || enCours.value !== null) return
+  // Pas encore de lien : rien ne meurt, pas de confirmation.
+  if (!p.lienActif) {
+    void fabriquerLien(p)
+    return
+  }
+  demander(confirmationDeRegeneration(p.libelle), () => fabriquerLien(p))
+}
+
+function revoquerLien(p: ParticipantDuTirage): void {
+  demander(confirmationDeRevocation(p.libelle), async () => {
+    enCours.value = `lien-${p.personId}`
+    erreur.value = null
+    try {
+      await revoquerLienDuParticipant(id.value, p.personId)
+      marquerLien(p.personId, false)
+      if (lienAffiche.value?.personId === p.personId) lienAffiche.value = null
+    } catch (e) {
+      erreur.value = e
+    } finally {
+      enCours.value = null
+    }
   })
 }
 
@@ -406,22 +500,52 @@ const classeSelect = 'h-9 rounded-champ border border-ligne bg-fond px-2 text-sm
       <!-- ───────── Participants ───────── -->
       <PanneauBase :titre="`Participants (${tirage.participants.length})`" class="mb-6">
         <ul class="flex flex-col divide-y divide-ligne">
-          <li v-for="p in tirage.participants" :key="p.personId" class="flex items-center justify-between gap-3 py-2">
-            <span class="text-sm text-texte">
-              {{ p.libelle }}<template v-if="p.estMoi"> (vous)</template>
-              <span v-if="p.referent" class="block text-xs text-attenue">accompagné·e par {{ p.referent.libelle }}</span>
-            </span>
-            <BoutonBase
-              v-if="tirage.peutGerer || p.suivi"
-              variante="discret"
-              :chargement="enCours === `retirer-${p.personId}`"
+          <li v-for="p in tirage.participants" :key="p.personId" class="flex flex-col gap-2 py-2">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-sm text-texte">
+                {{ p.libelle }}<template v-if="p.estMoi"> (vous)</template>
+                <span v-if="p.referent" class="block text-xs text-attenue">accompagné·e par {{ p.referent.libelle }}</span>
+              </span>
+              <BoutonBase
+                v-if="tirage.peutGerer || p.suivi"
+                variante="discret"
+                :chargement="enCours === `retirer-${p.personId}`"
+                :desactive="suspendu || enCours !== null"
+                @click="retirer(p)"
+              >
+                {{ p.estMoi ? 'Quitter' : 'Retirer' }}
+              </BoutonBase>
+            </div>
+
+            <!-- Le lien personnel : sans compte, la personne suit son tirage par là. -->
+            <ActionsDuLien
+              v-if="peutGererLeLien(p)"
+              :lien-actif="p.lienActif"
+              :chargement="enCours === `lien-${p.personId}`"
               :desactive="suspendu || enCours !== null"
-              @click="retirer(p)"
-            >
-              {{ p.estMoi ? 'Quitter' : 'Retirer' }}
-            </BoutonBase>
+              @copier="copierLien(p)"
+              @revoquer="revoquerLien(p)"
+            />
+
+            <LienDuParticipant
+              v-if="lienAffiche !== null && lienAffiche.personId === p.personId"
+              :libelle="lienAffiche.libelle"
+              :adresse="lienAffiche.adresse"
+              :deja-copie="lienAffiche.copie"
+              @fermer="lienAffiche = null"
+            />
           </li>
         </ul>
+
+        <p v-if="gestionDeLiens" class="mt-3 text-xs text-attenue">
+          Le lien personnel permet à quelqu’un sans compte de dire s’il vient et de découvrir à qui il
+          offre. Il n’est affiché qu’une fois, à sa création : pour le renvoyer, régénérez-le — l’ancien
+          cessera de fonctionner. Il donne accès à sa présence et à son cadeau : ne le partagez qu’avec lui.
+        </p>
+        <p v-if="tirage.peutGerer" class="mt-2 text-xs text-attenue">
+          Un participant qui a son compte n’a pas de lien : son tirage reste secret, même pour
+          l’organisateur. Celui d’une personne accompagnée, c’est son référent qui le partage.
+        </p>
 
         <div v-if="tirage.peutGerer" class="mt-4 flex flex-col gap-2 border-t border-ligne pt-4">
           <label class="flex flex-col gap-1 text-sm text-texte">
@@ -438,7 +562,9 @@ const classeSelect = 'h-9 rounded-champ border border-ligne bg-fond px-2 text-sm
           </label>
           <SelecteurPersonne
             etiquette="Ajouter une personne de l’arbre"
+            aide="Seules les personnes vivantes sont proposées."
             :avec-propositions="false"
+            vivants-seulement
             :deja-choisis="dejaChoisis"
             @choisir="ajouter"
           />

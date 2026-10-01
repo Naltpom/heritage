@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Tirage\Repository;
 
+use App\Module\Tirage\Entity\Participant;
 use App\Module\Tirage\Entity\Tirage;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
@@ -37,5 +38,24 @@ class TirageRepository extends ServiceEntityRepository
             ->getResult();
 
         return $tirages;
+    }
+
+    /**
+     * Le participant dont le lien personnel a cette empreinte — par l'index unique
+     * `uniq_trg_participant_lien`, jamais par une comparaison en PHP.
+     */
+    public function participantParEmpreinte(string $empreinte): ?Participant
+    {
+        /** @var Participant|null $participant */
+        $participant = $this->getEntityManager()->createQueryBuilder()
+            ->select('p', 't')
+            ->from(Participant::class, 'p')
+            ->join('p.tirage', 't')
+            ->where('p.tokenHash = :empreinte')
+            ->setParameter('empreinte', $empreinte)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        return $participant;
     }
 }

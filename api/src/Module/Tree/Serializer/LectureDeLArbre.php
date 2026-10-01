@@ -305,7 +305,7 @@ final readonly class LectureDeLArbre
      *
      * @return list<Person>
      */
-    public function candidatsDeRecherche(array $mots, int $limite): array
+    public function candidatsDeRecherche(array $mots, int $limite, bool $sansDecesEnregistre = false): array
     {
         if ([] === $mots) {
             return [];
@@ -314,6 +314,17 @@ final readonly class LectureDeLArbre
         $constructeur = $this->personnes->createQueryBuilder('p')
             ->orderBy('p.searchKey', 'ASC')->addOrderBy('p.id', 'ASC')
             ->setMaxResults($limite * self::SUR_ECHANTILLON);
+
+        // La recherche des vivants seulement (`?vivants=1`) écarte dès le SQL les décès
+        // **enregistrés** : sans cela, un patronyme riche en ancêtres remplirait le
+        // sur-échantillon de défunts, et les vivants passeraient sous le plafond. Ce n'est
+        // qu'un pré-filtre — la règle complète (repli par génération, `force_privacy`)
+        // reste appliquée ensuite, personne par personne, par l'appelant.
+        // `force_privacy` fait une personne « vivante » même décédée (la seule échappatoire
+        // de la règle, dans le sens prudent) : on la garde, la règle tranchera.
+        if ($sansDecesEnregistre) {
+            $constructeur->andWhere('p.deceased = false OR p.forcePrivacy = true');
+        }
 
         foreach (array_values($mots) as $rang => $mot) {
             // Le préfixe d'abord, parce que c'est ce que servirait l'index ; l'infixe
