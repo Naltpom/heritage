@@ -7,7 +7,7 @@
  * | Régime | Ce que c'est |
  * |---|---|
  * | `anonyme` | aucune session |
- * | `en_attente` | session ouverte, rattachement **non validé** — accès aux personnes **décédées uniquement**, **aucun cercle** |
+ * | `en_attente` | session ouverte, inscription **non validée** — **rien de l'arbre**, ni vivants ni défunts, **aucun cercle** |
  * | `membre` | rattaché, avec un cercle de visibilité |
  * | `administrateur` | `ROLE_ADMIN` ; implique `membre` |
  *
@@ -24,6 +24,15 @@
  * `aucun`, et les lire produirait `undefined`, pas `0`. Le type
  * `CercleDeSession` est une union discriminée précisément pour que ce test-là ne
  * compile pas.
+ *
+ * **Révision du 01/10/2026 (ADR 0003).** Le compte en attente lisait « l'arbre
+ * ancien » : les défunts, et chaque vivant en nœud restreint — nom complet
+ * compris. Le lien d'invitation circule dans un groupe de messagerie : n'importe
+ * qui pouvait s'inscrire sous un faux nom et lire les noms des vivants. Il ne
+ * voit donc plus rien de l'arbre : toute route qui le lit exige `membre`, et sa
+ * page par défaut est l'écran d'attente (`inscription.etat`). L'API lui répond
+ * `403 regime_en_attente` sur les mêmes lectures — la garde n'est que le premier
+ * rideau.
  *
  * Ce module ne contient que des fonctions pures : c'est ce qui le rend testable
  * sans monter ni routeur ni application (`acces.test.ts`).
@@ -44,9 +53,12 @@ export type NiveauRequis =
   | 'public'
   /** Réservé aux visiteurs sans session : connexion, inscription. */
   | 'anonyme'
-  /** Toute session, **y compris `en_attente`** : arbre, fiche, chronologie. */
+  /** Toute session, **y compris `en_attente`** : ce qui concerne le compte
+   *  lui-même — son inscription, Mon compte, Moi, l'ouverture d'une
+   *  notification. **Jamais une lecture de l'arbre** (ADR 0003, 01/10/2026). */
   | 'attente'
-  /** Rattachement validé exigé : déposer une demande, téléverser. */
+  /** Inscription validée exigée : **toute lecture de l'arbre** (arbre, fiche,
+   *  Explorer, accueil) et toute contribution. */
   | 'membre'
   /** `ROLE_ADMIN`. */
   | 'administration'
@@ -91,10 +103,12 @@ export function estRattache(regime: RegimeAcces): boolean {
 /** Où atterrit un lecteur qui n'a rien demandé de précis. */
 export function routeParDefaut(regime: RegimeAcces): RouteLocationRaw {
   if (regime === 'anonyme') return { name: 'connexion' }
-  // Tout lecteur connecté atterrit sur l'accueil (`/home`) : les anniversaires du
-  // jour, ses tirages, et les deux portes — l'arbre, proposer. Un compte en
-  // attente aussi : les anniversaires des personnes décédées lui sont ouverts, et
-  // « un écran vide pousse à l'abandon » (§ 12.2).
+  // Un compte en attente atterrit sur SA page : l'écran d'attente. L'accueil
+  // lit l'arbre (anniversaires, tirages), et il ne lit plus rien de l'arbre
+  // avant sa validation (ADR 0003, révision du 01/10/2026).
+  if (regime === 'en_attente') return { name: 'inscription.etat' }
+  // Tout membre atterrit sur l'accueil (`/home`) : les anniversaires du jour,
+  // ses tirages, et les deux portes — l'arbre, proposer.
   return { name: 'accueil' }
 }
 
@@ -123,19 +137,21 @@ export function resoudreAcces(
       }
 
     case 'attente':
-      // Les trois régimes connectés passent. C'est ici que se joue la décision
-      // du commanditaire : la lecture de l'arbre ancien est **ouverte** au
-      // compte en attente (§ 12.2).
+      // Les trois régimes connectés passent. Ce niveau ne couvre plus que ce
+      // qui concerne le compte lui-même : depuis le 01/10/2026, aucune route qui
+      // lit l'arbre ne le porte (ADR 0003).
       if (estConnecte(regime)) return { autorise: true }
       return refuserFauteDeSession(cheminDemande)
 
     case 'membre':
       if (estRattache(regime)) return { autorise: true }
       if (!estConnecte(regime)) return refuserFauteDeSession(cheminDemande)
-      // Connecté mais pas rattaché : on ne le renvoie pas à la connexion — il
+      // Connecté mais pas validé : on ne le renvoie pas à la connexion — il
       // est bien connecté —, on l'emmène à l'écran qui explique l'attente
-      // (§ 4.4). Le message du serveur sur une écriture est du même ordre :
-      // « Votre rattachement est en cours de vérification. »
+      // (§ 4.4). C'est le cas de l'arbre, de la fiche, d'Explorer et de
+      // l'accueil comme d'une écriture : le serveur répond de même
+      // `403 regime_en_attente`, « Votre inscription est en cours de
+      // vérification ».
       return {
         autorise: false,
         motif: 'rattachement_non_valide',

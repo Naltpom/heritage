@@ -13,6 +13,8 @@ use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\UserStatus;
 use App\Module\Core\Service\CleDeRecherche;
 use App\Module\Core\ValueObject\UncertainDate;
+use App\Module\Membership\Entity\Member;
+use App\Module\Membership\Enum\MatchKind;
 use App\Module\Tree\Entity\Child;
 use App\Module\Tree\Entity\Citation;
 use App\Module\Tree\Entity\Family;
@@ -64,6 +66,9 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
  */
 abstract class ArbreWebTestCase extends WebTestCase
 {
+    /** L'ancre de {@see creerLecteurHorsCercle()} : aucune fiche de l'arbre ne la porte. */
+    protected const int FICHE_HORS_DE_L_ARBRE = 987654321;
+
     protected KernelBrowser $client;
 
     /** @var array<string, Person> */
@@ -364,6 +369,33 @@ abstract class ArbreWebTestCase extends WebTestCase
 
         $em->persist($utilisateur);
         $em->flush();
+
+        return $utilisateur;
+    }
+
+    /**
+     * Un **membre validé dont le cercle ne contient aucun vivant de cet arbre** : compte
+     * actif, `mbr_member` actif, ancré sur une fiche que le double `PortArbre` de
+     * `Membership` ne connaît pas — le calcul du cercle rend donc `[]`.
+     *
+     * C'est le lecteur que ces tests appelaient « membre actif » en ne créant que le
+     * compte. Depuis la correction du 01/10/2026, un compte actif **sans** rattachement
+     * n'a pas de cercle (`Regime::Aucun`) et le voter `MEMBRE` le refuse
+     * (`403 regime_en_attente`) : il ne lit plus rien de l'arbre. Le point de vue que ces
+     * tests éprouvent — défunts complets, vivants en nœuds restreints — est désormais
+     * celui d'un membre rattaché dont le cercle est vide.
+     */
+    protected function creerLecteurHorsCercle(string $courriel, string $nomAffiche = 'Compte de test'): User
+    {
+        $utilisateur = $this->creerUtilisateur($courriel, nomAffiche: $nomAffiche);
+        $identifiant = $utilisateur->getId();
+        self::assertNotNull($identifiant);
+
+        $membre = new Member($identifiant, $courriel, self::FICHE_HORS_DE_L_ARBRE, 'Fiche hors de l’arbre de test', MatchKind::PreLie);
+        $membre->activer();
+
+        $this->em()->persist($membre);
+        $this->em()->flush();
 
         return $utilisateur;
     }

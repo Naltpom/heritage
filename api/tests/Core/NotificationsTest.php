@@ -116,7 +116,7 @@ final class NotificationsTest extends CoreWebTestCase
 
         $this->service()->notifier(
             (int) $enAttente->getId(),
-            NotificationKind::CompteEnAttente,
+            NotificationKind::CompteActive,
             'Votre compte est activé.',
         );
 

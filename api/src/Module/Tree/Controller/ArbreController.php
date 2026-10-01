@@ -6,7 +6,7 @@ namespace App\Module\Tree\Controller;
 
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\ValidationException;
-use App\Module\Core\Security\RegimeVoter;
+use App\Module\Core\Security\ReserveAuxMembres;
 use App\Module\Tree\Serializer\EtagDuGraphe;
 use App\Module\Tree\Serializer\EtatVivant;
 use App\Module\Tree\Serializer\FabriqueDuCercle;
@@ -21,17 +21,18 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * Les quatre routes de lecture de l'arbre — § 5 du contrat d'API.
  *
  * ```
- * GET /api/arbre/graphe            ATTENTE   200 · 304
- * GET /api/arbre/personnes/{id}    ATTENTE   200      (réduite, jamais 404, si hors cercle)
- * GET /api/arbre/familles/{id}     ATTENTE   200
- * GET /api/arbre/recherche         ATTENTE   200 · 422
+ * GET /api/arbre/graphe            MEMBRE   200 · 304
+ * GET /api/arbre/personnes/{id}    MEMBRE   200      (réduite, jamais 404, si hors cercle)
+ * GET /api/arbre/familles/{id}     MEMBRE   200
+ * GET /api/arbre/recherche         MEMBRE   200 · 422
  * ```
+ *
+ * Compte en attente : `403 regime_en_attente` sur les quatre.
  *
  * ## Ce contrôleur ne filtre rien, et c'est une règle et non un style
  *
@@ -41,13 +42,17 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * endroits qui décident de la confidentialité — et le second serait celui qu'on
  * oublierait de corriger.
  *
- * ## `ATTENTE` et non `MEMBRE` sur les quatre routes
+ * ## `MEMBRE` sur les quatre routes — révision du 01/10/2026 (ADR 0003)
  *
- * Un compte en attente de rattachement **lit** l'arbre ancien : 256 fiches sur 274 sont
- * des personnes décédées, l'attente peut durer plusieurs jours, et un écran vide pousse
- * à l'abandon (§ 12.2). Il n'écrit rien, et aucune de ces routes n'écrit. Son régime lui
- * ferme toutes les personnes vivantes — pas par une branche posée ici, mais parce qu'il
- * n'a **pas de cercle** ({@see \App\Module\Tree\Serializer\CercleDuLecteur}).
+ * Un compte en attente de rattachement lisait jusque-là « l'arbre ancien » : les défunts
+ * en entier, et chaque vivant en **nœud restreint** — nom complet, sexe, génération,
+ * branche ({@see NormaliseurDeGraphe}). Le lien d'invitation circule dans un groupe de
+ * messagerie : n'importe qui pouvait s'inscrire sous un faux nom et lire la liste des
+ * vivants de la famille. Il ne lit donc plus **rien** ici avant sa validation
+ * ({@see ReserveAuxMembres}), et le refus est rendu avant que le graphe soit chargé.
+ *
+ * Le cercle reste appliqué dans la sérialisation pour les membres : l'attribut ferme la
+ * porte au régime `aucun`, il ne remplace pas le filtrage de ceux qui entrent.
  *
  * ## `{id}` porte `\d+`, et c'est une protection gratuite
  *
@@ -56,7 +61,7 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * soucier. Le détail d'un nœud en attente passe par `GET /api/demandes/{id}/brouillons/{ref}`,
  * qui appartient à `Proposal`.
  */
-#[IsGranted(RegimeVoter::ATTENTE)]
+#[ReserveAuxMembres]
 final class ArbreController extends AbstractController
 {
     public function __construct(

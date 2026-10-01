@@ -170,21 +170,41 @@ final class AnniversairesTest extends CasDeTestAlmanach
     // ── Le cercle ────────────────────────────────────────────────────────────────
 
     /**
-     * **Un mariage de deux défunts est visible d'un compte en attente**.
-     *
-     * Le pendant indispensable de la règle du « ET » : elle ferme, elle ne doit pas
-     * verrouiller. Un compte `en_attente` relève du régime `Regime::Aucun` — il n'a
-     * **pas** de cercle et ne voit que des personnes décédées. Ses deux époux l'étant,
-     * l'union sort entière, avec ses deux sujets et son libellé composé.
-     *
-     * Sans ce cas, `testUnMariageDisparaitDesQuUnDesDeuxEpouxEstVivantHorsCercle` serait
-     * vert même si la règle était « aucune union ne sort jamais ».
+     * **Un compte en attente ne lit plus le calendrier** (ADR 0003, révision du
+     * 01/10/2026) : `403 regime_en_attente`, même s'il n'y a que des défunts à montrer.
      */
-    public function testUnMariageDeDeuxDefuntsEstVisibleDunCompteEnAttente(): void
+    public function testUnCompteEnAttenteEstRefuse(): void
     {
         $this->poserUnion(42, [self::SUREAU, self::SARRIETTE], '23 SEP 1927', 'Saule');
 
         $this->connecterUnMembre(UserStatus::EnAttente);
+        $this->requete('GET', '/api/anniversaires');
+
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->client->getResponse()->getStatusCode());
+        self::assertSame('regime_en_attente', $this->charge()['erreur']['code']);
+        self::assertStringNotContainsString('Sureau', (string) $this->client->getResponse()->getContent());
+    }
+
+    /**
+     * **Un mariage de deux défunts est visible de tout membre**, cercle ou pas.
+     *
+     * Le pendant indispensable de la règle du « ET » : elle ferme, elle ne doit pas
+     * verrouiller. Deux défunts sont visibles de tout lecteur qui lit l'arbre ; l'union
+     * sort entière, avec ses deux sujets et son libellé composé.
+     *
+     * Ce cas tenait avec un compte en attente, puis avec un compte actif **sans
+     * rattachement** (régime `Aucun`). Ni l'un ni l'autre ne lit plus rien depuis le
+     * 01/10/2026 — {@see testUnCompteSansCercleEstRefuse()} —, il se tient donc avec un
+     * membre rattaché.
+     *
+     * Sans ce cas, `testUnMariageDisparaitDesQuUnDesDeuxEpouxEstVivantHorsCercle` serait
+     * vert même si la règle était « aucune union ne sort jamais ».
+     */
+    public function testUnMariageDeDeuxDefuntsEstVisibleDeToutMembre(): void
+    {
+        $this->poserUnion(42, [self::SUREAU, self::SARRIETTE], '23 SEP 1927', 'Saule');
+
+        $this->connecterUnMembre();
         $this->requete('GET', '/api/anniversaires');
 
         self::assertSame(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
@@ -207,6 +227,25 @@ final class AnniversairesTest extends CasDeTestAlmanach
             $evenement['libelle'],
             'Le libellé d’une union se compose APRÈS le filtre, sur des sujets que le cercle a déjà autorisés.',
         );
+    }
+
+    /**
+     * **Un compte actif sans rattachement ne lit pas le calendrier** (correction du
+     * 01/10/2026). Ancien administrateur rétrogradé, compte créé en ligne de commande :
+     * actif, mais sans cercle. Il lisait les anniversaires des défunts, et les noms des
+     * vivants en nœuds restreints ailleurs. Il est désormais refusé comme un compte en
+     * attente — c'est le voter `MEMBRE` qui lit le cercle.
+     */
+    public function testUnCompteSansCercleEstRefuse(): void
+    {
+        $this->poserUnion(42, [self::SUREAU, self::SARRIETTE], '23 SEP 1927', 'Saule');
+
+        $this->connecterUnCompteSansCercle();
+        $this->requete('GET', '/api/anniversaires');
+
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->client->getResponse()->getStatusCode());
+        self::assertSame('regime_en_attente', $this->charge()['erreur']['code']);
+        self::assertStringNotContainsString('Sureau', (string) $this->client->getResponse()->getContent());
     }
 
     /**

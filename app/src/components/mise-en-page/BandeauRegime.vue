@@ -10,10 +10,11 @@
  * `409 vue_comme_membre_active`** — le front désactive ses boutons, et l'API ne
  * compte pas dessus.
  *
- * **2. Le régime « en attente de validation » (§ 12).** Le compte voit les
- * personnes **décédées uniquement** et **aucune personne vivante**, y compris
- * celle à laquelle il prétend se rattacher. Ce n'est pas un cercle réduit : il
- * n'a **pas de cercle**. Sans ce bandeau, l'arbre a l'air cassé.
+ * **2. Le régime « en attente de validation » (§ 12).** Le compte ne voit
+ * **rien de l'arbre**, ni vivants ni défunts (ADR 0003, révision du
+ * 01/10/2026) : ses seuls écrans sont son inscription, son compte et Moi. Le
+ * bandeau dit pourquoi l'application lui paraît si vide, et quand cela
+ * changera — sans quoi il conclurait à un compte cassé.
  */
 import { useSession } from '@/composables/useSession'
 
@@ -56,10 +57,9 @@ const { regime, vueEmpruntee, incarnation, nomAffiche } = useSession()
       class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-ligne bg-panneau px-4 py-2 text-sm"
       role="status"
     >
-      <strong class="font-semibold">Rattachement en cours de vérification</strong>
+      <strong class="font-semibold">Inscription en cours de vérification</strong>
       <span class="text-attenue">
-        En attendant, vous consultez les fiches des personnes décédées. Les personnes vivantes
-        ne vous sont pas accessibles.
+        L’arbre vous sera ouvert dès qu’elle sera validée. Vous serez prévenu.
       </span>
       <RouterLink :to="{ name: 'inscription.etat' }" class="font-semibold text-accent underline">
         Voir l'état de mon inscription

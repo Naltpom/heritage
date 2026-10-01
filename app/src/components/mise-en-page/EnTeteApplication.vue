@@ -20,6 +20,12 @@
  * l'avatar, dont le menu reprend **le contenu de Moi** — le même composant
  * (`MoiView`, `forme="menu"`), pas une recopie.
  *
+ * **Un compte en attente** (ADR 0003, révision du 01/10/2026) ne lit plus rien
+ * de l'arbre avant sa validation. Son en-tête n'a donc qu'un onglet, « Mon
+ * inscription » — l'écran d'attente —, ni recherche ni loupe (elles
+ * interrogent l'arbre) ; la cloche et l'avatar restent : ses notifications et
+ * son compte sont à lui.
+ *
  * Ce qui ne change pas, et pourquoi :
  *
  * - **Un anonyme ne reçoit aucun `<button>`** : ni loupe, ni cloche, ni avatar
@@ -46,7 +52,7 @@ import MoiView from '@/views/MoiView.vue'
 import RechercheEntete from './RechercheEntete.vue'
 
 const routeur = useRouter()
-const { connecte, nomAffiche } = useSession()
+const { connecte, rattache, nomAffiche } = useSession()
 const { ouvert, outilsDisponibles, basculerTiroir, fermerTiroirs } = useTiroirs()
 const { section, titre, resume, parent, filtresActifs } = useEntete()
 
@@ -62,6 +68,13 @@ const ONGLETS: { section: Section; nom: string; libelle: string }[] = [
   { section: 'arbre', nom: 'arbre', libelle: 'Arbre' },
   { section: 'explorer', nom: 'explorer', libelle: 'Explorer' },
 ]
+
+/** Un compte en attente : un seul onglet, sa page d'attente. */
+const ONGLETS_EN_ATTENTE: { section: Section; nom: string; libelle: string }[] = [
+  { section: 'accueil', nom: 'inscription.etat', libelle: 'Mon inscription' },
+]
+
+const onglets = computed(() => (rattache.value ? ONGLETS : ONGLETS_EN_ATTENTE))
 
 const initiales = computed(() => {
   const mots = nomAffiche.value.split(/[\s@.]+/).filter(Boolean)
@@ -164,7 +177,7 @@ const classeBoutonIcone =
       <!-- Bureau : les onglets. Sur téléphone, c'est la barre du bas. -->
       <nav aria-label="Navigation principale" class="flex h-14 items-stretch max-md:hidden">
         <RouterLink
-          v-for="o in ONGLETS"
+          v-for="o in onglets"
           :key="o.nom"
           :to="{ name: o.nom }"
           :class="classeOnglet(section === o.section)"
@@ -175,8 +188,11 @@ const classeBoutonIcone =
       </nav>
 
       <!-- La recherche, une seule fois. Bureau : `md:contents`, ses enfants sont
-           ceux de la barre. Téléphone : masquée, ou dépliée par-dessus la barre. -->
+           ceux de la barre. Téléphone : masquée, ou dépliée par-dessus la barre.
+           Absente pour un compte en attente : elle cherche dans l'arbre. -->
+      <span v-if="!rattache" class="flex-1 max-md:hidden" aria-hidden="true" />
       <div
+        v-if="rattache"
         id="recherche-entete"
         ref="zoneRecherche"
         class="md:contents"
@@ -195,6 +211,7 @@ const classeBoutonIcone =
       </div>
 
       <button
+        v-if="rattache"
         ref="boutonLoupe"
         type="button"
         :class="classeBoutonIcone"

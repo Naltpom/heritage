@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Timeline\Controller;
 
-use App\Module\Core\Security\RegimeVoter;
+use App\Module\Core\Security\ReserveAuxMembres;
 use App\Module\Timeline\Service\IdentiteDuLecteur;
 use App\Module\Timeline\Service\NormaliseurDeChronologie;
 use App\Module\Timeline\Service\NormaliseurDeRequete;
@@ -13,15 +13,14 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * Les trois routes de la vue chronologique — § 9 du contrat d'API.
  *
  * ```
- * GET /api/chronologie                 ATTENTE   200 · 422
- * GET /api/chronologie/preferences     ATTENTE   200 · 401
- * PUT /api/chronologie/preferences     ATTENTE   200 · 422
+ * GET /api/chronologie                 MEMBRE   200 · 422
+ * GET /api/chronologie/preferences     MEMBRE   200 · 401
+ * PUT /api/chronologie/preferences     MEMBRE   200 · 422
  * ```
  *
  * ## Ce contrôleur ne filtre rien
@@ -32,14 +31,13 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * confidentialité apparaîtrait ici, il y aurait deux endroits qui en décident, et le
  * second serait celui qu'on oublierait de corriger.
  *
- * ## `ATTENTE` sur les trois, y compris sur le `PUT`
+ * ## `MEMBRE` sur les trois, préférences comprises — révision du 01/10/2026
  *
- * C'est ce que porte le tableau du § 9, et c'est cohérent malgré l'apparence : `PUT`
- * **écrit**, mais il écrit un réglage d'affichage du compte lui-même, pas une donnée de
- * l'arbre. Le § 12.2 ferme l'écriture *sur l'arbre* à un compte en attente — proposer,
- * téléverser —, pas le droit de régler sa propre vue. Un compte en attente lit l'arbre
- * ancien pendant plusieurs jours (§ 12.1) ; lui interdire de choisir sa largeur de bande
- * ne protégerait personne et lui laisserait un écran qu'il ne peut pas cadrer.
+ * Un compte en attente lisait la chronologie des défunts ; depuis l'ADR 0003 révisée, il
+ * ne lit plus rien de l'arbre avant sa validation (`403 regime_en_attente`, voir
+ * {@see ReserveAuxMembres}). Les préférences suivent la vue qu'elles règlent : régler la
+ * largeur de bande d'un écran qu'on ne peut pas ouvrir n'aurait pas de sens, et une
+ * route à part ouverte au régime `aucun` serait une porte de plus à surveiller.
  *
  * ## `GET` ne devient jamais une écriture
  *
@@ -49,7 +47,7 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * rien dire » — et un `GET` cesserait d'être idempotent, ce qui se paierait en `INSERT`
  * à chaque mouvement de curseur du front.
  */
-#[IsGranted(RegimeVoter::ATTENTE)]
+#[ReserveAuxMembres]
 final class ChronologieController extends AbstractController
 {
     public function __construct(

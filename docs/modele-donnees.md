@@ -587,6 +587,7 @@ dossier de mission).
 
 **`NotificationKind`** — `demande_soumise`, `demande_validee`, `demande_refusee`,
 `demande_caduque`, `doublon_probable`, `invitation_utilisee`, `compte_en_attente`,
+`compte_active` (au compte lui-même, à son activation — ADR 0003, révision du 2026-10-01),
 `media_valide`, `media_refuse`, `tirage_effectue` (module `Tirage`, ADR 0009 — elle ne nomme
 personne). La notification `demande_caduque` porte le diff de ce qui a
 changé et le lien « refaire cette demande » (§ 9.6) : sans eux, c'est une contribution

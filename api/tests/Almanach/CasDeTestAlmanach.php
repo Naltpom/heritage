@@ -237,6 +237,18 @@ abstract class CasDeTestAlmanach extends WebTestCase
         $this->requete('POST', '/api/connexion', ['email' => 'membre@example.test', 'password' => 'motdepasse-de-test']);
     }
 
+    /**
+     * Un compte **actif sans rattachement** : statut actif, mais sans cercle — le défaut
+     * fermé de `Membership`, régime `aucun`. Depuis la correction du 01/10/2026, il est
+     * refusé comme un compte en attente (`403 regime_en_attente`) : le voter `MEMBRE` lit
+     * le cercle, plus seulement le statut.
+     */
+    protected function connecterUnCompteSansCercle(): void
+    {
+        $this->creerUtilisateur('membre@example.test');
+        $this->requete('POST', '/api/connexion', ['email' => 'membre@example.test', 'password' => 'motdepasse-de-test']);
+    }
+
     /** @param array<string, mixed>|null $corps */
     protected function requete(string $methode, string $chemin, ?array $corps = null): void
     {

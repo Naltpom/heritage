@@ -543,7 +543,7 @@ final class CitationsDArbresTiersTest extends ArbreWebTestCase
     private function connexionDe(string $courriel): void
     {
         if (null === $this->em()->getRepository(User::class)->findOneBy(['email' => $courriel])) {
-            $this->creerUtilisateur($courriel);
+            $this->creerLecteurHorsCercle($courriel);
         }
 
         $this->client->request('POST', '/api/connexion', server: [

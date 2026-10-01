@@ -181,6 +181,8 @@ final class RoutesDesDemarchesTest extends ArbreWebTestCase
 
         $this->requete('/api/demarches');
         self::assertSame(Response::HTTP_FORBIDDEN, $this->statut());
+        // Le refus dit pourquoi : le front y reconnaît l'attente (ADR 0003, 01/10/2026).
+        self::assertSame('regime_en_attente', $this->charge()['erreur']['code']);
     }
 
     public function testSousLaBasculeLAdministrateurLitSansEcrire(): void

@@ -245,7 +245,7 @@ final class CalqueIncompletTest extends ArbreWebTestCase
 
     private function demandeDe(\Doctrine\ORM\EntityManagerInterface $em): ChangeRequest
     {
-        $auteur = $this->creerUtilisateur(self::MEMBRE, nomAffiche: 'Girolle Chanterelle');
+        $auteur = $this->creerLecteurHorsCercle(self::MEMBRE, nomAffiche: 'Girolle Chanterelle');
         $auteurId = $auteur->getId();
         self::assertNotNull($auteurId);
 
@@ -279,7 +279,7 @@ final class CalqueIncompletTest extends ArbreWebTestCase
     private function connexionDe(string $courriel): void
     {
         if (null === $this->em()->getRepository(\App\Module\Core\Entity\User::class)->findOneBy(['email' => $courriel])) {
-            $this->creerUtilisateur($courriel);
+            $this->creerLecteurHorsCercle($courriel);
         }
 
         $this->client->request('POST', '/api/connexion', server: [

@@ -487,9 +487,11 @@ final readonly class ServiceDInscription
      * surtout pas le `display_name` réel de la fiche, qui peut porter un nom d'usage ou un
      * nom d'épouse qu'il ignore » (§ 4.4).
      *
-     * `cequejevois` donne du sens à l'attente sans rien exposer : **deux nombres, pas une
-     * liste**. C'est la mise en œuvre du motif du commanditaire — « un écran vide pousse à
-     * l'abandon ».
+     * **Plus aucun chiffre de l'arbre** (révision du 2026-10-01, ADR 0003). La réponse
+     * portait `cequejevois` — le nombre de défunts et le nombre total de fiches — pour
+     * « donner du sens à l'attente ». Un compte en attente ne lit plus rien de l'arbre,
+     * et c'est peut-être un inconnu inscrit sous un faux nom avec le lien du groupe :
+     * même deux nombres sont de trop.
      *
      * @return array<string, mixed>
      */
@@ -510,10 +512,6 @@ final readonly class ServiceDInscription
             'matchKind' => $membre->getMatchKind()->value,
             'regime' => $enAttente ? 'aucun' : 'cercle',
         ];
-
-        if ($enAttente) {
-            $etat['cequejevois'] = $this->deuxNombres();
-        }
 
         // La photo déposée à l'inscription — un booléen, pas l'image : l'écran d'attente
         // n'en a besoin que pour proposer « Ajouter votre photo » à qui l'a passée. La clé
@@ -661,32 +659,5 @@ final readonly class ServiceDInscription
         );
 
         $this->em->flush();
-    }
-
-    /**
-     * « Deux nombres, pas une liste » (§ 4.4).
-     *
-     * `personnesDecedees` se compte sur la vue de l'arbre, donc sur la propriété calculée
-     * du § 9.2 — pas sur une colonne `deceased`, qui dirait autre chose : une personne
-     * sans décès connu et née il y a quarante ans est *vivante* pour la règle et
-     * *non décédée* pour la colonne.
-     *
-     * @return array{personnesDecedees: int, personnesTotales: int}
-     */
-    private function deuxNombres(): array
-    {
-        $vue = $this->arbre->vue();
-        $decedees = 0;
-
-        foreach ($vue->personnes as $personne) {
-            if (!$personne->vivante) {
-                ++$decedees;
-            }
-        }
-
-        return [
-            'personnesDecedees' => $decedees,
-            'personnesTotales' => \count($vue->personnes),
-        ];
     }
 }

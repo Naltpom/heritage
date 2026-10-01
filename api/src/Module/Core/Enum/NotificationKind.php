@@ -20,6 +20,12 @@ enum NotificationKind: string
     case DoublonProbable = 'doublon_probable';
     case InvitationUtilisee = 'invitation_utilisee';
     case CompteEnAttente = 'compte_en_attente';
+    /**
+     * Annoncée **au compte lui-même** : son inscription est validée, l'arbre lui est
+     * ouvert. Elle a sa propre nature depuis le 01/10/2026 — elle partait sous
+     * `compte_en_attente`, que le front affiche « Compte à valider ».
+     */
+    case CompteActive = 'compte_active';
     case MediaValide = 'media_valide';
     case MediaRefuse = 'media_refuse';
     /** Le tirage au sort d'une année est fait (module `Tirage`). Elle ne nomme personne. */

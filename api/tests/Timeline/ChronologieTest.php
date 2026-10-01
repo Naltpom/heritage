@@ -70,6 +70,17 @@ final class ChronologieTest extends CasDeTestTimeline
         $this->connexion('membre@example.test');
     }
 
+    /**
+     * Un compte **actif sans rattachement** : statut actif, mais sans cercle — le défaut
+     * fermé de `Membership`, régime `aucun`. Refusé comme un compte en attente depuis la
+     * correction du 01/10/2026 : le voter `MEMBRE` lit le cercle.
+     */
+    private function connecterUnCompteSansCercle(): void
+    {
+        $this->creerUtilisateur('membre@example.test');
+        $this->connexion('membre@example.test');
+    }
+
     // ── Le cercle ────────────────────────────────────────────────────────────────
 
     /**
@@ -119,38 +130,60 @@ final class ChronologieTest extends CasDeTestTimeline
     }
 
     /**
-     * **Un compte `en_attente` n'a pas de cercle** : il ne voit que des personnes décédées.
-     *
-     * Ce n'est pas « un cercle avec N = 0 » — c'est un régime distinct (`Regime::Aucun`),
-     * et il tombe du contrat du noyau, pas d'un `if` écrit dans ce module. Le test le prend
-     * par son symptôme observable : une seule barre, celle de la défunte, et pas même celle
-     * de la personne à laquelle le compte prétend se rattacher.
+     * **Un compte `en_attente` ne lit plus la chronologie** — ni ses préférences (ADR 0003,
+     * révision du 01/10/2026) : `403 regime_en_attente`, dans l'enveloppe du § 15.1.
      */
-    public function testUnCompteEnAttenteNeVoitQueDesPersonnesDecedees(): void
+    public function testUnCompteEnAttenteEstRefuseSurLesTroisRoutes(): void
     {
         $this->connecterUnMembre(UserStatus::EnAttente);
-        $this->requete('GET', '/api/chronologie');
 
-        self::assertSame(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
+        foreach ([['GET', '/api/chronologie'], ['GET', '/api/chronologie/preferences'], ['PUT', '/api/chronologie/preferences']] as [$methode, $chemin]) {
+            $this->requete($methode, $chemin, 'PUT' === $methode ? ['bande' => 50] : null);
 
-        $barres = $this->barresParPersonne();
-
-        self::assertSame([self::SUREAU], array_keys($barres), 'Le régime `Aucun` ne montre aucune personne vivante.');
+            self::assertSame(Response::HTTP_FORBIDDEN, $this->client->getResponse()->getStatusCode(), $methode.' '.$chemin);
+            self::assertSame('regime_en_attente', $this->charge()['erreur']['code'], $methode.' '.$chemin);
+        }
     }
 
     /**
-     * Et ses **jalons** ne portent donc que des faits de personnes décédées (§ 9.1).
+     * **Un compte actif sans rattachement ne lit plus la chronologie** (correction du
+     * 01/10/2026).
      *
-     * Le cas pose deux faits, l'un sur une vivante du cercle, l'autre sur la défunte, et
-     * vérifie qu'un seul sort. Sans le premier, le test serait vert même si le filtrage des
-     * jalons n'existait pas.
+     * Ce cas tenait le régime `Aucun` — « ne voit que des personnes décédées » — avec un
+     * compte actif sans `mbr_member`. Mais c'est précisément le compte qui fuyait : un
+     * ancien administrateur rétrogradé lisait l'arbre ancien, noms des vivants compris,
+     * alors que la session le disait « en attente ». Le voter `MEMBRE` lit désormais le
+     * cercle : sans cercle, `403 regime_en_attente`, sur les trois routes, et rien ne sort.
      */
-    public function testLesJalonsDUnCompteEnAttenteNePortentQueDesFaitsDePersonnesDecedees(): void
+    public function testUnCompteActifSansCercleEstRefuseSurLesTroisRoutes(): void
     {
-        ArbreDeChronologieEnMemoire::ajouterFait(self::LECTEUR, 'residence', 'Résidence', null, ArbreDeChronologieEnMemoire::date('2021', 'Aubépine'));
         ArbreDeChronologieEnMemoire::ajouterFait(self::SUREAU, 'recensement', 'Recensement', null, ArbreDeChronologieEnMemoire::date('1957', 'Saint-Ronce-de-Verçay'));
 
-        $this->connecterUnMembre(UserStatus::EnAttente);
+        $this->connecterUnCompteSansCercle();
+
+        foreach ([['GET', '/api/chronologie'], ['GET', '/api/chronologie/preferences'], ['PUT', '/api/chronologie/preferences']] as [$methode, $chemin]) {
+            $this->requete($methode, $chemin, 'PUT' === $methode ? ['bande' => 50] : null);
+
+            self::assertSame(Response::HTTP_FORBIDDEN, $this->client->getResponse()->getStatusCode(), $methode.' '.$chemin);
+            self::assertSame('regime_en_attente', $this->charge()['erreur']['code'], $methode.' '.$chemin);
+            self::assertStringNotContainsString('Saint-Ronce', (string) $this->client->getResponse()->getContent(), $methode.' '.$chemin);
+        }
+    }
+
+    /**
+     * Les **jalons** d'un membre ne portent que des faits de personnes qu'il voit (§ 9.1).
+     *
+     * Le cas pose deux faits, l'un sur le cousin vivant **hors cercle**, l'autre sur la
+     * défunte, et vérifie qu'un seul sort. Sans le premier, le test serait vert même si le
+     * filtrage des jalons n'existait pas. (Il se tenait avec un lecteur sans cercle, qui ne
+     * lit plus rien — cas précédent.)
+     */
+    public function testLesJalonsNePortentPasDeFaitDUnVivantHorsCercle(): void
+    {
+        ArbreDeChronologieEnMemoire::ajouterFait(self::HORS_CERCLE, 'residence', 'Résidence', null, ArbreDeChronologieEnMemoire::date('2021', 'Aubépine'));
+        ArbreDeChronologieEnMemoire::ajouterFait(self::SUREAU, 'recensement', 'Recensement', null, ArbreDeChronologieEnMemoire::date('1957', 'Saint-Ronce-de-Verçay'));
+
+        $this->connecterUnMembre();
         $this->requete('GET', '/api/chronologie');
 
         $charge = $this->charge();
@@ -164,8 +197,9 @@ final class ChronologieTest extends CasDeTestTimeline
                 'personId' => self::SUREAU,
             ]],
             $charge['jalons'],
-            'Le jalon du § 9.1, et lui seul : le fait d\'une personne vivante ne sort pas en régime `Aucun`.',
+            'Le jalon de la défunte, et lui seul : le fait d’un vivant hors cercle ne sort pas.',
         );
+        self::assertStringNotContainsString('Aubépine', (string) $this->client->getResponse()->getContent());
     }
 
     /**

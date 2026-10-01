@@ -5,17 +5,16 @@ declare(strict_types=1);
 namespace App\Module\Almanach\Controller;
 
 use App\Module\Almanach\Service\NormaliseurDesAnniversaires;
-use App\Module\Core\Security\RegimeVoter;
+use App\Module\Core\Security\ReserveAuxMembres;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * La route du calendrier des anniversaires.
  *
  * ```
- * GET /api/anniversaires     ATTENTE   200
+ * GET /api/anniversaires     MEMBRE   200   (compte en attente : 403 regime_en_attente)
  * ```
  *
  * ## Ce contrôleur ne filtre rien
@@ -36,7 +35,7 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * ces décisions supposent un fuseau horaire et une intention d'affichage que seul le client
  * possède.
  */
-#[IsGranted(RegimeVoter::ATTENTE)]
+#[ReserveAuxMembres]
 final class AnniversairesController extends AbstractController
 {
     /**

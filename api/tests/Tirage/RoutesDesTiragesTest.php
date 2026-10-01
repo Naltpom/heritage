@@ -187,14 +187,18 @@ final class RoutesDesTiragesTest extends CasDeTestTirages
         self::assertSame(Response::HTTP_CREATED, $this->statut());
         self::assertTrue($this->charge()['suisParticipant']);
 
+        // Un compte actif **sans rattachement** n'a pas de cercle : depuis la correction du
+        // 01/10/2026, le voter `MEMBRE` le refuse comme un compte en attente — il ne voit
+        // même plus la liste. (Il recevait `moi: null`, puis `409 rattachement_requis` en
+        // voulant rejoindre.)
         $this->connexionDe(self::TUF);
         $this->requete('/api/tirages');
-        self::assertNull($this->charge()['moi'], 'Un compte sans rattachement n’a pas de personne.');
-        self::assertFalse($this->charge()['tirages'][0]['peutRejoindre']);
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->statut());
+        self::assertSame('regime_en_attente', $this->codeDErreur());
 
         $this->envoyer('POST', "/api/tirages/{$id}/rejoindre");
-        self::assertSame(Response::HTTP_CONFLICT, $this->statut());
-        self::assertSame('rattachement_requis', $this->codeDErreur());
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->statut());
+        self::assertSame('regime_en_attente', $this->codeDErreur());
     }
 
     public function testSeulLOrganisateurLanceLeTirage(): void
@@ -216,6 +220,8 @@ final class RoutesDesTiragesTest extends CasDeTestTirages
 
         $this->requete('/api/tirages');
         self::assertSame(Response::HTTP_FORBIDDEN, $this->statut());
+        // Le refus dit pourquoi : le front y reconnaît l'attente (ADR 0003, 01/10/2026).
+        self::assertSame('regime_en_attente', $this->codeDErreur());
     }
 
     /* ───────────────── Présences et annulation ───────────────── */
