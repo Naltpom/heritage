@@ -77,3 +77,6 @@ export * from './push'
    connexion sans mot de passe. La conversion JSON ↔ `ArrayBuffer` est dans
    `lib/cleDAcces.ts`, l'enchaînement dans `composables/useClesDAcces.ts`. */
 export * from './clesDAcces'
+/* Module `Statistiques` : Explorer › Stats. Tout est calculé côté serveur, après
+   le cercle de visibilité ; le chantier a sa propre route, d'administration. */
+export * from './statistiques'

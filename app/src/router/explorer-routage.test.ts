@@ -47,6 +47,7 @@ describe('Explorer ouvre un onglet, jamais une page vide', () => {
     ['/explorer/chronologie', 'chronologie'],
     ['/explorer/carte', 'carte'],
     ['/explorer/calendrier', 'anniversaires'],
+    ['/explorer/stats', 'stats'],
   ])('%s résout la route « %s »', (chemin, nom) => {
     expect(routeur().resolve(chemin).name).toBe(nom)
   })
@@ -55,8 +56,8 @@ describe('Explorer ouvre un onglet, jamais une page vide', () => {
     expect(routeur().resolve({ name: 'anniversaires' }).path).toBe('/explorer/calendrier')
   })
 
-  it('les trois onglets vivent sous la route parente d’Explorer', () => {
-    for (const nom of ['chronologie', 'carte', 'anniversaires']) {
+  it('les quatre onglets vivent sous la route parente d’Explorer', () => {
+    for (const nom of ['chronologie', 'carte', 'anniversaires', 'stats']) {
       const resolue = routeur().resolve({ name: nom })
       expect(resolue.matched.map((m) => m.name)).toEqual(['explorer', nom])
     }
@@ -87,7 +88,7 @@ describe('les anciennes adresses mènent au bon onglet', () => {
 })
 
 describe('la section de l’en-tête', () => {
-  it.each(['chronologie', 'carte', 'anniversaires', 'explorer'])(
+  it.each(['chronologie', 'carte', 'anniversaires', 'stats', 'explorer'])(
     '« %s » appartient à Explorer',
     (nom) => {
       const resolue = routeur().resolve({ name: nom })
@@ -99,7 +100,7 @@ describe('la section de l’en-tête', () => {
 })
 
 describe('le niveau d’accès', () => {
-  it.each(['/explorer/chronologie', '/explorer/carte', '/explorer/calendrier'])(
+  it.each(['/explorer/chronologie', '/explorer/carte', '/explorer/calendrier', '/explorer/stats'])(
     '%s est réservé aux membres : fermé au compte en attente et à l’anonyme',
     (chemin) => {
       // ADR 0003, révision du 01/10/2026 : un compte en attente ne voit plus
@@ -121,7 +122,7 @@ describe('le niveau d’accès', () => {
 
 describe('le titre de l’en-tête du téléphone', () => {
   it('dit « Explorer » sur les trois onglets, que la rangée nomme déjà', async () => {
-    for (const chemin of ['/explorer/chronologie', '/explorer/carte', '/explorer/calendrier']) {
+    for (const chemin of ['/explorer/chronologie', '/explorer/carte', '/explorer/calendrier', '/explorer/stats']) {
       const route = await allerA(chemin)
       expect(titreDEntete(String(route.name), route.meta), chemin).toBe('Explorer')
     }
