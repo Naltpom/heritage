@@ -53,6 +53,13 @@ export interface ResumeDEvenement extends AnnonceDEvenement {
   suisInvite: boolean
   /** `null` : pas encore répondu — ou pas invité (`suisInvite`). */
   maReponse: ReponseAInvitation | null
+  /**
+   * Le nom de qui a **noté** ma réponse à ma place (l'organisateur, de vive
+   * voix) ; `null` quand je l'ai donnée moi-même.
+   */
+  maReponseNoteePar: string | null
+  /** Les dates ont changé depuis ma réponse : elle tient, mais l'écran demande de la confirmer. */
+  reponseAConfirmer: boolean
   /** Invité, événement maintenu et pas terminé : les boutons Présent / Absent servent. */
   peutRepondre: boolean
   nombreDInvites: number
@@ -74,6 +81,12 @@ export interface LigneDeSuivi extends PersonneInvitable {
   vuLe: string | null
   reponduLe: string | null
   relanceLe: string | null
+  /** La réponse a été notée par l'organisateur (ou un administrateur) : son nom. */
+  noteePar: string | null
+  /** Répondu avant le dernier changement de dates : à reconfirmer. */
+  aConfirmer: boolean
+  /** Le lecteur peut noter la réponse de cet invité à sa place. Le serveur en décide. */
+  peutNoterReponse: boolean
 }
 
 export interface SuiviDEvenement {
@@ -139,6 +152,15 @@ export function repondreAEvenement(id: number, reponse: ReponseAInvitation): Pro
   return requeteApi<DetailDEvenement>(`/evenements/${id}/reponse`, { methode: 'PUT', corps: { reponse } })
 }
 
+/**
+ * L'organisateur note la réponse d'un invité **à sa place** — « grand-mère a
+ * répondu par téléphone ». Tracée « notée par … » ; elle ne compte pas comme
+ * une vue de l'annonce.
+ */
+export function noterLaReponseDUnInvite(id: number, personId: number, reponse: ReponseAInvitation): Promise<DetailDEvenement> {
+  return requeteApi<DetailDEvenement>(`/evenements/${id}/invites/${personId}/reponse`, { methode: 'PUT', corps: { reponse } })
+}
+
 /** Les personnes déjà invitées sont ignorées sans erreur ; les nouvelles sont prévenues. */
 export function inviterAEvenement(id: number, personIds: number[]): Promise<DetailDEvenement> {
   return requeteApi<DetailDEvenement>(`/evenements/${id}/invites`, { methode: 'POST', corps: { personIds } })
@@ -175,7 +197,13 @@ export function relancerLesInvites(id: number): Promise<DetailDEvenement> {
 /** Ce qu'un lien personnel donne à lire. Rien de plus n'est rendu. */
 export interface AnnonceParLien {
   evenement: AnnonceDEvenement & { annule: boolean; passe: boolean }
-  invite: { libelle: string; reponse: ReponseAInvitation | null; peutRepondre: boolean }
+  invite: {
+    libelle: string
+    reponse: ReponseAInvitation | null
+    /** Les dates ont changé depuis la réponse : à confirmer. */
+    aConfirmer: boolean
+    peutRepondre: boolean
+  }
 }
 
 /** Rendu une seule fois, à la création : la clé ne se redemande pas. */

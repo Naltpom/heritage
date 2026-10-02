@@ -25,6 +25,7 @@ import {
   creerLienDInvite,
   inviterAEvenement,
   lireEvenement,
+  noterLaReponseDUnInvite,
   relancerLesInvites,
   repondreAEvenement,
   retirerDeLEvenement,
@@ -49,10 +50,12 @@ import {
   confirmationDeRelance,
   confirmationDeRetrait,
   confirmationDeRevocation,
+  DATES_MODIFIEES,
   etatDeLEvenement,
   messageDePartage,
   periodeEnTete,
   phraseDeMaReponse,
+  phraseDeReponseNotee,
   quand,
 } from '@/components/evenements-familiaux/evenements'
 import { chargerLesInvitables, type Invitable } from '@/components/evenements-familiaux/invites'
@@ -140,6 +143,16 @@ function repondre(reponse: ReponseAInvitation): void {
 }
 
 /* ───────────────── Organisateur ───────────────── */
+
+/**
+ * Noter la réponse d'un invité à sa place — « grand-mère a répondu par
+ * téléphone ». Sans confirmation, comme une réponse : elle se corrige d'un
+ * geste, et la ligne dit ensuite « noté par … ».
+ */
+function noterReponse(ligne: LigneDeSuivi, reponse: ReponseAInvitation): void {
+  if (suspendu.value) return
+  void agir(`noter-${ligne.personId}-${reponse}`, () => noterLaReponseDUnInvite(id.value, ligne.personId, reponse))
+}
 
 function annuler(): void {
   const e = evenement.value
@@ -331,15 +344,28 @@ const PASTILLES: Record<string, string> = {
           {{ evenement.peutRepondre && evenement.maReponse === null ? 'Venez-vous ?' : 'Ma réponse' }}
         </h2>
         <template v-if="evenement.peutRepondre">
+          <!-- Les dates ont bougé depuis la réponse : elle tient, mais on la confirme
+               — toucher la réponse marquée suffit. -->
+          <p
+            v-if="evenement.reponseAConfirmer"
+            class="rounded-panneau border border-alerte-bord bg-alerte-doux p-3 text-sm font-semibold text-alerte"
+            role="status"
+          >
+            {{ DATES_MODIFIEES }}
+          </p>
           <BoutonsDeReponse
             :reponse="evenement.maReponse"
             :en-cours="reponseEnCours"
+            :confirmable="evenement.reponseAConfirmer"
             :desactive="suspendu || (enCours !== null && reponseEnCours === null)"
             @choisir="repondre"
           />
           <p class="text-xs text-attenue">Vous pouvez changer d’avis jusqu’à la fin de l’événement.</p>
         </template>
         <p v-else class="text-sm text-texte">{{ phraseDeMaReponse(evenement.maReponse) }}</p>
+        <p v-if="evenement.maReponseNoteePar !== null" class="text-xs text-attenue">
+          {{ phraseDeReponseNotee(evenement.maReponseNoteePar) }}
+        </p>
       </section>
 
       <p v-if="evenement.description" class="mb-5 text-[15px] leading-relaxed whitespace-pre-line text-texte">
@@ -387,6 +413,7 @@ const PASTILLES: Record<string, string> = {
             @copier-lien="copierLien"
             @revoquer-lien="revoquerLien"
             @fermer-lien="lienAffiche = null"
+            @noter-reponse="noterReponse"
           />
         </PanneauBase>
 

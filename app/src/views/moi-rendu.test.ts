@@ -6,7 +6,7 @@ import MoiView from './MoiView.vue'
 /**
  * « Moi » (`/moi`), rendu côté serveur.
  *
- * C'est désormais la **seule** porte d'entrée de Mes demandes, des tirages, des
+ * C'est désormais la **seule** porte d'entrée de Mes demandes, des événements (tirages au sort compris), des
  * actes demandés, des questions et de l'administration : si une entrée
  * disparaissait d'ici, la capacité entière deviendrait introuvable — l'écran
  * resterait juste, la route continuerait de répondre, et personne ne le
@@ -67,8 +67,8 @@ describe('Moi, selon le régime', () => {
     expect(html).toMatch(/>CR<\/span>/)
   })
 
-  it('donne à un membre son compte, les cinq entrées de contribution et l’aide', async () => {
-    expect(vers(await rendre('membre'))).toEqual(['compte', 'demandes.miennes', 'evenements', 'tirages', 'demarches', 'questions', 'aide'])
+  it('donne à un membre son compte, les quatre entrées de contribution et l’aide', async () => {
+    expect(vers(await rendre('membre'))).toEqual(['compte', 'demandes.miennes', 'evenements', 'demarches', 'questions', 'aide'])
   })
 
   it('ne donne à un compte en attente que son inscription, son compte — et la déconnexion', async () => {
@@ -90,7 +90,6 @@ describe('Moi, selon le régime', () => {
       'compte',
       'demandes.miennes',
       'evenements',
-      'tirages',
       'demarches',
       'questions',
       'aide',
@@ -136,6 +135,6 @@ describe('Moi, selon le régime', () => {
 
     expect(html).not.toContain('<h1')
     expect(html).not.toContain('min-h-12')
-    expect(vers(html)).toEqual(['compte', 'demandes.miennes', 'evenements', 'tirages', 'demarches', 'questions', 'aide'])
+    expect(vers(html)).toEqual(['compte', 'demandes.miennes', 'evenements', 'demarches', 'questions', 'aide'])
   })
 })

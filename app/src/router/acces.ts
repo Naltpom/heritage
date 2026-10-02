@@ -104,11 +104,11 @@ export function estRattache(regime: RegimeAcces): boolean {
 export function routeParDefaut(regime: RegimeAcces): RouteLocationRaw {
   if (regime === 'anonyme') return { name: 'connexion' }
   // Un compte en attente atterrit sur SA page : l'écran d'attente. L'accueil
-  // lit l'arbre (anniversaires, tirages), et il ne lit plus rien de l'arbre
+  // lit l'arbre (anniversaires, événements), et il ne lit plus rien de l'arbre
   // avant sa validation (ADR 0003, révision du 01/10/2026).
   if (regime === 'en_attente') return { name: 'inscription.etat' }
   // Tout membre atterrit sur l'accueil (`/home`) : les anniversaires du jour,
-  // ses tirages, et les deux portes — l'arbre, proposer.
+  // ses événements, et les deux portes — l'arbre, proposer.
   return { name: 'accueil' }
 }
 

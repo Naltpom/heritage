@@ -7,13 +7,15 @@
  *
  * 1. **deux boutons sur une ligne** — « Arbre » et « Modifier l'arbre », qui
  *    ouvre l'assistant ;
- * 2. **le prochain événement où l'on est invité** — la cousinade de l'été —,
- *    avec sa réponse ou les deux boutons Présent / Absent pour la donner
- *    (`CarteEvenementAccueil`) ; la carte vue, l'annonce l'est aussi ;
- * 3. **ses tirages** — repliés sur une ligne, dépliés pour régler sa présence ;
- *    une fois le tirage fait, « Voir à qui je fais le cadeau » en violet, sans
- *    rien déplier (`CarteTirageAccueil`) ;
- * 4. **les anniversaires**, en carrousel : on glisse (ou les flèches) pour voir
+ * 2. **mes événements** (02/10/2026 : une seule section, « le tirage au sort
+ *    est un événement en soi ») — **tous** ceux qui m'attendent, le plus
+ *    proche d'abord : les rassemblements où je suis invité ou que j'organise,
+ *    avec ma réponse ou les deux boutons Présent / Absent
+ *    (`CarteEvenementAccueil`) — la carte vue, l'annonce l'est aussi —, et les
+ *    tirages dont je suis ou que j'organise, repliés sur une ligne, dépliés
+ *    pour régler ma présence, et une fois le tirage fait « Voir à qui je fais
+ *    le cadeau » en violet, sans rien déplier (`CarteTirageAccueil`) ;
+ * 3. **les anniversaires**, en carrousel : on glisse (ou les flèches) pour voir
  *    les jours voisins. Les vivants d'abord, bien lisibles ; les défunts
  *    ensuite, en retrait, sous « En mémoire ».
  *
@@ -43,14 +45,13 @@ import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import LigneEvenement from '@/components/anniversaires/LigneEvenement.vue'
 import CarteTirageAccueil from '@/components/accueil/CarteTirageAccueil.vue'
 import CarteEvenementAccueil from '@/components/accueil/CarteEvenementAccueil.vue'
-import { prochainPourMoi } from '@/components/evenements-familiaux/evenements'
+import { mesEvenements } from '@/components/evenements-familiaux/liste-commune'
 import {
   anniversairesDuJour,
   decaler,
   jourCourt,
   libelleDate,
   libelleRelatif,
-  prochaineOccurrence,
 } from '@/components/accueil/jours'
 
 const { rattache, nomAffiche, vueEmpruntee } = useSession()
@@ -104,48 +105,44 @@ async function charger(): Promise<void> {
 onMounted(charger)
 onBeforeUnmount(() => avorteur?.abort())
 
-/* ───────────────── Le prochain événement ───────────────── */
+/* ───────────────── Mes événements ───────────────── */
 
-const prochainEvenement = computed(() => prochainPourMoi(evenements.value, aujourdhui))
-const reponseEnCours = ref<ReponseAInvitation | null>(null)
-const erreurDeReponse = ref<unknown>(null)
+/** Rassemblements et tirages mêlés, le plus proche d'abord (`mesEvenements`). */
+const mesProchains = computed(() => mesEvenements(evenements.value, tirages.value, aujourdhui))
+
+/** La réponse qui part, et pour quel rassemblement : une à la fois. */
+const reponseEnCours = ref<{ id: number; reponse: ReponseAInvitation } | null>(null)
+const erreurDeReponse = ref<{ id: number; erreur: unknown } | null>(null)
 
 /**
- * La carte montre l'annonce : elle est vue. Au mieux — un échec ne se signale
- * pas, l'annonce sera marquée à l'ouverture de sa page. Rien sous la bascule
- * « voir comme » : l'administrateur ne voit pas à la place du membre.
+ * Les cartes montrent les annonces : elles sont vues — chacune de celles où
+ * l'on est invité. Au mieux : un échec ne se signale pas, l'annonce sera
+ * marquée à l'ouverture de sa page. Rien sous la bascule « voir comme » :
+ * l'administrateur ne voit pas à la place du membre.
  */
 function signalerLaVue(): void {
-  const e = prochainEvenement.value
-  if (e === null || vueEmpruntee.value !== null) return
-  void marquerVu(e.id).catch(() => undefined)
+  if (vueEmpruntee.value !== null) return
+  for (const element of mesProchains.value) {
+    if (element.type === 'rassemblement' && element.evenement.suisInvite) {
+      void marquerVu(element.evenement.id).catch(() => undefined)
+    }
+  }
 }
 
-async function repondre(reponse: ReponseAInvitation): Promise<void> {
-  const e = prochainEvenement.value
-  if (e === null || reponseEnCours.value !== null) return
-  reponseEnCours.value = reponse
+async function repondre(id: number, reponse: ReponseAInvitation): Promise<void> {
+  if (reponseEnCours.value !== null) return
+  reponseEnCours.value = { id, reponse }
   erreurDeReponse.value = null
   try {
     // La réponse est l'événement relu ; son résumé remplace celui de la liste.
-    const relu = await repondreAEvenement(e.id, reponse)
+    const relu = await repondreAEvenement(id, reponse)
     evenements.value = evenements.value.map((x) => (x.id === relu.id ? relu : x))
-  } catch (err: unknown) {
-    erreurDeReponse.value = err
+  } catch (erreur: unknown) {
+    erreurDeReponse.value = { id, erreur }
   } finally {
     reponseEnCours.value = null
   }
 }
-
-/* ───────────────── Mes tirages ───────────────── */
-
-const prochainsTirages = computed(() =>
-  tirages.value
-    .filter((t) => t.suisParticipant || t.organisateur.estMoi)
-    .map((t) => ({ tirage: t, date: prochaineOccurrence(t, aujourdhui) }))
-    .sort((a, b) => a.date.getTime() - b.date.getTime())
-    .map(({ tirage }) => tirage),
-)
 
 /** La réponse d'un réglage de présence remplace le résumé du tirage. */
 function remplacerTirage(maj: ResumeDeTirage): void {
@@ -257,37 +254,31 @@ function surTouche(e: KeyboardEvent): void {
       </RouterLink>
     </nav>
 
-    <!-- ───────── Le prochain événement ───────── -->
-    <section v-if="rattache && prochainEvenement !== null" aria-labelledby="titre-evenement" class="mb-6">
+    <!-- ───────── Mes événements : rassemblements et tirages, le plus proche d'abord ───────── -->
+    <section v-if="rattache && mesProchains.length > 0" aria-labelledby="titre-mes-evenements" class="mb-6">
       <div class="mb-2 flex items-baseline justify-between">
-        <h2 id="titre-evenement" class="text-sm font-semibold tracking-tight">Prochain événement</h2>
+        <h2 id="titre-mes-evenements" class="text-sm font-semibold tracking-tight">Mes événements</h2>
         <RouterLink :to="{ name: 'evenements' }" class="text-xs text-accent underline">Tous les événements</RouterLink>
       </div>
-      <CarteEvenementAccueil
-        :evenement="prochainEvenement"
-        :aujourdhui="aujourdhui"
-        :en-cours="reponseEnCours"
-        :erreur="erreurDeReponse"
-        :desactive="vueEmpruntee !== null"
-        @repondre="repondre"
-      />
-    </section>
-
-    <!-- ───────── Mes tirages ───────── -->
-    <section v-if="rattache && prochainsTirages.length > 0" aria-labelledby="titre-tirages" class="mb-6">
-      <div class="mb-2 flex items-baseline justify-between">
-        <h2 id="titre-tirages" class="text-sm font-semibold tracking-tight">Mes tirages</h2>
-        <RouterLink :to="{ name: 'tirages' }" class="text-xs text-accent underline">Tous les tirages</RouterLink>
-      </div>
       <div class="flex flex-col gap-3">
-        <CarteTirageAccueil
-          v-for="t in prochainsTirages"
-          :key="t.id"
-          :tirage="t"
-          :moi="moi"
-          :aujourdhui="aujourdhui"
-          @maj="remplacerTirage"
-        />
+        <template v-for="element in mesProchains" :key="element.cle">
+          <CarteEvenementAccueil
+            v-if="element.type === 'rassemblement'"
+            :evenement="element.evenement"
+            :aujourdhui="aujourdhui"
+            :en-cours="reponseEnCours?.id === element.evenement.id ? reponseEnCours.reponse : null"
+            :erreur="erreurDeReponse?.id === element.evenement.id ? erreurDeReponse.erreur : null"
+            :desactive="vueEmpruntee !== null || (reponseEnCours !== null && reponseEnCours.id !== element.evenement.id)"
+            @repondre="(r) => repondre(element.evenement.id, r)"
+          />
+          <CarteTirageAccueil
+            v-else
+            :tirage="element.tirage"
+            :moi="moi"
+            :aujourdhui="aujourdhui"
+            @maj="remplacerTirage"
+          />
+        </template>
       </div>
     </section>
 

@@ -110,10 +110,12 @@ const LIBELLES_DE_TYPE: Readonly<Record<string, string>> = {
   media_refuse: 'Média refusé',
   tirage_effectue: 'Tirage au sort',
   // Module `Evenement` (02/10/2026) : l'invitation, le rappel à qui n'a pas
-  // répondu, l'annulation. Les trois mènent à `evenement.detail`.
+  // répondu, l'annulation, le changement de dates. Les quatre mènent à
+  // `evenement.detail`.
   evenement_invitation: 'Invitation',
   evenement_relance: 'Rappel d’invitation',
   evenement_annule: 'Événement annulé',
+  evenement_dates_modifiees: 'Nouvelles dates',
 }
 
 export function libelleDeType(kind: string): string {

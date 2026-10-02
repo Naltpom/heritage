@@ -4,7 +4,10 @@
  * 1. **Pas encore répondu** : « Venez-vous ? » et les deux boutons, sur la carte.
  * 2. **Déjà répondu** : la réponse marquée, l'autre bouton à portée.
  * 3. **Annulé** : plus de boutons — mais la carte n'apparaît alors pas sur
- *    l'accueil (`prochainPourMoi`), ce cas protège un écran qui l'oublierait.
+ *    l'accueil (`mesEvenements`), ce cas protège un écran qui l'oublierait.
+ * 4. **Dates changées** : le bandeau, et la réponse marquée se confirme.
+ * 5. **Réponse notée** par l'organisateur : la carte le dit.
+ * 6. **Organisé sans y être invité** : « Vous organisez », pas de boutons.
  */
 import { describe, expect, it } from 'vitest'
 import { createSSRApp, defineComponent, h } from 'vue'
@@ -26,6 +29,8 @@ function evenement(partiel: Partial<ResumeDEvenement> = {}): ResumeDEvenement {
     peutGerer: false,
     suisInvite: true,
     maReponse: null,
+    maReponseNoteePar: null,
+    reponseAConfirmer: false,
     peutRepondre: true,
     nombreDInvites: 37,
     nombreDePresents: 12,
@@ -49,7 +54,7 @@ describe('CarteEvenementAccueil', () => {
   it('pas encore répondu : la question et les deux boutons, sur la carte', async () => {
     const html = await rendre(evenement())
 
-    expect(html).toContain('Invitation · dans 16 jours')
+    expect(html).toContain('Rassemblement · Invitation · dans 16 jours')
     expect(html).toContain('Cousinade été 2027')
     expect(html).toContain('Du sam. 17 au dim. 18 juillet 2027')
     expect(html).toContain('12 présents sur 37 invités')
@@ -63,6 +68,23 @@ describe('CarteEvenementAccueil', () => {
 
     expect(html).toContain('Ma réponse')
     expect(html.match(/aria-pressed="true"/g)).toHaveLength(1)
+  })
+
+  it('dates changées depuis la réponse : le bandeau le dit', async () => {
+    const html = await rendre(evenement({ maReponse: 'present', reponseAConfirmer: true }))
+    expect(html).toContain('Les dates ont changé : confirmez votre réponse.')
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1)
+  })
+
+  it('réponse notée par l’organisateur : la carte le dit', async () => {
+    const html = await rendre(evenement({ maReponse: 'present', maReponseNoteePar: 'Opale Tilleul' }))
+    expect(html).toContain('Réponse notée par Opale Tilleul.')
+  })
+
+  it('organisé sans y être invité : « Vous organisez », sans boutons', async () => {
+    const html = await rendre(evenement({ suisInvite: false, peutRepondre: false, organisateur: { libelle: 'Moi', estMoi: true } }))
+    expect(html).toContain('Vous organisez')
+    expect(html).not.toContain('aria-label="Ma réponse"')
   })
 
   it('sans réponse possible : pas de boutons', async () => {
