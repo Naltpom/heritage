@@ -271,6 +271,36 @@ describe('disposition lignees', () => {
     expect(d.alliances[0]!.nom).toBe('Vallaize')
   })
 
+  it('range, sur demande, les familles par alliance dans la branche qui les relie', () => {
+    const d2 = disposerLignees(graphe, { alliances: 'dans-l-arbre' })
+    const g = (cle: string) => d2.parId.get(id[cle]!)!
+    expect(chevauchements(d2)).toEqual([])
+    expect(d2.alliancesDansLArbre).toBe(true)
+    expect(d2.alliances).toEqual([])
+    // Au-dessus de l'allié, du côté Voulgre : à gauche des Figarol de la même rangée.
+    for (const cle of ['pereAllie', 'mereAllie']) {
+      expect(g(cle).rangee).toBe(g('allie').rangee - 1)
+      expect(g(cle).cx).toBeLessThan(g('agpF').cx)
+      expect(g(cle).parente).toBe('alliance')
+      expect(g(cle).pont).toBeNull()
+    }
+    // Par défaut, la vue d'avant : un bloc à part.
+    expect(d.alliancesDansLArbre).toBe(false)
+  })
+
+  it('range, sur demande, chaque fratrie dans l’ordre des naissances', () => {
+    const d2 = disposerLignees(graphe, { fratriesParNaissance: true })
+    const g = (cle: string) => d2.parId.get(id[cle]!)!
+    expect(chevauchements(d2)).toEqual([])
+    // Laurent (1969), Céline (1972), Stéphane (1977) : l'aîné, le père, à gauche.
+    expect(g('pere').cx).toBeLessThan(g('tante').cx)
+    expect(g('tante').cx).toBeLessThan(g('oncle').cx)
+    // Nicole (1958) avant Emmanuelle (1971), la mère.
+    expect(g('tanteM').cx).toBeLessThan(g('mere').cx)
+    // Par défaut, la règle d'avant : la fratrie du père à l'extérieur, à sa gauche.
+    expect(f('tante').cx).toBeLessThan(f('pere').cx)
+  })
+
   it('masque par défaut les familles par alliance, et rien d’autre', () => {
     const d2 = disposerLignees(sansFamillesParAlliance(graphe))
     for (const cle of ['pereAllie', 'mereAllie']) expect(d2.parId.has(id[cle]!)).toBe(false)
