@@ -1,0 +1,37 @@
+# Contrat : ce fichier est celui du module Statistiques (Explorer › Stats).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services/_autoload.yaml couvre déjà toutes les classes
+# de src/Module/Statistiques/. On ne déclare ici que ce que le conteneur ne peut pas
+# deviner : les **alias d'interface** des trois ports. Le piège d'ordre de chargement est
+# celui que décrit config/services/almanach.yaml — rien de concret ici, que des alias.
+
+services:
+    # ── L'arbre, complet et non filtré ─────────────────────────────────────────────
+    #
+    # Le cercle s'applique ensuite, une seule fois, dans `StatistiquesVisibles`. Le contrat
+    # entier est écrit sur l'interface.
+    App\Module\Statistiques\Contract\PortStatistiquesArbre:
+        alias: App\Module\Tree\Service\VueDeLArbrePourStatistiques
+
+    # ── Le chantier (administration) : des comptes, jamais un nom ──────────────────
+    App\Module\Statistiques\Contract\PortActiviteDesDemandes:
+        alias: App\Module\Proposal\Service\ActiviteDesDemandesPourStatistiques
+
+    App\Module\Statistiques\Contract\PortActesDemandes:
+        alias: App\Module\Demarche\Service\ActesDemandesPourStatistiques
+
+when@test:
+    services:
+        # Le port vers `Tree`, joué par un relevé en mémoire que chaque test peuple en
+        # quelques lignes — même choix qu'`Almanach`. La traduction réelle est éprouvée à
+        # part, sur une vraie base : `tests/Tree/PortDesStatistiquesTest.php`.
+        App\Tests\Statistiques\Double\ReleveEnMemoire:
+            public: true
+
+        App\Module\Statistiques\Contract\PortStatistiquesArbre:
+            alias: App\Tests\Statistiques\Double\ReleveEnMemoire
+            public: true
+
+        # ⚠ Ne pas rendre public ici un service de `src/` : la ligne le redéfinirait sans
+        # autowiring (voir l'avertissement de config/services/almanach.yaml).

@@ -31,6 +31,7 @@ traiter en face plutôt que découvrir à l'implémentation.
 | `Gedcom` | import / export GEDCOM | `ged_` |
 | `Almanach` | carte des lieux, anniversaires | `alm_` (réservé — **aucune table dans cette livraison**) |
 | `Assistant` | l'assistant IA : propositions, rattachement assisté, questions sur l'arbre | `ast_` (depuis le 2026-10-01 : les conversations de « Poser une question ») |
+| `Statistiques` | Explorer › Stats : l'arbre en chiffres, le chantier (ADR 0015) | `stt_` (réservé — **aucune table**) |
 
 Règles de frontière :
 
