@@ -37,13 +37,14 @@
  * `OngletsFiche` : trois onglets dont le soulignement glisse (refonte du
  * 30/09/2026). Le contenu qui coulisse dessous est l'affaire de `PageFiche`.
  *
- * ## « ‹ Retour à l'arbre »
+ * ## « ‹ Retrouver dans l'arbre »
  *
  * Toujours présent sur desktop — sur mobile, l'en-tête de l'application porte
- * déjà « ‹ Arbre ». Il mène à `{ name: 'arbre' }` : quand on vient de l'arbre,
- * celui-ci relit la vue mémorisée (`histoire/retour.ts`) et se remonte **sur la
- * vue exacte qu'on avait quittée** ; sinon, il s'ouvre ajusté. `retourMemorise`
- * ne décide donc que de l'infobulle, pas de la présence du lien.
+ * déjà « ‹ Arbre », qui fait de même. Il mène à l'arbre **centré sur la personne
+ * de cette fiche** (`?personne=`), et non plus sur la vue qu'on avait quittée :
+ * de fiche en fiche (parents, enfants…), on finit loin de là où on était parti,
+ * et « retour » ramenait sur quelqu'un d'autre que la personne qu'on regarde.
+ * D'où le libellé : on ne « revient » pas, on la « retrouve ».
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed } from 'vue'
@@ -54,11 +55,9 @@ import OngletsFiche from './OngletsFiche.vue'
 import PortraitFiche from './PortraitFiche.vue'
 import type { OngletFiche } from './onglets'
 
-const { fiche, onglet, retourMemorise = false, edition = false } = defineProps<{
+const { fiche, onglet, edition = false } = defineProps<{
   fiche: FichePersonneComplete
   onglet: OngletFiche
-  /** L'arbre a mémorisé la vue qu'on a quittée : le retour la restaurera. */
-  retourMemorise?: boolean
   /** Le mode édition (crayon) : bandeau violet, sans onglets. */
   edition?: boolean
 }>()
@@ -79,15 +78,11 @@ const confidentialite = computed(() => noteDeConfidentialite(fiche))
       class="mx-auto flex w-full max-w-[1040px] flex-col gap-3.5 px-8 pt-[18px] max-md:gap-3 max-md:px-5 max-md:pt-1"
     >
       <RouterLink
-        :to="{ name: 'arbre' }"
+        :to="{ name: 'arbre', query: { personne: fiche.id } }"
         class="self-start text-[13px] text-accent hover:underline max-md:hidden"
-        :title="
-          retourMemorise
-            ? 'Revenir à l’arbre, là où vous l’aviez laissé'
-            : 'Aller à l’arbre'
-        "
+        :title="`Ouvrir l’arbre centré sur ${fiche.displayName}`"
       >
-        <span aria-hidden="true">‹ </span>Retour à l’arbre
+        <span aria-hidden="true">‹ </span>Retrouver dans l’arbre
       </RouterLink>
 
       <div class="flex items-center gap-5 max-md:gap-3.5">
