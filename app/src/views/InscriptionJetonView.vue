@@ -23,6 +23,25 @@
  * l'attendait, pas **qui** on attendait. Les deux modes demandent ensuite les
  * mêmes trois champs — un formulaire qui ne réclamerait que la date en mode
  * confirmation dirait au porteur « nous savons déjà ton nom ».
+ *
+ * **La vidéo « Bienvenue ».** Une fois le jeton reconnu — et seulement alors :
+ * un lien refusé n'ouvre sur rien, une vidéo qui promettrait la suite serait un
+ * mensonge —, le lecteur s'ouvre de lui-même par-dessus l'écran, en muet, avec
+ * la vidéo qui raconte le parcours (se retrouver, créer son accès, être validé,
+ * explorer). À la fin ou à la croix, il disparaît et laisse l'écran tel qu'il
+ * était, « Commencer » compris. Elle n'est **jamais** une étape :
+ *
+ * - elle ne s'ouvre d'elle-même **qu'une fois par navigateur**
+ *   (`heritage.videos.bienvenue.vue`, voir `lib/videos.ts`). La marque est
+ *   posée quand le fichier s'est effectivement chargé (`chargee`), pas à
+ *   l'ouverture : une vidéo absente ou un réseau coupé ne « consomment » pas
+ *   la première fois ;
+ * - si elle ne charge pas, le lecteur se ferme sans un mot, et l'inscription
+ *   continue comme avant ;
+ * - un lien discret, « Revoir la vidéo de présentation », la rouvre à la demande.
+ *
+ * Rien de l'invitation n'est écrit pour autant : la marque dit « déjà vue sur
+ * ce navigateur », pas qui l'a vue ni avec quel jeton (`fluxInscription.ts`).
  */
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -35,6 +54,8 @@ import CadreEntree from '@/components/inscription/CadreEntree.vue'
 import LienNonValide from '@/components/inscription/LienNonValide.vue'
 import { estLienNonValide, jetonDeLaRoute } from '@/components/inscription/lienInvitation'
 import { fermerFlux, ouvrirFlux } from '@/components/inscription/fluxInscription'
+import LecteurVideo from '@/components/video/LecteurVideo.vue'
+import { bienvenueDejaVue, marquerBienvenueVue, videoParId } from '@/lib/videos'
 
 const route = useRoute()
 const routeur = useRouter()
@@ -66,6 +87,9 @@ async function verifier(): Promise<void> {
   try {
     ouvrirFlux(jeton, await verifierJeton(jeton))
     pret.value = true
+    // Le jeton est bon : c'est le moment de la vidéo, si ce navigateur ne
+    // l'a jamais montrée. Elle se pose PAR-DESSUS l'écran, qui est déjà prêt.
+    if (!bienvenueDejaVue()) videoOuverte.value = true
   } catch (cause) {
     fermerFlux()
     if (estLienNonValide(cause)) lienRefuse.value = true
@@ -76,6 +100,16 @@ async function verifier(): Promise<void> {
 }
 
 onMounted(verifier)
+
+/* ───────────────── La vidéo « Bienvenue » ───────────────── */
+
+const BIENVENUE = videoParId('bienvenue')
+/** Le lecteur est affiché. Il se ferme de lui-même à la fin, à la croix, ou sur un échec. */
+const videoOuverte = ref(false)
+
+function revoirLaVideo(): void {
+  videoOuverte.value = true
+}
 
 function commencer(): void {
   // Le jeton reste en mémoire et ne repart pas dans l'URL : le semer dans
@@ -117,6 +151,19 @@ function commencer(): void {
       <div class="mt-5">
         <BoutonBase pleineLargeur @click="commencer">Commencer</BoutonBase>
       </div>
+
+      <!-- Discret, sous le bouton : la vidéo n'est pas le chemin, elle l'éclaire. -->
+      <p class="mt-3 text-center">
+        <button
+          type="button"
+          data-revoir-video
+          class="inline-flex min-h-11 items-center gap-1.5 px-2 text-sm text-attenue underline decoration-ligne underline-offset-4 hover:text-texte"
+          @click="revoirLaVideo"
+        >
+          <svg viewBox="0 0 24 24" class="size-4" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+          Revoir la vidéo de présentation
+        </button>
+      </p>
     </PanneauBase>
 
     <template #pied>
@@ -128,4 +175,14 @@ function commencer(): void {
       </p>
     </template>
   </CadreEntree>
+
+  <!-- Par-dessus l'écran, téléporté dans <body>. `chargee` : le fichier existe
+       et se lit — c'est là, et pas avant, que « déjà vue » se retient. -->
+  <LecteurVideo
+    v-if="videoOuverte && pret"
+    :video="BIENVENUE"
+    @chargee="marquerBienvenueVue()"
+    @fin="videoOuverte = false"
+    @fermer="videoOuverte = false"
+  />
 </template>

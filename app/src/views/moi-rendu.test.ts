@@ -67,8 +67,8 @@ describe('Moi, selon le régime', () => {
     expect(html).toMatch(/>CR<\/span>/)
   })
 
-  it('donne à un membre son compte et les quatre entrées de contribution', async () => {
-    expect(vers(await rendre('membre'))).toEqual(['compte', 'demandes.miennes', 'tirages', 'demarches', 'questions'])
+  it('donne à un membre son compte, les quatre entrées de contribution et l’aide', async () => {
+    expect(vers(await rendre('membre'))).toEqual(['compte', 'demandes.miennes', 'tirages', 'demarches', 'questions', 'aide'])
   })
 
   it('ne donne à un compte en attente que son inscription, son compte — et la déconnexion', async () => {
@@ -92,6 +92,7 @@ describe('Moi, selon le régime', () => {
       'tirages',
       'demarches',
       'questions',
+      'aide',
       'administration.demandes',
     ])
     expect(html).not.toContain('Voir comme un membre')
@@ -134,6 +135,6 @@ describe('Moi, selon le régime', () => {
 
     expect(html).not.toContain('<h1')
     expect(html).not.toContain('min-h-12')
-    expect(vers(html)).toEqual(['compte', 'demandes.miennes', 'tirages', 'demarches', 'questions'])
+    expect(vers(html)).toEqual(['compte', 'demandes.miennes', 'tirages', 'demarches', 'questions', 'aide'])
   })
 })

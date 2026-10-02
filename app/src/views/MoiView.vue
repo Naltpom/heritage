@@ -4,7 +4,7 @@
  *
  * Tout ce qui concerne **le compte qui lit** tient ici, et nulle part ailleurs :
  * mon compte, mes demandes, les tirages, les actes demandés, les questions,
- * l'administration pour un administrateur, et la déconnexion. C'est la règle de
+ * l'aide (les vidéos de présentation), l'administration pour un administrateur, et la déconnexion. C'est la règle de
  * la refonte : **chaque chose a une seule porte d'entrée**. L'en-tête ne porte
  * plus « Mes demandes », « Validation » ni « + Proposer » ; le tiroir du
  * téléphone a disparu. Sur téléphone, on arrive ici par l'entrée « Moi » de la
@@ -107,6 +107,9 @@ const entrees = computed<Entree[]>(() => {
       { nom: 'tirages', libelle: 'Tirages au sort' },
       { nom: 'demarches', libelle: 'Actes demandés' },
       { nom: 'questions', libelle: 'Questions' },
+      // Les vidéos de présentation. Ici et pas dans la barre du bas : quatre
+      // entrées, pas une de plus — l'aide est une page qu'on ouvre rarement.
+      { nom: 'aide', libelle: 'Aide et vidéos' },
     )
   }
   return liste

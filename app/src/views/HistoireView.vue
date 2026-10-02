@@ -96,6 +96,8 @@ import IdentiteFiche from '@/components/personne/IdentiteFiche.vue'
 import ParenteFiche from '@/components/personne/ParenteFiche.vue'
 import FaitsFiche from '@/components/personne/FaitsFiche.vue'
 import { useSession } from '@/composables/useSession'
+import LecteurVideo from '@/components/video/LecteurVideo.vue'
+import { videoParId } from '@/lib/videos'
 
 const estMobile = useEstMobile()
 const { fermerTiroirs, unTiroirEstOuvert, ouvert: ouvertTiroir } = useTiroirs()
@@ -662,6 +664,14 @@ const OPTIONS_ALLIANCES = [
   { dans: false, libelle: 'À part', sous: 'chacune son bloc, à droite' },
   { dans: true, libelle: 'Dans mon arbre', sous: 'dans la branche qui les relie' },
 ] as const
+
+/*
+ * L'aide en vidéo, sur place : « Voir la vidéo », au pied des filtres, ouvre le
+ * chapitre qui les explique PAR-DESSUS l'arbre, sans quitter l'écran — les
+ * filtres restent tels qu'on les a laissés, feuillet compris, à la fermeture.
+ */
+const VIDEO_FILTRES = videoParId('filtres-de-l-arbre')
+const aideFiltresOuverte = ref(false)
 
 const BASCULES = [
   { cle: 'ligneDirecte', libelle: 'Ligne directe', sous: 'ancêtres et descendants' },
@@ -1415,6 +1425,15 @@ onBeforeUnmount(() => {
         <p class="m-0 text-xs text-attenue">
           Les autres fiches restent visibles, estompées.
         </p>
+        <button
+          type="button"
+          data-aide-filtres
+          class="flex min-h-11 items-center gap-2 self-start text-left text-sm text-accent hover:underline"
+          @click="aideFiltresOuverte = true"
+        >
+          <span class="flex size-5 flex-none items-center justify-center rounded-full border-[1.5px] border-current text-[11px] font-bold" aria-hidden="true">?</span>
+          Voir la vidéo : comment marchent les filtres
+        </button>
       </template>
       <template #actions>
         <div class="flex overflow-hidden rounded-lg border border-ligne">
@@ -1953,6 +1972,13 @@ onBeforeUnmount(() => {
 
     <!-- Téléphone, première visite : Compact ou Portrait ? Une fois, jamais avec une autre fenêtre. -->
     <InvitationFormatDesCartes :pret="disposition !== null && !chargement && ouvertTiroir === 'aucun'" />
+    <!-- L'aide des filtres : téléportée dans <body>, au-dessus du feuillet. -->
+    <LecteurVideo
+      v-if="aideFiltresOuverte"
+      :video="VIDEO_FILTRES"
+      @fin="aideFiltresOuverte = false"
+      @fermer="aideFiltresOuverte = false"
+    />
   </div>
 </template>
 
