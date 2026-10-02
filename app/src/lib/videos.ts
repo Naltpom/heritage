@@ -21,7 +21,7 @@
  * l'accepte en `?video=<id>`, et un lien partagé dans un groupe de messagerie
  * doit encore ouvrir la bonne vidéo dans six mois. On ajoute, on ne renomme pas.
  *
- * Les durées sont **approximatives** : elles ne servent qu'à l'étiquette
+ * Les durées sont **arrondies** : elles ne servent qu'à l'étiquette
  * « 0:35 » des cartes, et le lecteur suit la vraie durée du fichier pour sa
  * barre de progression. Les corriger ici, à l'œil, quand les montages bougent.
  */
@@ -77,14 +77,14 @@ export interface CheminsVideo {
  * Approximations : voir l'en-tête du fichier.
  */
 const DUREES: Record<string, number> = {
-  bienvenue: 35,
+  bienvenue: 38,
   decouvrir: 28,
-  'lire-l-arbre': 40,
-  'filtres-de-l-arbre': 40,
-  'proposer-une-correction': 40,
-  'sources-et-actes': 35,
-  'notifications-et-calendrier': 35,
-  'carte-et-chronologie': 35,
+  'lire-l-arbre': 35,
+  'filtres-de-l-arbre': 38,
+  'proposer-une-correction': 33,
+  'sources-et-actes': 30,
+  'notifications-et-calendrier': 30,
+  'carte-et-chronologie': 27,
 }
 
 /** La durée approximative d'une vidéo ; 30 s pour un identifiant oublié ci-dessus. */

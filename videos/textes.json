@@ -1,0 +1,58 @@
+{
+  "bienvenue": [
+    "Bienvenue ! Votre famille a son arbre, et il vous attend.",
+    "D’abord, retrouvez-vous : votre nom, vos prénoms, votre date de naissance.",
+    "Votre fiche est sûrement déjà là. Touchez-la, puis Continuer.",
+    "Ensuite, un courriel et un mot de passe. Le téléphone est facultatif.",
+    "On vérifie que c’est bien vous : l’arbre reste privé, entre vous.",
+    "Puis explorez l’arbre, ouvrez les fiches, complétez ce que vous savez.",
+    "Deux minutes suffisent. C’est parti !"
+  ],
+  "lire-l-arbre": [
+    "Dans l’arbre, vous êtes au centre : vos parents au-dessus, vos enfants en dessous.",
+    "Chaque couleur est une branche : deux côtés du père, deux côtés de la mère.",
+    "Ensemble, pour tout voir d’un coup. Fiches, pour lire les détails.",
+    "Touchez une fiche : son volet s’ouvre, avec les dates et les proches.",
+    "Cochez « Afficher sa ligne directe » : ses ancêtres et ses descendants s’allument.",
+    "Perdu ? « Me trouver » vous ramène à votre fiche."
+  ],
+  "filtres-de-l-arbre": [
+    "Le bouton Filtres règle ce que l’arbre vous montre.",
+    "Branches : touchez une couleur pour la masquer, touchez encore pour la remettre.",
+    "Familles par alliance : ce sont les familles des conjoints de vos proches.",
+    "À part, chacune a son bloc, à droite. Dans mon arbre, elles rejoignent la branche qui les relie.",
+    "Par ordre de naissance : l’aîné à gauche, le plus jeune à droite.",
+    "Ligne directe ou personnes vivantes : les autres fiches restent visibles, estompées.",
+    "Et Réinitialiser remet tout comme au départ."
+  ],
+  "proposer-une-correction": [
+    "Une date fausse, un parent qui manque ? Vous pouvez le corriger.",
+    "Sur la fiche, touchez le crayon : vous passez en mode édition.",
+    "Changez la date, ou ajoutez un parent, un conjoint, un enfant.",
+    "Rien n’est envoyé avant « Corriger ». Votre proposition part alors en vérification.",
+    "Elle est relue, et vous êtes prévenu dès qu’elle est acceptée.",
+    "Vous retrouvez tout votre suivi dans « Mes demandes »."
+  ],
+  "sources-et-actes": [
+    "Chaque fiche dit d’où viennent ses informations.",
+    "Vérifié : la date a été lue sur un acte ou un registre.",
+    "Non vérifié : elle vient d’un autre arbre, sans acte pour l’instant.",
+    "L’onglet Sources et documents montre les actes et les notes.",
+    "Vous avez un acte, une photo, un livret de famille ? Joignez-le à la fiche.",
+    "Pièce après pièce, l’arbre devient sûr."
+  ],
+  "notifications-et-calendrier": [
+    "La cloche vous prévient de ce qui bouge dans l’arbre.",
+    "Une demande acceptée, un média validé, un tirage au sort : tout arrive ici.",
+    "Sur téléphone, « Recevoir aussi sur ce téléphone » vous alerte même l’application fermée.",
+    "Le calendrier rassemble les naissances, les unions, et les disparus qu’on garde en mémoire.",
+    "Et chaque jour, l’accueil vous rappelle les dates du jour."
+  ],
+  "carte-et-chronologie": [
+    "Explorer vous montre la famille autrement.",
+    "La carte : où vos ancêtres sont nés, se sont mariés, ont vécu.",
+    "La chronologie : chaque vie est une barre, des plus anciennes aux plus récentes.",
+    "Les couleurs suivent toujours les branches : vous savez de quel côté vous regardez.",
+    "Siècle après siècle, toute la famille, d’un coup d’œil."
+  ]
+}

@@ -1,0 +1,377 @@
+[
+ {
+  "texte": "Bienvenue ! Votre famille a son arbre, et il vous attend.",
+  "mots": [
+   {
+    "mot": "Bienvenue",
+    "debut": 0.099,
+    "fin": 0.717
+   },
+   {
+    "mot": "Votre",
+    "debut": 1.553,
+    "fin": 1.954
+   },
+   {
+    "mot": "famille",
+    "debut": 1.966,
+    "fin": 2.366
+   },
+   {
+    "mot": "a",
+    "debut": 2.379,
+    "fin": 2.439
+   },
+   {
+    "mot": "son",
+    "debut": 2.451,
+    "fin": 2.597
+   },
+   {
+    "mot": "arbre",
+    "debut": 2.609,
+    "fin": 2.973
+   },
+   {
+    "mot": "et",
+    "debut": 3.301,
+    "fin": 3.325
+   },
+   {
+    "mot": "il",
+    "debut": 3.337,
+    "fin": 3.422
+   },
+   {
+    "mot": "vous",
+    "debut": 3.434,
+    "fin": 3.507
+   },
+   {
+    "mot": "attend",
+    "debut": 3.519,
+    "fin": 3.944
+   }
+  ]
+ },
+ {
+  "texte": "D’abord, retrouvez-vous : votre nom, vos prénoms, votre date de naissance.",
+  "mots": [
+   {
+    "mot": "D’abord",
+    "debut": 0.099,
+    "fin": 0.609
+   },
+   {
+    "mot": "retrouvez-vous",
+    "debut": 0.924,
+    "fin": 1.592
+   },
+   {
+    "mot": "votre",
+    "debut": 1.908,
+    "fin": 2.187
+   },
+   {
+    "mot": "nom",
+    "debut": 2.199,
+    "fin": 2.417
+   },
+   {
+    "mot": "vos",
+    "debut": 2.696,
+    "fin": 2.818
+   },
+   {
+    "mot": "prénoms",
+    "debut": 2.83,
+    "fin": 3.242
+   },
+   {
+    "mot": "votre",
+    "debut": 3.534,
+    "fin": 3.801
+   },
+   {
+    "mot": "date",
+    "debut": 3.813,
+    "fin": 4.068
+   },
+   {
+    "mot": "de",
+    "debut": 4.08,
+    "fin": 4.177
+   },
+   {
+    "mot": "naissance",
+    "debut": 4.189,
+    "fin": 4.82
+   }
+  ]
+ },
+ {
+  "texte": "Votre fiche est sûrement déjà là. Touchez-la, puis Continuer.",
+  "mots": [
+   {
+    "mot": "Votre",
+    "debut": 0.099,
+    "fin": 0.499
+   },
+   {
+    "mot": "fiche",
+    "debut": 0.511,
+    "fin": 0.766
+   },
+   {
+    "mot": "est",
+    "debut": 0.778,
+    "fin": 0.839
+   },
+   {
+    "mot": "sûrement",
+    "debut": 0.851,
+    "fin": 1.191
+   },
+   {
+    "mot": "déjà",
+    "debut": 1.203,
+    "fin": 1.47
+   },
+   {
+    "mot": "là",
+    "debut": 1.482,
+    "fin": 1.725
+   },
+   {
+    "mot": "Touchez-la",
+    "debut": 2.561,
+    "fin": 3.131
+   },
+   {
+    "mot": "puis",
+    "debut": 3.386,
+    "fin": 3.507
+   },
+   {
+    "mot": "Continuer",
+    "debut": 3.519,
+    "fin": 4.248
+   }
+  ]
+ },
+ {
+  "texte": "Ensuite, un courriel et un mot de passe. Le téléphone est facultatif.",
+  "mots": [
+   {
+    "mot": "Ensuite",
+    "debut": 0.099,
+    "fin": 0.62
+   },
+   {
+    "mot": "un",
+    "debut": 0.936,
+    "fin": 0.984
+   },
+   {
+    "mot": "courriel",
+    "debut": 0.997,
+    "fin": 1.433
+   },
+   {
+    "mot": "et",
+    "debut": 1.446,
+    "fin": 1.506
+   },
+   {
+    "mot": "un",
+    "debut": 1.518,
+    "fin": 1.591
+   },
+   {
+    "mot": "mot",
+    "debut": 1.603,
+    "fin": 1.725
+   },
+   {
+    "mot": "de",
+    "debut": 1.737,
+    "fin": 1.834
+   },
+   {
+    "mot": "passe",
+    "debut": 1.846,
+    "fin": 2.307
+   },
+   {
+    "mot": "Le",
+    "debut": 3.144,
+    "fin": 3.265
+   },
+   {
+    "mot": "téléphone",
+    "debut": 3.277,
+    "fin": 3.836
+   },
+   {
+    "mot": "est",
+    "debut": 3.848,
+    "fin": 3.896
+   },
+   {
+    "mot": "facultatif",
+    "debut": 3.909,
+    "fin": 4.819
+   }
+  ]
+ },
+ {
+  "texte": "On vérifie que c’est bien vous : l’arbre reste privé, entre vous.",
+  "mots": [
+   {
+    "mot": "On",
+    "debut": 0.099,
+    "fin": 0.22
+   },
+   {
+    "mot": "vérifie",
+    "debut": 0.232,
+    "fin": 0.705
+   },
+   {
+    "mot": "que",
+    "debut": 0.717,
+    "fin": 0.851
+   },
+   {
+    "mot": "c’est",
+    "debut": 0.863,
+    "fin": 1.009
+   },
+   {
+    "mot": "bien",
+    "debut": 1.021,
+    "fin": 1.215
+   },
+   {
+    "mot": "vous",
+    "debut": 1.227,
+    "fin": 1.421
+   },
+   {
+    "mot": "l’arbre",
+    "debut": 1.725,
+    "fin": 2.028
+   },
+   {
+    "mot": "reste",
+    "debut": 2.04,
+    "fin": 2.368
+   },
+   {
+    "mot": "privé",
+    "debut": 2.38,
+    "fin": 2.768
+   },
+   {
+    "mot": "entre",
+    "debut": 3.108,
+    "fin": 3.339
+   },
+   {
+    "mot": "vous",
+    "debut": 3.351,
+    "fin": 3.582
+   }
+  ]
+ },
+ {
+  "texte": "Puis explorez l’arbre, ouvrez les fiches, complétez ce que vous savez.",
+  "mots": [
+   {
+    "mot": "Puis",
+    "debut": 0.099,
+    "fin": 0.256
+   },
+   {
+    "mot": "explorez",
+    "debut": 0.268,
+    "fin": 0.742
+   },
+   {
+    "mot": "l’arbre",
+    "debut": 0.754,
+    "fin": 1.106
+   },
+   {
+    "mot": "ouvrez",
+    "debut": 1.397,
+    "fin": 1.616
+   },
+   {
+    "mot": "les",
+    "debut": 1.628,
+    "fin": 1.737
+   },
+   {
+    "mot": "fiches",
+    "debut": 1.749,
+    "fin": 2.162
+   },
+   {
+    "mot": "complétez",
+    "debut": 2.429,
+    "fin": 2.902
+   },
+   {
+    "mot": "ce",
+    "debut": 2.914,
+    "fin": 3.035
+   },
+   {
+    "mot": "que",
+    "debut": 3.048,
+    "fin": 3.157
+   },
+   {
+    "mot": "vous",
+    "debut": 3.169,
+    "fin": 3.278
+   },
+   {
+    "mot": "savez",
+    "debut": 3.29,
+    "fin": 3.751
+   }
+  ]
+ },
+ {
+  "texte": "Deux minutes suffisent. C’est parti !",
+  "mots": [
+   {
+    "mot": "Deux",
+    "debut": 0.099,
+    "fin": 0.269
+   },
+   {
+    "mot": "minutes",
+    "debut": 0.281,
+    "fin": 0.682
+   },
+   {
+    "mot": "suffisent",
+    "debut": 0.694,
+    "fin": 1.337
+   },
+   {
+    "mot": "C’est",
+    "debut": 2.172,
+    "fin": 2.379
+   },
+   {
+    "mot": "parti",
+    "debut": 2.391,
+    "fin": 2.913
+   }
+  ]
+ }
+]

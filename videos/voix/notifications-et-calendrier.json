@@ -1,0 +1,322 @@
+[
+ {
+  "texte": "La cloche vous prévient de ce qui bouge dans l’arbre.",
+  "mots": [
+   {
+    "mot": "La",
+    "debut": 0.099,
+    "fin": 0.256
+   },
+   {
+    "mot": "cloche",
+    "debut": 0.268,
+    "fin": 0.62
+   },
+   {
+    "mot": "vous",
+    "debut": 0.633,
+    "fin": 0.778
+   },
+   {
+    "mot": "prévient",
+    "debut": 0.79,
+    "fin": 1.166
+   },
+   {
+    "mot": "de",
+    "debut": 1.179,
+    "fin": 1.3
+   },
+   {
+    "mot": "ce",
+    "debut": 1.312,
+    "fin": 1.421
+   },
+   {
+    "mot": "qui",
+    "debut": 1.433,
+    "fin": 1.579
+   },
+   {
+    "mot": "bouge",
+    "debut": 1.591,
+    "fin": 1.834
+   },
+   {
+    "mot": "dans",
+    "debut": 1.846,
+    "fin": 1.98
+   },
+   {
+    "mot": "l’arbre",
+    "debut": 1.992,
+    "fin": 2.392
+   }
+  ]
+ },
+ {
+  "texte": "Une demande acceptée, un média validé, un tirage au sort : tout arrive ici.",
+  "mots": [
+   {
+    "mot": "Une",
+    "debut": 0.099,
+    "fin": 0.293
+   },
+   {
+    "mot": "demande",
+    "debut": 0.305,
+    "fin": 0.608
+   },
+   {
+    "mot": "acceptée",
+    "debut": 0.62,
+    "fin": 1.203
+   },
+   {
+    "mot": "un",
+    "debut": 1.567,
+    "fin": 1.616
+   },
+   {
+    "mot": "média",
+    "debut": 1.628,
+    "fin": 1.919
+   },
+   {
+    "mot": "validé",
+    "debut": 1.931,
+    "fin": 2.404
+   },
+   {
+    "mot": "un",
+    "debut": 2.732,
+    "fin": 2.793
+   },
+   {
+    "mot": "tirage",
+    "debut": 2.805,
+    "fin": 3.242
+   },
+   {
+    "mot": "au",
+    "debut": 3.254,
+    "fin": 3.315
+   },
+   {
+    "mot": "sort",
+    "debut": 3.327,
+    "fin": 3.739
+   },
+   {
+    "mot": "tout",
+    "debut": 4.006,
+    "fin": 4.115
+   },
+   {
+    "mot": "arrive",
+    "debut": 4.128,
+    "fin": 4.467
+   },
+   {
+    "mot": "ici",
+    "debut": 4.48,
+    "fin": 4.941
+   }
+  ]
+ },
+ {
+  "texte": "Sur téléphone, « Recevoir aussi sur ce téléphone » vous alerte même l’application fermée.",
+  "mots": [
+   {
+    "mot": "Sur",
+    "debut": 0.099,
+    "fin": 0.341
+   },
+   {
+    "mot": "téléphone",
+    "debut": 0.353,
+    "fin": 0.997
+   },
+   {
+    "mot": "Recevoir",
+    "debut": 1.336,
+    "fin": 1.822
+   },
+   {
+    "mot": "aussi",
+    "debut": 1.834,
+    "fin": 2.101
+   },
+   {
+    "mot": "sur",
+    "debut": 2.113,
+    "fin": 2.283
+   },
+   {
+    "mot": "ce",
+    "debut": 2.295,
+    "fin": 2.417
+   },
+   {
+    "mot": "téléphone",
+    "debut": 2.429,
+    "fin": 3.06
+   },
+   {
+    "mot": "vous",
+    "debut": 3.4,
+    "fin": 3.472
+   },
+   {
+    "mot": "alerte",
+    "debut": 3.484,
+    "fin": 3.933
+   },
+   {
+    "mot": "même",
+    "debut": 3.946,
+    "fin": 4.152
+   },
+   {
+    "mot": "l’application",
+    "debut": 4.164,
+    "fin": 4.759
+   },
+   {
+    "mot": "fermée",
+    "debut": 4.771,
+    "fin": 5.232
+   }
+  ]
+ },
+ {
+  "texte": "Le calendrier rassemble les naissances, les unions, et les disparus qu’on garde en mémoire.",
+  "mots": [
+   {
+    "mot": "Le",
+    "debut": 0.099,
+    "fin": 0.256
+   },
+   {
+    "mot": "calendrier",
+    "debut": 0.268,
+    "fin": 0.863
+   },
+   {
+    "mot": "rassemble",
+    "debut": 0.875,
+    "fin": 1.361
+   },
+   {
+    "mot": "les",
+    "debut": 1.373,
+    "fin": 1.47
+   },
+   {
+    "mot": "naissances",
+    "debut": 1.482,
+    "fin": 2.077
+   },
+   {
+    "mot": "les",
+    "debut": 2.38,
+    "fin": 2.489
+   },
+   {
+    "mot": "unions",
+    "debut": 2.501,
+    "fin": 2.853
+   },
+   {
+    "mot": "et",
+    "debut": 3.181,
+    "fin": 3.205
+   },
+   {
+    "mot": "les",
+    "debut": 3.217,
+    "fin": 3.327
+   },
+   {
+    "mot": "disparus",
+    "debut": 3.339,
+    "fin": 3.824
+   },
+   {
+    "mot": "qu’on",
+    "debut": 3.836,
+    "fin": 4.006
+   },
+   {
+    "mot": "garde",
+    "debut": 4.018,
+    "fin": 4.273
+   },
+   {
+    "mot": "en",
+    "debut": 4.285,
+    "fin": 4.346
+   },
+   {
+    "mot": "mémoire",
+    "debut": 4.358,
+    "fin": 4.868
+   }
+  ]
+ },
+ {
+  "texte": "Et chaque jour, l’accueil vous rappelle les dates du jour.",
+  "mots": [
+   {
+    "mot": "Et",
+    "debut": 0.099,
+    "fin": 0.208
+   },
+   {
+    "mot": "chaque",
+    "debut": 0.22,
+    "fin": 0.438
+   },
+   {
+    "mot": "jour",
+    "debut": 0.451,
+    "fin": 0.79
+   },
+   {
+    "mot": "l’accueil",
+    "debut": 1.118,
+    "fin": 1.482
+   },
+   {
+    "mot": "vous",
+    "debut": 1.494,
+    "fin": 1.616
+   },
+   {
+    "mot": "rappelle",
+    "debut": 1.628,
+    "fin": 1.98
+   },
+   {
+    "mot": "les",
+    "debut": 1.992,
+    "fin": 2.101
+   },
+   {
+    "mot": "dates",
+    "debut": 2.113,
+    "fin": 2.356
+   },
+   {
+    "mot": "du",
+    "debut": 2.368,
+    "fin": 2.501
+   },
+   {
+    "mot": "jour",
+    "debut": 2.514,
+    "fin": 2.914
+   }
+  ]
+ }
+]
