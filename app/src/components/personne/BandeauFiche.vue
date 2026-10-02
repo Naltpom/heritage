@@ -83,7 +83,7 @@ const confidentialite = computed(() => noteDeConfidentialite(fiche))
         class="self-start text-[13px] text-accent hover:underline max-md:hidden"
         :title="
           retourMemorise
-            ? 'Revenir à l’arbre, sur la vue que vous aviez quittée'
+            ? 'Revenir à l’arbre, là où vous l’aviez laissé'
             : 'Aller à l’arbre'
         "
       >
@@ -158,7 +158,7 @@ const confidentialite = computed(() => noteDeConfidentialite(fiche))
         <svg viewBox="0 0 24 24" class="size-4 flex-none" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />
         </svg>
-        Mode édition — vos corrections partiront en demandes, rien ne change avant « Corriger ».
+        Mode édition : rien n’est envoyé avant « Corriger ».
       </p>
       <OngletsFiche v-else :fiche="fiche" :actif="onglet" />
     </div>

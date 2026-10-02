@@ -77,7 +77,7 @@ const PUCES: Record<Changement['nature'], string> = { champ: '✎', retrait: '�
       </h2>
 
       <p v-if="changements.length === 0" class="m-0 text-sm text-attenue">
-        Aucun champ n’a changé et aucun lien n’a été retiré ni ajouté.
+        Vous n’avez rien modifié.
       </p>
 
       <template v-else>
@@ -94,8 +94,7 @@ const PUCES: Record<Changement['nature'], string> = { champ: '✎', retrait: '�
         </ul>
 
         <p class="m-0 text-xs text-attenue">
-          Rien ne change dans l’arbre tout de suite : ces corrections partent en demandes, qu’un
-          administrateur valide ou refuse. En attendant, vous seul les voyez appliquées.
+          Un administrateur validera ou refusera ces corrections ; d’ici là, vous seul les voyez.
         </p>
 
         <label class="flex flex-col gap-1">
@@ -103,7 +102,7 @@ const PUCES: Record<Changement['nature'], string> = { champ: '✎', retrait: '�
           <textarea
             v-model="message"
             rows="2"
-            placeholder="« J’ai l’acte de naissance », « vu sur le livret de famille »…"
+            placeholder="Ex. : j’ai l’acte de naissance"
             class="w-full rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
           />
         </label>

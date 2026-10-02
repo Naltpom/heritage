@@ -412,7 +412,7 @@ describe('CarteRestreinte — ni onglets, ni barre d’action', () => {
     // Le prénom seul : « Tilleul » est aussi le nom d'une branche (`champs.ts`).
     expect(html).not.toContain('Pyroxène')
     expect(html).toContain(
-      '<b>Fiche confidentielle.</b> Sa diffusion est restreinte par décision d’administration : ni dates, ni lieux, ni sources, ni photos ne vous sont communiqués. Sa place dans l’arbre reste visible.',
+      '<b>Fiche confidentielle.</b> Un administrateur l’a réservée : seule sa place dans l’arbre est visible.',
     )
     expect(html).toContain('Sexe')
     expect(html).toContain('Génération')

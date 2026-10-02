@@ -96,8 +96,8 @@ function aideParent(nom: string, familleId: number): string {
   const autres = fiche.parents.filter((p) => p.familyId === familleId && !barre(cleDeParent(p.personId, familleId)))
   const autre = autres.find((p) => p.displayName !== nom)
   return autre
-    ? `Retirer le lien : ${fiche.displayName} ne sera plus l’enfant de ${nom}, et restera celui de ${autre.displayName}.`
-    : `Retirer le lien : ${fiche.displayName} ne sera plus l’enfant de ${nom}.`
+    ? `Retirer ce parent (${autre.displayName} reste parent)`
+    : 'Retirer ce parent'
 }
 </script>
 
@@ -124,7 +124,7 @@ function aideParent(nom: string, familleId: number): string {
             :title="
               barre(cleDeConjoint(union.conjoint.personId, union.familyId))
                 ? 'Rétablir ce lien'
-                : `Retirer le lien : ${union.conjoint.displayName} ne sera plus le conjoint de ${fiche.displayName}. Les enfants de l’union restent ceux de ${fiche.displayName}.`
+                : `Retirer ce conjoint (les enfants restent ceux de ${fiche.displayName})`
             "
             data-croix="conjoint"
             @click="basculer(cleDeConjoint(union.conjoint.personId, union.familyId))"
@@ -153,7 +153,7 @@ function aideParent(nom: string, familleId: number): string {
               :title="
                 barre(cleDEnfant(enfant.personId, union.familyId))
                   ? 'Rétablir ce lien'
-                  : `Retirer le lien : ${enfant.displayName} ne sera plus l’enfant de ce couple.`
+                  : 'Retirer cet enfant du couple'
               "
               data-croix="enfant"
               @click="basculer(cleDEnfant(enfant.personId, union.familyId))"
@@ -218,7 +218,7 @@ function aideParent(nom: string, familleId: number): string {
       <div v-if="recherche === 'enfant-seul'" class="mt-2">
         <SelecteurPersonne
           etiquette="Enfant à ajouter"
-          aide="Il sera rattaché à cette fiche seule, sans second parent. Pour l’enfant d’une union ci-dessus, utilisez « Ajouter un enfant de ce couple »."
+          aide="L’autre parent restera inconnu. Pour l’enfant d’un couple ci-dessus, passez par ce couple."
           :deja-choisis="exclus"
           :avec-propositions="false"
           @choisir="ajouterEnfant($event, null)"
@@ -276,7 +276,7 @@ function aideParent(nom: string, familleId: number): string {
         <li v-for="membre in fiche.fratrie" :key="membre.personId" class="py-0.5">{{ membre.displayName }}</li>
       </ul>
       <p class="m-0 mt-1 text-xs text-attenue" data-aide-fratrie>
-        Ils viennent des parents : modifiez leur lien depuis leur fiche ou celle d’un parent.
+        Pour les modifier, passez par leur fiche ou celle d’un parent.
       </p>
     </section>
   </div>

@@ -42,7 +42,7 @@ const champsEnAttente = computed(() =>
       class="m-0 flex flex-wrap items-center gap-2 text-[13px]"
     >
       <PastilleEtat etat="en_attente" />
-      <span>Déjà proposé, en attente : {{ champsEnAttente.join(', ') }}. Les champs partent de la valeur validée.</span>
+      <span>Déjà proposé : {{ champsEnAttente.join(', ') }}. Les champs montrent la valeur actuelle.</span>
     </p>
 
     <ChampsIdentite
@@ -64,7 +64,7 @@ const champsEnAttente = computed(() =>
       v-model="saisie.deces"
       :etiquette="etiquetteDeChamp('death')"
       :erreur="erreurs['death'] ?? ''"
-      aide="Un décès daté demande de cocher « Décès attesté » ci-dessus."
+      aide="Pour dater le décès, cochez « Décès attesté »."
     />
   </div>
 </template>

@@ -188,7 +188,7 @@ describe('EditionParente — une croix par lien, aucune sur la fratrie', () => {
     expect(html.match(/data-croix="enfant"/g)).toHaveLength(1)
     expect(html).toContain('aria-label="Retirer Cobalt Romarin comme conjoint"')
     // Le parent barré dit ce qui reste : l'autre parent du couple.
-    expect(html).toContain('ne sera plus l’enfant de Galène Bourrache, et restera celui de Opale Sureau')
+    expect(html).toContain('Retirer ce parent (Opale Sureau reste parent)')
   })
 
   it('les frères et sœurs n’ont pas de croix, et l’écran dit pourquoi', async () => {
@@ -199,7 +199,7 @@ describe('EditionParente — une croix par lien, aucune sur la fratrie', () => {
     })
     expect(html).toContain('Jaspe Sureau')
     expect(html).toContain('data-aide-fratrie')
-    expect(html).toContain('Ils viennent des parents')
+    expect(html).toContain('passez par leur fiche ou celle d’un parent')
     expect(html).not.toContain('data-croix="fratrie"')
   })
 
@@ -256,7 +256,7 @@ describe('ModaleCorrection — tout ce qui va partir', () => {
     const html = await rendre(ModaleCorrection, {
       changements: [{ nature: 'champ', texte: 'Décès : (vide) → 1960' }],
       message: '',
-      erreursSaisie: [{ champ: 'deceased', message: 'Une date de décès est indiquée : cochez « personne décédée ».' }],
+      erreursSaisie: [{ champ: 'deceased', message: 'Une date de décès est indiquée : cochez « Décès attesté ».' }],
     })
     expect(html).toContain('role="alert"')
     expect(/<button[^>]*disabled[^>]*data-geste="confirmer"|data-geste="confirmer"[^>]*disabled/.test(html)).toBe(true)

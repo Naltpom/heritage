@@ -409,12 +409,12 @@ export function regimeDocumentaire(fiche: FichePersonne): RegimeDeFiche | null {
   const meilleur = typeof charge['bestQuay'] === 'number' ? charge['bestQuay'] : -1
 
   if (citations === 0) {
-    return { ton: 'mauvais', texte: 'Aucune source. Rien n’appuie ces informations.', court: 'Sans source' }
+    return { ton: 'mauvais', texte: 'Aucune source pour ces informations.', court: 'Sans source' }
   }
   if (meilleur < 2) {
-    return { ton: 'mauvais', texte: 'Non vérifié : recopies d’arbres, aucun acte.', court: 'Non vérifié' }
+    return { ton: 'mauvais', texte: 'Non vérifié : repris d’autres arbres, sans acte.', court: 'Non vérifié' }
   }
-  return { ton: 'bon', texte: 'Appuyé sur un acte ou un registre.', court: 'Vérifié' }
+  return { ton: 'bon', texte: 'Vérifié sur un acte ou un registre.', court: 'Vérifié' }
 }
 
 /* ------------------------------------------------------------------ */
@@ -469,10 +469,10 @@ export function noteDeConfidentialite(fiche: FichePersonne): string | null {
   if (fiche.visibilite !== 'complete' || !fiche.vivant) return null
   if (fiche.forcePrivacy) {
     return fiche.privacyNote !== null && fiche.privacyNote.length > 0
-      ? `Fiche protégée par décision d’administration : ${fiche.privacyNote}`
-      : 'Fiche protégée par décision d’administration.'
+      ? `Fiche protégée par un administrateur : ${fiche.privacyNote}`
+      : 'Fiche protégée par un administrateur.'
   }
   // Depuis le 2026-10-01, tout membre validé voit les vivants (ADR 0003) : seule
   // une fiche à confidentialité forcée reste réservée à son cercle.
-  return 'Personne vivante : sa fiche n’est communiquée qu’aux membres de la famille.'
+  return 'Personne vivante : fiche visible des seuls membres de la famille.'
 }

@@ -107,9 +107,8 @@ function classeValeur(valeur: ValeurAffichee): string {
         class="mt-1.5 block rounded-champ border border-alerte-bord bg-alerte-doux px-2 py-1 text-xs"
         role="status"
       >
-        La fiche a changé depuis le dépôt de cette demande : elle portait alors
-        «&nbsp;{{ ligne.actuel.principal }}&nbsp;». La demande deviendra caduque si elle n’est pas
-        reprise.
+        La fiche a changé depuis cette demande (elle portait «&nbsp;{{ ligne.actuel.principal }}&nbsp;») :
+        elle devra sans doute être refaite.
       </span>
 
       <details class="mt-1 text-xs text-attenue">
@@ -117,7 +116,7 @@ function classeValeur(valeur: ValeurAffichee): string {
         <!-- `actuel` est la valeur **au moment de la soumission**. Rendue
              accessible sans condition : c'est ce que le § 13.2 demande. -->
         <span class="mt-1 block">
-          Valeur au dépôt de la demande : «&nbsp;{{ ligne.actuel.principal }}&nbsp;».
+          Valeur au moment de la demande : «&nbsp;{{ ligne.actuel.principal }}&nbsp;».
         </span>
         <span v-if="ligne.entree.autresDemandes.length > 0" class="mt-1 block">
           {{ ligne.entree.autresDemandes.length }} autre<template

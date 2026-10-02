@@ -139,8 +139,8 @@ const classeChamp = computed(() => [
         <span v-if="saisie.origine?.place" class="text-attenue"> — {{ saisie.origine.place }}</span>
       </p>
       <p class="text-xs text-attenue">
-        Cette date est écrite sous une forme que ce formulaire ne sait pas rééditer telle
-        quelle. Elle est laissée intacte tant que vous ne la remplacez pas.
+        Cette date ne peut pas être modifiée ici : elle reste telle quelle si vous ne la
+        remplacez pas.
       </p>
       <button
         type="button"

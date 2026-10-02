@@ -331,7 +331,7 @@ describe('une date de décès implique le décès', () => {
     expect(converti.valeurs).toBeNull()
     // La clé est `deceased` et non `death` : c'est la case qui manque, et c'est
     // sur elle que le formulaire doit poser le message.
-    expect(converti.erreurs['deceased']).toMatch(/personne décédée/)
+    expect(converti.erreurs['deceased']).toMatch(/Décès attesté/)
     expect(converti.erreurs['deceased']).toMatch(/effacez la date/)
   })
 

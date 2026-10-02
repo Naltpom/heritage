@@ -197,7 +197,7 @@ const PASTILLE: Record<CitationDeFiche['appui'], string> = {
       v-if="citations.length === 0 && fiche.notes.length === 0"
       class="m-0 text-attenue italic"
     >
-      Rien n’appuie encore cette fiche : ni source, ni note.
+      Aucune source ni note pour l’instant.
     </p>
   </div>
 </template>

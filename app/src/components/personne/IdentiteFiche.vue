@@ -27,13 +27,20 @@
  */
 import { computed } from 'vue'
 import type { FichePersonne } from '@/lib/api'
+import { useSession } from '@/composables/useSession'
 import { construireLignes } from './champs'
 import LigneChamp from './LigneChamp.vue'
 
 const { fiche, seulement } = defineProps<{ fiche: FichePersonne; seulement?: readonly string[] }>()
 
+const { administrateur } = useSession()
+
 const lignes = computed(() => {
-  const toutes = construireLignes(fiche)
+  // Seule exception au rôle du lecteur, et elle ne fait que retirer : la
+  // référence technique de l'import ne parle qu'à l'administrateur.
+  const toutes = construireLignes(fiche).filter(
+    (ligne) => ligne.cle !== 'gedcomXref' || administrateur.value,
+  )
   return seulement === undefined ? toutes : toutes.filter((ligne) => seulement.includes(ligne.cle))
 })
 </script>

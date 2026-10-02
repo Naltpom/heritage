@@ -208,8 +208,7 @@ function pluriel(n: number, mot: string): string {
           data-annonce-depot
         >
           <p class="m-0 font-semibold">
-            {{ annonce.length > 1 ? 'Vos corrections sont parties en demandes' : 'Votre correction est partie en demande' }}
-            — un administrateur la validera ou la refusera.
+            {{ annonce.length > 1 ? 'Corrections envoyées : un administrateur va les relire.' : 'Correction envoyée : un administrateur va la relire.' }}
           </p>
           <ul class="m-0 flex list-none flex-col gap-0.5 p-0">
             <li v-for="depot in annonce" :key="depot.id">

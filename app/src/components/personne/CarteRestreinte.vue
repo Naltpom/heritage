@@ -75,14 +75,12 @@ const LIGNES = ['sex', 'generation'] as const
         class="m-0 rounded-[8px] border border-alerte-bord bg-alerte-doux px-3 py-2.5 text-[13px] leading-[1.55]"
       >
         <template v-if="regime === 'en_attente'">
-          <b>Personne vivante.</b> Tant que votre rattachement n’est pas validé, aucune personne
-          vivante ne vous est accessible — y compris celle à laquelle vous vous rattachez. Sa place
-          dans l’arbre reste visible.
+          <b>Personne vivante.</b> Vous verrez les personnes vivantes, vous compris, une fois votre
+          inscription validée.
         </template>
         <template v-else>
-          <b>Fiche confidentielle.</b> Sa diffusion est restreinte par décision d’administration :
-          ni dates, ni lieux, ni sources, ni photos ne vous sont communiqués. Sa place dans l’arbre
-          reste visible.
+          <b>Fiche confidentielle.</b> Un administrateur l’a réservée : seule sa place dans l’arbre
+          est visible.
         </template>
       </p>
 

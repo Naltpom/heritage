@@ -162,7 +162,7 @@ async function deposer(): Promise<void> {
   <div class="mx-auto w-full max-w-3xl px-4 py-8">
     <div v-if="chargement && apercu === null">
       <PanneauBase>
-        <p class="mb-3 text-sm text-attenue" role="status">Lecture de ce que cette fiche porte…</p>
+        <p class="mb-3 text-sm text-attenue" role="status">Chargement de la fiche…</p>
         <SqueletteChargement :lignes="4" />
       </PanneauBase>
     </div>
@@ -209,7 +209,7 @@ async function deposer(): Promise<void> {
         </ul>
 
         <p v-else class="m-0 text-sm">
-          Rien d’autre que la fiche&nbsp;: ni note, ni source, ni union.
+          Rien d’autre que la fiche.
         </p>
 
         <ul v-if="bloquantes.length > 0" class="mt-3 m-0 list-disc space-y-1 pl-5 text-sm text-alerte">
@@ -235,15 +235,12 @@ async function deposer(): Promise<void> {
             v-model="motif"
             rows="3"
             :aria-invalid="erreurMotifAffichee.length > 0"
-            placeholder="« Doublon de la fiche 42 : même homme, même acte de naissance, celle-ci est vide. »"
+            placeholder="Ex. : doublon de la fiche 42, même acte de naissance"
             class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
             @blur="motifTouche = true"
           />
           <span v-if="erreurMotifAffichee.length > 0" class="text-xs text-alerte" role="alert">
             {{ erreurMotifAffichee }}
-          </span>
-          <span v-else class="text-xs text-attenue">
-            C’est la seule trace écrite de la raison.
           </span>
         </label>
       </PanneauBase>

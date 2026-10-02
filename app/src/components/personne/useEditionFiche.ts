@@ -85,7 +85,7 @@ export function useEditionFiche(fiche: Ref<FichePersonneComplete> | (() => Fiche
     if (edition.value !== null && aDesModifications(edition.value)) {
       confirmationAnnulation.value = {
         titre: 'Abandonner ces corrections ?',
-        message: 'Rien n’a encore été envoyé. Ce que vous avez modifié sur cette fiche sera perdu.',
+        message: 'Rien n’a été envoyé : vos modifications seront perdues.',
         confirmer: 'Abandonner',
         danger: true,
       }

@@ -147,7 +147,7 @@ describe('les deux blocages qui ne parlent pas de l’arbre', () => {
 
     expect(bloquantes).toHaveLength(1)
     expect(bloquantes[0]?.libelle).toContain('compte membre n° 4')
-    expect(bloquantes[0]?.libelle).toContain('point de départ')
+    expect(bloquantes[0]?.libelle).toContain('relié à cette fiche')
     expect(bloquantes[0]?.libelle).not.toContain('@')
   })
 
