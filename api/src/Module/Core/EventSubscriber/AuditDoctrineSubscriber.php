@@ -82,6 +82,7 @@ final class AuditDoctrineSubscriber
         'declaredGivenNames',
         'declaredBirthDate',
         'attachmentSuggestion',
+        'voiceMessageName',
         'publicKey',
         'credentialId',
     ];

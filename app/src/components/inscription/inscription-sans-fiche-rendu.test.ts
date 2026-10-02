@@ -72,7 +72,7 @@ describe('DeclarationFamille', () => {
     expect(html).toMatch(/<textarea[^>]*required/)
     expect(html).toContain('Mon père est Jean Dupont, né vers 1960 à Lille ; ma mère Marie Martin ; ma grand-mère paternelle …')
     expect(html).toContain('0 / 60 caractères au minimum')
-    expect(html).toContain('(obligatoire)')
+    expect(html).toContain('(obligatoire sans message vocal)')
   })
 
   it('porte la mention : administrateurs seulement, analyse possible par Gemini', async () => {

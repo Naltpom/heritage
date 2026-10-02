@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 // `@/router` appellerait `createWebHistory()` au chargement : la table seule.
 import { routes } from '@/router/routes'
 import {
+  demarrerLaLecture,
   CLE_BIENVENUE_VUE,
   DOSSIER_VIDEOS,
   VIDEOS,
@@ -248,5 +249,48 @@ describe('« Bienvenue », une seule fois par navigateur', () => {
 describe('le mouvement réduit', () => {
   it('rend faux hors navigateur, sans lever', () => {
     expect(prefereMoinsDAnimations()).toBe(false)
+  })
+})
+
+describe('demarrerLaLecture — le son d’abord, le muet en repli', () => {
+  const refus = (): Error => Object.assign(new Error('refusé'), { name: 'NotAllowedError' })
+  /** Un faux `<video>` : `permis(muet)` dit si le navigateur accepte de jouer. */
+  function faux(permis: (muet: boolean) => boolean | 'autre') {
+    const essais: boolean[] = []
+    const video = {
+      muted: true,
+      play() {
+        essais.push(this.muted)
+        const r = permis(this.muted)
+        if (r === 'autre') return Promise.reject(Object.assign(new Error('x'), { name: 'AbortError' }))
+        return r ? Promise.resolve() : Promise.reject(refus())
+      },
+    }
+    return { video, essais }
+  }
+
+  it('joue avec le son quand le navigateur le permet (un clic vient de la demander)', async () => {
+    const { video, essais } = faux(() => true)
+    expect(await demarrerLaLecture(video)).toBe('son')
+    expect(video.muted).toBe(false)
+    expect(essais).toEqual([false])
+  })
+
+  it('retombe en muet quand le son est refusé (arrivée par un lien)', async () => {
+    const { video, essais } = faux((muet) => muet)
+    expect(await demarrerLaLecture(video)).toBe('muet')
+    expect(video.muted).toBe(true)
+    expect(essais).toEqual([false, true])
+  })
+
+  it('attend un geste quand même le muet est refusé', async () => {
+    const { video } = faux(() => false)
+    expect(await demarrerLaLecture(video)).toBe('geste')
+  })
+
+  it('ne réessaie pas sur une erreur qui n’est pas une permission', async () => {
+    const { video, essais } = faux(() => 'autre')
+    expect(await demarrerLaLecture(video)).toBe('echec')
+    expect(essais).toEqual([false])
   })
 })

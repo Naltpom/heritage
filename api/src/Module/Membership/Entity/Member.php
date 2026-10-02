@@ -127,8 +127,37 @@ class Member
     #[ORM\Column(type: Types::DATE_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $declaredBirthDate = null;
 
+    /**
+     * Le texte libre. **Facultatif depuis le message vocal** : un candidat peut dire sa
+     * famille au lieu de l'écrire, et la déclaration tient alors par le vocal seul
+     * (`ck_mbr_member_declaration_texte_ou_voix`).
+     */
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $familyDescription = null;
+
+    // ── Le message vocal de la déclaration (addendum du 2 octobre 2026) ───────────
+    //
+    // Le fichier vit hors racine web (`StockageDesMessagesVocaux`), sous un nom aléatoire ;
+    // la ligne n'en garde que de quoi le servir à un administrateur. Mêmes règles que la
+    // déclaration — c'en est une — : `a_rattacher` en attente seulement, purgé au
+    // rattachement comme au refus. **La purge de la ligne n'efface pas le fichier** : une
+    // entité ne touche pas au disque. C'est `ServiceDesMembres` qui le fait, après coup,
+    // à partir du nom lu **avant** {@see purgerLaDeclaration()}.
+
+    /** `[0-9a-f]{32}.(webm|ogg|m4a)` — revalidé par le stockage à chaque accès. */
+    #[ORM\Column(length: 40, nullable: true)]
+    private ?string $voiceMessageName = null;
+
+    /** Le type **reniflé** : `audio/webm`, `audio/ogg` ou `audio/mp4`. */
+    #[ORM\Column(length: 24, nullable: true)]
+    private ?string $voiceMessageMime = null;
+
+    #[ORM\Column(nullable: true)]
+    private ?int $voiceMessageSize = null;
+
+    /** Mesurée par le chrono du navigateur : indicative, et nulle si elle n'a pas été donnée. */
+    #[ORM\Column(type: Types::SMALLINT, nullable: true)]
+    private ?int $voiceMessageSeconds = null;
 
     /**
      * La suggestion de rattachement calculée par le module `Assistant`, **mise en cache
@@ -176,7 +205,7 @@ class Member
         string $surname,
         string $givenNames,
         \DateTimeImmutable $birthDate,
-        string $description,
+        ?string $description,
     ): self {
         $membre = (new \ReflectionClass(self::class))->newInstanceWithoutConstructor();
 
@@ -256,14 +285,38 @@ class Member
     }
 
     /**
+     * Joint le message vocal de la déclaration — à la création du compte seulement, dans
+     * la transaction qui la pose. Sans effet hors d'un compte à rattacher.
+     */
+    public function joindreUnMessageVocal(string $nom, string $mime, int $taille, ?int $secondes): self
+    {
+        if (!$this->estARattacher()) {
+            return $this;
+        }
+
+        $this->voiceMessageName = $nom;
+        $this->voiceMessageMime = $mime;
+        $this->voiceMessageSize = $taille;
+        $this->voiceMessageSeconds = $secondes;
+
+        return $this;
+    }
+
+    /**
      * Efface la déclaration et la suggestion — au rattachement comme au refus.
      *
      * La **nature**, elle, reste : un compte refusé demeure `a_rattacher`, sans fiche et
      * suspendu. On peut donc relire plus tard qu'il s'était inscrit sans se trouver, sans
-     * rien garder de ce qu'il avait écrit.
+     * rien garder de ce qu'il avait écrit — ni dit : le message vocal part aussi. Son
+     * **fichier**, en revanche, est l'affaire de l'appelant : lire
+     * {@see getVoiceMessageName()} avant la purge, effacer après le commit.
      */
     public function purgerLaDeclaration(): self
     {
+        $this->voiceMessageName = null;
+        $this->voiceMessageMime = null;
+        $this->voiceMessageSize = null;
+        $this->voiceMessageSeconds = null;
         $this->declaredSurname = null;
         $this->declaredGivenNames = null;
         $this->declaredBirthDate = null;
@@ -293,6 +346,26 @@ class Member
     public function getFamilyDescription(): ?string
     {
         return $this->familyDescription;
+    }
+
+    public function getVoiceMessageName(): ?string
+    {
+        return $this->voiceMessageName;
+    }
+
+    public function getVoiceMessageMime(): ?string
+    {
+        return $this->voiceMessageMime;
+    }
+
+    public function getVoiceMessageSize(): ?int
+    {
+        return $this->voiceMessageSize;
+    }
+
+    public function getVoiceMessageSeconds(): ?int
+    {
+        return $this->voiceMessageSeconds;
     }
 
     /** @return array<string, mixed>|null */

@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------------ */
-/* L'arbre fictif des chapitres : Camille Martin (1992), sa fratrie, ses     */
+/* L'arbre fictif des chapitres : Nathan Martin (1992), sa fratrie, ses     */
 /* enfants, et cinq générations d'ascendants, colorés par branche comme     */
 /* dans l'application (Martin, Bernard côté père ; Dubois, Lefèvre côté     */
 /* mère). Coordonnées « monde » : 1080 de large à l'échelle 1.              */
@@ -12,7 +12,7 @@ const GEN_Y = { '-1': 1530, 0: 1340, 1: 1150, 2: 970, 3: 800, 4: 650 }
 function arbreFictif() {
   const r = rnd(42), N = []
   const ajoute = (n) => { N.push(n); return n }
-  const vous = ajoute({ id: 'vous', g: 0, nom: 'Camille Martin', dates: '° 1992', naissance: 1992, sexe: 'f', q: null, cx: 540, cy: GEN_Y[0], w: 290, h: 104, vous: true })
+  const vous = ajoute({ id: 'vous', g: 0, nom: 'Nathan Martin', dates: '° 1992', naissance: 1992, sexe: 'h', q: null, cx: 540, cy: GEN_Y[0], w: 290, h: 104, vous: true })
   ajoute({ id: 'lucas', g: 0, nom: 'Lucas Martin', dates: '° 1995', naissance: 1995, sexe: 'h', q: null, cx: 188, cy: GEN_Y[0], w: 290, h: 104, fratrie: true })
   ajoute({ id: 'emma', g: 0, nom: 'Emma Martin', dates: '° 1989', naissance: 1989, sexe: 'f', q: null, cx: 892, cy: GEN_Y[0], w: 290, h: 104, fratrie: true })
   ajoute({ id: 'leo', g: -1, nom: 'Léo Martin', dates: '° 2018', sexe: 'h', q: null, cx: 380, cy: GEN_Y[-1], w: 280, h: 100, enfant: true })
@@ -47,12 +47,12 @@ function arbreFictif() {
 function ligneDirecteDe(A, n) {
   const res = new Set([n])
   if (n.sosa) {
-    // ascendants : les Sosa 2s, 2s+1 de proche en proche ; descendants : les Sosa s/2 jusqu'à Camille
+    // ascendants : les Sosa 2s, 2s+1 de proche en proche ; descendants : les Sosa s/2 jusqu'à Nathan
     const monte = (s) => { for (const k of [2 * s, 2 * s + 1]) { const a = A.parSosa(k); if (a) { res.add(a); monte(k) } } }
     monte(n.sosa)
     let s = n.sosa
     while (s > 3) { s = Math.floor(s / 2); res.add(A.parSosa(s)) }
-    // un parent de Camille : toute la fratrie descend de lui
+    // un parent de Nathan : toute la fratrie descend de lui
     for (const m of A.N.filter((m) => m.g === 0)) res.add(m)
   }
   if (n.sosa || n === A.vous) for (const e of A.N.filter((m) => m.enfant)) res.add(e)
@@ -81,7 +81,7 @@ function traitsDe(A, { k = 1, alpha = 1, estompe = () => 0, position = (n) => n 
   const S = A.parSosa
   couple(S(2), S(3), A.N.filter((n) => n.g === 0))
   for (let s = 2; s < 16; s++) couple(S(2 * s), S(2 * s + 1), [S(s)])
-  // Camille et ses enfants
+  // Nathan et ses enfants
   const v = P(A.vous)
   const es = A.N.filter((n) => n.enfant).map(P).filter(Boolean)
   if (v && es.length) {

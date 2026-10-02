@@ -318,8 +318,27 @@ export interface DeclarationARattacher {
   givenNames: string
   /** `YYYY-MM-DD`. */
   birthDate: string
-  /** Texte libre : « Mon père est… ». 60 à 4 000 caractères. */
-  description: string
+  /**
+   * Texte libre : « Mon père est… ». 60 à 4 000 caractères — ou `null`, ou
+   * court, quand la personne a laissé un message vocal à la place.
+   */
+  description: string | null
+}
+
+/**
+ * Le message vocal de la déclaration (2 octobre 2026). Décrit ici, jamais
+ * transporté : le son sort par `url`, une route `ROLE_ADMIN` qui sert les
+ * requêtes partielles — un `<audio controls>` s'y branche tel quel.
+ */
+export interface MessageVocalARattacher {
+  /** Écrite par le serveur, jamais reconstruite ici. */
+  url: string
+  /** `audio/webm`, `audio/mp4` ou `audio/ogg` — lu sur les octets. */
+  type: string
+  /** En octets. */
+  taille: number
+  /** En secondes, mesurée par le chrono du navigateur ; `null` si elle n'a pas été donnée. */
+  duree: number | null
 }
 
 /** La photo déposée à l'inscription, visible des seuls administrateurs (et du
@@ -342,6 +361,7 @@ export interface CompteARattacher {
   invitationPersonId: number | null
   invitationPersonLabel: string | null
   declaration: DeclarationARattacher
+  messageVocal: MessageVocalARattacher | null
   photo: PhotoARattacher | null
   /** ISO 8601, ou `null` si aucune analyse n'est encore en cache. */
   suggestionCalculeeLe: string | null

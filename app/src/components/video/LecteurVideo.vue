@@ -19,7 +19,8 @@
  *   et non `cover` : sur un écran plus allongé que 9:16, `cover` rognerait le
  *   haut et le bas — c'est-à-dire les sous-titres incrustés.
  * - **Ordinateur** (`md:`) : un cadre vertical 9:16 centré, haut de 90 % de la
- *   fenêtre, coins arrondis, sur un fond assombri et flouté — la page reste
+ *   fenêtre, coins arrondis, sur un fond assombri (sans flou : un `backdrop-filter`
+ *   recalculé sous une vidéo qui joue la fait saccader) — la page reste
  *   devinée derrière, on sait qu'on n'en est pas sorti.
  * - Le tout est **téléporté dans `<body>`** : ouvert depuis le feuillet des
  *   filtres de l'arbre, il serait sinon prisonnier du contexte d'empilement
@@ -28,10 +29,11 @@
  *
  * **La lecture.**
  *
- * - **Démarrage automatique, en muet.** Les navigateurs refusent la lecture
- *   automatique avec le son ; en muet, ils l'acceptent (`muted playsinline`).
- *   Un gros bouton « Activer le son » est donc là dès la première image. Une
- *   fois le son activé, il devient le petit bouton couper/rétablir.
+ * - **Démarrage automatique, avec le son si le navigateur le permet** (après
+ *   un clic sur une carte de l'Aide, par exemple), **en muet sinon** (arrivée
+ *   par un lien d'invitation) — voir `demarrer`. En muet, un gros bouton
+ *   « Activer le son » est là dès la première image ; une fois le son actif,
+ *   c'est le petit bouton couper/rétablir.
  * - La lecture est lancée **par `play()`** plutôt que par l'attribut
  *   `autoplay` : on apprend ainsi qu'elle a été refusée (mode économie
  *   d'énergie d'iOS, réglage du navigateur), et on montre alors le bouton
@@ -80,7 +82,7 @@
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue'
-import { cheminsDe, prefereMoinsDAnimations, type MotifFermeture, type VideoAide } from '@/lib/videos'
+import { cheminsDe, demarrerLaLecture, prefereMoinsDAnimations, type MotifFermeture, type VideoAide } from '@/lib/videos'
 import { signalerLecteurOuvert } from '@/composables/lecteurVideo'
 
 const { video } = defineProps<{ video: VideoAide }>()
@@ -256,12 +258,19 @@ onMounted(async () => {
   if (v === null) return
   // L'attribut ET la propriété : iOS lit l'attribut pour autoriser la lecture
   // automatique, et Vue ne pose que la propriété.
-  v.muted = true
-  v.defaultMuted = true
-  v.setAttribute('muted', '')
   if (prefereMoinsDAnimations()) attenteGeste.value = true
-  else void lancer()
+  else void demarrer()
 })
+
+/** Le démarrage : avec le son si le navigateur le permet, en muet sinon (`demarrerLaLecture`). */
+async function demarrer(): Promise<void> {
+  const v = element.value
+  if (v === null || typeof v.play !== 'function') return
+  const issue = await demarrerLaLecture(v)
+  muet.value = issue !== 'son'
+  sonDejaActive.value = issue === 'son'
+  attenteGeste.value = issue === 'geste'
+}
 
 onBeforeUnmount(() => {
   liberer?.()
@@ -287,7 +296,7 @@ const pourcentage = computed(() => `${(progression.value * 100).toFixed(2)}%`)
       :aria-describedby="`${id}-description`"
       data-lecteur-video
       :data-video="video.id"
-      class="lecteur-video fixed inset-0 z-[700] flex items-center justify-center bg-black transition-opacity duration-300 md:bg-black/75 md:backdrop-blur-md"
+      class="lecteur-video fixed inset-0 z-[700] flex items-center justify-center bg-black transition-opacity duration-300 md:bg-black/85"
       :class="enSortie ? 'opacity-0' : 'opacity-100'"
       @keydown="surTouche"
     >
@@ -332,7 +341,7 @@ const pourcentage = computed(() => `${(progression.value * 100).toFixed(2)}%`)
           type="button"
           aria-label="Fermer la vidéo"
           data-fermer-video
-          class="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-3 flex size-11 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm hover:bg-black/75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          class="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-3 flex size-11 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           @click="fermer('croix')"
         >
           <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
@@ -360,7 +369,7 @@ const pourcentage = computed(() => `${(progression.value * 100).toFixed(2)}%`)
           type="button"
           :aria-label="muet ? 'Rétablir le son' : 'Couper le son'"
           data-basculer-son
-          class="absolute top-[max(0.75rem,env(safe-area-inset-top))] left-3 flex size-11 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm hover:bg-black/75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          class="absolute top-[max(0.75rem,env(safe-area-inset-top))] left-3 flex size-11 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           @click="regler(!muet)"
         >
           <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -390,7 +399,7 @@ const pourcentage = computed(() => `${(progression.value * 100).toFixed(2)}%`)
           type="button"
           :aria-label="enLecture ? 'Mettre en pause' : 'Reprendre la lecture'"
           data-pause-video
-          class="absolute bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-3 flex size-11 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm hover:bg-black/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          class="absolute bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-3 flex size-11 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           @click="basculerLecture"
         >
           <svg v-if="enLecture" viewBox="0 0 24 24" class="size-5" fill="currentColor" aria-hidden="true">

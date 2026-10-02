@@ -1146,8 +1146,30 @@ Les deux formes sont **exclusives**. Ordre des contrôles :
    ci-dessus), `declaration.surname` (1 à 120 caractères après nettoyage des blancs),
    `declaration.givenNames` (1 à 160), `declaration.birthDate` (`YYYY-MM-DD` d'une date qui
    existe, de 1900 à aujourd'hui), `declaration.description` (60 à 4 000 caractères après
-   nettoyage) ;
+   nettoyage — **0 à 4 000 avec un message vocal valide**, voir ci-dessous),
+   `declaration.messageVocal` ;
 6. `409` `courriel_deja_pris`, inchangé.
+
+##### Le message vocal (2 octobre 2026)
+
+La déclaration peut porter un **message vocal**, à la place du texte ou en plus. Le corps
+part alors en `multipart/form-data` : le JSON ci-dessus, **inchangé**, dans le champ
+`donnees`, et l'enregistrement dans le champ `messageVocal`. La durée mesurée par le
+navigateur voyage dans la déclaration, `declaration.dureeMessageVocal` (secondes, 1 à 310,
+facultative) : un WebM de `MediaRecorder` n'annonce pas la sienne.
+
+- **Texte OU vocal OU les deux** : un vocal valide rend `description` facultative (vide, elle
+  est rangée à `null`) ; sans vocal, les 60 caractères tiennent. Un vocal **refusé** ne rend
+  pas le texte facultatif : les deux refus viennent dans le même `422`.
+- Contrôles, tous sous `declaration.messageVocal` dans le seul `422` : transfert réussi,
+  **10 Mio** au plus, type **lu sur les octets** — WebM (`1A 45 DF A3`), Ogg (`OggS`), MP4
+  (`ftyp`, sauf les marques d'images HEIF/AVIF) —, durée annoncée lisible et ≤ 310 s.
+- Le jeton est contrôlé **avant** : sans jeton valide, `404`, et rien n'est écrit. Le
+  limiteur `inscription_sans_fiche` (5 / h / IP) couvre le vocal comme le reste.
+- Un `messageVocal` sans `declaration` ⇒ `422` `{champs: {messageVocal: …}}`.
+- Stockage **hors racine web** (`<MEDIA_RACINE>/messages-vocaux/`), nom aléatoire ; colonnes
+  `voice_message_*` de `mbr_member`. Purgé — ligne **et fichier** — au rattachement comme au
+  refus.
 
 Succès : `core_user` `en_attente`, `mbr_member` **sans fiche** (`person_id` nul,
 `match_kind = a_rattacher`), un usage d'invitation compté sous le même verrou que l'autre
@@ -4321,6 +4343,7 @@ première règle qui correspond est appliquée »).
 | `POST` | `/api/administration/membres/{id}/activer` | `ADMIN` | `{personId?}` — **obligatoire** pour un compte `a_rattacher` | `200` membre | `404` · `409` `personne_deja_rattachee`, `compte_deja_decide` · `409` `vue_comme_membre_active` · `422` |
 | `POST` | `/api/administration/membres/{id}/refuser` | `ADMIN` | *(vide)* | `200` membre | `404` · `409` `compte_deja_decide` · `409` `vue_comme_membre_active` |
 | `GET` | `/api/administration/rattachements` | `ADMIN` | — | `200` liste § 10.1 | `409` `vue_comme_membre_active` |
+| `GET` | `/api/administration/rattachements/{memberId}/message-vocal` | `ADMIN` | — | `200` / `206` le son (`Range`) | `404` · `409` `vue_comme_membre_active` |
 | `GET` | `/api/administration/rattachements/{memberId}/suggestion` | `ADMIN` | — | `200` suggestion § 10.1 | `404` · `409` `vue_comme_membre_active` · `429` · `502` `assistant_erreur` · `503` `assistant_indisponible` |
 | `POST` | `/api/administration/rattachements/{memberId}/suggestion` | `ADMIN` | *(vide)* | `200` suggestion § 10.1 | *(idem)* |
 | `POST` | `/api/administration/rattachements/{memberId}/creer-et-rattacher` | `ADMIN` | `{parents?, message?}` | `201` `{membre, personId, demandeId}` | `404` · `409` `personne_deja_rattachee`, `compte_deja_decide` · `422` |
@@ -4444,6 +4467,7 @@ la description est un texte libre qu'aucun cercle ne sait filtrer.
         "birthDate": "1998-04-12",
         "description": "Mon père est Jean Dupont, né vers 1960 à Lille ; ma mère Marie Martin…"
       },
+      "messageVocal": { "url": "/api/administration/rattachements/14/message-vocal", "type": "audio/webm", "taille": 553412, "duree": 134 },
       "photo": { "mediaId": 91, "url": "/api/medias/91/fichier?v=1a2b3c4d", "vignetteUrl": "/api/medias/91/vignette?v=1a2b3c4d" },
       "suggestionCalculeeLe": null
     }
@@ -4456,6 +4480,14 @@ la description est un texte libre qu'aucun cercle ne sait filtrer.
 
 `photo` vaut `null` sans photo ; `suggestionCalculeeLe` est une date ISO ou `null`. Les
 comptes `a_rattacher` figurent aussi dans `GET /api/administration/membres`, sans `personId`.
+
+`messageVocal` vaut `null` sans message vocal ; sinon il le **décrit** (`type` reniflé,
+`taille` en octets, `duree` annoncée ou `null`) sans le contenir. `declaration.description`
+peut alors valoir `null`. Le son sort par `url` —
+`GET /api/administration/rattachements/{memberId}/message-vocal`, `ADMIN`, refusée sous la
+bascule, `Cache-Control: private, no-store`, requêtes partielles (`Range` → `206`) servies.
+`404` pour un compte inconnu, déjà décidé, sans vocal, ou dont le fichier manque.
+L'analyse de l'assistant ne reçoit **pas** le son : seulement le fait qu'il existe.
 
 Chaque élément de `GET /api/administration/membres` (la file des comptes `en_attente`) porte
 en plus `portraitEnAttente` — `{mediaId, url, vignetteUrl}` ou `null` : la photo déposée à

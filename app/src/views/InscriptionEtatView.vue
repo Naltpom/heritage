@@ -166,7 +166,7 @@ async function entrerDansLArbre(): Promise<void> {
           </p>
 
           <p v-if="sansFiche" class="mt-2.5 text-sm">
-            Votre fiche sera retrouvée, ou créée, à partir de votre description.
+            Votre fiche sera retrouvée, ou créée, à partir de votre description, écrite ou parlée.
           </p>
           <p v-else class="mt-2.5 text-sm">
             Un administrateur vérifie que la fiche choisie est bien la vôtre.

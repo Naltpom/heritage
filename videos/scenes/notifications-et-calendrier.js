@@ -25,7 +25,7 @@ function application(t) {
   enTete(500, { cloche: sonne > 0 && sonne < 1 ? sonne : 0, badge: t > P.sonne ? '3' : null })
   // l'accueil en fond, discret
   x.globalAlpha *= 0.5
-  texte('Bonjour, Camille', 60, 700, { taille: 50, poids: 700, align: 'left' })
+  texte('Bonjour, Nathan', 60, 700, { taille: 50, poids: 700, align: 'left' })
   bouton('Arbre', 290, 820, 460, 96, { taille: 32 }); bouton('Modifier l’arbre', 790, 820, 460, 96, { variante: 'contourAccent', taille: 32 })
   rr(60, 900, 960, 300, 22); x.fillStyle = COUL.panneau; x.fill()
   x.restore()
@@ -130,7 +130,7 @@ function accueil(t) {
   const k = eout(prog(t, P.accueil, P.accueil + 0.4))
   if (k <= 0) return
   x.save(); x.globalAlpha = k; x.translate(0, (1 - k) * 80)
-  texte('Bonjour, Camille', 60, 570, { taille: 54, poids: 700, align: 'left' })
+  texte('Bonjour, Nathan', 60, 570, { taille: 54, poids: 700, align: 'left' })
   texte('Aujourd’hui, 2 octobre', 60, 630, { taille: 32, poids: 400, coul: COUL.attenue, align: 'left' })
   rr(40, 690, 1000, 980, 26); x.fillStyle = COUL.panneau; x.fill(); x.strokeStyle = COUL.ligne; x.lineWidth = 2; x.stroke()
   texte('Anniversaires · Aujourd’hui', 540, 750, { taille: 34, poids: 700 })

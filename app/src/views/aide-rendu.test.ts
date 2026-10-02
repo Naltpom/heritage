@@ -105,7 +105,7 @@ describe('la page Aide', () => {
   })
 
   it('dit la durée en mots aux lecteurs d’écran', async () => {
-    expect(await rendre()).toContain('aria-label="Bienvenue dans Heritage — vidéo de 38 secondes"')
+    expect(await rendre()).toContain('aria-label="Bienvenue dans Heritage — vidéo de 43 secondes"')
   })
 
   it('offre d’aller à l’écran d’un chapitre, hors du bouton de la carte', async () => {

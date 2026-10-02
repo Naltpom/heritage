@@ -77,7 +77,7 @@ export interface CheminsVideo {
  * Approximations : voir l'en-tête du fichier.
  */
 const DUREES: Record<string, number> = {
-  bienvenue: 38,
+  bienvenue: 43,
   decouvrir: 28,
   'lire-l-arbre': 35,
   'filtres-de-l-arbre': 38,
@@ -291,5 +291,50 @@ export function prefereMoinsDAnimations(): boolean {
     return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
   } catch {
     return false
+  }
+}
+
+/**
+ * Comment la lecture a pu démarrer : avec le son, en muet, ou pas du tout (il
+ * faut un geste — mode économie d'énergie, réglage du navigateur).
+ */
+export type Demarrage = 'son' | 'muet' | 'geste' | 'echec'
+
+/** Ce que `demarrerLaLecture` touche d'un `<video>` : de quoi le simuler en test. */
+export interface LecturePilotable {
+  muted: boolean
+  play(): Promise<void>
+}
+
+const refuse = (cause: unknown): boolean => cause instanceof Error && cause.name === 'NotAllowedError'
+
+/**
+ * Le démarrage : **d'abord avec le son**, en muet seulement si le navigateur refuse.
+ *
+ * Un navigateur laisse une vidéo parler d'emblée quand un geste vient de la
+ * demander — le clic sur une carte de la page Aide, sur « ? Voir la vidéo » — ou
+ * sur un site que la personne fréquente déjà. Il refuse à l'arrivée par un lien
+ * d'invitation : premier passage, aucun geste. Alors seulement on retombe sur la
+ * lecture muette (toujours permise) et le gros bouton « Activer le son ». Couper
+ * d'office aurait privé de la voix ceux qui pouvaient l'entendre.
+ *
+ * Un refus qui n'est pas une question de permission (`AbortError` d'un
+ * démontage, fichier illisible) rend `echec` : l'élément dira lui-même son
+ * erreur par l'événement `error`, que le lecteur écoute déjà.
+ */
+export async function demarrerLaLecture(video: LecturePilotable): Promise<Demarrage> {
+  video.muted = false
+  try {
+    await video.play()
+    return 'son'
+  } catch (cause) {
+    if (!refuse(cause)) return 'echec'
+  }
+  video.muted = true
+  try {
+    await video.play()
+    return 'muet'
+  } catch (cause) {
+    return refuse(cause) ? 'geste' : 'echec'
   }
 }

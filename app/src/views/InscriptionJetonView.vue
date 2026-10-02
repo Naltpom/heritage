@@ -24,21 +24,21 @@
  * mêmes trois champs — un formulaire qui ne réclamerait que la date en mode
  * confirmation dirait au porteur « nous savons déjà ton nom ».
  *
- * **La vidéo « Bienvenue ».** Une fois le jeton reconnu — et seulement alors :
- * un lien refusé n'ouvre sur rien, une vidéo qui promettrait la suite serait un
- * mensonge —, le lecteur s'ouvre de lui-même par-dessus l'écran, en muet, avec
- * la vidéo qui raconte le parcours (se retrouver, créer son accès, être validé,
- * explorer). À la fin ou à la croix, il disparaît et laisse l'écran tel qu'il
- * était, « Commencer » compris. Elle n'est **jamais** une étape :
+ * **Un seul geste : « Commencer ».** Une fois le jeton reconnu — et seulement
+ * alors : un lien refusé n'ouvre sur rien —, l'écran ne propose qu'un bouton.
+ * La première fois, il lance la vidéo « Bienvenue », qui raconte le parcours
+ * (se retrouver, créer son accès, être validé, explorer) ; c'est un clic, donc
+ * le navigateur la laisse **parler**. À la fin, à la croix ou si elle ne charge
+ * pas, le formulaire de rattachement s'ouvre directement. La vidéo n'est
+ * **jamais** une étape :
  *
- * - elle ne s'ouvre d'elle-même **qu'une fois par navigateur**
- *   (`heritage.videos.bienvenue.vue`, voir `lib/videos.ts`). La marque est
- *   posée quand le fichier s'est effectivement chargé (`chargee`), pas à
- *   l'ouverture : une vidéo absente ou un réseau coupé ne « consomment » pas
- *   la première fois ;
- * - si elle ne charge pas, le lecteur se ferme sans un mot, et l'inscription
- *   continue comme avant ;
- * - un lien discret, « Revoir la vidéo de présentation », la rouvre à la demande.
+ * - elle ne passe **qu'une fois par navigateur** (`heritage.videos.bienvenue.vue`,
+ *   voir `lib/videos.ts`) : ensuite, « Commencer » va droit au formulaire. La
+ *   marque est posée quand le fichier s'est effectivement chargé (`chargee`),
+ *   pas à l'ouverture : une vidéo absente ou un réseau coupé ne « consomment »
+ *   pas la première fois ;
+ * - elle ne s'ouvre plus d'elle-même à l'arrivée : sans geste, le navigateur
+ *   l'aurait imposée muette, et il fallait chercher « Activer le son ».
  *
  * Rien de l'invitation n'est écrit pour autant : la marque dit « déjà vue sur
  * ce navigateur », pas qui l'a vue ni avec quel jeton (`fluxInscription.ts`).
@@ -87,9 +87,6 @@ async function verifier(): Promise<void> {
   try {
     ouvrirFlux(jeton, await verifierJeton(jeton))
     pret.value = true
-    // Le jeton est bon : c'est le moment de la vidéo, si ce navigateur ne
-    // l'a jamais montrée. Elle se pose PAR-DESSUS l'écran, qui est déjà prêt.
-    if (!bienvenueDejaVue()) videoOuverte.value = true
   } catch (cause) {
     fermerFlux()
     if (estLienNonValide(cause)) lienRefuse.value = true
@@ -101,20 +98,21 @@ async function verifier(): Promise<void> {
 
 onMounted(verifier)
 
-/* ───────────────── La vidéo « Bienvenue » ───────────────── */
+/* ───────────────── « Commencer » : la vidéo, puis le formulaire ───────────────── */
 
 const BIENVENUE = videoParId('bienvenue')
 /** Le lecteur est affiché. Il se ferme de lui-même à la fin, à la croix, ou sur un échec. */
 const videoOuverte = ref(false)
 
-function revoirLaVideo(): void {
-  videoOuverte.value = true
+function versLeFormulaire(): void {
+  videoOuverte.value = false
+  void routeur.push({ name: 'inscription.rattachement' })
 }
 
+/** La vidéo la première fois ; le formulaire directement ensuite. */
 function commencer(): void {
-  // Le jeton reste en mémoire et ne repart pas dans l'URL : le semer dans
-  // l'historique et les `Referer` de trois écrans de plus n'apporterait rien.
-  void routeur.push({ name: 'inscription.rattachement' })
+  if (bienvenueDejaVue()) versLeFormulaire()
+  else videoOuverte.value = true
 }
 </script>
 
@@ -135,35 +133,16 @@ function commencer(): void {
     <MessageErreur v-else-if="erreur !== null" :erreur="erreur" @action="verifier" />
 
     <PanneauBase v-else-if="pret">
-      <h2 class="text-base font-semibold">Avant de commencer</h2>
-
-      <p class="mt-2 text-sm text-attenue">
-        Retrouvez-vous dans l’arbre, puis choisissez un mot de passe : deux minutes suffisent.
-      </p>
-
-      <!-- Dire d'emblée que la fiche existe peut-être déjà évite le malentendu
-           le plus courant : « je crée mon profil ». Non — on rattache une
-           personne déjà présente dans l'arbre à un compte. -->
-      <p class="mt-2 text-sm text-attenue">
-        Votre date de naissance sert seulement à vérifier que c’est bien vous.
+      <!-- Dire d'emblée qu'il s'agit de **se retrouver** — la fiche existe sans
+           doute déjà — évite le malentendu le plus courant : « je crée mon
+           profil ». Le reste, la vidéo le montre, puis le formulaire le demande. -->
+      <p class="text-sm text-attenue">
+        Retrouvez-vous dans l’arbre de la famille : deux minutes suffisent.
       </p>
 
       <div class="mt-5">
         <BoutonBase pleineLargeur @click="commencer">Commencer</BoutonBase>
       </div>
-
-      <!-- Discret, sous le bouton : la vidéo n'est pas le chemin, elle l'éclaire. -->
-      <p class="mt-3 text-center">
-        <button
-          type="button"
-          data-revoir-video
-          class="inline-flex min-h-11 items-center gap-1.5 px-2 text-sm text-attenue underline decoration-ligne underline-offset-4 hover:text-texte"
-          @click="revoirLaVideo"
-        >
-          <svg viewBox="0 0 24 24" class="size-4" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
-          Revoir la vidéo de présentation
-        </button>
-      </p>
     </PanneauBase>
 
     <template #pied>
@@ -177,12 +156,13 @@ function commencer(): void {
   </CadreEntree>
 
   <!-- Par-dessus l'écran, téléporté dans <body>. `chargee` : le fichier existe
-       et se lit — c'est là, et pas avant, que « déjà vue » se retient. -->
+       et se lit — c'est là, et pas avant, que « déjà vue » se retient. La fin,
+       la croix et l'échec mènent tous au formulaire. -->
   <LecteurVideo
     v-if="videoOuverte && pret"
     :video="BIENVENUE"
     @chargee="marquerBienvenueVue()"
-    @fin="videoOuverte = false"
-    @fermer="videoOuverte = false"
+    @fin="versLeFormulaire"
+    @fermer="versLeFormulaire"
   />
 </template>

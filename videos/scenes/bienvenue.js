@@ -1,12 +1,12 @@
 /* Bienvenue — la vidéo du lien d'invitation : ce qui va se passer, dans l'ordre
    de l'écran (se retrouver, choisir ses identifiants, la vérification), puis
-   ce qu'on fera dans l'arbre. Données fictives : Camille Martin, née en 1992. */
-minuter([0.5, 0.95, 0.55, 0.75, 0.6, 0.75, 0.6], [0.55, 0.75, 0.65, 0.8, 0.45, 0.45, 0], 1.6)
+   ce qu'on fera dans l'arbre. Données fictives : Nathan Martin, né en 1992. */
+minuter([0.5, 0.95, 0.55, 0.6, 0.7, 0.6, 0.75, 0.6], [0.55, 0.75, 0.6, 0.55, 0.8, 0.45, 0.45, 0], 1.4)
 
-/* -------- l'arbre de Camille -------- */
+/* -------- l'arbre de Nathan -------- */
 const RANG = { 0: 1420, 1: 1220, 2: 1020, 3: 860 }
 const GENS = [
-  [{ nom: 'Camille Martin', dates: '° 14.3.1992', sexe: 'f', vous: true }],
+  [{ nom: 'Nathan Martin', dates: '° 14.3.1992', sexe: 'h', vous: true }],
   [{ nom: 'Paul Martin', dates: '° 1961', sexe: 'h', branche: 'A' }, { nom: 'Hélène Dubois', dates: '° 1964', sexe: 'f', branche: 'C' }],
   [{ nom: 'Jean Martin', dates: '1932 – 2011', sexe: 'h', branche: 'A' }, { nom: 'Simone Bernard', dates: '1935 – 2019', sexe: 'f', branche: 'B' },
     { nom: 'René Dubois', dates: '1930 – 1998', sexe: 'h', branche: 'C' }, { nom: 'Odette Lefèvre', dates: '1936 – 2020', sexe: 'f', branche: 'D' }],
@@ -29,18 +29,21 @@ const P = {
   arbre: 0.15,
   formulaire: V[1].debut - 0.95, recherche: V[1].fin + 0.35,
   resultats: V[2].debut - 0.45, choix: M(2, 6), continuer: M(2, 8) + 0.25,
-  identifiants: V[3].debut - 0.7, creer: V[3].fin + 0.4,
-  attente: V[4].debut - 0.55, verifie: M(4, 4), cadenas: M(4, 8),
-  explore: V[5].debut - 0.7, toucheFiche: M(5, 3), crayon: M(5, 6),
-  fin: V[6].debut - 0.55,
+  description: V[3].debut - 0.5, ecrit: M(3, 6), micro: M(3, 13) - 0.1,
+  identifiants: V[4].debut - 0.7, creer: V[4].fin + 0.4,
+  attente: V[5].debut - 0.55, verifie: M(5, 4), cadenas: M(5, 8),
+  explore: V[6].debut - 0.7, toucheFiche: M(6, 3), crayon: M(6, 6),
+  fin: V[7].debut - 0.55,
 }
-const FRAPPES = [['Martin', M(1, 3)], ['Camille', M(1, 5)], ['14/03/1992', M(1, 7)]]
-const COURRIEL = ['camille@exemple.fr', M(3, 2)], MOTDEPASSE = ['••••••••••••', M(3, 5) + 0.1]
+const RECIT = 'Né le 14/03/1992 à Lyon, fils de Paul Martin (1961) et d’Hélène Dubois…'
+const FRAPPES = [['Martin', M(1, 3)], ['Nathan', M(1, 5)], ['14/03/1992', M(1, 7)]]
+const COURRIEL = ['nathan@exemple.fr', M(4, 2)], TELEPHONE = ['06 12 34 56 78', M(4, 4)], MOTDEPASSE = ['••••••••••••', M(4, 7) + 0.1]
 
 son(P.arbre, 'eclosion')
 son(P.formulaire, 'souffle')
-for (const [s, d] of [...FRAPPES, COURRIEL, MOTDEPASSE]) sonsDeFrappe(s, d)
+for (const [s, d] of [...FRAPPES, COURRIEL, TELEPHONE, MOTDEPASSE]) sonsDeFrappe(s, d)
 son(P.recherche, 'tape'); son(P.resultats, 'pop'); son(P.choix, 'tape'); son(P.continuer, 'tape')
+son(P.description, 'souffle', 0.6); sonsDeFrappe(RECIT.slice(0, 40), P.ecrit, 26); son(P.micro, 'tape'); son(P.micro + 0.15, 'pop')
 son(P.identifiants, 'souffle'); son(P.creer, 'tape'); son(P.attente, 'pop'); son(P.verifie + 0.1, 'tampon'); son(P.cadenas, 'clic')
 son(P.explore, 'souffle'); son(P.toucheFiche, 'tape'); son(P.crayon, 'pop'); son(P.fin, 'final')
 
@@ -57,7 +60,7 @@ function traitsArbre(k, alpha) {
   }
   x.restore()
 }
-/** `trouve` : 0 = la case de Camille est vide (« Vous ? »), 1 = elle est remplie. */
+/** `trouve` : 0 = la case de Nathan est vide (« Vous ? »), 1 = elle est remplie. */
 function arbre(t, { alpha = 1, trouve = 0, surligne = null } = {}) {
   traitsArbre(eout(prog(t, P.arbre + 0.5, P.arbre + 1.0)), alpha)
   for (const n of noeuds) {
@@ -92,7 +95,7 @@ function cadreEntree(titre, sous, etape, alpha, dy) {
   x.restore()
 }
 function ecranRecherche(t) {
-  const entree = eout(prog(t, P.formulaire, P.formulaire + 0.45)), sortie = eio(prog(t, P.identifiants - 0.1, P.identifiants + 0.3))
+  const entree = eout(prog(t, P.formulaire, P.formulaire + 0.45)), sortie = eio(prog(t, P.description - 0.1, P.description + 0.3))
   const a = entree * (1 - sortie)
   if (a <= 0) return
   const dy = (1 - entree) * 120 - sortie * 160
@@ -109,7 +112,7 @@ function ecranRecherche(t) {
     if (repli > 0 && i > 0) return
     if (repli > 0) {
       // résumé de la recherche, sur une ligne
-      texte('Martin · Camille · 14/03/1992', 110, 830, { taille: 34, poids: 600, align: 'left', alpha: repli })
+      texte('Martin · Nathan · 14/03/1992', 110, 830, { taille: 34, poids: 600, align: 'left', alpha: repli })
       texte('Modifier', 970, 830, { taille: 30, poids: 600, coul: COUL.accent, align: 'right', alpha: repli })
       return
     }
@@ -126,8 +129,8 @@ function ecranRecherche(t) {
     texte('2 fiches trouvées', 110, 920, { taille: 30, poids: 700, coul: COUL.attenue, align: 'left', alpha: r, espacement: 1 })
     const choisie = eout(prog(t, P.choix, P.choix + 0.2))
     const cands = [
-      { nom: 'Camille Martin', dates: '° 14.3.1992 · Lyon', sexe: 'f', bonne: true },
-      { nom: 'Camille Martin', dates: '1921 – 2004 · Rouen', sexe: 'f', bonne: false },
+      { nom: 'Nathan Martin', dates: '° 14.3.1992 · Lyon', sexe: 'h', bonne: true },
+      { nom: 'Nathan Martin', dates: '1921 – 2004 · Rouen', sexe: 'h', bonne: false },
     ]
     cands.forEach((c, i) => {
       const ki = eout(prog(t, P.resultats + i * 0.12, P.resultats + 0.4 + i * 0.12))
@@ -136,7 +139,7 @@ function ecranRecherche(t) {
       x.save(); x.globalAlpha *= ki * (c.bonne ? 1 : 1 - 0.5 * choisie)
       rr(110, y - 70, 860, 140, 18); x.fillStyle = sel > 0 ? melange(COUL.panneau2, '#3a2e22', sel) : COUL.panneau2; x.fill()
       x.strokeStyle = sel > 0 ? COUL.accent : COUL.ligne; x.lineWidth = sel > 0 ? 4 : 2; x.stroke()
-      silhouette(185, y + 4, 70, '#6a4d55')
+      silhouette(185, y + 4, 70, '#4b5a74')
       texte(c.nom, 250, y - 18, { taille: 38, poids: 700, align: 'left' })
       texte(c.dates, 250, y + 28, { taille: 28, poids: 500, align: 'left', coul: COUL.attenue })
       // le bouton radio
@@ -152,6 +155,56 @@ function ecranRecherche(t) {
   }
 }
 
+/* Pas de fiche à son nom : on décrit sa famille, par écrit ou à voix haute. */
+function ecranDescription(t) {
+  const entree = eout(prog(t, P.description, P.description + 0.45)), sortie = eio(prog(t, P.identifiants - 0.1, P.identifiants + 0.3))
+  const a = entree * (1 - sortie)
+  if (a <= 0) return
+  x.save(); x.globalAlpha *= a; x.translate(0, (1 - entree) * 120 - sortie * 160)
+  texte('Aucune correspondance trouvée', 90, 600, { taille: 30, poids: 700, coul: COUL.accent, align: 'left' })
+  texte('Décrivez votre famille', 90, 660, { taille: 56, poids: 700, align: 'left' })
+  rr(60, 720, 960, 900, 28); x.fillStyle = COUL.panneau; x.fill(); x.strokeStyle = COUL.ligne; x.lineWidth = 2; x.stroke()
+  // la consigne parlée, qui joue
+  rr(100, 760, 880, 90, 18); x.fillStyle = COUL.panneau2; x.fill()
+  x.beginPath(); x.arc(150, 805, 26, 0, Math.PI * 2); x.fillStyle = COUL.accent; x.fill()
+  x.fillStyle = '#1a1410'; x.fillRect(141, 793, 6, 24); x.fillRect(153, 793, 6, 24)
+  texte('Écouter les explications', 195, 793, { taille: 28, poids: 600, align: 'left' })
+  x.fillStyle = COUL.ligne; x.fillRect(195, 822, 740, 6); x.fillStyle = COUL.accent; x.fillRect(195, 822, 740 * clamp((t - P.description) / 6), 6)
+  // le texte
+  const focus = t > P.ecrit - 0.1 && t < P.micro ? 1 : 0
+  rr(100, 890, 880, 330, 16); x.fillStyle = '#111214'; x.fill(); x.strokeStyle = focus ? COUL.accent : COUL.ligne; x.lineWidth = focus ? 4 : 2; x.stroke()
+  const tape = t > P.ecrit ? frappe(RECIT, P.ecrit, 26) : ''
+  if (!tape) texte('Votre date de naissance, vos parents, vos frères et sœurs…', 125, 935, { taille: 28, poids: 400, coul: '#55585e', align: 'left' })
+  const coupe = 33
+  texte(tape.slice(0, coupe), 125, 940, { taille: 32, poids: 500, align: 'left' })
+  texte(tape.slice(coupe), 125, 990, { taille: 32, poids: 500, align: 'left' })
+  // le micro : il s'allume sur « voix haute », et l'enregistrement démarre
+  const enreg = t > P.micro
+  const pm = pression(P.micro)
+  x.save(); x.translate(540, 1330); x.scale(1 - 0.04 * pm, 1 - 0.04 * pm)
+  rr(-440, -60, 880, 120, 60); x.fillStyle = enreg ? '#3a1f1d' : COUL.panneau2; x.fill(); x.strokeStyle = enreg ? COUL.rouge : COUL.ligne; x.lineWidth = 3; x.stroke()
+  if (!enreg) {
+    // le micro
+    x.fillStyle = COUL.texte; rr(-292, -26, 24, 40, 12); x.fill(); x.strokeStyle = COUL.texte; x.lineWidth = 4; x.beginPath(); x.arc(-280, 0, 22, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke(); x.fillRect(-282, 22, 4, 12)
+    texte('Enregistrer un message vocal', 20, 2, { taille: 32, poids: 700 })
+  } else {
+    const clign = Math.floor(t * 2) % 2 === 0
+    x.beginPath(); x.arc(-380, 0, 13, 0, Math.PI * 2); x.fillStyle = clign ? COUL.rouge : '#7a3a34'; x.fill()
+    const sec = Math.floor(t - P.micro)
+    texte(`0:${String(sec).padStart(2, '0')}`, -340, 2, { taille: 32, poids: 700, align: 'left', police: MONO })
+    // l'onde de la voix
+    for (let i = 0; i < 26; i++) {
+      const h = 10 + 34 * Math.abs(Math.sin(t * 9 + i * 0.7) * Math.sin(t * 3.3 + i * 0.31))
+      x.fillStyle = COUL.rouge; rr(-200 + i * 18, -h / 2, 9, h, 4); x.fill()
+    }
+    texte('Arrêter', 380, 2, { taille: 28, poids: 700, coul: COUL.rouge, align: 'right' })
+  }
+  x.restore()
+  texte('Par écrit, à voix haute, ou les deux.', 540, 1450, { taille: 28, poids: 500, coul: COUL.attenue })
+  x.restore()
+  doigt(700, 1330, P.micro)
+}
+
 function ecranIdentifiants(t) {
   const entree = eout(prog(t, P.identifiants, P.identifiants + 0.45)), sortie = eio(prog(t, P.attente - 0.1, P.attente + 0.3))
   const a = entree * (1 - sortie)
@@ -159,13 +212,11 @@ function ecranIdentifiants(t) {
   const dy = (1 - entree) * 120 - sortie * 160
   cadreEntree('Choisir vos identifiants', 'Pour revenir sur l’arbre.', 2, a, dy)
   x.save(); x.globalAlpha *= a; x.translate(0, dy)
-  const [c, dc] = COURRIEL, [m, dm] = MOTDEPASSE
-  champ('Adresse de courriel', frappe(c, dc, 22), 110, 850, 860, { focus: t >= dc - 0.15 && t < dm - 0.2 ? 1 : 0, curseur: t >= dc - 0.15 && t < dm - 0.2, aide: 'Pour vous connecter et être prévenu.' })
-  // le téléphone : facultatif, il s'allume quand la voix le dit
-  const tel = t >= M(3, 9) - 0.1 ? 1 - prog(t, M(3, 11) + 0.5, M(3, 11) + 0.9) : 0
-  champ('Téléphone (facultatif)', '', 110, 1050, 860, { focus: tel, placeholder: 'Rien n’oblige à le donner', aide: 'Seul l’administrateur le voit.' })
-  if (t >= M(3, 11) - 0.05) pastille('facultatif', 830, 1024, { ton: 'vert', alpha: eout(prog(t, M(3, 11) - 0.05, M(3, 11) + 0.2)) })
-  champ('Mot de passe', frappe(m, dm, 22), 110, 1250, 860, { focus: t >= dm - 0.15 && t < P.creer ? 1 : 0, curseur: t >= dm - 0.15 && t < P.creer, aide: 'Une petite phrase fait un bon mot de passe.' })
+  const [c, dc] = COURRIEL, [tl, dt] = TELEPHONE, [m, dm] = MOTDEPASSE
+  const actif = (debut, finDuChamp) => (t >= debut - 0.15 && t < finDuChamp - 0.15 ? 1 : 0)
+  champ('Adresse de courriel', frappe(c, dc, 22), 110, 850, 860, { focus: actif(dc, dt), curseur: actif(dc, dt) > 0, aide: 'Pour vous connecter et être prévenu.' })
+  champ('Téléphone', frappe(tl, dt, 18), 110, 1050, 860, { focus: actif(dt, dm), curseur: actif(dt, dm) > 0, aide: 'Seul l’administrateur le voit.' })
+  champ('Mot de passe', frappe(m, dm, 22), 110, 1250, 860, { focus: actif(dm, P.creer + 0.15), curseur: actif(dm, P.creer + 0.15) > 0, aide: 'Une petite phrase fait un bon mot de passe.' })
   bouton('Créer mon compte', 540, 1500, 860, 104, { presse: pression(P.creer) })
   x.restore()
   doigt(680, 1500 + dy, P.creer)
@@ -266,16 +317,13 @@ SCENE = (t) => {
     doigt(f.cx, f.cy, P.toucheFiche)
   }
   ecranRecherche(t)
+  ecranDescription(t)
   ecranIdentifiants(t)
   ecranAttente(t)
   volet(t)
-  for (let n = 0; n < 6; n++) legende(n)
-  // la fin : l'emblème, puis la phrase et « Commencer »
+  for (let n = 0; n < 7; n++) legende(n)
+  // la fin : l'emblème, puis la phrase — le formulaire s'ouvre de lui-même juste après
   emblemeFinal(P.fin)
-  if (t > P.fin) {
-    karaoke(6, 540, 1150, { taille: 52, largeur: 900, sortieApres: 9 })
-    const kb = eback(prog(t, V[6].fin + 0.1, V[6].fin + 0.45), 2)
-    if (kb > 0) { const pulse = 1 + 0.03 * Math.sin((t - V[6].fin) * 6); bouton('Commencer', 540, 1340, 560 * kb * pulse, 110 * kb, { taille: 40 }) }
-  }
+  if (t > P.fin) karaoke(7, 540, 1150, { taille: 52, largeur: 900, sortieApres: 9 })
 }
 lancer(SCENE, { affiche: 2.2 })

@@ -89,6 +89,8 @@ const parcoursPerdu = computed(
 
 /** Le candidat vient-il de « Je ne me trouve pas » ? */
 const sansFiche = computed(() => flux.declaration.value !== null)
+/** … et a-t-il laissé un message vocal ? Il part avec la déclaration, en `multipart`. */
+const avecMessageVocal = computed(() => (flux.declaration.value?.messageVocal ?? null) !== null)
 
 /**
  * Les refus du serveur sur la déclaration (`declaration.surname`,
@@ -252,7 +254,7 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
 
           <ChampTexte
             v-model="telephone"
-            etiquette="Téléphone (facultatif)"
+            etiquette="Téléphone"
             type="tel"
             aide="Seul l’administrateur le voit, pour garder le contact avec la famille."
             autocomplete="tel"
@@ -279,7 +281,7 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
     </PanneauBase>
 
     <p v-if="sansFiche" class="mt-3 text-xs text-attenue">
-      Votre fiche sera retrouvée ou créée à partir de votre description.
+      Votre fiche sera retrouvée ou créée à partir de votre description{{ avecMessageVocal ? ' et de votre message vocal' : '' }}.
       <RouterLink :to="{ name: 'inscription.rattachement' }" class="underline">
         Modifier ma description
       </RouterLink>

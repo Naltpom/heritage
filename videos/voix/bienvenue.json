@@ -160,67 +160,137 @@
   ]
  },
  {
-  "texte": "Ensuite, un courriel et un mot de passe. Le téléphone est facultatif.",
+  "texte": "Pas de fiche à votre nom ? Racontez votre famille, par écrit ou à voix haute.",
+  "mots": [
+   {
+    "mot": "Pas",
+    "debut": 0.099,
+    "fin": 0.244
+   },
+   {
+    "mot": "de",
+    "debut": 0.256,
+    "fin": 0.39
+   },
+   {
+    "mot": "fiche",
+    "debut": 0.402,
+    "fin": 0.633
+   },
+   {
+    "mot": "à",
+    "debut": 0.645,
+    "fin": 0.681
+   },
+   {
+    "mot": "votre",
+    "debut": 0.693,
+    "fin": 0.984
+   },
+   {
+    "mot": "nom",
+    "debut": 0.997,
+    "fin": 1.264
+   },
+   {
+    "mot": "Racontez",
+    "debut": 2.112,
+    "fin": 2.621
+   },
+   {
+    "mot": "votre",
+    "debut": 2.634,
+    "fin": 2.937
+   },
+   {
+    "mot": "famille",
+    "debut": 2.949,
+    "fin": 3.447
+   },
+   {
+    "mot": "par",
+    "debut": 3.726,
+    "fin": 3.896
+   },
+   {
+    "mot": "écrit",
+    "debut": 3.908,
+    "fin": 4.211
+   },
+   {
+    "mot": "ou",
+    "debut": 4.223,
+    "fin": 4.308
+   },
+   {
+    "mot": "à",
+    "debut": 4.32,
+    "fin": 4.393
+   },
+   {
+    "mot": "voix",
+    "debut": 4.405,
+    "fin": 4.624
+   },
+   {
+    "mot": "haute",
+    "debut": 4.636,
+    "fin": 5.036
+   }
+  ]
+ },
+ {
+  "texte": "Ensuite, votre courriel, votre téléphone, et un mot de passe.",
   "mots": [
    {
     "mot": "Ensuite",
     "debut": 0.099,
-    "fin": 0.62
+    "fin": 0.645
    },
    {
-    "mot": "un",
-    "debut": 0.936,
-    "fin": 0.984
+    "mot": "votre",
+    "debut": 0.96,
+    "fin": 1.227
    },
    {
     "mot": "courriel",
-    "debut": 0.997,
-    "fin": 1.433
-   },
-   {
-    "mot": "et",
-    "debut": 1.446,
-    "fin": 1.506
-   },
-   {
-    "mot": "un",
-    "debut": 1.518,
-    "fin": 1.591
-   },
-   {
-    "mot": "mot",
-    "debut": 1.603,
+    "debut": 1.239,
     "fin": 1.725
    },
    {
-    "mot": "de",
-    "debut": 1.737,
-    "fin": 1.834
-   },
-   {
-    "mot": "passe",
-    "debut": 1.846,
-    "fin": 2.307
-   },
-   {
-    "mot": "Le",
-    "debut": 3.144,
-    "fin": 3.265
+    "mot": "votre",
+    "debut": 2.052,
+    "fin": 2.332
    },
    {
     "mot": "téléphone",
-    "debut": 3.277,
-    "fin": 3.836
+    "debut": 2.344,
+    "fin": 2.987
    },
    {
-    "mot": "est",
-    "debut": 3.848,
-    "fin": 3.896
+    "mot": "et",
+    "debut": 3.315,
+    "fin": 3.363
    },
    {
-    "mot": "facultatif",
-    "debut": 3.909,
-    "fin": 4.819
+    "mot": "un",
+    "debut": 3.375,
+    "fin": 3.448
+   },
+   {
+    "mot": "mot",
+    "debut": 3.46,
+    "fin": 3.582
+   },
+   {
+    "mot": "de",
+    "debut": 3.594,
+    "fin": 3.691
+   },
+   {
+    "mot": "passe",
+    "debut": 3.703,
+    "fin": 4.152
    }
   ]
  },
