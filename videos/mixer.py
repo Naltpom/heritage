@@ -25,6 +25,7 @@ AMBIANCES = {
     'sources-et-actes': dict(ton=4, bpm=92, pulse=0.25, mineur=True),
     'notifications-et-calendrier': dict(ton=9, bpm=100, pulse=0.35, mineur=False),
     'carte-et-chronologie': dict(ton=3, bpm=92, pulse=0.3, mineur=False),
+    'les-evenements': dict(ton=10, bpm=100, pulse=0.4, mineur=False),
 }
 
 
