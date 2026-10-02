@@ -74,6 +74,11 @@ final class InscriptionController extends AbstractController
      * de succès et le journal d'audit voient un compte connecté de la même façon. La
      * réponse que rend le gestionnaire de succès est ignorée : c'est la nôtre qui doit
      * porter le `201`.
+     *
+     * **Deux encodages, un seul corps.** En JSON, comme toujours ; ou en `multipart` quand
+     * la déclaration de famille porte un **message vocal** : le corps JSON voyage alors,
+     * inchangé, dans le champ `donnees`, et l'enregistrement dans le champ `messageVocal`.
+     * Le service reçoit le même tableau dans les deux cas — et le fichier à part.
      */
     #[Route('/api/inscription/compte', name: 'membership_inscription_compte', methods: ['POST'])]
     public function compte(
@@ -83,7 +88,12 @@ final class InscriptionController extends AbstractController
     ): JsonResponse {
         $corps = $this->corpsJson($requete);
 
-        $utilisateur = $this->inscription->creerLeCompte($this->jeton($requete), $corps, $requete);
+        $utilisateur = $this->inscription->creerLeCompte(
+            $this->jeton($requete),
+            $corps,
+            $requete,
+            $requete->files->get('messageVocal'),
+        );
 
         $securite->login($utilisateur, 'json_login');
 
@@ -131,10 +141,20 @@ final class InscriptionController extends AbstractController
         return $jeton;
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Le corps, en JSON — ou, pour un envoi `multipart` (le message vocal), le JSON du
+     * champ `donnees`. Les deux formes rendent le même tableau : le jeton et les champs se
+     * lisent au même endroit, et le `404` d'un jeton absent est le même.
+     *
+     * @return array<string, mixed>
+     */
     private function corpsJson(Request $requete): array
     {
-        $decode = json_decode($requete->getContent(), true);
+        $brut = 'form' === $requete->getContentTypeFormat()
+            ? $requete->request->get('donnees')
+            : $requete->getContent();
+
+        $decode = \is_string($brut) ? json_decode($brut, true) : null;
 
         if (!\is_array($decode)) {
             throw new ValidationException(['corps' => 'Un objet JSON est attendu.']);

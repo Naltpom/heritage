@@ -262,10 +262,24 @@ final readonly class AgentDeRattachement
             \sprintf('Nom : %s', $declaration->surname),
             \sprintf('Prénoms : %s', $declaration->givenNames),
             \sprintf('Date de naissance déclarée : %s', $declaration->birthDate->format('Y-m-d')),
-            '',
-            'Sa description de sa famille :',
-            '« '.trim($declaration->description).' »',
         ];
+
+        $description = trim($declaration->description);
+
+        if ('' !== $description) {
+            $lignes[] = '';
+            $lignes[] = 'Sa description de sa famille :';
+            $lignes[] = '« '.$description.' »';
+        }
+
+        if ($declaration->aUnMessageVocal) {
+            // Le vocal ne t'est pas transmis : seul l'administrateur l'écoute. Le dire évite
+            // que l'agent conclue « indécise » faute d'un texte qu'on ne lui a pas donné.
+            $lignes[] = '';
+            $lignes[] = '' === $description
+                ? 'Elle n’a rien écrit : elle a laissé un message vocal, que seul l’administrateur peut écouter. Cherche à partir de son identité, et dis dans ton résumé que le message vocal reste à écouter.'
+                : 'Elle a aussi laissé un message vocal, que seul l’administrateur peut écouter : il peut compléter ce texte.';
+        }
 
         if (null !== $declaration->invitationPersonId) {
             $lignes[] = '';

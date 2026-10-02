@@ -47,9 +47,15 @@ final readonly class ComptesARattacherParMembership implements ComptesARattacher
 
         // `ck_mbr_member_declaration` ne garantit que l'inverse — pas de déclaration hors
         // d'un compte `a_rattacher` — et une ligne sans déclaration n'a rien à analyser.
-        if (null === $surname || null === $givenNames || null === $birthDate || null === $description) {
+        if (null === $surname || null === $givenNames || null === $birthDate) {
             return null;
         }
+
+        // Une description absente n'est plus un trou : depuis le message vocal, la
+        // déclaration peut tenir par la voix seule. Le contrat transporte alors un texte
+        // vide — l'analyse ne s'appuie plus que sur l'identité, et elle le sait
+        // (`aUnMessageVocal`). Le fichier, lui, ne quitte pas ce module.
+        $description ??= '';
 
         $id = $membre->getId();
         \assert(null !== $id);
@@ -65,6 +71,7 @@ final readonly class ComptesARattacherParMembership implements ComptesARattacher
             invitationPersonId: $membre->getInvitation()?->getPersonId(),
             suggestion: $membre->getAttachmentSuggestion(),
             suggestionAt: $membre->getAttachmentSuggestionAt(),
+            aUnMessageVocal: null !== $membre->getVoiceMessageName(),
         );
     }
 

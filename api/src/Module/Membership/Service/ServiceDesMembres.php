@@ -82,6 +82,7 @@ final readonly class ServiceDesMembres
         private NotificationDesAdministrateurs $notifications,
         private AuditService $audit,
         private PortraitsDesComptes $portraits,
+        private StockageDesMessagesVocaux $messagesVocaux,
     ) {
     }
 
@@ -134,8 +135,13 @@ final readonly class ServiceDesMembres
         // l'écraserait (`refresh()` rend la ligne de la base, pas l'objet en mémoire).
         $nouvelleFiche = null !== $personId ? $this->ficheDeRemplacement($membre, $personId) : null;
 
-        $this->em->wrapInTransaction(function () use ($membre, $nouvelleFiche, $utilisateur, $administrateur): void {
+        // Le message vocal de la déclaration, lu **sous verrou** et avant la purge : la ligne
+        // l'oublie dans la transaction, le fichier part après le commit.
+        $nomDuVocal = null;
+
+        $this->em->wrapInTransaction(function () use ($membre, $nouvelleFiche, $utilisateur, $administrateur, &$nomDuVocal): void {
             $this->relireEnAttenteSousVerrou($membre);
+            $nomDuVocal = $membre->getVoiceMessageName();
 
             if (null !== $nouvelleFiche) {
                 // `rattacherA()` et non une réflexion sur `personId` : le mutateur existe
@@ -146,6 +152,7 @@ final readonly class ServiceDesMembres
             $this->finaliserLActivation($membre, $utilisateur, $administrateur);
         });
 
+        $this->messagesVocaux->supprimer($nomDuVocal);
         $this->notifications->compteActive($membre);
 
         return $membre;
@@ -185,8 +192,15 @@ final readonly class ServiceDesMembres
 
         $this->refuserSiDejaReclamee($membre, $personId);
 
+        $nomDuVocal = $membre->getVoiceMessageName();
         $membre->rattacherA($personId, $personLabel, MatchKind::ManuelAdmin);
         $this->finaliserLActivation($membre, $utilisateur, $administrateur);
+        // La transaction est celle de l'appelant, et aucun crochet ne dit ici quand elle
+        // sera validée : le fichier part tout de suite. Si elle échouait ensuite, la ligne
+        // reviendrait avec un nom sans fichier — la route d'écoute rend alors un `404`, et
+        // rien d'autre ne le lit. L'inverse (un vocal survivant à un rattachement réussi)
+        // garderait une voix de vivant sans raison : c'est le pire des deux.
+        $this->messagesVocaux->supprimer($nomDuVocal);
         $this->notifications->compteActive($membre);
 
         return $membre;
@@ -254,10 +268,13 @@ final readonly class ServiceDesMembres
             throw new NotFoundException();
         }
 
-        $effacerLaPhoto = $this->em->wrapInTransaction(function () use ($membre, $utilisateur, $administrateur): \Closure {
+        $nomDuVocal = null;
+
+        $effacerLaPhoto = $this->em->wrapInTransaction(function () use ($membre, $utilisateur, $administrateur, &$nomDuVocal): \Closure {
             // Le même verrou que l'activation : deux décisions croisées se sérialisent, et
             // la seconde voit la première.
             $this->relireEnAttenteSousVerrou($membre);
+            $nomDuVocal = $membre->getVoiceMessageName();
 
             $membre->setStatus(MemberStatus::Suspendu)->purgerLaDeclaration();
             $utilisateur->setStatus(UserStatus::Suspendu)->toucher();
@@ -287,6 +304,8 @@ final readonly class ServiceDesMembres
         // Le refus est validé : les fichiers peuvent partir. S'il avait échoué, l'exception
         // serait déjà remontée, et la photo serait encore là — ligne **et** fichier.
         $effacerLaPhoto();
+        // Le message vocal de la déclaration, de même : la ligne l'a oublié, le fichier suit.
+        $this->messagesVocaux->supprimer($nomDuVocal);
 
         return $membre;
     }

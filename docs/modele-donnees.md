@@ -1153,6 +1153,10 @@ ajoutée de cette table est le **rattachement**.
 | `declared_given_names` | `VARCHAR(160)` | oui | `NULL` | Idem : les prénoms déclarés. |
 | `declared_birth_date` | `DATE` | oui | `NULL` | Idem : la date de naissance déclarée — une date **ferme**, ce que le candidat dit de lui-même, pas une donnée de l'arbre. |
 | `family_description` | `TEXT` | oui | `NULL` | Idem : « Mon père est… ». Des données de **vivants**, lisibles des seuls administrateurs, jamais journalisées (`CHAMPS_SENSIBLES` du journal mécanique). |
+| `voice_message_name` | `VARCHAR(40)` | oui | `NULL` | Compte `a_rattacher` en attente seulement : le **message vocal** de la déclaration (2 octobre 2026) — nom aléatoire du fichier sous `<MEDIA_RACINE>/messages-vocaux/`, hors racine web. **Purgé**, fichier compris, au rattachement et au refus. |
+| `voice_message_mime` | `VARCHAR(24)` | oui | `NULL` | Le type **reniflé sur les octets** : `audio/webm`, `audio/ogg`, `audio/mp4`. |
+| `voice_message_size` | `INT` | oui | `NULL` | En octets, 10 Mio au plus. |
+| `voice_message_seconds` | `SMALLINT` | oui | `NULL` | La durée mesurée par le navigateur — indicative. |
 | `attachment_suggestion` | `JSONB` | oui | `NULL` | La suggestion de rattachement calculée par `Assistant`, **mise en cache**. `Membership` ne la lit pas : il la stocke et la purge. |
 | `attachment_suggestion_at` | `TIMESTAMPTZ` | oui | `NULL` | Date du calcul de la suggestion. |
 
@@ -1186,6 +1190,21 @@ CONSTRAINT ck_mbr_member_declaration CHECK (match_kind = 'a_rattacher' OR (famil
 CONSTRAINT ck_mbr_member_declaration_en_attente CHECK (status = 'en_attente' OR (family_description IS NULL
   AND declared_surname IS NULL AND declared_given_names IS NULL AND declared_birth_date IS NULL
   AND attachment_suggestion IS NULL AND attachment_suggestion_at IS NULL)),
+```
+
+**Contraintes — le message vocal (`Version20261002190000`)**
+
+```sql
+-- Nom, type et taille vont ensemble ; pas de durée sans fichier.
+CONSTRAINT ck_mbr_member_message_vocal_complet CHECK ((voice_message_name IS NULL) = (voice_message_mime IS NULL)
+  AND (voice_message_name IS NULL) = (voice_message_size IS NULL)
+  AND (voice_message_name IS NOT NULL OR voice_message_seconds IS NULL)),
+-- Comme la déclaration : un compte à rattacher, en attente.
+CONSTRAINT ck_mbr_member_message_vocal_a_rattacher CHECK (voice_message_name IS NULL
+  OR (match_kind = 'a_rattacher' AND status = 'en_attente')),
+-- Une déclaration a un texte ou un vocal — ou les deux.
+CONSTRAINT ck_mbr_member_declaration_texte_ou_voix CHECK (declared_surname IS NULL
+  OR family_description IS NOT NULL OR voice_message_name IS NOT NULL),
 ```
 
 Un compte refusé reste `a_rattacher`, sans fiche, **suspendu** — et sa déclaration est vide.

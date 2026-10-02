@@ -115,6 +115,7 @@ final readonly class ServiceDInscription
         private UserPasswordHasherInterface $hacheur,
         private AuditService $audit,
         private PortraitsDesComptes $portraits,
+        private StockageDesMessagesVocaux $messagesVocaux,
     ) {
     }
 
@@ -232,6 +233,16 @@ final readonly class ServiceDInscription
      * (déclaration seulement), jeton, présence d'une des deux formes, exclusivité, champs,
      * courriel déjà pris.
      *
+     * ## Le message vocal (addendum du 2 octobre 2026)
+     *
+     * `$messageVocal` est le fichier `messageVocal` d'un corps `multipart` — `null` en JSON.
+     * Il n'accompagne qu'une **déclaration**, et il est contrôlé avec elle : ses refus
+     * (`declaration.messageVocal`) entrent dans le même `422` que les autres champs, et un
+     * vocal **valide** rend le texte facultatif ({@see DeclarationDeFamille::lire()}). Rien
+     * n'est écrit avant que tout soit valide — ni la ligne, ni le fichier. Le jeton est
+     * contrôlé avant, comme pour le reste du corps : sans jeton valide, le fichier n'est
+     * même pas lu.
+     *
      * @param array<string, mixed> $corps
      *
      * @throws NotFoundException        jeton ou `choix` invalide — « on ne confirme rien sur le
@@ -240,7 +251,7 @@ final readonly class ServiceDInscription
      * @throws ValidationException      courriel, mot de passe ou déclaration refusés
      * @throws TooManyRequestsException plus de cinq comptes sans fiche par heure depuis cette IP
      */
-    public function creerLeCompte(string $jeton, array $corps, Request $requete): User
+    public function creerLeCompte(string $jeton, array $corps, Request $requete, mixed $messageVocal = null): User
     {
         $avecDeclaration = \array_key_exists('declaration', $corps) && null !== $corps['declaration'];
 
@@ -283,10 +294,21 @@ final readonly class ServiceDInscription
         }
 
         $declaration = null;
+        $vocal = null;
 
         if ($avecDeclaration) {
-            [$declaration, $erreurs] = DeclarationDeFamille::lire($corps['declaration']);
-            $champs = [...$champs, ...$erreurs];
+            $brute = $corps['declaration'];
+            // Le vocal d'abord : c'est sa validité qui dit si le texte est obligatoire.
+            [$vocal, $refusDuVocal] = MessageVocalDeDeclaration::lire(
+                $messageVocal,
+                \is_array($brute) ? ($brute['dureeMessageVocal'] ?? null) : null,
+            );
+            [$declaration, $erreurs] = DeclarationDeFamille::lire($brute, avecMessageVocal: null !== $vocal);
+            $champs = [...$champs, ...$erreurs, ...$refusDuVocal];
+        } elseif (null !== $messageVocal) {
+            // Un vocal sans déclaration n'aurait nulle part où vivre : il décrit une famille,
+            // et un compte rattaché à une fiche n'en a pas à décrire.
+            $champs['messageVocal'] = 'Un message vocal n’accompagne qu’une description de famille.';
         }
 
         if ([] !== $champs) {
@@ -307,7 +329,7 @@ final readonly class ServiceDInscription
         }
 
         if (null !== $declaration) {
-            return $this->creerLeCompteSansFiche($invitation, $email, $motDePasse, $declaration, $telephone);
+            return $this->creerLeCompteSansFiche($invitation, $email, $motDePasse, $declaration, $telephone, $vocal);
         }
 
         \assert(\is_string($choix));
@@ -454,6 +476,7 @@ final readonly class ServiceDInscription
         string $motDePasse,
         DeclarationDeFamille $declaration,
         ?string $telephone = null,
+        ?MessageVocalDeDeclaration $vocal = null,
     ): User {
         $utilisateur = new User($email);
         $utilisateur
@@ -461,8 +484,35 @@ final readonly class ServiceDInscription
             ->setStatus(UserStatus::EnAttente)
             ->setPassword($this->hacheur->hashPassword($utilisateur, $motDePasse));
 
+        // Le fichier est déposé **avant** la transaction, et retiré si elle échoue : une
+        // copie disque dans une transaction ne se défait pas d'elle-même, et la ligne ne
+        // doit jamais désigner un fichier absent. Le sens inverse — un fichier sans ligne,
+        // sur une panne entre les deux — est le moindre mal : il n'est servi par rien.
+        $nomDuVocal = null !== $vocal ? $this->messagesVocaux->deposer($vocal->chemin, $vocal->mime) : null;
+
+        try {
+            $membre = $this->creerLeMembreSansFiche($invitation, $utilisateur, $email, $declaration, $vocal, $nomDuVocal);
+        } catch (\Throwable $echec) {
+            $this->messagesVocaux->supprimer($nomDuVocal);
+
+            throw $echec;
+        }
+
+        $this->notifications->compteARattacher($membre);
+
+        return $utilisateur;
+    }
+
+    private function creerLeMembreSansFiche(
+        Invitation $invitation,
+        User $utilisateur,
+        string $email,
+        DeclarationDeFamille $declaration,
+        ?MessageVocalDeDeclaration $vocal,
+        ?string $nomDuVocal,
+    ): Member {
         /** @var Member $membre */
-        $membre = $this->em->wrapInTransaction(function () use ($invitation, $utilisateur, $email, $declaration): Member {
+        $membre = $this->em->wrapInTransaction(function () use ($invitation, $utilisateur, $email, $declaration, $vocal, $nomDuVocal): Member {
             $this->em->refresh($invitation, LockMode::PESSIMISTIC_WRITE);
 
             if (null !== $invitation->getRevokedAt() || $invitation->estEpuisee() || $invitation->estEchue()) {
@@ -485,6 +535,10 @@ final readonly class ServiceDInscription
             );
             $membre->setInvitation($invitation);
 
+            if (null !== $vocal && null !== $nomDuVocal) {
+                $membre->joindreUnMessageVocal($nomDuVocal, $vocal->mime, $vocal->taille, $vocal->secondes);
+            }
+
             $this->em->persist($membre);
 
             $invitation->enregistrerUnUsage($identifiant, $email);
@@ -506,9 +560,7 @@ final readonly class ServiceDInscription
             return $membre;
         });
 
-        $this->notifications->compteARattacher($membre);
-
-        return $utilisateur;
+        return $membre;
     }
 
     /**
