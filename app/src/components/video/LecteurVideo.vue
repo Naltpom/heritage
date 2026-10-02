@@ -82,7 +82,7 @@
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId } from 'vue'
-import { cheminsDe, demarrerLaLecture, prefereMoinsDAnimations, type MotifFermeture, type VideoAide } from '@/lib/videos'
+import { cheminsDe, demarrerLaLecture, marquerVideoVue, prefereMoinsDAnimations, themeDuNavigateur, type MotifFermeture, type VideoAide } from '@/lib/videos'
 import { signalerLecteurOuvert } from '@/composables/lecteurVideo'
 
 const { video } = defineProps<{ video: VideoAide }>()
@@ -96,7 +96,9 @@ const emit = defineEmits<{
   chargee: []
 }>()
 
-const chemins = computed(() => cheminsDe(video))
+/** Le thème du navigateur, lu à l'ouverture : la vidéo claire dans l'application claire. */
+const theme = themeDuNavigateur()
+const chemins = computed(() => cheminsDe(video, theme))
 const id = useId()
 
 /** Durée du fondu de fin, en millisecondes — la même que la classe `duration-300`. */
@@ -192,6 +194,8 @@ function surFin(): void {
   fini = true
   progression.value = 1
   enLecture.value = false
+  // regardée jusqu'au bout : la page Aide la marquera « Vue »
+  marquerVideoVue(video.id)
   enSortie.value = true
   const delai = prefereMoinsDAnimations() ? 0 : DUREE_FONDU
   minuterieFondu = setTimeout(() => emit('fin'), delai)
