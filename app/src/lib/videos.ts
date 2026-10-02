@@ -77,7 +77,7 @@ export interface CheminsVideo {
  * Approximations : voir l'en-tête du fichier.
  */
 const DUREES: Record<string, number> = {
-  bienvenue: 37,
+  bienvenue: 43,
   decouvrir: 28,
   'lire-l-arbre': 35,
   'filtres-de-l-arbre': 38,

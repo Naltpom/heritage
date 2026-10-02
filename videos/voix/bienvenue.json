@@ -160,6 +160,86 @@
   ]
  },
  {
+  "texte": "Pas de fiche à votre nom ? Racontez votre famille, par écrit ou à voix haute.",
+  "mots": [
+   {
+    "mot": "Pas",
+    "debut": 0.099,
+    "fin": 0.244
+   },
+   {
+    "mot": "de",
+    "debut": 0.256,
+    "fin": 0.39
+   },
+   {
+    "mot": "fiche",
+    "debut": 0.402,
+    "fin": 0.633
+   },
+   {
+    "mot": "à",
+    "debut": 0.645,
+    "fin": 0.681
+   },
+   {
+    "mot": "votre",
+    "debut": 0.693,
+    "fin": 0.984
+   },
+   {
+    "mot": "nom",
+    "debut": 0.997,
+    "fin": 1.264
+   },
+   {
+    "mot": "Racontez",
+    "debut": 2.112,
+    "fin": 2.621
+   },
+   {
+    "mot": "votre",
+    "debut": 2.634,
+    "fin": 2.937
+   },
+   {
+    "mot": "famille",
+    "debut": 2.949,
+    "fin": 3.447
+   },
+   {
+    "mot": "par",
+    "debut": 3.726,
+    "fin": 3.896
+   },
+   {
+    "mot": "écrit",
+    "debut": 3.908,
+    "fin": 4.211
+   },
+   {
+    "mot": "ou",
+    "debut": 4.223,
+    "fin": 4.308
+   },
+   {
+    "mot": "à",
+    "debut": 4.32,
+    "fin": 4.393
+   },
+   {
+    "mot": "voix",
+    "debut": 4.405,
+    "fin": 4.624
+   },
+   {
+    "mot": "haute",
+    "debut": 4.636,
+    "fin": 5.036
+   }
+  ]
+ },
+ {
   "texte": "Ensuite, votre courriel, votre téléphone, et un mot de passe.",
   "mots": [
    {

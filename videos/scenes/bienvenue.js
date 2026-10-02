@@ -1,7 +1,7 @@
 /* Bienvenue — la vidéo du lien d'invitation : ce qui va se passer, dans l'ordre
    de l'écran (se retrouver, choisir ses identifiants, la vérification), puis
    ce qu'on fera dans l'arbre. Données fictives : Nathan Martin, né en 1992. */
-minuter([0.5, 0.95, 0.55, 0.75, 0.6, 0.75, 0.6], [0.55, 0.75, 0.65, 0.8, 0.45, 0.45, 0], 1.6)
+minuter([0.5, 0.95, 0.55, 0.6, 0.7, 0.6, 0.75, 0.6], [0.55, 0.75, 0.6, 0.55, 0.8, 0.45, 0.45, 0], 1.4)
 
 /* -------- l'arbre de Nathan -------- */
 const RANG = { 0: 1420, 1: 1220, 2: 1020, 3: 860 }
@@ -29,18 +29,21 @@ const P = {
   arbre: 0.15,
   formulaire: V[1].debut - 0.95, recherche: V[1].fin + 0.35,
   resultats: V[2].debut - 0.45, choix: M(2, 6), continuer: M(2, 8) + 0.25,
-  identifiants: V[3].debut - 0.7, creer: V[3].fin + 0.4,
-  attente: V[4].debut - 0.55, verifie: M(4, 4), cadenas: M(4, 8),
-  explore: V[5].debut - 0.7, toucheFiche: M(5, 3), crayon: M(5, 6),
-  fin: V[6].debut - 0.55,
+  description: V[3].debut - 0.5, ecrit: M(3, 6), micro: M(3, 13) - 0.1,
+  identifiants: V[4].debut - 0.7, creer: V[4].fin + 0.4,
+  attente: V[5].debut - 0.55, verifie: M(5, 4), cadenas: M(5, 8),
+  explore: V[6].debut - 0.7, toucheFiche: M(6, 3), crayon: M(6, 6),
+  fin: V[7].debut - 0.55,
 }
+const RECIT = 'Né le 14/03/1992 à Lyon, fils de Paul Martin (1961) et d’Hélène Dubois…'
 const FRAPPES = [['Martin', M(1, 3)], ['Nathan', M(1, 5)], ['14/03/1992', M(1, 7)]]
-const COURRIEL = ['nathan@exemple.fr', M(3, 2)], TELEPHONE = ['06 12 34 56 78', M(3, 4)], MOTDEPASSE = ['••••••••••••', M(3, 7) + 0.1]
+const COURRIEL = ['nathan@exemple.fr', M(4, 2)], TELEPHONE = ['06 12 34 56 78', M(4, 4)], MOTDEPASSE = ['••••••••••••', M(4, 7) + 0.1]
 
 son(P.arbre, 'eclosion')
 son(P.formulaire, 'souffle')
 for (const [s, d] of [...FRAPPES, COURRIEL, TELEPHONE, MOTDEPASSE]) sonsDeFrappe(s, d)
 son(P.recherche, 'tape'); son(P.resultats, 'pop'); son(P.choix, 'tape'); son(P.continuer, 'tape')
+son(P.description, 'souffle', 0.6); sonsDeFrappe(RECIT.slice(0, 40), P.ecrit, 26); son(P.micro, 'tape'); son(P.micro + 0.15, 'pop')
 son(P.identifiants, 'souffle'); son(P.creer, 'tape'); son(P.attente, 'pop'); son(P.verifie + 0.1, 'tampon'); son(P.cadenas, 'clic')
 son(P.explore, 'souffle'); son(P.toucheFiche, 'tape'); son(P.crayon, 'pop'); son(P.fin, 'final')
 
@@ -92,7 +95,7 @@ function cadreEntree(titre, sous, etape, alpha, dy) {
   x.restore()
 }
 function ecranRecherche(t) {
-  const entree = eout(prog(t, P.formulaire, P.formulaire + 0.45)), sortie = eio(prog(t, P.identifiants - 0.1, P.identifiants + 0.3))
+  const entree = eout(prog(t, P.formulaire, P.formulaire + 0.45)), sortie = eio(prog(t, P.description - 0.1, P.description + 0.3))
   const a = entree * (1 - sortie)
   if (a <= 0) return
   const dy = (1 - entree) * 120 - sortie * 160
@@ -150,6 +153,56 @@ function ecranRecherche(t) {
     doigt(560, 1010 + dy, P.choix)
     doigt(620, 1440 + dy, P.continuer)
   }
+}
+
+/* Pas de fiche à son nom : on décrit sa famille, par écrit ou à voix haute. */
+function ecranDescription(t) {
+  const entree = eout(prog(t, P.description, P.description + 0.45)), sortie = eio(prog(t, P.identifiants - 0.1, P.identifiants + 0.3))
+  const a = entree * (1 - sortie)
+  if (a <= 0) return
+  x.save(); x.globalAlpha *= a; x.translate(0, (1 - entree) * 120 - sortie * 160)
+  texte('Aucune correspondance trouvée', 90, 600, { taille: 30, poids: 700, coul: COUL.accent, align: 'left' })
+  texte('Décrivez votre famille', 90, 660, { taille: 56, poids: 700, align: 'left' })
+  rr(60, 720, 960, 900, 28); x.fillStyle = COUL.panneau; x.fill(); x.strokeStyle = COUL.ligne; x.lineWidth = 2; x.stroke()
+  // la consigne parlée, qui joue
+  rr(100, 760, 880, 90, 18); x.fillStyle = COUL.panneau2; x.fill()
+  x.beginPath(); x.arc(150, 805, 26, 0, Math.PI * 2); x.fillStyle = COUL.accent; x.fill()
+  x.fillStyle = '#1a1410'; x.fillRect(141, 793, 6, 24); x.fillRect(153, 793, 6, 24)
+  texte('Écouter les explications', 195, 793, { taille: 28, poids: 600, align: 'left' })
+  x.fillStyle = COUL.ligne; x.fillRect(195, 822, 740, 6); x.fillStyle = COUL.accent; x.fillRect(195, 822, 740 * clamp((t - P.description) / 6), 6)
+  // le texte
+  const focus = t > P.ecrit - 0.1 && t < P.micro ? 1 : 0
+  rr(100, 890, 880, 330, 16); x.fillStyle = '#111214'; x.fill(); x.strokeStyle = focus ? COUL.accent : COUL.ligne; x.lineWidth = focus ? 4 : 2; x.stroke()
+  const tape = t > P.ecrit ? frappe(RECIT, P.ecrit, 26) : ''
+  if (!tape) texte('Votre date de naissance, vos parents, vos frères et sœurs…', 125, 935, { taille: 28, poids: 400, coul: '#55585e', align: 'left' })
+  const coupe = 33
+  texte(tape.slice(0, coupe), 125, 940, { taille: 32, poids: 500, align: 'left' })
+  texte(tape.slice(coupe), 125, 990, { taille: 32, poids: 500, align: 'left' })
+  // le micro : il s'allume sur « voix haute », et l'enregistrement démarre
+  const enreg = t > P.micro
+  const pm = pression(P.micro)
+  x.save(); x.translate(540, 1330); x.scale(1 - 0.04 * pm, 1 - 0.04 * pm)
+  rr(-440, -60, 880, 120, 60); x.fillStyle = enreg ? '#3a1f1d' : COUL.panneau2; x.fill(); x.strokeStyle = enreg ? COUL.rouge : COUL.ligne; x.lineWidth = 3; x.stroke()
+  if (!enreg) {
+    // le micro
+    x.fillStyle = COUL.texte; rr(-292, -26, 24, 40, 12); x.fill(); x.strokeStyle = COUL.texte; x.lineWidth = 4; x.beginPath(); x.arc(-280, 0, 22, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke(); x.fillRect(-282, 22, 4, 12)
+    texte('Enregistrer un message vocal', 20, 2, { taille: 32, poids: 700 })
+  } else {
+    const clign = Math.floor(t * 2) % 2 === 0
+    x.beginPath(); x.arc(-380, 0, 13, 0, Math.PI * 2); x.fillStyle = clign ? COUL.rouge : '#7a3a34'; x.fill()
+    const sec = Math.floor(t - P.micro)
+    texte(`0:${String(sec).padStart(2, '0')}`, -340, 2, { taille: 32, poids: 700, align: 'left', police: MONO })
+    // l'onde de la voix
+    for (let i = 0; i < 26; i++) {
+      const h = 10 + 34 * Math.abs(Math.sin(t * 9 + i * 0.7) * Math.sin(t * 3.3 + i * 0.31))
+      x.fillStyle = COUL.rouge; rr(-200 + i * 18, -h / 2, 9, h, 4); x.fill()
+    }
+    texte('Arrêter', 380, 2, { taille: 28, poids: 700, coul: COUL.rouge, align: 'right' })
+  }
+  x.restore()
+  texte('Par écrit, à voix haute, ou les deux.', 540, 1450, { taille: 28, poids: 500, coul: COUL.attenue })
+  x.restore()
+  doigt(700, 1330, P.micro)
 }
 
 function ecranIdentifiants(t) {
@@ -264,16 +317,13 @@ SCENE = (t) => {
     doigt(f.cx, f.cy, P.toucheFiche)
   }
   ecranRecherche(t)
+  ecranDescription(t)
   ecranIdentifiants(t)
   ecranAttente(t)
   volet(t)
-  for (let n = 0; n < 6; n++) legende(n)
-  // la fin : l'emblème, puis la phrase et « Commencer »
+  for (let n = 0; n < 7; n++) legende(n)
+  // la fin : l'emblème, puis la phrase — le formulaire s'ouvre de lui-même juste après
   emblemeFinal(P.fin)
-  if (t > P.fin) {
-    karaoke(6, 540, 1150, { taille: 52, largeur: 900, sortieApres: 9 })
-    const kb = eback(prog(t, V[6].fin + 0.1, V[6].fin + 0.45), 2)
-    if (kb > 0) { const pulse = 1 + 0.03 * Math.sin((t - V[6].fin) * 6); bouton('Commencer', 540, 1340, 560 * kb * pulse, 110 * kb, { taille: 40 }) }
-  }
+  if (t > P.fin) karaoke(7, 540, 1150, { taille: 52, largeur: 900, sortieApres: 9 })
 }
 lancer(SCENE, { affiche: 2.2 })
