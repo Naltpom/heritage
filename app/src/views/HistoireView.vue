@@ -1843,7 +1843,7 @@ onBeforeUnmount(() => {
             :nom="ficheLue.displayName"
             :sexe="ficheLue.sex"
           />
-          <IdentiteFiche :fiche="ficheLue" :seulement="['birth', 'death', 'marriedName', 'nickname']" />
+          <IdentiteFiche :fiche="ficheLue" :seulement="['birth', 'death']" />
           <ParenteFiche :fiche="ficheLue" vers-arbre @choisir="choisirProche" />
           <section v-if="ficheLue.faits.length">
             <h3 class="mb-2 text-[11px] tracking-wider text-attenue uppercase">Faits</h3>
