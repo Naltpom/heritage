@@ -25,7 +25,7 @@ const {
   chasseFixe = false,
 } = defineProps<{
   etiquette: string
-  type?: 'text' | 'email' | 'password' | 'date' | 'search' | 'number'
+  type?: 'text' | 'email' | 'password' | 'date' | 'search' | 'number' | 'tel'
   aide?: string
   /** Message d'erreur pour ce champ — typiquement `analyse.champs[nom]`. */
   erreur?: string

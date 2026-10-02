@@ -21,8 +21,14 @@
  */
 import type { FichePersonneComplete } from '@/lib/api'
 import { rendreDate } from './champs'
+import ListeDeProches from './ListeDeProches.vue'
 
-defineProps<{ fiche: FichePersonneComplete }>()
+/**
+ * `versArbre` : dans le volet de `/arbre`, un proche se choisit dans l'arbre au lieu
+ * d'ouvrir sa fiche (`choisir`).
+ */
+defineProps<{ fiche: FichePersonneComplete; versArbre?: boolean }>()
+const emit = defineEmits<{ choisir: [personId: number] }>()
 </script>
 
 <template>
@@ -39,16 +45,14 @@ defineProps<{ fiche: FichePersonneComplete }>()
         class="mb-2.5 border-l-2 pl-3"
         :class="union.divorced ? 'border-alerte' : 'border-ligne'"
       >
-        <p class="m-0">
-          <RouterLink
-            v-if="union.conjoint !== null"
-            :to="{ name: 'personne.detail', params: { id: union.conjoint.personId } }"
-            class="font-semibold text-accent underline"
-          >
-            {{ union.conjoint.displayName }}
-          </RouterLink>
-          <span v-else class="text-attenue italic">conjoint inconnu</span>
-        </p>
+        <ListeDeProches
+          v-if="union.conjoint !== null"
+          class="font-semibold"
+          :proches="[union.conjoint]"
+          :vers-arbre="versArbre"
+          @choisir="emit('choisir', $event)"
+        />
+        <p v-else class="m-0 text-attenue italic">conjoint inconnu</p>
 
         <p v-if="union.marriage !== null" class="m-0 text-xs text-attenue">
           ⚭ {{ rendreDate(union.marriage, 'date inconnue').principal }}
@@ -63,52 +67,44 @@ defineProps<{ fiche: FichePersonneComplete }>()
           >
         </p>
 
-        <ul v-if="union.enfants.length > 0" class="m-0 mt-1 list-none p-0">
-          <li v-for="enfant in union.enfants" :key="enfant.personId" class="py-0.5">
-            <RouterLink
-              :to="{ name: 'personne.detail', params: { id: enfant.personId } }"
-              class="text-accent underline"
-            >
-              {{ enfant.displayName }}
-            </RouterLink>
-          </li>
-        </ul>
+        <ListeDeProches
+          v-if="union.enfants.length > 0"
+          class="mt-1"
+          :proches="union.enfants"
+          trier
+          :vers-arbre="versArbre"
+          @choisir="emit('choisir', $event)"
+        />
       </div>
     </section>
 
     <!-- Parents -------------------------------------------------- -->
     <section v-if="fiche.parents.length > 0">
       <h3 class="mb-2 text-[11px] tracking-wider text-attenue uppercase">Parents</h3>
-      <ul class="m-0 list-none p-0">
-        <li v-for="parent in fiche.parents" :key="parent.personId" class="py-0.5">
-          <RouterLink
-            :to="{ name: 'personne.detail', params: { id: parent.personId } }"
-            class="text-accent underline"
-          >
-            {{ parent.displayName }}
-          </RouterLink>
-          <!-- `relation` vaut `naissance`, `adoption`… — valeur du modèle, non
-               traduite. On ne l'affiche que lorsqu'elle apprend quelque chose. -->
-          <span v-if="parent.relation !== 'naissance'" class="text-xs text-attenue">
-            — {{ parent.relation.replace(/_/g, ' ') }}
-          </span>
-        </li>
-      </ul>
+      <!-- `relation` vaut `naissance`, `adoption`… — valeur du modèle, non traduite.
+           On ne l'affiche que lorsqu'elle apprend quelque chose. -->
+      <ListeDeProches
+        :proches="
+          fiche.parents.map((p) => ({
+            ...p,
+            ...(p.relation !== 'naissance' ? { mention: p.relation.replace(/_/g, ' ') } : {}),
+          }))
+        "
+        :vers-arbre="versArbre"
+        @choisir="emit('choisir', $event)"
+      />
     </section>
 
     <!-- Fratrie -------------------------------------------------- -->
     <section v-if="fiche.fratrie.length > 0">
       <h3 class="mb-2 text-[11px] tracking-wider text-attenue uppercase">Frères et sœurs</h3>
-      <ul class="m-0 list-none p-0">
-        <li v-for="membre in fiche.fratrie" :key="membre.personId" class="py-0.5">
-          <RouterLink
-            :to="{ name: 'personne.detail', params: { id: membre.personId } }"
-            class="text-accent underline"
-          >
-            {{ membre.displayName }}
-          </RouterLink>
-        </li>
-      </ul>
+      <!-- L'aîné en haut : par année de naissance, puis l'ordre de la fratrie. -->
+      <ListeDeProches
+        :proches="[...fiche.fratrie].sort((a, b) => a.siblingOrder - b.siblingOrder)"
+        trier
+        :vers-arbre="versArbre"
+        @choisir="emit('choisir', $event)"
+      />
     </section>
 
     <p

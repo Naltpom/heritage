@@ -229,6 +229,26 @@ final readonly class NormaliseurDePersonne
         return [
             'personId' => $personne->getId(),
             'displayName' => $this->nomVisible($personne, $cercle, $vivants),
+        ] + $this->datesVisibles($personne, $cercle, $vivants);
+    }
+
+    /**
+     * Les dates d'un proche, pour la grille « personne · naissance · décès » de la
+     * fiche — **seulement si le cercle le montre**, comme son nom. Hors cercle, les deux
+     * clés sont **absentes**, pas `null` : `null` dit « on ne sait pas », l'absence dit
+     * « tu n'as pas le droit de savoir » (§ 1.3, ADR 0003).
+     *
+     * @return array{naissance?: string|null, deces?: string|null}
+     */
+    private function datesVisibles(Person $personne, CercleDuLecteur $cercle, EtatVivant $vivants): array
+    {
+        if (!$cercle->voit($personne->getId(), $vivants->estVivante($personne))) {
+            return [];
+        }
+
+        return [
+            'naissance' => $this->dates->compacte($personne->getBirth()),
+            'deces' => $this->dates->compacte($personne->getDeath()),
         ];
     }
 
@@ -257,7 +277,7 @@ final readonly class NormaliseurDePersonne
                     // même quand un époux est masqué.
                     'relation' => $filiation->getRelation()->value,
                     'familyId' => $famille->getId(),
-                ];
+                ] + $this->datesVisibles($parent, $cercle, $vivants);
             }
         }
 
@@ -280,7 +300,7 @@ final readonly class NormaliseurDePersonne
                 'personId' => $frereOuSoeur->getId(),
                 'displayName' => $this->nomVisible($frereOuSoeur, $cercle, $vivants),
                 'siblingOrder' => $ligne->getSiblingOrder(),
-            ];
+            ] + $this->datesVisibles($frereOuSoeur, $cercle, $vivants);
         }
 
         return $sortie;

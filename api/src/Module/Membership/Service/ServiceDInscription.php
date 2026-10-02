@@ -256,6 +256,7 @@ final readonly class ServiceDInscription
         $choix = $corps['choix'] ?? null;
         $email = $corps['email'] ?? null;
         $motDePasse = $corps['password'] ?? null;
+        [$telephone, $refusTelephone] = self::lireTelephone($corps['telephone'] ?? null);
         $avecChoix = \is_string($choix) && '' !== $choix;
 
         // 3 — ni l'un ni l'autre : le même `404` qu'avant l'inscription sans fiche.
@@ -276,6 +277,9 @@ final readonly class ServiceDInscription
         }
         if (!\is_string($motDePasse) || mb_strlen($motDePasse) < self::LONGUEUR_MINIMALE_MOT_DE_PASSE) {
             $champs['password'] = \sprintf('%d caractères minimum.', self::LONGUEUR_MINIMALE_MOT_DE_PASSE);
+        }
+        if (null !== $refusTelephone) {
+            $champs['telephone'] = $refusTelephone;
         }
 
         $declaration = null;
@@ -303,7 +307,7 @@ final readonly class ServiceDInscription
         }
 
         if (null !== $declaration) {
-            return $this->creerLeCompteSansFiche($invitation, $email, $motDePasse, $declaration);
+            return $this->creerLeCompteSansFiche($invitation, $email, $motDePasse, $declaration, $telephone);
         }
 
         \assert(\is_string($choix));
@@ -341,6 +345,7 @@ final readonly class ServiceDInscription
         // ferait attendre d'autant chaque inscription concurrente sur le même lien.
         $utilisateur = new User($email);
         $utilisateur
+            ->setTelephone($telephone)
             ->setStatus($actif ? UserStatus::Actif : UserStatus::EnAttente)
             ->setPassword($this->hacheur->hashPassword($utilisateur, $motDePasse));
 
@@ -418,14 +423,41 @@ final readonly class ServiceDInscription
      * `invitation_utilisee` porte la nature `a_rattacher` et les compteurs, rien de ce que
      * le candidat a écrit ; la notification des administrateurs ne nomme que le courriel.
      */
+    /**
+     * Le téléphone **facultatif** : absent, `null` ou vide, il n'y en a pas. Sinon on
+     * garde chiffres, `+`, espaces, points, tirets et parenthèses, et il faut de 6 à 15
+     * chiffres (E.164 en compte 15 au plus). Il ne sert qu'à l'annuaire de
+     * l'administrateur : pas de vérification par SMS, pas de format imposé.
+     *
+     * @return array{0: string|null, 1: string|null} le numéro nettoyé, et le refus
+     */
+    public static function lireTelephone(mixed $brut): array
+    {
+        if (null === $brut || (\is_string($brut) && '' === trim($brut))) {
+            return [null, null];
+        }
+        if (!\is_string($brut) || 1 !== preg_match('/^[0-9+().\s-]+$/', trim($brut))) {
+            return [null, 'Numéro de téléphone invalide.'];
+        }
+        $propre = trim((string) preg_replace('/\s+/', ' ', $brut));
+        $chiffres = (string) preg_replace('/\D/', '', $propre);
+        if (\strlen($chiffres) < 6 || \strlen($chiffres) > 15 || mb_strlen($propre) > 32) {
+            return [null, 'Numéro de téléphone invalide.'];
+        }
+
+        return [$propre, null];
+    }
+
     private function creerLeCompteSansFiche(
         Invitation $invitation,
         string $email,
         string $motDePasse,
         DeclarationDeFamille $declaration,
+        ?string $telephone = null,
     ): User {
         $utilisateur = new User($email);
         $utilisateur
+            ->setTelephone($telephone)
             ->setStatus(UserStatus::EnAttente)
             ->setPassword($this->hacheur->hashPassword($utilisateur, $motDePasse));
 

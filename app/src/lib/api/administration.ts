@@ -157,6 +157,8 @@ export interface MembreAdministration {
 export interface UtilisateurAdministration {
   id: number
   email: string
+  /** Facultatif, donné à l'inscription ; `null` sinon. Absent d'un serveur antérieur. */
+  telephone?: string | null
   displayName: string
   roles: string[]
   status: StatutCompte

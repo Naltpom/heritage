@@ -156,6 +156,8 @@ export function creerCompte(
     jeton: string
     email: string
     password: string
+    /** Facultatif : ne part que s'il est donné. */
+    telephone?: string
   } & RattachementDemande,
 ): Promise<ChargeDeSession> {
   // Le corps est écrit champ par champ plutôt que d'étaler `entree` : il ne part
@@ -179,6 +181,7 @@ export function creerCompte(
       ...rattachement,
       email: entree.email,
       password: entree.password,
+      ...(entree.telephone ? { telephone: entree.telephone } : {}),
     },
     sansRattrapage: true,
   })

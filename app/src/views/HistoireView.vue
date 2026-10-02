@@ -42,6 +42,7 @@ import {
   requeteApi,
   type Branche,
   type Graphe,
+  type FichePersonneComplete,
   type NoeudNonPlace,
   type ResultatDeRecherche,
 } from '@/lib/api'
@@ -89,6 +90,11 @@ import {
   type Canevas,
 } from '@/histoire/vue'
 import { memoriserVue, reprendreVue, type VueMemorisee } from '@/histoire/retour'
+import { ligneDe } from '@/histoire/ligneDirecte'
+import PortraitFiche from '@/components/personne/PortraitFiche.vue'
+import IdentiteFiche from '@/components/personne/IdentiteFiche.vue'
+import ParenteFiche from '@/components/personne/ParenteFiche.vue'
+import FaitsFiche from '@/components/personne/FaitsFiche.vue'
 import { useSession } from '@/composables/useSession'
 
 const estMobile = useEstMobile()
@@ -512,21 +518,56 @@ function surMolette(e: WheelEvent): void {
 const selection = ref<string | null>(null)
 const ficheChoisie = computed(() => (selection.value ? disposition.value?.parId.get(selection.value) ?? null : null))
 const parente = ref<string | null>(null)
+/** La fiche entière de la personne choisie, pour le volet (PC) ; `null` tant qu'elle se lit. */
+const ficheLue = ref<FichePersonneComplete | null>(null)
 let lecture: AbortController | null = null
 
-watch(ficheChoisie, (f) => {
+watch(ficheChoisie, (f, avant) => {
+  if (f?.id === avant?.id) return
   lecture?.abort()
   parente.value = null
+  ficheLue.value = null
   const personId = f?.noeud.personId
   if (personId === null || personId === undefined) return
   lecture = new AbortController()
   // La parenté est calculée par le serveur, relativement au lecteur : on ne la recalcule pas.
   lireFichePersonne(personId, lecture.signal)
     .then((fiche) => {
-      if (fiche.visibilite === 'complete') parente.value = fiche.parente
+      if (fiche.visibilite !== 'complete') return
+      parente.value = fiche.parente
+      ficheLue.value = fiche
     })
     .catch(() => {})
 })
+
+/*
+ * Le VOLET (PC) : la fiche de la personne choisie, sur toute la droite. Il POUSSE
+ * l'arbre — le canevas rétrécit, rien n'est caché dessous ; s'il venait couvrir la
+ * fiche choisie, l'arbre la ramène dans la partie visible. Le téléphone garde le
+ * panneau du bas.
+ */
+const voletOuvert = computed(() => !estMobile.value && ficheChoisie.value !== null)
+watch(voletOuvert, async (ouvert) => {
+  if (!ouvert) return
+  await nextTick()
+  mesurer()
+  const f = ficheChoisie.value
+  if (!f) return
+  const x = versEcranX(f.cx)
+  if (x < 40 || x > taille.value.l - 40) voler(s.value, f.cx, f.y + f.h / 2)
+})
+
+/** Un proche cliqué dans le volet : on le choisit dans l'arbre, et l'écran le rejoint. */
+function choisirProche(personId: number): void {
+  afficherSonAlliance(personId)
+  const f = disposition.value?.parPersonId.get(personId)
+  if (!f) {
+    void routeur.push({ name: 'personne.detail', params: { id: personId } })
+    return
+  }
+  selection.value = f.id
+  voler(Math.max(s.value, 0.6), f.cx, f.y + f.h / 2)
+}
 
 function voirFiche(f: FicheHistoire): void {
   voler(Math.max(s.value, 1), f.cx, f.y + f.h / 2)
@@ -590,7 +631,7 @@ const OPTIONS_ALLIANCES = [
 ] as const
 
 const BASCULES = [
-  { cle: 'ligneDirecte', libelle: 'Ma ligne directe', sous: 'vous et vos ancêtres' },
+  { cle: 'ligneDirecte', libelle: 'Ligne directe', sous: 'ancêtres et descendants' },
   { cle: 'vivants', libelle: 'Personnes vivantes', sous: '' },
 ] as const
 
@@ -603,7 +644,7 @@ const brancheDe = (f: FicheHistoire): string =>
 
 function passe(f: FicheHistoire): boolean {
   if (brancheDe(f) !== 'hors' && (filtres.masquees as Branche[]).includes(f.branche)) return false
-  if (filtres.ligneDirecte && !f.directe) return false
+  if (filtres.ligneDirecte && enLigne(f) === null) return false
   if (filtres.vivants && !f.noeud.vivant) return false
   if (filtres.qualite) {
     const def = FILTRES.find((d) => d.id === filtres.qualite)
@@ -612,8 +653,36 @@ function passe(f: FicheHistoire): boolean {
   return true
 }
 
-/** La lignée directe n'est mise en valeur que lorsqu'on la demande. */
+/*
+ * LA LIGNE DIRECTE suit la personne choisie : ses ancêtres et ses descendants (les
+ * vôtres quand personne n'est choisi). Une seule bascule, partagée par les Filtres, le
+ * volet et le panneau du téléphone — elle reste cochée d'une personne à l'autre.
+ */
+const racineDeLaLigne = computed<string | null>(() =>
+  filtres.ligneDirecte ? (ficheChoisie.value?.id ?? disposition.value?.ego ?? null) : null,
+)
+const ligne = computed<{ ascendants: Set<string>; descendants: Set<string> } | null>(() => {
+  const racine = racineDeLaLigne.value
+  const g = grapheCharge.value
+  if (racine === null || !g) return null
+  return ligneDe(g, racine)
+})
+/** Où se trouve une fiche dans la ligne affichée : un ancêtre (ou la racine), un descendant, ni l'un ni l'autre. */
+const enLigne = (f: FicheHistoire): 'ascendant' | 'descendant' | null => {
+  const l = ligne.value
+  if (!l) return null
+  return l.ascendants.has(f.id) ? 'ascendant' : l.descendants.has(f.id) ? 'descendant' : null
+}
+/** La ligne directe n'est mise en valeur que lorsqu'on la demande. */
 const surligner = computed(() => filtres.ligneDirecte)
+/** Les traits dorés ne dessinent que VOTRE ligne directe : pour une autre personne, les fiches parlent. */
+const surlignerTraits = computed(() => surligner.value && racineDeLaLigne.value === disposition.value?.ego)
+const libelleLigne = computed(() => {
+  const f = ficheChoisie.value
+  if (!f || f.id === disposition.value?.ego) return 'Ma ligne directe'
+  const nom = f.noeud.visibilite === 'restreinte' ? 'cette personne' : f.noeud.displayName
+  return `Ligne directe de ${nom}`
+})
 
 /* L'état de la recherche, lu par le rendu : les cibles sont mises en évidence. */
 const recherche = ref('')
@@ -662,13 +731,22 @@ const stylesFiches = computed(() => {
       opacity: !passe(f) ? '0.1' : ciblees.size && !ciblees.has(f.id) ? '0.25' : '1',
     }
     if (loin) {
-      base.background = f.directe && direct ? 'var(--hi-direct-plein)' : `color-mix(in srgb, ${couleurBranche(brancheDe(f))} 70%, transparent)`
+      const place = direct ? enLigne(f) : null
+      base.background =
+        place === 'ascendant'
+          ? 'var(--hi-direct-plein)'
+          : place === 'descendant'
+            ? 'color-mix(in srgb, var(--hi-direct-plein) 55%, transparent)'
+            : `color-mix(in srgb, ${couleurBranche(brancheDe(f))} 70%, transparent)`
       return base
     }
     base.background = `var(--h-${sexe})`
-    base.border = f.directe && direct
+    const place = direct ? enLigne(f) : null
+    base.border = place === 'ascendant'
       ? '1px solid var(--h-accent)'
-      : n.enAttente
+      : place === 'descendant'
+        ? '1px dashed var(--h-accent)'
+        : n.enAttente
         ? '1px dashed var(--h-accent)'
         : `1px ${n.vivant ? 'dashed' : 'solid'} var(--h-${sexe}-bord)`
     // Le liseré de branche : à gauche d'une fiche couchée, en haut d'une fiche debout.
@@ -742,7 +820,7 @@ const libelles = computed<Libelle[]>(() => {
   const visibles = d.fiches.filter((f) => passe(f) && dansLaFenetre(f.x, f.y, f.w, f.h))
   const commun = (f: FicheHistoire) => ({
     id: f.id,
-    directe: f.directe && direct,
+    directe: direct && enLigne(f) !== null,
     estompe: ciblees.size > 0 && !ciblees.has(f.id),
     reduction: r,
   })
@@ -810,7 +888,7 @@ const libelles = computed<Libelle[]>(() => {
 const libellesFoyers = computed(() => {
   const d = disposition.value
   if (!d || niveau.value !== 1) return []
-  const fort = surligner.value
+  const fort = surlignerTraits.value
   const demandes = d.foyers
     .filter((c) => (c.ancetres || s.value > 0.25) && c.envergure * s.value > 44 && dansLaFenetre(c.x - 40, c.y - 20, 80, 20))
     .map((c, i) => {
@@ -1297,7 +1375,7 @@ onBeforeUnmount(() => {
             class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
             :class="filtres[t.cle] ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
           >{{ filtres[t.cle] ? '✓' : '' }}</span>
-          <span class="flex-1 text-sm">{{ t.libelle }}</span>
+          <span class="flex-1 text-sm">{{ t.cle === 'ligneDirecte' ? libelleLigne : t.libelle }}</span>
           <span class="text-xs text-attenue">{{ t.sous }}</span>
         </button>
         <p class="m-0 text-xs text-attenue">
@@ -1338,10 +1416,11 @@ onBeforeUnmount(() => {
       </RouterLink>
     </div>
 
+    <div class="flex min-h-0 flex-1">
     <!-- Le canevas -->
     <div
       ref="fenetre"
-      class="grille relative flex-1 cursor-grab touch-none overflow-hidden select-none active:cursor-grabbing"
+      class="grille relative min-w-0 flex-1 cursor-grab touch-none overflow-hidden select-none active:cursor-grabbing"
       @pointerdown="surPointeurBas"
       @pointermove="surPointeurDeplace"
       @pointerup="surPointeurHaut"
@@ -1380,10 +1459,10 @@ onBeforeUnmount(() => {
             <path
               :d="disposition.traces.directs"
               fill="none"
-              :stroke="surligner ? 'var(--h-accent)' : 'var(--hi-arete)'"
-              :stroke-width="surligner ? (niveau === 0 ? 2.5 : 2) : 1.2"
+              :stroke="surlignerTraits ? 'var(--h-accent)' : 'var(--hi-arete)'"
+              :stroke-width="surlignerTraits ? (niveau === 0 ? 2.5 : 2) : 1.2"
               vector-effect="non-scaling-stroke"
-              :opacity="surligner ? 1 : opaciteOrdinaire"
+              :opacity="surlignerTraits ? 1 : opaciteOrdinaire"
             />
           </g>
         </svg>
@@ -1463,7 +1542,7 @@ onBeforeUnmount(() => {
             left: `${c.x}px`,
             top: `${c.y}px`,
             fontSize: c.ancetres && surligner ? '11.5px' : '10.5px',
-            color: c.ancetres && surligner ? 'var(--hi-libelle-accent)' : 'var(--h-attenue)',
+            color: c.ancetres && surlignerTraits ? 'var(--hi-libelle-accent)' : 'var(--h-attenue)',
           }"
         >
           {{ c.nom }}
@@ -1577,9 +1656,8 @@ onBeforeUnmount(() => {
 
         <!-- La fiche sélectionnée -->
         <section
-          v-if="ficheChoisie"
-          class="absolute z-10 flex flex-col gap-2 rounded-panneau border border-ligne bg-panneau px-4 py-3.5 shadow-[0_10px_30px_rgba(0,0,0,.5)]"
-          :class="estMobile ? 'inset-x-3 bottom-3' : 'top-4 right-4 w-[300px]'"
+          v-if="ficheChoisie && estMobile"
+          class="absolute inset-x-3 bottom-3 z-10 flex flex-col gap-2 rounded-panneau border border-ligne bg-panneau px-4 py-3.5 shadow-[0_10px_30px_rgba(0,0,0,.5)]"
           :style="{ borderTop: `3px solid ${couleurBranche(brancheDe(ficheChoisie))}` }"
           aria-live="polite"
           @pointerdown.stop
@@ -1620,6 +1698,19 @@ onBeforeUnmount(() => {
             >sans lien connu · position estimée</span>
             <span v-if="ficheChoisie.noeud.enAttente" class="rounded-pastille border border-accent px-2.5 py-px text-xs text-accent">en attente</span>
           </div>
+          <button
+            type="button"
+            role="checkbox"
+            :aria-checked="filtres.ligneDirecte"
+            class="flex min-h-9 items-center gap-2.5 text-left text-sm"
+            @click="filtres.ligneDirecte = !filtres.ligneDirecte"
+          >
+            <span
+              class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
+              :class="filtres.ligneDirecte ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+            >{{ filtres.ligneDirecte ? '✓' : '' }}</span>
+            Afficher sa ligne directe
+          </button>
           <div class="flex gap-2">
             <button
               type="button"
@@ -1653,6 +1744,128 @@ onBeforeUnmount(() => {
         <span>{{ erreur }}</span>
         <button type="button" class="rounded-champ border border-ligne px-3 py-1.5 text-texte" @click="charger">Réessayer</button>
       </div>
+    </div>
+
+    <!-- Le volet (PC) : la fiche de la personne choisie ; il pousse l'arbre. -->
+    <aside
+      v-if="voletOuvert && ficheChoisie && disposition"
+      class="flex w-[380px] flex-none flex-col border-l border-ligne bg-panneau"
+      :style="{ borderTop: `3px solid ${couleurBranche(brancheDe(ficheChoisie))}` }"
+      aria-label="Fiche de la personne choisie"
+    >
+      <header class="flex flex-none flex-col gap-2 border-b border-ligne px-4 py-3.5">
+        <div class="flex items-start gap-2">
+          <div class="flex flex-1 flex-col leading-snug">
+            <span class="text-[17px] font-semibold">{{
+              ficheChoisie.noeud.visibilite === 'restreinte' ? NOM_D_UNE_PERSONNE_VIVANTE : ficheChoisie.noeud.displayName
+            }}</span>
+            <span v-if="typeof ficheChoisie.noeud.etiquetteDates === 'string'" class="font-mono text-xs text-attenue">{{
+              ficheChoisie.noeud.etiquetteDates
+            }}</span>
+          </div>
+          <button
+            type="button"
+            aria-label="Fermer"
+            title="Fermer (Échap)"
+            class="-mt-1.5 -mr-2 h-8 w-8 text-lg text-attenue hover:text-texte"
+            @click="selection = null"
+          >
+            ×
+          </button>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <span v-if="ficheChoisie.id === disposition.ego" class="rounded-pastille bg-accent-doux px-2.5 py-0.5 text-xs font-semibold text-accent">vous</span>
+          <span v-else-if="parente" class="rounded-pastille bg-accent-doux px-2.5 py-0.5 text-xs font-semibold text-accent">{{ parente }}</span>
+          <span
+            v-if="ficheChoisie.parente === 'alliance'"
+            class="rounded-pastille border border-dashed border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]"
+            title="Sa famille est liée à la vôtre par un mariage."
+          >famille par alliance</span>
+          <span v-else class="rounded-pastille border border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]">{{
+            libelleBranche(ficheChoisie.branche)
+          }}</span>
+          <span
+            v-if="ficheChoisie.detache"
+            class="rounded-pastille border border-dashed border-ligne px-2.5 py-px text-xs text-attenue"
+            title="Sans lien connu avec vous : génération estimée d’après les dates."
+          >sans lien connu</span>
+          <span v-if="ficheChoisie.noeud.enAttente" class="rounded-pastille border border-accent px-2.5 py-px text-xs text-accent">en attente</span>
+        </div>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="h-9 flex-1 rounded-champ border border-ligne font-semibold hover:bg-accent-doux"
+            @click="voirFiche(ficheChoisie)"
+          >
+            Centrer
+          </button>
+          <RouterLink
+            v-if="ficheChoisie.noeud.personId !== null"
+            :to="{ name: 'personne.detail', params: { id: ficheChoisie.noeud.personId } }"
+            class="flex h-9 flex-1 items-center justify-center rounded-champ bg-accent font-semibold text-fond"
+            @click="memoriserLaVue"
+          >
+            Fiche
+          </RouterLink>
+          <RouterLink
+            v-else-if="ficheChoisie.noeud.demandeId !== undefined"
+            :to="{ name: 'demande.detail', params: { id: ficheChoisie.noeud.demandeId } }"
+            class="flex h-9 flex-1 items-center justify-center rounded-champ bg-accent font-semibold text-fond"
+            @click="memoriserLaVue"
+          >
+            Demande
+          </RouterLink>
+        </div>
+        <button
+          type="button"
+          role="checkbox"
+          :aria-checked="filtres.ligneDirecte"
+          class="flex min-h-9 items-center gap-2.5 text-left text-sm"
+          @click="filtres.ligneDirecte = !filtres.ligneDirecte"
+        >
+          <span
+            class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
+            :class="filtres.ligneDirecte ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+          >{{ filtres.ligneDirecte ? '✓' : '' }}</span>
+          <span class="flex flex-col leading-tight">
+            <span>Afficher sa ligne directe</span>
+            <span class="text-xs text-attenue">ancêtres et descendants · reste cochée d’une personne à l’autre</span>
+          </span>
+        </button>
+      </header>
+
+      <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4">
+        <template v-if="ficheLue && ficheLue.id === ficheChoisie.noeud.personId">
+          <PortraitFiche
+            v-if="ficheLue.portrait"
+            class="self-center"
+            :portrait="ficheLue.portrait"
+            :nom="ficheLue.displayName"
+            :sexe="ficheLue.sex"
+          />
+          <IdentiteFiche :fiche="ficheLue" :seulement="['birth', 'death', 'marriedName', 'nickname']" />
+          <ParenteFiche :fiche="ficheLue" vers-arbre @choisir="choisirProche" />
+          <section v-if="ficheLue.faits.length">
+            <h3 class="mb-2 text-[11px] tracking-wider text-attenue uppercase">Faits</h3>
+            <FaitsFiche :fiche="ficheLue" />
+          </section>
+          <p class="m-0 text-xs text-attenue">
+            {{ ficheLue.citationCount }} source{{ ficheLue.citationCount > 1 ? 's' : '' }} ·
+            {{ ficheLue.notes.length }} note{{ ficheLue.notes.length > 1 ? 's' : '' }} —
+            <RouterLink
+              v-if="ficheChoisie.noeud.personId !== null"
+              :to="{ name: 'personne.detail', params: { id: ficheChoisie.noeud.personId } }"
+              class="text-accent underline"
+              @click="memoriserLaVue"
+            >tout voir sur la fiche</RouterLink>
+          </p>
+        </template>
+        <p v-else-if="ficheChoisie.noeud.visibilite === 'restreinte'" class="m-0 text-sm text-attenue">
+          Personne vivante : sa fiche n’est visible que de ses proches.
+        </p>
+        <p v-else class="m-0 text-sm text-attenue">Lecture de la fiche…</p>
+      </div>
+    </aside>
     </div>
 
     <!-- Téléphone : la recherche en bas -->
