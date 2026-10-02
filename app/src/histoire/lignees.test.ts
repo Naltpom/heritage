@@ -288,6 +288,20 @@ describe('disposition lignees', () => {
     expect(d.alliancesDansLArbre).toBe(false)
   })
 
+  it('donne aux familles par alliance rangées dans l’arbre la branche de qui les relie', () => {
+    // Le serveur ne leur sert aucune branche ; l'allié qui les relie est d'une branche.
+    const teinte = (cle: string, b: Branche | null): ((n: Graphe['noeuds'][number]) => Graphe['noeuds'][number]) =>
+      (n) => (n.id === id[cle] ? ({ ...n, branch: b } as typeof n) : n)
+    const g2: Graphe = {
+      ...graphe,
+      noeuds: graphe.noeuds.map(teinte('allie', 'mp')).map(teinte('pereAllie', null)).map(teinte('mereAllie', null)),
+    }
+    const dans = disposerLignees(g2, { alliances: 'dans-l-arbre' })
+    for (const cle of ['pereAllie', 'mereAllie']) expect(dans.parId.get(id[cle]!)!.branche).toBe('mp')
+    const aPart = disposerLignees(g2)
+    for (const cle of ['pereAllie', 'mereAllie']) expect(aPart.parId.get(id[cle]!)!.branche).toBeNull()
+  })
+
   it('range, sur demande, chaque fratrie dans l’ordre des naissances', () => {
     const d2 = disposerLignees(graphe, { fratriesParNaissance: true })
     const g = (cle: string) => d2.parId.get(id[cle]!)!
