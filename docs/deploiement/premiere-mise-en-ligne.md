@@ -259,6 +259,7 @@ HERITAGE_GEMINI_CLE_API=
 HERITAGE_GEMINI_MODELE=
 HERITAGE_GEMINI_POINT_DACCES=
 HERITAGE_GEMINI_MODELE_ASSISTANT=
+HERITAGE_GEMINI_MODELE_TRANSCRIPTION=
 ```
 
 | Clé | Valeur | Comment l'obtenir |
@@ -267,6 +268,7 @@ HERITAGE_GEMINI_MODELE_ASSISTANT=
 | `HERITAGE_GEMINI_MODELE` | **laisser vide** | le code retombe sur son défaut ; à ne renseigner que si le fournisseur retire ce modèle |
 | `HERITAGE_GEMINI_POINT_DACCES` | **laisser vide** | à renseigner **uniquement** pour Vertex AI, dont l'URL porte le projet et la région |
 | `HERITAGE_GEMINI_MODELE_ASSISTANT` | **laisser vide** en principe | le modèle de « Proposer avec l'assistant » (lecture d'actes, parcours de l'arbre) ; vide = `gemini-pro-latest` (alias du dernier Pro servi ; `gemini-2.5-pro` rend `404 … no longer available to new users` aux clés récentes, constaté le 24 septembre 2026) |
+| `HERITAGE_GEMINI_MODELE_TRANSCRIPTION` | **laisser vide** en principe | le modèle qui transcrit les messages vocaux de l'inscription sans fiche ; vide = `gemini-2.5-flash` |
 
 Seule la première est à remplir. Les autres existent parce qu'un identifiant
 de modèle et une URL écrits en dur transforment une décision du fournisseur en

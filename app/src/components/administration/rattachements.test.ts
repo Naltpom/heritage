@@ -1,19 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import { createSSRApp, h } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import { ErreurApi, type CompteARattacher, type SuggestionDeRattachement } from '@/lib/api'
+import {
+  ErreurApi,
+  type CompteARattacher,
+  type SuggestionDeRattachement,
+  type TranscriptionARattacher,
+} from '@/lib/api'
 import {
   FileDAnalyses,
+  TRANSCRIPTION_LONGUE,
   ajouterParent,
   compteDisparu,
   creationPossible,
   dateDeclaree,
   etatApresErreur,
+  etatDeTranscription,
   exigencesDeCreation,
   ficheARattacher,
   identiteDeclaree,
   initialesDeclarees,
+  mentionDeLAnalyse,
+  transcriptionApresErreur,
   type EtatDAnalyse,
+  type EtatDeTranscription,
 } from './rattachements'
 import CarteARattacher from './CarteARattacher.vue'
 
@@ -35,6 +45,9 @@ import CarteARattacher from './CarteARattacher.vue'
  * Rendu en SSR, comme le reste du projet — pas de `jsdom`. Les noms de ce jeu
  * d'essai sont inventés : la base porte l'arbre réel du commanditaire.
  */
+
+/** Une transcription jamais tentée — l'état d'un vocal tout juste déposé. */
+const A_FAIRE: TranscriptionARattacher = { statut: 'a_faire', texte: null, erreur: null, le: null }
 
 function compte(sur: Partial<CompteARattacher> = {}): CompteARattacher {
   return {
@@ -76,6 +89,7 @@ function suggestion(sur: Partial<SuggestionDeRattachement> = {}): SuggestionDeRa
     },
     alternatives: [],
     creation: null,
+    transcriptionPriseEnCompte: false,
     ...sur,
   }
 }
@@ -282,8 +296,11 @@ async function rendre(
   sujet: CompteARattacher,
   analyse: EtatDAnalyse,
   suspendu = false,
+  transcription?: EtatDeTranscription,
 ): Promise<string> {
-  const app = createSSRApp({ render: () => h(CarteARattacher, { compte: sujet, analyse, suspendu }) })
+  const app = createSSRApp({
+    render: () => h(CarteARattacher, { compte: sujet, analyse, suspendu, transcription }),
+  })
   return (await renderToString(app)).replace(/<!--[\s\S]*?-->/g, '')
 }
 
@@ -337,6 +354,7 @@ describe('la carte « À rattacher »', () => {
           type: 'audio/webm',
           taille: 540 * 1024,
           duree: 134,
+          transcription: A_FAIRE,
         },
       }),
       { etat: 'attente' },
@@ -357,7 +375,13 @@ describe('la carte « À rattacher »', () => {
     const html = await rendre(
       compte({
         declaration: { surname: 'Serpolet', givenNames: 'Léa Marie', birthDate: '1998-04-12', description: null },
-        messageVocal: { url: '/api/administration/rattachements/14/message-vocal', type: 'audio/mp4', taille: 2048, duree: null },
+        messageVocal: {
+          url: '/api/administration/rattachements/14/message-vocal',
+          type: 'audio/mp4',
+          taille: 2048,
+          duree: null,
+          transcription: A_FAIRE,
+        },
       }),
       { etat: 'attente' },
     )
@@ -405,5 +429,129 @@ describe('la carte « À rattacher »', () => {
     for (const libelle of ['Rattacher à Léa Serpolet', 'Choisir une autre fiche', 'Créer la fiche et rattacher', 'Refuser l’inscription']) {
       expect(eteint(html, libelle)).toBe(true)
     }
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* La transcription du message vocal                                   */
+/* ------------------------------------------------------------------ */
+
+const TEXTE_TRANSCRIT = 'Je suis Léa Serpolet, née le 12 avril 1998 ; mon père est Jean Serpolet [?].'
+
+/** Un compte qui n'a rien écrit et a laissé un vocal, transcrit comme indiqué. */
+function compteAvecVocal(transcription: TranscriptionARattacher): CompteARattacher {
+  return compte({
+    declaration: { surname: 'Serpolet', givenNames: 'Léa Marie', birthDate: '1998-04-12', description: null },
+    messageVocal: {
+      url: '/api/administration/rattachements/14/message-vocal',
+      type: 'audio/webm',
+      taille: 4096,
+      duree: 75,
+      transcription,
+    },
+  })
+}
+
+describe('l’état de la transcription', () => {
+  it('se lit sur ce que le serveur rend : à faire, faite, en échec', () => {
+    expect(etatDeTranscription(A_FAIRE)).toEqual({ etat: 'a_faire' })
+    expect(
+      etatDeTranscription({ statut: 'faite', texte: 'Bonjour.', erreur: null, le: '2026-10-02T21:00:00+02:00' }),
+    ).toEqual({ etat: 'faite', texte: 'Bonjour.', le: '2026-10-02T21:00:00+02:00' })
+    expect(etatDeTranscription({ statut: 'echec', texte: null, erreur: 'Délai dépassé.', le: null })).toEqual({
+      etat: 'echec',
+      message: 'Délai dépassé.',
+      reessayable: true,
+    })
+  })
+
+  it('503 : pas de « Réessayer », qui échouerait pareil ; 429 et le reste : réessayable', () => {
+    expect(transcriptionApresErreur(new ErreurApi(503, 'assistant_indisponible', 'x'))).toMatchObject({
+      etat: 'echec',
+      reessayable: false,
+    })
+    expect(transcriptionApresErreur(new ErreurApi(429, 'trop_de_tentatives', 'x'))).toMatchObject({
+      etat: 'echec',
+      reessayable: true,
+    })
+    expect(transcriptionApresErreur(new ErreurApi(500, 'erreur_interne', 'Panne.'))).toMatchObject({
+      etat: 'echec',
+      reessayable: true,
+    })
+  })
+
+  it('dit si l’analyse affichée a tenu compte de la transcription — et rien sans analyse prête', () => {
+    const faite: EtatDeTranscription = { etat: 'faite', texte: TEXTE_TRANSCRIT, le: null }
+    expect(
+      mentionDeLAnalyse(faite, { etat: 'prete', suggestion: suggestion({ transcriptionPriseEnCompte: true }) }),
+    ).toContain('en a tenu compte')
+    expect(mentionDeLAnalyse(faite, { etat: 'prete', suggestion: suggestion() })).toContain('sans elle')
+    expect(mentionDeLAnalyse(faite, { etat: 'en_cours' })).toBeNull()
+    expect(mentionDeLAnalyse({ etat: 'a_faire' }, { etat: 'prete', suggestion: suggestion() })).toBeNull()
+    expect(mentionDeLAnalyse(null, { etat: 'prete', suggestion: suggestion() })).toBeNull()
+  })
+})
+
+describe('la carte et la transcription', () => {
+  it('sans message vocal, ne parle pas de transcription', async () => {
+    const html = await rendre(compte(), { etat: 'attente' })
+    expect(html).not.toContain('data-transcription')
+    expect(html).not.toContain('Transcription')
+  })
+
+  it('pendant la transcription, le dit sous le lecteur — et l’audio reste là', async () => {
+    const html = await rendre(compteAvecVocal(A_FAIRE), { etat: 'attente' }, false, { etat: 'en_cours' })
+    expect(html).toContain('data-etat="en_cours"')
+    expect(html).toContain('Transcription automatique en cours')
+    expect(html).toMatch(/<audio[^>]*controls/)
+  })
+
+  it('sans état tenu par l’écran, reprend celui de la liste', async () => {
+    const html = await rendre(compteAvecVocal(A_FAIRE), { etat: 'attente' })
+    expect(html).toContain('data-etat="a_faire"')
+    expect(html).toContain('Transcription automatique en attente')
+  })
+
+  it('faite et courte : le texte d’emblée, l’avertissement sur les noms, et l’analyse qui en a tenu compte', async () => {
+    const html = await rendre(
+      compteAvecVocal({ statut: 'faite', texte: TEXTE_TRANSCRIT, erreur: null, le: '2026-10-02T21:00:00+02:00' }),
+      { etat: 'prete', suggestion: suggestion({ transcriptionPriseEnCompte: true }) },
+    )
+    expect(html).toContain('data-etat="faite"')
+    expect(html).toContain('Jean Serpolet [?]')
+    expect(html).not.toContain('<details')
+    expect(html).toContain('tels qu’entendus')
+    expect(html).toContain('L’analyse ci-dessous en a tenu compte.')
+  })
+
+  it('faite et longue : repliée dans un <details>, avec sa longueur', async () => {
+    const long = `${TEXTE_TRANSCRIT} `.repeat(Math.ceil(TRANSCRIPTION_LONGUE / TEXTE_TRANSCRIT.length) + 1).trim()
+    const html = await rendre(compteAvecVocal({ statut: 'faite', texte: long, erreur: null, le: null }), {
+      etat: 'attente',
+    })
+    expect(html).toContain('<details')
+    expect(html).toContain(`${long.length} caractères`)
+    expect(html).toContain('Jean Serpolet [?]')
+  })
+
+  it('en échec : le motif et « Réessayer la transcription », éteint sous la bascule', async () => {
+    const echec = compteAvecVocal({ statut: 'echec', texte: null, erreur: 'Le modèle n’a pas répondu à temps.', le: null })
+    const html = await rendre(echec, { etat: 'attente' })
+    expect(html).toContain('data-etat="echec"')
+    expect(html).toContain('Le modèle n’a pas répondu à temps.')
+    expect(eteint(html, 'Réessayer la transcription')).toBe(false)
+
+    expect(eteint(await rendre(echec, { etat: 'attente' }, true), 'Réessayer la transcription')).toBe(true)
+  })
+
+  it('sans clé : le motif, mais pas de « Réessayer »', async () => {
+    const html = await rendre(compteAvecVocal(A_FAIRE), { etat: 'non_configuree' }, false, {
+      etat: 'echec',
+      message: 'La transcription automatique n’est pas configurée sur cette installation : écoutez le message.',
+      reessayable: false,
+    })
+    expect(html).toContain('pas configurée')
+    expect(html).not.toContain('Réessayer la transcription')
+    expect(html).toMatch(/<audio[^>]*controls/)
   })
 })

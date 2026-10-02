@@ -1158,6 +1158,9 @@ ajoutée de cette table est le **rattachement**.
 | `voice_message_mime` | `VARCHAR(24)` | oui | `NULL` | Le type **reniflé sur les octets** : `audio/webm`, `audio/ogg`, `audio/mp4`. |
 | `voice_message_size` | `INT` | oui | `NULL` | En octets, 10 Mio au plus. |
 | `voice_message_seconds` | `SMALLINT` | oui | `NULL` | La durée mesurée par le navigateur — indicative. |
+| `voice_message_transcript` | `TEXT` | oui | `NULL` | Sa **transcription automatique** (Gemini, 2 octobre 2026 au soir), verbatim. Données de **vivants**, comme la description : lisible des seuls administrateurs, colonne sensible du journal mécanique, **purgée** avec le vocal. |
+| `voice_message_transcript_error` | `VARCHAR(300)` | oui | `NULL` | Le motif du dernier échec de transcription, écrit par le serveur. Exclusif de la transcription. |
+| `voice_message_transcribed_at` | `TIMESTAMPTZ` | oui | `NULL` | La dernière tentative, réussie ou non. |
 | `attachment_suggestion` | `JSONB` | oui | `NULL` | La suggestion de rattachement calculée par `Assistant`, **mise en cache**. `Membership` ne la lit pas : il la stocke et la purge. |
 | `attachment_suggestion_at` | `TIMESTAMPTZ` | oui | `NULL` | Date du calcul de la suggestion. |
 
@@ -1207,6 +1210,31 @@ CONSTRAINT ck_mbr_member_message_vocal_a_rattacher CHECK (voice_message_name IS 
 CONSTRAINT ck_mbr_member_declaration_texte_ou_voix CHECK (declared_surname IS NULL
   OR family_description IS NOT NULL OR voice_message_name IS NOT NULL),
 ```
+
+**Contraintes — la transcription du message vocal (`Version20261002220000`)**
+
+```sql
+-- Pas de transcription (ni d'échec, ni de date) sans vocal : elle part avec lui.
+CONSTRAINT ck_mbr_member_transcription_avec_vocal CHECK (voice_message_name IS NOT NULL
+  OR (voice_message_transcript IS NULL AND voice_message_transcript_error IS NULL
+      AND voice_message_transcribed_at IS NULL)),
+-- Un texte ou un échec, jamais les deux.
+CONSTRAINT ck_mbr_member_transcription_ou_echec CHECK (voice_message_transcript IS NULL
+  OR voice_message_transcript_error IS NULL),
+-- Un texte ou un échec porte sa date ; une date seule ne veut rien dire.
+CONSTRAINT ck_mbr_member_transcription_datee CHECK ((voice_message_transcribed_at IS NULL)
+  = (voice_message_transcript IS NULL AND voice_message_transcript_error IS NULL)),
+```
+
+**Sous-traitant : Google (Gemini).** Le son du message vocal sort vers Gemini pour être
+transcrit, et sa transcription y repart avec la déclaration pour l'analyse de rattachement —
+les mêmes règles que la description (ADR 0008, addendums du 1er et du 2 octobre 2026) :
+palier **payant ou Vertex AI** seulement (non-entraînement), données envoyées **en ligne**
+(pas de File API, rien n'est stocké chez le fournisseur au-delà de l'appel), **jamais le
+courriel**, appel déclenché par un administrateur et jamais par l'inscription. La base de
+l'envoi est la même que pour la description : la personne en est **informée avant
+d'enregistrer** par la mention sous le micro, et l'envoi est facultatif — elle peut écrire
+au lieu de parler.
 
 Un compte refusé reste `a_rattacher`, sans fiche, **suspendu** — et sa déclaration est vide.
 L'écriture de la suggestion relit la ligne sous verrou (`SELECT … FOR UPDATE`) avant

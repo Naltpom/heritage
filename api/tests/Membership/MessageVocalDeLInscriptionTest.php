@@ -10,6 +10,8 @@ use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Enum\MemberStatus;
 use App\Module\Membership\Repository\MemberRepository;
 use App\Module\Membership\Service\MessageVocalDeDeclaration;
+use App\Tests\Assistant\Double\ComptesARattacherEnMemoire;
+use App\Tests\Assistant\Double\ModeleScripte;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 /**
@@ -26,7 +28,10 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
  * - **pas de jeton valide, pas de dépôt** : rien n'est écrit, ni ligne ni fichier ;
  * - **le son ne sort que vers un administrateur**, par une route à lui, requêtes partielles
  *   comprises — et ni un membre, ni le déposant lui-même, ni un anonyme ne l'obtiennent ;
- * - **il part avec la déclaration**, au rattachement comme au refus — fichier compris.
+ * - **il part avec la déclaration**, au rattachement comme au refus — fichier compris ;
+ * - **sa transcription** (2 octobre 2026, soir) se range sur la ligne par la route de
+ *   l'assistant — modèle scripté, `Membership` réel —, sort dans la liste en liste
+ *   blanche, et part avec le vocal.
  *
  * `MEDIA_RACINE` est détournée vers `var/`, comme dans `RattachementDesComptesSansFicheTest` :
  * les messages vocaux vivent sous `messages-vocaux/` de cette racine.
@@ -48,6 +53,12 @@ final class MessageVocalDeLInscriptionTest extends CasDeTestMembership
         $_SERVER['MEDIA_RACINE'] = $racine;
 
         parent::setUp();
+
+        // La transcription passe par le module `Assistant` : son côté `Membership` doit
+        // être le vrai (un test précédent a pu laisser le double en mémoire), et le modèle
+        // est scripté.
+        ComptesARattacherEnMemoire::brancherSurMembership();
+        ModeleScripte::oublierTout();
 
         // Une adresse à ce test : le plafond de cinq comptes sans fiche par heure et par IP
         // ne doit pas dépendre de l'ordre d'exécution.
@@ -216,6 +227,8 @@ final class MessageVocalDeLInscriptionTest extends CasDeTestMembership
             'type' => 'audio/webm',
             'taille' => $membre->getVoiceMessageSize(),
             'duree' => 42,
+            // Jamais tentée : l'écran la lancera.
+            'transcription' => ['statut' => 'a_faire', 'texte' => null, 'erreur' => null, 'le' => null],
         ], $element['messageVocal']);
 
         // Le son, en entier…
@@ -303,7 +316,103 @@ final class MessageVocalDeLInscriptionTest extends CasDeTestMembership
         self::assertFileDoesNotExist($this->cheminDuVocal($nom));
     }
 
+    // ── Sa transcription ──────────────────────────────────────────────────────────
+
+    public function testLaTranscriptionSeRangeSurLaLigneEtSortDansLaListe(): void
+    {
+        $membreId = $this->compteAvecVocal();
+        $this->connexion('admin@example.net');
+
+        // Un échec d'abord : rangé avec son motif, et l'audio toujours servi.
+        ModeleScripte::repondra(new \RuntimeException('Panne.'));
+        $this->transcrire($membreId);
+        self::assertResponseIsSuccessful();
+        self::assertSame('echec', $this->charge()['statut']);
+
+        $membre = $this->membre($membreId);
+        self::assertNull($membre->getVoiceMessageTranscript());
+        self::assertNotNull($membre->getVoiceMessageTranscriptError());
+        self::assertNotNull($membre->getVoiceMessageTranscribedAt());
+        $this->client->request('GET', \sprintf('/api/administration/rattachements/%d/message-vocal', $membreId));
+        self::assertSame(200, $this->client->getResponse()->getStatusCode(), 'L’audio reste écoutable quoi qu’il arrive.');
+
+        // « Réessayer » : le texte remplace l'échec.
+        ModeleScripte::repondra(self::reponseTexte('Mon père est Pyrite Romarin.'));
+        $this->transcrire($membreId);
+        self::assertResponseIsSuccessful();
+
+        $membre = $this->membre($membreId);
+        self::assertSame('Mon père est Pyrite Romarin.', $membre->getVoiceMessageTranscript());
+        self::assertNull($membre->getVoiceMessageTranscriptError());
+
+        // Le son envoyé est celui du disque, octet pour octet.
+        $envoye = ModeleScripte::requetes()[1]['charge']['contents'][0]['parts'][1]['inlineData'];
+        self::assertSame('audio/webm', $envoye['mimeType']);
+        self::assertSame(self::WEBM.str_repeat("\x00", 4096), base64_decode($envoye['data'], true));
+
+        $this->requete('GET', '/api/administration/rattachements');
+        $transcription = $this->charge()['elements'][0]['messageVocal']['transcription'];
+        self::assertSame(['statut', 'texte', 'erreur', 'le'], array_keys($transcription));
+        self::assertSame('faite', $transcription['statut']);
+        self::assertSame('Mon père est Pyrite Romarin.', $transcription['texte']);
+        self::assertNull($transcription['erreur']);
+
+        // Le texte n'entre pas dans le journal mécanique.
+        $journal = (string) json_encode($this->em()->getConnection()->fetchAllAssociative('SELECT changes FROM core_audit_log'));
+        self::assertStringNotContainsString('Pyrite', $journal);
+    }
+
+    public function testLeRefusEffaceLaTranscriptionAvecLeVocal(): void
+    {
+        $membreId = $this->compteAvecVocal();
+        $this->connexion('admin@example.net');
+        ModeleScripte::repondra(self::reponseTexte('Mon père est Pyrite Romarin.'));
+        $this->transcrire($membreId);
+        self::assertResponseIsSuccessful();
+
+        $this->requete('POST', \sprintf('/api/administration/membres/%d/refuser', $membreId));
+        self::assertResponseIsSuccessful();
+
+        $membre = $this->membre($membreId);
+        self::assertNull($membre->getVoiceMessageTranscript());
+        self::assertNull($membre->getVoiceMessageTranscriptError());
+        self::assertNull($membre->getVoiceMessageTranscribedAt());
+
+        // Plus de vocal, plus rien à transcrire.
+        $this->transcrire($membreId);
+        self::assertSame(404, $this->client->getResponse()->getStatusCode());
+    }
+
+    public function testLeRattachementEffaceLaTranscription(): void
+    {
+        $membreId = $this->compteAvecVocal();
+        $this->connexion('admin@example.net');
+        ModeleScripte::repondra(self::reponseTexte('Mon père est Pyrite Romarin.'));
+        $this->transcrire($membreId);
+        self::assertResponseIsSuccessful();
+
+        $this->requete('POST', \sprintf('/api/administration/membres/%d/activer', $membreId), ['personId' => ArbreFamilial::ETRANGER]);
+        self::assertResponseIsSuccessful();
+
+        self::assertNull($this->membre($membreId)->getVoiceMessageTranscript());
+    }
+
     // ── Outils ────────────────────────────────────────────────────────────────────
+
+    private function transcrire(int $membreId): void
+    {
+        $this->client->request(
+            'POST',
+            \sprintf('/api/administration/rattachements/%d/transcription', $membreId),
+            server: ['HTTP_ACCEPT' => 'application/json', 'REMOTE_ADDR' => $this->ip],
+        );
+    }
+
+    /** @return array<string, mixed> une réponse Gemini qui rend du texte */
+    private static function reponseTexte(string $texte): array
+    {
+        return ['candidates' => [['content' => ['parts' => [['text' => $texte]]], 'finishReason' => 'STOP']]];
+    }
 
     /** @return array{0: \App\Module\Membership\Entity\Invitation, 1: string} */
     private function invitation(): array

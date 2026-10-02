@@ -1170,6 +1170,11 @@ facultative) : un WebM de `MediaRecorder` n'annonce pas la sienne.
 - Stockage **hors racine web** (`<MEDIA_RACINE>/messages-vocaux/`), nom aléatoire ; colonnes
   `voice_message_*` de `mbr_member`. Purgé — ligne **et fichier** — au rattachement comme au
   refus.
+- **Transcrit automatiquement** après coup (2 octobre 2026, soir) par Gemini, à la demande de
+  l'écran « À rattacher » (§ 10.1, « La transcription du message vocal ») : rien n'est appelé
+  à l'inscription, et un échec de transcription n'a aucun effet sur le compte. La mention
+  sous le micro le dit : « Votre message est écouté par l'administrateur et transcrit
+  automatiquement (Google Gemini) pour retrouver votre fiche. »
 
 Succès : `core_user` `en_attente`, `mbr_member` **sans fiche** (`person_id` nul,
 `match_kind = a_rattacher`), un usage d'invitation compté sous le même verrou que l'autre
@@ -4346,6 +4351,7 @@ première règle qui correspond est appliquée »).
 | `GET` | `/api/administration/rattachements/{memberId}/message-vocal` | `ADMIN` | — | `200` / `206` le son (`Range`) | `404` · `409` `vue_comme_membre_active` |
 | `GET` | `/api/administration/rattachements/{memberId}/suggestion` | `ADMIN` | — | `200` suggestion § 10.1 | `404` · `409` `vue_comme_membre_active` · `429` · `502` `assistant_erreur` · `503` `assistant_indisponible` |
 | `POST` | `/api/administration/rattachements/{memberId}/suggestion` | `ADMIN` | *(vide)* | `200` suggestion § 10.1 | *(idem)* |
+| `POST` | `/api/administration/rattachements/{memberId}/transcription` | `ADMIN` | *(vide)* | `200` transcription § 10.1 (y compris en échec) | `404` · `409` `vue_comme_membre_active` · `429` · `503` `assistant_indisponible` |
 | `POST` | `/api/administration/rattachements/{memberId}/creer-et-rattacher` | `ADMIN` | `{parents?, message?}` | `201` `{membre, personId, demandeId}` | `404` · `409` `personne_deja_rattachee`, `compte_deja_decide` · `422` |
 | `GET` | `/api/administration/reglages` | `ADMIN` | — | `200` tableau nu | — |
 | `PATCH` | `/api/administration/reglages/{cle}` | `ADMIN` | `{value}` | `200` réglage | `404` · `422` `valeur_hors_bornes` |
@@ -4467,7 +4473,10 @@ la description est un texte libre qu'aucun cercle ne sait filtrer.
         "birthDate": "1998-04-12",
         "description": "Mon père est Jean Dupont, né vers 1960 à Lille ; ma mère Marie Martin…"
       },
-      "messageVocal": { "url": "/api/administration/rattachements/14/message-vocal", "type": "audio/webm", "taille": 553412, "duree": 134 },
+      "messageVocal": {
+        "url": "/api/administration/rattachements/14/message-vocal", "type": "audio/webm", "taille": 553412, "duree": 134,
+        "transcription": { "statut": "faite", "texte": "Bonjour, je suis Léa Dupont…", "erreur": null, "le": "2026-10-02T21:04:12+02:00" }
+      },
       "photo": { "mediaId": 91, "url": "/api/medias/91/fichier?v=1a2b3c4d", "vignetteUrl": "/api/medias/91/vignette?v=1a2b3c4d" },
       "suggestionCalculeeLe": null
     }
@@ -4487,7 +4496,10 @@ peut alors valoir `null`. Le son sort par `url` —
 `GET /api/administration/rattachements/{memberId}/message-vocal`, `ADMIN`, refusée sous la
 bascule, `Cache-Control: private, no-store`, requêtes partielles (`Range` → `206`) servies.
 `404` pour un compte inconnu, déjà décidé, sans vocal, ou dont le fichier manque.
-L'analyse de l'assistant ne reçoit **pas** le son : seulement le fait qu'il existe.
+`messageVocal.transcription` — **toujours ces quatre clés** — décrit sa transcription
+automatique : `statut` `a_faire` (jamais tentée), `faite` (`texte` verbatim) ou `echec`
+(`erreur`, le motif écrit par le serveur) ; `le` est la date de la dernière tentative. Le
+texte parle de vivants, comme la description : mêmes règles, même purge.
 
 Chaque élément de `GET /api/administration/membres` (la file des comptes `en_attente`) porte
 en plus `portraitEnAttente` — `{mediaId, url, vignetteUrl}` ou `null` : la photo déposée à
@@ -4532,7 +4544,8 @@ pour tous les administrateurs — limite réglable globalement (« Quotas d'usag
     "dejaRattachee": false
   },
   "alternatives": [],
-  "creation": null
+  "creation": null,
+  "transcriptionPriseEnCompte": false
 }
 ```
 
@@ -4543,9 +4556,36 @@ pour tous les administrateurs — limite réglable globalement (« Quotas d'usag
   motifIrrecevable}`. `corps` est un corps `creation_personne` exact (§ 6.3) dont `#p1` est
   le titulaire du compte — **son identité vient toujours de la déclaration** ; `#p2`… sont des
   parents absents de l'arbre.
-- Le prompt contient le nom, les prénoms, la date déclarée, la description et le pré-lien de
-  l'invitation à titre d'indice ; **jamais le courriel**. Le journal ne reçoit que des
-  compteurs. Aucun rattachement n'est jamais automatique.
+- Le prompt contient le nom, les prénoms, la date déclarée, la description, la
+  **transcription du message vocal** s'il y en a une (étiquetée « transcription
+  automatique ») et le pré-lien de l'invitation à titre d'indice ; **jamais le courriel**, ni
+  le son. Le journal ne reçoit que des compteurs. Aucun rattachement n'est jamais automatique.
+- `transcriptionPriseEnCompte` : l'analyse a-t-elle lu une transcription ? Une suggestion
+  gardée **sans** transcription alors qu'il en existe une désormais n'est plus servie du
+  cache : le `GET` suivant la recalcule (et consomme le quota).
+
+#### La transcription du message vocal (module `Assistant`)
+
+`POST /api/administration/rattachements/{memberId}/transcription` envoie le message vocal à
+Gemini (`inlineData`, base64 ; modèle `HERITAGE_GEMINI_MODELE_TRANSCRIPTION`, défaut
+`gemini-2.5-flash` ; 60 s au plus) avec une consigne de **verbatim** en français — noms
+propres et dates tels qu'entendus, `[?]` sur un nom incertain, `[inaudible]`, aucun résumé —,
+**range le résultat sur le compte** et le rend. Les trois types de `MediaRecorder` partent
+sans conversion (WebM et Ogg tels quels, le MP4 de Safari annoncé `audio/m4a`). Mêmes
+contrôles que la suggestion, dans le même ordre ; même quota global
+`assistant.rattachements`. `404` si le compte n'a pas de vocal.
+
+```json
+{ "memberId": 14, "statut": "faite", "texte": "Bonjour, je suis Léa Dupont…", "erreur": null, "le": "2026-10-02T21:04:12+02:00" }
+```
+
+- **`200` même en échec** — `{"statut": "echec", "texte": null, "erreur": "Le modèle n’a pas
+  répondu à temps. Réessayez dans un moment."}` : délai, quota ou panne du fournisseur,
+  refus, réponse vide. L'état est la ressource ; il est rangé sur le compte, et un nouvel
+  appel (« Réessayer ») le remplace. L'audio reste servi quoi qu'il arrive.
+- L'écran enchaîne, **dans la file des analyses**, la transcription puis la suggestion.
+- Journal : `AppelModeleDeLangage`, sujet `Assistant\Transcription` — statut, durée
+  annoncée, taille, nombre de caractères ; jamais le texte, jamais le son.
 
 `POST /api/administration/rattachements/{memberId}/creer-et-rattacher`, corps
 `{"parents": [12, 57], "message": "facultatif"}` : `parents` porte 0 à 2 personnes existantes.

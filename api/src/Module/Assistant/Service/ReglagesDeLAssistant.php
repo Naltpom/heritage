@@ -44,9 +44,28 @@ final readonly class ReglagesDeLAssistant
      */
     public const float DELAI_GLOBAL_SECONDES = 90.0;
 
+    /**
+     * Le modèle de la **transcription** des messages vocaux (ADR 0013, addendum du
+     * 2 octobre 2026, soir) — `gemini-2.5-flash`, le modèle léger des questions.
+     *
+     * Écouter et recopier n'est pas raisonner : un modèle Flash le fait aussi bien, plus
+     * vite, et l'audio y est facturé environ trois fois moins qu'en Pro. En variable pour
+     * la même raison que l'autre : les identifiants se retirent au rythme du fournisseur.
+     */
+    public const string MODELE_TRANSCRIPTION_DEFAUT = 'gemini-2.5-flash';
+
+    /**
+     * Soixante secondes pour une transcription. Cinq minutes de voix, c'est environ
+     * 10 000 jetons d'entrée et 1 500 de sortie : un modèle Flash rend cela en dix à
+     * trente secondes. Au-delà, il ne rendra plus rien d'utile, et l'écran attend.
+     */
+    public const float DELAI_TRANSCRIPTION_SECONDES = 60.0;
+
     public function __construct(
         #[Autowire(env: 'default::HERITAGE_GEMINI_MODELE_ASSISTANT')]
         private ?string $modele = null,
+        #[Autowire(env: 'default::HERITAGE_GEMINI_MODELE_TRANSCRIPTION')]
+        private ?string $modeleDeTranscription = null,
     ) {
     }
 
@@ -55,5 +74,12 @@ final readonly class ReglagesDeLAssistant
         $modele = trim($this->modele ?? '');
 
         return '' === $modele ? self::MODELE_DEFAUT : $modele;
+    }
+
+    public function modeleDeTranscription(): string
+    {
+        $modele = trim($this->modeleDeTranscription ?? '');
+
+        return '' === $modele ? self::MODELE_TRANSCRIPTION_DEFAUT : $modele;
     }
 }

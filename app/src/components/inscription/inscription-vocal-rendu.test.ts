@@ -71,8 +71,10 @@ describe('le micro, à côté du champ', () => {
     expect(html).toMatch(/<textarea[^>]*required/)
     expect(html).toContain('0 / 60 caractères au minimum')
     expect(html).toContain('Écouter les explications')
-    // Le vocal a sa propre mention : il ne part pas à l'analyse automatique.
-    expect(html).toContain('Écouté seulement par les administrateurs')
+    // Le vocal a sa propre mention : écouté par l'administrateur, et transcrit
+    // automatiquement — le candidat le sait avant d'enregistrer.
+    expect(html).toContain('écouté par l’administrateur et transcrit automatiquement')
+    expect(html).not.toContain('pas transmis à l’analyse automatique')
   })
 
   it('n’est pas décidé au rendu serveur : le bouton attend le montage', async () => {

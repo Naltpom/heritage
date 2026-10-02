@@ -63,6 +63,9 @@ final class AuditDoctrineSubscriber
      * **vivantes**, et elles sont **purgées** au rattachement comme au refus. Sans cette
      * liste, la purge elle-même écrirait l'ancienne valeur en clair dans le diff
      * `avant`/`apres` — le journal garderait pour toujours ce que la table vient d'effacer.
+     * Même règle pour le message vocal (`voiceMessageName`) et, depuis le 2 octobre 2026
+     * au soir, pour sa **transcription** (`voiceMessageTranscript`) : c'est la description,
+     * dite au lieu d'écrite.
      *
      * `publicKey` et `credentialId` sont ceux d'une clé d'accès (`Core\Passkey`). Rien de
      * secret — la clé privée ne quitte jamais l'appareil —, mais du matériel de clé n'a
@@ -83,6 +86,7 @@ final class AuditDoctrineSubscriber
         'declaredBirthDate',
         'attachmentSuggestion',
         'voiceMessageName',
+        'voiceMessageTranscript',
         'publicKey',
         'credentialId',
     ];

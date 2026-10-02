@@ -36,6 +36,16 @@ final readonly class DeclarationDuCompte
          * reste dans `Membership`, et seul un administrateur l'écoute.
          */
         public bool $aUnMessageVocal = false,
+        /**
+         * La **transcription** de ce message vocal, quand Gemini l'a rendue (addendum du
+         * 2 octobre 2026, soir) : un texte de vivant, à traiter comme la description.
+         * `null` sans vocal, avant la première tentative, ou après un échec.
+         */
+        public ?string $transcription = null,
+        /** Le motif du dernier échec de transcription, s'il y en a eu un. */
+        public ?string $transcriptionErreur = null,
+        /** La dernière tentative de transcription, réussie ou non. */
+        public ?\DateTimeImmutable $transcriptionLe = null,
     ) {
     }
 }

@@ -9,6 +9,7 @@ use App\Module\Core\Exception\ConflictException;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Membership\Contract\ComptesARattacher;
 use App\Module\Membership\Contract\DeclarationDuCompte;
+use App\Module\Membership\Contract\MessageVocalDuCompte;
 use App\Module\Membership\Service\ComptesARattacherParMembership;
 
 /**
@@ -45,6 +46,9 @@ final class ComptesARattacherEnMemoire implements ComptesARattacher
     /** @var array<int, true> */
     private static array $reclamees = [];
 
+    /** @var array<int, MessageVocalDuCompte> */
+    private static array $vocaux = [];
+
     /** @var list<array{memberId: int, personId: int, personLabel: string, administrateur: string}> */
     private static array $rattachements = [];
 
@@ -69,6 +73,7 @@ final class ComptesARattacherEnMemoire implements ComptesARattacher
         self::$enMemoire = true;
         self::$declarations = [];
         self::$reclamees = [];
+        self::$vocaux = [];
         self::$rattachements = [];
         self::$erreur = null;
         self::$avantLeVerrou = null;
@@ -77,6 +82,18 @@ final class ComptesARattacherEnMemoire implements ComptesARattacher
     public static function poser(DeclarationDuCompte $declaration): void
     {
         self::$declarations[$declaration->memberId] = $declaration;
+    }
+
+    /** Le son du message vocal d'un compte posé : la déclaration doit dire `aUnMessageVocal`. */
+    public static function poserLeVocal(int $memberId, MessageVocalDuCompte $vocal): void
+    {
+        self::$vocaux[$memberId] = $vocal;
+    }
+
+    /** @return DeclarationDuCompte|null la déclaration telle qu'elle est gardée */
+    public static function declarationGardee(int $memberId): ?DeclarationDuCompte
+    {
+        return self::$declarations[$memberId] ?? null;
     }
 
     public static function reclamer(int $personId): void
@@ -146,6 +163,51 @@ final class ComptesARattacherEnMemoire implements ComptesARattacher
             // Aller-retour JSON : c'est ce que ferait la colonne `jsonb`, et un blob qui
             // ne survivrait pas à l'encodage doit casser ici, pas en production.
             json_decode(json_encode($suggestion, \JSON_THROW_ON_ERROR), true, 512, \JSON_THROW_ON_ERROR),
+            $le,
+            $d->aUnMessageVocal,
+            $d->transcription,
+            $d->transcriptionErreur,
+            $d->transcriptionLe,
+        );
+
+        return true;
+    }
+
+    public function messageVocal(int $memberId): ?MessageVocalDuCompte
+    {
+        if (!self::$enMemoire) {
+            return $this->reel->messageVocal($memberId);
+        }
+
+        return isset(self::$declarations[$memberId]) ? (self::$vocaux[$memberId] ?? null) : null;
+    }
+
+    public function enregistrerLaTranscription(int $memberId, ?string $texte, ?string $erreur, \DateTimeImmutable $le): bool
+    {
+        if (!self::$enMemoire) {
+            return $this->reel->enregistrerLaTranscription($memberId, $texte, $erreur, $le);
+        }
+
+        $d = self::$declarations[$memberId] ?? null;
+
+        if (null === $d || !$d->aUnMessageVocal) {
+            return false;
+        }
+
+        self::$declarations[$memberId] = new DeclarationDuCompte(
+            $d->memberId,
+            $d->userId,
+            $d->email,
+            $d->surname,
+            $d->givenNames,
+            $d->birthDate,
+            $d->description,
+            $d->invitationPersonId,
+            $d->suggestion,
+            $d->suggestionAt,
+            $d->aUnMessageVocal,
+            $texte,
+            null === $texte ? $erreur : null,
             $le,
         );
 

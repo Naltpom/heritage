@@ -44,6 +44,14 @@ use Symfony\Component\Routing\Attribute\Route;
  * `GET /api/administration/rattachements/{memberId}/message-vocal`, **et seulement par
  * là** : même `ROLE_ADMIN`, même refus sous la bascule — une voix se filtre encore moins
  * qu'un texte.
+ *
+ * ## Sa transcription
+ *
+ * Depuis le 2 octobre 2026 au soir, le module `Assistant` transcrit ce message par Gemini,
+ * après coup, à la demande de l'écran (`POST …/{memberId}/transcription`). La liste rend
+ * l'état de cette transcription dans `messageVocal.transcription` — `a_faire`, `faite`
+ * avec son texte, ou `echec` avec son motif. Le texte est de la même nature que la
+ * description : il ne sort qu'ici, vers un administrateur.
  */
 final class RattachementsAdminController extends AbstractController
 {
@@ -149,7 +157,7 @@ final class RattachementsAdminController extends AbstractController
     /**
      * Le message vocal tel que la liste le décrit — jamais le son, qui a sa route.
      *
-     * @return array{url: string, type: string, taille: int, duree: int|null}|null
+     * @return array{url: string, type: string, taille: int, duree: int|null, transcription: array{statut: string, texte: string|null, erreur: string|null, le: string|null}}|null
      */
     private function messageVocalDe(Member $membre): ?array
     {
@@ -167,6 +175,32 @@ final class RattachementsAdminController extends AbstractController
             'type' => $mime,
             'taille' => $taille,
             'duree' => $membre->getVoiceMessageSeconds(),
+            'transcription' => self::transcriptionDe($membre),
+        ];
+    }
+
+    /**
+     * L'état de la transcription, en liste blanche : quatre clés, toujours les mêmes.
+     *
+     * `a_faire` — jamais tentée (l'écran la lancera) ; `faite` — le texte est là ;
+     * `echec` — la dernière tentative a échoué, et le motif dit pourquoi (« Réessayer »).
+     *
+     * @return array{statut: string, texte: string|null, erreur: string|null, le: string|null}
+     */
+    private static function transcriptionDe(Member $membre): array
+    {
+        $texte = $membre->getVoiceMessageTranscript();
+        $erreur = $membre->getVoiceMessageTranscriptError();
+
+        return [
+            'statut' => match (true) {
+                null !== $texte => 'faite',
+                null !== $erreur => 'echec',
+                default => 'a_faire',
+            },
+            'texte' => $texte,
+            'erreur' => null === $texte ? $erreur : null,
+            'le' => $membre->getVoiceMessageTranscribedAt()?->format(\DateTimeInterface::ATOM),
         ];
     }
 }

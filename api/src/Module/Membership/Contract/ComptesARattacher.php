@@ -42,6 +42,26 @@ interface ComptesARattacher
     public function enregistrerLaSuggestion(int $memberId, array $suggestion, \DateTimeImmutable $le): bool;
 
     /**
+     * Le **son** du message vocal d'un compte à rattacher, pour sa transcription — ou
+     * `null` (compte décidé, pas de vocal, fichier absent du volume).
+     *
+     * Les octets voyagent, pas le chemin : le stockage reste l'affaire de `Membership`, et
+     * l'appelant n'a pas à savoir où vivent les fichiers. 10 Mio au plus
+     * (`MessageVocalDeDeclaration::TAILLE_MAX`).
+     */
+    public function messageVocal(int $memberId): ?MessageVocalDuCompte;
+
+    /**
+     * Range la transcription du message vocal — `$texte` — ou le motif de son échec —
+     * `$erreur`, quand `$texte` est nul. Même discipline que
+     * {@see enregistrerLaSuggestion()} : la ligne est relue **sous verrou**, et rien n'est
+     * écrit si le compte a été décidé (ou son vocal purgé) pendant que le modèle écoutait.
+     *
+     * @return bool `false` si rien n'a été écrit
+     */
+    public function enregistrerLaTranscription(int $memberId, ?string $texte, ?string $erreur, \DateTimeImmutable $le): bool;
+
+    /**
      * Relit le compte **sous verrou**, dans la transaction de l'appelant, et exige qu'il soit
      * encore `a_rattacher` et `en_attente`. À appeler **avant** de créer quoi que ce soit :
      * le compte lu par {@see declaration()} a pu être refusé depuis, par un autre

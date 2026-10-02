@@ -339,6 +339,27 @@ export interface MessageVocalARattacher {
   taille: number
   /** En secondes, mesurée par le chrono du navigateur ; `null` si elle n'a pas été donnée. */
   duree: number | null
+  /** Sa transcription automatique (Gemini, 2 octobre 2026 au soir). */
+  transcription: TranscriptionARattacher
+}
+
+/**
+ * L'état de la transcription automatique d'un message vocal.
+ *
+ *  - `a_faire` — jamais tentée : l'écran la lance avant l'analyse ;
+ *  - `faite`   — `texte` est là, verbatim, à vérifier à l'écoute ;
+ *  - `echec`   — la dernière tentative a échoué, `erreur` dit pourquoi
+ *    (« Réessayer »). L'audio, lui, reste écoutable.
+ *
+ * **Le texte parle de vivants**, comme la description : il n'est écrit dans
+ * aucun stockage du navigateur.
+ */
+export interface TranscriptionARattacher {
+  statut: 'a_faire' | 'faite' | 'echec'
+  texte: string | null
+  erreur: string | null
+  /** ISO 8601 de la dernière tentative, ou `null` avant la première. */
+  le: string | null
 }
 
 /** La photo déposée à l'inscription, visible des seuls administrateurs (et du
@@ -419,6 +440,8 @@ export interface SuggestionDeRattachement {
   alternatives: FicheSuggeree[]
   /** Non nul si `absente`, facultatif si `indecise`. */
   creation: CreationSuggeree | null
+  /** L'analyse a-t-elle lu la transcription du message vocal ? */
+  transcriptionPriseEnCompte: boolean
 }
 
 /** `201` de « Créer la fiche et rattacher ». */
@@ -452,6 +475,26 @@ export function lireSuggestionDeRattachement(
   return requeteApi<SuggestionDeRattachement>(
     `/administration/rattachements/${memberId}/suggestion`,
     signal === undefined ? {} : { signal },
+  )
+}
+
+/**
+ * `POST …/rattachements/{memberId}/transcription` — transcrit le message vocal
+ * (ou recommence après un échec : « Réessayer »), 10 à 60 s. Consomme le quota
+ * global des rattachements assistés.
+ *
+ * Rend **`200` même en échec** (`statut: 'echec'`, avec le motif) : l'état est
+ * la réponse. `503` sans clé, `429` quota, `404` compte décidé ou sans vocal.
+ * À enchaîner **avant** la suggestion, dans la même file : une suggestion
+ * calculée sans la transcription serait recalculée aussitôt après.
+ */
+export function transcrireMessageVocal(
+  memberId: number,
+  signal?: AbortSignal,
+): Promise<TranscriptionARattacher & { memberId: number }> {
+  return requeteApi<TranscriptionARattacher & { memberId: number }>(
+    `/administration/rattachements/${memberId}/transcription`,
+    signal === undefined ? { methode: 'POST' } : { methode: 'POST', signal },
   )
 }
 

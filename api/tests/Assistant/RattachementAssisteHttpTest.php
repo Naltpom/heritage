@@ -327,7 +327,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         $lignes = $this->em()->getRepository(AuditLog::class)->findBy(['action' => AuditAction::AppelModeleDeLangage]);
         self::assertCount(1, $lignes);
         self::assertSame('Assistant\\Rattachement', $lignes[0]->getSubjectType());
-        self::assertSame(['tours' => 2, 'appels_d_outils' => ['lire_personne' => 1], 'verdict' => 'indecise', 'alternatives' => 0, 'creation_proposee' => false], $lignes[0]->getChanges());
+        self::assertSame(['tours' => 2, 'appels_d_outils' => ['lire_personne' => 1], 'verdict' => 'indecise', 'alternatives' => 0, 'creation_proposee' => false, 'transcription_prise_en_compte' => false], $lignes[0]->getChanges());
         self::assertStringNotContainsString('Jean Dupont', (string) json_encode($lignes[0]->getChanges()));
     }
 

@@ -37,8 +37,11 @@ use Psr\Log\LoggerInterface;
  *
  * ── Ce que le modèle reçoit, et ce qu'il ne reçoit JAMAIS ───────────────────────
  *
- * Il reçoit la déclaration (nom, prénoms, date, texte) et, à titre d'indice, la personne
- * que l'invitation pré-liait. **Jamais le courriel** : il n'aide en rien à reconnaître une
+ * Il reçoit la déclaration (nom, prénoms, date, texte), la **transcription** du message
+ * vocal quand il y en a une (2 octobre 2026, soir ; étiquetée comme telle, parce qu'une
+ * transcription automatique écorche les noms propres), et, à titre d'indice, la personne
+ * que l'invitation pré-liait. Jamais le son lui-même : il a été transcrit à part
+ * ({@see TranscriptionDesMessagesVocaux}). **Jamais le courriel** : il n'aide en rien à reconnaître une
  * fiche, et c'est un identifiant de vivant qui n'a rien à faire chez un tiers.
  *
  * ── Ce qui n'est JAMAIS journalisé ──────────────────────────────────────────────
@@ -272,13 +275,26 @@ final readonly class AgentDeRattachement
             $lignes[] = '« '.$description.' »';
         }
 
-        if ($declaration->aUnMessageVocal) {
-            // Le vocal ne t'est pas transmis : seul l'administrateur l'écoute. Le dire évite
-            // que l'agent conclue « indécise » faute d'un texte qu'on ne lui a pas donné.
+        $transcription = trim($declaration->transcription ?? '');
+
+        if ($declaration->aUnMessageVocal && '' !== $transcription) {
+            // La transcription vaut la description — avec sa fragilité propre : un nom
+            // entendu n'est pas un nom écrit. Le dire évite qu'un « Dupond » entendu pour
+            // « Dupont » fasse conclure à l'absence.
             $lignes[] = '';
             $lignes[] = '' === $description
-                ? 'Elle n’a rien écrit : elle a laissé un message vocal, que seul l’administrateur peut écouter. Cherche à partir de son identité, et dis dans ton résumé que le message vocal reste à écouter.'
-                : 'Elle a aussi laissé un message vocal, que seul l’administrateur peut écouter : il peut compléter ce texte.';
+                ? 'Elle n’a rien écrit : elle a laissé un message vocal. Voici sa transcription automatique (les noms propres et les dates y sont tels qu’entendus — l’orthographe peut différer de l’arbre ; « [?] » marque un nom incertain) :'
+                : 'Elle a aussi laissé un message vocal, qui complète ce texte. Voici sa transcription automatique (les noms propres et les dates y sont tels qu’entendus — l’orthographe peut différer de l’arbre ; « [?] » marque un nom incertain) :';
+            $lignes[] = '« '.$transcription.' »';
+            $lignes[] = 'Sers-t’en exactement comme de la description écrite. Si la transcription et le texte se contredisent, signale-le dans « avertissements ».';
+        } elseif ($declaration->aUnMessageVocal) {
+            // Pas (encore) de transcription — elle a échoué, ou n'a pas été demandée : le
+            // dire évite que l'agent conclue « indécise » faute d'un texte qu'on ne lui a
+            // pas donné.
+            $lignes[] = '';
+            $lignes[] = '' === $description
+                ? 'Elle n’a rien écrit : elle a laissé un message vocal, dont la transcription n’est pas disponible. Cherche à partir de son identité, et dis dans ton résumé que le message vocal reste à écouter.'
+                : 'Elle a aussi laissé un message vocal, dont la transcription n’est pas disponible : il peut compléter ce texte, et l’administrateur l’écoutera.';
         }
 
         if (null !== $declaration->invitationPersonId) {
@@ -303,7 +319,8 @@ final readonly class AgentDeRattachement
         Tu aides l’administrateur d’un arbre généalogique familial. Une personne vient de
         créer un compte avec le lien d’invitation de la famille, sans trouver sa fiche dans
         l’arbre. Elle a donné son nom, ses prénoms, sa date de naissance et un texte libre
-        qui décrit sa famille. Ton travail : dire à l’administrateur si cette personne est
+        qui décrit sa famille — écrit, ou dit dans un message vocal dont tu reçois la
+        transcription automatique. Ton travail : dire à l’administrateur si cette personne est
         DÉJÀ dans l’arbre (et laquelle), ou si elle en est absente (et comment l’y ajouter).
         Tu ne rattaches rien toi-même : l’administrateur décide. Tu écris en français.
 

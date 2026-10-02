@@ -625,8 +625,10 @@ final class RattachementDesComptesSansFicheTest extends CasDeTestMembership
         \assert($em instanceof EntityManagerInterface);
         \assert($membres instanceof \App\Module\Membership\Repository\MemberRepository);
         \assert($service instanceof \App\Module\Membership\Service\ServiceDesMembres);
+        $vocaux = $conteneur->get(\App\Module\Membership\Service\StockageDesMessagesVocaux::class);
+        \assert($vocaux instanceof \App\Module\Membership\Service\StockageDesMessagesVocaux);
 
-        return new ComptesARattacherParMembership($em, $membres, $service);
+        return new ComptesARattacherParMembership($em, $membres, $service, $vocaux);
     }
 
     /** Un administrateur et un compte `a_rattacher` ; rend l'identifiant du membre. */

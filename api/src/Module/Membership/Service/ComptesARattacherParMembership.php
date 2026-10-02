@@ -7,6 +7,7 @@ namespace App\Module\Membership\Service;
 use App\Module\Core\Entity\User;
 use App\Module\Membership\Contract\ComptesARattacher;
 use App\Module\Membership\Contract\DeclarationDuCompte;
+use App\Module\Membership\Contract\MessageVocalDuCompte;
 use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Repository\MemberRepository;
 use Doctrine\DBAL\LockMode;
@@ -29,6 +30,7 @@ final readonly class ComptesARattacherParMembership implements ComptesARattacher
         private EntityManagerInterface $em,
         private MemberRepository $membres,
         private ServiceDesMembres $service,
+        private StockageDesMessagesVocaux $messagesVocaux,
     ) {
     }
 
@@ -72,7 +74,62 @@ final readonly class ComptesARattacherParMembership implements ComptesARattacher
             suggestion: $membre->getAttachmentSuggestion(),
             suggestionAt: $membre->getAttachmentSuggestionAt(),
             aUnMessageVocal: null !== $membre->getVoiceMessageName(),
+            transcription: $membre->getVoiceMessageTranscript(),
+            transcriptionErreur: $membre->getVoiceMessageTranscriptError(),
+            transcriptionLe: $membre->getVoiceMessageTranscribedAt(),
         );
+    }
+
+    /**
+     * Les octets du message vocal. Le nom relu de la base est revalidé par le stockage
+     * avant toute ouverture ; un fichier manquant (volume restauré sans lui, effacement
+     * manuel) rend `null`, comme un compte sans vocal : il n'y a rien à transcrire.
+     */
+    public function messageVocal(int $memberId): ?MessageVocalDuCompte
+    {
+        $membre = $this->aRattacher($memberId);
+        $nom = $membre?->getVoiceMessageName();
+        $mime = $membre?->getVoiceMessageMime();
+
+        if (null === $membre || null === $nom || null === $mime || !$this->messagesVocaux->existe($nom)) {
+            return null;
+        }
+
+        $octets = @file_get_contents($this->messagesVocaux->chemin($nom));
+
+        if (!\is_string($octets) || '' === $octets) {
+            return null;
+        }
+
+        return new MessageVocalDuCompte($octets, $mime, $membre->getVoiceMessageSeconds());
+    }
+
+    /**
+     * Même relecture sous verrou que {@see enregistrerLaSuggestion()}, pour la même
+     * raison : la transcription dure jusqu'à une minute, et un refus passé entre-temps a
+     * purgé le vocal — y réécrire un texte ferait survivre la voix à sa purge (et
+     * `ck_mbr_member_transcription_avec_vocal` le refuserait).
+     */
+    public function enregistrerLaTranscription(int $memberId, ?string $texte, ?string $erreur, \DateTimeImmutable $le): bool
+    {
+        $membre = $this->membres->find($memberId);
+
+        if (null === $membre) {
+            return false;
+        }
+
+        return $this->em->wrapInTransaction(function () use ($membre, $texte, $erreur, $le): bool {
+            $this->em->refresh($membre, LockMode::PESSIMISTIC_WRITE);
+
+            if (!$membre->estARattacher() || null === $membre->getVoiceMessageName()) {
+                return false;
+            }
+
+            $membre->enregistrerLaTranscription($texte, $erreur, $le)->toucher();
+            $this->em->flush();
+
+            return true;
+        });
     }
 
     /**
