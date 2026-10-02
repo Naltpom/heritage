@@ -29,53 +29,76 @@ import ListeDeProches from './ListeDeProches.vue'
  */
 defineProps<{ fiche: FichePersonneComplete; versArbre?: boolean }>()
 const emit = defineEmits<{ choisir: [personId: number] }>()
+
+/** « 1re union », « 2e union »… dans l’ordre où le serveur les donne. */
+function rangDUnion(rang: number): string {
+  return rang === 0 ? '1re union' : `${rang + 1}e union`
+}
 </script>
 
 <template>
   <div class="flex flex-col gap-5 text-sm">
     <!-- Unions --------------------------------------------------- -->
-    <section v-if="fiche.unions.length > 0">
-      <h3 class="mb-2 text-[11px] tracking-wider text-attenue uppercase">
+    <!-- Chaque union est un bloc à deux étages, pour qu'on lise d'un coup
+         « avec qui » puis « leurs enfants » : le conjoint en gras, couleur du
+         texte, avec le mariage et le divorce ; puis, en retrait sous un liseré,
+         les enfants de CETTE union, en liens. Avant, conjoint et enfants avaient le
+         même style et se suivaient sans rupture : avec deux unions, on ne savait
+         plus qui était l'épouse et qui était l'enfant. -->
+    <section v-if="fiche.unions.length > 0" class="flex flex-col gap-2.5">
+      <h3 class="text-[11px] tracking-wider text-attenue uppercase">
         Union<template v-if="fiche.unions.length > 1">s — {{ fiche.unions.length }}</template>
       </h3>
 
-      <div
-        v-for="union in fiche.unions"
+      <article
+        v-for="(union, rang) in fiche.unions"
         :key="union.familyId"
-        class="mb-2.5 border-l-2 pl-3"
-        :class="union.divorced ? 'border-alerte' : 'border-ligne'"
+        data-union
+        class="rounded-champ border bg-fond/40 px-3 py-2.5"
+        :class="union.divorced ? 'border-alerte-bord' : 'border-ligne'"
       >
-        <ListeDeProches
-          v-if="union.conjoint !== null"
-          class="font-semibold"
-          :proches="[union.conjoint]"
-          :vers-arbre="versArbre"
-          @choisir="emit('choisir', $event)"
-        />
-        <p v-else class="m-0 text-attenue italic">conjoint inconnu</p>
+        <p v-if="fiche.unions.length > 1" class="m-0 mb-1 text-[11px] font-semibold tracking-wider text-attenue uppercase">
+          {{ rangDUnion(rang) }}
+        </p>
 
-        <p v-if="union.marriage !== null" class="m-0 text-xs text-attenue">
-          ⚭ {{ rendreDate(union.marriage, 'date inconnue').principal }}
+        <div class="flex items-baseline gap-2">
+          <span class="text-attenue" aria-hidden="true">⚭</span>
+          <ListeDeProches
+            v-if="union.conjoint !== null"
+            class="min-w-0 flex-1"
+            principal
+            :proches="[union.conjoint]"
+            :vers-arbre="versArbre"
+            @choisir="emit('choisir', $event)"
+          />
+          <p v-else class="m-0 text-attenue italic">conjoint inconnu</p>
+        </div>
+
+        <p v-if="union.marriage !== null" class="m-0 pl-5 text-xs text-attenue">
+          Mariage : {{ rendreDate(union.marriage, 'date inconnue').principal }}
           <template v-if="union.marriage.place"> — {{ union.marriage.place }}</template>
         </p>
 
         <!-- `.ar.divorce` est **conservée** au rendu de l'arbre : « ce n'est pas
              une distance, c'est une information » (§ 7.3 du dossier). Ici aussi. -->
-        <p v-if="union.divorced" class="m-0 text-xs text-alerte">
+        <p v-if="union.divorced" class="m-0 pl-5 text-xs text-alerte">
           Divorce<template v-if="union.divorce !== null">
             — {{ rendreDate(union.divorce, 'date inconnue').principal }}</template
           >
         </p>
 
-        <ListeDeProches
-          v-if="union.enfants.length > 0"
-          class="mt-1"
-          :proches="union.enfants"
-          trier
-          :vers-arbre="versArbre"
-          @choisir="emit('choisir', $event)"
-        />
-      </div>
+        <div v-if="union.enfants.length > 0" data-enfants-de-l-union class="mt-2 ml-1.5 border-l-2 border-ligne pl-3">
+          <p class="m-0 mb-0.5 text-[11px] tracking-wider text-attenue uppercase">
+            {{ union.conjoint !== null ? 'Leurs enfants' : 'Enfants' }} · {{ union.enfants.length }}
+          </p>
+          <ListeDeProches
+            :proches="union.enfants"
+            trier
+            :vers-arbre="versArbre"
+            @choisir="emit('choisir', $event)"
+          />
+        </div>
+      </article>
     </section>
 
     <!-- Parents -------------------------------------------------- -->
