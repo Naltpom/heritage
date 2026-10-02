@@ -346,8 +346,10 @@ export interface MessageVocalARattacher {
 /**
  * L'état de la transcription automatique d'un message vocal.
  *
- *  - `a_faire` — jamais tentée : l'écran la lance avant l'analyse ;
- *  - `faite`   — `texte` est là, verbatim, à vérifier à l'écoute ;
+ *  - `a_faire` — jamais tentée : « Transcrire le message vocal » la lance —
+ *    rien ne part tout seul depuis le 3 octobre 2026 ;
+ *  - `faite`   — `texte` est là, verbatim, à vérifier à l'écoute — et à
+ *    corriger : `corrigeeLe` dit qu'un administrateur l'a relu et enregistré ;
  *  - `echec`   — la dernière tentative a échoué, `erreur` dit pourquoi
  *    (« Réessayer »). L'audio, lui, reste écoutable.
  *
@@ -360,6 +362,11 @@ export interface TranscriptionARattacher {
   erreur: string | null
   /** ISO 8601 de la dernière tentative, ou `null` avant la première. */
   le: string | null
+  /**
+   * ISO 8601 de la dernière **correction à la main** (3 octobre 2026), ou
+   * `null` : le texte est celui du modèle. Absent d'un serveur antérieur.
+   */
+  corrigeeLe?: string | null
 }
 
 /** La photo déposée à l'inscription, visible des seuls administrateurs (et du
@@ -442,6 +449,12 @@ export interface SuggestionDeRattachement {
   creation: CreationSuggeree | null
   /** L'analyse a-t-elle lu la transcription du message vocal ? */
   transcriptionPriseEnCompte: boolean
+  /**
+   * La transcription a changé depuis ce calcul (arrivée, retranscrite ou
+   * corrigée à la main) : la recherche n'a pas lu ce que l'écran montre.
+   * « Relancez la recherche ». Absent d'un serveur antérieur.
+   */
+  perimee?: boolean
 }
 
 /** `201` de « Créer la fiche et rattacher ». */
@@ -457,36 +470,33 @@ export function listerRattachements(): Promise<ListePaginee<CompteARattacher>> {
 }
 
 /**
- * `GET …/rattachements/{memberId}/suggestion` — la suggestion en cache, ou
- * calculée à la première lecture (20 à 60 s : le serveur relâche la session
- * avant d'appeler le modèle, le reste du site ne se bloque pas).
+ * `GET …/rattachements/{memberId}/suggestion` — la suggestion **déjà
+ * calculée**, ou `null` (`204`) s'il n'y en a pas. **Lecture seule** depuis le
+ * 3 octobre 2026 : ni modèle, ni quota, ni clé exigée — c'est
+ * {@link relancerSuggestionDeRattachement}, derrière un clic, qui calcule.
  *
- * `503 assistant_indisponible` : pas de clé et rien en cache. `502` : le modèle
- * a échoué. `429` : quota global des administrateurs atteint (`Retry-After`).
- *
- * **L'appelant les enchaîne l'une après l'autre**, jamais en parallèle : dix
- * cartes ouvertes d'un coup feraient dix analyses simultanées sur un quota
- * commun de 40 par jour.
+ * `perimee` dit que la transcription a changé depuis le calcul.
  */
-export function lireSuggestionDeRattachement(
+export async function lireSuggestionDeRattachement(
   memberId: number,
   signal?: AbortSignal,
-): Promise<SuggestionDeRattachement> {
-  return requeteApi<SuggestionDeRattachement>(
-    `/administration/rattachements/${memberId}/suggestion`,
-    signal === undefined ? {} : { signal },
+): Promise<SuggestionDeRattachement | null> {
+  return (
+    (await requeteApi<SuggestionDeRattachement | null>(
+      `/administration/rattachements/${memberId}/suggestion`,
+      signal === undefined ? {} : { signal },
+    )) ?? null
   )
 }
 
 /**
  * `POST …/rattachements/{memberId}/transcription` — transcrit le message vocal
- * (ou recommence après un échec : « Réessayer »), 10 à 60 s. Consomme le quota
- * global des rattachements assistés.
+ * (ou recommence : « Réessayer », « Retranscrire »), 10 à 60 s. Consomme le
+ * quota global des rattachements assistés. Une correction à la main est
+ * **remplacée** par le texte du modèle (`corrigeeLe` repasse à `null`).
  *
  * Rend **`200` même en échec** (`statut: 'echec'`, avec le motif) : l'état est
  * la réponse. `503` sans clé, `429` quota, `404` compte décidé ou sans vocal.
- * À enchaîner **avant** la suggestion, dans la même file : une suggestion
- * calculée sans la transcription serait recalculée aussitôt après.
  */
 export function transcrireMessageVocal(
   memberId: number,
@@ -498,7 +508,31 @@ export function transcrireMessageVocal(
   )
 }
 
-/** `POST` sur la même route : « Relancer l'analyse ». Consomme le quota. */
+/**
+ * `PATCH …/rattachements/{memberId}/transcription` — enregistre la
+ * transcription **corrigée à la main** (ou écrite, quand le modèle n'en a pas
+ * rendu). Ni modèle, ni quota. `422` texte vide ou de plus de
+ * {@link TRANSCRIPTION_MAX} caractères ; `404` compte décidé ou sans vocal. Une
+ * suggestion déjà calculée devient `perimee`.
+ */
+export function corrigerTranscription(
+  memberId: number,
+  texte: string,
+): Promise<TranscriptionARattacher & { memberId: number }> {
+  return requeteApi<TranscriptionARattacher & { memberId: number }>(
+    `/administration/rattachements/${memberId}/transcription`,
+    { methode: 'PATCH', corps: { texte } },
+  )
+}
+
+/** La borne du serveur (`TranscriptionDesMessagesVocaux::TEXTE_MAX`). */
+export const TRANSCRIPTION_MAX = 16000
+
+/**
+ * `POST` sur la route de la suggestion : « Lancer la recherche » ou « Relancer
+ * la recherche ». 20 à 60 s ; consomme le quota global. `503` sans clé, `502`
+ * modèle en panne, `429` quota atteint (`Retry-After`).
+ */
 export function relancerSuggestionDeRattachement(
   memberId: number,
   signal?: AbortSignal,

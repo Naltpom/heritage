@@ -48,10 +48,13 @@ use Symfony\Component\Routing\Attribute\Route;
  * ## Sa transcription
  *
  * Depuis le 2 octobre 2026 au soir, le module `Assistant` transcrit ce message par Gemini,
- * après coup, à la demande de l'écran (`POST …/{memberId}/transcription`). La liste rend
- * l'état de cette transcription dans `messageVocal.transcription` — `a_faire`, `faite`
- * avec son texte, ou `echec` avec son motif. Le texte est de la même nature que la
- * description : il ne sort qu'ici, vers un administrateur.
+ * après coup, à la demande d'un administrateur (`POST …/{memberId}/transcription`). La
+ * liste rend l'état de cette transcription dans `messageVocal.transcription` — `a_faire`,
+ * `faite` avec son texte, ou `echec` avec son motif. Depuis le 3 octobre 2026, elle ne
+ * part plus d'elle-même : un administrateur clique « Transcrire », peut **corriger** le
+ * texte (`PATCH …/{memberId}/transcription`, `corrigeeLe`), puis lance la recherche. Le
+ * texte est de la même nature que la description : il ne sort qu'ici, vers un
+ * administrateur.
  */
 final class RattachementsAdminController extends AbstractController
 {
@@ -157,7 +160,7 @@ final class RattachementsAdminController extends AbstractController
     /**
      * Le message vocal tel que la liste le décrit — jamais le son, qui a sa route.
      *
-     * @return array{url: string, type: string, taille: int, duree: int|null, transcription: array{statut: string, texte: string|null, erreur: string|null, le: string|null}}|null
+     * @return array{url: string, type: string, taille: int, duree: int|null, transcription: array{statut: string, texte: string|null, erreur: string|null, le: string|null, corrigeeLe: string|null}}|null
      */
     private function messageVocalDe(Member $membre): ?array
     {
@@ -180,12 +183,13 @@ final class RattachementsAdminController extends AbstractController
     }
 
     /**
-     * L'état de la transcription, en liste blanche : quatre clés, toujours les mêmes.
+     * L'état de la transcription, en liste blanche : cinq clés, toujours les mêmes.
      *
-     * `a_faire` — jamais tentée (l'écran la lancera) ; `faite` — le texte est là ;
+     * `a_faire` — jamais tentée (un clic sur « Transcrire » la lancera ; rien ne part à
+     * l'ouverture de l'écran depuis le 3 octobre 2026) ; `faite` — le texte est là ;
      * `echec` — la dernière tentative a échoué, et le motif dit pourquoi (« Réessayer »).
      *
-     * @return array{statut: string, texte: string|null, erreur: string|null, le: string|null}
+     * @return array{statut: string, texte: string|null, erreur: string|null, le: string|null, corrigeeLe: string|null}
      */
     private static function transcriptionDe(Member $membre): array
     {
@@ -201,6 +205,9 @@ final class RattachementsAdminController extends AbstractController
             'texte' => $texte,
             'erreur' => null === $texte ? $erreur : null,
             'le' => $membre->getVoiceMessageTranscribedAt()?->format(\DateTimeInterface::ATOM),
+            // Corrigée à la main par un administrateur (3 octobre 2026) ; `null` : le texte
+            // est celui du modèle.
+            'corrigeeLe' => $membre->getVoiceMessageTranscriptEditedAt()?->format(\DateTimeInterface::ATOM),
         ];
     }
 }

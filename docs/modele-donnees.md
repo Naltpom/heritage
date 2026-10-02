@@ -1161,6 +1161,7 @@ ajoutée de cette table est le **rattachement**.
 | `voice_message_transcript` | `TEXT` | oui | `NULL` | Sa **transcription automatique** (Gemini, 2 octobre 2026 au soir), verbatim. Données de **vivants**, comme la description : lisible des seuls administrateurs, colonne sensible du journal mécanique, **purgée** avec le vocal. |
 | `voice_message_transcript_error` | `VARCHAR(300)` | oui | `NULL` | Le motif du dernier échec de transcription, écrit par le serveur. Exclusif de la transcription. |
 | `voice_message_transcribed_at` | `TIMESTAMPTZ` | oui | `NULL` | La dernière tentative, réussie ou non. |
+| `voice_message_transcript_edited_at` | `TIMESTAMPTZ` | oui | `NULL` | La dernière **correction à la main** du texte par un administrateur (3 octobre 2026, `PATCH …/transcription`) ; `NULL` tant que le texte est celui du modèle — une retranscription la remet à `NULL`. Elle dit à l'analyse que les noms ont été relus. En clair dans le journal mécanique (une date, pas un contenu). |
 | `attachment_suggestion` | `JSONB` | oui | `NULL` | La suggestion de rattachement calculée par `Assistant`, **mise en cache**. `Membership` ne la lit pas : il la stocke et la purge. |
 | `attachment_suggestion_at` | `TIMESTAMPTZ` | oui | `NULL` | Date du calcul de la suggestion. |
 
@@ -1225,6 +1226,19 @@ CONSTRAINT ck_mbr_member_transcription_ou_echec CHECK (voice_message_transcript 
 CONSTRAINT ck_mbr_member_transcription_datee CHECK ((voice_message_transcribed_at IS NULL)
   = (voice_message_transcript IS NULL AND voice_message_transcript_error IS NULL)),
 ```
+
+**Contrainte — la correction à la main (`Version20261003080000`)**
+
+```sql
+-- Une correction est un texte : pas de date de correction sans transcription.
+CONSTRAINT ck_mbr_member_transcription_corrigee CHECK (voice_message_transcript_edited_at IS NULL
+  OR voice_message_transcript IS NOT NULL),
+```
+
+La suggestion gardée (`attachment_suggestion`, schéma du module `Assistant`) porte depuis le
+même jour `transcriptionEmpreinte` — le SHA-256 de la transcription qu'elle a lue, jamais le
+texte — : si la transcription a changé depuis, la suggestion est rendue **périmée**
+(`perimee: true`) au lieu d'être recalculée par une lecture.
 
 **Sous-traitant : Google (Gemini).** Le son du message vocal sort vers Gemini pour être
 transcrit, et sa transcription y repart avec la déclaration pour l'analyse de rattachement —

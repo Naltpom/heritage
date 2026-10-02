@@ -46,6 +46,12 @@ final readonly class DeclarationDuCompte
         public ?string $transcriptionErreur = null,
         /** La dernière tentative de transcription, réussie ou non. */
         public ?\DateTimeImmutable $transcriptionLe = null,
+        /**
+         * La dernière **correction à la main** de la transcription par un administrateur
+         * (addendum du 3 octobre 2026) ; `null` tant que le texte est celui du modèle.
+         * L'analyse en tire que les noms propres ont été relus.
+         */
+        public ?\DateTimeImmutable $transcriptionCorrigeeLe = null,
     ) {
     }
 }

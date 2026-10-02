@@ -218,6 +218,49 @@ demande de création, exactement comme le texte.
   appel payant au même fournisseur, pour la même décision. Une carte avec vocal coûte donc
   deux coups.
 
+## Addendum du 3 octobre 2026 — l'IA à la demande, la transcription corrigée à la main
+
+Le propriétaire, à l'usage : « si transcription, est-ce que je peux modifier le texte moi
+avant ? et ne pas lancer la recherche IA directement au chargement de la page, me mettre le
+bouton lancer la recherche moi-même ». Deux décisions, qui remplacent les puces « Après
+coup, à la demande de l'écran » et « L'analyse la lit, étiquetée » ci-dessus là où elles
+disaient « automatiquement » :
+
+- **Rien ne part à l'ouverture de l'écran.** L'onglet « À rattacher » ne fait plus que
+  **lire** : la liste, le quota global (`GET /api/administration/quotas`, pour afficher ce
+  qu'il en reste à côté du bouton — rien si la lecture échoue : on n'invente pas un
+  compteur), et la suggestion **déjà calculée** des seules cartes qui en ont une.
+  `GET …/{memberId}/suggestion` devient une **lecture pure** : `200` avec la suggestion
+  gardée, ou `204` s'il n'y en a pas — jamais un calcul, jamais de quota, pas de clé exigée.
+  Chaque appel au modèle part d'un clic : « Transcrire le message vocal » (`POST
+  …/transcription`), « Lancer la recherche » / « Relancer la recherche » (`POST
+  …/suggestion`, toujours une à la fois côté écran). Les gestes manuels — rattacher à une
+  fiche, créer, refuser — ne dépendent d'aucun des deux.
+- **La transcription se corrige avant la recherche.** Elle s'affiche dans un champ
+  modifiable ; « Enregistrer » fait `PATCH …/{memberId}/transcription` `{"texte": "…"}`
+  (administrateurs seulement, refusé sous la bascule, `422` vide ou au-delà de 16 000
+  caractères, `404` sans vocal ou compte décidé). Ni modèle, ni quota. Une colonne de plus,
+  `voice_message_transcript_edited_at` (`Version20261003080000`) : la date de la dernière
+  correction, `null` tant que le texte est celui du modèle — une retranscription la remet à
+  `null` ; pas de date sans texte (`ck_mbr_member_transcription_corrigee`) ; purgée avec le
+  vocal. Quand le modèle a échoué ou qu'il n'y a pas de clé, l'administrateur peut aussi
+  **écrire** la transcription lui-même après écoute (même route). Le journal mécanique
+  garde **qui** et **quand** (`voiceMessageTranscriptEditedAt`), jamais le texte
+  (`voiceMessageTranscript` reste un champ sensible).
+- **La recherche sait que le texte a été relu.** Le premier message de l'agent étiquette une
+  transcription corrigée « relue et corrigée par l'administrateur après écoute (les noms
+  propres et les dates y ont été vérifiés) » au lieu de « tels qu'entendus ». L'audit de
+  l'appel note `transcription_corrigee`.
+- **Une suggestion devient « périmée » au lieu d'être recalculée en douce.** La suggestion
+  gardée porte l'**empreinte** (SHA-256, jamais le texte) de la transcription qu'elle a lue.
+  Si la transcription a changé depuis — arrivée, retranscrite, corrigée —, la suggestion
+  reste montrée mais `perimee: true`, et l'écran dit « La transcription a changé depuis cette
+  recherche : relancez la recherche ». Revenir exactement au texte lu la rend de nouveau
+  valable. Les suggestions gardées avant ce jour, sans empreinte, retombent sur l'ancienne
+  règle (transcription présente et non lue, ou corrigée après le calcul).
+- **La description écrite n'est pas modifiable.** C'est la parole du candidat ; seule la
+  transcription automatique — le travail d'une machine — se corrige.
+
 ## Conséquences
 
 - `MatchKind` compte quatre valeurs ; `Member::getPersonId()` et `getPersonLabel()` sont

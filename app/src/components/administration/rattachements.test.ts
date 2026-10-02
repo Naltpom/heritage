@@ -8,9 +8,11 @@ import {
   type TranscriptionARattacher,
 } from '@/lib/api'
 import {
+  CLE_DU_QUOTA,
   FileDAnalyses,
-  TRANSCRIPTION_LONGUE,
   ajouterParent,
+  avisAvantLancement,
+  brouillonEnregistrable,
   compteDisparu,
   creationPossible,
   dateDeclaree,
@@ -20,10 +22,16 @@ import {
   ficheARattacher,
   identiteDeclaree,
   initialesDeclarees,
+  libelleDuLancement,
+  libelleDuQuota,
+  lignesDuChamp,
   mentionDeLAnalyse,
+  motifDeBlocageDuLancement,
+  quotaDesRattachements,
   transcriptionApresErreur,
   type EtatDAnalyse,
   type EtatDeTranscription,
+  type QuotaRestant,
 } from './rattachements'
 import CarteARattacher from './CarteARattacher.vue'
 
@@ -297,9 +305,10 @@ async function rendre(
   analyse: EtatDAnalyse,
   suspendu = false,
   transcription?: EtatDeTranscription,
+  quota: QuotaRestant | null = null,
 ): Promise<string> {
   const app = createSSRApp({
-    render: () => h(CarteARattacher, { compte: sujet, analyse, suspendu, transcription }),
+    render: () => h(CarteARattacher, { compte: sujet, analyse, suspendu, transcription, quota }),
   })
   return (await renderToString(app)).replace(/<!--[\s\S]*?-->/g, '')
 }
@@ -404,10 +413,10 @@ describe('la carte « À rattacher »', () => {
     expect(html).not.toContain('Relancer')
   })
 
-  it('après un échec : le message et « Relancer l’analyse »', async () => {
-    const html = await rendre(compte(), { etat: 'echec', message: 'L’analyse a échoué.', attenteSecondes: null })
-    expect(html).toContain('L’analyse a échoué.')
-    expect(html).toContain('Relancer l’analyse')
+  it('après un échec : le message et « Relancer la recherche »', async () => {
+    const html = await rendre(compte(), { etat: 'echec', message: 'La recherche a échoué.', attenteSecondes: null })
+    expect(html).toContain('La recherche a échoué.')
+    expect(eteint(html, 'Relancer la recherche')).toBe(false)
   })
 
   it('prête : « Rattacher à … » la fiche désignée', async () => {
@@ -424,11 +433,112 @@ describe('la carte « À rattacher »', () => {
     expect(eteint(html, 'Rattacher à Léa Serpolet')).toBe(true)
   })
 
-  it('sous la bascule, toutes les décisions sont éteintes', async () => {
+  it('sous la bascule, toutes les décisions sont éteintes — la recherche aussi', async () => {
     const html = await rendre(compte(), { etat: 'prete', suggestion: suggestion() }, true)
-    for (const libelle of ['Rattacher à Léa Serpolet', 'Choisir une autre fiche', 'Créer la fiche et rattacher', 'Refuser l’inscription']) {
+    for (const libelle of [
+      'Rattacher à Léa Serpolet',
+      'Choisir une autre fiche',
+      'Créer la fiche et rattacher',
+      'Refuser l’inscription',
+      'Relancer la recherche',
+    ]) {
       expect(eteint(html, libelle)).toBe(true)
     }
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* La recherche à la demande (3 octobre 2026)                          */
+/* ------------------------------------------------------------------ */
+
+const QUOTA: QuotaRestant = { restant: 37, limite: 40, fenetre: 'par 24 h' }
+
+describe('la recherche ne part que sur un clic', () => {
+  it('sans recherche faite : une phrase et « Lancer la recherche », allumé — rien en cours', async () => {
+    const html = await rendre(compte(), { etat: 'aucune' })
+    expect(html).toContain('data-analyse="aucune"')
+    expect(html).toContain('Aucune recherche lancée')
+    expect(eteint(html, 'Lancer la recherche')).toBe(false)
+    expect(html).not.toContain('Recherche en cours')
+    // Les gestes à la main restent là.
+    expect(eteint(html, 'Choisir une autre fiche')).toBe(false)
+    expect(eteint(html, 'Refuser l’inscription')).toBe(false)
+  })
+
+  it('le quota restant s’affiche à côté du bouton quand le serveur le donne — et rien sinon', async () => {
+    const avec = await rendre(compte(), { etat: 'aucune' }, false, undefined, QUOTA)
+    expect(avec).toContain('data-quota')
+    expect(avec).toContain('37 appels à l’IA restants sur 40')
+
+    const sans = await rendre(compte(), { etat: 'aucune' })
+    expect(sans).not.toContain('data-quota')
+    expect(sans).not.toContain('restant')
+  })
+
+  it('quota épuisé : le bouton s’éteint, et la carte dit pourquoi', async () => {
+    const html = await rendre(compte(), { etat: 'aucune' }, false, undefined, { ...QUOTA, restant: 0 })
+    expect(eteint(html, 'Lancer la recherche')).toBe(true)
+    expect(html).toContain('Le quota du jour est atteint')
+  })
+
+  it('pendant la relecture, en file ou en cours : pas de bouton', async () => {
+    for (const etat of ['lecture', 'attente', 'en_cours'] as const) {
+      const html = await rendre(compte(), { etat })
+      expect(html).not.toContain('data-lancer')
+    }
+    expect(await rendre(compte(), { etat: 'lecture' })).toContain('Lecture de la recherche déjà faite')
+  })
+
+  it('une suggestion périmée est montrée, signalée, et « Relancer la recherche » passe en principal', async () => {
+    const html = await rendre(compte(), { etat: 'prete', suggestion: suggestion({ perimee: true }) })
+    expect(html).toContain('data-perimee')
+    expect(html).toContain('La transcription a changé depuis cette recherche : relancez la recherche.')
+    expect(html).toContain('Probablement déjà dans l’arbre')
+    expect(eteint(html, 'Relancer la recherche')).toBe(false)
+
+    expect(await rendre(compte(), { etat: 'prete', suggestion: suggestion() })).not.toContain('data-perimee')
+  })
+
+  it('le libellé suit l’état : lancer, relancer, ou rien', () => {
+    expect(libelleDuLancement({ etat: 'aucune' })).toBe('Lancer la recherche')
+    expect(libelleDuLancement({ etat: 'prete', suggestion: suggestion() })).toBe('Relancer la recherche')
+    expect(libelleDuLancement({ etat: 'echec', message: 'x', attenteSecondes: null })).toBe('Relancer la recherche')
+    for (const etat of ['lecture', 'attente', 'en_cours', 'non_configuree'] as const) {
+      expect(libelleDuLancement({ etat })).toBeNull()
+    }
+  })
+
+  it('bloquée pendant une transcription ou avec une correction non enregistrée ; un simple avis sans transcription', () => {
+    expect(motifDeBlocageDuLancement({ etat: 'en_cours' }, false)).toContain('fin de la transcription')
+    expect(motifDeBlocageDuLancement({ etat: 'faite', texte: 'x', le: null, corrigeeLe: null }, true)).toContain(
+      'Enregistrez',
+    )
+    expect(motifDeBlocageDuLancement({ etat: 'faite', texte: 'x', le: null, corrigeeLe: null }, false)).toBeNull()
+    expect(motifDeBlocageDuLancement(null, false)).toBeNull()
+
+    expect(avisAvantLancement({ etat: 'a_faire' })).toContain('pas transcrit')
+    expect(avisAvantLancement({ etat: 'echec', message: 'x', reessayable: true })).toContain('pas transcrit')
+    expect(avisAvantLancement({ etat: 'faite', texte: 'x', le: null, corrigeeLe: null })).toBeNull()
+    expect(avisAvantLancement(null)).toBeNull()
+  })
+
+  it('le quota se lit dans la liste du serveur, et n’est jamais inventé', () => {
+    const ligne = {
+      cle: CLE_DU_QUOTA,
+      libelle: 'Rattachements assistés',
+      fenetre: 'par 24 h',
+      consomme: 3,
+      limite: 40,
+      limiteParDefaut: 40,
+      personnalisee: false,
+    }
+    expect(quotaDesRattachements([ligne])).toEqual({ restant: 37, limite: 40, fenetre: 'par 24 h' })
+    expect(quotaDesRattachements([{ ...ligne, consomme: 45 }])?.restant).toBe(0)
+    expect(quotaDesRattachements([{ ...ligne, cle: 'assistant.analyses' }])).toBeNull()
+    expect(quotaDesRattachements([])).toBeNull()
+
+    expect(libelleDuQuota({ restant: 1, limite: 40, fenetre: 'par 24 h' })).toContain('1 appel à l’IA restant sur 40')
+    expect(libelleDuQuota({ restant: 0, limite: 0, fenetre: 'par 24 h' })).toContain('fermés')
   })
 })
 
@@ -457,7 +567,16 @@ describe('l’état de la transcription', () => {
     expect(etatDeTranscription(A_FAIRE)).toEqual({ etat: 'a_faire' })
     expect(
       etatDeTranscription({ statut: 'faite', texte: 'Bonjour.', erreur: null, le: '2026-10-02T21:00:00+02:00' }),
-    ).toEqual({ etat: 'faite', texte: 'Bonjour.', le: '2026-10-02T21:00:00+02:00' })
+    ).toEqual({ etat: 'faite', texte: 'Bonjour.', le: '2026-10-02T21:00:00+02:00', corrigeeLe: null })
+    expect(
+      etatDeTranscription({
+        statut: 'faite',
+        texte: 'Bonjour.',
+        erreur: null,
+        le: '2026-10-02T21:00:00+02:00',
+        corrigeeLe: '2026-10-03T08:00:00+02:00',
+      }),
+    ).toMatchObject({ etat: 'faite', corrigeeLe: '2026-10-03T08:00:00+02:00' })
     expect(etatDeTranscription({ statut: 'echec', texte: null, erreur: 'Délai dépassé.', le: null })).toEqual({
       etat: 'echec',
       message: 'Délai dépassé.',
@@ -480,12 +599,18 @@ describe('l’état de la transcription', () => {
     })
   })
 
-  it('dit si l’analyse affichée a tenu compte de la transcription — et rien sans analyse prête', () => {
-    const faite: EtatDeTranscription = { etat: 'faite', texte: TEXTE_TRANSCRIT, le: null }
+  it('dit si la recherche affichée a tenu compte de la transcription — et rien sans recherche prête', () => {
+    const faite: EtatDeTranscription = { etat: 'faite', texte: TEXTE_TRANSCRIT, le: null, corrigeeLe: null }
     expect(
       mentionDeLAnalyse(faite, { etat: 'prete', suggestion: suggestion({ transcriptionPriseEnCompte: true }) }),
     ).toContain('en a tenu compte')
     expect(mentionDeLAnalyse(faite, { etat: 'prete', suggestion: suggestion() })).toContain('sans elle')
+    expect(
+      mentionDeLAnalyse(faite, {
+        etat: 'prete',
+        suggestion: suggestion({ transcriptionPriseEnCompte: true, perimee: true }),
+      }),
+    ).toContain('autre version')
     expect(mentionDeLAnalyse(faite, { etat: 'en_cours' })).toBeNull()
     expect(mentionDeLAnalyse({ etat: 'a_faire' }, { etat: 'prete', suggestion: suggestion() })).toBeNull()
     expect(mentionDeLAnalyse(null, { etat: 'prete', suggestion: suggestion() })).toBeNull()
@@ -506,42 +631,91 @@ describe('la carte et la transcription', () => {
     expect(html).toMatch(/<audio[^>]*controls/)
   })
 
-  it('sans état tenu par l’écran, reprend celui de la liste', async () => {
-    const html = await rendre(compteAvecVocal(A_FAIRE), { etat: 'attente' })
+  it('jamais transcrite : rien ne part tout seul — « Transcrire le message vocal », ou l’écrire soi-même', async () => {
+    const html = await rendre(compteAvecVocal(A_FAIRE), { etat: 'aucune' })
     expect(html).toContain('data-etat="a_faire"')
-    expect(html).toContain('Transcription automatique en attente')
+    expect(html).toContain('Pas encore transcrit.')
+    expect(eteint(html, 'Transcrire le message vocal')).toBe(false)
+    expect(eteint(html, 'L’écrire moi-même')).toBe(false)
+    // Pas de champ tant qu'il n'y a pas de texte.
+    expect(html).not.toContain('<textarea')
+    // La recherche peut partir sans elle, mais la carte prévient.
+    expect(html).toContain('Le message vocal n’est pas transcrit : la recherche ne l’entendra pas.')
+    expect(eteint(html, 'Lancer la recherche')).toBe(false)
   })
 
-  it('faite et courte : le texte d’emblée, l’avertissement sur les noms, et l’analyse qui en a tenu compte', async () => {
+  it('faite : le texte dans un champ modifiable, « Enregistrer » éteint tant que rien ne change, et « Retranscrire »', async () => {
     const html = await rendre(
       compteAvecVocal({ statut: 'faite', texte: TEXTE_TRANSCRIT, erreur: null, le: '2026-10-02T21:00:00+02:00' }),
       { etat: 'prete', suggestion: suggestion({ transcriptionPriseEnCompte: true }) },
     )
     expect(html).toContain('data-etat="faite"')
-    expect(html).toContain('Jean Serpolet [?]')
-    expect(html).not.toContain('<details')
+    expect(html).toMatch(/<textarea[^>]*data-champ-transcription[^>]*>[^<]*Jean Serpolet \[\?\]/)
+    expect(html).toContain('Transcription automatique')
     expect(html).toContain('tels qu’entendus')
-    expect(html).toContain('L’analyse ci-dessous en a tenu compte.')
+    expect(eteint(html, 'Enregistrer')).toBe(true)
+    expect(eteint(html, 'Retranscrire')).toBe(false)
+    expect(html).toContain('La recherche ci-dessous en a tenu compte.')
   })
 
-  it('faite et longue : repliée dans un <details>, avec sa longueur', async () => {
-    const long = `${TEXTE_TRANSCRIT} `.repeat(Math.ceil(TRANSCRIPTION_LONGUE / TEXTE_TRANSCRIT.length) + 1).trim()
-    const html = await rendre(compteAvecVocal({ statut: 'faite', texte: long, erreur: null, le: null }), {
-      etat: 'attente',
-    })
-    expect(html).toContain('<details')
-    expect(html).toContain(`${long.length} caractères`)
-    expect(html).toContain('Jean Serpolet [?]')
+  it('corrigée à la main : la carte le dit, avec la date', async () => {
+    const html = await rendre(
+      compteAvecVocal({
+        statut: 'faite',
+        texte: 'Je suis Léa Serpolet ; mon père est Jean Serpolet.',
+        erreur: null,
+        le: '2026-10-02T21:00:00+02:00',
+        corrigeeLe: '2026-10-03T08:30:00+02:00',
+      }),
+      { etat: 'aucune' },
+    )
+    expect(html).toContain('Transcription — corrigée à la main')
+    expect(html).toContain('Corrigée le')
+    expect(html).toContain('la recherche lit ce texte tel quel')
+    expect(html).not.toContain('tels qu’entendus')
   })
 
-  it('en échec : le motif et « Réessayer la transcription », éteint sous la bascule', async () => {
+  it('pendant la transcription, « Lancer la recherche » attend', async () => {
+    const html = await rendre(compteAvecVocal(A_FAIRE), { etat: 'aucune' }, false, { etat: 'en_cours' })
+    expect(eteint(html, 'Lancer la recherche')).toBe(true)
+    expect(html).toContain('Attendez la fin de la transcription.')
+  })
+
+  it('la description écrite, elle, n’est jamais un champ : c’est la parole du candidat', async () => {
+    const html = await rendre(compte(), { etat: 'aucune' })
+    expect(html).toContain('Mon père est Jean Serpolet')
+    expect(html).not.toContain('<textarea')
+  })
+
+  it('un champ long défile au lieu de pousser les décisions hors de l’écran', () => {
+    expect(lignesDuChamp('')).toBe(3)
+    expect(lignesDuChamp('x'.repeat(700))).toBe(10)
+    expect(lignesDuChamp('x'.repeat(6000))).toBe(14)
+  })
+
+  it('« Enregistrer » suit les règles du serveur : ni vide, ni identique, ni trop long', () => {
+    expect(brouillonEnregistrable('Bonjour.', 'Bonjour.')).toEqual({ possible: false, motif: null })
+    expect(brouillonEnregistrable('  Bonjour.  ', 'Bonjour.')).toEqual({ possible: false, motif: null })
+    expect(brouillonEnregistrable('Bonjour, Jean.', 'Bonjour.')).toEqual({ possible: true, motif: null })
+    expect(brouillonEnregistrable('   ', 'Bonjour.').motif).toContain('vide')
+    expect(brouillonEnregistrable('x'.repeat(16001), null).motif).toContain('dépasse')
+    // Une saisie à la main, sans texte enregistré.
+    expect(brouillonEnregistrable('Je suis Léa.', null)).toEqual({ possible: true, motif: null })
+    expect(brouillonEnregistrable('', null)).toEqual({ possible: false, motif: null })
+  })
+
+  it('en échec : le motif, « Réessayer la transcription » et « L’écrire moi-même », éteints sous la bascule', async () => {
     const echec = compteAvecVocal({ statut: 'echec', texte: null, erreur: 'Le modèle n’a pas répondu à temps.', le: null })
     const html = await rendre(echec, { etat: 'attente' })
     expect(html).toContain('data-etat="echec"')
     expect(html).toContain('Le modèle n’a pas répondu à temps.')
     expect(eteint(html, 'Réessayer la transcription')).toBe(false)
 
-    expect(eteint(await rendre(echec, { etat: 'attente' }, true), 'Réessayer la transcription')).toBe(true)
+    expect(eteint(html, 'L’écrire moi-même')).toBe(false)
+
+    const sousLaBascule = await rendre(echec, { etat: 'attente' }, true)
+    expect(eteint(sousLaBascule, 'Réessayer la transcription')).toBe(true)
+    expect(eteint(sousLaBascule, 'L’écrire moi-même')).toBe(true)
   })
 
   it('sans clé : le motif, mais pas de « Réessayer »', async () => {

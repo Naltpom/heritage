@@ -6,14 +6,22 @@
  * un clic de l'administrateur, et les boutons « Rattacher à … » que ce
  * composant porte ne font que le rapporter à la carte, qui agit.
  *
- * Cinq états, décidés par `rattachements.ts` (`EtatDAnalyse`) :
+ * Sept états, décidés par `rattachements.ts` (`EtatDAnalyse`) :
  *
- *  - `attente` et `en_cours` — l'analyse prend 20 à 60 secondes, et les cartes
- *    passent **l'une après l'autre** : une carte peut attendre son tour ;
- *  - `prete` — verdict, résumé, fiche désignée, autres pistes, création ;
+ *  - `lecture` — l'écran relit la recherche déjà faite (gratuit) ;
+ *  - `aucune` — **rien n'est lancé tout seul** (3 octobre 2026) : une phrase,
+ *    et « Lancer la recherche » ;
+ *  - `attente` et `en_cours` — la recherche prend 20 à 60 secondes, et les
+ *    cartes passent **l'une après l'autre** : une carte peut attendre son tour ;
+ *  - `prete` — verdict, résumé, fiche désignée, autres pistes, création ; et,
+ *    si la transcription a changé depuis, « La transcription a changé :
+ *    relancez la recherche » (`perimee`) ;
  *  - `non_configuree` — pas de clé : une phrase neutre, **pas** de « Relancer »,
  *    qui échouerait toujours pareil ;
- *  - `echec` — le message, et « Relancer ».
+ *  - `echec` — le message, et « Relancer la recherche ».
+ *
+ * Le bouton de recherche porte, à côté, **ce qu'il reste du quota** quand le
+ * serveur le dit (`quota`) — sinon rien : on n'invente pas un compteur.
  *
  * Dans tous les cas, la carte reste utilisable à la main : c'est ce que la
  * dernière phrase de chaque état non prêt rappelle.
@@ -24,20 +32,47 @@
 import { computed } from 'vue'
 import type { SuggestionDeRattachement } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
-import { LIBELLES_CONFIANCE, LIBELLES_VERDICT, type EtatDAnalyse } from './rattachements'
+import {
+  LIBELLES_CONFIANCE,
+  LIBELLES_VERDICT,
+  libelleDuLancement,
+  libelleDuQuota,
+  type EtatDAnalyse,
+  type QuotaRestant,
+} from './rattachements'
 
-const { analyse, suspendu = false, occupe = false } = defineProps<{
+const {
+  analyse,
+  suspendu = false,
+  occupe = false,
+  motifDeBlocage = null,
+  avis = null,
+  quota = null,
+  infobulle,
+} = defineProps<{
   analyse: EtatDAnalyse
   /** Écritures éteintes (bascule « voir comme »). */
   suspendu?: boolean
   /** Une action de la carte est en cours : les boutons attendent. */
   occupe?: boolean
+  /** Pourquoi « Lancer la recherche » attend (transcription en cours, correction non enregistrée). */
+  motifDeBlocage?: string | null
+  /** Un avis qui ne bloque pas (« le message vocal n'est pas transcrit »). */
+  avis?: string | null
+  /** Ce qu'il reste du quota global, si le serveur l'a dit. */
+  quota?: QuotaRestant | null
+  infobulle?: string | undefined
 }>()
 
 const emit = defineEmits<{
-  relancer: []
+  /** « Lancer la recherche » ou « Relancer la recherche » : un appel au modèle. */
+  lancer: []
   rattacher: [personId: number, displayName: string]
 }>()
+
+const lancement = computed(() => libelleDuLancement(analyse))
+const quotaEpuise = computed(() => quota !== null && quota.restant === 0)
+const perimee = computed(() => analyse.etat === 'prete' && analyse.suggestion.perimee === true)
 
 const suggestion = computed<SuggestionDeRattachement | null>(() =>
   analyse.etat === 'prete' ? analyse.suggestion : null,
@@ -65,28 +100,31 @@ function horodatage(iso: string): string {
     aria-label="Analyse automatique"
   >
     <header class="flex flex-wrap items-center justify-between gap-2">
-      <h4 class="text-xs font-semibold tracking-wide text-attenue uppercase">Analyse automatique</h4>
-      <BoutonBase
-        v-if="analyse.etat === 'prete' || analyse.etat === 'echec'"
-        variante="discret"
-        :desactive="suspendu || occupe"
-        @click="emit('relancer')"
-      >
-        Relancer l’analyse
-      </BoutonBase>
+      <h4 class="text-xs font-semibold tracking-wide text-attenue uppercase">Recherche dans l’arbre (IA)</h4>
     </header>
 
+    <!-- ── Relecture de ce qui a déjà été calculé ─────────────────────── -->
+    <p v-if="analyse.etat === 'lecture'" class="text-attenue" role="status">
+      Lecture de la recherche déjà faite…
+    </p>
+
+    <!-- ── Rien de lancé : c'est à l'administrateur de le faire ──────── -->
+    <p v-else-if="analyse.etat === 'aucune'" class="text-attenue" data-aucune>
+      Aucune recherche lancée. Elle lit la déclaration — et la transcription du message vocal s’il y en a
+      une — puis cherche la personne dans l’arbre (20 à 60 secondes). Vous pouvez aussi décider à la main.
+    </p>
+
     <!-- ── En attente ou en cours ─────────────────────────────────────── -->
-    <p v-if="analyse.etat === 'attente'" class="text-attenue" role="status">
-      En file : les analyses passent l’une après l’autre.
+    <p v-else-if="analyse.etat === 'attente'" class="text-attenue" role="status">
+      En file : les recherches passent l’une après l’autre.
     </p>
     <p v-else-if="analyse.etat === 'en_cours'" class="text-attenue" role="status">
-      Analyse en cours (20 à 60 secondes). Vous pouvez décider sans l’attendre.
+      Recherche en cours (20 à 60 secondes). Vous pouvez décider sans l’attendre.
     </p>
 
     <!-- ── Pas de clé : un réglage, pas une panne ─────────────────────── -->
     <p v-else-if="analyse.etat === 'non_configuree'" class="text-attenue">
-      Analyse automatique indisponible : choisissez une fiche, ou créez-la.
+      Recherche automatique indisponible sur cette installation : choisissez une fiche, ou créez-la.
     </p>
 
     <!-- ── Échec : le message, et de quoi relancer ────────────────────── -->
@@ -99,6 +137,16 @@ function horodatage(iso: string): string {
 
     <!-- ── Prête ───────────────────────────────────────────────────────── -->
     <template v-else-if="suggestion !== null">
+      <!-- Faite sur une autre version de la transcription : montrée quand
+           même (elle peut rester juste), mais signalée en tête. -->
+      <p
+        v-if="perimee"
+        class="rounded-champ border border-accent bg-accent-doux px-2.5 py-1.5 text-accent"
+        role="status"
+        data-perimee
+      >
+        La transcription a changé depuis cette recherche : relancez la recherche.
+      </p>
       <p class="font-semibold" :data-verdict="suggestion.verdict">{{ LIBELLES_VERDICT[suggestion.verdict] }}</p>
       <p class="whitespace-pre-line">{{ suggestion.resume }}</p>
 
@@ -170,5 +218,26 @@ function horodatage(iso: string): string {
         rattaché sans votre décision.
       </p>
     </template>
+
+    <!-- ── Le bouton : rien ne part sans lui ──────────────────────────── -->
+    <div v-if="lancement !== null" class="flex flex-col gap-1.5 border-t border-ligne pt-2.5" data-lancement>
+      <p v-if="avis !== null" class="text-xs text-attenue" data-avis>{{ avis }}</p>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <BoutonBase
+          :variante="analyse.etat === 'aucune' || perimee ? 'principal' : 'secondaire'"
+          :desactive="suspendu || occupe || motifDeBlocage !== null || quotaEpuise"
+          :title="infobulle ?? motifDeBlocage ?? undefined"
+          data-lancer
+          @click="emit('lancer')"
+        >
+          {{ lancement }}
+        </BoutonBase>
+        <span v-if="quota !== null" class="text-xs text-attenue tnum" data-quota>{{ libelleDuQuota(quota) }}</span>
+      </div>
+      <p v-if="motifDeBlocage !== null" class="text-xs text-accent" role="status" data-blocage>{{ motifDeBlocage }}</p>
+      <p v-else-if="quotaEpuise" class="text-xs text-accent" role="status">
+        Le quota du jour est atteint : rattachez à la main, ou réessayez plus tard.
+      </p>
+    </div>
   </section>
 </template>

@@ -39,7 +39,9 @@ use Psr\Log\LoggerInterface;
  *
  * Il reçoit la déclaration (nom, prénoms, date, texte), la **transcription** du message
  * vocal quand il y en a une (2 octobre 2026, soir ; étiquetée comme telle, parce qu'une
- * transcription automatique écorche les noms propres), et, à titre d'indice, la personne
+ * transcription automatique écorche les noms propres — ou étiquetée « relue et corrigée
+ * par l'administrateur » quand il l'a corrigée à la main, 3 octobre 2026), et, à titre
+ * d'indice, la personne
  * que l'invitation pré-liait. Jamais le son lui-même : il a été transcrit à part
  * ({@see TranscriptionDesMessagesVocaux}). **Jamais le courriel** : il n'aide en rien à reconnaître une
  * fiche, et c'est un identifiant de vivant qui n'a rien à faire chez un tiers.
@@ -281,10 +283,17 @@ final readonly class AgentDeRattachement
             // La transcription vaut la description — avec sa fragilité propre : un nom
             // entendu n'est pas un nom écrit. Le dire évite qu'un « Dupond » entendu pour
             // « Dupont » fasse conclure à l'absence.
+            //
+            // Corrigée à la main (3 octobre 2026) : l'administrateur a écouté et relu les
+            // noms ; l'étiquette change, pour que l'agent ne cherche plus de variantes
+            // d'orthographe là où un humain a déjà tranché.
+            $etiquette = null !== $declaration->transcriptionCorrigeeLe
+                ? 'Voici sa transcription, relue et corrigée par l’administrateur après écoute (les noms propres et les dates y ont été vérifiés : fie-toi à leur orthographe) :'
+                : 'Voici sa transcription automatique (les noms propres et les dates y sont tels qu’entendus — l’orthographe peut différer de l’arbre ; « [?] » marque un nom incertain) :';
             $lignes[] = '';
-            $lignes[] = '' === $description
-                ? 'Elle n’a rien écrit : elle a laissé un message vocal. Voici sa transcription automatique (les noms propres et les dates y sont tels qu’entendus — l’orthographe peut différer de l’arbre ; « [?] » marque un nom incertain) :'
-                : 'Elle a aussi laissé un message vocal, qui complète ce texte. Voici sa transcription automatique (les noms propres et les dates y sont tels qu’entendus — l’orthographe peut différer de l’arbre ; « [?] » marque un nom incertain) :';
+            $lignes[] = ('' === $description
+                ? 'Elle n’a rien écrit : elle a laissé un message vocal. '
+                : 'Elle a aussi laissé un message vocal, qui complète ce texte. ').$etiquette;
             $lignes[] = '« '.$transcription.' »';
             $lignes[] = 'Sers-t’en exactement comme de la description écrite. Si la transcription et le texte se contredisent, signale-le dans « avertissements ».';
         } elseif ($declaration->aUnMessageVocal) {

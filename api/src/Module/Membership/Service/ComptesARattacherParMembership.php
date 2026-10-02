@@ -77,6 +77,7 @@ final readonly class ComptesARattacherParMembership implements ComptesARattacher
             transcription: $membre->getVoiceMessageTranscript(),
             transcriptionErreur: $membre->getVoiceMessageTranscriptError(),
             transcriptionLe: $membre->getVoiceMessageTranscribedAt(),
+            transcriptionCorrigeeLe: $membre->getVoiceMessageTranscriptEditedAt(),
         );
     }
 
@@ -126,6 +127,32 @@ final readonly class ComptesARattacherParMembership implements ComptesARattacher
             }
 
             $membre->enregistrerLaTranscription($texte, $erreur, $le)->toucher();
+            $this->em->flush();
+
+            return true;
+        });
+    }
+
+    /**
+     * Même relecture sous verrou : la correction est rapide, mais un refus cliqué dans un
+     * autre onglet a pu purger le vocal entre la lecture et l'écriture.
+     */
+    public function corrigerLaTranscription(int $memberId, string $texte, \DateTimeImmutable $le): bool
+    {
+        $membre = $this->membres->find($memberId);
+
+        if (null === $membre) {
+            return false;
+        }
+
+        return $this->em->wrapInTransaction(function () use ($membre, $texte, $le): bool {
+            $this->em->refresh($membre, LockMode::PESSIMISTIC_WRITE);
+
+            if (!$membre->estARattacher() || null === $membre->getVoiceMessageName()) {
+                return false;
+            }
+
+            $membre->corrigerLaTranscription($texte, $le)->toucher();
             $this->em->flush();
 
             return true;

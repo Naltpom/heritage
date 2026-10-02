@@ -135,7 +135,7 @@ final class RattachementAssisteIntegrationTest extends CasDeTestDemandesHttp
             ],
         ]));
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
         self::assertSame('absente', $this->charge()['verdict']);
         self::assertTrue($this->charge()['creation']['recevable']);
@@ -298,7 +298,7 @@ final class RattachementAssisteIntegrationTest extends CasDeTestDemandesHttp
             ]);
         });
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseStatusCodeSame(404);
 
         self::assertCount(1, ModeleScripte::requetes(), 'L’analyse a bien tourné : c’est l’écriture qui est refusée.');
@@ -328,7 +328,7 @@ final class RattachementAssisteIntegrationTest extends CasDeTestDemandesHttp
             return ModeleScripte::appel('conclure', ['resume' => 'Elle est dans l’arbre.', 'verdict' => 'indecise']);
         });
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseStatusCodeSame(404);
         self::assertNull($connexion->fetchOne('SELECT attachment_suggestion FROM mbr_member WHERE id = ?', [$this->membre]));
     }
@@ -348,7 +348,7 @@ final class RattachementAssisteIntegrationTest extends CasDeTestDemandesHttp
             'verdict' => 'fiche_existante',
             'fiche' => ['personId' => $lea, 'confiance' => 'haute', 'justification' => 'Même identité.'],
         ]));
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
         $fiche = $this->charge()['fiche'];
         self::assertSame($lea, $fiche['personId']);
