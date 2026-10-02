@@ -172,7 +172,51 @@ vide), et une **consigne parlée** l'explique, une fois par onglet. Le candidat 
 - **Écouté par l'administrateur seul**, par une route `ROLE_ADMIN` refusée sous la bascule. Le
   modèle de langage n'en reçoit **pas** le son, seulement le fait qu'il existe (une
   transcription automatique serait une nouvelle sortie de données de vivants vers un tiers :
-  elle demanderait sa propre décision).
+  elle demanderait sa propre décision). — *Cette décision a été prise le soir même : voir
+  l'addendum suivant.*
+
+## Addendum du 2 octobre 2026, soir — le message vocal est transcrit
+
+Le propriétaire a tranché : **le vocal doit servir à l'analyse**, comme la description
+écrite. Il est transcrit par **Gemini** — le fournisseur de l'analyse, pas un tiers de plus —,
+et la transcription nourrit l'agent de rattachement pour proposer la fiche, les proches et la
+demande de création, exactement comme le texte.
+
+- **Après coup, à la demande de l'écran.** Comme l'analyse : rien n'est appelé à
+  l'inscription. La carte « À rattacher » d'un vocal non transcrit fait d'abord
+  `POST …/{memberId}/transcription` (module `Assistant`, `TranscriptionDesMessagesVocaux`),
+  puis demande sa suggestion, **dans la même file** — une carte à la fois. Pas de file de
+  messages : le projet n'en a pas, et une transcription d'un appel ne justifie pas d'en
+  introduire une.
+- **Pas de conversion.** La documentation de Gemini (« Audio understanding », relue ce jour)
+  admet `audio/webm`, `audio/ogg`, `audio/m4a`… : les trois formats de `MediaRecorder` partent
+  tels quels, le MP4 de Safari sous le nom `audio/m4a`. **Pas de `ffmpeg`** dans l'image de
+  l'API. Si un format venait à être refusé, l'échec se lirait sur la carte (« Le fournisseur a
+  refusé cet enregistrement ») et la conversion serait à reprendre ici.
+- **En ligne, pas par la File API** : 10 Mio au plus, 13,4 une fois en base64, sous la limite
+  de 20 Mo d'une requête — et la File API garderait le fichier 48 heures chez le fournisseur.
+- **Un modèle léger** (`HERITAGE_GEMINI_MODELE_TRANSCRIPTION`, défaut `gemini-2.5-flash`) :
+  recopier n'est pas raisonner. Consigne de **verbatim** en français, noms et dates tels
+  qu'entendus, `[?]` sur un nom incertain ; température nulle ; 60 s au plus.
+- **L'échec ne bloque rien.** Délai, quota, refus, réponse vide : le motif est **rangé sur le
+  compte**, la carte dit « échec — Réessayer », l'analyse se fait sans la transcription, et
+  l'audio reste écoutable. La route rend `200` dans les deux cas : l'état est la ressource.
+- **Trois colonnes de plus**, sur la même ligne (`Version20261002220000`) : le texte, le motif
+  du dernier échec, la date de la dernière tentative. Elles suivent les règles du vocal —
+  rien sans lui (`ck_mbr_member_transcription_avec_vocal`), purgées avec lui au rattachement
+  comme au refus — et le texte est une **colonne sensible** du journal mécanique.
+- **L'analyse la lit, étiquetée.** Le premier message de l'agent cite la transcription comme
+  « transcription automatique d'un message vocal », en précisant que l'orthographe des noms
+  peut différer de l'arbre. La suggestion gardée note `transcriptionPriseEnCompte` ; une
+  suggestion calculée **avant** la transcription n'est plus servie du cache : la lecture
+  suivante la recalcule. C'est la relance automatique, sans bouton.
+- **La personne est prévenue**, sous le micro, avant d'enregistrer : « Votre message est
+  écouté par l'administrateur et transcrit automatiquement (Google Gemini) pour retrouver
+  votre fiche. » C'est la même base que pour la description (ADR 0008, addendum du 1er
+  octobre) : une information préalable, sur un envoi facultatif — écrire reste possible.
+- **Même quota** que l'analyse (`assistant.rattachements`, global) : une transcription est un
+  appel payant au même fournisseur, pour la même décision. Une carte avec vocal coûte donc
+  deux coups.
 
 ## Conséquences
 

@@ -11,8 +11,15 @@
  * **Et le message vocal**, s'il y en a un (2 octobre 2026) : la personne a pu
  * dire sa famille au lieu de l'écrire, ou en plus. Un `<audio controls>` le
  * joue depuis une route `ROLE_ADMIN` ; le texte et la voix coexistent, et l'un
- * peut manquer. L'analyse automatique ne l'entend pas — elle sait seulement
- * qu'il existe : c'est à l'administrateur de l'écouter.
+ * peut manquer.
+ *
+ * **Et sa transcription** (2 octobre 2026, soir) : Gemini l'écoute et l'écrit
+ * mot pour mot, et l'analyse lit ce texte comme la description. Sous le
+ * lecteur, la carte montre la transcription (repliée si elle est longue), son
+ * état — en cours, en attente, échec avec « Réessayer » — et si l'analyse
+ * affichée en a tenu compte. L'audio reste écoutable quoi qu'il arrive : la
+ * transcription aide, elle ne remplace pas l'écoute (les noms propres y sont
+ * tels qu'entendus).
  *
  * **La description parle de vivants.** Elle n'est lue qu'ici, sous
  * `/api/administration`, et elle n'est écrite dans aucun stockage du
@@ -57,16 +64,25 @@ import {
   ajouterParent,
   creationPossible,
   dateDeclaree,
+  etatDeTranscription,
   exigencesDeCreation,
   identiteDeclaree,
   initialesDeclarees,
+  mentionDeLAnalyse,
+  transcriptionLongue,
   type EtatDAnalyse,
+  type EtatDeTranscription,
   type ParentChoisi,
 } from './rattachements'
 
-const { compte, analyse, suspendu = false, infobulle } = defineProps<{
+const { compte, analyse, transcription, suspendu = false, infobulle } = defineProps<{
   compte: CompteARattacher
   analyse: EtatDAnalyse
+  /**
+   * L'état de la transcription tenu par l'écran (en cours, échec d'appel…).
+   * Absent : celui que la liste a rendu.
+   */
+  transcription?: EtatDeTranscription | undefined
   /** Écritures éteintes (bascule « voir comme »). */
   suspendu?: boolean
   infobulle?: string | undefined
@@ -76,6 +92,8 @@ const emit = defineEmits<{
   /** Une décision a abouti : la carte n'a plus lieu d'être. */
   traite: [memberId: number]
   relancer: [memberId: number]
+  /** « Réessayer » la transcription du message vocal. */
+  retranscrire: [memberId: number]
 }>()
 
 /** Le panneau ouvert sous la carte : aucun, choisir une fiche, ou créer. */
@@ -89,6 +107,12 @@ const suggestion = computed(() => (analyse.etat === 'prete' ? analyse.suggestion
 const exigences = computed(() => exigencesDeCreation(suggestion.value))
 const creationPrete = computed(() => creationPossible(suggestion.value, parents.value))
 const identite = computed(() => identiteDeclaree(compte))
+
+/** `null` sans message vocal. */
+const etatTranscription = computed<EtatDeTranscription | null>(() =>
+  compte.messageVocal === null ? null : (transcription ?? etatDeTranscription(compte.messageVocal.transcription)),
+)
+const mentionAnalyse = computed(() => mentionDeLAnalyse(etatTranscription.value, analyse))
 
 /** Enveloppe commune : un seul geste à la fois, erreur remontée telle quelle. */
 async function agir(geste: () => Promise<unknown>): Promise<void> {
@@ -248,6 +272,57 @@ function dateLisible(iso: string): string {
         class="w-full"
         :aria-label="`Message vocal de ${identite}`"
       />
+
+      <!-- ── Sa transcription automatique ─────────────────────────────── -->
+      <div
+        v-if="etatTranscription !== null"
+        class="flex flex-col gap-1 text-sm"
+        data-transcription
+        :data-etat="etatTranscription.etat"
+      >
+        <p v-if="etatTranscription.etat === 'en_cours'" class="text-attenue" role="status">
+          Transcription automatique en cours (10 à 60 secondes)…
+        </p>
+        <p v-else-if="etatTranscription.etat === 'a_faire'" class="text-attenue" role="status">
+          Transcription automatique en attente.
+        </p>
+
+        <template v-else-if="etatTranscription.etat === 'faite'">
+          <!-- Longue : repliée, pour ne pas pousser les décisions hors de
+               l'écran. Courte : lisible d'emblée. -->
+          <details v-if="transcriptionLongue(etatTranscription.texte)" class="rounded-champ border border-ligne">
+            <summary class="cursor-pointer px-2.5 py-1.5 font-medium">
+              Transcription automatique
+              <span class="tnum font-normal text-attenue">— {{ etatTranscription.texte.length }} caractères</span>
+            </summary>
+            <p class="border-t border-ligne px-2.5 py-2 whitespace-pre-line">{{ etatTranscription.texte }}</p>
+          </details>
+          <template v-else>
+            <p class="font-medium">Transcription automatique</p>
+            <p class="whitespace-pre-line">{{ etatTranscription.texte }}</p>
+          </template>
+          <p class="text-xs text-attenue">
+            Écrite par Gemini : les noms propres et les dates y sont tels qu’entendus — vérifiez à l’écoute.
+          </p>
+          <p v-if="mentionAnalyse !== null" class="text-xs text-attenue" data-transcription-analyse>
+            {{ mentionAnalyse }}
+          </p>
+        </template>
+
+        <template v-else-if="etatTranscription.etat === 'echec'">
+          <p class="text-accent" role="status">La transcription automatique a échoué : {{ etatTranscription.message }}</p>
+          <div v-if="etatTranscription.reessayable">
+            <BoutonBase
+              variante="secondaire"
+              :desactive="suspendu"
+              :title="infobulle"
+              @click="emit('retranscrire', compte.memberId)"
+            >
+              Réessayer la transcription
+            </BoutonBase>
+          </div>
+        </template>
+      </div>
     </section>
 
     <SuggestionRattachement

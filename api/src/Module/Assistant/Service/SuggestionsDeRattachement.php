@@ -38,6 +38,15 @@ use App\Module\Membership\Contract\DeclarationDuCompte;
  *    nom et les dates des fiches citées, et `dejaRattachee` — une autre inscription a pu
  *    réclamer la fiche depuis. Une fiche disparue devient `fiche: null`, `indecise`.
  *
+ * ── La transcription du message vocal ──────────────────────────────────────────
+ *
+ * Depuis le 2 octobre 2026 au soir, l'agent lit aussi la **transcription** du message
+ * vocal ({@see TranscriptionDesMessagesVocaux}). La suggestion gardée note si elle en a
+ * tenu compte (`transcriptionPriseEnCompte`) ; une suggestion calculée **avant** que la
+ * transcription n'arrive n'est plus servie du cache ({@see enCache()}) : la lecture
+ * suivante la recalcule, et l'administrateur voit une analyse qui a « entendu » le
+ * message.
+ *
  * ── Ce qui est rendu à l'administrateur, et pourquoi sans filtre de cercle ─────
  *
  * Toutes ces routes sont sous `/api/administration` : le lecteur est un administrateur,
@@ -107,6 +116,12 @@ final readonly class SuggestionsDeRattachement
     public function enCache(DeclarationDuCompte $declaration): ?array
     {
         if (null === $declaration->suggestion || null === $declaration->suggestionAt) {
+            return null;
+        }
+
+        // Une transcription est arrivée depuis le calcul : la suggestion gardée ne l'a pas
+        // lue, elle est périmée. `null` fait recalculer — c'est la relance automatique.
+        if (null !== $declaration->transcription && true !== ($declaration->suggestion['transcriptionPriseEnCompte'] ?? false)) {
             return null;
         }
 
@@ -182,6 +197,8 @@ final readonly class SuggestionsDeRattachement
             'fiche' => $fiche,
             'alternatives' => $alternatives,
             'creation' => $creation,
+            // Le seul fait, pas le texte : la transcription vit sur le compte.
+            'transcriptionPriseEnCompte' => null !== $declaration->transcription,
         ];
     }
 
@@ -307,6 +324,7 @@ final readonly class SuggestionsDeRattachement
             'fiche' => $fiche,
             'alternatives' => $alternatives,
             'creation' => \is_array($gardee['creation'] ?? null) ? $gardee['creation'] : null,
+            'transcriptionPriseEnCompte' => true === ($gardee['transcriptionPriseEnCompte'] ?? false),
         ];
     }
 
@@ -358,6 +376,7 @@ final readonly class SuggestionsDeRattachement
                 'verdict' => $suggestion['verdict'],
                 'alternatives' => \count(\is_array($suggestion['alternatives']) ? $suggestion['alternatives'] : []),
                 'creation_proposee' => null !== $suggestion['creation'],
+                'transcription_prise_en_compte' => $suggestion['transcriptionPriseEnCompte'],
             ],
         );
     }

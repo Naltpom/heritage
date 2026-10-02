@@ -31,9 +31,23 @@
  * de l'onglet, en parallèle, ferait partir dix appels d'un coup, dont la moitié
  * finirait en `429` — et chacun tiendrait un processus PHP. D'où
  * {@link FileDAnalyses} : une seule à la fois, dans l'ordre des cartes.
+ *
+ * ── La transcription du message vocal, avant l'analyse ──────────────────────
+ *
+ * Depuis le 2 octobre 2026 au soir, un message vocal est **transcrit** par
+ * Gemini, et l'analyse lit la transcription comme la description. Dans la file,
+ * la tâche d'une carte avec un vocal non transcrit fait donc deux appels, l'un
+ * après l'autre : la transcription (10 à 60 s), puis la suggestion. Un échec de
+ * transcription n'arrête rien : l'analyse se fait sans elle, la carte dit
+ * « échec — Réessayer », et l'audio reste écoutable.
  */
 
-import { analyserErreur, type CompteARattacher, type SuggestionDeRattachement } from '@/lib/api'
+import {
+  analyserErreur,
+  type CompteARattacher,
+  type SuggestionDeRattachement,
+  type TranscriptionARattacher,
+} from '@/lib/api'
 
 /* ------------------------------------------------------------------ */
 /* L'état de l'analyse d'une carte                                     */
@@ -82,6 +96,87 @@ export function etatApresErreur(cause: unknown): EtatDAnalyse {
     }
   }
   return { etat: 'echec', message: analyse.message, attenteSecondes: null }
+}
+
+/* ------------------------------------------------------------------ */
+/* L'état de la transcription d'un message vocal                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Les états de la transcription, du point de vue de la carte.
+ *
+ *  - `a_faire`  — jamais tentée : la file la lancera avant l'analyse ;
+ *  - `en_cours` — le serveur fait écouter le message à Gemini ;
+ *  - `faite`    — le texte est là ;
+ *  - `echec`    — la dernière tentative a échoué. `reessayable` : faux pour
+ *    `503` (pas de clé) — un « Réessayer » qui échoue toujours pareil use la
+ *    confiance dans les autres boutons, même règle que l'analyse.
+ */
+export type EtatDeTranscription =
+  | { etat: 'a_faire' }
+  | { etat: 'en_cours' }
+  | { etat: 'faite'; texte: string; le: string | null }
+  | { etat: 'echec'; message: string; reessayable: boolean }
+
+/** L'état d'une transcription telle que le serveur la décrit. */
+export function etatDeTranscription(transcription: TranscriptionARattacher): EtatDeTranscription {
+  if (transcription.statut === 'faite' && transcription.texte !== null) {
+    return { etat: 'faite', texte: transcription.texte, le: transcription.le }
+  }
+  if (transcription.statut === 'echec') {
+    return {
+      etat: 'echec',
+      message: transcription.erreur ?? 'La transcription a échoué.',
+      reessayable: true,
+    }
+  }
+  return { etat: 'a_faire' }
+}
+
+/** L'état qu'une erreur de la route de transcription produit (le `404` est
+ *  traité à part : {@link compteDisparu}). */
+export function transcriptionApresErreur(cause: unknown): EtatDeTranscription {
+  const analyse = analyserErreur(cause)
+  if (analyse.statut === 503) {
+    return {
+      etat: 'echec',
+      message: 'La transcription automatique n’est pas configurée sur cette installation : écoutez le message.',
+      reessayable: false,
+    }
+  }
+  if (analyse.statut === 429) {
+    return {
+      etat: 'echec',
+      message: 'Quota d’analyses atteint pour aujourd’hui : écoutez le message, ou réessayez plus tard.',
+      reessayable: true,
+    }
+  }
+  return { etat: 'echec', message: analyse.message, reessayable: true }
+}
+
+/**
+ * Au-delà, la transcription se replie dans un `<details>` : cinq minutes de
+ * parole font 4 000 à 6 000 caractères, qui pousseraient les décisions hors de
+ * l'écran. Une phrase ou deux restent dépliées.
+ */
+export const TRANSCRIPTION_LONGUE = 400
+
+export function transcriptionLongue(texte: string): boolean {
+  return texte.length > TRANSCRIPTION_LONGUE
+}
+
+/**
+ * Ce que la carte dit du lien entre la transcription et l'analyse affichée, ou
+ * `null` quand il n'y a rien à dire (pas de transcription, ou pas d'analyse).
+ */
+export function mentionDeLAnalyse(
+  transcription: EtatDeTranscription | null,
+  analyse: EtatDAnalyse,
+): string | null {
+  if (transcription?.etat !== 'faite' || analyse.etat !== 'prete') return null
+  return analyse.suggestion.transcriptionPriseEnCompte
+    ? 'L’analyse ci-dessous en a tenu compte.'
+    : 'L’analyse ci-dessous a été faite sans elle : relancez-la.'
 }
 
 /** Une erreur de lecture qui dit « ce compte a été traité ailleurs » : la carte

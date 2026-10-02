@@ -57,12 +57,14 @@ export const MENTION_DESCRIPTION =
   'Lu seulement par les administrateurs, et parfois analysé automatiquement (Google Gemini) pour retrouver votre fiche.'
 
 /**
- * La mention du message vocal. Il n'est **pas** transmis à l'analyse
- * automatique — seul le fait qu'il existe l'est : c'est un administrateur qui
- * l'écoute.
+ * La mention du message vocal. Depuis le 2 octobre 2026 au soir, il est
+ * **transcrit automatiquement** (Google Gemini, le même fournisseur que
+ * l'analyse de la description) et la transcription sert à retrouver la fiche :
+ * la mention le dit, avant l'enregistrement — c'est elle qui fonde l'envoi
+ * (ADR 0008, addendum ; ADR 0013).
  */
 export const MENTION_MESSAGE_VOCAL =
-  'Écouté seulement par les administrateurs ; il n’est pas transmis à l’analyse automatique.'
+  'Votre message est écouté par l’administrateur et transcrit automatiquement (Google Gemini) pour retrouver votre fiche.'
 
 /** Longueur de la description telle que le serveur la compte. */
 export function longueurDescription(texte: string): number {

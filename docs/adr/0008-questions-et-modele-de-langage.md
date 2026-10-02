@@ -479,6 +479,30 @@ souvent vivants. Ce qui est décidé :
 - **Sans clé, ou en panne**, la carte reste utilisable à la main : rattacher à une fiche
   choisie, ou créer la fiche depuis la seule déclaration en choisissant ses parents.
 
+## Addendum (2 octobre 2026, soir) — la transcription du message vocal d'une inscription
+
+L'inscription sans fiche admet un **message vocal** (ADR 0013, addendum du 2 octobre). Il est
+désormais **transcrit par Gemini** et la transcription rejoint la description dans l'analyse
+de rattachement ci-dessus. C'est une **nouvelle sortie** — la voix d'une personne vivante qui
+parle d'autres vivants —, et elle suit exactement les règles de la description :
+
+- **Ce qui part** : le son, en ligne (`inlineData`), au modèle de transcription
+  (`HERITAGE_GEMINI_MODELE_TRANSCRIPTION`, défaut `gemini-2.5-flash`) ; puis le **texte**
+  transcrit, avec la déclaration, à l'agent de rattachement. Pas de File API : rien ne reste
+  chez le fournisseur au-delà de l'appel. **Jamais le courriel.**
+- **Le palier** : celui de ce document — payant ou Vertex AI, jamais le gratuit.
+- **La personne est prévenue** avant d'enregistrer, sous le micro : écouté par
+  l'administrateur, **transcrit automatiquement (Google Gemini)** pour retrouver sa fiche.
+  L'enregistrement est facultatif : elle peut écrire à la place.
+- **Déclenché par un administrateur**, jamais par l'inscription : l'écran « À rattacher »
+  transcrit avant d'analyser, sur le quota global `assistant.rattachements`.
+- **Gardée sur le compte, puis purgée** avec le vocal (`mbr_member.voice_message_transcript`),
+  colonne sensible du journal mécanique. **Journal** : `AppelModeleDeLangage`, sujet
+  `Assistant\Transcription` — statut, durée annoncée, taille, nombre de caractères ; jamais
+  le texte ni le son.
+- **Le modèle ne décide toujours rien** : la transcription est montrée à l'administrateur
+  sous le lecteur, avec l'avertissement que les noms y sont tels qu'entendus.
+
 ## Addendum (1er octobre 2026, soir) — « Poser une question » à l'assistant
 
 Un membre connecté interroge l'arbre en langage naturel, dans une conversation suivie

@@ -23,6 +23,13 @@
  * tous les administrateurs. Sortir de l'écran vide la file et coupe l'appel en
  * cours.
  *
+ * Une carte dont le **message vocal** n'est pas encore transcrit fait d'abord
+ * transcrire (`POST …/transcription`, 10 à 60 s), puis demande sa suggestion :
+ * l'analyse lit alors la transcription. Un échec de transcription n'empêche pas
+ * l'analyse ; « Réessayer » remet la carte en file, transcription puis
+ * suggestion — le serveur recalcule une suggestion qui n'avait pas entendu le
+ * message.
+ *
  * ── Sous la bascule « voir comme » ──────────────────────────────────────────
  *
  * La liste rend `409 vue_comme_membre_active` : une description ne se filtre
@@ -35,6 +42,7 @@ import {
   listerRattachements,
   quitterVueComme,
   relancerSuggestionDeRattachement,
+  transcrireMessageVocal,
   type CompteARattacher,
   type SuggestionDeRattachement,
 } from '@/lib/api'
@@ -54,7 +62,10 @@ import {
   FileDAnalyses,
   compteDisparu,
   etatApresErreur,
+  etatDeTranscription,
+  transcriptionApresErreur,
   type EtatDAnalyse,
+  type EtatDeTranscription,
 } from '@/components/administration/rattachements'
 
 const { vueEmpruntee } = useSession()
@@ -62,6 +73,8 @@ const { vueEmpruntee } = useSession()
 const comptes = ref<CompteARattacher[]>([])
 /** L'état de l'analyse de chaque carte, par `memberId`. */
 const analyses = ref<Record<number, EtatDAnalyse>>({})
+/** L'état de la transcription de chaque carte qui a un vocal, par `memberId`. */
+const transcriptions = ref<Record<number, EtatDeTranscription>>({})
 const chargement = ref(false)
 const erreur = ref<unknown>(null)
 
@@ -81,15 +94,45 @@ function retirerLaCarte(memberId: number): void {
   const reste = { ...analyses.value }
   delete reste[memberId]
   analyses.value = reste
+  const resteT = { ...transcriptions.value }
+  delete resteT[memberId]
+  transcriptions.value = resteT
+}
+
+/**
+ * Transcrit le message vocal de la carte, si elle en a un **à transcrire** —
+ * jamais tenté, ou `retranscrire` (« Réessayer »). Rend `false` si la carte a
+ * disparu ou si la file a été vidée : la suite n'a plus lieu d'être.
+ */
+async function transcrireSiBesoin(memberId: number, retranscrire: boolean, signal: AbortSignal): Promise<boolean> {
+  const etat = transcriptions.value[memberId]
+  if (etat === undefined || (etat.etat !== 'a_faire' && !retranscrire)) return true
+  transcriptions.value = { ...transcriptions.value, [memberId]: { etat: 'en_cours' } }
+  try {
+    const transcription = await transcrireMessageVocal(memberId, signal)
+    if (signal.aborted) return false
+    transcriptions.value = { ...transcriptions.value, [memberId]: etatDeTranscription(transcription) }
+  } catch (cause) {
+    if (signal.aborted) return false
+    if (compteDisparu(cause)) {
+      retirerLaCarte(memberId)
+      return false
+    }
+    transcriptions.value = { ...transcriptions.value, [memberId]: transcriptionApresErreur(cause) }
+  }
+  return true
 }
 
 /**
  * Met une analyse en file. `forcer` : « Relancer l'analyse » (`POST`, consomme
- * le quota) ; sinon, lecture du cache ou premier calcul (`GET`).
+ * le quota) ; sinon, lecture du cache ou premier calcul (`GET`). La
+ * transcription du vocal passe avant, si elle est à faire — ou à refaire
+ * (`retranscrire`).
  */
-function mettreEnFile(memberId: number, forcer: boolean): void {
+function mettreEnFile(memberId: number, forcer: boolean, retranscrire = false): void {
   analyses.value = { ...analyses.value, [memberId]: { etat: 'attente' } }
   void file.ajouter(memberId, async (signal) => {
+    if (!(await transcrireSiBesoin(memberId, retranscrire, signal))) return
     analyses.value = { ...analyses.value, [memberId]: { etat: 'en_cours' } }
     let suggestion: SuggestionDeRattachement
     try {
@@ -123,6 +166,11 @@ async function charger(): Promise<void> {
   try {
     comptes.value = (await listerRattachements()).elements
     analyses.value = {}
+    transcriptions.value = Object.fromEntries(
+      comptes.value.flatMap((compte) =>
+        compte.messageVocal === null ? [] : [[compte.memberId, etatDeTranscription(compte.messageVocal.transcription)]],
+      ),
+    )
     for (const compte of comptes.value) mettreEnFile(compte.memberId, false)
   } catch (cause) {
     erreur.value = cause
@@ -188,10 +236,12 @@ async function quitter(): Promise<void> {
       :key="compte.memberId"
       :compte="compte"
       :analyse="analyseDe(compte.memberId)"
+      :transcription="transcriptions[compte.memberId]"
       :suspendu="suspendu"
       :infobulle="infobulle"
       @traite="retirerLaCarte"
       @relancer="(memberId) => mettreEnFile(memberId, true)"
+      @retranscrire="(memberId) => mettreEnFile(memberId, false, true)"
     />
   </div>
 </template>

@@ -159,6 +159,29 @@ class Member
     #[ORM\Column(type: Types::SMALLINT, nullable: true)]
     private ?int $voiceMessageSeconds = null;
 
+    // ── Sa transcription automatique (addendum du 2 octobre 2026, soir) ──────────
+    //
+    // Le module `Assistant` envoie le son à Gemini, après coup, à la demande de l'écran
+    // « À rattacher » ; ce qu'il en rapporte est rangé ici, par le contrat
+    // `ComptesARattacher`. Un texte **ou** un échec, jamais les deux
+    // (`ck_mbr_member_transcription_ou_echec`), daté ; rien sans vocal
+    // (`ck_mbr_member_transcription_avec_vocal`) : la transcription part avec lui.
+
+    /**
+     * Le texte transcrit, verbatim. **Des données de vivants**, au même titre que la
+     * description : colonne sensible du journal mécanique, purgée avec la déclaration.
+     */
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $voiceMessageTranscript = null;
+
+    /** Le motif du dernier échec, écrit par le serveur — jamais une réponse du modèle. */
+    #[ORM\Column(length: 300, nullable: true)]
+    private ?string $voiceMessageTranscriptError = null;
+
+    /** La dernière tentative, réussie ou non. */
+    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $voiceMessageTranscribedAt = null;
+
     /**
      * La suggestion de rattachement calculée par le module `Assistant`, **mise en cache
      * ici** pour ne pas rappeler le modèle de langage à chaque ouverture de l'écran.
@@ -313,6 +336,9 @@ class Member
      */
     public function purgerLaDeclaration(): self
     {
+        $this->voiceMessageTranscript = null;
+        $this->voiceMessageTranscriptError = null;
+        $this->voiceMessageTranscribedAt = null;
         $this->voiceMessageName = null;
         $this->voiceMessageMime = null;
         $this->voiceMessageSize = null;
@@ -366,6 +392,47 @@ class Member
     public function getVoiceMessageSeconds(): ?int
     {
         return $this->voiceMessageSeconds;
+    }
+
+    public function getVoiceMessageTranscript(): ?string
+    {
+        return $this->voiceMessageTranscript;
+    }
+
+    public function getVoiceMessageTranscriptError(): ?string
+    {
+        return $this->voiceMessageTranscriptError;
+    }
+
+    public function getVoiceMessageTranscribedAt(): ?\DateTimeImmutable
+    {
+        return $this->voiceMessageTranscribedAt;
+    }
+
+    /**
+     * Range la transcription du message vocal — **ou** le motif de son échec, quand
+     * `$texte` est nul. Une tentative remplace la précédente : un échec efface un texte
+     * plus ancien (on ne garde pas une transcription qu'on a voulu refaire), un succès
+     * efface l'échec.
+     *
+     * Sans effet hors d'un compte à rattacher **qui a un vocal** : la purge a pu passer
+     * pendant que le modèle travaillait, et la base le refuserait de toute façon.
+     */
+    public function enregistrerLaTranscription(?string $texte, ?string $erreur, \DateTimeImmutable $le): self
+    {
+        if (!$this->estARattacher() || null === $this->voiceMessageName) {
+            return $this;
+        }
+
+        if (null === $texte && null === $erreur) {
+            throw new \LogicException('Une transcription est un texte ou un échec.');
+        }
+
+        $this->voiceMessageTranscript = $texte;
+        $this->voiceMessageTranscriptError = null === $texte ? mb_substr((string) $erreur, 0, 300) : null;
+        $this->voiceMessageTranscribedAt = $le;
+
+        return $this;
     }
 
     /** @return array<string, mixed>|null */

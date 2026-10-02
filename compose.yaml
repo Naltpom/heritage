@@ -404,6 +404,9 @@ services:
       # L'assistant de proposition : même clé, même point d'accès, son propre
       # modèle (vide = `gemini-pro-latest`).
       HERITAGE_GEMINI_MODELE_ASSISTANT: ${HERITAGE_GEMINI_MODELE_ASSISTANT:-}
+      # La transcription des messages vocaux de l'inscription sans fiche : même
+      # clé, son propre modèle (vide = `gemini-2.5-flash`).
+      HERITAGE_GEMINI_MODELE_TRANSCRIPTION: ${HERITAGE_GEMINI_MODELE_TRANSCRIPTION:-}
       # La carte : le recours EN LIGNE de `heritage:resoudre-les-lieux --en-ligne`
       # (OpenStreetMap Nominatim, seule la chaîne du lieu sort). Vide = activé,
       # `0` = coupé pour toute l'instance. Même piège qu'au-dessus : sans cette
