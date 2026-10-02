@@ -43,7 +43,8 @@ import ListeNotifications from './ListeNotifications.vue'
 import NotificationsTelephone from './NotificationsTelephone.vue'
 
 const { connecte } = useSession()
-const { nonLues, notifications, etatListe, charger, marquerLue, toutMarquerLu } = useNotifications()
+const { nonLues, notifications, etatListe, charger, chargerLaSuite, resteAvant, chargementSuite, marquerLue, toutMarquerLu } =
+  useNotifications()
 const estMobile = useEstMobile()
 const routeur = useRouter()
 
@@ -207,8 +208,11 @@ onBeforeUnmount(() => {
             :notifications="notifications"
             :etat="etatListe"
             :maintenant="maintenant"
+            :reste-avant="resteAvant"
+            :chargement-suite="chargementSuite"
             @choisir="surChoix"
             @reessayer="charger()"
+            @suite="chargerLaSuite()"
           />
         </div>
       </div>

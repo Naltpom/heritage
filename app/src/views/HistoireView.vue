@@ -252,6 +252,38 @@ const nonPlaces = ref<NoeudNonPlace[]>([])
 const chargement = ref(true)
 const erreur = ref<string | null>(null)
 
+/*
+ * L'APPARITION, au premier affichage : l'arbre éclot depuis vous, en étoile. Chaque
+ * fiche apparaît avec un retard qui croît avec sa distance à la vôtre — les proches
+ * d'abord, les lointains ensuite —, puis les traits et les noms. Rien n'est attendu :
+ * la disposition est entière, seul le dessin s'échelonne. Une seule fois par chargement
+ * (pas à chaque filtre), et jamais si le système demande moins d'animations.
+ */
+const DUREE_REVELATION = 1600
+const revelation = shallowRef<Map<string, number> | null>(null)
+let finRevelation = 0
+function lancerRevelation(): void {
+  const d = disposition.value
+  const moi = d?.parId.get(d.ego)
+  if (!d || !moi) return
+  try {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  } catch {
+    /* environnement sans matchMedia : on anime */
+  }
+  const distance = (f: FicheHistoire): number => Math.hypot(f.cx - moi.cx, (f.y - moi.y) * 1.6)
+  let loin = 1
+  for (const f of d.fiches) loin = Math.max(loin, distance(f))
+  revelation.value = new Map(d.fiches.map((f) => [f.id, Math.round(DUREE_REVELATION * Math.pow(distance(f) / loin, 0.75))]))
+  window.clearTimeout(finRevelation)
+  finRevelation = window.setTimeout(() => (revelation.value = null), DUREE_REVELATION + 900)
+}
+/** L'animation d'apparition d'un élément rattaché à une fiche, décalée de `apres` ms. */
+function apparition(id: string, nom: string, apres = 0): Record<string, string> {
+  const delai = revelation.value?.get(id)
+  return delai === undefined ? {} : { animation: `${nom} 420ms cubic-bezier(.2,.7,.3,1) ${delai + apres}ms backwards` }
+}
+
 async function charger(): Promise<void> {
   chargement.value = true
   erreur.value = null
@@ -274,6 +306,7 @@ async function charger(): Promise<void> {
     if (personneDemandee !== null) vueAReprendre = null
     mesurer()
     ajuster()
+    lancerRevelation()
   } catch (e) {
     erreur.value = e instanceof Error ? e.message : "L'arbre n'a pas pu être chargé."
   } finally {
@@ -729,6 +762,7 @@ const stylesFiches = computed(() => {
       width: `${f.w}px`,
       height: `${f.h}px`,
       opacity: !passe(f) ? '0.1' : ciblees.size && !ciblees.has(f.id) ? '0.25' : '1',
+      ...apparition(f.id, 'apparition-fiche'),
     }
     if (loin) {
       const place = direct ? enLigne(f) : null
@@ -1428,7 +1462,11 @@ onBeforeUnmount(() => {
       @pointerleave="surPointeurHaut"
     >
       <template v-if="disposition">
-        <svg class="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
+        <svg
+          class="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+          aria-hidden="true"
+          :style="revelation ? { animation: `apparition-texte 900ms ease-out ${DUREE_REVELATION * 0.35}ms backwards` } : undefined"
+        >
           <g :transform="transformationTraits">
             <path
               :d="disposition.traces.ordinaires"
@@ -1482,7 +1520,7 @@ onBeforeUnmount(() => {
             decoding="async"
             class="pointer-events-none absolute object-cover"
             :class="t.forme === 'portrait' ? 'rounded-[14%]' : 'rounded-full'"
-            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1 }"
+            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...apparition(t.id, 'apparition-texte', 120) }"
           />
           <svg
             v-else
@@ -1490,7 +1528,7 @@ onBeforeUnmount(() => {
             :class="t.forme === 'portrait' ? 'cadre-portrait rounded-[14%]' : ''"
             viewBox="0 0 40 40"
             aria-hidden="true"
-            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1 }"
+            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...apparition(t.id, 'apparition-texte', 120) }"
           >
             <circle cx="20" cy="13.6" r="6.8" class="silhouette" />
             <path d="M6.8,36.8 a13.2,13.2 0 0 1 26.4,0 Z" class="silhouette" />
@@ -1500,7 +1538,7 @@ onBeforeUnmount(() => {
           <div
             v-if="t.forme === 'compact' && t.t1 !== ''"
             class="pointer-events-none absolute flex origin-top-left flex-col justify-center overflow-hidden leading-tight"
-            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1 }"
+            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...apparition(t.id, 'apparition-texte', 160) }"
           >
             <span
               class="truncate font-semibold"
@@ -1512,7 +1550,7 @@ onBeforeUnmount(() => {
           <div
             v-else-if="t.forme === 'portrait' && t.nom !== ''"
             class="pointer-events-none absolute flex origin-top-left flex-col items-center overflow-hidden text-center"
-            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1 }"
+            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...apparition(t.id, 'apparition-texte', 160) }"
           >
             <span
               v-if="t.nom"
@@ -1917,6 +1955,20 @@ onBeforeUnmount(() => {
     <InvitationFormatDesCartes :pret="disposition !== null && !chargement && ouvertTiroir === 'aucun'" />
   </div>
 </template>
+
+<style>
+@keyframes apparition-fiche {
+  from {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+}
+@keyframes apparition-texte {
+  from {
+    opacity: 0;
+  }
+}
+</style>
 
 <style scoped>
 .histoire {
