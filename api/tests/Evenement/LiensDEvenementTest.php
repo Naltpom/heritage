@@ -49,7 +49,7 @@ final class LiensDEvenementTest extends CasDeTestEvenements
                 'annule' => false,
                 'passe' => false,
             ],
-            'invite' => ['libelle' => 'Basalte Romarin', 'reponse' => null, 'peutRepondre' => true],
+            'invite' => ['libelle' => 'Basalte Romarin', 'reponse' => null, 'aConfirmer' => false, 'peutRepondre' => true],
         ], $this->charge());
 
         $this->assertAucunAutreNom((string) $this->client->getResponse()->getContent(), ['oncle']);

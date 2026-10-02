@@ -38,4 +38,10 @@ enum NotificationKind: string
     case EvenementInvitation = 'evenement_invitation';
     case EvenementRelance = 'evenement_relance';
     case EvenementAnnule = 'evenement_annule';
+    /**
+     * L'organisateur a **déplacé** l'événement (début ou fin changés) — à tous les invités qui
+     * ont un compte, sauf l'auteur du geste (ADR 0014, addendum du 2026-10-02). Les réponses
+     * déjà données restent, mais deviennent « à confirmer ».
+     */
+    case EvenementDatesModifiees = 'evenement_dates_modifiees';
 }

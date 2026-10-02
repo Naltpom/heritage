@@ -31,6 +31,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * PUT    /api/evenements/{id}/reponse                      répondre (présent / absent)
  * POST   /api/evenements/{id}/invites                      inviter           201
  * DELETE /api/evenements/{id}/invites/{personId}           retirer
+ * PUT    /api/evenements/{id}/invites/{personId}/reponse   noter sa réponse à sa place
  * POST   /api/evenements/{id}/invites/{personId}/lien      lien personnel    201
  * DELETE /api/evenements/{id}/invites/{personId}/lien      révoquer          204
  * POST   /api/evenements/{id}/relance                      relancer
@@ -119,13 +120,13 @@ final class EvenementController extends AbstractController
     {
         $this->bascule->refuserSiActive();
         $lecteur = $this->identite->lecteur();
-        $aujourdhui = new \DateTimeImmutable();
+        $maintenant = new \DateTimeImmutable();
 
         return $this->detail($this->service->modifier(
             $this->service->trouver($id, $lecteur),
             $lecteur,
-            $this->lecture->annonce($requete, $aujourdhui),
-            $aujourdhui,
+            $this->lecture->annonce($requete, $maintenant),
+            $maintenant,
         ));
     }
 
@@ -194,6 +195,30 @@ final class EvenementController extends AbstractController
             $this->service->trouver($id, $lecteur),
             $lecteur,
             $personId,
+            new \DateTimeImmutable(),
+        ));
+    }
+
+    /**
+     * L'organisateur (ou un administrateur) **note la réponse d'un invité à sa place** — une
+     * réponse donnée de vive voix. Tracée comme telle, elle ne compte pas comme une vue.
+     */
+    #[Route(
+        '/{id}/invites/{personId}/reponse',
+        name: 'evenement_noter_reponse',
+        requirements: ['id' => '\d+', 'personId' => '\d+'],
+        methods: ['PUT'],
+    )]
+    public function noterLaReponse(int $id, int $personId, Request $requete): JsonResponse
+    {
+        $this->bascule->refuserSiActive();
+        $lecteur = $this->identite->lecteur();
+
+        return $this->detail($this->service->noterLaReponse(
+            $this->service->trouver($id, $lecteur),
+            $lecteur,
+            $personId,
+            $this->lecture->reponse($requete),
             new \DateTimeImmutable(),
         ));
     }

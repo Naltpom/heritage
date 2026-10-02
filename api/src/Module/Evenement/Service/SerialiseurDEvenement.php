@@ -39,7 +39,9 @@ use App\Module\Evenement\Enum\Reponse;
  * Le suivi (`suivi`), réservé à qui gère l'événement : les invités en quatre groupes —
  * présents, absents, **vus sans réponse** (les fantômes 👻), **pas encore vus** —, chacun
  * avec ses horodatages et s'il a un compte ou un lien. Les noms sont ceux que l'organisateur
- * a lui-même choisis dans son cercle : rien de neuf ne lui est appris.
+ * a lui-même choisis dans son cercle : rien de neuf ne lui est appris. Depuis le 2026-10-02,
+ * chaque ligne dit aussi si la réponse a été **notée par l'organisateur** (`noteePar`) et si
+ * elle est **à confirmer** après un changement de dates (`aConfirmer`).
  */
 final readonly class SerialiseurDEvenement
 {
@@ -70,6 +72,11 @@ final readonly class SerialiseurDEvenement
             'peutGerer' => $this->service->peutGerer($evenement, $lecteur),
             'suisInvite' => null !== $moi,
             'maReponse' => $moi?->getReponse()?->value,
+            // « Notée par Nathan » : la réponse a été saisie par l'organisateur, de vive voix.
+            // L'invité le lit, pour la reconnaître — et la changer si elle était mal comprise.
+            'maReponseNoteePar' => $moi?->getReponseNoteeParLibelle(),
+            // Les dates ont bougé depuis la réponse : l'écran demande de la confirmer.
+            'reponseAConfirmer' => null !== $moi && $moi->estAConfirmer(),
             'peutRepondre' => null !== $moi && $this->service->peutRepondre($evenement, $aujourdhui),
             'nombreDInvites' => \count($evenement->getInvitations()),
             'nombreDePresents' => \count($this->avecLaReponse($evenement, Reponse::Present)),
@@ -133,6 +140,9 @@ final readonly class SerialiseurDEvenement
             'invite' => [
                 'libelle' => $invitation->getPersonLabel(),
                 'reponse' => $invitation->getReponse()?->value,
+                // Sans compte, pas de notification : le lien est le seul endroit où l'invité
+                // apprend que les dates ont changé depuis sa réponse.
+                'aConfirmer' => $invitation->estAConfirmer(),
                 'peutRepondre' => $this->service->peutRepondre($evenement, $aujourdhui),
             ],
         ];
@@ -167,6 +177,13 @@ final readonly class SerialiseurDEvenement
                 'vuLe' => $invitation->getVuLe()?->format(\DATE_ATOM),
                 'reponduLe' => $invitation->getReponduLe()?->format(\DATE_ATOM),
                 'relanceLe' => $invitation->getRelanceLe()?->format(\DATE_ATOM),
+                // La réponse a été notée à la place de l'invité : par qui (affichage discret).
+                'noteePar' => $invitation->getReponseNoteeParLibelle(),
+                // Répondu avant le dernier changement de dates : à reconfirmer.
+                'aConfirmer' => $invitation->estAConfirmer(),
+                // L'organisateur peut noter (ou corriger) la réponse de cet invité. Pas la
+                // sienne : il répond lui-même, avec ses propres boutons.
+                'peutNoterReponse' => $modifiable && $invitation->getPersonId() !== $lecteur->personId,
             ];
         }
 
