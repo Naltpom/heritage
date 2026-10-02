@@ -42,10 +42,20 @@ use App\Module\Membership\Contract\DeclarationDuCompte;
  *
  * Depuis le 2 octobre 2026 au soir, l'agent lit aussi la **transcription** du message
  * vocal ({@see TranscriptionDesMessagesVocaux}). La suggestion gardée note si elle en a
- * tenu compte (`transcriptionPriseEnCompte`) ; une suggestion calculée **avant** que la
- * transcription n'arrive n'est plus servie du cache ({@see enCache()}) : la lecture
- * suivante la recalcule, et l'administrateur voit une analyse qui a « entendu » le
- * message.
+ * tenu compte (`transcriptionPriseEnCompte`) et **l'empreinte** du texte qu'elle a lu
+ * (`transcriptionEmpreinte`, un SHA-256 — jamais le texte : il vit sur le compte).
+ *
+ * ── Rien ne se calcule tout seul (addendum du 3 octobre 2026) ──────────────────
+ *
+ * Le propriétaire a demandé que la recherche ne parte **plus** à l'ouverture de l'écran :
+ * il veut relire, corriger la transcription, puis cliquer « Lancer la recherche ». D'où :
+ *
+ * - {@see enCache()} ne fait que **lire** : la suggestion gardée, ou `null` — jamais un
+ *   calcul. Une suggestion dont la transcription a changé depuis (arrivée, retranscrite,
+ *   corrigée à la main) n'est plus jetée pour être recalculée en douce : elle est rendue
+ *   **périmée** (`perimee: true`), et l'écran dit « La transcription a changé : relancez
+ *   la recherche » ;
+ * - seul {@see calculer()} appelle le modèle — derrière un clic.
  *
  * ── Ce qui est rendu à l'administrateur, et pourquoi sans filtre de cercle ─────
  *
@@ -110,6 +120,7 @@ final readonly class SuggestionsDeRattachement
 
     /**
      * La suggestion gardée, **champs volatils recalculés**. `null` s'il n'y en a pas.
+     * **Ne calcule jamais rien** : pas d'appel au modèle, pas de quota.
      *
      * @return array<string, mixed>|null
      */
@@ -119,12 +130,8 @@ final readonly class SuggestionsDeRattachement
             return null;
         }
 
-        // Une transcription est arrivée depuis le calcul : la suggestion gardée ne l'a pas
-        // lue, elle est périmée. `null` fait recalculer — c'est la relance automatique.
-        if (null !== $declaration->transcription && true !== ($declaration->suggestion['transcriptionPriseEnCompte'] ?? false)) {
-            return null;
-        }
-
+        // Une suggestion dont la transcription a changé reste servie — marquée périmée par
+        // `presenter()` : c'est à l'administrateur de relancer, pas à une lecture.
         return $this->presenter($declaration, $declaration->suggestion, $declaration->suggestionAt);
     }
 
@@ -199,6 +206,8 @@ final readonly class SuggestionsDeRattachement
             'creation' => $creation,
             // Le seul fait, pas le texte : la transcription vit sur le compte.
             'transcriptionPriseEnCompte' => null !== $declaration->transcription,
+            // De quoi savoir, plus tard, si la transcription a changé depuis ce calcul.
+            'transcriptionEmpreinte' => self::empreinte($declaration->transcription),
         ];
     }
 
@@ -325,7 +334,41 @@ final readonly class SuggestionsDeRattachement
             'alternatives' => $alternatives,
             'creation' => \is_array($gardee['creation'] ?? null) ? $gardee['creation'] : null,
             'transcriptionPriseEnCompte' => true === ($gardee['transcriptionPriseEnCompte'] ?? false),
+            'perimee' => self::perimee($declaration, $gardee, $le),
         ];
+    }
+
+    /**
+     * L'empreinte d'une transcription — un SHA-256 du texte, ou `null` sans texte. Elle
+     * dit « ce n'est plus le même texte » sans le garder une seconde fois.
+     */
+    public static function empreinte(?string $transcription): ?string
+    {
+        return null === $transcription ? null : hash('sha256', $transcription);
+    }
+
+    /**
+     * La suggestion a-t-elle été calculée sur **une autre** transcription que celle du
+     * compte aujourd'hui ? Arrivée depuis, retranscrite, corrigée à la main : dans les
+     * trois cas l'analyse n'a pas lu ce que l'administrateur lit.
+     *
+     * Les suggestions gardées avant le 3 octobre 2026 n'ont pas d'empreinte : on retombe
+     * sur l'ancienne règle (« une transcription existe et l'analyse ne l'a pas lue »), et
+     * sur la date de correction, postérieure au calcul.
+     *
+     * @param array<string, mixed> $gardee
+     */
+    private static function perimee(DeclarationDuCompte $declaration, array $gardee, \DateTimeImmutable $le): bool
+    {
+        if (\array_key_exists('transcriptionEmpreinte', $gardee)) {
+            return $gardee['transcriptionEmpreinte'] !== self::empreinte($declaration->transcription);
+        }
+
+        if (null !== $declaration->transcription && true !== ($gardee['transcriptionPriseEnCompte'] ?? false)) {
+            return true;
+        }
+
+        return null !== $declaration->transcriptionCorrigeeLe && $declaration->transcriptionCorrigeeLe > $le;
     }
 
     /**
@@ -377,6 +420,7 @@ final readonly class SuggestionsDeRattachement
                 'alternatives' => \count(\is_array($suggestion['alternatives']) ? $suggestion['alternatives'] : []),
                 'creation_proposee' => null !== $suggestion['creation'],
                 'transcription_prise_en_compte' => $suggestion['transcriptionPriseEnCompte'],
+                'transcription_corrigee' => null !== $declaration->transcription && null !== $declaration->transcriptionCorrigeeLe,
             ],
         );
     }

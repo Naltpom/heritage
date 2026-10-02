@@ -107,7 +107,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         self::assertSame([], ModeleScripte::requetes());
     }
 
-    public function testSousLaBasculeLesTroisRoutesRendent409(): void
+    public function testSousLaBasculeLesCinqRoutesRendent409(): void
     {
         $membre = $this->creerContributeur('opale@example.net', $this->jean, 'Opale');
         $this->connexion('natron@example.net');
@@ -116,7 +116,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         $this->requete('POST', '/api/administration/voir-comme', ['memberId' => $ligne->getId()]);
         self::assertResponseIsSuccessful();
 
-        foreach ([['GET', 'suggestion'], ['POST', 'suggestion'], ['POST', 'creer-et-rattacher']] as [$methode, $fin]) {
+        foreach ([['GET', 'suggestion'], ['POST', 'suggestion'], ['POST', 'creer-et-rattacher'], ['POST', 'transcription'], ['PATCH', 'transcription']] as [$methode, $fin]) {
             $this->requete($methode, $this->route($fin), 'creer-et-rattacher' === $fin ? ['parents' => [$this->jean]] : null);
             self::assertResponseStatusCodeSame(409, "$methode $fin");
             self::assertSame('vue_comme_membre_active', $this->erreur()['code']);
@@ -145,7 +145,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
             ]),
         );
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
         $suggestion = $this->charge();
 
@@ -189,7 +189,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
             'fiche' => ['personId' => $this->aieul, 'confiance' => 'haute', 'justification' => 'Même nom.'],
         ]));
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
         $suggestion = $this->charge();
 
@@ -215,7 +215,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
             ],
         ]));
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
         $creation = $this->charge()['creation'];
 
@@ -239,7 +239,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         $this->connexion('natron@example.net');
         ModeleScripte::repondra(ModeleScripte::appel('conclure', ['resume' => 'Aucun parent reconnu.', 'verdict' => 'absente']));
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
         $creation = $this->charge()['creation'];
 
@@ -249,12 +249,42 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         self::assertSame('Léa Marie', $creation['corps']['brouillons'][0]['givenNames']);
     }
 
-    public function testSansCleEtSansCacheLaSuggestionRend503SansConsommerLeQuota(): void
+    /**
+     * Le cœur de l'addendum du 3 octobre 2026 : **lire ne calcule rien**. L'écran
+     * « À rattacher » relit la suggestion gardée à l'ouverture ; s'il n'y en a pas, c'est
+     * `204`, et l'administrateur clique « Lancer la recherche » (`POST`) s'il le veut.
+     * Ni appel au modèle, ni quota consommé, ni clé exigée — même lu deux fois.
+     */
+    public function testLireSansSuggestionGardeeRend204SansAppelerLeModele(): void
+    {
+        $this->connexion('natron@example.net');
+        // De quoi répondre, si quelqu'un appelait le modèle : personne ne doit le faire.
+        ModeleScripte::repondra(ModeleScripte::appel('conclure', ['resume' => 'Ne doit pas partir.', 'verdict' => 'indecise']));
+
+        $this->requete('GET', $this->route('suggestion'));
+        self::assertResponseStatusCodeSame(204);
+        self::assertSame('', (string) $this->client->getResponse()->getContent());
+        self::assertStringContainsString('no-store', (string) $this->client->getResponse()->headers->get('Cache-Control'));
+
+        $this->requete('GET', $this->route('suggestion'));
+        self::assertResponseStatusCodeSame(204);
+
+        self::assertSame([], ModeleScripte::requetes(), 'Une lecture n’appelle jamais le modèle.');
+        self::assertSame(40, $this->limiteur()->consume(0)->getRemainingTokens(), 'Une lecture ne consomme pas le quota.');
+        self::assertNull(ComptesARattacherEnMemoire::suggestionGardee(self::MEMBRE));
+
+        // Sans clé non plus : lire ne coûte rien, et ne l'exige pas.
+        AccesAuModeleSimule::retirerLaCle();
+        $this->requete('GET', $this->route('suggestion'));
+        self::assertResponseStatusCodeSame(204);
+    }
+
+    public function testSansCleLancerLaRechercheRend503SansConsommerLeQuota(): void
     {
         $this->connexion('natron@example.net');
         AccesAuModeleSimule::retirerLaCle();
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseStatusCodeSame(503);
         self::assertSame('assistant_indisponible', $this->erreur()['code']);
         self::assertSame(40, $this->limiteur()->consume(0)->getRemainingTokens());
@@ -264,7 +294,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
     {
         $this->connexion('natron@example.net');
         ModeleScripte::repondra(ModeleScripte::appel('conclure', ['resume' => 'Indécis.', 'verdict' => 'indecise']));
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
 
         AccesAuModeleSimule::retirerLaCle();
@@ -285,8 +315,14 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
             ModeleScripte::appel('conclure', ['resume' => 'Second.', 'verdict' => 'indecise']),
         );
 
+        $this->requete('POST', $this->route('suggestion'));
+        self::assertSame('Premier.', $this->charge()['resume']);
+        self::assertFalse($this->charge()['perimee']);
+
+        // Relue : la même, sans appel.
         $this->requete('GET', $this->route('suggestion'));
         self::assertSame('Premier.', $this->charge()['resume']);
+        self::assertCount(1, ModeleScripte::requetes());
 
         $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
@@ -299,7 +335,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
         $this->connexion('natron@example.net');
         ModeleScripte::repondra(new \RuntimeException('Délai dépassé.'));
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseStatusCodeSame(502);
         self::assertSame('assistant_erreur', $this->erreur()['code']);
 
@@ -321,13 +357,13 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
             ModeleScripte::appel('conclure', ['resume' => 'Indécis.', 'verdict' => 'indecise']),
         );
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
 
         $lignes = $this->em()->getRepository(AuditLog::class)->findBy(['action' => AuditAction::AppelModeleDeLangage]);
         self::assertCount(1, $lignes);
         self::assertSame('Assistant\\Rattachement', $lignes[0]->getSubjectType());
-        self::assertSame(['tours' => 2, 'appels_d_outils' => ['lire_personne' => 1], 'verdict' => 'indecise', 'alternatives' => 0, 'creation_proposee' => false, 'transcription_prise_en_compte' => false], $lignes[0]->getChanges());
+        self::assertSame(['tours' => 2, 'appels_d_outils' => ['lire_personne' => 1], 'verdict' => 'indecise', 'alternatives' => 0, 'creation_proposee' => false, 'transcription_prise_en_compte' => false, 'transcription_corrigee' => false], $lignes[0]->getChanges());
         self::assertStringNotContainsString('Jean Dupont', (string) json_encode($lignes[0]->getChanges()));
     }
 
@@ -379,7 +415,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
                 ],
             ],
         ]));
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertTrue($this->charge()['creation']['recevable']);
 
         // Sans parents : le corps gardé est déposé tel quel.
@@ -402,7 +438,7 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
                 'liens' => [['nature' => 'enfant_de', 'sujet' => '#p1', 'autre' => '#p2']],
             ],
         ]));
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
 
         $this->requete('POST', $this->route('creer-et-rattacher'), ['parents' => [$this->jean]]);

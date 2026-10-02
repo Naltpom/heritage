@@ -168,6 +168,7 @@ final class ComptesARattacherEnMemoire implements ComptesARattacher
             $d->transcription,
             $d->transcriptionErreur,
             $d->transcriptionLe,
+            $d->transcriptionCorrigeeLe,
         );
 
         return true;
@@ -208,6 +209,41 @@ final class ComptesARattacherEnMemoire implements ComptesARattacher
             $d->aUnMessageVocal,
             $texte,
             null === $texte ? $erreur : null,
+            $le,
+            // Une transcription automatique efface la marque de correction.
+            null,
+        );
+
+        return true;
+    }
+
+    public function corrigerLaTranscription(int $memberId, string $texte, \DateTimeImmutable $le): bool
+    {
+        if (!self::$enMemoire) {
+            return $this->reel->corrigerLaTranscription($memberId, $texte, $le);
+        }
+
+        $d = self::$declarations[$memberId] ?? null;
+
+        if (null === $d || !$d->aUnMessageVocal) {
+            return false;
+        }
+
+        self::$declarations[$memberId] = new DeclarationDuCompte(
+            $d->memberId,
+            $d->userId,
+            $d->email,
+            $d->surname,
+            $d->givenNames,
+            $d->birthDate,
+            $d->description,
+            $d->invitationPersonId,
+            $d->suggestion,
+            $d->suggestionAt,
+            $d->aUnMessageVocal,
+            $texte,
+            null,
+            $d->transcriptionLe ?? $le,
             $le,
         );
 

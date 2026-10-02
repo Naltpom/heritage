@@ -33,10 +33,14 @@ use Symfony\Component\RateLimiter\LimiterInterface;
  * - **la transcription est rangée sur le compte**, et l'échec aussi, avec son motif :
  *   `200` dans les deux cas, parce que l'état **est** la réponse ; « Réessayer » refait ;
  * - **l'analyse la lit comme la description**, étiquetée « transcription automatique », et
- *   le dit (`transcriptionPriseEnCompte`) ; une suggestion calculée avant la transcription
- *   est recalculée à la lecture suivante ;
+ *   le dit (`transcriptionPriseEnCompte`) ; une suggestion calculée sur une autre version
+ *   de la transcription est rendue **périmée** — jamais recalculée en douce par une
+ *   lecture (addendum du 3 octobre 2026) ;
+ * - **la correction à la main** (`PATCH`, 3 octobre 2026) : sans appel ni quota, bornée,
+ *   marquée ; la recherche suivante lit le texte corrigé et sait qu'il a été relu ; une
+ *   retranscription efface la marque ;
  * - **les refus** : membre ordinaire `403`, compte sans vocal `404`, pas de clé `503`,
- *   quota global `429` ;
+ *   quota global `429`, texte invalide `422` ;
  * - **le journal** : un appel, des comptes, jamais le texte.
  */
 final class TranscriptionDuMessageVocalHttpTest extends CasDeTestDemandesHttp
@@ -47,6 +51,9 @@ final class TranscriptionDuMessageVocalHttpTest extends CasDeTestDemandesHttp
     private const string WEBM = "\x1A\x45\xDF\xA3\x9F\x42\x86\x81\x01\x42\xF7\x81\x01\x42\xF2\x81";
 
     private const string TRANSCRIPTION = 'Bonjour, je suis Léa Dupont, née le 12 avril 1998. Mon père, c’est Jean Dupont, né vers 1960 à Lille, et ma mère Marie Martin.';
+
+    /** La même, relue par l'administrateur : « Martin » s'écrivait « Martain ». */
+    private const string CORRIGEE = 'Bonjour, je suis Léa Dupont, née le 12 avril 1998. Mon père, c’est Jean Dupont, né vers 1960 à Lille, et ma mère Marie Martain.';
 
     protected function setUp(): void
     {
@@ -76,7 +83,8 @@ final class TranscriptionDuMessageVocalHttpTest extends CasDeTestDemandesHttp
         self::assertStringContainsString('no-store', (string) $this->client->getResponse()->headers->get('Cache-Control'));
 
         $charge = $this->charge();
-        self::assertSame(['memberId', 'statut', 'texte', 'erreur', 'le'], array_keys($charge));
+        self::assertSame(['memberId', 'statut', 'texte', 'erreur', 'le', 'corrigeeLe'], array_keys($charge));
+        self::assertNull($charge['corrigeeLe'], 'Un texte du modèle n’est pas une correction.');
         self::assertSame('faite', $charge['statut']);
         self::assertSame(self::TRANSCRIPTION, $charge['texte']);
         self::assertNull($charge['erreur']);
@@ -243,9 +251,10 @@ final class TranscriptionDuMessageVocalHttpTest extends CasDeTestDemandesHttp
         $this->requete('POST', $this->route('transcription'));
         self::assertResponseIsSuccessful();
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
         self::assertTrue($this->charge()['transcriptionPriseEnCompte']);
+        self::assertFalse($this->charge()['perimee']);
 
         $premier = ModeleScripte::requetes()[1]['charge']['contents'][0]['parts'][0]['text'];
         self::assertStringContainsString('transcription automatique', $premier);
@@ -257,11 +266,12 @@ final class TranscriptionDuMessageVocalHttpTest extends CasDeTestDemandesHttp
     }
 
     /**
-     * L'analyse a tourné avant la transcription (elle a échoué, puis « Réessayer » a
-     * réussi) : la suggestion gardée ne l'a pas entendue, et la lecture suivante la
-     * recalcule — sans que personne clique sur « Relancer ».
+     * La recherche a tourné avant la transcription. Avant le 3 octobre 2026, la lecture
+     * suivante la recalculait d'elle-même ; désormais **une lecture ne calcule jamais** :
+     * la suggestion est rendue telle quelle, marquée `perimee`, et c'est le clic
+     * « Relancer la recherche » (`POST`) qui la refait.
      */
-    public function testUneSuggestionCalculeeSansLaTranscriptionEstRecalculeeQuandElleArrive(): void
+    public function testUneSuggestionCalculeeSansLaTranscriptionEstPerimeeQuandElleArrive(): void
     {
         $this->connexion('natron@example.net');
         ModeleScripte::repondra(
@@ -270,25 +280,193 @@ final class TranscriptionDuMessageVocalHttpTest extends CasDeTestDemandesHttp
             ModeleScripte::appel('conclure', ['resume' => 'Avec la voix.', 'verdict' => 'indecise']),
         );
 
-        $this->requete('GET', $this->route('suggestion'));
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
         self::assertFalse($this->charge()['transcriptionPriseEnCompte']);
+        self::assertFalse($this->charge()['perimee']);
         $premier = ModeleScripte::requetes()[0]['charge']['contents'][0]['parts'][0]['text'];
         self::assertStringContainsString('dont la transcription n’est pas disponible', $premier);
-
-        // Servie du cache tant que rien n'a changé.
-        $this->requete('GET', $this->route('suggestion'));
-        self::assertSame('Sans la voix.', $this->charge()['resume']);
-        self::assertCount(1, ModeleScripte::requetes());
 
         $this->requete('POST', $this->route('transcription'));
         self::assertResponseIsSuccessful();
 
+        // Relue : la même suggestion, périmée — et aucun appel de plus.
         $this->requete('GET', $this->route('suggestion'));
+        self::assertResponseIsSuccessful();
+        self::assertSame('Sans la voix.', $this->charge()['resume']);
+        self::assertTrue($this->charge()['perimee']);
+        self::assertCount(2, ModeleScripte::requetes(), 'Une lecture ne relance rien.');
+
+        // « Relancer la recherche ».
+        $this->requete('POST', $this->route('suggestion'));
         self::assertResponseIsSuccessful();
         self::assertSame('Avec la voix.', $this->charge()['resume']);
         self::assertTrue($this->charge()['transcriptionPriseEnCompte']);
+        self::assertFalse($this->charge()['perimee']);
         self::assertCount(3, ModeleScripte::requetes());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  La correction à la main (3 octobre 2026)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    public function testLAdministrateurCorrigeLaTranscriptionSansAppelNiQuota(): void
+    {
+        $this->connexion('natron@example.net');
+        ModeleScripte::repondra(self::texte(self::TRANSCRIPTION));
+        $this->requete('POST', $this->route('transcription'));
+        self::assertResponseIsSuccessful();
+        $tentative = ComptesARattacherEnMemoire::declarationGardee(self::MEMBRE)?->transcriptionLe;
+
+        // Fins de ligne Windows et blancs autour : ramenés.
+        $this->requete('PATCH', $this->route('transcription'), ['texte' => '  '.self::CORRIGEE."\r\nFin.\r\n"]);
+        self::assertResponseIsSuccessful();
+        self::assertStringContainsString('no-store', (string) $this->client->getResponse()->headers->get('Cache-Control'));
+
+        $charge = $this->charge();
+        self::assertSame(['memberId', 'statut', 'texte', 'erreur', 'le', 'corrigeeLe'], array_keys($charge));
+        self::assertSame('faite', $charge['statut']);
+        self::assertSame(self::CORRIGEE."\nFin.", $charge['texte']);
+        self::assertNull($charge['erreur']);
+        self::assertIsString($charge['corrigeeLe']);
+
+        $gardee = ComptesARattacherEnMemoire::declarationGardee(self::MEMBRE);
+        self::assertSame(self::CORRIGEE."\nFin.", $gardee?->transcription);
+        self::assertNotNull($gardee->transcriptionCorrigeeLe);
+        self::assertEquals($tentative, $gardee->transcriptionLe, 'La date de la tentative du modèle reste la sienne.');
+
+        self::assertCount(1, ModeleScripte::requetes(), 'Corriger n’appelle pas le modèle.');
+        self::assertSame(39, $this->limiteur()->consume(0)->getRemainingTokens(), 'Corriger ne consomme pas le quota.');
+    }
+
+    /**
+     * Ce que le propriétaire a demandé, de bout en bout : transcrire, lancer la recherche,
+     * corriger un nom, voir la recherche **périmée**, la relancer — et que la seconde lise
+     * le texte corrigé, étiqueté comme relu.
+     */
+    public function testLaRechercheLitLaVersionCorrigeeEtLaPrecedenteEstPerimee(): void
+    {
+        $this->connexion('natron@example.net');
+        ModeleScripte::repondra(
+            self::texte(self::TRANSCRIPTION),
+            ModeleScripte::appel('conclure', ['resume' => 'Sur le texte de Gemini.', 'verdict' => 'indecise']),
+            ModeleScripte::appel('conclure', ['resume' => 'Sur le texte corrigé.', 'verdict' => 'indecise']),
+        );
+
+        $this->requete('POST', $this->route('transcription'));
+        $this->requete('POST', $this->route('suggestion'));
+        self::assertResponseIsSuccessful();
+        self::assertFalse($this->charge()['perimee']);
+
+        $this->requete('PATCH', $this->route('transcription'), ['texte' => self::CORRIGEE]);
+        self::assertResponseIsSuccessful();
+
+        $this->requete('GET', $this->route('suggestion'));
+        self::assertResponseIsSuccessful();
+        self::assertSame('Sur le texte de Gemini.', $this->charge()['resume'], 'La suggestion reste montrée…');
+        self::assertTrue($this->charge()['perimee'], '… mais périmée : elle a lu une autre version.');
+        self::assertCount(2, ModeleScripte::requetes());
+
+        $this->requete('POST', $this->route('suggestion'));
+        self::assertResponseIsSuccessful();
+        self::assertSame('Sur le texte corrigé.', $this->charge()['resume']);
+        self::assertFalse($this->charge()['perimee']);
+
+        $premier = ModeleScripte::requetes()[2]['charge']['contents'][0]['parts'][0]['text'];
+        self::assertStringContainsString(self::CORRIGEE, $premier);
+        self::assertStringNotContainsString(self::TRANSCRIPTION, $premier);
+        self::assertStringContainsString('relue et corrigée par l’administrateur', $premier);
+        self::assertStringNotContainsString('tels qu’entendus', $premier);
+
+        // Le journal de l'appel dit que le texte était relu — sans le texte.
+        $lignes = $this->em()->getRepository(AuditLog::class)->findBy(['action' => AuditAction::AppelModeleDeLangage, 'subjectType' => 'Assistant\\Rattachement']);
+        self::assertCount(2, $lignes);
+        $changements = array_map(static fn (AuditLog $l): array => (array) $l->getChanges(), $lignes);
+        self::assertContains(true, array_column($changements, 'transcription_corrigee'));
+        self::assertStringNotContainsString('Dupont', (string) json_encode($changements));
+
+        // C'est le texte lu qui compte, pas le fait d'avoir touché au champ : changer le
+        // texte périme la recherche, revenir exactement à celui qu'elle a lu la rend de
+        // nouveau valable.
+        $this->requete('PATCH', $this->route('transcription'), ['texte' => self::TRANSCRIPTION]);
+        $this->requete('GET', $this->route('suggestion'));
+        self::assertTrue($this->charge()['perimee']);
+        $this->requete('PATCH', $this->route('transcription'), ['texte' => self::CORRIGEE]);
+        $this->requete('GET', $this->route('suggestion'));
+        self::assertFalse($this->charge()['perimee']);
+    }
+
+    public function testRetranscrireEffaceLaMarqueDeCorrection(): void
+    {
+        $this->connexion('natron@example.net');
+        ModeleScripte::repondra(self::texte(self::TRANSCRIPTION), self::texte(self::TRANSCRIPTION));
+
+        $this->requete('POST', $this->route('transcription'));
+        $this->requete('PATCH', $this->route('transcription'), ['texte' => self::CORRIGEE]);
+        self::assertNotNull(ComptesARattacherEnMemoire::declarationGardee(self::MEMBRE)?->transcriptionCorrigeeLe);
+
+        $this->requete('POST', $this->route('transcription'));
+        self::assertResponseIsSuccessful();
+        self::assertNull($this->charge()['corrigeeLe']);
+        $gardee = ComptesARattacherEnMemoire::declarationGardee(self::MEMBRE);
+        self::assertSame(self::TRANSCRIPTION, $gardee?->transcription);
+        self::assertNull($gardee->transcriptionCorrigeeLe, 'Le texte est de nouveau celui du modèle.');
+    }
+
+    /** Le modèle a échoué, ou il n'y a pas de clé : l'administrateur écoute et l'écrit. */
+    public function testOnPeutEcrireLaTranscriptionSoiMemeSansCleNiTentative(): void
+    {
+        $this->connexion('natron@example.net');
+        AccesAuModeleSimule::retirerLaCle();
+
+        $this->requete('PATCH', $this->route('transcription'), ['texte' => self::CORRIGEE]);
+        self::assertResponseIsSuccessful();
+        self::assertSame('faite', $this->charge()['statut']);
+
+        $gardee = ComptesARattacherEnMemoire::declarationGardee(self::MEMBRE);
+        self::assertSame(self::CORRIGEE, $gardee?->transcription);
+        self::assertNotNull($gardee->transcriptionLe, 'Un texte porte sa date.');
+        self::assertNotNull($gardee->transcriptionCorrigeeLe);
+        self::assertSame([], ModeleScripte::requetes());
+    }
+
+    public function testUneCorrectionInvalideRend422SansRienEcrire(): void
+    {
+        $this->connexion('natron@example.net');
+        ModeleScripte::repondra(self::texte(self::TRANSCRIPTION));
+        $this->requete('POST', $this->route('transcription'));
+
+        foreach ([[], ['texte' => null], ['texte' => 42], ['texte' => ''], ['texte' => " \n\t "], ['texte' => str_repeat('é', TranscriptionDesMessagesVocaux::TEXTE_MAX + 1)]] as $corps) {
+            $this->requete('PATCH', $this->route('transcription'), $corps);
+            self::assertResponseStatusCodeSame(422, (string) json_encode($corps));
+        }
+
+        $gardee = ComptesARattacherEnMemoire::declarationGardee(self::MEMBRE);
+        self::assertSame(self::TRANSCRIPTION, $gardee?->transcription);
+        self::assertNull($gardee->transcriptionCorrigeeLe);
+
+        // La borne elle-même passe.
+        $this->requete('PATCH', $this->route('transcription'), ['texte' => str_repeat('é', TranscriptionDesMessagesVocaux::TEXTE_MAX)]);
+        self::assertResponseIsSuccessful();
+    }
+
+    public function testCorrigerEstReserveAuxAdministrateursEtAuxComptesAvecVocal(): void
+    {
+        $this->creerContributeur('opale@example.net', 1, 'Opale');
+        $this->connexion('opale@example.net');
+        $this->requete('PATCH', $this->route('transcription'), ['texte' => self::CORRIGEE]);
+        self::assertResponseStatusCodeSame(403);
+        self::assertNull(ComptesARattacherEnMemoire::declarationGardee(self::MEMBRE)?->transcription);
+
+        $this->connexion('natron@example.net');
+        $this->requete('PATCH', '/api/administration/rattachements/999/transcription', ['texte' => self::CORRIGEE]);
+        self::assertResponseStatusCodeSame(404);
+
+        ComptesARattacherEnMemoire::oublierTout();
+        ComptesARattacherEnMemoire::poser(self::declaration(vocal: false));
+        $this->requete('PATCH', $this->route('transcription'), ['texte' => self::CORRIGEE]);
+        self::assertResponseStatusCodeSame(404);
+        self::assertNull(ComptesARattacherEnMemoire::declarationGardee(self::MEMBRE)?->transcription);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

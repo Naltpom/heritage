@@ -24,27 +24,43 @@
  * déclenche rien. Et la carte doit rester utilisable **sans** elle : clé
  * absente, modèle en panne, quota épuisé — la main de l'administrateur suffit.
  *
- * ── Les analyses, l'une après l'autre ───────────────────────────────────────
+ * ── Rien ne part tout seul (3 octobre 2026) ─────────────────────────────────
  *
- * Une analyse prend 20 à 60 secondes et consomme un quota **global** de 40 par
- * 24 heures, commun à tous les administrateurs. Les lancer toutes à l'ouverture
- * de l'onglet, en parallèle, ferait partir dix appels d'un coup, dont la moitié
- * finirait en `429` — et chacun tiendrait un processus PHP. D'où
- * {@link FileDAnalyses} : une seule à la fois, dans l'ordre des cartes.
+ * Jusqu'au 2 octobre, l'ouverture de l'onglet lançait, carte par carte, la
+ * transcription du message vocal puis la recherche. Le propriétaire a demandé
+ * l'inverse : « ne pas lancer la recherche IA directement au chargement de la
+ * page, me mettre le bouton », et pouvoir **corriger la transcription avant**.
+ * Désormais l'ouverture ne fait que **lire** — la liste, et la suggestion déjà
+ * calculée s'il y en a une (`GET`, gratuit). Chaque appel au modèle part d'un
+ * clic : « Transcrire le message vocal », « Lancer la recherche ».
  *
- * ── La transcription du message vocal, avant l'analyse ──────────────────────
+ * Chaque appel consomme un quota **global** de 40 par 24 heures, commun à tous
+ * les administrateurs : la carte affiche ce qu'il en reste quand le serveur le
+ * dit ({@link quotaDesRattachements}).
  *
- * Depuis le 2 octobre 2026 au soir, un message vocal est **transcrit** par
- * Gemini, et l'analyse lit la transcription comme la description. Dans la file,
- * la tâche d'une carte avec un vocal non transcrit fait donc deux appels, l'un
- * après l'autre : la transcription (10 à 60 s), puis la suggestion. Un échec de
- * transcription n'arrête rien : l'analyse se fait sans elle, la carte dit
- * « échec — Réessayer », et l'audio reste écoutable.
+ * ── Les recherches, l'une après l'autre ─────────────────────────────────────
+ *
+ * Une recherche prend 20 à 60 secondes. Trois clics rapides sur trois cartes ne
+ * doivent pas faire trois appels simultanés, chacun tenant un processus PHP :
+ * {@link FileDAnalyses} les passe une à la fois, dans l'ordre des clics.
+ *
+ * ── La transcription, relue avant la recherche ──────────────────────────────
+ *
+ * Un message vocal est **transcrit** par Gemini (2 octobre 2026, soir), et la
+ * recherche lit la transcription comme la description. Les noms propres y sont
+ * « tels qu'entendus » : l'administrateur peut les **corriger** dans le champ
+ * et enregistrer — le serveur note la correction, et la recherche suivante lit
+ * le texte corrigé. Une recherche faite sur une autre version est dite
+ * **périmée** (`perimee`) : « La transcription a changé : relancez la
+ * recherche ». La description **écrite**, elle, n'est jamais modifiable :
+ * c'est la parole du candidat.
  */
 
 import {
+  TRANSCRIPTION_MAX,
   analyserErreur,
   type CompteARattacher,
+  type QuotaGlobal,
   type SuggestionDeRattachement,
   type TranscriptionARattacher,
 } from '@/lib/api'
@@ -56,14 +72,21 @@ import {
 /**
  * Les états d'une suggestion, du point de vue de la carte.
  *
- *  - `attente`        — pas encore demandée : une autre carte passe avant ;
+ *  - `lecture`        — l'écran relit la suggestion déjà calculée (`GET`,
+ *    gratuit) ;
+ *  - `aucune`         — aucune recherche n'a été lancée : « Lancer la
+ *    recherche » ;
+ *  - `attente`        — demandée, mais une autre carte passe avant ;
  *  - `en_cours`       — le serveur interroge le modèle (20 à 60 s) ;
- *  - `prete`          — la suggestion est là ;
- *  - `non_configuree` — `503 assistant_indisponible` : pas de clé, rien en
- *    cache. Ce n'est pas une panne, c'est un réglage : pas de « Relancer » ;
+ *  - `prete`          — la suggestion est là (`perimee` : faite sur une autre
+ *    version de la transcription) ;
+ *  - `non_configuree` — `503 assistant_indisponible` : pas de clé. Ce n'est
+ *    pas une panne, c'est un réglage : pas de « Relancer » ;
  *  - `echec`          — `502`, `429` ou autre : un message, et « Relancer ».
  */
 export type EtatDAnalyse =
+  | { etat: 'lecture' }
+  | { etat: 'aucune' }
   | { etat: 'attente' }
   | { etat: 'en_cours' }
   | { etat: 'prete'; suggestion: SuggestionDeRattachement }
@@ -84,14 +107,14 @@ export function etatApresErreur(cause: unknown): EtatDAnalyse {
     return {
       etat: 'echec',
       message:
-        'Quota d’analyses atteint pour aujourd’hui : rattachez à la main, ou relancez plus tard.',
+        'Quota d’appels à l’IA atteint pour aujourd’hui : rattachez à la main, ou relancez plus tard.',
       attenteSecondes: analyse.attenteSecondes,
     }
   }
   if (analyse.statut === 502) {
     return {
       etat: 'echec',
-      message: 'L’analyse a échoué : relancez-la, ou décidez à la main.',
+      message: 'La recherche a échoué : relancez-la, ou décidez à la main.',
       attenteSecondes: null,
     }
   }
@@ -105,9 +128,10 @@ export function etatApresErreur(cause: unknown): EtatDAnalyse {
 /**
  * Les états de la transcription, du point de vue de la carte.
  *
- *  - `a_faire`  — jamais tentée : la file la lancera avant l'analyse ;
+ *  - `a_faire`  — jamais tentée : « Transcrire le message vocal » ;
  *  - `en_cours` — le serveur fait écouter le message à Gemini ;
- *  - `faite`    — le texte est là ;
+ *  - `faite`    — le texte est là, modifiable ; `corrigeeLe` dit qu'un
+ *    administrateur l'a corrigé et enregistré ;
  *  - `echec`    — la dernière tentative a échoué. `reessayable` : faux pour
  *    `503` (pas de clé) — un « Réessayer » qui échoue toujours pareil use la
  *    confiance dans les autres boutons, même règle que l'analyse.
@@ -115,13 +139,18 @@ export function etatApresErreur(cause: unknown): EtatDAnalyse {
 export type EtatDeTranscription =
   | { etat: 'a_faire' }
   | { etat: 'en_cours' }
-  | { etat: 'faite'; texte: string; le: string | null }
+  | { etat: 'faite'; texte: string; le: string | null; corrigeeLe: string | null }
   | { etat: 'echec'; message: string; reessayable: boolean }
 
 /** L'état d'une transcription telle que le serveur la décrit. */
 export function etatDeTranscription(transcription: TranscriptionARattacher): EtatDeTranscription {
   if (transcription.statut === 'faite' && transcription.texte !== null) {
-    return { etat: 'faite', texte: transcription.texte, le: transcription.le }
+    return {
+      etat: 'faite',
+      texte: transcription.texte,
+      le: transcription.le,
+      corrigeeLe: transcription.corrigeeLe ?? null,
+    }
   }
   if (transcription.statut === 'echec') {
     return {
@@ -147,7 +176,7 @@ export function transcriptionApresErreur(cause: unknown): EtatDeTranscription {
   if (analyse.statut === 429) {
     return {
       etat: 'echec',
-      message: 'Quota d’analyses atteint pour aujourd’hui : écoutez le message, ou réessayez plus tard.',
+      message: 'Quota d’appels à l’IA atteint pour aujourd’hui : écoutez le message, ou réessayez plus tard.',
       reessayable: true,
     }
   }
@@ -155,28 +184,125 @@ export function transcriptionApresErreur(cause: unknown): EtatDeTranscription {
 }
 
 /**
- * Au-delà, la transcription se replie dans un `<details>` : cinq minutes de
- * parole font 4 000 à 6 000 caractères, qui pousseraient les décisions hors de
- * l'écran. Une phrase ou deux restent dépliées.
+ * La hauteur du champ de la transcription, en lignes : de 3 à 14, selon la
+ * longueur. Cinq minutes de parole font 4 000 à 6 000 caractères ; au-delà de
+ * 14 lignes le champ défile plutôt que de pousser les décisions hors de
+ * l'écran.
  */
-export const TRANSCRIPTION_LONGUE = 400
-
-export function transcriptionLongue(texte: string): boolean {
-  return texte.length > TRANSCRIPTION_LONGUE
+export function lignesDuChamp(texte: string): number {
+  const estimees = Math.ceil(texte.length / 70) + (texte.match(/\n/g)?.length ?? 0)
+  return Math.min(14, Math.max(3, estimees))
 }
 
 /**
- * Ce que la carte dit du lien entre la transcription et l'analyse affichée, ou
- * `null` quand il n'y a rien à dire (pas de transcription, ou pas d'analyse).
+ * Ce que « Enregistrer » ferait du brouillon : rien (`possible: false`, pas de
+ * motif) s'il est identique au texte enregistré ; refusé, avec le motif, s'il
+ * est vide ou trop long — les mêmes règles que le serveur (`422`).
+ */
+export function brouillonEnregistrable(
+  brouillon: string,
+  enregistre: string | null,
+): { possible: boolean; motif: string | null } {
+  const texte = brouillon.trim()
+  if (texte === (enregistre ?? '').trim()) return { possible: false, motif: null }
+  if (texte === '') return { possible: false, motif: 'La transcription ne peut pas être vide.' }
+  if (texte.length > TRANSCRIPTION_MAX) {
+    return {
+      possible: false,
+      motif: `La transcription dépasse ${TRANSCRIPTION_MAX.toLocaleString('fr-FR')} caractères.`,
+    }
+  }
+  return { possible: true, motif: null }
+}
+
+/**
+ * Ce que la carte dit du lien entre la transcription et la recherche affichée,
+ * ou `null` quand il n'y a rien à dire (pas de transcription, ou pas de
+ * recherche).
  */
 export function mentionDeLAnalyse(
   transcription: EtatDeTranscription | null,
   analyse: EtatDAnalyse,
 ): string | null {
   if (transcription?.etat !== 'faite' || analyse.etat !== 'prete') return null
+  if (analyse.suggestion.perimee === true) {
+    return 'La recherche ci-dessous a été faite sur une autre version de ce texte : relancez-la.'
+  }
   return analyse.suggestion.transcriptionPriseEnCompte
-    ? 'L’analyse ci-dessous en a tenu compte.'
-    : 'L’analyse ci-dessous a été faite sans elle : relancez-la.'
+    ? 'La recherche ci-dessous en a tenu compte.'
+    : 'La recherche ci-dessous a été faite sans elle : relancez-la.'
+}
+
+/* ------------------------------------------------------------------ */
+/* Le bouton « Lancer la recherche »                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Le libellé du bouton de recherche, ou `null` quand il n'a pas lieu d'être :
+ * pendant la relecture, en file, en cours — et sans clé (`non_configuree`), où
+ * il échouerait toujours pareil.
+ */
+export function libelleDuLancement(analyse: EtatDAnalyse): string | null {
+  if (analyse.etat === 'aucune') return 'Lancer la recherche'
+  if (analyse.etat === 'prete' || analyse.etat === 'echec') return 'Relancer la recherche'
+  return null
+}
+
+/**
+ * Pourquoi la recherche ne peut pas partir **maintenant**, ou `null`.
+ *
+ *  - la transcription est en cours : la recherche la lirait à moitié faite ;
+ *  - une correction n'est pas enregistrée : la recherche lit la version
+ *    **enregistrée**, et l'administrateur croirait qu'elle a lu la sienne.
+ */
+export function motifDeBlocageDuLancement(
+  transcription: EtatDeTranscription | null,
+  brouillonModifie: boolean,
+): string | null {
+  if (transcription?.etat === 'en_cours') return 'Attendez la fin de la transcription.'
+  if (brouillonModifie) {
+    return 'Enregistrez (ou annulez) votre correction : la recherche lit la transcription enregistrée.'
+  }
+  return null
+}
+
+/** Un avis, pas un blocage : la recherche peut partir sans la transcription. */
+export function avisAvantLancement(transcription: EtatDeTranscription | null): string | null {
+  if (transcription?.etat === 'a_faire' || transcription?.etat === 'echec') {
+    return 'Le message vocal n’est pas transcrit : la recherche ne l’entendra pas.'
+  }
+  return null
+}
+
+/* ------------------------------------------------------------------ */
+/* Le quota                                                            */
+/* ------------------------------------------------------------------ */
+
+/** La clé du quota global des rattachements assistés (`QuotasDeLAssistant`). */
+export const CLE_DU_QUOTA = 'assistant.rattachements'
+
+/** Ce qu'il reste du quota global, tel que le serveur le compte. */
+export interface QuotaRestant {
+  restant: number
+  limite: number
+  fenetre: string
+}
+
+/**
+ * Le quota des rattachements assistés, lu dans `GET /api/administration/quotas`
+ * — ou `null` si le serveur ne le rend pas : **on n'invente rien**.
+ */
+export function quotaDesRattachements(quotas: readonly QuotaGlobal[]): QuotaRestant | null {
+  const quota = quotas.find((q) => q.cle === CLE_DU_QUOTA)
+  if (quota === undefined) return null
+  return { restant: Math.max(0, quota.limite - quota.consomme), limite: quota.limite, fenetre: quota.fenetre }
+}
+
+/** « 38 appels à l’IA restants sur 40 (par 24 h, …) ». */
+export function libelleDuQuota(quota: QuotaRestant): string {
+  if (quota.limite === 0) return 'Les appels à l’IA sont fermés sur cette installation.'
+  const appels = quota.restant > 1 ? 'appels à l’IA restants' : 'appel à l’IA restant'
+  return `${quota.restant} ${appels} sur ${quota.limite} (${quota.fenetre}, transcriptions et recherches de tous les administrateurs).`
 }
 
 /** Une erreur de lecture qui dit « ce compte a été traité ailleurs » : la carte
@@ -195,9 +321,9 @@ export type TacheDAnalyse = (signal: AbortSignal) => Promise<void>
 /**
  * Exécute les analyses **une à la fois**, dans l'ordre d'arrivée.
  *
- * Une clé déjà en attente n'est pas ajoutée deux fois : l'ouverture de l'onglet
- * puis un clic impatient sur « Relancer » ne doivent pas coûter deux analyses
- * sur le quota. Une clé **en cours** peut en revanche être remise en file — c'est
+ * Une clé déjà en attente n'est pas ajoutée deux fois : deux clics impatients
+ * sur « Lancer la recherche » ne doivent pas coûter deux recherches sur le
+ * quota. Une clé **en cours** peut en revanche être remise en file — c'est
  * « Relancer » après un échec qui arriverait pendant l'analyse suivante.
  *
  * `vider()` abandonne ce qui attend et coupe l'appel en cours (sortie de

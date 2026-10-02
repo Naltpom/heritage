@@ -31,7 +31,9 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
  * - **il part avec la déclaration**, au rattachement comme au refus — fichier compris ;
  * - **sa transcription** (2 octobre 2026, soir) se range sur la ligne par la route de
  *   l'assistant — modèle scripté, `Membership` réel —, sort dans la liste en liste
- *   blanche, et part avec le vocal.
+ *   blanche, et part avec le vocal ;
+ * - **sa correction à la main** (3 octobre 2026) se range sur la ligne, datée, sans que le
+ *   journal mécanique en garde le texte, et part avec le vocal.
  *
  * `MEDIA_RACINE` est détournée vers `var/`, comme dans `RattachementDesComptesSansFicheTest` :
  * les messages vocaux vivent sous `messages-vocaux/` de cette racine.
@@ -227,8 +229,8 @@ final class MessageVocalDeLInscriptionTest extends CasDeTestMembership
             'type' => 'audio/webm',
             'taille' => $membre->getVoiceMessageSize(),
             'duree' => 42,
-            // Jamais tentée : l'écran la lancera.
-            'transcription' => ['statut' => 'a_faire', 'texte' => null, 'erreur' => null, 'le' => null],
+            // Jamais tentée : un clic la lancera.
+            'transcription' => ['statut' => 'a_faire', 'texte' => null, 'erreur' => null, 'le' => null, 'corrigeeLe' => null],
         ], $element['messageVocal']);
 
         // Le son, en entier…
@@ -352,7 +354,8 @@ final class MessageVocalDeLInscriptionTest extends CasDeTestMembership
 
         $this->requete('GET', '/api/administration/rattachements');
         $transcription = $this->charge()['elements'][0]['messageVocal']['transcription'];
-        self::assertSame(['statut', 'texte', 'erreur', 'le'], array_keys($transcription));
+        self::assertSame(['statut', 'texte', 'erreur', 'le', 'corrigeeLe'], array_keys($transcription));
+        self::assertNull($transcription['corrigeeLe']);
         self::assertSame('faite', $transcription['statut']);
         self::assertSame('Mon père est Pyrite Romarin.', $transcription['texte']);
         self::assertNull($transcription['erreur']);
@@ -397,7 +400,67 @@ final class MessageVocalDeLInscriptionTest extends CasDeTestMembership
         self::assertNull($this->membre($membreId)->getVoiceMessageTranscript());
     }
 
+    public function testLaCorrectionSeRangeSurLaLigneSansEntrerAuJournal(): void
+    {
+        $membreId = $this->compteAvecVocal();
+        $this->connexion('admin@example.net');
+        ModeleScripte::repondra(self::reponseTexte('Mon père est Pyrite Romarain [?].'));
+        $this->transcrire($membreId);
+        self::assertResponseIsSuccessful();
+
+        $this->corriger($membreId, 'Mon père est Pyrite Romarin, né à Quimperlé.');
+        self::assertSame(200, $this->client->getResponse()->getStatusCode(), (string) $this->client->getResponse()->getContent());
+
+        $membre = $this->membre($membreId);
+        self::assertSame('Mon père est Pyrite Romarin, né à Quimperlé.', $membre->getVoiceMessageTranscript());
+        self::assertNull($membre->getVoiceMessageTranscriptError());
+        self::assertNotNull($membre->getVoiceMessageTranscriptEditedAt());
+        self::assertNotNull($membre->getVoiceMessageTranscribedAt());
+
+        // La liste le dit.
+        $this->requete('GET', '/api/administration/rattachements');
+        $transcription = $this->charge()['elements'][0]['messageVocal']['transcription'];
+        self::assertSame('faite', $transcription['statut']);
+        self::assertSame('Mon père est Pyrite Romarin, né à Quimperlé.', $transcription['texte']);
+        self::assertIsString($transcription['corrigeeLe']);
+
+        // Journalisée — qui, quand —, jamais quoi : ni le texte de Gemini, ni la correction.
+        $lignes = $this->em()->getConnection()->fetchAllAssociative(
+            "SELECT changes FROM core_audit_log WHERE action = 'modification' AND subject_type LIKE '%Member'",
+        );
+        $journal = (string) json_encode($lignes);
+        self::assertStringContainsString('voiceMessageTranscriptEditedAt', $journal);
+        self::assertStringNotContainsString('Quimperl', $journal);
+        self::assertStringNotContainsString('Pyrite', (string) json_encode($this->em()->getConnection()->fetchAllAssociative('SELECT changes FROM core_audit_log')));
+
+        // Une retranscription efface la marque.
+        ModeleScripte::repondra(self::reponseTexte('Mon père est Pyrite Romarain [?].'));
+        $this->transcrire($membreId);
+        self::assertNull($this->membre($membreId)->getVoiceMessageTranscriptEditedAt());
+
+        // Et le refus emporte tout.
+        $this->corriger($membreId, 'Mon père est Pyrite Romarin.');
+        $this->requete('POST', \sprintf('/api/administration/membres/%d/refuser', $membreId));
+        self::assertResponseIsSuccessful();
+        $membre = $this->membre($membreId);
+        self::assertNull($membre->getVoiceMessageTranscript());
+        self::assertNull($membre->getVoiceMessageTranscriptEditedAt());
+
+        $this->corriger($membreId, 'Trop tard.');
+        self::assertSame(404, $this->client->getResponse()->getStatusCode());
+    }
+
     // ── Outils ────────────────────────────────────────────────────────────────────
+
+    private function corriger(int $membreId, string $texte): void
+    {
+        $this->client->request(
+            'PATCH',
+            \sprintf('/api/administration/rattachements/%d/transcription', $membreId),
+            server: ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', 'REMOTE_ADDR' => $this->ip],
+            content: json_encode(['texte' => $texte], \JSON_THROW_ON_ERROR),
+        );
+    }
 
     private function transcrire(int $membreId): void
     {

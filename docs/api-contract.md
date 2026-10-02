@@ -4349,9 +4349,10 @@ première règle qui correspond est appliquée »).
 | `POST` | `/api/administration/membres/{id}/refuser` | `ADMIN` | *(vide)* | `200` membre | `404` · `409` `compte_deja_decide` · `409` `vue_comme_membre_active` |
 | `GET` | `/api/administration/rattachements` | `ADMIN` | — | `200` liste § 10.1 | `409` `vue_comme_membre_active` |
 | `GET` | `/api/administration/rattachements/{memberId}/message-vocal` | `ADMIN` | — | `200` / `206` le son (`Range`) | `404` · `409` `vue_comme_membre_active` |
-| `GET` | `/api/administration/rattachements/{memberId}/suggestion` | `ADMIN` | — | `200` suggestion § 10.1 | `404` · `409` `vue_comme_membre_active` · `429` · `502` `assistant_erreur` · `503` `assistant_indisponible` |
-| `POST` | `/api/administration/rattachements/{memberId}/suggestion` | `ADMIN` | *(vide)* | `200` suggestion § 10.1 | *(idem)* |
+| `GET` | `/api/administration/rattachements/{memberId}/suggestion` | `ADMIN` | — | `200` suggestion gardée § 10.1 · `204` aucune — **jamais un calcul** | `404` · `409` `vue_comme_membre_active` |
+| `POST` | `/api/administration/rattachements/{memberId}/suggestion` | `ADMIN` | *(vide)* | `200` suggestion § 10.1 | `404` · `409` `vue_comme_membre_active` · `429` · `502` `assistant_erreur` · `503` `assistant_indisponible` |
 | `POST` | `/api/administration/rattachements/{memberId}/transcription` | `ADMIN` | *(vide)* | `200` transcription § 10.1 (y compris en échec) | `404` · `409` `vue_comme_membre_active` · `429` · `503` `assistant_indisponible` |
+| `PATCH` | `/api/administration/rattachements/{memberId}/transcription` | `ADMIN` | `{texte}` — 1 à 16 000 caractères | `200` transcription § 10.1 (`corrigeeLe` renseignée) | `404` · `409` `vue_comme_membre_active` · `422` |
 | `POST` | `/api/administration/rattachements/{memberId}/creer-et-rattacher` | `ADMIN` | `{parents?, message?}` | `201` `{membre, personId, demandeId}` | `404` · `409` `personne_deja_rattachee`, `compte_deja_decide` · `422` |
 | `GET` | `/api/administration/reglages` | `ADMIN` | — | `200` tableau nu | — |
 | `PATCH` | `/api/administration/reglages/{cle}` | `ADMIN` | `{value}` | `200` réglage | `404` · `422` `valeur_hors_bornes` |
@@ -4475,7 +4476,7 @@ la description est un texte libre qu'aucun cercle ne sait filtrer.
       },
       "messageVocal": {
         "url": "/api/administration/rattachements/14/message-vocal", "type": "audio/webm", "taille": 553412, "duree": 134,
-        "transcription": { "statut": "faite", "texte": "Bonjour, je suis Léa Dupont…", "erreur": null, "le": "2026-10-02T21:04:12+02:00" }
+        "transcription": { "statut": "faite", "texte": "Bonjour, je suis Léa Dupont…", "erreur": null, "le": "2026-10-02T21:04:12+02:00", "corrigeeLe": null }
       },
       "photo": { "mediaId": 91, "url": "/api/medias/91/fichier?v=1a2b3c4d", "vignetteUrl": "/api/medias/91/vignette?v=1a2b3c4d" },
       "suggestionCalculeeLe": null
@@ -4496,10 +4497,12 @@ peut alors valoir `null`. Le son sort par `url` —
 `GET /api/administration/rattachements/{memberId}/message-vocal`, `ADMIN`, refusée sous la
 bascule, `Cache-Control: private, no-store`, requêtes partielles (`Range` → `206`) servies.
 `404` pour un compte inconnu, déjà décidé, sans vocal, ou dont le fichier manque.
-`messageVocal.transcription` — **toujours ces quatre clés** — décrit sa transcription
+`messageVocal.transcription` — **toujours ces cinq clés** — décrit sa transcription
 automatique : `statut` `a_faire` (jamais tentée), `faite` (`texte` verbatim) ou `echec`
-(`erreur`, le motif écrit par le serveur) ; `le` est la date de la dernière tentative. Le
-texte parle de vivants, comme la description : mêmes règles, même purge.
+(`erreur`, le motif écrit par le serveur) ; `le` est la date de la dernière tentative ;
+`corrigeeLe` la date de la dernière **correction à la main** (3 octobre 2026), `null` tant
+que le texte est celui du modèle. Le texte parle de vivants, comme la description : mêmes
+règles, même purge.
 
 Chaque élément de `GET /api/administration/membres` (la file des comptes `en_attente`) porte
 en plus `portraitEnAttente` — `{mediaId, url, vignetteUrl}` ou `null` : la photo déposée à
@@ -4516,16 +4519,20 @@ Dans la liste des invitations (§ 3.3), chaque ligne de `inscrits[]` porte déso
 
 #### La suggestion de rattachement (module `Assistant`)
 
-`GET /api/administration/rattachements/{memberId}/suggestion` rend la suggestion **en cache**
+`GET /api/administration/rattachements/{memberId}/suggestion` rend la suggestion **gardée**
 sur le compte s'il y en a une — même si le modèle n'est pas configuré ; ses champs volatils
-(`displayName`, `ligneDates`, `dejaRattachee`) sont recalculés à chaque lecture. Sinon
-l'analyse est calculée, stockée, puis rendue. `POST` sur la même adresse force un nouveau
-calcul (« Relancer l'analyse »). Sur les trois routes de ce préfixe : `409`
-`vue_comme_membre_active` d'abord, `404` si le compte n'est plus `a_rattacher` / `en_attente`,
-et la session est **relâchée** avant tout appel au modèle. Quota séparé :
-`assistant.rattachements`, **40 analyses par 24 heures glissantes par défaut, clé globale**
-pour tous les administrateurs — limite réglable globalement (« Quotas d'usage » ci-dessous). `503` `assistant_indisponible` (pas de clé et pas de cache) ·
-`502` `assistant_erreur` · `429` avec `Retry-After`.
+(`displayName`, `ligneDates`, `dejaRattachee`, `perimee`) sont recalculés à chaque lecture.
+**Depuis le 3 octobre 2026, le `GET` ne calcule jamais rien** : sans suggestion gardée, il rend
+`204` (corps vide), sans appel au modèle, sans quota, sans clé exigée. C'est `POST` sur la
+même adresse — « Lancer la recherche » / « Relancer la recherche », derrière un clic — qui
+calcule, stocke et rend. Sur les routes de ce préfixe : `409` `vue_comme_membre_active`
+d'abord, `404` si le compte n'est plus `a_rattacher` / `en_attente`, et la session est
+**relâchée** avant tout appel au modèle. Quota séparé : `assistant.rattachements`, **40
+appels par 24 heures glissantes par défaut, clé globale** pour tous les administrateurs —
+limite réglable globalement (« Quotas d'usage » ci-dessous) ; l'écran en lit l'état par
+`GET /api/administration/quotas` pour l'afficher à côté du bouton. `503`
+`assistant_indisponible` (pas de clé) · `502` `assistant_erreur` · `429` avec `Retry-After`
+— sur le `POST` seulement.
 
 ```json
 {
@@ -4545,7 +4552,8 @@ pour tous les administrateurs — limite réglable globalement (« Quotas d'usag
   },
   "alternatives": [],
   "creation": null,
-  "transcriptionPriseEnCompte": false
+  "transcriptionPriseEnCompte": false,
+  "perimee": false
 }
 ```
 
@@ -4558,11 +4566,15 @@ pour tous les administrateurs — limite réglable globalement (« Quotas d'usag
   parents absents de l'arbre.
 - Le prompt contient le nom, les prénoms, la date déclarée, la description, la
   **transcription du message vocal** s'il y en a une (étiquetée « transcription
-  automatique ») et le pré-lien de l'invitation à titre d'indice ; **jamais le courriel**, ni
-  le son. Le journal ne reçoit que des compteurs. Aucun rattachement n'est jamais automatique.
-- `transcriptionPriseEnCompte` : l'analyse a-t-elle lu une transcription ? Une suggestion
-  gardée **sans** transcription alors qu'il en existe une désormais n'est plus servie du
-  cache : le `GET` suivant la recalcule (et consomme le quota).
+  automatique », ou « relue et corrigée par l'administrateur » quand `corrigeeLe` est posée)
+  et le pré-lien de l'invitation à titre d'indice ; **jamais le courriel**, ni le son. Le
+  journal ne reçoit que des compteurs (dont `transcription_corrigee`). Aucun rattachement
+  n'est jamais automatique.
+- `transcriptionPriseEnCompte` : l'analyse a-t-elle lu une transcription ?
+- `perimee` : la transcription a changé depuis le calcul (arrivée, retranscrite ou corrigée
+  à la main) — la suggestion garde l'empreinte SHA-256 du texte qu'elle a lu, jamais le
+  texte. Elle reste servie, l'écran dit « relancez la recherche » ; rien n'est recalculé
+  sans un `POST`.
 
 #### La transcription du message vocal (module `Assistant`)
 
@@ -4576,16 +4588,29 @@ contrôles que la suggestion, dans le même ordre ; même quota global
 `assistant.rattachements`. `404` si le compte n'a pas de vocal.
 
 ```json
-{ "memberId": 14, "statut": "faite", "texte": "Bonjour, je suis Léa Dupont…", "erreur": null, "le": "2026-10-02T21:04:12+02:00" }
+{ "memberId": 14, "statut": "faite", "texte": "Bonjour, je suis Léa Dupont…", "erreur": null, "le": "2026-10-02T21:04:12+02:00", "corrigeeLe": null }
 ```
 
 - **`200` même en échec** — `{"statut": "echec", "texte": null, "erreur": "Le modèle n’a pas
   répondu à temps. Réessayez dans un moment."}` : délai, quota ou panne du fournisseur,
   refus, réponse vide. L'état est la ressource ; il est rangé sur le compte, et un nouvel
   appel (« Réessayer ») le remplace. L'audio reste servi quoi qu'il arrive.
-- L'écran enchaîne, **dans la file des analyses**, la transcription puis la suggestion.
+- Rien ne la lance tout seul : l'écran l'appelle sur « Transcrire le message vocal »,
+  « Réessayer » ou « Retranscrire ». Une nouvelle transcription remplace une correction à la
+  main (`corrigeeLe` repasse à `null`).
 - Journal : `AppelModeleDeLangage`, sujet `Assistant\Transcription` — statut, durée
   annoncée, taille, nombre de caractères ; jamais le texte, jamais le son.
+
+`PATCH /api/administration/rattachements/{memberId}/transcription`, corps `{"texte": "…"}`
+(3 octobre 2026) : range la transcription **corrigée à la main** — ou écrite, quand le
+modèle a échoué ou n'est pas configuré. Ni modèle, ni quota, ni clé exigée. Le texte est
+ramené (blancs autour retirés, fins de ligne `\r\n` → `\n`) ; `422 {champs: {texte}}` s'il
+manque, n'est pas une chaîne, est vide, ou dépasse 16 000 caractères. Mêmes contrôles 1 à 3
+que la suggestion (`409` sous la bascule, `403`, `404`), puis `404` sans message vocal. Rend
+la même forme que le `POST`, `statut: "faite"` et `corrigeeLe` renseignée ; `le` garde la
+date de la dernière tentative du modèle (ou prend celle de la correction s'il n'y en a pas
+eu). Une suggestion gardée devient `perimee`. Journal : la ligne `modification` du journal
+mécanique sur `Membership\Member`, le texte masqué (`***`), la date de correction en clair.
 
 `POST /api/administration/rattachements/{memberId}/creer-et-rattacher`, corps
 `{"parents": [12, 57], "message": "facultatif"}` : `parents` porte 0 à 2 personnes existantes.

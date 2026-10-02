@@ -6,6 +6,7 @@ namespace App\Module\Assistant\Service;
 
 use App\Module\Core\Enum\AuditAction;
 use App\Module\Core\Exception\NotFoundException;
+use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Service\AuditService;
 use App\Module\Membership\Contract\ComptesARattacher;
 use App\Module\Membership\Contract\DeclarationDuCompte;
@@ -54,12 +55,20 @@ use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
  *
  * ── L'échec ne bloque rien ─────────────────────────────────────────────────────
  *
- * La transcription a lieu **après** l'inscription, à la demande de l'écran « À
- * rattacher » — comme l'analyse, paresseusement. Une panne (délai, quota du fournisseur,
+ * La transcription a lieu **après** l'inscription, quand un administrateur clique
+ * « Transcrire le message vocal » sur l'écran « À rattacher » — jamais d'elle-même
+ * (addendum du 3 octobre 2026 : rien ne part au chargement de l'écran). Une panne (délai, quota du fournisseur,
  * refus, réponse vide) est **rangée sur le compte** avec son motif : la carte affiche
  * « échec — Réessayer », l'audio reste écoutable, et l'analyse se fait sans la
  * transcription. Rien n'est levé vers l'appelant pour une panne du modèle : l'état de la
  * transcription **est** la réponse.
+ *
+ * ── La correction à la main ───────────────────────────────────────────────────
+ *
+ * Depuis le 3 octobre 2026, l'administrateur peut **relire et corriger** le texte avant
+ * de lancer la recherche ({@see corriger()}, `PATCH …/transcription`) — ou l'écrire
+ * lui-même quand le modèle a échoué. La marque de correction dit à l'analyse que les
+ * noms ont été relus ; une nouvelle transcription automatique l'efface.
  *
  * ── Ce qui n'est JAMAIS journalisé ─────────────────────────────────────────────
  *
@@ -96,7 +105,7 @@ final readonly class TranscriptionDesMessagesVocaux
      * Transcrit le message vocal du compte, **range le résultat sur le compte** — texte ou
      * motif d'échec —, et rend l'état tel que la carte le lit.
      *
-     * @return array{memberId: int, statut: string, texte: string|null, erreur: string|null, le: string}
+     * @return array{memberId: int, statut: string, texte: string|null, erreur: string|null, le: string, corrigeeLe: null}
      *
      * @throws NotFoundException le compte n'attend plus de rattachement, ou n'a pas de vocal
      */
@@ -136,6 +145,62 @@ final readonly class TranscriptionDesMessagesVocaux
             'texte' => $texte,
             'erreur' => $erreur,
             'le' => $le->format(\DateTimeInterface::ATOM),
+            // Un texte du modèle : la relecture éventuelle d'avant ne vaut plus.
+            'corrigeeLe' => null,
+        ];
+    }
+
+    /**
+     * **Corrige à la main** la transcription — ou l'écrit, quand le modèle n'en a pas
+     * rendu (addendum du 3 octobre 2026). Aucun appel au modèle, aucun quota : c'est
+     * l'administrateur qui écrit, après avoir écouté.
+     *
+     * Le texte est validé ici : une chaîne, non vide une fois les blancs retirés, de
+     * {@see self::TEXTE_MAX} caractères au plus — la même borne que ce que le modèle peut
+     * rendre. Les fins de ligne Windows sont ramenées à `\n`.
+     *
+     * Le journal : la ligne `modification` du journal mécanique sur `Membership\Member`,
+     * texte masqué (`voiceMessageTranscript` est un champ sensible de
+     * `AuditDoctrineSubscriber`) — on y lit **qui** a corrigé et **quand**
+     * (`voiceMessageTranscriptEditedAt`), jamais **quoi**.
+     *
+     * La suggestion gardée n'est pas effacée : elle devient **périmée**
+     * ({@see SuggestionsDeRattachement::empreinte()}), et l'écran le dit.
+     *
+     * @return array{memberId: int, statut: string, texte: string, erreur: null, le: string, corrigeeLe: string}
+     *
+     * @throws ValidationException texte absent, vide ou trop long
+     * @throws NotFoundException   le compte n'attend plus de rattachement, ou n'a pas de vocal
+     */
+    public function corriger(DeclarationDuCompte $declaration, mixed $brut): array
+    {
+        if (!\is_string($brut)) {
+            throw new ValidationException(['texte' => 'La transcription est un texte.']);
+        }
+
+        $texte = trim(str_replace(["\r\n", "\r"], "\n", $brut));
+
+        if ('' === $texte) {
+            throw new ValidationException(['texte' => 'La transcription ne peut pas être vide.']);
+        }
+
+        if (mb_strlen($texte) > self::TEXTE_MAX) {
+            throw new ValidationException(['texte' => \sprintf('La transcription dépasse %d caractères.', self::TEXTE_MAX)]);
+        }
+
+        $le = new \DateTimeImmutable();
+
+        if (!$this->comptes->corrigerLaTranscription($declaration->memberId, $texte, $le)) {
+            throw new NotFoundException('Ce compte n’attend plus de rattachement.');
+        }
+
+        return [
+            'memberId' => $declaration->memberId,
+            'statut' => 'faite',
+            'texte' => $texte,
+            'erreur' => null,
+            'le' => ($declaration->transcriptionLe ?? $le)->format(\DateTimeInterface::ATOM),
+            'corrigeeLe' => $le->format(\DateTimeInterface::ATOM),
         ];
     }
 

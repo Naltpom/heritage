@@ -183,6 +183,15 @@ class Member
     private ?\DateTimeImmutable $voiceMessageTranscribedAt = null;
 
     /**
+     * La dernière **correction à la main** du texte par un administrateur (addendum du
+     * 3 octobre 2026) ; `null` tant que le texte est celui du modèle. Elle dit à l'analyse
+     * que les noms propres ont été relus. Pas de date sans texte
+     * (`ck_mbr_member_transcription_corrigee`).
+     */
+    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $voiceMessageTranscriptEditedAt = null;
+
+    /**
      * La suggestion de rattachement calculée par le module `Assistant`, **mise en cache
      * ici** pour ne pas rappeler le modèle de langage à chaque ouverture de l'écran.
      *
@@ -339,6 +348,7 @@ class Member
         $this->voiceMessageTranscript = null;
         $this->voiceMessageTranscriptError = null;
         $this->voiceMessageTranscribedAt = null;
+        $this->voiceMessageTranscriptEditedAt = null;
         $this->voiceMessageName = null;
         $this->voiceMessageMime = null;
         $this->voiceMessageSize = null;
@@ -431,6 +441,40 @@ class Member
         $this->voiceMessageTranscript = $texte;
         $this->voiceMessageTranscriptError = null === $texte ? mb_substr((string) $erreur, 0, 300) : null;
         $this->voiceMessageTranscribedAt = $le;
+        // Le texte est de nouveau celui du modèle : la relecture ne vaut plus.
+        $this->voiceMessageTranscriptEditedAt = null;
+
+        return $this;
+    }
+
+    public function getVoiceMessageTranscriptEditedAt(): ?\DateTimeImmutable
+    {
+        return $this->voiceMessageTranscriptEditedAt;
+    }
+
+    /**
+     * **Corrige à la main** la transcription — ou l'écrit, quand le modèle n'en a pas
+     * rendu (échec, pas de clé) : l'administrateur a écouté, il sait ce qui est dit.
+     *
+     * Le texte remplace le précédent, l'échec éventuel s'efface, et la date de correction
+     * est posée. `voiceMessageTranscribedAt` garde la date de la dernière tentative du
+     * modèle s'il y en a eu une ; sinon elle prend `$le`, parce qu'un texte porte sa date
+     * (`ck_mbr_member_transcription_datee`).
+     *
+     * Sans effet hors d'un compte à rattacher **qui a un vocal** — même garde que
+     * {@see enregistrerLaTranscription()}. Le texte arrive déjà validé (non vide, borné) :
+     * c'est l'affaire de la route.
+     */
+    public function corrigerLaTranscription(string $texte, \DateTimeImmutable $le): self
+    {
+        if (!$this->estARattacher() || null === $this->voiceMessageName) {
+            return $this;
+        }
+
+        $this->voiceMessageTranscript = $texte;
+        $this->voiceMessageTranscriptError = null;
+        $this->voiceMessageTranscribedAt ??= $le;
+        $this->voiceMessageTranscriptEditedAt = $le;
 
         return $this;
     }

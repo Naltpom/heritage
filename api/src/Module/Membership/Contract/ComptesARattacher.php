@@ -62,6 +62,18 @@ interface ComptesARattacher
     public function enregistrerLaTranscription(int $memberId, ?string $texte, ?string $erreur, \DateTimeImmutable $le): bool;
 
     /**
+     * Range la transcription **corrigée à la main** par un administrateur (addendum du
+     * 3 octobre 2026) — ou écrite par lui, quand le modèle n'en a pas rendu. Le texte
+     * arrive validé (non vide, borné) ; la ligne est relue sous verrou, comme pour
+     * {@see enregistrerLaTranscription()}, et rien n'est écrit si le compte a été décidé ou
+     * son vocal purgé entre-temps. Une transcription automatique ultérieure efface la
+     * marque de correction.
+     *
+     * @return bool `false` si rien n'a été écrit
+     */
+    public function corrigerLaTranscription(int $memberId, string $texte, \DateTimeImmutable $le): bool;
+
+    /**
      * Relit le compte **sous verrou**, dans la transaction de l'appelant, et exige qu'il soit
      * encore `a_rattacher` et `en_attente`. À appeler **avant** de créer quoi que ce soit :
      * le compte lu par {@see declaration()} a pu être refusé depuis, par un autre

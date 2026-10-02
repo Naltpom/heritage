@@ -23,34 +23,40 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Le rattachement assisté d'un compte « à rattacher » — trois routes d'administration.
+ * Le rattachement assisté d'un compte « à rattacher » — cinq routes d'administration.
  *
  * | Route | Ce qu'elle fait |
  * |---|---|
- * | `GET  …/{memberId}/suggestion` | la suggestion gardée (rafraîchie) ; sinon, la calcule, la garde et la rend |
- * | `POST …/{memberId}/suggestion` | « Relancer l'analyse » : recalcule, quoi qu'il y ait en cache |
- * | `POST …/{memberId}/creer-et-rattacher` | dépose et valide la création de la fiche, rattache et active le compte |
- * | `POST …/{memberId}/transcription` | transcrit le message vocal (ou recommence), range le résultat sur le compte |
+ * | `GET   …/{memberId}/suggestion` | la suggestion gardée (rafraîchie, `perimee` à jour) ; `204` s'il n'y en a pas — **jamais un calcul** |
+ * | `POST  …/{memberId}/suggestion` | « Lancer / Relancer la recherche » : calcule, quoi qu'il y ait en cache |
+ * | `POST  …/{memberId}/creer-et-rattacher` | dépose et valide la création de la fiche, rattache et active le compte |
+ * | `POST  …/{memberId}/transcription` | transcrit le message vocal (ou recommence), range le résultat sur le compte |
+ * | `PATCH …/{memberId}/transcription` | range la transcription **corrigée à la main** (ou écrite) par l'administrateur |
  *
- * ── La transcription d'abord, l'analyse ensuite ─────────────────────────────────
+ * ── Rien ne part tout seul (addendum du 3 octobre 2026) ──────────────────────────
  *
- * Depuis le 2 octobre 2026 au soir, le message vocal est **transcrit** par Gemini
- * ({@see TranscriptionDesMessagesVocaux}) et l'analyse lit la transcription comme la
- * description. L'écran enchaîne les deux appels, l'un après l'autre : la transcription,
- * puis la suggestion. Chacun garde sa borne de temps — une minute, puis cinquante-cinq
- * secondes —, plutôt qu'un seul appel qui les additionnerait.
+ * Jusqu'au 2 octobre, l'écran enchaînait à l'ouverture, carte par carte, la
+ * transcription puis le calcul de la suggestion (le `GET` calculait ce qu'il ne trouvait
+ * pas en cache). Le propriétaire a demandé l'inverse : **relire, corriger la
+ * transcription, puis lancer la recherche soi-même**. Désormais :
+ *
+ * - le `GET` ne fait que lire — ni modèle, ni quota, ni clé exigée ; il rend `204` quand
+ *   rien n'a été calculé, et l'écran affiche « Lancer la recherche » ;
+ * - seuls les deux `POST` appellent le modèle, et chacun derrière un clic ;
+ * - le `PATCH` corrige le texte : aucun appel, aucun quota. La suggestion gardée n'est
+ *   pas effacée, elle devient `perimee` ({@see SuggestionsDeRattachement}) — l'écran dit
+ *   « La transcription a changé : relancez la recherche ».
+ *
+ * Chaque appel garde sa borne de temps — une minute pour la transcription,
+ * cinquante-cinq secondes pour la recherche.
  *
  * La transcription répond **`200` même quand elle échoue** : son état (`faite` ou
  * `echec`, avec le motif) est la ressource, et il est rangé sur le compte. Seuls les refus
  * qui ne sont pas des pannes du modèle gardent leur statut : `404`, `409`, `429`, `503`.
- *
- * Une suggestion calculée **sans** une transcription qui existe désormais n'est plus
- * servie du cache : elle est recalculée à la lecture suivante
- * ({@see SuggestionsDeRattachement::enCache()}). C'est ce qui « relance l'analyse quand la
- * transcription arrive », sans que personne ait à y penser.
  *
  * Le préfixe `/api/administration/rattachements` est partagé avec la liste des comptes
  * (`GET /api/administration/rattachements`, module `Membership`) : c'est le **quatrième**
@@ -65,8 +71,8 @@ use Symfony\Component\Routing\Attribute\Route;
  *    `^/api/administration`, mais un contrôle qui suppose la configuration juste n'en est
  *    pas un (même remarque qu'`AssistantController`).
  * 3. **`404`** — le compte n'est pas (ou plus) « à rattacher » et en attente.
- * 4. **`503`** — pas de clé et rien en cache (suggestion seulement). Une suggestion
- *    gardée reste servie sans clé : elle ne coûte rien.
+ * 4. **`503`** — pas de clé (les deux `POST` seulement). Le `GET` et le `PATCH` n'en
+ *    ont pas besoin : ils ne coûtent rien.
  * 5. **`429`** — le quota global, consommé juste avant l'appel qui coûte.
  * 6. **La session est relâchée** avant l'appel au modèle : sans cela, chaque requête du
  *    même navigateur attendrait le verrou de session jusqu'à 90 secondes, et le site se
@@ -114,18 +120,44 @@ final class RattachementAssisteController extends AbstractController
         return $this->charge($this->transcriptions->transcrire($declaration));
     }
 
-    #[Route('/{memberId}/suggestion', name: 'assistant_rattachement_suggestion', requirements: ['memberId' => '\d{1,9}'], methods: ['GET'])]
-    public function lire(int $memberId, Request $requete): JsonResponse
+    /**
+     * Corrige à la main la transcription — ou l'écrit. Corps : `{"texte": "…"}`, non vide,
+     * 16 000 caractères au plus (`422` sinon).
+     *
+     * Les contrôles 1 à 3, puis `404` sans message vocal ; **ni clé, ni quota** : rien ne
+     * part chez le fournisseur. La réponse a la forme de celle du `POST`, `corrigeeLe`
+     * renseignée.
+     */
+    #[Route('/{memberId}/transcription', name: 'assistant_rattachement_corriger_transcription', requirements: ['memberId' => '\d{1,9}'], methods: ['PATCH'])]
+    public function corrigerLaTranscription(int $memberId, Request $requete): JsonResponse
     {
         $declaration = $this->declaration($memberId);
 
-        $gardee = $this->suggestions->enCache($declaration);
-
-        if (null !== $gardee) {
-            return $this->charge($gardee);
+        if (!$declaration->aUnMessageVocal) {
+            throw new NotFoundException('Ce compte n’a pas de message vocal à transcrire.');
         }
 
-        return $this->charge($this->calculer($declaration, $requete));
+        return $this->charge($this->transcriptions->corriger($declaration, $this->corps($requete)['texte'] ?? null));
+    }
+
+    /**
+     * La suggestion gardée — **lecture seule** (addendum du 3 octobre 2026). `204` quand
+     * aucune recherche n'a encore été lancée pour ce compte : c'est au clic de
+     * l'administrateur de la lancer (`POST`), pas à l'ouverture de l'écran.
+     */
+    #[Route('/{memberId}/suggestion', name: 'assistant_rattachement_suggestion', requirements: ['memberId' => '\d{1,9}'], methods: ['GET'])]
+    public function lire(int $memberId): Response
+    {
+        $gardee = $this->suggestions->enCache($this->declaration($memberId));
+
+        if (null === $gardee) {
+            $vide = new Response(null, Response::HTTP_NO_CONTENT);
+            $vide->headers->set('Cache-Control', 'no-store');
+
+            return $vide;
+        }
+
+        return $this->charge($gardee);
     }
 
     #[Route('/{memberId}/suggestion', name: 'assistant_rattachement_relancer', requirements: ['memberId' => '\d{1,9}'], methods: ['POST'])]
@@ -151,7 +183,7 @@ final class RattachementAssisteController extends AbstractController
     }
 
     /**
-     * Les contrôles 1 à 3, communs aux deux routes de suggestion.
+     * Les contrôles 1 à 3, communs à toutes les routes de ce fichier sauf la création.
      */
     private function declaration(int $memberId): DeclarationDuCompte
     {
