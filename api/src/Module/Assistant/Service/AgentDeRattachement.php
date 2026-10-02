@@ -28,7 +28,7 @@ use Psr\Log\LoggerInterface;
  * ── Même mécanique que {@see AgentDeLAssistant}, autre question ─────────────────
  *
  * Mêmes outils de lecture (`chercher_personnes`, `lire_personne`), même transport, mêmes
- * bornes ({@see ReglagesDeLAssistant} : huit tours, quatre-vingt-dix secondes), même mode
+ * bornes ({@see ReglagesDeLAssistant} : huit tours, cinquante-cinq secondes), même mode
  * `ANY`, même relance d'un tour rendu en prose, même contrainte au dernier tour. Seuls
  * changent la consigne, le premier message et l'outil final — `conclure` au lieu de
  * `proposer`. Les deux lectures bas niveau des réponses (`appelsDeFonction`,
@@ -70,6 +70,7 @@ final readonly class AgentDeRattachement
 
     public function analyser(DeclarationDuCompte $declaration): ResultatDeLAgent
     {
+        ReglagesDeLAssistant::accorderLeTemps();
         $debut = microtime(true);
         $contenus = [['role' => 'user', 'parts' => [['text' => self::premierMessage($declaration)]]]];
         $appelsDOutils = [];

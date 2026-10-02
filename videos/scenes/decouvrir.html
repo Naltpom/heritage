@@ -10,6 +10,7 @@
 </head>
 <body>
 <canvas id="c" width="1080" height="1920"></canvas>
+<script src="../theme.js"></script>
 <script>
 /* ------------------------------------------------------------------ */
 /* Heritage — vidéo de présentation, 15 s, 1080×1920, données fictives  */
@@ -38,6 +39,10 @@ const COUL = {
   accent: '#e3a35f', neutre: '#3a3f47', papier: '#efe6d1', encre: '#3b2f22',
   A: '#cf8a4c', B: '#3f9b88', C: '#8c6ddb', D: '#84b04c',
 }
+// en thème clair (rendre.mjs), les jetons prennent les valeurs claires de l'application ; theme.js traduit le reste
+if (window.THEME === 'clair') Object.assign(COUL, {
+  fond: '#f4f2ef', panneau: '#fffefc', ligne: '#dcd7ce', texte: '#1b1b1b', attenue: '#6b6560', accent: '#8a5a2b', neutre: '#cfcac2',
+})
 const FAMILLES = [
   { cle: 'A', nom: 'Martin' }, { cle: 'B', nom: 'Bernard' }, { cle: 'C', nom: 'Dubois' }, { cle: 'D', nom: 'Lefèvre' },
 ]
@@ -210,7 +215,7 @@ function karaoke(n, cx, cy, { taille = 60, sauter = 0, largeur = 960, entree = 0
       const dit = tm ? t0 >= tm.debut - 0.03 : true
       const eclat = tm ? 1 - prog(t0, tm.debut, tm.debut + 0.35) : 0
       const sc = dit ? 1 + 0.08 * eclat * (t0 >= tm.debut ? 1 : 0) : 1
-      const coul = !dit ? '#5f5c57' : eclat > 0 ? melange('#efe9e0', COUL.accent, eclat) : '#efe9e0'
+      const coul = !dit ? '#5f5c57' : eclat > 0 ? melange(COUL.texte, COUL.accent, eclat) : COUL.texte
       x.save(); x.translate(px + m.w / 2, py); x.scale(sc, sc)
       texte(m.j, 0, 0, { taille, poids, police, coul, alpha: kIn * (1 - kOut) })
       x.restore()

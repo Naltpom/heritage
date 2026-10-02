@@ -51,6 +51,9 @@ use Symfony\Component\Routing\Attribute\Route;
  *   pas effacée, elle devient `perimee` ({@see SuggestionsDeRattachement}) — l'écran dit
  *   « La transcription a changé : relancez la recherche ».
  *
+ * Chaque appel garde sa borne de temps — une minute pour la transcription,
+ * cinquante-cinq secondes pour la recherche.
+ *
  * La transcription répond **`200` même quand elle échoue** : son état (`faite` ou
  * `echec`, avec le motif) est la ressource, et il est rangé sur le compte. Seuls les refus
  * qui ne sont pas des pannes du modèle gardent leur statut : `404`, `409`, `429`, `503`.

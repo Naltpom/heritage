@@ -128,7 +128,7 @@ final class AssistantController extends AbstractController
     }
 
     /**
-     * **Libère le fichier de session avant l'appel au modèle** — jusqu'à 90 secondes
+     * **Libère le fichier de session avant l'appel au modèle** — jusqu'à 55 secondes
      * (`ReglagesDeLAssistant::DELAI_GLOBAL_SECONDES`).
      *
      * Le gestionnaire natif pose un `flock` exclusif sur le fichier de session du
