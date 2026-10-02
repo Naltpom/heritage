@@ -1,0 +1,377 @@
+[
+ {
+  "texte": "Dans l’arbre, vous êtes au centre : vos parents au-dessus, vos enfants en dessous.",
+  "mots": [
+   {
+    "mot": "Dans",
+    "debut": 0.099,
+    "fin": 0.317
+   },
+   {
+    "mot": "l’arbre",
+    "debut": 0.329,
+    "fin": 0.693
+   },
+   {
+    "mot": "vous",
+    "debut": 0.997,
+    "fin": 1.069
+   },
+   {
+    "mot": "êtes",
+    "debut": 1.082,
+    "fin": 1.288
+   },
+   {
+    "mot": "au",
+    "debut": 1.3,
+    "fin": 1.421
+   },
+   {
+    "mot": "centre",
+    "debut": 1.433,
+    "fin": 1.822
+   },
+   {
+    "mot": "vos",
+    "debut": 2.125,
+    "fin": 2.247
+   },
+   {
+    "mot": "parents",
+    "debut": 2.259,
+    "fin": 2.562
+   },
+   {
+    "mot": "au-dessus",
+    "debut": 2.574,
+    "fin": 3.108
+   },
+   {
+    "mot": "vos",
+    "debut": 3.375,
+    "fin": 3.472
+   },
+   {
+    "mot": "enfants",
+    "debut": 3.484,
+    "fin": 3.849
+   },
+   {
+    "mot": "en",
+    "debut": 3.861,
+    "fin": 3.97
+   },
+   {
+    "mot": "dessous",
+    "debut": 3.982,
+    "fin": 4.407
+   }
+  ]
+ },
+ {
+  "texte": "Chaque couleur est une branche : deux côtés du père, deux côtés de la mère.",
+  "mots": [
+   {
+    "mot": "Chaque",
+    "debut": 0.099,
+    "fin": 0.414
+   },
+   {
+    "mot": "couleur",
+    "debut": 0.426,
+    "fin": 0.815
+   },
+   {
+    "mot": "est",
+    "debut": 0.827,
+    "fin": 0.875
+   },
+   {
+    "mot": "une",
+    "debut": 0.887,
+    "fin": 1.069
+   },
+   {
+    "mot": "branche",
+    "debut": 1.082,
+    "fin": 1.543
+   },
+   {
+    "mot": "deux",
+    "debut": 1.883,
+    "fin": 2.004
+   },
+   {
+    "mot": "côtés",
+    "debut": 2.016,
+    "fin": 2.319
+   },
+   {
+    "mot": "du",
+    "debut": 2.332,
+    "fin": 2.465
+   },
+   {
+    "mot": "père",
+    "debut": 2.477,
+    "fin": 2.853
+   },
+   {
+    "mot": "deux",
+    "debut": 3.169,
+    "fin": 3.278
+   },
+   {
+    "mot": "côtés",
+    "debut": 3.29,
+    "fin": 3.569
+   },
+   {
+    "mot": "de",
+    "debut": 3.582,
+    "fin": 3.666
+   },
+   {
+    "mot": "la",
+    "debut": 3.679,
+    "fin": 3.776
+   },
+   {
+    "mot": "mère",
+    "debut": 3.788,
+    "fin": 4.261
+   }
+  ]
+ },
+ {
+  "texte": "Ensemble, pour tout voir d’un coup. Fiches, pour lire les détails.",
+  "mots": [
+   {
+    "mot": "Ensemble",
+    "debut": 0.099,
+    "fin": 0.693
+   },
+   {
+    "mot": "pour",
+    "debut": 0.948,
+    "fin": 1.142
+   },
+   {
+    "mot": "tout",
+    "debut": 1.154,
+    "fin": 1.288
+   },
+   {
+    "mot": "voir",
+    "debut": 1.3,
+    "fin": 1.518
+   },
+   {
+    "mot": "d’un",
+    "debut": 1.531,
+    "fin": 1.688
+   },
+   {
+    "mot": "coup",
+    "debut": 1.7,
+    "fin": 1.992
+   },
+   {
+    "mot": "Fiches",
+    "debut": 2.84,
+    "fin": 3.289
+   },
+   {
+    "mot": "pour",
+    "debut": 3.52,
+    "fin": 3.69
+   },
+   {
+    "mot": "lire",
+    "debut": 3.702,
+    "fin": 3.896
+   },
+   {
+    "mot": "les",
+    "debut": 3.908,
+    "fin": 4.005
+   },
+   {
+    "mot": "détails",
+    "debut": 4.017,
+    "fin": 4.588
+   }
+  ]
+ },
+ {
+  "texte": "Touchez une fiche : son volet s’ouvre, avec les dates et les proches.",
+  "mots": [
+   {
+    "mot": "Touchez",
+    "debut": 0.099,
+    "fin": 0.414
+   },
+   {
+    "mot": "une",
+    "debut": 0.426,
+    "fin": 0.548
+   },
+   {
+    "mot": "fiche",
+    "debut": 0.56,
+    "fin": 0.984
+   },
+   {
+    "mot": "son",
+    "debut": 1.288,
+    "fin": 1.446
+   },
+   {
+    "mot": "volet",
+    "debut": 1.458,
+    "fin": 1.725
+   },
+   {
+    "mot": "s’ouvre",
+    "debut": 1.737,
+    "fin": 2.101
+   },
+   {
+    "mot": "avec",
+    "debut": 2.417,
+    "fin": 2.659
+   },
+   {
+    "mot": "les",
+    "debut": 2.671,
+    "fin": 2.781
+   },
+   {
+    "mot": "dates",
+    "debut": 2.793,
+    "fin": 3.035
+   },
+   {
+    "mot": "et",
+    "debut": 3.048,
+    "fin": 3.072
+   },
+   {
+    "mot": "les",
+    "debut": 3.084,
+    "fin": 3.169
+   },
+   {
+    "mot": "proches",
+    "debut": 3.181,
+    "fin": 3.715
+   }
+  ]
+ },
+ {
+  "texte": "Cochez « Afficher sa ligne directe » : ses ancêtres et ses descendants s’allument.",
+  "mots": [
+   {
+    "mot": "Cochez",
+    "debut": 0.099,
+    "fin": 0.535
+   },
+   {
+    "mot": "Afficher",
+    "debut": 0.766,
+    "fin": 1.154
+   },
+   {
+    "mot": "sa",
+    "debut": 1.167,
+    "fin": 1.312
+   },
+   {
+    "mot": "ligne",
+    "debut": 1.324,
+    "fin": 1.603
+   },
+   {
+    "mot": "directe",
+    "debut": 1.616,
+    "fin": 2.113
+   },
+   {
+    "mot": "ses",
+    "debut": 2.38,
+    "fin": 2.514
+   },
+   {
+    "mot": "ancêtres",
+    "debut": 2.526,
+    "fin": 3.023
+   },
+   {
+    "mot": "et",
+    "debut": 3.035,
+    "fin": 3.084
+   },
+   {
+    "mot": "ses",
+    "debut": 3.096,
+    "fin": 3.217
+   },
+   {
+    "mot": "descendants",
+    "debut": 3.23,
+    "fin": 3.679
+   },
+   {
+    "mot": "s’allument",
+    "debut": 3.691,
+    "fin": 4.188
+   }
+  ]
+ },
+ {
+  "texte": "Perdu ? « Me trouver » vous ramène à votre fiche.",
+  "mots": [
+   {
+    "mot": "Perdu",
+    "debut": 0.099,
+    "fin": 0.608
+   },
+   {
+    "mot": "Me",
+    "debut": 1.456,
+    "fin": 1.663
+   },
+   {
+    "mot": "trouver",
+    "debut": 1.675,
+    "fin": 2.075
+   },
+   {
+    "mot": "vous",
+    "debut": 2.294,
+    "fin": 2.391
+   },
+   {
+    "mot": "ramène",
+    "debut": 2.403,
+    "fin": 2.767
+   },
+   {
+    "mot": "à",
+    "debut": 2.779,
+    "fin": 2.816
+   },
+   {
+    "mot": "votre",
+    "debut": 2.828,
+    "fin": 3.131
+   },
+   {
+    "mot": "fiche",
+    "debut": 3.143,
+    "fin": 3.604
+   }
+  ]
+ }
+]

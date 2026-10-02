@@ -39,8 +39,21 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
 
 const HORS_LIGNE = `<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Heritage — hors connexion</title><body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#141517;color:#e8e6e2;font:16px system-ui,sans-serif;text-align:center;padding:24px"><div><p style="font-weight:600">Pas de connexion</p><p style="color:#9a948c">Heritage a besoin d'internet pour afficher l'arbre. Réessayez dès que le réseau revient.</p></div></body></html>`
 
+/*
+ * Le `fetch` ne touche QUE les navigations. Tout le reste — l'API, les actifs,
+ * et surtout les VIDÉOS (`/videos/*.mp4`) — n'est pas intercepté du tout :
+ * pas de `respondWith`, le navigateur fait sa requête comme sans service worker.
+ * C'est ce qui garde intactes les requêtes partielles (`Range: bytes=…` →
+ * `206`) dont un lecteur vidéo vit : un `respondWith(fetch(e.request))` les
+ * relaierait, et Safari, notamment, lit mal une vidéo dont les réponses
+ * partielles passent par un service worker.
+ *
+ * Les vidéos sont aussi écartées NOMMÉMENT, même en navigation (un lien direct
+ * vers un `.mp4` ouvert dans un onglet) : rien ne doit jamais les relayer.
+ */
 self.addEventListener('fetch', (e) => {
   if (e.request.mode !== 'navigate') return
+  if (new URL(e.request.url).pathname.startsWith('/videos/')) return
   e.respondWith(
     fetch(e.request).catch(
       () => new Response(HORS_LIGNE, { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }),

@@ -27,6 +27,7 @@ import { computed, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
 import { annoncerBarreDOutils, useEstMobile, useTiroirs } from '@/composables/useTiroirs'
 import { publierFiltresActifs } from '@/composables/entete'
 import { useGlisserPourFermer } from '@/composables/useGlisserPourFermer'
+import { lecteurVideoOuvert } from '@/composables/lecteurVideo'
 
 const {
   filtresActifs = 0,
@@ -76,9 +77,14 @@ onBeforeUnmount(() => {
 /**
  * Échap, menu ouvert : il ne sert qu'à fermer le menu. Écouté en capture et
  * arrêté là, pour que l'écran derrière (désélection…) ne l'entende pas.
+ *
+ * Sauf sous une vidéo : ouverte depuis ce menu (« Voir la vidéo » des filtres
+ * de l'arbre), elle le recouvre, et Échap est à elle. Cet écouteur-ci, inscrit
+ * avant le sien, passerait sinon le premier et fermerait un menu invisible
+ * (`composables/lecteurVideo.ts`).
  */
 function surEchap(e: KeyboardEvent): void {
-  if (e.key !== 'Escape' || !menuBureau.value) return
+  if (e.key !== 'Escape' || !menuBureau.value || lecteurVideoOuvert.value) return
   e.stopImmediatePropagation()
   menuBureau.value = false
 }

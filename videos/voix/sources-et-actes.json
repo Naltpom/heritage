@@ -1,0 +1,332 @@
+[
+ {
+  "texte": "Chaque fiche dit d’où viennent ses informations.",
+  "mots": [
+   {
+    "mot": "Chaque",
+    "debut": 0.099,
+    "fin": 0.402
+   },
+   {
+    "mot": "fiche",
+    "debut": 0.414,
+    "fin": 0.681
+   },
+   {
+    "mot": "dit",
+    "debut": 0.693,
+    "fin": 0.851
+   },
+   {
+    "mot": "d’où",
+    "debut": 0.863,
+    "fin": 0.985
+   },
+   {
+    "mot": "viennent",
+    "debut": 0.997,
+    "fin": 1.264
+   },
+   {
+    "mot": "ses",
+    "debut": 1.276,
+    "fin": 1.397
+   },
+   {
+    "mot": "informations",
+    "debut": 1.409,
+    "fin": 2.222
+   }
+  ]
+ },
+ {
+  "texte": "Vérifié : la date a été lue sur un acte ou un registre.",
+  "mots": [
+   {
+    "mot": "Vérifié",
+    "debut": 0.099,
+    "fin": 0.778
+   },
+   {
+    "mot": "la",
+    "debut": 1.142,
+    "fin": 1.251
+   },
+   {
+    "mot": "date",
+    "debut": 1.264,
+    "fin": 1.482
+   },
+   {
+    "mot": "a",
+    "debut": 1.494,
+    "fin": 1.555
+   },
+   {
+    "mot": "été",
+    "debut": 1.567,
+    "fin": 1.785
+   },
+   {
+    "mot": "lue",
+    "debut": 1.798,
+    "fin": 1.931
+   },
+   {
+    "mot": "sur",
+    "debut": 1.943,
+    "fin": 2.149
+   },
+   {
+    "mot": "un",
+    "debut": 2.162,
+    "fin": 2.21
+   },
+   {
+    "mot": "acte",
+    "debut": 2.222,
+    "fin": 2.538
+   },
+   {
+    "mot": "ou",
+    "debut": 2.55,
+    "fin": 2.635
+   },
+   {
+    "mot": "un",
+    "debut": 2.647,
+    "fin": 2.732
+   },
+   {
+    "mot": "registre",
+    "debut": 2.744,
+    "fin": 3.315
+   }
+  ]
+ },
+ {
+  "texte": "Non vérifié : elle vient d’un autre arbre, sans acte pour l’instant.",
+  "mots": [
+   {
+    "mot": "Non",
+    "debut": 0.099,
+    "fin": 0.353
+   },
+   {
+    "mot": "vérifié",
+    "debut": 0.366,
+    "fin": 0.96
+   },
+   {
+    "mot": "elle",
+    "debut": 1.312,
+    "fin": 1.397
+   },
+   {
+    "mot": "vient",
+    "debut": 1.409,
+    "fin": 1.603
+   },
+   {
+    "mot": "d’un",
+    "debut": 1.616,
+    "fin": 1.737
+   },
+   {
+    "mot": "autre",
+    "debut": 1.749,
+    "fin": 2.016
+   },
+   {
+    "mot": "arbre",
+    "debut": 2.028,
+    "fin": 2.319
+   },
+   {
+    "mot": "sans",
+    "debut": 2.586,
+    "fin": 2.732
+   },
+   {
+    "mot": "acte",
+    "debut": 2.744,
+    "fin": 3.084
+   },
+   {
+    "mot": "pour",
+    "debut": 3.096,
+    "fin": 3.242
+   },
+   {
+    "mot": "l’instant",
+    "debut": 3.254,
+    "fin": 3.739
+   }
+  ]
+ },
+ {
+  "texte": "L’onglet Sources et documents montre les actes et les notes.",
+  "mots": [
+   {
+    "mot": "L’onglet",
+    "debut": 0.099,
+    "fin": 0.572
+   },
+   {
+    "mot": "Sources",
+    "debut": 0.584,
+    "fin": 0.887
+   },
+   {
+    "mot": "et",
+    "debut": 0.899,
+    "fin": 0.948
+   },
+   {
+    "mot": "documents",
+    "debut": 0.96,
+    "fin": 1.421
+   },
+   {
+    "mot": "montre",
+    "debut": 1.433,
+    "fin": 1.737
+   },
+   {
+    "mot": "les",
+    "debut": 1.749,
+    "fin": 1.858
+   },
+   {
+    "mot": "actes",
+    "debut": 1.87,
+    "fin": 2.174
+   },
+   {
+    "mot": "et",
+    "debut": 2.186,
+    "fin": 2.21
+   },
+   {
+    "mot": "les",
+    "debut": 2.222,
+    "fin": 2.307
+   },
+   {
+    "mot": "notes",
+    "debut": 2.319,
+    "fin": 2.768
+   }
+  ]
+ },
+ {
+  "texte": "Vous avez un acte, une photo, un livret de famille ? Joignez-le à la fiche.",
+  "mots": [
+   {
+    "mot": "Vous",
+    "debut": 0.099,
+    "fin": 0.268
+   },
+   {
+    "mot": "avez",
+    "debut": 0.281,
+    "fin": 0.56
+   },
+   {
+    "mot": "un",
+    "debut": 0.572,
+    "fin": 0.657
+   },
+   {
+    "mot": "acte",
+    "debut": 0.669,
+    "fin": 1.021
+   },
+   {
+    "mot": "une",
+    "debut": 1.324,
+    "fin": 1.397
+   },
+   {
+    "mot": "photo",
+    "debut": 1.409,
+    "fin": 1.858
+   },
+   {
+    "mot": "un",
+    "debut": 2.174,
+    "fin": 2.222
+   },
+   {
+    "mot": "livret",
+    "debut": 2.234,
+    "fin": 2.526
+   },
+   {
+    "mot": "de",
+    "debut": 2.538,
+    "fin": 2.647
+   },
+   {
+    "mot": "famille",
+    "debut": 2.659,
+    "fin": 3.132
+   },
+   {
+    "mot": "Joignez-le",
+    "debut": 3.969,
+    "fin": 4.479
+   },
+   {
+    "mot": "à",
+    "debut": 4.491,
+    "fin": 4.552
+   },
+   {
+    "mot": "la",
+    "debut": 4.564,
+    "fin": 4.685
+   },
+   {
+    "mot": "fiche",
+    "debut": 4.697,
+    "fin": 5.171
+   }
+  ]
+ },
+ {
+  "texte": "Pièce après pièce, l’arbre devient sûr.",
+  "mots": [
+   {
+    "mot": "Pièce",
+    "debut": 0.099,
+    "fin": 0.378
+   },
+   {
+    "mot": "après",
+    "debut": 0.39,
+    "fin": 0.657
+   },
+   {
+    "mot": "pièce",
+    "debut": 0.669,
+    "fin": 1.118
+   },
+   {
+    "mot": "l’arbre",
+    "debut": 1.336,
+    "fin": 1.652
+   },
+   {
+    "mot": "devient",
+    "debut": 1.664,
+    "fin": 1.943
+   },
+   {
+    "mot": "sûr",
+    "debut": 1.955,
+    "fin": 2.368
+   }
+  ]
+ }
+]

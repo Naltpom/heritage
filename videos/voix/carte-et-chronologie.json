@@ -1,0 +1,292 @@
+[
+ {
+  "texte": "Explorer vous montre la famille autrement.",
+  "mots": [
+   {
+    "mot": "Explorer",
+    "debut": 0.099,
+    "fin": 0.621
+   },
+   {
+    "mot": "vous",
+    "debut": 0.633,
+    "fin": 0.791
+   },
+   {
+    "mot": "montre",
+    "debut": 0.803,
+    "fin": 1.119
+   },
+   {
+    "mot": "la",
+    "debut": 1.131,
+    "fin": 1.24
+   },
+   {
+    "mot": "famille",
+    "debut": 1.252,
+    "fin": 1.616
+   },
+   {
+    "mot": "autrement",
+    "debut": 1.628,
+    "fin": 2.102
+   }
+  ]
+ },
+ {
+  "texte": "La carte : où vos ancêtres sont nés, se sont mariés, ont vécu.",
+  "mots": [
+   {
+    "mot": "La",
+    "debut": 0.099,
+    "fin": 0.317
+   },
+   {
+    "mot": "carte",
+    "debut": 0.329,
+    "fin": 0.705
+   },
+   {
+    "mot": "où",
+    "debut": 0.972,
+    "fin": 1.009
+   },
+   {
+    "mot": "vos",
+    "debut": 1.021,
+    "fin": 1.154
+   },
+   {
+    "mot": "ancêtres",
+    "debut": 1.167,
+    "fin": 1.701
+   },
+   {
+    "mot": "sont",
+    "debut": 1.713,
+    "fin": 1.858
+   },
+   {
+    "mot": "nés",
+    "debut": 1.87,
+    "fin": 2.052
+   },
+   {
+    "mot": "se",
+    "debut": 2.368,
+    "fin": 2.514
+   },
+   {
+    "mot": "sont",
+    "debut": 2.526,
+    "fin": 2.659
+   },
+   {
+    "mot": "mariés",
+    "debut": 2.671,
+    "fin": 3.084
+   },
+   {
+    "mot": "ont",
+    "debut": 3.412,
+    "fin": 3.448
+   },
+   {
+    "mot": "vécu",
+    "debut": 3.46,
+    "fin": 3.921
+   }
+  ]
+ },
+ {
+  "texte": "La chronologie : chaque vie est une barre, des plus anciennes aux plus récentes.",
+  "mots": [
+   {
+    "mot": "La",
+    "debut": 0.099,
+    "fin": 0.305
+   },
+   {
+    "mot": "chronologie",
+    "debut": 0.317,
+    "fin": 1.009
+   },
+   {
+    "mot": "chaque",
+    "debut": 1.3,
+    "fin": 1.555
+   },
+   {
+    "mot": "vie",
+    "debut": 1.567,
+    "fin": 1.713
+   },
+   {
+    "mot": "est",
+    "debut": 1.725,
+    "fin": 1.773
+   },
+   {
+    "mot": "une",
+    "debut": 1.785,
+    "fin": 2.004
+   },
+   {
+    "mot": "barre",
+    "debut": 2.016,
+    "fin": 2.344
+   },
+   {
+    "mot": "des",
+    "debut": 2.72,
+    "fin": 2.829
+   },
+   {
+    "mot": "plus",
+    "debut": 2.841,
+    "fin": 2.999
+   },
+   {
+    "mot": "anciennes",
+    "debut": 3.011,
+    "fin": 3.436
+   },
+   {
+    "mot": "aux",
+    "debut": 3.448,
+    "fin": 3.497
+   },
+   {
+    "mot": "plus",
+    "debut": 3.509,
+    "fin": 3.667
+   },
+   {
+    "mot": "récentes",
+    "debut": 3.679,
+    "fin": 4.273
+   }
+  ]
+ },
+ {
+  "texte": "Les couleurs suivent toujours les branches : vous savez de quel côté vous regardez.",
+  "mots": [
+   {
+    "mot": "Les",
+    "debut": 0.099,
+    "fin": 0.293
+   },
+   {
+    "mot": "couleurs",
+    "debut": 0.305,
+    "fin": 0.681
+   },
+   {
+    "mot": "suivent",
+    "debut": 0.693,
+    "fin": 0.924
+   },
+   {
+    "mot": "toujours",
+    "debut": 0.936,
+    "fin": 1.239
+   },
+   {
+    "mot": "les",
+    "debut": 1.251,
+    "fin": 1.336
+   },
+   {
+    "mot": "branches",
+    "debut": 1.349,
+    "fin": 1.822
+   },
+   {
+    "mot": "vous",
+    "debut": 2.186,
+    "fin": 2.295
+   },
+   {
+    "mot": "savez",
+    "debut": 2.307,
+    "fin": 2.586
+   },
+   {
+    "mot": "de",
+    "debut": 2.599,
+    "fin": 2.696
+   },
+   {
+    "mot": "quel",
+    "debut": 2.708,
+    "fin": 2.902
+   },
+   {
+    "mot": "côté",
+    "debut": 2.914,
+    "fin": 3.205
+   },
+   {
+    "mot": "vous",
+    "debut": 3.217,
+    "fin": 3.351
+   },
+   {
+    "mot": "regardez",
+    "debut": 3.363,
+    "fin": 3.958
+   }
+  ]
+ },
+ {
+  "texte": "Siècle après siècle, toute la famille, d’un coup d’œil.",
+  "mots": [
+   {
+    "mot": "Siècle",
+    "debut": 0.099,
+    "fin": 0.475
+   },
+   {
+    "mot": "après",
+    "debut": 0.488,
+    "fin": 0.742
+   },
+   {
+    "mot": "siècle",
+    "debut": 0.755,
+    "fin": 1.107
+   },
+   {
+    "mot": "toute",
+    "debut": 1.41,
+    "fin": 1.592
+   },
+   {
+    "mot": "la",
+    "debut": 1.604,
+    "fin": 1.701
+   },
+   {
+    "mot": "famille",
+    "debut": 1.713,
+    "fin": 2.223
+   },
+   {
+    "mot": "d’un",
+    "debut": 2.502,
+    "fin": 2.624
+   },
+   {
+    "mot": "coup",
+    "debut": 2.636,
+    "fin": 2.781
+   },
+   {
+    "mot": "d’œil",
+    "debut": 2.793,
+    "fin": 3.194
+   }
+  ]
+ }
+]

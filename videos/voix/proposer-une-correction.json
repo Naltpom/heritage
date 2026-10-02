@@ -1,0 +1,347 @@
+[
+ {
+  "texte": "Une date fausse, un parent qui manque ? Vous pouvez le corriger.",
+  "mots": [
+   {
+    "mot": "Une",
+    "debut": 0.099,
+    "fin": 0.293
+   },
+   {
+    "mot": "date",
+    "debut": 0.305,
+    "fin": 0.511
+   },
+   {
+    "mot": "fausse",
+    "debut": 0.523,
+    "fin": 0.96
+   },
+   {
+    "mot": "un",
+    "debut": 1.239,
+    "fin": 1.288
+   },
+   {
+    "mot": "parent",
+    "debut": 1.3,
+    "fin": 1.591
+   },
+   {
+    "mot": "qui",
+    "debut": 1.603,
+    "fin": 1.749
+   },
+   {
+    "mot": "manque",
+    "debut": 1.761,
+    "fin": 2.198
+   },
+   {
+    "mot": "Vous",
+    "debut": 3.034,
+    "fin": 3.265
+   },
+   {
+    "mot": "pouvez",
+    "debut": 3.277,
+    "fin": 3.556
+   },
+   {
+    "mot": "le",
+    "debut": 3.568,
+    "fin": 3.677
+   },
+   {
+    "mot": "corriger",
+    "debut": 3.689,
+    "fin": 4.284
+   }
+  ]
+ },
+ {
+  "texte": "Sur la fiche, touchez le crayon : vous passez en mode édition.",
+  "mots": [
+   {
+    "mot": "Sur",
+    "debut": 0.099,
+    "fin": 0.329
+   },
+   {
+    "mot": "la",
+    "debut": 0.341,
+    "fin": 0.463
+   },
+   {
+    "mot": "fiche",
+    "debut": 0.475,
+    "fin": 0.887
+   },
+   {
+    "mot": "touchez",
+    "debut": 1.191,
+    "fin": 1.47
+   },
+   {
+    "mot": "le",
+    "debut": 1.482,
+    "fin": 1.579
+   },
+   {
+    "mot": "crayon",
+    "debut": 1.591,
+    "fin": 2.004
+   },
+   {
+    "mot": "vous",
+    "debut": 2.332,
+    "fin": 2.441
+   },
+   {
+    "mot": "passez",
+    "debut": 2.453,
+    "fin": 2.768
+   },
+   {
+    "mot": "en",
+    "debut": 2.781,
+    "fin": 2.866
+   },
+   {
+    "mot": "mode",
+    "debut": 2.878,
+    "fin": 3.072
+   },
+   {
+    "mot": "édition",
+    "debut": 3.084,
+    "fin": 3.594
+   }
+  ]
+ },
+ {
+  "texte": "Changez la date, ou ajoutez un parent, un conjoint, un enfant.",
+  "mots": [
+   {
+    "mot": "Changez",
+    "debut": 0.099,
+    "fin": 0.499
+   },
+   {
+    "mot": "la",
+    "debut": 0.511,
+    "fin": 0.633
+   },
+   {
+    "mot": "date",
+    "debut": 0.645,
+    "fin": 0.875
+   },
+   {
+    "mot": "ou",
+    "debut": 1.167,
+    "fin": 1.215
+   },
+   {
+    "mot": "ajoutez",
+    "debut": 1.227,
+    "fin": 1.664
+   },
+   {
+    "mot": "un",
+    "debut": 1.676,
+    "fin": 1.761
+   },
+   {
+    "mot": "parent",
+    "debut": 1.773,
+    "fin": 2.113
+   },
+   {
+    "mot": "un",
+    "debut": 2.404,
+    "fin": 2.453
+   },
+   {
+    "mot": "conjoint",
+    "debut": 2.465,
+    "fin": 2.95
+   },
+   {
+    "mot": "un",
+    "debut": 3.266,
+    "fin": 3.315
+   },
+   {
+    "mot": "enfant",
+    "debut": 3.327,
+    "fin": 3.776
+   }
+  ]
+ },
+ {
+  "texte": "Rien n’est envoyé avant « Corriger ». Votre proposition part alors en vérification.",
+  "mots": [
+   {
+    "mot": "Rien",
+    "debut": 0.099,
+    "fin": 0.414
+   },
+   {
+    "mot": "n’est",
+    "debut": 0.426,
+    "fin": 0.535
+   },
+   {
+    "mot": "envoyé",
+    "debut": 0.548,
+    "fin": 1.045
+   },
+   {
+    "mot": "avant",
+    "debut": 1.057,
+    "fin": 1.397
+   },
+   {
+    "mot": "Corriger",
+    "debut": 1.579,
+    "fin": 2.149
+   },
+   {
+    "mot": "Votre",
+    "debut": 2.985,
+    "fin": 3.374
+   },
+   {
+    "mot": "proposition",
+    "debut": 3.386,
+    "fin": 4.114
+   },
+   {
+    "mot": "part",
+    "debut": 4.126,
+    "fin": 4.32
+   },
+   {
+    "mot": "alors",
+    "debut": 4.333,
+    "fin": 4.587
+   },
+   {
+    "mot": "en",
+    "debut": 4.599,
+    "fin": 4.648
+   },
+   {
+    "mot": "vérification",
+    "debut": 4.66,
+    "fin": 5.522
+   }
+  ]
+ },
+ {
+  "texte": "Elle est relue, et vous êtes prévenu dès qu’elle est acceptée.",
+  "mots": [
+   {
+    "mot": "Elle",
+    "debut": 0.099,
+    "fin": 0.268
+   },
+   {
+    "mot": "est",
+    "debut": 0.281,
+    "fin": 0.329
+   },
+   {
+    "mot": "relue",
+    "debut": 0.341,
+    "fin": 0.645
+   },
+   {
+    "mot": "et",
+    "debut": 1.021,
+    "fin": 1.045
+   },
+   {
+    "mot": "vous",
+    "debut": 1.057,
+    "fin": 1.154
+   },
+   {
+    "mot": "êtes",
+    "debut": 1.167,
+    "fin": 1.397
+   },
+   {
+    "mot": "prévenu",
+    "debut": 1.409,
+    "fin": 1.798
+   },
+   {
+    "mot": "dès",
+    "debut": 1.81,
+    "fin": 1.919
+   },
+   {
+    "mot": "qu’elle",
+    "debut": 1.931,
+    "fin": 2.113
+   },
+   {
+    "mot": "est",
+    "debut": 2.125,
+    "fin": 2.174
+   },
+   {
+    "mot": "acceptée",
+    "debut": 2.186,
+    "fin": 2.89
+   }
+  ]
+ },
+ {
+  "texte": "Vous retrouvez tout votre suivi dans « Mes demandes ».",
+  "mots": [
+   {
+    "mot": "Vous",
+    "debut": 0.099,
+    "fin": 0.305
+   },
+   {
+    "mot": "retrouvez",
+    "debut": 0.317,
+    "fin": 0.778
+   },
+   {
+    "mot": "tout",
+    "debut": 0.79,
+    "fin": 0.924
+   },
+   {
+    "mot": "votre",
+    "debut": 0.936,
+    "fin": 1.264
+   },
+   {
+    "mot": "suivi",
+    "debut": 1.276,
+    "fin": 1.603
+   },
+   {
+    "mot": "dans",
+    "debut": 1.616,
+    "fin": 1.822
+   },
+   {
+    "mot": "Mes",
+    "debut": 2.089,
+    "fin": 2.198
+   },
+   {
+    "mot": "demandes",
+    "debut": 2.21,
+    "fin": 2.768
+   }
+  ]
+ }
+]

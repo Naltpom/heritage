@@ -1,0 +1,442 @@
+[
+ {
+  "texte": "Le bouton Filtres règle ce que l’arbre vous montre.",
+  "mots": [
+   {
+    "mot": "Le",
+    "debut": 0.099,
+    "fin": 0.221
+   },
+   {
+    "mot": "bouton",
+    "debut": 0.233,
+    "fin": 0.573
+   },
+   {
+    "mot": "Filtres",
+    "debut": 0.585,
+    "fin": 0.973
+   },
+   {
+    "mot": "règle",
+    "debut": 0.985,
+    "fin": 1.289
+   },
+   {
+    "mot": "ce",
+    "debut": 1.301,
+    "fin": 1.422
+   },
+   {
+    "mot": "que",
+    "debut": 1.434,
+    "fin": 1.543
+   },
+   {
+    "mot": "l’arbre",
+    "debut": 1.556,
+    "fin": 1.859
+   },
+   {
+    "mot": "vous",
+    "debut": 1.871,
+    "fin": 1.992
+   },
+   {
+    "mot": "montre",
+    "debut": 2.005,
+    "fin": 2.429
+   }
+  ]
+ },
+ {
+  "texte": "Branches : touchez une couleur pour la masquer, touchez encore pour la remettre.",
+  "mots": [
+   {
+    "mot": "Branches",
+    "debut": 0.099,
+    "fin": 0.608
+   },
+   {
+    "mot": "touchez",
+    "debut": 0.924,
+    "fin": 1.239
+   },
+   {
+    "mot": "une",
+    "debut": 1.251,
+    "fin": 1.361
+   },
+   {
+    "mot": "couleur",
+    "debut": 1.373,
+    "fin": 1.725
+   },
+   {
+    "mot": "pour",
+    "debut": 1.737,
+    "fin": 1.87
+   },
+   {
+    "mot": "la",
+    "debut": 1.883,
+    "fin": 1.967
+   },
+   {
+    "mot": "masquer",
+    "debut": 1.98,
+    "fin": 2.453
+   },
+   {
+    "mot": "touchez",
+    "debut": 2.756,
+    "fin": 3.084
+   },
+   {
+    "mot": "encore",
+    "debut": 3.096,
+    "fin": 3.497
+   },
+   {
+    "mot": "pour",
+    "debut": 3.509,
+    "fin": 3.654
+   },
+   {
+    "mot": "la",
+    "debut": 3.667,
+    "fin": 3.751
+   },
+   {
+    "mot": "remettre",
+    "debut": 3.764,
+    "fin": 4.285
+   }
+  ]
+ },
+ {
+  "texte": "Familles par alliance : ce sont les familles des conjoints de vos proches.",
+  "mots": [
+   {
+    "mot": "Familles",
+    "debut": 0.099,
+    "fin": 0.523
+   },
+   {
+    "mot": "par",
+    "debut": 0.535,
+    "fin": 0.742
+   },
+   {
+    "mot": "alliance",
+    "debut": 0.754,
+    "fin": 1.288
+   },
+   {
+    "mot": "ce",
+    "debut": 1.603,
+    "fin": 1.749
+   },
+   {
+    "mot": "sont",
+    "debut": 1.761,
+    "fin": 1.895
+   },
+   {
+    "mot": "les",
+    "debut": 1.907,
+    "fin": 2.016
+   },
+   {
+    "mot": "familles",
+    "debut": 2.028,
+    "fin": 2.441
+   },
+   {
+    "mot": "des",
+    "debut": 2.453,
+    "fin": 2.55
+   },
+   {
+    "mot": "conjoints",
+    "debut": 2.562,
+    "fin": 2.95
+   },
+   {
+    "mot": "de",
+    "debut": 2.963,
+    "fin": 3.048
+   },
+   {
+    "mot": "vos",
+    "debut": 3.06,
+    "fin": 3.181
+   },
+   {
+    "mot": "proches",
+    "debut": 3.193,
+    "fin": 3.739
+   }
+  ]
+ },
+ {
+  "texte": "À part, chacune a son bloc, à droite. Dans mon arbre, elles rejoignent la branche qui les relie.",
+  "mots": [
+   {
+    "mot": "À",
+    "debut": 0.099,
+    "fin": 0.244
+   },
+   {
+    "mot": "part",
+    "debut": 0.256,
+    "fin": 0.62
+   },
+   {
+    "mot": "chacune",
+    "debut": 0.936,
+    "fin": 1.336
+   },
+   {
+    "mot": "a",
+    "debut": 1.349,
+    "fin": 1.421
+   },
+   {
+    "mot": "son",
+    "debut": 1.433,
+    "fin": 1.616
+   },
+   {
+    "mot": "bloc",
+    "debut": 1.628,
+    "fin": 1.955
+   },
+   {
+    "mot": "à",
+    "debut": 2.21,
+    "fin": 2.247
+   },
+   {
+    "mot": "droite",
+    "debut": 2.259,
+    "fin": 2.805
+   },
+   {
+    "mot": "Dans",
+    "debut": 3.653,
+    "fin": 3.883
+   },
+   {
+    "mot": "mon",
+    "debut": 3.896,
+    "fin": 4.029
+   },
+   {
+    "mot": "arbre",
+    "debut": 4.041,
+    "fin": 4.393
+   },
+   {
+    "mot": "elles",
+    "debut": 4.697,
+    "fin": 4.782
+   },
+   {
+    "mot": "rejoignent",
+    "debut": 4.794,
+    "fin": 5.279
+   },
+   {
+    "mot": "la",
+    "debut": 5.291,
+    "fin": 5.4
+   },
+   {
+    "mot": "branche",
+    "debut": 5.413,
+    "fin": 5.752
+   },
+   {
+    "mot": "qui",
+    "debut": 5.765,
+    "fin": 5.898
+   },
+   {
+    "mot": "les",
+    "debut": 5.91,
+    "fin": 5.995
+   },
+   {
+    "mot": "relie",
+    "debut": 6.007,
+    "fin": 6.493
+   }
+  ]
+ },
+ {
+  "texte": "Par ordre de naissance : l’aîné à gauche, le plus jeune à droite.",
+  "mots": [
+   {
+    "mot": "Par",
+    "debut": 0.099,
+    "fin": 0.305
+   },
+   {
+    "mot": "ordre",
+    "debut": 0.317,
+    "fin": 0.584
+   },
+   {
+    "mot": "de",
+    "debut": 0.596,
+    "fin": 0.705
+   },
+   {
+    "mot": "naissance",
+    "debut": 0.717,
+    "fin": 1.324
+   },
+   {
+    "mot": "l’aîné",
+    "debut": 1.628,
+    "fin": 1.907
+   },
+   {
+    "mot": "à",
+    "debut": 1.919,
+    "fin": 2.016
+   },
+   {
+    "mot": "gauche",
+    "debut": 2.028,
+    "fin": 2.453
+   },
+   {
+    "mot": "le",
+    "debut": 2.756,
+    "fin": 2.841
+   },
+   {
+    "mot": "plus",
+    "debut": 2.853,
+    "fin": 3.011
+   },
+   {
+    "mot": "jeune",
+    "debut": 3.023,
+    "fin": 3.254
+   },
+   {
+    "mot": "à",
+    "debut": 3.266,
+    "fin": 3.315
+   },
+   {
+    "mot": "droite",
+    "debut": 3.327,
+    "fin": 3.836
+   }
+  ]
+ },
+ {
+  "texte": "Ligne directe ou personnes vivantes : les autres fiches restent visibles, estompées.",
+  "mots": [
+   {
+    "mot": "Ligne",
+    "debut": 0.099,
+    "fin": 0.45
+   },
+   {
+    "mot": "directe",
+    "debut": 0.463,
+    "fin": 0.899
+   },
+   {
+    "mot": "ou",
+    "debut": 0.912,
+    "fin": 0.96
+   },
+   {
+    "mot": "personnes",
+    "debut": 0.972,
+    "fin": 1.397
+   },
+   {
+    "mot": "vivantes",
+    "debut": 1.409,
+    "fin": 1.931
+   },
+   {
+    "mot": "les",
+    "debut": 2.307,
+    "fin": 2.416
+   },
+   {
+    "mot": "autres",
+    "debut": 2.429,
+    "fin": 2.768
+   },
+   {
+    "mot": "fiches",
+    "debut": 2.781,
+    "fin": 3.023
+   },
+   {
+    "mot": "restent",
+    "debut": 3.035,
+    "fin": 3.339
+   },
+   {
+    "mot": "visibles",
+    "debut": 3.351,
+    "fin": 3.776
+   },
+   {
+    "mot": "estompées",
+    "debut": 4.079,
+    "fin": 4.613
+   }
+  ]
+ },
+ {
+  "texte": "Et Réinitialiser remet tout comme au départ.",
+  "mots": [
+   {
+    "mot": "Et",
+    "debut": 0.099,
+    "fin": 0.184
+   },
+   {
+    "mot": "Réinitialiser",
+    "debut": 0.196,
+    "fin": 0.985
+   },
+   {
+    "mot": "remet",
+    "debut": 0.997,
+    "fin": 1.264
+   },
+   {
+    "mot": "tout",
+    "debut": 1.276,
+    "fin": 1.41
+   },
+   {
+    "mot": "comme",
+    "debut": 1.422,
+    "fin": 1.641
+   },
+   {
+    "mot": "au",
+    "debut": 1.653,
+    "fin": 1.701
+   },
+   {
+    "mot": "départ",
+    "debut": 1.713,
+    "fin": 2.272
+   }
+  ]
+ }
+]

@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Heritage — motion</title>
+<style>
+  html, body { margin: 0; background: #0e1013; }
+  canvas { display: block; width: 360px; height: 640px; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+/* ------------------------------------------------------------------ */
+/* Heritage — vidéo de présentation, 15 s, 1080×1920, données fictives  */
+/* Version nerveuse : calée sur 120 BPM (un temps = 0,5 s), arrivées en */
+/* rebond, zooms éclair, impacts avec secousse et flash, textes mot à   */
+/* mot. Tout est fonction du temps t : render(t) dessine une image.     */
+/* ------------------------------------------------------------------ */
+const W = 1080, H = 1920, DUREE = 28
+const cv = document.getElementById('c'), x = cv.getContext('2d')
+
+/* La partition : chaque repère tombe sur un temps (0,5 s) ou un demi-temps. */
+const VOIX = [{"texte": "Heritage. Votre famille, enfin lisible.", "debut": 0.3, "mots": [{"debut": 0.399, "fin": 1.084}, {"debut": 1.911, "fin": 2.319}, {"debut": 2.331, "fin": 2.836}, {"debut": 3.137, "fin": 3.365}, {"debut": 3.377, "fin": 3.966}]}, {"texte": "Toute votre famille, réunie autour de vous.", "debut": 5.6, "mots": [{"debut": 5.698, "fin": 5.914}, {"debut": 5.926, "fin": 6.227}, {"debut": 6.239, "fin": 6.732}, {"debut": 7.068, "fin": 7.417}, {"debut": 7.429, "fin": 7.729}, {"debut": 7.741, "fin": 7.837}, {"debut": 7.849, "fin": 8.09}]}, {"texte": "Chaque fiche s’ouvre d’un seul geste.", "debut": 10.3, "mots": [{"debut": 10.398, "fin": 10.711}, {"debut": 10.723, "fin": 11.035}, {"debut": 11.047, "fin": 11.36}, {"debut": 11.372, "fin": 11.504}, {"debut": 11.516, "fin": 11.708}, {"debut": 11.72, "fin": 12.249}]}, {"texte": "Chaque date est vérifiée sur les actes.", "debut": 14.4, "mots": [{"debut": 14.499, "fin": 14.836}, {"debut": 14.848, "fin": 15.076}, {"debut": 15.088, "fin": 15.124}, {"debut": 15.136, "fin": 15.617}, {"debut": 15.629, "fin": 15.761}, {"debut": 15.773, "fin": 15.881}, {"debut": 15.893, "fin": 16.386}]}, {"texte": "Et chaque famille trouve sa place.", "debut": 18.3, "mots": [{"debut": 18.399, "fin": 18.483}, {"debut": 18.495, "fin": 18.736}, {"debut": 18.748, "fin": 19.108}, {"debut": 19.12, "fin": 19.373}, {"debut": 19.385, "fin": 19.541}, {"debut": 19.553, "fin": 20.058}]}, {"texte": "Heritage. L’arbre de votre famille, vérifié et partagé.", "debut": 21.6, "mots": [{"debut": 21.699, "fin": 22.384}, {"debut": 23.211, "fin": 23.619}, {"debut": 23.631, "fin": 23.715}, {"debut": 23.727, "fin": 24.04}, {"debut": 24.052, "fin": 24.545}, {"debut": 24.869, "fin": 25.422}, {"debut": 25.434, "fin": 25.542}, {"debut": 25.554, "fin": 26.203}]}]
+/* La partition suit la VOIX : l'image prépare, la phrase tombe, la scène suivante part
+   0,2 à 0,4 s après le dernier mot. Les impacts tombent sur des mots. */
+const T = {
+  titre: 0.15, titreSortie: 4.95,
+  arbre: 4.65, arbreTraits: 5.4, finArbre: 9.0,
+  plonge: 9.0, plongeFin: 9.6, panneau: 9.75,
+  acte: 13.35, acteImpact: 13.65, ecriture: 13.8, tampon: 15.0, // le tampon claque sur « vérifiée »
+  sortie: 17.15, recule: 17.4, reculeFin: 17.95, couleurs: 18.2, // « famille » allume la 2e famille
+  fin: 21.0, finEmbleme: 21.2,
+}
+
+const COUL = {
+  fond: '#121418', panneau: '#1b1e23', ligne: '#2e3239', texte: '#efe9e0', attenue: '#8d8880',
+  accent: '#e3a35f', neutre: '#3a3f47', papier: '#efe6d1', encre: '#3b2f22',
+  A: '#cf8a4c', B: '#3f9b88', C: '#8c6ddb', D: '#84b04c',
+}
+const FAMILLES = [
+  { cle: 'A', nom: 'Martin' }, { cle: 'B', nom: 'Bernard' }, { cle: 'C', nom: 'Dubois' }, { cle: 'D', nom: 'Lefèvre' },
+]
+const SERIF = 'Georgia, "Times New Roman", serif'
+const SANS = '"Segoe UI", system-ui, sans-serif'
+
+/* -------- outils -------- */
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v))
+const lerp = (a, b, k) => a + (b - a) * k
+const prog = (t, a, b) => clamp((t - a) / (b - a))
+const eio = (k) => (k < 0.5 ? 16 * k ** 5 : 1 - Math.pow(-2 * k + 2, 5) / 2) // très tendu : un zoom éclair
+const eout = (k) => 1 - Math.pow(1 - k, 4)
+const eback = (k, c1 = 2.4) => { const c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2) }
+function rnd(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296) }
+function rr(px, py, w, h, r) {
+  x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + w, py, px + w, py + h, r); x.arcTo(px + w, py + h, px, py + h, r)
+  x.arcTo(px, py + h, px, py, r); x.arcTo(px, py, px + w, py, r); x.closePath()
+}
+function texte(s, px, py, { taille = 48, poids = 600, police = SANS, coul = COUL.texte, align = 'center', alpha = 1, espacement = 0 } = {}) {
+  x.save(); x.globalAlpha *= alpha; x.fillStyle = coul; x.textAlign = align; x.textBaseline = 'middle'
+  x.font = `${poids} ${taille}px ${police}`
+  if (espacement) x.letterSpacing = `${espacement}px`
+  x.fillText(s, px, py); x.restore()
+}
+function silhouette(cx, cy, r, coul, alpha = 1) {
+  x.save(); x.globalAlpha *= alpha; x.fillStyle = coul
+  x.beginPath(); x.arc(cx, cy - r * 0.28, r * 0.34, 0, Math.PI * 2); x.fill()
+  x.beginPath(); x.ellipse(cx, cy + r * 0.62, r * 0.66, r * 0.5, 0, Math.PI, 0); x.fill(); x.restore()
+}
+
+/* Les impacts : une secousse qui s'amortit en 0,35 s, et un flash bref. */
+const IMPACTS = [T.acteImpact, T.tampon + 0.14]
+function secousse(t) {
+  let dx = 0, dy = 0
+  for (const i of IMPACTS) {
+    const d = t - i
+    if (d < 0 || d > 0.35) continue
+    const a = 26 * Math.exp(-d * 14)
+    dx += Math.sin(d * 95) * a; dy += Math.cos(d * 80) * a * 0.7
+  }
+  return [dx, dy]
+}
+function flash(t) {
+  let a = 0
+  for (const i of IMPACTS) { const d = t - i; if (d >= 0 && d < 0.18) a = Math.max(a, 0.22 * (1 - d / 0.18)) }
+  return a
+}
+
+/* -------- l'arbre fictif -------- */
+const RANGEES = { 0: 1450, 1: 1230, 2: 1010, 3: 790, 4: 580 }
+const fiches = []
+function largeurDe(g) { return g === 0 ? 170 : g === 1 ? 160 : g === 2 ? 150 : g === 3 ? 108 : 54 }
+for (let g = 0; g <= 4; g++) {
+  const n = 2 ** g, w = largeurDe(g), ecart = (1000 - n * w) / Math.max(1, n)
+  for (let i = 0; i < n; i++) {
+    const cx = g === 0 ? 540 : 40 + ecart / 2 + w / 2 + i * (w + ecart)
+    const quart = g >= 2 ? FAMILLES[Math.floor((i / n) * 4)].cle : g === 1 ? (i === 0 ? 'AB' : 'CD') : 'moi'
+    fiches.push({ g, i, cx, cy: RANGEES[g], w, h: g === 4 ? 78 : g === 3 ? 112 : 150, quart })
+  }
+}
+fiches.push({ g: 0, i: -1, cx: 330, cy: 1450, w: 150, h: 150, quart: 'moi' }, { g: 0, i: -2, cx: 750, cy: 1450, w: 150, h: 150, quart: 'moi' })
+fiches.push({ g: -1, i: -3, cx: 455, cy: 1660, w: 140, h: 140, quart: 'moi' }, { g: -1, i: -4, cx: 625, cy: 1660, w: 140, h: 140, quart: 'moi' })
+const moi = fiches[0]
+const CIBLE = fiches.find((f) => f.g === 3 && f.i === 1)
+const dist = (f) => Math.hypot(f.cx - moi.cx, (f.cy - moi.cy) * 1.25)
+const LOIN = Math.max(...fiches.map(dist))
+const parG = (g, i) => fiches.find((f) => f.g === g && f.i === i)
+
+/* -------- la caméra : zooms éclair -------- */
+function camera(t) {
+  // Entrée : on arrive DANS l'arbre depuis un léger zoom (punch), puis zoom éclair sur Louise.
+  const punch = 1 + 0.18 * (1 - eout(prog(t, T.arbre, T.arbre + 0.6)))
+  const plonge = eio(prog(t, T.plonge, T.plongeFin)), recule = eio(prog(t, T.recule, T.reculeFin))
+  const k = plonge * (1 - recule)
+  const s = lerp(1, 2.8, k) * punch * lerp(1, 0.97, recule)
+  const [dx, dy] = secousse(t)
+  return { s, fx: lerp(moi.cx, CIBLE.cx, k) - dx / s, fy: lerp(1010, CIBLE.cy + 170, k) - dy / s }
+}
+const versEcran = (cam, px, py) => [(px - cam.fx) * cam.s + 540, (py - cam.fy) * cam.s + 960]
+
+/* -------- scènes -------- */
+function fondGrille() {
+  x.fillStyle = COUL.fond; x.fillRect(0, 0, W, H)
+  x.save(); x.globalAlpha = 0.5; x.fillStyle = '#1d2026'
+  for (let gy = 0; gy < H; gy += 36) for (let gx = (gy / 36) % 2 ? 18 : 0; gx < W; gx += 36) x.fillRect(gx, gy, 2, 2)
+  x.restore()
+}
+
+function scneTitre(t) {
+  const sortie = prog(t, T.titreSortie - 0.25, T.titreSortie)
+  if (sortie >= 1) return
+  x.save()
+  // Sortie : le titre s'envole vers l'avant (zoom) en se dissipant.
+  const zs = 1 + eio(sortie) * 2.2
+  x.translate(540, 960); x.scale(zs, zs); x.translate(-540, -960); x.globalAlpha = 1 - eio(sortie)
+  const mot = 'Heritage'
+  x.font = `600 160px ${SERIF}`
+  const largeurs = [...mot].map((c) => x.measureText(c).width), total = largeurs.reduce((a, b) => a + b, 0)
+  let px = 540 - total / 2
+  ;[...mot].forEach((c, i) => {
+    const k = prog(t, T.titre + i * 0.045, T.titre + 0.28 + i * 0.045)
+    const e = eback(k)
+    texte(c, px + largeurs[i] / 2, 900 - (1 - e) * 140, { taille: 160, police: SERIF, poids: 600, alpha: clamp(k * 3) })
+    px += largeurs[i]
+  })
+  const trait = eout(prog(t, 0.55, 0.8))
+  x.fillStyle = COUL.accent; x.fillRect(540 - 200 * trait, 1005, 400 * trait, 6)
+  karaoke(0, 540, 1095, { taille: 54, sauter: 1, poids: 600, sortieApres: 9 })
+  x.restore()
+}
+
+/* Un texte qui claque mot par mot : chaque mot arrive grossi et retombe à sa taille. */
+function mots(phrase, cx, cy, debut, style) {
+  const liste = phrase.split(' ')
+  x.save(); x.font = `${style.poids ?? 600} ${style.taille}px ${style.police ?? SANS}`
+  const espace = x.measureText(' ').width
+  const larg = liste.map((m) => x.measureText(m).width)
+  let px = cx - (larg.reduce((a, b) => a + b, 0) + espace * (liste.length - 1)) / 2
+  x.restore()
+  liste.forEach((m, i) => {
+    const k = prog(t0, debut + i * 0.12, debut + 0.26 + i * 0.12)
+    if (k > 0) {
+      const sc = lerp(1.25, 1, eout(k))
+      x.save(); x.translate(px + larg[i] / 2, cy + (1 - eout(k)) * 14); x.scale(sc, sc)
+      texte(m, 0, 0, { ...style, alpha: (style.alpha ?? 1) * clamp(k * 2.5) }); x.restore()
+    }
+    px += larg[i] + espace
+  })
+}
+let t0 = 0 // le temps courant, lu par `mots`
+
+/** Coupe une phrase en lignes qui tiennent dans `largeur`. */
+function lignes(jetons, style, largeur) {
+  x.save(); x.font = `${style.poids ?? 700} ${style.taille}px ${style.police ?? SANS}`
+  const esp = x.measureText(' ').width
+  const ms = jetons.map((j, i) => ({ j, i, w: x.measureText(j).width }))
+  x.restore()
+  const larg = (l) => l.reduce((a, m) => a + m.w, 0) + esp * (l.length - 1)
+  if (larg(ms) <= largeur) return { res: [ms], esp }
+  // deux lignes équilibrées, la coupure de préférence après une virgule
+  let mieux = null
+  for (let k = 1; k < ms.length; k++) {
+    const cout = Math.max(larg(ms.slice(0, k)), larg(ms.slice(k))) - (/,$/.test(ms[k - 1].j) ? 120 : 0)
+    if (!mieux || cout < mieux.cout) mieux = { cout, k }
+  }
+  return { res: [ms.slice(0, mieux.k), ms.slice(mieux.k)], esp }
+}
+/**
+ * Une phrase de la voix, en karaoké. `sauter` retire les premiers jetons (le nom, dit
+ * pendant que le titre s'affiche). Les mots non encore dits sont grisés ; le mot dit
+ * s'allume en doré une fraction de seconde, puis reste blanc.
+ */
+function karaoke(n, cx, cy, { taille = 60, sauter = 0, largeur = 960, entree = 0.15, sortieApres = 0.35, poids = 700, police = SANS } = {}) {
+  const v = VOIX[n]
+  const jetons = v.texte.split(' ').slice(sauter)
+  const temps = v.mots.slice(sauter)
+  const derniere = temps[temps.length - 1].fin
+  const kIn = eout(prog(t0, v.debut + (temps[0].debut - v.debut) - entree - 0.05, v.debut + (temps[0].debut - v.debut) + 0.1))
+  const kOut = eio(prog(t0, derniere + sortieApres, derniere + sortieApres + 0.25))
+  if (kIn <= 0 || kOut >= 1) return 0
+  const style = { taille, poids, police }
+  const { res, esp } = lignes(jetons, style, largeur)
+  const hl = taille * 1.16
+  res.forEach((ligne, li) => {
+    const total = ligne.reduce((a, m) => a + m.w, 0) + esp * (ligne.length - 1)
+    let px = cx - total / 2
+    const py = cy + (li - (res.length - 1) / 2) * hl + (1 - kIn) * 16
+    for (const m of ligne) {
+      const tm = temps[m.i]
+      const dit = tm ? t0 >= tm.debut - 0.03 : true
+      const eclat = tm ? 1 - prog(t0, tm.debut, tm.debut + 0.35) : 0
+      const sc = dit ? 1 + 0.08 * eclat * (t0 >= tm.debut ? 1 : 0) : 1
+      const coul = !dit ? '#5f5c57' : eclat > 0 ? melange('#efe9e0', COUL.accent, eclat) : '#efe9e0'
+      x.save(); x.translate(px + m.w / 2, py); x.scale(sc, sc)
+      texte(m.j, 0, 0, { taille, poids, police, coul, alpha: kIn * (1 - kOut) })
+      x.restore()
+      px += m.w + esp
+    }
+  })
+  return kIn * (1 - kOut)
+}
+
+function couleurFiche(f, t) {
+  if (f.quart === 'moi') return f === moi ? COUL.accent : '#596069'
+  const ordre = { A: 0, B: 1, C: 2, D: 3, AB: 0.5, CD: 2.5 }[f.quart]
+  const k = eout(prog(t, T.couleurs + ordre * 0.5, T.couleurs + 0.25 + ordre * 0.5))
+  const cible = f.quart.length === 2 ? COUL[f.quart[0]] : COUL[f.quart]
+  return k <= 0 ? COUL.neutre : melange(COUL.neutre, cible, k)
+}
+function melange(a, b, k) {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16)), pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16))
+  return `rgb(${pa.map((v, i) => Math.round(lerp(v, pb[i], k))).join(',')})`
+}
+
+function traits(t, cam) {
+  // Les traits se DESSINENT : chaque segment pousse depuis l'enfant, en 0,35 s.
+  const k = eout(prog(t, T.arbreTraits, T.arbreTraits + 0.5))
+  if (k <= 0) return
+  x.save(); x.globalAlpha = 0.9; x.strokeStyle = '#4a5059'; x.lineWidth = 2.4 * cam.s
+  const seg = (a, b, c, d) => { const [p1, q1] = versEcran(cam, a, b), [p2, q2] = versEcran(cam, c, d); x.beginPath(); x.moveTo(p1, q1); x.lineTo(lerp(p1, p2, k), lerp(q1, q2, k)); x.stroke() }
+  for (let g = 0; g < 4; g++) for (let i = 0; i < 2 ** g; i++) {
+    const enf = parG(g, i), p = parG(g + 1, 2 * i), m = parG(g + 1, 2 * i + 1)
+    const yU = p.cy + p.h / 2 + 18, yB = enf.cy - enf.h / 2 - 22, mid = (p.cx + m.cx) / 2
+    seg(enf.cx, enf.cy - enf.h / 2, enf.cx, yB); seg(enf.cx, yB, mid, yB); seg(mid, yB, mid, yU)
+    seg(mid, yU, p.cx, yU); seg(mid, yU, m.cx, yU); seg(p.cx, yU, p.cx, p.cy + p.h / 2); seg(m.cx, yU, m.cx, m.cy + m.h / 2)
+  }
+  const y0 = moi.cy - moi.h / 2 - 22
+  for (const i of [-1, -2]) { const f = parG(0, i); seg(moi.cx, y0, f.cx, y0); seg(f.cx, y0, f.cx, f.cy - f.h / 2) }
+  const yE = 1660 - 70 - 24; seg(moi.cx, moi.cy + moi.h / 2, moi.cx, yE)
+  for (const i of [-3, -4]) { const f = parG(-1, i); seg(moi.cx, yE, f.cx, yE); seg(f.cx, yE, f.cx, f.cy - f.h / 2) }
+  x.restore()
+}
+
+function dessinerFiche(f, t, cam) {
+  const debut = T.arbre + 1.0 * Math.pow(dist(f) / LOIN, 0.8)
+  const k = prog(t, debut, debut + 0.32)
+  if (k <= 0) return
+  const sc = eback(k, 2.4) * cam.s
+  const [sx, sy] = versEcran(cam, f.cx, f.cy)
+  const w = f.w * sc, h = f.h * sc
+  if (sx + w < -50 || sx - w > W + 50 || sy + h < -50 || sy - h > H + 50) return
+  x.save(); x.globalAlpha = clamp(k * 3)
+  const surligne = f === CIBLE ? eout(prog(t, T.plongeFin - 0.1, T.plongeFin + 0.15)) * (1 - eout(prog(t, T.recule, T.recule + 0.2))) : 0
+  if (surligne > 0) { x.shadowColor = COUL.accent; x.shadowBlur = 60 * surligne }
+  rr(sx - w / 2, sy - h / 2, w, h, Math.min(18, 10 * sc)); x.fillStyle = '#20242a'; x.fill()
+  x.shadowBlur = 0
+  x.save(); x.clip(); x.fillStyle = couleurFiche(f, t); x.fillRect(sx - w / 2, sy - h / 2, w, Math.max(6, h * (f === moi ? 1 : 0.07))); x.restore()
+  // le flash de couleur quand la famille s'allume
+  if (f.quart !== 'moi') {
+    const ordre = { A: 0, B: 1, C: 2, D: 3, AB: 0.5, CD: 2.5 }[f.quart]
+    const fl = prog(t, T.couleurs + ordre * 0.5, T.couleurs + 0.3 + ordre * 0.5)
+    if (fl > 0 && fl < 1) { rr(sx - w / 2, sy - h / 2, w, h, Math.min(18, 10 * sc)); x.fillStyle = couleurFiche(f, t); x.globalAlpha = 0.55 * (1 - fl); x.fill(); x.globalAlpha = clamp(k * 3) }
+  }
+  if (f === moi) {
+    texte('Vous', sx, sy + h * 0.05, { taille: 40 * sc, poids: 700, coul: COUL.fond })
+  } else if (f.h * cam.s > 60) {
+    silhouette(sx, sy - h * 0.12, h * 0.36, '#4b515a')
+    x.fillStyle = '#4b515a'; x.fillRect(sx - w * 0.3, sy + h * 0.26, w * 0.6, Math.max(2, h * 0.045)); x.fillRect(sx - w * 0.2, sy + h * 0.36, w * 0.4, Math.max(2, h * 0.035))
+    if (f === CIBLE && cam.s > 1.8) {
+      x.fillStyle = '#20242a'; x.fillRect(sx - w * 0.45, sy + h * 0.2, w * 0.9, h * 0.25)
+      texte('Louise Martin', sx, sy + h * 0.27, { taille: 15 * cam.s, poids: 700 })
+      texte('1887 – 1962', sx, sy + h * 0.38, { taille: 12 * cam.s, poids: 500, coul: COUL.attenue })
+    }
+  }
+  if (surligne > 0) { rr(sx - w / 2, sy - h / 2, w, h, Math.min(18, 10 * sc)); x.strokeStyle = COUL.accent; x.globalAlpha = surligne; x.lineWidth = 4; x.stroke() }
+  x.restore()
+}
+
+function bandeau(t) {
+  for (let q = 0; q < 4; q++) {
+    const k = prog(t, T.couleurs + q * 0.5, T.couleurs + 0.3 + q * 0.5)
+    const sortie = eio(prog(t, T.fin - 0.2, T.fin + 0.1))
+    if (k <= 0 || sortie >= 1) continue
+    const cx = 40 + 125 + q * 250
+    x.save(); x.globalAlpha = 1 - sortie
+    x.fillStyle = COUL[FAMILLES[q].cle]; x.fillRect(cx - 110, 438, 220 * eout(k), 7)
+    const sc = lerp(1.35, 1, eout(k))
+    x.translate(cx, 478); x.scale(sc, sc)
+    texte(FAMILLES[q].nom, 0, 0, { taille: 40, poids: 800, coul: COUL[FAMILLES[q].cle], alpha: clamp(k * 3) })
+    x.restore()
+  }
+}
+
+function legende(t, n) {
+  const v = VOIX[n], debut = v.mots[0].debut - 0.2, fin = v.mots[v.mots.length - 1].fin + 0.6
+  const sortie = eio(prog(t, fin - 0.25, fin))
+  if (t < debut || sortie >= 1) return
+  x.save(); x.globalAlpha = 1 - sortie
+  const g = x.createLinearGradient(0, 0, 0, 470); g.addColorStop(0, 'rgba(18,20,24,.97)'); g.addColorStop(0.75, 'rgba(18,20,24,.9)'); g.addColorStop(1, 'rgba(18,20,24,0)')
+  x.fillStyle = g; x.fillRect(0, 0, W, 470)
+  x.restore()
+  karaoke(n, 540, 305, { taille: 56, largeur: 900 })
+}
+
+function panneau(t) {
+  const entree = eback(prog(t, T.panneau, T.panneau + 0.35), 1.6), sortie = eio(prog(t, T.sortie, T.sortie + 0.3))
+  const k = entree * (1 - sortie)
+  if (k <= 0) return
+  const h = 900, y0 = H - h * k
+  x.save()
+  x.shadowColor = 'rgba(0,0,0,.6)'; x.shadowBlur = 60
+  rr(30, y0, W - 60, h + 120, 36); x.fillStyle = COUL.panneau; x.fill(); x.shadowBlur = 0
+  x.fillStyle = COUL.A; x.fillRect(30, y0, W - 60, 7)
+  x.fillStyle = COUL.ligne; rr(490, y0 + 24, 100, 10, 5); x.fill()
+  x.save(); x.beginPath(); x.arc(150, y0 + 150, 82, 0, Math.PI * 2); x.fillStyle = '#2a2e35'; x.fill(); x.clip()
+  silhouette(150, y0 + 162, 120, '#4f5660'); x.restore()
+  texte('Louise Martin', 270, y0 + 118, { taille: 58, poids: 700, align: 'left' })
+  const date = eout(prog(t, T.panneau + 0.25, T.panneau + 0.45))
+  texte('° 12.3.1887   † 4.9.1962', 270 + (1 - date) * 30, y0 + 182, { taille: 34, poids: 500, coul: COUL.attenue, align: 'left', alpha: date })
+  const verifie = eback(prog(t, T.tampon + 0.3, T.tampon + 0.5), 3)
+  if (verifie > 0) {
+    x.save(); x.translate(760, y0 + 182); x.scale(verifie, verifie)
+    x.beginPath(); x.arc(0, 0, 26, 0, Math.PI * 2); x.fillStyle = '#4caf7a'; x.fill()
+    x.strokeStyle = '#0f2a1c'; x.lineWidth = 6; x.lineCap = 'round'; x.beginPath(); x.moveTo(-10, 1); x.lineTo(-3, 9); x.lineTo(11, -8); x.stroke(); x.restore()
+  }
+  const lignes = [
+    ['PARENTS', null, null], ['Jules Martin', '° 1855', '† 1921'], ['Marie Roux', '° 1859', '† 1930'],
+    ['FRÈRES ET SŒURS', null, null], ['Henri Martin', '° 1884', '† 1916'], ['Lucie Martin', '° 1891', '† 1978'],
+  ]
+  lignes.forEach(([a, b, c], i) => {
+    const kl = eout(prog(t, T.panneau + 0.4 + i * 0.09, T.panneau + 0.62 + i * 0.09))
+    const ly = y0 + 270 + i * 54, dx = (1 - kl) * 80
+    if (b === null) texte(a, 80 + dx, ly, { taille: 24, poids: 700, coul: COUL.attenue, align: 'left', alpha: kl, espacement: 3 })
+    else {
+      texte(a, 80 + dx, ly, { taille: 36, poids: 600, coul: COUL.accent, align: 'left', alpha: kl })
+      texte(b, 690 + dx, ly, { taille: 30, poids: 500, coul: COUL.attenue, align: 'right', alpha: kl, police: 'Consolas, monospace' })
+      texte(c, 860 + dx, ly, { taille: 30, poids: 500, coul: COUL.attenue, align: 'right', alpha: kl, police: 'Consolas, monospace' })
+    }
+  })
+  x.restore()
+}
+
+function acte(t) {
+  // L'acte TOMBE (accélère, pas de rebond doux) et claque à T.acteImpact.
+  const chute = prog(t, T.acte, T.acteImpact), sortie = eio(prog(t, T.sortie, T.sortie + 0.3))
+  if (chute <= 0 || sortie >= 1) return
+  const tombe = chute * chute
+  const rebond = Math.exp(-Math.max(0, t - T.acteImpact) * 12) * Math.sin(Math.max(0, t - T.acteImpact) * 30) * 18
+  const y = lerp(-950, 440, tombe) - rebond - sortie * 1400
+  const rot = lerp(-14, -3.5, tombe)
+  const [dx, dy] = secousse(t)
+  x.save(); x.translate(540 + dx, y + 306 + dy); x.rotate((rot * Math.PI) / 180); x.scale(0.85, 0.85)
+  x.shadowColor = 'rgba(0,0,0,.55)'; x.shadowBlur = 50
+  rr(-420, -360, 840, 720, 10); x.fillStyle = COUL.papier; x.fill(); x.shadowBlur = 0
+  texte('Acte de naissance', 0, -300, { taille: 44, poids: 700, police: SERIF, coul: COUL.encre })
+  texte('N° 112 — l’an mil huit cent quatre-vingt-sept', 0, -248, { taille: 24, poids: 500, police: SERIF, coul: '#6b5a44' })
+  const r = rnd(7), ecrit = prog(t, T.ecriture, T.ecriture + 1.1)
+  x.strokeStyle = COUL.encre; x.lineWidth = 3; x.lineCap = 'round'
+  for (let l = 0; l < 9; l++) {
+    const ly = -180 + l * 52, fin = l === 8 ? 0.55 : 0.92 - r() * 0.12
+    const visible = clamp(ecrit * 9 - l)
+    x.beginPath(); let px = -360
+    x.moveTo(px, ly)
+    while (px < -360 + 720 * fin) {
+      const pas = 10 + r() * 14, haut = 8 + r() * 14, bas = (r() - 0.5) * 4, coupe = r() < 0.12
+      if (px < -360 + 720 * fin * visible) x.quadraticCurveTo(px + pas / 2, ly - haut, px + pas, ly + bas)
+      px += pas
+      if (coupe) { px += 14; x.moveTo(px, ly) }
+    }
+    x.stroke()
+  }
+  const lu = eout(prog(t, T.ecriture + 1.05, T.ecriture + 1.3))
+  if (lu > 0) { x.fillStyle = 'rgba(227,163,95,.5)'; x.fillRect(-150, -134, 300 * lu, 22) }
+  x.restore()
+  // le tampon : il descend vite et CLAQUE
+  const tampon = prog(t, T.tampon, T.tampon + 0.12)
+  if (tampon > 0) {
+    const sc = lerp(3.2, 1, tampon * tampon)
+    x.save(); x.translate(735 + dx, y + 520 + dy); x.rotate((-12 * Math.PI) / 180); x.scale(sc * 0.88, sc * 0.88); x.globalAlpha = clamp(tampon * 3) * 0.95
+    rr(-210, -62, 420, 124, 16); x.strokeStyle = '#2f9d64'; x.lineWidth = 9; x.stroke()
+    texte('VÉRIFIÉ PAR ACTE', 0, 4, { taille: 44, poids: 800, coul: '#2f9d64', espacement: 2 })
+    x.restore()
+  }
+}
+
+function fin(t) {
+  const k = eio(prog(t, T.fin - 0.15, T.fin + 0.2))
+  if (k <= 0) return
+  x.save(); x.globalAlpha = k; x.fillStyle = COUL.fond; x.fillRect(0, 0, W, H); x.restore()
+  // l'emblème : le tronc pousse, les branches jaillissent, les fruits éclatent
+  const tronc = eout(prog(t, T.finEmbleme, T.finEmbleme + 0.25))
+  const branches = eout(prog(t, T.finEmbleme + 0.15, T.finEmbleme + 0.4))
+  x.save(); x.translate(540, 760); x.strokeStyle = COUL.accent; x.lineWidth = 11; x.lineCap = 'round'
+  const ligne = (a, b, c, d, kk) => { if (kk <= 0) return; x.beginPath(); x.moveTo(a, b); x.lineTo(lerp(a, c, kk), lerp(b, d, kk)); x.stroke() }
+  ligne(0, 120, 0, 10, tronc); ligne(0, 40, -70, -40, branches); ligne(0, 40, 70, -40, branches); ligne(0, 10, 0, -80, branches)
+  ;[[-70, -40, COUL.A, 0], [0, -80, COUL.B, 0.08], [70, -40, COUL.C, 0.16]].forEach(([px, py, c, d]) => {
+    const kk = eback(prog(t, T.finEmbleme + 0.35 + d, T.finEmbleme + 0.6 + d), 3)
+    if (kk <= 0) return
+    x.beginPath(); x.arc(px, py, 24 * kk, 0, Math.PI * 2); x.fillStyle = c; x.fill()
+  })
+  x.restore()
+  const titre = prog(t, T.finEmbleme + 0.3, T.finEmbleme + 0.6)
+  if (titre > 0) {
+    const sc = lerp(1.35, 1, eout(titre))
+    x.save(); x.translate(540, 995); x.scale(sc, sc); texte('Heritage', 0, 0, { taille: 140, police: SERIF, poids: 600, alpha: clamp(titre * 2.5) }); x.restore()
+  }
+  karaoke(5, 540, 1160, { taille: 54, sauter: 1, largeur: 760, poids: 600, sortieApres: 9 })
+}
+
+function render(t) {
+  t0 = t
+  x.setTransform(1, 0, 0, 1, 0, 0)
+  fondGrille()
+  const cam = camera(t)
+  if (t > T.arbre - 0.05) {
+    traits(t, cam)
+    for (const f of [...fiches].sort((a, b) => (a === CIBLE) - (b === CIBLE))) dessinerFiche(f, t, cam)
+  }
+  bandeau(t)
+  for (const n of [1, 2, 3, 4]) legende(t, n)
+  acte(t)
+  panneau(t)
+  scneTitre(t)
+  fin(t)
+  const f = flash(t)
+  if (f > 0) { x.fillStyle = `rgba(255,244,225,${f})`; x.fillRect(0, 0, W, H) }
+}
+window.render = render
+window.DUREE = DUREE
+if (!window.__capture) { const d0 = performance.now(); (function boucle() { render(((performance.now() - d0) / 1000) % DUREE); requestAnimationFrame(boucle) })() }
+</script>
+</body>
+</html>

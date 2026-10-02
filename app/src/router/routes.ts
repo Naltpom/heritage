@@ -60,7 +60,7 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   // « Inscription » de sa barre du bas qui s'allume (ADR 0003, 01/10/2026).
   if (nom === 'inscription.etat') return 'accueil'
   if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires' || nom === 'explorer') return 'explorer'
-  if (nom === 'moi' || nom === 'compte' || nom.startsWith('demande') || nom.startsWith('tirage') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
+  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
 }
@@ -263,6 +263,26 @@ export const routes: RouteRecordRaw[] = [
     name: 'moi',
     component: () => import('@/views/MoiView.vue'),
     meta: { acces: 'attente', titre: 'Moi' },
+  },
+
+  {
+    // **L'aide** : les vidéos de présentation, en cartes (`lib/videos.ts`).
+    // On y entre par « Moi » (et le menu de l'avatar sur bureau) — pas par une
+    // cinquième entrée de la barre du bas, qui en a quatre et pas une de plus.
+    // Elle allume donc l'onglet « Moi » (`sectionDe`).
+    //
+    // `membre` et non `attente` : les vidéos montrent l'arbre en action — ses
+    // filtres, la carte, le calendrier — c'est-à-dire des écrans qu'un compte
+    // en attente ne peut pas encore ouvrir (ADR 0003, révision du 01/10/2026).
+    // Celui-là a déjà vu « Bienvenue » sur l'écran de son invitation.
+    //
+    // `?video=<id>` ouvre directement une vidéo : c'est une REQUÊTE et non un
+    // segment de chemin, l'écran reste le même — il porte seulement un lecteur
+    // par-dessus. L'identifiant est un contrat, comme un nom de route.
+    path: '/aide',
+    name: 'aide',
+    component: () => import('@/views/AideView.vue'),
+    meta: { acces: 'membre', titre: 'Aide' },
   },
 
   {
