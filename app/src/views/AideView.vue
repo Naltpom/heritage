@@ -30,14 +30,16 @@
  * `membre` (voir la route) : les vidéos montrent l'arbre en action, et l'entrée
  * qui y mène est dans « Moi », avec les autres pages d'un membre.
  */
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import LecteurVideo from '@/components/video/LecteurVideo.vue'
 import {
   cheminsDe,
   dureeEnToutesLettres,
   formaterDuree,
+  themeDuNavigateur,
   videoDeLaRequete,
+  videosVues,
   videosDuGroupe,
   type VideoAide,
 } from '@/lib/videos'
@@ -60,7 +62,14 @@ function ouvrir(video: VideoAide): void {
   void routeur.replace({ query: { ...route.query, video: video.id } })
 }
 
+/** Le thème des affiches : celui du navigateur, comme les vidéos. */
+const theme = themeDuNavigateur()
+
+/** Les vidéos regardées jusqu'au bout sur ce navigateur ; relues à chaque fermeture du lecteur. */
+const vues = ref(videosVues())
+
 function fermer(): void {
+  vues.value = videosVues()
   const query = { ...route.query }
   delete query['video']
   void routeur.replace({ query })
@@ -91,7 +100,7 @@ function fermer(): void {
           <button
             type="button"
             class="group flex flex-1 flex-col text-left"
-            :aria-label="`${v.titre} — vidéo de ${dureeEnToutesLettres(v.dureeSecondes)}`"
+            :aria-label="`${v.titre} — vidéo de ${dureeEnToutesLettres(v.dureeSecondes)}${vues.has(v.id) ? ', déjà vue' : ''}`"
             @click="ouvrir(v)"
           >
             <!-- L'affiche : 4:5, recadrée au centre — assez haute pour qu'on
@@ -99,7 +108,7 @@ function fermer(): void {
             <span class="relative block aspect-[4/5] w-full overflow-hidden bg-accent-doux">
               <img
                 v-if="!affichesEnEchec.has(v.id)"
-                :src="cheminsDe(v).affiche"
+                :src="cheminsDe(v, theme).affiche"
                 alt=""
                 loading="lazy"
                 decoding="async"
@@ -115,6 +124,16 @@ function fermer(): void {
                 class="absolute right-2 bottom-2 rounded-pastille bg-black/65 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white tnum"
                 aria-hidden="true"
               >{{ formaterDuree(v.dureeSecondes) }}</span>
+              <!-- Regardée jusqu'au bout sur ce navigateur. -->
+              <span
+                v-if="vues.has(v.id)"
+                data-video-vue
+                class="absolute top-2 left-2 flex items-center gap-1 rounded-pastille bg-ok px-2 py-0.5 text-[11px] font-semibold text-white"
+                aria-hidden="true"
+              >
+                <svg viewBox="0 0 24 24" class="size-3" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+                Vue
+              </span>
             </span>
             <span class="flex flex-col gap-1 px-3 pt-2.5 pb-3">
               <span class="text-sm font-semibold leading-snug text-texte">{{ v.titre }}</span>

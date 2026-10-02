@@ -21,6 +21,14 @@ const COUL = {
   homme: '#22304a', femme: '#3c2830',
   A: '#cf8a4c', B: '#3f9b88', C: '#8c6ddb', D: '#84b04c',
 }
+/* En thème clair, les jetons prennent les valeurs claires de l'application, pour que
+   les mélanges (karaoké, couleurs de branche) se fassent entre couleurs claires ;
+   les couleurs écrites en dur dans les scènes, elles, sont traduites par theme.js. */
+if (window.THEME === 'clair') Object.assign(COUL, {
+  fond: '#f4f2ef', panneau: '#fffefc', panneau2: '#f2efea', ligne: '#dcd7ce', texte: '#1b1b1b', attenue: '#6b6560',
+  accent: '#8a5a2b', fonceAccent: '#f0e3d4', neutre: '#cfcac2', violet: '#5b3fb0', vert: '#3f6b4a', rouge: '#a8501e',
+  homme: '#dbe6f2', femme: '#f3dfe2',
+})
 const BRANCHES = [
   { cle: 'A', nom: 'Martin', role: 'Père du père' }, { cle: 'B', nom: 'Bernard', role: 'Mère du père' },
   { cle: 'C', nom: 'Dubois', role: 'Père de la mère' }, { cle: 'D', nom: 'Lefèvre', role: 'Mère de la mère' },
