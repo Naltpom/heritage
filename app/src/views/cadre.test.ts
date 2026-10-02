@@ -159,6 +159,7 @@ describe('aucun écran ne refait la formule dans son coin', () => {
     'ChronologieView.vue',
     'CarteView.vue',
     'AnniversairesView.vue',
+    'StatsView.vue',
   ] as const
 
   it('ne laisse aucun plancher de 320 px revenir dans une vue à canevas', async () => {

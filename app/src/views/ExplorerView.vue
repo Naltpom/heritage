@@ -1,6 +1,6 @@
 <script lang="ts">
 /**
- * Les trois onglets d'Explorer, dans leur ordre.
+ * Les quatre onglets d'Explorer, dans leur ordre (Stats ajouté le 02/10/2026).
  *
  * Dans un bloc `<script>` ordinaire, et non dans le `<script setup>`, pour la
  * raison qu'explique `AnniversairesView` : ce qui est dans une fermeture de
@@ -20,13 +20,14 @@ export const ONGLETS_EXPLORER = [
   { cle: 'chronologie', libelle: 'Chronologie', vers: { name: 'chronologie' } },
   { cle: 'carte', libelle: 'Carte', vers: { name: 'carte' } },
   { cle: 'anniversaires', libelle: 'Calendrier', vers: { name: 'anniversaires' } },
+  { cle: 'stats', libelle: 'Stats', vers: { name: 'stats' } },
 ] as const
 
 export type OngletExplorer = (typeof ONGLETS_EXPLORER)[number]['cle']
 
 const CLES: readonly string[] = ONGLETS_EXPLORER.map((o) => o.cle)
 
-/** L'onglet d'un nom de route. Hors des trois (la route parente, le temps de sa
+/** L'onglet d'un nom de route. Hors des quatre (la route parente, le temps de sa
  *  redirection), c'est le premier : la rangée n'est jamais sans onglet actif. */
 export function ongletDe(nom: unknown): OngletExplorer {
   return typeof nom === 'string' && CLES.includes(nom) ? (nom as OngletExplorer) : 'chronologie'
@@ -35,7 +36,7 @@ export function ongletDe(nom: unknown): OngletExplorer {
 
 <script setup lang="ts">
 /**
- * Explorer — une page, trois onglets qui glissent (refonte du 30/09/2026).
+ * Explorer — une page, quatre onglets qui glissent (refonte du 30/09/2026).
  *
  * La chronologie, la carte et le calendrier étaient trois entrées de l'en-tête ;
  * ils deviennent trois onglets d'une seule entrée, et trois **routes enfants**
@@ -68,7 +69,7 @@ export function ongletDe(nom: unknown): OngletExplorer {
  * recréé à chaque changement, donc sans mémoire.
  * ────────────────────────────────────────────────────────────────────
  *
- * **La hauteur.** Les trois écrans mesurent le haut de leur cadre
+ * **La hauteur.** Les quatre écrans mesurent le haut de leur cadre
  * (`hauteurDuCadre()`, `views/cadre.ts`) : la rangée d'onglets est donc déduite
  * d'elle-même, sans que cette vue ait à la déclarer. Pendant l'animation,
  * l'écran sortant quitte le flux (voir `ContenuGlissant`) : l'entrant se monte
@@ -118,7 +119,7 @@ function surEcranEnPlace(): void {
         :actif="actif"
         etiquette="Explorer"
         egaux
-        class="md:max-w-[420px]"
+        class="md:max-w-[520px]"
       />
     </div>
 

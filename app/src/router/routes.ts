@@ -39,7 +39,7 @@ declare module 'vue-router' {
 
 /**
  * Le titre que l'en-tête du téléphone affiche pour une route. C'est celui de la
- * route, sauf dans Explorer : ses trois onglets sont déjà nommés dans la rangée
+ * route, sauf dans Explorer : ses quatre onglets sont déjà nommés dans la rangée
  * juste en dessous, et « Chronologie » au-dessus de l'onglet « Chronologie »
  * dirait deux fois la même chose. L'en-tête dit donc où l'on est — « Explorer » —
  * et la rangée, quel onglet. L'onglet du navigateur (`document.title`) garde,
@@ -59,7 +59,7 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   // L'écran d'attente est l'accueil d'un compte en attente : c'est l'entrée
   // « Inscription » de sa barre du bas qui s'allume (ADR 0003, 01/10/2026).
   if (nom === 'inscription.etat') return 'accueil'
-  if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires' || nom === 'explorer') return 'explorer'
+  if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires' || nom === 'stats' || nom === 'explorer') return 'explorer'
   if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
@@ -212,9 +212,9 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Fiche', parent: VERS_ARBRE },
   },
   {
-    // **Explorer** : une page, trois onglets qui glissent — Chronologie, Carte,
-    // Calendrier (refonte du 30/09/2026). Les trois écrans deviennent des routes
-    // enfants et **gardent leur nom** (`chronologie`, `carte`, `anniversaires`) :
+    // **Explorer** : une page, quatre onglets qui glissent — Chronologie, Carte,
+    // Calendrier (refonte du 30/09/2026), puis Stats (02/10/2026). Les trois
+    // premiers écrans sont devenus des routes enfants et **gardent leur nom** (`chronologie`, `carte`, `anniversaires`) :
     // les noms de route sont un contrat, on n'en renomme aucun. Les anciennes
     // adresses (`/chronologie`, `/carte`, `/anniversaires`) redirigent plus bas.
     //
@@ -245,6 +245,16 @@ export const routes: RouteRecordRaw[] = [
         name: 'anniversaires',
         component: () => import('@/views/AnniversairesView.vue'),
         meta: { acces: 'membre', titre: 'Calendrier' },
+      },
+      {
+        // Le quatrième onglet (02/10/2026) : l'arbre en chiffres. `membre` comme
+        // les trois autres : il lit des dates et des lieux. Sa section
+        // « chantier » est réservée à l'administration, mais c'est le serveur qui
+        // en décide (`/api/administration/stats/chantier`), pas la route.
+        path: 'stats',
+        name: 'stats',
+        component: () => import('@/views/StatsView.vue'),
+        meta: { acces: 'membre', titre: 'Statistiques' },
       },
     ],
   },

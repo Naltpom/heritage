@@ -1,0 +1,10 @@
+# Contrat : ce fichier est celui du module Statistiques (Explorer › Stats).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# Les routes se déclarent par attributs #[Route] dans le contrôleur du module.
+
+statistiques_controleurs:
+    resource:
+        path: ../../src/Module/Statistiques/Controller/
+        namespace: App\Module\Statistiques\Controller
+    type: attribute
