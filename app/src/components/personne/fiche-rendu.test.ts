@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { BlocDate, FichePersonneComplete, FichePersonneRestreinte } from '@/lib/api'
 import FicheRestreinte from './FicheRestreinte.vue'
 import IdentiteFiche from './IdentiteFiche.vue'
+import ParenteFiche from './ParenteFiche.vue'
 
 /**
  * Deux règles de cet écran ne se prouvent pas sur une fonction : elles se
@@ -226,5 +227,39 @@ describe('§ 1.3 — une valeur nulle garde sa ligne, un champ interdit n’en a
     const html = await rendre(FicheRestreinte, { fiche: RESTREINTE })
     // Le prénom seul : « Tilleul » est aussi le nom d'une branche (`champs.ts`).
     expect(html).not.toContain('Pyroxène')
+  })
+})
+
+describe('les unions : « avec qui », puis « leurs enfants »', () => {
+  const union = (familyId: number, conjoint: string, enfants: string[], divorced = false) => ({
+    familyId,
+    conjoint: { personId: familyId * 10, displayName: conjoint, naissance: '1924' },
+    marriage: null,
+    divorced,
+    divorce: null,
+    enfants: enfants.map((n, i) => ({ personId: familyId * 10 + i + 1, displayName: n, naissance: `19${50 + i}` })),
+  })
+
+  it('numérote les unions et sépare le conjoint de ses enfants', async () => {
+    const html = await rendre(ParenteFiche, {
+      fiche: ficheComplete({
+        unions: [union(1, 'Renée Magnol', ['Daniel', 'Christiane'], true), union(2, 'Aimée Samara', ['Patrick'])] as never,
+      }),
+    })
+    expect(html).toContain('1re union')
+    expect(html).toContain('2e union')
+    expect(html.match(/Leurs enfants · 2/g)).toHaveLength(1)
+    expect(html).toContain('Leurs enfants · 1')
+    // le conjoint n'est pas dans le bloc des enfants
+    const premier = html.slice(html.indexOf('1re union'), html.indexOf('2e union'))
+    const enfants = premier.slice(premier.indexOf('data-enfants-de-l-union'))
+    expect(enfants).not.toContain('Renée Magnol')
+    expect(enfants).toContain('Daniel')
+  })
+
+  it('une seule union ne se numérote pas', async () => {
+    const html = await rendre(ParenteFiche, { fiche: ficheComplete({ unions: [union(1, 'Renée Magnol', [])] as never }) })
+    expect(html).not.toContain('1re union')
+    expect(html).not.toContain('Leurs enfants')
   })
 })

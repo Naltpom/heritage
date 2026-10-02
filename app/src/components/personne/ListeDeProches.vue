@@ -11,6 +11,9 @@
  *
  * `versArbre` remplace le lien vers la fiche par un choix dans l'arbre (le volet de
  * `/arbre`) : on se promène de proche en proche sans quitter l'arbre.
+ *
+ * `principal` : le conjoint d'une union. Son nom s'écrit en gras, couleur du texte,
+ * pour qu'on ne le confonde pas avec les enfants listés dessous, en liens d'accent.
  */
 import { computed } from 'vue'
 
@@ -23,7 +26,10 @@ export interface Proche {
   mention?: string
 }
 
-const props = defineProps<{ proches: Proche[]; trier?: boolean; versArbre?: boolean }>()
+const props = defineProps<{ proches: Proche[]; trier?: boolean; versArbre?: boolean; principal?: boolean }>()
+const classeNom = computed(() =>
+  props.principal ? 'font-semibold text-texte underline decoration-ligne underline-offset-2 hover:decoration-texte' : 'text-accent underline',
+)
 const emit = defineEmits<{ choisir: [personId: number] }>()
 
 const annee = (d: string | null | undefined): number => {
@@ -47,12 +53,13 @@ const lignes = computed(() =>
         <button
           v-if="versArbre"
           type="button"
-          class="text-left text-accent underline"
+          class="text-left"
+          :class="classeNom"
           @click="emit('choisir', p.personId)"
         >
           {{ p.displayName }}
         </button>
-        <RouterLink v-else :to="{ name: 'personne.detail', params: { id: p.personId } }" class="text-accent underline">
+        <RouterLink v-else :to="{ name: 'personne.detail', params: { id: p.personId } }" :class="classeNom">
           {{ p.displayName }}
         </RouterLink>
         <span v-if="p.mention" class="text-xs text-attenue"> — {{ p.mention }}</span>
