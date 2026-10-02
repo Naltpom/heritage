@@ -151,9 +151,9 @@ describe('SuiviDesInvites', () => {
 
 describe('SelecteurDInvites', () => {
   const invitables: Invitable[] = [
-    { personId: 1, libelle: 'Cobalt Romarin', groupe: 'pp' },
-    { personId: 2, libelle: 'Ambre Chardon', groupe: 'mp' },
-    { personId: 3, libelle: 'Jaspe Tilleul', groupe: 'mm' },
+    { personId: 1, libelle: 'Cobalt Romarin', groupe: 'pp', nomDuGroupe: 'Romarin' },
+    { personId: 2, libelle: 'Ambre Chardon', groupe: 'mp', nomDuGroupe: 'Chardon' },
+    { personId: 3, libelle: 'Jaspe Tilleul', groupe: 'mm', nomDuGroupe: 'Tilleul' },
   ]
 
   it('le compteur, « Tous les vivants » et un raccourci par branche', async () => {

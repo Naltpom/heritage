@@ -26,6 +26,7 @@
 
 import { requeteApi, type Graphe, type NoeudPersonne } from '@/lib/api'
 import { nomBranche } from '@/components/personne/champs'
+import { disposerLignees, LIBELLES_QUART } from '@/histoire/lignees'
 
 /**
  * Charge le graphe du lecteur et en tire les invitables. Un appel simple, sans
@@ -35,7 +36,7 @@ import { nomBranche } from '@/components/personne/champs'
  */
 export async function chargerLesInvitables(signal?: AbortSignal): Promise<Invitable[]> {
   const graphe = await requeteApi<Graphe>('/arbre/graphe', signal === undefined ? {} : { signal })
-  return invitablesDuGraphe(graphe)
+  return invitablesDuGraphe(graphe, nomsDesGroupes(graphe))
 }
 
 export interface Invitable {
@@ -43,7 +44,35 @@ export interface Invitable {
   libelle: string
   /** La branche du lecteur (`pp`, `tr`, `cmm`…) ou `alliance` — pour les raccourcis. */
   groupe: string
+  /** Comment l'arbre nomme ce groupe : « Provost », « Tronc », « Par alliance »… */
+  nomDuGroupe: string
 }
+
+/**
+ * Les noms des groupes **tels que l'arbre les affiche** : un quart porte le nom
+ * de famille de son grand-parent de tête (« Provost », « Destombes »), comme la
+ * bande en haut de l'arbre et les boutons « Branches » de ses filtres — pas le
+ * nom court de la branche (« Romarin »), que personne ne reconnaît ici. On le
+ * demande à `disposerLignees`, qui le calcule déjà ; à défaut (quart sans tête
+ * connue), le rôle : « Père du père ».
+ */
+export function nomsDesGroupes(graphe: Graphe): Record<string, string> {
+  const noms: Record<string, string> = { tr: 'Tronc', alliance: 'Par alliance' }
+  let quarts: { branche: string; nom: string }[] = []
+  try {
+    quarts = disposerLignees(graphe).quarts
+  } catch {
+    // un graphe que la disposition ne sait pas lire : les rôles suffiront
+  }
+  for (const [cle, role] of Object.entries(LIBELLES_QUART)) {
+    const nom = quarts.find((q) => q.branche === cle)?.nom ?? ''
+    noms[cle] = nom === '' ? role : cle.startsWith('c') ? `${nom} (conjoint)` : nom
+  }
+  return noms
+}
+
+/** Un nom qui n'en est pas un (« ? », vide) : la fiche n'est pas proposable. */
+const sansNom = (libelle: string): boolean => !/\p{L}/u.test(libelle)
 
 /** L'ordre des raccourcis : les quatre quarts, le tronc, ceux du conjoint, puis les alliances. */
 const ORDRE_DES_GROUPES = ['pp', 'pm', 'mp', 'mm', 'tr', 'cpp', 'cpm', 'cmp', 'cmm', 'alliance']
@@ -55,7 +84,7 @@ const ORDRE_DES_GROUPES = ['pp', 'pm', 'mp', 'mm', 'tr', 'cpp', 'cpm', 'cmp', 'c
  * rangée dans aucune branche du lecteur — le front ne lit jamais sa `branch`
  * (révision du 2026-10-01) : elle forme son propre groupe.
  */
-export function invitablesDuGraphe(graphe: Pick<Graphe, 'noeuds'>): Invitable[] {
+export function invitablesDuGraphe(graphe: Pick<Graphe, 'noeuds'>, noms: Record<string, string> = {}): Invitable[] {
   const vus = new Set<number>()
   const invitables: Invitable[] = []
 
@@ -63,19 +92,21 @@ export function invitablesDuGraphe(graphe: Pick<Graphe, 'noeuds'>): Invitable[] 
     if (noeud.type !== 'personne') continue
     const p: NoeudPersonne = noeud
     if (p.personId === null || p.enAttente === true || !p.vivant || p.visibilite !== 'complete') continue
-    if (vus.has(p.personId)) continue
+    if (vus.has(p.personId) || sansNom(p.displayName)) continue
     vus.add(p.personId)
+    const groupe = p.parente === 'alliance' ? 'alliance' : p.branch
     invitables.push({
       personId: p.personId,
       libelle: p.displayName,
-      groupe: p.parente === 'alliance' ? 'alliance' : p.branch,
+      groupe,
+      nomDuGroupe: noms[groupe] ?? libelleDuGroupe(groupe),
     })
   }
 
   return invitables.sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr'))
 }
 
-/** Le libellé d'un groupe : le nom court de la branche (« Romarin »), ou « Par alliance ». */
+/** Le libellé de repli d'un groupe, sans graphe : le nom court de la branche, ou « Par alliance ». */
 export function libelleDuGroupe(groupe: string): string {
   return groupe === 'alliance' ? 'Par alliance' : nomBranche(groupe)
 }
@@ -92,7 +123,7 @@ export function groupesDisponibles(invitables: readonly Invitable[]): { cle: str
 
   return [...effectifs.entries()]
     .sort(([a], [b]) => rang(a) - rang(b) || a.localeCompare(b))
-    .map(([cle, nombre]) => ({ cle, libelle: libelleDuGroupe(cle), nombre }))
+    .map(([cle, nombre]) => ({ cle, libelle: invitables.find((i) => i.groupe === cle)?.nomDuGroupe ?? libelleDuGroupe(cle), nombre }))
 }
 
 /** Minuscules, sans accents : « Élise » se trouve en tapant « elise ». */

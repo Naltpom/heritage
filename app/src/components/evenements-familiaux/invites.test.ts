@@ -51,11 +51,22 @@ describe('qui peut être invité', () => {
       personne(null, 'Fiche proposée', { enAttente: true }),
       personne(4, 'Fiche en attente', { enAttente: true }),
       personne(5, 'Ambre Chardon', { branch: 'mp' }),
+      personne(6, '?', { branch: 'mp' }),
       { type: 'famille', id: 'f1', x: 0, y: 0, w: 1, h: 1, familyId: 1, divorced: false },
     ]))
 
     expect(invitables.map((i) => i.personId)).toEqual([5, 1])
     expect(JSON.stringify(invitables)).not.toContain('Personne vivante')
+  })
+
+  it('porte le nom que l’arbre donne au groupe, et le nom court à défaut', () => {
+    const noms = { pp: 'Provost', mp: 'Voulgre' }
+    const invitables = invitablesDuGraphe(graphe([
+      personne(1, 'Cobalt Romarin', { branch: 'pp' }),
+      personne(5, 'Ambre Chardon', { branch: 'tr' }),
+    ]), noms)
+    expect(invitables.find((i) => i.personId === 1)?.nomDuGroupe).toBe('Provost')
+    expect(invitables.find((i) => i.personId === 5)?.nomDuGroupe).toBe('Tronc')
   })
 
   it('une personne entrée par alliance forme son propre groupe, quelle que soit sa branche', () => {
@@ -73,13 +84,13 @@ describe('qui peut être invité', () => {
 describe('les raccourcis par branche', () => {
   it('dans l’ordre de la légende, avec leur effectif', () => {
     const invitables: Invitable[] = [
-      { personId: 1, libelle: 'A', groupe: 'tr' },
-      { personId: 2, libelle: 'B', groupe: 'alliance' },
-      { personId: 3, libelle: 'C', groupe: 'pp' },
-      { personId: 4, libelle: 'D', groupe: 'tr' },
+      { personId: 1, libelle: 'A', groupe: 'tr', nomDuGroupe: 'Tronc' },
+      { personId: 2, libelle: 'B', groupe: 'alliance', nomDuGroupe: 'Par alliance' },
+      { personId: 3, libelle: 'C', groupe: 'pp', nomDuGroupe: 'Provost' },
+      { personId: 4, libelle: 'D', groupe: 'tr', nomDuGroupe: 'Tronc' },
     ]
     expect(groupesDisponibles(invitables)).toEqual([
-      { cle: 'pp', libelle: 'Romarin', nombre: 1 },
+      { cle: 'pp', libelle: 'Provost', nombre: 1 },
       { cle: 'tr', libelle: 'Tronc', nombre: 2 },
       { cle: 'alliance', libelle: 'Par alliance', nombre: 1 },
     ])
