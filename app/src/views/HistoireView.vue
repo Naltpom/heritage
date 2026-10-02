@@ -113,6 +113,10 @@ const grapheCharge = shallowRef<Graphe | null>(null)
  */
 const CLE_CONJOINT = 'heritage.arbre.familleDuConjoint'
 const CLE_ALLIANCES = 'heritage.arbre.famillesParAlliance'
+/** Affichées : chacune à part (défaut, la vue d'avant) ou rangée dans les branches. */
+const CLE_ALLIANCES_DANS_L_ARBRE = 'heritage.arbre.alliancesDansLArbre'
+/** Les fratries dans l'ordre des naissances (l'aîné à gauche) ; décochée, la règle d'avant. */
+const CLE_FRATRIES = 'heritage.arbre.fratriesParNaissance'
 function lirePreference(cle: string, parDefaut: boolean): boolean {
   try {
     const v = localStorage.getItem(cle)
@@ -130,6 +134,8 @@ function ecrirePreference(cle: string, affichee: boolean): void {
 }
 const avecConjoint = ref(lirePreference(CLE_CONJOINT, true))
 const avecAlliances = ref(lirePreference(CLE_ALLIANCES, false))
+const alliancesDansLArbre = ref(lirePreference(CLE_ALLIANCES_DANS_L_ARBRE, false))
+const fratriesParNaissance = ref(lirePreference(CLE_FRATRIES, false))
 const grapheSansConjoint = computed(() => (grapheCharge.value ? sansFamilleDuConjoint(grapheCharge.value) : null))
 const aUneFamilleDeConjoint = computed(() => grapheSansConjoint.value !== grapheCharge.value)
 const aDesAlliances = computed(() => (grapheCharge.value ? aDesFamillesParAlliance(grapheCharge.value) : false))
@@ -154,7 +160,10 @@ function disposer(graphe: Graphe): void {
   const sansAlliances = avecAlliances.value ? graphe : sansFamillesParAlliance(graphe)
   const filtre = avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
   // Les boîtes en dernier : le tri des familles ne lit que les liens, jamais `w` ni `h`.
-  disposition.value = disposerLignees(auFormat(filtre, formatDesCartes.value))
+  disposition.value = disposerLignees(auFormat(filtre, formatDesCartes.value), {
+    alliances: alliancesDansLArbre.value ? 'dans-l-arbre' : 'a-part',
+    fratriesParNaissance: fratriesParNaissance.value,
+  })
 }
 /** Après une bascule : la disposition refaite, et ce qui n'existe plus oublié. */
 function redisposer(): void {
@@ -168,6 +177,14 @@ function redisposer(): void {
 }
 watch(avecConjoint, (avec) => {
   ecrirePreference(CLE_CONJOINT, avec)
+  redisposer()
+})
+watch(alliancesDansLArbre, (dans) => {
+  ecrirePreference(CLE_ALLIANCES_DANS_L_ARBRE, dans)
+  redisposer()
+})
+watch(fratriesParNaissance, (oui) => {
+  ecrirePreference(CLE_FRATRIES, oui)
   redisposer()
 })
 /*
@@ -567,6 +584,11 @@ function basculerBranche(b: BrancheDeQuart): void {
   filtres.masquees = filtres.masquees.includes(b) ? filtres.masquees.filter((x) => x !== b) : [...filtres.masquees, b]
 }
 
+const OPTIONS_ALLIANCES = [
+  { dans: false, libelle: 'À part', sous: 'chacune son bloc, à droite' },
+  { dans: true, libelle: 'Dans mon arbre', sous: 'dans la branche qui les relie' },
+] as const
+
 const BASCULES = [
   { cle: 'ligneDirecte', libelle: 'Ma ligne directe', sous: 'vous et vos ancêtres' },
   { cle: 'vivants', libelle: 'Personnes vivantes', sous: '' },
@@ -576,10 +598,11 @@ const BASCULES = [
  * La branche d'une fiche pour la TEINTE et les filtres : une fiche par alliance n'est
  * d'aucune branche du lecteur, quelle que soit celle que le serveur lui donne.
  */
-const brancheDe = (f: FicheHistoire): string => (f.parente === 'alliance' ? 'hors' : f.noeud.branch)
+const brancheDe = (f: FicheHistoire): string =>
+  f.parente === 'alliance' && !disposition.value?.alliancesDansLArbre ? 'hors' : f.noeud.branch
 
 function passe(f: FicheHistoire): boolean {
-  if (f.parente !== 'alliance' && (filtres.masquees as Branche[]).includes(f.noeud.branch)) return false
+  if (brancheDe(f) !== 'hors' && (filtres.masquees as Branche[]).includes(f.noeud.branch)) return false
   if (filtres.ligneDirecte && !f.directe) return false
   if (filtres.vivants && !f.noeud.vivant) return false
   if (filtres.qualite) {
@@ -1227,7 +1250,39 @@ onBeforeUnmount(() => {
               <span class="text-xs text-attenue">les familles des conjoints de vos proches</span>
             </span>
           </button>
+          <div v-if="avecAlliances" class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Où afficher les familles par alliance">
+            <button
+              v-for="o in OPTIONS_ALLIANCES"
+              :key="o.libelle"
+              type="button"
+              role="radio"
+              :aria-checked="alliancesDansLArbre === o.dans"
+              class="flex min-h-11 flex-col justify-center rounded-champ border px-2.5 py-1.5 text-left leading-tight"
+              :class="alliancesDansLArbre === o.dans ? 'border-accent bg-accent-doux' : 'border-ligne'"
+              @click="alliancesDansLArbre = o.dans"
+            >
+              <span class="text-[13px] font-semibold">{{ o.libelle }}</span>
+              <span class="text-[11px] text-attenue">{{ o.sous }}</span>
+            </button>
+          </div>
         </template>
+        <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Fratries</div>
+        <button
+          type="button"
+          role="checkbox"
+          :aria-checked="fratriesParNaissance"
+          class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
+          @click="fratriesParNaissance = !fratriesParNaissance"
+        >
+          <span
+            class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
+            :class="fratriesParNaissance ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+          >{{ fratriesParNaissance ? '✓' : '' }}</span>
+          <span class="flex flex-1 flex-col leading-tight">
+            <span class="text-sm">Par ordre de naissance</span>
+            <span class="text-xs text-attenue">l’aîné à gauche, le plus jeune à droite</span>
+          </span>
+        </button>
         <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Afficher seulement</div>
         <button
           v-for="t in BASCULES"

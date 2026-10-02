@@ -160,6 +160,8 @@ export interface DispositionHistoire {
   quarts: Quart[]
   /** Les familles par alliance présentes dans le graphe, de gauche à droite. */
   alliances: BlocAlliance[]
+  /** Les familles par alliance sont rangées dans les branches (teinte et filtres compris). */
+  alliancesDansLArbre: boolean
   /** La zone des personnes détachées, au-delà du bord droit ; `null` s'il n'y en a pas. */
   zoneDetachee: { cx: number; x0: number; x1: number; effectif: number } | null
   generations: GenerationHistoire[]
@@ -371,6 +373,18 @@ export interface OptionsDeDisposition {
    * famille » de ce pont, on ne reclasse rien (sinon chaque groupe se viderait).
    */
   interne?: boolean
+  /**
+   * Où vont les familles par alliance affichées : `a-part` (défaut), chacune son bloc à
+   * droite ; `dans-l-arbre`, rattachées comme des alliés à côté de la personne qui les
+   * relie, dans sa branche et sa teinte — au prix de traits plus longs.
+   */
+  alliances?: 'a-part' | 'dans-l-arbre'
+  /**
+   * Chaque fratrie de la lignée directe dans l'ordre des naissances, l'aîné à gauche,
+   * l'ancêtre direct à sa place. Sans elle (défaut), la fratrie est rangée à
+   * l'EXTÉRIEUR de la lignée (règle 3) et l'ancêtre reste côté intérieur.
+   */
+  fratriesParNaissance?: boolean
 }
 
 export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = {}): DispositionHistoire {
@@ -386,7 +400,9 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
    * collatéral, ni le rattrapage dans les creux. Elles entrent d'un bloc, après.
    */
   const classes = options.interne ? null : classerParente(graphe)
-  const groupes = options.interne ? new Map<string, string[]>() : groupesParAlliance(graphe)
+  const alliancesDansLArbre = options.alliances === 'dans-l-arbre'
+  const groupes =
+    options.interne || alliancesDansLArbre ? new Map<string, string[]>() : groupesParAlliance(graphe)
   const horsJeu = new Set([...groupes.values()].flat())
   const enJeu = (id: string): boolean => personnes.has(id) && !horsJeu.has(id)
 
@@ -630,7 +646,8 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
       .sort((a, b) => anneeTri(a) - anneeTri(b))
     if (!fratrie.includes(direct)) fratrie.push(direct)
     const autres = fratrie.filter((e) => e !== direct)
-    const ordre = cote === 'G' ? [...autres, direct] : cote === 'D' ? [direct, ...autres] : fratrie
+    const ordre =
+      options.fratriesParNaissance || cote === 'C' ? fratrie : cote === 'G' ? [...autres, direct] : [direct, ...autres]
     const iDirect = ordre.indexOf(direct)
 
     const parties = ordre.map((e, i) => {
@@ -638,7 +655,9 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
         if (poses.has(e)) return fantome(e, g + 1)
         return m === 1 ? blocDescendance(e, 'D', g + 1) : ancetreEtSesUnions(e, m, g + 1)
       }
-      const sens: Cote = cote === 'C' ? (i < iDirect ? 'G' : 'D') : cote
+      // Un aîné à gauche de l'ancêtre pose son conjoint et sa descendance vers la gauche,
+      // un cadet vers la droite : rien ne vient s'intercaler sous l'ancêtre.
+      const sens: Cote = cote === 'C' || options.fratriesParNaissance ? (i < iDirect ? 'G' : 'D') : cote
       return blocDescendance(e, sens, g + 1)
     })
     const { forme: G, ancres } = empiler(parties, ECART_FRATRIE)
@@ -968,7 +987,10 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     const x = xDe()
     const ordre = [...groupes].filter(([pont]) => poses.has(pont)).sort(([a], [b]) => x.get(a)! - x.get(b)!)
     for (const [pont, membres] of ordre) {
-      const sous = disposerLignees(sousGraphe(pont, membres), { interne: true })
+      const sous = disposerLignees(sousGraphe(pont, membres), {
+        interne: true,
+        fratriesParNaissance: options.fratriesParNaissance === true,
+      })
       const g0 = rangeeDe.get(pont)!
       const bloc = vide()
       const ids: string[] = []
@@ -1387,7 +1409,9 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
   for (const branche of ['pp', 'pm', 'mp', 'mm', 'cpp', 'cpm', 'cmp', 'cmm'] as const) {
     // Une fiche par alliance n'est d'aucun quart, quelle que soit la branche servie : la
     // bande « Voulgre » s'étirait sur toute l'ascendance du mari de la tante.
-    const membres = fiches.filter((f) => f.noeud.branch === branche && f.parente !== 'alliance')
+    const membres = fiches.filter(
+      (f) => f.noeud.branch === branche && (f.parente !== 'alliance' || alliancesDansLArbre),
+    )
     if (!membres.length) continue
     const duConjoint = branche.startsWith('c')
     const cle = (duConjoint ? branche.slice(1) : branche) as 'pp' | 'pm' | 'mp' | 'mm'
@@ -1438,6 +1462,7 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     foyers,
     quarts,
     alliances,
+    alliancesDansLArbre,
     zoneDetachee,
     generations,
     largeur: maxX - minX + 2 * MARGE_X,
