@@ -137,7 +137,7 @@ function poserRang(index: number, brut: string): void {
         <SelecteurPersonne
           v-if="saisie.filiation.famille === null && saisie.filiation.parents.length < 2"
           etiquette="Ajouter un parent"
-          aide="Un ou deux parents. Le service rapprochera le couple — ou le créera — au moment de la validation."
+          aide="Un ou deux parents."
           :deja-choisis="dejaChoisis"
           @choisir="ajouterParent"
         />
@@ -168,7 +168,7 @@ function poserRang(index: number, brut: string): void {
             v-model="union.mariage"
             etiquette="Mariage"
             :erreur="erreurs[`unions.${index}.mariage`] ?? ''"
-            aide="Facultatif : une union sans date reste une union."
+            aide="Facultatif."
           />
 
           <label class="flex items-start gap-2">
@@ -180,7 +180,7 @@ function poserRang(index: number, brut: string): void {
             <span class="text-sm">
               Union rompue
               <span class="block text-xs text-attenue">
-                Divorce ou séparation. La date peut rester inconnue.
+                Divorce ou séparation, même sans date.
               </span>
             </span>
           </label>
@@ -248,7 +248,7 @@ function poserRang(index: number, brut: string): void {
 
         <SelecteurPersonne
           etiquette="Ajouter un enfant"
-          aide="Le rang est facultatif : sans lui, l’enfant est rattaché à la fin de la fratrie."
+          aide="Rang facultatif : sans lui, l’enfant est placé en dernier."
           :deja-choisis="dejaChoisis"
           @choisir="ajouterEnfant"
         />
@@ -263,10 +263,10 @@ function poserRang(index: number, brut: string): void {
     >
       <template v-if="erreurs['liens']">{{ erreurs['liens'] }}</template>
       <template v-else-if="total === 0">
-        Aucun lien pour l’instant. Il en faudra au moins un pour soumettre la demande.
+        Ajoutez au moins un lien avant d’envoyer.
       </template>
       <template v-else>
-        {{ total }} lien{{ total > 1 ? 's' : '' }} — la personne sera rattachée à l’arbre.
+        {{ total }} lien{{ total > 1 ? 's' : '' }} : la personne sera reliée à l’arbre.
       </template>
     </p>
   </div>

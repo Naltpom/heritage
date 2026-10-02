@@ -248,13 +248,13 @@ describe('FriseHistorique — le rendu', () => {
   it('ne dit pas « vide » tant que les révisions se chargent', async () => {
     const html = await rendre(FriseHistorique, { entrees: [], ficheId: 17, etatRevisions: 'chargement' })
     expect(html).not.toContain('data-historique-vide')
-    expect(html).toContain('Chargement des modifications appliquées')
+    expect(html).toContain('Chargement des modifications')
   })
 
   it('dit au lecteur sans accès aux révisions pourquoi il ne voit que les ajouts', async () => {
     const html = await rendre(FriseHistorique, { entrees, ficheId: 17, etatRevisions: 'reserve' })
     expect(html).toContain('data-etat-revisions="reserve"')
-    expect(html).toContain('ne sont visibles que des membres')
+    expect(html).toContain('réservées aux membres')
   })
 })
 

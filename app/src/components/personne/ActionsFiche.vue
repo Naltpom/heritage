@@ -97,7 +97,7 @@ const NEUTRE = 'border-ligne bg-panneau text-texte hover:border-accent hover:tex
         :to="versSuppression"
         data-geste="demander-suppression"
         aria-label="Demander la suppression de cette fiche"
-        title="Demander la suppression de cette fiche — l’écran montre d’abord tout ce qu’elle emporterait"
+        title="Demander la suppression de cette fiche"
         :class="[BASE, taille, 'border-alerte-bord bg-panneau text-alerte hover:border-alerte hover:bg-alerte-doux']"
       >
         <svg viewBox="0 0 24 24" class="size-[18px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -110,7 +110,7 @@ const NEUTRE = 'border-ligne bg-panneau text-texte hover:border-accent hover:tex
         :to="versAssistant"
         data-geste="assistant"
         aria-label="Demander à l’assistant"
-        title="Demander à l’assistant — décrivez en une phrase ce qu’il faut corriger ou ajouter sur cette fiche"
+        title="Dire à l’assistant ce qu’il faut corriger ou ajouter"
         :class="[BASE, taille, NEUTRE]"
       >
         <svg viewBox="0 0 24 24" class="size-[18px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -124,7 +124,7 @@ const NEUTRE = 'border-ligne bg-panneau text-texte hover:border-accent hover:tex
         :to="versDepot"
         data-geste="joindre-document"
         aria-label="Joindre un document"
-        title="Joindre un document — un acte, une photo, une preuve"
+        title="Joindre un acte, une photo ou une preuve"
         :class="[BASE, taille, NEUTRE]"
       >
         <svg viewBox="0 0 24 24" class="size-[18px]" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -138,7 +138,7 @@ const NEUTRE = 'border-ligne bg-panneau text-texte hover:border-accent hover:tex
         type="button"
         data-geste="editer"
         aria-label="Corriger la fiche"
-        title="Corriger la fiche — les champs et la famille deviennent modifiables ; rien ne part avant « Corriger »"
+        title="Corriger la fiche : rien n’est envoyé avant « Corriger »"
         :class="[BASE, taille, 'border-edition bg-edition text-edition-texte hover:opacity-90']"
         @click="emit('editer')"
       >
@@ -154,7 +154,7 @@ const NEUTRE = 'border-ligne bg-panneau text-texte hover:border-accent hover:tex
         type="button"
         data-geste="annuler-edition"
         aria-label="Annuler les corrections"
-        title="Annuler — quitter le mode édition sans rien envoyer"
+        title="Quitter sans rien envoyer"
         :disabled="envoi"
         :class="[BASE, taille, NEUTRE, 'disabled:opacity-55']"
         @click="emit('annuler')"
@@ -167,7 +167,7 @@ const NEUTRE = 'border-ligne bg-panneau text-texte hover:border-accent hover:tex
         type="button"
         data-geste="corriger"
         aria-label="Corriger : relire puis envoyer"
-        title="Corriger — relire tous les changements, puis les envoyer en demande"
+        title="Relire puis envoyer les changements"
         :disabled="envoi"
         :class="[BASE, taille, 'border-edition bg-edition text-edition-texte hover:opacity-90 disabled:opacity-55']"
         @click="emit('corriger')"

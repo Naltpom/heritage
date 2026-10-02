@@ -78,29 +78,28 @@ const PASTILLE_APPUI: Record<'acte' | 'index' | 'arbre', string> = {
       data-etat-revisions="chargement"
       aria-live="polite"
     >
-      Chargement des modifications appliquées…
+      Chargement des modifications…
     </p>
     <p
       v-else-if="etatRevisions === 'reserve'"
       class="m-0 text-xs text-attenue"
       data-etat-revisions="reserve"
     >
-      Les modifications appliquées à la fiche ne sont visibles que des membres ; seuls les
-      ajouts figurent ici.
+      Les modifications sont réservées aux membres : seuls les ajouts figurent ici.
     </p>
     <p
       v-else-if="etatRevisions === 'tronque'"
       class="m-0 text-xs text-attenue"
       data-etat-revisions="tronque"
     >
-      Seules les modifications les plus récentes ont été chargées.
+      Seules les modifications récentes sont affichées.
     </p>
     <!-- Les révisions n'ont pas pu être chargées : les ajouts restent lisibles
          dessous, et l'erreur dit quoi faire. -->
     <MessageErreur
       v-else-if="etatRevisions === 'erreur'"
       :erreur="erreur"
-      titre="Les modifications appliquées n’ont pas pu être chargées."
+      titre="Les modifications n’ont pas pu être chargées."
       @action="emit('reessayer')"
     />
 
@@ -200,7 +199,7 @@ const PASTILLE_APPUI: Record<'acte' | 'index' | 'arbre', string> = {
             >
               Demande n° {{ entree.demandeId }}
             </RouterLink>
-            <span v-else-if="entree.importGedcom" class="text-attenue">Import GEDCOM</span>
+            <span v-else-if="entree.importGedcom" class="text-attenue">Import de l’arbre</span>
             <RouterLink
               v-if="entree.nature !== 'revision'"
               :to="{ name: 'personne.detail', params: { id: ficheId }, query: requeteDOnglet('sources') }"

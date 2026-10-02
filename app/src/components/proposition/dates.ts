@@ -671,31 +671,31 @@ export function valeurAEnvoyer(saisie: SaisieDate): ResultatSaisieDate {
  * contributeur doit pouvoir relire avant de valider.
  */
 export function apercuDeValeur(valeur: ValeurDate | null): string {
-  if (valeur === null) return 'Aucune date ne sera proposée.'
+  if (valeur === null) return 'Aucune date.'
 
   const lieu = valeur.place === null ? '' : `, à ${valeur.place}`
   switch (valeur.qualifier) {
     case 'inconnue':
       return `Date inconnue${lieu}.`
     case 'entre':
-      return `Entre le ${valeur.min} et le ${valeur.max}, bornes comprises${lieu}.`
+      return `Entre le ${jjmmaaaa(valeur.min)} et le ${jjmmaaaa(valeur.max)}${lieu}.`
     case 'avant':
-      return `Avant le ${valeur.max}, borne comprise${lieu}.`
+      return `Au plus tard le ${jjmmaaaa(valeur.max)}${lieu}.`
     case 'apres':
-      return `À partir du ${valeur.min}${lieu}.`
+      return `À partir du ${jjmmaaaa(valeur.min)}${lieu}.`
     case 'environ':
-      return `Vers ${anneeDe(valeur.min)} — la fourchette ${valeur.min} → ${valeur.max} n’est pas élargie${lieu}.`
+      return `Vers ${anneeDe(valeur.min)}${lieu}.`
     case 'annee':
-      return `Année ${anneeDe(valeur.min)}, jour et mois inconnus${lieu}.`
+      return `En ${anneeDe(valeur.min)}${lieu}.`
     case 'exacte':
-      return `Le ${valeur.min}${lieu}.`
+      return `Le ${jjmmaaaa(valeur.min)}${lieu}.`
     case 'mois':
-      return `Mois entier, du ${valeur.min} au ${valeur.max}, bornes comprises${lieu}.`
+      return `En ${mmaaaa(valeur.min)}${lieu}.`
     // `depuis` et `jusqu_a` portent une borne **ouverte** : le dire, plutôt que
     // de laisser croire à un intervalle fermé dont une extrémité serait vide.
     case 'depuis':
-      return `À partir du ${valeur.min}, sans fin connue${lieu}.`
+      return `À partir du ${jjmmaaaa(valeur.min)}${lieu}.`
     case 'jusqu_a':
-      return `Jusqu’au ${valeur.max}, sans début connu${lieu}.`
+      return `Jusqu’au ${jjmmaaaa(valeur.max)}${lieu}.`
   }
 }

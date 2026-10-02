@@ -49,25 +49,23 @@ const { regime } = useSession()
 </script>
 
 <template>
-  <PanneauBase titre="Fiche à diffusion restreinte" class="mb-4">
+  <PanneauBase titre="Fiche réservée" class="mb-4">
     <p class="text-sm leading-relaxed">
       <template v-if="regime === 'en_attente'">
         <strong class="font-semibold">Cette personne est vivante.</strong>
-        Tant que votre rattachement n’est pas validé, aucune personne vivante ne vous est
-        accessible — y compris celle à laquelle vous vous rattachez.
+        Vous la verrez une fois votre inscription validée.
       </template>
       <!-- Depuis le 2026-10-01, un membre validé voit tous les vivants : une fiche
            réduite est, pour lui, une fiche à confidentialité forcée (ADR 0003). -->
       <template v-else>
         <strong class="font-semibold">Fiche confidentielle.</strong>
-        Sa diffusion est restreinte par décision d’administration : ni dates, ni lieux, ni
-        sources, ni photos, ni parenté ne vous sont communiqués.
+        Un administrateur l’a réservée : ni dates, ni lieux, ni sources, ni photos, ni parenté
+        ne vous sont envoyés.
       </template>
     </p>
 
     <p class="mt-2 text-sm leading-relaxed text-attenue">
-      Ces informations ne sont pas masquées à l’écran : le serveur ne les a pas envoyées. Sa
-      place dans l’arbre, elle, reste visible — c’est pour cela que vous avez pu arriver ici.
+      Sa place dans l’arbre reste visible.
     </p>
 
     <!-- Les trois champs que les sept clés permettent d'écrire. Aucun n'est
@@ -82,7 +80,7 @@ const { regime } = useSession()
           Revenir à l’arbre
         </RouterLink>
         <span class="text-xs text-attenue">
-          Le cercle se règle par un administrateur ; il ne s’ouvre pas depuis cet écran.
+          Seul un administrateur peut changer cet accès.
         </span>
       </div>
     </template>

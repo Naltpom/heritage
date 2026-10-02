@@ -319,11 +319,8 @@ function refaire(demandeId: number | null): void {
     <!-- L'impasse cohérente du § 5.1, dite en une phrase. -->
     <PanneauBase v-else-if="restreinte" titre="Cette fiche ne peut pas être modifiée ici">
       <p class="text-sm">
-        Vous voyez le nom de cette personne dans l’arbre, mais aucune de ses données :
-        proposer une correction supposerait de savoir ce qu’elles valent aujourd’hui.
-      </p>
-      <p class="mt-2 text-sm text-attenue">
-        Un administrateur peut vous rattacher autrement, ou déposer la correction à votre place.
+        Ses informations ne vous sont pas visibles : demandez à un administrateur de faire la
+        correction.
       </p>
     </PanneauBase>
 
@@ -374,7 +371,7 @@ function refaire(demandeId: number | null): void {
       <PanneauBase v-if="champsEnAttente.length > 0" class="mb-4">
         <p class="flex flex-wrap items-center gap-2 text-sm">
           <PastilleEtat etat="en_attente" />
-          <span>Déjà proposé, en attente : {{ champsEnAttente.join(', ') }}.</span>
+          <span>Déjà proposé : {{ champsEnAttente.join(', ') }}.</span>
         </p>
       </PanneauBase>
 
@@ -446,7 +443,7 @@ function refaire(demandeId: number | null): void {
             v-model="message"
             rows="2"
             aria-label="Message à l’administrateur"
-            placeholder="Un mot pour l’administrateur (facultatif) — « j’ai l’acte de naissance »"
+            placeholder="Un mot pour l’administrateur (facultatif)"
             class="w-full rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
           />
         </PanneauBase>

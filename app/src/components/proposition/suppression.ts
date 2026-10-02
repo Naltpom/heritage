@@ -53,7 +53,7 @@ export function erreurDeMotif(motif: string): string | null {
   const propre = motif.trim()
 
   if (propre.length === 0) {
-    return 'Dites pourquoi cette fiche doit disparaître : l’administrateur va trancher.'
+    return 'Dites pourquoi supprimer cette fiche : un administrateur va trancher.'
   }
 
   if (propre.length < MOTIF_MINIMUM) {
@@ -136,14 +136,14 @@ export function lignesEmportees(inventaire: InventaireDeSuppression): LigneEmpor
   // cercle ni parenté, et son titulaire le découvre en se connectant.
   if (inventaire.membreId !== null) {
     lignes.push({
-      libelle: `le compte membre n° ${inventaire.membreId}, qui perdrait son point de départ dans l’arbre`,
+      libelle: `le compte membre n° ${inventaire.membreId}, relié à cette fiche`,
       bloquante: true,
     })
   }
 
   if (inventaire.invitationsActives > 0) {
     lignes.push({
-      libelle: 'une invitation en attente, qui créerait à son acceptation un compte sans fiche',
+      libelle: 'une invitation en attente, qui resterait sans fiche à son acceptation',
       bloquante: true,
     })
   }

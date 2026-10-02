@@ -364,7 +364,7 @@ export function valeursDepuisSaisie(saisie: SaisieModification): {
   // la même chose, dans les mêmes termes.
   if (!saisie.deceased && porteUneDateDeDeces(deces.valeur)) {
     erreurs['deceased'] =
-      'Une date de décès est indiquée : cochez « personne décédée », ou effacez la date.'
+      'Une date de décès est indiquée : cochez « Décès attesté », ou effacez la date.'
 
     return { valeurs: null, erreurs }
   }

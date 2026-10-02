@@ -139,7 +139,7 @@ describe('§ 13.2 — l’écran montre la valeur proposée ET la valeur validé
     expect(html).toContain('Proposé par Opale Romarin')
     expect(html).toContain('Demande n° 14')
     // `actuel` est accessible sans condition, dans le repli.
-    expect(html).toContain('Valeur au dépôt de la demande')
+    expect(html).toContain('Valeur au moment de la demande')
   })
 
   it('annonce la caducité quand la fiche a bougé depuis le dépôt', async () => {
@@ -162,7 +162,7 @@ describe('§ 13.2 — l’écran montre la valeur proposée ET la valeur validé
       },
     )
 
-    expect(html).toContain('La fiche a changé depuis le dépôt')
+    expect(html).toContain('La fiche a changé depuis cette demande')
     expect(html).toContain('Bourrache-Sureau')
   })
 
@@ -181,6 +181,13 @@ describe('§ 14 — la fourchette arrive telle quelle jusqu’au HTML', () => {
 })
 
 describe('§ 1.3 — une valeur nulle garde sa ligne, un champ interdit n’en a pas', () => {
+  it('n’écrit la référence d’import qu’à l’administrateur', async () => {
+    const html = await rendre(IdentiteFiche, { fiche: ficheComplete() })
+    expect(html).toContain('Prénoms')
+    expect(html).not.toContain('Référence GEDCOM')
+    expect(html).not.toContain('@I500017@')
+  })
+
   it('écrit un mot pour un champ à null, jamais un tiret', async () => {
     const html = await rendre(IdentiteFiche, { fiche: ficheComplete({ nickname: null }) })
     expect(html).toContain('Surnom')
@@ -210,7 +217,7 @@ describe('§ 1.3 — une valeur nulle garde sa ligne, un champ interdit n’en a
     expect(html).toContain('Fiche confidentielle')
     // La phrase qui distingue « masqué à l'écran » de « pas envoyé » : c'est
     // toute la différence entre une règle appliquée et une règle affichée.
-    expect(html).toContain('le serveur ne les a pas envoyées')
+    expect(html).toContain('ne vous sont envoyés')
     expect(html).toContain('Revenir à l’arbre')
   })
 
