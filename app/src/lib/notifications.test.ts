@@ -28,7 +28,7 @@ describe('la pastille', () => {
 })
 
 describe('le type', () => {
-  it('a une étiquette lisible pour chacun des onze types du serveur', () => {
+  it('a une étiquette lisible pour chacun des quatorze types du serveur', () => {
     const types = [
       'demande_soumise',
       'demande_validee',
@@ -41,6 +41,9 @@ describe('le type', () => {
       'media_valide',
       'media_refuse',
       'tirage_effectue',
+      'evenement_invitation',
+      'evenement_relance',
+      'evenement_annule',
     ]
     for (const t of types) {
       expect(libelleDeType(t)).not.toBe('Notification')
@@ -57,6 +60,8 @@ describe('le type', () => {
     expect(tonDeType('demande_validee')).toBe('ok')
     expect(tonDeType('compte_active')).toBe('ok')
     expect(tonDeType('tirage_effectue')).toBe('neutre')
+    expect(tonDeType('evenement_invitation')).toBe('neutre')
+    expect(tonDeType('evenement_annule')).toBe('alerte')
   })
 })
 

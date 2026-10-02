@@ -2,19 +2,22 @@
 
 declare(strict_types=1);
 
-namespace App\Module\Tirage\Service;
+namespace App\Module\Core\Service;
 
 /**
- * La clé du lien personnel d'un participant : sa génération, son empreinte, sa forme.
+ * La clé d'un **lien personnel** — celui d'un participant de tirage (`/t/<clé>`), celui d'un
+ * invité à un événement (`/e/<clé>`) : sa génération, son empreinte, sa forme.
  *
- * ## Une copie, et non un emprunt
+ * ## Une copie devenue commune
  *
- * C'est l'idiome du jeton d'invitation (`Membership\Service\GenerateurDeJeton`), recopié
- * **à dessein** : ce service est interne à `Membership`, et l'ADR 0002 n'autorise un `use`
- * inter-modules que vers `Core\…` ou un `Contract\`. Vingt lignes sans état ne justifient ni
- * un contrat, ni une montée dans `Core` (règle 3 : ce qui ne sert qu'à deux modules est
- * dupliqué plutôt qu'installé dans le noyau). Si un troisième module en a besoin, c'est le
- * moment de le monter dans `Core`.
+ * C'est l'idiome du jeton d'invitation (`Membership\Service\GenerateurDeJeton`). Il a d'abord
+ * été recopié dans `Tirage`, **à dessein** : l'ADR 0002 n'autorise un `use` inter-modules que
+ * vers `Core\…` ou un `Contract\`, et ce qui ne sert qu'à deux modules est dupliqué plutôt
+ * qu'installé dans le noyau (règle 3). L'en-tête de cette copie fixait la suite : « si un
+ * troisième module en a besoin, c'est le moment de le monter dans `Core` ». Le module
+ * `Evenement` (2026-10-02) est ce troisième : la classe vit donc ici, et `Tirage` comme
+ * `Evenement` l'emploient telle quelle. `Membership` garde son générateur de jeton : il porte
+ * en plus un préfixe affichable, propre aux invitations, et le déplacer ne servirait personne.
  *
  * ## Ce qui est stocké
  *
@@ -27,7 +30,8 @@ namespace App\Module\Tirage\Service;
  *
  * 32 octets aléatoires en **base64url sans remplissage**, soit 43 caractères
  * `[A-Za-z0-9_-]` : 256 bits, qu'aucun limiteur n'a besoin de protéger contre la devinette
- * — le limiteur de {@see LimiteurDesLiens} n'est là que par défense en profondeur.
+ * — le limiteur de chaque module (`Tirage\Service\LimiteurDesLiens`,
+ * `Evenement\Service\LimiteurDesLiens`) n'est là que par défense en profondeur.
  *
  * ## Pourquoi `hash_equals` n'apparaît nulle part
  *
@@ -45,7 +49,8 @@ final class GenerateurDeCle
         return rtrim(strtr(base64_encode(random_bytes(self::OCTETS)), '+/', '-_'), '=');
     }
 
-    /** `hash('sha256', $cle)` en hexadécimal — les 64 caractères de `trg_participant.lien_token_hash`. */
+    /** `hash('sha256', $cle)` en hexadécimal — les 64 caractères de `trg_participant.lien_token_hash` et
+     * de `evt_invitation.lien_token_hash`. */
     public function empreinte(string $cle): string
     {
         return hash('sha256', $cle);

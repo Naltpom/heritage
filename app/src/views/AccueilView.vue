@@ -7,10 +7,13 @@
  *
  * 1. **deux boutons sur une ligne** — « Arbre » et « Modifier l'arbre », qui
  *    ouvre l'assistant ;
- * 2. **ses tirages** — repliés sur une ligne, dépliés pour régler sa présence ;
+ * 2. **le prochain événement où l'on est invité** — la cousinade de l'été —,
+ *    avec sa réponse ou les deux boutons Présent / Absent pour la donner
+ *    (`CarteEvenementAccueil`) ; la carte vue, l'annonce l'est aussi ;
+ * 3. **ses tirages** — repliés sur une ligne, dépliés pour régler sa présence ;
  *    une fois le tirage fait, « Voir à qui je fais le cadeau » en violet, sans
  *    rien déplier (`CarteTirageAccueil`) ;
- * 3. **les anniversaires**, en carrousel : on glisse (ou les flèches) pour voir
+ * 4. **les anniversaires**, en carrousel : on glisse (ou les flèches) pour voir
  *    les jours voisins. Les vivants d'abord, bien lisibles ; les défunts
  *    ensuite, en retrait, sous « En mémoire ».
  *
@@ -24,8 +27,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import {
   chargerAnniversaires,
+  listerEvenements,
   listerTirages,
+  marquerVu,
+  repondreAEvenement,
   type PersonneDuTirage,
+  type ReponseAInvitation,
+  type ResumeDEvenement,
   type ResumeDeTirage,
   type VueAnniversaires,
 } from '@/lib/api'
@@ -34,6 +42,8 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import LigneEvenement from '@/components/anniversaires/LigneEvenement.vue'
 import CarteTirageAccueil from '@/components/accueil/CarteTirageAccueil.vue'
+import CarteEvenementAccueil from '@/components/accueil/CarteEvenementAccueil.vue'
+import { prochainPourMoi } from '@/components/evenements-familiaux/evenements'
 import {
   anniversairesDuJour,
   decaler,
@@ -54,6 +64,7 @@ const anniversaires = shallowRef<VueAnniversaires | null>(null)
 const erreurAnniversaires = ref<unknown>(null)
 const tirages = shallowRef<ResumeDeTirage[]>([])
 const moi = shallowRef<PersonneDuTirage | null>(null)
+const evenements = shallowRef<ResumeDEvenement[]>([])
 let avorteur: AbortController | null = null
 
 async function charger(): Promise<void> {
@@ -62,8 +73,8 @@ async function charger(): Promise<void> {
   const { signal } = avorteur
   erreurAnniversaires.value = null
 
-  // Les deux en parallèle, et chacun pour soi : des tirages en panne ne
-  // retirent pas les anniversaires, ni l'inverse.
+  // En parallèle, et chacun pour soi : des tirages en panne ne retirent pas
+  // les anniversaires, ni l'inverse — ni les événements.
   await Promise.all([
     chargerAnniversaires(signal).then(
       (vue) => (anniversaires.value = vue),
@@ -78,11 +89,53 @@ async function charger(): Promise<void> {
           () => (tirages.value = []),
         )
       : Promise.resolve(),
+    rattache.value
+      ? listerEvenements(signal).then(
+          (liste) => {
+            evenements.value = liste.evenements
+            signalerLaVue()
+          },
+          () => (evenements.value = []),
+        )
+      : Promise.resolve(),
   ])
 }
 
 onMounted(charger)
 onBeforeUnmount(() => avorteur?.abort())
+
+/* ───────────────── Le prochain événement ───────────────── */
+
+const prochainEvenement = computed(() => prochainPourMoi(evenements.value, aujourdhui))
+const reponseEnCours = ref<ReponseAInvitation | null>(null)
+const erreurDeReponse = ref<unknown>(null)
+
+/**
+ * La carte montre l'annonce : elle est vue. Au mieux — un échec ne se signale
+ * pas, l'annonce sera marquée à l'ouverture de sa page. Rien sous la bascule
+ * « voir comme » : l'administrateur ne voit pas à la place du membre.
+ */
+function signalerLaVue(): void {
+  const e = prochainEvenement.value
+  if (e === null || vueEmpruntee.value !== null) return
+  void marquerVu(e.id).catch(() => undefined)
+}
+
+async function repondre(reponse: ReponseAInvitation): Promise<void> {
+  const e = prochainEvenement.value
+  if (e === null || reponseEnCours.value !== null) return
+  reponseEnCours.value = reponse
+  erreurDeReponse.value = null
+  try {
+    // La réponse est l'événement relu ; son résumé remplace celui de la liste.
+    const relu = await repondreAEvenement(e.id, reponse)
+    evenements.value = evenements.value.map((x) => (x.id === relu.id ? relu : x))
+  } catch (err: unknown) {
+    erreurDeReponse.value = err
+  } finally {
+    reponseEnCours.value = null
+  }
+}
 
 /* ───────────────── Mes tirages ───────────────── */
 
@@ -203,6 +256,22 @@ function surTouche(e: KeyboardEvent): void {
         Poser une question sur l’arbre
       </RouterLink>
     </nav>
+
+    <!-- ───────── Le prochain événement ───────── -->
+    <section v-if="rattache && prochainEvenement !== null" aria-labelledby="titre-evenement" class="mb-6">
+      <div class="mb-2 flex items-baseline justify-between">
+        <h2 id="titre-evenement" class="text-sm font-semibold tracking-tight">Prochain événement</h2>
+        <RouterLink :to="{ name: 'evenements' }" class="text-xs text-accent underline">Tous les événements</RouterLink>
+      </div>
+      <CarteEvenementAccueil
+        :evenement="prochainEvenement"
+        :aujourdhui="aujourdhui"
+        :en-cours="reponseEnCours"
+        :erreur="erreurDeReponse"
+        :desactive="vueEmpruntee !== null"
+        @repondre="repondre"
+      />
+    </section>
 
     <!-- ───────── Mes tirages ───────── -->
     <section v-if="rattache && prochainsTirages.length > 0" aria-labelledby="titre-tirages" class="mb-6">

@@ -61,6 +61,10 @@ export * from './conversations'
 /* Module `Tirage` : les tirages au sort récurrents — « Noël côté papa ». Le
    serveur ne rend au lecteur que ses propres attributions (ADR 0009). */
 export * from './tirages'
+/* Module `Evenement` : les événements de famille — « Cousinade été 2027 » —, qui
+   vient, et pour l'organisateur qui a vu sans répondre. Le fichier ne s'appelle
+   pas `evenements.ts` : ce nom-là est celui de l'Almanach. */
+export * from './evenementsFamiliaux'
 /* Module `Demarche` : les actes demandés à une mairie ou à des archives, et
    leur suivi — chaque message avec son texte entier. Le serveur ne rend que
    les démarches dont le lecteur voit toutes les personnes. */

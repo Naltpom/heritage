@@ -75,6 +75,7 @@ final class CompteEnAttenteSansArbreTest extends ArbreWebTestCase
         yield 'inventaire d’une suppression' => ['/api/demandes/suppression/personne/{aieule}'];
         yield 'questions' => ['/api/questions'];
         yield 'tirages' => ['/api/tirages'];
+        yield 'événements' => ['/api/evenements'];
         yield 'actes demandés' => ['/api/demarches'];
     }
 
