@@ -43,11 +43,12 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * ## Les notifications
  *
- * Trois natures, chacune envoyée **après** l'écriture qui la cause, aux seuls invités qui ont
+ * Quatre natures, chacune envoyée **après** l'écriture qui la cause, aux seuls invités qui ont
  * un compte — l'auteur du geste jamais à lui-même :
  *
  * - `evenement_invitation` à l'invitation (création, ou ajout après coup) ;
  * - `evenement_relance` à la relance, pour qui n'a pas répondu ;
+ * - `evenement_dates_modifiees` quand le début ou la fin changent, à tous les invités ;
  * - `evenement_annule` à l'annulation, pour qui avait répondu **ou vu** : prévenir qui n'a
  *   jamais ouvert l'annonce d'une annulation lui apprendrait l'existence d'un événement
  *   auquel il ne pensait pas aller — sa cloche n'a rien à y gagner.
@@ -188,14 +189,50 @@ final readonly class ServiceDesEvenements
         return $evenement;
     }
 
-    public function modifier(Evenement $evenement, LecteurDEvenement $lecteur, AnnonceDeLEvenement $annonce, \DateTimeImmutable $aujourdhui): Evenement
+    /**
+     * Modifie l'annonce. **Si le début ou la fin changent**, l'événement est marqué déplacé
+     * ({@see Evenement::marquerDatesModifiees()}) et **tous les invités qui ont un compte**
+     * sont prévenus (`evenement_dates_modifiees`) — vus ou non, répondus ou non : une date
+     * qui bouge concerne chacun, et c'est la décision du commanditaire (2026-10-02).
+     *
+     * Les réponses déjà données **restent** : « je viens » vaut souvent encore, et les effacer
+     * ferait de chaque correction de date une avalanche de fantômes. Elles deviennent « à
+     * confirmer » ({@see Invitation::estAConfirmer()}) et l'écran de l'invité le lui dit.
+     *
+     * Le titre, le lieu ou la description changés seuls ne préviennent personne : l'écran
+     * relit l'annonce, et une notification par faute de frappe corrigée serait du bruit.
+     */
+    public function modifier(Evenement $evenement, LecteurDEvenement $lecteur, AnnonceDeLEvenement $annonce, \DateTimeImmutable $maintenant): Evenement
     {
         $this->exigerLaGestion($evenement, $lecteur);
-        $this->exigerModifiable($evenement, $aujourdhui);
+        $this->exigerModifiable($evenement, $maintenant);
+
+        $deplace = $evenement->getDebut()->format('Y-m-d') !== $annonce->debut->format('Y-m-d')
+            || $evenement->getFin()->format('Y-m-d') !== $annonce->fin->format('Y-m-d');
 
         $this->appliquer($evenement, $annonce);
+
+        if ($deplace) {
+            $evenement->marquerDatesModifiees($maintenant);
+        }
+
         $evenement->toucher();
         $this->em->flush();
+
+        if ($deplace) {
+            $this->notifier(
+                $evenement->getInvitations(),
+                $lecteur,
+                NotificationKind::EvenementDatesModifiees,
+                $evenement->getTitre().' : nouvelles dates',
+                \sprintf(
+                    '%s a changé les dates : désormais %s. Si vous aviez répondu, confirmez votre réponse.',
+                    $evenement->getOrganisateurLibelle(),
+                    PeriodeEnFrancais::de($evenement->getDebut(), $evenement->getFin()),
+                ),
+                $evenement,
+            );
+        }
 
         return $evenement;
     }
@@ -300,6 +337,41 @@ final readonly class ServiceDesEvenements
         $invitation = $this->invitationDuLecteur($evenement, $lecteur) ?? throw ErreurDEvenement::nonInvite();
 
         $this->enregistrerLaReponse($invitation, $reponse, $maintenant);
+
+        return $evenement;
+    }
+
+    /**
+     * **Noter la réponse d'un invité à sa place** — « grand-mère a répondu par téléphone ».
+     *
+     * Réservé à qui gère l'événement (l'organisateur, un administrateur), et soumis à la même
+     * borne que la réponse de l'invité : pas sur un événement annulé ou terminé. La réponse est
+     * tracée comme notée par ce compte, et **ne pose pas la vue** : l'invité n'a rien ouvert
+     * (voir {@see Invitation::noterLaReponse()}).
+     *
+     * L'organisateur qui se désigne lui-même ne note rien « à sa place » : c'est sa propre
+     * réponse, enregistrée comme telle.
+     *
+     * L'invité n'est pas notifié : il a donné cette réponse lui-même, de vive voix. Il la
+     * retrouve sur sa page, marquée « notée par … », et peut la changer.
+     */
+    public function noterLaReponse(Evenement $evenement, LecteurDEvenement $lecteur, int $personId, Reponse $reponse, \DateTimeImmutable $maintenant): Evenement
+    {
+        $this->exigerLaGestion($evenement, $lecteur);
+
+        $invitation = $evenement->invitation($personId) ?? throw ErreurDEvenement::introuvable();
+
+        if (!$this->peutRepondre($evenement, $maintenant)) {
+            throw ErreurDEvenement::reponseFigee();
+        }
+
+        if ($personId === $lecteur->personId) {
+            $invitation->repondre($reponse, $maintenant);
+        } else {
+            $invitation->noterLaReponse($reponse, $maintenant, $lecteur->userId, $lecteur->libelle);
+        }
+
+        $this->em->flush();
 
         return $evenement;
     }

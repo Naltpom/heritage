@@ -17,7 +17,7 @@ import {
   periode,
   periodeEnTete,
   phraseDeMaReponse,
-  prochainPourMoi,
+  phraseDeReponseNotee,
   quand,
   rappelDesLiens,
   repartir,
@@ -40,6 +40,8 @@ function evenement(partiel: Partial<ResumeDEvenement> = {}): ResumeDEvenement {
     peutGerer: false,
     suisInvite: true,
     maReponse: null,
+    maReponseNoteePar: null,
+    reponseAConfirmer: false,
     peutRepondre: true,
     nombreDInvites: 37,
     nombreDePresents: 12,
@@ -58,6 +60,9 @@ function ligne(partiel: Partial<LigneDeSuivi> = {}): LigneDeSuivi {
     vuLe: null,
     reponduLe: null,
     relanceLe: null,
+    noteePar: null,
+    aConfirmer: false,
+    peutNoterReponse: true,
     ...partiel,
   }
 }
@@ -111,14 +116,6 @@ describe('où en est l’événement', () => {
     expect(aVenir.map((e) => e.id)).toEqual([3, 2])
     expect(passes.map((e) => e.id)).toEqual([4, 6, 5])
   })
-
-  it('l’accueil montre le prochain auquel on est invité — pas celui qu’on organise sans y être', () => {
-    const organise = evenement({ id: 2, debut: '2027-07-05', fin: '2027-07-05', suisInvite: false, peutGerer: true })
-    const invite = evenement({ id: 3 })
-    expect(prochainPourMoi([organise, invite], AUJOURDHUI)?.id).toBe(3)
-    expect(prochainPourMoi([organise], AUJOURDHUI)).toBeNull()
-    expect(prochainPourMoi([evenement({ annule: true })], AUJOURDHUI)).toBeNull()
-  })
 })
 
 describe('les comptes et les phrases', () => {
@@ -150,6 +147,15 @@ describe('le suivi de l’organisateur', () => {
     expect(detailDeLaLigne(ligne({ vuLe: ilYA(48) }), 'fantomes', MAINTENANT)).toBe('vu il y a 2 j')
     expect(detailDeLaLigne(ligne({ reponduLe: ilYA(3) }), 'presents', MAINTENANT)).toBe('a répondu il y a 3 h')
     expect(detailDeLaLigne(ligne({ vuLe: ilYA(5), aUnCompte: false, lienActif: true }), 'fantomes', MAINTENANT)).toBe('vu il y a 5 h · par son lien')
+  })
+
+  it('dit qu’une réponse a été notée par l’organisateur, et qu’elle est à confirmer après un changement de dates', () => {
+    expect(detailDeLaLigne(ligne({ reponduLe: ilYA(3), noteePar: 'Nathan' }), 'presents', MAINTENANT)).toBe('noté par Nathan il y a 3 h')
+    expect(detailDeLaLigne(ligne({ reponduLe: ilYA(3), aConfirmer: true }), 'absents', MAINTENANT)).toBe(
+      'a répondu il y a 3 h · à confirmer (dates changées)',
+    )
+    expect(phraseDeReponseNotee('Nathan')).toBe('Réponse notée par Nathan.')
+    expect(phraseDeReponseNotee(null)).toBeNull()
   })
 
   it('dit, pour qui n’a pas vu, s’il a un compte ou un lien — et s’il a été relancé', () => {

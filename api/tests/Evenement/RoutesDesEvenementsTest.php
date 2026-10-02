@@ -174,7 +174,7 @@ final class RoutesDesEvenementsTest extends CasDeTestEvenements
 
         self::assertSame([
             'id', 'titre', 'debut', 'fin', 'lieu', 'description', 'annule', 'passe', 'organisateur',
-            'peutGerer', 'suisInvite', 'maReponse', 'peutRepondre', 'nombreDInvites', 'nombreDePresents',
+            'peutGerer', 'suisInvite', 'maReponse', 'maReponseNoteePar', 'reponseAConfirmer', 'peutRepondre', 'nombreDInvites', 'nombreDePresents',
             'quiVient', 'nombreDAbsents', 'suivi',
         ], array_keys($charge));
         self::assertSame(['libelle', 'estMoi'], array_keys($charge['organisateur']));
@@ -185,7 +185,7 @@ final class RoutesDesEvenementsTest extends CasDeTestEvenements
         self::assertSame(1, $charge['nombreDAbsents'], 'Combien ont décliné, oui…');
         self::assertStringNotContainsString($this->personnes['cousin']->getDisplayName(), $brut, '… qui, non.');
 
-        foreach (['vuLe', 'reponduLe', 'relanceLe', 'fantomes', 'nonVus', 'aUnCompte', 'lienActif'] as $interdit) {
+        foreach (['vuLe', 'reponduLe', 'relanceLe', 'fantomes', 'nonVus', 'aUnCompte', 'lienActif', 'noteePar', 'aConfirmer', 'peutNoterReponse'] as $interdit) {
             self::assertStringNotContainsString('"'.$interdit.'"', $brut, \sprintf('`%s` ne sort pas pour un invité.', $interdit));
         }
 
@@ -195,7 +195,7 @@ final class RoutesDesEvenementsTest extends CasDeTestEvenements
         self::assertSame(['moi', 'evenements'], array_keys($liste));
         self::assertSame(['personId' => $this->idDe('conjointe'), 'libelle' => $this->personnes['conjointe']->getDisplayName()], $liste['moi']);
         self::assertCount(1, $liste['evenements']);
-        self::assertSame(\array_slice(array_keys($charge), 0, 15), array_keys($liste['evenements'][0]));
+        self::assertSame(\array_slice(array_keys($charge), 0, 17), array_keys($liste['evenements'][0]));
     }
 
     public function testLeSuiviDeLOrganisateurEstUneListeBlanche(): void
@@ -213,7 +213,7 @@ final class RoutesDesEvenementsTest extends CasDeTestEvenements
             array_keys($suivi),
         );
         self::assertSame(
-            ['personId', 'libelle', 'estMoi', 'aUnCompte', 'lienActif', 'peutPartagerLien', 'vuLe', 'reponduLe', 'relanceLe'],
+            ['personId', 'libelle', 'estMoi', 'aUnCompte', 'lienActif', 'peutPartagerLien', 'vuLe', 'reponduLe', 'relanceLe', 'noteePar', 'aConfirmer', 'peutNoterReponse'],
             array_keys($suivi['presents'][0]),
         );
         self::assertNotNull($suivi['presents'][0]['vuLe']);

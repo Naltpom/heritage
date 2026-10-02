@@ -112,3 +112,89 @@ propre à chaque module (identifiants et compteurs séparés).
 - Ce qui n'est **pas** fait, et pourrait l'être : prévenir les invités quand l'annonce
   change de dates ; laisser l'organisateur noter la réponse de quelqu'un qui l'a donnée de
   vive voix ; supprimer un événement créé par erreur (on l'annule).
+
+## Addendum du 2026-10-02 — les tirages sont des événements ; noter une réponse ; changer les dates
+
+Trois demandes du commanditaire, le jour même.
+
+### 1. « Le tirage au sort, c'est un événement en soi »
+
+Mot pour mot : *« on a créé événement et tirage au sort… une fusion serait plus judicieuse :
+le tirage au sort c'est un événement en soi. Lors de la création d'un événement on choisit
+Rassemblement ou Tirage au sort. Tout fusionner serait plus simple pour les utilisateurs. »*
+
+**Décision : la fusion se fait là où l'utilisateur la voit, et nulle part ailleurs.**
+
+- **Côté front**, une seule entrée « Événements » (Moi, l'accueil), une seule liste
+  `/evenements` qui mêle rassemblements et tirages — chaque ligne porte sa pastille
+  « Rassemblement » ou « Tirage au sort », filtrable par `?type=` —, un seul bouton « Créer
+  un événement » qui demande d'abord le type (deux grandes cartes), puis montre le formulaire
+  du rassemblement ou celui du tirage. Les pages de détail restent celles de chaque module.
+- **Les anciennes adresses marchent** : `/tirages` redirige vers `/evenements?type=tirage`,
+  `/tirages/nouveau` vers la création, type tirage ; `/tirages/<id>` et le nom
+  `tirage.detail` ne bougent pas — les notifications `tirage_effectue` déjà écrites y mènent.
+- **Côté API, rien n'est fusionné** : ni les modules, ni les tables, ni les routes. Des
+  données vivent en production dans les deux, et les deux modules n'ont pas les mêmes règles
+  de lecture (le **secret** des attributions d'un tirage, le **suivi** d'un rassemblement) :
+  une table commune ferait porter à chaque requête une distinction que les modules tiennent
+  aujourd'hui par construction.
+- **La liste commune est faite par le front**, à partir de `GET /api/evenements` et
+  `GET /api/tirages` appelés en parallèle (`components/evenements-familiaux/liste-commune.ts`).
+  Un point d'entrée qui agrège côté API a été écarté : il ne ferait que recopier les deux
+  sérialisations — chaque module resterait maître de la sienne, donc il faudrait les tenir
+  synchrones —, et deux appels parallèles coûtent le temps d'un. Une panne de l'un laisse
+  l'autre s'afficher, et la page le dit.
+- **Un tirage n'est jamais « passé »** : il revient chaque année. Il se range à sa prochaine
+  date — l'édition ouverte quand elle est à venir, sinon le jour habituel.
+
+**L'accueil** montre désormais **tous** mes événements à venir, rassemblements et tirages
+mêlés, le plus proche d'abord, dans une seule section « Mes événements » : les
+rassemblements où je suis invité **ou que j'organise** (la carte dit alors « Vous
+organisez » et n'a pas de boutons), les tirages dont je suis ou que j'organise. Chaque carte
+de rassemblement où je suis invité pose la vue, comme la carte unique d'avant.
+
+### 2. Noter la réponse de quelqu'un à sa place
+
+« Grand-mère a répondu par téléphone. » L'organisateur — et un administrateur — note la
+réponse d'un invité depuis le suivi : `PUT /api/evenements/{id}/invites/{personId}/reponse`.
+
+- Elle est **tracée** : `evt_invitation.reponse_notee_par_user_id` et
+  `reponse_notee_par_libelle` (dénormalisé, pour l'affichage discret « noté par Nathan »
+  dans le suivi, « Réponse notée par Nathan » chez l'invité).
+- Elle **ne compte pas comme une vue** : `vu_le` n'est pas posé. L'invité n'a rien ouvert,
+  et le suivi ne doit pas le prétendre.
+- Dès que l'invité répond lui-même, la trace s'efface : la réponse redevient la sienne.
+- L'invité n'est pas notifié : il a donné cette réponse lui-même, de vive voix.
+- Mêmes bornes que la réponse de l'invité : pas sur un événement annulé ou terminé
+  (`409 reponse_figee`), rien sous la bascule.
+
+### 3. Changer les dates prévient les invités
+
+Décision du commanditaire : quand l'organisateur change le **début ou la fin**, une
+notification `evenement_dates_modifiees` part à **tous les invités qui ont un compte** —
+vus ou non, répondus ou non —, jamais à l'auteur du geste : « Cousinade été 2027 : nouvelles
+dates », « … a changé les dates : désormais du … au … ».
+
+Les réponses déjà données **restent** : « je viens » vaut souvent encore, et les effacer
+ferait de chaque correction de date une avalanche de fantômes. Elles deviennent **à
+confirmer** : `evt_evenement.dates_modifiees_le` garde le dernier déplacement, et une réponse
+dont `repondu_le` le précède est à confirmer (`reponseAConfirmer` pour l'invité,
+`aConfirmer` dans le suivi et sur le lien personnel). L'écran de l'invité affiche « Les
+dates ont changé : confirmez votre réponse », et toucher la réponse déjà marquée la
+confirme. Un horodatage sur l'événement plutôt qu'un drapeau par invité : une seule écriture
+au déplacement, et la règle se lit en comparant deux dates.
+
+Le titre, le lieu ou la description changés seuls ne préviennent personne.
+
+### Conséquences de l'addendum
+
+- Migration `Version20261002233000` : trois colonnes nullables, deux `CHECK`
+  (`ck_evt_invitation_notee_par`, `ck_evt_invitation_notee_avec_reponse`). Les lignes
+  existantes ne bougent pas.
+- Une nature de notification de plus (`evenement_dates_modifiees`, étiquette « Nouvelles
+  dates » dans la cloche).
+- Le résumé gagne `maReponseNoteePar` et `reponseAConfirmer` ; la ligne du suivi `noteePar`,
+  `aConfirmer`, `peutNoterReponse` ; le lien personnel `invite.aConfirmer` — listes blanches
+  mises à jour, et éprouvées par les tests.
+- Des trois pistes laissées ouvertes plus haut, deux sont faites ; reste la suppression d'un
+  événement créé par erreur.

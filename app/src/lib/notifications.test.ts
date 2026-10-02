@@ -28,7 +28,7 @@ describe('la pastille', () => {
 })
 
 describe('le type', () => {
-  it('a une étiquette lisible pour chacun des quatorze types du serveur', () => {
+  it('a une étiquette lisible pour chacun des quinze types du serveur', () => {
     const types = [
       'demande_soumise',
       'demande_validee',
@@ -44,6 +44,7 @@ describe('le type', () => {
       'evenement_invitation',
       'evenement_relance',
       'evenement_annule',
+      'evenement_dates_modifiees',
     ]
     for (const t of types) {
       expect(libelleDeType(t)).not.toBe('Notification')
@@ -62,6 +63,8 @@ describe('le type', () => {
     expect(tonDeType('tirage_effectue')).toBe('neutre')
     expect(tonDeType('evenement_invitation')).toBe('neutre')
     expect(tonDeType('evenement_annule')).toBe('alerte')
+    // Un déplacement n'est pas un refus : la réponse tient, on la confirme.
+    expect(tonDeType('evenement_dates_modifiees')).toBe('neutre')
   })
 })
 

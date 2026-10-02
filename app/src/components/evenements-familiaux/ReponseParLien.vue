@@ -24,7 +24,7 @@ import type { AnnonceParLien, ReponseAInvitation } from '@/lib/api'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import BoutonsDeReponse from './BoutonsDeReponse.vue'
-import { periodeEnTete, phraseDeMaReponse } from './evenements'
+import { DATES_MODIFIEES, periodeEnTete, phraseDeMaReponse } from './evenements'
 
 export type EtatDuLienDEvenement =
   | { type: 'chargement' }
@@ -92,8 +92,22 @@ const lecture = computed<AnnonceParLien | null>(() => (etat.type === 'pret' ? et
 
       <section class="flex flex-col gap-2 rounded-panneau border border-ligne bg-panneau p-4">
         <template v-if="lecture.invite.peutRepondre">
+          <!-- Sans compte, pas de notification : c'est ici seulement que l'invité
+               apprend que les dates ont bougé depuis sa réponse. -->
+          <p
+            v-if="lecture.invite.aConfirmer"
+            class="rounded-panneau border border-alerte-bord bg-alerte-doux p-3 text-sm font-semibold text-alerte"
+            role="status"
+          >
+            {{ DATES_MODIFIEES }}
+          </p>
           <p class="text-sm font-semibold text-texte">Venez-vous ?</p>
-          <BoutonsDeReponse :reponse="lecture.invite.reponse" :en-cours="enCours" @choisir="(r) => emit('repondre', r)" />
+          <BoutonsDeReponse
+            :reponse="lecture.invite.reponse"
+            :en-cours="enCours"
+            :confirmable="lecture.invite.aConfirmer"
+            @choisir="(r) => emit('repondre', r)"
+          />
           <p class="text-xs text-attenue">
             {{ lecture.invite.reponse === null ? 'Un geste suffit. Vous pourrez changer d’avis jusqu’à la fin de l’événement.' : 'Vous pouvez changer d’avis jusqu’à la fin de l’événement.' }}
           </p>

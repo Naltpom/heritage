@@ -64,3 +64,46 @@ describe('les écrans des événements', () => {
     }
   })
 })
+
+/**
+ * Les tirages au sort sont des événements (02/10/2026) : une seule liste,
+ * `/evenements`. Mais **les anciennes adresses doivent continuer de marcher** —
+ * des notifications (`tirage_effectue` → `tirage.detail`), des liens partagés
+ * et des favoris y mènent.
+ */
+describe('les anciennes adresses des tirages', () => {
+  /** Où une navigation arriverait, redirections suivies — sans monter d'écran. */
+  async function arrivee(chemin: string): Promise<{ name: unknown; query: Record<string, unknown> }> {
+    const r = routeur()
+    let cible: { name: unknown; query: Record<string, unknown> } = { name: null, query: {} }
+    // La garde voit la route **après** redirection ; elle arrête là, pour ne
+    // charger aucun composant.
+    r.beforeEach((to) => {
+      cible = { name: to.name, query: { ...to.query } }
+      return false
+    })
+    await r.push(chemin)
+    return cible
+  }
+
+  it('`/tirages` mène à la liste commune, filtrée sur les tirages', async () => {
+    expect(await arrivee('/tirages')).toEqual({ name: 'evenements', query: { type: 'tirage' } })
+  })
+
+  it('`/tirages/nouveau` mène à la création d’un événement, type tirage', async () => {
+    expect(await arrivee('/tirages/nouveau')).toEqual({ name: 'evenement.nouveau', query: { type: 'tirage' } })
+  })
+
+  it('le détail d’un tirage garde son adresse et son nom — les notifications y mènent', () => {
+    const r = routeur()
+    expect(r.resolve('/tirages/12').name).toBe('tirage.detail')
+    expect(r.resolve({ name: 'tirage.detail', params: { id: 12 } }).fullPath).toBe('/tirages/12')
+    // Son « retour » mène à la liste commune.
+    const route = routes.find((x) => x.name === 'tirage.detail')
+    expect(route?.meta?.parent).toEqual({ nom: 'evenements', libelle: 'Événements' })
+  })
+
+  it('le nom `tirages` se résout encore, pour un lien nommé oublié quelque part', () => {
+    expect(routeur().resolve({ name: 'tirages' }).fullPath).toBe('/tirages')
+  })
+})

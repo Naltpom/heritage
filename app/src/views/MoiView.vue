@@ -3,7 +3,7 @@
  * « Moi » (`/moi`) — la quatrième entrée de la navigation (refonte du 30/09/2026).
  *
  * Tout ce qui concerne **le compte qui lit** tient ici, et nulle part ailleurs :
- * mon compte, mes demandes, les événements, les tirages, les actes demandés, les questions,
+ * mon compte, mes demandes, les événements (rassemblements et tirages au sort), les actes demandés, les questions,
  * l'aide (les vidéos de présentation), l'administration pour un administrateur, et la déconnexion. C'est la règle de
  * la refonte : **chaque chose a une seule porte d'entrée**. L'en-tête ne porte
  * plus « Mes demandes », « Validation » ni « + Proposer » ; le tiroir du
@@ -104,8 +104,7 @@ const entrees = computed<Entree[]>(() => {
   if (rattache.value) {
     liste.push(
       { nom: 'demandes.miennes', libelle: 'Mes demandes', compte: demandesEnAttente.value },
-      { nom: 'evenements', libelle: 'Événements' },
-      { nom: 'tirages', libelle: 'Tirages au sort' },
+      { nom: 'evenements', libelle: 'Événements' }, // rassemblements et tirages au sort (02/10/2026)
       { nom: 'demarches', libelle: 'Actes demandés' },
       { nom: 'questions', libelle: 'Questions' },
       // Les vidéos de présentation. Ici et pas dans la barre du bas : quatre

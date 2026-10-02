@@ -19,12 +19,19 @@
  * éteint. Pour ceux sans compte, l'application ne peut rien envoyer : le
  * rappel le dit, et leurs lignes portent le geste du lien.
  *
+ * **Noter une réponse à la place de l'invité** (ADR 0014, addendum du
+ * 02/10/2026) — « grand-mère a répondu par téléphone » : chaque ligne porte un
+ * « Noter sa réponse » discret, qui déplie les deux boutons Présent / Absent.
+ * La ligne dit ensuite « noté par … » : la réponse n'est pas une vue, et le
+ * suivi ne prétend pas que l'invité a ouvert l'annonce.
+ *
  * Le composant **ne charge ni n'écrit rien** : il émet, la page décide et fait
  * confirmer. Suite : `suivi-des-invites-rendu.test.ts`.
  */
-import { computed } from 'vue'
-import type { LigneDeSuivi, SuiviDEvenement } from '@/lib/api'
+import { computed, ref, watch } from 'vue'
+import type { LigneDeSuivi, ReponseAInvitation, SuiviDEvenement } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
+import BoutonsDeReponse from './BoutonsDeReponse.vue'
 import ActionsDuLien from '@/components/tirages/ActionsDuLien.vue'
 import LienDeLInvite from './LienDeLInvite.vue'
 import { GROUPES_DU_SUIVI, detailDeLaLigne, etatDeLaRelance, rappelDesLiens } from './evenements'
@@ -50,7 +57,10 @@ const {
   /** Ni annulé ni terminé : on peut encore inviter, retirer, relancer. */
   modifiable: boolean
   desactive?: boolean
-  /** La clé du geste en cours (`relancer`, `retirer-12`, `lien-12`), pour son bouton. */
+  /**
+   * La clé du geste en cours (`relancer`, `retirer-12`, `lien-12`,
+   * `noter-12-present`), pour son bouton.
+   */
   enCours?: string | null
   lienAffiche?: LienAffiche | null
 }>()
@@ -61,7 +71,29 @@ const emit = defineEmits<{
   copierLien: [ligne: LigneDeSuivi]
   revoquerLien: [ligne: LigneDeSuivi]
   fermerLien: []
+  noterReponse: [ligne: LigneDeSuivi, reponse: ReponseAInvitation]
 }>()
+
+/** La ligne dont « Noter sa réponse » est déplié — une à la fois. */
+const ligneOuverte = ref<number | null>(null)
+
+// Le suivi relu (la réponse est enregistrée) replie la ligne ; une erreur la
+// laisse dépliée, pour réessayer.
+watch(
+  () => suivi,
+  () => (ligneOuverte.value = null),
+)
+
+/** La réponse que porte une ligne, déduite de son groupe. */
+function reponseDuGroupe(groupe: string): ReponseAInvitation | null {
+  return groupe === 'presents' ? 'present' : groupe === 'absents' ? 'absent' : null
+}
+
+function noterEnCours(personId: number): ReponseAInvitation | null {
+  if (enCours === `noter-${personId}-present`) return 'present'
+  if (enCours === `noter-${personId}-absent`) return 'absent'
+  return null
+}
 
 const relance = computed(() => etatDeLaRelance(suivi, maintenant))
 const rappel = computed(() => rappelDesLiens(suivi))
@@ -125,6 +157,29 @@ const TONS: Record<string, string> = {
             >
               Retirer
             </BoutonBase>
+          </div>
+
+          <!-- Une réponse donnée de vive voix : l'organisateur la note. -->
+          <div v-if="modifiable && l.peutNoterReponse" class="flex flex-col gap-2">
+            <button
+              v-if="ligneOuverte !== l.personId"
+              type="button"
+              class="self-start text-xs text-accent underline disabled:opacity-55"
+              :disabled="desactive || enCours !== null"
+              @click="ligneOuverte = l.personId"
+            >
+              {{ reponseDuGroupe(g.cle) === null ? 'Noter sa réponse' : 'Corriger sa réponse' }}
+            </button>
+            <div v-else class="flex flex-col gap-1.5 rounded-panneau border border-ligne bg-fond p-2">
+              <p class="text-xs text-attenue">Réponse donnée de vive voix — elle sera notée à votre nom :</p>
+              <BoutonsDeReponse
+                :reponse="reponseDuGroupe(g.cle)"
+                :en-cours="noterEnCours(l.personId)"
+                :desactive="desactive"
+                @choisir="(r) => emit('noterReponse', l, r)"
+              />
+              <button type="button" class="self-start text-xs text-attenue underline" @click="ligneOuverte = null">Fermer</button>
+            </div>
           </div>
 
           <!-- Sans compte, l'invité répond par son lien : l'organisateur le crée et l'envoie. -->

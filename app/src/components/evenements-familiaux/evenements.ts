@@ -125,19 +125,21 @@ export function repartir<T extends Pick<ResumeDEvenement, 'debut' | 'fin' | 'ann
   return { aVenir, passes }
 }
 
-/**
- * L'événement de la carte d'accueil : le prochain **auquel on est invité**, ni
- * annulé ni terminé. On n'y met pas celui qu'on organise sans y être invité :
- * l'accueil parle à l'invité, et l'organisateur a son suivi.
- */
-export function prochainPourMoi<T extends ResumeDEvenement>(evenements: readonly T[], aujourdhui: Date): T | null {
-  return repartir(evenements.filter((e) => e.suisInvite), aujourdhui).aVenir[0] ?? null
-}
-
 export const REPONSES: { valeur: ReponseAInvitation; libelle: string }[] = [
   { valeur: 'present', libelle: 'Présent' },
   { valeur: 'absent', libelle: 'Absent' },
 ]
+
+/**
+ * Le bandeau de l'invité dont la réponse précède un changement de dates : elle
+ * tient toujours, mais l'organisateur compte sur une confirmation.
+ */
+export const DATES_MODIFIEES = 'Les dates ont changé : confirmez votre réponse.'
+
+/** « Réponse notée par Opale Tilleul. » — l'organisateur l'a saisie, de vive voix. */
+export function phraseDeReponseNotee(par: string | null): string | null {
+  return par === null ? null : `Réponse notée par ${par}.`
+}
 
 /** Ce que l'invité a répondu, dit à lui-même. */
 export function phraseDeMaReponse(reponse: ReponseAInvitation | null): string {
@@ -183,7 +185,13 @@ export function detailDeLaLigne(ligne: LigneDeSuivi, groupe: GroupeDeSuivi, main
   const morceaux: string[] = []
 
   if ((groupe === 'presents' || groupe === 'absents') && ligne.reponduLe !== null) {
-    morceaux.push(`a répondu ${dateRelative(ligne.reponduLe, maintenant)}`)
+    // Notée par l'organisateur : on le dit, discrètement — l'invité n'a rien ouvert.
+    morceaux.push(
+      ligne.noteePar === null
+        ? `a répondu ${dateRelative(ligne.reponduLe, maintenant)}`
+        : `noté par ${ligne.noteePar} ${dateRelative(ligne.reponduLe, maintenant)}`,
+    )
+    if (ligne.aConfirmer) morceaux.push('à confirmer (dates changées)')
   }
   if (groupe === 'fantomes' && ligne.vuLe !== null) morceaux.push(`vu ${dateRelative(ligne.vuLe, maintenant)}`)
   if (groupe === 'nonVus') morceaux.push(ligne.aUnCompte ? 'a un compte' : ligne.lienActif ? 'sans compte · lien créé' : 'sans compte · pas encore de lien')

@@ -23,6 +23,15 @@ use Doctrine\ORM\Mapping as ORM;
  *   de l'événement, et c'est l'avis courant qui compte.
  * - {@see self::$relanceLe} — la dernière relance reçue par cette personne.
  *
+ * ## Une réponse notée par l'organisateur
+ *
+ * « Grand-mère a répondu par téléphone » : l'organisateur (ou un administrateur) peut noter
+ * la réponse **à la place** de l'invité ({@see self::noterLaReponse()}). Elle est tracée —
+ * qui l'a notée ({@see self::$reponseNoteeParUserId}, et son nom dénormalisé pour
+ * l'affichage discret « noté par Nathan ») — et elle **ne pose pas la vue** : l'invité n'a
+ * rien ouvert, et le suivi ne doit pas dire le contraire. Dès que l'invité répond lui-même,
+ * la trace s'efface : la réponse redevient la sienne.
+ *
  * « Vu, sans réponse » — le fantôme 👻 — n'est pas une colonne : c'est `vuLe` posé et
  * `reponse` nulle. Le stocker, ce serait devoir le tenir à jour à chaque réponse.
  *
@@ -79,6 +88,17 @@ class Invitation
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $reponduLe = null;
+
+    /**
+     * ⇢ inter-module (`Core\User`) : le compte qui a **noté** la réponse à la place de
+     * l'invité ; `null` quand l'invité a répondu lui-même (ou n'a pas répondu).
+     */
+    #[ORM\Column(nullable: true)]
+    private ?int $reponseNoteeParUserId = null;
+
+    /** Dénormalisé, comme l'organisateur : le nom affiché de ce compte, au moment de noter. */
+    #[ORM\Column(length: 180, nullable: true)]
+    private ?string $reponseNoteeParLibelle = null;
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $relanceLe = null;
@@ -161,14 +181,58 @@ class Invitation
         return $this->reponduLe;
     }
 
-    /** Répondre, c'est avoir vu : la vue se pose au passage si elle manquait. */
+    /**
+     * Répondre, c'est avoir vu : la vue se pose au passage si elle manquait. La réponse est
+     * celle de l'invité : une trace « noté par » antérieure s'efface.
+     */
     public function repondre(Reponse $reponse, \DateTimeImmutable $le): self
     {
         $this->marquerVue($le);
         $this->reponse = $reponse;
         $this->reponduLe = $le;
+        $this->reponseNoteeParUserId = null;
+        $this->reponseNoteeParLibelle = null;
 
         return $this;
+    }
+
+    /**
+     * La réponse donnée de vive voix, **notée par l'organisateur** (ou un administrateur).
+     *
+     * La vue n'est **pas** posée : l'invité n'a pas ouvert l'annonce, et « vu » dans le suivi
+     * doit rester ce que l'invité a fait lui-même. La date de réponse, elle, est posée — c'est
+     * le moment où la réponse est connue, et `ck_evt_invitation_repondu` l'exige.
+     */
+    public function noterLaReponse(Reponse $reponse, \DateTimeImmutable $le, int $parUserId, string $parLibelle): self
+    {
+        $this->reponse = $reponse;
+        $this->reponduLe = $le;
+        $this->reponseNoteeParUserId = $parUserId;
+        $this->reponseNoteeParLibelle = $parLibelle;
+
+        return $this;
+    }
+
+    public function getReponseNoteeParUserId(): ?int
+    {
+        return $this->reponseNoteeParUserId;
+    }
+
+    /** « Nathan » : qui a noté la réponse ; `null` quand l'invité l'a donnée lui-même. */
+    public function getReponseNoteeParLibelle(): ?string
+    {
+        return $this->reponseNoteeParLibelle;
+    }
+
+    /**
+     * La réponse précède le dernier déplacement de l'événement : elle tient toujours, mais
+     * l'invité est prié de la confirmer. Répondre de nouveau — même la même chose — l'efface.
+     */
+    public function estAConfirmer(): bool
+    {
+        $deplaceLe = $this->evenement->getDatesModifieesLe();
+
+        return null !== $this->reponduLe && null !== $deplaceLe && $this->reponduLe < $deplaceLe;
     }
 
     public function getRelanceLe(): ?\DateTimeImmutable
