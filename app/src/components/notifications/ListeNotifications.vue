@@ -12,22 +12,46 @@
  * la route a disparu (`lienDeNotification` → `null`) reste lisible, en bouton
  * qui la marque lue sans naviguer.
  */
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
 import type { Notification } from '@/lib/api'
 import type { EtatListe } from '@/composables/useNotifications'
 import { dateRelative, libelleDeType, lienDeNotification, tonDeType } from '@/lib/notifications'
 
-const { notifications, etat, maintenant } = defineProps<{
+const { notifications, etat, maintenant, resteAvant = false, chargementSuite = false } = defineProps<{
   notifications: readonly Notification[]
   etat: EtatListe
   /** Heure de référence des dates relatives, figée par la cloche à l'ouverture. */
   maintenant: Date
+  /** Il reste des notifications plus anciennes à demander. */
+  resteAvant?: boolean
+  chargementSuite?: boolean
 }>()
 const emit = defineEmits<{
   /** Clic sur une notification ; `navigue` dit si un lien emmène ailleurs. */
   choisir: [notification: Notification, navigue: boolean]
   reessayer: []
+  /** Le bas de la liste est en vue : le lot suivant, s'il y en a un. */
+  suite: []
 }>()
+
+/*
+ * Le bas de la liste : quand il entre en vue, on demande le lot suivant. Un
+ * observateur plutôt qu'un écouteur de défilement — il ne coûte rien tant qu'on ne
+ * descend pas.
+ */
+const sentinelle = ref<HTMLElement | null>(null)
+let observateur: IntersectionObserver | null = null
+watch(sentinelle, (el) => {
+  observateur?.disconnect()
+  observateur = null
+  if (!el || typeof IntersectionObserver === 'undefined') return
+  observateur = new IntersectionObserver((entrees) => {
+    if (entrees.some((e) => e.isIntersecting)) emit('suite')
+  })
+  observateur.observe(el)
+})
+onBeforeUnmount(() => observateur?.disconnect())
 
 const routeur = useRouter()
 
@@ -89,6 +113,10 @@ const CLASSES_TON: Record<'alerte' | 'ok' | 'neutre', string> = {
           <span v-if="n.readAt === null" class="sr-only">(non lue)</span>
         </span>
       </component>
+    </li>
+    <li v-if="resteAvant" ref="sentinelle" class="px-4 py-3 text-center text-[12px] text-attenue">
+      <button v-if="!chargementSuite" type="button" class="underline" @click="emit('suite')">Plus anciennes</button>
+      <template v-else>Chargement…</template>
     </li>
   </ul>
 </template>

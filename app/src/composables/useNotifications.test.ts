@@ -31,6 +31,7 @@ vi.mock('@/composables/useSession', async () => {
 
 import {
   PERIODE_SONDAGE_MS,
+  chargerLaSuite,
   chargerNotifications,
   demarrerSuivi,
   marquerLue,
@@ -159,6 +160,37 @@ describe('la liste', () => {
     expect(etatListe.value).toBe('prete')
     expect(notifications.value.map((n) => n.id)).toEqual([1, 2, 3])
     expect(nonLues.value).toBe(2)
+  })
+
+  it('charge les plus anciennes par lots, jamais toutes d’un coup', async () => {
+    api.listerNotifications
+      .mockResolvedValueOnce({ elements: [notif(1), notif(2)], total: 5, page: 1, parPage: 30 })
+      .mockResolvedValueOnce({ elements: [notif(3), notif(4)], total: 5, page: 2, parPage: 30 })
+      .mockResolvedValueOnce({ elements: [notif(5)], total: 5, page: 3, parPage: 30 })
+    await chargerNotifications()
+    const { notifications, resteAvant } = useNotifications()
+    expect(resteAvant.value).toBe(true)
+
+    await chargerLaSuite()
+    expect(notifications.value.map((n) => n.id)).toEqual([1, 2, 3, 4])
+    expect(api.listerNotifications).toHaveBeenLastCalledWith({ page: 2, parPage: 30 })
+
+    await chargerLaSuite()
+    expect(notifications.value.map((n) => n.id)).toEqual([1, 2, 3, 4, 5])
+    expect(resteAvant.value).toBe(false)
+    await chargerLaSuite()
+    expect(api.listerNotifications).toHaveBeenCalledTimes(3)
+  })
+
+  it('montre la liste déjà lue pendant qu’elle se rafraîchit', async () => {
+    await chargerNotifications()
+    let finir: (v: unknown) => void = () => {}
+    api.listerNotifications.mockReturnValueOnce(new Promise((r) => (finir = r)))
+    const encours = chargerNotifications()
+    expect(useNotifications().etatListe.value).toBe('prete')
+    finir({ elements: [notif(9)], total: 1, page: 1, parPage: 30 })
+    await encours
+    expect(useNotifications().notifications.value.map((n) => n.id)).toEqual([9])
   })
 
   it('dit son erreur, pour que la cloche propose de réessayer', async () => {

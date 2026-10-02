@@ -55,6 +55,10 @@ export type EtatListe = 'repos' | 'chargement' | 'prete' | 'erreur'
 const nonLues = shallowRef(0)
 const notifications = shallowRef<readonly Notification[]>([])
 const etatListe = shallowRef<EtatListe>('repos')
+/** La dernière page lue, et s'il en reste de plus anciennes à demander. */
+const pageLue = shallowRef(0)
+const resteAvant = shallowRef(false)
+const chargementSuite = shallowRef(false)
 
 function connecte(): boolean {
   return useSession().connecte.value
@@ -86,10 +90,14 @@ export async function chargerNotifications(): Promise<void> {
     etatListe.value = 'repos'
     return
   }
-  etatListe.value = 'chargement'
+  // Déjà lue (préchargée, ou une ouverture précédente) : on la montre telle quelle et
+  // on la rafraîchit en dessous, sans repasser par « Chargement… ».
+  if (etatListe.value !== 'prete') etatListe.value = 'chargement'
   try {
     const page = await listerNotifications({ page: 1, parPage: TAILLE_LISTE })
     notifications.value = page.elements
+    pageLue.value = 1
+    resteAvant.value = page.total > page.elements.length
     etatListe.value = 'prete'
     // La liste est fraîche ; le compteur l'est-il ? On le recalcule depuis
     // elle quand elle est complète, sans second appel.
@@ -98,6 +106,27 @@ export async function chargerNotifications(): Promise<void> {
     }
   } catch {
     etatListe.value = 'erreur'
+  }
+}
+
+/**
+ * Les notifications plus anciennes, **par lots** de {@link TAILLE_LISTE} : la cloche
+ * les demande quand on arrive au bas de la liste, jamais toutes d'un coup. Un échec
+ * se tait — la liste déjà là reste, le prochain défilement redemandera.
+ */
+export async function chargerLaSuite(): Promise<void> {
+  if (!connecte() || !resteAvant.value || chargementSuite.value || etatListe.value !== 'prete') return
+  chargementSuite.value = true
+  try {
+    const page = await listerNotifications({ page: pageLue.value + 1, parPage: TAILLE_LISTE })
+    const deja = new Set(notifications.value.map((n) => n.id))
+    notifications.value = [...notifications.value, ...page.elements.filter((n) => !deja.has(n.id))]
+    pageLue.value += 1
+    resteAvant.value = page.elements.length > 0 && page.total > notifications.value.length
+  } catch {
+    /* voir le commentaire de la fonction */
+  } finally {
+    chargementSuite.value = false
   }
 }
 
@@ -159,6 +188,11 @@ export function demarrerSuivi(cible: CibleVisibilite | null = globalThis.documen
   const visible = (): boolean => cible === null || cible.visibilityState === 'visible'
 
   void rafraichirCompteur()
+  // La liste se précharge en arrière-plan, une fois la page posée : ouvrir la cloche
+  // la montre aussitôt au lieu d'attendre l'aller-retour.
+  const prechargement = setTimeout(() => {
+    if (visible() && etatListe.value === 'repos') void chargerNotifications()
+  }, 1500)
   const minuterie = setInterval(() => {
     if (visible()) void rafraichirCompteur()
   }, PERIODE_SONDAGE_MS)
@@ -176,12 +210,15 @@ export function demarrerSuivi(cible: CibleVisibilite | null = globalThis.documen
     (estConnecte) => {
       notifications.value = []
       etatListe.value = 'repos'
+      pageLue.value = 0
+      resteAvant.value = false
       if (estConnecte) void rafraichirCompteur()
       else nonLues.value = 0
     },
   )
 
   return () => {
+    clearTimeout(prechargement)
     clearInterval(minuterie)
     cible?.removeEventListener('visibilitychange', surVisibilite)
     arreterSession()
@@ -193,6 +230,9 @@ export function reinitialiserNotifications(): void {
   nonLues.value = 0
   notifications.value = []
   etatListe.value = 'repos'
+  pageLue.value = 0
+  resteAvant.value = false
+  chargementSuite.value = false
 }
 
 export interface EtatNotifications {
@@ -200,6 +240,9 @@ export interface EtatNotifications {
   notifications: Readonly<Ref<readonly Notification[]>>
   etatListe: Readonly<Ref<EtatListe>>
   charger: typeof chargerNotifications
+  chargerLaSuite: typeof chargerLaSuite
+  resteAvant: Readonly<Ref<boolean>>
+  chargementSuite: Readonly<Ref<boolean>>
   marquerLue: typeof marquerLue
   toutMarquerLu: typeof toutMarquerLu
   rafraichirCompteur: typeof rafraichirCompteur
@@ -232,6 +275,9 @@ export function useNotifications(): EtatNotifications {
     notifications: readonly(notifications) as Readonly<Ref<readonly Notification[]>>,
     etatListe: readonly(etatListe),
     charger: chargerNotifications,
+    chargerLaSuite,
+    resteAvant: readonly(resteAvant),
+    chargementSuite: readonly(chargementSuite),
     marquerLue,
     toutMarquerLu,
     rafraichirCompteur,

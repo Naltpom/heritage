@@ -410,6 +410,21 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
   const groupes =
     options.interne || alliancesDansLArbre ? new Map<string, string[]>() : groupesParAlliance(graphe)
   const horsJeu = new Set([...groupes.values()].flat())
+
+  /** Une alliance prend la branche de son pont — en remontant si le pont l'est aussi. */
+  const brancheDeRattachement = (id: string): Branche => {
+    let courant = id
+    for (let i = 0; i < 50; i++) {
+      const c = classes?.get(courant)
+      if (c?.parente !== 'alliance' || c.pont === null) break
+      courant = c.pont
+    }
+    return personnes.get(courant)?.branch ?? personnes.get(id)!.branch
+  }
+  /** La branche où une fiche se range : la sienne, ou celle de qui la relie (alliance dans l'arbre). */
+  const brancheVue = (id: string): Branche | null =>
+    alliancesDansLArbre ? brancheDeRattachement(id) : (personnes.get(id)?.branch ?? null)
+  const QUARTS_DU_LECTEUR = new Set<Branche | null>(['pp', 'pm', 'mp', 'mm'])
   const enJeu = (id: string): boolean => personnes.has(id) && !horsJeu.has(id)
 
   const enfantsDe = (f: string): string[] => (index.enfantsParFamille.get(f) ?? []).filter(enJeu)
@@ -841,7 +856,7 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
    * Voulgre posés au-dessus des Figarol, l'ascendance d'un allié Destombes chez
    * les Provost). Sans cible — un îlot détaché —, le bloc va au bord.
    */
-  function accrocher(bloc: Forme, cote: Cote, cible?: number, zone = 0): void {
+  function accrocher(bloc: Forme, cote: Cote, cible?: number, zone = 0, branche: Branche | null = null): void {
     if (cible !== undefined && bloc.poses.length <= PETIT_BLOC) {
       // Ce qui est pris, rangée par rangée : chaque fiche, et l'espace entre deux
       // époux posés — un bloc glissé là couperait leur trait d'union.
@@ -863,6 +878,29 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
           .filter((p): p is Pose => p !== undefined)
         if (ep.length < 2 || ep.some((p) => p.g !== ep[0]!.g)) continue
         prendre(ep[0]!.g, Math.min(...ep.map((p) => p.x)), Math.max(...ep.map((p) => p.x)))
+      }
+      /*
+       * « Dans mon arbre », une belle-famille reste dans la COLONNE de sa branche : sur
+       * chacune de ses rangées, l'étendue des autres quarts est prise, creux compris.
+       * Sinon les Lemay, Hassebroucq, Delobel — belle-famille d'un Destombes — se
+       * glissaient dans un trou au milieu des Provost (capture du 02/10).
+       */
+      if (alliancesDansLArbre && QUARTS_DU_LECTEUR.has(branche)) {
+        const rangees = new Set(bloc.poses.map((p) => p.g))
+        const etendue = new Map<string, [number, number]>()
+        for (const p of racine.poses) {
+          if (!rangees.has(p.g)) continue
+          const b = brancheVue(p.id)
+          if (b === branche || !QUARTS_DU_LECTEUR.has(b)) continue
+          const w = largeur(p.id)
+          const cle = `${p.g}|${b}`
+          const e = etendue.get(cle)
+          if (e) {
+            e[0] = Math.min(e[0], p.x - w / 2)
+            e[1] = Math.max(e[1], p.x + w / 2)
+          } else etendue.set(cle, [p.x - w / 2, p.x + w / 2])
+        }
+        for (const [cle, [a, b]] of etendue) prendre(Number(cle.split('|')[0]), a, b)
       }
       // Les autres zones sont des MURS : le bloc ne les traverse pas pour trouver un creux
       // plus proche de l'autre côté. Les zones vont de gauche à droite dans l'ordre.
@@ -958,7 +996,7 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
             if (poses.has(e)) continue
             // À côté du conjoint posé, ou au-dessus de l'enfant posé.
             const pas = epPoses.length ? largeur(attache) / 2 + ECART_FRATRIE + largeur(e) / 2 : 0
-            accrocher(blocDescendance(e, cote, rangee), cote, cote === 'G' ? xAttache - pas : xAttache + pas, zone)
+            accrocher(blocDescendance(e, cote, rangee), cote, cote === 'G' ? xAttache - pas : xAttache + pas, zone, brancheVue(attache))
           }
         } else {
           // Les époux sont posés, il reste des enfants : une fratrie issue d'une autre union.
@@ -968,7 +1006,7 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
           const { forme, ancres } = empiler(parties, ECART_FRATRIE)
           const milieu = epPoses.length ? epPoses.reduce((s, e) => s + (x.get(e) ?? 0), 0) / epPoses.length : xAttache
           forme.ancre = (ancres[0]! + ancres[ancres.length - 1]!) / 2
-          accrocher(forme, cote, milieu, zone)
+          accrocher(forme, cote, milieu, zone, brancheVue(attache))
         }
         progres = true
         break
@@ -1155,16 +1193,6 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
   const hautRangee = (g: number): number => (g - minG) * pasRangee + MARGE_Y
   const milieuRangee = (g: number): number => hautRangee(g) + hauteurFiche / 2
 
-  /** Une alliance prend la branche de son pont — en remontant si le pont l'est aussi. */
-  const brancheDeRattachement = (id: string): Branche => {
-    let courant = id
-    for (let i = 0; i < 50; i++) {
-      const c = classes?.get(courant)
-      if (c?.parente !== 'alliance' || c.pont === null) break
-      courant = c.pont
-    }
-    return personnes.get(courant)?.branch ?? personnes.get(id)!.branch
-  }
   const fiches: FicheHistoire[] = []
   const parId = new Map<string, FicheHistoire>()
   const parPersonId = new Map<number, FicheHistoire>()
