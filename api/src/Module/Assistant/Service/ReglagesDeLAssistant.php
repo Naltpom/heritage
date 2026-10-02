@@ -37,12 +37,38 @@ final readonly class ReglagesDeLAssistant
     public const int TOURS_MAXIMAUX = 8;
 
     /**
-     * Quatre-vingt-dix secondes pour toute l'analyse, tous tours compris.
+     * Cinquante-cinq secondes pour toute l'analyse, tous tours compris.
      *
-     * Le membre attend devant un écran qui le lui dit (« 20 à 60 s »). Au-delà, il a
-     * rechargé la page, et la réponse ne servirait plus personne.
+     * Le membre attend devant un écran qui le lui dit (« 20 à 60 s »). La borne était de
+     * 90 s, mais deux plafonds plus bas la coupaient avant elle, sans message :
+     * `max_execution_time` de PHP (30 s, valeur compilée — d'où l'« Erreur interne » du
+     * 02/10/2026, incident 0d101c6bd09ac5dc, `MaxExecutionTimeError` dans l'appel au
+     * modèle) et le `proxy_read_timeout` de 60 s du nginx de l'hôte. 55 s tient sous le
+     * second ; le premier est levé par {@see self::accorderLeTemps()}.
      */
-    public const float DELAI_GLOBAL_SECONDES = 90.0;
+    public const float DELAI_GLOBAL_SECONDES = 55.0;
+
+    /** Ce que PHP accorde à une requête qui interroge le modèle : la borne, plus une marge. */
+    public const int DUREE_PHP_SECONDES = 70;
+
+    /**
+     * Relève `max_execution_time` pour la requête en cours, avant le premier appel au
+     * modèle. Sans cela, PHP tue la requête à 30 s au milieu d'un appel HTTP, et le membre
+     * reçoit une `500` au lieu du message « la recherche a pris trop de temps ».
+     */
+    public static function accorderLeTemps(): void
+    {
+        // Relever, jamais abaisser : `0` (illimité, la valeur de la ligne de commande et
+        // donc des tests) ou une valeur déjà plus haute restent tels quels — sinon la
+        // suite de tests, qui tourne dans un seul processus, mourrait à 70 s.
+        $actuel = (int) \ini_get('max_execution_time');
+
+        if (0 === $actuel || $actuel >= self::DUREE_PHP_SECONDES) {
+            return;
+        }
+
+        set_time_limit(self::DUREE_PHP_SECONDES);
+    }
 
     /**
      * Le modèle de la **transcription** des messages vocaux (ADR 0013, addendum du

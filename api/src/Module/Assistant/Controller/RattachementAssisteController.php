@@ -40,7 +40,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * Depuis le 2 octobre 2026 au soir, le message vocal est **transcrit** par Gemini
  * ({@see TranscriptionDesMessagesVocaux}) et l'analyse lit la transcription comme la
  * description. L'écran enchaîne les deux appels, l'un après l'autre : la transcription,
- * puis la suggestion. Chacun garde sa borne de temps — une minute, puis quatre-vingt-dix
+ * puis la suggestion. Chacun garde sa borne de temps — une minute, puis cinquante-cinq
  * secondes —, plutôt qu'un seul appel qui les additionnerait.
  *
  * La transcription répond **`200` même quand elle échoue** : son état (`faite` ou
