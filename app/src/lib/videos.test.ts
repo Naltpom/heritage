@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest'
 // `@/router` appellerait `createWebHistory()` au chargement : la table seule.
 import { routes } from '@/router/routes'
 import {
+  CLE_VIDEOS_VUES,
+  marquerVideoVue,
+  themeDuNavigateur,
+  videosVues,
   demarrerLaLecture,
   CLE_BIENVENUE_VUE,
   DOSSIER_VIDEOS,
@@ -292,5 +296,41 @@ describe('demarrerLaLecture — le son d’abord, le muet en repli', () => {
     const { video, essais } = faux(() => 'autre')
     expect(await demarrerLaLecture(video)).toBe('echec')
     expect(essais).toEqual([false])
+  })
+})
+
+describe('les deux thèmes des vidéos', () => {
+  it('la version claire porte le suffixe « -clair » ; les sous-titres sont communs', () => {
+    expect(cheminsDe({ id: 'bienvenue' }, 'clair')).toEqual({
+      mp4: '/videos/bienvenue-clair.mp4',
+      affiche: '/videos/bienvenue-clair.jpg',
+      sousTitres: '/videos/bienvenue.vtt',
+    })
+    expect(cheminsDe({ id: 'bienvenue' }).mp4).toBe('/videos/bienvenue.mp4')
+  })
+
+  it('hors navigateur, le thème est sombre', () => {
+    expect(themeDuNavigateur()).toBe('sombre')
+  })
+})
+
+describe('les vidéos vues jusqu’au bout', () => {
+  function faux(initial: Record<string, string> = {}) {
+    const donnees = { ...initial }
+    return { donnees, getItem: (c: string) => donnees[c] ?? null, setItem: (c: string, v: string) => void (donnees[c] = v) }
+  }
+
+  it('retient une vidéo, une seule fois', () => {
+    const s = faux()
+    marquerVideoVue('lire-l-arbre', s)
+    marquerVideoVue('lire-l-arbre', s)
+    marquerVideoVue('bienvenue', s)
+    expect([...videosVues(s)]).toEqual(['lire-l-arbre', 'bienvenue'])
+  })
+
+  it('une valeur illisible ne voit rien, et ne lève pas', () => {
+    expect(videosVues(faux({ [CLE_VIDEOS_VUES]: '{pas du json' })).size).toBe(0)
+    expect(videosVues(faux({ [CLE_VIDEOS_VUES]: '{"a":1}' })).size).toBe(0)
+    expect(videosVues(null).size).toBe(0)
   })
 })

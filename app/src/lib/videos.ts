@@ -163,9 +163,30 @@ export const VIDEOS: readonly VideoAide[] = [
 ]
 
 /** Les trois fichiers d'une vidéo. */
-export function cheminsDe(video: Pick<VideoAide, 'id'>): CheminsVideo {
+export function cheminsDe(video: Pick<VideoAide, 'id'>, theme: ThemeVideo = 'sombre'): CheminsVideo {
   const base = `${DOSSIER_VIDEOS}${video.id}`
-  return { mp4: `${base}.mp4`, affiche: `${base}.jpg`, sousTitres: `${base}.vtt` }
+  // la version claire porte le suffixe `-clair` ; les sous-titres sont les mêmes
+  const image = theme === 'clair' ? `${base}-clair` : base
+  return { mp4: `${image}.mp4`, affiche: `${image}.jpg`, sousTitres: `${base}.vtt` }
+}
+
+/**
+ * Les vidéos existent en deux thèmes, comme l'application : **sombre** et
+ * **clair** (`<id>-clair.mp4`, `<id>-clair.jpg`, mêmes images, mêmes voix,
+ * palette claire de `styles/main.css`). Le thème est celui du navigateur
+ * (`prefers-color-scheme`), la même règle que la feuille de style : une vidéo
+ * sombre au milieu d'une application claire ferait l'effet d'un trou.
+ */
+export type ThemeVideo = 'sombre' | 'clair'
+
+/** Le thème du navigateur ; sombre hors navigateur (tests, rendu serveur). */
+export function themeDuNavigateur(): ThemeVideo {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'sombre'
+  try {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'sombre' : 'clair'
+  } catch {
+    return 'sombre'
+  }
 }
 
 /** Les vidéos d'un groupe, dans l'ordre du catalogue. */
@@ -275,6 +296,37 @@ export function marquerBienvenueVue(stockage: Stockage | null = stockageDuNaviga
     stockage.setItem(CLE_BIENVENUE_VUE, '1')
   } catch {
     /* quota plein, navigation privée : la vidéo reviendra, ce n'est pas grave */
+  }
+}
+
+/**
+ * Les vidéos **regardées jusqu'au bout** sur ce navigateur — la page Aide les
+ * marque « Vue ». Jusqu'au bout seulement : une vidéo fermée à la croix n'a pas
+ * été vue, et c'est justement celle qu'on aimerait qu'on reprenne. Une liste
+ * d'identifiants en JSON ; illisible ou absente, rien n'est vu.
+ */
+export const CLE_VIDEOS_VUES = 'heritage.videos.vues'
+
+export function videosVues(stockage: Stockage | null = stockageDuNavigateur()): Set<string> {
+  if (stockage === null) return new Set()
+  try {
+    const brut: unknown = JSON.parse(stockage.getItem(CLE_VIDEOS_VUES) ?? '[]')
+    return new Set(Array.isArray(brut) ? brut.filter((id): id is string => typeof id === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+/** Retient qu'une vidéo a été regardée jusqu'au bout. Silencieux si le stockage refuse. */
+export function marquerVideoVue(id: string, stockage: Stockage | null = stockageDuNavigateur()): void {
+  if (stockage === null) return
+  const vues = videosVues(stockage)
+  if (vues.has(id)) return
+  vues.add(id)
+  try {
+    stockage.setItem(CLE_VIDEOS_VUES, JSON.stringify([...vues]))
+  } catch {
+    /* quota plein, navigation privée : la marque ne tiendra pas, ce n'est pas grave */
   }
 }
 
