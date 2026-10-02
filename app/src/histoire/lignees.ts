@@ -92,6 +92,12 @@ export interface FicheHistoire {
   parente: Parente
   /** Sur une fiche `alliance` : le conjoint « famille » qui rattache son bloc. */
   pont: IdentifiantNoeud | null
+  /**
+   * La branche où la fiche se range, pour la teinte, les filtres et le bandeau : celle
+   * servie, sauf pour une famille par alliance rangée « dans mon arbre » — le serveur
+   * ne lui en donne aucune, elle prend celle de la personne qui la relie.
+   */
+  branche: Branche
 }
 
 export interface EtiquetteFoyer {
@@ -1149,6 +1155,16 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
   const hautRangee = (g: number): number => (g - minG) * pasRangee + MARGE_Y
   const milieuRangee = (g: number): number => hautRangee(g) + hauteurFiche / 2
 
+  /** Une alliance prend la branche de son pont — en remontant si le pont l'est aussi. */
+  const brancheDeRattachement = (id: string): Branche => {
+    let courant = id
+    for (let i = 0; i < 50; i++) {
+      const c = classes?.get(courant)
+      if (c?.parente !== 'alliance' || c.pont === null) break
+      courant = c.pont
+    }
+    return personnes.get(courant)?.branch ?? personnes.get(id)!.branch
+  }
   const fiches: FicheHistoire[] = []
   const parId = new Map<string, FicheHistoire>()
   const parPersonId = new Map<number, FicheHistoire>()
@@ -1171,6 +1187,7 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
       detache: detaches.has(p.id),
       parente: pontDe.has(p.id) ? 'alliance' : (classes?.get(p.id)?.parente ?? 'famille'),
       pont: pontDe.get(p.id) ?? null,
+      branche: alliancesDansLArbre ? brancheDeRattachement(p.id) : noeud.branch,
     }
     fiches.push(fiche)
     parId.set(p.id, fiche)
@@ -1410,7 +1427,7 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     // Une fiche par alliance n'est d'aucun quart, quelle que soit la branche servie : la
     // bande « Voulgre » s'étirait sur toute l'ascendance du mari de la tante.
     const membres = fiches.filter(
-      (f) => f.noeud.branch === branche && (f.parente !== 'alliance' || alliancesDansLArbre),
+      (f) => f.branche === branche && (f.parente !== 'alliance' || alliancesDansLArbre),
     )
     if (!membres.length) continue
     const duConjoint = branche.startsWith('c')

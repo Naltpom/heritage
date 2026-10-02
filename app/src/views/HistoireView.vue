@@ -599,10 +599,10 @@ const BASCULES = [
  * d'aucune branche du lecteur, quelle que soit celle que le serveur lui donne.
  */
 const brancheDe = (f: FicheHistoire): string =>
-  f.parente === 'alliance' && !disposition.value?.alliancesDansLArbre ? 'hors' : f.noeud.branch
+  f.parente === 'alliance' && !disposition.value?.alliancesDansLArbre ? 'hors' : f.branche
 
 function passe(f: FicheHistoire): boolean {
-  if (brancheDe(f) !== 'hors' && (filtres.masquees as Branche[]).includes(f.noeud.branch)) return false
+  if (brancheDe(f) !== 'hors' && (filtres.masquees as Branche[]).includes(f.branche)) return false
   if (filtres.ligneDirecte && !f.directe) return false
   if (filtres.vivants && !f.noeud.vivant) return false
   if (filtres.qualite) {
