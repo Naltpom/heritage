@@ -44,6 +44,14 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, Equatab
     #[ORM\Column(length: 180)]
     private string $email;
 
+    /**
+     * Le téléphone, **facultatif**, donné à l'inscription : il ne sert qu'à
+     * l'administrateur (l'annuaire des proches). Forme lisible, telle que saisie après
+     * nettoyage (`+33 6 12 34 56 78`) ; `null` quand rien n'a été donné.
+     */
+    #[ORM\Column(length: 32, nullable: true)]
+    private ?string $telephone = null;
+
     /** Empreinte du mot de passe, jamais le mot de passe. 255 : les algorithmes de demain sont plus longs. */
     #[ORM\Column(length: 255)]
     private string $password = '';
@@ -104,6 +112,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, Equatab
     public function setEmail(string $email): self
     {
         $this->email = $email;
+
+        return $this;
+    }
+
+    public function getTelephone(): ?string
+    {
+        return $this->telephone;
+    }
+
+    public function setTelephone(?string $telephone): self
+    {
+        $this->telephone = $telephone;
 
         return $this;
     }

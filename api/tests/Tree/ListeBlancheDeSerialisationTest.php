@@ -297,6 +297,28 @@ final class ListeBlancheDeSerialisationTest extends ArbreWebTestCase
     }
 
     /**
+     * La grille « personne · naissance · décès » des proches : les dates suivent le
+     * cercle comme le nom. Hors cercle, les clés sont **absentes** — ni la date, ni
+     * même `null`.
+     */
+    public function testLesDatesDesProchesSuiventLeCercle(): void
+    {
+        $enfantsDe = static fn (array $fiche): array => array_merge(...array_map(static fn (array $u): array => $u['enfants'], $fiche['unions']));
+        $egoDans = fn (array $liste): array => array_values(array_filter($liste, fn (array $e): bool => $e['personId'] === $this->idDe('ego')))[0];
+
+        $fermee = $this->fiche('aieule', $this->membre(), CercleDuLecteur::de([]));
+        $ego = $egoDans($enfantsDe($fermee));
+        self::assertArrayNotHasKey('naissance', $ego, 'Un vivant hors cercle : sa date de naissance n’est pas servie.');
+        self::assertArrayNotHasKey('deces', $ego);
+
+        $ouverte = $this->fiche('aieule', $this->membre(), CercleDuLecteur::de([$this->idDe('ego')]));
+        $ego = $egoDans($enfantsDe($ouverte));
+        self::assertArrayHasKey('naissance', $ego, 'Dans le cercle, la date suit le nom.');
+        self::assertArrayHasKey('deces', $ego);
+        self::assertNull($ego['deces'], 'Un vivant n’a pas de date de décès : `null`, pas l’absence.');
+    }
+
+    /**
      * Les **enfants** d'une famille sortaient sous leur vrai nom sans aucun contrôle de
      * cercle. Ils restent listés — `siblingOrder` et `relation` sont des faits de la
      * famille —, leur nom suit le cercle.

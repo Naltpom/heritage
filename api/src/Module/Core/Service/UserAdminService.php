@@ -232,6 +232,8 @@ final class UserAdminService
         return [
             'id' => $id,
             'email' => $compte->getEmail(),
+            // Facultatif, donné à l'inscription : l'annuaire des proches (administration seulement).
+            'telephone' => $compte->getTelephone(),
             // Comme dans la charge de session : sans rattachement validé, le nom affiché
             // retombe sur le courriel et n'est **jamais** renseigné depuis
             // `mbr_member.person_label` (§ 2.2).

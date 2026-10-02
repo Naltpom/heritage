@@ -65,6 +65,8 @@ const routeur = useRouter()
 const flux = useFluxInscription()
 
 const email = ref('')
+/** Facultatif : pour l'annuaire des proches de l'administrateur. */
+const telephone = ref('')
 const motDePasse = ref('')
 const envoi = ref(false)
 const erreur = ref<unknown>(null)
@@ -111,6 +113,10 @@ function messageCourriel(): string {
   return aTenteEnvoi.value ? (refusCourriel.value ?? '') : ''
 }
 
+function messageTelephone(): string {
+  return analyse.value?.champs['telephone'] ?? ''
+}
+
 function messageMotDePasse(): string {
   const duServeur = analyse.value?.champs['password'] ?? ''
   if (duServeur.length > 0) return duServeur
@@ -149,6 +155,7 @@ async function soumettre(): Promise<void> {
       ...rattachement,
       email: email.value.trim(),
       password: motDePasse.value,
+      ...(telephone.value.trim() ? { telephone: telephone.value.trim() } : {}),
     })
     // Le mot de passe, le jeton et la description ont fait leur office : aucun
     // n'a de raison de rester en mémoire. Le jeton vient d'être consommé.
@@ -241,6 +248,15 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
             autocomplete="email"
             :erreur="messageCourriel()"
             requis
+          />
+
+          <ChampTexte
+            v-model="telephone"
+            etiquette="Téléphone (facultatif)"
+            type="tel"
+            aide="Seul l’administrateur le voit, pour garder le contact avec la famille."
+            autocomplete="tel"
+            :erreur="messageTelephone()"
           />
 
           <ChampTexte

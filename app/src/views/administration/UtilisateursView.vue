@@ -350,6 +350,9 @@ function dateLisible(valeur: string | null): string {
                   compte « {{ utilisateur.displayName }} »
                 </p>
                 <p class="text-xs text-attenue [overflow-wrap:anywhere]">{{ utilisateur.email }}</p>
+                <p v-if="utilisateur.telephone" class="text-xs text-attenue">
+                  <a :href="`tel:${utilisateur.telephone.replace(/[^0-9+]/g, '')}`" class="underline">{{ utilisateur.telephone }}</a>
+                </p>
               </td>
 
               <td class="py-3 pr-3">

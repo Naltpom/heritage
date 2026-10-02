@@ -96,6 +96,17 @@ final class NormaliseurDeDate
      * `graphe.py`, ligne 399. Le tiret est un demi-cadratin entouré d'espaces, et l'absence
      * totale de date rend « — », jamais la chaîne vide.
      */
+    /**
+     * Une date seule, sous la même forme compacte que `ligneDeFiche` (« 1901-1909 »,
+     * « 26.9.2012 ») ; `null` quand elle n'est pas connue.
+     */
+    public function compacte(UncertainDate $date): ?string
+    {
+        $texte = $this->compacte->etiquette($date);
+
+        return '' === $texte ? null : $texte;
+    }
+
     public function ligneDeFiche(UncertainDate $naissance, UncertainDate $deces): string
     {
         $n = $this->compacte->etiquette($naissance);

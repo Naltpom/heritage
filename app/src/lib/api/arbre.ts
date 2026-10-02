@@ -39,18 +39,33 @@ export interface ParentDeFiche {
   displayName: string
   relation: string
   familyId: number
+  /** Date de naissance compacte (« 1816 », « 5.10.1816 ») — **absente** hors cercle,
+   *  `null` quand elle n'est pas connue. */
+  naissance?: string | null
+  /** Date de décès compacte — mêmes règles que `naissance`. */
+  deces?: string | null
 }
 
 export interface FrereOuSoeurDeFiche {
   personId: number
   displayName: string
   siblingOrder: number
+  /** Date de naissance compacte (« 1816 », « 5.10.1816 ») — **absente** hors cercle,
+   *  `null` quand elle n'est pas connue. */
+  naissance?: string | null
+  /** Date de décès compacte — mêmes règles que `naissance`. */
+  deces?: string | null
 }
 
 /** Référence minimale d'une personne dans une union (conjoint, enfant). */
 export interface ReferencePersonne {
   personId: number
   displayName: string
+  /** Date de naissance compacte (« 1816 », « 5.10.1816 ») — **absente** hors cercle,
+   *  `null` quand elle n'est pas connue. */
+  naissance?: string | null
+  /** Date de décès compacte — mêmes règles que `naissance`. */
+  deces?: string | null
 }
 
 export interface UnionDeFiche {
