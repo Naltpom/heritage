@@ -163,3 +163,12 @@ l'attribution du participant** — et celui qui le crée le détient. Concrètem
 - Pistes laissées ouvertes : une liste d'idées de cadeaux par participant, un rappel avant
   le jour J, le dévoilement après la fête, et l'interdiction des tirages croisés (A → B et
   B → A la même année).
+
+## Addendum du 2026-10-02 — les tirages sont des événements, côté utilisateur
+
+Le commanditaire : « le tirage au sort c'est un événement en soi ». La liste, l'entrée de
+Moi et la création des tirages rejoignent celles des événements de famille : une liste
+`/evenements` commune, un bouton « Créer un événement » qui demande le type. Le module
+`Tirage`, ses tables, ses routes et ses règles — le secret des attributions d'abord — ne
+changent pas ; `/tirages` redirige vers la liste commune, `/tirages/<id>` et `tirage.detail`
+restent. Voir l'[ADR 0014, addendum du même jour](0014-evenements-de-famille.md).
