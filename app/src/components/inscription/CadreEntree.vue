@@ -16,6 +16,9 @@
  * un parcours en trois temps dont on ne voit pas la fin donne l'impression de ne
  * pas avancer, et c'est là qu'on abandonne.
  */
+import { ref } from 'vue'
+import { useChampAuDessusDuClavier } from '@/composables/useChampAuDessusDuClavier'
+
 const { titre, sousTitre = '', etape = 0 } = defineProps<{
   titre: string
   sousTitre?: string
@@ -24,10 +27,20 @@ const { titre, sousTitre = '', etape = 0 } = defineProps<{
 }>()
 
 const ETAPES = ['Rattachement', 'Compte', 'Validation'] as const
+
+/*
+ * Sur téléphone, le formulaire part du HAUT (centré, il passait sous le clavier) et le
+ * champ touché est remonté au-dessus du clavier, dont la hauteur est réservée en bas.
+ */
+const zone = ref<HTMLElement | null>(null)
+useChampAuDessusDuClavier(zone)
 </script>
 
 <template>
-  <div class="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center px-4 py-10">
+  <div
+    ref="zone"
+    class="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 py-10 max-md:justify-start max-md:pt-[max(2.5rem,env(safe-area-inset-top))] max-md:pb-[calc(2.5rem+var(--clavier,0px))] md:justify-center"
+  >
     <header class="mb-6">
       <p class="text-sm font-semibold tracking-tight text-accent">Heritage</p>
       <h1 class="mt-1 text-2xl font-semibold tracking-tight">{{ titre }}</h1>

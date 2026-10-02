@@ -26,6 +26,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
 import { annoncerBarreDOutils, useEstMobile, useTiroirs } from '@/composables/useTiroirs'
 import { publierFiltresActifs } from '@/composables/entete'
+import { useGlisserPourFermer } from '@/composables/useGlisserPourFermer'
 
 const {
   filtresActifs = 0,
@@ -55,6 +56,9 @@ const aDesFiltres = computed(() => Boolean(slots.filtres || slots.pastilles || s
 const menuBureau = ref(false)
 const ouvertMobile = computed(() => ouvert.value === 'outils')
 const zone = ref<HTMLElement | null>(null)
+/** Le feuillet du téléphone : il se ferme en le tirant vers le bas, depuis son haut. */
+const feuillet = ref<HTMLElement | null>(null)
+useGlisserPourFermer(feuillet, computed(() => ouvertMobile.value && estMobile.value), () => fermer())
 
 let retirer: (() => void) | null = null
 onMounted(() => {
@@ -140,12 +144,16 @@ function fermer(): void {
       <div
         v-if="aDesFiltres"
         id="tiroir-outils"
+        ref="feuillet"
         role="group"
         :aria-label="`Filtres · ${ecran}`"
-        class="flex flex-col gap-3 border border-ligne bg-panneau shadow-panneau whitespace-normal md:absolute md:top-[calc(100%+8px)] md:right-0 md:z-40 md:w-[360px] md:rounded-panneau md:p-4 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:max-h-[84%] max-md:overflow-y-auto max-md:rounded-t-2xl max-md:px-4 max-md:pt-2 max-md:pb-[max(16px,env(safe-area-inset-bottom))]"
+        class="flex flex-col gap-3 border border-ligne bg-panneau shadow-panneau whitespace-normal md:absolute md:top-[calc(100%+8px)] md:right-0 md:z-40 md:w-[360px] md:rounded-panneau md:p-4 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:max-h-[84%] max-md:overflow-y-auto max-md:overscroll-contain max-md:rounded-t-2xl max-md:px-4 max-md:pt-2 max-md:pb-[max(16px,env(safe-area-inset-bottom))]"
         :class="[ouvertMobile ? '' : 'max-md:hidden', menuBureau && $slots.filtres ? '' : 'md:hidden']"
       >
-        <span class="mx-auto h-[5px] w-10 flex-none rounded-pastille bg-ligne md:hidden" aria-hidden="true" />
+        <!-- La poignée : on tire le feuillet vers le bas pour le fermer. -->
+        <span class="-mt-2 -mb-1 flex h-6 flex-none items-center justify-center md:hidden" aria-hidden="true">
+          <span class="h-[5px] w-10 rounded-pastille bg-ligne" />
+        </span>
         <div class="flex items-center justify-between">
           <span class="text-[17px] font-semibold md:text-[15px]">Filtres · {{ ecran }}</span>
           <button v-if="reinitialisable" type="button" class="h-9 text-sm font-semibold text-accent" @click="emit('reinitialiser')">Réinitialiser</button>
