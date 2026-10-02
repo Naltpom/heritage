@@ -46,6 +46,14 @@
  *
  * Les candidats décédés ne sont plus proposés (le serveur les écarte) : un
  * compte se rattache à une personne vivante, ou se déclare sans fiche.
+ *
+ * **Un résultat vide ouvre la description d'emblée** (2 octobre 2026), et une
+ * voix l'explique (`ConsigneParlee.vue`, une fois par onglet). La décision ne
+ * dépend, elle aussi, que du nombre de candidats affichés : elle est donc la
+ * même pour les trois causes d'un résultat vide, et ne rouvre aucun canal. Le
+ * clic sur « Rechercher ma fiche » « déverrouille » au passage la consigne
+ * (`deverrouillerLaConsigne()`), pour que Safari la laisse parler une fois la
+ * réponse arrivée.
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -53,6 +61,7 @@ import {
   rechercherRattachement,
   type CandidatRattachement,
   type DeclarationDeFamille,
+  type MessageVocal,
 } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import ChampTexte from '@/components/base/ChampTexte.vue'
@@ -63,6 +72,7 @@ import LienNonValide from '@/components/inscription/LienNonValide.vue'
 import ResultatCandidats from '@/components/inscription/ResultatCandidats.vue'
 import DeclarationFamille from '@/components/inscription/DeclarationFamille.vue'
 import { libelleSansFiche, normaliserDeclaration } from '@/components/inscription/declaration'
+import { deverrouillerLaConsigne } from '@/components/inscription/consigneVocale'
 import { estLienNonValide } from '@/components/inscription/lienInvitation'
 import {
   choisirCandidat,
@@ -82,6 +92,8 @@ const givenNames = ref(flux.declaration.value?.givenNames ?? '')
 const birthDate = ref(flux.declaration.value?.birthDate ?? '')
 /** Le brouillon de la description : il survit à la fermeture du panneau. */
 const description = ref(flux.declaration.value?.description ?? '')
+/** Le message vocal enregistré, s'il y en a un : il survit, lui aussi, au panneau refermé. */
+const messageVocal = ref<MessageVocal | null>(flux.declaration.value?.messageVocal ?? null)
 /** Le panneau « Décrivez votre famille » est-il ouvert ? Il l'est d'emblée au
  *  retour de l'étape 2 si c'est par lui que le candidat était passé. */
 const declarer = ref(flux.declaration.value !== null)
@@ -120,6 +132,10 @@ async function chercher(): Promise<void> {
   }
   if (!formulaireComplet.value || envoi.value) return
 
+  // **Avant tout `await`** : c'est encore le geste de la personne, le seul
+  // moment où Safari permet d'amorcer un son qu'on jouera après la réponse.
+  deverrouillerLaConsigne()
+
   envoi.value = true
   erreur.value = null
   refChoisi.value = null
@@ -135,6 +151,9 @@ async function chercher(): Promise<void> {
     })
     retenirCandidats(reponse.candidats)
     aCherche.value = true
+    // Rien trouvé : la description s'ouvre d'elle-même — même décision pour
+    // toutes les causes d'un résultat vide, puisqu'elle ne lit que le nombre.
+    if (reponse.candidats.length === 0) declarer.value = true
   } catch (cause) {
     aCherche.value = false
     retenirCandidats([])
@@ -261,6 +280,8 @@ function continuer(): void {
     <div v-if="declarer" class="mt-4">
       <DeclarationFamille
         v-model:description="description"
+        v-model:messageVocal="messageVocal"
+        consigneAuto
         :surname="surname"
         :givenNames="givenNames"
         :birthDate="birthDate"

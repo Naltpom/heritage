@@ -51,6 +51,7 @@ function compte(sur: Partial<CompteARattacher> = {}): CompteARattacher {
       birthDate: '1998-04-12',
       description: 'Mon père est Jean Serpolet, né vers 1960 à Lille ;\nma mère Marie Sarriette.',
     },
+    messageVocal: null,
     photo: null,
     suggestionCalculeeLe: null,
     ...sur,
@@ -320,6 +321,49 @@ describe('la carte « À rattacher »', () => {
     expect(html).toContain('src="/api/medias/91/vignette"')
     expect(html).toContain('href="/api/medias/91/fichier"')
     expect(html).not.toContain('data-initiales')
+  })
+
+  it('sans message vocal, n’en dit rien', async () => {
+    const html = await rendre(compte(), { etat: 'attente' })
+    expect(html).not.toContain('data-message-vocal')
+    expect(html).not.toContain('<audio')
+  })
+
+  it('avec un message vocal : « Message vocal », sa durée, et un lecteur sur la route du serveur', async () => {
+    const html = await rendre(
+      compte({
+        messageVocal: {
+          url: '/api/administration/rattachements/14/message-vocal',
+          type: 'audio/webm',
+          taille: 540 * 1024,
+          duree: 134,
+        },
+      }),
+      { etat: 'attente' },
+    )
+    expect(html).toContain('data-message-vocal')
+    expect(html).toContain('Message vocal')
+    expect(html).toContain('2:14')
+    expect(html).toContain('540 ko')
+    expect(html).toMatch(/<audio[^>]*src="\/api\/administration\/rattachements\/14\/message-vocal"/)
+    expect(html).toMatch(/<audio[^>]*controls/)
+    // Rien n'est téléchargé avant qu'on appuie sur lecture.
+    expect(html).toMatch(/<audio[^>]*preload="none"/)
+    // Le texte et la voix coexistent.
+    expect(html).toContain('Mon père est Jean Serpolet')
+  })
+
+  it('un vocal sans texte : pas de citation vide', async () => {
+    const html = await rendre(
+      compte({
+        declaration: { surname: 'Serpolet', givenNames: 'Léa Marie', birthDate: '1998-04-12', description: null },
+        messageVocal: { url: '/api/administration/rattachements/14/message-vocal', type: 'audio/mp4', taille: 2048, duree: null },
+      }),
+      { etat: 'attente' },
+    )
+    expect(html).not.toContain('data-description')
+    expect(html).toContain('data-message-vocal')
+    expect(html).toContain('2 ko')
   })
 
   it('pendant l’analyse, le dit — et laisse décider à la main', async () => {

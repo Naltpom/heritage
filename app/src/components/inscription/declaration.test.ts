@@ -72,6 +72,35 @@ describe('la description', () => {
   })
 })
 
+describe('texte OU vocal OU les deux', () => {
+  const VOCAL = { fichier: new Blob(['x']), type: 'audio/webm', dureeSecondes: 42 }
+  const IDENTITE = { surname: 'Dupont', givenNames: 'Léa Marie', birthDate: '1998-04-12' }
+
+  it('le vocal seul suffit : le texte peut rester vide', () => {
+    expect(erreurDescription('', true)).toBeNull()
+    expect(declarationAcceptable({ ...IDENTITE, description: '', messageVocal: VOCAL }, AUJOURDHUI)).toBe(true)
+  })
+
+  it('un texte court accompagne un vocal sans plancher', () => {
+    expect(erreurDescription('Voir mon message.', true)).toBeNull()
+    expect(compteurDescription('Voir mon message.', true)).toMatch(/^17 \/ 4\s000 caractères$/)
+  })
+
+  it('le plafond tient avec ou sans vocal', () => {
+    expect(erreurDescription('x'.repeat(DESCRIPTION_MAXIMALE + 1), true)).toMatch(/dépasse/)
+  })
+
+  it('sans vocal, rien ne change : 60 caractères au moins, et l’écran le rappelle', () => {
+    expect(declarationAcceptable({ ...IDENTITE, description: '' }, AUJOURDHUI)).toBe(false)
+    expect(declarationAcceptable({ ...IDENTITE, description: '', messageVocal: null }, AUJOURDHUI)).toBe(false)
+    expect(erreurDescription('')).toMatch(/ou enregistrez un message vocal/)
+  })
+
+  it('le message vocal passe la normalisation tel quel', () => {
+    expect(normaliserDeclaration({ ...IDENTITE, description: '  ', messageVocal: VOCAL }).messageVocal).toBe(VOCAL)
+  })
+})
+
 describe('la date de naissance déclarée', () => {
   it('exige une date ferme et réelle', () => {
     expect(erreurDateDeNaissance('', AUJOURDHUI)).not.toBeNull()

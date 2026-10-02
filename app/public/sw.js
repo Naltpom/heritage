@@ -50,10 +50,13 @@ const HORS_LIGNE = `<!doctype html><html lang="fr"><meta charset="utf-8"><meta n
  *
  * Les vidéos sont aussi écartées NOMMÉMENT, même en navigation (un lien direct
  * vers un `.mp4` ouvert dans un onglet) : rien ne doit jamais les relayer.
+ * Les CONSIGNES PARLÉES (`/audio/*.mp3`, « Décrivez votre famille ») aussi, et
+ * pour la même raison : un lecteur audio vit des mêmes requêtes partielles.
  */
 self.addEventListener('fetch', (e) => {
   if (e.request.mode !== 'navigate') return
-  if (new URL(e.request.url).pathname.startsWith('/videos/')) return
+  const chemin = new URL(e.request.url).pathname
+  if (chemin.startsWith('/videos/') || chemin.startsWith('/audio/')) return
   e.respondWith(
     fetch(e.request).catch(
       () => new Response(HORS_LIGNE, { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }),

@@ -9,7 +9,8 @@
  * la tiennent :
  *
  * - le `fetch` n'intercepte que les **navigations** ;
- * - et pas même une navigation vers `/videos/` (un `.mp4` ouvert dans un onglet).
+ * - et pas même une navigation vers `/videos/` (un `.mp4` ouvert dans un onglet)
+ *   — ni vers `/audio/`, les consignes parlées, qui vivent des mêmes `Range`.
  *
  * Le script est exécuté tel quel dans un bac à sable `node:vm`, avec un `self`
  * de quelques lignes : c'est le fichier servi qu'on éprouve, pas une copie.
@@ -61,6 +62,13 @@ describe('le service worker et les vidéos', () => {
 
   it('laisse passer même une vidéo ouverte dans un onglet (une navigation)', () => {
     expect(intercepte({ url: 'https://heritage.test/videos/decouvrir.mp4', mode: 'navigate' })).toBe(false)
+  })
+
+  it('laisse passer les consignes parlées (`/audio/`), même requêtes partielles', () => {
+    expect(
+      intercepte({ url: 'https://heritage.test/audio/aide-declaration.mp3', mode: 'no-cors', headers: { Range: 'bytes=0-' } }),
+    ).toBe(false)
+    expect(intercepte({ url: 'https://heritage.test/audio/aide-declaration.mp3', mode: 'navigate' })).toBe(false)
   })
 
   it('continue de répondre aux navigations de l’application — la page hors connexion', () => {

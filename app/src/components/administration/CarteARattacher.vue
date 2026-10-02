@@ -8,6 +8,12 @@
  * famille telle qu'elle a été écrite, la photo s'il y en a une, et la
  * suggestion de l'analyse automatique.
  *
+ * **Et le message vocal**, s'il y en a un (2 octobre 2026) : la personne a pu
+ * dire sa famille au lieu de l'écrire, ou en plus. Un `<audio controls>` le
+ * joue depuis une route `ROLE_ADMIN` ; le texte et la voix coexistent, et l'un
+ * peut manquer. L'analyse automatique ne l'entend pas — elle sait seulement
+ * qu'il existe : c'est à l'administrateur de l'écouter.
+ *
  * **La description parle de vivants.** Elle n'est lue qu'ici, sous
  * `/api/administration`, et elle n'est écrite dans aucun stockage du
  * navigateur : elle vit dans la charge, le temps que la carte est ouverte. Le
@@ -33,7 +39,14 @@
  * (`ecrituresSuspendues`), comme sur les autres écrans de l'administration.
  */
 import { computed, ref } from 'vue'
-import { activerMembre, creerFicheEtRattacher, refuserInscription, type CompteARattacher } from '@/lib/api'
+import {
+  activerMembre,
+  creerFicheEtRattacher,
+  refuserInscription,
+  type CompteARattacher,
+  type MessageVocalARattacher,
+} from '@/lib/api'
+import { formaterChrono, tailleLisible } from '@/components/inscription/messageVocal'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import DialogueConfirmation, { type DemandeDeConfirmation } from '@/components/base/DialogueConfirmation.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
@@ -132,7 +145,7 @@ function demanderRefus(): void {
   confirmation.value = {
     titre: 'Refuser cette inscription ?',
     message:
-      `Le compte ${compte.email} ne pourra plus se connecter ; sa description, son identité ` +
+      `Le compte ${compte.email} ne pourra plus se connecter ; sa description, son message vocal, son identité ` +
       'et sa photo seront effacées.',
     confirmer: 'Refuser l’inscription',
     danger: true,
@@ -146,6 +159,12 @@ async function refuser(): Promise<void> {
 
 function basculer(cible: 'autre_fiche' | 'creation'): void {
   panneau.value = panneau.value === cible ? 'aucun' : cible
+}
+
+/** « — 2:14, 540 ko » : la durée annoncée s'il y en a une, et la taille. */
+function descriptionDuVocal(vocal: MessageVocalARattacher): string {
+  const morceaux = [vocal.duree !== null ? formaterChrono(vocal.duree) : null, tailleLisible(vocal.taille)]
+  return `— ${morceaux.filter((m) => m !== null).join(', ')}`
 }
 
 function dateLisible(iso: string): string {
@@ -202,11 +221,34 @@ function dateLisible(iso: string): string {
 
     <!-- ── La description, telle qu'elle a été écrite ────────────────── -->
     <blockquote
+      v-if="compte.declaration.description !== null && compte.declaration.description !== ''"
       class="rounded-champ border-l-2 border-accent bg-fond px-3 py-2 text-sm whitespace-pre-line"
       data-description
     >
       {{ compte.declaration.description }}
     </blockquote>
+
+    <!-- ── Et telle qu'elle a été dite ────────────────────────────────── -->
+    <!-- Le son vient d'une route `ROLE_ADMIN` qui sert les requêtes
+         partielles : `preload="none"`, rien n'est téléchargé avant qu'on
+         appuie sur lecture — c'est une voix de vivant. -->
+    <section
+      v-if="compte.messageVocal !== null"
+      class="flex flex-col gap-1.5 rounded-champ border-l-2 border-accent bg-fond px-3 py-2"
+      data-message-vocal
+    >
+      <p class="text-sm font-medium">
+        Message vocal
+        <span class="tnum font-normal text-attenue">{{ descriptionDuVocal(compte.messageVocal) }}</span>
+      </p>
+      <audio
+        :src="compte.messageVocal.url"
+        controls
+        preload="none"
+        class="w-full"
+        :aria-label="`Message vocal de ${identite}`"
+      />
+    </section>
 
     <SuggestionRattachement
       :analyse="analyse"
