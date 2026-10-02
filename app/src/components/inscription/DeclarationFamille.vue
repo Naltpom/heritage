@@ -183,8 +183,9 @@ function continuer(): void {
       </div>
 
       <!-- Le message vocal, en plus — ou à la place — du texte. Sa propre
-           mention : il n'est écouté que par les administrateurs, et ne part pas
-           à l'analyse automatique (seul le fait qu'il existe lui est dit). -->
+           mention : il est écouté par les administrateurs et transcrit par
+           Gemini, puis la transcription nourrit l'analyse automatique comme
+           le ferait la description écrite (ADR 0013). -->
       <div class="mt-3 flex flex-col gap-1.5">
         <p class="text-sm font-medium">Ou dites-le à voix haute</p>
         <p class="text-xs text-attenue">{{ MENTION_MESSAGE_VOCAL }}</p>
