@@ -7,7 +7,9 @@
  * vous êtes — par écrit ou à voix haute. Le fichier est statique
  * (`public/audio/aide-declaration.mp3`, servi par nginx, bloc `/audio/`), et
  * son texte exact est ci-dessous : il sert de transcription à l'écran et pour
- * les lecteurs d'écran.
+ * les lecteurs d'écran. Le fichier se refabrique par `videos/audio/consigne.py`
+ * (synthèse vocale) puis se recopie dans `app/public/audio/` : qui change
+ * l'un change les trois — le script, le MP3 et `TEXTE_CONSIGNE`.
  *
  * Trois règles, que ce module rend testables sans navigateur :
  *
