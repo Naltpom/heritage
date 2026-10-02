@@ -55,6 +55,7 @@ final readonly class AgentDeLAssistant
 
     public function analyser(EntreeDAnalyse $entree): ResultatDeLAgent
     {
+        ReglagesDeLAssistant::accorderLeTemps();
         $debut = microtime(true);
         $contenus = [['role' => 'user', 'parts' => $this->premierMessage($entree)]];
         $appelsDOutils = [];

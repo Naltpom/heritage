@@ -14,8 +14,8 @@ use Psr\Log\LoggerInterface;
  *
  * ── Même mécanique que {@see AgentDeLAssistant}, autre question ─────────────────
  *
- * Même transport, mêmes bornes ({@see ReglagesDeLAssistant} : huit tours, quatre-vingt-
- * dix secondes, chaque appel recevant le temps qui reste), même mode `ANY`, même relance
+ * Même transport, mêmes bornes ({@see ReglagesDeLAssistant} : huit tours, cinquante-cinq
+ * secondes, chaque appel recevant le temps qui reste), même mode `ANY`, même relance
  * d'un tour rendu en prose, même contrainte au dernier tour, mêmes lectures bas niveau des
  * réponses (`appelsDeFonction`, `partsRenvoyables`). Changent la consigne, les outils
  * ({@see OutilsDeConsultation}, qui ne montrent au modèle que le cercle du lecteur) et
@@ -55,6 +55,7 @@ final readonly class AgentDeConsultation
 
     public function repondre(EntreeDeQuestion $entree): ResultatDeLAgent
     {
+        ReglagesDeLAssistant::accorderLeTemps();
         $debut = microtime(true);
         $contenus = [...self::historique($entree->historique), ['role' => 'user', 'parts' => [['text' => self::message($entree)]]]];
         $appelsDOutils = [];
