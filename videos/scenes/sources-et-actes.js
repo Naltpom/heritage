@@ -182,7 +182,7 @@ function ongletSources(t) {
 function arbreSur(t) {
   const k = eout(prog(t, P.arbre, P.arbre + 0.4))
   if (k <= 0) return
-  const fiches = [[540, 1380, 'Camille Martin', 'f'], [290, 1130, 'Paul Martin', 'h'], [790, 1130, 'Hélène Dubois', 'f'],
+  const fiches = [[540, 1380, 'Nathan Martin', 'h'], [290, 1130, 'Paul Martin', 'h'], [790, 1130, 'Hélène Dubois', 'f'],
     [165, 880, 'Jean Martin', 'h'], [415, 880, 'Simone Bernard', 'f'], [665, 880, 'René Dubois', 'h'], [915, 880, 'Odette Lefèvre', 'f']]
   x.save(); x.globalAlpha = k
   x.strokeStyle = '#4a5059'; x.lineWidth = 3

@@ -72,7 +72,7 @@ function fermer(): void {
     <header class="mb-6">
       <h1 class="text-xl font-semibold text-texte">Aide</h1>
       <p class="mt-1 text-sm text-attenue">
-        De courtes vidéos pour prendre Heritage en main. Elles démarrent sans le son : touchez « Activer le son ».
+        De courtes vidéos pour prendre Heritage en main. Si une vidéo démarre sans le son, touchez « Activer le son ».
       </p>
     </header>
 

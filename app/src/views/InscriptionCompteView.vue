@@ -252,7 +252,7 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
 
           <ChampTexte
             v-model="telephone"
-            etiquette="Téléphone (facultatif)"
+            etiquette="Téléphone"
             type="tel"
             aide="Seul l’administrateur le voit, pour garder le contact avec la famille."
             autocomplete="tel"

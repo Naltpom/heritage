@@ -1,12 +1,12 @@
 /* Bienvenue — la vidéo du lien d'invitation : ce qui va se passer, dans l'ordre
    de l'écran (se retrouver, choisir ses identifiants, la vérification), puis
-   ce qu'on fera dans l'arbre. Données fictives : Camille Martin, née en 1992. */
+   ce qu'on fera dans l'arbre. Données fictives : Nathan Martin, né en 1992. */
 minuter([0.5, 0.95, 0.55, 0.75, 0.6, 0.75, 0.6], [0.55, 0.75, 0.65, 0.8, 0.45, 0.45, 0], 1.6)
 
-/* -------- l'arbre de Camille -------- */
+/* -------- l'arbre de Nathan -------- */
 const RANG = { 0: 1420, 1: 1220, 2: 1020, 3: 860 }
 const GENS = [
-  [{ nom: 'Camille Martin', dates: '° 14.3.1992', sexe: 'f', vous: true }],
+  [{ nom: 'Nathan Martin', dates: '° 14.3.1992', sexe: 'h', vous: true }],
   [{ nom: 'Paul Martin', dates: '° 1961', sexe: 'h', branche: 'A' }, { nom: 'Hélène Dubois', dates: '° 1964', sexe: 'f', branche: 'C' }],
   [{ nom: 'Jean Martin', dates: '1932 – 2011', sexe: 'h', branche: 'A' }, { nom: 'Simone Bernard', dates: '1935 – 2019', sexe: 'f', branche: 'B' },
     { nom: 'René Dubois', dates: '1930 – 1998', sexe: 'h', branche: 'C' }, { nom: 'Odette Lefèvre', dates: '1936 – 2020', sexe: 'f', branche: 'D' }],
@@ -34,12 +34,12 @@ const P = {
   explore: V[5].debut - 0.7, toucheFiche: M(5, 3), crayon: M(5, 6),
   fin: V[6].debut - 0.55,
 }
-const FRAPPES = [['Martin', M(1, 3)], ['Camille', M(1, 5)], ['14/03/1992', M(1, 7)]]
-const COURRIEL = ['camille@exemple.fr', M(3, 2)], MOTDEPASSE = ['••••••••••••', M(3, 5) + 0.1]
+const FRAPPES = [['Martin', M(1, 3)], ['Nathan', M(1, 5)], ['14/03/1992', M(1, 7)]]
+const COURRIEL = ['nathan@exemple.fr', M(3, 2)], TELEPHONE = ['06 12 34 56 78', M(3, 4)], MOTDEPASSE = ['••••••••••••', M(3, 7) + 0.1]
 
 son(P.arbre, 'eclosion')
 son(P.formulaire, 'souffle')
-for (const [s, d] of [...FRAPPES, COURRIEL, MOTDEPASSE]) sonsDeFrappe(s, d)
+for (const [s, d] of [...FRAPPES, COURRIEL, TELEPHONE, MOTDEPASSE]) sonsDeFrappe(s, d)
 son(P.recherche, 'tape'); son(P.resultats, 'pop'); son(P.choix, 'tape'); son(P.continuer, 'tape')
 son(P.identifiants, 'souffle'); son(P.creer, 'tape'); son(P.attente, 'pop'); son(P.verifie + 0.1, 'tampon'); son(P.cadenas, 'clic')
 son(P.explore, 'souffle'); son(P.toucheFiche, 'tape'); son(P.crayon, 'pop'); son(P.fin, 'final')
@@ -57,7 +57,7 @@ function traitsArbre(k, alpha) {
   }
   x.restore()
 }
-/** `trouve` : 0 = la case de Camille est vide (« Vous ? »), 1 = elle est remplie. */
+/** `trouve` : 0 = la case de Nathan est vide (« Vous ? »), 1 = elle est remplie. */
 function arbre(t, { alpha = 1, trouve = 0, surligne = null } = {}) {
   traitsArbre(eout(prog(t, P.arbre + 0.5, P.arbre + 1.0)), alpha)
   for (const n of noeuds) {
@@ -109,7 +109,7 @@ function ecranRecherche(t) {
     if (repli > 0 && i > 0) return
     if (repli > 0) {
       // résumé de la recherche, sur une ligne
-      texte('Martin · Camille · 14/03/1992', 110, 830, { taille: 34, poids: 600, align: 'left', alpha: repli })
+      texte('Martin · Nathan · 14/03/1992', 110, 830, { taille: 34, poids: 600, align: 'left', alpha: repli })
       texte('Modifier', 970, 830, { taille: 30, poids: 600, coul: COUL.accent, align: 'right', alpha: repli })
       return
     }
@@ -126,8 +126,8 @@ function ecranRecherche(t) {
     texte('2 fiches trouvées', 110, 920, { taille: 30, poids: 700, coul: COUL.attenue, align: 'left', alpha: r, espacement: 1 })
     const choisie = eout(prog(t, P.choix, P.choix + 0.2))
     const cands = [
-      { nom: 'Camille Martin', dates: '° 14.3.1992 · Lyon', sexe: 'f', bonne: true },
-      { nom: 'Camille Martin', dates: '1921 – 2004 · Rouen', sexe: 'f', bonne: false },
+      { nom: 'Nathan Martin', dates: '° 14.3.1992 · Lyon', sexe: 'h', bonne: true },
+      { nom: 'Nathan Martin', dates: '1921 – 2004 · Rouen', sexe: 'h', bonne: false },
     ]
     cands.forEach((c, i) => {
       const ki = eout(prog(t, P.resultats + i * 0.12, P.resultats + 0.4 + i * 0.12))
@@ -136,7 +136,7 @@ function ecranRecherche(t) {
       x.save(); x.globalAlpha *= ki * (c.bonne ? 1 : 1 - 0.5 * choisie)
       rr(110, y - 70, 860, 140, 18); x.fillStyle = sel > 0 ? melange(COUL.panneau2, '#3a2e22', sel) : COUL.panneau2; x.fill()
       x.strokeStyle = sel > 0 ? COUL.accent : COUL.ligne; x.lineWidth = sel > 0 ? 4 : 2; x.stroke()
-      silhouette(185, y + 4, 70, '#6a4d55')
+      silhouette(185, y + 4, 70, '#4b5a74')
       texte(c.nom, 250, y - 18, { taille: 38, poids: 700, align: 'left' })
       texte(c.dates, 250, y + 28, { taille: 28, poids: 500, align: 'left', coul: COUL.attenue })
       // le bouton radio
@@ -159,13 +159,11 @@ function ecranIdentifiants(t) {
   const dy = (1 - entree) * 120 - sortie * 160
   cadreEntree('Choisir vos identifiants', 'Pour revenir sur l’arbre.', 2, a, dy)
   x.save(); x.globalAlpha *= a; x.translate(0, dy)
-  const [c, dc] = COURRIEL, [m, dm] = MOTDEPASSE
-  champ('Adresse de courriel', frappe(c, dc, 22), 110, 850, 860, { focus: t >= dc - 0.15 && t < dm - 0.2 ? 1 : 0, curseur: t >= dc - 0.15 && t < dm - 0.2, aide: 'Pour vous connecter et être prévenu.' })
-  // le téléphone : facultatif, il s'allume quand la voix le dit
-  const tel = t >= M(3, 9) - 0.1 ? 1 - prog(t, M(3, 11) + 0.5, M(3, 11) + 0.9) : 0
-  champ('Téléphone (facultatif)', '', 110, 1050, 860, { focus: tel, placeholder: 'Rien n’oblige à le donner', aide: 'Seul l’administrateur le voit.' })
-  if (t >= M(3, 11) - 0.05) pastille('facultatif', 830, 1024, { ton: 'vert', alpha: eout(prog(t, M(3, 11) - 0.05, M(3, 11) + 0.2)) })
-  champ('Mot de passe', frappe(m, dm, 22), 110, 1250, 860, { focus: t >= dm - 0.15 && t < P.creer ? 1 : 0, curseur: t >= dm - 0.15 && t < P.creer, aide: 'Une petite phrase fait un bon mot de passe.' })
+  const [c, dc] = COURRIEL, [tl, dt] = TELEPHONE, [m, dm] = MOTDEPASSE
+  const actif = (debut, finDuChamp) => (t >= debut - 0.15 && t < finDuChamp - 0.15 ? 1 : 0)
+  champ('Adresse de courriel', frappe(c, dc, 22), 110, 850, 860, { focus: actif(dc, dt), curseur: actif(dc, dt) > 0, aide: 'Pour vous connecter et être prévenu.' })
+  champ('Téléphone', frappe(tl, dt, 18), 110, 1050, 860, { focus: actif(dt, dm), curseur: actif(dt, dm) > 0, aide: 'Seul l’administrateur le voit.' })
+  champ('Mot de passe', frappe(m, dm, 22), 110, 1250, 860, { focus: actif(dm, P.creer + 0.15), curseur: actif(dm, P.creer + 0.15) > 0, aide: 'Une petite phrase fait un bon mot de passe.' })
   bouton('Créer mon compte', 540, 1500, 860, 104, { presse: pression(P.creer) })
   x.restore()
   doigt(680, 1500 + dy, P.creer)
