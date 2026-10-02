@@ -60,7 +60,7 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   // « Inscription » de sa barre du bas qui s'allume (ADR 0003, 01/10/2026).
   if (nom === 'inscription.etat') return 'accueil'
   if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires' || nom === 'explorer') return 'explorer'
-  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
+  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
 }
@@ -255,7 +255,7 @@ export const routes: RouteRecordRaw[] = [
 
   {
     // **Moi** : la quatrième entrée de la barre du bas. Tout ce qui est
-    // personnel ou rare, en une liste : mon compte, mes demandes, tirages,
+    // personnel ou rare, en une liste : mon compte, mes demandes, événements, tirages,
     // actes demandés, questions, administration, déconnexion. `attente` : un
     // compte en attente y trouve son inscription, son compte et la
     // déconnexion — rien qui lise l'arbre.
@@ -350,6 +350,52 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/views/TirageLienView.vue'),
     props: true,
     meta: { acces: 'public', titre: 'Mon tirage au sort', cadre: false },
+  },
+  {
+    // **Les événements de famille** — « Cousinade été 2027 ». `membre`, comme
+    // les tirages : on y est invité par la personne de l'arbre à laquelle on
+    // est rattaché, et l'API refuse tout compte en attente. Ils allument
+    // l'onglet « Moi » (`sectionDe`), d'où on y entre.
+    path: '/evenements',
+    name: 'evenements',
+    component: () => import('@/views/EvenementsView.vue'),
+    meta: { acces: 'membre', titre: 'Événements' },
+  },
+  {
+    // Déclarée avant le détail par lisibilité seulement : `:id(\d+)` ne
+    // reconnaît pas « nouveau ».
+    path: '/evenements/nouveau',
+    name: 'evenement.nouveau',
+    component: () => import('@/views/EvenementFormulaireView.vue'),
+    meta: { acces: 'membre', titre: 'Nouvel événement', parent: { nom: 'evenements', libelle: 'Événements' } },
+  },
+  {
+    // Nom cité par les notifications `evenement_invitation`, `evenement_relance`
+    // et `evenement_annule` : on ne le renomme pas. Ouvrir cette page pose la
+    // première vue de l'invité (côté serveur).
+    path: '/evenements/:id(\\d+)',
+    name: 'evenement.detail',
+    component: () => import('@/views/EvenementView.vue'),
+    meta: { acces: 'membre', titre: 'Événement', parent: { nom: 'evenements', libelle: 'Événements' } },
+  },
+  {
+    path: '/evenements/:id(\\d+)/modifier',
+    name: 'evenement.modifier',
+    component: () => import('@/views/EvenementFormulaireView.vue'),
+    meta: { acces: 'membre', titre: 'Modifier l’événement', parent: { nom: 'evenements', libelle: 'Événements' } },
+  },
+  {
+    // **Le lien personnel d'un invité sans compte** : il lit l'annonce et
+    // répond, sans session. Mêmes choix que `tirage.lien`, pour les mêmes
+    // raisons : `public` (le lien s'ouvre aussi sur le téléphone d'un membre
+    // connecté), `cadre: false`, chemin court (`/e/`) qui se recopie dans un
+    // SMS, clé non filtrée ici — une forme invalide tombe sur « ce lien n'est
+    // plus valable », pas sur « page introuvable ».
+    path: '/e/:cle',
+    name: 'evenement.lien',
+    component: () => import('@/views/EvenementLienView.vue'),
+    props: true,
+    meta: { acces: 'public', titre: 'Invitation', cadre: false },
   },
   {
     // Les actes demandés à une mairie ou à des archives, et leur suivi (module

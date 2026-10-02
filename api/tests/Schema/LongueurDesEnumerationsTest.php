@@ -77,8 +77,12 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * et `statut` sur `dmr_demarche`, `sens` et `canal` sur `dmr_echange`. La plus longue
      * valeur du lot est `extrait_sans_filiation`, 22 signes, d'où le `VARCHAR(24)` de
      * `forme`.
+     *
+     * **56 depuis le 2026-10-02** : `evt_invitation.reponse` (module `Evenement`), en
+     * `VARCHAR(8)` pour une plus longue valeur de sept signes (`present`). Deux valeurs et
+     * pas de troisième — pas de « peut-être », c'est la demande.
      */
-    private const int COLONNES_ENUM_ATTENDUES = 55;
+    private const int COLONNES_ENUM_ATTENDUES = 56;
 
     public function testChaqueColonneAccueilleLaPlusLongueValeurDeSonEnumeration(): void
     {

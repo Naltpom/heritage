@@ -83,6 +83,13 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Module/Tirage/Entity'
                 prefix: 'App\Module\Tirage\Entity'
                 alias: Tirage
+            # Les événements de famille — « Cousinade été 2027 » — préfixe `evt_`.
+            Evenement:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Evenement/Entity'
+                prefix: 'App\Module\Evenement\Entity'
+                alias: Evenement
             Demarche:
                 type: attribute
                 is_bundle: false

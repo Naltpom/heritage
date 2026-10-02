@@ -5262,7 +5262,7 @@ n'est revalidé (un `304` serait une autorisation de garder l'arbre à l'écran)
 | `GET /api/carte`, `GET /api/anniversaires` | **`403` `regime_en_attente`** |
 | `GET /api/medias`, et `GET /api/medias/{id}` (`/fichier`, `/vignette`) de tout autre média, existant ou non | **`403` `regime_en_attente`** |
 | `GET /api/demandes/historique/...`, `GET /api/demandes/suppression/personne/{id}` | **`403` `regime_en_attente`** |
-| `GET /api/questions`, `/api/tirages`, `/api/demarches` (et leurs sous-routes) | **`403` `regime_en_attente`** |
+| `GET /api/questions`, `/api/tirages`, `/api/evenements`, `/api/demarches` (et leurs sous-routes) | **`403` `regime_en_attente`** |
 | **`POST /api/demandes`**, **`POST /api/medias`** | **`403` `regime_en_attente`** |
 | Toute route `/api/administration/*` | `403` (`access_control`, `ROLE_ADMIN`) |
 
@@ -6622,6 +6622,118 @@ On ne tire pas au sort un cadeau pour une personne disparue : l'API refuse de l'
 qui écarte les personnes non vivantes **au sens de la règle unique** (§ 9.2 du modèle — la
 même qui donne le champ `vivant` des résultats). Sans ce paramètre, la recherche est
 inchangée. Les participants inscrits avant cette règle ne sont pas retirés d'office.
+
+## 22 bis. Événements de famille
+
+Module **`Evenement`**. Les événements de famille — « Cousinade été 2027 » —, leurs invités
+(des vivants de l'arbre), qui vient, et pour l'organisateur qui a vu l'annonce sans répondre.
+Décision et règles : [`docs/adr/0014-evenements-de-famille.md`](adr/0014-evenements-de-famille.md).
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/evenements` | `membre` | — | `200` `{moi, evenements}` | `401`, `403` |
+| `POST` | `/api/evenements` | `membre` | annonce + `{invites: int[]}` | `201` | `409`, `422` |
+| `GET` | `/api/evenements/{id}` | organisateur, invité | — | `200` (**pose la vue**) | `404` |
+| `PUT` | `/api/evenements/{id}` | organisateur | annonce | `200` | `403`, `404`, `409`, `422` |
+| `POST` | `/api/evenements/{id}/annulation` | organisateur | — | `200` | `403`, `404`, `409` |
+| `POST` | `/api/evenements/{id}/vu` | organisateur, invité | — | `204` (**pose la vue**) | `404` |
+| `PUT` | `/api/evenements/{id}/reponse` | invité | `{reponse}` | `200` | `403`, `404`, `409`, `422` |
+| `POST` | `/api/evenements/{id}/invites` | organisateur | `{personIds: int[]}` | `201` | `403`, `404`, `409`, `422` |
+| `DELETE` | `/api/evenements/{id}/invites/{personId}` | organisateur | — | `200` | `403`, `404`, `409` |
+| `POST` | `/api/evenements/{id}/invites/{personId}/lien` | organisateur, pour un invité **sans compte** | — | `201` `{cle, url}` | `403`, `404`, `409` |
+| `DELETE` | `/api/evenements/{id}/invites/{personId}/lien` | organisateur | — | `204` | `403`, `404`, `409` |
+| `POST` | `/api/evenements/{id}/relance` | organisateur | — | `200` | `403`, `404`, `409` |
+| `GET` | `/api/evenements/lien/{cle}` | **public** (la clé) | — | `200` (**pose la vue**) | `404`, `429` |
+| `PUT` | `/api/evenements/lien/{cle}/reponse` | **public** (la clé) | `{reponse}` | `200` | `404`, `409`, `422`, `429` |
+
+« Organisateur » vaut aussi pour un administrateur, qui voit tous les événements. Un
+événement est **introuvable** (`404`) pour qui n'en est ni l'organisateur ni l'invité.
+**Annonce** : `{titre, debut, fin, lieu?, description?}` — dates `AAAA-MM-JJ`, `fin >= debut`
+(égales pour un jour) et non passée ; titre ≤ 120, lieu ≤ 160, description ≤ 4 000
+caractères. `reponse` vaut `present` ou `absent` — **pas de troisième valeur**. Une personne
+déjà invitée est ignorée sans erreur à l'ajout. Chaque écriture rend l'**événement relu**,
+sérialisé pour le lecteur, et `409 vue_comme_membre_active` sous la bascule — sauf
+`POST …/vu`, qui n'y pose simplement rien.
+
+**Régime de cache : aucun.** `Cache-Control: private, no-store` et `Vary: Cookie`.
+
+### 22 bis.1 La vue
+
+La **première** vue de l'invité se pose à `GET /api/evenements/{id}`, à `POST …/vu` (la carte
+de l'accueil) et à `GET /api/evenements/lien/{cle}`, et ne bouge plus ensuite. Répondre la
+pose aussi si elle manquait. Elle ne se pose **ni sous la bascule** « voir comme un membre »,
+**ni** quand le compte connecté qui ouvre un lien personnel gère l'événement (l'organisateur
+qui vérifie le lien avant de l'envoyer) — la réponse, elle, est la même.
+
+### 22 bis.2 Ce que voit un invité
+
+Le résumé (`GET /api/evenements`) porte exactement : `id`, `titre`, `debut`, `fin`, `lieu`,
+`description`, `annule`, `passe`, `organisateur {libelle, estMoi}`, `peutGerer`,
+`suisInvite`, `maReponse`, `peutRepondre`, `nombreDInvites`, `nombreDePresents`. Le détail y
+ajoute `quiVient {presents: [{personId, libelle, estMoi}], autres}`, `nombreDAbsents` et
+`suivi`, qui vaut **`null`** pour qui ne gère pas l'événement.
+
+`quiVient.presents` ne nomme que les présents **du cercle du lecteur** (ADR 0003) ; les
+autres sont comptés dans `autres`. **Qui a décliné, qui a vu sans répondre, et tout
+horodatage de vue ou de réponse ne sortent que dans `suivi`.**
+
+### 22 bis.3 Le suivi
+
+```json
+{
+  "presents": [], "absents": [],
+  "fantomes": [{"personId": 12, "libelle": "…", "estMoi": false, "aUnCompte": true, "lienActif": false, "peutPartagerLien": false, "vuLe": "2027-06-28T21:14:00+02:00", "reponduLe": null, "relanceLe": null}],
+  "nonVus": [],
+  "derniereRelanceLe": null,
+  "prochaineRelancePossibleLe": null,
+  "aRelancer": 1
+}
+```
+
+`ligne` : `{personId, libelle, estMoi, aUnCompte, lienActif, peutPartagerLien, vuLe,
+reponduLe, relanceLe}` — horodatages ATOM ou `null`. `fantomes` : vus, sans réponse ;
+`nonVus` : pas encore ouverts. `aRelancer` : les invités **avec un compte** et sans réponse
+qu'une relance toucherait maintenant (l'organisateur exclu). Une relance par **24 heures** au
+plus, pour tout l'événement ; les invités sans compte ne reçoivent rien d'elle.
+
+### 22 bis.4 Le lien personnel
+
+Réservé aux invités **sans compte** (un rattachement, même en attente, compte) ; il cesse de
+valoir quand l'invité en ouvre un. Mêmes règles que le lien de tirage (§ 22.4) : clé de 43
+caractères, empreinte seule en base, un seul refus `404 lien_invalide`, limiteur par IP
+(20 échecs / h, 300 requêtes / h). Il rend exactement :
+
+```json
+{
+  "evenement": {"titre": "…", "debut": "2027-07-17", "fin": "2027-07-18", "lieu": "…", "description": "…", "annule": false, "passe": false},
+  "invite": {"libelle": "…", "reponse": null, "peutRepondre": true}
+}
+```
+
+Ni les autres invités, ni qui vient, ni l'organisateur, ni aucun identifiant.
+
+### 22 bis.5 Les notifications
+
+`evenement_invitation` (création, ajout), `evenement_relance`, `evenement_annule` (aux invités
+qui avaient vu ou répondu) ; aux seuls invités qui ont un compte, jamais à l'auteur du geste ;
+`linkRoute: "evenement.detail"`, `linkParams: {id}`.
+
+### 22 bis.6 Les codes d'erreur
+
+| Code | Statut | Quand |
+|---|---|---|
+| `ressource_introuvable` | `404` | Événement inconnu **ou** invisible ; invité inconnu à retirer. |
+| `reserve_a_l_organisateur` | `403` | Geste de gestion par un autre compte. |
+| `non_invite` | `403` | Répondre sans être invité (l'organisateur qui ne s'est pas invité). |
+| `acces_refuse` | `403` | Lien demandé pour un invité qui a son compte. |
+| `evenement_annule` | `409` | Modifier, inviter, retirer, relancer ou annuler un événement annulé. |
+| `evenement_passe` | `409` | Les mêmes gestes sur un événement terminé. |
+| `reponse_figee` | `409` | Répondre à un événement annulé ou terminé. |
+| `relance_trop_recente` | `409` | Moins de 24 h depuis la dernière ; `details.prochaineRelancePossibleLe`. |
+| `rien_a_relancer` | `409` | Aucun invité avec un compte n'attend de réponse. |
+| `donnees_invalides` | `422` | `champs` nomme chaque champ fautif. Une personne **inconnue ou vivante hors du cercle** du lecteur : le même texte dans les deux cas. |
+| `invite_decede` | `422` | Inviter une personne qui n'est pas vivante ; `champs` nomme `invites` ou `personIds`. |
+| `lien_invalide` | `404` | Lien mal formé, inconnu, révoqué, remplacé, invité retiré ou qui a ouvert un compte. |
 
 ## 23. Incarnation d'un compte
 

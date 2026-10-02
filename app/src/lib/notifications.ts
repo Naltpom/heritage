@@ -109,6 +109,11 @@ const LIBELLES_DE_TYPE: Readonly<Record<string, string>> = {
   media_valide: 'Média accepté',
   media_refuse: 'Média refusé',
   tirage_effectue: 'Tirage au sort',
+  // Module `Evenement` (02/10/2026) : l'invitation, le rappel à qui n'a pas
+  // répondu, l'annulation. Les trois mènent à `evenement.detail`.
+  evenement_invitation: 'Invitation',
+  evenement_relance: 'Rappel d’invitation',
+  evenement_annule: 'Événement annulé',
 }
 
 export function libelleDeType(kind: string): string {
@@ -117,7 +122,13 @@ export function libelleDeType(kind: string): string {
 
 /** Le ton de l'étiquette : un refus ou un conflit se voit, le reste est neutre. */
 export function tonDeType(kind: string): 'alerte' | 'ok' | 'neutre' {
-  if (kind === 'demande_refusee' || kind === 'media_refuse' || kind === 'demande_caduque' || kind === 'doublon_probable') {
+  if (
+    kind === 'demande_refusee' ||
+    kind === 'media_refuse' ||
+    kind === 'demande_caduque' ||
+    kind === 'doublon_probable' ||
+    kind === 'evenement_annule'
+  ) {
     return 'alerte'
   }
   if (kind === 'demande_validee' || kind === 'media_valide' || kind === 'compte_active') return 'ok'

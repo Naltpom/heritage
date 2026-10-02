@@ -589,7 +589,8 @@ dossier de mission).
 `demande_caduque`, `doublon_probable`, `invitation_utilisee`, `compte_en_attente`,
 `compte_active` (au compte lui-même, à son activation — ADR 0003, révision du 2026-10-01),
 `media_valide`, `media_refuse`, `tirage_effectue` (module `Tirage`, ADR 0009 — elle ne nomme
-personne). La notification `demande_caduque` porte le diff de ce qui a
+personne), `evenement_invitation`, `evenement_relance`, `evenement_annule` (module
+`Evenement`, ADR 0014 — elles nomment l'organisateur et l'événement, jamais un autre invité). La notification `demande_caduque` porte le diff de ce qui a
 changé et le lien « refaire cette demande » (§ 9.6) : sans eux, c'est une contribution
 perdue.
 
@@ -2183,6 +2184,24 @@ l'en-tête détaille chaque `CHECK`.
 Les clés étrangères sont toutes internes au module, en `ON DELETE CASCADE`. Les références
 vers `tree_person` et `core_user` sont des identifiants nus avec libellé dénormalisé
 (ADR 0002, règle 2) : une attribution garde le nom de l'année où elle a été tirée.
+
+## 8 ter bis. Module `Evenement` — préfixe `evt_`
+
+Les événements de famille — « Cousinade été 2027 » —, leurs invités, et qui a vu l'annonce :
+[ADR 0014](adr/0014-evenements-de-famille.md). Migration : `Version20261002180000`, dont
+l'en-tête détaille chaque `CHECK`.
+
+| Table | Colonnes principales | Contraintes |
+|---|---|---|
+| `evt_evenement` | `titre`, `debut`, `fin` (dates, fin incluse), `lieu?`, `description?`, `organisateur_user_id` ⇢ `core_user`, `organisateur_libelle`, `annule_le?`, `derniere_relance_le?` | `ck_evt_evenement_dates` (`fin >= debut`) |
+| `evt_invitation` | `evenement_id`, `person_id` ⇢ `tree_person`, `person_label`, `invite_par_user_id` ⇢ `core_user`, `vu_le?`, `reponse?`, `repondu_le?`, `relance_le?`, `lien_token_hash?`, `lien_cree_le?` | `uniq_evt_invitation_personne (evenement_id, person_id)`, `uniq_evt_invitation_lien`, `ck_evt_invitation_reponse`, `ck_evt_invitation_repondu` et `ck_evt_invitation_lien` (équivalences) |
+
+Énumération : **`Reponse`** — `present`, `absent`, en `VARCHAR(8)`. Pas de troisième valeur :
+une réponse nulle est un silence, et c'est ce que le suivi montre.
+
+`vu_le` est la **première** vue et ne bouge plus. Le compte de l'invité n'est pas une
+colonne : il se lit au rattachement (`Membership`), au moment voulu. `lien_token_hash` est
+l'empreinte `sha256` de la clé du lien personnel — jamais la clé.
 
 ## 8 quater. Module `Assistant` — préfixe `ast_`
 

@@ -119,8 +119,15 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * table et non des colonnes sur `core_user`, parce que la liste des quotas est
      * déclarée par les modules qui les consomment, et qu'un quota de plus ne doit pas
      * demander une migration du compte.
+     *
+     * **43 depuis le 2026-10-02** : `evt_evenement` et `evt_invitation` (module `Evenement`,
+     * `migrations/Version20261002180000.php`) portent les événements de famille — « Cousinade
+     * été 2027 » — et, pour chaque invité, sa première vue, sa réponse et sa dernière
+     * relance. Ce sont des **décisions** : l'invitation a sa table parce qu'elle a sa vie
+     * propre (vue, réponse, relance, lien personnel) et qu'un événement en compte des
+     * dizaines ; le compte de l'invité n'y est pas figé, il se lit au rattachement.
      */
-    private const int NOMBRE_DE_TABLES = 41;
+    private const int NOMBRE_DE_TABLES = 43;
 
     public function testLeMappingEstValide(): void
     {
@@ -157,7 +164,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      */
     public function testChaqueTablePorteLePrefixeDeSonModule(): void
     {
-        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_', 'dmr_', 'ast_'];
+        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_', 'evt_', 'dmr_', 'ast_'];
 
         foreach ($this->tablesDuMapping() as $table) {
             $porteUnPrefixe = array_filter(

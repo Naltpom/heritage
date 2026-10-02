@@ -1,0 +1,11 @@
+# Contrat : ce fichier est celui du module Evenement (événements de famille — « Cousinade
+# été 2027 »). Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# Les routes se déclarent par attributs #[Route] dans les contrôleurs du module ;
+# l'import ci-dessous suffit à les charger.
+
+evenement_controleurs:
+    resource:
+        path: ../../src/Module/Evenement/Controller/
+        namespace: App\Module\Evenement\Controller
+    type: attribute

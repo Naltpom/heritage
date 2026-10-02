@@ -94,6 +94,11 @@ security:
         # limiteur par IP (`Tirage\Service\LimiteurDesLiens`). Le `/` final compte : il
         # n'ouvre rien d'autre sous `/api/tirages`.
         - { path: ^/api/tirages/lien/, roles: PUBLIC_ACCESS }
+        # Le lien personnel d'un invité à un événement : une personne sans compte y lit
+        # l'annonce et répond présente ou absente. Même raison, même protection — la clé,
+        # un `404` unique, un limiteur par IP (`Evenement\Service\LimiteurDesLiens`) — et
+        # le même `/` final, qui n'ouvre rien d'autre sous `/api/evenements`.
+        - { path: ^/api/evenements/lien/, roles: PUBLIC_ACCESS }
         # Avant `^/api`, faute de quoi cette règle ne serait jamais atteinte. Le journal
         # d'audit, les réglages, la bascule « voir comme un membre » et la gestion des
         # comptes vivent tous derrière.
