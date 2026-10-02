@@ -92,14 +92,9 @@ import PageFiche from '@/components/personne/PageFiche.vue'
 import { ongletDepuisRequete, type OngletFiche } from '@/components/personne/onglets'
 import LoupeMedia from '@/components/medias/LoupeMedia.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
-import { vueARetrouver } from '@/histoire/retour'
 
 const route = useRoute()
 
-/** Venu de l'arbre : « Retour à l'arbre » y ramène, sur la vue exacte qu'on
- *  avait quittée. Le lien est là dans tous les cas ; ceci n'en change que
- *  l'infobulle. */
-const retourArbre = vueARetrouver()
 
 /** Le routeur contraint déjà `:id(\d+)` : un identifiant provisoire (`#12/p1`)
  *  ne correspond à aucune route côté API et n'en a pas ici non plus (§ 13.4). */
@@ -194,7 +189,6 @@ watch(identifiant, () => {
       v-else-if="complete !== null"
       :fiche="complete"
       :onglet="onglet"
-      :retour-memorise="retourArbre"
       @agrandir="loupe = $event"
       @recharger="executer"
     />

@@ -112,13 +112,23 @@ function fermerEtRendreLeFocus(): void {
   declencheur?.focus()
 }
 
-/** « ‹ Arbre » : l'arbre reprend la vue quittée ; ailleurs, on revient d'où l'on vient. */
+/**
+ * « ‹ Arbre » : depuis une fiche, l'arbre **centré sur la personne de la fiche**
+ * (comme « Retrouver dans l'arbre » sur ordinateur) — de fiche en fiche, la vue
+ * quittée n'a plus rien à voir avec celle qu'on regarde. Ailleurs, l'arbre tel
+ * qu'on l'a laissé ; et hors de l'arbre, on revient d'où l'on vient.
+ */
 function retour(): void {
   const p = parent.value
   if (!p) return
   const precedent = (globalThis.history?.state as { back?: unknown } | null)?.back
-  if (p.nom !== 'arbre' && typeof precedent === 'string') routeur.back()
-  else void routeur.push({ name: p.nom })
+  if (p.nom !== 'arbre' && typeof precedent === 'string') {
+    routeur.back()
+    return
+  }
+  const ici = routeur.currentRoute.value
+  const personne = ici.name === 'personne.detail' ? ici.params['id'] : undefined
+  void routeur.push(typeof personne === 'string' ? { name: p.nom, query: { personne } } : { name: p.nom })
 }
 
 function surClicExterieur(e: MouseEvent): void {

@@ -83,10 +83,9 @@ import ParenteFiche from './ParenteFiche.vue'
 import SectionFiche from './SectionFiche.vue'
 import SourcesFiche from './SourcesFiche.vue'
 
-const { fiche, onglet, retourMemorise = false } = defineProps<{
+const { fiche, onglet } = defineProps<{
   fiche: FichePersonneComplete
   onglet: OngletFiche
-  retourMemorise?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -173,7 +172,6 @@ function pluriel(n: number, mot: string): string {
     <BandeauFiche
       :fiche="fiche"
       :onglet="onglet"
-      :retour-memorise="retourMemorise"
       :edition="edition !== null"
       @agrandir="emit('agrandir', $event)"
     >
