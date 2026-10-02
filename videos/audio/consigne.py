@@ -16,6 +16,6 @@ ICI = os.path.dirname(os.path.abspath(__file__))
 
 
 async def main():
-    await edge_tts.Communicate(TEXTE, 'fr-FR-DeniseNeural', rate='+0%').save(os.path.join(ICI, 'aide-declaration.mp3'))
+    await edge_tts.Communicate(TEXTE, 'fr-FR-DeniseNeural', rate='+12%').save(os.path.join(ICI, 'aide-declaration.mp3'))
 
 asyncio.run(main())

@@ -55,7 +55,8 @@
  * (`deverrouillerLaConsigne()`), pour que Safari la laisse parler une fois la
  * réponse arrivée.
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { prefereMoinsDAnimations } from '@/lib/videos'
 import { useRouter } from 'vue-router'
 import {
   rechercherRattachement,
@@ -177,6 +178,21 @@ watch(refChoisi, (valeur) => {
   if (valeur !== null) declarer.value = false
 })
 
+/**
+ * La description s'ouvre **sous** le formulaire et les résultats : sur un
+ * téléphone, elle naît hors de l'écran, et la consigne parlée qui démarre
+ * parlerait d'une carte qu'on ne voit pas. On l'amène donc sous les yeux — en
+ * douceur, sauf pour qui demande moins d'animations.
+ */
+const carteDeclaration = ref<HTMLElement | null>(null)
+watch(declarer, async (ouverte) => {
+  if (!ouverte) return
+  await nextTick()
+  const carte = carteDeclaration.value
+  if (carte === null || typeof carte.scrollIntoView !== 'function') return
+  carte.scrollIntoView({ behavior: prefereMoinsDAnimations() ? 'auto' : 'smooth', block: 'start' })
+})
+
 function ouvrirDeclaration(): void {
   refChoisi.value = null
   declarer.value = true
@@ -236,6 +252,7 @@ function continuer(): void {
           <ChampTexte
             v-model="birthDate"
             etiquette="Date de naissance"
+            aide="Seulement pour vérifier que c’est bien vous."
             type="date"
             autocomplete="bday"
             requis
@@ -277,7 +294,7 @@ function continuer(): void {
       </BoutonBase>
     </div>
 
-    <div v-if="declarer" class="mt-4">
+    <div v-if="declarer" ref="carteDeclaration" class="mt-4 scroll-mt-4">
       <DeclarationFamille
         v-model:description="description"
         v-model:messageVocal="messageVocal"

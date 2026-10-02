@@ -1,24 +1,25 @@
 /**
- * L'écran du lien d'invitation et la vidéo « Bienvenue » — **montés et
- * cliqués** (`test-utils/rendu-memoire.ts`).
+ * L'écran du lien d'invitation, « Commencer » et la vidéo « Bienvenue » —
+ * **montés et cliqués** (`test-utils/rendu-memoire.ts`).
  *
  * Ce que ces cas tiennent, parce que c'est ce qui se casserait sans bruit :
  *
- * - la vidéo s'ouvre d'elle-même **après** un jeton reconnu, et **jamais**
- *   sur un lien refusé ;
+ * - rien ne s'ouvre de soi-même : l'écran ne propose qu'un geste, « Commencer » ;
+ * - **la première fois**, « Commencer » lance la vidéo (un clic : elle peut
+ *   parler) ; **à la fin, à la croix ou sur un échec**, on part au formulaire
+ *   de rattachement, sans repasser par cet écran ;
  * - **une fois par navigateur** : la marque `heritage.videos.bienvenue.vue`
  *   est posée quand le fichier s'est chargé — pas à l'ouverture, pour qu'une
- *   vidéo absente ne « consomme » pas la première fois ;
- * - à la fin, à la croix ou sur un échec, le lecteur disparaît et **l'écran
- *   d'inscription reste intact** — « Commencer » compris ;
- * - « Revoir la vidéo de présentation » la rouvre.
+ *   vidéo absente ne « consomme » pas la première fois — et, la marque posée,
+ *   « Commencer » va droit au formulaire ;
+ * - un lien refusé n'offre aucun bouton.
  *
  * Le cadre d'entrée est remplacé par une boîte nue : il branche le clavier du
  * téléphone sur de vrais éléments, que ce rendu sans DOM n'a pas.
  */
 import { defineComponent, h } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { boutonNomme, cliquer, monterEnMemoire, parAttribut, texte, un, attendre, type Noeud } from '@/test-utils/rendu-memoire'
+import { boutonNomme, cliquer, monterEnMemoire, parAttribut, un, attendre, type Noeud } from '@/test-utils/rendu-memoire'
 
 const etat = vi.hoisted(() => ({
   verifierJeton: null as unknown as (jeton: string) => Promise<unknown>,
@@ -90,40 +91,69 @@ async function evenementVideo(racine: Noeud, nom: string): Promise<void> {
   await attendre()
 }
 
-describe('la vidéo « Bienvenue » sur l’écran du lien d’invitation', () => {
-  it('s’ouvre d’elle-même une fois le jeton reconnu, par-dessus l’écran prêt', async () => {
+const FORMULAIRE = [{ name: 'inscription.rattachement' }]
+
+describe('« Commencer » et la vidéo « Bienvenue » sur l’écran du lien d’invitation', () => {
+  it('ne lance rien d’elle-même : un seul bouton, « Commencer »', async () => {
     const racine = await monter()
 
-    expect(lecteur(racine)?.attributs['data-video']).toBe('bienvenue')
-    // L'écran est déjà là, dessous : la vidéo ne le remplace pas.
+    expect(lecteur(racine)).toBeNull()
     expect(un(racine, boutonNomme('Commencer'))).not.toBeNull()
+    expect(un(racine, parAttribut('data-revoir-video'))).toBeNull()
   })
 
-  it('ne s’ouvre pas sur un lien refusé', async () => {
+  it('lance la vidéo au premier « Commencer »', async () => {
+    const racine = await monter()
+
+    await cliquer(un(racine, boutonNomme('Commencer')))
+
+    expect(lecteur(racine)?.attributs['data-video']).toBe('bienvenue')
+    expect(etat.push).toEqual([])
+  })
+
+  it('n’offre aucun bouton sur un lien refusé', async () => {
     etat.verifierJeton = () => Promise.reject(new ErreurApi(404, 'invitation_invalide', 'Ce lien n’est plus valable.'))
     const racine = await monter()
 
     expect(lecteur(racine)).toBeNull()
-    expect(un(racine, parAttribut('data-revoir-video'))).toBeNull()
+    expect(un(racine, boutonNomme('Commencer'))).toBeNull()
   })
 
-  it('ne s’ouvre pas sur une panne du serveur', async () => {
-    etat.verifierJeton = () => Promise.reject(new ErreurApi(503, 'service_indisponible', 'Réessayez.'))
+  it('mène au formulaire à la fin de la vidéo', async () => {
     const racine = await monter()
+    await cliquer(un(racine, boutonNomme('Commencer')))
+
+    await evenementVideo(racine, 'ended')
+    await new Promise((fin) => setTimeout(fin, 360))
+    await attendre()
 
     expect(lecteur(racine)).toBeNull()
+    expect(etat.push).toEqual(FORMULAIRE)
   })
 
-  it('ne s’ouvre plus d’elle-même sur un navigateur qui l’a déjà montrée', async () => {
-    donnees[CLE_BIENVENUE_VUE] = '1'
+  it('mène au formulaire dès la croix', async () => {
     const racine = await monter()
+    await cliquer(un(racine, boutonNomme('Commencer')))
+
+    await cliquer(un(racine, parAttribut('data-fermer-video')))
 
     expect(lecteur(racine)).toBeNull()
-    expect(un(racine, boutonNomme('Commencer'))).not.toBeNull()
+    expect(etat.push).toEqual(FORMULAIRE)
+  })
+
+  it('mène au formulaire si la vidéo ne charge pas, sans la retenir « vue »', async () => {
+    const racine = await monter()
+    await cliquer(un(racine, boutonNomme('Commencer')))
+
+    await evenementVideo(racine, 'error')
+
+    expect(etat.push).toEqual(FORMULAIRE)
+    expect(donnees[CLE_BIENVENUE_VUE]).toBeUndefined()
   })
 
   it('retient « déjà vue » quand la vidéo s’est chargée — pas avant', async () => {
     const racine = await monter()
+    await cliquer(un(racine, boutonNomme('Commencer')))
     expect(donnees[CLE_BIENVENUE_VUE]).toBeUndefined()
 
     await evenementVideo(racine, 'loadedmetadata')
@@ -131,48 +161,17 @@ describe('la vidéo « Bienvenue » sur l’écran du lien d’invitation', () =
     expect(donnees[CLE_BIENVENUE_VUE]).toBe('1')
   })
 
-  it('ne retient rien si la vidéo ne charge pas, et laisse l’écran intact', async () => {
-    const racine = await monter()
-
-    await evenementVideo(racine, 'error')
-
-    expect(lecteur(racine)).toBeNull()
-    expect(donnees[CLE_BIENVENUE_VUE]).toBeUndefined()
-    expect(un(racine, boutonNomme('Commencer'))).not.toBeNull()
-  })
-
-  it('disparaît à la croix, et « Commencer » mène toujours au rattachement', async () => {
-    const racine = await monter()
-
-    await cliquer(un(racine, parAttribut('data-fermer-video')))
-    expect(lecteur(racine)).toBeNull()
-
-    await cliquer(un(racine, boutonNomme('Commencer')))
-    expect(etat.push).toEqual([{ name: 'inscription.rattachement' }])
-  })
-
-  it('disparaît à la fin de la vidéo', async () => {
-    const racine = await monter()
-
-    await evenementVideo(racine, 'ended')
-    await new Promise((fin) => setTimeout(fin, 360))
-    await attendre()
-
-    expect(lecteur(racine)).toBeNull()
-  })
-
-  it('se rouvre par « Revoir la vidéo de présentation »', async () => {
+  it('va droit au formulaire sur un navigateur qui l’a déjà montrée', async () => {
     donnees[CLE_BIENVENUE_VUE] = '1'
     const racine = await monter()
-    const lien = un(racine, parAttribut('data-revoir-video'))
-    expect(texte(lien!).trim()).toBe('Revoir la vidéo de présentation')
 
-    await cliquer(lien)
+    await cliquer(un(racine, boutonNomme('Commencer')))
 
-    expect(lecteur(racine)?.attributs['data-video']).toBe('bienvenue')
+    expect(lecteur(racine)).toBeNull()
+    expect(etat.push).toEqual(FORMULAIRE)
   })
 
-  it('ne lève pas quand le stockage du navigateur refuse tout', async () => {
+  it('ne lève pas quand le stockage du navigateur refuse tout, et mène au formulaire', async () => {
     vi.stubGlobal('localStorage', {
       getItem: () => {
         throw new Error('SecurityError')
@@ -183,9 +182,8 @@ describe('la vidéo « Bienvenue » sur l’écran du lien d’invitation', () =
     })
     const racine = await monter()
 
-    // Sans mémoire, pas de lecture d'office (elle reviendrait à chaque fois) ;
-    // l'inscription, elle, est là.
-    expect(lecteur(racine)).toBeNull()
-    expect(un(racine, boutonNomme('Commencer'))).not.toBeNull()
+    // Sans mémoire, on ne sait pas si elle a été vue : on ne l'impose pas.
+    await cliquer(un(racine, boutonNomme('Commencer')))
+    expect(etat.push).toEqual(FORMULAIRE)
   })
 })
