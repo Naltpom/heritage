@@ -698,3 +698,73 @@ describe.each(FORMATS_DE_CARTE)('disposition lignees — format %s', (format) =>
     }
   })
 })
+
+/** Les montants verticaux qui se recouvrent (même x, hauteurs qui se chevauchent). */
+function superpositionsVerticales(d: DispositionHistoire): string[] {
+  const segs: { x: number; y0: number; y1: number }[] = []
+  for (const chemin of Object.values(d.traces)) {
+    for (const m of chemin.matchAll(/M([\d.-]+) ([\d.-]+)L([\d.-]+) ([\d.-]+)/g)) {
+      const [x1, y1, x2, y2] = m.slice(1).map(Number) as [number, number, number, number]
+      if (Math.abs(x1 - x2) < 0.01 && Math.abs(y1 - y2) > 0.01) segs.push({ x: x1, y0: Math.min(y1, y2), y1: Math.max(y1, y2) })
+    }
+  }
+  const fautes: string[] = []
+  for (let i = 0; i < segs.length; i++)
+    for (let j = i + 1; j < segs.length; j++) {
+      const [a, b] = [segs[i]!, segs[j]!]
+      if (Math.abs(a.x - b.x) < 1 && Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) > 1) fautes.push(`x=${a.x} ${a.y0}-${a.y1} / ${b.y0}-${b.y1}`)
+    }
+  return fautes
+}
+
+describe('disposition lignees — traits', () => {
+  // Capture du 02/10 : deux fils rattachés chacun à un seul parent, à côté du couple
+  // Lezy–Carette ; la descente de ce couple tombait pile sur la chute de Pierre.
+  const noeuds: Graphe['noeuds'] = []
+  const aretes: AreteGraphe[] = []
+  let n = 1
+  const p = (nom: string, sex: Sexe, annee: number): string => {
+    const id = `p${n++}`
+    noeuds.push({
+      id, type: 'personne', personId: n, x: 0, y: 0, w: 252, h: 330, displayName: nom, etiquetteNom: nom,
+      sex, generation: 0, branch: 'pm', vivant: false, visibilite: 'complete', etiquetteDates: `${annee} – `,
+    } as NoeudPersonne)
+    return id
+  }
+  const fam = (epoux: string[], enfants: string[]): void => {
+    const f: NoeudFamille = { id: `f${n++}`, type: 'famille', familyId: n, x: 0, y: 0, w: 10, h: 10, divorced: false }
+    noeuds.push(f)
+    for (const e of epoux) aretes.push({ de: e, vers: f.id, genre: 'union' })
+    for (const e of enfants) aretes.push({ de: f.id, vers: e, genre: 'filiation' })
+  }
+  const paul = p('Paul Ducatteau', 'masculin', 1845)
+  const louis = p('Louis Ducatteau', 'masculin', 1820)
+  const florine = p('Florine Lézy', 'feminin', 1816)
+  fam([louis, florine], [paul])
+  const francoisD = p('François Ducatteau', 'masculin', 1779)
+  const rosalieD = p('Rosalie Demarcq', 'feminin', 1782)
+  fam([francoisD, rosalieD], [louis])
+  fam([rosalieD], [p('Auguste Ducatteau', 'masculin', 1813)])
+  fam([francoisD], [p('Pierre Ducatteau', 'masculin', 1815)])
+  fam([p('François Lezy', 'masculin', 1785), p('Rosalie Carette', 'feminin', 1788)], [florine])
+  const graphe: Graphe = {
+    empreinte: '0'.repeat(64),
+    ego: paul,
+    boite: { x: 0, y: 0, w: 1000, h: 1000 },
+    calque: { actif: false, demandes: [], proposes: 0, places: 0, nonPlaces: [] },
+    noeuds,
+    aretes,
+  }
+
+  it('ne superpose jamais deux traits verticaux, quelle que soit la disposition', () => {
+    for (const options of [{}, { fratriesParNaissance: true }] as const) {
+      expect(superpositionsVerticales(disposerLignees(graphe, options))).toEqual([])
+    }
+  })
+
+  it('ne superpose aucun trait vertical sur l’arbre de démonstration', () => {
+    for (const options of [{}, { fratriesParNaissance: true }, { alliances: 'dans-l-arbre' }] as const) {
+      expect(superpositionsVerticales(disposerLignees(construire().graphe, options))).toEqual([])
+    }
+  })
+})

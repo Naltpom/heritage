@@ -1250,12 +1250,16 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     ep: FicheHistoire[]
     en: FicheHistoire[]
     /** Union droite (même rangée, rien entre les deux) ou contournement. */
-    detour: (Intervalle & { rangee: number }) | null
+    detour: (Intervalle & { rangee: number; xa: number; xb: number }) | null
     milieuX: number | null
     milieuY: number
     portee: [number, number] | null
     barre: (Intervalle & { rangee: number }) | null
     departX: number
+    /** Où la descente peut se poser sans quitter l'union (ou la fiche du parent seul). */
+    plage: [number, number]
+    /** Le point d'arrivée de chaque enfant sur le haut de sa fiche : son centre, sauf conflit. */
+    chutes: Map<string, number>
     direct: FicheHistoire | undefined
   }
 
@@ -1293,7 +1297,7 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
       const ya = a.y + a.h / 2
       if (a.rangee === b.rangee && separes(a, b)) {
         // Des fiches entre les époux : l'union contourne par le dessous.
-        detour = { lo: a.cx, hi: b.cx, couloir: 0, rangee: a.rangee }
+        detour = { lo: a.cx, hi: b.cx, couloir: 0, rangee: a.rangee, xa: a.cx, xb: b.cx }
         milieuX = (a.cx + b.cx) / 2
         portee = [a.cx, b.cx]
       } else {
@@ -1337,22 +1341,102 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
 
     const direct = ancestrale ? en.find((e) => e.directe) : undefined
     let departX = milieuX ?? 0
-    let barre: Trace['barre'] = null
     if (en.length && milieuX !== null) {
       const xs = en.map((e) => e.cx)
       const vise = direct ? direct.cx : (Math.min(...xs) + Math.max(...xs)) / 2
       departX = portee ? Math.min(portee[1], Math.max(portee[0], vise)) : milieuX
-      const seul = en.length === 1 ? en[0]! : null
-      if (!(seul && Math.abs(seul.cx - departX) < 0.5)) {
-        barre = {
-          lo: Math.min(departX, ...xs),
-          hi: Math.max(departX, ...xs),
-          couloir: 0,
-          rangee: Math.min(...en.map((e) => e.rangee)),
-        }
+    }
+    // La descente peut glisser dans l'interstice entre deux époux voisins, même étroit.
+    const [a0, b0] = [ep[0], ep[ep.length - 1]]
+    const plage: [number, number] =
+      portee ??
+      (a0 && b0 && a0 !== b0 && a0.rangee === b0.rangee && b0.x - (a0.x + a0.w) >= 6
+        ? [a0.x + a0.w + 3, b0.x - 3]
+        : [departX, departX])
+    const chutes = new Map(en.map((e) => [e.id, e.cx]))
+    traces.push({ fam, ancestrale, style, ep, en, detour, milieuX, milieuY, portee, barre: null, departX, plage, chutes, direct })
+  }
+
+  /*
+   * Une personne dont DEUX unions contournent (un remariage, des fiches entre chaque
+   * conjoint) faisait partir les deux montants du même point de sa fiche, l'un sur
+   * l'autre : chaque union suivante descend un peu à côté, alternativement à droite et
+   * à gauche du centre.
+   */
+  const departsSous = new Map<string, number>()
+  const montant = (f: FicheHistoire): number => {
+    const k = departsSous.get(f.id) ?? 0
+    departsSous.set(f.id, k + 1)
+    const pas = Math.ceil(k / 2) * 10 * (k % 2 ? 1 : -1)
+    return Math.min(f.x + f.w - 12, Math.max(f.x + 12, f.cx + pas))
+  }
+  for (const t of traces) {
+    if (!t.detour) continue
+    t.detour.xa = montant(t.ep[0]!)
+    t.detour.xb = montant(t.ep[t.ep.length - 1]!)
+  }
+
+  /*
+   * AUCUN TRAIT VERTICAL SUR UN AUTRE. Dans l'espace au-dessus d'une rangée passent la
+   * descente de chaque couple et la chute vers chaque enfant ; deux d'entre elles, de
+   * familles différentes, pouvaient tomber au même x et se confondre sur toute leur
+   * hauteur — on ne savait plus qui était à qui (capture du 02/10 : la descente du
+   * couple Lezy–Carette pile sur la chute de Pierre Ducatteau). Se croiser est permis ;
+   * se superposer, non. Chaque trait garde sa place s'il le peut, sinon glisse au plus
+   * près dans ce dont il dispose : la descente entre ses époux, la chute sur le haut de
+   * la fiche de l'enfant.
+   */
+  const ECART_VERTICAL = 8
+  const libre = (x: number, pris: { x: number; fam: string }[], fam: string): boolean =>
+    pris.every((o) => o.fam === fam || Math.abs(o.x - x) >= ECART_VERTICAL)
+  const auPlusPres = (x: number, [lo, hi]: [number, number], ok: (x: number) => boolean): number => {
+    if (ok(x)) return x
+    for (let k = 1; k * 2 <= hi - lo + ECART_VERTICAL * 40; k++) {
+      for (const c of [x + k * 2, x - k * 2]) if (c >= lo && c <= hi && ok(c)) return c
+    }
+    return x
+  }
+  const espaceDe = (t: Trace): number => Math.min(...t.en.map((e) => e.rangee))
+  const parEspace = new Map<number, Trace[]>()
+  for (const t of traces) {
+    if (!t.en.length || t.milieuX === null) continue
+    const r = espaceDe(t)
+    parEspace.set(r, [...(parEspace.get(r) ?? []), t])
+  }
+  for (const liste of parEspace.values()) {
+    // Ce qui ne bouge pas : les montants des unions qui contournent (sous les époux),
+    // et d'abord le centre de chaque enfant — une chute qui reste droite.
+    const pris: { x: number; fam: string }[] = []
+    for (const t of liste) for (const e of t.en) pris.push({ x: e.cx, fam: t.fam })
+    for (const t of traces)
+      if (t.detour && t.detour.rangee + 1 === espaceDe(liste[0]!))
+        pris.push({ x: t.detour.xa, fam: t.fam }, { x: t.detour.xb, fam: t.fam })
+    // Les descentes : à leur place si elle est libre, sinon au plus près dans leur plage.
+    const descentes: { x: number; fam: string }[] = []
+    for (const t of liste) {
+      t.departX = auPlusPres(t.departX, t.plage, (x) => libre(x, [...pris, ...descentes], t.fam))
+      descentes.push({ x: t.departX, fam: t.fam })
+    }
+    // Les chutes : une descente d'une autre famille sur leur x les fait glisser sur la fiche.
+    for (const t of liste) {
+      for (const e of t.en) {
+        const plage: [number, number] = [e.x + 14, e.x + e.w - 14]
+        t.chutes.set(e.id, auPlusPres(e.cx, plage, (x) => libre(x, descentes, t.fam)))
       }
     }
-    traces.push({ fam, ancestrale, style, ep, en, detour, milieuX, milieuY, portee, barre, departX, direct })
+  }
+  // Les barres, une fois les points fixés.
+  for (const t of traces) {
+    if (!t.en.length || t.milieuX === null) continue
+    const xs = [...t.chutes.values()]
+    const seul = t.en.length === 1 ? t.en[0]! : null
+    if (seul && Math.abs(t.chutes.get(seul.id)! - t.departX) < 0.5) continue
+    t.barre = {
+      lo: Math.min(t.departX, ...xs),
+      hi: Math.max(t.departX, ...xs),
+      couloir: 0,
+      rangee: Math.min(...t.en.map((e) => e.rangee)),
+    }
   }
 
   /*
@@ -1386,7 +1470,8 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     if (detour) {
       const [a, b] = [ep[0]!, ep[ep.length - 1]!]
       const y = yDetour(detour.rangee, detour.couloir)
-      traits[t.style] += seg(a.cx, a.y + a.h, a.cx, y) + seg(a.cx, y, b.cx, y) + seg(b.cx, y, b.cx, b.y + b.h)
+      const [xa, xb] = [detour.xa, detour.xb]
+      traits[t.style] += seg(xa, a.y + a.h, xa, y) + seg(xa, y, xb, y) + seg(xb, y, xb, b.y + b.h)
       departY = y
     }
     if (!en.length || milieuX === null) continue
@@ -1401,12 +1486,13 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
       cible(seg(t.departX, departY, t.departX, seul.y), ancestrale, enAttente(fam, seul.id))
       continue
     }
+    const chute = (e: FicheHistoire): number => t.chutes.get(e.id) ?? e.cx
     const barre = yBarre(t.barre.rangee, t.barre.couloir, ancestrale)
     cible(seg(t.departX, departY, t.departX, barre), ancestrale, false)
     if (t.barre.hi > t.barre.lo) traits.ordinaires += seg(t.barre.lo, barre, t.barre.hi, barre)
-    if (direct && Math.abs(direct.cx - t.departX) >= 0.5)
-      traits.directs += seg(Math.min(t.departX, direct.cx), barre, Math.max(t.departX, direct.cx), barre)
-    for (const e of en) cible(seg(e.cx, barre, e.cx, e.y), e === direct, enAttente(fam, e.id))
+    if (direct && Math.abs(chute(direct) - t.departX) >= 0.5)
+      traits.directs += seg(Math.min(t.departX, chute(direct)), barre, Math.max(t.departX, chute(direct)), barre)
+    for (const e of en) cible(seg(chute(e), barre, chute(e), e.y), e === direct, enAttente(fam, e.id))
   }
 
   /* Les quarts : ceux du lecteur, puis ceux de son conjoint. */
