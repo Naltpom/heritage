@@ -118,8 +118,27 @@ export interface DeclarationDeFamille {
   givenNames: string
   /** Date ferme `YYYY-MM-DD`, comme à l'étape 1b. */
   birthDate: string
-  /** 60 à 4 000 caractères après `trim()` — voir `components/inscription/declaration.ts`. */
+  /**
+   * 60 à 4 000 caractères après `trim()` — voir `components/inscription/declaration.ts`.
+   * **Facultatif quand un message vocal l'accompagne** : il peut alors être vide.
+   */
   description: string
+  /** Le message vocal, s'il y en a un — un seul. */
+  messageVocal?: MessageVocal | null
+}
+
+/**
+ * Un message vocal enregistré dans le navigateur (`EnregistreurVocal.vue`).
+ *
+ * Le `Blob` ne vit qu'en mémoire, le temps du parcours : il part dans le corps
+ * `multipart` de `POST /inscription/compte` et nulle part ailleurs.
+ */
+export interface MessageVocal {
+  fichier: Blob
+  /** Le type sans paramètres : `audio/webm`, `audio/mp4`, `audio/ogg`. */
+  type: string
+  /** Mesurée par le chrono : un WebM de `MediaRecorder` n'annonce pas la sienne. */
+  dureeSecondes: number
 }
 
 /**
@@ -148,6 +167,11 @@ export type RattachementDemande =
  *   pointées (`declaration.description`…), et un limiteur par adresse IP
  *   (5 comptes sans fiche par heure) rend une vraie `429`.
  *
+ * **Avec un message vocal**, le corps part en `multipart` : le JSON habituel,
+ * tel quel, dans le champ `donnees`, et l'enregistrement dans `messageVocal`.
+ * Le serveur lit les deux formes de la même façon ; ses refus du fichier
+ * reviennent sous `declaration.messageVocal`, dans le même `422`.
+ *
  * Succès : `201`, jeton d'invitation consommé, `mbr_member` créé, **session
  * ouverte**. La charge rendue est celle du § 2.2.
  */
@@ -162,6 +186,7 @@ export function creerCompte(
 ): Promise<ChargeDeSession> {
   // Le corps est écrit champ par champ plutôt que d'étaler `entree` : il ne part
   // que ce que le contrat attend, et jamais les deux formes à la fois.
+  const vocal = entree.declaration?.messageVocal ?? null
   const rattachement =
     entree.declaration !== undefined
       ? {
@@ -170,21 +195,38 @@ export function creerCompte(
             givenNames: entree.declaration.givenNames,
             birthDate: entree.declaration.birthDate,
             description: entree.declaration.description,
+            // La durée accompagne le fichier, et seulement lui.
+            ...(vocal !== null ? { dureeMessageVocal: Math.max(1, Math.round(vocal.dureeSecondes)) } : {}),
           },
         }
       : { choix: entree.choix }
 
+  const corps = {
+    jeton: entree.jeton,
+    ...rattachement,
+    email: entree.email,
+    password: entree.password,
+    ...(entree.telephone ? { telephone: entree.telephone } : {}),
+  }
+
   return requeteApi<ChargeDeSession>('/inscription/compte', {
     methode: 'POST',
-    corps: {
-      jeton: entree.jeton,
-      ...rattachement,
-      email: entree.email,
-      password: entree.password,
-      ...(entree.telephone ? { telephone: entree.telephone } : {}),
-    },
+    corps: vocal !== null ? corpsAvecMessageVocal(corps, vocal) : corps,
     sansRattrapage: true,
   })
+}
+
+/**
+ * Le corps `multipart` : le JSON dans `donnees`, le fichier dans `messageVocal`.
+ * Exposé pour les tests — c'est la forme que le serveur attend, au champ près.
+ */
+export function corpsAvecMessageVocal(corps: Record<string, unknown>, vocal: MessageVocal): FormData {
+  const formulaire = new FormData()
+  formulaire.append('donnees', JSON.stringify(corps))
+  // Le nom est indicatif : le serveur ne croit que les octets.
+  const extension = vocal.type.includes('mp4') ? 'm4a' : vocal.type.includes('ogg') ? 'ogg' : 'webm'
+  formulaire.append('messageVocal', vocal.fichier, `message-vocal.${extension}`)
+  return formulaire
 }
 
 /**

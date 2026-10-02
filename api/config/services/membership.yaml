@@ -30,6 +30,13 @@ parameters:
     app.membership.expediteur_par_defaut: 'heritage@localhost'
     app.membership.expediteur: '%env(default:app.membership.expediteur_par_defaut:MAILER_EXPEDITEUR)%'
 
+    # Les messages vocaux de l'inscription sans fiche (`StockageDesMessagesVocaux`) : un
+    # sous-dossier du volume des téléversements, **hors racine web**. Dérivé de la racine
+    # des médias plutôt que d'une variable à lui, pour qu'un VPS qui déplace le volume
+    # (`MEDIA_RACINE`) n'ait qu'un réglage à faire — et que les tests, qui détournent
+    # `MEDIA_RACINE` vers `var/`, n'écrivent pas dans le dépôt.
+    app.membership.messages_vocaux: '%app.media.racine%/messages-vocaux'
+
 services:
     # ── Le cercle de visibilité ────────────────────────────────────────────────────
     #

@@ -20,6 +20,13 @@
  * phrase : « Mon père est Jean Dupont, né vers 1960 à Lille. » en fait déjà
  * cinquante. En dessous, l'administrateur n'aurait rien pour chercher.
  *
+ * **Texte OU vocal OU les deux** (2 octobre 2026). La personne peut aussi
+ * **dire** sa famille (`EnregistreurVocal.vue`, `messageVocal.ts`). Avec un
+ * message vocal, le texte devient facultatif : il peut être vide, ou court — il
+ * complète ce qui a été dit. Sans vocal, rien ne change : 60 caractères au
+ * moins. Le plafond de 4 000 tient dans les deux cas. Le serveur applique la
+ * même règle (`DeclarationDeFamille::lire()`).
+ *
  * **Ce texte parle de personnes vivantes.** Rien ici ne le stocke ni ne le
  * journalise : ce module ne fait que compter.
  */
@@ -49,6 +56,14 @@ export const EXEMPLE_DESCRIPTION =
 export const MENTION_DESCRIPTION =
   'Lu seulement par les administrateurs, et parfois analysé automatiquement (Google Gemini) pour retrouver votre fiche.'
 
+/**
+ * La mention du message vocal. Il n'est **pas** transmis à l'analyse
+ * automatique — seul le fait qu'il existe l'est : c'est un administrateur qui
+ * l'écoute.
+ */
+export const MENTION_MESSAGE_VOCAL =
+  'Écouté seulement par les administrateurs ; il n’est pas transmis à l’analyse automatique.'
+
 /** Longueur de la description telle que le serveur la compte. */
 export function longueurDescription(texte: string): number {
   return longueurVisible(texte.trim())
@@ -59,10 +74,18 @@ export function longueurDescription(texte: string): number {
  *
  * Comme pour le mot de passe, il dit **ce qu'il manque** : « encore
  * 23 caractères » se corrige, « trop court » se subit.
+ *
+ * `avecVocal` : un message vocal accompagne-t-il la déclaration ? Il rend le
+ * texte facultatif — seul le plafond demeure.
  */
-export function erreurDescription(texte: string): string | null {
+export function erreurDescription(texte: string, avecVocal = false): string | null {
   const longueur = longueurDescription(texte)
-  if (longueur === 0) return 'Décrivez votre famille en quelques phrases.'
+  if (avecVocal) {
+    return longueur > DESCRIPTION_MAXIMALE
+      ? `Ce texte dépasse ${DESCRIPTION_MAXIMALE.toLocaleString('fr-FR')} caractères : resserrez-le un peu.`
+      : null
+  }
+  if (longueur === 0) return 'Décrivez votre famille en quelques phrases, ou enregistrez un message vocal.'
   if (longueur < DESCRIPTION_MINIMALE) {
     const manquants = DESCRIPTION_MINIMALE - longueur
     return manquants === 1
@@ -82,10 +105,12 @@ export function erreurDescription(texte: string): string | null {
  * (Aucun rapport avec les recherches de l'étape 1b, dont rien ne se compte côté
  * client : ce compteur-ci mesure le texte que le candidat est en train d'écrire.)
  */
-export function compteurDescription(texte: string): string {
+export function compteurDescription(texte: string, avecVocal = false): string {
   const longueur = longueurDescription(texte)
   const fmt = (n: number): string => n.toLocaleString('fr-FR')
-  return longueur < DESCRIPTION_MINIMALE
+  // Avec un vocal, il n'y a plus de minimum à atteindre : le compteur ne
+  // réclame rien.
+  return longueur < DESCRIPTION_MINIMALE && !avecVocal
     ? `${fmt(longueur)} / ${fmt(DESCRIPTION_MINIMALE)} caractères au minimum`
     : `${fmt(longueur)} / ${fmt(DESCRIPTION_MAXIMALE)} caractères`
 }
@@ -138,7 +163,8 @@ export function erreursDeclaration(
   const date = erreurDateDeNaissance(declaration.birthDate, aujourdhui)
   if (date !== null) erreurs.birthDate = date
 
-  const description = erreurDescription(declaration.description)
+  const avecVocal = declaration.messageVocal !== undefined && declaration.messageVocal !== null
+  const description = erreurDescription(declaration.description, avecVocal)
   if (description !== null) erreurs.description = description
 
   return erreurs
@@ -159,6 +185,8 @@ export function normaliserDeclaration(declaration: DeclarationDeFamille): Declar
     givenNames: declaration.givenNames.trim(),
     birthDate: declaration.birthDate,
     description: declaration.description.trim(),
+    // Le `Blob` passe tel quel : il n'a pas d'espaces à retirer.
+    ...(declaration.messageVocal ? { messageVocal: declaration.messageVocal } : {}),
   }
 }
 

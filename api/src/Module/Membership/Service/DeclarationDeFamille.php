@@ -26,6 +26,22 @@ namespace App\Module\Membership\Service;
  * généalogique : c'est ce que le candidat dit de lui-même. Contrairement à l'étape 1b, elle
  * est **conservée** — le temps de la décision de l'administrateur, pas davantage : elle est
  * purgée au rattachement comme au refus (`Member::purgerLaDeclaration()`).
+ *
+ * ## Le texte devient facultatif quand un message vocal l'accompagne
+ *
+ * Depuis le 2 octobre 2026, le candidat peut **dire** sa famille au lieu de l'écrire
+ * ({@see MessageVocalDeDeclaration}). La règle devient « un texte **ou** un vocal, ou les
+ * deux » :
+ *
+ * - sans vocal, rien ne change : 60 à 4 000 caractères ;
+ * - avec un vocal, le texte peut être vide — il est alors rangé à `null` — ou court : il
+ *   complète ce qui a été dit et n'a plus à porter seul la recherche. Le plafond de
+ *   4 000 caractères, lui, tient toujours.
+ *
+ * `lire()` ne voit pas le fichier : l'appelant lui dit seulement s'il y en a un **valide**.
+ * Un vocal refusé (mauvais type, trop lourd) ne rend pas le texte facultatif — sinon le
+ * candidat corrigerait le vocal et découvrirait au second envoi que son texte, lui aussi,
+ * était trop court.
  */
 final readonly class DeclarationDeFamille
 {
@@ -39,7 +55,8 @@ final readonly class DeclarationDeFamille
         public string $nom,
         public string $prenoms,
         public \DateTimeImmutable $naissance,
-        public string $description,
+        /** `null` quand un message vocal tient lieu de description. */
+        public ?string $description,
     ) {
     }
 
@@ -49,9 +66,12 @@ final readonly class DeclarationDeFamille
      * Les clés d'erreur sont préfixées par `declaration.` : c'est le chemin du champ dans le
      * corps, et le front les range sous le bon champ sans table de correspondance.
      *
+     * `$avecMessageVocal` : un message vocal **valide** accompagne-t-il la déclaration ? Il
+     * rend le texte facultatif (voir l'en-tête de classe).
+     *
      * @return array{0: self|null, 1: array<string, string>}
      */
-    public static function lire(mixed $brut, ?\DateTimeImmutable $aujourdhui = null): array
+    public static function lire(mixed $brut, ?\DateTimeImmutable $aujourdhui = null, bool $avecMessageVocal = false): array
     {
         if (!\is_array($brut)) {
             return [null, ['declaration' => 'Décrivez votre famille.']];
@@ -81,22 +101,28 @@ final readonly class DeclarationDeFamille
         }
 
         $longueur = null === $description ? 0 : mb_strlen($description);
+        // Avec un vocal, le texte n'a plus de plancher — seulement son plafond.
+        $minimum = $avecMessageVocal ? 0 : self::DESCRIPTION_MIN;
 
-        if ($longueur < self::DESCRIPTION_MIN || $longueur > self::DESCRIPTION_MAX) {
-            $champs['declaration.description'] = \sprintf(
-                'Décrivez votre famille en %d à %d caractères : vos parents, vos grands-parents, des dates, des lieux.',
-                self::DESCRIPTION_MIN,
-                self::DESCRIPTION_MAX,
-            );
+        if ($longueur < $minimum || $longueur > self::DESCRIPTION_MAX) {
+            $champs['declaration.description'] = $avecMessageVocal
+                ? \sprintf('La description ne doit pas dépasser %d caractères.', self::DESCRIPTION_MAX)
+                : \sprintf(
+                    'Décrivez votre famille en %d à %d caractères, ou enregistrez un message vocal : vos parents, vos grands-parents, des dates, des lieux.',
+                    self::DESCRIPTION_MIN,
+                    self::DESCRIPTION_MAX,
+                );
         }
 
         if ([] !== $champs) {
             return [null, $champs];
         }
 
-        \assert(null !== $nom && null !== $prenoms && null !== $naissance && null !== $description);
+        \assert(null !== $nom && null !== $prenoms && null !== $naissance);
 
-        return [new self($nom, $prenoms, $naissance, $description), []];
+        // Un texte vide qui accompagne un vocal est rangé à `null`, pas à `''` : « rien
+        // d'écrit » ne se dit que d'une façon en base.
+        return [new self($nom, $prenoms, $naissance, 0 === $longueur ? null : $description), []];
     }
 
     /** Une chaîne débarrassée de ses blancs extrêmes, ou `null` si ce n'en est pas une. */

@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Module\Membership\Controller;
 
+use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Membership\Contract\PortraitsDesComptes;
 use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Repository\MemberRepository;
+use App\Module\Membership\Service\StockageDesMessagesVocaux;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -31,6 +35,15 @@ use Symfony\Component\Routing\Attribute\Route;
  * vivants hors de son cercle ; la masquer rendrait un écran faux. On refuse.
  *
  * `ROLE_ADMIN` par `access_control` (`^/api/administration`) : ni voter ni contrôle ici.
+ *
+ * ## Le message vocal
+ *
+ * Depuis le 2 octobre 2026, une déclaration peut porter un **message vocal** — à la place
+ * du texte, ou en plus. La liste n'en rend que la présence, le type, la taille et la durée
+ * annoncée (`messageVocal`) ; le son lui-même sort par
+ * `GET /api/administration/rattachements/{memberId}/message-vocal`, **et seulement par
+ * là** : même `ROLE_ADMIN`, même refus sous la bascule — une voix se filtre encore moins
+ * qu'un texte.
  */
 final class RattachementsAdminController extends AbstractController
 {
@@ -39,6 +52,7 @@ final class RattachementsAdminController extends AbstractController
         private readonly PortraitsDesComptes $portraits,
         private readonly CercleDeVisibiliteInterface $cercle,
         private readonly BasculeVoirComme $bascule,
+        private readonly StockageDesMessagesVocaux $messagesVocaux,
     ) {
     }
 
@@ -55,6 +69,49 @@ final class RattachementsAdminController extends AbstractController
             'page' => 1,
             'parPage' => \count($elements),
         ]);
+    }
+
+    /**
+     * Le message vocal d'une déclaration, **en flux**.
+     *
+     * `BinaryFileResponse` sert les requêtes partielles (`Range` → `206`) sans rien
+     * demander : c'est ce dont un `<audio controls>` a besoin pour se déplacer dans
+     * l'enregistrement, et Safari refuse de lire un son servi sans elles.
+     *
+     * `404` pour tout ce qui ne peut pas être servi — compte inconnu, déjà rattaché ou
+     * refusé (la purge a effacé le vocal), pas de vocal, fichier absent du volume. Aucun
+     * cache (`private, no-store`) : c'est une voix de vivant, que le navigateur de
+     * l'administrateur n'a pas à garder.
+     */
+    #[Route(
+        '/api/administration/rattachements/{memberId}/message-vocal',
+        name: 'membership_admin_rattachements_message_vocal',
+        requirements: ['memberId' => '\d+'],
+        methods: ['GET'],
+    )]
+    public function messageVocal(int $memberId): BinaryFileResponse
+    {
+        $this->bascule->refuserSiActive();
+
+        $membre = $this->membres->find($memberId);
+        $nom = null !== $membre && $membre->estARattacher() ? $membre->getVoiceMessageName() : null;
+        $mime = $membre?->getVoiceMessageMime();
+
+        if (null === $nom || null === $mime || !$this->messagesVocaux->existe($nom)) {
+            throw new NotFoundException();
+        }
+
+        $reponse = new BinaryFileResponse($this->messagesVocaux->chemin($nom));
+        $reponse->headers->set('Content-Type', $mime);
+        $reponse->headers->set('X-Content-Type-Options', 'nosniff');
+        $reponse->headers->set('Cache-Control', 'private, no-store');
+        $reponse->setContentDisposition(
+            HeaderUtils::DISPOSITION_INLINE,
+            // Un nom neutre : ni l'identité ni le courriel n'ont à voyager dans un en-tête.
+            'message-vocal.'.pathinfo($nom, \PATHINFO_EXTENSION),
+        );
+
+        return $reponse;
     }
 
     /** @return array<string, mixed> */
@@ -83,8 +140,33 @@ final class RattachementsAdminController extends AbstractController
                 'birthDate' => $membre->getDeclaredBirthDate()?->format('Y-m-d'),
                 'description' => $membre->getFamilyDescription(),
             ],
+            'messageVocal' => $this->messageVocalDe($membre),
             'photo' => $this->portraits->portraitEnAttente($membre->getUserId()),
             'suggestionCalculeeLe' => $membre->getAttachmentSuggestionAt()?->format(\DateTimeInterface::ATOM),
+        ];
+    }
+
+    /**
+     * Le message vocal tel que la liste le décrit — jamais le son, qui a sa route.
+     *
+     * @return array{url: string, type: string, taille: int, duree: int|null}|null
+     */
+    private function messageVocalDe(Member $membre): ?array
+    {
+        $id = $membre->getId();
+        $mime = $membre->getVoiceMessageMime();
+        $taille = $membre->getVoiceMessageSize();
+
+        if (null === $id || null === $membre->getVoiceMessageName() || null === $mime || null === $taille) {
+            return null;
+        }
+
+        return [
+            // Écrite par le serveur, comme les URL de la photo : le front ne la reconstruit pas.
+            'url' => $this->generateUrl('membership_admin_rattachements_message_vocal', ['memberId' => $id]),
+            'type' => $mime,
+            'taille' => $taille,
+            'duree' => $membre->getVoiceMessageSeconds(),
         ];
     }
 }

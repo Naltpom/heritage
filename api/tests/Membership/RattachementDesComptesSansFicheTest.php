@@ -86,7 +86,7 @@ final class RattachementDesComptesSansFicheTest extends CasDeTestMembership
         $element = $charge['elements'][0];
         self::assertSame([
             'memberId', 'userId', 'email', 'inscritLe', 'invitationId', 'invitationPersonId',
-            'invitationPersonLabel', 'declaration', 'photo', 'suggestionCalculeeLe',
+            'invitationPersonLabel', 'declaration', 'messageVocal', 'photo', 'suggestionCalculeeLe',
         ], array_keys($element));
         self::assertSame($membre->getId(), $element['memberId']);
         self::assertSame('lave@example.net', $element['email']);
@@ -98,6 +98,7 @@ final class RattachementDesComptesSansFicheTest extends CasDeTestMembership
             'birthDate' => '1998-04-12',
             'description' => self::DESCRIPTION,
         ], $element['declaration']);
+        self::assertNull($element['messageVocal']);
         self::assertNull($element['photo']);
         self::assertNull($element['suggestionCalculeeLe']);
     }

@@ -153,6 +153,27 @@ attend son compte**.
 - **Supprimer** le compte refusé. Rejetée pour ce livrable (§ 3 de la décision) : le chantier
   appartient à `Core`.
 
+## Addendum du 2 octobre 2026 — dire sa famille au lieu de l'écrire
+
+« Décrivez votre famille » s'ouvre d'emblée quand la recherche ne rend personne (la décision
+ne lit que le nombre de candidats : elle est la même pour toutes les causes d'un résultat
+vide), et une **consigne parlée** l'explique, une fois par onglet. Le candidat peut écrire,
+**ou enregistrer un message vocal** (`MediaRecorder`), ou les deux.
+
+- **Texte OU vocal OU les deux.** Un vocal valide rend la description facultative ; sans lui,
+  60 caractères au moins, comme avant.
+- **Dans la même requête**, en `multipart` — pas de dépôt préalable : aucun fichier orphelin
+  d'un parcours abandonné, aucune route de dépôt anonyme de plus. Jeton contrôlé d'abord,
+  limiteur `inscription_sans_fiche`, 10 Mio, type lu sur les octets (WebM, Ogg, MP4).
+- **Des colonnes, pas un média.** Le fichier n'appartient à aucune fiche et n'entre dans
+  aucun circuit de validation : il vit sous `messages-vocaux/` du volume des téléversements,
+  hors racine web, et ses quatre colonnes `voice_message_*` suivent les règles de la
+  déclaration — purgées, **fichier compris**, au rattachement comme au refus.
+- **Écouté par l'administrateur seul**, par une route `ROLE_ADMIN` refusée sous la bascule. Le
+  modèle de langage n'en reçoit **pas** le son, seulement le fait qu'il existe (une
+  transcription automatique serait une nouvelle sortie de données de vivants vers un tiers :
+  elle demanderait sa propre décision).
+
 ## Conséquences
 
 - `MatchKind` compte quatre valeurs ; `Member::getPersonId()` et `getPersonLabel()` sont

@@ -24,12 +24,18 @@ final readonly class DeclarationDuCompte
         public string $surname,
         public string $givenNames,
         public \DateTimeImmutable $birthDate,
+        /** Vide quand la personne n'a rien écrit et a laissé un message vocal à la place. */
         public string $description,
         /** La personne pré-liée par l'invitation utilisée, s'il y en avait une : un indice pour l'analyse. */
         public ?int $invitationPersonId,
         /** @var array<string, mixed>|null */
         public ?array $suggestion,
         public ?\DateTimeImmutable $suggestionAt,
+        /**
+         * La personne a-t-elle laissé un **message vocal** ? Seul le fait voyage : la voix
+         * reste dans `Membership`, et seul un administrateur l'écoute.
+         */
+        public bool $aUnMessageVocal = false,
     ) {
     }
 }
