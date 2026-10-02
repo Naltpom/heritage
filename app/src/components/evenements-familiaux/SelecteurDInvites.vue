@@ -20,7 +20,7 @@
  * `selecteur-d-invites-rendu.test.ts`).
  */
 import { computed, ref, useId } from 'vue'
-import { basculer, filtrerParNom, groupesDisponibles, libelleDuGroupe, toutCoche, type Invitable } from './invites'
+import { basculer, filtrerParNom, groupesDisponibles, toutCoche, type Invitable } from './invites'
 import { compteDInvites } from './evenements'
 
 const { invitables, dejaInvites = [] } = defineProps<{
@@ -131,7 +131,7 @@ const classeRaccourci = (actif: boolean): string =>
               @change="cocher(i.personId, ($event.target as HTMLInputElement).checked)"
             />
             <span class="min-w-0 flex-1 truncate text-[15px] text-texte">{{ i.libelle }}</span>
-            <span class="shrink-0 text-xs text-attenue">{{ libelleDuGroupe(i.groupe) }}</span>
+            <span class="shrink-0 text-xs text-attenue">{{ i.nomDuGroupe }}</span>
           </label>
         </li>
         <li v-if="visibles.length === 0" class="px-3 py-4 text-sm text-attenue">Personne ne porte ce nom parmi les vivants.</li>
