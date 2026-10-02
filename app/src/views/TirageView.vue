@@ -209,7 +209,7 @@ async function supprimerPourDeBon(): Promise<void> {
   enCours.value = 'supprimer'
   try {
     await supprimerTirage(id.value)
-    await routeur.push({ name: 'tirages' })
+    await routeur.push({ name: 'evenements' })
   } catch (e) {
     erreur.value = e
   } finally {

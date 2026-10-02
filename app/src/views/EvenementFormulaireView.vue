@@ -3,6 +3,12 @@
  * Créer un événement (`/evenements/nouveau`) ou modifier son annonce
  * (`/evenements/:id/modifier`).
  *
+ * **D'abord, le type** (02/10/2026 — « le tirage au sort c'est un événement en
+ * soi ») : sans `?type=`, la page montre deux grandes cartes, « Rassemblement »
+ * et « Tirage au sort » (`ChoixDuType`). `?type=tirage` montre le formulaire
+ * du tirage (`FormulaireNouveauTirage`, celui de l'ancienne page « Tirages »),
+ * qui mène à la page du tirage ; `?type=rassemblement`, celui qui suit.
+ *
  * **À la création**, l'annonce puis les invités, sur la même page : le titre,
  * les deux dates (une seule suffit pour un événement d'un jour — la fin prend
  * le début), le lieu, la description, puis les vivants de l'arbre à cocher. Le
@@ -13,7 +19,9 @@
  * **À la modification**, l'annonce seule : les invités se gèrent sur la page de
  * l'événement, un par un, chacun avec sa notification — renvoyer la liste
  * entière ici ferait croire qu'on peut l'éditer d'un bloc, sans dire qui serait
- * prévenu.
+ * prévenu. Changer le début ou la fin **prévient tous les invités qui ont un
+ * compte**, et ceux qui avaient répondu sont priés de confirmer : l'écran le
+ * dit sous les dates, avant qu'on enregistre.
  *
  * Les erreurs se lisent sous chaque champ : celles que l'écran voit avant
  * d'envoyer (`verifierAnnonce`), puis celles que le serveur nomme — les mêmes
@@ -36,6 +44,9 @@ import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import { ecrituresSuspendues, motifSuspension } from '@/components/administration/ecriture'
 import SelecteurDInvites from '@/components/evenements-familiaux/SelecteurDInvites.vue'
+import ChoixDuType from '@/components/evenements-familiaux/ChoixDuType.vue'
+import FormulaireNouveauTirage from '@/components/tirages/FormulaireNouveauTirage.vue'
+import { lireTypeDEvenement } from '@/components/evenements-familiaux/liste-commune'
 import {
   annonceAEnvoyer,
   annonceDe,
@@ -56,6 +67,16 @@ const motifSuspendu = computed(() => motifSuspension(vueEmpruntee.value))
 const id = computed<number | null>(() => (route.params['id'] === undefined ? null : Number(route.params['id'])))
 const creation = computed(() => id.value === null)
 
+/**
+ * Ce qu'on crée : lu dans l'adresse. `null` à la création sans `?type=` — la
+ * page demande alors. Une modification est toujours celle d'un rassemblement :
+ * un tirage se règle sur sa propre page.
+ */
+const type = computed(() => (creation.value ? lireTypeDEvenement(route.query['type']) : 'rassemblement'))
+
+/** Les dates d'origine, pour dire — avant d'enregistrer — que les invités seront prévenus. */
+const datesDOrigine = ref<{ debut: string; fin: string } | null>(null)
+
 const annonce = ref<AnnonceDEvenement>(annonceVide())
 const invites = ref<number[]>([])
 const invitables = ref<Invitable[] | null>(null)
@@ -70,6 +91,9 @@ async function charger(): Promise<void> {
   erreurDeChargement.value = null
   pret.value = false
 
+  // Le choix du type, ou le formulaire du tirage : rien à charger ici.
+  if (type.value !== 'rassemblement') return
+
   try {
     if (id.value === null) {
       annonce.value = annonceVide()
@@ -79,6 +103,7 @@ async function charger(): Promise<void> {
       invites.value = liste.moi !== null && vivants.some((v) => v.personId === liste.moi?.personId) ? [liste.moi.personId] : []
     } else {
       annonce.value = annonceDe(await lireEvenement(id.value, signal))
+      datesDOrigine.value = { debut: annonce.value.debut, fin: annonce.value.fin }
     }
     pret.value = true
   } catch (e) {
@@ -86,7 +111,29 @@ async function charger(): Promise<void> {
   }
 }
 
-watch(id, charger, { immediate: true })
+watch([id, type], charger, { immediate: true })
+
+/** Les dates touchées à la modification : un enregistrement préviendra les invités. */
+const datesTouchees = computed(() => {
+  const origine = datesDOrigine.value
+  if (creation.value || origine === null) return false
+  const fin = annonce.value.fin === '' ? annonce.value.debut : annonce.value.fin
+  return origine.debut !== annonce.value.debut || origine.fin !== fin
+})
+
+const titreDeLaPage = computed(() => {
+  if (!creation.value) return 'Modifier l’annonce'
+  if (type.value === 'tirage') return 'Nouveau tirage au sort'
+  if (type.value === 'rassemblement') return 'Nouveau rassemblement'
+  return 'Créer un événement'
+})
+
+const sousTitre = computed(() => {
+  if (!creation.value) return 'Les invités voient l’annonce telle que vous la laissez.'
+  if (type.value === 'tirage') return 'Chacun tirera au sort à qui offrir un cadeau, et ne verra que le sien.'
+  if (type.value === 'rassemblement') return 'Une cousinade, un anniversaire, des retrouvailles : choisissez qui inviter, chacun sera prévenu.'
+  return 'Que voulez-vous organiser ?'
+})
 onBeforeUnmount(() => avorteur?.abort())
 
 /* ───────────────── Les champs texte ─────────────────
@@ -151,18 +198,29 @@ const classeZone =
 <template>
   <div class="mx-auto w-full max-w-2xl px-4 py-6">
     <header class="mb-5">
-      <h1 class="text-xl font-semibold text-texte">{{ creation ? 'Nouvel événement' : 'Modifier l’annonce' }}</h1>
-      <p class="mt-1 text-sm text-attenue">
-        {{ creation ? 'Une cousinade, un anniversaire, des retrouvailles : choisissez qui inviter, chacun sera prévenu.' : 'Les invités voient l’annonce telle que vous la laissez.' }}
-      </p>
+      <RouterLink
+        v-if="creation && type !== null"
+        :to="{ name: 'evenement.nouveau' }"
+        class="mb-2 inline-block text-xs text-accent underline"
+      >
+        Changer de type d’événement
+      </RouterLink>
+      <h1 class="text-xl font-semibold text-texte">{{ titreDeLaPage }}</h1>
+      <p class="mt-1 text-sm text-attenue">{{ sousTitre }}</p>
     </header>
 
     <p v-if="motifSuspendu !== null" class="mb-4 rounded-panneau border border-ligne bg-panneau p-3 text-xs text-attenue">
       {{ motifSuspendu }}
     </p>
 
+    <!-- ───────── D'abord, le type ───────── -->
+    <ChoixDuType v-if="creation && type === null" />
+
+    <!-- ───────── Un tirage au sort : son propre formulaire ───────── -->
+    <FormulaireNouveauTirage v-else-if="type === 'tirage'" :suspendu="suspendu" @abandon="abandonner" />
+
     <MessageErreur
-      v-if="erreurDeChargement !== null"
+      v-else-if="erreurDeChargement !== null"
       :erreur="erreurDeChargement"
       titre="Le formulaire n’a pas pu être préparé"
       @action="charger"
@@ -186,6 +244,9 @@ const classeZone =
             <ChampTexte v-model="annonce.fin" etiquette="Au" type="date" :erreur="erreurs['fin'] ?? ''" />
           </div>
           <p class="-mt-2 text-xs text-attenue">Un seul jour ? Laissez la même date.</p>
+          <p v-if="datesTouchees" class="-mt-2 rounded-panneau border border-ligne bg-fond p-2 text-xs text-texte" role="status">
+            Les dates changent : tous les invités qui ont un compte seront prévenus, et ceux qui avaient répondu devront confirmer.
+          </p>
 
           <ChampTexte v-model="lieu" etiquette="Lieu (facultatif)" placeholder="Chez Tante Ardoise, à Fleurance" :erreur="erreurs['lieu'] ?? ''" />
 

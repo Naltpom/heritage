@@ -6654,6 +6654,13 @@ Module **`Evenement`**. Les événements de famille — « Cousinade été 2027 
 (des vivants de l'arbre), qui vient, et pour l'organisateur qui a vu l'annonce sans répondre.
 Décision et règles : [`docs/adr/0014-evenements-de-famille.md`](adr/0014-evenements-de-famille.md).
 
+**Addendum du 2026-10-02.** Côté utilisateur, les tirages au sort (§ 22) sont des événements
+comme les autres : une seule liste et une seule création côté front, qui appelle les deux
+API. **Aucune route n'est fusionnée ni ajoutée pour cela** — `GET /api/evenements` et
+`GET /api/tirages` restent chacune maîtresse de ce que son lecteur voit. Deux gestes
+s'ajoutent ici : l'organisateur **note la réponse d'un invité à sa place**
+(`PUT …/invites/{personId}/reponse`), et **changer les dates prévient les invités**.
+
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs |
 |---|---|---|---|---|---|
 | `GET` | `/api/evenements` | `membre` | — | `200` `{moi, evenements}` | `401`, `403` |
@@ -6665,6 +6672,7 @@ Décision et règles : [`docs/adr/0014-evenements-de-famille.md`](adr/0014-evene
 | `PUT` | `/api/evenements/{id}/reponse` | invité | `{reponse}` | `200` | `403`, `404`, `409`, `422` |
 | `POST` | `/api/evenements/{id}/invites` | organisateur | `{personIds: int[]}` | `201` | `403`, `404`, `409`, `422` |
 | `DELETE` | `/api/evenements/{id}/invites/{personId}` | organisateur | — | `200` | `403`, `404`, `409` |
+| `PUT` | `/api/evenements/{id}/invites/{personId}/reponse` | organisateur | `{reponse}` | `200` | `403`, `404`, `409`, `422` |
 | `POST` | `/api/evenements/{id}/invites/{personId}/lien` | organisateur, pour un invité **sans compte** | — | `201` `{cle, url}` | `403`, `404`, `409` |
 | `DELETE` | `/api/evenements/{id}/invites/{personId}/lien` | organisateur | — | `204` | `403`, `404`, `409` |
 | `POST` | `/api/evenements/{id}/relance` | organisateur | — | `200` | `403`, `404`, `409` |
@@ -6694,7 +6702,9 @@ qui vérifie le lien avant de l'envoyer) — la réponse, elle, est la même.
 
 Le résumé (`GET /api/evenements`) porte exactement : `id`, `titre`, `debut`, `fin`, `lieu`,
 `description`, `annule`, `passe`, `organisateur {libelle, estMoi}`, `peutGerer`,
-`suisInvite`, `maReponse`, `peutRepondre`, `nombreDInvites`, `nombreDePresents`. Le détail y
+`suisInvite`, `maReponse`, `maReponseNoteePar` (le nom de qui l'a notée à la place de
+l'invité, ou `null`), `reponseAConfirmer` (les dates ont changé depuis la réponse),
+`peutRepondre`, `nombreDInvites`, `nombreDePresents`. Le détail y
 ajoute `quiVient {presents: [{personId, libelle, estMoi}], autres}`, `nombreDAbsents` et
 `suivi`, qui vaut **`null`** pour qui ne gère pas l'événement.
 
@@ -6716,7 +6726,11 @@ horodatage de vue ou de réponse ne sortent que dans `suivi`.**
 ```
 
 `ligne` : `{personId, libelle, estMoi, aUnCompte, lienActif, peutPartagerLien, vuLe,
-reponduLe, relanceLe}` — horodatages ATOM ou `null`. `fantomes` : vus, sans réponse ;
+reponduLe, relanceLe, noteePar, aConfirmer, peutNoterReponse}` — horodatages ATOM ou `null`.
+`noteePar` : la réponse a été notée par l'organisateur (ou un administrateur) — elle ne pose
+**pas** `vuLe`, et s'efface quand l'invité répond lui-même. `aConfirmer` : répondu avant le
+dernier changement de dates. `peutNoterReponse` : l'événement est modifiable et la ligne
+n'est pas celle du lecteur. `fantomes` : vus, sans réponse ;
 `nonVus` : pas encore ouverts. `aRelancer` : les invités **avec un compte** et sans réponse
 qu'une relance toucherait maintenant (l'organisateur exclu). Une relance par **24 heures** au
 plus, pour tout l'événement ; les invités sans compte ne reçoivent rien d'elle.
@@ -6731,7 +6745,7 @@ caractères, empreinte seule en base, un seul refus `404 lien_invalide`, limiteu
 ```json
 {
   "evenement": {"titre": "…", "debut": "2027-07-17", "fin": "2027-07-18", "lieu": "…", "description": "…", "annule": false, "passe": false},
-  "invite": {"libelle": "…", "reponse": null, "peutRepondre": true}
+  "invite": {"libelle": "…", "reponse": null, "aConfirmer": false, "peutRepondre": true}
 }
 ```
 
@@ -6740,7 +6754,9 @@ Ni les autres invités, ni qui vient, ni l'organisateur, ni aucun identifiant.
 ### 22 bis.5 Les notifications
 
 `evenement_invitation` (création, ajout), `evenement_relance`, `evenement_annule` (aux invités
-qui avaient vu ou répondu) ; aux seuls invités qui ont un compte, jamais à l'auteur du geste ;
+qui avaient vu ou répondu), `evenement_dates_modifiees` (début ou fin changés par
+`PUT /api/evenements/{id}`, à **tous** les invités ; titre « <titre> : nouvelles dates ») ; aux
+seuls invités qui ont un compte, jamais à l'auteur du geste ;
 `linkRoute: "evenement.detail"`, `linkParams: {id}`.
 
 ### 22 bis.6 Les codes d'erreur
@@ -6753,7 +6769,7 @@ qui avaient vu ou répondu) ; aux seuls invités qui ont un compte, jamais à l'
 | `acces_refuse` | `403` | Lien demandé pour un invité qui a son compte. |
 | `evenement_annule` | `409` | Modifier, inviter, retirer, relancer ou annuler un événement annulé. |
 | `evenement_passe` | `409` | Les mêmes gestes sur un événement terminé. |
-| `reponse_figee` | `409` | Répondre à un événement annulé ou terminé. |
+| `reponse_figee` | `409` | Répondre — ou noter une réponse — à un événement annulé ou terminé. |
 | `relance_trop_recente` | `409` | Moins de 24 h depuis la dernière ; `details.prochaineRelancePossibleLe`. |
 | `rien_a_relancer` | `409` | Aucun invité avec un compte n'attend de réponse. |
 | `donnees_invalides` | `422` | `champs` nomme chaque champ fautif. Une personne **inconnue ou vivante hors du cercle** du lecteur : le même texte dans les deux cas. |

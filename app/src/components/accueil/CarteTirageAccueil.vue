@@ -18,7 +18,8 @@ import { definirPresence, type PersonneDuTirage, type PresenceAuTirage, type Res
 import Segmente from '@/components/mise-en-page/Segmente.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import { PRESENCES, consigneDeRemise, phraseDAttribution } from '@/components/tirages/tirages'
-import { dansCombien, etatDuTirageCeJour, libelleDate, prochaineOccurrence } from './jours'
+import { dateDuTirage } from '@/components/evenements-familiaux/liste-commune'
+import { dansCombien, etatDuTirageCeJour, libelleDate } from './jours'
 
 const { tirage, moi, aujourdhui } = defineProps<{
   tirage: ResumeDeTirage
@@ -33,7 +34,9 @@ const devoiles = ref(new Set<number>())
 const enCours = ref(false)
 const erreur = ref<unknown>(null)
 
-const date = computed(() => prochaineOccurrence(tirage, aujourdhui))
+// La date qui range aussi la carte dans « Mes événements » : l'édition ouverte
+// quand elle est à venir (un Noël fêté le 26), sinon le jour habituel.
+const date = computed(() => dateDuTirage(tirage, aujourdhui))
 const edition = computed(() => tirage.prochaineEdition)
 const maPresence = computed(() => edition.value?.presences.find((p) => p.personId === moi?.personId) ?? null)
 const reglable = computed(() => edition.value !== null && edition.value.statut === 'ouverte' && !edition.value.passee && maPresence.value !== null)
@@ -74,6 +77,8 @@ async function choisirPresence(presence: PresenceAuTirage): Promise<void> {
       <span class="min-w-0 flex-1">
         <span class="block truncate text-sm font-semibold text-texte">{{ tirage.nom }}</span>
         <span class="block truncate text-xs text-attenue">
+          <!-- Sur l'accueil, rassemblements et tirages se suivent : le type se dit. -->
+          <span class="font-semibold text-cadeau">Tirage au sort</span> ·
           {{ libelleDate(date) }} · {{ dansCombien(date, aujourdhui) }}<template v-if="tirage.lieu"> · {{ tirage.lieu }}</template>
         </span>
       </span>

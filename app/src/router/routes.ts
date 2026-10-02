@@ -80,7 +80,7 @@ export const routes: RouteRecordRaw[] = [
 
   {
     // La page d'accueil d'un membre (`routeParDefaut`) : les anniversaires du
-    // jour en carrousel, ses tirages, l'arbre et « proposer ». `membre` : elle
+    // jour en carrousel, ses événements, l'arbre et « proposer ». `membre` : elle
     // lit l'arbre, et un compte en attente n'en voit plus rien (ADR 0003,
     // révision du 01/10/2026) — sa page à lui est `inscription.etat`.
     path: '/home',
@@ -255,7 +255,7 @@ export const routes: RouteRecordRaw[] = [
 
   {
     // **Moi** : la quatrième entrée de la barre du bas. Tout ce qui est
-    // personnel ou rare, en une liste : mon compte, mes demandes, événements, tirages,
+    // personnel ou rare, en une liste : mon compte, mes demandes, événements (et tirages),
     // actes demandés, questions, administration, déconnexion. `attente` : un
     // compte en attente y trouve son inscription, son compte et la
     // déconnexion — rien qui lise l'arbre.
@@ -316,20 +316,31 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Questions' },
   },
   {
-    // Les tirages au sort récurrents (ADR 0009). `membre` : on y participe par
-    // la personne de l'arbre à laquelle on est rattaché, et l'API refuse tout
-    // compte en attente.
+    // **L'ancienne liste des tirages** (ADR 0009). Depuis le 02/10/2026, les
+    // tirages au sort sont des événements comme les autres, côté utilisateur :
+    // une seule liste, « Événements » (ADR 0014, addendum). Le chemin reste —
+    // des liens partagés et d'anciens favoris y mènent — et mène à la liste
+    // commune, filtrée sur les tirages. Le nom reste aussi, pour qu'un lien
+    // nommé oublié quelque part ne tombe pas sur « page introuvable ».
     path: '/tirages',
     name: 'tirages',
-    component: () => import('@/views/TiragesView.vue'),
-    meta: { acces: 'membre', titre: 'Tirages au sort' },
+    redirect: { name: 'evenements', query: { type: 'tirage' } },
+    meta: { acces: 'membre', titre: 'Événements' },
   },
   {
-    // Nom cité par les notifications `tirage_effectue` : on ne le renomme pas.
+    // La création d'un tirage passe par « Créer un événement », type choisi.
+    path: '/tirages/nouveau',
+    redirect: { name: 'evenement.nouveau', query: { type: 'tirage' } },
+    meta: { acces: 'membre', titre: 'Nouvel événement' },
+  },
+  {
+    // Nom cité par les notifications `tirage_effectue` : on ne le renomme pas,
+    // et le chemin reste `/tirages/<id>` — les notifications déjà écrites et
+    // les liens partagés y mènent. Seul son parent change : la liste commune.
     path: '/tirages/:id(\\d+)',
     name: 'tirage.detail',
     component: () => import('@/views/TirageView.vue'),
-    meta: { acces: 'membre', titre: 'Tirage au sort', parent: { nom: 'tirages', libelle: 'Tirages' } },
+    meta: { acces: 'membre', titre: 'Tirage au sort', parent: { nom: 'evenements', libelle: 'Événements' } },
   },
   {
     // **Le lien personnel d'un participant** (ADR 0009, révision du 30/09/2026) :
@@ -352,10 +363,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'public', titre: 'Mon tirage au sort', cadre: false },
   },
   {
-    // **Les événements de famille** — « Cousinade été 2027 ». `membre`, comme
-    // les tirages : on y est invité par la personne de l'arbre à laquelle on
-    // est rattaché, et l'API refuse tout compte en attente. Ils allument
-    // l'onglet « Moi » (`sectionDe`), d'où on y entre.
+    // **Les événements** — rassemblements (« Cousinade été 2027 ») et tirages
+    // au sort, dans une seule liste depuis le 02/10/2026 (ADR 0014, addendum).
+    // `?type=rassemblement` ou `?type=tirage` la restreint. `membre` : on y est
+    // invité par la personne de l'arbre à laquelle on est rattaché, et l'API
+    // refuse tout compte en attente. Ils allument l'onglet « Moi »
+    // (`sectionDe`), d'où on y entre.
     path: '/evenements',
     name: 'evenements',
     component: () => import('@/views/EvenementsView.vue'),
@@ -363,7 +376,9 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     // Déclarée avant le détail par lisibilité seulement : `:id(\d+)` ne
-    // reconnaît pas « nouveau ».
+    // reconnaît pas « nouveau ». Sans `?type=`, l'écran demande d'abord ce
+    // qu'on crée — un rassemblement ou un tirage au sort —, puis montre le bon
+    // formulaire.
     path: '/evenements/nouveau',
     name: 'evenement.nouveau',
     component: () => import('@/views/EvenementFormulaireView.vue'),

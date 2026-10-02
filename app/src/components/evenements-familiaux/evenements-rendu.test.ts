@@ -8,12 +8,17 @@
  * 3. **Le suivi** : les quatre groupes, les fantômes nommés comme tels, le
  *    « vu il y a … », et le geste du lien pour qui n'a pas de compte.
  * 4. **Le sélecteur** : le compteur, « Tous les vivants », les branches.
+ * 5. **Le choix du type** (02/10/2026) : deux grandes cartes, Rassemblement et
+ *    Tirage au sort, chacune menant au bon formulaire.
+ * 6. **La réponse notée** par l'organisateur et **les dates changées** : le
+ *    suivi le dit, l'invité par lien voit le bandeau.
  */
 import { describe, expect, it } from 'vitest'
-import { createSSRApp, h } from 'vue'
+import { createSSRApp, defineComponent, h } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import type { AnnonceParLien, LigneDeSuivi, SuiviDEvenement } from '@/lib/api'
 import BoutonsDeReponse from './BoutonsDeReponse.vue'
+import ChoixDuType from './ChoixDuType.vue'
 import ReponseParLien, { type EtatDuLienDEvenement } from './ReponseParLien.vue'
 import SelecteurDInvites from './SelecteurDInvites.vue'
 import SuiviDesInvites from './SuiviDesInvites.vue'
@@ -52,7 +57,7 @@ function lecture(partiel: Partial<AnnonceParLien['evenement']> = {}, invite: Par
       passe: false,
       ...partiel,
     },
-    invite: { libelle: 'Mamie Rose', reponse: null, peutRepondre: true, ...invite },
+    invite: { libelle: 'Mamie Rose', reponse: null, aConfirmer: false, peutRepondre: true, ...invite },
   }
 }
 
@@ -86,6 +91,18 @@ describe('ReponseParLien', () => {
     expect(html).not.toContain('aria-label="Ma réponse"')
     expect(html).toContain('Vous avez dit : présent.')
   })
+
+  it('dates changées depuis la réponse : le bandeau le dit, la réponse reste marquée', async () => {
+    const html = await rendreLien({ type: 'pret', lecture: lecture({}, { reponse: 'absent', aConfirmer: true }) })
+
+    expect(html).toContain('Les dates ont changé : confirmez votre réponse.')
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1)
+  })
+
+  it('sans changement de dates : pas de bandeau', async () => {
+    const html = await rendreLien({ type: 'pret', lecture: lecture({}, { reponse: 'absent' }) })
+    expect(html).not.toContain('Les dates ont changé')
+  })
 })
 
 function ligne(personId: number, libelle: string, partiel: Partial<LigneDeSuivi> = {}): LigneDeSuivi {
@@ -99,6 +116,9 @@ function ligne(personId: number, libelle: string, partiel: Partial<LigneDeSuivi>
     vuLe: null,
     reponduLe: null,
     relanceLe: null,
+    noteePar: null,
+    aConfirmer: false,
+    peutNoterReponse: true,
     ...partiel,
   }
 }
@@ -146,6 +166,53 @@ describe('SuiviDesInvites', () => {
 
     expect(html).not.toContain('Relancer')
     expect(html).not.toContain('Retirer')
+    expect(html).not.toContain('Noter sa réponse')
+  })
+
+  it('propose de noter la réponse de chacun — « corriger » pour qui a déjà répondu', async () => {
+    const html = await rendre(SuiviDesInvites, { suivi, maintenant, modifiable: true })
+
+    // Fantôme et non-vus : « Noter » ; présent et absent : « Corriger ».
+    expect(html.match(/Noter sa réponse/g)).toHaveLength(3)
+    expect(html.match(/Corriger sa réponse/g)).toHaveLength(2)
+  })
+
+  it('ne propose pas de noter sa propre réponse, et dit qui a noté celle d’un autre', async () => {
+    const html = await rendre(SuiviDesInvites, {
+      suivi: {
+        ...suivi,
+        presents: [ligne(1, 'Mamie Rose', { reponduLe: ilYA(1), noteePar: 'Opale Tilleul', aConfirmer: true })],
+        absents: [],
+        fantomes: [ligne(3, 'Opale Tilleul', { vuLe: ilYA(2), estMoi: true, peutNoterReponse: false })],
+        nonVus: [],
+      },
+      maintenant,
+      modifiable: true,
+    })
+
+    expect(html).toContain('noté par Opale Tilleul hier')
+    expect(html).toContain('à confirmer (dates changées)')
+    expect(html.match(/Noter sa réponse|Corriger sa réponse/g)).toHaveLength(1)
+  })
+})
+
+describe('ChoixDuType', () => {
+  const LienFactice = defineComponent({
+    name: 'RouterLink',
+    props: { to: { type: [String, Object], default: '' } },
+    setup: (props, { slots }) => () =>
+      h('a', { href: typeof props.to === 'string' ? props.to : `?type=${String((props.to as { query?: { type?: string } }).query?.type)}` }, slots['default']?.()),
+  })
+
+  it('deux grandes cartes, chacune menant à son formulaire', async () => {
+    const app = createSSRApp({ render: () => h(ChoixDuType) })
+    app.component('RouterLink', LienFactice)
+    const html = await renderToString(app)
+
+    expect(html).toContain('Rassemblement')
+    expect(html).toContain('Tirage au sort')
+    expect(html).toContain('href="?type=rassemblement"')
+    expect(html).toContain('href="?type=tirage"')
   })
 })
 

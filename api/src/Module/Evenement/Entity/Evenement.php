@@ -82,6 +82,18 @@ class Evenement
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $annuleLe = null;
 
+    /**
+     * La dernière fois que l'organisateur a **déplacé** l'événement (début ou fin changés) ;
+     * `null` : les dates sont celles de l'annonce d'origine.
+     *
+     * Une réponse donnée **avant** ce moment n'est pas effacée — « je viens » vaut souvent
+     * encore une semaine plus tard —, mais elle devient **à confirmer** : l'écran de l'invité
+     * le lui dit ({@see Invitation::estAConfirmer()}). Un horodatage plutôt qu'un drapeau par
+     * invité : une seule écriture au déplacement, et la règle se lit en comparant deux dates.
+     */
+    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $datesModifieesLe = null;
+
     /** La dernière relance envoyée, pour en tenir une par {@see self::DELAI_ENTRE_RELANCES_HEURES}. */
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $derniereRelanceLe = null;
@@ -146,6 +158,19 @@ class Evenement
     {
         $this->debut = $debut;
         $this->fin = $fin;
+
+        return $this;
+    }
+
+    public function getDatesModifieesLe(): ?\DateTimeImmutable
+    {
+        return $this->datesModifieesLe;
+    }
+
+    /** L'événement vient d'être déplacé : les réponses déjà données deviennent « à confirmer ». */
+    public function marquerDatesModifiees(\DateTimeImmutable $le): self
+    {
+        $this->datesModifieesLe = $le;
 
         return $this;
     }

@@ -12,12 +12,18 @@
  * Le composant **émet sans retenir** : la page appelle l'API et repasse la
  * réponse enregistrée. Il sert à la page de l'événement, à la carte d'accueil
  * et au lien personnel. Suite : `boutons-de-reponse-rendu.test.ts`.
+ *
+ * **`confirmable`** : les dates ont changé depuis la réponse (ADR 0014,
+ * addendum du 02/10/2026). Toucher la réponse **déjà marquée** la renvoie
+ * alors — c'est « je confirme » —, au lieu de ne rien faire.
  */
 import type { ReponseAInvitation } from '@/lib/api'
 
-const { reponse, desactive = false, enCours = null } = defineProps<{
+const { reponse, desactive = false, enCours = null, confirmable = false } = defineProps<{
   reponse: ReponseAInvitation | null
   desactive?: boolean
+  /** La réponse courante est à confirmer : la toucher de nouveau l'envoie. */
+  confirmable?: boolean
   /** La réponse en train de partir : son bouton tourne, l'autre attend. */
   enCours?: ReponseAInvitation | null
 }>()
@@ -30,7 +36,7 @@ const OPTIONS: { valeur: ReponseAInvitation; libelle: string; actif: string }[] 
 ]
 
 function choisir(valeur: ReponseAInvitation): void {
-  if (desactive || enCours !== null || valeur === reponse) return
+  if (desactive || enCours !== null || (valeur === reponse && !confirmable)) return
   emit('choisir', valeur)
 }
 </script>
