@@ -60,7 +60,7 @@ const STOCKAGE_HOSTILE: Stockage = {
 }
 
 describe('le catalogue', () => {
-  it('compte les huit vidéos, dans l’ordre d’affichage', () => {
+  it('compte les neuf vidéos, dans l’ordre d’affichage', () => {
     expect(VIDEOS.map((v) => v.id)).toEqual([
       'bienvenue',
       'decouvrir',
@@ -70,6 +70,7 @@ describe('le catalogue', () => {
       'sources-et-actes',
       'notifications-et-calendrier',
       'carte-et-chronologie',
+      'les-evenements',
     ])
   })
 
@@ -99,7 +100,7 @@ describe('le catalogue', () => {
 
   it('met « Bienvenue » et « Découvrir » en tête, et le reste en chapitres', () => {
     expect(videosDuGroupe('bien-commencer').map((v) => v.id)).toEqual(['bienvenue', 'decouvrir'])
-    expect(videosDuGroupe('fonctionnalite')).toHaveLength(6)
+    expect(videosDuGroupe('fonctionnalite')).toHaveLength(7)
     expect(videosDuGroupe('bien-commencer').length + videosDuGroupe('fonctionnalite').length).toBe(VIDEOS.length)
   })
 })

@@ -154,6 +154,15 @@ onBeforeUnmount(() => avorteur?.abort())
         <p class="mt-1 text-sm text-attenue">
           Cousinades, retrouvailles, tirages au sort de Noël : qui vient, et à qui offrir.
         </p>
+        <!-- L'aide en vidéo, à l'endroit où l'on se pose la question. -->
+        <RouterLink
+          :to="{ name: 'aide', query: { video: 'les-evenements' } }"
+          data-aide-evenements
+          class="mt-1 inline-flex min-h-11 items-center gap-2 text-sm text-accent hover:underline"
+        >
+          <span class="flex size-5 flex-none items-center justify-center rounded-full border-[1.5px] border-current text-[11px] font-bold" aria-hidden="true">?</span>
+          Voir la vidéo : comment marchent les événements
+        </RouterLink>
       </div>
       <RouterLink
         v-if="!suspendu"

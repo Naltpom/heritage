@@ -85,6 +85,7 @@ const DUREES: Record<string, number> = {
   'sources-et-actes': 30,
   'notifications-et-calendrier': 30,
   'carte-et-chronologie': 27,
+  'les-evenements': 36,
 }
 
 /** La durée approximative d'une vidéo ; 30 s pour un identifiant oublié ci-dessus. */
@@ -159,6 +160,14 @@ export const VIDEOS: readonly VideoAide[] = [
     dureeSecondes: duree('carte-et-chronologie'),
     groupe: 'fonctionnalite',
     ecran: { nom: 'carte', libelle: 'Ouvrir la carte' },
+  },
+  {
+    id: 'les-evenements',
+    titre: 'Les événements',
+    description: 'Un rassemblement ou un tirage au sort : inviter, les réponses, les relances.',
+    dureeSecondes: duree('les-evenements'),
+    groupe: 'fonctionnalite',
+    ecran: { nom: 'evenements', libelle: 'Voir les événements' },
   },
 ]
 

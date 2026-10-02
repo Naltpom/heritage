@@ -42,6 +42,8 @@
     '#16181c': '#efece7', '#1a1c20': '#f6f4f1', '#16171a': '#ebe8e3', '#1e2127': '#e9e5de',
     // l'enregistrement
     '#3a1f1d': '#f8e1dc', '#7a3a34': '#e9b8ae',
+    // le violet du cadeau (tirage au sort), comme --h-cadeau
+    '#b78cf0': '#6b3fa0', '#9a6fe0': '#8456b8',
   }
   const RGBA = [
     // [r, g, b] sombre → [r, g, b] clair, l'opacité est gardée

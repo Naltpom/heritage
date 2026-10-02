@@ -1,0 +1,422 @@
+[
+ {
+  "texte": "Une cousinade, un Noël en famille ? Créez un événement.",
+  "mots": [
+   {
+    "mot": "Une",
+    "debut": 0.099,
+    "fin": 0.305
+   },
+   {
+    "mot": "cousinade",
+    "debut": 0.317,
+    "fin": 0.912
+   },
+   {
+    "mot": "un",
+    "debut": 1.239,
+    "fin": 1.288
+   },
+   {
+    "mot": "Noël",
+    "debut": 1.3,
+    "fin": 1.567
+   },
+   {
+    "mot": "en",
+    "debut": 1.579,
+    "fin": 1.64
+   },
+   {
+    "mot": "famille",
+    "debut": 1.652,
+    "fin": 2.15
+   },
+   {
+    "mot": "Créez",
+    "debut": 2.985,
+    "fin": 3.325
+   },
+   {
+    "mot": "un",
+    "debut": 3.337,
+    "fin": 3.459
+   },
+   {
+    "mot": "événement",
+    "debut": 3.471,
+    "fin": 4.041
+   }
+  ]
+ },
+ {
+  "texte": "Choisissez : un rassemblement, ou un tirage au sort pour les cadeaux.",
+  "mots": [
+   {
+    "mot": "Choisissez",
+    "debut": 0.099,
+    "fin": 0.778
+   },
+   {
+    "mot": "un",
+    "debut": 1.082,
+    "fin": 1.166
+   },
+   {
+    "mot": "rassemblement",
+    "debut": 1.179,
+    "fin": 1.87
+   },
+   {
+    "mot": "ou",
+    "debut": 2.186,
+    "fin": 2.259
+   },
+   {
+    "mot": "un",
+    "debut": 2.271,
+    "fin": 2.368
+   },
+   {
+    "mot": "tirage",
+    "debut": 2.38,
+    "fin": 2.817
+   },
+   {
+    "mot": "au",
+    "debut": 2.829,
+    "fin": 2.89
+   },
+   {
+    "mot": "sort",
+    "debut": 2.902,
+    "fin": 3.193
+   },
+   {
+    "mot": "pour",
+    "debut": 3.205,
+    "fin": 3.339
+   },
+   {
+    "mot": "les",
+    "debut": 3.351,
+    "fin": 3.424
+   },
+   {
+    "mot": "cadeaux",
+    "debut": 3.436,
+    "fin": 3.836
+   }
+  ]
+ },
+ {
+  "texte": "Un titre, des dates, un lieu, puis cochez les invités parmi les vivants.",
+  "mots": [
+   {
+    "mot": "Un",
+    "debut": 0.099,
+    "fin": 0.268
+   },
+   {
+    "mot": "titre",
+    "debut": 0.281,
+    "fin": 0.645
+   },
+   {
+    "mot": "des",
+    "debut": 0.887,
+    "fin": 0.997
+   },
+   {
+    "mot": "dates",
+    "debut": 1.009,
+    "fin": 1.251
+   },
+   {
+    "mot": "un",
+    "debut": 1.579,
+    "fin": 1.64
+   },
+   {
+    "mot": "lieu",
+    "debut": 1.652,
+    "fin": 1.907
+   },
+   {
+    "mot": "puis",
+    "debut": 2.162,
+    "fin": 2.307
+   },
+   {
+    "mot": "cochez",
+    "debut": 2.319,
+    "fin": 2.611
+   },
+   {
+    "mot": "les",
+    "debut": 2.623,
+    "fin": 2.732
+   },
+   {
+    "mot": "invités",
+    "debut": 2.744,
+    "fin": 3.145
+   },
+   {
+    "mot": "parmi",
+    "debut": 3.157,
+    "fin": 3.436
+   },
+   {
+    "mot": "les",
+    "debut": 3.448,
+    "fin": 3.533
+   },
+   {
+    "mot": "vivants",
+    "debut": 3.545,
+    "fin": 3.958
+   }
+  ]
+ },
+ {
+  "texte": "Chacun est prévenu, et répond présent ou absent.",
+  "mots": [
+   {
+    "mot": "Chacun",
+    "debut": 0.099,
+    "fin": 0.56
+   },
+   {
+    "mot": "est",
+    "debut": 0.572,
+    "fin": 0.657
+   },
+   {
+    "mot": "prévenu",
+    "debut": 0.669,
+    "fin": 1.13
+   },
+   {
+    "mot": "et",
+    "debut": 1.47,
+    "fin": 1.506
+   },
+   {
+    "mot": "répond",
+    "debut": 1.518,
+    "fin": 1.81
+   },
+   {
+    "mot": "présent",
+    "debut": 1.822,
+    "fin": 2.21
+   },
+   {
+    "mot": "ou",
+    "debut": 2.222,
+    "fin": 2.307
+   },
+   {
+    "mot": "absent",
+    "debut": 2.319,
+    "fin": 2.768
+   }
+  ]
+ },
+ {
+  "texte": "Vous voyez qui vient, qui a vu l’annonce sans répondre, et qui ne l’a pas encore vue.",
+  "mots": [
+   {
+    "mot": "Vous",
+    "debut": 0.099,
+    "fin": 0.293
+   },
+   {
+    "mot": "voyez",
+    "debut": 0.305,
+    "fin": 0.633
+   },
+   {
+    "mot": "qui",
+    "debut": 0.645,
+    "fin": 0.79
+   },
+   {
+    "mot": "vient",
+    "debut": 0.802,
+    "fin": 1.069
+   },
+   {
+    "mot": "qui",
+    "debut": 1.324,
+    "fin": 1.446
+   },
+   {
+    "mot": "a",
+    "debut": 1.458,
+    "fin": 1.494
+   },
+   {
+    "mot": "vu",
+    "debut": 1.506,
+    "fin": 1.64
+   },
+   {
+    "mot": "l’annonce",
+    "debut": 1.652,
+    "fin": 2.04
+   },
+   {
+    "mot": "sans",
+    "debut": 2.052,
+    "fin": 2.283
+   },
+   {
+    "mot": "répondre",
+    "debut": 2.295,
+    "fin": 2.781
+   },
+   {
+    "mot": "et",
+    "debut": 3.084,
+    "fin": 3.12
+   },
+   {
+    "mot": "qui",
+    "debut": 3.133,
+    "fin": 3.278
+   },
+   {
+    "mot": "ne",
+    "debut": 3.29,
+    "fin": 3.375
+   },
+   {
+    "mot": "l’a",
+    "debut": 3.387,
+    "fin": 3.484
+   },
+   {
+    "mot": "pas",
+    "debut": 3.497,
+    "fin": 3.618
+   },
+   {
+    "mot": "encore",
+    "debut": 3.63,
+    "fin": 3.97
+   },
+   {
+    "mot": "vue",
+    "debut": 3.982,
+    "fin": 4.237
+   }
+  ]
+ },
+ {
+  "texte": "Un oubli ? Relancez-les d’un geste.",
+  "mots": [
+   {
+    "mot": "Un",
+    "debut": 0.099,
+    "fin": 0.244
+   },
+   {
+    "mot": "oubli",
+    "debut": 0.256,
+    "fin": 0.79
+   },
+   {
+    "mot": "Relancez-les",
+    "debut": 1.626,
+    "fin": 2.257
+   },
+   {
+    "mot": "d’un",
+    "debut": 2.269,
+    "fin": 2.439
+   },
+   {
+    "mot": "geste",
+    "debut": 2.451,
+    "fin": 2.985
+   }
+  ]
+ },
+ {
+  "texte": "Et pour un tirage au sort, chacun découvre à qui il fait son cadeau.",
+  "mots": [
+   {
+    "mot": "Et",
+    "debut": 0.099,
+    "fin": 0.171
+   },
+   {
+    "mot": "pour",
+    "debut": 0.183,
+    "fin": 0.402
+   },
+   {
+    "mot": "un",
+    "debut": 0.414,
+    "fin": 0.475
+   },
+   {
+    "mot": "tirage",
+    "debut": 0.487,
+    "fin": 0.924
+   },
+   {
+    "mot": "au",
+    "debut": 0.936,
+    "fin": 0.997
+   },
+   {
+    "mot": "sort",
+    "debut": 1.009,
+    "fin": 1.409
+   },
+   {
+    "mot": "chacun",
+    "debut": 1.749,
+    "fin": 2.077
+   },
+   {
+    "mot": "découvre",
+    "debut": 2.089,
+    "fin": 2.514
+   },
+   {
+    "mot": "à",
+    "debut": 2.526,
+    "fin": 2.562
+   },
+   {
+    "mot": "qui",
+    "debut": 2.574,
+    "fin": 2.732
+   },
+   {
+    "mot": "il",
+    "debut": 2.744,
+    "fin": 2.829
+   },
+   {
+    "mot": "fait",
+    "debut": 2.841,
+    "fin": 2.975
+   },
+   {
+    "mot": "son",
+    "debut": 2.987,
+    "fin": 3.12
+   },
+   {
+    "mot": "cadeau",
+    "debut": 3.133,
+    "fin": 3.557
+   }
+  ]
+ }
+]
