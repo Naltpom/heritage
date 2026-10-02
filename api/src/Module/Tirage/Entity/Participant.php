@@ -28,7 +28,7 @@ use Doctrine\ORM\Mapping as ORM;
  * - il **meurt avec le participant** — retiré du tirage ou tirage supprimé — sans qu'aucun
  *   code n'ait à y penser : la ligne part, l'empreinte avec.
  *
- * Seule l'**empreinte** est stockée ({@see \App\Module\Tirage\Service\GenerateurDeCle}).
+ * Seule l'**empreinte** est stockée ({@see \App\Module\Core\Service\GenerateurDeCle}).
  * La propriété s'appelle `tokenHash` comme celle de `mbr_invitation` **à dessein** : c'est le
  * nom que le journal d'audit masque (`AuditDoctrineSubscriber::CHAMPS_SENSIBLES`), et une
  * empreinte n'a rien à faire en clair dans `core_audit_log`, même si elle ne rend pas la clé.

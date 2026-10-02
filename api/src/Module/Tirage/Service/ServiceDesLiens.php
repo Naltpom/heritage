@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Tirage\Service;
 
 use App\Module\Core\Contract\AnnuaireDesMembresInterface;
+use App\Module\Core\Service\GenerateurDeCle;
 use App\Module\Tirage\Entity\Participant;
 use App\Module\Tirage\Entity\Tirage;
 use App\Module\Tirage\Enum\Presence;
