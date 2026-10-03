@@ -126,8 +126,13 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * relance. Ce sont des **décisions** : l'invitation a sa table parce qu'elle a sa vie
      * propre (vue, réponse, relance, lien personnel) et qu'un événement en compte des
      * dizaines ; le compte de l'invité n'y est pas figé, il se lit au rattachement.
+     *
+     * **46 depuis le 2026-10-03** : `core_note` (module `Core`,
+     * `migrations/Version20261003120000.php`), le carnet de notes personnel de
+     * l'administrateur. Une table à part : une note n'est ni un réglage ni une donnée de
+     * l'arbre.
      */
-    private const int NOMBRE_DE_TABLES = 45;
+    private const int NOMBRE_DE_TABLES = 46;
 
     public function testLeMappingEstValide(): void
     {

@@ -576,6 +576,13 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/administration/DemandesRgpdView.vue'),
         meta: { acces: 'administration', titre: 'Demandes RGPD' },
       },
+      {
+        // Le carnet de notes personnel de l'administrateur.
+        path: 'notes',
+        name: 'administration.notes',
+        component: () => import('@/views/administration/NotesView.vue'),
+        meta: { acces: 'administration', titre: 'Notes' },
+      },
     ],
   },
 

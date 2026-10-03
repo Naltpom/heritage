@@ -831,3 +831,44 @@ export function retirerAutorisationNaissance(personId: number): Promise<EtatAuto
     methode: 'DELETE',
   })
 }
+
+/* ------------------------------------------------------------------ */
+/* Le carnet de notes de l'administrateur — personnel                  */
+/* ------------------------------------------------------------------ */
+
+/** Une note du carnet. Personne d'autre que son auteur ne la lit. */
+export interface NoteDuCarnet {
+  id: number
+  titre: string
+  texte: string
+  epinglee: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** Le corps de `POST` et de `PUT`. `PUT` **remplace** : un champ omis est vidé. */
+export interface SaisieDeNote {
+  titre: string
+  texte: string
+  epinglee: boolean
+}
+
+/** `GET /api/administration/notes` — épinglées d'abord, puis la plus récente. */
+export function listerNotes(): Promise<NoteDuCarnet[]> {
+  return requeteApi<NoteDuCarnet[]>('/administration/notes')
+}
+
+/** `POST /api/administration/notes` — `201`, ou `422` avec `champs`. */
+export function creerNote(saisie: SaisieDeNote): Promise<NoteDuCarnet> {
+  return requeteApi<NoteDuCarnet>('/administration/notes', { methode: 'POST', corps: saisie })
+}
+
+/** `PUT /api/administration/notes/{id}`. */
+export function modifierNote(id: number, saisie: SaisieDeNote): Promise<NoteDuCarnet> {
+  return requeteApi<NoteDuCarnet>(`/administration/notes/${id}`, { methode: 'PUT', corps: saisie })
+}
+
+/** `DELETE /api/administration/notes/{id}` — `204`. */
+export function supprimerNote(id: number): Promise<void> {
+  return requeteApi<void>(`/administration/notes/${id}`, { methode: 'DELETE' })
+}

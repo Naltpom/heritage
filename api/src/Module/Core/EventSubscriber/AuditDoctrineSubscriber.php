@@ -72,6 +72,10 @@ final class AuditDoctrineSubscriber
      * rien à faire dans un journal qu'on ne purge jamais. Aucune route ne les modifie :
      * s'ils apparaissaient un jour dans un diff, ce serait une écriture à regarder, pas
      * une valeur à relire.
+     *
+     * `noteBody` est le texte d'une note du carnet personnel de l'administrateur
+     * (`Core\NoteAdministrateur`) : une note supprimée doit l'être vraiment, et un
+     * journal qu'on ne purge jamais en garderait chaque version.
      */
     private const array CHAMPS_SENSIBLES = [
         'password',
@@ -89,6 +93,7 @@ final class AuditDoctrineSubscriber
         'voiceMessageTranscript',
         'publicKey',
         'credentialId',
+        'noteBody',
     ];
 
     /**
