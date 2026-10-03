@@ -17,7 +17,14 @@
  */
 
 import { requeteApi } from './client'
-import type { ChargeDeSession, ListePaginee, StatutCompte, TypeRattachement } from './types'
+import type {
+  ChargeDeSession,
+  ListePaginee,
+  PartageNaissance,
+  PartageNaissanceEnregistre,
+  StatutCompte,
+  TypeRattachement,
+} from './types'
 import type { CorpsCreationPersonne } from './propositions'
 import type { ChangementPropose, PersonneCitee } from './assistant'
 
@@ -152,6 +159,9 @@ export interface MembreAdministration {
   invitationId: number | null
   linkedAt: string | null
   activatedAt: string | null
+  /** ADR 0016 — ce que ce membre partage de sa date de naissance. Absent d'un
+   *  serveur antérieur. */
+  partageNaissance?: PartageNaissanceEnregistre
 }
 
 export interface UtilisateurAdministration {
@@ -167,6 +177,13 @@ export interface UtilisateurAdministration {
   createdAt: string
   /** `null` pour un compte sans rattachement (le compte d'amorçage). */
   membre: MembreAdministration | null
+  /**
+   * ADR 0016 — ce compte voit les dates de naissance des vivants **sans** la
+   * réciprocité : les siennes ne conditionnent plus celles des autres. Les
+   * photos restent floutées tant qu'il n'a pas la sienne. Absent d'un serveur
+   * antérieur, et alors faux.
+   */
+  ignoreRestrictionNaissance?: boolean
   /** Les quotas comptés par compte, dans l'ordre du serveur (§ 10.1, « Quotas d'usage »). */
   quotas: QuotaDeCompte[]
 }
@@ -246,6 +263,8 @@ export function modifierUtilisateur(
     roles?: string[] | undefined
     status?: 'actif' | 'suspendu' | undefined
     displayName?: string | undefined
+    /** ADR 0016 — lève la réciprocité sur les dates (jamais sur les photos). */
+    ignoreRestrictionNaissance?: boolean | undefined
   },
 ): Promise<UtilisateurAdministration> {
   return requeteApi<UtilisateurAdministration>(`/administration/utilisateurs/${id}`, {
@@ -734,4 +753,81 @@ export function resteDuQuota(quotas: readonly QuotaDeCompte[], cle: string): num
   const quota = quotas.find((q) => q.cle === cle)
   if (quota === undefined || quota.exempte) return null
   return Math.max(0, quota.limite - quota.consomme)
+}
+
+/* ------------------------------------------------------------------ */
+/* ADR 0016 — l'autorisation signée d'une personne vivante sans compte */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Une personne vivante **sans compte** ne peut pas cocher elle-même ce qu'elle
+ * partage de sa date de naissance. Sans rien, elle ne partage rien. Un
+ * administrateur peut déposer son **autorisation signée** (PDF ou photo du
+ * papier) et cocher ce qu'elle accepte : année, mois, jour.
+ *
+ * Dès qu'un compte est rattaché à la fiche, c'est **son** choix qui compte :
+ * l'autorisation est archivée (`compte_rattache`) et un nouveau dépôt rend
+ * `409 compte_rattache`. Une personne décédée n'est pas concernée (`422`).
+ */
+
+/** Pourquoi une autorisation n'est plus active. */
+export type RaisonArchivageAutorisation = 'remplacee' | 'compte_rattache' | 'retiree'
+
+export interface AutorisationNaissance extends PartageNaissance {
+  id: number
+  note: string | null
+  mime: string
+  taille: number
+  sha256: string
+  accordeeLe: string
+  accordeeParUserId: number | null
+  archiveeLe: string | null
+  raisonArchivage: RaisonArchivageAutorisation | null
+  /** URL **relative** du document, écrite par le serveur — route d'administration. */
+  documentUrl: string
+}
+
+export interface EtatAutorisationNaissance {
+  /** Un compte est rattaché : seul son propre choix compte. */
+  compteRattache: boolean
+  /** L'autorisation active, ou `null`. */
+  autorisation: AutorisationNaissance | null
+  /** Les autorisations archivées, de la plus récente à la plus ancienne. */
+  historique: AutorisationNaissance[]
+}
+
+/** `GET /api/administration/personnes/{id}/autorisation-naissance`. */
+export function lireAutorisationNaissance(personId: number): Promise<EtatAutorisationNaissance> {
+  return requeteApi<EtatAutorisationNaissance>(`/administration/personnes/${personId}/autorisation-naissance`)
+}
+
+/**
+ * `POST /api/administration/personnes/{id}/autorisation-naissance` —
+ * `multipart/form-data`. Le document (PDF, JPEG, PNG ou WebP, 10 Mo au plus)
+ * et les trois cases, en `'true'`/`'false'`. Une autorisation active est
+ * remplacée (archivée en `remplacee`). Aucun `Content-Type` posé : voir
+ * `televerserMedia()`.
+ */
+export function deposerAutorisationNaissance(
+  personId: number,
+  envoi: PartageNaissance & { document: File; note?: string | undefined },
+): Promise<EtatAutorisationNaissance> {
+  const formulaire = new FormData()
+  formulaire.append('document', envoi.document, envoi.document.name)
+  formulaire.append('annee', envoi.annee ? 'true' : 'false')
+  formulaire.append('mois', envoi.mois ? 'true' : 'false')
+  formulaire.append('jour', envoi.jour ? 'true' : 'false')
+  const note = envoi.note?.trim() ?? ''
+  if (note.length > 0) formulaire.append('note', note)
+  return requeteApi<EtatAutorisationNaissance>(`/administration/personnes/${personId}/autorisation-naissance`, {
+    methode: 'POST',
+    corps: formulaire,
+  })
+}
+
+/** `DELETE` — l'autorisation active est archivée (`retiree`), jamais effacée. */
+export function retirerAutorisationNaissance(personId: number): Promise<EtatAutorisationNaissance> {
+  return requeteApi<EtatAutorisationNaissance>(`/administration/personnes/${personId}/autorisation-naissance`, {
+    methode: 'DELETE',
+  })
 }

@@ -145,6 +145,9 @@ function plein(principal: string, secondaire: string | null = null): ValeurAffic
   return { principal, secondaire, vide: false }
 }
 
+/** Ce qu'on écrit pour une date masquée dont rien n'est partagé (ADR 0016). */
+export const NAISSANCE_NON_PARTAGEE = 'non partagée'
+
 /**
  * Rend un bloc date **sans jamais le recomposer**.
  *
@@ -172,6 +175,12 @@ export function rendreDate(bloc: BlocDate | BlocDateOp | null, motSiVide: string
   // le lieu peut ne pas l'être.
   const principal = texte ?? brut
 
+  // Masquée (ADR 0016) : la date existe, le lecteur n'en voit que ce que la
+  // personne et lui partagent tous deux — `texte` le dit (« mars 1985 »). Rien
+  // de partagé : « non partagée », et surtout pas le mot des dates inconnues.
+  if (principal === null && bloc.qualifier === 'masquee') {
+    return { principal: NAISSANCE_NON_PARTAGEE, secondaire: bloc.place, vide: true }
+  }
   if (principal === null) return { principal: motSiVide, secondaire: bloc.place, vide: true }
   return plein(principal, bloc.place)
 }

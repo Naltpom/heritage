@@ -24,6 +24,10 @@
  * négatif compris quand on remonte avant l'événement — voir son en-tête. Le
  * choix de ne rien peindre appartient à ce gabarit, et à lui seul : c'est ce qui
  * évite un `null` que chaque appelant aurait à réinterpréter.
+ *
+ * **Sans année, aucun âge** (ADR 0016) : la naissance d'une personne vivante
+ * dont l'année n'est pas partagée arrive sans `annee`, et `texte` dit
+ * « 12 mars ». On n'invente pas d'écart à partir de rien.
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed } from 'vue'
@@ -36,7 +40,9 @@ const { evenement, anneeAffichee } = defineProps<{
   anneeAffichee: number
 }>()
 
-const ecart = computed(() => ageALAnniversaire(evenement.annee, anneeAffichee))
+const ecart = computed(() =>
+  evenement.annee === undefined ? null : ageALAnniversaire(evenement.annee, anneeAffichee),
+)
 
 const libelleEcart = computed(() => (ecart.value === 1 ? 'il y a 1 an' : `il y a ${ecart.value} ans`))
 </script>
@@ -61,6 +67,6 @@ const libelleEcart = computed(() => (ecart.value === 1 ? 'il y a 1 an' : `il y a
 
     <p v-if="evenement.lieu" class="mt-0.5 text-xs text-attenue">{{ evenement.lieu }}</p>
 
-    <p v-if="ecart >= 1" class="tnum mt-0.5 text-xs text-attenue">{{ libelleEcart }}</p>
+    <p v-if="ecart !== null && ecart >= 1" class="tnum mt-0.5 text-xs text-attenue">{{ libelleEcart }}</p>
   </div>
 </template>

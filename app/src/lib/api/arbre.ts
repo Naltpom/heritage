@@ -168,6 +168,8 @@ export interface MediaDeFiche {
   vignetteUrl: string
   /** ATOM — la date du dépôt, celle de `createdAt` au § 7.2. */
   createdAt: string
+  /** ADR 0016 — les URL mènent déjà à la variante floutée. Voir `PortraitDeFiche`. */
+  flou?: boolean
 }
 
 export interface PortraitDeFiche {
@@ -175,6 +177,13 @@ export interface PortraitDeFiche {
   url: string
   vignetteUrl: string
   caption: string | null
+  /**
+   * ADR 0016 — le lecteur n'a pas de photo de lui : le serveur sert ce portrait
+   * de personne vivante **flouté**, et `url` y mène déjà. Le front ne floute
+   * jamais en CSS — une image nette floutée à l'écran reste nette à qui
+   * l'enregistre ; il dit seulement pourquoi.
+   */
+  flou?: boolean
 }
 
 /**
@@ -229,6 +238,12 @@ export interface FichePersonneComplete {
   vivant: boolean
   birth: BlocDate | null
   death: BlocDate | null
+  /**
+   * ADR 0016 — `false` quand la naissance est masquée, même en partie, pour ce
+   * lecteur : le champ ne se saisit pas (`naissanceVerrouillee()`). Facultatif
+   * pour les charges d'essai écrites avant lui ; absent vaut `true`.
+   */
+  naissanceModifiable?: boolean
   /** **La ligne de dates de la fiche**, forme compacte (« 1901-1909 – 1987 »).
    *  Ce n'est pas l'étiquette du moteur : celle-là s'appelle `etiquette`, ne vit
    *  que sur un nœud du graphe, et vaut « vivant·e » pour toute personne

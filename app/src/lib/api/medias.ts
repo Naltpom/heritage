@@ -160,6 +160,9 @@ export interface Media {
   url: string
   /** Idem pour la vignette du § 7.5. */
   vignetteUrl: string
+  /** ADR 0016 — `url` et `vignetteUrl` mènent déjà à la variante floutée : le
+   *  lecteur n'a pas de photo de lui, et le sujet est vivant. */
+  flou?: boolean
   /** La demande `ajout_media` qui porte ce média, `null` pour un dépôt direct
    *  d'administrateur — qui naît `actif` (§ 7.1). */
   changeRequestId: number | null

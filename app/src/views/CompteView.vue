@@ -29,6 +29,12 @@
  * rendrait `401` et la personne serait mise dehors par le changement qu'elle
  * vient de faire.
  *
+ * ── Confidentialité ──────────────────────────────────────────────────────────
+ *
+ * Le partage de la date de naissance (ADR 0016) : `SectionPartageNaissance`.
+ * Absente quand la session porte `partageNaissance: null` — un compte sans
+ * ligne membre n'a rien à partager.
+ *
  * ── Clés d'accès ─────────────────────────────────────────────────────────────
  *
  * Face ID, empreinte, Windows Hello : la section vit dans son propre composant
@@ -50,6 +56,7 @@ import PanneauBase from '@/components/base/PanneauBase.vue'
 import ChoixPortrait from '@/components/medias/ChoixPortrait.vue'
 import InstallationApplication from '@/components/mise-en-page/InstallationApplication.vue'
 import SectionClesDAcces from '@/components/cles-d-acces/SectionClesDAcces.vue'
+import SectionPartageNaissance from '@/components/compte/SectionPartageNaissance.vue'
 import { oublierToutesLesClesDeCetAppareil } from '@/composables/useClesDAcces'
 
 const { session, rattache } = useSession()
@@ -69,6 +76,9 @@ const nomDeLaFiche = computed(() => membreRattache.value?.personLabel ?? null)
 /* --- photo de profil = portrait de la personne ---------------------- */
 
 const portrait = computed(() => session.value?.portrait ?? null)
+
+/** ADR 0016 — `null` (ou absent) : pas de ligne membre, pas de section. */
+const partageNaissance = computed(() => session.value?.partageNaissance ?? null)
 const choixPortraitOuvert = ref(false)
 const portraitDepose = ref(false)
 
@@ -230,6 +240,9 @@ function dateLisible(iso: string): string {
         <p class="text-sm text-attenue">
           Elle apparaît sur votre carte dans l’arbre.
         </p>
+        <p v-if="session?.reciprocite?.photo === false" class="text-sm text-attenue">
+          Tant que vous n’avez pas de photo, celles des personnes vivantes s’affichent floutées.
+        </p>
         <div class="flex items-center gap-4">
           <img
             v-if="portrait !== null"
@@ -251,6 +264,10 @@ function dateLisible(iso: string): string {
           @depose="portraitDepose = true"
         />
       </section>
+    </PanneauBase>
+
+    <PanneauBase v-if="partageNaissance !== null">
+      <SectionPartageNaissance :partage="partageNaissance" />
     </PanneauBase>
 
     <PanneauBase>

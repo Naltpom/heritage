@@ -203,8 +203,47 @@ export interface BlocDateOp {
  * La conversion existe déjà, une seule fois : `sansTexte()` dans
  * `@/components/proposition/dates`. Ne pas en écrire une seconde.
  */
-export interface BlocDate extends BlocDateOp {
+export interface BlocDate extends Omit<BlocDateOp, 'qualifier'> {
+  /**
+   * `masquee` n'existe **qu'en lecture** (ADR 0016, réciprocité des vivants) :
+   * la naissance d'une personne vivante dont le lecteur ne voit qu'une partie —
+   * ou rien. `raw`, `min` et `max` valent alors `null`, `place` reste, et
+   * `texte` dit ce qui est partagé (« mars 1985 », « 12 mars », ou `''`).
+   *
+   * Ce n'est pas un qualificatif GEDCOM, et il n'entre donc pas dans
+   * `QualificatifDate` : un bloc masqué ne se reposte jamais. Le champ de la
+   * fiche est verrouillé (`naissanceModifiable`), et `sansTexte()` le ramène à
+   * un bloc qui n'affirme rien.
+   */
+  qualifier: QualificatifDate | 'masquee'
   texte: string
+  /** Sur un bloc `masquee` seulement : les composantes que le lecteur voit. */
+  composantes?: ComposantesDate
+}
+
+/** ADR 0016 — les composantes d'une date de naissance réduite. Absente = non
+ *  partagée. */
+export interface ComposantesDate {
+  annee?: number
+  mois?: number
+  jour?: number
+}
+
+/**
+ * ADR 0016 — ce que le membre accepte de partager de sa date de naissance.
+ * Trois cases **indépendantes** : « le jour et le mois, pas l'année » est un
+ * choix courant. Ce qu'il ne partage pas, il ne le voit pas non plus chez les
+ * autres personnes vivantes.
+ */
+export interface PartageNaissance {
+  annee: boolean
+  mois: boolean
+  jour: boolean
+}
+
+/** Le choix tel que le serveur le rend : avec la date du dernier changement. */
+export interface PartageNaissanceEnregistre extends PartageNaissance {
+  modifieLe: string | null
 }
 
 /* ------------------------------------------------------------------ */
@@ -290,6 +329,23 @@ export interface ChargeDeSession {
    * « quelqu'un a déposé cette photo de vous : la garder ou la remplacer ? ».
    */
   portrait: PortraitDeSession | null
+  /**
+   * ADR 0016 — le choix de partage de la date de naissance. `null` quand le
+   * compte n'a pas de ligne membre (le compte d'amorçage). Facultatif pour les
+   * charges d'essai écrites avant lui ; le serveur l'envoie toujours.
+   */
+  partageNaissance?: PartageNaissanceEnregistre | null
+  /** ADR 0016 — la réciprocité telle qu'elle s'applique au lecteur effectif. */
+  reciprocite?: ReciprociteDeSession
+}
+
+export interface ReciprociteDeSession {
+  /** L'administrateur a levé pour ce compte la restriction sur les **dates**
+   *  (jamais sur les photos). */
+  restrictionIgnoree: boolean
+  /** Le lecteur a une photo de lui, validée ou en attente. Sans elle, les
+   *  portraits des personnes vivantes arrivent floutés par le serveur. */
+  photo: boolean
 }
 
 export interface PortraitDeSession {
