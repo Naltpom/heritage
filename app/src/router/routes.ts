@@ -567,6 +567,15 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/administration/SourcesView.vue'),
         meta: { acces: 'administration', titre: 'Sources' },
       },
+      {
+        // Les demandes RGPD des membres (ADR 0016, révision du 3 octobre
+        // 2026). Le nom est un contrat : la notification `demande_rgpd` y mène
+        // (`linkRoute: 'administration.rgpd'`).
+        path: 'rgpd',
+        name: 'administration.rgpd',
+        component: () => import('@/views/administration/DemandesRgpdView.vue'),
+        meta: { acces: 'administration', titre: 'Demandes RGPD' },
+      },
     ],
   },
 

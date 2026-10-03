@@ -82,9 +82,9 @@ export function changerMotDePasse(
  *
  * `409 compte_non_rattache` sans ligne membre ; `409 vue_comme_membre_active`
  * sous la bascule « voir comme » — on ne choisit pas à la place du membre ;
- * `409 partage_en_carence` pour une composante retirée il y a moins de trente
- * jours qu'on voudrait recocher (`details.jusquAu`, par composante). Retirer
- * est toujours immédiat.
+ * `409 partage_verrouille` pour une composante partagée il y a moins de trente
+ * jours qu'on voudrait décocher (`details.jusquAu`, par composante) : la
+ * retirer plus tôt passe par une demande RGPD. Partager est toujours immédiat.
  */
 export function modifierPartageNaissance(partage: PartageNaissance): Promise<PartageNaissanceEnregistre> {
   return requeteApi<PartageNaissanceEnregistre>('/session/partage-naissance', {

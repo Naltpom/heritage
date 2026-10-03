@@ -6,8 +6,8 @@
  *     naissance d'un compte — `PATCH` avec `ignoreRestrictionNaissance` —, et la
  *     ligne dit ce que le membre partage ;
  *  2. **Mon compte** : le choix ne part qu'à « Enregistrer », la session est
- *     relue ; une case en carence est éteinte ; un `409 partage_en_carence` se
- *     dit sans casser l'écran ;
+ *     relue ; une case cochée verrouillée est éteinte, avec le lien vers la
+ *     demande RGPD ; un `409 partage_verrouille` se dit sans casser l'écran ;
  *  3. **la fiche** : l'autorisation signée se dépose en `multipart` avec ses
  *     trois cases, se retire ; un compte rattaché ferme le dépôt.
  *
@@ -193,8 +193,8 @@ describe('Mon compte — le partage de ma date de naissance', () => {
     const racine = await monterSection(ENREGISTRE)
 
     expect(texte(racine)).toContain('Choix modifié le 20 septembre 2026')
-    // L'avertissement est là avant qu'on décoche.
-    expect(un(racine, parAttribut('data-avertissement-retrait'))).not.toBeNull()
+    // Tout est partagé, rien n'est verrouillé : on peut décocher.
+    expect(tous(racine, (n) => n.tag === 'input' && n.attributs['disabled'] === true)).toHaveLength(0)
     expect(un(racine, boutonNomme('Enregistrer'))?.attributs['disabled']).toBe(true)
 
     await cocher(racine, 'annee', false)
@@ -205,26 +205,50 @@ describe('Mon compte — le partage de ma date de naissance', () => {
     expect(etat.rafraichir).toHaveBeenCalledTimes(1)
   })
 
-  it('une case en carence est éteinte, avec sa date', async () => {
-    const racine = await monterSection({
-      ...ENREGISTRE,
-      annee: false,
-      carenceJusquAu: { annee: '2026-11-02T12:00:00+01:00' },
-    })
-    const caseAnnee = un(racine, (n) => n.tag === 'input' && n.attributs['data-composante'] === 'annee')
-    expect(caseAnnee?.attributs['disabled']).toBe(true)
-    expect(texte(un(racine, parAttribut('data-carence'))!)).toContain('2 novembre 2026')
+  it('l’avertissement des trente jours est là avant de cocher, et appuyé une fois coché', async () => {
+    const racine = await monterSection({ ...ENREGISTRE, annee: false })
+    const avertissement = () => un(racine, parAttribut('data-avertissement-partage'))
+
+    expect(texte(avertissement()!)).toContain('Une information partagée reste visible des autres membres au moins 30 jours.')
+    expect(String(avertissement()!.attributs['class'])).not.toContain('text-alerte')
+
+    await cocher(racine, 'annee', true)
+    expect(String(avertissement()!.attributs['class'])).toContain('text-alerte')
   })
 
-  it('un 409 partage_en_carence se dit, et la session est relue', async () => {
-    api.modifierPartageNaissance.mockRejectedValue(
-      new ErreurApi(409, 'partage_en_carence', 'Trop tôt.', null, { jusquAu: { mois: '2026-11-02T12:00:00+01:00' } }),
+  it('une case cochée verrouillée est éteinte, avec sa date et le lien vers la demande RGPD', async () => {
+    const recus: string[] = []
+    const racine = await monterEnMemoire(
+      defineComponent({
+        render: () =>
+          h(SectionPartageNaissance, {
+            partage: { ...ENREGISTRE, annee: false, verrouJusquAu: { mois: '2026-11-02T12:00:00+01:00' } },
+            onDemandeRgpd: (cle: string) => recus.push(cle),
+          }),
+      }),
+      { RouterLink: LienFactice },
     )
-    const racine = await monterSection({ ...ENREGISTRE, mois: false })
-    await cocher(racine, 'mois', true)
+    const caseDe = (cle: string) => un(racine, (n) => n.tag === 'input' && n.attributs['data-composante'] === cle)
+    expect(caseDe('mois')?.attributs['disabled']).toBe(true)
+    expect(caseDe('jour')?.attributs['disabled']).toBe(false)
+    // Non cochée : partager est immédiat, jamais éteint.
+    expect(caseDe('annee')?.attributs['disabled']).toBe(false)
+    expect(texte(un(racine, parAttribut('data-verrou'))!)).toContain('Partagé jusqu’au 2 novembre 2026 au minimum')
+
+    await cliquer(un(racine, (n) => n.tag === 'button' && n.attributs['data-demande-rgpd'] === 'mois'))
+    expect(recus).toEqual(['mois'])
+  })
+
+  it('un 409 partage_verrouille se dit, et la session est relue', async () => {
+    api.modifierPartageNaissance.mockRejectedValue(
+      new ErreurApi(409, 'partage_verrouille', 'Trop tôt.', null, { jusquAu: { mois: '2026-11-02T12:00:00+01:00' } }),
+    )
+    const racine = await monterSection(ENREGISTRE)
+    await cocher(racine, 'mois', false)
     await soumettre(racine)
 
-    expect(texte(racine)).toContain('ne peut pas encore être partagée à nouveau')
+    expect(un(racine, parAttribut('data-refus-verrou'))).not.toBeNull()
+    expect(texte(racine)).toContain('ne peut pas encore être retirée')
     expect(etat.rafraichir).toHaveBeenCalledTimes(1)
   })
 })

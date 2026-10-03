@@ -242,17 +242,19 @@ export interface PartageNaissance {
 }
 
 /**
- * La **carence** : une composante retirée ne se partage à nouveau qu'après
- * trente jours. Seules les composantes en carence sont présentes, avec la date
- * (ISO) à partir de laquelle elles se recochent. Retirer, lui, est immédiat.
+ * Le **verrou** : une composante partagée reste visible au moins trente jours.
+ * Partager est immédiat ; retirer ne l'est qu'une fois le verrou passé — avant,
+ * il faut une demande RGPD. Seules les composantes **partagées et encore
+ * verrouillées** sont présentes, avec la date (ISO) à partir de laquelle elles
+ * se décochent.
  */
-export type CarenceDePartage = Partial<Record<keyof PartageNaissance, string>>
+export type VerrouDePartage = Partial<Record<keyof PartageNaissance, string>>
 
 /** Le choix tel que le serveur le rend : avec la date du dernier changement. */
 export interface PartageNaissanceEnregistre extends PartageNaissance {
   modifieLe: string | null
-  /** Facultatif pour les charges d'essai ; absent vaut « aucune carence ». */
-  carenceJusquAu?: CarenceDePartage
+  /** Facultatif pour les charges d'essai ; absent vaut « aucun verrou ». */
+  verrouJusquAu?: VerrouDePartage
 }
 
 /* ------------------------------------------------------------------ */

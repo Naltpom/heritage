@@ -13,30 +13,42 @@
  * vue_comme_membre_active`) : on ne choisit pas pour le membre qu'on regarde.
  * Les cases s'éteignent et la raison est dite.
  *
- * **La carence** (trente jours avant de recocher une composante retirée) : les
- * cases concernées arrivent éteintes, avec leur date (`carenceJusquAu`). Tant
- * qu'une composante est partagée, la phrase d'avertissement est là, **avant**
- * qu'on décoche — pas une modale, une phrase. Un `409 partage_en_carence`
- * (une autre session a retiré entre-temps) relit la session et le dit.
+ * **Le verrou** (une composante partagée reste visible au moins trente
+ * jours) : les cases cochées concernées arrivent éteintes, avec leur date
+ * (`verrouJusquAu`) et le lien vers une demande RGPD, que la section relaie
+ * (`@demande-rgpd`) au bloc « Demandes RGPD » de la vue. L'avertissement est
+ * là **avant** qu'on coche — pas une modale, une phrase —, appuyé dès qu'une
+ * case vient d'être cochée. Un `409 partage_verrouille` (une autre session a
+ * partagé entre-temps) relit la session et le dit.
  *
  * La vue la masque quand `partageNaissance` vaut `null` : un compte sans ligne
  * membre n'a pas de date de naissance à partager.
  */
 import { computed, ref, watch } from 'vue'
-import { analyserErreur, modifierPartageNaissance, type PartageNaissanceEnregistre } from '@/lib/api'
+import {
+  analyserErreur,
+  modifierPartageNaissance,
+  type PartageNaissance as Partage,
+  type PartageNaissanceEnregistre,
+} from '@/lib/api'
 import { rafraichirSession, useSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PartageNaissance from './PartageNaissance.vue'
 import {
-  carenceDuRefus,
+  ajouteUneComposante,
   erreursDePartage,
   memePartage,
   partageSeul,
-  retireUneComposante,
+  verrouDuRefus,
 } from './partageNaissance'
 
 const { partage: enregistre } = defineProps<{ partage: PartageNaissanceEnregistre }>()
+
+const emit = defineEmits<{
+  /** Retirer avant la fin du verrou : la composante à préremplir. */
+  'demande-rgpd': [cle: keyof Partage]
+}>()
 
 const { session, vueEmpruntee } = useSession()
 
@@ -56,11 +68,10 @@ const enregistrement = ref(false)
 const modifie = computed(() => !memePartage(choix.value, enregistre))
 const suspendu = computed(() => vueEmpruntee.value !== null)
 const refus = computed(() => erreursDePartage(analyserErreur(erreur.value)?.champs))
-const carence = computed(() => enregistre.carenceJusquAu ?? {})
-const partageQuelqueChose = computed(() => enregistre.annee || enregistre.mois || enregistre.jour)
-const retrait = computed(() => retireUneComposante(enregistre, choix.value))
-/** Le refus `409 partage_en_carence` : on le dit nous-mêmes, la session relue. */
-const refusCarence = computed(() => carenceDuRefus(erreur.value) !== null)
+const verrou = computed(() => enregistre.verrouJusquAu ?? {})
+const ajout = computed(() => ajouteUneComposante(enregistre, choix.value))
+/** Le refus `409 partage_verrouille` : on le dit nous-mêmes, la session relue. */
+const refusVerrou = computed(() => verrouDuRefus(erreur.value) !== null)
 const restrictionIgnoree = computed(() => session.value?.reciprocite?.restrictionIgnoree === true)
 
 async function enregistrer(): Promise<void> {
@@ -74,9 +85,9 @@ async function enregistrer(): Promise<void> {
     enregistrement.value = true
   } catch (cause) {
     erreur.value = cause
-    // La carence a changé sous nos pieds : la session relue rallume les bonnes
-    // dates sur les cases, et le choix revient à ce qui est enregistré.
-    if (carenceDuRefus(cause) !== null) await rafraichirSession().catch(() => undefined)
+    // Le verrou a changé sous nos pieds : la session relue éteint les bonnes
+    // cases, avec leur date, et le choix revient à ce qui est enregistré.
+    if (verrouDuRefus(cause) !== null) await rafraichirSession().catch(() => undefined)
   } finally {
     envoi.value = false
   }
@@ -93,17 +104,14 @@ function dateLisible(iso: string): string {
   <form class="flex flex-col gap-3 p-4" novalidate data-section-partage-naissance @submit.prevent="enregistrer">
     <h2 class="text-base font-semibold">Confidentialité</h2>
 
-    <PartageNaissance v-model="choix" :erreurs="refus" :carence="carence" :desactive="suspendu || envoi" />
-
-    <p
-      v-if="partageQuelqueChose"
-      class="m-0 text-xs"
-      :class="retrait ? 'font-semibold text-alerte' : 'text-attenue'"
-      data-avertissement-retrait
-    >
-      Si vous retirez une information, vous ne pourrez la partager à nouveau qu’après 30 jours, et vous
-      ne verrez plus celle des autres.
-    </p>
+    <PartageNaissance
+      v-model="choix"
+      :erreurs="refus"
+      :verrou="verrou"
+      :avertissement-appuye="ajout"
+      :desactive="suspendu || envoi"
+      @demande-rgpd="(cle) => emit('demande-rgpd', cle)"
+    />
 
     <p v-if="enregistre.modifieLe !== null" class="m-0 text-xs text-attenue">
       Choix modifié le {{ dateLisible(enregistre.modifieLe) }}.
@@ -115,9 +123,9 @@ function dateLisible(iso: string): string {
       Vous voyez l’arbre comme un autre membre : ce choix ne se modifie pas pendant ce temps.
     </p>
 
-    <p v-if="refusCarence" class="m-0 text-sm text-alerte" role="alert">
-      Une information retirée récemment ne peut pas encore être partagée à nouveau. Les cases montrent
-      à partir de quand.
+    <p v-if="refusVerrou" class="m-0 text-sm text-alerte" role="alert" data-refus-verrou>
+      Une information partagée il y a moins de 30 jours ne peut pas encore être retirée. Les cases
+      montrent jusqu’à quand ; pour la retirer avant, faites une demande RGPD.
     </p>
     <MessageErreur
       v-else-if="erreur !== null && Object.keys(refus).length === 0"

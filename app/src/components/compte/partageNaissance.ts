@@ -3,7 +3,7 @@
  * sans monter de composant : le choix par défaut, la comparaison, les refus du
  * serveur et le résumé court de l'écran d'administration.
  */
-import { estErreurApi, type CarenceDePartage, type PartageNaissance } from '@/lib/api'
+import { estErreurApi, type PartageNaissance, type VerrouDePartage } from '@/lib/api'
 
 /**
  * **Rien de coché par défaut.** Partager est un consentement : il se donne, il
@@ -59,48 +59,49 @@ export function initialesPartage(partage: PartageNaissance): string {
   return lettres.length === 0 ? '—' : lettres.join(' ')
 }
 
-/** Le refus d'un partage recoché trop tôt (`409`). */
-export const CODE_PARTAGE_EN_CARENCE = 'partage_en_carence'
+/** Le refus d'un retrait trop tôt (`409`) : la composante est verrouillée. */
+export const CODE_PARTAGE_VERROUILLE = 'partage_verrouille'
 
 /**
- * La carence que porte un refus `409 partage_en_carence` (`details.jusquAu`),
+ * Le verrou que porte un refus `409 partage_verrouille` (`details.jusquAu`),
  * ou `null` pour toute autre erreur. Les valeurs qui ne sont pas des chaînes
  * sont ignorées : on n'affiche pas une date qu'on ne sait pas lire.
  */
-export function carenceDuRefus(erreur: unknown): CarenceDePartage | null {
-  if (!estErreurApi(erreur) || erreur.code !== CODE_PARTAGE_EN_CARENCE) return null
+export function verrouDuRefus(erreur: unknown): VerrouDePartage | null {
+  if (!estErreurApi(erreur) || erreur.code !== CODE_PARTAGE_VERROUILLE) return null
   const jusquAu = erreur.details?.['jusquAu']
-  const carence: CarenceDePartage = {}
+  const verrou: VerrouDePartage = {}
   if (typeof jusquAu === 'object' && jusquAu !== null) {
     for (const cle of ['annee', 'mois', 'jour'] as const) {
       const date = (jusquAu as Record<string, unknown>)[cle]
-      if (typeof date === 'string') carence[cle] = date
+      if (typeof date === 'string') verrou[cle] = date
     }
   }
-  return carence
+  return verrou
 }
 
 /**
- * Une case **non cochée** en carence ne se coche pas : la date dit quand elle
- * le pourra. Une case cochée n'est jamais bloquée — retirer est immédiat.
+ * Une case **cochée** que le verrou mentionne ne se décoche pas : la date dit
+ * jusqu'à quand, au minimum. Une case non cochée n'est jamais bloquée —
+ * partager est immédiat.
  */
-export function enCarence(
+export function verrouillee(
   partage: PartageNaissance,
-  carence: CarenceDePartage,
+  verrou: VerrouDePartage,
   cle: keyof PartageNaissance,
 ): string | null {
-  return !partage[cle] && carence[cle] !== undefined ? carence[cle] : null
+  return partage[cle] && verrou[cle] !== undefined ? verrou[cle] : null
 }
 
-/** « 2 novembre 2026 » — la date d'une fin de carence, en toutes lettres. */
-export function dateDeCarence(iso: string): string {
+/** « 2 novembre 2026 » — la fin d'un verrou, en toutes lettres. */
+export function dateDuVerrou(iso: string): string {
   const date = new Date(iso)
   return Number.isNaN(date.getTime())
     ? iso
     : date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-/** Une composante partagée hier ne l'est plus dans le choix en cours. */
-export function retireUneComposante(avant: PartageNaissance, apres: PartageNaissance): boolean {
-  return (avant.annee && !apres.annee) || (avant.mois && !apres.mois) || (avant.jour && !apres.jour)
+/** Une composante non partagée hier l'est dans le choix en cours. */
+export function ajouteUneComposante(avant: PartageNaissance, apres: PartageNaissance): boolean {
+  return (!avant.annee && apres.annee) || (!avant.mois && apres.mois) || (!avant.jour && apres.jour)
 }

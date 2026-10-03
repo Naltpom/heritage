@@ -28,7 +28,7 @@ describe('la pastille', () => {
 })
 
 describe('le type', () => {
-  it('a une étiquette lisible pour chacun des quinze types du serveur', () => {
+  it('a une étiquette lisible pour chacun des dix-sept types du serveur', () => {
     const types = [
       'demande_soumise',
       'demande_validee',
@@ -45,6 +45,8 @@ describe('le type', () => {
       'evenement_relance',
       'evenement_annule',
       'evenement_dates_modifiees',
+      'demande_rgpd',
+      'demande_rgpd_traitee',
     ]
     for (const t of types) {
       expect(libelleDeType(t)).not.toBe('Notification')
@@ -65,6 +67,14 @@ describe('le type', () => {
     expect(tonDeType('evenement_annule')).toBe('alerte')
     // Un déplacement n'est pas un refus : la réponse tient, on la confirme.
     expect(tonDeType('evenement_dates_modifiees')).toBe('neutre')
+    // Une réponse RGPD peut être un refus comme une application : neutre.
+    expect(tonDeType('demande_rgpd')).toBe('neutre')
+    expect(tonDeType('demande_rgpd_traitee')).toBe('neutre')
+  })
+
+  it('nomme les deux types des demandes RGPD', () => {
+    expect(libelleDeType('demande_rgpd')).toBe('Demande RGPD')
+    expect(libelleDeType('demande_rgpd_traitee')).toBe('Réponse RGPD')
   })
 })
 

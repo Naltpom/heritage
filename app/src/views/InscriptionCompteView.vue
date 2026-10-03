@@ -39,8 +39,10 @@
  *
  * **Le partage de la date de naissance** (ADR 0016) se choisit ici, avant la
  * création : trois cases indépendantes, aucune cochée d'avance — un
- * consentement se donne. Ses refus reviennent sous `partageNaissance.*` et
- * s'affichent sous les cases. Il se change ensuite dans « Mon compte ».
+ * consentement se donne. L'avertissement est dit avant qu'on coche : une
+ * information partagée reste visible au moins trente jours. Ses refus
+ * reviennent sous `partageNaissance.*` et s'affichent sous les cases. Il se
+ * change ensuite dans « Mon compte ».
  *
  * **Après le `201` vient la photo** (`EtapePhoto.vue`) : un panneau « Votre
  * photo », attendu mais qu'on peut passer d'un lien discret. Qu'elle soit

@@ -33,7 +33,9 @@
  *
  * Le partage de la date de naissance (ADR 0016) : `SectionPartageNaissance`.
  * Absente quand la session porte `partageNaissance: null` — un compte sans
- * ligne membre n'a rien à partager.
+ * ligne membre n'a rien à partager. Juste en dessous, `SectionDemandesRgpd` :
+ * retirer une composante encore verrouillée (30 jours) passe par une demande,
+ * et le lien sous la case ouvre le formulaire, la composante cochée.
  *
  * ── Clés d'accès ─────────────────────────────────────────────────────────────
  *
@@ -46,6 +48,7 @@ import {
   analyserErreur,
   changerMotDePasse,
   demanderChangementDeCourriel,
+  type PartageNaissance,
 } from '@/lib/api'
 import { connecter, useSession } from '@/composables/useSession'
 import { erreurCourriel, erreurMotDePasse } from '@/components/inscription/reglesMotDePasse'
@@ -57,6 +60,7 @@ import ChoixPortrait from '@/components/medias/ChoixPortrait.vue'
 import InstallationApplication from '@/components/mise-en-page/InstallationApplication.vue'
 import SectionClesDAcces from '@/components/cles-d-acces/SectionClesDAcces.vue'
 import SectionPartageNaissance from '@/components/compte/SectionPartageNaissance.vue'
+import SectionDemandesRgpd from '@/components/compte/SectionDemandesRgpd.vue'
 import { oublierToutesLesClesDeCetAppareil } from '@/composables/useClesDAcces'
 
 const { session, rattache } = useSession()
@@ -79,6 +83,12 @@ const portrait = computed(() => session.value?.portrait ?? null)
 
 /** ADR 0016 — `null` (ou absent) : pas de ligne membre, pas de section. */
 const partageNaissance = computed(() => session.value?.partageNaissance ?? null)
+const sectionRgpd = ref<InstanceType<typeof SectionDemandesRgpd> | null>(null)
+
+/** Le lien « faites une demande RGPD » sous une case verrouillée. */
+function demanderRetrait(cle: keyof PartageNaissance): void {
+  sectionRgpd.value?.ouvrir(cle)
+}
 const choixPortraitOuvert = ref(false)
 const portraitDepose = ref(false)
 
@@ -267,7 +277,11 @@ function dateLisible(iso: string): string {
     </PanneauBase>
 
     <PanneauBase v-if="partageNaissance !== null">
-      <SectionPartageNaissance :partage="partageNaissance" />
+      <SectionPartageNaissance :partage="partageNaissance" @demande-rgpd="demanderRetrait" />
+    </PanneauBase>
+
+    <PanneauBase v-if="partageNaissance !== null">
+      <SectionDemandesRgpd ref="sectionRgpd" />
     </PanneauBase>
 
     <PanneauBase>
