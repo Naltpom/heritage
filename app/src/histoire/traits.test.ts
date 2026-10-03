@@ -100,7 +100,8 @@ interface Segment {
 }
 
 function segments(d: DispositionHistoire): Segment[] {
-  const tout = Object.values(d.traces).join('')
+  const { ordinaires, directs, divorces, attente } = d.traces
+  const tout = ordinaires + directs + divorces + attente
   const re = /M([-\d.]+) ([-\d.]+)L([-\d.]+) ([-\d.]+)/g
   const liste: Segment[] = []
   let m: RegExpExecArray | null

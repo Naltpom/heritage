@@ -91,6 +91,7 @@ import {
 } from '@/histoire/vue'
 import { memoriserVue, reprendreVue, type VueMemorisee } from '@/histoire/retour'
 import { ligneDe } from '@/histoire/ligneDirecte'
+import { basculerFamille, familleDuClic, familleEclairee } from '@/histoire/eclairage'
 import PortraitFiche from '@/components/personne/PortraitFiche.vue'
 import IdentiteFiche from '@/components/personne/IdentiteFiche.vue'
 import ParenteFiche from '@/components/personne/ParenteFiche.vue'
@@ -179,6 +180,7 @@ function redisposer(): void {
   disposer(grapheCharge.value)
   const d = disposition.value!
   if (selection.value !== null && !d.parId.has(selection.value)) selection.value = null
+  if (!familleEclairee(d.traces.familles, familleChoisie.value)) familleChoisie.value = null
   const quarts = new Set<string>(d.quarts.map((q) => q.branche))
   filtres.masquees = filtres.masquees.filter((b) => quarts.has(b))
   cadrage.value = ajusterLargeur(canevas.value, gouttiere.value)
@@ -614,6 +616,33 @@ function choisir(f: FicheHistoire): void {
   if (s.value < 0.42) voler(1, f.cx, f.y + f.h / 2)
 }
 
+/*
+ * La SURBRILLANCE D'UNE FAMILLE : un clic sur l'un de ses traits allume tous ses traits et
+ * les fiches qu'ils relient (époux, enfants) ; un second clic, un clic dans le vide ou
+ * Échap l'éteignent. Le reste de l'arbre ne bouge pas, et le clic sur une fiche garde son
+ * sens (il ouvre la fiche).
+ */
+const familleChoisie = ref<string | null>(null)
+const eclairage = computed(() => (disposition.value ? familleEclairee(disposition.value.traces.familles, familleChoisie.value) : null))
+
+/**
+ * Un seul écouteur, sur le canevas (ADR 0007, règle 3) : un trait cliqué bascule sa
+ * famille ; un clic dans le vide l'éteint. Un glisser qui se termine sur une ligne n'est
+ * pas un clic — même garde que pour les fiches.
+ */
+function surClicDuCanevas(e: MouseEvent): void {
+  if (Date.now() - finDeGlisser < 80) return
+  const cliquee = familleDuClic(e.target)
+  if (cliquee !== null) {
+    familleChoisie.value = basculerFamille(familleChoisie.value, cliquee)
+    return
+  }
+  // Une fiche, un bouton, une étiquette cliquable : ce n'est pas le vide.
+  const element = e.target as HTMLElement | null
+  if (element?.closest?.('[role="button"], button, a, input')) return
+  familleChoisie.value = null
+}
+
 function meTrouver(): void {
   const d = disposition.value
   const moi = d?.parId.get(d.ego)
@@ -1034,6 +1063,17 @@ const anneau = computed(() => {
   return { x: versEcranX(f.x) - 4, y: versEcranY(f.y) - 4, w: f.w * s.value + 8, h: f.h * sy.value + 8 }
 })
 
+/** Les fiches de la famille en surbrillance, visibles à l'écran. */
+const anneauxFamille = computed(() => {
+  const d = disposition.value
+  const f = eclairage.value
+  if (!d || !f) return []
+  return f.personnes
+    .map((id) => d.parId.get(id))
+    .filter((p): p is FicheHistoire => p !== undefined && dansLaFenetre(p.x, p.y, p.w, p.h))
+    .map((p) => ({ id: p.id, x: versEcranX(p.x) - 3, y: versEcranY(p.y) - 3, w: p.w * s.value + 6, h: p.h * sy.value + 6 }))
+})
+
 /** Les cibles de la recherche visibles à l'écran ; celle du curseur est plus marquée. */
 const anneauxCibles = computed(() =>
   cibles.value
@@ -1231,6 +1271,7 @@ function surToucheGlobale(e: KeyboardEvent): void {
   else if (e.key === 'Escape') {
     // Un tiroir ouvert garde la priorité : il se referme avant qu'on désélectionne.
     if (unTiroirEstOuvert()) fermerFiltres()
+    else if (familleChoisie.value !== null) familleChoisie.value = null
     else selection.value = null
   }
 }
@@ -1479,6 +1520,7 @@ onBeforeUnmount(() => {
       @pointerup="surPointeurHaut"
       @pointercancel="surPointeurHaut"
       @pointerleave="surPointeurHaut"
+      @click="surClicDuCanevas"
     >
       <template v-if="disposition">
         <svg
@@ -1520,6 +1562,39 @@ onBeforeUnmount(() => {
               :stroke-width="surlignerTraits ? (niveau === 0 ? 2.5 : 2) : 1.2"
               vector-effect="non-scaling-stroke"
               :opacity="surlignerTraits ? 1 : opaciteOrdinaire"
+            />
+            <!-- La famille en surbrillance, par-dessus ses traits ordinaires. -->
+            <path
+              v-if="eclairage"
+              :d="eclairage.d"
+              fill="none"
+              stroke="var(--h-accent)"
+              stroke-width="3"
+              stroke-linecap="round"
+              vector-effect="non-scaling-stroke"
+            />
+          </g>
+        </svg>
+
+        <!--
+          Les ZONES DE CLIC des familles : un trait transparent et large par famille, sous
+          les fiches. Le SVG laisse passer le pointeur (le glisser du canevas continue de
+          marcher) ; seuls les traits l'attrapent.
+        -->
+        <svg class="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
+          <g :transform="transformationTraits">
+            <path
+              v-for="f in disposition.traces.familles"
+              :key="f.id"
+              :d="f.d"
+              :data-famille="f.id"
+              class="cursor-pointer"
+              fill="none"
+              stroke="transparent"
+              stroke-width="12"
+              stroke-linecap="round"
+              vector-effect="non-scaling-stroke"
+              pointer-events="stroke"
             />
           </g>
         </svg>
@@ -1610,6 +1685,12 @@ onBeforeUnmount(() => {
           :key="`cible-${a.id}`"
           class="pointer-events-none absolute rounded-[9px] border-[var(--hi-libelle-accent)]"
           :class="a.courante ? 'border-2 shadow-[0_0_0_5px_rgba(217,160,102,.25)]' : 'border'"
+          :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
+        />
+        <div
+          v-for="a in anneauxFamille"
+          :key="`famille-${a.id}`"
+          class="pointer-events-none absolute rounded-[8px] border-2 border-[var(--h-accent)]"
           :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
         />
         <div

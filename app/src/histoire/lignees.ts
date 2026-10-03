@@ -149,11 +149,26 @@ export interface GenerationHistoire {
   effectif: number
 }
 
+/**
+ * Les traits d'UNE famille — union, descente, barre de fratrie, chutes vers les enfants —
+ * et les fiches qu'ils relient. C'est ce qu'on clique pour mettre la famille en
+ * surbrillance ; les quatre chaînes de {@link TracesHistoire} restent le dessin ordinaire.
+ */
+export interface TraceDeFamille {
+  /** L'identifiant du nœud famille. */
+  id: string
+  d: string
+  /** Les époux puis les enfants (donc les frères et sœurs), identifiants de nœuds. */
+  personnes: IdentifiantNoeud[]
+}
+
 export interface TracesHistoire {
   ordinaires: string
   directs: string
   divorces: string
   attente: string
+  /** Les mêmes segments, regroupés par famille — dans l'ordre du tracé. */
+  familles: TraceDeFamille[]
 }
 
 export interface DispositionHistoire {
@@ -1223,7 +1238,13 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
   }
 
   /* Les traits, famille par famille. */
-  const traits: TracesHistoire = { ordinaires: '', directs: '', divorces: '', attente: '' }
+  const traits: TracesHistoire = { ordinaires: '', directs: '', divorces: '', attente: '', familles: [] }
+  /** Les segments de chaque famille, accumulés en même temps que les quatre chaînes. */
+  const parFamille = new Map<string, string>()
+  const tracer = (cle: 'ordinaires' | 'directs' | 'divorces' | 'attente', s: string, fam: string): void => {
+    traits[cle] += s
+    parFamille.set(fam, (parFamille.get(fam) ?? '') + s)
+  }
   const seg = (x1: number, y1: number, x2: number, y2: number): string =>
     `M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}`
   const aretesEnAttente = new Set<string>()
@@ -1330,7 +1351,7 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
         portee = [a.cx, b.cx]
       } else {
         const s = a.rangee === b.rangee ? seg(a.x + a.w, ya, b.x, ya) : seg(a.cx, a.y + a.h / 2, b.cx, b.y + b.h / 2)
-        traits[style] += s
+        tracer(style, s, fam)
         milieuX = (a.x + a.w + b.x) / 2
         milieuY = ya
         if (a.rangee === b.rangee && b.x - (a.x + a.w) > 16) portee = [a.x + a.w + 8, b.x - 8]
@@ -1499,15 +1520,12 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
       const [a, b] = [ep[0]!, ep[ep.length - 1]!]
       const y = yDetour(detour.rangee, detour.couloir)
       const [xa, xb] = [detour.xa, detour.xb]
-      traits[t.style] += seg(xa, a.y + a.h, xa, y) + seg(xa, y, xb, y) + seg(xb, y, xb, b.y + b.h)
+      tracer(t.style, seg(xa, a.y + a.h, xa, y) + seg(xa, y, xb, y) + seg(xb, y, xb, b.y + b.h), fam)
       departY = y
     }
     if (!en.length || milieuX === null) continue
-    const cible = (s: string, directe: boolean, attente: boolean): void => {
-      if (attente) traits.attente += s
-      else if (directe) traits.directs += s
-      else traits.ordinaires += s
-    }
+    const cible = (s: string, directe: boolean, attente: boolean): void =>
+      tracer(attente ? 'attente' : directe ? 'directs' : 'ordinaires', s, fam)
     if (!t.barre) {
       // Un enfant sous l'union : un trait droit.
       const seul = en[0]!
@@ -1517,10 +1535,15 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     const chute = (e: FicheHistoire): number => t.chutes.get(e.id) ?? e.cx
     const barre = yBarre(t.barre.rangee, t.barre.couloir, ancestrale)
     cible(seg(t.departX, departY, t.departX, barre), ancestrale, false)
-    if (t.barre.hi > t.barre.lo) traits.ordinaires += seg(t.barre.lo, barre, t.barre.hi, barre)
+    if (t.barre.hi > t.barre.lo) tracer('ordinaires', seg(t.barre.lo, barre, t.barre.hi, barre), fam)
     if (direct && Math.abs(chute(direct) - t.departX) >= 0.5)
-      traits.directs += seg(Math.min(t.departX, chute(direct)), barre, Math.max(t.departX, chute(direct)), barre)
+      tracer('directs', seg(Math.min(t.departX, chute(direct)), barre, Math.max(t.departX, chute(direct)), barre), fam)
     for (const e of en) cible(seg(chute(e), barre, chute(e), e.y), e === direct, enAttente(fam, e.id))
+  }
+  // Une famille sans aucun trait dessiné (un parent seul, sans enfant visible) n'a rien à cliquer.
+  for (const t of traces) {
+    const d = parFamille.get(t.fam)
+    if (d) traits.familles.push({ id: t.fam, d, personnes: [...t.ep, ...t.en].map((f) => f.id) })
   }
 
   /* Les quarts : ceux du lecteur, puis ceux de son conjoint. */
