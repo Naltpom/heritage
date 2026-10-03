@@ -38,4 +38,4 @@ python planche.py <id>
 - Le plan suivant part 0,4 à 0,6 s après le dernier mot.
 - En haut, environ 200 px restent libres pour la croix et le bouton du son du lecteur. En bas, environ 100 px restent libres pour la barre de progression.
 
-La voix est générée par la synthèse Edge de Microsoft (`fr-FR-DeniseNeural`). Seul le texte des phrases leur est envoyé.
+La voix est générée par la synthèse Edge de Microsoft (`fr-FR-DeniseNeural`, et `fr-FR-RemyMultilingualNeural` pour « Un mot de Nathan »). Seul le texte des phrases leur est envoyé.

@@ -10,14 +10,16 @@ import asyncio, json, os, sys
 import edge_tts
 
 VOIX = 'fr-FR-DeniseNeural'
-# Une vidéo dite à la première personne par quelqu'un de la famille prend une voix d'homme.
-VOIX_PAR_VIDEO = {'un-mot-de-nathan': 'fr-FR-HenriNeural'}
-DEBIT = '+3%'
+DEBIT, HAUTEUR = '+3%', '+0Hz'
+# Une vidéo dite à la première personne par quelqu'un de la famille prend une voix d'homme :
+# (voix, débit, hauteur). Rémy est plus jeune et plus vif qu'Henri ; un débit et une
+# hauteur un peu relevés lui donnent l'entrain d'un mot de Nathan à sa famille.
+VOIX_PAR_VIDEO = {'un-mot-de-nathan': ('fr-FR-RemyMultilingualNeural', '+12%', '+3Hz')}
 ICI = os.path.dirname(os.path.abspath(__file__))
 
 
-async def une(dossier, i, phrase, voix=VOIX):
-    com = edge_tts.Communicate(phrase, voix, rate=DEBIT, boundary='WordBoundary')
+async def une(dossier, i, phrase, voix=VOIX, debit=DEBIT, hauteur=HAUTEUR):
+    com = edge_tts.Communicate(phrase, voix, rate=debit, pitch=hauteur, boundary='WordBoundary')
     mots, audio = [], bytearray()
     async for morceau in com.stream():
         if morceau['type'] == 'audio':
@@ -34,7 +36,8 @@ async def main():
     for vid in sys.argv[1:] or textes:
         dossier = os.path.join(ICI, 'voix', vid)
         os.makedirs(dossier, exist_ok=True)
-        res = [await une(dossier, i, p, VOIX_PAR_VIDEO.get(vid, VOIX)) for i, p in enumerate(textes[vid])]
+        reglage = VOIX_PAR_VIDEO.get(vid, (VOIX, DEBIT, HAUTEUR))
+        res = [await une(dossier, i, p, *reglage) for i, p in enumerate(textes[vid])]
         json.dump(res, open(os.path.join(ICI, 'voix', f'{vid}.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         print(vid, [len(r['mots']) for r in res])
 
