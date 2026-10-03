@@ -35,7 +35,7 @@
  * après — un contributeur qui l'apprend après coup a déjà cru son acte publié.
  */
 import { computed, onBeforeUnmount, ref, useId } from 'vue'
-import { analyserErreur, televerserMedia, type Media, type NatureMedia } from '@/lib/api'
+import { analyserErreur, proposerLeMedia, televerserMedia, type Media, type NatureMedia } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import ChampTexte from '@/components/base/ChampTexte.vue'
 import { TAILLE_MAX_PAR_DEFAUT, tailleLisible, verifierAvantEnvoi } from './medias'
@@ -137,6 +137,10 @@ async function envoyer(): Promise<void> {
           subjectId: personId,
           caption: envoi.legende,
         })
+        // Déposé par un membre, il attend : la demande « Ajout d'un document » le porte
+        // jusqu'à la file de l'administration. Sans elle, il restait orphelin, en
+        // attente pour toujours et absent des demandes (signalé le 03/10/2026).
+        await proposerLeMedia(media, personId)
         envoi.etat = 'reussi'
         emit('televerse', media)
       } catch (cause) {
