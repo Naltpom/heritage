@@ -66,6 +66,11 @@ services:
     App\Module\Core\Contract\AnnuaireDesMembresInterface:
         alias: App\Module\Core\Contract\AnnuaireVide
 
+    # La réciprocité des vivants (ADR 0016) — même mécanique, même défaut fermé que le
+    # cercle : sans `Membership`, aucune composante de naissance ni aucun portrait net.
+    App\Module\Core\Security\ReciprociteInterface:
+        alias: App\Module\Core\Security\ReciprociteFermee
+
     # Le calque « en attente » et les nœuds proposés — implémenté par `Proposal`, consommé
     # par `Tree`. Repli **fermé** : aucun calque, aucun nœud proposé. Ici l'enjeu n'est pas
     # une fuite mais une fonctionnalité qui disparaît (le demandeur ne voit plus sa

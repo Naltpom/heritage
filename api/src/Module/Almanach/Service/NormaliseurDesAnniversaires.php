@@ -76,7 +76,20 @@ final class NormaliseurDesAnniversaires
 
         foreach ($flux->evenements as $evenement) {
             $genre = $evenement->genre()->value;
-            $jour = JourAnniversaire::depuis($evenement->date);
+
+            if ($evenement->estReduite()) {
+                // La naissance d'un vivant vue partiellement (ADR 0016) : au calendrier
+                // seulement si le jour **et** le mois sont partagés des deux côtés. Sinon
+                // l'événement ne sort pas, et n'est pas non plus compté dans `sansJour` —
+                // le compte dirait qu'il existe.
+                $visibles = $evenement->composantesVisibles ?? [];
+                if (!isset($visibles['mois'], $visibles['jour'])) {
+                    continue;
+                }
+                $jour = ['mois' => $visibles['mois'], 'jour' => $visibles['jour']];
+            } else {
+                $jour = JourAnniversaire::depuis($evenement->date);
+            }
 
             if (null === $jour) {
                 ++$sansJour[$genre];
@@ -119,6 +132,27 @@ final class NormaliseurDesAnniversaires
      */
     private function enJson(EvenementDeLArbre $evenement, string $genre): array
     {
+        if ($evenement->estReduite()) {
+            // ADR 0016 : `annee` **absente** quand l'année n'est pas partagée — pas `0`, qui
+            // se lirait « il y a 2026 ans ». Le front n'affiche alors pas l'âge.
+            $visibles = $evenement->composantesVisibles ?? [];
+
+            return [
+                'cle' => $evenement->cle,
+                'genre' => $genre,
+                'type' => $evenement->type->value,
+                ...(isset($visibles['annee']) ? ['annee' => $visibles['annee']] : []),
+                'texte' => $evenement->texteVisible ?? '',
+                'lieu' => $evenement->date->getPlace(),
+                'sujets' => array_map(
+                    static fn (SujetDeLEvenement $sujet): array => $sujet->enJson(),
+                    $evenement->sujets,
+                ),
+                'familyId' => $evenement->familyId,
+                'libelle' => $this->flux->libelle($evenement),
+            ];
+        }
+
         return [
             'cle' => $evenement->cle,
             'genre' => $genre,

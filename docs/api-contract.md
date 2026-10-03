@@ -2109,6 +2109,66 @@ intérêt l'arbre ancien qu'on lui ouvre justement pour que l'attente ait du sen
 
 ---
 
+### 5.6 La réciprocité des vivants — naissance et portrait (ADR 0016)
+
+Un second filtre, **après** le cercle, sur la naissance et le portrait des vivants. Toutes
+les routes qui servent l'une ou l'autre l'appliquent au serveur ; rien de retenu ne sort.
+
+**Le bloc `birth` d'une fiche** — quand le lecteur ne voit pas toutes les composantes :
+
+```json
+{ "raw": null, "qualifier": "masquee", "min": null, "max": null,
+  "place": "Saule", "texte": "12 mars", "composantes": { "mois": 3, "jour": 12 } }
+```
+
+`masquee` n'existe que dans l'API (jamais en entrée). Le bloc est émis même pour une date
+inconnue. La fiche porte `naissanceModifiable` (`false` dès qu'une composante manque) ; une
+demande qui touche `birth` sur un tel vivant rend `422 naissance_masquee`. `ligneDates`, la
+`naissance` des proches, l'`etiquetteDates` du graphe (« n. 3/1985 · vivant·e »), la
+recherche, la chronologie, la carte et les statistiques ne portent que la date réduite.
+
+**`GET /api/anniversaires`** — la naissance d'un vivant n'y est que si le jour et le mois
+sont partagés ; `annee` est alors **absente** quand l'année ne l'est pas (`texte` :
+« 12 mars »). Les autres ne sont pas comptés dans `resume.sansJour`.
+
+**La charge de session** (§ 2.2) gagne :
+
+```json
+"partageNaissance": { "annee": true, "mois": true, "jour": false, "modifieLe": "2026-10-03T10:00:00+00:00" },
+"reciprocite": { "restrictionIgnoree": false, "photo": true }
+```
+
+`partageNaissance` est le choix du compte de la session (`null` sans rattachement) ;
+`reciprocite` vaut pour le lecteur effectif (le membre emprunté sous « voir comme »).
+
+**`PUT /api/session/partage-naissance`** — `{annee, mois, jour}` (booléens, absents = `false`)
+→ `200 {annee, mois, jour, modifieLe}`. `409 compte_non_rattache` sans rattachement,
+`409 vue_comme_membre_active` sous la bascule, `422` sur un type invalide. Journalisé
+(`partage_naissance`, source `profil`).
+
+**`POST /api/inscription/compte`** (§ 4.3) accepte `partageNaissance: {annee, mois, jour}`,
+facultatif (absent : rien n'est partagé, aucun choix n'est enregistré) ; erreurs de champ
+`partageNaissance.annee`… dans le `422` unique.
+
+**`PATCH /api/administration/utilisateurs/{id}`** accepte `ignoreRestrictionNaissance`
+(booléen, journalisé `restriction_naissance`) ; la charge d'un compte porte
+`ignoreRestrictionNaissance` et, dans `membre`, `partageNaissance`.
+
+**L'autorisation signée d'un vivant sans compte** — administrateurs seulement :
+
+| Route | Effet |
+|---|---|
+| `GET /api/administration/personnes/{id}/autorisation-naissance` | `{compteRattache, autorisation, historique}` |
+| `POST …/autorisation-naissance` (multipart `document`, `annee`, `mois`, `jour`, `note`) | `201` ; remplace et archive l'active ; `409 compte_rattache`, `422` défunt ou document refusé (PDF, JPEG, PNG, WebP, 10 Mo) |
+| `DELETE …/autorisation-naissance` | archive (`retiree`) ; `404` sans autorisation active |
+| `GET /api/administration/autorisations-naissance/{id}/document` | le document, `attachment`, `Cache-Control: no-store` |
+
+**Les médias** (§ 7) — une image dont le sujet est un vivant, demandée par un lecteur sans
+photo de lui, est servie **floue** par `/fichier` comme par `/vignette` (même JPEG, `ETag`
+`"f…"`). Sa charge porte `flou: true`, des URL suffixées `-f` (clé de cache, que le serveur
+ignore), `width`/`height` à `null`, et ni `sha256` ni `originalName`. Exceptions : le
+déposant, et l'administrateur devant une photo en attente de validation.
+
 ## 6. Propositions
 
 Module `Proposal`. **Un seul mécanisme** : modifier un champ, ajouter une personne, ajouter un

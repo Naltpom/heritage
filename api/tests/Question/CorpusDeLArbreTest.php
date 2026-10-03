@@ -176,12 +176,32 @@ final class CorpusDeLArbreTest extends TestCase
 
     /* ─────────────── Montage ─────────────── */
 
+    /**
+     * ADR 0016 : la naissance d'une personne **vivante** ne part jamais chez le tiers, même
+     * réduite à l'année — le corpus est commun à tous les lecteurs, la réciprocité ne s'y
+     * découpe pas.
+     */
+    public function testAucuneNaissanceDeVivantNeSort(): void
+    {
+        $corpus = (new CorpusDeLArbre())->pour([
+            $this->fiche(id: 1, nom: 'Prune Bréval', vivante: true, naissance: new UncertainDate(
+                '12 MAR 1985',
+                DateQualifier::Exacte,
+                new \DateTimeImmutable('1985-03-12'),
+                new \DateTimeImmutable('1985-03-12'),
+            )),
+        ]);
+
+        self::assertArrayNotHasKey('naissance', $corpus['personnes'][0]);
+        self::assertStringNotContainsString('1985', json_encode($corpus, \JSON_THROW_ON_ERROR));
+    }
+
     private function complete(): FicheEtudiee
     {
         return $this->fiche(
             id: 1,
             nom: 'Prune Bréval',
-            vivante: true,
+            vivante: false,
             naissance: new UncertainDate(
                 '1930',
                 DateQualifier::Annee,

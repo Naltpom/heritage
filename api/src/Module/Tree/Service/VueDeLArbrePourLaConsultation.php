@@ -54,6 +54,7 @@ final readonly class VueDeLArbrePourLaConsultation implements ArbrePourLaConsult
         private AdressesDArbresEnLigne $adresses,
         private ParenteDuLecteur $parentes,
         private NormaliseurDeRequete $requetes,
+        private NaissanceDuLecteur $naissances,
     ) {
     }
 
@@ -132,10 +133,13 @@ final readonly class VueDeLArbrePourLaConsultation implements ArbrePourLaConsult
      */
     private function evenementRetenu(Person $personne, string $evenement, array $motsDuLieu, ?int $anneeMin, ?int $anneeMax): ?UncertainDate
     {
+        // La naissance **vue par le lecteur** (ADR 0016) : chercher « né en 1985 » ne doit
+        // pas retrouver un vivant dont l'année n'est pas partagée — le filtre serait un oracle.
+        $naissance = $this->naissances->pour($personne, $this->vivants->estVivante($personne));
         $candidates = match ($evenement) {
-            'naissance' => [$personne->getBirth()],
+            'naissance' => [$naissance],
             'deces' => [$personne->getDeath()],
-            default => [$personne->getBirth(), $personne->getDeath()],
+            default => [$naissance, $personne->getDeath()],
         };
 
         foreach ($candidates as $date) {
@@ -203,8 +207,9 @@ final readonly class VueDeLArbrePourLaConsultation implements ArbrePourLaConsult
             (int) $personne->getId(),
             $personne->getDisplayName(),
             $personne->getSex(),
-            $this->vivants->estVivante($personne),
-            $personne->getBirth(),
+            $vivante = $this->vivants->estVivante($personne),
+            // ADR 0016 : la naissance d'un vivant passe par la réciprocité.
+            $this->naissances->pour($personne, $vivante),
             $personne->getDeath(),
         );
     }

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Tests\Assistant;
 
+use App\Module\Assistant\Service\QuotasDeLAssistant;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\DateQualifier;
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Service\CleDeRecherche;
+use App\Module\Core\Service\QuotasDUsage;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Membership\Entity\Member;
 use App\Module\Proposal\Entity\ChangeRequest;
@@ -19,8 +21,6 @@ use App\Tests\Assistant\Double\AccesAuModeleSimule;
 use App\Tests\Assistant\Double\ModeleScripte;
 use App\Tests\Proposal\CasDeTestDemandesHttp;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
-use App\Module\Assistant\Service\QuotasDeLAssistant;
-use App\Module\Core\Service\QuotasDUsage;
 use Symfony\Component\RateLimiter\LimiterInterface;
 
 /**
@@ -312,7 +312,10 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
         $trouvees = array_column($requetes[1]['charge']['contents'][2]['parts'][0]['functionResponse']['response']['personnes'], null, 'personId');
         self::assertFalse($trouvees[$this->marne]['confidentielle']);
         self::assertTrue($trouvees[$this->tuf]['confidentielle'], 'Le modèle voit Tuf — décision du commanditaire — et sait qu’il ne doit rien en citer.');
-        self::assertSame('12 avril 1990, Quimper', $trouvees[$this->tuf]['naissance'], 'Les outils lisent tout l’arbre.');
+        // ADR 0016 : les outils lisent tout l'arbre **à travers la réciprocité** — le
+        // lecteur ne partage rien, la date de naissance d'un vivant ne part donc pas chez
+        // le tiers ; le lieu, lui, n'est pas concerné.
+        self::assertSame('Quimper', $trouvees[$this->tuf]['naissance'], 'Les outils lisent l’arbre à travers la réciprocité.');
 
         // ── Le dépôt à blanc n'a rien écrit. ─────────────────────────────────────
         self::assertSame(0, $this->em()->getRepository(ChangeRequest::class)->count([]), 'Analyser ne dépose rien.');

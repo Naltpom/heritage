@@ -83,6 +83,7 @@ final readonly class ServiceDesMembres
         private AuditService $audit,
         private PortraitsDesComptes $portraits,
         private StockageDesMessagesVocaux $messagesVocaux,
+        private ConsentementDeNaissance $consentements,
     ) {
     }
 
@@ -147,6 +148,8 @@ final readonly class ServiceDesMembres
                 // `rattacherA()` et non une réflexion sur `personId` : le mutateur existe
                 // depuis l'inscription sans fiche, et il purge au passage la déclaration.
                 $membre->rattacherA($nouvelleFiche->id, $nouvelleFiche->libelle, MatchKind::ManuelAdmin);
+                // ADR 0016 : la fiche a désormais un compte, son choix seul compte.
+                $this->consentements->archiverPourRattachement($nouvelleFiche->id, $administrateur->getId());
             }
 
             $this->finaliserLActivation($membre, $utilisateur, $administrateur);
@@ -194,6 +197,7 @@ final readonly class ServiceDesMembres
 
         $nomDuVocal = $membre->getVoiceMessageName();
         $membre->rattacherA($personId, $personLabel, MatchKind::ManuelAdmin);
+        $this->consentements->archiverPourRattachement($personId, $administrateur->getId());
         $this->finaliserLActivation($membre, $utilisateur, $administrateur);
         // La transaction est celle de l'appelant, et aucun crochet ne dit ici quand elle
         // sera validée : le fichier part tout de suite. Si elle échouait ensuite, la ligne

@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\Tree;
 
 use App\Module\Core\Enum\Regime;
+use App\Module\Core\ValueObject\ComposantesDeDate;
 use App\Module\Tree\Serializer\EtagDuGraphe;
 use App\Module\Tree\Serializer\FabriqueDuCercle;
 use App\Module\Tree\Serializer\LecteurDeLArbre;
 use App\Module\Tree\Serializer\PersonneDuLecteur;
 use App\Module\Tree\Serializer\PopulationDeLArbre;
 use App\Module\Tree\Service\TreeFingerprint;
+use App\Tests\Core\Double\ReciprociteEnMemoire;
 use App\Tests\Tree\Double\AnnuaireEnMemoire;
 use App\Tests\Tree\Double\CalqueEnMemoire;
 use App\Tests\Tree\Double\CercleEnMemoire;
@@ -305,6 +307,25 @@ final class EtagDuGrapheTest extends TestCase
     }
 
     /**
+     * ADR 0016 : la réciprocité des vivants change les étiquettes de dates et les
+     * vignettes sans changer le cercle. Un `ETag` qui l'ignorerait servirait un `304` sur
+     * les dates d'hier à qui vient de cesser de partager — ou sur des photos floues à qui
+     * vient d'en déposer une.
+     */
+    public function testLaReciprociteEntreDansLETag(): void
+    {
+        $lecteur = new LecteurDeLArbre(42, 'Membre', false, Regime::Cercle);
+
+        $avant = $this->etags(reciprocite: new ReciprociteEnMemoire([11 => ComposantesDeDate::tout()]))->pour($lecteur);
+        $moins = $this->etags(reciprocite: new ReciprociteEnMemoire([11 => new ComposantesDeDate(annee: true)]))->pour($lecteur);
+        $sansPhoto = $this->etags(reciprocite: new ReciprociteEnMemoire([11 => ComposantesDeDate::tout()], photo: false))->pour($lecteur);
+
+        self::assertNotSame($avant, $moins, 'Un consentement réduit doit changer l’ETag.');
+        self::assertNotSame($avant, $sansPhoto, 'Perdre ou gagner sa photo doit changer l’ETag.');
+        self::assertSame($avant, $this->etags(reciprocite: new ReciprociteEnMemoire([11 => ComposantesDeDate::tout()]))->pour($lecteur));
+    }
+
+    /**
      * @param array<int, int> $personneParCompte le point de vue de chaque compte, quand le
      *                                           cas en a besoin — vide par défaut : un
      *                                           lecteur rattaché à personne regarde depuis
@@ -315,11 +336,12 @@ final class EtagDuGrapheTest extends TestCase
         ?CercleEnMemoire $cercle = null,
         array $personneParCompte = [],
         ?MiseEnPageEnMemoire $miseEnPage = null,
+        ?ReciprociteEnMemoire $reciprocite = null,
     ): EtagDuGraphe {
         return new EtagDuGraphe(
             $this->empreinteFigee(),
             $propositions ?? new CalqueEnMemoire(7),
-            new FabriqueDuCercle($cercle ?? new CercleEnMemoire(Regime::Cercle, [11, 12])),
+            new FabriqueDuCercle($cercle ?? new CercleEnMemoire(Regime::Cercle, [11, 12]), $reciprocite ?? new ReciprociteEnMemoire()),
             $this->populationFigee(),
             new PersonneDuLecteur(new AnnuaireEnMemoire($personneParCompte)),
             $miseEnPage ?? new MiseEnPageEnMemoire(),

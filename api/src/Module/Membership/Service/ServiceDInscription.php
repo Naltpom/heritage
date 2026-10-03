@@ -13,6 +13,7 @@ use App\Module\Core\Exception\TooManyRequestsException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Repository\UserRepository;
 use App\Module\Core\Service\AuditService;
+use App\Module\Core\ValueObject\ComposantesDeDate;
 use App\Module\Membership\Contract\PortraitsDesComptes;
 use App\Module\Membership\Entity\ClaimAttempt;
 use App\Module\Membership\Entity\Invitation;
@@ -116,6 +117,7 @@ final readonly class ServiceDInscription
         private AuditService $audit,
         private PortraitsDesComptes $portraits,
         private StockageDesMessagesVocaux $messagesVocaux,
+        private ConsentementDeNaissance $consentements,
     ) {
     }
 
@@ -293,6 +295,19 @@ final readonly class ServiceDInscription
             $champs['telephone'] = $refusTelephone;
         }
 
+        // Le partage de la date de naissance (ADR 0016) : facultatif — absent, rien n'est
+        // partagé et aucun choix n'est enregistré ; présent, c'est un choix explicite, même
+        // tout à `false`.
+        $partage = null;
+        if (\array_key_exists('partageNaissance', $corps) && null !== $corps['partageNaissance']) {
+            if (!\is_array($corps['partageNaissance'])) {
+                $champs['partageNaissance'] = 'Doit être un objet {annee, mois, jour}.';
+            } else {
+                [$partage, $refusDuPartage] = ConsentementDeNaissance::lire($corps['partageNaissance'], 'partageNaissance.');
+                $champs = [...$champs, ...$refusDuPartage];
+            }
+        }
+
         $declaration = null;
         $vocal = null;
 
@@ -329,7 +344,7 @@ final readonly class ServiceDInscription
         }
 
         if (null !== $declaration) {
-            return $this->creerLeCompteSansFiche($invitation, $email, $motDePasse, $declaration, $telephone, $vocal);
+            return $this->creerLeCompteSansFiche($invitation, $email, $motDePasse, $declaration, $telephone, $vocal, $partage);
         }
 
         \assert(\is_string($choix));
@@ -377,7 +392,7 @@ final readonly class ServiceDInscription
         // s'écrivent dans la même transaction : un compte sans usage compté, ou
         // l'inverse, n'existe jamais.
         /** @var Member $membre */
-        $membre = $this->em->wrapInTransaction(function () use ($invitation, $utilisateur, $email, $personne, $nature, $actif): Member {
+        $membre = $this->em->wrapInTransaction(function () use ($invitation, $utilisateur, $email, $personne, $nature, $actif, $partage): Member {
             $this->em->refresh($invitation, LockMode::PESSIMISTIC_WRITE);
 
             if (null !== $invitation->getRevokedAt() || $invitation->estEpuisee() || $invitation->estEchue()) {
@@ -392,6 +407,9 @@ final readonly class ServiceDInscription
 
             $membre = new Member($identifiant, $email, $personne->id, $personne->libelle, $nature);
             $membre->setInvitation($invitation);
+            $this->poserLePartage($membre, $partage);
+            // Un compte rattaché à la fiche : son choix seul compte désormais.
+            $this->consentements->archiverPourRattachement($personne->id);
 
             if ($actif) {
                 // Activation automatique : pas d'auteur, `activated_by_user_id` reste nul
@@ -402,6 +420,8 @@ final readonly class ServiceDInscription
             $this->em->persist($membre);
 
             $invitation->enregistrerUnUsage($identifiant, $email);
+
+            $this->journaliserLePartage($membre, $partage, $utilisateur);
 
             $this->audit->enregistrer(
                 AuditAction::InvitationUtilisee,
@@ -477,6 +497,7 @@ final readonly class ServiceDInscription
         DeclarationDeFamille $declaration,
         ?string $telephone = null,
         ?MessageVocalDeDeclaration $vocal = null,
+        ?ComposantesDeDate $partage = null,
     ): User {
         $utilisateur = new User($email);
         $utilisateur
@@ -491,7 +512,7 @@ final readonly class ServiceDInscription
         $nomDuVocal = null !== $vocal ? $this->messagesVocaux->deposer($vocal->chemin, $vocal->mime) : null;
 
         try {
-            $membre = $this->creerLeMembreSansFiche($invitation, $utilisateur, $email, $declaration, $vocal, $nomDuVocal);
+            $membre = $this->creerLeMembreSansFiche($invitation, $utilisateur, $email, $declaration, $vocal, $nomDuVocal, $partage);
         } catch (\Throwable $echec) {
             $this->messagesVocaux->supprimer($nomDuVocal);
 
@@ -510,9 +531,10 @@ final readonly class ServiceDInscription
         DeclarationDeFamille $declaration,
         ?MessageVocalDeDeclaration $vocal,
         ?string $nomDuVocal,
+        ?ComposantesDeDate $partage = null,
     ): Member {
         /** @var Member $membre */
-        $membre = $this->em->wrapInTransaction(function () use ($invitation, $utilisateur, $email, $declaration, $vocal, $nomDuVocal): Member {
+        $membre = $this->em->wrapInTransaction(function () use ($invitation, $utilisateur, $email, $declaration, $vocal, $nomDuVocal, $partage): Member {
             $this->em->refresh($invitation, LockMode::PESSIMISTIC_WRITE);
 
             if (null !== $invitation->getRevokedAt() || $invitation->estEpuisee() || $invitation->estEchue()) {
@@ -539,9 +561,13 @@ final readonly class ServiceDInscription
                 $membre->joindreUnMessageVocal($nomDuVocal, $vocal->mime, $vocal->taille, $vocal->secondes);
             }
 
+            $this->poserLePartage($membre, $partage);
+
             $this->em->persist($membre);
 
             $invitation->enregistrerUnUsage($identifiant, $email);
+
+            $this->journaliserLePartage($membre, $partage, $utilisateur);
 
             $this->audit->enregistrer(
                 AuditAction::InvitationUtilisee,
@@ -561,6 +587,35 @@ final readonly class ServiceDInscription
         });
 
         return $membre;
+    }
+
+    private function poserLePartage(Member $membre, ?ComposantesDeDate $partage): void
+    {
+        if (null !== $partage) {
+            $membre->partagerLaNaissance($partage, 'inscription');
+        }
+    }
+
+    /**
+     * La preuve du consentement donné à l'inscription — le compte est l'acteur : il n'y a
+     * pas encore de session.
+     */
+    private function journaliserLePartage(Member $membre, ?ComposantesDeDate $partage, User $utilisateur): void
+    {
+        if (null === $partage) {
+            return;
+        }
+
+        $this->em->flush();
+
+        $this->audit->enregistrer(
+            AuditAction::PartageNaissance,
+            'membre',
+            null !== $membre->getId() ? (string) $membre->getId() : null,
+            $membre->getUserEmail(),
+            ['avant' => null, 'apres' => $partage->enTableau(), 'source' => 'inscription'],
+            $utilisateur,
+        );
     }
 
     /**

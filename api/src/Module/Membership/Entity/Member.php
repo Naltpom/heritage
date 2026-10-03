@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Membership\Entity;
 
+use App\Module\Core\ValueObject\ComposantesDeDate;
 use App\Module\Membership\Enum\MatchKind;
 use App\Module\Membership\Enum\MemberStatus;
 use App\Module\Membership\Repository\MemberRepository;
@@ -205,6 +206,33 @@ class Member
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $attachmentSuggestionAt = null;
+
+    // ── Le partage de la date de naissance (ADR 0016, réciprocité des vivants) ─────
+    //
+    // Ce que le titulaire consent à montrer de sa naissance aux autres membres —
+    // l'année, le mois, le jour, indépendamment. C'est aussi ce qu'il verra des autres :
+    // `Service\Reciprocite` prend l'intersection. Tout à `false` par défaut, y compris pour
+    // les comptes antérieurs à la fonctionnalité : on ne présume pas un consentement.
+    //
+    // `birthShareUpdatedAt` et `birthShareSource` sont la **trace** du dernier choix
+    // (`ck_mbr_member_partage_trace`) ; le détail de chaque changement est au journal
+    // d'audit, avec son auteur.
+
+    #[ORM\Column(options: ['default' => false])]
+    private bool $birthShareYear = false;
+
+    #[ORM\Column(options: ['default' => false])]
+    private bool $birthShareMonth = false;
+
+    #[ORM\Column(options: ['default' => false])]
+    private bool $birthShareDay = false;
+
+    #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
+    private ?\DateTimeImmutable $birthShareUpdatedAt = null;
+
+    /** `inscription` ou `profil` — d'où vient le dernier choix. */
+    #[ORM\Column(length: 16, nullable: true)]
+    private ?string $birthShareSource = null;
 
     public function __construct(
         int $userId,
@@ -590,6 +618,34 @@ class Member
         $this->activatedAt = $le ?? new \DateTimeImmutable();
         $this->activatedByUserId = $parUserId;
         $this->updatedAt = $this->activatedAt;
+
+        return $this;
+    }
+
+    public function getPartageDeNaissance(): ComposantesDeDate
+    {
+        return new ComposantesDeDate($this->birthShareYear, $this->birthShareMonth, $this->birthShareDay);
+    }
+
+    public function getPartageModifieLe(): ?\DateTimeImmutable
+    {
+        return $this->birthShareUpdatedAt;
+    }
+
+    public function getPartageSource(): ?string
+    {
+        return $this->birthShareSource;
+    }
+
+    /** @param 'inscription'|'profil' $source */
+    public function partagerLaNaissance(ComposantesDeDate $partage, string $source, ?\DateTimeImmutable $le = null): self
+    {
+        $this->birthShareYear = $partage->annee;
+        $this->birthShareMonth = $partage->mois;
+        $this->birthShareDay = $partage->jour;
+        $this->birthShareUpdatedAt = $le ?? new \DateTimeImmutable();
+        $this->birthShareSource = $source;
+        $this->updatedAt = $this->birthShareUpdatedAt;
 
         return $this;
     }

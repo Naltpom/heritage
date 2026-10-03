@@ -231,9 +231,19 @@ abstract class CasDeTestAlmanach extends WebTestCase
      * voit que des personnes décédées, et il n'a pas de `Member` — d'où l'absence de
      * rattachement dans ce cas.
      */
-    protected function connecterUnMembre(UserStatus $statut = UserStatus::Actif): void
+    /**
+     * @param bool $voitLesNaissances le membre porte l'option « ignorer la restriction de
+     *                                date de naissance » (ADR 0016) — pour les cas qui
+     *                                exercent le cercle et non la réciprocité
+     */
+    protected function connecterUnMembre(UserStatus $statut = UserStatus::Actif, bool $voitLesNaissances = false): void
     {
         $utilisateur = $this->creerUtilisateur('membre@example.test', statut: $statut);
+
+        if ($voitLesNaissances) {
+            $utilisateur->setIgnoreBirthRestriction(true);
+            $this->em()->flush();
+        }
 
         if (UserStatus::Actif === $statut) {
             $this->creerMembre($utilisateur, self::LECTEUR, 'Natron Romarin');

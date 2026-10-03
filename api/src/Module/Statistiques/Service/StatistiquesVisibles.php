@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Module\Statistiques\Service;
 
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
+use App\Module\Core\Security\ReciprociteInterface;
+use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Statistiques\Contract\PersonneDuReleve;
+use App\Module\Statistiques\Contract\ReleveDeLArbre;
 use Psr\Clock\ClockInterface;
 
 /**
@@ -44,6 +47,9 @@ final class StatistiquesVisibles
         private readonly ReleveEnCache $releve,
         private readonly CercleDeVisibiliteInterface $cercle,
         private readonly ClockInterface $horloge,
+        // ADR 0016 : âges, doyens et décennies des vivants ne se calculent que sur les
+        // composantes de naissance que le lecteur a le droit de voir.
+        private readonly ReciprociteInterface $reciprocite,
     ) {
     }
 
@@ -54,7 +60,49 @@ final class StatistiquesVisibles
         $identifiants = array_map(static fn (PersonneDuReleve $p): int => $p->id, $releve->personnes);
         $visibles = array_fill_keys($this->cercle->filtrerPersonnes($identifiants), true);
 
-        return new Population($releve, $visibles, $this->horloge->now());
+        return new Population($this->aTraversLaReciprocite($releve), $visibles, $this->horloge->now());
+    }
+
+    /**
+     * Le relevé, la naissance des vivants **dégradée** à ce que la réciprocité accorde
+     * (ADR 0016) — sans l'année, une date inconnue. Le cache reste partagé : le filtre
+     * s'applique après sa lecture, comme le cercle.
+     */
+    private function aTraversLaReciprocite(ReleveDeLArbre $releve): ReleveDeLArbre
+    {
+        $personnes = [];
+        $change = false;
+
+        foreach ($releve->personnes as $p) {
+            $permises = $p->vivant ? $this->reciprocite->naissance($p->id) : null;
+
+            if (null === $permises || $permises->estComplete()) {
+                $personnes[] = $p;
+                continue;
+            }
+
+            $change = true;
+            $personnes[] = new PersonneDuReleve(
+                $p->id,
+                $p->displayName,
+                $p->prenoms,
+                $p->nom,
+                $p->sex,
+                $p->naissance->reduite($permises) ?? UncertainDate::inconnue($p->naissance->getPlace()),
+                $p->deces,
+                $p->vivant,
+                $p->decede,
+                $p->branch,
+                $p->generation,
+                $p->bestQuay,
+                $p->citationCount,
+                $p->creeLe,
+            );
+        }
+
+        return $change
+            ? new ReleveDeLArbre($personnes, $releve->familles, $releve->faits, $releve->appuis, $releve->lieux, $releve->racineId)
+            : $releve;
     }
 
     /**

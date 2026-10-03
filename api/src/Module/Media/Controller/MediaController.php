@@ -25,6 +25,8 @@ use App\Module\Media\Security\LecteurMedia;
 use App\Module\Media\Service\AdresseDuMedia;
 use App\Module\Media\Service\CatalogueMedia;
 use App\Module\Media\Service\CircuitDeValidationMedia;
+use App\Module\Media\Service\FlouDesPortraits;
+use App\Module\Media\Service\GenerateurDeFlou;
 use App\Module\Media\Service\NormaliseurMedia;
 use App\Module\Media\Service\PivotementMedia;
 use App\Module\Media\Service\QuotasDesMedias;
@@ -93,6 +95,9 @@ final class MediaController extends AbstractController
         private readonly SuppressionMedia $suppression,
         private readonly NormaliseurMedia $normaliseur,
         private readonly StockageMedia $stockage,
+        // La réciprocité des portraits (ADR 0016) : qui reçoit la variante floue, et laquelle.
+        private readonly FlouDesPortraits $flous,
+        private readonly GenerateurDeFlou $generateurDeFlou,
         /**
          * 20 dépôts par heure et par compte (§ 1.9 du contrat) — **sauf pour un
          * administrateur**, qui en est exempté depuis le 17 septembre 2026. La décision,
@@ -321,6 +326,10 @@ final class MediaController extends AbstractController
         $lecteur = $this->lecteur();
         $media = $this->voir($id, $lecteur);
 
+        if ($this->flous->doitFlouter($media, $lecteur)) {
+            return $this->repondre($requete, $this->flou($media));
+        }
+
         return $this->repondre(
             $requete,
             $this->octets(
@@ -335,7 +344,15 @@ final class MediaController extends AbstractController
     #[Route('/{id}/vignette', name: 'media_vignette', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function vignette(int $id, Request $requete): Response
     {
-        $media = $this->voir($id, $this->lecteur());
+        $lecteur = $this->lecteur();
+        $media = $this->voir($id, $lecteur);
+
+        // Même fichier flou que `/fichier` : un lecteur sans photo n'obtient d'un vivant
+        // ni la vignette nette, ni l'original par l'autre route.
+        if ($this->flous->doitFlouter($media, $lecteur)) {
+            return $this->repondre($requete, $this->flou($media));
+        }
+
         $vignette = $media->getThumbnailName();
 
         if (null === $vignette) {
@@ -359,6 +376,25 @@ final class MediaController extends AbstractController
                 'v'.$media->getSha256(),
             ),
         );
+    }
+
+    /**
+     * La variante **floue** d'une photo de vivant (ADR 0016) — jamais l'original, même en
+     * cas d'échec : une image illisible rend `404`.
+     *
+     * L'`ETag` est préfixé (`f…`) : le navigateur ne confond pas les octets flous avec les
+     * nets qu'il aurait en cache, et un `304` n'est jamais rendu pour l'autre variante. Pas
+     * de nom d'origine : il ne doit rien dire de plus que l'image.
+     */
+    private function flou(Media $media): Response
+    {
+        $chemin = $this->generateurDeFlou->pour($media->getStorageName(), $media->getMimeType());
+
+        if (null === $chemin) {
+            throw new NotFoundException();
+        }
+
+        return $this->octets($chemin, 'image/jpeg', null, 'f'.$media->getSha256());
     }
 
     /**

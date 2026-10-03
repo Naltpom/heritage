@@ -46,6 +46,7 @@ final readonly class VueDeLArbrePourLAssistant implements ArbrePourLAssistant
         private LectureDeLArbre $lecture,
         private NormaliseurDeRequete $requetes,
         private EtatVivant $vivants,
+        private NaissanceDuLecteur $naissances,
     ) {
     }
 
@@ -192,8 +193,9 @@ final readonly class VueDeLArbrePourLAssistant implements ArbrePourLAssistant
             (int) $personne->getId(),
             $personne->getDisplayName(),
             $personne->getSex(),
-            $this->vivants->estVivante($personne),
-            $personne->getBirth(),
+            $vivante = $this->vivants->estVivante($personne),
+            // ADR 0016 : la naissance d'un vivant passe par la réciprocité.
+            $this->naissances->pour($personne, $vivante),
             $personne->getDeath(),
             $parents,
             $conjoints,

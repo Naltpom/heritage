@@ -73,6 +73,20 @@ enum AuditAction: string
     case IncarnationFin = 'incarnation_fin';
 
     /**
+     * La réciprocité des vivants (ADR 0016) — **la preuve du consentement** RGPD.
+     *
+     * `partage_naissance` : un compte change ce qu'il partage de sa date de naissance
+     * (`changes` : avant, après, source `inscription` ou `profil`). L'incarnant, s'il y en
+     * a un, est posé comme sur toute ligne écrite pendant une incarnation.
+     * `autorisation_naissance` : un administrateur dépose ou retire l'autorisation signée
+     * d'un vivant sans compte (`changes` : composantes, empreinte du document).
+     * `restriction_naissance` : l'option « ignorer la restriction » d'un compte change.
+     */
+    case PartageNaissance = 'partage_naissance';
+    case AutorisationNaissance = 'autorisation_naissance';
+    case RestrictionNaissance = 'restriction_naissance';
+
+    /**
      * Un appel sortant au modèle de langage qui formule les questions (ADR 0008).
      *
      * **C'est le seul endroit du produit où des données de personnes vivantes quittent

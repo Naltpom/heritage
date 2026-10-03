@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Tree\Serializer;
 
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
+use App\Module\Core\Security\ReciprociteInterface;
 
 /**
  * Obtient le {@see CercleDuLecteur} de la requête en cours — **le seul endroit de `Tree`
@@ -43,12 +44,16 @@ final class FabriqueDuCercle
     /** @var array<string, CercleDuLecteur> mémorisé pour la durée de la requête */
     private array $memoire = [];
 
-    public function __construct(private readonly CercleDeVisibiliteInterface $cercle)
-    {
+    public function __construct(
+        private readonly CercleDeVisibiliteInterface $cercle,
+        // La réciprocité des vivants (ADR 0016) : le second filtre, sur la naissance et le
+        // portrait. Même contrat implicite, même défaut fermé.
+        private readonly ReciprociteInterface $reciprocite,
+    ) {
     }
 
     public function pour(LecteurDeLArbre $lecteur): CercleDuLecteur
     {
-        return $this->memoire[$lecteur->cle()] ??= CercleDuLecteur::delegue($this->cercle);
+        return $this->memoire[$lecteur->cle()] ??= CercleDuLecteur::delegue($this->cercle, $this->reciprocite);
     }
 }

@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Tests\Membership;
 
+use App\Module\Core\Entity\AuditLog;
+use App\Module\Core\Enum\AuditAction;
 use App\Module\Core\Enum\UserStatus;
 use App\Module\Core\Repository\NotificationRepository;
 use App\Module\Core\Repository\UserRepository;
+use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Enum\InvitationStatus;
 use App\Module\Membership\Enum\MatchKind;
 use App\Module\Membership\Enum\MemberStatus;
@@ -28,6 +31,57 @@ use App\Tests\Membership\Double\ArbreEnMemoire;
  */
 final class InscriptionTest extends CasDeTestMembership
 {
+    /**
+     * ADR 0016 : le partage de la date de naissance se choisit **à l'inscription**, est
+     * posé sur le rattachement, et laisse sa preuve au journal — le compte en est l'acteur.
+     */
+    public function testLePartageDeLaNaissanceSeChoisitALInscription(): void
+    {
+        $administrateur = $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
+        [, $jeton] = $this->creerInvitation($administrateur, ArbreFamilial::EGO, 'Natron Romarin');
+        $reference = $this->rattacher($jeton, 'Romarin', 'Natron', '1980-07-27');
+
+        $this->requete('POST', '/api/inscription/compte', [
+            'jeton' => $jeton,
+            'choix' => $reference,
+            'email' => 'natron@example.net',
+            'password' => 'un-mot-de-passe-de-douze-signes',
+            'partageNaissance' => ['annee' => false, 'mois' => true, 'jour' => true],
+        ]);
+
+        self::assertSame(201, $this->client->getResponse()->getStatusCode());
+        self::assertSame(
+            ['annee' => false, 'mois' => true, 'jour' => true],
+            array_intersect_key($this->charge()['partageNaissance'], array_flip(['annee', 'mois', 'jour'])),
+        );
+
+        $membre = $this->em()->getRepository(Member::class)->findOneBy(['personId' => ArbreFamilial::EGO]);
+        self::assertNotNull($membre);
+        self::assertSame('inscription', $membre->getPartageSource());
+
+        $preuve = $this->em()->getRepository(AuditLog::class)->findBy(['action' => AuditAction::PartageNaissance]);
+        self::assertCount(1, $preuve);
+        self::assertSame('natron@example.net', $preuve[0]->getActorEmail());
+    }
+
+    public function testUnPartageMalFormeALInscriptionEstUneErreurDeChamp(): void
+    {
+        $administrateur = $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
+        [, $jeton] = $this->creerInvitation($administrateur, ArbreFamilial::EGO, 'Natron Romarin');
+        $reference = $this->rattacher($jeton, 'Romarin', 'Natron', '1980-07-27');
+
+        $this->requete('POST', '/api/inscription/compte', [
+            'jeton' => $jeton,
+            'choix' => $reference,
+            'email' => 'natron@example.net',
+            'password' => 'un-mot-de-passe-de-douze-signes',
+            'partageNaissance' => ['annee' => 'oui peut-être'],
+        ]);
+
+        self::assertSame(422, $this->client->getResponse()->getStatusCode());
+        self::assertArrayHasKey('partageNaissance.annee', $this->charge()['erreur']['champs']);
+    }
+
     /** Le cas nominal : l'administrateur a pré-lié, le candidat confirme sa date. */
     public function testLeParcoursPreLieActiveLeCompteImmediatement(): void
     {
@@ -50,7 +104,7 @@ final class InscriptionTest extends CasDeTestMembership
         // « C'est exactement la charge de session du § 2.2 : une seule forme à implémenter
         // côté front, un seul magasin à alimenter. »
         self::assertSame(
-            ['utilisateur', 'membre', 'cercle', 'voirComme', 'incarnation', 'demandesEnAttente', 'portrait'],
+            ['utilisateur', 'membre', 'cercle', 'voirComme', 'incarnation', 'demandesEnAttente', 'portrait', 'partageNaissance', 'reciprocite'],
             array_keys($charge),
         );
         self::assertIsArray($charge['utilisateur']);

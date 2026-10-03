@@ -22,6 +22,13 @@ interface PortraitsDesComptes
     /** @return array{mediaId: int, url: string, vignetteUrl: string}|null le portrait en attente du compte */
     public function portraitEnAttente(int $userId): ?array;
 
+    /**
+     * Le compte a-t-il une photo de lui — portrait de sa fiche actif ou en attente, ou
+     * portrait de compte en attente ? C'est la condition de la réciprocité des portraits
+     * (ADR 0016) : sans photo de soi, les portraits des vivants sont servis floutés.
+     */
+    public function aUnePhoto(int $userId, ?int $personId): bool;
+
     /** Déplace le portrait en attente sur la fiche et le valide (il devient le portrait actif). Rend false s'il n'y en a pas. */
     public function rattacherALaFiche(int $userId, int $personId, string $personLabel): bool;
 

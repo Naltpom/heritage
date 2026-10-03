@@ -70,17 +70,17 @@ final class DetectionDesLacunesTest extends TestCase
      */
     public function testLeLieuNEstDemandeQueSurUnEvenementDate(): void
     {
-        $sansDate = $this->naturesPour($this->fiche(id: 1));
+        $sansDate = $this->naturesPour($this->fiche(id: 1, vivante: false, deces: $this->annee(1990)));
 
         self::assertContains(NatureDeLacune::DateDeNaissanceInconnue, $sansDate);
         self::assertNotContains(NatureDeLacune::LieuDeNaissanceInconnu, $sansDate);
 
-        $dateeSansLieu = $this->naturesPour($this->fiche(id: 1, naissance: $this->annee(1950)));
+        $dateeSansLieu = $this->naturesPour($this->fiche(id: 1, vivante: false, naissance: $this->annee(1950), deces: $this->annee(1990)));
 
         self::assertNotContains(NatureDeLacune::DateDeNaissanceInconnue, $dateeSansLieu);
         self::assertContains(NatureDeLacune::LieuDeNaissanceInconnu, $dateeSansLieu);
 
-        $complete = $this->naturesPour($this->fiche(id: 1, naissance: $this->annee(1950, 'Saule')));
+        $complete = $this->naturesPour($this->fiche(id: 1, vivante: false, naissance: $this->annee(1950, 'Saule'), deces: $this->annee(1990)));
 
         self::assertNotContains(NatureDeLacune::LieuDeNaissanceInconnu, $complete);
     }
@@ -101,7 +101,7 @@ final class DetectionDesLacunesTest extends TestCase
 
         self::assertNotContains(
             NatureDeLacune::DateDeNaissanceInconnue,
-            $this->naturesPour($this->fiche(id: 1, naissance: $fourchette)),
+            $this->naturesPour($this->fiche(id: 1, vivante: false, naissance: $fourchette, deces: $this->annee(1990))),
         );
     }
 
@@ -115,7 +115,7 @@ final class DetectionDesLacunesTest extends TestCase
 
         self::assertContains(
             NatureDeLacune::DateDeNaissanceInconnue,
-            $this->naturesPour($this->fiche(id: 1, naissance: $illisible)),
+            $this->naturesPour($this->fiche(id: 1, vivante: false, naissance: $illisible, deces: $this->annee(1990))),
         );
     }
 
@@ -134,6 +134,21 @@ final class DetectionDesLacunesTest extends TestCase
 
         self::assertNotContains(NatureDeLacune::DateDeDecesInconnue, $natures);
         self::assertNotContains(NatureDeLacune::LieuDeDecesInconnu, $natures);
+    }
+
+    /**
+     * ADR 0016 : on ne demande **jamais** la naissance d'une personne vivante — ni sa date,
+     * ni son lieu. La question dirait si la date est connue, à qui ne la partage pas, et la
+     * réponse collecterait la donnée même que la réciprocité protège.
+     */
+    public function testAucuneQuestionDeNaissanceSurUnePersonneVivante(): void
+    {
+        foreach ([null, $this->annee(1960)] as $naissance) {
+            $natures = $this->naturesPour($this->fiche(id: 1, vivante: true, naissance: $naissance));
+
+            self::assertNotContains(NatureDeLacune::DateDeNaissanceInconnue, $natures);
+            self::assertNotContains(NatureDeLacune::LieuDeNaissanceInconnu, $natures);
+        }
     }
 
     public function testLeDecesDUnePersonneDecedeeEstDemande(): void

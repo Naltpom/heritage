@@ -53,6 +53,7 @@ final readonly class ContributeurDeSession implements SessionPayloadContributorI
         private MemberRepository $membres,
         private CercleDeVisibilite $cercle,
         private ReglagesDeMembership $reglages,
+        private Reciprocite $reciprocite,
     ) {
     }
 
@@ -65,6 +66,18 @@ final readonly class ContributeurDeSession implements SessionPayloadContributorI
         return [
             'membre' => null !== $membre ? $this->membre($membre) : null,
             'cercle' => $this->cercle(),
+            // ADR 0016. Le choix **du compte de la session** — celui que l'écran « Mon compte »
+            // modifie —, `null` sans rattachement.
+            'partageNaissance' => null !== $membre ? [
+                ...$membre->getPartageDeNaissance()->enTableau(),
+                'modifieLe' => $membre->getPartageModifieLe()?->format(\DateTimeInterface::ATOM),
+            ] : null,
+            // Et ce qui s'applique **au lecteur effectif** (le membre emprunté sous la
+            // bascule) : l'option d'administration, et s'il a une photo de lui.
+            'reciprocite' => [
+                'restrictionIgnoree' => $this->reciprocite->restrictionIgnoree(),
+                'photo' => $this->reciprocite->lecteurAUnePhoto(),
+            ],
         ];
     }
 

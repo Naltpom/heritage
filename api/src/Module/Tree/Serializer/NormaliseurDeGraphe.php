@@ -7,9 +7,12 @@ namespace App\Module\Tree\Serializer;
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
 use App\Module\Core\Contract\ProjectionEnAttente;
 use App\Module\Core\Enum\Branch;
+use App\Module\Core\Enum\DateQualifier;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
+use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Tree\Enum\ParenteDansLArbre;
 use App\Module\Tree\Service\ArbreVuDepuis;
+use App\Module\Tree\Service\EtiquetteDeDateGedcom;
 use App\Module\Tree\Service\MesureDeFiche;
 use App\Module\Tree\Service\PlacementPartage;
 use App\Module\Tree\Service\ProjecteurDePlacement;
@@ -96,6 +99,7 @@ final readonly class NormaliseurDeGraphe
         private Connection $connexion,
         private ArbreVuDepuis $arbre,
         private MesureDeFiche $mesure = new MesureDeFiche(),
+        private EtiquetteDeDateGedcom $etiquettes = new EtiquetteDeDateGedcom(),
     ) {
     }
 
@@ -194,7 +198,7 @@ final readonly class NormaliseurDeGraphe
                 'places' => \count($projection->noeuds) - \count($nonPlaces),
                 'nonPlaces' => $nonPlaces,
             ],
-            'noeuds' => $this->noeuds($placement, $placables, $proposesParId, $libelles, $parentes, $renommage, $cercle, $avecImage, $vignettes),
+            'noeuds' => $this->noeuds($placement, $placables, $proposesParId, $libelles, $parentes, $renommage, $cercle, $avecImage, $vignettes, $this->naissancesReduites($placables, $cercle)),
             'aretes' => $this->aretes($placement, $renommage),
         ];
     }
@@ -262,10 +266,11 @@ final readonly class NormaliseurDeGraphe
      * @param array<string, PersonnePlacable>                                                                                                                   $placables
      * @param array<string, NoeudProposePlacable>                                                                                                               $proposes
      * @param array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, bool>} $libelles
-     * @param array<int, array{parente: ParenteDansLArbre, pont: string|null}>                                                                                $parentes
+     * @param array<int, array{parente: ParenteDansLArbre, pont: string|null}>                                                                                  $parentes
      * @param array<string, string>                                                                                                                             $renommage
      * @param array<int, true>                                                                                                                                  $avecImage
-     * @param array<int, string>                                                                                                                                $vignettes personne visible → URL de la vignette de son portrait
+     * @param array<int, string>                                                                                                                                $vignettes          personne visible → URL de la vignette de son portrait
+     * @param array<int, string>                                                                                                                                $naissancesReduites vivant vu partiellement → sa naissance compacte réduite (ADR 0016)
      *
      * @return list<array<string, mixed>>
      */
@@ -279,6 +284,7 @@ final readonly class NormaliseurDeGraphe
         CercleDuLecteur $cercle,
         array $avecImage,
         array $vignettes,
+        array $naissancesReduites = [],
     ): array {
         $sortie = [];
 
@@ -300,7 +306,7 @@ final readonly class NormaliseurDeGraphe
             $base = IdentifiantDeNoeud::identifiantBase($noeud->id);
 
             if (IdentifiantDeNoeud::estPersonne($noeud->id) && null !== $base) {
-                $sortie[] = $this->noeudDePersonne($noeud, $base, $placables[$noeud->id] ?? null, $libelles['personnes'][$base] ?? null, $parentes[$base] ?? null, $cercle, $avecImage, $vignettes);
+                $sortie[] = $this->noeudDePersonne($noeud, $base, $placables[$noeud->id] ?? null, $libelles['personnes'][$base] ?? null, $parentes[$base] ?? null, $cercle, $avecImage, $vignettes, $naissancesReduites[$base] ?? null);
 
                 continue;
             }
@@ -343,6 +349,7 @@ final readonly class NormaliseurDeGraphe
         CercleDuLecteur $cercle,
         array $avecImage,
         array $vignettes,
+        ?string $naissanceReduite = null,
     ): array {
         // **L'état vivant est celui du jeu de placement**, pas un second calcul. C'est
         // celui sur lequel `w` a été mesurée ; en recalculer un ici ouvrirait la porte à
@@ -434,7 +441,16 @@ final readonly class NormaliseurDeGraphe
         // constante « vivant·e ».
         // La ligne AFFICHÉE — naissance des vivants comprise —, celle sur laquelle
         // l'affinage a remesuré `w`. `ligneDates()` reste ce que le moteur mesure.
-        $charge['etiquetteDates'] = null !== $placable ? $this->mesure->ligneDatesAffichee($placable) : '—';
+        //
+        // Réciprocité des vivants (ADR 0016) : la naissance d'un vivant dont le lecteur ne
+        // voit pas tout est rendue depuis la date **dégradée** — jamais depuis
+        // `PersonnePlacable::$nais`, qui vient de `raw` et porte toutes les composantes. La
+        // largeur ne bouge pas : celle d'un vivant est une constante.
+        $charge['etiquetteDates'] = match (true) {
+            null !== $naissanceReduite => '' !== $naissanceReduite ? 'n. '.$naissanceReduite.' · vivant·e' : 'vivant·e',
+            null !== $placable => $this->mesure->ligneDatesAffichee($placable),
+            default => '—',
+        };
         $charge['bestQuay'] = $libelle['bestQuay'] ?? null;
         $charge['citationCount'] = $libelle['citationCount'] ?? 0;
         $charge['avecImage'] = isset($avecImage[$personneId]);
@@ -446,6 +462,63 @@ final readonly class NormaliseurDeGraphe
         }
 
         return $charge;
+    }
+
+    /**
+     * La naissance **réduite** des vivants dont le lecteur ne voit pas toutes les
+     * composantes (ADR 0016), sous la forme compacte : « 1985 », « 3/1985 », « 12.3 », ou
+     * la chaîne vide. Les vivants vus en entier, et les défunts, n'y figurent pas : leur
+     * étiquette reste celle du moteur.
+     *
+     * Une requête pour tous les vivants concernés, sur les **bornes** — `raw` n'est pas lu.
+     *
+     * @param array<string, PersonnePlacable> $placables
+     *
+     * @return array<int, string>
+     */
+    private function naissancesReduites(array $placables, CercleDuLecteur $cercle): array
+    {
+        $permises = [];
+
+        foreach ($placables as $id => $placable) {
+            $base = IdentifiantDeNoeud::estPersonne($id) ? IdentifiantDeNoeud::identifiantBase($id) : null;
+
+            if (null === $base || !$placable->vivant) {
+                continue;
+            }
+
+            $partage = $cercle->naissance($base, true);
+
+            if (!$partage->estComplete()) {
+                $permises[$base] = $partage;
+            }
+        }
+
+        if ([] === $permises) {
+            return [];
+        }
+
+        $lignes = $this->connexion->fetchAllAssociative(
+            'SELECT id, birth_qualifier, birth_min, birth_max FROM tree_person WHERE id IN (?)',
+            [array_keys($permises)],
+            [\Doctrine\DBAL\ArrayParameterType::INTEGER],
+        );
+
+        $reduites = array_fill_keys(array_keys($permises), '');
+
+        foreach ($lignes as $ligne) {
+            $id = (int) $ligne['id'];
+            $date = new UncertainDate(
+                null,
+                DateQualifier::tryFrom((string) $ligne['birth_qualifier']) ?? DateQualifier::Inconnue,
+                null !== $ligne['birth_min'] ? new \DateTimeImmutable((string) $ligne['birth_min']) : null,
+                null !== $ligne['birth_max'] ? new \DateTimeImmutable((string) $ligne['birth_max']) : null,
+            );
+
+            $reduites[$id] = $this->etiquettes->etiquettePartielle($date, $permises[$id]);
+        }
+
+        return $reduites;
     }
 
     /**

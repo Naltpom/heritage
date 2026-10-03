@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Serializer;
 
+use App\Module\Core\ValueObject\ComposantesDeDate;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Tree\Service\EtiquetteDeDateGedcom;
 
@@ -55,6 +56,37 @@ final class NormaliseurDeDate
     }
 
     /**
+     * Le bloc date d'une **naissance**, à travers la réciprocité des vivants (ADR 0016).
+     *
+     * Tout permis : le bloc ordinaire, inchangé. Sinon un bloc **masqué** — mêmes six clés,
+     * `qualifier: "masquee"`, `raw`, `min` et `max` à `null`, le lieu conservé, `texte`
+     * réduit aux composantes permises — plus `composantes`, ce qui en reste de certain.
+     * Il est émis **même quand la date est inconnue** : sinon « inconnue » et « non
+     * partagée » se distingueraient, et le masque dirait ce qu'il cache.
+     *
+     * `masquee` n'existe que dans l'API : ce n'est pas une valeur de `DateQualifier`, et
+     * aucune requête d'écriture ne l'accepte.
+     *
+     * @return array<string, mixed>
+     */
+    public function naissancePourFiche(UncertainDate $date, ComposantesDeDate $permises): array
+    {
+        if ($permises->estComplete()) {
+            return $this->pourFiche($date);
+        }
+
+        return [
+            'raw' => null,
+            'qualifier' => 'masquee',
+            'min' => null,
+            'max' => null,
+            'place' => $date->getPlace(),
+            'texte' => $date->formatPartiel($permises),
+            'composantes' => (object) $date->composantesVisibles($permises),
+        ];
+    }
+
+    /**
      * `ligneDates` — la **forme compacte** du § 14.4 : « 1901-1909 – 1987 »,
      * « n. 26.9.2012 ».
      *
@@ -100,16 +132,20 @@ final class NormaliseurDeDate
      * Une date seule, sous la même forme compacte que `ligneDeFiche` (« 1901-1909 »,
      * « 26.9.2012 ») ; `null` quand elle n'est pas connue.
      */
-    public function compacte(UncertainDate $date): ?string
+    public function compacte(UncertainDate $date, ?ComposantesDeDate $permises = null): ?string
     {
-        $texte = $this->compacte->etiquette($date);
+        $texte = null === $permises ? $this->compacte->etiquette($date) : $this->compacte->etiquettePartielle($date, $permises);
 
         return '' === $texte ? null : $texte;
     }
 
-    public function ligneDeFiche(UncertainDate $naissance, UncertainDate $deces): string
+    /**
+     * `$permises` restreint la **naissance** aux composantes que la réciprocité accorde
+     * (ADR 0016) ; `null` = tout, le cas d'une personne décédée.
+     */
+    public function ligneDeFiche(UncertainDate $naissance, UncertainDate $deces, ?ComposantesDeDate $permises = null): string
     {
-        $n = $this->compacte->etiquette($naissance);
+        $n = null === $permises ? $this->compacte->etiquette($naissance) : $this->compacte->etiquettePartielle($naissance, $permises);
         $d = $this->compacte->etiquette($deces);
 
         if ('' !== $n && '' !== $d) {

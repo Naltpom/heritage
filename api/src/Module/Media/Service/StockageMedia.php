@@ -50,6 +50,7 @@ final class StockageMedia
 
     private const string ORIGINAUX = 'originaux';
     private const string VIGNETTES = 'vignettes';
+    private const string FLOUS = 'flous';
 
     /** @var array<string, string> */
     private const array EXTENSIONS = [
@@ -162,6 +163,49 @@ final class StockageMedia
 
         if (is_file($chemin)) {
             @unlink($chemin);
+        }
+
+        // La variante floue d'un original part avec lui (ADR 0016) : une suppression, une
+        // rotation ou un remplacement ne doivent pas laisser traîner son dérivé.
+        if (!$vignette && is_file($flou = $this->cheminDuFlou($nom))) {
+            @unlink($flou);
+        }
+    }
+
+    /**
+     * Le chemin de la variante **floue** d'un original — réciprocité des portraits
+     * (ADR 0016). Toujours un JPEG, rangé à part (`flous/`), et dérivé du nom de stockage :
+     * une rotation, qui change ce nom, rend l'ancienne variante inatteignable.
+     */
+    public function cheminDuFlou(string $nom): string
+    {
+        if (1 !== preg_match(self::NOM_VALIDE, $nom)) {
+            throw new \InvalidArgumentException('Nom de fichier de média invalide.');
+        }
+
+        return \sprintf(
+            '%s/%s/%s/%s.jpg',
+            rtrim($this->racine, '/\\'),
+            self::FLOUS,
+            substr($nom, 0, 2),
+            pathinfo($nom, \PATHINFO_FILENAME),
+        );
+    }
+
+    /** Écrit la variante floue d'un original. */
+    public function deposerLeFlou(string $octets, string $nom): void
+    {
+        $destination = $this->cheminDuFlou($nom);
+        $this->creerLeRepertoire(\dirname($destination));
+
+        // Écrit à côté puis renommé : deux requêtes simultanées ne se lisent jamais un
+        // fichier à moitié écrit.
+        $temporaire = $destination.'.'.bin2hex(random_bytes(4)).'.tmp';
+
+        if (false === @file_put_contents($temporaire, $octets) || !@rename($temporaire, $destination)) {
+            @unlink($temporaire);
+
+            throw new \RuntimeException(\sprintf('Écriture impossible dans le stockage des médias (%s, flou).', $nom));
         }
     }
 

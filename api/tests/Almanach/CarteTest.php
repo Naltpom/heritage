@@ -57,7 +57,9 @@ final class CarteTest extends CasDeTestAlmanach
         $this->poserPersonne(self::HORS_CERCLE + 100, 'Cousine Lointaine', vivant: true);
         $this->poserEvenement(self::HORS_CERCLE + 100, TypeDEvenement::Naissance, '1981', 'Saule, Ombrage, Sylvanie');
 
-        $this->connecterUnMembre();
+        // Le cercle est exercé ici, pas la réciprocité (ADR 0016) : sans elle, une naissance
+        // de vivant sans année partagée n'a pas de place sur la carte.
+        $this->connecterUnMembre(voitLesNaissances: true);
         $this->requete('GET', '/api/carte');
 
         self::assertArrayHasKey('naissance:'.(self::HORS_CERCLE + 100), $this->evenementsDeLaCarte());

@@ -85,6 +85,15 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, Equatab
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $lastLoginAt = null;
 
+    /**
+     * L'option d'administration « ignorer la restriction de date de naissance » (ADR 0016) :
+     * ce compte voit toutes les composantes de naissance des vivants qu'il voit déjà,
+     * quels que soient les consentements. **Les dates seulement** — les portraits restent
+     * soumis à la réciprocité de la photo.
+     */
+    #[ORM\Column(options: ['default' => false])]
+    private bool $ignoreBirthRestriction = false;
+
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     private \DateTimeImmutable $createdAt;
 
@@ -221,6 +230,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, Equatab
     public function setLastLoginAt(?\DateTimeImmutable $lastLoginAt): self
     {
         $this->lastLoginAt = $lastLoginAt;
+
+        return $this;
+    }
+
+    public function ignoreLaRestrictionDeNaissance(): bool
+    {
+        return $this->ignoreBirthRestriction;
+    }
+
+    public function setIgnoreBirthRestriction(bool $ignorer): self
+    {
+        $this->ignoreBirthRestriction = $ignorer;
 
         return $this;
     }

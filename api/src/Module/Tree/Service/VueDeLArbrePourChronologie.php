@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Service;
 
+use App\Module\Core\Security\ReciprociteInterface;
+use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Timeline\Contract\ArbreDeLaChronologie;
 use App\Module\Timeline\Contract\FaitDeLaChronologie;
 use App\Module\Timeline\Contract\PersonneDeLaChronologie;
@@ -69,6 +72,8 @@ final class VueDeLArbrePourChronologie implements PortChronologieArbre
         private readonly EntityManagerInterface $em,
         private readonly ReglePersonneVivante $regleVivante,
         private readonly ReglagesDeLArbre $reglages,
+        // ADR 0016 : la naissance d'un vivant traverse la réciprocité avant de quitter `Tree`.
+        private readonly ReciprociteInterface $reciprocite,
         private readonly EtiquetteDeDateGedcom $dates = new EtiquetteDeDateGedcom(),
     ) {
     }
@@ -99,6 +104,14 @@ final class VueDeLArbrePourChronologie implements PortChronologieArbre
                 continue;
             }
 
+            $vivant = $vivants[$id] ?? true;
+            // Réciprocité des vivants (ADR 0016) : la naissance d'un vivant part **dégradée**
+            // aux composantes que le lecteur peut voir — sans l'année, pas de début de barre.
+            $permises = $vivant ? $this->reciprocite->naissance($id) : ComposantesDeDate::tout();
+            $naissance = $permises->estComplete()
+                ? $personne->getBirth()
+                : ($personne->getBirth()->reduite($permises) ?? UncertainDate::inconnue($personne->getBirth()->getPlace()));
+
             $traduites[] = new PersonneDeLaChronologie(
                 id: $id,
                 displayName: $personne->getDisplayName(),
@@ -107,8 +120,8 @@ final class VueDeLArbrePourChronologie implements PortChronologieArbre
                 sex: $personne->getSex(),
                 // « Un décès inconnu vaut vivant, donc masqué » : c'est la règle qui
                 // tranche, jamais l'absence de date lue ici.
-                vivant: $vivants[$id] ?? true,
-                birth: $personne->getBirth(),
+                vivant: $vivant,
+                birth: $naissance,
                 death: $personne->getDeath(),
                 // La forme **compacte** du § 14.4, composée ici parce que sa grammaire
                 // appartient à `Tree` : `1901-1909`, `26.9.2012`, `~1889`, `<1920`. On la
@@ -118,7 +131,7 @@ final class VueDeLArbrePourChronologie implements PortChronologieArbre
                 // On ne compose PAS la ligne entière ici : l'assemblage (`n. `, `† `, le
                 // demi-cadratin, `—`) diffère entre `ligneDates` et `etiquetteDates`, et
                 // c'est l'appelant qui sait laquelle des deux il sert.
-                etiquetteNaissance: $this->dates->etiquette($personne->getBirth()),
+                etiquetteNaissance: $this->dates->etiquettePartielle($personne->getBirth(), $permises),
                 etiquetteDeces: $this->dates->etiquette($personne->getDeath()),
             );
         }

@@ -7,6 +7,9 @@ namespace App\Tests\Almanach;
 use App\Module\Almanach\Contract\TypeDEvenement;
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\UserStatus;
+use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Membership\Entity\AutorisationDeNaissance;
+use App\Module\Membership\Entity\Member;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -136,6 +139,58 @@ final class AnniversairesTest extends CasDeTestAlmanach
         self::assertIsArray($jours);
         self::assertCount(1, $jours, 'Trois dates sans jour ne doivent créer aucune case.');
         self::assertSame(['mois' => 3, 'jour' => 11], ['mois' => $jours[0]['mois'], 'jour' => $jours[0]['jour']]);
+    }
+
+    /**
+     * **La réciprocité des vivants** (ADR 0016) : l'anniversaire d'un vivant n'est au
+     * calendrier que si le jour **et** le mois sont partagés des deux côtés — et sans
+     * l'année, la clé `annee` est **absente**, pas `0` : pas d'âge à calculer.
+     */
+    public function testLAnniversaireDUnVivantSuitLaReciprocite(): void
+    {
+        $this->poserEvenement(self::PERE, TypeDEvenement::Naissance, '12 MAR 1956', 'Saule');
+        $this->autoriser(self::PERE, ComposantesDeDate::tout());
+
+        $this->connecterUnMembre();
+        $this->partager(new ComposantesDeDate(mois: true, jour: true));
+        $this->requete('GET', '/api/anniversaires');
+
+        $jours = $this->charge()['jours'];
+        self::assertIsArray($jours);
+        self::assertCount(1, $jours);
+        self::assertSame(['mois' => 3, 'jour' => 12], ['mois' => $jours[0]['mois'], 'jour' => $jours[0]['jour']]);
+        $evenement = $jours[0]['evenements'][0];
+        self::assertArrayNotHasKey('annee', $evenement, 'L’année n’est pas partagée : pas d’âge.');
+        self::assertSame('12 mars', $evenement['texte']);
+        self::assertStringNotContainsString('1956', (string) $this->client->getResponse()->getContent());
+    }
+
+    public function testSansPartageLAnniversaireDUnVivantNEstNiPlaceNiCompte(): void
+    {
+        $this->poserEvenement(self::PERE, TypeDEvenement::Naissance, '12 MAR 1956', 'Saule');
+        $this->autoriser(self::PERE, ComposantesDeDate::tout());
+
+        $this->connecterUnMembre();
+        $this->requete('GET', '/api/anniversaires');
+
+        self::assertSame([], $this->charge()['jours']);
+        self::assertSame(0, $this->resume()['sansJour']['naissance'], 'Le compter dirait qu’il existe.');
+        self::assertSame(0, $this->resume()['parGenre']['naissance']);
+    }
+
+    private function autoriser(int $personId, ComposantesDeDate $partage): void
+    {
+        $admin = $this->creerUtilisateur('admin-autorisation@example.test', ['ROLE_ADMIN']);
+        $this->em()->persist(new AutorisationDeNaissance($personId, $partage, str_repeat('a', 32).'.pdf', 'application/pdf', 1, str_repeat('0', 64), null, (int) $admin->getId()));
+        $this->em()->flush();
+    }
+
+    private function partager(ComposantesDeDate $partage): void
+    {
+        $membre = $this->em()->getRepository(Member::class)->findOneBy(['personId' => self::LECTEUR]);
+        \assert($membre instanceof Member);
+        $membre->partagerLaNaissance($partage, 'profil');
+        $this->em()->flush();
     }
 
     /**
