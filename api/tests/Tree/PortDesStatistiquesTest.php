@@ -11,6 +11,8 @@ use App\Module\Statistiques\Contract\NatureDuFait;
 use App\Module\Statistiques\Contract\PersonneDuReleve;
 use App\Module\Statistiques\Contract\PorteeDeLAppui;
 use App\Module\Tree\Entity\Fact;
+use App\Module\Tree\Entity\Family;
+use App\Module\Tree\Entity\Person;
 use App\Module\Tree\Enum\FactType;
 use App\Module\Tree\Service\ReglagesDeLArbreParSettings;
 use App\Module\Tree\Service\ReglePersonneVivante;
@@ -72,6 +74,37 @@ final class PortDesStatistiquesTest extends ArbreWebTestCase
         self::assertSame($this->idDe('aieule'), $aieux->epouseId);
         self::assertSame([$this->idDe('ego')], $aieux->enfants);
         self::assertSame(-3, $aieux->generation);
+    }
+
+    /**
+     * Une fiche « sans lien connu » (aucune branche) a une génération comptée depuis son
+     * propre îlot, qui repart de 0 : en prod, des aïeux nés vers 1750 sortaient en
+     * « génération 0 » dans « enfants par couple ». Le relevé ne lui donne pas de rang.
+     */
+    public function testUneFicheSansLienNAPasDeGeneration(): void
+    {
+        $lui = (new Person('Isolé Sanslien'))->setGivenNames('Isolé')->setSurname('Sanslien')->setSearchKey('SANSLIEN ISOLE')->setGeneration(0);
+        $elle = (new Person('Isolée Sanslien'))->setGivenNames('Isolée')->setSurname('Sanslien')->setSearchKey('SANSLIEN ISOLEE')->setGeneration(0);
+        $couple = (new Family($lui, $elle))->setGeneration(0);
+        $this->em()->persist($lui);
+        $this->em()->persist($elle);
+        $this->em()->persist($couple);
+        $this->em()->flush();
+
+        $releve = $this->port()->releve();
+        foreach ($releve->personnes as $p) {
+            if ($p->id === $lui->getId()) {
+                self::assertNull($p->generation, 'Sans branche, pas de génération.');
+            }
+            if ($p->id === $this->idDe('ego')) {
+                self::assertNotNull($p->generation, 'Une fiche reliée garde la sienne.');
+            }
+        }
+        foreach ($releve->familles as $f) {
+            if ($f->id === $couple->getId()) {
+                self::assertNull($f->generation, 'Un couple sans lien n’a pas de génération.');
+            }
+        }
     }
 
     public function testUneCitationTraverseAvecSaPortee(): void
