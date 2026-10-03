@@ -85,6 +85,8 @@ enum AuditAction: string
     case PartageNaissance = 'partage_naissance';
     case AutorisationNaissance = 'autorisation_naissance';
     case RestrictionNaissance = 'restriction_naissance';
+    /** Une demande RGPD déposée, puis traitée (`changes` : nature, décision). */
+    case DemandeRgpd = 'demande_rgpd';
 
     /**
      * Un appel sortant au modèle de langage qui formule les questions (ADR 0008).

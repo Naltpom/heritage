@@ -234,22 +234,24 @@ class Member
     #[ORM\Column(length: 16, nullable: true)]
     private ?string $birthShareSource = null;
 
-    // ── La carence après un retrait (ADR 0016, équité) ──────────────────────────
+    // ── Le verrou après un partage (ADR 0016, équité) ───────────────────────────
     //
-    // Retirer une composante est **toujours immédiat** — le RGPD l'exige (art. 7.3). Mais
-    // la **remettre** n'est possible qu'après {@see self::CARENCE_JOURS} jours : sans quoi
-    // « je partage, je regarde, je retire » rendrait la réciprocité bidon. La carence ne
-    // retient la donnée de personne ; elle ne fait que différer l'accès aux dates des
-    // autres. Une date par composante : retirer le jour ne bloque pas l'année.
+    // Partager une composante est **immédiat**. Mais une composante partagée reste
+    // visible des autres **au moins {@see self::DUREE_MINIMALE_JOURS} jours** : sans quoi
+    // « je partage, je regarde, je retire » rendrait la réciprocité bidon pour ceux qui
+    // partagent vraiment. Décision du commanditaire, contraire à la lettre de l'art. 7.3 du
+    // RGPD et prise en connaissance de cause ; la soupape est la **demande RGPD**, que
+    // l'administrateur applique sans délai (source `administration`). Une date par
+    // composante : la date à laquelle elle a été partagée, `null` quand elle ne l'est pas.
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $birthShareYearWithdrawnAt = null;
+    private ?\DateTimeImmutable $birthShareYearSince = null;
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $birthShareMonthWithdrawnAt = null;
+    private ?\DateTimeImmutable $birthShareMonthSince = null;
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $birthShareDayWithdrawnAt = null;
+    private ?\DateTimeImmutable $birthShareDaySince = null;
 
     public function __construct(
         int $userId,
@@ -654,44 +656,39 @@ class Member
         return $this->birthShareSource;
     }
 
-    /** La durée de la carence, en jours, après le retrait d'une composante. */
-    public const int CARENCE_JOURS = 30;
+    /** Combien de jours une composante partagée reste visible, au moins. */
+    public const int DUREE_MINIMALE_JOURS = 30;
 
     /**
-     * Jusqu'à quand chaque composante retirée ne peut pas être remise — seules celles dont
-     * la carence court encore à `$maintenant` figurent.
+     * Jusqu'à quand chaque composante **partagée** ne peut pas être retirée par le titulaire
+     * — seules celles dont le verrou court encore à `$maintenant` figurent.
      *
      * @return array{annee?: \DateTimeImmutable, mois?: \DateTimeImmutable, jour?: \DateTimeImmutable}
      */
-    public function carenceDuPartage(\DateTimeImmutable $maintenant = new \DateTimeImmutable()): array
+    public function verrouDuPartage(\DateTimeImmutable $maintenant = new \DateTimeImmutable()): array
     {
-        $carences = [];
+        $verrous = [];
 
-        foreach (['annee' => $this->birthShareYearWithdrawnAt, 'mois' => $this->birthShareMonthWithdrawnAt, 'jour' => $this->birthShareDayWithdrawnAt] as $cle => $retrait) {
-            $fin = $retrait?->modify(\sprintf('+%d days', self::CARENCE_JOURS));
+        foreach (['annee' => $this->birthShareYearSince, 'mois' => $this->birthShareMonthSince, 'jour' => $this->birthShareDaySince] as $cle => $depuis) {
+            $fin = $depuis?->modify(\sprintf('+%d days', self::DUREE_MINIMALE_JOURS));
             if (null !== $fin && $fin > $maintenant) {
-                $carences[$cle] = $fin;
+                $verrous[$cle] = $fin;
             }
         }
 
-        return $carences;
+        return $verrous;
     }
 
-    /** @param 'inscription'|'profil' $source */
+    /** @param 'inscription'|'profil'|'administration' $source */
     public function partagerLaNaissance(ComposantesDeDate $partage, string $source, ?\DateTimeImmutable $le = null): self
     {
         $le ??= new \DateTimeImmutable();
 
-        // Chaque composante qui passe de partagée à retirée ouvre sa carence.
-        if ($this->birthShareYear && !$partage->annee) {
-            $this->birthShareYearWithdrawnAt = $le;
-        }
-        if ($this->birthShareMonth && !$partage->mois) {
-            $this->birthShareMonthWithdrawnAt = $le;
-        }
-        if ($this->birthShareDay && !$partage->jour) {
-            $this->birthShareDayWithdrawnAt = $le;
-        }
+        // Chaque composante qui devient partagée pose sa date ; une composante retirée l'oublie.
+        $depuis = static fn (bool $avant, bool $apres, ?\DateTimeImmutable $date): ?\DateTimeImmutable => $apres ? ($avant ? $date : $le) : null;
+        $this->birthShareYearSince = $depuis($this->birthShareYear, $partage->annee, $this->birthShareYearSince);
+        $this->birthShareMonthSince = $depuis($this->birthShareMonth, $partage->mois, $this->birthShareMonthSince);
+        $this->birthShareDaySince = $depuis($this->birthShareDay, $partage->jour, $this->birthShareDaySince);
 
         $this->birthShareYear = $partage->annee;
         $this->birthShareMonth = $partage->mois;

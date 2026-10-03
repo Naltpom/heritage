@@ -2683,7 +2683,8 @@ qui n'a pas de photo de lui. Les défunts et sa propre fiche ne sont jamais conc
 
 | Table | Colonnes | Rôle |
 |---|---|---|
-| `mbr_member` | `birth_share_year`, `birth_share_month`, `birth_share_day` (`false` par défaut), `birth_share_updated_at`, `birth_share_source` (`inscription` \| `profil`) | le consentement du titulaire du compte ; `ck_mbr_member_partage_trace`, `ck_mbr_member_partage_source` |
+| `mbr_member` | `birth_share_year`, `birth_share_month`, `birth_share_day` (`false` par défaut), `birth_share_*_since` (date du partage : verrou de 30 jours), `birth_share_updated_at`, `birth_share_source` (`inscription` \| `profil` \| `administration`) | le consentement du titulaire du compte ; `ck_mbr_member_partage_trace`, `ck_mbr_member_partage_source` |
+| `mbr_demande_rgpd` | `member_id`, `user_id`, `user_email`, `nature` (`retrait_partage` \| `rectification` \| `autre`), `retirer_annee|mois|jour`, `message`, `created_at`, `traitee_at`, `traitee_par_user_id`, `decision` (`appliquee` \| `refusee`), `reponse` | le formulaire RGPD ; `ck_mbr_demande_rgpd_nature`, `ck_mbr_demande_rgpd_decision` |
 | `core_user` | `ignore_birth_restriction` (`false`) | l'option d'administration « ignorer la restriction de date de naissance » — les dates seulement |
 | `mbr_autorisation_naissance` | `person_id`, `share_year|month|day`, `document_name|mime|size|sha256`, `note`, `granted_by_user_id`, `granted_at`, `archived_at`, `archived_by_user_id`, `archive_reason` | l'autorisation signée d'un vivant **sans compte** ; une seule active par personne (`uniq_mbr_autorisation_active`), archivée et jamais supprimée (`remplacee`, `retiree`, `compte_rattache`) |
 

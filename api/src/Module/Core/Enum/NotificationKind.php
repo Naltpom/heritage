@@ -44,4 +44,8 @@ enum NotificationKind: string
      * déjà données restent, mais deviennent « à confirmer ».
      */
     case EvenementDatesModifiees = 'evenement_dates_modifiees';
+    /** Une demande RGPD d'un membre attend un administrateur (ADR 0016). */
+    case DemandeRgpd = 'demande_rgpd';
+    /** La demande RGPD du membre a été traitée — appliquée ou refusée. */
+    case DemandeRgpdTraitee = 'demande_rgpd_traitee';
 }
