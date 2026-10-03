@@ -241,9 +241,18 @@ export interface PartageNaissance {
   jour: boolean
 }
 
+/**
+ * La **carence** : une composante retirée ne se partage à nouveau qu'après
+ * trente jours. Seules les composantes en carence sont présentes, avec la date
+ * (ISO) à partir de laquelle elles se recochent. Retirer, lui, est immédiat.
+ */
+export type CarenceDePartage = Partial<Record<keyof PartageNaissance, string>>
+
 /** Le choix tel que le serveur le rend : avec la date du dernier changement. */
 export interface PartageNaissanceEnregistre extends PartageNaissance {
   modifieLe: string | null
+  /** Facultatif pour les charges d'essai ; absent vaut « aucune carence ». */
+  carenceJusquAu?: CarenceDePartage
 }
 
 /* ------------------------------------------------------------------ */

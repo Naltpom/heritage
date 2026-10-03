@@ -81,7 +81,10 @@ export function changerMotDePasse(
  * périme aussi l'`ETag` du graphe.
  *
  * `409 compte_non_rattache` sans ligne membre ; `409 vue_comme_membre_active`
- * sous la bascule « voir comme » — on ne choisit pas à la place du membre.
+ * sous la bascule « voir comme » — on ne choisit pas à la place du membre ;
+ * `409 partage_en_carence` pour une composante retirée il y a moins de trente
+ * jours qu'on voudrait recocher (`details.jusquAu`, par composante). Retirer
+ * est toujours immédiat.
  */
 export function modifierPartageNaissance(partage: PartageNaissance): Promise<PartageNaissanceEnregistre> {
   return requeteApi<PartageNaissanceEnregistre>('/session/partage-naissance', {
