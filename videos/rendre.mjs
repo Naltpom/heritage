@@ -23,9 +23,11 @@ const autonome = fs.existsSync(path.join(ici, 'scenes', `${id}.html`))
 const voix = autonome ? null : JSON.parse(fs.readFileSync(path.join(ici, 'voix', `${id}.json`), 'utf8'))
 
 const navigateur = await puppeteer.launch({
-  executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  // CHROME : le chemin du navigateur, hors de Windows (par exemple /opt/pw-browsers/chromium)
+  executablePath: process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
   headless: true,
-  args: ['--force-device-scale-factor=1', '--allow-file-access-from-files'],
+  // en root (un conteneur), Chrome refuse de démarrer avec son bac à sable
+  args: ['--force-device-scale-factor=1', '--allow-file-access-from-files', ...(process.getuid?.() === 0 ? ['--no-sandbox'] : [])],
 })
 const page = await navigateur.newPage()
 page.on('console', (m) => { if (m.type() === 'warning' || m.type() === 'error') console.log('[page]', m.text()) })
