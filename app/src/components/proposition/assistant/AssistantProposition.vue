@@ -51,6 +51,7 @@ import {
   invaliderGraphe,
   lireMesQuotas,
   resteDuQuota,
+  proposerLeMedia,
   televerserMedia,
   type AnalyseAssistant,
   type PortraitPropose,
@@ -394,12 +395,17 @@ async function relancerDepot(): Promise<void> {
       televerser: ({ index, personId: cible, legende }) => {
         const fichier = fichiers[index]
         if (fichier === undefined) return Promise.reject(new Error('Document introuvable.'))
+        // Le média naît en attente ; sa demande « Ajout d'un document » l'amène dans la
+        // file de l'administration (sans elle, il restait orphelin — 03/10/2026).
         return televerserMedia({
           fichier,
           kind: 'preuve',
           subjectKind: 'personne',
           subjectId: cible,
           caption: legende,
+        }).then(async (media) => {
+          await proposerLeMedia(media, cible)
+          return media
         })
       },
     })
@@ -407,6 +413,8 @@ async function relancerDepot(): Promise<void> {
     // attend l'identifiant de sa demande de création, qui vient d'être créée.
     await executerPortraits(planPortraits.value, plan.value, async ({ portrait, destination, legende }) => {
       const fichier = await fichierDuPortrait(portrait)
+      // Un portrait d'une fiche existante attend sa demande « Ajout d'un document » ;
+      // celui d'une personne proposée est porté par sa demande de création.
       return destination.type === 'personne'
         ? televerserMedia({
             fichier,
@@ -414,6 +422,9 @@ async function relancerDepot(): Promise<void> {
             subjectKind: 'personne',
             subjectId: destination.personId,
             caption: legende,
+          }).then(async (media) => {
+            await proposerLeMedia(media, destination.personId)
+            return media
           })
         : televerserMedia({
             fichier,
