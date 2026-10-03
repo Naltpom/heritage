@@ -124,7 +124,11 @@ final class VueDeLArbrePourStatistiques implements PortStatistiquesArbre
                 vivant: $vivants[$id] ?? true,
                 decede: $personne->isDeceased(),
                 branch: $personne->getBranch(),
-                generation: $personne->getGeneration(),
+                // Une fiche sans branche n'est pas reliée à la racine (« sans lien
+                // connu ») : sa génération est comptée depuis son propre îlot, qui
+                // repart de 0 — des aïeux de 1750 y passaient en « génération 0 ».
+                // Elle n'a donc pas de rang dans les séries par génération.
+                generation: null === $personne->getBranch() ? null : $personne->getGeneration(),
                 bestQuay: $personne->getBestQuay(),
                 citationCount: $personne->getCitationCount(),
                 creeLe: $personne->getCreatedAt(),
@@ -184,7 +188,11 @@ final class VueDeLArbrePourStatistiques implements PortStatistiquesArbre
                 divorce: $famille->isDivorced(),
                 dateDuDivorce: self::copie($famille->getDivorce()),
                 enfants: $enfants[$id] ?? [],
-                generation: $famille->getGeneration(),
+                // Même règle que pour les personnes : un couple dont aucun membre n'est
+                // relié à la racine n'a pas de génération qui ait un sens.
+                generation: null === $famille->getHusband()?->getBranch() && null === $famille->getWife()?->getBranch()
+                    ? null
+                    : $famille->getGeneration(),
             );
         }
 
