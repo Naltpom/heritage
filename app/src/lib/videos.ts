@@ -32,7 +32,7 @@ export const DOSSIER_VIDEOS = '/videos/'
 /**
  * Où la vidéo est rangée sur la page Aide.
  *
- * - `bien-commencer` : les deux présentations générales, en tête ;
+ * - `bien-commencer` : les présentations générales, en tête ;
  * - `fonctionnalite` : un chapitre par écran ou par geste.
  */
 export type GroupeVideo = 'bien-commencer' | 'fonctionnalite'
@@ -78,6 +78,7 @@ export interface CheminsVideo {
  */
 const DUREES: Record<string, number> = {
   bienvenue: 43,
+  'un-mot-de-nathan': 108,
   decouvrir: 28,
   'lire-l-arbre': 35,
   'filtres-de-l-arbre': 38,
@@ -104,6 +105,15 @@ export const VIDEOS: readonly VideoAide[] = [
     titre: 'Bienvenue dans Heritage',
     description: 'Se retrouver dans l’arbre, créer son accès, être validé par la famille, puis explorer.',
     dureeSecondes: duree('bienvenue'),
+    groupe: 'bien-commencer',
+  },
+  // Le mot d'accueil de Nathan à la famille, par le sang ou par alliance : qui il
+  // est, et tout ce que l'application permet. Dit à la première personne.
+  {
+    id: 'un-mot-de-nathan',
+    titre: 'Un mot de Nathan',
+    description: 'Pourquoi cette application, et tout ce qu’on peut y faire ensemble.',
+    dureeSecondes: duree('un-mot-de-nathan'),
     groupe: 'bien-commencer',
   },
   {

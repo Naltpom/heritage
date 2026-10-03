@@ -18,22 +18,22 @@ const P = {
   // 0–1 : bonjour
   avatar: 0.15, nom: M(0, 3), mariage: M(1, 6), repas: M(1, 9), jamais: M(1, 13),
   // 2–4 : l'arbre
-  arbre: S(2), sang: M(2, 7), alliance: M(2, 10), enchante: M(2, 12),
+  arbre: S(2), sang: M(2, 8), alliance: M(2, 11), enchante: M(2, 13),
   ensemble: S(3) + 0.1, compteur: M(3, 10) - 0.3,
-  fiches: S(4) + 0.1, centre: M(4, 4), branches: M(4, 8),
+  fiches: S(4) + 0.1, centre: M(4, 4), branches: M(4, 10),
   // 5 : la fiche
-  fiche: S(5), touche: M(5, 0) - 0.05, dates: M(5, 3), proches: M(5, 5), photos: M(5, 8), origine: M(5, 12),
+  fiche: S(5), touche: M(5, 0) - 0.05, dates: M(5, 4), proches: M(5, 6), photos: M(5, 8), origine: M(5, 10),
   // 6–7 : l'assistant
   assistant: S(6), frappe: M(6, 4), photo: M(6, 11) - 0.1,
-  correction: M(7, 2), verification: M(7, 8), acceptee: V[7].fin - 0.1,
+  correction: M(7, 3), verification: M(7, 8), acceptee: V[7].fin - 0.1,
   // 8–9 : les questions
   question: S(8), reponse: M(8, 5), siennes: S(9), repondre: M(9, 9),
   // 10 : carte et chronologie
-  carte: S(10), chrono: M(10, 7) - 0.35,
+  carte: S(10), chrono: M(10, 9) - 0.35,
   // 11 : le calendrier
   calendrier: S(11), memoire: M(11, 8),
   // 12 : la cloche
-  cloche: S(12), push1: M(12, 3), push2: M(12, 8), push3: M(12, 11),
+  cloche: S(12), push1: M(12, 3), push2: M(12, 9), push3: M(12, 11),
   // 13–14 : les événements
   retrouver: S(13), cousinade: M(13, 7), surprise: M(13, 9), hommage: M(13, 12),
   suivi: S(14), relance: M(14, 11) - 0.05,
@@ -42,9 +42,9 @@ const P = {
   // 16 : les actes demandés
   demarches: S(16),
   // 17 : la confidentialité
-  prive: S(17), cadenas: M(17, 6), vivants: M(17, 11),
+  prive: S(17), cadenas: M(17, 4), vivants: M(17, 10),
   // 18 : l'installation
-  installer: S(18), icone: M(18, 3),
+  installer: S(18), icone: M(18, 4),
   // 19–20 : la fin
   venez: S(19), fin: S(20) + 0.25,
 }
@@ -604,9 +604,9 @@ function demarches(t) {
   x.save(); x.globalAlpha = a; x.translate(0, dy)
   titreEcran('Actes demandés', 'Qui a écrit à qui, et où on en est')
   const lignesActes = [
-    ['Acte de naissance · Jean Martin', 'Mairie de Brest', 'Reçu', 'vert', M(16, 6)],
-    ['Acte de mariage · Simone et Jean', 'Mairie de Lille', 'Envoyé', 'accent', M(16, 9)],
-    ['Registre paroissial · 1788', 'Archives du Rhône', 'Relancé', 'violet', M(16, 12)],
+    ['Acte de naissance · Jean Martin', 'Mairie de Brest', 'Reçu', 'vert', M(16, 7)],
+    ['Acte de mariage · Simone et Jean', 'Mairie de Lille', 'Envoyé', 'accent', M(16, 8)],
+    ['Registre paroissial · 1788', 'Archives du Rhône', 'Relancé', 'violet', M(16, 10)],
   ]
   lignesActes.forEach(([titre, ou, statut, ton, quand], i) => {
     const k = eout(prog(t, quand - 0.3, quand + 0.1))
