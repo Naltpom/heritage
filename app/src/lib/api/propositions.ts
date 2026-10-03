@@ -827,7 +827,30 @@ export interface CorpsRetraitLien extends CorpsCommun {
   retraits: RetraitPropose[]
 }
 
+/**
+ * § 6.4 — joindre un document (portrait, preuve) à une fiche. Le média est
+ * **d'abord téléversé** (`POST /api/medias`, il naît `en_attente`), puis cette
+ * demande le désigne ; sans elle, il reste orphelin, invisible de la file des
+ * demandes. `sha256` est celui que la réponse du téléversement a rendu.
+ */
+export interface CorpsAjoutMedia extends CorpsCommun {
+  kind: 'ajout_media'
+  targetKind: 'personne'
+  targetId: number
+  ops: {
+    seq: number
+    opKind: 'ajout_media'
+    subjectKind: 'personne'
+    subjectId: number
+    field: null
+    valueKind: 'media'
+    oldValue: null
+    newValue: { mediaId: number; kind: string; caption: string | null; sha256: string }
+  }[]
+}
+
 export type CorpsDemande =
+  | CorpsAjoutMedia
   | CorpsModificationPersonne
   | CorpsCreationPersonne
   | CorpsAjoutLien
@@ -847,6 +870,37 @@ export type CorpsDemande =
  */
 export function creerDemande(corps: CorpsDemande): Promise<Demande> {
   return requeteApi<Demande>('/demandes', { methode: 'POST', corps })
+}
+
+/**
+ * La demande `ajout_media` d'un média qu'on vient de téléverser sur une fiche, soumise
+ * d'emblée : c'est elle qui l'amène dans la file des demandes de l'administration.
+ * Rien à faire pour un média qui n'attend pas (dépôt direct d'un administrateur, déjà
+ * actif) ou qui est déjà porté par une demande.
+ */
+export async function proposerLeMedia(
+  media: { id: number; kind: string; status: string; caption: string | null; sha256?: string; changeRequestId: number | null },
+  personId: number,
+): Promise<Demande | null> {
+  if (media.status !== 'en_attente' || media.changeRequestId !== null || media.sha256 === undefined) return null
+  return creerDemande({
+    kind: 'ajout_media',
+    soumettre: true,
+    targetKind: 'personne',
+    targetId: personId,
+    ops: [
+      {
+        seq: 1,
+        opKind: 'ajout_media',
+        subjectKind: 'personne',
+        subjectId: personId,
+        field: null,
+        valueKind: 'media',
+        oldValue: null,
+        newValue: { mediaId: media.id, kind: media.kind, caption: media.caption, sha256: media.sha256 },
+      },
+    ],
+  })
 }
 
 /* ------------------------------------------------------------------ */
