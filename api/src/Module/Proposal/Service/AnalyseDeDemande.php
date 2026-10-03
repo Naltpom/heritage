@@ -305,6 +305,17 @@ final readonly class AnalyseDeDemande
                 continue;
             }
 
+            // Un op de **média** (`ajout_media`) vise une ligne de `med_media`, pas une
+            // fiche de l'arbre : il n'a ni version ni valeur à confronter, et le port de
+            // l'arbre refuse ce type de cible (il levait, et l'écran d'administration de
+            // toute demande « Ajout d'un document » tombait en 500 — 03/10/2026). Son
+            // existence est vérifiée à l'application, par le module Media.
+            if (SubjectKind::Media === $op->getSubjectKind()) {
+                $etats[] = new EtatDOp($op, null, false, false, $this->libelle($op, null));
+
+                continue;
+            }
+
             $cle = EtatCible::cleDe($op->getSubjectKind(), $sujet);
 
             if (!\array_key_exists($cle, $cibles)) {
