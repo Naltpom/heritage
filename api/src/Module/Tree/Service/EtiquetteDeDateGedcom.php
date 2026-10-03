@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Tree\Service;
 
 use App\Module\Core\Enum\DateQualifier;
+use App\Module\Core\ValueObject\ComposantesDeDate;
 use App\Module\Core\ValueObject\UncertainDate;
 
 /**
@@ -56,6 +57,34 @@ final class EtiquetteDeDateGedcom
         }
 
         return $this->depuisLesBornes($date);
+    }
+
+    /**
+     * La forme compacte des seules composantes permises — la naissance d'un vivant vue à
+     * travers la réciprocité (ADR 0016) : « 1985 », « 3/1985 », « 12.3 », « mars ».
+     *
+     * **Jamais depuis `raw`**, qui porte toutes les composantes d'un coup : on part de la
+     * date dégradée ({@see UncertainDate::reduite()}), qui n'en a plus.
+     */
+    public function etiquettePartielle(UncertainDate $date, ComposantesDeDate $permises): string
+    {
+        if ($permises->estComplete()) {
+            return $this->etiquette($date);
+        }
+
+        if ($permises->annee) {
+            $reduite = $date->reduite($permises);
+
+            return null === $reduite ? '' : $this->depuisLesBornes($reduite);
+        }
+
+        $visibles = $date->composantesVisibles($permises);
+
+        if (isset($visibles['mois'], $visibles['jour'])) {
+            return $visibles['jour'].'.'.$visibles['mois'];
+        }
+
+        return isset($visibles['mois']) ? UncertainDate::nomDuMois($visibles['mois']) : '';
     }
 
     /**

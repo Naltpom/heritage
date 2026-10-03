@@ -125,7 +125,14 @@ export interface EvenementAnniversaire {
   cle: string
   genre: GenreEvenement
   type: TypeEvenement
-  annee: number
+  /**
+   * **Absente** quand l'année n'est pas partagée (ADR 0016) : la naissance d'une
+   * personne vivante dont le lecteur et elle ne partagent pas tous deux
+   * l'année. Le jour et le mois placent l'événement sur la grille ; aucun âge
+   * ne se calcule.
+   */
+  annee?: number
+  /** La date en toutes lettres — partielle quand elle est réduite (« 12 mars »). */
   texte: string
   /** Le lieu brut, sans coordonnées : un calendrier n'en a pas besoin. */
   lieu: string | null

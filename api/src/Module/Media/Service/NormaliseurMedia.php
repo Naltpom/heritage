@@ -42,6 +42,10 @@ use App\Module\Media\Security\LecteurMedia;
  */
 final class NormaliseurMedia
 {
+    public function __construct(private readonly FlouDesPortraits $flous)
+    {
+    }
+
     /**
      * @param list<Avertissement> $avertissements présents à la création seulement
      *
@@ -52,6 +56,9 @@ final class NormaliseurMedia
         $id = $media->getId();
         $sien = $media->getUploadedByUserId() === $lecteur->userId;
         $privilegie = $lecteur->administrateur || $sien;
+        // ADR 0016 : une photo de vivant servie floue n'en dit pas plus que ses pixels —
+        // ni dimensions, ni empreinte, ni nom d'origine —, et son URL est celle du flou.
+        $flou = $this->flous->doitFlouter($media, $lecteur);
 
         $charge = [
             'id' => $id,
@@ -61,8 +68,8 @@ final class NormaliseurMedia
             'subjectLabel' => $media->getSubjectLabel(),
             'mimeType' => $media->getMimeType(),
             'byteSize' => $media->getByteSize(),
-            'width' => $media->getWidth(),
-            'height' => $media->getHeight(),
+            'width' => $flou ? null : $media->getWidth(),
+            'height' => $flou ? null : $media->getHeight(),
             'pageCount' => $media->getPageCount(),
             'exifStripped' => $media->isExifStripped(),
             'status' => $media->getStatus()->value,
@@ -71,10 +78,14 @@ final class NormaliseurMedia
             'taken' => $this->bloc($media->getTaken()),
             'uploadedByLabel' => $media->getUploadedByLabel(),
             'createdAt' => $media->getCreatedAt()->format(\DateTimeInterface::ATOM),
-            'url' => AdresseDuMedia::fichier($media),
-            'vignetteUrl' => AdresseDuMedia::vignette($media),
+            'url' => AdresseDuMedia::fichier($media, $flou),
+            'vignetteUrl' => AdresseDuMedia::vignette($media, $flou),
             'changeRequestId' => $media->getChangeRequestId(),
         ];
+
+        if ($flou) {
+            $charge['flou'] = true;
+        }
 
         // Hors contrat écrit, et assumé : un média rattaché à une personne pas encore
         // créée n'a pas de `subjectId`, et le front doit pouvoir l'afficher sous le nœud
@@ -86,7 +97,7 @@ final class NormaliseurMedia
             $charge['subjectRequestId'] = $media->getSubjectRequestId();
         }
 
-        if ($privilegie) {
+        if ($privilegie && !$flou) {
             $charge['originalName'] = $media->getOriginalName();
             $charge['sha256'] = $media->getSha256();
         }

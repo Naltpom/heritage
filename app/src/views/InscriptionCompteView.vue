@@ -37,6 +37,11 @@
  * où la description se corrige. Le serveur borne aussi ces comptes à cinq par
  * heure et par adresse : c'est une vraie `429`, qui passe par `<MessageErreur>`.
  *
+ * **Le partage de la date de naissance** (ADR 0016) se choisit ici, avant la
+ * création : trois cases indépendantes, aucune cochée d'avance — un
+ * consentement se donne. Ses refus reviennent sous `partageNaissance.*` et
+ * s'affichent sous les cases. Il se change ensuite dans « Mon compte ».
+ *
  * **Après le `201` vient la photo** (`EtapePhoto.vue`) : un panneau « Votre
  * photo », attendu mais qu'on peut passer d'un lien discret. Qu'elle soit
  * déposée ou passée, la suite est l'écran d'état.
@@ -52,6 +57,8 @@ import PanneauBase from '@/components/base/PanneauBase.vue'
 import CadreEntree from '@/components/inscription/CadreEntree.vue'
 import LienNonValide from '@/components/inscription/LienNonValide.vue'
 import EtapePhoto from '@/components/inscription/EtapePhoto.vue'
+import PartageNaissance from '@/components/compte/PartageNaissance.vue'
+import { erreursDePartage, partageParDefaut } from '@/components/compte/partageNaissance'
 import { estLienNonValide } from '@/components/inscription/lienInvitation'
 import { fermerFlux, useFluxInscription } from '@/components/inscription/fluxInscription'
 import {
@@ -68,6 +75,8 @@ const email = ref('')
 /** Facultatif : pour l'annuaire des proches de l'administrateur. */
 const telephone = ref('')
 const motDePasse = ref('')
+/** ADR 0016 — rien de coché d'avance. */
+const partage = ref(partageParDefaut())
 const envoi = ref(false)
 const erreur = ref<unknown>(null)
 const lienRefuse = ref(false)
@@ -104,6 +113,8 @@ const refusDeclaration = computed<string[]>(() => {
     .filter(([cle, message]) => cle.startsWith('declaration') && message.length > 0)
     .map(([, message]) => message)
 })
+
+const refusPartage = computed(() => erreursDePartage(analyse.value?.champs))
 
 const refusCourriel = computed(() => erreurCourriel(email.value))
 const refusMotDePasse = computed(() => erreurMotDePasse(motDePasse.value))
@@ -158,6 +169,7 @@ async function soumettre(): Promise<void> {
       email: email.value.trim(),
       password: motDePasse.value,
       ...(telephone.value.trim() ? { telephone: telephone.value.trim() } : {}),
+      partageNaissance: partage.value,
     })
     // Le mot de passe, le jeton et la description ont fait leur office : aucun
     // n'a de raison de rester en mémoire. Le jeton vient d'être consommé.
@@ -270,6 +282,8 @@ function suivreConduite(conduite: ReturnType<typeof analyserErreur>['conduite'])
             :erreur="messageMotDePasse()"
             requis
           />
+
+          <PartageNaissance v-model="partage" :erreurs="refusPartage" />
         </div>
 
         <div class="mt-5">

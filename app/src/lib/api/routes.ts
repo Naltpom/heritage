@@ -13,7 +13,14 @@
 
 import { requeteApi } from './client'
 import { oublierEtag, requeteRevalidee, type ResultatRevalide } from './revalidation'
-import type { ChargeDeSession, Graphe, ListePaginee, Notification } from './types'
+import type {
+  ChargeDeSession,
+  Graphe,
+  ListePaginee,
+  Notification,
+  PartageNaissance,
+  PartageNaissanceEnregistre,
+} from './types'
 
 /* ------------------------------------------------------------------ */
 /* § 2 — session                                                       */
@@ -63,6 +70,26 @@ export function changerMotDePasse(
   return requeteApi<{ motDePasseChange: boolean; clesDAccesRetirees?: number }>('/session/mot-de-passe', {
     methode: 'POST',
     corps: { motDePasseActuel, nouveauMotDePasse },
+  })
+}
+
+/**
+ * `PUT /api/session/partage-naissance` — ADR 0016, réciprocité des vivants.
+ *
+ * Les trois cases, toujours les trois. Le choix change ce que le lecteur voit
+ * des autres : après l'appel, relire la session (`rafraichirSession()`), qui
+ * périme aussi l'`ETag` du graphe.
+ *
+ * `409 compte_non_rattache` sans ligne membre ; `409 vue_comme_membre_active`
+ * sous la bascule « voir comme » — on ne choisit pas à la place du membre ;
+ * `409 partage_en_carence` pour une composante retirée il y a moins de trente
+ * jours qu'on voudrait recocher (`details.jusquAu`, par composante). Retirer
+ * est toujours immédiat.
+ */
+export function modifierPartageNaissance(partage: PartageNaissance): Promise<PartageNaissanceEnregistre> {
+  return requeteApi<PartageNaissanceEnregistre>('/session/partage-naissance', {
+    methode: 'PUT',
+    corps: { annee: partage.annee, mois: partage.mois, jour: partage.jour },
   })
 }
 

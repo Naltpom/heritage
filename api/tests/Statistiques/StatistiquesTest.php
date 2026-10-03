@@ -197,6 +197,21 @@ final class StatistiquesTest extends WebTestCase
         self::assertSame(1, $charge['vie']['moisDesNaissances']['mois'][5], 'Pour l’administrateur, rien n’est retiré.');
     }
 
+    /**
+     * ADR 0016 : sans partage de l'année, l'âge d'un vivant ne se calcule pas — il ne peut
+     * donc être ni doyen, ni compté dans les naissances renseignées, ni dans un mois.
+     */
+    public function testSansPartageLAgeDesVivantsNeSeCalculePas(): void
+    {
+        $this->connecterUnAdministrateur(voitLesNaissances: false);
+        $this->requete('GET', '/api/explorer/stats');
+
+        $charge = $this->charge();
+
+        self::assertNotSame(self::HORS_CERCLE, $charge['records']['doyen']['personnes'][0]['id'] ?? null);
+        self::assertSame(0, $charge['vie']['moisDesNaissances']['mois'][5] ?? 0);
+    }
+
     public function testLeCercleNEstConsulteQuAUnSeulEndroit(): void
     {
         $racine = \dirname(__DIR__, 2).'/src/Module/Statistiques';
@@ -374,9 +389,15 @@ final class StatistiquesTest extends WebTestCase
         return $utilisateur;
     }
 
-    private function connecterUnMembre(): void
+    /**
+     * @param bool $voitLesNaissances l'option « ignorer la restriction de date de naissance »
+     *                                (ADR 0016) : les cas qui exercent le cercle ou les
+     *                                chiffres, et non la réciprocité, la posent
+     */
+    private function connecterUnMembre(bool $voitLesNaissances = true): void
     {
         $utilisateur = $this->creerUtilisateur('membre@example.test');
+        $utilisateur->setIgnoreBirthRestriction($voitLesNaissances);
         $identifiant = $utilisateur->getId();
         \assert(null !== $identifiant);
 
@@ -389,9 +410,10 @@ final class StatistiquesTest extends WebTestCase
         $this->requete('POST', '/api/connexion', ['email' => 'membre@example.test', 'password' => 'motdepasse-de-test']);
     }
 
-    private function connecterUnAdministrateur(): void
+    private function connecterUnAdministrateur(bool $voitLesNaissances = true): void
     {
-        $this->creerUtilisateur('admin@example.test', ['ROLE_ADMIN']);
+        $this->creerUtilisateur('admin@example.test', ['ROLE_ADMIN'])->setIgnoreBirthRestriction($voitLesNaissances);
+        $this->em()->flush();
         $this->requete('POST', '/api/connexion', ['email' => 'admin@example.test', 'password' => 'motdepasse-de-test']);
     }
 

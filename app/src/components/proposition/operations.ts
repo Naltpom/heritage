@@ -275,6 +275,23 @@ export interface SaisieModification {
 }
 
 /**
+ * **La date de naissance de cette fiche peut-elle se saisir ?** (ADR 0016)
+ *
+ * Non quand le lecteur ne la voit pas entière : la réciprocité des vivants lui
+ * en a retiré une partie — ou tout. Corriger une date qu'on ne voit pas
+ * reviendrait à l'écraser à l'aveugle, et l'`oldValue` partirait faux. Le
+ * serveur le dit par `naissanceModifiable` ; un bloc `masquee` le dit aussi,
+ * pour une charge qui n'aurait pas le drapeau.
+ */
+export function naissanceVerrouillee(fiche: FichePersonneComplete): boolean {
+  return fiche.naissanceModifiable === false || fiche.birth?.qualifier === 'masquee'
+}
+
+/** Ce que l'écran dit à côté d'une date de naissance verrouillée. */
+export const MOTIF_NAISSANCE_VERROUILLEE =
+  'Cette date de naissance n’est pas entièrement partagée avec vous : elle ne peut pas être corrigée ici.'
+
+/**
  * L'état initial du formulaire, depuis la fiche lue.
  *
  * **Les valeurs viennent du corps de la fiche, jamais du calque `enAttente`.**

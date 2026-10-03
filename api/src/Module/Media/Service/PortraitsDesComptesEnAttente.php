@@ -52,6 +52,11 @@ final readonly class PortraitsDesComptesEnAttente implements PortraitsDesComptes
         ];
     }
 
+    public function aUnePhoto(int $userId, ?int $personId): bool
+    {
+        return $this->medias->aUnePhoto($userId, $personId);
+    }
+
     public function rattacherALaFiche(int $userId, int $personId, string $personLabel): bool
     {
         $media = $this->medias->portraitsEnAttenteDuCompte($userId)[0] ?? null;

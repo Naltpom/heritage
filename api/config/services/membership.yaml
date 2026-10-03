@@ -37,6 +37,10 @@ parameters:
     # `MEDIA_RACINE` vers `var/`, n'écrivent pas dans le dépôt.
     app.membership.messages_vocaux: '%app.media.racine%/messages-vocaux'
 
+    # Les autorisations signées de partage de date de naissance (ADR 0016) : même volume,
+    # même règle — hors racine web, nom aléatoire, lues par un administrateur seulement.
+    app.membership.autorisations: '%app.media.racine%/autorisations-naissance'
+
 services:
     # ── Le cercle de visibilité ────────────────────────────────────────────────────
     #
@@ -56,6 +60,13 @@ services:
     # Vérification : bin/console debug:container App\\Module\\Core\\Security\\CercleDeVisibiliteInterface
     App\Module\Core\Security\CercleDeVisibiliteInterface:
         alias: App\Module\Membership\Service\CercleDeVisibilite
+
+    # ── La réciprocité des vivants (ADR 0016) ──────────────────────────────────────
+    #
+    # Même câblage, même raison que le cercle juste au-dessus : `core.yaml` pointe sur
+    # `ReciprociteFermee`, ce fichier-ci passe après et prend la main.
+    App\Module\Core\Security\ReciprociteInterface:
+        alias: App\Module\Membership\Service\Reciprocite
 
     # ── L'annuaire des membres, demandé par `Core` ─────────────────────────────────
     #
@@ -117,6 +128,10 @@ when@test:
         # personne n'injecte encore.
         App\Module\Core\Security\CercleDeVisibiliteInterface:
             alias: App\Module\Membership\Service\CercleDeVisibilite
+            public: true
+
+        App\Module\Core\Security\ReciprociteInterface:
+            alias: App\Module\Membership\Service\Reciprocite
             public: true
 
         # Le port vers `Tree`, joué par un arbre en mémoire que chaque test peuple en

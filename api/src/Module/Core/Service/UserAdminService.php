@@ -104,6 +104,13 @@ final class UserAdminService
         $roles = \array_key_exists('roles', $corps) ? $this->rolesValides($corps['roles']) : null;
         $statut = \array_key_exists('status', $corps) ? $this->statutValide($corps['status']) : null;
         $nom = \array_key_exists('displayName', $corps) ? $this->nomValide($corps['displayName']) : null;
+        $ignorer = null;
+        if (\array_key_exists('ignoreRestrictionNaissance', $corps)) {
+            if (!\is_bool($corps['ignoreRestrictionNaissance'])) {
+                throw new ValidationException(['ignoreRestrictionNaissance' => 'Doit être vrai ou faux.']);
+            }
+            $ignorer = $corps['ignoreRestrictionNaissance'];
+        }
 
         // **Avant** toute écriture : `appliquerLesRoles()` journalise, donc vide l'unité de
         // travail — un `409` levé après lui laisserait le changement de rôle écrit.
@@ -119,6 +126,19 @@ final class UserAdminService
         }
         if (null !== $nom) {
             $compte->setDisplayName($nom);
+        }
+        if (null !== $ignorer && $ignorer !== $compte->ignoreLaRestrictionDeNaissance()) {
+            // ADR 0016 : l'option qui fait voir toutes les dates de naissance des vivants.
+            // Journalisée à part — c'est un accès élargi à des données de vivants.
+            $compte->setIgnoreBirthRestriction($ignorer);
+            $this->audit->enregistrer(
+                AuditAction::RestrictionNaissance,
+                User::class,
+                (string) $compte->getId(),
+                $compte->getEmail(),
+                ['avant' => !$ignorer, 'apres' => $ignorer],
+                $administrateur,
+            );
         }
 
         $compte->toucher();
@@ -240,6 +260,8 @@ final class UserAdminService
             'displayName' => '' !== $displayName ? $displayName : $compte->getEmail(),
             'roles' => $compte->getRoles(),
             'status' => $compte->getStatus()->value,
+            // ADR 0016 : voit-il toutes les dates de naissance des vivants ?
+            'ignoreRestrictionNaissance' => $compte->ignoreLaRestrictionDeNaissance(),
             'totpEnabledAt' => $compte->getTotpEnabledAt()?->format(\DateTimeInterface::ATOM),
             'lastLoginAt' => $compte->getLastLoginAt()?->format(\DateTimeInterface::ATOM),
             'createdAt' => $compte->getCreatedAt()->format(\DateTimeInterface::ATOM),

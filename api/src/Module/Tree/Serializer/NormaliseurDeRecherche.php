@@ -96,7 +96,7 @@ final readonly class NormaliseurDeRecherche
                 break;
             }
 
-            $elements[] = $this->ligne($personne, $vivants);
+            $elements[] = $this->ligne($personne, $vivants, $cercle);
         }
 
         return ['elements' => $elements, 'tronque' => $tronque];
@@ -105,7 +105,7 @@ final readonly class NormaliseurDeRecherche
     /**
      * @return array<string, mixed>
      */
-    private function ligne(Person $personne, EtatVivant $vivants): array
+    private function ligne(Person $personne, EtatVivant $vivants, CercleDuLecteur $cercle): array
     {
         return [
             'personId' => $personne->getId(),
@@ -116,7 +116,12 @@ final readonly class NormaliseurDeRecherche
             'vivant' => $vivants->estVivante($personne),
             // La ligne de dates **d'une fiche**, pas l'étiquette du moteur : on n'arrive
             // ici que sur une personne dont le lecteur a le droit de voir les dates.
-            'ligneDates' => $this->dates->ligneDeFiche($personne->getBirth(), $personne->getDeath()),
+            // La naissance d'un vivant passe par la réciprocité (ADR 0016).
+            'ligneDates' => $this->dates->ligneDeFiche(
+                $personne->getBirth(),
+                $personne->getDeath(),
+                $cercle->naissance($personne->getId(), $vivants->estVivante($personne)),
+            ),
             // Toujours `complete` par construction : ce qui ne l'est pas n'a pas été émis.
             'visibilite' => NiveauDeVisibilite::Complete->value,
         ];

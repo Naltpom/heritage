@@ -17,6 +17,9 @@
  *   la phrase entière ; mobile : la forme courte.
  * - **La note de confidentialité** : `noteDeConfidentialite()`, commandée par
  *   `vivant` — jamais par `deceased`, ni par l'absence de dates.
+ * - **Le portrait flouté** (ADR 0016) : sans photo de lui, le lecteur reçoit
+ *   les portraits des vivants **déjà floutés par le serveur** (`flou: true`).
+ *   On ne floute rien ici ; on dit seulement pourquoi, et où y remédier.
  *
  * ## Les actions : une rangée d'icônes, posée par `PageFiche`
  *
@@ -136,6 +139,12 @@ const confidentialite = computed(() => noteDeConfidentialite(fiche))
 
           <p v-if="confidentialite !== null" class="m-0 text-xs leading-relaxed text-attenue">
             {{ confidentialite }}
+          </p>
+
+          <p v-if="fiche.portrait?.flou === true" class="m-0 text-xs leading-relaxed text-attenue" data-portrait-flou>
+            Ajoutez
+            <RouterLink :to="{ name: 'compte' }" class="text-accent underline-offset-2 hover:underline">votre photo</RouterLink>
+            pour voir celles des autres.
           </p>
         </div>
 

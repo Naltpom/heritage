@@ -199,6 +199,13 @@ final readonly class EtagDuGraphe
      */
     private function empreinteDuCercleEffectif(LecteurDeLArbre $lecteur): string
     {
-        return $this->cercles->pour($lecteur)->empreinte($this->population->identifiants());
+        $cercle = $this->cercles->pour($lecteur);
+        $empreinte = $cercle->empreinte($this->population->identifiants());
+        $reciprocite = $cercle->empreinteDeLaReciprocite();
+
+        // La réciprocité des vivants (ADR 0016) change les étiquettes de dates et les
+        // vignettes (floues ou non) sans changer le cercle : elle entre dans la même
+        // composante. Vide sans réciprocité branchée, ce qui garde l'empreinte d'avant.
+        return '' === $reciprocite ? $empreinte : hash('sha256', $empreinte.'|'.$reciprocite);
     }
 }

@@ -12,6 +12,7 @@ use App\Module\Media\Security\LecteurMedia;
 use App\Module\Media\Security\VisibiliteDesSujetsInterface;
 use App\Module\Media\Service\AdresseDuMedia;
 use App\Module\Media\Service\CatalogueMedia;
+use App\Module\Media\Service\FlouDesPortraits;
 use App\Module\Tree\Serializer\LecteurDeLArbre;
 use App\Module\Tree\Serializer\PortDesMedias;
 
@@ -42,31 +43,37 @@ final readonly class PortDesMediasDeLArbre implements PortDesMedias
         private MediaRepository $medias,
         private CatalogueMedia $catalogue,
         private VisibiliteDesSujetsInterface $visibilite,
+        // ADR 0016 : la photo d'un vivant part floue à qui n'a pas la sienne.
+        private FlouDesPortraits $flous,
     ) {
     }
 
     public function portraitDe(int $personneId, LecteurDeLArbre $lecteur): ?array
     {
         $portrait = $this->medias->portraitActif($personneId);
+        $lecteurMedia = $this->traduire($lecteur);
 
-        if (null === $portrait || !$this->catalogue->lisible($portrait, $this->traduire($lecteur))) {
+        if (null === $portrait || !$this->catalogue->lisible($portrait, $lecteurMedia)) {
             return null;
         }
 
+        $flou = $this->flous->doitFlouter($portrait, $lecteurMedia);
+
         return [
             'mediaId' => (int) $portrait->getId(),
-            'url' => $this->url($portrait, 'fichier'),
-            'vignetteUrl' => $this->url($portrait, 'vignette'),
+            'url' => AdresseDuMedia::fichier($portrait, $flou),
+            'vignetteUrl' => AdresseDuMedia::vignette($portrait, $flou),
             'caption' => $portrait->getCaption(),
-        ];
+        ] + ($flou ? ['flou' => true] : []);
     }
 
     public function mediasDePersonne(int $personneId, LecteurDeLArbre $lecteur): array
     {
+        $lecteurMedia = $this->traduire($lecteur);
         $medias = $this->catalogue->lister(
             MediaSubject::Personne,
             $personneId,
-            $this->traduire($lecteur),
+            $lecteurMedia,
         );
 
         return array_map(
@@ -74,8 +81,8 @@ final readonly class PortDesMediasDeLArbre implements PortDesMedias
                 'mediaId' => (int) $media->getId(),
                 'kind' => $media->getKind()->value,
                 'caption' => $media->getCaption(),
-                'url' => $this->url($media, 'fichier'),
-                'vignetteUrl' => $this->url($media, 'vignette'),
+                'url' => $this->url($media, 'fichier', $lecteurMedia),
+                'vignetteUrl' => $this->url($media, 'vignette', $lecteurMedia),
                 // La date du dépôt — celle de la ligne, comme `createdAt` du § 7.2 :
                 // l'onglet Historique de la fiche range les preuves par elle.
                 'createdAt' => $media->getCreatedAt()->format(\DateTimeInterface::ATOM),
@@ -109,7 +116,7 @@ final readonly class PortDesMediasDeLArbre implements PortDesMedias
                 $parCitation[$citationId][] = [
                     'mediaId' => (int) $media->getId(),
                     'kind' => $media->getKind()->value,
-                    'vignetteUrl' => $this->url($media, 'vignette'),
+                    'vignetteUrl' => $this->url($media, 'vignette', $lecteurMedia),
                 ];
             }
         }
@@ -174,17 +181,21 @@ final readonly class PortDesMediasDeLArbre implements PortDesMedias
         }
 
         $reponse = [];
+        $lecteurMedia = $this->traduire($lecteur);
 
         foreach ($this->visibilite->filtrerVisibles(MediaSubject::Personne, array_keys($parPersonne)) as $personneId) {
-            $reponse[$personneId] = $this->url($parPersonne[$personneId], 'vignette');
+            $reponse[$personneId] = $this->url($parPersonne[$personneId], 'vignette', $lecteurMedia);
         }
 
         return $reponse;
     }
 
-    private function url(Media $media, string $segment): string
+    /** L'adresse du média, celle de sa variante floue quand le lecteur n'a droit qu'à elle. */
+    private function url(Media $media, string $segment, LecteurMedia $lecteur): string
     {
-        return 'vignette' === $segment ? AdresseDuMedia::vignette($media) : AdresseDuMedia::fichier($media);
+        $flou = $this->flous->doitFlouter($media, $lecteur);
+
+        return 'vignette' === $segment ? AdresseDuMedia::vignette($media, $flou) : AdresseDuMedia::fichier($media, $flou);
     }
 
     /**

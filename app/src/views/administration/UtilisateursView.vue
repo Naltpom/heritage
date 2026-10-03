@@ -49,6 +49,12 @@
  * panneau à lui, sous le tableau, et non une ligne par compte qui laisserait
  * croire qu'un administrateur a son propre compteur.
  *
+ * **La réciprocité des dates de naissance** (ADR 0016). La colonne
+ * « Rattachement » dit ce que le membre partage de sa date de naissance, et
+ * l'icône calendrier lève — ou rétablit — pour ce compte la restriction : il
+ * voit alors les dates des vivants sans que son propre choix les réduise. Les
+ * **photos** n'en dépendent pas : sans photo de lui, elles restent floutées.
+ *
  * **« Voir comme ce membre » a été retiré de cet écran** (01/10/2026) :
  * « Se connecter en tant que » (ADR 0010) montre la même chose, et davantage.
  * Une bascule restée active côté serveur se quitte toujours par le bandeau
@@ -82,6 +88,7 @@ import MentionDeRattachement from '@/components/administration/MentionDeRattache
 import PortraitAValider from '@/components/administration/PortraitAValider.vue'
 import QuotasDuCompte from '@/components/administration/QuotasDuCompte.vue'
 import EditeurDeQuotas, { type EditionDeQuotas } from '@/components/administration/EditeurDeQuotas.vue'
+import { resumePartage } from '@/components/compte/partageNaissance'
 import {
   ecrituresSuspendues,
   infobulleSuspension,
@@ -201,6 +208,17 @@ function basculerSuspension(utilisateur: UtilisateurAdministration): void {
     modifierUtilisateur(utilisateur.id, {
       status: utilisateur.status === 'suspendu' ? 'actif' : 'suspendu',
     }),
+  )
+}
+
+/** ADR 0016 — absent d'un serveur antérieur : la restriction s'applique. */
+function restrictionIgnoree(utilisateur: UtilisateurAdministration): boolean {
+  return utilisateur.ignoreRestrictionNaissance === true
+}
+
+function basculerRestrictionNaissance(utilisateur: UtilisateurAdministration): void {
+  void agir(utilisateur.id, () =>
+    modifierUtilisateur(utilisateur.id, { ignoreRestrictionNaissance: !restrictionIgnoree(utilisateur) }),
   )
 }
 
@@ -370,6 +388,20 @@ function dateLisible(valeur: string | null): string {
                 <!-- Le rattachement, dans ses trois états — y compris celui où
                      il n'y en a aucun. Le détail est dans `rattachement.ts`. -->
                 <MentionDeRattachement :membre="utilisateur.membre" />
+                <p
+                  v-if="utilisateur.membre?.partageNaissance"
+                  class="mt-1 text-xs text-attenue"
+                  data-partage-du-membre
+                >
+                  Date de naissance partagée : {{ resumePartage(utilisateur.membre.partageNaissance) }}
+                </p>
+                <p
+                  v-if="restrictionIgnoree(utilisateur)"
+                  class="mt-1 text-xs font-semibold text-accent"
+                  data-restriction-ignoree
+                >
+                  Restriction de date de naissance ignorée
+                </p>
                 <PortraitAValider :photo="portraitAValider(utilisateur)" :nom="utilisateur.displayName" />
               </td>
 
@@ -430,6 +462,23 @@ function dateLisible(valeur: string | null): string {
                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
                     <path d="M10 17l5-5-5-5" />
                     <path d="M15 12H3" />
+                  </BoutonIcone>
+
+                  <BoutonIcone
+                    :libelle="
+                      restrictionIgnoree(utilisateur)
+                        ? 'Rétablir la restriction de date de naissance'
+                        : 'Ignorer la restriction de date de naissance'
+                    "
+                    :variante="restrictionIgnoree(utilisateur) ? 'accent' : 'neutre'"
+                    :desactive="suspendu || enCours !== null"
+                    :infobulle="infobulle"
+                    @click="basculerRestrictionNaissance(utilisateur)"
+                  >
+                    <rect x="4" y="5" width="16" height="15" rx="2" />
+                    <path d="M4 10h16M9 3v4M15 3v4" />
+                    <path v-if="!restrictionIgnoree(utilisateur)" d="M12 13v4" />
+                    <path v-else d="M9.5 15l2 2 3.5-3.5" />
                   </BoutonIcone>
 
                   <BoutonIcone

@@ -17,7 +17,9 @@
  * ## Les onglets (trois depuis le 30/09/2026)
  *
  * - **Identité et famille** : `IdentiteFiche` (où se dessine le calque « en
- *   attente », à côté de la valeur validée), les faits, puis `ParenteFiche` ;
+ *   attente », à côté de la valeur validée), pour un administrateur et une
+ *   personne vivante l'autorisation signée (`AutorisationNaissance`, ADR 0016),
+ *   les faits, puis `ParenteFiche` ;
  * - **Sources et documents** : `SourcesFiche` (sources et notes), puis
  *   `GalerieMedias` — qui charge ses propres médias, monté seulement quand
  *   l'onglet est ouvert, et dont la zone de dépôt porte l'ancre `#depot` —,
@@ -67,6 +69,7 @@ import GalerieMedias from '@/components/medias/GalerieMedias.vue'
 import ListeDemarches from '@/components/demarches/ListeDemarches.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
 import ActionsFiche from './ActionsFiche.vue'
+import AutorisationNaissance from './AutorisationNaissance.vue'
 import BandeauFiche from './BandeauFiche.vue'
 import { couleurBranche, generationLisible, nomBranche } from './champs'
 import { LIBELLES_DEPOT } from './edition'
@@ -122,7 +125,7 @@ function surToucheFin(e: TouchEvent): void {
   if (cible) void routeur.replace({ name: 'personne.detail', params: { id: fiche.id }, query: requeteDOnglet(cible) })
 }
 
-const { peutProposer, peutDeposer, peutDemanderSuppression } = useGestesFiche()
+const { peutProposer, peutDeposer, peutDemanderSuppression, peutGererAutorisationNaissance } = useGestesFiche()
 
 /** La barre du bas se remplit par ce qui est permis ; vide, elle n'existe pas. */
 const barreAction = computed(
@@ -246,6 +249,14 @@ function pluriel(n: number, mot: string): string {
             <template v-else-if="onglet === 'identite'">
               <SectionFiche titre="Identité" data-panneau="identite">
                 <IdentiteFiche :fiche="fiche" />
+              </SectionFiche>
+              <!-- ADR 0016 : l'autorisation signée d'un vivant sans compte. -->
+              <SectionFiche
+                v-if="fiche.vivant && peutGererAutorisationNaissance"
+                titre="Date de naissance — autorisation signée"
+                data-panneau="autorisation-naissance"
+              >
+                <AutorisationNaissance :person-id="fiche.id" />
               </SectionFiche>
               <SectionFiche v-if="fiche.faits.length > 0" titre="Faits">
                 <FaitsFiche :fiche="fiche" />

@@ -11,6 +11,10 @@
  * saisit donc exactement comme dans le formulaire de modification, et repart
  * telle qu'elle était si l'éditeur ne sait pas l'exprimer.
  *
+ * Une naissance que le lecteur ne voit pas entière (ADR 0016) ne se saisit
+ * pas : `ChampDateNonModifiable` la montre telle qu'elle lui est servie, avec
+ * la raison, et la saisie garde sa valeur d'origine — aucun op.
+ *
  * Le calque « en attente » est **signalé**, jamais recopié dans un champ : partir
  * d'une valeur proposée déposerait une demande dont l'`oldValue` n'a jamais existé
  * en base (§ 13.2).
@@ -19,9 +23,14 @@ import { computed } from 'vue'
 import type { FichePersonneComplete } from '@/lib/api'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import ChampDateIncertaine from '@/components/proposition/ChampDateIncertaine.vue'
+import ChampDateNonModifiable from '@/components/proposition/ChampDateNonModifiable.vue'
 import ChampsIdentite from '@/components/proposition/ChampsIdentite.vue'
 import { etiquetteDeChamp, type ChampPersonne } from '@/components/proposition/champs'
-import type { SaisieModification } from '@/components/proposition/operations'
+import {
+  MOTIF_NAISSANCE_VERROUILLEE,
+  naissanceVerrouillee,
+  type SaisieModification,
+} from '@/components/proposition/operations'
 
 const { fiche, erreurs = {} } = defineProps<{
   fiche: FichePersonneComplete
@@ -55,7 +64,14 @@ const champsEnAttente = computed(() =>
       :erreurs="erreurs"
     />
 
+    <ChampDateNonModifiable
+      v-if="naissanceVerrouillee(fiche)"
+      :etiquette="etiquetteDeChamp('birth')"
+      :bloc="fiche.birth"
+      :motif="MOTIF_NAISSANCE_VERROUILLEE"
+    />
     <ChampDateIncertaine
+      v-else
       v-model="saisie.naissance"
       :etiquette="etiquetteDeChamp('birth')"
       :erreur="erreurs['birth'] ?? ''"

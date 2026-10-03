@@ -32,14 +32,19 @@ use App\Module\Media\Entity\Media;
  */
 final class AdresseDuMedia
 {
-    public static function fichier(Media $media): string
+    /**
+     * `$flou` (ADR 0016) suffixe la version de `-f` : **une clé de cache, pas un droit**.
+     * C'est le serveur qui décide des octets ; le suffixe garantit seulement que le
+     * navigateur ne range pas la variante floue et la nette sous la même adresse.
+     */
+    public static function fichier(Media $media, bool $flou = false): string
     {
-        return self::composer($media, 'fichier');
+        return self::composer($media, 'fichier', $flou);
     }
 
-    public static function vignette(Media $media): string
+    public static function vignette(Media $media, bool $flou = false): string
     {
-        return self::composer($media, 'vignette');
+        return self::composer($media, 'vignette', $flou);
     }
 
     public static function version(Media $media): string
@@ -47,8 +52,8 @@ final class AdresseDuMedia
         return substr(hash('sha256', $media->getStorageName()), 0, 12);
     }
 
-    private static function composer(Media $media, string $segment): string
+    private static function composer(Media $media, string $segment, bool $flou = false): string
     {
-        return \sprintf('/api/medias/%d/%s?v=%s', (int) $media->getId(), $segment, self::version($media));
+        return \sprintf('/api/medias/%d/%s?v=%s%s', (int) $media->getId(), $segment, self::version($media), $flou ? '-f' : '');
     }
 }

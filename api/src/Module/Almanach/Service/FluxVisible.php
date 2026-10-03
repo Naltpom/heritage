@@ -8,7 +8,10 @@ use App\Module\Almanach\Contract\EvenementDeLArbre;
 use App\Module\Almanach\Contract\FluxDEvenements;
 use App\Module\Almanach\Contract\PortEvenementsArbre;
 use App\Module\Almanach\Contract\SujetDeLEvenement;
+use App\Module\Almanach\Contract\TypeDEvenement;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
+use App\Module\Core\Security\ReciprociteInterface;
+use App\Module\Core\ValueObject\UncertainDate;
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -91,6 +94,8 @@ final class FluxVisible
     public function __construct(
         private readonly PortEvenementsArbre $port,
         private readonly CercleDeVisibiliteInterface $cercle,
+        // ADR 0016 : la naissance d'un vivant ne sort qu'à travers la réciprocité.
+        private readonly ReciprociteInterface $reciprocite,
     ) {
     }
 
@@ -116,10 +121,45 @@ final class FluxVisible
                 continue;
             }
 
-            $retenus[] = $evenement;
+            $retenus[] = $this->aTraversLaReciprocite($evenement);
         }
 
         return new FluxDEvenements($retenus, $flux->lieux);
+    }
+
+    /**
+     * **La réciprocité des vivants** (ADR 0016) — le second filtre, après le cercle, et le
+     * seul point de passage du calendrier et de la carte.
+     *
+     * La naissance d'un vivant dont le lecteur ne voit pas toutes les composantes repart
+     * avec une date **dégradée** (sans `raw`, bornes élargies, ou inconnue sans l'année) :
+     * un consommateur qui l'ignore ne peut rien en tirer de plus que le permis. Ce qu'il
+     * reste de sûr — le jour et le mois d'un anniversaire — voyage à côté.
+     */
+    private function aTraversLaReciprocite(EvenementDeLArbre $evenement): EvenementDeLArbre
+    {
+        if (TypeDEvenement::Naissance !== $evenement->type || 1 !== \count($evenement->sujets) || !$evenement->sujets[0]->vivant) {
+            return $evenement;
+        }
+
+        $permises = $this->reciprocite->naissance($evenement->sujets[0]->personId);
+
+        if ($permises->estComplete()) {
+            return $evenement;
+        }
+
+        $date = $evenement->date;
+
+        return new EvenementDeLArbre(
+            $evenement->cle,
+            $evenement->type,
+            $evenement->sujets,
+            $date->reduite($permises) ?? UncertainDate::inconnue($date->getPlace()),
+            $evenement->libelle,
+            $evenement->familyId,
+            $date->composantesVisibles($permises),
+            $date->formatPartiel($permises),
+        );
     }
 
     /**

@@ -129,7 +129,14 @@ final class DetecteurDeLacunes
         // DATER. Poser les deux questions sur la même fiche en produirait une seconde,
         // absurde pour qui la lit — et un membre qui lit une question absurde cesse de
         // lire les suivantes.
-        if (!$this->estDatee($fiche->naissance)) {
+        //
+        // ADR 0016 : **aucune** question sur la naissance d'une personne vivante. « Date
+        // de naissance inconnue » dirait à qui ne partage pas qu'elle est connue ou non —
+        // et « lieu inconnu » qu'elle l'est —, et la demander à la famille, c'est
+        // collecter la donnée même que la réciprocité protège.
+        if ($fiche->vivante) {
+            // rien à demander
+        } elseif (!$this->estDatee($fiche->naissance)) {
             $natures[] = NatureDeLacune::DateDeNaissanceInconnue;
         } elseif (!$this->estSituee($fiche->naissance)) {
             $natures[] = NatureDeLacune::LieuDeNaissanceInconnu;

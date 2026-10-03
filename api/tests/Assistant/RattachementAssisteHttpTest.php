@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Assistant;
 
+use App\Module\Assistant\Service\QuotasDeLAssistant;
 use App\Module\Core\Entity\AuditLog;
 use App\Module\Core\Enum\AuditAction;
 use App\Module\Core\Enum\DateQualifier;
@@ -12,6 +13,7 @@ use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Exception\ConflictException;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Service\CleDeRecherche;
+use App\Module\Core\Service\QuotasDUsage;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Membership\Contract\DeclarationDuCompte;
 use App\Module\Membership\Entity\Member;
@@ -20,8 +22,6 @@ use App\Tests\Assistant\Double\AccesAuModeleSimule;
 use App\Tests\Assistant\Double\ComptesARattacherEnMemoire;
 use App\Tests\Assistant\Double\ModeleScripte;
 use App\Tests\Proposal\CasDeTestDemandesHttp;
-use App\Module\Assistant\Service\QuotasDeLAssistant;
-use App\Module\Core\Service\QuotasDUsage;
 use Symfony\Component\RateLimiter\LimiterInterface;
 
 /**
@@ -75,7 +75,10 @@ final class RattachementAssisteHttpTest extends CasDeTestDemandesHttp
 
         ComptesARattacherEnMemoire::poser(self::declaration());
 
-        $this->creerUtilisateur('natron@example.net', ['ROLE_ADMIN'], 'Natron');
+        // L'administrateur qui rattache compare des naissances : il porte l'option
+        // « ignorer la restriction de date de naissance » (ADR 0016).
+        $this->creerUtilisateur('natron@example.net', ['ROLE_ADMIN'], 'Natron')->setIgnoreBirthRestriction(true);
+        $this->em()->flush();
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

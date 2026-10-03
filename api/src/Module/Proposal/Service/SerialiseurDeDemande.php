@@ -285,6 +285,12 @@ final readonly class SerialiseurDeDemande
             $changes = self::sansValeursDAvant($changes);
         }
 
+        // ADR 0016 : la naissance d'un vivant que le lecteur ne voit pas entière ne
+        // ressort pas par l'historique — ni avant, ni après.
+        if ($this->masques->naissanceMasquee($kind, $revision->getSubjectId())) {
+            $changes = self::sansNaissance($changes);
+        }
+
         return [
             'id' => $revision->getId(),
             'operation' => $revision->getOperation()->value,
@@ -350,6 +356,11 @@ final readonly class SerialiseurDeDemande
             // ces ops par `opAvecEtat()`, n'est pas concernée : l'administrateur voit tout.
             if ($this->masques->masquee($op->getSubjectKind(), $op->getSubjectId())) {
                 unset($rendu['oldValue'], $rendu['baseVersion']);
+            }
+
+            // ADR 0016 : la valeur d'avant d'une naissance que l'auteur ne voit pas entière.
+            if ('birth' === $op->getField() && $this->masques->naissanceMasquee($op->getSubjectKind(), $op->getSubjectId())) {
+                unset($rendu['oldValue']);
             }
 
             $rendus[] = $rendu;
@@ -646,6 +657,24 @@ final readonly class SerialiseurDeDemande
         $brouillon = $this->brouillons->find($draftPersonId);
 
         return null === $brouillon ? $stocke : $brouillon->nomPropose().' (proposée)';
+    }
+
+    /**
+     * Les `changes` d'une révision, privés des champs de naissance (ADR 0016).
+     *
+     * @param array<string, mixed> $changes
+     *
+     * @return array<string, mixed>
+     */
+    private static function sansNaissance(array $changes): array
+    {
+        foreach (array_keys($changes) as $champ) {
+            if (str_starts_with((string) $champ, 'birth')) {
+                unset($changes[$champ]);
+            }
+        }
+
+        return $changes;
     }
 
     /**

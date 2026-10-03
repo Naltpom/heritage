@@ -176,6 +176,36 @@ class MediaRepository extends ServiceEntityRepository
     }
 
     /**
+     * Le compte a-t-il **une photo de lui** — la condition de la réciprocité des portraits
+     * (ADR 0016) ?
+     *
+     * Un portrait de sa fiche, **actif ou en attente** de validation (déposé par une
+     * demande), ou le portrait de son compte encore en attente de rattachement. Un portrait
+     * refusé ou remplacé ne compte pas.
+     */
+    public function aUnePhoto(int $userId, ?int $personId): bool
+    {
+        $requete = $this->createQueryBuilder('m')
+            ->select('COUNT(m.id)')
+            ->andWhere('m.kind = :portrait')
+            ->setParameter('portrait', MediaKind::Portrait)
+            ->setParameter('compte', $userId)
+            ->setParameter('attente', MediaStatus::EnAttente);
+
+        if (null !== $personId) {
+            $requete
+                ->andWhere('(m.subjectKind = :personne AND m.subjectId = :fiche AND m.status IN (:statuts)) OR (m.subjectUserId = :compte AND m.status = :attente)')
+                ->setParameter('personne', MediaSubject::Personne)
+                ->setParameter('fiche', $personId)
+                ->setParameter('statuts', [MediaStatus::Actif, MediaStatus::EnAttente]);
+        } else {
+            $requete->andWhere('m.subjectUserId = :compte AND m.status = :attente');
+        }
+
+        return (int) $requete->getQuery()->getSingleScalarResult() > 0;
+    }
+
+    /**
      * Les portraits en attente posés sur un **compte** sans fiche (ADR 0013). Au plus un
      * d'ordinaire — `uniq_med_media_portrait_de_compte` y veille —, mais la méthode rend une
      * liste : c'est ce qui permet au dépôt suivant de tout nettoyer, même si l'index

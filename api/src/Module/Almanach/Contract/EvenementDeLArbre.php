@@ -87,6 +87,17 @@ final readonly class EvenementDeLArbre
         public UncertainDate $date,
         public ?string $libelle = null,
         public ?int $familyId = null,
+        /**
+         * La naissance d'un vivant **vue partiellement** (ADR 0016) : `$date` est alors la
+         * date dégradée — sans les composantes retenues —, et ce champ porte ce qu'il reste
+         * de sûr et de permis, pour les écrans qui calculent (le jour et le mois d'un
+         * anniversaire sans son année). `null` : rien n'a été retenu.
+         *
+         * @var array{annee?: int, mois?: int, jour?: int}|null
+         */
+        public ?array $composantesVisibles = null,
+        /** Le rendu français des composantes permises (« 12 mars »), quand la date est réduite. */
+        public ?string $texteVisible = null,
     ) {
     }
 
@@ -99,6 +110,12 @@ final readonly class EvenementDeLArbre
     public function identifiantsDesSujets(): array
     {
         return array_map(static fn (SujetDeLEvenement $sujet): int => $sujet->personId, $this->sujets);
+    }
+
+    /** La naissance de ce vivant n'est-elle vue que partiellement ? */
+    public function estReduite(): bool
+    {
+        return null !== $this->composantesVisibles;
     }
 
     public function genre(): GenreDEvenement

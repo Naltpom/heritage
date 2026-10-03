@@ -75,7 +75,10 @@ final class CorpusDeLArbre
                     'nom' => $fiche->nomAffiche,
                     'sexe' => $fiche->sexe,
                     'vivante' => $fiche->vivante,
-                    'naissance' => self::annee($fiche->naissance->getMin(), $fiche->naissance->getMax()),
+                    // ADR 0016 : **aucune** naissance de personne vivante ne part chez le tiers,
+                    // quels que soient les consentements — le corpus est commun à tous les
+                    // lecteurs, et la réciprocité ne se découpe pas dans un texte partagé.
+                    'naissance' => $fiche->vivante ? null : self::annee($fiche->naissance->getMin(), $fiche->naissance->getMax()),
                     'deces' => self::annee($fiche->deces->getMin(), $fiche->deces->getMax()),
                     'pere' => null === $fiche->pereId ? null : ($rangs[$fiche->pereId] ?? null),
                     'mere' => null === $fiche->mereId ? null : ($rangs[$fiche->mereId] ?? null),

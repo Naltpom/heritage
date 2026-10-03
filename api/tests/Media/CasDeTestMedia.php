@@ -122,7 +122,7 @@ abstract class CasDeTestMedia extends TestCase
         // L'adaptateur **réel** : les tests exercent la vraie traduction
         // « sujet → personnes », pas un double de mon propre port.
         $this->visibilite = new VisibiliteParLeCercle($this->cercle, $this->sujets);
-        $this->normaliseur = new NormaliseurMedia();
+        $this->normaliseur = new NormaliseurMedia(new \App\Module\Media\Service\FlouDesPortraits(new \App\Tests\Core\Double\ReciprociteEnMemoire()));
 
         $medias = $this->medias = new MediaRepository(new DoublureDeRegistre($this->em));
 

@@ -35,7 +35,7 @@ import { computed } from 'vue'
 import { useSession } from '@/composables/useSession'
 
 export function useGestesFiche() {
-  const { rattache, vueEmpruntee } = useSession()
+  const { rattache, administrateur, vueEmpruntee } = useSession()
 
   const ecritureOuverte = computed(() => rattache.value && vueEmpruntee.value === null)
 
@@ -46,5 +46,8 @@ export function useGestesFiche() {
     peutDemanderSuppression: computed(() => ecritureOuverte.value),
     /** L'envoi de document : même condition que le dépôt de la galerie. */
     peutDeposer: computed(() => ecritureOuverte.value),
+    /** ADR 0016 — l'autorisation signée d'un vivant sans compte : administrateur,
+     *  hors vue empruntée (le serveur y refuse toute écriture). */
+    peutGererAutorisationNaissance: computed(() => administrateur.value && vueEmpruntee.value === null),
   }
 }

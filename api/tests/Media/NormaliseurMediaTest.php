@@ -43,7 +43,7 @@ final class NormaliseurMediaTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->normaliseur = new NormaliseurMedia();
+        $this->normaliseur = new NormaliseurMedia(new \App\Module\Media\Service\FlouDesPortraits(new \App\Tests\Core\Double\ReciprociteEnMemoire()));
     }
 
     public function testLEnsembleExactDesClesPourUnLecteurOrdinaire(): void

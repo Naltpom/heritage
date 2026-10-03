@@ -153,6 +153,9 @@ final readonly class NormaliseurDePersonne
         $unions = $this->lecture->unionsDe($personne);
         $enfantsParFamille = $this->lecture->enfantsDe($unions);
         $citations = $this->lecture->citationsDePersonne($personne);
+        // La réciprocité des vivants (ADR 0016) : ce que le lecteur voit de la naissance.
+        // Tout pour un défunt ; pour un vivant, l'intersection des deux consentements.
+        $naissance = $cercle->naissance($id, $vivante);
 
         return [
             'id' => $id,
@@ -168,9 +171,12 @@ final readonly class NormaliseurDePersonne
             // jamais `deceased` et jamais l'absence de dates.
             'deceased' => $personne->isDeceased(),
             'vivant' => $vivante,
-            'birth' => $this->dates->pourFiche($personne->getBirth()),
+            'birth' => $this->dates->naissancePourFiche($personne->getBirth(), $naissance),
             'death' => $this->dates->pourFiche($personne->getDeath()),
-            'ligneDates' => $this->dates->ligneDeFiche($personne->getBirth(), $personne->getDeath()),
+            'ligneDates' => $this->dates->ligneDeFiche($personne->getBirth(), $personne->getDeath(), $naissance),
+            // Une date qu'on ne voit pas entière ne se corrige pas : la demande écraserait
+            // ce qu'on ne connaît pas (`422 naissance_masquee` côté `Proposal`).
+            'naissanceModifiable' => $naissance->estComplete(),
             'branch' => $personne->getBranch()?->value,
             'generation' => $personne->getGeneration(),
             'bestQuay' => $personne->getBestQuay(),
@@ -247,7 +253,10 @@ final readonly class NormaliseurDePersonne
         }
 
         return [
-            'naissance' => $this->dates->compacte($personne->getBirth()),
+            'naissance' => $this->dates->compacte(
+                $personne->getBirth(),
+                $cercle->naissance($personne->getId(), $vivants->estVivante($personne)),
+            ),
             'deces' => $this->dates->compacte($personne->getDeath()),
         ];
     }

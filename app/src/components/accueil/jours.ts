@@ -65,7 +65,8 @@ export function anniversairesDuJour(jours: readonly JourAnniversaire[], date: Da
     .filter((j) => correspond(j.mois, j.jour, date))
     .flatMap((j) => j.evenements)
     .slice()
-    .sort((a, b) => a.annee - b.annee || a.cle.localeCompare(b.cle))
+    // Sans année (non partagée, ADR 0016) : en dernier. Voir `parJour()`.
+    .sort((a, b) => (a.annee ?? Infinity) - (b.annee ?? Infinity) || a.cle.localeCompare(b.cle))
 }
 
 /** Les tirages dont le jour habituel tombe ce jour-là. */

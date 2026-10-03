@@ -251,3 +251,15 @@ describe('les événements sans jour connu', () => {
     expect(compterSansJourMasques(SANS_JOUR, TOUS)).toBe(0)
   })
 })
+
+describe('une naissance sans année partagée (ADR 0016)', () => {
+  it('reste sur son jour, après les événements datés, dans un ordre stable', () => {
+    const { annee: _sans, ...sansAnnee } = evenement('n:b', 'naissance', 0)
+    const sansAnnee2 = { ...sansAnnee, cle: 'n:a' }
+    const table = parJour(
+      [jour(3, 12, [sansAnnee, evenement('n:c', 'naissance', 1950), sansAnnee2, evenement('n:d', 'naissance', 1890)])],
+      new Set<GenreEvenement>(['naissance']),
+    )
+    expect(table.get('03-12')?.map((e) => e.cle)).toEqual(['n:d', 'n:c', 'n:a', 'n:b'])
+  })
+})

@@ -45,6 +45,7 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         private PortArbre $arbre,
         private NormaliseurDeValeur $normaliseur,
         private SurfaceEditable $surface,
+        private ValeursMasquees $masques,
     ) {
     }
 
@@ -258,6 +259,12 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         $baseVersion = $brut['baseVersion'] ?? null;
         if (!\is_int($baseVersion)) {
             throw DonneesInvalides::pourChamp("$chemin.baseVersion", 'La version vue à la lecture de la fiche est obligatoire : sans elle, une demande déposée lundi et validée vendredi écrase le travail de mardi.');
+        }
+
+        // ADR 0016 : **avant** toute lecture de la valeur courante — le contrôle de
+        // l'ancienne valeur rendrait sinon la date complète dans son `409`.
+        if ('birth' === $field && $this->masques->naissanceMasquee($subjectKind, $subjectId)) {
+            throw DonneesInvalides::naissanceMasquee("$chemin.field");
         }
 
         if (!\array_key_exists('oldValue', $brut) || !\array_key_exists('newValue', $brut)) {

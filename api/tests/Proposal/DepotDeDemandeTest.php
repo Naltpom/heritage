@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Proposal;
 
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Enum\RequestKind;
 use App\Module\Proposal\Enum\RequestStatus;
 use App\Module\Proposal\Exception\AccesRefuse;
@@ -58,6 +59,34 @@ final class DepotDeDemandeTest extends BaseDeDemandes
         self::assertSame('SUREAU', $ops[0]->getNewValue());
         self::assertSame(7, $ops[0]->getBaseVersion());
         self::assertSame('nickname', $ops[1]->getField());
+    }
+
+    /**
+     * ADR 0016 : la naissance d'un **vivant** que l'auteur ne voit pas entière ne se
+     * corrige pas — `422 naissance_masquee`, levé **avant** le contrôle de l'ancienne
+     * valeur, dont le `409` rendrait sinon la date complète.
+     */
+    public function testLaNaissanceDUnVivantQuOnNeVoitPasNeSeCorrigePas(): void
+    {
+        $this->arbre->poser(SubjectKind::Personne, self::PERSONNE, 'Marne Dolomite Sureau', 7, [
+            'givenNames' => 'Marne Dolomite',
+            'surname' => 'Sureau',
+            'marriedName' => null,
+            'nickname' => null,
+            'sex' => 'feminin',
+            'deceased' => false,
+            'birth' => $this->annee(1987),
+            'death' => UncertainDate::inconnue(),
+            'forcePrivacy' => false,
+            'privacyNote' => null,
+        ]);
+
+        try {
+            $this->depot->deposer($this->corpsDeModification([$this->opDate()]), $this->lecteur(self::OPALE));
+            self::fail('La demande aurait dû être refusée.');
+        } catch (DonneesInvalides $refus) {
+            self::assertSame('naissance_masquee', $refus->codeErreur());
+        }
     }
 
     /**

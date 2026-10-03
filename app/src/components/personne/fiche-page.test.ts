@@ -61,6 +61,15 @@ vi.mock('vue-router', async () => {
   }
 })
 
+/* ADR 0016 : le bloc d'autorisation signée lit son état au montage. Il ne doit
+   jamais partir sur le réseau depuis un test : on rend une lecture qui
+   n'aboutit pas, le rendu serveur ne l'attend pas. */
+const lectures = vi.hoisted(() => ({ autorisation: vi.fn(() => new Promise(() => undefined)) }))
+vi.mock('@/lib/api', async (original) => ({
+  ...(await original<typeof import('@/lib/api')>()),
+  lireAutorisationNaissance: lectures.autorisation,
+}))
+
 /* La vue charge sa fiche par `useAppelApi` : on lui rend une charge déjà là,
    puisque le rendu serveur n'attend pas la promesse. */
 vi.mock('@/composables/useAppelApi', async () => {
@@ -460,5 +469,64 @@ describe('le glissement entre onglets (téléphone)', () => {
     expect(ongletVoisin(rangee, 'historique', -1)).toBe('sources')
     expect(ongletVoisin(rangee, 'identite', -1)).toBeNull()
     expect(ongletVoisin(rangee, 'historique', 1)).toBeNull()
+  })
+})
+
+describe('réciprocité des vivants (ADR 0016) — sur la page fiche', () => {
+  const VIVANTE: Partial<FichePersonneComplete> = {
+    deceased: false,
+    vivant: true,
+    birth: { raw: null, qualifier: 'masquee', min: null, max: null, place: 'Saule', texte: '' },
+    naissanceModifiable: false,
+    ligneDates: null,
+  }
+
+  it('un portrait servi flouté le dit, et renvoie au compte pour y remédier', async () => {
+    const flou = await rendre(PageFiche, {
+      fiche: ficheComplete({
+        ...VIVANTE,
+        portrait: { mediaId: 5, url: '/api/medias/5/fichier?flou=1', vignetteUrl: '/api/medias/5/vignette?flou=1', caption: null, flou: true },
+      }),
+      onglet: 'identite',
+    })
+    expect(flou).toContain('data-portrait-flou')
+    expect(flou).toContain('pour voir celles des autres.')
+    expect(flou).toContain('data-vers="{&quot;name&quot;:&quot;compte&quot;}"')
+    // L'image est celle du serveur : aucun flou ajouté en CSS.
+    expect(flou).not.toMatch(/blur/)
+
+    const net = await rendre(PageFiche, {
+      fiche: ficheComplete({
+        ...VIVANTE,
+        portrait: { mediaId: 5, url: '/api/medias/5/fichier', vignetteUrl: '/api/medias/5/vignette', caption: null },
+      }),
+      onglet: 'identite',
+    })
+    expect(net).not.toContain('data-portrait-flou')
+  })
+
+  it('la naissance masquée se lit « non partagée » dans l’onglet Identité', async () => {
+    const html = await rendre(PageFiche, { fiche: ficheComplete(VIVANTE), onglet: 'identite' })
+    expect(html).toContain('non partagée')
+  })
+
+  it('l’autorisation signée : administrateur, personne vivante, hors vue empruntée', async () => {
+    etat.regime.value = 'administrateur'
+    const admin = await rendre(PageFiche, { fiche: ficheComplete(VIVANTE), onglet: 'identite' })
+    expect(admin).toContain('data-panneau="autorisation-naissance"')
+    expect(lectures.autorisation).toHaveBeenCalledWith(17)
+
+    // Une personne décédée n'est pas concernée.
+    const decedee = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
+    expect(decedee).not.toContain('data-panneau="autorisation-naissance"')
+
+    etat.vueEmpruntee.value = { memberId: 7, memberLabel: 'Cobalt Romarin' }
+    const empruntee = await rendre(PageFiche, { fiche: ficheComplete(VIVANTE), onglet: 'identite' })
+    expect(empruntee).not.toContain('data-panneau="autorisation-naissance"')
+
+    etat.vueEmpruntee.value = null
+    etat.regime.value = 'membre'
+    const membre = await rendre(PageFiche, { fiche: ficheComplete(VIVANTE), onglet: 'identite' })
+    expect(membre).not.toContain('data-panneau="autorisation-naissance"')
   })
 })

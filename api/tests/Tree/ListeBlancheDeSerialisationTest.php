@@ -8,6 +8,7 @@ use App\Module\Core\Contract\CalqueEnAttenteInterface;
 use App\Module\Core\Contract\CalqueFerme;
 use App\Module\Core\Enum\Regime;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\ValueObject\ComposantesDeDate;
 use App\Module\Tree\Serializer\AppuiDUneCitation;
 use App\Module\Tree\Serializer\CercleDuLecteur;
 use App\Module\Tree\Serializer\EtatVivant;
@@ -112,6 +113,40 @@ final class ListeBlancheDeSerialisationTest extends ArbreWebTestCase
         self::assertSame('n. ~1934', $fiche['ligneDates'], '`ligneDates` est la forme **compacte** (§ 14.4) ; la prose « vers 1934 » est la valeur de `texte`, dans le bloc date.');
         self::assertCount(1, $fiche['citations']);
         self::assertCount(1, $fiche['notes']);
+    }
+
+    /**
+     * **La réciprocité des vivants** (ADR 0016) : un vivant que le cercle montre, mais
+     * dont le lecteur ne partage pas — ou n'obtient pas — la naissance, sort avec un bloc
+     * **masqué**. Ni `raw`, ni bornes, ni année dans aucune clé ; le lieu, lui, reste.
+     */
+    public function testUneNaissanceNonPartageeNeSortParAucuneCle(): void
+    {
+        $cercle = CercleDuLecteur::de([$this->idDe('cousin')])->avecPartage([$this->idDe('cousin') => ComposantesDeDate::aucune()]);
+        $fiche = $this->fiche('cousin', $this->membre(), $cercle);
+
+        self::assertSame('complete', $fiche['visibilite'], 'Le cercle décide de la fiche ; la réciprocité ne fait que réduire la naissance.');
+        self::assertIsArray($fiche['birth']);
+        self::assertSame('masquee', $fiche['birth']['qualifier']);
+        self::assertNull($fiche['birth']['raw']);
+        self::assertNull($fiche['birth']['min']);
+        self::assertNull($fiche['birth']['max']);
+        self::assertSame('', $fiche['birth']['texte']);
+        self::assertSame('Sorbière, Fougerie, Florie', $fiche['birth']['place']);
+        self::assertSame('—', $fiche['ligneDates']);
+        self::assertFalse($fiche['naissanceModifiable'], 'On ne corrige pas une date qu’on ne voit pas.');
+        self::assertStringNotContainsString('1934', json_encode($fiche, \JSON_THROW_ON_ERROR));
+    }
+
+    public function testUneNaissancePartageeALAnneeNeLivreQueLAnnee(): void
+    {
+        $cercle = CercleDuLecteur::de([$this->idDe('cousin')])->avecPartage([$this->idDe('cousin') => new ComposantesDeDate(annee: true)]);
+        $fiche = $this->fiche('cousin', $this->membre(), $cercle);
+
+        self::assertSame('masquee', $fiche['birth']['qualifier']);
+        self::assertSame('vers 1934', $fiche['birth']['texte'], '« vers » ne dit qu’une année, et c’est elle qui est partagée.');
+        self::assertSame('n. ~1934', $fiche['ligneDates']);
+        self::assertStringNotContainsString('ABT', json_encode($fiche, \JSON_THROW_ON_ERROR), '`raw` ne sort jamais d’une naissance réduite.');
     }
 
     /**

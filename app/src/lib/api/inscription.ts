@@ -44,6 +44,7 @@
 import { requeteApi } from './client'
 import type {
   ChargeDeSession,
+  PartageNaissance,
   EtatInscription,
   ResultatRattachement,
   VerificationJeton,
@@ -182,6 +183,10 @@ export function creerCompte(
     password: string
     /** Facultatif : ne part que s'il est donné. */
     telephone?: string
+    /** ADR 0016 — ce que le candidat partage de sa date de naissance. Absent :
+     *  le serveur applique son défaut. Ses refus reviennent sous
+     *  `partageNaissance.annee`, `.mois`, `.jour`. */
+    partageNaissance?: PartageNaissance
   } & RattachementDemande,
 ): Promise<ChargeDeSession> {
   // Le corps est écrit champ par champ plutôt que d'étaler `entree` : il ne part
@@ -207,6 +212,15 @@ export function creerCompte(
     email: entree.email,
     password: entree.password,
     ...(entree.telephone ? { telephone: entree.telephone } : {}),
+    ...(entree.partageNaissance
+      ? {
+          partageNaissance: {
+            annee: entree.partageNaissance.annee,
+            mois: entree.partageNaissance.mois,
+            jour: entree.partageNaissance.jour,
+          },
+        }
+      : {}),
   }
 
   return requeteApi<ChargeDeSession>('/inscription/compte', {

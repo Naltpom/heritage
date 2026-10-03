@@ -6,6 +6,8 @@ namespace App\Module\Tree\Serializer;
 
 use App\Module\Core\Enum\Regime;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
+use App\Module\Core\Security\ReciprociteInterface;
+use App\Module\Core\ValueObject\ComposantesDeDate;
 
 /**
  * Le cercle de visibilité, **tel que la sérialisation le consulte**.
@@ -71,13 +73,91 @@ final readonly class CercleDuLecteur
         public Regime $regime,
         private array $personnes,
         private ?CercleDeVisibiliteInterface $delegue = null,
+        private ?ReciprociteInterface $reciprocite = null,
+        /** @var array<int, ComposantesDeDate>|null réciprocité pré-résolue, pour les tests */
+        private ?array $partages = null,
+        private bool $photo = true,
     ) {
     }
 
-    /** Le cas de production : on interroge le contrat unique du noyau. */
-    public static function delegue(CercleDeVisibiliteInterface $cercle): self
+    /**
+     * Le cas de production : on interroge le contrat unique du noyau — et, pour la
+     * naissance et le portrait des vivants, celui de la réciprocité (ADR 0016).
+     */
+    public static function delegue(CercleDeVisibiliteInterface $cercle, ?ReciprociteInterface $reciprocite = null): self
     {
-        return new self($cercle->regime(), [], $cercle);
+        return new self($cercle->regime(), [], $cercle, $reciprocite);
+    }
+
+    /**
+     * Pour les tests des normaliseurs : la même construction, avec une réciprocité
+     * pré-résolue. Une personne vivante absente de `$partages` ne partage rien.
+     *
+     * @param array<int, ComposantesDeDate> $partages ce que le lecteur voit de chaque vivant
+     * @param bool                          $photo    le lecteur a-t-il une photo de lui ?
+     */
+    public function avecPartage(array $partages, bool $photo = true): self
+    {
+        return new self($this->regime, $this->personnes, $this->delegue, $this->reciprocite, $partages, $photo);
+    }
+
+    /**
+     * Ce que le lecteur voit de la **naissance** de cette personne (ADR 0016). Tout pour une
+     * personne décédée ; pour un vivant, ce que la réciprocité accorde.
+     *
+     * Un cercle pré-résolu sans {@see avecPartage()} — les tests antérieurs à la
+     * réciprocité — garde l'ancienne lecture : tout ce que le cercle montre. En production,
+     * {@see FabriqueDuCercle} branche toujours la réciprocité.
+     */
+    public function naissance(?int $personneId, bool $vivante): ComposantesDeDate
+    {
+        if (!$vivante) {
+            return ComposantesDeDate::tout();
+        }
+
+        if (null === $personneId) {
+            return ComposantesDeDate::aucune();
+        }
+
+        if (null !== $this->partages) {
+            return $this->partages[$personneId] ?? ComposantesDeDate::aucune();
+        }
+
+        return null !== $this->reciprocite
+            ? $this->reciprocite->naissance($personneId)
+            : (null !== $this->delegue ? ComposantesDeDate::aucune() : ComposantesDeDate::tout());
+    }
+
+    /** Le portrait de cette personne peut-il être servi net (ADR 0016) ? */
+    public function portraitNet(?int $personneId, bool $vivante): bool
+    {
+        if (!$vivante) {
+            return true;
+        }
+
+        if (null !== $this->partages) {
+            return $this->photo;
+        }
+
+        return null !== $this->reciprocite
+            ? null !== $personneId && $this->reciprocite->portraitNet($personneId)
+            : null === $this->delegue;
+    }
+
+    /** L'empreinte de la réciprocité, pour les `ETag` ; vide sans réciprocité branchée. */
+    public function empreinteDeLaReciprocite(): string
+    {
+        if (null !== $this->partages) {
+            $lignes = [];
+            foreach ($this->partages as $id => $partage) {
+                $lignes[] = $id.':'.$partage->masque();
+            }
+            sort($lignes);
+
+            return hash('sha256', implode(',', $lignes).'|'.($this->photo ? 'p' : '-'));
+        }
+
+        return $this->reciprocite?->empreinte() ?? '';
     }
 
     /**

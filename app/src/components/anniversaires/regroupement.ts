@@ -68,7 +68,12 @@ export function parJour(
   }
 
   for (const retenus of table.values()) {
-    retenus.sort((a, b) => a.annee - b.annee || (a.cle < b.cle ? -1 : a.cle > b.cle ? 1 : 0))
+    // Sans année (non partagée, ADR 0016) : en fin de jour, après la chronique.
+    // Deux absentes donnent `NaN`, faux comme `0` : la clé départage.
+    retenus.sort(
+      (a, b) =>
+        (a.annee ?? Infinity) - (b.annee ?? Infinity) || (a.cle < b.cle ? -1 : a.cle > b.cle ? 1 : 0),
+    )
   }
 
   return table

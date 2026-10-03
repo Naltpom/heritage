@@ -45,6 +45,20 @@ final class DonneesInvalides extends ErreurDeDemande
         );
     }
 
+    /**
+     * `422 naissance_masquee` — ADR 0016 : la naissance d'un vivant que l'auteur ne voit pas
+     * entière ne se corrige pas. La demande écraserait ce qu'il ne connaît pas, et le
+     * contrôle de l'ancienne valeur lui rendrait la date complète dans son `409`.
+     */
+    public static function naissanceMasquee(string $chemin): self
+    {
+        return new self(
+            [$chemin => 'Vous ne voyez pas toute cette date de naissance : vous ne pouvez pas la modifier.'],
+            'Cette date de naissance n’est pas partagée avec vous en entier.',
+            'naissance_masquee',
+        );
+    }
+
     /** Le motif de refus, dont l'absence est refusée par `ck_prp_request_motif_refus` avant même le service. */
     public static function motifDeRefusManquant(): self
     {

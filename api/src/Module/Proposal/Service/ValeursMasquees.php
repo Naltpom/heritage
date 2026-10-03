@@ -6,6 +6,7 @@ namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
+use App\Module\Core\Security\ReciprociteInterface;
 use App\Module\Proposal\Service\Port\PortArbre;
 
 /**
@@ -58,7 +59,26 @@ final readonly class ValeursMasquees
     public function __construct(
         private CercleDeVisibiliteInterface $cercle,
         private PortArbre $arbre,
+        private ReciprociteInterface $reciprocite,
     ) {
+    }
+
+    /**
+     * La naissance de cette personne est-elle **masquée en partie** au lecteur — la
+     * réciprocité des vivants (ADR 0016) ? Vrai pour un vivant dont il ne voit pas toutes
+     * les composantes ; jamais pour un défunt.
+     */
+    public function naissanceMasquee(SubjectKind $kind, ?int $id): bool
+    {
+        if (SubjectKind::Personne !== $kind || null === $id || $this->reciprocite->naissance($id)->estComplete()) {
+            return false;
+        }
+
+        // Comme {@see self::masquee()} : un défunt n'est jamais concerné, et c'est l'arbre
+        // de ce module qui le dit.
+        $cible = $this->arbre->chargerCible($kind, $id);
+
+        return null !== $cible && true !== (bool) ($cible->valeurs['deceased'] ?? false);
     }
 
     public function masquee(SubjectKind $kind, ?int $id): bool
