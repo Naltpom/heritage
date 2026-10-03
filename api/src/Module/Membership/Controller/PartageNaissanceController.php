@@ -10,9 +10,11 @@ use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Membership\Entity\AutorisationDeNaissance;
+use App\Module\Membership\Entity\DemandeRgpd;
 use App\Module\Membership\Repository\AutorisationDeNaissanceRepository;
 use App\Module\Membership\Repository\MemberRepository;
 use App\Module\Membership\Service\ConsentementDeNaissance;
+use App\Module\Membership\Service\DemandesRgpd;
 use App\Module\Membership\Service\StockageDesAutorisations;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -42,7 +44,44 @@ final class PartageNaissanceController extends AbstractController
         private readonly ConsentementDeNaissance $consentements,
         private readonly StockageDesAutorisations $stockage,
         private readonly BasculeVoirComme $bascule,
+        private readonly DemandesRgpd $demandesRgpd,
     ) {
+    }
+
+    // ── Le formulaire RGPD ──────────────────────────────────────────────────────
+
+    #[Route('/api/session/demandes-rgpd', name: 'membership_demandes_rgpd_lister', methods: ['GET'])]
+    public function mesDemandes(#[CurrentUser] User $utilisateur): JsonResponse
+    {
+        return new JsonResponse(['elements' => array_map(
+            static fn (DemandeRgpd $d): array => DemandesRgpd::normaliser($d),
+            $this->demandesRgpd->duCompte($utilisateur),
+        )]);
+    }
+
+    #[Route('/api/session/demandes-rgpd', name: 'membership_demandes_rgpd_deposer', methods: ['POST'])]
+    public function deposerUneDemande(Request $requete, #[CurrentUser] User $utilisateur): JsonResponse
+    {
+        $this->bascule->refuserSiActive();
+
+        return new JsonResponse(DemandesRgpd::normaliser($this->demandesRgpd->deposer($utilisateur, $this->corpsJson($requete))), Response::HTTP_CREATED);
+    }
+
+    #[Route('/api/administration/demandes-rgpd', name: 'membership_admin_demandes_rgpd', methods: ['GET'])]
+    public function fileRgpd(): JsonResponse
+    {
+        return new JsonResponse(['elements' => array_map(
+            static fn (DemandeRgpd $d): array => DemandesRgpd::normaliser($d, true),
+            $this->demandesRgpd->file(),
+        )]);
+    }
+
+    #[Route('/api/administration/demandes-rgpd/{id}/traiter', name: 'membership_admin_demande_rgpd_traiter', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function traiterUneDemande(int $id, Request $requete, #[CurrentUser] User $administrateur): JsonResponse
+    {
+        $this->bascule->refuserSiActive();
+
+        return new JsonResponse(DemandesRgpd::normaliser($this->demandesRgpd->traiter($id, $this->corpsJson($requete), $administrateur), true));
     }
 
     #[Route('/api/session/partage-naissance', name: 'membership_partage_naissance', methods: ['PUT'])]

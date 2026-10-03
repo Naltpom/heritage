@@ -116,6 +116,10 @@ const LIBELLES_DE_TYPE: Readonly<Record<string, string>> = {
   evenement_relance: 'Rappel d’invitation',
   evenement_annule: 'Événement annulé',
   evenement_dates_modifiees: 'Nouvelles dates',
+  // Les demandes RGPD (ADR 0016, révision du 03/10/2026) : la nouvelle, aux
+  // administrateurs (`administration.rgpd`) ; la réponse, au membre (`compte`).
+  demande_rgpd: 'Demande RGPD',
+  demande_rgpd_traitee: 'Réponse RGPD',
 }
 
 export function libelleDeType(kind: string): string {

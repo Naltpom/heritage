@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { ErreurApi } from '@/lib/api'
 import {
-  carenceDuRefus,
-  enCarence,
+  ajouteUneComposante,
+  dateDuVerrou,
   erreursDePartage,
   initialesPartage,
   memePartage,
   partageParDefaut,
   partageSeul,
   resumePartage,
-  retireUneComposante,
+  verrouDuRefus,
+  verrouillee,
 } from './partageNaissance'
 
 /**
  * Le choix de partage de la date de naissance (ADR 0016), sans composant :
  * rien de coché d'avance, trois composantes indépendantes, les refus du
- * serveur remis sous la bonne case, et la carence de trente jours.
+ * serveur remis sous la bonne case, et le verrou de trente jours.
  */
 
 const TOUT = { annee: true, mois: true, jour: true }
@@ -26,8 +27,8 @@ describe('le choix', () => {
     expect(partageParDefaut()).toEqual(RIEN)
   })
 
-  it('ne garde que les trois cases, jamais la date de modification ni la carence', () => {
-    expect(partageSeul({ ...TOUT, modifieLe: '2026-10-01', carenceJusquAu: {} } as typeof TOUT)).toEqual(TOUT)
+  it('ne garde que les trois cases, jamais la date de modification ni le verrou', () => {
+    expect(partageSeul({ ...TOUT, modifieLe: '2026-10-01', verrouJusquAu: {} } as typeof TOUT)).toEqual(TOUT)
   })
 
   it('compare composante par composante', () => {
@@ -55,27 +56,33 @@ describe('les refus du serveur', () => {
   })
 })
 
-describe('la carence', () => {
-  const CARENCE = { annee: '2026-11-02T00:00:00+01:00' }
+describe('le verrou', () => {
+  const VERROU = { annee: '2026-11-02T00:00:00+01:00' }
 
-  it('éteint une case non cochée en carence, jamais une case cochée', () => {
-    expect(enCarence({ ...RIEN }, CARENCE, 'annee')).toBe(CARENCE.annee)
-    expect(enCarence({ ...TOUT }, CARENCE, 'annee')).toBeNull()
-    expect(enCarence({ ...RIEN }, CARENCE, 'mois')).toBeNull()
+  it('éteint une case cochée verrouillée, jamais une case non cochée', () => {
+    expect(verrouillee({ ...TOUT }, VERROU, 'annee')).toBe(VERROU.annee)
+    expect(verrouillee({ ...RIEN }, VERROU, 'annee')).toBeNull()
+    expect(verrouillee({ ...TOUT }, VERROU, 'mois')).toBeNull()
   })
 
-  it('lit `details.jusquAu` d’un refus 409, et rien d’une autre erreur', () => {
-    const refus = new ErreurApi(409, 'partage_en_carence', 'Trop tôt.', null, {
+  it('lit `details.jusquAu` d’un refus 409 partage_verrouille, et rien d’une autre erreur', () => {
+    const refus = new ErreurApi(409, 'partage_verrouille', 'Trop tôt.', null, {
       jusquAu: { mois: '2026-11-02T00:00:00+01:00', jour: 12 },
     })
-    expect(carenceDuRefus(refus)).toEqual({ mois: '2026-11-02T00:00:00+01:00' })
-    expect(carenceDuRefus(new ErreurApi(409, 'vue_comme_membre_active', 'Non.'))).toBeNull()
-    expect(carenceDuRefus(new Error('réseau'))).toBeNull()
+    expect(verrouDuRefus(refus)).toEqual({ mois: '2026-11-02T00:00:00+01:00' })
+    expect(verrouDuRefus(new ErreurApi(409, 'partage_en_carence', 'Ancien code.'))).toBeNull()
+    expect(verrouDuRefus(new ErreurApi(409, 'vue_comme_membre_active', 'Non.'))).toBeNull()
+    expect(verrouDuRefus(new Error('réseau'))).toBeNull()
   })
 
-  it('sait quand un choix retire une composante partagée', () => {
-    expect(retireUneComposante(TOUT, { ...TOUT, jour: false })).toBe(true)
-    expect(retireUneComposante({ ...RIEN, mois: true }, { ...TOUT })).toBe(false)
-    expect(retireUneComposante(RIEN, RIEN)).toBe(false)
+  it('dit la fin du verrou en toutes lettres', () => {
+    expect(dateDuVerrou('2026-11-02T12:00:00+01:00')).toBe('2 novembre 2026')
+    expect(dateDuVerrou('pas une date')).toBe('pas une date')
+  })
+
+  it('sait quand un choix ajoute une composante', () => {
+    expect(ajouteUneComposante(RIEN, { ...RIEN, jour: true })).toBe(true)
+    expect(ajouteUneComposante(TOUT, { ...TOUT, mois: false })).toBe(false)
+    expect(ajouteUneComposante(RIEN, RIEN)).toBe(false)
   })
 })

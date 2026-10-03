@@ -2134,7 +2134,7 @@ sont partagés ; `annee` est alors **absente** quand l'année ne l'est pas (`tex
 **La charge de session** (§ 2.2) gagne :
 
 ```json
-"partageNaissance": { "annee": true, "mois": true, "jour": false, "modifieLe": "2026-10-03T10:00:00+00:00", "carenceJusquAu": { "jour": "2026-11-02T10:00:00+00:00" } },
+"partageNaissance": { "annee": true, "mois": true, "jour": false, "modifieLe": "2026-10-03T10:00:00+00:00", "verrouJusquAu": { "jour": "2026-11-02T10:00:00+00:00" } },
 "reciprocite": { "restrictionIgnoree": false, "photo": true }
 ```
 
@@ -2142,10 +2142,10 @@ sont partagés ; `annee` est alors **absente** quand l'année ne l'est pas (`tex
 `reciprocite` vaut pour le lecteur effectif (le membre emprunté sous « voir comme »).
 
 **`PUT /api/session/partage-naissance`** — `{annee, mois, jour}` (booléens, absents = `false`)
-→ `200 {annee, mois, jour, modifieLe, carenceJusquAu}`. Retirer est toujours immédiat ; une
-composante retirée ne se remet qu'après 30 jours — `carenceJusquAu` (`{mois: "<ATOM>"}`, les
-seules composantes concernées) le dit, et une remise anticipée rend `409 partage_en_carence`
-(`details.jusquAu`). `409 compte_non_rattache` sans rattachement,
+→ `200 {annee, mois, jour, modifieLe, verrouJusquAu}`. Partager est toujours immédiat ; une
+composante partagée reste visible au moins 30 jours — `verrouJusquAu` (`{mois: "<ATOM>"}`, les
+seules composantes encore verrouillées) le dit, et la retirer avant rend `409 partage_verrouille`
+(`details.jusquAu`) : il faut passer par une demande RGPD. `409 compte_non_rattache` sans rattachement,
 `409 vue_comme_membre_active` sous la bascule, `422` sur un type invalide. Journalisé
 (`partage_naissance`, source `profil`).
 
@@ -2165,6 +2165,15 @@ facultatif (absent : rien n'est partagé, aucun choix n'est enregistré) ; erreu
 | `POST …/autorisation-naissance` (multipart `document`, `annee`, `mois`, `jour`, `note`) | `201` ; remplace et archive l'active ; `409 compte_rattache`, `422` défunt ou document refusé (PDF, JPEG, PNG, WebP, 10 Mo) |
 | `DELETE …/autorisation-naissance` | archive (`retiree`) ; `404` sans autorisation active |
 | `GET /api/administration/autorisations-naissance/{id}/document` | le document, `attachment`, `Cache-Control: no-store` |
+
+**Le formulaire RGPD** — la soupape du verrou, et le canal de toute demande sur ses données :
+
+| Route | Effet |
+|---|---|
+| `GET /api/session/demandes-rgpd` | `{elements: [{id, nature, aRetirer, message, creeeLe, traiteeLe, decision, reponse}]}` |
+| `POST /api/session/demandes-rgpd` | `{nature: retrait_partage\|rectification\|autre, annee?, mois?, jour?, message?}` → `201` ; `422` (`nature`, `composantes`, `message`), `409 compte_non_rattache` ; notifie les administrateurs (`demande_rgpd`) |
+| `GET /api/administration/demandes-rgpd` | la file : en attente d'abord, puis traitées ; chaque demande porte `memberId`, `userId`, `userEmail` |
+| `POST /api/administration/demandes-rgpd/{id}/traiter` | `{decision: appliquee\|refusee, reponse?}` (réponse obligatoire pour un refus) ; un retrait appliqué retire les composantes **sans verrou** (source `administration`) ; `409 demande_deja_traitee` ; notifie le membre (`demande_rgpd_traitee`) |
 
 **Les médias** (§ 7) — une image dont le sujet est un vivant, demandée par un lecteur sans
 photo de lui, est servie **floue** par `/fichier` comme par `/vignette` (même JPEG, `ETag`

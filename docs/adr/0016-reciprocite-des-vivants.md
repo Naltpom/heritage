@@ -37,22 +37,25 @@ L'option d'administration « ignorer la restriction de date de naissance », pos
 compte, donne toutes les composantes. **Elle ne couvre pas les photos** (décision du
 commanditaire). Le lieu de naissance, le nom et les autres événements ne sont pas concernés.
 
-### L'équité : une carence après un retrait
+### L'équité : ce qui est partagé reste visible 30 jours
 
-« Je partage, je regarde, je retire » rendrait la réciprocité bidon. Le commanditaire voulait
-interdire le retrait pendant une durée minimale ; **ce n'est pas possible** : le RGPD
-(art. 7.3) veut qu'un consentement se retire à tout moment, aussi facilement qu'il s'est
-donné. La règle retenue :
+« Je partage, je regarde, je retire » rendrait la réciprocité bidon pour ceux qui partagent
+vraiment. La règle, **décidée par le commanditaire** :
 
-- **ajouter** une composante est toujours libre ;
-- **retirer** est toujours immédiat — la date disparaît aussitôt pour les autres, et le
-  lecteur cesse de voir la leur ;
-- une composante **retirée ne se remet qu'après 30 jours** (`Member::CARENCE_JOURS`), **par
-  composante** : retirer le jour ne bloque ni l'année ni le mois. Une remise anticipée rend
-  `409 partage_en_carence`.
+- **partager** une composante est toujours immédiat ;
+- une composante **partagée reste visible au moins 30 jours** (`Member::DUREE_MINIMALE_JOURS`),
+  composante par composante (`mbr_member.birth_share_*_since`) : le titulaire ne la retire pas
+  avant — `409 partage_verrouille` ;
+- **la soupape est le formulaire RGPD** de l'application (`mbr_demande_rgpd`) : le membre
+  demande le retrait (ou une rectification, ou autre chose), un administrateur l'applique **sans
+  délai** (source `administration`, qui ignore le verrou) ou la refuse avec une réponse ; les
+  deux sont notifiés, tout est journalisé (`demande_rgpd`).
 
-La carence ne retient la donnée de personne : elle ne fait que différer l'accès aux dates des
-autres, et l'astuce ne sert plus qu'une fois par mois. Chaque changement reste au journal.
+**Écart assumé au RGPD.** L'article 7.3 veut qu'un consentement se retire « à tout moment »,
+aussi simplement qu'il s'est donné. Le verrou de 30 jours s'en écarte : la décision a été prise
+**en connaissance de cause**, après avertissement, et le retrait reste possible à tout moment
+par la demande RGPD. Si l'écart devait être levé, il suffit de faire appliquer les demandes de
+retrait automatiquement, ou de supprimer le contrôle dans `ConsentementDeNaissance::enregistrer()`.
 
 ### Deux filtres empilés, le cercle d'abord
 

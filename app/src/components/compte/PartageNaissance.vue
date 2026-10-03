@@ -14,24 +14,28 @@
  * photo dit l'autre moitié de la règle — sans photo de soi, celles des
  * vivants arrivent floutées — parce qu'on la découvre sinon sans explication.
  *
- * **La carence** : une composante retirée ne se recoche qu'après trente jours.
- * Une case non cochée que `carence` mentionne est éteinte, et la date dit
- * quand elle se rallume. À l'inscription, il n'y a pas d'état antérieur, donc
- * pas de carence.
+ * **Le verrou** : partager est immédiat, mais une composante partagée reste
+ * visible au moins trente jours. La phrase d'avertissement le dit **avant**
+ * qu'on coche. Une case cochée que `verrou` mentionne est éteinte, avec la
+ * date jusqu'à laquelle elle tient et le moyen de la retirer plus tôt : une
+ * demande RGPD (`@demande-rgpd`, avec la composante). Une case non cochée
+ * n'est jamais éteinte. À l'inscription, il n'y a pas d'état antérieur, donc
+ * pas de verrou.
  *
  * Servi à l'inscription (étape 2) et dans « Mon compte ». Le composant ne
  * parle pas au serveur : il tient l'objet, l'écran l'envoie.
  */
-import { useId } from 'vue'
-import type { CarenceDePartage, PartageNaissance } from '@/lib/api'
-import { dateDeCarence, enCarence } from './partageNaissance'
+import { computed, useId } from 'vue'
+import type { PartageNaissance, VerrouDePartage } from '@/lib/api'
+import { dateDuVerrou, verrouillee } from './partageNaissance'
 
 const {
   erreurs = {},
   desactive = false,
   legende = 'J’accepte de partager ma date de naissance',
   sansExplication = false,
-  carence = {},
+  verrou = {},
+  avertissementAppuye = false,
 } = defineProps<{
   /** Les refus du serveur, par composante (`annee`, `mois`, `jour`). */
   erreurs?: Partial<Record<keyof PartageNaissance, string>>
@@ -40,8 +44,15 @@ const {
   /** Pour l'autorisation signée d'un tiers : la règle s'adresse au membre
    *  (« vous »), elle n'a rien à dire à l'administrateur qui coche pour un autre. */
   sansExplication?: boolean
-  /** Les composantes retirées il y a moins de trente jours (`carenceJusquAu`). */
-  carence?: CarenceDePartage
+  /** Les composantes partagées il y a moins de trente jours (`verrouJusquAu`). */
+  verrou?: VerrouDePartage
+  /** L'avertissement des trente jours en gras : une case vient d'être cochée. */
+  avertissementAppuye?: boolean
+}>()
+
+const emit = defineEmits<{
+  /** « Faites une demande RGPD » sous une case verrouillée. */
+  'demande-rgpd': [cle: keyof PartageNaissance]
 }>()
 
 const partage = defineModel<PartageNaissance>({ required: true })
@@ -56,6 +67,12 @@ const COMPOSANTES: readonly { cle: keyof PartageNaissance; libelle: string }[] =
 
 /** Un nouvel objet à chaque case : le parent garde un `ref` simple, et
  *  `defineModel` ne voit pas une mutation en place. */
+/** L'avertissement tient tant qu'il reste une case à cocher qui ne soit pas
+ *  déjà partagée et verrouillée. */
+const resteACocher = computed(() =>
+  COMPOSANTES.some((composante) => verrouillee(partage.value, verrou, composante.cle) === null),
+)
+
 function cocher(cle: keyof PartageNaissance, valeur: boolean): void {
   partage.value = { ...partage.value, [cle]: valeur }
 }
@@ -75,7 +92,7 @@ function cocher(cle: keyof PartageNaissance, valeur: boolean): void {
           type="checkbox"
           class="size-4 accent-[var(--color-accent)]"
           :checked="partage[composante.cle]"
-          :disabled="desactive || enCarence(partage, carence, composante.cle) !== null"
+          :disabled="desactive || verrouillee(partage, verrou, composante.cle) !== null"
           :data-composante="composante.cle"
           @change="cocher(composante.cle, ($event.target as HTMLInputElement).checked)"
         />
@@ -83,14 +100,20 @@ function cocher(cle: keyof PartageNaissance, valeur: boolean): void {
       </label>
     </div>
 
-    <template v-for="composante in COMPOSANTES" :key="`carence-${composante.cle}`">
+    <template v-for="composante in COMPOSANTES" :key="`verrou-${composante.cle}`">
       <p
-        v-if="enCarence(partage, carence, composante.cle) !== null"
+        v-if="verrouillee(partage, verrou, composante.cle) !== null"
         class="text-xs text-attenue"
-        :data-carence="composante.cle"
+        :data-verrou="composante.cle"
       >
-        {{ composante.libelle }} — retiré récemment : vous pourrez le partager à nouveau à partir du
-        {{ dateDeCarence(enCarence(partage, carence, composante.cle)!) }}.
+        {{ composante.libelle }} — Partagé jusqu’au
+        {{ dateDuVerrou(verrouillee(partage, verrou, composante.cle)!) }} au minimum. Pour le retirer avant,
+        <button
+          type="button"
+          class="underline hover:text-texte"
+          :data-demande-rgpd="composante.cle"
+          @click="emit('demande-rgpd', composante.cle)"
+        >faites une demande RGPD</button>.
       </p>
     </template>
 
@@ -99,9 +122,17 @@ function cocher(cle: keyof PartageNaissance, valeur: boolean): void {
     </template>
 
     <template v-if="!sansExplication">
+      <p
+        v-if="resteACocher"
+        class="text-xs leading-relaxed"
+        :class="avertissementAppuye ? 'font-semibold text-alerte' : 'text-attenue'"
+        data-avertissement-partage
+      >
+        Une information partagée reste visible des autres membres au moins 30 jours.
+      </p>
       <p :id="`${id}-regle`" class="text-xs leading-relaxed text-attenue">
         Ce que vous ne partagez pas, vous ne le verrez pas non plus chez les autres personnes vivantes.
-        Les personnes décédées ne sont pas concernées. Modifiable à tout moment dans votre compte.
+        Les personnes décédées ne sont pas concernées. Modifiable ensuite dans votre compte.
       </p>
       <p class="text-xs leading-relaxed text-attenue">
         Sans photo de vous (même en attente de validation), les photos des personnes vivantes

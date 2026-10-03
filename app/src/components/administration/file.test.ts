@@ -335,6 +335,7 @@ describe('les onglets de l’administration', () => {
       'administration.invitations',
       'administration.utilisateurs',
       'administration.sources',
+      'administration.rgpd',
     ]) {
       expect(source).toContain(`'${nom}'`)
     }
@@ -342,7 +343,7 @@ describe('les onglets de l’administration', () => {
   })
 
   it('sont en tête de la barre des quatre sous-écrans, et plus dans le cadre', () => {
-    for (const vue of ['FileDemandesView', 'InvitationsView', 'UtilisateursView', 'SourcesView']) {
+    for (const vue of ['FileDemandesView', 'InvitationsView', 'UtilisateursView', 'SourcesView', 'DemandesRgpdView']) {
       expect(lire(`../../views/administration/${vue}.vue`), vue).toContain('<OngletsAdministration />')
     }
     expect(lire('../../views/AdministrationView.vue')).not.toContain('<nav')

@@ -152,32 +152,79 @@ final class ReciprociteTest extends CasDeTestMembership
     }
 
     /**
-     * L'équité : retirer est immédiat (RGPD, art. 7.3), mais une composante retirée ne se
-     * remet qu'après 30 jours — « je partage, je regarde, je retire » ne marche qu'une fois.
-     * La carence est **par composante** : ajouter une autre reste libre.
+     * L'équité (ADR 0016) : partager est immédiat, mais une information partagée reste
+     * visible **au moins 30 jours** — le titulaire ne la retire pas avant. Par composante :
+     * ajouter le jour reste libre, retirer le mois reste bloqué.
      */
-    public function testUneComposanteRetireeNeSeRemetQuApresLaCarence(): void
+    public function testUneInformationPartageeResteVisibleTrenteJours(): void
     {
-        $this->membreQuiPartage('ego@example.net', ArbreFamilial::EGO, new ComposantesDeDate(annee: true, mois: true));
+        $this->membreQuiPartage('ego@example.net', ArbreFamilial::EGO, ComposantesDeDate::aucune());
         $this->connexion('ego@example.net');
 
-        $this->requete('PUT', '/api/session/partage-naissance', ['annee' => true, 'mois' => false]);
-        self::assertResponseIsSuccessful('Le retrait passe toujours.');
-        self::assertArrayHasKey('mois', $this->charge()['carenceJusquAu']);
-
         $this->requete('PUT', '/api/session/partage-naissance', ['annee' => true, 'mois' => true]);
+        self::assertResponseIsSuccessful('Partager passe toujours, sans délai.');
+        self::assertArrayHasKey('mois', $this->charge()['verrouJusquAu']);
+
+        $this->requete('PUT', '/api/session/partage-naissance', ['annee' => true, 'mois' => false]);
         self::assertResponseStatusCodeSame(409);
         $erreur = $this->charge()['erreur'];
-        self::assertSame('partage_en_carence', $erreur['code']);
+        self::assertSame('partage_verrouille', $erreur['code']);
         self::assertArrayHasKey('mois', $erreur['details']['jusquAu']);
 
-        $this->requete('PUT', '/api/session/partage-naissance', ['annee' => true, 'jour' => true]);
-        self::assertResponseIsSuccessful('Une autre composante s’ajoute librement.');
+        $this->requete('PUT', '/api/session/partage-naissance', ['annee' => true, 'mois' => true, 'jour' => true]);
+        self::assertResponseIsSuccessful('Ajouter une autre information reste libre.');
 
-        // Trente et un jours plus tard, le mois se remet.
         $membre = $this->em()->getRepository(Member::class)->findOneBy(['personId' => ArbreFamilial::EGO]);
         self::assertNotNull($membre);
-        self::assertSame([], $membre->carenceDuPartage(new \DateTimeImmutable('+31 days')));
+        self::assertSame([], $membre->verrouDuPartage(new \DateTimeImmutable('+31 days')), 'Après trente jours, le titulaire retire librement.');
+    }
+
+    /**
+     * La soupape : le formulaire RGPD. Le membre demande le retrait, l'administrateur
+     * l'applique — sans attendre la fin du verrou —, et chacun est notifié.
+     */
+    public function testUneDemandeRgpdAppliqueeRetireSansDelai(): void
+    {
+        $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
+        $this->membreQuiPartage('ego@example.net', ArbreFamilial::EGO, ComposantesDeDate::aucune());
+        $this->connexion('ego@example.net');
+        $this->requete('PUT', '/api/session/partage-naissance', ['annee' => true, 'mois' => true, 'jour' => true]);
+
+        $this->requete('POST', '/api/session/demandes-rgpd', ['nature' => 'retrait_partage', 'jour' => true, 'message' => 'Je me suis trompé.']);
+        self::assertResponseStatusCodeSame(201);
+        $id = $this->charge()['id'];
+
+        $this->client->request('POST', '/api/deconnexion');
+        $this->connexion('admin@example.net');
+        $this->requete('GET', '/api/administration/demandes-rgpd');
+        self::assertSame($id, $this->charge()['elements'][0]['id']);
+
+        $this->requete('POST', '/api/administration/demandes-rgpd/'.$id.'/traiter', ['decision' => 'appliquee']);
+        self::assertResponseIsSuccessful();
+        self::assertSame('appliquee', $this->charge()['decision']);
+
+        $this->em()->clear();
+        $membre = $this->em()->getRepository(Member::class)->findOneBy(['personId' => ArbreFamilial::EGO]);
+        self::assertNotNull($membre);
+        self::assertEquals(new ComposantesDeDate(annee: true, mois: true), $membre->getPartageDeNaissance());
+        self::assertSame('administration', $membre->getPartageSource());
+
+        $this->requete('POST', '/api/administration/demandes-rgpd/'.$id.'/traiter', ['decision' => 'refusee', 'reponse' => 'Non.']);
+        self::assertResponseStatusCodeSame(409, 'Une demande ne se traite qu’une fois.');
+    }
+
+    public function testUneDemandeRgpdMalFormeeEstRefusee(): void
+    {
+        $this->membreQuiPartage('ego@example.net', ArbreFamilial::EGO, ComposantesDeDate::aucune());
+        $this->connexion('ego@example.net');
+
+        $this->requete('POST', '/api/session/demandes-rgpd', ['nature' => 'retrait_partage']);
+        self::assertResponseStatusCodeSame(422);
+        self::assertArrayHasKey('composantes', $this->charge()['erreur']['champs']);
+
+        $this->requete('POST', '/api/session/demandes-rgpd', ['nature' => 'rectification', 'message' => '  ']);
+        self::assertResponseStatusCodeSame(422);
+        self::assertArrayHasKey('message', $this->charge()['erreur']['champs']);
     }
 
     public function testUnCompteSansRattachementNAPasDePartage(): void

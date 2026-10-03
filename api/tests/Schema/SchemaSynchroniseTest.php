@@ -127,7 +127,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * propre (vue, réponse, relance, lien personnel) et qu'un événement en compte des
      * dizaines ; le compte de l'invité n'y est pas figé, il se lit au rattachement.
      */
-    private const int NOMBRE_DE_TABLES = 44;
+    private const int NOMBRE_DE_TABLES = 45;
 
     public function testLeMappingEstValide(): void
     {
