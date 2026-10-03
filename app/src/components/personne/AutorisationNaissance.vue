@@ -214,10 +214,11 @@ function ligneDHistorique(autorisation: AutorisationNaissance): string {
         <label class="flex flex-col gap-1">
           <span class="text-sm font-medium">Note</span>
           <input
-            v-model="note"
+            :value="note"
             type="text"
             placeholder="Ex. : signée lors de la cousinade"
             class="rounded-champ border border-ligne bg-fond px-2.5 py-1.5 text-sm text-texte"
+            @input="note = ($event.target as HTMLInputElement).value"
           />
         </label>
 
