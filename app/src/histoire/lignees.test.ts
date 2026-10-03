@@ -702,7 +702,7 @@ describe.each(FORMATS_DE_CARTE)('disposition lignees — format %s', (format) =>
 /** Les montants verticaux qui se recouvrent (même x, hauteurs qui se chevauchent). */
 function superpositionsVerticales(d: DispositionHistoire): string[] {
   const segs: { x: number; y0: number; y1: number }[] = []
-  for (const chemin of Object.values(d.traces)) {
+  for (const chemin of [d.traces.ordinaires, d.traces.directs, d.traces.divorces, d.traces.attente]) {
     for (const m of chemin.matchAll(/M([\d.-]+) ([\d.-]+)L([\d.-]+) ([\d.-]+)/g)) {
       const [x1, y1, x2, y2] = m.slice(1).map(Number) as [number, number, number, number]
       if (Math.abs(x1 - x2) < 0.01 && Math.abs(y1 - y2) > 0.01) segs.push({ x: x1, y0: Math.min(y1, y2), y1: Math.max(y1, y2) })
