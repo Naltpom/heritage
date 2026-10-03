@@ -17,7 +17,9 @@ use Doctrine\Migrations\AbstractMigration;
  *   titulaire du compte accepte de montrer de sa naissance (et donc ce qu'il verra des
  *   autres). **`false` par défaut, y compris pour les comptes existants** : on ne présume
  *   pas un consentement. `birth_share_updated_at` et `birth_share_source` gardent la trace
- *   du dernier choix ;
+ *   du dernier choix ; `birth_share_*_withdrawn_at`, la date du dernier retrait de chaque
+ *   composante — elle ouvre une **carence** de 30 jours avant qu'on puisse la remettre
+ *   (le retrait, lui, est toujours immédiat : RGPD, art. 7.3) ;
  * - `core_user.ignore_birth_restriction` — l'option d'administration qui fait voir à un
  *   compte toutes les dates de naissance des vivants qu'il voit déjà. Les dates
  *   seulement : les portraits n'en dépendent pas ;
@@ -46,6 +48,9 @@ final class Version20261003090000 extends AbstractMigration
         $this->addSql('ALTER TABLE mbr_member ADD birth_share_day BOOLEAN DEFAULT false NOT NULL');
         $this->addSql('ALTER TABLE mbr_member ADD birth_share_updated_at TIMESTAMP(0) WITH TIME ZONE DEFAULT NULL');
         $this->addSql('ALTER TABLE mbr_member ADD birth_share_source VARCHAR(16) DEFAULT NULL');
+        $this->addSql('ALTER TABLE mbr_member ADD birth_share_year_withdrawn_at TIMESTAMP(0) WITH TIME ZONE DEFAULT NULL');
+        $this->addSql('ALTER TABLE mbr_member ADD birth_share_month_withdrawn_at TIMESTAMP(0) WITH TIME ZONE DEFAULT NULL');
+        $this->addSql('ALTER TABLE mbr_member ADD birth_share_day_withdrawn_at TIMESTAMP(0) WITH TIME ZONE DEFAULT NULL');
         $this->addSql(<<<'SQL'
             ALTER TABLE mbr_member
               ADD CONSTRAINT ck_mbr_member_partage_trace
@@ -76,6 +81,6 @@ final class Version20261003090000 extends AbstractMigration
         $this->addSql('ALTER TABLE core_user DROP ignore_birth_restriction');
         $this->addSql('ALTER TABLE mbr_member DROP CONSTRAINT ck_mbr_member_partage_source');
         $this->addSql('ALTER TABLE mbr_member DROP CONSTRAINT ck_mbr_member_partage_trace');
-        $this->addSql('ALTER TABLE mbr_member DROP birth_share_source, DROP birth_share_updated_at, DROP birth_share_day, DROP birth_share_month, DROP birth_share_year');
+        $this->addSql('ALTER TABLE mbr_member DROP birth_share_day_withdrawn_at, DROP birth_share_month_withdrawn_at, DROP birth_share_year_withdrawn_at, DROP birth_share_source, DROP birth_share_updated_at, DROP birth_share_day, DROP birth_share_month, DROP birth_share_year');
     }
 }

@@ -85,10 +85,7 @@ final readonly class AnnuaireDesMembres implements AnnuaireDesMembresInterface
             'linkedAt' => $membre->getLinkedAt()->format(\DateTimeInterface::ATOM),
             'activatedAt' => $membre->getActivatedAt()?->format(\DateTimeInterface::ATOM),
             // ADR 0016 : ce que le compte partage de sa naissance.
-            'partageNaissance' => [
-                ...$membre->getPartageDeNaissance()->enTableau(),
-                'modifieLe' => $membre->getPartageModifieLe()?->format(\DateTimeInterface::ATOM),
-            ],
+            'partageNaissance' => ConsentementDeNaissance::etat($membre),
         ];
     }
 

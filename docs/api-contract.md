@@ -2134,7 +2134,7 @@ sont partagés ; `annee` est alors **absente** quand l'année ne l'est pas (`tex
 **La charge de session** (§ 2.2) gagne :
 
 ```json
-"partageNaissance": { "annee": true, "mois": true, "jour": false, "modifieLe": "2026-10-03T10:00:00+00:00" },
+"partageNaissance": { "annee": true, "mois": true, "jour": false, "modifieLe": "2026-10-03T10:00:00+00:00", "carenceJusquAu": { "jour": "2026-11-02T10:00:00+00:00" } },
 "reciprocite": { "restrictionIgnoree": false, "photo": true }
 ```
 
@@ -2142,7 +2142,10 @@ sont partagés ; `annee` est alors **absente** quand l'année ne l'est pas (`tex
 `reciprocite` vaut pour le lecteur effectif (le membre emprunté sous « voir comme »).
 
 **`PUT /api/session/partage-naissance`** — `{annee, mois, jour}` (booléens, absents = `false`)
-→ `200 {annee, mois, jour, modifieLe}`. `409 compte_non_rattache` sans rattachement,
+→ `200 {annee, mois, jour, modifieLe, carenceJusquAu}`. Retirer est toujours immédiat ; une
+composante retirée ne se remet qu'après 30 jours — `carenceJusquAu` (`{mois: "<ATOM>"}`, les
+seules composantes concernées) le dit, et une remise anticipée rend `409 partage_en_carence`
+(`details.jusquAu`). `409 compte_non_rattache` sans rattachement,
 `409 vue_comme_membre_active` sous la bascule, `422` sur un type invalide. Journalisé
 (`partage_naissance`, source `profil`).
 

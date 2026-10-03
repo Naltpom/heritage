@@ -151,6 +151,35 @@ final class ReciprociteTest extends CasDeTestMembership
         self::assertSame(['annee' => true, 'mois' => false, 'jour' => true], array_intersect_key($this->charge()['partageNaissance'], array_flip(['annee', 'mois', 'jour'])));
     }
 
+    /**
+     * L'équité : retirer est immédiat (RGPD, art. 7.3), mais une composante retirée ne se
+     * remet qu'après 30 jours — « je partage, je regarde, je retire » ne marche qu'une fois.
+     * La carence est **par composante** : ajouter une autre reste libre.
+     */
+    public function testUneComposanteRetireeNeSeRemetQuApresLaCarence(): void
+    {
+        $this->membreQuiPartage('ego@example.net', ArbreFamilial::EGO, new ComposantesDeDate(annee: true, mois: true));
+        $this->connexion('ego@example.net');
+
+        $this->requete('PUT', '/api/session/partage-naissance', ['annee' => true, 'mois' => false]);
+        self::assertResponseIsSuccessful('Le retrait passe toujours.');
+        self::assertArrayHasKey('mois', $this->charge()['carenceJusquAu']);
+
+        $this->requete('PUT', '/api/session/partage-naissance', ['annee' => true, 'mois' => true]);
+        self::assertResponseStatusCodeSame(409);
+        $erreur = $this->charge()['erreur'];
+        self::assertSame('partage_en_carence', $erreur['code']);
+        self::assertArrayHasKey('mois', $erreur['details']['jusquAu']);
+
+        $this->requete('PUT', '/api/session/partage-naissance', ['annee' => true, 'jour' => true]);
+        self::assertResponseIsSuccessful('Une autre composante s’ajoute librement.');
+
+        // Trente et un jours plus tard, le mois se remet.
+        $membre = $this->em()->getRepository(Member::class)->findOneBy(['personId' => ArbreFamilial::EGO]);
+        self::assertNotNull($membre);
+        self::assertSame([], $membre->carenceDuPartage(new \DateTimeImmutable('+31 days')));
+    }
+
     public function testUnCompteSansRattachementNAPasDePartage(): void
     {
         $this->creerUtilisateur('seul@example.net');

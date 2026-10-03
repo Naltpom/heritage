@@ -92,6 +92,18 @@ final readonly class ConsentementDeNaissance
     public function enregistrer(Member $membre, ComposantesDeDate $partage, string $source, bool $flush = true): void
     {
         $avant = $membre->getPartageDeNaissance();
+
+        // L'équité (ADR 0016) : une composante retirée ne se remet qu'après sa carence. Le
+        // retrait, lui, passe toujours — il ne figure pas dans ce contrôle.
+        $bloquees = [];
+        foreach ($membre->carenceDuPartage() as $cle => $fin) {
+            if ($partage->{$cle} && !$avant->{$cle}) {
+                $bloquees[$cle] = $fin->format(\DateTimeInterface::ATOM);
+            }
+        }
+        if ([] !== $bloquees) {
+            throw new ConflictException('partage_en_carence', \sprintf('Une composante retirée ne peut être partagée à nouveau qu’après %d jours.', Member::CARENCE_JOURS), ['jusquAu' => $bloquees]);
+        }
         $membre->partagerLaNaissance($partage, $source);
 
         if ($flush) {
@@ -107,6 +119,24 @@ final readonly class ConsentementDeNaissance
         );
 
         $this->oublier();
+    }
+
+    /**
+     * Le choix d'un compte tel que les écrans le lisent : les trois composantes, la date du
+     * dernier choix, et la fin de carence de chaque composante retirée.
+     *
+     * @return array<string, mixed>
+     */
+    public static function etat(Member $membre): array
+    {
+        return [
+            ...$membre->getPartageDeNaissance()->enTableau(),
+            'modifieLe' => $membre->getPartageModifieLe()?->format(\DateTimeInterface::ATOM),
+            'carenceJusquAu' => (object) array_map(
+                static fn (\DateTimeImmutable $fin): string => $fin->format(\DateTimeInterface::ATOM),
+                $membre->carenceDuPartage(),
+            ),
+        ];
     }
 
     /**

@@ -68,10 +68,7 @@ final readonly class ContributeurDeSession implements SessionPayloadContributorI
             'cercle' => $this->cercle(),
             // ADR 0016. Le choix **du compte de la session** — celui que l'écran « Mon compte »
             // modifie —, `null` sans rattachement.
-            'partageNaissance' => null !== $membre ? [
-                ...$membre->getPartageDeNaissance()->enTableau(),
-                'modifieLe' => $membre->getPartageModifieLe()?->format(\DateTimeInterface::ATOM),
-            ] : null,
+            'partageNaissance' => null !== $membre ? ConsentementDeNaissance::etat($membre) : null,
             // Et ce qui s'applique **au lecteur effectif** (le membre emprunté sous la
             // bascule) : l'option d'administration, et s'il a une photo de lui.
             'reciprocite' => [

@@ -37,6 +37,23 @@ L'option d'administration « ignorer la restriction de date de naissance », pos
 compte, donne toutes les composantes. **Elle ne couvre pas les photos** (décision du
 commanditaire). Le lieu de naissance, le nom et les autres événements ne sont pas concernés.
 
+### L'équité : une carence après un retrait
+
+« Je partage, je regarde, je retire » rendrait la réciprocité bidon. Le commanditaire voulait
+interdire le retrait pendant une durée minimale ; **ce n'est pas possible** : le RGPD
+(art. 7.3) veut qu'un consentement se retire à tout moment, aussi facilement qu'il s'est
+donné. La règle retenue :
+
+- **ajouter** une composante est toujours libre ;
+- **retirer** est toujours immédiat — la date disparaît aussitôt pour les autres, et le
+  lecteur cesse de voir la leur ;
+- une composante **retirée ne se remet qu'après 30 jours** (`Member::CARENCE_JOURS`), **par
+  composante** : retirer le jour ne bloque ni l'année ni le mois. Une remise anticipée rend
+  `409 partage_en_carence`.
+
+La carence ne retient la donnée de personne : elle ne fait que différer l'accès aux dates des
+autres, et l'astuce ne sert plus qu'une fois par mois. Chaque changement reste au journal.
+
 ### Deux filtres empilés, le cercle d'abord
 
 La réciprocité ne remplace pas le cercle : `CercleDuLecteur::voit()` décide toujours de la

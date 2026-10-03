@@ -63,10 +63,7 @@ final class PartageNaissanceController extends AbstractController
 
         $this->consentements->enregistrer($membre, $partage, 'profil');
 
-        return new JsonResponse([
-            ...$partage->enTableau(),
-            'modifieLe' => $membre->getPartageModifieLe()?->format(\DateTimeInterface::ATOM),
-        ]);
+        return new JsonResponse(ConsentementDeNaissance::etat($membre));
     }
 
     #[Route('/api/administration/personnes/{id}/autorisation-naissance', name: 'membership_admin_autorisation_lire', requirements: ['id' => '\d+'], methods: ['GET'])]
