@@ -482,6 +482,27 @@ final class ValidationDeDemandeTest extends BaseDeDemandes
      * pouvait donc pas constater qu'un greffon n'était pas appelé. Celui-ci le constate :
      * l'espion note son appel, et son écriture doit ressortir en `prp_revision`.
      */
+    /**
+     * Une demande « Ajout d'un document » porte un op dont le sujet est un **média**,
+     * pas une fiche : l'analyse ne doit pas le confronter à l'arbre. Elle le faisait,
+     * le port réel levait, et l'écran d'administration de la demande rendait une 500
+     * (demande 4160, 03/10/2026) ; le double, lui, le déclarait « disparu ».
+     */
+    public function testUnOpDeMediaNEstPasConfronteALArbre(): void
+    {
+        $demande = $this->deposer('surname', 'Sureau', 'SUREAU');
+
+        $op = new ChangeRequestOp($demande, 2, OpKind::AjoutMedia, SubjectKind::Media, ValueKind::Media);
+        $op->viserLigneExistante(4656, null)->setValues(null, ['mediaId' => 4656, 'kind' => 'portrait', 'caption' => null, 'sha256' => 'abc']);
+        $this->em->persist($op);
+        $this->em->flush();
+
+        $plan = $this->analyse->analyser($demande);
+
+        self::assertSame([], $plan->disparues, 'Le média n’est pas une cible de l’arbre : il ne peut pas en « disparaître ».');
+        self::assertCount(2, $plan->ops);
+    }
+
     public function testUnOpQuiNEstPasUnChampEstReellementApplique(): void
     {
         $demande = $this->deposer('surname', 'Sureau', 'SUREAU');
