@@ -1,11 +1,17 @@
 /* « Un mot de Nathan » : Nathan se présente à la famille (par le sang ou par
-   alliance), puis fait le tour complet de l'application — l'arbre, la fiche,
+   alliance), puis fait le tour de l'application — l'arbre, la fiche,
    l'assistant et la vérification, les questions, la carte et la chronologie,
-   le calendrier, la cloche, les événements, le tirage au sort, les actes
-   demandés, la confidentialité, l'installation. Une phrase, un tableau. */
+   le calendrier et la cloche, les événements, le tirage au sort, la
+   confidentialité, l'installation. Une phrase, un tableau.
+
+   Le mouvement : chaque tableau entre par la droite et sort par la gauche,
+   comme on glisse d'un écran à l'autre ; pendant qu'il est là, la caméra
+   avance lentement. Des halos aux couleurs des branches dérivent en fond, et
+   les temps forts (enchanté, le compteur, la correction acceptée, le cadeau,
+   l'icône, la fin) lâchent une gerbe d'éclats. */
 minuter(
-  [1.0, 0.45, 0.6, 0.55, 0.5, 0.6, 0.6, 0.45, 0.6, 0.5, 0.6, 0.6, 0.6, 0.6, 0.5, 0.6, 0.6, 0.6, 0.6, 0.6, 0.7],
-  [0.4, 0.45, 0.45, 0.5, 0.45, 0.45, 0.4, 0.5, 0.45, 0.5, 0.45, 0.45, 0.45, 0.4, 0.5, 0.45, 0.45, 0.45, 0.45, 0.5, 0.6],
+  [1.0, 0.45, 0.55, 0.55, 0.5, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.65, 0.55],
+  [0.4, 0.45, 0.5, 0.45, 0.45, 0.7, 1.05, 0.95, 0.5, 0.95, 0.75, 0.45, 0.65, 0.5, 0.6],
   2.6,
 )
 
@@ -16,65 +22,106 @@ const S = (n) => V[n].debut - 0.45
 
 const P = {
   // 0–1 : bonjour
-  avatar: 0.15, nom: M(0, 3), mariage: M(1, 6), repas: M(1, 9), jamais: M(1, 13),
-  // 2–4 : l'arbre
-  arbre: S(2), sang: M(2, 8), alliance: M(2, 11), enchante: M(2, 13),
-  ensemble: S(3) + 0.1, compteur: M(3, 10) - 0.3,
-  fiches: S(4) + 0.1, centre: M(4, 4), branches: M(4, 10),
-  // 5 : la fiche
-  fiche: S(5), touche: M(5, 0) - 0.05, dates: M(5, 4), proches: M(5, 6), photos: M(5, 8), origine: M(5, 10),
-  // 6–7 : l'assistant
-  assistant: S(6), frappe: M(6, 4), photo: M(6, 11) - 0.1,
-  correction: M(7, 3), verification: M(7, 8), acceptee: V[7].fin - 0.1,
-  // 8–9 : les questions
-  question: S(8), reponse: M(8, 5), siennes: S(9), repondre: M(9, 9),
-  // 10 : carte et chronologie
-  carte: S(10), chrono: M(10, 9) - 0.35,
-  // 11 : le calendrier
-  calendrier: S(11), memoire: M(11, 8),
-  // 12 : la cloche
-  cloche: S(12), push1: M(12, 3), push2: M(12, 9), push3: M(12, 11),
-  // 13–14 : les événements
-  retrouver: S(13), cousinade: M(13, 7), surprise: M(13, 9), hommage: M(13, 12),
-  suivi: S(14), relance: M(14, 11) - 0.05,
-  // 15 : le tirage
-  tirage: S(15), revele: M(15, 9) - 0.05,
-  // 16 : les actes demandés
-  demarches: S(16),
-  // 17 : la confidentialité
-  prive: S(17), cadenas: M(17, 4), vivants: M(17, 10),
-  // 18 : l'installation
-  installer: S(18), icone: M(18, 4),
-  // 19–20 : la fin
-  venez: S(19), fin: S(20) + 0.25,
+  avatar: 0.15, nom: M(0, 3), mariage: M(1, 6), repas: M(1, 9), jamais: M(1, 11),
+  // 2–3 : l'arbre ; 1 800 personnes ; vous au centre
+  arbre: S(2), sang: M(2, 8), alliance: M(2, 11), enchante: M(2, 12),
+  ensemble: S(3) + 0.1, compteur: M(3, 8) - 0.3, fiches: M(3, 11) - 0.1, centre: M(3, 13),
+  // 4 : la fiche
+  fiche: S(4), touche: M(4, 0) - 0.05, dates: M(4, 4), proches: M(4, 6), photos: M(4, 8), origine: M(4, 10),
+  // 5 : l'assistant et la vérification
+  assistant: S(5), frappe: M(5, 2), prepare: M(5, 6), correction: M(5, 9), verification: M(5, 14), acceptee: V[5].fin + 0.3,
+  // 6 : les questions
+  question: S(6), reponse: M(6, 2) + 0.1, siennes: M(6, 6) - 0.2, repondre: V[6].fin + 0.55,
+  // 7 : carte et chronologie
+  carte: S(7), chrono: M(7, 8) - 0.25,
+  // 8 : le calendrier, puis la cloche
+  calendrier: S(8), anniversaire: M(8, 4), cloche: M(8, 6) - 0.3, push1: M(8, 7), push2: M(8, 9), push3: M(8, 12),
+  // 9 : les événements
+  retrouver: S(9), cousinade: M(9, 4), surprise: M(9, 6), hommage: M(9, 7) + 0.2,
+  suivi: M(9, 8) - 0.35, voyez: M(9, 10), qui: M(9, 11), vient: M(9, 12),
+  // 10 : le tirage
+  tirage: S(10), revele: M(10, 9) - 0.05,
+  // 11 : la confidentialité
+  prive: S(11), cadenas: M(11, 2), invites: M(11, 5), vivants: M(11, 10),
+  // 12 : l'installation
+  installer: S(12), icone: M(12, 5),
+  // 13–14 : la fin
+  venez: S(13), fin: S(14) + 0.25,
 }
+P.branches = P.centre + 0.25
 
 /* -------- les bruitages -------- */
 son(P.avatar, 'eclosion'); son(P.nom, 'pop'); son(P.mariage, 'note1'); son(P.repas, 'note2'); son(P.jamais, 'note3')
 son(P.arbre, 'souffle', 0.6); son(P.sang, 'note2'); son(P.alliance, 'note4'); son(P.enchante, 'succes')
-son(P.ensemble, 'recul'); son(P.compteur, 'impact', 0.6); son(P.fiches, 'souffle', 0.5); son(P.centre, 'pop')
-for (let q = 0; q < 4; q++) son(P.branches + q * 0.12, `note${q + 1}`)
+son(P.ensemble, 'recul'); son(P.compteur + 0.4, 'impact', 0.6); son(P.fiches, 'souffle', 0.5); son(P.centre, 'pop')
+for (let q = 0; q < 4; q++) son(P.branches + q * 0.12, `note${q + 1}`, 0.6)
 son(P.touche, 'tape'); son(P.touche + 0.1, 'pop'); son(P.photos, 'note2'); son(P.origine, 'tampon', 0.5)
-son(P.assistant, 'souffle', 0.5); sonsDeFrappe('Jean est né à Brest, pas à Lyon.', P.frappe, 22); son(P.photo, 'tape'); son(P.photo + 0.15, 'clic')
-son(P.correction, 'pop'); son(P.verification, 'note3'); son(P.acceptee, 'succes')
-son(P.question, 'souffle', 0.5); son(P.reponse, 'pop'); son(P.siennes, 'notif'); son(P.repondre, 'tape')
-son(P.carte, 'souffle', 0.5); son(P.carte + 0.6, 'note1'); son(P.chrono, 'recul', 0.6)
-son(P.calendrier, 'souffle', 0.5); son(P.memoire, 'note4')
-son(P.cloche, 'souffle', 0.5); son(P.push1, 'notif'); son(P.push2, 'notif', 0.7); son(P.push3, 'notif', 0.6)
+son(P.assistant, 'souffle', 0.5); sonsDeFrappe('Jean est né à Brest, pas à Lyon.', P.frappe, 26)
+son(P.prepare, 'note1', 0.6); son(P.correction, 'pop'); son(P.verification, 'note3'); son(P.acceptee, 'succes')
+son(P.question, 'souffle', 0.5); son(P.question + 0.25, 'pop'); son(P.reponse, 'pop'); son(P.siennes, 'notif'); son(P.repondre, 'tape')
+son(P.carte, 'souffle', 0.5); son(P.carte + 0.5, 'note1'); son(P.chrono, 'recul', 0.6)
+son(P.calendrier, 'souffle', 0.5); son(P.anniversaire, 'note4'); son(P.cloche, 'souffle', 0.5)
+son(P.push1, 'notif'); son(P.push2, 'notif', 0.7); son(P.push3, 'notif', 0.6)
 son(P.retrouver, 'souffle', 0.5); son(P.cousinade, 'note1'); son(P.surprise, 'note2'); son(P.hommage, 'note3')
-son(P.suivi, 'souffle', 0.5); son(P.relance, 'tape'); son(P.relance + 0.15, 'notif')
+son(P.suivi, 'souffle', 0.5); son(P.voyez, 'pop', 0.6); son(P.vient, 'pop', 0.6)
 son(P.tirage, 'souffle', 0.5); son(P.revele, 'tampon', 0.5); son(P.revele + 0.1, 'succes')
-son(P.demarches, 'souffle', 0.5)
-son(P.prive, 'souffle', 0.5); son(P.cadenas, 'tampon', 0.7); son(P.vivants, 'note2')
-son(P.installer, 'souffle', 0.5); son(P.icone, 'pop'); son(P.icone + 0.6, 'tape')
+son(P.prive, 'souffle', 0.5); son(P.cadenas, 'tampon', 0.7); son(P.invites, 'note1', 0.6); son(P.vivants, 'note2')
+son(P.installer, 'souffle', 0.5); son(P.icone, 'pop'); son(P.icone + 0.6, 'tape'); son(P.icone + 0.65, 'succes', 0.6)
 son(P.venez, 'eclosion'); son(P.fin, 'final')
 
-/* -------- outils de mise en scène -------- */
+/* -------- le mouvement -------- */
 /** Un tableau visible de `debut` à `fin` : il monte en entrant, glisse vers le haut en sortant. */
 function phase(t, debut, fin) {
   const k = eout(prog(t, debut, debut + 0.4)), s = eio(prog(t, fin - 0.15, fin + 0.25))
   return { a: k * (1 - s), dy: (1 - k) * 90 - s * 120 }
 }
+/**
+ * Un tableau d'application, de `debut` à `fin` : il arrive de la droite, part
+ * vers la gauche (comme un écran qu'on fait glisser), et pendant qu'il est là,
+ * la caméra avance lentement vers lui.
+ */
+function tableau(t, debut, fin, dessin) {
+  const k = eout(prog(t, debut, debut + 0.5)), s = eio(prog(t, fin - 0.15, fin + 0.35))
+  const a = k * (1 - s)
+  if (a <= 0) return
+  const z = (1 + 0.035 * edoux(prog(t, debut, fin + 0.35))) * lerp(0.93, 1, k) * lerp(1, 0.93, s)
+  x.save(); x.globalAlpha = a
+  x.translate(540 + (1 - k) * 220 - s * 220, 1150); x.scale(z, z); x.translate(-540, -1150)
+  dessin()
+  x.restore()
+}
+
+/** Des halos aux couleurs des branches, qui dérivent lentement derrière tout. */
+function ambiance(t) {
+  const halos = [['A', 0.0, 260, 0.11], ['B', 1.7, 340, 0.08], ['C', 3.1, 300, 0.1], ['D', 4.4, 380, 0.07]]
+  for (const [q, ph, r, al] of halos) {
+    const cx = 540 + Math.sin(t * 0.21 + ph) * 420, cy = 1150 + Math.cos(t * 0.17 + ph * 1.3) * 620
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, r * 2.2)
+    g.addColorStop(0, avecAlpha(COUL[q], al)); g.addColorStop(1, avecAlpha(COUL[q], 0))
+    x.fillStyle = g; x.fillRect(0, 0, W, H)
+  }
+}
+
+/** Une gerbe d'éclats aux couleurs des branches, lâchée à `debut` depuis (cx, cy). */
+const ECLATS = []
+function eclats(debut, cx, cy, { n = 34, force = 1, graine = 1 } = {}) { ECLATS.push({ debut, cx, cy, n, force, graine }) }
+function dessinerEclats(t) {
+  for (const e of ECLATS) {
+    const k = (t - e.debut) / 1.5
+    if (k <= 0 || k >= 1) continue
+    const r = rnd(e.graine * 97 + 13), dt = t - e.debut
+    for (let i = 0; i < e.n; i++) {
+      const ang = r() * Math.PI * 2, v = (380 + r() * 620) * e.force, rot = r() * 6, q = 'ABCD'[i % 4], forme = r()
+      const px = e.cx + Math.cos(ang) * v * dt * (1 - 0.35 * dt), py = e.cy + Math.sin(ang) * v * dt * (1 - 0.35 * dt) + 520 * dt * dt
+      x.save(); x.globalAlpha = (1 - eio(k)) * 0.95; x.translate(px, py); x.rotate(rot + dt * 7)
+      x.fillStyle = i % 5 === 0 ? COUL.accent : COUL[q]
+      if (forme < 0.5) { rr(-9, -4, 18, 8, 3); x.fill() } else { x.beginPath(); x.arc(0, 0, 6, 0, Math.PI * 2); x.fill() }
+      x.restore()
+    }
+  }
+}
+
+/* -------- outils de mise en scène -------- */
 function titreEcran(s, sous) {
   texte(s, 60, 580, { taille: 56, poids: 700, align: 'left' })
   if (sous) texte(sous, 60, 638, { taille: 30, poids: 400, coul: COUL.attenue, align: 'left' })
@@ -136,15 +183,31 @@ function bulle(s, px, py, largeur, { moi = false, alpha = 1, taille = 32 } = {})
   x.restore()
   return h
 }
+/** Une ligne « en cours de chargement » qui miroite. */
+function squelette(px, py, w, h, t, decalage = 0) {
+  rr(px, py, w, h, h / 2); x.fillStyle = COUL.panneau2; x.fill()
+  const m = ((t * 0.9 + decalage) % 1.4) / 1.4
+  x.save(); rr(px, py, w, h, h / 2); x.clip()
+  const g = x.createLinearGradient(px + (m - 0.3) * w * 1.6, 0, px + (m + 0.1) * w * 1.6, 0)
+  g.addColorStop(0, avecAlpha(COUL.texte, 0)); g.addColorStop(0.5, avecAlpha(COUL.texte, 0.12)); g.addColorStop(1, avecAlpha(COUL.texte, 0))
+  x.fillStyle = g; x.fillRect(px, py, w, h); x.restore()
+}
 
 /* -------- 0–1. Bonjour, moi c'est Nathan -------- */
 function bonjour(t) {
   const { a, dy } = phase(t, P.avatar, P.arbre)
   if (a <= 0) return
   x.save(); x.globalAlpha = a; x.translate(0, dy)
+  // la caméra avance doucement vers Nathan
+  const z = 1 + 0.05 * edoux(prog(t, P.avatar, P.arbre))
+  x.translate(540, 1150); x.scale(z, z); x.translate(-540, -1150)
   const ka = eback(prog(t, P.avatar, P.avatar + 0.6), 1.6)
-  // l'avatar, au centre, avec un halo qui respire
+  // l'avatar, au centre, avec deux ondes qui s'éloignent et un halo qui respire
   x.save(); x.translate(540, 980); x.scale(ka, ka)
+  for (let o = 0; o < 2; o++) {
+    const ph = ((t * 0.45 + o * 0.5) % 1)
+    x.beginPath(); x.arc(0, 0, 200 + 220 * ph, 0, Math.PI * 2); x.strokeStyle = avecAlpha(COUL.accent, 0.35 * (1 - ph)); x.lineWidth = 3; x.stroke()
+  }
   const halo = 1 + 0.04 * Math.sin(t * 2.4)
   x.beginPath(); x.arc(0, 0, 230 * halo, 0, Math.PI * 2); x.fillStyle = avecAlpha(COUL.accent, 0.12); x.fill()
   x.beginPath(); x.arc(0, 0, 190, 0, Math.PI * 2); x.fillStyle = '#2c3038'; x.fill(); x.strokeStyle = COUL.accent; x.lineWidth = 8; x.stroke()
@@ -158,12 +221,16 @@ function bonjour(t) {
     for (let d = 0; d < 4; d++) { rr(-34 + d * 18, -92, 14, 60, 7); x.fill() }
     x.restore()
   }
-  // le nom
+  // le nom, lettre à lettre
   const kn = eout(prog(t, P.nom - 0.1, P.nom + 0.35))
   if (kn > 0) {
-    x.save(); x.translate(540, 1330); const sc = lerp(1.25, 1, kn); x.scale(sc, sc)
-    texte('Nathan', 0, 0, { taille: 120, police: SERIF, poids: 600, alpha: kn })
-    x.restore()
+    const nom = 'Nathan', w = largeurTexte(nom, 120, 600, SERIF)
+    let px = 540 - w / 2
+    for (let i = 0; i < nom.length; i++) {
+      const kl = eback(prog(t, P.nom - 0.1 + i * 0.05, P.nom + 0.25 + i * 0.05), 2.2), lw = largeurTexte(nom[i], 120, 600, SERIF)
+      if (kl > 0) { x.save(); x.translate(px + lw / 2, 1330 + (1 - kl) * 50); texte(nom[i], 0, 0, { taille: 120, police: SERIF, poids: 600, alpha: clamp(kl) }); x.restore() }
+      px += lw
+    }
     x.fillStyle = COUL.accent; x.fillRect(540 - 140 * kn, 1410, 280 * kn, 6)
   }
   // où l'on s'est peut-être croisés
@@ -175,7 +242,7 @@ function bonjour(t) {
   for (const [quand, cx, cy, libelle, icone] of souvenirs) {
     const k = eback(prog(t, quand - 0.15, quand + 0.3), 2.2)
     if (k <= 0) continue
-    x.save(); x.translate(cx, cy + Math.sin(t * 2 + cx) * 6); x.scale(k, k)
+    x.save(); x.translate(cx, cy + Math.sin(t * 2 + cx) * 6); x.scale(k, k); x.rotate((1 - clamp(k)) * 0.2)
     rr(-150, -80, 300, 160, 30); x.fillStyle = COUL.panneau; x.fill(); x.strokeStyle = COUL.ligne; x.lineWidth = 2; x.stroke()
     icone(0, -22)
     texte(libelle, 0, 50, { taille: 28, poids: 600 })
@@ -184,7 +251,7 @@ function bonjour(t) {
   x.restore()
 }
 
-/* -------- 2–4. L'arbre : par le sang, par alliance ; 1 800 personnes ; vous au centre -------- */
+/* -------- 2–3. L'arbre : par le sang, par alliance ; 1 800 personnes ; vous au centre -------- */
 const A = arbreFictif()
 const LIGNE = ligneDirecteDe(A, A.vous)
 const dist = (n) => Math.hypot(n.cx - A.vous.cx, (n.cy - A.vous.cy) * 1.3)
@@ -195,7 +262,8 @@ const ALLIES = [
   { nom: 'Karim Haddad', dates: '° 1987', sexe: 'h', cx: 892, cy: 1530, lien: 'emma' },
 ]
 function camera(t) {
-  return trajet(t, { s: 1, fx: 540, fy: 1100 }, [
+  return trajet(t, { s: 1.12, fx: 540, fy: 1220 }, [
+    { a: P.arbre, b: P.ensemble, s: 1, fy: 1100 },
     { a: P.ensemble, b: P.ensemble + 0.8, s: 0.56, fy: 720 },
     { a: P.fiches, b: P.fiches + 0.7, s: 1, fy: 1100 },
     { a: P.fiche, b: P.fiche + 0.6, s: 1.3, fx: 380, fy: 1000 },
@@ -218,7 +286,7 @@ function arbre(t) {
   if (kal > 0) {
     for (const al of ALLIES) {
       const n = A.N.find((m) => m.id === al.lien)
-      x.save(); x.globalAlpha *= kal; x.setLineDash([12, 10]); x.strokeStyle = COUL.violet; x.lineWidth = 4
+      x.save(); x.globalAlpha *= kal; x.setLineDash([12, 10]); x.lineDashOffset = -t * 30; x.strokeStyle = COUL.violet; x.lineWidth = 4
       x.beginPath(); x.moveTo(n.cx, n.cy + n.h / 2); x.lineTo(al.cx, al.cy - 50); x.stroke(); x.restore()
       carteFiche(al.cx, al.cy, 280, 100, { nom: al.nom, dates: al.dates, sexe: al.sexe, branche: COUL.violet, alpha: kal, echelle: eback(clamp(kal), 2), surligne: 1 - prog(t, P.alliance + 0.4, P.enchante + 0.4) })
     }
@@ -229,7 +297,7 @@ function arbre(t) {
     const k = prog(t, d, d + 0.3)
     if (k <= 0) continue
     let s = 0
-    if (n.vous) s = eout(prog(t, P.centre - 0.1, P.centre + 0.2))
+    if (n.vous) s = Math.max(eout(prog(t, P.centre - 0.1, P.centre + 0.2)), 0.8 * eout(prog(t, P.enchante - 0.1, P.enchante + 0.2)) * (1 - prog(t, P.ensemble, P.ensemble + 0.3)))
     if (LIGNE.has(n) && sang > 0 && !n.vous) s = Math.max(s, 0.7 * sang)
     if (n === A.parSosa(5)) s = Math.max(s, eout(prog(t, P.touche, P.touche + 0.2)))
     const couleurs = n.q ? Math.max(1 - prog(t, P.fiches, P.fiches + 0.2), eout(prog(t, P.branches + 'ABCD'.indexOf(n.q) * 0.12, P.branches + 'ABCD'.indexOf(n.q) * 0.12 + 0.25))) : 1
@@ -237,13 +305,14 @@ function arbre(t) {
   }
   x.restore()
   // le compteur de la vue « Ensemble »
-  const kc = eout(prog(t, P.compteur - 0.5, P.compteur + 0.2)) * (1 - eio(prog(t, P.fiches - 0.2, P.fiches + 0.2)))
+  const kc = eback(prog(t, P.compteur - 0.5, P.compteur + 0.1), 1.6) * (1 - eio(prog(t, P.fiches + 0.1, P.fiches + 0.45)))
   if (kc > 0) {
     const n = Math.round(1800 * eout(prog(t, P.compteur - 0.5, P.compteur + 0.4)))
-    x.save(); x.globalAlpha = kc * a
-    rr(140, 1380, 800, 260, 36); x.fillStyle = COUL.fond; x.fill(); x.strokeStyle = COUL.accent; x.lineWidth = 3; x.stroke()
-    texte(`${n.toLocaleString('fr-FR')}${n >= 1800 ? ' +' : ''}`, 540, 1480, { taille: 120, police: SERIF, poids: 600, coul: COUL.accent })
-    texte('personnes dans l’arbre', 540, 1578, { taille: 38, poids: 600 })
+    const bat = 1 + 0.06 * Math.sin(Math.PI * prog(t, P.compteur + 0.4, P.compteur + 0.7))
+    x.save(); x.globalAlpha = clamp(kc) * a; x.translate(540, 1510); x.scale(kc * bat, kc * bat)
+    rr(-400, -130, 800, 260, 36); x.fillStyle = COUL.fond; x.fill(); x.strokeStyle = COUL.accent; x.lineWidth = 3; x.stroke()
+    texte(`${n.toLocaleString('fr-FR')}${n >= 1800 ? ' +' : ''}`, 0, -30, { taille: 120, police: SERIF, poids: 600, coul: COUL.accent })
+    texte('personnes dans l’arbre', 0, 68, { taille: 38, poids: 600 })
     x.restore()
   }
   // la bande des branches
@@ -258,47 +327,51 @@ function arbre(t) {
     x.restore()
   }
   // « vous êtes ici »
-  const kv = eout(prog(t, P.centre - 0.05, P.centre + 0.3)) * (1 - prog(t, P.fiche - 0.2, P.fiche + 0.1))
+  const kv = eback(prog(t, P.centre - 0.05, P.centre + 0.3), 2) * (1 - prog(t, P.fiche - 0.2, P.fiche + 0.1))
   if (kv > 0) {
     const [vx, vy] = versEcran(cam, A.vous.cx, A.vous.cy)
-    x.save(); x.globalAlpha = kv * a; x.translate(vx, vy - 110 - 8 * Math.sin(t * 5))
+    x.save(); x.globalAlpha = clamp(kv) * a; x.translate(vx, vy - 110 - 8 * Math.sin(t * 5)); x.scale(kv, kv)
     pastille('Vous', 0, 0, { taille: 30 })
     x.restore()
   }
   voileBas()
 }
 
-/* -------- 5. La fiche : dates, proches, photos, d'où vient l'information -------- */
+/* -------- 4. La fiche : dates, proches, photos, d'où vient l'information -------- */
 function fiche(t) {
-  const k = eback(prog(t, P.touche + 0.1, P.touche + 0.5), 1.2), s = eio(prog(t, P.assistant - 0.15, P.assistant + 0.25))
+  const k = eback(prog(t, P.touche + 0.1, P.touche + 0.5), 1.2), s = eio(prog(t, P.assistant - 0.15, P.assistant + 0.3))
   if (k <= 0 || s >= 1) return
   const [sx, sy] = versEcran(camera(P.touche), A.parSosa(5).cx, A.parSosa(5).cy)
   doigt(sx, sy, P.touche)
-  const y0 = H - 1180 * k + s * 300
-  x.save(); x.globalAlpha = 1 - s
+  const y0 = H - 1180 * k
+  x.save(); x.globalAlpha = 1 - s; x.translate(-s * 220, 0)
   x.shadowColor = 'rgba(0,0,0,.6)'; x.shadowBlur = 50
   rr(20, y0, 1040, 1300, 34); x.fillStyle = COUL.panneau; x.fill(); x.shadowBlur = 0
   x.fillStyle = COUL.B; x.fillRect(20, y0, 1040, 7)
   x.fillStyle = COUL.ligne; rr(490, y0 + 22, 100, 10, 5); x.fill()
   texte('Simone Bernard', 70, y0 + 100, { taille: 54, poids: 700, align: 'left' })
   const kd = eout(prog(t, P.dates - 0.15, P.dates + 0.25))
-  texte('° 3 mai 1935, Lille   † 18 janv. 2019, Paris', 70, y0 + 160, { taille: 30, poids: 500, align: 'left', coul: COUL.attenue, police: MONO, alpha: kd })
-  // les proches
-  const kp = eout(prog(t, P.proches - 0.15, P.proches + 0.25))
-  x.save(); x.globalAlpha *= kp
-  texte('PROCHES', 70, y0 + 240, { taille: 26, poids: 700, coul: COUL.attenue, align: 'left', espacement: 3 })
-  ;[['Auguste Bernard', 'père'], ['Rose Faure', 'mère'], ['Jean Martin', 'époux'], ['Paul Martin', 'fils']].forEach(([nom, role], i) => {
-    texte(nom, 70, y0 + 295 + i * 52, { taille: 32, poids: 600, coul: COUL.accent, align: 'left' })
-    texte(role, 1000, y0 + 295 + i * 52, { taille: 26, poids: 500, coul: COUL.attenue, align: 'right' })
-  })
-  x.restore()
+  texte('° 3 mai 1935, Lille   † 18 janv. 2019, Paris', 70 + (1 - kd) * 40, y0 + 160, { taille: 30, poids: 500, align: 'left', coul: COUL.attenue, police: MONO, alpha: kd })
+  // les proches, un par un
+  const kp = prog(t, P.proches - 0.15, P.proches + 0.45)
+  if (kp > 0) {
+    texte('PROCHES', 70, y0 + 240, { taille: 26, poids: 700, coul: COUL.attenue, align: 'left', espacement: 3, alpha: clamp(kp * 3) })
+    ;[['Auguste Bernard', 'père'], ['Rose Faure', 'mère'], ['Jean Martin', 'époux'], ['Paul Martin', 'fils']].forEach(([nom, role], i) => {
+      const ki = eout(prog(t, P.proches - 0.15 + i * 0.08, P.proches + 0.2 + i * 0.08))
+      if (ki <= 0) return
+      x.save(); x.globalAlpha *= ki; x.translate((1 - ki) * 60, 0)
+      texte(nom, 70, y0 + 295 + i * 52, { taille: 32, poids: 600, coul: COUL.accent, align: 'left' })
+      texte(role, 1000, y0 + 295 + i * 52, { taille: 26, poids: 500, coul: COUL.attenue, align: 'right' })
+      x.restore()
+    })
+  }
   // les photos
   const kph = prog(t, P.photos - 0.15, P.photos + 0.5)
   if (kph > 0) {
     texte('PHOTOS', 70, y0 + 540, { taille: 26, poids: 700, coul: COUL.attenue, align: 'left', espacement: 3, alpha: clamp(kph * 3) })
     ;[[220, -0.05, 'f'], [520, 0.04, 'h'], [820, -0.03, 'f']].forEach(([cx, rot, sexe], i) => {
       const kk = eback(prog(t, P.photos - 0.1 + i * 0.12, P.photos + 0.25 + i * 0.12), 2)
-      if (kk > 0) { x.save(); x.translate(cx, y0 + 690); x.scale(kk, kk); photoAncienne(0, 0, 250, 200, { rot, sexe }); x.restore() }
+      if (kk > 0) { x.save(); x.translate(cx, y0 + 690 + (1 - clamp(kk)) * 80); x.scale(kk, kk); photoAncienne(0, 0, 250, 200, { rot: rot * (1 + 3 * (1 - clamp(kk))), sexe }); x.restore() }
     })
   }
   // d'où vient l'information
@@ -310,87 +383,102 @@ function fiche(t) {
     texte('Acte de naissance', 95, y0 + 930, { taille: 32, poids: 700, align: 'left' })
     texte('Archives du Nord · registre 1935', 95, y0 + 974, { taille: 26, poids: 400, coul: COUL.attenue, align: 'left' })
     const kt = eback(prog(t, P.origine, P.origine + 0.3), 2.5)
-    x.save(); x.translate(860, y0 + 945); x.scale(kt, kt); pastille('Vérifié', 0, 0, { ton: 'vert', taille: 28 }); x.restore()
+    x.save(); x.translate(860, y0 + 945); x.scale(kt, kt); x.rotate((1 - clamp(kt)) * -0.4); pastille('Vérifié', 0, 0, { ton: 'vert', taille: 28 }); x.restore()
     x.restore()
   }
   x.restore()
 }
 
-/* -------- 6–7. L'assistant : dire avec ses mots, l'acte en photo ; la vérification -------- */
+/* -------- 5. L'assistant : dire avec ses mots ; la correction ; la vérification -------- */
 const RECIT = 'Jean est né à Brest, pas à Lyon.'
 function assistant(t) {
-  const { a, dy } = phase(t, P.assistant, P.question)
-  if (a <= 0) return
-  x.save(); x.globalAlpha = a; x.translate(0, dy)
-  titreEcran('Modifier l’arbre', 'L’assistant écoute, et prépare la demande')
-  // le récit
-  champ('Ce que vous savez', '', 60, 740, 960, { h: 190, focus: prog(t, P.frappe - 0.3, P.frappe) })
-  const tape = frappe(RECIT, P.frappe, 22)
-  texte(tape, 90, 810, { taille: 36, poids: 500, align: 'left' })
-  if (t < P.photo && Math.floor(t * 2.4) % 2 === 0) { x.fillStyle = COUL.accent; x.fillRect(92 + largeurTexte(tape, 36, 500), 785, 4, 50) }
-  // les boutons de documents
-  bouton('Importer', 290, 1010, 440, 90, { variante: 'contour', taille: 30 })
-  bouton('Prendre en photo', 790, 1010, 440, 90, { variante: 'contour', taille: 30, presse: pression(P.photo) })
-  // l'acte photographié
-  const kph = eback(prog(t, P.photo + 0.1, P.photo + 0.5), 1.6)
-  if (kph > 0 && t < P.correction + 0.2) { x.save(); x.translate(540, 1380); x.scale(kph, kph); acte(0, 0, 560, 420, { rot: -0.03 }); x.restore() }
-  // la demande préparée
-  const kc = eout(prog(t, P.correction - 0.1, P.correction + 0.35))
-  if (kc > 0) {
-    x.save(); x.globalAlpha *= kc; x.translate(0, (1 - kc) * 80)
-    panneau(60, 1120, 960, 520, { lisere: COUL.violet, bord: avecAlpha(COUL.violet, 0.6) })
-    texte('Demande de modification', 100, 1185, { taille: 36, poids: 700, align: 'left' })
-    texte('Jean Martin · lieu de naissance', 100, 1235, { taille: 28, poids: 400, coul: COUL.attenue, align: 'left' })
-    texte('Lyon', 100, 1325, { taille: 44, poids: 600, coul: COUL.rouge, align: 'left' })
-    x.fillStyle = COUL.rouge; x.fillRect(96, 1325, largeurTexte('Lyon', 44, 600) + 8, 4)
-    texte('→', 300, 1325, { taille: 44, poids: 600, coul: COUL.attenue })
-    texte('Brest', 380, 1325, { taille: 44, poids: 700, coul: COUL.vert, align: 'left' })
-    acte(860, 1340, 160, 120, { rot: 0.05 })
-    texte('Pièce jointe : acte de naissance', 100, 1415, { taille: 26, poids: 400, coul: COUL.attenue, align: 'left' })
-    const kv = prog(t, P.verification - 0.1, P.verification + 0.2), ka = prog(t, P.acceptee - 0.1, P.acceptee + 0.2)
-    if (kv > 0 && ka <= 0) { x.save(); x.translate(540, 1540); x.scale(eback(kv, 2), eback(kv, 2)); pastille('En vérification par la famille', 0, 0, { taille: 30 }); x.restore() }
-    if (ka > 0) { x.save(); x.translate(540, 1540); x.scale(eback(ka, 2), eback(ka, 2)); pastille('Acceptée · entrée dans l’arbre', 0, 0, { ton: 'vert', taille: 30 }); x.restore() }
+  tableau(t, P.assistant, P.question, () => {
+    titreEcran('Modifier l’arbre', 'L’assistant écoute, et prépare la demande')
+    // le récit
+    champ('Ce que vous savez', '', 60, 740, 960, { h: 190, focus: prog(t, P.frappe - 0.3, P.frappe) })
+    const tape = frappe(RECIT, P.frappe, 26)
+    texte(tape, 90, 810, { taille: 36, poids: 500, align: 'left' })
+    if (t < P.correction && Math.floor(t * 2.4) % 2 === 0) { x.fillStyle = COUL.accent; x.fillRect(92 + largeurTexte(tape, 36, 500), 785, 4, 50) }
+    // les boutons de documents
+    bouton('Importer', 290, 1010, 440, 90, { variante: 'contour', taille: 30 })
+    bouton('Prendre en photo', 790, 1010, 440, 90, { variante: 'contour', taille: 30 })
+    // l'assistant prépare : la carte se remplit de lignes qui miroitent
+    const kp = eout(prog(t, P.prepare - 0.1, P.prepare + 0.3))
+    const kc = eout(prog(t, P.correction - 0.1, P.correction + 0.35))
+    x.save(); x.globalAlpha *= Math.max(kp, kc); x.translate(0, (1 - kp) * 80)
+    panneau(60, 1120, 960, 520, { lisere: COUL.violet, bord: avecAlpha(COUL.violet, 0.3 + 0.3 * kc) })
+    if (kc < 1) {
+      x.save(); x.globalAlpha *= 1 - kc
+      texte('L’assistant prépare la demande…', 100, 1185, { taille: 32, poids: 600, coul: COUL.attenue, align: 'left' })
+      squelette(100, 1240, 520, 30, t); squelette(100, 1300, 760, 50, t, 0.2); squelette(100, 1380, 420, 30, t, 0.4)
+      x.restore()
+    }
+    if (kc > 0) {
+      x.save(); x.globalAlpha *= kc
+      texte('Demande de modification', 100, 1185, { taille: 36, poids: 700, align: 'left' })
+      texte('Jean Martin · lieu de naissance', 100, 1235, { taille: 28, poids: 400, coul: COUL.attenue, align: 'left' })
+      texte('Lyon', 100, 1325, { taille: 44, poids: 600, coul: COUL.rouge, align: 'left' })
+      const barre = eout(prog(t, P.correction + 0.1, P.correction + 0.4))
+      x.fillStyle = COUL.rouge; x.fillRect(96, 1325, (largeurTexte('Lyon', 44, 600) + 8) * barre, 4)
+      const kb = eout(prog(t, P.correction + 0.25, P.correction + 0.55))
+      texte('→', 300 - (1 - kb) * 30, 1325, { taille: 44, poids: 600, coul: COUL.attenue, alpha: kb })
+      texte('Brest', 380, 1325, { taille: 44, poids: 700, coul: COUL.vert, align: 'left', alpha: kb })
+      acte(860, 1340, 160, 120, { rot: 0.05 })
+      texte('Pièce jointe : acte de naissance', 100, 1415, { taille: 26, poids: 400, coul: COUL.attenue, align: 'left' })
+      const kv = prog(t, P.verification - 0.1, P.verification + 0.2), ka = prog(t, P.acceptee - 0.1, P.acceptee + 0.2)
+      if (kv > 0 && ka <= 0) {
+        x.save(); x.translate(540, 1540); x.scale(eback(kv, 2), eback(kv, 2)); pastille('En vérification par la famille', 0, 0, { taille: 30 }); x.restore()
+      }
+      if (ka > 0) { x.save(); x.translate(540, 1540); x.scale(eback(ka, 2), eback(ka, 2)); pastille('Acceptée · entrée dans l’arbre', 0, 0, { ton: 'vert', taille: 30 }); x.restore() }
+      x.restore()
+    }
     x.restore()
-  }
-  x.restore()
-  doigt(790, 1010 + dy, P.photo)
+  })
 }
 
-/* -------- 8–9. Les questions : on demande, et l'arbre demande aussi -------- */
+/* -------- 6. Les questions : on demande, et l'arbre demande aussi -------- */
 const QUESTION = 'Que sait-on de Jean Martin ?'
-const REPONSE = 'Né en 1904 à Brest, marié à Simone Bernard en 1957. Deux actes le confirment.'
+const REPONSE = 'Né en 1904 à Brest. Deux actes le confirment.'
 function questions(t) {
-  const { a, dy } = phase(t, P.question, P.carte)
-  if (a <= 0) return
-  x.save(); x.globalAlpha = a; x.translate(0, dy)
-  const sienne = eio(prog(t, P.siennes, P.siennes + 0.5))
-  // la conversation
-  x.save(); x.globalAlpha *= 1 - sienne; x.translate(0, -sienne * 120)
-  titreEcran('Poser une question', 'L’application cherche dans l’arbre')
-  const kq = eback(prog(t, P.question + 0.2, P.question + 0.55), 1.6)
-  if (kq > 0) { x.save(); x.globalAlpha *= clamp(kq); bulle(QUESTION, 0, 760, 760, { moi: true }); x.restore() }
-  if (t > P.question + 0.6 && t < P.reponse) {
-    for (let d = 0; d < 3; d++) { x.beginPath(); x.arc(110 + d * 34, 960 + Math.sin(t * 10 + d) * 6, 10, 0, Math.PI * 2); x.fillStyle = COUL.attenue; x.fill() }
-  }
-  const kr = eout(prog(t, P.reponse, P.reponse + 0.35))
-  if (kr > 0) { x.save(); x.globalAlpha *= kr; bulle(REPONSE.slice(0, Math.ceil(REPONSE.length * clamp((t - P.reponse) / 1.4))), 0, 920, 860); x.restore() }
-  x.restore()
-  // la question que l'arbre vous pose
-  if (sienne > 0) {
-    x.save(); x.globalAlpha *= sienne; x.translate(0, (1 - sienne) * 100)
-    titreEcran('Questions', 'Ce que vous seul pouvez savoir')
-    panneau(60, 740, 960, 640, { lisere: COUL.accent })
-    texte('UNE QUESTION POUR VOUS', 100, 800, { taille: 26, poids: 700, coul: COUL.accent, align: 'left', espacement: 3 })
-    paragraphe('Où Simone Bernard et Jean Martin se sont-ils mariés ?', 100, 870, 880, { taille: 42, poids: 700 })
-    champ('', frappe('À Lille, je crois !', P.siennes + 1.0, 16), 100, 1060, 880, { h: 100, focus: 1, curseur: t < P.repondre })
-    bouton('Répondre', 540, 1270, 880, 96, { taille: 34, presse: pression(P.repondre) })
+  tableau(t, P.question, P.carte, () => {
+    const sienne = eio(prog(t, P.siennes, P.siennes + 0.5))
+    // la conversation
+    x.save(); x.globalAlpha *= 1 - sienne; x.translate(-sienne * 200, 0)
+    titreEcran('Poser une question', 'L’application cherche dans l’arbre')
+    const kq = eback(prog(t, P.question + 0.2, P.question + 0.55), 1.6)
+    if (kq > 0) { x.save(); x.globalAlpha *= clamp(kq); x.translate((1 - clamp(kq)) * 60, 0); bulle(QUESTION, 0, 760, 760, { moi: true }); x.restore() }
+    if (t > P.question + 0.6 && t < P.reponse) {
+      for (let d = 0; d < 3; d++) { x.beginPath(); x.arc(110 + d * 34, 960 + Math.sin(t * 10 + d) * 6, 10, 0, Math.PI * 2); x.fillStyle = COUL.attenue; x.fill() }
+    }
+    const kr = eout(prog(t, P.reponse, P.reponse + 0.3))
+    if (kr > 0) {
+      x.save(); x.globalAlpha *= kr
+      const h = bulle(REPONSE.slice(0, Math.ceil(REPONSE.length * clamp((t - P.reponse) / 0.8))), 0, 920, 860)
+      // les deux actes qui le confirment
+      for (let i = 0; i < 2; i++) {
+        const ka = eback(prog(t, P.reponse + 0.7 + i * 0.12, P.reponse + 1.0 + i * 0.12), 2)
+        if (ka > 0) { x.save(); x.translate(150 + i * 170, 920 + h + 110); x.scale(ka, ka); acte(0, 0, 130, 170, { rot: i ? 0.06 : -0.05 }); x.restore() }
+      }
+      x.restore()
+    }
     x.restore()
-    doigt(700, 1270 + dy, P.repondre)
-  }
-  x.restore()
+    // la question que l'arbre vous pose
+    if (sienne > 0) {
+      x.save(); x.globalAlpha *= sienne; x.translate((1 - sienne) * 200, 0)
+      titreEcran('Questions', 'Ce que vous seul pouvez savoir')
+      panneau(60, 740, 960, 640, { lisere: COUL.accent })
+      texte('UNE QUESTION POUR VOUS', 100, 800, { taille: 26, poids: 700, coul: COUL.accent, align: 'left', espacement: 3 })
+      paragraphe('Où Simone Bernard et Jean Martin se sont-ils mariés ?', 100, 870, 880, { taille: 42, poids: 700 })
+      champ('', frappe('À Lille, je crois !', P.siennes + 0.55, 22), 100, 1060, 880, { h: 100, focus: 1, curseur: t < P.repondre })
+      bouton('Répondre', 540, 1270, 880, 96, { taille: 34, presse: pression(P.repondre) })
+      if (t > P.repondre + 0.1) { const kk = eback(prog(t, P.repondre + 0.1, P.repondre + 0.4), 2); x.save(); x.translate(540, 1460); x.scale(kk, kk); pastille('Merci ! La famille va vérifier', 0, 0, { ton: 'vert', taille: 30 }); x.restore() }
+      x.restore()
+      doigt(700, 1270, P.repondre)
+    }
+  })
 }
 
-/* -------- 10. La carte, puis la chronologie -------- */
+/* -------- 7. La carte, puis la chronologie -------- */
 const FRANCE = [[-4.8, 48.4], [-3.4, 48.8], [-1.6, 49.6], [-1.3, 49.7], [0.2, 49.5], [1.6, 50.9], [2.5, 51.1], [4.2, 49.95], [4.9, 49.8], [6.1, 49.5], [8.2, 48.97], [7.6, 47.6],
   [6.9, 47.4], [6.1, 46.15], [7.0, 45.9], [6.6, 45.1], [7.0, 44.2], [7.5, 43.8], [6.2, 43.1], [4.8, 43.4], [3.1, 43.1], [3.1, 42.45], [1.7, 42.5], [-0.5, 42.8], [-1.8, 43.4],
   [-1.3, 44.5], [-1.2, 46.0], [-2.2, 47.1], [-4.4, 47.8]]
@@ -408,296 +496,284 @@ const VIES = []
   }
 }
 function carteEtChronologie(t) {
-  const { a, dy } = phase(t, P.carte, P.calendrier)
-  if (a <= 0) return
-  x.save(); x.globalAlpha = a; x.translate(0, dy)
-  const ch = eio(prog(t, P.chrono, P.chrono + 0.5))
-  // la carte
-  if (ch < 1) {
-    x.save(); x.globalAlpha *= 1 - ch
-    titreEcran('Carte', 'Où la famille est née, s’est mariée, a vécu')
-    const pts = FRANCE.map(proj)
-    x.beginPath(); pts.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); x.closePath()
-    x.fillStyle = '#1e2127'; x.fill(); x.strokeStyle = COUL.neutre; x.lineWidth = 3; x.stroke()
-    LIEUX.forEach(([lon, lat, q], i) => {
-      const kk = eback(prog(t, P.carte + 0.5 + i * 0.07, P.carte + 0.8 + i * 0.07), 2.5)
-      if (kk <= 0) return
-      const [px, py] = proj([lon, lat])
-      x.beginPath(); x.arc(px, py, 30 * kk, 0, Math.PI * 2); x.fillStyle = avecAlpha(COUL[q], 0.22); x.fill()
-      x.beginPath(); x.arc(px, py, 18 * kk, 0, Math.PI * 2); x.fillStyle = COUL[q]; x.fill()
-    })
-    x.restore()
-  }
-  // la chronologie : une barre par vie, les siècles défilent
-  if (ch > 0) {
-    x.save(); x.globalAlpha *= ch
-    titreEcran('Chronologie', 'Chaque vie est une barre, siècle après siècle')
-    const AN0 = 1700, AN1 = 2030, Y0 = 720, Y1 = 1740
-    const anY = (an) => Y0 + (an - AN0) / (AN1 - AN0) * (Y1 - Y0)
-    for (let s = 1700; s <= 2000; s += 100) { const y = anY(s); x.fillStyle = COUL.ligne; x.fillRect(60, y, 960, 2); texte(String(s), 60, y - 18, { taille: 26, poids: 700, coul: COUL.attenue, align: 'left' }) }
-    const deroule = eout(prog(t, P.chrono, P.chrono + 1.6))
-    const rang = { A: 0, B: 0, C: 0, D: 0 }
-    VIES.forEach((v) => {
-      const col = rang[v.q]++ % 10, cx = 140 + 'ABCD'.indexOf(v.q) * 225 + col * 21
-      const y0b = anY(v.ne), y1b = lerp(y0b, anY(v.mort), clamp(deroule * 1.3 - (v.ne - 1700) / 330 * 0.3))
-      if (anY(v.ne) > lerp(Y0, Y1, deroule) + 40) return
-      rr(cx, y0b, 14, Math.max(4, y1b - y0b), 7); x.fillStyle = COUL[v.q]; x.fill()
-    })
-    x.restore()
-  }
-  x.restore()
+  tableau(t, P.carte, P.calendrier, () => {
+    const ch = eio(prog(t, P.chrono, P.chrono + 0.5))
+    // la carte : elle se dessine, puis les lieux tombent dessus, reliés entre eux
+    if (ch < 1) {
+      x.save(); x.globalAlpha *= 1 - ch; x.translate(540, 1210); x.scale(1 - 0.15 * ch, 1 - 0.15 * ch); x.translate(-540, -1210 + ch * 200)
+      titreEcran('Carte', 'Où la famille est née, s’est mariée, a vécu')
+      const pts = FRANCE.map(proj), trace = eout(prog(t, P.carte + 0.1, P.carte + 0.8))
+      x.beginPath(); pts.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); x.closePath()
+      x.fillStyle = avecAlpha(COUL.panneau, trace); x.fill()
+      x.save(); x.setLineDash([3000 * trace, 3000]); x.strokeStyle = COUL.neutre; x.lineWidth = 3; x.stroke(); x.restore()
+      // les liens d'une même branche
+      for (const q of 'ABCD') {
+        const ps = LIEUX.filter((l) => l[2] === q).map(proj)
+        const kl = eout(prog(t, P.carte + 1.2, P.carte + 1.9))
+        if (kl <= 0) continue
+        x.save(); x.globalAlpha *= 0.5 * kl; x.strokeStyle = COUL[q]; x.lineWidth = 3; x.setLineDash([8, 8]); x.lineDashOffset = -t * 40
+        x.beginPath(); ps.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); x.stroke(); x.restore()
+      }
+      LIEUX.forEach(([lon, lat, q], i) => {
+        const kk = eback(prog(t, P.carte + 0.5 + i * 0.05, P.carte + 0.8 + i * 0.05), 2.5)
+        if (kk <= 0) return
+        const [px, py] = proj([lon, lat])
+        const pouls = 1 + 0.25 * Math.max(0, Math.sin(t * 3 + i))
+        x.beginPath(); x.arc(px, py - (1 - clamp(kk)) * 60, 30 * kk * pouls, 0, Math.PI * 2); x.fillStyle = avecAlpha(COUL[q], 0.22); x.fill()
+        x.beginPath(); x.arc(px, py - (1 - clamp(kk)) * 60, 18 * kk, 0, Math.PI * 2); x.fillStyle = COUL[q]; x.fill()
+      })
+      x.restore()
+    }
+    // la chronologie : une barre par vie, les siècles défilent
+    if (ch > 0) {
+      x.save(); x.globalAlpha *= ch; x.translate(0, (1 - ch) * 120)
+      titreEcran('Chronologie', 'Chaque vie est une barre, siècle après siècle')
+      const AN0 = 1700, AN1 = 2030, Y0 = 720, Y1 = 1740
+      const anY = (an) => Y0 + (an - AN0) / (AN1 - AN0) * (Y1 - Y0)
+      for (let s = 1700; s <= 2000; s += 100) { const y = anY(s); x.fillStyle = COUL.ligne; x.fillRect(60, y, 960, 2); texte(String(s), 60, y - 18, { taille: 26, poids: 700, coul: COUL.attenue, align: 'left' }) }
+      const deroule = eout(prog(t, P.chrono, P.chrono + 1.6))
+      const rang = { A: 0, B: 0, C: 0, D: 0 }
+      VIES.forEach((v) => {
+        const col = rang[v.q]++ % 10, cx = 140 + 'ABCD'.indexOf(v.q) * 225 + col * 21
+        const y0b = anY(v.ne), y1b = lerp(y0b, anY(v.mort), clamp(deroule * 1.3 - (v.ne - 1700) / 330 * 0.3))
+        if (anY(v.ne) > lerp(Y0, Y1, deroule) + 40) return
+        rr(cx, y0b, 14, Math.max(4, y1b - y0b), 7); x.fillStyle = COUL[v.q]; x.fill()
+      })
+      // la ligne du temps qui descend
+      const yl = lerp(Y0, Y1, deroule)
+      if (deroule < 1) { x.fillStyle = COUL.accent; x.fillRect(60, yl, 960, 3); x.beginPath(); x.arc(60, yl + 1, 9, 0, Math.PI * 2); x.fill() }
+      x.restore()
+    }
+  })
 }
 
-/* -------- 11. Le calendrier, et ceux qu'on garde en mémoire -------- */
+/* -------- 8. Le calendrier, puis la cloche jusque sur l'écran verrouillé -------- */
 const JOURS = [], COUL_EV = { n: BLEU, u: COUL.accent, d: '#b7a6d9' }
 for (let i = 0; i < 35; i++) JOURS.push(i - 2)
-const EVENEMENTS = { 2: [['Léo', 'n']], 5: [['Emma', 'n']], 8: [['Paul & Hélène', 'u']], 12: [['Simone', 'd']], 14: [['Lucas', 'n']], 19: [['Odette', 'n']], 21: [['René & Odette', 'u']], 24: [['Auguste', 'd']], 27: [['Jade', 'n']] }
+const EVENEMENTS = { 2: [['Léo', 'n']], 3: [['Emma', 'n']], 8: [['Paul & Hélène', 'u']], 12: [['Simone', 'd']], 14: [['Lucas', 'n']], 19: [['Odette', 'n']], 21: [['René & Odette', 'u']], 24: [['Auguste', 'd']], 27: [['Jade', 'n']] }
 function calendrier(t) {
-  const { a, dy } = phase(t, P.calendrier, P.cloche)
-  if (a <= 0) return
-  x.save(); x.globalAlpha = a; x.translate(0, dy)
-  titreEcran('Calendrier', 'Octobre')
-  ;['L', 'M', 'M', 'J', 'V', 'S', 'D'].forEach((j, i) => texte(j, 85 + i * 152, 700, { taille: 26, poids: 700, coul: COUL.attenue }))
-  JOURS.forEach((j, i) => {
-    const cx = 85 + (i % 7) * 152, cy = 730 + Math.floor(i / 7) * 160
-    const dansLeMois = j >= 1 && j <= 31
-    rr(cx - 72, cy, 144, 150, 12); x.fillStyle = dansLeMois ? COUL.panneau : '#16171a'; x.fill()
-    if (!dansLeMois) return
-    texte(String(j), cx - 58, cy + 26, { taille: 26, poids: 700, align: 'left' })
-    ;(EVENEMENTS[j] || []).forEach(([nom, c]) => {
-      const quand = c === 'd' ? P.memoire : P.calendrier + 0.4 + (j % 9) * 0.08
-      const on = eout(prog(t, quand - 0.1, quand + 0.25))
-      if (on <= 0) return
-      x.save(); x.globalAlpha *= on
-      rr(cx - 66, cy + 56, 132, 70, 8); x.fillStyle = avecAlpha(COUL_EV[c], 0.25); x.fill()
-      x.fillStyle = COUL_EV[c]; x.fillRect(cx - 66, cy + 56, 5, 70)
-      texte(nom.split(' ')[0], cx - 54, cy + 91, { taille: 26, poids: 700, align: 'left' })
+  tableau(t, P.calendrier, P.cloche, () => {
+    titreEcran('Calendrier', 'Octobre')
+    ;['L', 'M', 'M', 'J', 'V', 'S', 'D'].forEach((j, i) => texte(j, 85 + i * 152, 700, { taille: 26, poids: 700, coul: COUL.attenue }))
+    JOURS.forEach((j, i) => {
+      const cx = 85 + (i % 7) * 152, cy = 730 + Math.floor(i / 7) * 160
+      const dansLeMois = j >= 1 && j <= 31
+      const kj = eout(prog(t, P.calendrier + 0.1 + i * 0.012, P.calendrier + 0.4 + i * 0.012))
+      x.save(); x.globalAlpha *= kj; x.translate(0, (1 - kj) * 30)
+      rr(cx - 72, cy, 144, 150, 12); x.fillStyle = dansLeMois ? COUL.panneau : COUL.fond; x.fill()
+      // aujourd'hui : le 3 octobre
+      if (j === 3) { const ka = eout(prog(t, P.anniversaire - 0.1, P.anniversaire + 0.25)); rr(cx - 72, cy, 144, 150, 12); x.strokeStyle = avecAlpha(COUL.accent, ka); x.lineWidth = 4; x.stroke() }
       x.restore()
+      if (!dansLeMois || kj <= 0) return
+      texte(String(j), cx - 58, cy + 26, { taille: 26, poids: 700, align: 'left', alpha: kj })
+      ;(EVENEMENTS[j] || []).forEach(([nom, c]) => {
+        const quand = P.calendrier + 0.5 + (j % 9) * 0.07
+        const on = eback(prog(t, quand - 0.1, quand + 0.25), 2)
+        if (on <= 0) return
+        x.save(); x.globalAlpha *= clamp(on); x.translate(cx, cy + 91); x.scale(on, on); x.translate(-cx, -cy - 91)
+        rr(cx - 66, cy + 56, 132, 70, 8); x.fillStyle = avecAlpha(COUL_EV[c], 0.25); x.fill()
+        x.fillStyle = COUL_EV[c]; x.fillRect(cx - 66, cy + 56, 5, 70)
+        texte(nom.split(' ')[0], cx - 54, cy + 91, { taille: 26, poids: 700, align: 'left' })
+        x.restore()
+      })
     })
+    // l'anniversaire du jour
+    const km = eback(prog(t, P.anniversaire, P.anniversaire + 0.4), 1.5)
+    if (km > 0) {
+      x.save(); x.translate(540, 1560); x.scale(km, km)
+      panneau(-460, -110, 920, 220, { lisere: BLEU, bord: avecAlpha(BLEU, 0.6) })
+      texte('AUJOURD’HUI · 3 OCTOBRE', -410, -50, { taille: 26, poids: 700, coul: BLEU, align: 'left', espacement: 3 })
+      texte('Emma Martin a 37 ans', -410, 10, { taille: 44, poids: 700, align: 'left' })
+      texte('Lui souhaiter un bon anniversaire', -410, 62, { taille: 28, poids: 400, coul: COUL.attenue, align: 'left' })
+      x.restore()
+    }
   })
-  // « En mémoire »
-  const km = eback(prog(t, P.memoire, P.memoire + 0.4), 1.5)
-  if (km > 0) {
-    x.save(); x.translate(540, 1560); x.scale(km, km)
-    panneau(-460, -110, 920, 220, { lisere: COUL_EV.d, bord: avecAlpha(COUL_EV.d, 0.6) })
-    texte('EN MÉMOIRE · 12 OCTOBRE', -410, -50, { taille: 26, poids: 700, coul: COUL_EV.d, align: 'left', espacement: 3 })
-    texte('Simone Bernard', -410, 10, { taille: 44, poids: 700, align: 'left' })
-    texte('1935 – 2019 · elle aurait eu 91 ans', -410, 62, { taille: 28, poids: 400, coul: COUL.attenue, align: 'left' })
-    x.restore()
-  }
-  x.restore()
 }
-
-/* -------- 12. La cloche, jusque sur l'écran verrouillé -------- */
 function cloche(t) {
-  const { a, dy } = phase(t, P.cloche, P.retrouver)
-  if (a <= 0) return
-  x.save(); x.globalAlpha = a; x.translate(0, dy)
-  const g = x.createLinearGradient(0, 500, 0, H); g.addColorStop(0, '#1b2433'); g.addColorStop(1, '#0d1118'); x.fillStyle = g; rr(40, 520, 1000, 1260, 50); x.fill()
-  texte('09:41', 540, 720, { taille: 170, poids: 300, coul: '#e9eef5' })
-  texte('samedi 3 octobre', 540, 830, { taille: 40, poids: 500, coul: '#c3cad4' })
-  const notifs = [
-    [P.push1, 'Demande acceptée', 'Le lieu de naissance de Jean Martin est corrigé.'],
-    [P.push2, 'Anniversaire', 'Emma Martin a 37 ans aujourd’hui.'],
-    [P.push3, 'Nouvel événement', 'Cousinade été 2027 : vous êtes invité.'],
-  ]
-  notifs.forEach(([quand, titre, corps], i) => {
-    const kp = eback(prog(t, quand - 0.1, quand + 0.3), 1.4)
-    if (kp <= 0) return
-    const y = 920 + i * 220
-    x.save(); x.translate(0, (1 - clamp(kp)) * -120); x.globalAlpha *= clamp(kp * 2)
-    rr(70, y, 940, 190, 36); x.fillStyle = 'rgba(232,236,242,.16)'; x.fill()
-    rr(105, y + 35, 64, 64, 14); x.fillStyle = COUL.fond; x.fill()
-    x.save(); x.translate(137, y + 67); dessinerCloche(0, 0, 22, COUL.accent); x.restore()
-    texte('HERITAGE', 195, y + 55, { taille: 26, poids: 700, coul: '#c3cad4', align: 'left', espacement: 2 })
-    texte('maintenant', 970, y + 55, { taille: 24, poids: 500, coul: '#9aa3ad', align: 'right' })
-    texte(titre, 195, y + 103, { taille: 34, poids: 700, coul: '#ffffff', align: 'left' })
-    texte(corps, 195, y + 148, { taille: 27, poids: 400, coul: '#dfe4ea', align: 'left' })
-    x.restore()
+  tableau(t, P.cloche, P.retrouver, () => {
+    const g = x.createLinearGradient(0, 500, 0, H); g.addColorStop(0, '#1b2433'); g.addColorStop(1, '#0d1118'); x.fillStyle = g; rr(40, 520, 1000, 1260, 50); x.fill()
+    texte('09:41', 540, 720, { taille: 170, poids: 300, coul: '#e9eef5' })
+    texte('samedi 3 octobre', 540, 830, { taille: 40, poids: 500, coul: '#c3cad4' })
+    const notifs = [
+      [P.push1, 'Anniversaire', 'Emma Martin a 37 ans aujourd’hui.'],
+      [P.push2, 'Demande acceptée', 'Le lieu de naissance de Jean Martin est corrigé.'],
+      [P.push3, 'Nouvel événement', 'Cousinade été 2027 : vous êtes invité.'],
+    ]
+    notifs.forEach(([quand, titre, corps], i) => {
+      const kp = eback(prog(t, quand - 0.1, quand + 0.3), 1.4)
+      if (kp <= 0) return
+      const y = 920 + i * 220
+      x.save(); x.translate(0, (1 - clamp(kp)) * -120); x.globalAlpha *= clamp(kp * 2)
+      rr(70, y, 940, 190, 36); x.fillStyle = 'rgba(232,236,242,.16)'; x.fill()
+      rr(105, y + 35, 64, 64, 14); x.fillStyle = COUL.fond; x.fill()
+      x.save(); x.translate(137, y + 67); x.rotate(Math.sin(prog(t, quand, quand + 0.6) * 18) * 0.35 * (1 - prog(t, quand, quand + 0.6))); dessinerCloche(0, 0, 22, COUL.accent); x.restore()
+      texte('HERITAGE', 195, y + 55, { taille: 26, poids: 700, coul: '#c3cad4', align: 'left', espacement: 2 })
+      texte('maintenant', 970, y + 55, { taille: 24, poids: 500, coul: '#9aa3ad', align: 'right' })
+      texte(titre, 195, y + 103, { taille: 34, poids: 700, coul: '#ffffff', align: 'left' })
+      texte(corps, 195, y + 148, { taille: 27, poids: 400, coul: '#dfe4ea', align: 'left' })
+      x.restore()
+    })
   })
-  x.restore()
 }
 
-/* -------- 13–14. Les événements : se retrouver, inviter, relancer -------- */
+/* -------- 9. Les événements : se retrouver, inviter, voir qui vient -------- */
 function evenements(t) {
-  const { a, dy } = phase(t, P.retrouver, P.tirage)
-  if (a <= 0) return
-  x.save(); x.globalAlpha = a; x.translate(0, dy)
-  const suivi = eio(prog(t, P.suivi, P.suivi + 0.5))
-  // trois occasions
-  if (suivi < 1) {
-    x.save(); x.globalAlpha *= 1 - suivi; x.translate(0, -suivi * 120)
-    titreEcran('Événements', 'Se retrouver, en vrai')
-    const cartes = [
-      [P.cousinade, 'Cousinade été 2027', '17 – 18 juillet · Annecy', 'Rassemblement', 'accent'],
-      [P.surprise, 'Les 70 ans de Paul', 'Anniversaire surprise · chut !', 'Rassemblement', 'accent'],
-      [P.hommage, 'Hommage à Simone', 'Une messe, puis un repas ensemble', 'Rassemblement', 'violet'],
-    ]
-    cartes.forEach(([quand, titre, sous, type, ton], i) => {
-      const k = eback(prog(t, quand - 0.15, quand + 0.3), 1.6)
-      if (k <= 0) return
-      const y = 720 + i * 300
-      x.save(); x.translate(540, y + 120); x.scale(k, k); x.rotate((1 - clamp(k)) * (i % 2 ? 0.08 : -0.08))
-      panneau(-480, -120, 960, 250, { lisere: ton === 'violet' ? COUL.violet : COUL.accent })
-      texte(titre, -430, -40, { taille: 44, poids: 700, align: 'left' })
-      texte(sous, -430, 20, { taille: 30, poids: 400, coul: COUL.attenue, align: 'left' })
-      x.translate(-430 + largeurTexte(type, 26, 700) / 2 + 18, 82); pastille(type, 0, 0, { ton, taille: 26 })
+  tableau(t, P.retrouver, P.tirage, () => {
+    const suivi = eio(prog(t, P.suivi, P.suivi + 0.5))
+    // trois occasions
+    if (suivi < 1) {
+      x.save(); x.globalAlpha *= 1 - suivi; x.translate(-suivi * 200, 0)
+      titreEcran('Événements', 'Se retrouver, en vrai')
+      const cartes = [
+        [P.cousinade, 'Cousinade été 2027', '17 – 18 juillet · Annecy', 'Rassemblement', 'accent'],
+        [P.surprise, 'Les 70 ans de Paul', 'Anniversaire surprise · chut !', 'Surprise', 'accent'],
+        [P.hommage, 'Hommage à Simone', 'Une messe, puis un repas ensemble', 'Hommage', 'violet'],
+      ]
+      cartes.forEach(([quand, titre, sous, type, ton], i) => {
+        const k = eback(prog(t, quand - 0.15, quand + 0.3), 1.6)
+        if (k <= 0) return
+        const y = 720 + i * 300
+        x.save(); x.translate(540, y + 120); x.scale(k, k); x.rotate((1 - clamp(k)) * (i % 2 ? 0.08 : -0.08))
+        panneau(-480, -120, 960, 250, { lisere: ton === 'violet' ? COUL.violet : COUL.accent })
+        texte(titre, -430, -40, { taille: 44, poids: 700, align: 'left' })
+        texte(sous, -430, 20, { taille: 30, poids: 400, coul: COUL.attenue, align: 'left' })
+        x.translate(-430 + largeurTexte(type, 26, 700) / 2 + 18, 82); pastille(type, 0, 0, { ton, taille: 26 })
+        x.restore()
+      })
       x.restore()
-    })
-    x.restore()
-  }
-  // le suivi des invités
-  if (suivi > 0) {
-    x.save(); x.globalAlpha *= suivi; x.translate(0, (1 - suivi) * 100)
-    titreEcran('Suivi des invités', 'Cousinade été 2027 · 24 invités')
-    const groupes = [
-      ['Présents', '12', COUL.vert, 'Lucas, Emma, Paul…', M(14, 6)],
-      ['Absents', '3', COUL.attenue, 'Jean, Odette, René', M(14, 6) + 0.25],
-      ['Vu, sans réponse', '5', COUL.accent, 'vu il y a 2 jours…', M(14, 8)],
-      ['Pas encore vu', '4', COUL.rouge, '2 par lien, 2 avec un compte', M(14, 9)],
-    ]
-    groupes.forEach(([nom, nb, c, sous, quand], i) => {
-      const y = 700 + i * 180, k = eout(prog(t, quand - 0.15, quand + 0.2))
-      x.save(); x.globalAlpha *= 0.35 + 0.65 * k
-      panneau(60, y, 960, 155, { lisere: c })
-      texte(nom, 100, y + 58, { taille: 38, poids: 700, align: 'left' })
-      texte(sous, 100, y + 108, { taille: 26, poids: 400, coul: COUL.attenue, align: 'left' })
-      texte(nb, 980, y + 78, { taille: 64, poids: 800, coul: c, align: 'right' })
+    }
+    // le suivi des invités
+    if (suivi > 0) {
+      x.save(); x.globalAlpha *= suivi; x.translate((1 - suivi) * 200, 0)
+      titreEcran('Suivi des invités', 'Cousinade été 2027 · 24 invités')
+      const groupes = [
+        ['Présents', 12, COUL.vert, 'Lucas, Emma, Paul…', P.voyez],
+        ['Absents', 3, COUL.attenue, 'Jean, Odette, René', P.voyez + 0.25],
+        ['Vu, sans réponse', 5, COUL.accent, 'vu il y a 2 jours…', P.qui],
+        ['Pas encore vu', 4, COUL.rouge, '2 par lien, 2 avec un compte', P.vient],
+      ]
+      groupes.forEach(([nom, nb, c, sous, quand], i) => {
+        const y = 700 + i * 180, k = eout(prog(t, quand - 0.15, quand + 0.2))
+        x.save(); x.globalAlpha *= 0.35 + 0.65 * k
+        panneau(60, y, 960, 155, { lisere: c })
+        texte(nom, 100, y + 58, { taille: 38, poids: 700, align: 'left' })
+        texte(sous, 100, y + 108, { taille: 26, poids: 400, coul: COUL.attenue, align: 'left' })
+        // le chiffre compte jusqu'à sa valeur
+        texte(String(Math.round(nb * eout(prog(t, quand - 0.1, quand + 0.5)))), 980, y + 78, { taille: 64, poids: 800, coul: c, align: 'right' })
+        x.restore()
+      })
+      // la jauge des réponses
+      const kj = eout(prog(t, P.voyez, P.vient + 0.6))
+      rr(60, 1440, 960, 24, 12); x.fillStyle = COUL.panneau2; x.fill()
+      let px = 60
+      for (const [, nb, c] of groupes) { const w = 960 * nb / 24 * kj; x.fillStyle = c; x.fillRect(px, 1440, w, 24); px += w }
+      texte(`${Math.round(15 * kj)} réponses sur 24`, 540, 1520, { taille: 30, poids: 600, coul: COUL.attenue })
       x.restore()
-    })
-    bouton('Relancer 9 invités', 540, 1480, 960, 100, { variante: 'contourAccent', taille: 34, presse: pression(P.relance) })
-    if (t > P.relance + 0.1) { const kk = eback(prog(t, P.relance + 0.1, P.relance + 0.4), 2); x.save(); x.translate(540, 1610); x.scale(kk, kk); pastille('9 invités relancés', 0, 0, { ton: 'vert', taille: 28 }); x.restore() }
-    x.restore()
-    doigt(700, 1480 + dy, P.relance)
-  }
-  x.restore()
+    }
+  })
 }
 
-/* -------- 15. Le tirage au sort de Noël -------- */
+/* -------- 10. Le tirage au sort de Noël -------- */
 function tirage(t) {
-  const { a, dy } = phase(t, P.tirage, P.demarches)
-  if (a <= 0) return
-  x.save(); x.globalAlpha = a; x.translate(0, dy)
-  titreEcran('Noël des cousins', 'Tirage au sort · 24 décembre')
-  panneau(60, 720, 960, 760, { bord: avecAlpha(VIOLET_CADEAU, 0.6), epais: 3, r: 30 })
-  const ouvre = prog(t, P.revele - 0.2, P.revele + 0.1)
-  x.save(); x.translate(540, 960 + Math.sin(t * 3) * 6 * (1 - ouvre))
-  x.fillStyle = VIOLET_CADEAU; rr(-130, -60, 260, 180, 16); x.fill()
-  x.save(); x.translate(0, -60 - 70 * eio(ouvre)); x.rotate(-0.35 * eio(ouvre)); rr(-145, -40, 290, 52, 12); x.fillStyle = '#9a6fe0'; x.fill(); x.restore()
-  x.fillStyle = '#f2d16b'; x.fillRect(-14, -60, 28, 180)
-  x.restore()
-  const r = eback(prog(t, P.revele, P.revele + 0.4), 2)
-  if (r > 0) {
-    x.save(); x.translate(540, 1270); x.scale(r, r)
-    texte('Vous offrez à', 0, -45, { taille: 36, poids: 500, coul: COUL.attenue })
-    texte('Léo Martin', 0, 30, { taille: 76, poids: 800 })
+  tableau(t, P.tirage, P.prive, () => {
+    titreEcran('Noël des cousins', 'Tirage au sort · 24 décembre')
+    panneau(60, 720, 960, 760, { bord: avecAlpha(VIOLET_CADEAU, 0.6), epais: 3, r: 30 })
+    // le paquet tremble, puis s'ouvre
+    const ouvre = prog(t, P.revele - 0.2, P.revele + 0.1)
+    const tremble = prog(t, P.revele - 1.0, P.revele - 0.2)
+    x.save(); x.translate(540, 960 + Math.sin(t * 3) * 6 * (1 - ouvre)); x.rotate(Math.sin(t * 40) * 0.05 * tremble * (1 - ouvre))
+    x.fillStyle = VIOLET_CADEAU; rr(-130, -60, 260, 180, 16); x.fill()
+    x.save(); x.translate(0, -60 - 70 * eio(ouvre)); x.rotate(-0.35 * eio(ouvre)); rr(-145, -40, 290, 52, 12); x.fillStyle = '#9a6fe0'; x.fill(); x.restore()
+    x.fillStyle = '#f2d16b'; x.fillRect(-14, -60, 28, 180)
     x.restore()
-  } else bouton('Voir à qui je fais le cadeau', 540, 1290, 780, 100, { variante: 'violet', taille: 32, presse: pression(P.revele) })
-  x.restore()
-  doigt(540, 1290 + dy, P.revele)
-}
-
-/* -------- 16. Les actes demandés aux mairies et aux archives -------- */
-function demarches(t) {
-  const { a, dy } = phase(t, P.demarches, P.prive)
-  if (a <= 0) return
-  x.save(); x.globalAlpha = a; x.translate(0, dy)
-  titreEcran('Actes demandés', 'Qui a écrit à qui, et où on en est')
-  const lignesActes = [
-    ['Acte de naissance · Jean Martin', 'Mairie de Brest', 'Reçu', 'vert', M(16, 7)],
-    ['Acte de mariage · Simone et Jean', 'Mairie de Lille', 'Envoyé', 'accent', M(16, 8)],
-    ['Registre paroissial · 1788', 'Archives du Rhône', 'Relancé', 'violet', M(16, 10)],
-  ]
-  lignesActes.forEach(([titre, ou, statut, ton, quand], i) => {
-    const k = eout(prog(t, quand - 0.3, quand + 0.1))
-    if (k <= 0) return
-    const y = 730 + i * 250
-    x.save(); x.globalAlpha *= k; x.translate((1 - k) * 80, 0)
-    panneau(60, y, 960, 210)
-    acte(150, y + 105, 110, 140, { rot: -0.04 })
-    texte(titre, 240, y + 70, { taille: 32, poids: 700, align: 'left' })
-    texte(ou, 240, y + 118, { taille: 28, poids: 400, coul: COUL.attenue, align: 'left' })
-    x.translate(240 + largeurTexte(statut, 26, 700) / 2 + 18, y + 168); pastille(statut, 0, 0, { ton, taille: 26 })
-    x.restore()
+    const r = eback(prog(t, P.revele, P.revele + 0.4), 2)
+    if (r > 0) {
+      x.save(); x.translate(540, 1270); x.scale(r, r)
+      texte('Vous offrez à', 0, -45, { taille: 36, poids: 500, coul: COUL.attenue })
+      texte('Léo Martin', 0, 30, { taille: 76, poids: 800 })
+      x.restore()
+    } else bouton('Voir à qui je fais le cadeau', 540, 1290, 780, 100, { variante: 'violet', taille: 32, presse: pression(P.revele) })
+    doigt(540, 1290, P.revele)
   })
-  x.restore()
 }
 
-/* -------- 17. Privé : l'arbre reste entre nous -------- */
+/* -------- 11. Privé : l'arbre reste entre nous -------- */
 function prive(t) {
-  const { a, dy } = phase(t, P.prive, P.installer)
-  if (a <= 0) return
-  x.save(); x.globalAlpha = a; x.translate(0, dy)
-  // l'arbre en fond, estompé
-  x.save(); x.globalAlpha *= 0.25; x.beginPath(); x.rect(0, 500, W, H - 600); x.clip(); filmer({ s: 0.8, fx: 540, fy: 1000 })
-  traitsDe(A, {}); for (const n of A.N) ficheDe(n, {}); x.restore()
-  // le cadenas
-  const kc = eback(prog(t, P.cadenas - 0.2, P.cadenas + 0.25), 1.8)
-  if (kc > 0) {
-    x.save(); x.translate(540, 1030); x.scale(kc, kc)
-    const ferme = eio(prog(t, P.cadenas, P.cadenas + 0.25))
-    x.strokeStyle = COUL.accent; x.lineWidth = 34; x.lineCap = 'round'
-    x.beginPath(); x.arc(0, -90 - 40 * (1 - ferme), 110, Math.PI, 0); x.lineTo(110, -90 + 40 * (1 - ferme) * 0); x.stroke()
-    rr(-170, -90, 340, 260, 40); x.fillStyle = COUL.accent; x.fill()
-    x.fillStyle = COUL.fond; x.beginPath(); x.arc(0, 15, 30, 0, Math.PI * 2); x.fill(); x.fillRect(-12, 15, 24, 70)
-    x.restore()
-  }
-  const kt = eout(prog(t, P.cadenas + 0.2, P.cadenas + 0.5))
-  // un voile sous les mots, pour qu'ils se lisent par-dessus l'arbre
-  x.save(); x.globalAlpha *= kt; rr(140, 1250, 800, 340, 34); x.fillStyle = avecAlpha(COUL.fond, 0.92); x.fill(); x.restore()
-  texte('Privé, entre nous', 540, 1330, { taille: 64, police: SERIF, poids: 600, alpha: kt })
-  ;[['Sur invitation seulement', 'accent', P.cadenas + 0.5], ['Les vivants protégés', 'vert', P.vivants]].forEach(([s, ton, quand], i) => {
-    const k = eback(prog(t, quand - 0.1, quand + 0.3), 2)
-    if (k <= 0) return
-    x.save(); x.translate(540, 1450 + i * 90); x.scale(k, k); pastille(s, 0, 0, { ton, taille: 32 }); x.restore()
+  tableau(t, P.prive, P.installer, () => {
+    // l'arbre en fond, estompé
+    x.save(); x.globalAlpha *= 0.25; x.beginPath(); x.rect(0, 500, W, H - 600); x.clip(); filmer({ s: 0.8, fx: 540, fy: 1000 })
+    traitsDe(A, {}); for (const n of A.N) ficheDe(n, {}); x.restore()
+    // le cadenas tombe et se ferme
+    const kc = eback(prog(t, P.cadenas - 0.25, P.cadenas + 0.2), 1.8)
+    if (kc > 0) {
+      x.save(); x.translate(540, 1030 - (1 - clamp(kc)) * 200); x.scale(kc, kc)
+      const ferme = eio(prog(t, P.cadenas, P.cadenas + 0.25))
+      x.strokeStyle = COUL.accent; x.lineWidth = 34; x.lineCap = 'round'
+      x.beginPath(); x.arc(0, -90 - 40 * (1 - ferme), 110, Math.PI, 0); x.lineTo(110, -90); x.stroke()
+      rr(-170, -90, 340, 260, 40); x.fillStyle = COUL.accent; x.fill()
+      x.fillStyle = COUL.fond; x.beginPath(); x.arc(0, 15, 30, 0, Math.PI * 2); x.fill(); x.fillRect(-12, 15, 24, 70)
+      x.restore()
+      // une onde quand il se ferme
+      const onde = prog(t, P.cadenas + 0.2, P.cadenas + 0.9)
+      if (onde > 0 && onde < 1) { x.beginPath(); x.arc(540, 1050, 220 + 260 * eout(onde), 0, Math.PI * 2); x.strokeStyle = avecAlpha(COUL.accent, 0.5 * (1 - onde)); x.lineWidth = 6; x.stroke() }
+    }
+    const kt = eout(prog(t, P.cadenas + 0.2, P.cadenas + 0.5))
+    // un voile sous les mots, pour qu'ils se lisent par-dessus l'arbre
+    x.save(); x.globalAlpha *= kt; rr(140, 1250, 800, 340, 34); x.fillStyle = avecAlpha(COUL.fond, 0.92); x.fill(); x.restore()
+    texte('Privé, entre nous', 540, 1330, { taille: 64, police: SERIF, poids: 600, alpha: kt })
+    ;[['Sur invitation seulement', 'accent', P.invites], ['Les vivants protégés', 'vert', P.vivants]].forEach(([s, ton, quand], i) => {
+      const k = eback(prog(t, quand - 0.1, quand + 0.3), 2)
+      if (k <= 0) return
+      x.save(); x.translate(540, 1450 + i * 90); x.scale(k, k); pastille(s, 0, 0, { ton, taille: 32 }); x.restore()
+    })
   })
-  x.restore()
 }
 
-/* -------- 18. Heritage sur l'écran d'accueil du téléphone -------- */
+/* -------- 12. Heritage sur l'écran d'accueil du téléphone -------- */
 function installer(t) {
-  const { a, dy } = phase(t, P.installer, P.venez)
-  if (a <= 0) return
-  x.save(); x.globalAlpha = a; x.translate(0, dy)
-  const g = x.createLinearGradient(0, 500, 0, H); g.addColorStop(0, '#1b2433'); g.addColorStop(1, '#0d1118'); x.fillStyle = g; rr(40, 520, 1000, 1260, 50); x.fill()
-  const r = rnd(3)
-  for (let i = 0; i < 16; i++) {
-    const cx = 175 + (i % 4) * 243, cy = 700 + Math.floor(i / 4) * 250
-    if (i === 6) continue
-    rr(cx - 75, cy - 75, 150, 150, 36); x.fillStyle = `rgba(232,236,242,${0.08 + r() * 0.08})`; x.fill()
-    x.fillStyle = 'rgba(232,236,242,.25)'; x.fillRect(cx - 45, cy + 100, 90, 12)
-  }
-  // l'icône Heritage arrive à sa place
-  const ki = eback(prog(t, P.icone - 0.1, P.icone + 0.35), 2.2)
-  if (ki > 0) {
-    const cx = 175 + 2 * 243, cy = 950
-    x.save(); x.translate(cx, cy); x.scale(ki, ki)
-    x.shadowColor = avecAlpha(COUL.accent, 0.8); x.shadowBlur = 40 * (1 - prog(t, P.icone + 0.4, P.icone + 1.4))
-    rr(-75, -75, 150, 150, 36); x.fillStyle = COUL.fond; x.fill(); x.shadowBlur = 0
-    x.strokeStyle = COUL.accent; x.lineWidth = 9; x.lineCap = 'round'
-    x.beginPath(); x.moveTo(0, 45); x.lineTo(0, -5); x.moveTo(0, 15); x.lineTo(-30, -20); x.moveTo(0, 15); x.lineTo(30, -20); x.moveTo(0, -5); x.lineTo(0, -40); x.stroke()
-    ;[[-30, -20, COUL.A], [0, -40, COUL.B], [30, -20, COUL.C]].forEach(([px, py, c]) => { x.beginPath(); x.arc(px, py, 11, 0, Math.PI * 2); x.fillStyle = c; x.fill() })
-    x.restore()
-    texte('Heritage', cx, cy + 112, { taille: 28, poids: 600, coul: '#e9eef5', alpha: clamp(ki) })
-  }
-  const kb = eout(prog(t, P.icone + 0.3, P.icone + 0.6))
-  if (kb > 0) { x.save(); x.globalAlpha *= kb; bouton('Installer', 540, 1640, 600, 100, { taille: 36, presse: pression(P.icone + 0.6) }); x.restore() }
-  x.restore()
-  doigt(540, 1640 + dy, P.icone + 0.6)
+  tableau(t, P.installer, P.venez, () => {
+    const g = x.createLinearGradient(0, 500, 0, H); g.addColorStop(0, '#1b2433'); g.addColorStop(1, '#0d1118'); x.fillStyle = g; rr(40, 520, 1000, 1260, 50); x.fill()
+    const r = rnd(3)
+    for (let i = 0; i < 16; i++) {
+      const cx = 175 + (i % 4) * 243, cy = 700 + Math.floor(i / 4) * 250
+      // les autres icônes s'écartent un instant pour faire la place
+      const ecart = i === 6 ? 0 : Math.sin(Math.PI * prog(t, P.icone - 0.2, P.icone + 0.4)) * 14
+      const ang = Math.atan2(cy - 950, cx - 661), dx = Math.cos(ang) * ecart, dyi = Math.sin(ang) * ecart
+      if (i === 6) continue
+      rr(cx - 75 + dx, cy - 75 + dyi, 150, 150, 36); x.fillStyle = `rgba(232,236,242,${0.08 + r() * 0.08})`; x.fill()
+      x.fillStyle = 'rgba(232,236,242,.25)'; x.fillRect(cx - 45 + dx, cy + 100 + dyi, 90, 12)
+    }
+    // l'icône Heritage arrive à sa place
+    const ki = eback(prog(t, P.icone - 0.1, P.icone + 0.35), 2.2)
+    if (ki > 0) {
+      const cx = 175 + 2 * 243, cy = 950
+      x.save(); x.translate(cx, cy); x.scale(ki, ki)
+      x.shadowColor = avecAlpha(COUL.accent, 0.8); x.shadowBlur = 40 * (1 - prog(t, P.icone + 0.4, P.icone + 1.4))
+      rr(-75, -75, 150, 150, 36); x.fillStyle = COUL.fond; x.fill(); x.shadowBlur = 0
+      x.strokeStyle = COUL.accent; x.lineWidth = 9; x.lineCap = 'round'
+      x.beginPath(); x.moveTo(0, 45); x.lineTo(0, -5); x.moveTo(0, 15); x.lineTo(-30, -20); x.moveTo(0, 15); x.lineTo(30, -20); x.moveTo(0, -5); x.lineTo(0, -40); x.stroke()
+      ;[[-30, -20, COUL.A], [0, -40, COUL.B], [30, -20, COUL.C]].forEach(([px, py, c]) => { x.beginPath(); x.arc(px, py, 11, 0, Math.PI * 2); x.fillStyle = c; x.fill() })
+      x.restore()
+      texte('Heritage', cx, cy + 112, { taille: 28, poids: 600, coul: '#e9eef5', alpha: clamp(ki) })
+    }
+    const kb = eout(prog(t, P.icone + 0.3, P.icone + 0.6))
+    if (kb > 0) { x.save(); x.globalAlpha *= kb; bouton('Installer', 540, 1640, 600, 100, { taille: 36, presse: pression(P.icone + 0.6) }); x.restore() }
+    doigt(540, 1640, P.icone + 0.6)
+  })
 }
 
-/* -------- 19. Venez : tout l'arbre s'allume -------- */
+/* -------- 13. Venez : tout l'arbre s'allume -------- */
 function venez(t) {
   const k = eout(prog(t, P.venez, P.venez + 0.5))
   if (k <= 0) return
   x.save(); x.globalAlpha = k
   x.beginPath(); x.rect(0, 500, W, H - 500); x.clip()
-  filmer({ s: lerp(0.9, 0.62, edoux(prog(t, P.venez, P.fin))), fx: 540, fy: lerp(1050, 760, edoux(prog(t, P.venez, P.fin))) })
+  filmer({ s: lerp(0.95, 0.6, edoux(prog(t, P.venez, P.fin))), fx: 540, fy: lerp(1150, 760, edoux(prog(t, P.venez, P.fin))) })
   const r = rnd(11)
   blocsLointains(A, 1)
   traitsDe(A, { alpha: 0.8 })
   for (const n of A.N) {
-    const d = P.venez + 0.2 + r() * 2.2
+    const d = P.venez + 0.2 + r() * 1.8
     ficheDe(n, { surligne: eout(prog(t, d, d + 0.3)) * (1 - prog(t, d + 0.5, d + 1.2)) })
   }
   x.restore()
@@ -705,15 +781,25 @@ function venez(t) {
 
 /* -------- la fin : l'emblème, la dernière phrase, la signature -------- */
 function signature(t) {
-  const d = V[20].fin + 0.2
+  const d = V[14].fin + 0.2
   const k = eout(prog(t, d, d + 0.5))
   if (k <= 0) return
-  texte('— Nathan', 540, 1200, { taille: 60, police: SERIF, poids: 600, coul: COUL.accent, alpha: k })
+  x.save(); x.translate(540 + (1 - k) * 40, 1200)
+  texte('— Nathan', 0, 0, { taille: 60, police: SERIF, poids: 600, coul: COUL.accent, alpha: k })
+  x.restore()
 }
+
+/* -------- les gerbes d'éclats -------- */
+eclats(P.enchante + 0.1, 540, 1420, { graine: 1, force: 0.9 })
+eclats(P.compteur + 0.4, 540, 1490, { graine: 2 })
+eclats(P.acceptee + 0.05, 540, 1540, { graine: 3, force: 0.8 })
+eclats(P.revele + 0.05, 540, 960, { graine: 4, n: 48, force: 1.2 })
+eclats(P.icone + 0.05, 661, 950, { graine: 5, force: 0.8 })
+eclats(P.fin + 0.45, 540, 760, { graine: 6, n: 56, force: 1.3 })
 
 SCENE = (t) => {
   fondGrille()
-  // un fondu d'entrée depuis le noir
+  ambiance(t)
   bonjour(t)
   arbre(t)
   fiche(t)
@@ -724,14 +810,16 @@ SCENE = (t) => {
   cloche(t)
   evenements(t)
   tirage(t)
-  demarches(t)
   prive(t)
   installer(t)
   venez(t)
-  for (let n = 0; n < 20; n++) legende(n)
+  if (t < P.fin) dessinerEclats(t)
+  for (let n = 0; n < 14; n++) legende(n)
   emblemeFinal(P.fin)
-  legende(20)
+  if (t >= P.fin) dessinerEclats(t)
+  legende(14)
   signature(t)
+  // un fondu d'entrée depuis le noir
   const noir = 1 - prog(t, 0, 0.35)
   if (noir > 0) { x.save(); x.globalAlpha = noir; x.fillStyle = COUL.fond; x.fillRect(0, 0, W, H); x.restore() }
 }

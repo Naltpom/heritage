@@ -25,7 +25,7 @@
   ]
  },
  {
-  "texte": "On s’est peut-être croisés à un mariage, à un repas de famille… ou jamais.",
+  "texte": "On s’est peut-être croisés à un mariage, à un repas… ou jamais.",
   "mots": [
    {
     "mot": "On",
@@ -64,43 +64,33 @@
    },
    {
     "mot": "à",
-    "debut": 2.137,
-    "fin": 2.222
+    "debut": 2.125,
+    "fin": 2.198
    },
    {
     "mot": "un",
-    "debut": 2.234,
-    "fin": 2.283
+    "debut": 2.21,
+    "fin": 2.259
    },
    {
     "mot": "repas",
-    "debut": 2.295,
-    "fin": 2.562
-   },
-   {
-    "mot": "de",
-    "debut": 2.574,
-    "fin": 2.696
-   },
-   {
-    "mot": "famille",
-    "debut": 2.708,
-    "fin": 3.108
+    "debut": 2.271,
+    "fin": 2.635
    },
    {
     "mot": "ou",
-    "debut": 3.302,
-    "fin": 3.363
+    "debut": 2.866,
+    "fin": 2.926
    },
    {
     "mot": "jamais",
-    "debut": 3.375,
-    "fin": 3.776
+    "debut": 2.938,
+    "fin": 3.327
    }
   ]
  },
  {
-  "texte": "Mais vous êtes dans mon arbre, par le sang ou par alliance. Alors, enchanté !",
+  "texte": "Mais vous êtes dans mon arbre, par le sang ou par alliance. Enchanté !",
   "mots": [
    {
     "mot": "Mais",
@@ -163,19 +153,14 @@
     "fin": 2.744
    },
    {
-    "mot": "Alors",
+    "mot": "Enchanté",
     "debut": 3.592,
-    "fin": 3.981
-   },
-   {
-    "mot": "enchanté",
-    "debut": 4.187,
-    "fin": 4.769
+    "fin": 4.26
    }
   ]
  },
  {
-  "texte": "J’ai créé Heritage, l’application de notre famille : plus de mille huit cents personnes.",
+  "texte": "J’ai créé Heritage pour notre famille : plus de mille huit cents personnes, et vous au centre.",
   "mots": [
    {
     "mot": "J’ai",
@@ -185,137 +170,77 @@
    {
     "mot": "créé",
     "debut": 0.341,
-    "fin": 0.608
+    "fin": 0.62
    },
    {
     "mot": "Heritage",
-    "debut": 0.62,
-    "fin": 1.203
+    "debut": 0.633,
+    "fin": 1.069
    },
    {
-    "mot": "l’application",
-    "debut": 1.531,
-    "fin": 2.186
-   },
-   {
-    "mot": "de",
-    "debut": 2.198,
-    "fin": 2.283
+    "mot": "pour",
+    "debut": 1.082,
+    "fin": 1.239
    },
    {
     "mot": "notre",
-    "debut": 2.295,
-    "fin": 2.599
+    "debut": 1.251,
+    "fin": 1.531
    },
    {
     "mot": "famille",
-    "debut": 2.611,
-    "fin": 2.999
-   },
-   {
-    "mot": "plus",
-    "debut": 3.181,
-    "fin": 3.315
-   },
-   {
-    "mot": "de",
-    "debut": 3.327,
-    "fin": 3.436
-   },
-   {
-    "mot": "mille",
-    "debut": 3.448,
-    "fin": 3.569
-   },
-   {
-    "mot": "huit",
-    "debut": 3.582,
-    "fin": 3.703
-   },
-   {
-    "mot": "cents",
-    "debut": 3.715,
-    "fin": 3.873
-   },
-   {
-    "mot": "personnes",
-    "debut": 3.885,
-    "fin": 4.467
-   }
-  ]
- },
- {
-  "texte": "Vous y êtes au centre, et chaque couleur est une branche de la famille.",
-  "mots": [
-   {
-    "mot": "Vous",
-    "debut": 0.099,
-    "fin": 0.244
-   },
-   {
-    "mot": "y",
-    "debut": 0.256,
-    "fin": 0.39
-   },
-   {
-    "mot": "êtes",
-    "debut": 0.402,
-    "fin": 0.523
-   },
-   {
-    "mot": "au",
-    "debut": 0.535,
-    "fin": 0.669
-   },
-   {
-    "mot": "centre",
-    "debut": 0.681,
-    "fin": 1.009
-   },
-   {
-    "mot": "et",
-    "debut": 1.349,
-    "fin": 1.409
-   },
-   {
-    "mot": "chaque",
-    "debut": 1.421,
-    "fin": 1.616
-   },
-   {
-    "mot": "couleur",
-    "debut": 1.628,
+    "debut": 1.543,
     "fin": 1.931
    },
    {
-    "mot": "est",
-    "debut": 1.943,
-    "fin": 1.98
-   },
-   {
-    "mot": "une",
-    "debut": 1.992,
-    "fin": 2.162
-   },
-   {
-    "mot": "branche",
-    "debut": 2.174,
-    "fin": 2.441
+    "mot": "plus",
+    "debut": 2.113,
+    "fin": 2.247
    },
    {
     "mot": "de",
-    "debut": 2.453,
-    "fin": 2.55
+    "debut": 2.259,
+    "fin": 2.368
    },
    {
-    "mot": "la",
-    "debut": 2.562,
-    "fin": 2.647
+    "mot": "mille",
+    "debut": 2.38,
+    "fin": 2.489
    },
    {
-    "mot": "famille",
-    "debut": 2.659,
-    "fin": 3.193
+    "mot": "huit",
+    "debut": 2.501,
+    "fin": 2.623
+   },
+   {
+    "mot": "cents",
+    "debut": 2.635,
+    "fin": 2.793
+   },
+   {
+    "mot": "personnes",
+    "debut": 2.805,
+    "fin": 3.29
+   },
+   {
+    "mot": "et",
+    "debut": 3.606,
+    "fin": 3.642
+   },
+   {
+    "mot": "vous",
+    "debut": 3.654,
+    "fin": 3.776
+   },
+   {
+    "mot": "au",
+    "debut": 3.788,
+    "fin": 3.873
+   },
+   {
+    "mot": "centre",
+    "debut": 3.885,
+    "fin": 4.322
    }
   ]
  },
@@ -395,7 +320,7 @@
   ]
  },
  {
-  "texte": "Une erreur, un oubli ? Dites-le avec vos mots, ou prenez un acte en photo.",
+  "texte": "Une erreur ? Dites-le avec vos mots : l’assistant prépare la correction, et la famille la vérifie.",
   "mots": [
    {
     "mot": "Une",
@@ -405,267 +330,127 @@
    {
     "mot": "erreur",
     "debut": 0.293,
-    "fin": 0.645
-   },
-   {
-    "mot": "un",
-    "debut": 0.887,
-    "fin": 0.936
-   },
-   {
-    "mot": "oubli",
-    "debut": 0.948,
-    "fin": 1.336
+    "fin": 0.705
    },
    {
     "mot": "Dites-le",
-    "debut": 2.184,
-    "fin": 2.549
+    "debut": 1.553,
+    "fin": 1.905
    },
    {
     "mot": "avec",
-    "debut": 2.561,
-    "fin": 2.779
+    "debut": 1.917,
+    "fin": 2.124
    },
    {
     "mot": "vos",
-    "debut": 2.791,
-    "fin": 2.925
+    "debut": 2.136,
+    "fin": 2.257
    },
    {
     "mot": "mots",
-    "debut": 2.937,
-    "fin": 3.18
+    "debut": 2.269,
+    "fin": 2.5
    },
    {
-    "mot": "ou",
-    "debut": 3.434,
-    "fin": 3.495
-   },
-   {
-    "mot": "prenez",
-    "debut": 3.507,
-    "fin": 3.811
-   },
-   {
-    "mot": "un",
-    "debut": 3.823,
-    "fin": 3.871
-   },
-   {
-    "mot": "acte",
-    "debut": 3.884,
-    "fin": 4.138
-   },
-   {
-    "mot": "en",
-    "debut": 4.151,
-    "fin": 4.211
-   },
-   {
-    "mot": "photo",
-    "debut": 4.223,
-    "fin": 4.684
-   }
-  ]
- },
- {
-  "texte": "L’assistant prépare la correction, et la famille la vérifie avant qu’elle entre dans l’arbre.",
-  "mots": [
-   {
-    "mot": "L’assistant",
-    "debut": 0.099,
-    "fin": 0.669
+    "mot": "l’assistant",
+    "debut": 2.67,
+    "fin": 3.119
    },
    {
     "mot": "prépare",
-    "debut": 0.681,
-    "fin": 1.021
+    "debut": 3.131,
+    "fin": 3.483
    },
    {
     "mot": "la",
-    "debut": 1.033,
-    "fin": 1.118
+    "debut": 3.495,
+    "fin": 3.58
    },
    {
     "mot": "correction",
-    "debut": 1.13,
-    "fin": 1.664
+    "debut": 3.592,
+    "fin": 4.126
    },
    {
     "mot": "et",
-    "debut": 2.004,
-    "fin": 2.028
+    "debut": 4.442,
+    "fin": 4.466
    },
    {
     "mot": "la",
-    "debut": 2.04,
-    "fin": 2.149
+    "debut": 4.478,
+    "fin": 4.587
    },
    {
     "mot": "famille",
-    "debut": 2.162,
-    "fin": 2.453
+    "debut": 4.599,
+    "fin": 4.891
    },
    {
     "mot": "la",
-    "debut": 2.465,
-    "fin": 2.55
+    "debut": 4.903,
+    "fin": 4.988
    },
    {
     "mot": "vérifie",
-    "debut": 2.562,
-    "fin": 2.975
-   },
-   {
-    "mot": "avant",
-    "debut": 2.987,
-    "fin": 3.169
-   },
-   {
-    "mot": "qu’elle",
-    "debut": 3.181,
-    "fin": 3.375
-   },
-   {
-    "mot": "entre",
-    "debut": 3.387,
-    "fin": 3.582
-   },
-   {
-    "mot": "dans",
-    "debut": 3.594,
-    "fin": 3.679
-   },
-   {
-    "mot": "l’arbre",
-    "debut": 3.691,
-    "fin": 4.128
+    "debut": 5.0,
+    "fin": 5.522
    }
   ]
  },
  {
-  "texte": "Posez une question : l’application cherche dans l’arbre, et vous répond.",
+  "texte": "Posez vos questions à l’arbre… et répondez aux siennes.",
   "mots": [
    {
     "mot": "Posez",
     "debut": 0.099,
-    "fin": 0.402
+    "fin": 0.39
    },
    {
-    "mot": "une",
-    "debut": 0.414,
+    "mot": "vos",
+    "debut": 0.402,
     "fin": 0.523
    },
    {
-    "mot": "question",
+    "mot": "questions",
     "debut": 0.535,
+    "fin": 0.936
+   },
+   {
+    "mot": "à",
+    "debut": 0.948,
     "fin": 1.009
    },
    {
-    "mot": "l’application",
-    "debut": 1.179,
-    "fin": 1.761
-   },
-   {
-    "mot": "cherche",
-    "debut": 1.773,
-    "fin": 2.125
-   },
-   {
-    "mot": "dans",
-    "debut": 2.137,
-    "fin": 2.247
-   },
-   {
     "mot": "l’arbre",
-    "debut": 2.259,
-    "fin": 2.526
+    "debut": 1.021,
+    "fin": 1.336
    },
    {
     "mot": "et",
-    "debut": 2.805,
-    "fin": 2.841
+    "debut": 1.518,
+    "fin": 1.567
    },
    {
-    "mot": "vous",
-    "debut": 2.853,
-    "fin": 2.963
+    "mot": "répondez",
+    "debut": 1.579,
+    "fin": 1.967
    },
    {
-    "mot": "répond",
-    "debut": 2.975,
-    "fin": 3.327
-   }
-  ]
- },
- {
-  "texte": "Et l’arbre vous pose les siennes, sur ce que vous seul savez.",
-  "mots": [
-   {
-    "mot": "Et",
-    "debut": 0.099,
-    "fin": 0.232
-   },
-   {
-    "mot": "l’arbre",
-    "debut": 0.244,
-    "fin": 0.548
-   },
-   {
-    "mot": "vous",
-    "debut": 0.56,
-    "fin": 0.669
-   },
-   {
-    "mot": "pose",
-    "debut": 0.681,
-    "fin": 0.912
-   },
-   {
-    "mot": "les",
-    "debut": 0.924,
-    "fin": 1.033
+    "mot": "aux",
+    "debut": 1.98,
+    "fin": 2.04
    },
    {
     "mot": "siennes",
-    "debut": 1.045,
-    "fin": 1.385
-   },
-   {
-    "mot": "sur",
-    "debut": 1.676,
-    "fin": 1.834
-   },
-   {
-    "mot": "ce",
-    "debut": 1.846,
-    "fin": 1.955
-   },
-   {
-    "mot": "que",
-    "debut": 1.967,
-    "fin": 2.089
-   },
-   {
-    "mot": "vous",
-    "debut": 2.101,
-    "fin": 2.222
-   },
-   {
-    "mot": "seul",
-    "debut": 2.234,
-    "fin": 2.441
-   },
-   {
-    "mot": "savez",
-    "debut": 2.453,
-    "fin": 2.841
+    "debut": 2.052,
+    "fin": 2.501
    }
   ]
  },
  {
-  "texte": "La carte montre où nos ancêtres ont vécu, la chronologie remonte les siècles.",
+  "texte": "La carte et la chronologie montrent où et quand nos ancêtres ont vécu.",
   "mots": [
    {
     "mot": "La",
@@ -675,67 +460,67 @@
    {
     "mot": "carte",
     "debut": 0.317,
-    "fin": 0.608
+    "fin": 0.596
    },
    {
-    "mot": "montre",
-    "debut": 0.62,
-    "fin": 0.863
-   },
-   {
-    "mot": "où",
-    "debut": 0.875,
-    "fin": 0.9
-   },
-   {
-    "mot": "nos",
-    "debut": 0.912,
-    "fin": 1.021
-   },
-   {
-    "mot": "ancêtres",
-    "debut": 1.033,
-    "fin": 1.433
-   },
-   {
-    "mot": "ont",
-    "debut": 1.446,
-    "fin": 1.494
-   },
-   {
-    "mot": "vécu",
-    "debut": 1.506,
-    "fin": 1.87
+    "mot": "et",
+    "debut": 0.608,
+    "fin": 0.633
    },
    {
     "mot": "la",
-    "debut": 2.198,
-    "fin": 2.356
+    "debut": 0.645,
+    "fin": 0.742
    },
    {
     "mot": "chronologie",
+    "debut": 0.754,
+    "fin": 1.251
+   },
+   {
+    "mot": "montrent",
+    "debut": 1.264,
+    "fin": 1.518
+   },
+   {
+    "mot": "où",
+    "debut": 1.531,
+    "fin": 1.591
+   },
+   {
+    "mot": "et",
+    "debut": 1.603,
+    "fin": 1.664
+   },
+   {
+    "mot": "quand",
+    "debut": 1.676,
+    "fin": 1.822
+   },
+   {
+    "mot": "nos",
+    "debut": 1.834,
+    "fin": 1.931
+   },
+   {
+    "mot": "ancêtres",
+    "debut": 1.943,
+    "fin": 2.356
+   },
+   {
+    "mot": "ont",
     "debut": 2.368,
-    "fin": 2.878
+    "fin": 2.404
    },
    {
-    "mot": "remonte",
-    "debut": 2.89,
-    "fin": 3.217
-   },
-   {
-    "mot": "les",
-    "debut": 3.23,
-    "fin": 3.327
-   },
-   {
-    "mot": "siècles",
-    "debut": 3.339,
-    "fin": 3.776
+    "mot": "vécu",
+    "debut": 2.417,
+    "fin": 2.841
    }
   ]
  },
  {
-  "texte": "Le calendrier rappelle chaque anniversaire, et garde en mémoire ceux qui sont partis.",
+  "texte": "Le calendrier n’oublie aucun anniversaire, et la cloche vous prévient, même application fermée.",
   "mots": [
    {
     "mot": "Le",
@@ -745,132 +530,67 @@
    {
     "mot": "calendrier",
     "debut": 0.305,
-    "fin": 0.802
+    "fin": 0.79
    },
    {
-    "mot": "rappelle",
-    "debut": 0.815,
-    "fin": 1.118
+    "mot": "n’oublie",
+    "debut": 0.802,
+    "fin": 1.094
    },
    {
-    "mot": "chaque",
-    "debut": 1.13,
-    "fin": 1.373
+    "mot": "aucun",
+    "debut": 1.106,
+    "fin": 1.324
    },
    {
     "mot": "anniversaire",
-    "debut": 1.385,
+    "debut": 1.336,
     "fin": 2.04
    },
    {
     "mot": "et",
-    "debut": 2.38,
-    "fin": 2.429
+    "debut": 2.392,
+    "fin": 2.417
    },
    {
-    "mot": "garde",
-    "debut": 2.441,
-    "fin": 2.72
-   },
-   {
-    "mot": "en",
-    "debut": 2.732,
-    "fin": 2.781
-   },
-   {
-    "mot": "mémoire",
-    "debut": 2.793,
-    "fin": 3.145
-   },
-   {
-    "mot": "ceux",
-    "debut": 3.157,
-    "fin": 3.278
-   },
-   {
-    "mot": "qui",
-    "debut": 3.29,
-    "fin": 3.424
-   },
-   {
-    "mot": "sont",
-    "debut": 3.436,
-    "fin": 3.582
-   },
-   {
-    "mot": "partis",
-    "debut": 3.594,
-    "fin": 4.067
-   }
-  ]
- },
- {
-  "texte": "La cloche vous prévient de tout, même sur votre téléphone, application fermée.",
-  "mots": [
-   {
-    "mot": "La",
-    "debut": 0.099,
-    "fin": 0.305
+    "mot": "la",
+    "debut": 2.429,
+    "fin": 2.526
    },
    {
     "mot": "cloche",
-    "debut": 0.317,
-    "fin": 0.596
+    "debut": 2.538,
+    "fin": 2.817
    },
    {
     "mot": "vous",
-    "debut": 0.608,
-    "fin": 0.717
-   },
-   {
-    "mot": "prévient",
-    "debut": 0.73,
-    "fin": 1.033
-   },
-   {
-    "mot": "de",
-    "debut": 1.045,
-    "fin": 1.154
-   },
-   {
-    "mot": "tout",
-    "debut": 1.167,
-    "fin": 1.409
-   },
-   {
-    "mot": "même",
-    "debut": 1.725,
-    "fin": 1.943
-   },
-   {
-    "mot": "sur",
-    "debut": 1.955,
-    "fin": 2.113
-   },
-   {
-    "mot": "votre",
-    "debut": 2.125,
-    "fin": 2.38
-   },
-   {
-    "mot": "téléphone",
-    "debut": 2.392,
+    "debut": 2.829,
     "fin": 2.938
    },
    {
+    "mot": "prévient",
+    "debut": 2.95,
+    "fin": 3.412
+   },
+   {
+    "mot": "même",
+    "debut": 3.715,
+    "fin": 3.921
+   },
+   {
     "mot": "application",
-    "debut": 3.254,
-    "fin": 3.776
+    "debut": 3.933,
+    "fin": 4.468
    },
    {
     "mot": "fermée",
-    "debut": 3.788,
-    "fin": 4.237
+    "debut": 4.48,
+    "fin": 4.917
    }
   ]
  },
  {
-  "texte": "Et surtout, on peut se retrouver : une cousinade, un anniversaire surprise, un hommage.",
+  "texte": "Et surtout, retrouvons-nous : une cousinade, un anniversaire surprise… Invitez, et voyez qui vient.",
   "mots": [
    {
     "mot": "Et",
@@ -880,132 +600,67 @@
    {
     "mot": "surtout",
     "debut": 0.256,
-    "fin": 0.681
+    "fin": 0.669
    },
    {
-    "mot": "on",
-    "debut": 0.936,
-    "fin": 1.009
-   },
-   {
-    "mot": "peut",
-    "debut": 1.021,
-    "fin": 1.179
-   },
-   {
-    "mot": "se",
-    "debut": 1.191,
-    "fin": 1.3
-   },
-   {
-    "mot": "retrouver",
-    "debut": 1.312,
-    "fin": 1.834
+    "mot": "retrouvons-nous",
+    "debut": 0.948,
+    "fin": 1.567
    },
    {
     "mot": "une",
-    "debut": 2.028,
-    "fin": 2.125
+    "debut": 1.737,
+    "fin": 1.834
    },
    {
     "mot": "cousinade",
-    "debut": 2.137,
-    "fin": 2.647
+    "debut": 1.846,
+    "fin": 2.368
    },
    {
     "mot": "un",
-    "debut": 2.975,
-    "fin": 3.023
+    "debut": 2.683,
+    "fin": 2.72
    },
    {
     "mot": "anniversaire",
-    "debut": 3.035,
-    "fin": 3.582
+    "debut": 2.732,
+    "fin": 3.302
    },
    {
     "mot": "surprise",
-    "debut": 3.594,
-    "fin": 4.091
+    "debut": 3.315,
+    "fin": 3.873
    },
    {
-    "mot": "un",
-    "debut": 4.31,
-    "fin": 4.358
-   },
-   {
-    "mot": "hommage",
-    "debut": 4.37,
-    "fin": 4.929
-   }
-  ]
- },
- {
-  "texte": "Créez l’événement, invitez, et voyez qui vient. Un oubli ? Relancez d’un geste.",
-  "mots": [
-   {
-    "mot": "Créez",
-    "debut": 0.099,
-    "fin": 0.353
-   },
-   {
-    "mot": "l’événement",
-    "debut": 0.366,
-    "fin": 0.827
-   },
-   {
-    "mot": "invitez",
-    "debut": 1.082,
-    "fin": 1.555
+    "mot": "Invitez",
+    "debut": 4.721,
+    "fin": 5.303
    },
    {
     "mot": "et",
-    "debut": 1.846,
-    "fin": 1.883
+    "debut": 5.583,
+    "fin": 5.631
    },
    {
     "mot": "voyez",
-    "debut": 1.895,
-    "fin": 2.162
+    "debut": 5.643,
+    "fin": 5.91
    },
    {
     "mot": "qui",
-    "debut": 2.174,
-    "fin": 2.332
+    "debut": 5.922,
+    "fin": 6.08
    },
    {
     "mot": "vient",
-    "debut": 2.344,
-    "fin": 2.635
-   },
-   {
-    "mot": "Un",
-    "debut": 3.471,
-    "fin": 3.629
-   },
-   {
-    "mot": "oubli",
-    "debut": 3.641,
-    "fin": 4.066
-   },
-   {
-    "mot": "Relancez",
-    "debut": 4.915,
-    "fin": 5.413
-   },
-   {
-    "mot": "d’un",
-    "debut": 5.425,
-    "fin": 5.583
-   },
-   {
-    "mot": "geste",
-    "debut": 5.595,
-    "fin": 6.08
+    "debut": 6.092,
+    "fin": 6.371
    }
   ]
  },
  {
-  "texte": "À Noël, le tirage au sort dit à chacun à qui il offre son cadeau.",
+  "texte": "À Noël, le tirage au sort dit à chacun à qui il offre.",
   "mots": [
    {
     "mot": "À",
@@ -1015,272 +670,192 @@
    {
     "mot": "Noël",
     "debut": 0.256,
-    "fin": 0.632
+    "fin": 0.62
    },
    {
     "mot": "le",
-    "debut": 0.984,
-    "fin": 1.094
+    "debut": 0.96,
+    "fin": 1.069
    },
    {
     "mot": "tirage",
-    "debut": 1.106,
-    "fin": 1.433
+    "debut": 1.082,
+    "fin": 1.409
    },
    {
     "mot": "au",
-    "debut": 1.446,
-    "fin": 1.506
+    "debut": 1.421,
+    "fin": 1.482
    },
    {
     "mot": "sort",
-    "debut": 1.518,
-    "fin": 1.713
+    "debut": 1.494,
+    "fin": 1.688
    },
    {
     "mot": "dit",
-    "debut": 1.725,
-    "fin": 1.858
+    "debut": 1.7,
+    "fin": 1.834
    },
    {
     "mot": "à",
-    "debut": 1.87,
-    "fin": 1.931
+    "debut": 1.846,
+    "fin": 1.907
    },
    {
     "mot": "chacun",
-    "debut": 1.943,
-    "fin": 2.307
+    "debut": 1.919,
+    "fin": 2.283
    },
    {
     "mot": "à",
-    "debut": 2.319,
-    "fin": 2.392
+    "debut": 2.295,
+    "fin": 2.356
    },
    {
     "mot": "qui",
-    "debut": 2.404,
-    "fin": 2.562
+    "debut": 2.368,
+    "fin": 2.514
    },
    {
     "mot": "il",
-    "debut": 2.574,
-    "fin": 2.659
+    "debut": 2.526,
+    "fin": 2.611
    },
    {
     "mot": "offre",
-    "debut": 2.671,
-    "fin": 2.902
-   },
-   {
-    "mot": "son",
-    "debut": 2.914,
-    "fin": 3.023
-   },
-   {
-    "mot": "cadeau",
-    "debut": 3.035,
-    "fin": 3.472
+    "debut": 2.623,
+    "fin": 2.963
    }
   ]
  },
  {
-  "texte": "Il manque un acte ? Les demandes aux mairies et aux archives se suivent ici.",
+  "texte": "L’arbre reste privé : seuls les invités y entrent, et les vivants sont protégés.",
   "mots": [
    {
-    "mot": "Il",
+    "mot": "L’arbre",
     "debut": 0.099,
-    "fin": 0.268
+    "fin": 0.487
    },
    {
-    "mot": "manque",
-    "debut": 0.281,
-    "fin": 0.499
+    "mot": "reste",
+    "debut": 0.499,
+    "fin": 0.766
    },
    {
-    "mot": "un",
-    "debut": 0.511,
-    "fin": 0.56
+    "mot": "privé",
+    "debut": 0.778,
+    "fin": 1.179
    },
    {
-    "mot": "acte",
-    "debut": 0.572,
-    "fin": 0.997
+    "mot": "seuls",
+    "debut": 1.409,
+    "fin": 1.591
    },
    {
-    "mot": "Les",
-    "debut": 1.845,
-    "fin": 2.051
+    "mot": "les",
+    "debut": 1.603,
+    "fin": 1.7
    },
    {
-    "mot": "demandes",
-    "debut": 2.063,
-    "fin": 2.391
+    "mot": "invités",
+    "debut": 1.713,
+    "fin": 2.113
    },
    {
-    "mot": "aux",
-    "debut": 2.403,
-    "fin": 2.439
+    "mot": "y",
+    "debut": 2.125,
+    "fin": 2.21
    },
    {
-    "mot": "mairies",
-    "debut": 2.451,
-    "fin": 2.743
+    "mot": "entrent",
+    "debut": 2.222,
+    "fin": 2.465
    },
    {
     "mot": "et",
-    "debut": 2.755,
-    "fin": 2.816
+    "debut": 2.793,
+    "fin": 2.817
    },
    {
-    "mot": "aux",
-    "debut": 2.828,
-    "fin": 2.888
+    "mot": "les",
+    "debut": 2.829,
+    "fin": 2.914
    },
    {
-    "mot": "archives",
-    "debut": 2.901,
-    "fin": 3.325
+    "mot": "vivants",
+    "debut": 2.926,
+    "fin": 3.205
    },
    {
-    "mot": "se",
-    "debut": 3.337,
-    "fin": 3.471
+    "mot": "sont",
+    "debut": 3.217,
+    "fin": 3.375
    },
    {
-    "mot": "suivent",
-    "debut": 3.483,
-    "fin": 3.665
-   },
-   {
-    "mot": "ici",
-    "debut": 3.677,
-    "fin": 4.041
+    "mot": "protégés",
+    "debut": 3.387,
+    "fin": 3.958
    }
   ]
  },
  {
-  "texte": "Et rassurez-vous : l’arbre est privé, et ce qui concerne les vivants est protégé.",
+  "texte": "Et Heritage s’installe sur votre téléphone, comme une vraie application.",
   "mots": [
    {
     "mot": "Et",
     "debut": 0.099,
-    "fin": 0.232
+    "fin": 0.256
    },
-   {
-    "mot": "rassurez-vous",
-    "debut": 0.244,
-    "fin": 0.863
-   },
-   {
-    "mot": "l’arbre",
-    "debut": 1.082,
-    "fin": 1.373
-   },
-   {
-    "mot": "est",
-    "debut": 1.385,
-    "fin": 1.421
-   },
-   {
-    "mot": "privé",
-    "debut": 1.433,
-    "fin": 1.846
-   },
-   {
-    "mot": "et",
-    "debut": 2.174,
-    "fin": 2.234
-   },
-   {
-    "mot": "ce",
-    "debut": 2.247,
-    "fin": 2.368
-   },
-   {
-    "mot": "qui",
-    "debut": 2.38,
-    "fin": 2.514
-   },
-   {
-    "mot": "concerne",
-    "debut": 2.526,
-    "fin": 2.89
-   },
-   {
-    "mot": "les",
-    "debut": 2.902,
-    "fin": 2.999
-   },
-   {
-    "mot": "vivants",
-    "debut": 3.011,
-    "fin": 3.278
-   },
-   {
-    "mot": "est",
-    "debut": 3.29,
-    "fin": 3.351
-   },
-   {
-    "mot": "protégé",
-    "debut": 3.363,
-    "fin": 3.921
-   }
-  ]
- },
- {
-  "texte": "Heritage s’installe sur votre téléphone, comme une vraie application.",
-  "mots": [
    {
     "mot": "Heritage",
-    "debut": 0.099,
-    "fin": 0.572
+    "debut": 0.268,
+    "fin": 0.669
    },
    {
     "mot": "s’installe",
-    "debut": 0.584,
-    "fin": 0.984
+    "debut": 0.681,
+    "fin": 1.082
    },
    {
     "mot": "sur",
-    "debut": 0.997,
-    "fin": 1.154
+    "debut": 1.094,
+    "fin": 1.251
    },
    {
     "mot": "votre",
-    "debut": 1.167,
-    "fin": 1.421
+    "debut": 1.264,
+    "fin": 1.518
    },
    {
     "mot": "téléphone",
-    "debut": 1.433,
-    "fin": 2.04
+    "debut": 1.531,
+    "fin": 2.137
    },
    {
     "mot": "comme",
-    "debut": 2.307,
-    "fin": 2.477
-   },
-   {
-    "mot": "une",
-    "debut": 2.489,
+    "debut": 2.404,
     "fin": 2.574
    },
    {
-    "mot": "vraie",
+    "mot": "une",
     "debut": 2.586,
-    "fin": 2.768
+    "fin": 2.683
+   },
+   {
+    "mot": "vraie",
+    "debut": 2.696,
+    "fin": 2.878
    },
    {
     "mot": "application",
-    "debut": 2.781,
-    "fin": 3.424
+    "debut": 2.89,
+    "fin": 3.533
    }
   ]
  },
  {
-  "texte": "Alors venez, retrouvez-vous, et racontez ce que vous savez.",
+  "texte": "Alors venez, et racontez ce que vous savez.",
   "mots": [
    {
     "mot": "Alors",
@@ -1290,42 +865,37 @@
    {
     "mot": "venez",
     "debut": 0.414,
-    "fin": 0.766
-   },
-   {
-    "mot": "retrouvez-vous",
-    "debut": 1.045,
-    "fin": 1.713
+    "fin": 0.79
    },
    {
     "mot": "et",
-    "debut": 2.028,
-    "fin": 2.089
+    "debut": 1.094,
+    "fin": 1.142
    },
    {
     "mot": "racontez",
-    "debut": 2.101,
-    "fin": 2.526
+    "debut": 1.154,
+    "fin": 1.579
    },
    {
     "mot": "ce",
-    "debut": 2.538,
-    "fin": 2.659
+    "debut": 1.591,
+    "fin": 1.713
    },
    {
     "mot": "que",
-    "debut": 2.671,
-    "fin": 2.781
+    "debut": 1.725,
+    "fin": 1.846
    },
    {
     "mot": "vous",
-    "debut": 2.793,
-    "fin": 2.89
+    "debut": 1.858,
+    "fin": 1.955
    },
    {
     "mot": "savez",
-    "debut": 2.902,
-    "fin": 3.302
+    "debut": 1.967,
+    "fin": 2.368
    }
   ]
  },
