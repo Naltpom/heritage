@@ -145,10 +145,15 @@ final class CercleFermeTest extends KernelTestCase
     {
         $reflexion = new \ReflectionClass(CercleDeVisibiliteInterface::class);
 
+        // `dansLePerimetre` : révision du 2026-10-04 de l'ADR 0003, « un arbre par famille ».
         self::assertSame(
-            ['regime', 'voitPersonne', 'filtrerPersonnes'],
+            ['regime', 'voitPersonne', 'dansLePerimetre', 'filtrerPersonnes'],
             array_map(static fn (\ReflectionMethod $m): string => $m->getName(), $reflexion->getMethods()),
         );
+
+        $perimetre = $reflexion->getMethod('dansLePerimetre');
+        self::assertSame('int', (string) $perimetre->getParameters()[0]->getType());
+        self::assertSame('bool', (string) $perimetre->getReturnType());
 
         $voitPersonne = $reflexion->getMethod('voitPersonne');
         // Un identifiant, jamais une entité de `Tree` : `Core` ne référence aucun module.
