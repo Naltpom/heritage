@@ -114,7 +114,7 @@ final class DemandeController extends AbstractController
         );
 
         return $this->charge($this->serialiseur->enveloppe(
-            array_map($this->serialiseur->resume(...), $resultat['elements']),
+            $this->serialiseur->resumes($resultat['elements']),
             $resultat['total'],
             $page,
             $parPage,

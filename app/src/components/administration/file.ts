@@ -1,103 +1,101 @@
 /**
- * Le regroupement de la file de validation.
+ * La file de validation, **à plat et par numéro** (décision du 2026-10-04).
  *
- * Le contrat est explicite sur le partage du travail : « triée par `submittedAt`
- * croissant, **regroupée par personne côté affichage** : l'API rend
- * `targetKind`/`targetId`, le front groupe » (§ 6.7, ADR 0004).
- *
- * Ce n'est pas une commodité visuelle. Deux demandes sur la même fiche
- * s'influencent : valider la première peut rendre la seconde caduque, et
- * l'administrateur qui les traite dans deux écrans séparés découvrira la
- * caducité **après** avoir cliqué. Les voir côte à côte, c'est décider dans le
- * bon ordre — et c'est ce que le bloc `demandesConcurrentes` du détail (§ 6.7)
- * dit à l'échelle d'une demande.
- *
- * Deux règles de forme :
- *
- * - **le regroupement ne réordonne rien de lui-même.** Il conserve l'ordre de ce
- *   qu'on lui donne : les groupes sortent dans l'ordre de leur demande la plus
- *   ancienne, et non par ordre alphabétique. Un tri *implicite* ajouté ici
- *   défferait celui du serveur sans que personne s'en aperçoive — le tri
- *   explicite, lui, est un choix du lecteur et vit dans `trierDemandes()` ;
- * - **les créations de personne n'ont pas de cible** (`targetId` à `null`) et
- *   forment leur propre groupe. Elles ne peuvent pas en avoir : la personne
- *   n'existe pas encore, c'est tout leur objet.
+ * Elle était regroupée par fiche visée (§ 6.7, ADR 0004) : deux demandes sur la
+ * même fiche s'influencent, valider la première peut rendre la seconde caduque.
+ * L'administrateur a demandé l'inverse : chaque demande par son **numéro**, dans
+ * l'ordre des numéros, sans regroupement, et des onglets par nature. Ce que le
+ * regroupement protégeait n'est pas perdu pour autant : chaque ligne dit combien
+ * d'**autres demandes en attente** visent la même fiche ({@link autresSurLaMemeFiche}),
+ * et le détail d'une demande garde son bloc `demandesConcurrentes`.
  */
 
-import type { Demande, StatutDemande } from '@/lib/api'
+import type { Demande, NatureDemande, StatutDemande } from '@/lib/api'
 
-export interface GroupeDemandes {
-  /** Clé technique, stable pour un `v-for`. */
-  cle: string
-  titre: string
-  /** Vrai pour le groupe des demandes sans cible (les créations). */
-  sansCible: boolean
-  demandes: Demande[]
-}
+/* ------------------------------------------------------------------ */
+/* Les onglets — les natures regroupées                                */
+/* ------------------------------------------------------------------ */
 
-const CLE_SANS_CIBLE = 'sans-cible'
+export type OngletDeFile = 'toutes' | 'modifications' | 'personnes' | 'liens'
 
 /**
- * Regroupe la file par fiche visée, en préservant l'ordre du serveur.
- *
- * Le groupe sans cible est laissé **à sa place** dans l'ordre d'arrivée, et non
- * poussé en fin de liste : une création déposée il y a trois semaines passe
- * avant une modification d'hier, et la remonter — ou la reléguer — reviendrait à
- * réordonner la file sur un critère que personne n'a demandé.
+ * Les natures de chaque onglet. `null` : toutes. Chaque nature est dans **un**
+ * onglet, et un test le tient : une nature ajoutée un jour et oubliée ici ne
+ * serait visible que sous « Toutes ».
  */
-export function grouperParCible(demandes: Demande[]): GroupeDemandes[] {
-  const groupes = new Map<string, GroupeDemandes>()
+export const NATURES_DE_L_ONGLET: Readonly<Record<OngletDeFile, readonly NatureDemande[] | null>> = {
+  toutes: null,
+  modifications: [
+    'modification_personne',
+    'modification_famille',
+    'modification_citation',
+    'ajout_citation',
+    'ajout_note',
+    'ajout_media',
+    'suppression_personne',
+  ],
+  personnes: ['creation_personne'],
+  liens: ['ajout_lien', 'retrait_lien'],
+}
 
-  for (const demande of demandes) {
-    const sansCible = demande.targetId === null || demande.targetKind === null
-    const cle = sansCible ? CLE_SANS_CIBLE : `${demande.targetKind}:${demande.targetId}`
+export const ONGLETS: readonly { valeur: OngletDeFile; libelle: string }[] = [
+  { valeur: 'toutes', libelle: 'Toutes' },
+  { valeur: 'modifications', libelle: 'Modifications' },
+  { valeur: 'personnes', libelle: 'Nouvelles personnes' },
+  { valeur: 'liens', libelle: 'Liens' },
+]
 
-    let groupe = groupes.get(cle)
-    if (groupe === undefined) {
-      groupe = {
-        cle,
-        titre: sansCible ? 'Personnes proposées' : (demande.targetLabel ?? `Fiche n° ${demande.targetId}`),
-        sansCible,
-        demandes: [],
-      }
-      groupes.set(cle, groupe)
-    }
-    groupe.demandes.push(demande)
+/** Le paramètre `kind` de la file pour cet onglet (§ 6.7 : une liste, séparée par des virgules). */
+export function natureDeLOnglet(onglet: OngletDeFile): string | undefined {
+  const natures = NATURES_DE_L_ONGLET[onglet]
+  return natures === null ? undefined : natures.join(',')
+}
+
+/* ------------------------------------------------------------------ */
+/* La ligne d'une demande                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Pour chaque demande **en attente**, le nombre d'**autres** demandes en attente
+ * qui visent la même fiche — ce que le regroupement par fiche montrait d'un coup
+ * d'œil. Une création n'a pas de cible : elle n'en a jamais.
+ */
+export function autresSurLaMemeFiche(demandes: readonly Demande[]): Map<number, number> {
+  const parCible = new Map<string, number>()
+  const cle = (d: Demande): string | null =>
+    d.status !== 'en_attente' || d.targetId === null || d.targetKind === null ? null : `${d.targetKind}:${d.targetId}`
+
+  for (const d of demandes) {
+    const c = cle(d)
+    if (c !== null) parCible.set(c, (parCible.get(c) ?? 0) + 1)
   }
 
-  // `Map` préserve l'ordre d'insertion : le premier groupe est celui de la
-  // demande la plus ancienne, ce qui est exactement l'ordre du serveur.
-  return [...groupes.values()]
+  const autres = new Map<number, number>()
+  for (const d of demandes) {
+    const c = cle(d)
+    const n = c === null ? 0 : (parCible.get(c) ?? 1) - 1
+    if (n > 0) autres.set(d.id, n)
+  }
+  return autres
 }
 
 /**
- * Les groupes qui portent plus d'une demande — ceux où l'ordre de décision
- * compte.
- */
-export function groupesEnConcurrence(groupes: GroupeDemandes[]): GroupeDemandes[] {
-  return groupes.filter((groupe) => !groupe.sansCible && groupe.demandes.length > 1)
-}
-
-/**
- * La personne dont ce groupe permet d'ouvrir un aperçu, ou `null`.
+ * La personne dont cette demande permet d'ouvrir un aperçu, ou `null`.
  *
- * **Trois cas rendent `null`, et il faut les distinguer d'un oubli.** Les
- * créations n'ont pas de cible — la personne n'existe pas encore, c'est tout
- * leur objet, et son contenu proposé est déjà sous les yeux dans le diff. Une
- * cible de nature `famille`, `citation` ou `source` n'est **pas** une personne :
+ * **Trois cas rendent `null`, et il faut les distinguer d'un oubli.** Une
+ * création n'a pas de cible — la personne n'existe pas encore. Une cible de
+ * nature `famille`, `citation` ou `source` n'est **pas** une personne :
  * `GET /api/arbre/personnes/{id}` y répondrait `404`, ou pire, rendrait la fiche
  * d'un homonyme numérique. Et un `targetId` absent ne se devine pas.
- *
- * C'est une fonction plutôt qu'un `v-if` dans le gabarit parce que la condition
- * porte deux clauses dont une est facile à oublier — celle de la nature —, et
- * qu'un bouton « voir la fiche » qui ouvre un 404 se lit comme une panne.
  */
-export function personneDuGroupe(groupe: GroupeDemandes): number | null {
-  if (groupe.sansCible) return null
-  const premiere = groupe.demandes[0]
-  if (premiere === undefined) return null
-  if (premiere.targetKind !== 'personne' || premiere.targetId === null) return null
-  return premiere.targetId
+export function personneDeLaDemande(demande: Demande): number | null {
+  if (demande.targetKind !== 'personne' || demande.targetId === null) return null
+  return demande.targetId
+}
+
+/** « Jeanne Dupont, Paul Dupont » — les personnes qu'une demande ajoute, ou `''`. */
+export function nouvellesPersonnes(demande: Demande): string {
+  return (demande.nouvellesPersonnes ?? []).join(', ')
 }
 
 /* ------------------------------------------------------------------ */
@@ -107,38 +105,16 @@ export function personneDuGroupe(groupe: GroupeDemandes): number | null {
 export type SensDeTri = 'anciennes' | 'recentes'
 
 /**
- * Trie la file par date de soumission.
+ * Trie la file **par numéro** (2026-10-04) : `anciennes`, le plus petit numéro
+ * d'abord — c'est aussi l'ordre de dépôt, les numéros croissant avec le temps ;
+ * `recentes`, l'inverse.
  *
- * `anciennes` **est l'ordre du serveur** et le défaut : une file se prend par le
- * début, et la demande qui attend depuis trois semaines est celle dont l'auteur
- * se demande si quelqu'un l'a lue. `recentes` existe parce qu'on cherche parfois
- * ce qu'on vient de recevoir — mais il faut l'avoir demandé.
- *
- * Deux précautions :
- *
- * - **le tableau d'entrée n'est pas modifié.** Il vient d'une `ref` que le
- *   composant relit ; le trier sur place ferait dépendre l'affichage de l'ordre
- *   dans lequel les `computed` se sont réveillés ;
- * - **une demande sans `submittedAt` est un brouillon** — jamais soumise, donc
- *   sans date. Elle est rangée en fin de liste dans les deux sens plutôt que
- *   traitée comme datée de 1970, ce qui la propulserait en tête du tri
- *   « anciennes » alors qu'elle n'attend aucune décision.
+ * **Le tableau d'entrée n'est pas modifié.** Il vient d'une `ref` que le
+ * composant relit ; le trier sur place ferait dépendre l'affichage de l'ordre
+ * dans lequel les `computed` se sont réveillés.
  */
-export function trierDemandes(demandes: Demande[], sens: SensDeTri): Demande[] {
-  const horodatage = (demande: Demande): number | null => {
-    if (demande.submittedAt === null) return null
-    const instant = new Date(demande.submittedAt).getTime()
-    return Number.isNaN(instant) ? null : instant
-  }
-
-  return [...demandes].sort((a, b) => {
-    const ta = horodatage(a)
-    const tb = horodatage(b)
-    if (ta === null && tb === null) return 0
-    if (ta === null) return 1
-    if (tb === null) return -1
-    return sens === 'anciennes' ? ta - tb : tb - ta
-  })
+export function trierDemandes(demandes: readonly Demande[], sens: SensDeTri): Demande[] {
+  return [...demandes].sort((a, b) => (sens === 'anciennes' ? a.id - b.id : b.id - a.id))
 }
 
 /**
@@ -191,10 +167,19 @@ export interface ContexteDeFile {
   /** `0` : tout le monde. */
   auteur: number
   tri: SensDeTri
+  onglet: OngletDeFile
+  /** La recherche (`q`) : un numéro, ou un texte. `''` : aucune. */
+  recherche: string
 }
 
-/** Le défaut de la file : en attente, tout le monde, la plus ancienne d'abord. */
-export const CONTEXTE_PAR_DEFAUT: Readonly<ContexteDeFile> = { etat: 'en_attente', auteur: 0, tri: 'anciennes' }
+/** Le défaut de la file : en attente, tout le monde, le plus petit numéro d'abord. */
+export const CONTEXTE_PAR_DEFAUT: Readonly<ContexteDeFile> = {
+  etat: 'en_attente',
+  auteur: 0,
+  tri: 'anciennes',
+  onglet: 'toutes',
+  recherche: '',
+}
 
 const ETATS_DE_FILE: readonly StatutDemande[] = ['en_attente', 'validee', 'refusee', 'caduque']
 
@@ -211,6 +196,8 @@ export function contexteDepuisRequete(requete: Record<string, unknown>): Context
   const etat = premiere(requete['etat'])
   const auteur = Number(premiere(requete['auteur']))
   const tri = premiere(requete['tri'])
+  const onglet = premiere(requete['onglet'])
+  const recherche = premiere(requete['q'])
 
   return {
     etat:
@@ -221,6 +208,8 @@ export function contexteDepuisRequete(requete: Record<string, unknown>): Context
           : CONTEXTE_PAR_DEFAUT.etat,
     auteur: Number.isInteger(auteur) && auteur > 0 ? auteur : CONTEXTE_PAR_DEFAUT.auteur,
     tri: tri === 'recentes' ? 'recentes' : 'anciennes',
+    onglet: typeof onglet === 'string' && onglet in NATURES_DE_L_ONGLET ? (onglet as OngletDeFile) : CONTEXTE_PAR_DEFAUT.onglet,
+    recherche: typeof recherche === 'string' ? recherche.trim() : '',
   }
 }
 
@@ -235,15 +224,14 @@ export function requeteDeContexte(contexte: ContexteDeFile): Record<string, stri
   if (contexte.etat !== CONTEXTE_PAR_DEFAUT.etat) requete['etat'] = contexte.etat === '' ? 'toutes' : contexte.etat
   if (contexte.auteur !== CONTEXTE_PAR_DEFAUT.auteur) requete['auteur'] = String(contexte.auteur)
   if (contexte.tri !== CONTEXTE_PAR_DEFAUT.tri) requete['tri'] = contexte.tri
+  if (contexte.onglet !== CONTEXTE_PAR_DEFAUT.onglet) requete['onglet'] = contexte.onglet
+  if (contexte.recherche !== '') requete['q'] = contexte.recherche
   return requete
 }
 
-/**
- * L'ordre **affiché** : trié, puis regroupé par fiche — une demande qui partage
- * sa fiche avec une plus ancienne passe juste après elle, comme à l'écran.
- */
-export function ordreDeLaFile(demandes: Demande[], tri: SensDeTri): Demande[] {
-  return grouperParCible(trierDemandes(demandes, tri)).flatMap((groupe) => groupe.demandes)
+/** L'ordre **affiché** : par numéro, à plat, comme à l'écran. */
+export function ordreDeLaFile(demandes: readonly Demande[], tri: SensDeTri): Demande[] {
+  return trierDemandes(demandes, tri)
 }
 
 /**
