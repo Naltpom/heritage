@@ -391,10 +391,11 @@ function render(t) {
   x.setTransform(1, 0, 0, 1, 0, 0); x.globalAlpha = 1
   SCENE(t)
 }
-function lancer(scene, { affiche = 1 } = {}) {
+/** `musique` (facultatif) : la forme de la musique, pour mixer.py — voir ses ambiances. */
+function lancer(scene, { affiche = 1, musique = null } = {}) {
   SCENE = scene; AFFICHE = affiche
   window.render = render
   window.DUREE = DUREE
-  window.PISTE = { duree: DUREE, affiche, phrases: V.map((v) => ({ texte: v.texte, jetons: v.jetons, debut: v.debut, fin: v.fin, mots: v.mots })), sons: SONS }
+  window.PISTE = { duree: DUREE, affiche, phrases: V.map((v) => ({ texte: v.texte, jetons: v.jetons, debut: v.debut, fin: v.fin, mots: v.mots })), sons: SONS, ...(musique ? { musique } : {}) }
   if (!window.__capture) { const d0 = performance.now(); (function boucle() { render(((performance.now() - d0) / 1000) % DUREE); requestAnimationFrame(boucle) })() }
 }

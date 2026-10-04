@@ -57,24 +57,24 @@ const P = {
 
 /* -------- les bruitages -------- */
 son(P.avatar, 'eclosion'); son(P.nom, 'pop'); son(P.mariage, 'note1'); son(P.repas, 'note2'); son(P.jamais, 'note3')
-son(P.arbre, 'souffle', 0.6); son(P.sang, 'note2'); son(P.alliance, 'note4'); son(P.enchante, 'succes')
+son(P.arbre, 'whoosh', 0.6); son(P.sang, 'note2'); son(P.alliance, 'note4'); son(P.enchante, 'succes')
 son(P.ensemble, 'recul'); son(P.compteur + 0.4, 'impact', 0.6); son(P.reliees, 'note3', 0.6)
-son(P.fiches, 'souffle', 0.5); son(P.centre, 'pop')
+son(P.fiches, 'whoosh', 0.5); son(P.centre, 'pop')
 for (let q = 0; q < 4; q++) son(P.branches + q * 0.12, `note${q + 1}`, 0.6)
-son(P.balade, 'souffle', 0.4); son(P.zoom, 'recul', 0.5); son(P.remonte, 'souffle', 0.5); son(P.descend, 'souffle', 0.5)
+son(P.balade, 'whoosh', 0.4); son(P.zoom, 'recul', 0.5); son(P.remonte, 'whoosh', 0.5); son(P.descend, 'whoosh', 0.5)
 son(P.touche, 'tape'); son(P.touche + 0.1, 'pop'); son(P.photos, 'note2'); son(P.origine, 'tampon', 0.5)
-son(P.carte, 'souffle', 0.5); son(P.monde, 'note1', 0.6); son(P.lieux, 'note2', 0.6); son(P.liens, 'note3', 0.6)
+son(P.carte, 'whoosh', 0.5); son(P.monde, 'note1', 0.6); son(P.lieux, 'note2', 0.6); son(P.liens, 'note3', 0.6)
 son(P.chrono, 'recul', 0.6); son(P.epoque, 'pop')
-son(P.calendrier, 'souffle', 0.5); son(P.anniversaires, 'note4'); son(P.memoire, 'note2', 0.6)
-son(P.stats, 'souffle', 0.5); son(P.adore, 'pop'); son(P.doyen, 'note1'); son(P.fratrie, 'note2'); son(P.longMariage, 'note3')
-son(P.stats2, 'souffle', 0.5); son(P.prenoms, 'note1', 0.6); son(P.transmis, 'note2', 0.6); son(P.metiers, 'note3', 0.6); son(P.age, 'note4', 0.6)
-son(P.assistant, 'souffle', 0.5); sonsDeFrappe('Jean est né à Brest, pas à Lyon.', P.frappe, 26); son(P.photo, 'tape'); son(P.photo + 0.15, 'clic')
+son(P.calendrier, 'whoosh', 0.5); son(P.anniversaires, 'note4'); son(P.memoire, 'note2', 0.6)
+son(P.stats, 'whoosh', 0.5); son(P.adore, 'pop'); son(P.doyen, 'note1'); son(P.fratrie, 'note2'); son(P.longMariage, 'note3')
+son(P.stats2, 'whoosh', 0.5); son(P.prenoms, 'note1', 0.6); son(P.transmis, 'note2', 0.6); son(P.metiers, 'note3', 0.6); son(P.age, 'note4', 0.6)
+son(P.assistant, 'whoosh', 0.5); sonsDeFrappe('Jean est né à Brest, pas à Lyon.', P.frappe, 26); son(P.photo, 'tape'); son(P.photo + 0.15, 'clic')
 son(P.prepare, 'note1', 0.6); son(P.correction, 'pop'); son(P.verification, 'note3'); son(P.acceptee, 'succes')
-son(P.question, 'souffle', 0.5); son(P.question + 0.25, 'pop'); son(P.reponse, 'pop'); son(P.siennes, 'notif'); son(P.repondre, 'tape')
-son(P.retrouver, 'souffle', 0.5); son(P.cousinade, 'note1'); son(P.surprise, 'note2'); son(P.hommage, 'note3')
-son(P.suivi, 'souffle', 0.5); son(P.voyez, 'pop', 0.6); son(P.vient, 'pop', 0.6); son(P.relance, 'tape'); son(P.relance + 0.15, 'notif')
-son(P.demarches, 'souffle', 0.5); son(P.mairies, 'note1', 0.6); son(P.archives, 'note2', 0.6); son(P.directement, 'tampon', 0.5)
-son(P.prive, 'souffle', 0.5); son(P.cadenas, 'tampon', 0.7); son(P.cadenas + 0.5, 'note1', 0.6); son(P.vivants, 'note2')
+son(P.question, 'whoosh', 0.5); son(P.question + 0.25, 'pop'); son(P.reponse, 'pop'); son(P.siennes, 'notif'); son(P.repondre, 'tape')
+son(P.retrouver, 'whoosh', 0.5); son(P.cousinade, 'note1'); son(P.surprise, 'note2'); son(P.hommage, 'note3')
+son(P.suivi, 'whoosh', 0.5); son(P.voyez, 'pop', 0.6); son(P.vient, 'pop', 0.6); son(P.relance, 'tape'); son(P.relance + 0.15, 'notif')
+son(P.demarches, 'whoosh', 0.5); son(P.mairies, 'note1', 0.6); son(P.archives, 'note2', 0.6); son(P.directement, 'tampon', 0.5)
+son(P.prive, 'whoosh', 0.5); son(P.cadenas, 'tampon', 0.7); son(P.cadenas + 0.5, 'note1', 0.6); son(P.vivants, 'note2')
 son(P.venez, 'eclosion'); son(P.fin, 'final')
 
 /* -------- le mouvement -------- */
@@ -897,6 +897,7 @@ eclats(P.adore + 0.05, 470, 568, { graine: 3, n: 24, force: 0.6 })
 eclats(P.acceptee + 0.05, 540, 1540, { graine: 4, force: 0.8 })
 eclats(P.relance + 0.15, 540, 1650, { graine: 5, n: 24, force: 0.7 })
 eclats(P.fin + 0.45, 540, 760, { graine: 6, n: 56, force: 1.3 })
+for (const e of ECLATS) son(e.debut, 'eclat', 0.8)
 
 SCENE = (t) => {
   fondGrille()
@@ -924,4 +925,11 @@ SCENE = (t) => {
   const noir = 1 - prog(t, 0, 0.35)
   if (noir > 0) { x.save(); x.globalAlpha = noir; x.fillStyle = COUL.fond; x.fillRect(0, 0, W, H); x.restore() }
 }
-lancer(SCENE, { affiche: V[4].fin + 0.3 })
+// la forme de la musique : une intro, l'explosion sur « enchanté », puis des
+// vagues — à fond sur l'arbre, les stats, les retrouvailles et la fin, plus posée
+// ailleurs, une respiration sur « t'inquiète » — et un grand final sur l'emblème
+const FORME_MUSIQUE = {
+  sections: [[0, 0], [P.enchante, 2], [P.carte, 1], [P.stats, 2], [P.assistant, 1], [P.retrouver, 2], [P.prive, 0.5], [P.venez, 2]],
+  final: P.fin,
+}
+lancer(SCENE, { affiche: V[4].fin + 0.3, musique: FORME_MUSIQUE })
