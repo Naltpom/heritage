@@ -145,4 +145,9 @@ final readonly class ArbreNonBranche implements PortArbre
     {
         throw new \LogicException(self::MESSAGE);
     }
+
+    public function enUnLot(\Closure $ecritures): mixed
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
 }

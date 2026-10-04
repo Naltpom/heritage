@@ -3405,6 +3405,14 @@ ne peut pas exister :
 transactionnelle et **le contrôle est intégralement fait avant la première écriture**
 (§ 9.4, point 2).
 
+**Durée.** Les colonnes dérivées de l'arbre (`generation`, `branch`, `rank`) sont recalculées
+**une fois**, après toutes les écritures de la demande (`PortArbre::enUnLot()`), et non après
+chaque fiche, famille ou filiation. Une création de 22 fiches avec 11 unions et 11 filiations
+(forme de la demande 4178) se valide ainsi en quelques secondes sur un arbre de 2 400 fiches,
+là où elle dépassait les 30 s de PHP et rendait une `500` (04/10/2026). En filet, la
+validation relève `max_execution_time` à **55 s** pour sa requête — sous les 60 s du proxy,
+comme l'assistant — sans jamais l'abaisser. Rien ne change dans les réponses.
+
 **Issue 1 — appliquée.** `200` :
 
 ```json
