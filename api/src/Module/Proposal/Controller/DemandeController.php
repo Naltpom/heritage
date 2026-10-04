@@ -328,6 +328,19 @@ final class DemandeController extends AbstractController
             throw new Introuvable('Historique introuvable.');
         }
 
+        // Une citation, une note, un fait, un média n'ont pas de nom à masquer, mais ils
+        // appartiennent à une fiche : celle que visaient les demandes qui les ont écrits.
+        // Fermée, ou dans l'arbre d'un autre compte (révision du 2026-10-04 de
+        // l'ADR 0003), l'historique l'est aussi — le même `404`.
+        if (SubjectKind::Personne !== $kind && SubjectKind::Famille !== $kind) {
+            foreach ($revisions->ciblesDesDemandes($kind, $subjectId) as $cible) {
+                if (\in_array($cible['kind'], [SubjectKind::Personne, SubjectKind::Famille], true)
+                    && $masques->sujetFerme($cible['kind'], $cible['id'])) {
+                    throw new Introuvable('Historique introuvable.');
+                }
+            }
+        }
+
         [$page, $parPage] = $this->pagination($requete);
         $resultat = $revisions->historique($kind, $subjectId, $page, $parPage);
 

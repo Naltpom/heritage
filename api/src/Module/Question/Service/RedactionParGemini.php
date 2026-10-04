@@ -120,6 +120,9 @@ final readonly class RedactionParGemini implements RedacteurDeQuestions
         private CorpusDeLArbre $corpus,
         private AuditService $audit,
         private LoggerInterface $journal,
+        // Le corpus est borné au périmètre du destinataire (ADR 0003, révision du
+        // 2026-10-04) — par le point unique du module, pas par une règle d'ici.
+        private LacunesVisibles $visibles,
     ) {
     }
 
@@ -169,7 +172,7 @@ final readonly class RedactionParGemini implements RedacteurDeQuestions
      */
     private function appeler(array $lot): array
     {
-        $fiches = $this->arbre->fiches();
+        $fiches = $this->visibles->bornerLeCorpus($this->arbre->fiches());
 
         $reponse = $this->http->request(
             'POST',

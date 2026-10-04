@@ -457,12 +457,18 @@ nouvel ADR ; elle ne l'est pas ici.
   quand un ami s'inscrit, et une invalidation de plus serait une invalidation à oublier.
   L'`ETag` du graphe le suit sans rien de plus : il hache les fiches servies complètes,
   qui en dépendent.
-  *Ce qui reste, et qu'il faut savoir.* Le modèle de langage qui formule les **questions**
-  (ADR 0008) reçoit toujours l'arbre entier — c'est un tiers sous contrat, pas un compte.
-  La **recherche de rattachement** à l'inscription parcourt toute la base : un ami doit
-  donc être invité par un lien **personnel pré-lié à sa fiche**, jamais par le lien
-  collectif de la famille. L'`ETag` du graphe porte aussi l'empreinte globale de la base :
-  une modification dans un autre arbre le change, sans rien en dire.
+  *Fermées le même jour, après relecture.* Le modèle de langage qui formule les
+  **questions** (ADR 0008) ne reçoit plus que le périmètre du destinataire
+  (`LacunesVisibles::bornerLeCorpus()`) : la parenté qu'il calcule ne traverse jamais
+  deux arbres. Un **invité** d'un événement ne compte plus que les invités de son
+  périmètre ; l'organisateur, qui les a conviés, les compte tous. L'**historique**
+  d'une citation, d'une note, d'un fait ou d'un média se ferme comme celui de la fiche
+  que visaient les demandes qui l'ont écrit (`RevisionRepository::ciblesDesDemandes()`).
+  *Ce qui reste, et qu'il faut savoir.* La **recherche de rattachement** à l'inscription
+  parcourt toute la base : un ami doit donc être invité par un lien **personnel pré-lié
+  à sa fiche**, jamais par le lien collectif de la famille. L'`ETag` du graphe porte
+  aussi l'empreinte globale de la base : une modification dans un autre arbre le change,
+  sans rien en dire.
 - La bascule « voir comme un membre » est **tracée au journal d'audit** : c'est une
   consultation de données personnelles sous une autre identité.
 - **Un test fonctionnel par porte de sortie** (les sept ci-dessus, **plus les libellés

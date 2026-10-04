@@ -11,6 +11,7 @@ use App\Module\Core\Service\AuditService;
 use App\Module\Question\Enum\NatureDeLacune;
 use App\Module\Question\Enum\RedacteurDeQuestion;
 use App\Module\Question\Service\CorpusDeLArbre;
+use App\Module\Question\Service\LacunesVisibles;
 use App\Module\Question\Service\CoupeCircuit;
 use App\Module\Question\Service\Lacune;
 use App\Module\Question\Service\RedactionParGabarit;
@@ -18,6 +19,7 @@ use App\Module\Question\Service\RedactionParGemini;
 use App\Module\Question\Service\ReglagesDeGemini;
 use App\Module\Question\Service\TexteDeQuestion;
 use App\Tests\Question\Double\ArbreEnMemoire;
+use App\Tests\Question\Double\CercleEnMemoire;
 use App\Tests\ReinitialisationDuSchema;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\NullLogger;
@@ -339,19 +341,40 @@ final class RedactionParGeminiTest extends KernelTestCase
         self::assertStringNotContainsString('cle', $serialise);
     }
 
+    /**
+     * **Révision du 2026-10-04 de l'ADR 0003 — un arbre par famille.** L'arbre d'un autre
+     * compte ne part pas chez le tiers : le corpus est borné au périmètre du destinataire.
+     */
+    public function testLArbreDUnAutreCompteNePartPasChezLeTiers(): void
+    {
+        $corps = null;
+        $client = new MockHttpClient(function (string $methode, string $u, array $options) use (&$corps): MockResponse {
+            $corps = $options['body'] ?? null;
+
+            return $this->reponseAvecTexte('[]');
+        });
+
+        $this->rediger($client, cercle: (new CercleEnMemoire())->horsPerimetre(2));
+
+        self::assertIsString($corps);
+        self::assertStringContainsString('Prune', $corps);
+        self::assertStringNotContainsString('Thym', $corps, 'La fiche de l’autre arbre ne quitte pas l’application.');
+        self::assertSame(1, $this->lignesDAudit()[0]->getChanges()['personnes_transmises'] ?? null);
+    }
+
     /* ─────────────── Montage ─────────────── */
 
     /**
      * @return array<string, TexteDeQuestion>
      */
-    private function rediger(MockHttpClient $client, string $cle = 'une-cle-de-test'): array
+    private function rediger(MockHttpClient $client, string $cle = 'une-cle-de-test', ?CercleEnMemoire $cercle = null): array
     {
-        return $this->redacteur($client, $cle)->rediger([
+        return $this->redacteur($client, $cle, $cercle)->rediger([
             $this->lacune(NatureDeLacune::LieuDeDecesInconnu, 1, 'Prune Bréval'),
         ]);
     }
 
-    private function redacteur(MockHttpClient $client, string $cle): RedactionParGemini
+    private function redacteur(MockHttpClient $client, string $cle, ?CercleEnMemoire $cercle = null): RedactionParGemini
     {
         $arbre = (new ArbreEnMemoire())
             ->ajouter(1, 'Prune Bréval', vivante: true)
@@ -372,6 +395,7 @@ final class RedactionParGeminiTest extends KernelTestCase
             new CorpusDeLArbre(),
             $this->audit,
             new NullLogger(),
+            new LacunesVisibles($cercle ?? new CercleEnMemoire()),
         );
     }
 

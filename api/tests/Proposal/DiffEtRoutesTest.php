@@ -151,6 +151,16 @@ final class DiffEtRoutesTest extends BaseDeDemandes
             $rendu['changes'],
         );
         self::assertSame($demande->getId(), $rendu['requestId']);
+
+        // Révision du 2026-10-04 de l'ADR 0003 : un historique se rattache à la fiche
+        // que visaient les demandes qui l'ont écrit — c'est ainsi que celui d'une
+        // citation, d'une note, d'un fait ou d'un média se ferme hors du périmètre.
+        self::assertSame(
+            [['kind' => SubjectKind::Personne, 'id' => self::PERSONNE]],
+            self::getContainer()
+                ->get(\App\Module\Proposal\Repository\RevisionRepository::class)
+                ->ciblesDesDemandes(SubjectKind::Personne, self::PERSONNE),
+        );
     }
 
     /**
