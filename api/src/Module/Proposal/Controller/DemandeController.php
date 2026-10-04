@@ -6,6 +6,7 @@ namespace App\Module\Proposal\Controller;
 
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Security\ReserveAuxMembres;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Proposal\Entity\ChangeRequest;
@@ -376,11 +377,13 @@ final class DemandeController extends AbstractController
     // L'inventaire décrit une fiche de l'arbre : lecture réservée aux membres (ADR 0003,
     // révision du 01/10/2026). Un compte en attente ne dépose de toute façon rien.
     #[ReserveAuxMembres]
-    public function apercuDeSuppression(int $personneId, InventaireDeLaSuppression $inventaires): JsonResponse
+    public function apercuDeSuppression(int $personneId, InventaireDeLaSuppression $inventaires, CercleDeVisibiliteInterface $cercle): JsonResponse
     {
         $this->lecteurs->courant();
 
-        $inventaire = $inventaires->de($personneId);
+        // L'arbre d'une autre famille : `404`, comme une fiche inexistante (révision du
+        // 2026-10-04 de l'ADR 0003). L'inventaire nomme la fiche et ses descendants.
+        $inventaire = $cercle->dansLePerimetre($personneId) ? $inventaires->de($personneId) : null;
 
         if (null === $inventaire) {
             throw Introuvable::cible(SubjectKind::Personne->value, $personneId);

@@ -53,6 +53,11 @@ use App\Module\Core\Enum\Regime;
  *
  * ## Les trois règles que toute implémentation doit respecter
  *
+ * 0. **Hors du périmètre du lecteur, rien** (révision du 2026-10-04 de l'ADR 0003) : la
+ *    base peut porter l'arbre d'une autre famille — celui d'un ami invité —, et ses
+ *    fiches n'existent pas pour ce lecteur, défuntes comprises. Voir
+ *    {@see CercleDeVisibiliteInterface::dansLePerimetre()}. Les règles suivantes ne
+ *    s'appliquent qu'à l'intérieur du périmètre.
  * 1. Une personne **décédée** est un fait historique : visible de tout compte connecté,
  *    sans restriction (§ 6.2 du dossier de mission).
  * 2. Une personne **vivante** est visible de tout lecteur en régime {@see Regime::Cercle}
@@ -111,6 +116,10 @@ interface CercleDeVisibiliteInterface
      * Le lecteur courant a-t-il le droit de voir les **données protégées** de cette
      * personne — dates, lieux, sources, citations, médias, portrait ?
      *
+     * Toujours `false` hors du périmètre du lecteur ({@see dansLePerimetre()}), défunts
+     * compris : la règle 1 ci-dessus (« une personne décédée est visible de tout compte
+     * connecté ») ne vaut que dans le périmètre depuis le 2026-10-04.
+     *
      * Pour un lecteur en régime `Cercle`, `false` ne se rend plus que pour une fiche
      * confidentielle hors de son cercle (révision du 2026-10-01).
      *
@@ -121,6 +130,25 @@ interface CercleDeVisibiliteInterface
      * blanche du § 11.1 du contrat, et c'est à l'appelant de l'appliquer.
      */
     public function voitPersonne(int $personId): bool;
+
+    /**
+     * La personne est-elle dans le **périmètre** du lecteur — l'arbre de sa fiche, plus
+     * les arbres « sans lien connu » qu'aucun compte ne tient (révision du 2026-10-04 de
+     * l'ADR 0003, « un arbre par famille ») ?
+     *
+     * Ce n'est pas la question de {@see voitPersonne()} : hors périmètre, la personne
+     * **n'existe pas** pour ce lecteur — défunte comprise, et pas même sous forme de nœud
+     * masqué. L'appelant l'**omet** des listes et du graphe, et rend `404` sur ses routes,
+     * exactement comme pour un identifiant inconnu. {@see voitPersonne()} et
+     * {@see filtrerPersonnes()} rendent déjà `false` hors périmètre ; cette méthode sert
+     * aux portes qui, sans elle, **masqueraient** au lieu d'omettre.
+     *
+     * L'administrateur hors bascule a tout l'arbre dans son périmètre ; sous la bascule,
+     * celui du membre emprunté. Un identifiant dont l'arbre est inconnu n'est **pas**
+     * exclu : le périmètre ne retire que ce qu'on sait appartenir à l'arbre d'un autre
+     * compte, et les règles suivantes tiennent déjà l'inconnu pour vivant, donc masqué.
+     */
+    public function dansLePerimetre(int $personId): bool;
 
     /**
      * La même question pour plusieurs personnes d'un coup.

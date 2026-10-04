@@ -7,6 +7,7 @@ namespace App\Module\Membership\Service;
 use App\Module\Core\Enum\Regime;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Membership\Service\Port\PortArbre;
+use App\Module\Membership\Service\Port\RattachementsAuxArbres;
 use App\Module\Membership\Service\Port\VueDeLArbre;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Log\LoggerInterface;
@@ -62,6 +63,20 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  *   drapeau qu'en régime `Cercle` ;
  * - l'absence de mode « sans filtre » : ce n'est pas un `if ($estMembre) return true`, la
  *   fiche confidentielle continue de passer par le cercle.
+ *
+ * ## Révision du 2026-10-04 : un arbre par famille
+ *
+ * La base peut porter plusieurs arbres sans lien entre eux — la famille du
+ * commanditaire, puis celle de chaque ami invité. Avant toute autre règle, une personne
+ * doit être dans le **périmètre** du lecteur ({@see ArbresDistincts}) : l'arbre de sa
+ * fiche, plus les arbres qu'aucun compte ne tient (« sans lien connu »). Hors périmètre,
+ * {@see self::voitPersonne()} rend `false` **avant** la règle des défunts, et
+ * {@see self::dansLePerimetre()} dit aux portes qui masqueraient qu'il faut omettre.
+ *
+ * Le périmètre n'est pas mis en cache : la vue est déjà chargée pour la requête, le
+ * parcours des composantes est linéaire, et les rattachements tiennent en deux
+ * projections. Un périmètre mémorisé au-delà de la requête serait une invalidation de
+ * plus à ne pas oublier — l'empreinte de l'arbre ne bouge pas quand un ami s'inscrit.
  *
  * ## L'administrateur passe par un cercle complet
  *
@@ -127,11 +142,15 @@ final class CercleDeVisibilite implements CercleDeVisibiliteInterface
      */
     private ?VueDeLArbre $vue = null;
 
+    /** Les arbres de la base et leurs rattachements, résolus au plus une fois par requête. */
+    private ?ArbresDistincts $arbres = null;
+
     public function __construct(
         private readonly SourceDuLecteur $lecteurs,
         private readonly PortArbre $arbre,
         private readonly CalculDuCercle $calcul,
         private readonly ReglagesDeMembership $reglages,
+        private readonly RattachementsAuxArbres $rattachements,
         // `cache.app` et non un pool dédié `cache.cercle` : les pools se déclarent sous
         // `framework.cache.pools`, dans `config/packages/cache.yaml`, hors du périmètre de
         // ce module. Le préfixe de clé suffit à la lisibilité, et le comportement est le
@@ -151,6 +170,12 @@ final class CercleDeVisibilite implements CercleDeVisibiliteInterface
 
     public function voitPersonne(int $personId): bool
     {
+        // **Révision du 2026-10-04, et elle passe avant la règle des défunts** : l'arbre
+        // d'une autre famille n'existe pas pour ce lecteur. Voir l'en-tête.
+        if (!$this->dansLePerimetre($personId)) {
+            return false;
+        }
+
         // **Règle 1 du contrat, et elle passe avant tout le reste.** Une personne décédée
         // est visible de tout compte connecté, y compris en régime `Aucun` — qui n'atteint
         // plus l'arbre depuis le 2026-10-01 (`ReserveAuxMembres`), mais la règle reste la
@@ -177,7 +202,7 @@ final class CercleDeVisibilite implements CercleDeVisibiliteInterface
         $visibles = [];
 
         foreach ($personIds as $id) {
-            if (isset($visibles[$id])) {
+            if (isset($visibles[$id]) || !$this->dansLePerimetre($id)) {
                 continue;
             }
 
@@ -189,6 +214,25 @@ final class CercleDeVisibilite implements CercleDeVisibiliteInterface
         }
 
         return array_keys($visibles);
+    }
+
+    public function dansLePerimetre(int $personId): bool
+    {
+        $lecteur = $this->lecteur();
+
+        // L'administrateur hors bascule : tous les arbres, comme son cercle complet.
+        if ($lecteur->cercleComplet) {
+            return true;
+        }
+
+        $ancre = Regime::Cercle === $lecteur->regime ? $lecteur->personneAncre : null;
+
+        return $this->arbres()->dansLePerimetre($personId, $ancre);
+    }
+
+    private function arbres(): ArbresDistincts
+    {
+        return $this->arbres ??= ArbresDistincts::de($this->vue(), $this->rattachements->personnes());
     }
 
     /**

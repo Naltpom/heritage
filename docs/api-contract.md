@@ -1273,6 +1273,12 @@ loin), pas une erreur qui ferait croire à une panne.
 cache sous `placement.{empreinte}`) projeté pour ce lecteur. **L'objet de l'étage 1 ne sort
 jamais tel quel.**
 
+**Borné au périmètre du lecteur** (ADR 0003, révision du 2026-10-04) : l'arbre de sa fiche,
+plus les arbres qu'aucun compte ne tient (« sans lien connu »). Les arbres des autres
+comptes ne sortent pas du tout — ni nœuds, même masqués, ni familles, ni arêtes. Le front
+reçoit les arbres sans lien comme des îlots détachés de l'ego, et les masque par défaut
+(case « Personnes sans lien connu », `app/src/histoire/sansLien.ts`).
+
 #### Identifiants de nœuds
 
 Le graphe mélange 274 personnes et 103 familles dans une même liste. Les identifiants sont
@@ -1758,7 +1764,8 @@ Quatre pièges, tous déjà payés ailleurs :
 ### 5.3 La fiche d'une personne
 
 `GET /api/arbre/personnes/17` — charge complète, lecteur dans le cercle (ou personne
-décédée). Les deux sérialisations comparées d'une **même** fiche sont au § 11 ; celle-ci est
+décédée). Une personne de l'arbre d'un **autre compte** rend `404`, défunte comprise, comme
+un identifiant inconnu (ADR 0003, révision du 2026-10-04). Les deux sérialisations comparées d'une **même** fiche sont au § 11 ; celle-ci est
 la référence de forme.
 
 ```json
@@ -2008,7 +2015,8 @@ forme réduite du § 11.1.
 ### 5.4 La fiche d'une famille
 
 `GET /api/arbre/familles/28` — nécessaire parce que `modification_famille` est une nature de
-demande (§ 5.7).
+demande (§ 5.7). Une famille de l'arbre d'un autre compte rend `404` (ADR 0003, révision du
+2026-10-04).
 
 ```json
 {

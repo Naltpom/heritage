@@ -185,6 +185,30 @@ final class StatistiquesTest extends WebTestCase
         self::assertSame(10, $charge['arbre']['personnes'], 'Les comptes, eux, comptent tout le monde.');
     }
 
+    /**
+     * **Révision du 2026-10-04 de l'ADR 0003 — un arbre par famille.** Un ami est rattaché
+     * au cousin, dont l'arbre (lui seul, ici) n'est relié à aucun autre : pour le membre,
+     * cet arbre n'existe pas — ni dans les records, ni même dans les totaux.
+     */
+    public function testLArbreDUnAutreCompteNeCompteNullePart(): void
+    {
+        $ami = $this->creerUtilisateur('ami@example.test');
+        $identifiant = $ami->getId();
+        \assert(null !== $identifiant);
+        $membre = new Member($identifiant, 'ami@example.test', self::HORS_CERCLE, 'Cousin Éloigné', MatchKind::PreLie);
+        $membre->setStatus(MemberStatus::Actif);
+        $membre->activer();
+        $this->em()->persist($membre);
+        $this->em()->flush();
+
+        $this->connecterUnMembre();
+        $this->requete('GET', '/api/explorer/stats');
+
+        self::assertResponseIsSuccessful();
+        self::assertSame(9, $this->charge()['arbre']['personnes'], 'Le cousin, rattaché à un autre compte, ne compte plus.');
+        self::assertStringNotContainsString('Cousin', (string) $this->client->getResponse()->getContent());
+    }
+
     public function testLAdministrateurVoitLeDoyenConfidentiel(): void
     {
         $this->connecterUnAdministrateur();

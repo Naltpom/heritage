@@ -294,6 +294,12 @@ final class CercleSansTuf implements CercleDeVisibiliteInterface
         return Regime::Cercle;
     }
 
+    /** Un seul arbre dans ce double : tout est dans le périmètre. */
+    public function dansLePerimetre(int $personId): bool
+    {
+        return true;
+    }
+
     public function voitPersonne(int $personId): bool
     {
         return 18 !== $personId;

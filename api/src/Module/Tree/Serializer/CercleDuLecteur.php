@@ -77,7 +77,44 @@ final readonly class CercleDuLecteur
         /** @var array<int, ComposantesDeDate>|null réciprocité pré-résolue, pour les tests */
         private ?array $partages = null,
         private bool $photo = true,
+        /** @var array<int, true>|null hors périmètre pré-résolu, pour les tests ; `null` : aucun */
+        private ?array $horsPerimetre = null,
     ) {
+    }
+
+    /**
+     * Pour les tests : les personnes d'un **autre arbre** que celui du lecteur (révision du
+     * 2026-10-04 de l'ADR 0003). Sans cet appel, un cercle pré-résolu n'a qu'un arbre.
+     *
+     * @param list<int> $personneIds
+     */
+    public function avecHorsPerimetre(array $personneIds): self
+    {
+        return new self($this->regime, $this->personnes, $this->delegue, $this->reciprocite, $this->partages, $this->photo, array_fill_keys($personneIds, true));
+    }
+
+    /**
+     * La personne existe-t-elle pour ce lecteur — est-elle dans son **périmètre** : l'arbre
+     * de sa fiche, plus les arbres qu'aucun compte ne tient (révision du 2026-10-04 de
+     * l'ADR 0003, « un arbre par famille ») ?
+     *
+     * `false` : la personne **n'est pas servie du tout** — ni nœud masqué, ni fiche
+     * réduite, ni référence : `404` sur ses routes, absente des listes, défunte comprise.
+     * C'est ce qui sépare cette question de {@see self::voit()}, qui masque des champs
+     * d'une fiche gardée à sa place. Une personne sans identifiant (proposée, pas encore
+     * en base) n'appartient qu'aux demandes du lecteur : elle y est.
+     */
+    public function connait(?int $personneId): bool
+    {
+        if (null === $personneId) {
+            return true;
+        }
+
+        if (null !== $this->delegue) {
+            return $this->delegue->dansLePerimetre($personneId);
+        }
+
+        return !isset($this->horsPerimetre[$personneId]);
     }
 
     /**
@@ -98,7 +135,7 @@ final readonly class CercleDuLecteur
      */
     public function avecPartage(array $partages, bool $photo = true): self
     {
-        return new self($this->regime, $this->personnes, $this->delegue, $this->reciprocite, $partages, $photo);
+        return new self($this->regime, $this->personnes, $this->delegue, $this->reciprocite, $partages, $photo, $this->horsPerimetre);
     }
 
     /**
@@ -203,6 +240,11 @@ final readonly class CercleDuLecteur
      */
     public function voit(?int $personneId, bool $vivante): bool
     {
+        // Hors périmètre, rien — et avant la règle des défunts (révision du 2026-10-04).
+        if (!$this->connait($personneId)) {
+            return false;
+        }
+
         if (!$vivante) {
             return true;
         }
@@ -295,7 +337,7 @@ final readonly class CercleDuLecteur
             ? $this->delegue->filtrerPersonnes($population)
             : array_values(array_filter(
                 $population,
-                fn (int $id): bool => Regime::Cercle === $this->regime && isset($this->personnes[$id]),
+                fn (int $id): bool => Regime::Cercle === $this->regime && isset($this->personnes[$id]) && $this->connait($id),
             ));
 
         sort($identifiants);

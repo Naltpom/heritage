@@ -40,6 +40,12 @@ use Psr\Clock\ClockInterface;
  * 3. **Ce qui nomme** (records, prénoms, noms de famille, patronyme d'une branche) : les
  *    seules fiches visibles. Un record dont le titulaire est invisible **passe au suivant**
  *    (voir {@see Records}).
+ *
+ * Et, **avant les trois** (révision du 2026-10-04 de l'ADR 0003, « un arbre par
+ * famille ») : l'arbre d'un autre compte n'entre dans **aucun** calcul — ni total, ni
+ * moyenne. Ses fiches, ses familles, ses faits et ses citations sont retirés du relevé
+ * avant toute chose ({@see self::dansLePerimetre()}) : « 274 personnes » ne doit pas
+ * devenir « 312 » le jour où un ami saisit sa famille.
  */
 final class StatistiquesVisibles
 {
@@ -56,11 +62,55 @@ final class StatistiquesVisibles
     /** La population du relevé, avec ce que le lecteur courant voit. */
     public function population(): Population
     {
-        $releve = $this->releve->releve();
+        $releve = $this->dansLePerimetre($this->releve->releve());
         $identifiants = array_map(static fn (PersonneDuReleve $p): int => $p->id, $releve->personnes);
         $visibles = array_fill_keys($this->cercle->filtrerPersonnes($identifiants), true);
 
         return new Population($this->aTraversLaReciprocite($releve), $visibles, $this->horloge->now());
+    }
+
+    /**
+     * Le relevé borné au périmètre du lecteur : son arbre et les arbres sans lien connu.
+     * Une famille, un fait ou une citation suit les personnes qu'il touche — une famille
+     * appartient tout entière à un seul arbre.
+     */
+    private function dansLePerimetre(ReleveDeLArbre $releve): ReleveDeLArbre
+    {
+        $dedans = [];
+        $personnes = [];
+
+        foreach ($releve->personnes as $p) {
+            if ($this->cercle->dansLePerimetre($p->id)) {
+                $dedans[$p->id] = true;
+                $personnes[] = $p;
+            }
+        }
+
+        if (\count($personnes) === \count($releve->personnes)) {
+            return $releve;
+        }
+
+        $familles = [];
+        foreach ($releve->familles as $f) {
+            foreach ([$f->mariId, $f->epouseId, ...$f->enfants] as $id) {
+                if (null !== $id && isset($dedans[$id])) {
+                    $familles[$f->id] = $f;
+                    break;
+                }
+            }
+        }
+
+        $garde = static fn (?int $personId, ?int $familyId): bool => (null !== $personId && isset($dedans[$personId]))
+            || (null !== $familyId && isset($familles[$familyId]));
+
+        return new ReleveDeLArbre(
+            $personnes,
+            array_values($familles),
+            array_values(array_filter($releve->faits, static fn ($f): bool => $garde($f->personId, $f->familyId))),
+            array_values(array_filter($releve->appuis, static fn ($a): bool => $garde($a->personId, $a->familyId))),
+            $releve->lieux,
+            null !== $releve->racineId && isset($dedans[$releve->racineId]) ? $releve->racineId : null,
+        );
     }
 
     /**

@@ -50,11 +50,24 @@ final class VueDuLecteur
     /** @var array<int, bool> la réponse du cercle, une fois par personne et par requête */
     private array $memoire = [];
 
+    /** @var array<int, bool> le périmètre, une fois par personne et par requête */
+    private array $perimetre = [];
+
     /** @var array<string, true> le vrai nom de chaque personne restreinte croisée dans la requête */
     private array $nomsMasques = [];
 
     public function __construct(private readonly CercleDeVisibiliteInterface $cercle)
     {
+    }
+
+    /**
+     * La personne est-elle dans le **périmètre** du lecteur — son arbre, plus les arbres
+     * sans lien connu (révision du 2026-10-04 de l'ADR 0003) ? Hors périmètre, elle
+     * n'existe pas : les outils ne la rendent pas, même au modèle.
+     */
+    public function connait(int $personId): bool
+    {
+        return $this->perimetre[$personId] ??= $this->cercle->dansLePerimetre($personId);
     }
 
     /**
@@ -65,6 +78,15 @@ final class VueDuLecteur
      */
     public function voitEnEntier(PersonneDeLArbre $personne): bool
     {
+        // L'arbre d'un autre compte : rien, défunts compris — et son nom au carnet.
+        if (!$this->connait($personne->id)) {
+            if ('' !== trim($personne->nomAffiche)) {
+                $this->nomsMasques[trim($personne->nomAffiche)] = true;
+            }
+
+            return false;
+        }
+
         if (!$personne->vivante) {
             return true;
         }

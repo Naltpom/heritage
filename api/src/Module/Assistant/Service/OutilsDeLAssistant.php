@@ -227,7 +227,13 @@ final readonly class OutilsDeLAssistant
             return ['erreur' => 'Le paramètre « requete » est obligatoire.'];
         }
 
-        $personnes = $this->arbre->chercher(mb_substr($requete, 0, 200), self::RESULTATS_MAXIMAUX);
+        // Le modèle lit tout l'arbre **du lecteur** — pas celui des autres familles
+        // (révision du 2026-10-04 de l'ADR 0003).
+        $personnes = array_values(array_filter(
+            $this->arbre->chercher(mb_substr($requete, 0, 200), self::RESULTATS_MAXIMAUX * 2),
+            fn (PersonneDeLArbre $p): bool => $this->vue->connait($p->id),
+        ));
+        $personnes = \array_slice($personnes, 0, self::RESULTATS_MAXIMAUX);
 
         return [
             'personnes' => array_map(fn (PersonneDeLArbre $p): array => $this->personne($p, true), $personnes),
@@ -253,7 +259,9 @@ final readonly class OutilsDeLAssistant
             return ['erreur' => 'Le paramètre « personId » est un entier.'];
         }
 
-        $fiche = $this->arbre->fiche($id);
+        // L'arbre d'un autre compte n'existe pas pour ce lecteur, ni pour le modèle qui
+        // travaille en son nom : la même réponse qu'un identifiant inconnu.
+        $fiche = $this->vue->connait($id) ? $this->arbre->fiche($id) : null;
 
         if (null === $fiche) {
             return ['erreur' => \sprintf('Aucune personne n° %d dans l’arbre.', $id)];

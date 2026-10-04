@@ -69,6 +69,18 @@ final class CercleFerme implements CercleDeVisibiliteInterface
         return false;
     }
 
+    /**
+     * Aucun arbre n'est établi, donc aucun ne peut être retiré : le périmètre ne ferme que
+     * ce qu'il **sait** être l'arbre d'un autre compte. Le reste de cette classe ferme
+     * déjà tout ; `Tree`, qui sert les défunts sans elle, garde son comportement d'avant.
+     */
+    public function dansLePerimetre(int $personId): bool
+    {
+        $this->avertir();
+
+        return true;
+    }
+
     public function filtrerPersonnes(array $personIds): array
     {
         $this->avertir();
