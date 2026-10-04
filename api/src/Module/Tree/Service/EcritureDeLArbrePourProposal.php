@@ -75,6 +75,15 @@ use Doctrine\ORM\Query;
  */
 final class EcritureDeLArbrePourProposal implements PortArbre
 {
+    /**
+     * Le nombre de lots ouverts par {@see self::enUnLot()} — un compteur et non un
+     * booléen, pour qu'un lot imbriqué ne referme pas celui qui l'englobe.
+     */
+    private int $lotsOuverts = 0;
+
+    /** Un geste structurant a eu lieu dans le lot : le recalcul reste dû à sa fermeture. */
+    private bool $recalculDu = false;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly NormalisateurNom $noms,
@@ -172,8 +181,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         \assert(null !== $id);
 
         $personne->setGedcomXref($this->xref('I', $id));
-        $this->derivees->recalculer();
-        $this->em->flush();
+        $this->recalculerLesColonnesDerivees();
 
         return new LigneCreee($id, $personne->getDisplayName());
     }
@@ -336,8 +344,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         // restée au rang qu'elle tenait par la fiche effacée — visible seulement à
         // l'écran, et seulement par quelqu'un qui connaît l'arbre. C'est le même piège,
         // dans le même ordre, que `rattacherEnfant()`.
-        $this->derivees->recalculer();
-        $this->em->flush();
+        $this->recalculerLesColonnesDerivees();
 
         return $inventaire;
     }
@@ -370,8 +377,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         \assert(null !== $id);
 
         $famille->setGedcomXref($this->xref('F', $id));
-        $this->derivees->recalculer();
-        $this->em->flush();
+        $this->recalculerLesColonnesDerivees();
 
         return new LigneCreee($id, $this->libelleDuCouple($famille));
     }
@@ -446,8 +452,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         // seulement par quelqu'un qui connaît l'arbre.
         $this->em->flush();
 
-        $this->derivees->recalculer();
-        $this->em->flush();
+        $this->recalculerLesColonnesDerivees();
     }
 
     public function prevoirFiliation(?int $enfantId, ?int $parentA, ?int $parentB, bool $unionUniqueAdmise): FiliationPrevue
@@ -526,8 +531,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         // Même ordre que `rattacherEnfant()` : le `flush` d'abord, sinon le recalcul relit
         // l'arbre d'avant et l'enfant reste au rang de génération de son ancienne famille.
         $this->em->flush();
-        $this->derivees->recalculer();
-        $this->em->flush();
+        $this->recalculerLesColonnesDerivees();
 
         return new FiliationEtablie(
             $familleId,
@@ -555,8 +559,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
 
         $this->em->remove($famille);
         $this->em->flush();
-        $this->derivees->recalculer();
-        $this->em->flush();
+        $this->recalculerLesColonnesDerivees();
 
         return $libelle;
     }
@@ -631,8 +634,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         if ($lien->estUneFiliation() && null !== $autre) {
             $filiation = $this->etablirFiliation((int) $personne->getId(), $autre->getId(), null, false, null);
         } else {
-            $this->derivees->recalculer();
-            $this->em->flush();
+            $this->recalculerLesColonnesDerivees();
         }
 
         return new LienRetire(
@@ -641,6 +643,32 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             $retrait->familleSupprimee ? null : $famille->getVersion(),
             $filiation,
         );
+    }
+
+    public function enUnLot(\Closure $ecritures): mixed
+    {
+        ++$this->lotsOuverts;
+
+        try {
+            $resultat = $ecritures();
+        } catch (\Throwable $erreur) {
+            // Rien à recalculer : la transaction du validateur va tout annuler. On remet
+            // seulement l'état à zéro — le service survit à la requête dans un processus
+            // de longue durée, et un `recalculDu` resté levé fausserait la suivante.
+            if (0 === --$this->lotsOuverts) {
+                $this->recalculDu = false;
+            }
+
+            throw $erreur;
+        }
+
+        if (0 === --$this->lotsOuverts && $this->recalculDu) {
+            $this->recalculDu = false;
+            $this->derivees->recalculer();
+            $this->em->flush();
+        }
+
+        return $resultat;
     }
 
     public function empreinteDeLArbre(): string
@@ -652,6 +680,29 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         $this->empreinte->oublie();
 
         return $this->empreinte->empreinte();
+    }
+
+    /**
+     * Recalcule `generation`, `branch` et `rank` après un geste structurant — ou, dans
+     * un lot ouvert par {@see self::enUnLot()}, **note** qu'il faudra le faire à sa
+     * fermeture.
+     *
+     * Le recalcul relit l'arbre **entier** et met toutes ses lignes dans l'unité de
+     * travail : chaque `flush()` suivant les parcourt toutes. Fait geste par geste, il
+     * coûtait *gestes × taille de l'arbre* — 80 s pour la forme de la demande 4178 sur
+     * un arbre de 2 400 fiches, contre une limite de 30 s. Le `flush()`, lui, reste fait
+     * dans les deux cas : c'est lui qui pose le `gedcom_xref` et rend le geste visible
+     * aux requêtes du geste suivant.
+     */
+    private function recalculerLesColonnesDerivees(): void
+    {
+        if ($this->lotsOuverts > 0) {
+            $this->recalculDu = true;
+        } else {
+            $this->derivees->recalculer();
+        }
+
+        $this->em->flush();
     }
 
     // ------------------------------------------------------------------ lecture

@@ -840,6 +840,12 @@ final class ArbreEnMemoire implements PortArbre
         return hash('sha256', serialize([$structurantes, self::$filiations]));
     }
 
+    /** Rien à différer : le double ne tient aucune colonne dérivée. */
+    public function enUnLot(\Closure $ecritures): mixed
+    {
+        return $ecritures();
+    }
+
     /**
      * Un identifiant hors de portée des fiches posées à la main par les tests (17, 55,
      * 61…), pour qu'une ligne créée ne puisse jamais se confondre avec une ligne de

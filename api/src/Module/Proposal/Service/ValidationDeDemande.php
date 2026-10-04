@@ -70,6 +70,19 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 final readonly class ValidationDeDemande
 {
     /**
+     * Ce que PHP accorde à une validation : 55 s, sous les 60 s du `proxy_read_timeout`
+     * du nginx de l'hôte — même borne, même raison que l'assistant
+     * (`Assistant\Service\ReglagesDeLAssistant::accorderLeTemps()`).
+     *
+     * **Un filet, pas la correction.** La demande 4178 tombait à 30 s parce que chaque
+     * geste relisait l'arbre entier ; c'est {@see PortArbre::enUnLot()} qui l'a ramenée à
+     * quelques secondes. Mais une validation est une seule transaction, tout ou rien :
+     * la tuer à mi-course rend une `500` et oblige à tout refaire, là où quelques
+     * secondes de plus la laissent aboutir. Le recalcul final, lui, grandit avec l'arbre.
+     */
+    public const int DUREE_PHP_SECONDES = 55;
+
+    /**
      * @param iterable<ApplicateurDOperation> $applicateurs          découverts par le tag
      *                                                               `app.proposal.applicateur_d_operation`
      * @param iterable<ApplicateurDeDemande>  $applicateursDeDemande découverts par le tag
@@ -91,6 +104,7 @@ final readonly class ValidationDeDemande
     public function valider(ChangeRequest $demande, Lecteur $lecteur): ResultatDeValidation
     {
         $this->verifierQuIlPeutEcrire($lecteur);
+        self::accorderLeTemps();
 
         if (RequestStatus::EnAttente !== $demande->getStatus()) {
             // Un double clic ne doit pas produire deux révisions.
@@ -200,11 +214,17 @@ final readonly class ValidationDeDemande
         // lignes existantes ; l'applicateur de nature crée des lignes qui n'existaient
         // pas. Les faire converger sur `EcritureDeRevision` est ce qui permet de calculer
         // l'empreinte **une fois**, après tout, et de la poser sur tout le lot.
-        $ecritures = [
+        //
+        // `enUnLot()` : les colonnes dérivées de l'arbre (génération, branche, rang) sont
+        // recalculées **une fois**, après toutes les écritures, et non après chaque geste.
+        // Geste par geste, une création de 22 fiches relisait l'arbre entier une
+        // quarantaine de fois et dépassait les 30 s de PHP (demande 4178, 04/10/2026).
+        /** @var list<EcritureDeRevision> $ecritures */
+        $ecritures = $this->arbre->enUnLot(fn (): array => [
             ...$this->appliquerLesChamps($plan, $demande),
             ...$this->appliquerLesAutresOps($plan, $demande, $lecteur),
             ...$this->appliquerLaNature($plan, $demande, $lecteur),
-        ];
+        ]);
 
         foreach ($plan->ops as $etat) {
             $etat->op->marquerApplique($maintenant);
@@ -519,6 +539,22 @@ final readonly class ValidationDeDemande
         }
 
         throw new \LogicException(\sprintf('Aucun applicateur n\'est branché pour les ops de nature « %s » : voir ApplicateurDOperation.', $kind->value));
+    }
+
+    /**
+     * Relève `max_execution_time` pour la requête en cours — **relever, jamais
+     * abaisser** : `0` (illimité, la valeur de la ligne de commande et donc des tests) ou
+     * une valeur déjà plus haute restent tels quels.
+     */
+    private static function accorderLeTemps(): void
+    {
+        $actuel = (int) \ini_get('max_execution_time');
+
+        if (0 === $actuel || $actuel >= self::DUREE_PHP_SECONDES) {
+            return;
+        }
+
+        set_time_limit(self::DUREE_PHP_SECONDES);
     }
 
     private function verifierQuIlPeutEcrire(Lecteur $lecteur): void

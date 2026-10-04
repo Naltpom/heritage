@@ -456,4 +456,33 @@ interface PortArbre
      * l'empreinte de l'arbre demandée au § 6.3 du dossier de mission — sans geste.
      */
     public function empreinteDeLArbre(): string;
+
+    /**
+     * Exécute toutes les écritures d'une validation **en un lot** : les colonnes dérivées
+     * de l'arbre (`generation`, `branch`, `rank`) ne sont recalculées qu'**une fois**, à
+     * la fin, et non après chaque geste.
+     *
+     * C'est ce qui fait tenir une grosse création dans le temps d'une requête. Chaque
+     * geste structurant — une personne créée, une famille nouée, un enfant rattaché —
+     * relisait l'arbre entier pour ce recalcul ; la demande 4178 (22 fiches, 11 unions,
+     * 11 filiations) en enchaînait une quarantaine sur 2 373 fiches et tombait en `500`
+     * après 30 s (04/10/2026, `MaxExecutionTimeError`).
+     *
+     * Le résultat est **le même** : le placement ne dépend que de la structure de l'arbre
+     * à l'instant du calcul, et le dernier recalcul de la série était déjà le seul dont
+     * le résultat restait. Rien, entre deux gestes d'une même validation, ne lit ces
+     * colonnes.
+     *
+     * Appelée **dans la transaction** du validateur, comme le reste : le recalcul final
+     * est `flush()`é avant de rendre la main, et l'empreinte lue ensuite le voit. Une
+     * exception levée par `$ecritures` remonte telle quelle, sans recalcul — la
+     * transaction est annulée de toute façon.
+     *
+     * @template T
+     *
+     * @param \Closure(): T $ecritures
+     *
+     * @return T
+     */
+    public function enUnLot(\Closure $ecritures): mixed;
 }
