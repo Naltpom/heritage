@@ -291,6 +291,9 @@ export interface Demande {
   brouillons: BrouillonDemande[]
   liens: LienDemande[]
   revisions: RevisionDemande[]
+  /** Sur une ligne de liste (§ 6.7, 2026-10-04) : le nom des personnes que la
+   *  demande ajoute à l'arbre, « Prénoms Nom ». Absent du détail. */
+  nouvellesPersonnes?: string[]
 }
 
 /**
@@ -502,9 +505,12 @@ export interface AuteurDeLaFile {
 
 export function listerDemandesAdministration(options: {
   status?: StatutDemande | undefined
-  kind?: NatureDemande | undefined
+  /** Une nature, ou plusieurs séparées par des virgules (les onglets de la file). */
+  kind?: NatureDemande | string | undefined
   targetId?: number | undefined
   auteur?: number | undefined
+  /** Un numéro de demande (`42`, `#42`, `n° 42`), ou un texte : fiche, auteur, message, personnes proposées. */
+  q?: string | undefined
   page?: number | undefined
   parPage?: number | undefined
 }): Promise<ListePaginee<Demande>> {
@@ -514,6 +520,7 @@ export function listerDemandesAdministration(options: {
       kind: options.kind,
       targetId: options.targetId,
       auteur: options.auteur,
+      q: options.q === '' ? undefined : options.q,
       page: options.page,
       parPage: options.parPage,
     },

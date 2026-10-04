@@ -198,9 +198,11 @@ final readonly class NormaliseurDeGraphe
                 'places' => \count($projection->noeuds) - \count($nonPlaces),
                 'nonPlaces' => $nonPlaces,
             ],
-            'noeuds' => $this->noeuds($placement, $placables, $proposesParId, $libelles, $parentes, $renommage, $cercle, $avecImage, $vignettes, $this->naissancesReduites($placables, $cercle)),
-            'aretes' => $this->aretes($placement, $renommage),
-        ];
+        ] + GrapheDuPerimetre::retirer(
+            $this->noeuds($placement, $placables, $proposesParId, $libelles, $parentes, $renommage, $cercle, $avecImage, $vignettes, $this->naissancesReduites($placables, $cercle)),
+            $this->aretes($placement, $renommage),
+            $cercle,
+        );
     }
 
     /**

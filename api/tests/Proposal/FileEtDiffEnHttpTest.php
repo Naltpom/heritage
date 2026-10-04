@@ -64,6 +64,7 @@ final class FileEtDiffEnHttpTest extends CasDeTestDemandesHttp
     private const array CLES_DU_RESUME = [
         'id', 'kind', 'status', 'authorUserId', 'authorLabel', 'targetKind', 'targetId',
         'targetLabel', 'message', 'autoValidated', 'submittedAt', 'createdAt',
+        'nouvellesPersonnes',
     ];
 
     /** Les clés du § 6.7 « administration » : le résumé de l'auteur, plus de quoi décider. */
@@ -315,6 +316,37 @@ final class FileEtDiffEnHttpTest extends CasDeTestDemandesHttp
 
         self::assertSame(0, $vide['total']);
         self::assertSame([], $vide['elements'], 'Une liste vide reste une liste, pas un `null`.');
+    }
+
+    /**
+     * La recherche de la file (2026-10-04) : un **numéro** désigne sa demande seule —
+     * `42`, `#42` ou `n° 42` —, tout autre texte cherche dans la fiche visée, l'auteur et
+     * le message. Et le filtre de nature accepte une liste, pour les onglets.
+     */
+    public function testLaFileSeChercheParNumeroEtParNomEtSeFiltreParPlusieursNatures(): void
+    {
+        $this->arbre()->poser(SubjectKind::Personne, self::AUTRE_PERSONNE, 'Silice Bourrache', 3, ['surname' => 'Bourrache']);
+
+        $this->connexionContributeur();
+        $premiere = $this->deposer([$this->opTexte('surname', 'Sureau', 'SUREAU')]);
+        $surLAutre = $this->deposerSur(self::AUTRE_PERSONNE, 'surname', 'Bourrache', 'BOURRACHE', 3);
+
+        $this->connexionAdministrateur();
+
+        foreach ([(string) $premiere, '#'.$premiere, 'n° '.$premiere] as $terme) {
+            $this->requete('GET', '/api/administration/demandes?status=&q='.rawurlencode($terme));
+            self::assertSame([$premiere], array_column((array) $this->charge()['elements'], 'id'), $terme);
+        }
+
+        $this->requete('GET', '/api/administration/demandes?q=bourr');
+        self::assertSame([$surLAutre], array_column((array) $this->charge()['elements'], 'id'));
+        self::assertSame([], ((array) ((array) $this->charge()['elements'])[0])['nouvellesPersonnes']);
+
+        $this->requete('GET', '/api/administration/demandes?kind=creation_personne,ajout_lien');
+        self::assertSame(0, $this->charge()['total']);
+
+        $this->requete('GET', '/api/administration/demandes?kind=modification_personne,ajout_lien');
+        self::assertSame(2, $this->charge()['total']);
     }
 
     /**

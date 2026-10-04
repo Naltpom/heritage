@@ -97,6 +97,35 @@ final readonly class SerialiseurDeDemande
      */
     public function resume(ChangeRequest $demande): array
     {
+        return $this->resumes([$demande])[0];
+    }
+
+    /**
+     * Les lignes d'une page de liste, le nom des personnes proposées chargé **en une
+     * requête** pour toute la page (2026-10-04) : la file d'administration affiche
+     * « Ajout de Jeanne Dupont, Paul Dupont » sans ouvrir chaque demande.
+     *
+     * @param list<ChangeRequest> $demandes
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function resumes(array $demandes): array
+    {
+        $noms = $this->brouillons->nomsParDemande(array_values(array_filter(array_map(
+            static fn (ChangeRequest $d): ?int => $d->getId(),
+            $demandes,
+        ))));
+
+        return array_map(fn (ChangeRequest $d): array => $this->ligne($d, $noms[$d->getId() ?? 0] ?? []), $demandes);
+    }
+
+    /**
+     * @param list<string> $nouvellesPersonnes
+     *
+     * @return array<string, mixed>
+     */
+    private function ligne(ChangeRequest $demande, array $nouvellesPersonnes): array
+    {
         return [
             'id' => $demande->getId(),
             'kind' => $demande->getKind()->value,
@@ -112,6 +141,9 @@ final readonly class SerialiseurDeDemande
             'autoValidated' => $demande->isAutoValidated(),
             'submittedAt' => $this->horodatage($demande->getSubmittedAt()),
             'createdAt' => $this->horodatage($demande->getCreatedAt()),
+            // Les personnes que la demande ajoute à l'arbre, par leur nom tel que saisi
+            // par l'auteur — pas une fiche de l'arbre, rien à masquer.
+            'nouvellesPersonnes' => $nouvellesPersonnes,
         ];
     }
 

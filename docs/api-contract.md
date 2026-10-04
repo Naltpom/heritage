@@ -1273,6 +1273,12 @@ loin), pas une erreur qui ferait croire à une panne.
 cache sous `placement.{empreinte}`) projeté pour ce lecteur. **L'objet de l'étage 1 ne sort
 jamais tel quel.**
 
+**Borné au périmètre du lecteur** (ADR 0003, révision du 2026-10-04) : l'arbre de sa fiche,
+plus les arbres qu'aucun compte ne tient (« sans lien connu »). Les arbres des autres
+comptes ne sortent pas du tout — ni nœuds, même masqués, ni familles, ni arêtes. Le front
+reçoit les arbres sans lien comme des îlots détachés de l'ego, et les masque par défaut
+(case « Personnes sans lien connu », `app/src/histoire/sansLien.ts`).
+
 #### Identifiants de nœuds
 
 Le graphe mélange 274 personnes et 103 familles dans une même liste. Les identifiants sont
@@ -1758,7 +1764,8 @@ Quatre pièges, tous déjà payés ailleurs :
 ### 5.3 La fiche d'une personne
 
 `GET /api/arbre/personnes/17` — charge complète, lecteur dans le cercle (ou personne
-décédée). Les deux sérialisations comparées d'une **même** fiche sont au § 11 ; celle-ci est
+décédée). Une personne de l'arbre d'un **autre compte** rend `404`, défunte comprise, comme
+un identifiant inconnu (ADR 0003, révision du 2026-10-04). Les deux sérialisations comparées d'une **même** fiche sont au § 11 ; celle-ci est
 la référence de forme.
 
 ```json
@@ -2008,7 +2015,8 @@ forme réduite du § 11.1.
 ### 5.4 La fiche d'une famille
 
 `GET /api/arbre/familles/28` — nécessaire parce que `modification_famille` est une nature de
-demande (§ 5.7).
+demande (§ 5.7). Une famille de l'arbre d'un autre compte rend `404` (ADR 0003, révision du
+2026-10-04).
 
 ```json
 {
@@ -2199,7 +2207,7 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `GET` | `/api/demandes/brouillons/recherche` | `MEMBRE` | `?q=&limite=` | `200` § 6.6 bis | `422` (`q` < 2) | — |
 | `GET` | `/api/demandes/brouillons/{brouillonId}` | `MEMBRE` | — | `200` une ligne du § 6.6 bis | `404` | — |
 | `GET` | `/api/demandes/historique/{subjectKind}/{subjectId}` | `MEMBRE` | `?page=&parPage=` | `200` liste paginée | `403` `regime_en_attente` · `404` | — |
-| `GET` | `/api/administration/demandes` | `ADMIN` | `?status=&kind=&targetId=&auteur=&page=` | `200` liste paginée | — | — |
+| `GET` | `/api/administration/demandes` | `ADMIN` | `?status=&kind=&targetId=&auteur=&q=&page=` | `200` liste paginée | — | — |
 | `GET` | `/api/administration/demandes/auteurs` | `ADMIN` | — | `200` `{elements}` | — | — |
 | `GET` | `/api/administration/demandes/{id}` | `ADMIN` | — | `200` § 6.7 | `404` | — |
 | `POST` | `/api/administration/demandes/{id}/valider` | `ADMIN` | *(vide)* | `200` § 6.8 | **`409` × 6 (§ 6.8)** · `404` · `409` `vue_comme_membre_active` | — |
@@ -3265,19 +3273,25 @@ autre membre, jamais `403`.
 ### 6.7 La file d'administration et le diff
 
 `GET /api/administration/demandes?status=en_attente` — triée par `submittedAt` croissant
-(`idx_prp_request_file`), **regroupée par personne** côté affichage : l'API rend
-`targetKind`/`targetId`, le front groupe (ADR 0004).
+(`idx_prp_request_file`). Depuis le 2026-10-04, le front l'affiche **à plat, par numéro**
+(chaque ligne porte `n° {id}`, et signale les autres demandes en attente sur la même
+fiche), en onglets par nature ; l'API rend toujours `targetKind`/`targetId`.
 
 | Paramètre | Défaut | Valeurs |
 |---|---|---|
 | `status` | tous | `en_attente`, `validee`, `refusee`, `caduque`, `brouillon`, `annulee` |
-| `kind` | tous | les valeurs de `RequestKind` |
+| `kind` | tous | une valeur de `RequestKind`, ou plusieurs séparées par des virgules (les onglets) |
 | `targetId` | toutes | un `tree_person.id` |
 | `auteur` | tout le monde | un `authorUserId` |
+| `q` | — | un **numéro** de demande (`42`, `#42`, `n° 42`) la désigne seule ; tout autre texte cherche, sans casse, dans `targetLabel`, `authorLabel`, `message` et le nom des personnes proposées |
 | `page`, `parPage` | 1, 25 (max 100) | § 1.5 |
 
 Les filtres se posent **sur la même requête**, jamais l'un après l'autre en mémoire :
 `total` doit compter ce que la liste montre, sans quoi la pagination ment.
+
+Chaque ligne porte, en plus du résumé du § 6.5, `nouvellesPersonnes` : la liste des noms
+(« Prénoms Nom ») des personnes que la demande ajoute à l'arbre, vide sinon — chargée en
+une requête pour toute la page.
 
 #### `GET /api/administration/demandes/auteurs`
 

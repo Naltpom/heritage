@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Question\Service;
 
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
+use App\Module\Question\Contract\FicheEtudiee;
 use App\Module\Question\Entity\Question;
 
 /**
@@ -90,6 +91,29 @@ final class LacunesVisibles
         return array_values(array_filter(
             $questions,
             static fn (Question $q): bool => isset($visibles[$q->getSujetId()]),
+        ));
+    }
+
+    /**
+     * **Le corpus qui part chez le fournisseur du modèle, borné au périmètre du lecteur**
+     * — révision du 2026-10-04 de l'ADR 0003, « un arbre par famille ».
+     *
+     * L'ADR 0008 ouvre au tiers l'arbre entier, vivants compris, pour qu'il calcule la
+     * parenté (« la sœur de votre grand-mère »). Cette parenté ne traverse jamais deux
+     * arbres : la question d'un membre ne porte que sur son arbre, et l'arbre d'un ami n'a
+     * rien à apprendre au modèle qui l'écrit. Il n'en part donc plus : seules les fiches du
+     * périmètre du destinataire — son arbre et les arbres sans lien connu. Le corpus
+     * n'est plus commun à tous les lecteurs ; il l'est à tous ceux d'un même arbre.
+     *
+     * @param list<FicheEtudiee> $fiches
+     *
+     * @return list<FicheEtudiee>
+     */
+    public function bornerLeCorpus(array $fiches): array
+    {
+        return array_values(array_filter(
+            $fiches,
+            fn (FicheEtudiee $f): bool => $this->cercle->dansLePerimetre($f->id),
         ));
     }
 

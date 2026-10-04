@@ -38,6 +38,39 @@ class DraftPersonRepository extends ServiceEntityRepository
     }
 
     /**
+     * Le nom des personnes proposées par chaque demande, **en une requête** pour toute
+     * une page de la file : « Prénoms Nom », dans l'ordre des références provisoires.
+     *
+     * @param list<int> $demandeIds
+     *
+     * @return array<int, list<string>> demande ⇒ noms
+     */
+    public function nomsParDemande(array $demandeIds): array
+    {
+        if ([] === $demandeIds) {
+            return [];
+        }
+
+        /** @var list<array{demande: int|string, givenNames: string, surname: string}> $lignes */
+        $lignes = $this->createQueryBuilder('b')
+            ->select('IDENTITY(b.request) AS demande', 'b.givenNames', 'b.surname')
+            ->andWhere('b.request IN (:demandes)')
+            ->setParameter('demandes', $demandeIds)
+            ->orderBy('b.localRef', 'ASC')
+            ->getQuery()
+            ->getArrayResult();
+
+        $noms = [];
+
+        foreach ($lignes as $ligne) {
+            $nom = trim($ligne['givenNames'].' '.$ligne['surname']);
+            $noms[(int) $ligne['demande']][] = '' === $nom ? 'Personne sans nom' : $nom;
+        }
+
+        return $noms;
+    }
+
+    /**
      * Un brouillon par sa référence provisoire, **dans sa demande**.
      *
      * L'unicité de `local_ref` est **par demande** (`uniq_prp_draft_person_ref`) : `#p1`

@@ -12,6 +12,7 @@ use App\Module\Membership\Service\Port\ArbreNonBranche;
 use App\Module\Membership\Service\Port\PortArbre;
 use App\Tests\Membership\Double\ArbreEnMemoire;
 use App\Tests\Membership\Double\LecteurFige;
+use App\Tests\Membership\Double\RattachementsFiges;
 use App\Tests\Membership\Double\ReglagesFiges;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -286,6 +287,72 @@ final class CercleDeVisibiliteTest extends TestCase
         self::assertSame([], $cercle->filtrerPersonnes([ArbreFamilial::AIEUL, ArbreFamilial::EGO]));
     }
 
+    /**
+     * **Révision du 2026-10-04 — un arbre par famille.** L'arbre d'un autre membre
+     * n'existe pas pour ce lecteur : ni ses vivants, ni ses **défunts**, et
+     * `dansLePerimetre()` le dit aux portes qui masqueraient au lieu d'omettre.
+     */
+    public function testLArbreDUnAutreMembreNExistePasPourLeLecteur(): void
+    {
+        // L'étranger et son ancêtre forment deux arbres à part ; un ami réclame le premier.
+        $cercle = $this->cercle(
+            $this->membre(ArbreFamilial::EGO),
+            rattachements: new RattachementsFiges([ArbreFamilial::EGO, ArbreFamilial::ETRANGER]),
+        );
+
+        self::assertFalse($cercle->dansLePerimetre(ArbreFamilial::ETRANGER));
+        self::assertFalse($cercle->voitPersonne(ArbreFamilial::ETRANGER));
+        self::assertTrue($cercle->dansLePerimetre(ArbreFamilial::COUSIN), 'Son propre arbre.');
+        self::assertTrue($cercle->dansLePerimetre(ArbreFamilial::ANCETRE_ETRANGER), 'Un arbre sans lien connu.');
+        self::assertSame(
+            [ArbreFamilial::AIEUL, ArbreFamilial::ANCETRE_ETRANGER],
+            $cercle->filtrerPersonnes([ArbreFamilial::AIEUL, ArbreFamilial::ETRANGER, ArbreFamilial::ANCETRE_ETRANGER]),
+        );
+    }
+
+    /** Un défunt de l'arbre d'un autre membre ne passe pas par la règle des défunts. */
+    public function testUnDefuntDUnAutreArbreRattacheEstInvisible(): void
+    {
+        $cercle = $this->cercle(
+            $this->membre(ArbreFamilial::EGO),
+            rattachements: new RattachementsFiges([ArbreFamilial::ANCETRE_ETRANGER]),
+        );
+
+        self::assertFalse($cercle->voitPersonne(ArbreFamilial::ANCETRE_ETRANGER));
+        self::assertSame([], $cercle->filtrerPersonnes([ArbreFamilial::ANCETRE_ETRANGER]));
+    }
+
+    /** Vu depuis l'arbre de l'ami : la famille du lecteur précédent n'existe pas. */
+    public function testLAmiNeVoitPasLaFamille(): void
+    {
+        $cercle = $this->cercle(
+            $this->membre(ArbreFamilial::ETRANGER),
+            rattachements: new RattachementsFiges([ArbreFamilial::EGO, ArbreFamilial::ETRANGER]),
+        );
+
+        self::assertTrue($cercle->voitPersonne(ArbreFamilial::ETRANGER));
+        foreach ([ArbreFamilial::AIEUL, ArbreFamilial::EGO, ArbreFamilial::COUSIN] as $id) {
+            self::assertFalse($cercle->dansLePerimetre($id), (string) $id);
+            self::assertFalse($cercle->voitPersonne($id), (string) $id);
+        }
+    }
+
+    /** L'administrateur hors bascule a tous les arbres ; sous la bascule, ceux du membre. */
+    public function testLAdministrateurVoitTousLesArbres(): void
+    {
+        $rattachements = new RattachementsFiges([ArbreFamilial::EGO, ArbreFamilial::ETRANGER]);
+        $admin = $this->cercle(new LecteurDuCercle(userId: 1, regime: Regime::Cercle, cercleComplet: true), rattachements: $rattachements);
+
+        self::assertTrue($admin->dansLePerimetre(ArbreFamilial::ETRANGER));
+        self::assertTrue($admin->dansLePerimetre(ArbreFamilial::EGO));
+
+        $bascule = $this->cercle(
+            new LecteurDuCercle(userId: 1, regime: Regime::Cercle, memberId: 7, personneAncre: ArbreFamilial::EGO, sousBascule: true),
+            rattachements: $rattachements,
+        );
+        self::assertFalse($bascule->dansLePerimetre(ArbreFamilial::ETRANGER));
+    }
+
     private function membre(int $personneAncre): LecteurDuCercle
     {
         return new LecteurDuCercle(userId: 3, regime: Regime::Cercle, memberId: 7, personneAncre: $personneAncre);
@@ -301,12 +368,14 @@ final class CercleDeVisibiliteTest extends TestCase
         ?ReglagesFiges $reglages = null,
         ?ArrayAdapter $cache = null,
         ?PortArbre $arbre = null,
+        ?RattachementsFiges $rattachements = null,
     ): CercleDeVisibilite {
         return new CercleDeVisibilite(
             new LecteurFige($lecteur),
             $arbre ?? new ArbreEnMemoire(),
             new CalculDuCercle(),
             $reglages ?? new ReglagesFiges(),
+            $rattachements ?? new RattachementsFiges(),
             $cache ?? new ArrayAdapter(),
         );
     }

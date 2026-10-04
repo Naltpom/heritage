@@ -6,6 +6,7 @@ namespace App\Module\Proposal\Repository;
 
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Proposal\Entity\ChangeRequest;
+use App\Module\Proposal\Entity\DraftPerson;
 use App\Module\Proposal\Enum\RequestKind;
 use App\Module\Proposal\Enum\RequestStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
@@ -152,15 +153,23 @@ class ChangeRequestRepository extends ServiceEntityRepository
      *
      * Index : `idx_prp_request_file`.
      *
+     * `$kind` accepte une liste — les onglets de la file regroupent plusieurs natures
+     * (« Modifications », « Liens »…). `$recherche` (2026-10-04) : un **numéro de
+     * demande** (`42`, `#42`, `n° 42`) la désigne seule ; tout autre texte cherche, sans
+     * casse, dans la fiche visée, l'auteur, le message et le nom des personnes proposées.
+     *
+     * @param RequestKind|list<RequestKind>|null $kind
+     *
      * @return array{elements: list<ChangeRequest>, total: int}
      */
     public function file(
         ?RequestStatus $statut,
-        ?RequestKind $kind,
+        RequestKind|array|null $kind,
         ?int $targetId,
         int $page,
         int $parPage,
         ?int $auteurUserId = null,
+        ?string $recherche = null,
     ): array {
         $qb = $this->createQueryBuilder('d')
             ->addOrderBy('d.submittedAt', 'ASC')
@@ -170,8 +179,10 @@ class ChangeRequestRepository extends ServiceEntityRepository
             $qb->andWhere('d.status = :statut')->setParameter('statut', $statut);
         }
 
-        if (null !== $kind) {
+        if ($kind instanceof RequestKind) {
             $qb->andWhere('d.kind = :kind')->setParameter('kind', $kind);
+        } elseif (\is_array($kind) && [] !== $kind) {
+            $qb->andWhere('d.kind IN (:kinds)')->setParameter('kinds', array_map(static fn (RequestKind $k): string => $k->value, $kind));
         }
 
         if (null !== $targetId) {
@@ -180,6 +191,21 @@ class ChangeRequestRepository extends ServiceEntityRepository
 
         if (null !== $auteurUserId) {
             $qb->andWhere('d.authorUserId = :auteur')->setParameter('auteur', $auteurUserId);
+        }
+
+        $recherche = null === $recherche ? '' : trim($recherche);
+
+        if (1 === preg_match('/^(?:n°|no|#)?\s*(\d+)$/iu', $recherche, $numero)) {
+            $qb->andWhere('d.id = :numero')->setParameter('numero', (int) $numero[1]);
+        } elseif ('' !== $recherche) {
+            // Un `%` ou un `_` tapé reste un joker : la route est réservée à l'administration.
+            $motif = '%'.mb_strtolower($recherche).'%';
+            $qb->andWhere($qb->expr()->orX(
+                'LOWER(d.targetLabel) LIKE :motif',
+                'LOWER(d.authorLabel) LIKE :motif',
+                'LOWER(d.message) LIKE :motif',
+                'EXISTS (SELECT b.id FROM '.DraftPerson::class.' b WHERE b.request = d AND LOWER(CONCAT(b.givenNames, \' \', b.surname)) LIKE :motif)',
+            ))->setParameter('motif', $motif);
         }
 
         return $this->paginer($qb, $page, $parPage);

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Contract\Lecteur;
+use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Enum\RequestKind;
 use App\Module\Proposal\Enum\RequestStatus;
@@ -12,7 +14,9 @@ use App\Module\Proposal\Exception\AccesRefuse;
 use App\Module\Proposal\Exception\Conflit;
 use App\Module\Proposal\Exception\DonneesInvalides;
 use App\Module\Proposal\Exception\ErreurDeDemande;
+use App\Module\Proposal\Exception\Introuvable;
 use App\Module\Proposal\Service\Port\NotificateurDeDemandes;
+use App\Module\Proposal\Service\Port\PortArbre;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 
@@ -43,6 +47,8 @@ final readonly class DepotDeDemande
         #[AutowireIterator('app.proposal.constructeur_de_demande')]
         private iterable $constructeurs,
         private NotificateurDeDemandes $notificateur,
+        private CercleDeVisibiliteInterface $cercle,
+        private PortArbre $arbre,
     ) {
     }
 
@@ -61,6 +67,7 @@ final readonly class DepotDeDemande
 
         $this->em->persist($demande);
         $constructeur->construire($demande, $corps, $lecteur);
+        $this->verifierDansLePerimetre($demande);
 
         // Défaut `true` : le cas courant est de proposer, pas d'enregistrer un brouillon.
         // Un défaut inverse ferait que les premières contributions d'un membre restent
@@ -130,6 +137,7 @@ final readonly class DepotDeDemande
 
         try {
             $constructeur->construire($demande, $corps, $lecteur);
+            $this->verifierDansLePerimetre($demande);
             $constructeur->verifierAvantSoumission($demande);
         } finally {
             foreach ($unite->getScheduledEntityInsertions() as $entite) {
@@ -198,6 +206,40 @@ final readonly class DepotDeDemande
      * `prp_revision` porterait son nom pendant que l'écran montre quelqu'un d'autre
      * (§ 10.4, point 9 du § 18).
      */
+    /**
+     * La cible est-elle dans le **périmètre** de l'auteur — son arbre, ou un arbre sans
+     * lien connu (révision du 2026-10-04 de l'ADR 0003) ? Sinon, la même `404` qu'une
+     * cible inexistante : proposer sur l'arbre d'une autre famille ne doit ni réussir, ni
+     * dire que la fiche existe. Une famille est dans l'arbre de ses époux.
+     */
+    private function verifierDansLePerimetre(ChangeRequest $demande): void
+    {
+        $kind = $demande->getTargetKind();
+        $id = $demande->getTargetId();
+
+        if (null === $kind || null === $id) {
+            return;
+        }
+
+        $personnes = match ($kind) {
+            SubjectKind::Personne => [$id],
+            SubjectKind::Famille => $this->arbre->epouxDeFamille($id),
+            default => [],
+        };
+
+        if ([] === $personnes) {
+            return;
+        }
+
+        foreach ($personnes as $personne) {
+            if ($this->cercle->dansLePerimetre($personne)) {
+                return;
+            }
+        }
+
+        throw Introuvable::cible($kind->value, $id);
+    }
+
     private function verifierQuIlPeutEcrire(Lecteur $lecteur): void
     {
         if ($lecteur->regimeEnAttente) {

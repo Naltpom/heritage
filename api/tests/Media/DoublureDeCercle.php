@@ -108,6 +108,12 @@ final class DoublureDeCercle implements CercleDeVisibiliteInterface
         return $this->regime;
     }
 
+    /** Un seul arbre dans ce double : tout est dans le périmètre. */
+    public function dansLePerimetre(int $personId): bool
+    {
+        return true;
+    }
+
     public function voitPersonne(int $personId): bool
     {
         if (\in_array($this->lecteur, $this->cerclesComplets, true)) {

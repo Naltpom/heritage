@@ -78,8 +78,8 @@ final readonly class SerialiseurDEvenement
             // Les dates ont bougé depuis la réponse : l'écran demande de la confirmer.
             'reponseAConfirmer' => null !== $moi && $moi->estAConfirmer(),
             'peutRepondre' => null !== $moi && $this->service->peutRepondre($evenement, $aujourdhui),
-            'nombreDInvites' => \count($evenement->getInvitations()),
-            'nombreDePresents' => \count($this->avecLaReponse($evenement, Reponse::Present)),
+            'nombreDInvites' => \count($this->comptables($evenement, $lecteur)),
+            'nombreDePresents' => \count($this->avecLaReponse($evenement, Reponse::Present, $lecteur)),
         ];
     }
 
@@ -87,7 +87,7 @@ final readonly class SerialiseurDEvenement
     public function detail(Evenement $evenement, LecteurDEvenement $lecteur, \DateTimeImmutable $maintenant): array
     {
         $gere = $this->service->peutGerer($evenement, $lecteur);
-        $presents = $this->avecLaReponse($evenement, Reponse::Present);
+        $presents = $this->avecLaReponse($evenement, Reponse::Present, $lecteur);
 
         // Le nom de qui vient : tous pour qui gère (il les a invités), ceux de son cercle
         // pour un invité. Le lecteur lui-même est toujours dans son propre cercle.
@@ -108,7 +108,7 @@ final readonly class SerialiseurDEvenement
                 ], $nommes),
                 'autres' => \count($presents) - \count($nommes),
             ],
-            'nombreDAbsents' => \count($this->avecLaReponse($evenement, Reponse::Absent)),
+            'nombreDAbsents' => \count($this->avecLaReponse($evenement, Reponse::Absent, $lecteur)),
             'suivi' => $gere ? $this->suivi($evenement, $lecteur, $maintenant) : null,
         ];
     }
@@ -198,11 +198,34 @@ final readonly class SerialiseurDEvenement
     }
 
     /** @return list<Invitation> */
-    private function avecLaReponse(Evenement $evenement, Reponse $reponse): array
+    private function avecLaReponse(Evenement $evenement, Reponse $reponse, LecteurDEvenement $lecteur): array
     {
         return array_values(array_filter(
-            $evenement->getInvitations(),
+            $this->comptables($evenement, $lecteur),
             static fn (Invitation $i): bool => $reponse === $i->getReponse(),
+        ));
+    }
+
+    /**
+     * Les invitations que ce lecteur a le droit de **compter** — révision du 2026-10-04
+     * de l'ADR 0003, « un arbre par famille ». Qui gère l'événement les compte toutes : il
+     * les a lancées. Un invité ne compte que celles de son périmètre : « 12 invités, dont 3
+     * autres » ne doit pas lui apprendre que l'organisateur a aussi convié une autre
+     * famille, ni combien de ses membres.
+     *
+     * @return list<Invitation>
+     */
+    private function comptables(Evenement $evenement, LecteurDEvenement $lecteur): array
+    {
+        $invitations = $evenement->getInvitations();
+
+        if ($this->service->peutGerer($evenement, $lecteur)) {
+            return $invitations;
+        }
+
+        return array_values(array_filter(
+            $invitations,
+            fn (Invitation $i): bool => $this->cercle->dansLePerimetre($i->getPersonId()),
         ));
     }
 }

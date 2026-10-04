@@ -20,11 +20,15 @@
  *  - un nœud restreint n'a pas de ligne de dates, et on ne la reconstitue pas ;
  *  - la recherche passe par l'API, jamais par un index local ;
  *  - un filtre **estompe**, il ne retire rien : la forme de l'arbre ne bouge pas —
- *    sauf deux bascules qui RETIRENT avant la disposition, pour que l'arbre se
- *    resserre : « Famille du conjoint » et « Familles par alliance » ;
+ *    sauf trois bascules qui RETIRENT avant la disposition, pour que l'arbre se
+ *    resserre : « Famille du conjoint », « Familles par alliance » et « Personnes
+ *    sans lien connu » ;
  *  - les familles par alliance (l'ascendance du mari d'une tante, vue de la nièce)
  *    sont masquées par défaut ; affichées, chacune a son bloc, à droite des branches
  *    du lecteur (`histoire/alliances.ts`, décision du 2026-10-01) ;
+ *  - les personnes sans lien connu (qu'aucun chemin ne relie au lecteur) sont
+ *    masquées par défaut ; affichées, elles gardent leur zone à droite
+ *    (`histoire/sansLien.ts`, décision du 2026-10-04) ;
  *  - une personne vivante hors du cercle s'écrit « Personne vivante » : le serveur
  *    n'envoie plus son nom, et l'écran ne relit pas celui qu'il recevrait ;
  *  - deux étiquettes ne se recouvrent jamais (`histoire/etiquettes.ts`) ;
@@ -71,6 +75,7 @@ import ReglageFormatDesCartes from '@/components/arbre/ReglageFormatDesCartes.vu
 import InvitationFormatDesCartes from '@/components/arbre/InvitationFormatDesCartes.vue'
 import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
 import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
+import { effectifSansLien, estSansLien, noeudsSansLien, sansPersonnesSansLien } from '@/histoire/sansLien'
 import { poserEtiquettes } from '@/histoire/etiquettes'
 import {
   DUREE_VOL,
@@ -111,7 +116,7 @@ const disposition = shallowRef<DispositionHistoire | null>(null)
 const grapheCharge = shallowRef<Graphe | null>(null)
 
 /*
- * Deux bascules RETIRENT des fiches avant la disposition, pour que l'arbre se
+ * Trois bascules RETIRENT des fiches avant la disposition, pour que l'arbre se
  * recompacte (les autres filtres estompent sans rien déplacer). Ce sont des
  * préférences de ce navigateur seulement.
  *
@@ -119,9 +124,13 @@ const grapheCharge = shallowRef<Graphe | null>(null)
  *  - Les familles PAR ALLIANCE (décision du 2026-10-01) : masquées par défaut. Vue
  *    de la nièce, l'ascendance du mari de sa tante n'a aucun lien de sang avec elle ;
  *    affichée, chacune a son propre bloc, à droite des branches du lecteur.
+ *  - Les personnes SANS LIEN CONNU (décision du 2026-10-04) : masquées par défaut,
+ *    retenues une fois affichées. Aucun chemin ne les relie au lecteur ; affichées,
+ *    elles gardent leur zone « sans lien connu », au-delà du bord droit.
  */
 const CLE_CONJOINT = 'heritage.arbre.familleDuConjoint'
 const CLE_ALLIANCES = 'heritage.arbre.famillesParAlliance'
+const CLE_SANS_LIEN = 'heritage.arbre.sansLienConnu'
 /** Affichées : chacune à part (défaut, la vue d'avant) ou rangée dans les branches. */
 const CLE_ALLIANCES_DANS_L_ARBRE = 'heritage.arbre.alliancesDansLArbre'
 /** Les fratries dans l'ordre des naissances (l'aîné à gauche) ; décochée, la règle d'avant. */
@@ -143,6 +152,7 @@ function ecrirePreference(cle: string, affichee: boolean): void {
 }
 const avecConjoint = ref(lirePreference(CLE_CONJOINT, true))
 const avecAlliances = ref(lirePreference(CLE_ALLIANCES, false))
+const avecSansLien = ref(lirePreference(CLE_SANS_LIEN, false))
 const alliancesDansLArbre = ref(lirePreference(CLE_ALLIANCES_DANS_L_ARBRE, false))
 const fratriesParNaissance = ref(lirePreference(CLE_FRATRIES, false))
 const grapheSansConjoint = computed(() => (grapheCharge.value ? sansFamilleDuConjoint(grapheCharge.value) : null))
@@ -156,6 +166,8 @@ const effectifAlliances = computed(() => {
   for (const c of classerParente(g).values()) if (c.parente === 'alliance') n++
   return n
 })
+/** Le nombre de personnes sans lien connu : 0, pas de bascule. */
+const effectifSansLienConnu = computed(() => (grapheCharge.value ? effectifSansLien(grapheCharge.value) : 0))
 /*
  * Le format des fiches : `compact` (photo à gauche, la boîte du moteur) ou
  * `portrait` (photo en haut, plus grande ; boîte fixe, `histoire/cartes.ts`). Il
@@ -167,7 +179,9 @@ const enPortrait = computed(() => formatDesCartes.value === 'portrait')
 function disposer(graphe: Graphe): void {
   // Les alliances d'abord, classées sur le graphe ENTIER : c'est lui que le serveur a classé.
   const sansAlliances = avecAlliances.value ? graphe : sansFamillesParAlliance(graphe)
-  const filtre = avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
+  const sansConjoint = avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
+  // Les îlots sont repérés sur le graphe ENTIER : c'est lui qui dit ce qui est relié au lecteur.
+  const filtre = avecSansLien.value ? sansConjoint : sansPersonnesSansLien(sansConjoint, noeudsSansLien(graphe))
   // Les boîtes en dernier : le tri des familles ne lit que les liens, jamais `w` ni `h`.
   disposition.value = disposerLignees(auFormat(filtre, formatDesCartes.value), {
     alliances: alliancesDansLArbre.value ? 'dans-l-arbre' : 'a-part',
@@ -242,15 +256,23 @@ function basculerAlliances(avec: boolean): void {
   ecrirePreference(CLE_ALLIANCES, avec)
   redisposer()
 }
+/** Même chose pour les personnes sans lien connu. */
+function basculerSansLien(avec: boolean): void {
+  if (avecSansLien.value === avec) return
+  avecSansLien.value = avec
+  ecrirePreference(CLE_SANS_LIEN, avec)
+  redisposer()
+}
 /**
- * Une personne qu'on cherche alors que sa famille par alliance est masquée : la
- * recherche la trouve (l'API ne sait rien de l'affichage) ; la choisir allume la
- * bascule, et la disposition refaite la contient.
+ * Une personne qu'on cherche alors que sa famille par alliance — ou la zone des
+ * personnes sans lien connu — est masquée : la recherche la trouve (l'API ne sait rien
+ * de l'affichage) ; la choisir allume la bascule, et la disposition refaite la contient.
  */
 function afficherSonAlliance(personId: number): void {
   const g = grapheCharge.value
-  if (!g || avecAlliances.value || disposition.value?.parPersonId.has(personId)) return
-  if (estParAlliance(g, personId)) basculerAlliances(true)
+  if (!g || disposition.value?.parPersonId.has(personId)) return
+  if (!avecAlliances.value && estParAlliance(g, personId)) basculerAlliances(true)
+  else if (!avecSansLien.value && estSansLien(g, personId)) basculerSansLien(true)
 }
 const nonPlaces = ref<NoeudNonPlace[]>([])
 const chargement = ref(true)
@@ -299,6 +321,11 @@ async function charger(): Promise<void> {
     if (demandee !== null && !avecAlliances.value && estParAlliance(graphe, demandee)) {
       avecAlliances.value = true
       ecrirePreference(CLE_ALLIANCES, true)
+    }
+    // De même vers une personne sans lien connu, zone masquée.
+    if (demandee !== null && !avecSansLien.value && estSansLien(graphe, demandee)) {
+      avecSansLien.value = true
+      ecrirePreference(CLE_SANS_LIEN, true)
     }
     disposer(graphe)
     nonPlaces.value = graphe.calque.nonPlaces
@@ -1428,6 +1455,25 @@ onBeforeUnmount(() => {
               <span class="text-[11px] text-attenue">{{ o.sous }}</span>
             </button>
           </div>
+        </template>
+        <template v-if="effectifSansLienConnu > 0">
+          <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Sans lien connu</div>
+          <button
+            type="button"
+            role="checkbox"
+            :aria-checked="avecSansLien"
+            class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
+            @click="basculerSansLien(!avecSansLien)"
+          >
+            <span
+              class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
+              :class="avecSansLien ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+            >{{ avecSansLien ? '✓' : '' }}</span>
+            <span class="flex flex-1 flex-col leading-tight">
+              <span class="text-sm">Afficher les personnes sans lien connu · {{ effectifSansLienConnu }}</span>
+              <span class="text-xs text-attenue">aucun lien ne les relie encore à vous</span>
+            </span>
+          </button>
         </template>
         <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Fratries</div>
         <button
