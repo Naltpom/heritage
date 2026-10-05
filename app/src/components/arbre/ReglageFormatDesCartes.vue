@@ -23,6 +23,9 @@ const OPTIONS: readonly { valeur: FormatDeCarte; libelle: string }[] = [
 </script>
 
 <template>
-  <div class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Affichage des fiches</div>
-  <Segmente :options="OPTIONS" :valeur="format" etiquette="Format des fiches" :colonnes="2" @choisir="choisirFormat" />
+  <!-- Une ligne de la section « Affichage » des filtres : un libellé, pas un titre de section. -->
+  <div class="flex flex-col gap-1.5">
+    <span class="text-sm">Affichage des fiches</span>
+    <Segmente :options="OPTIONS" :valeur="format" etiquette="Format des fiches" :colonnes="2" @choisir="choisirFormat" />
+  </div>
 </template>

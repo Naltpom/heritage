@@ -65,6 +65,7 @@ routeur.afterEach((vers) => {
     // Dans Explorer, « Explorer » : la rangée d'onglets nomme déjà l'écran.
     titre: titreDEntete(String(vers.name ?? ''), vers.meta),
     parent: vers.meta.parent ?? null,
+    rechercheLocale: vers.meta.rechercheLocale === true,
   })
 
   // Les tiroirs du mobile se referment en changeant de page. C'est ici et non

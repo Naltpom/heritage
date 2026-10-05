@@ -428,8 +428,8 @@ function dateLisible(valeur: string | null | undefined): string {
         <aside
           v-if="ficheAffichee"
           data-fiche-partagee
-          class="max-md:hidden md:sticky md:top-4 md:overflow-y-auto md:overscroll-contain md:pr-1"
-          :class="decidable ? 'md:max-h-[calc(100dvh-8rem)]' : 'md:max-h-[calc(100dvh-2rem)]'"
+          class="max-md:hidden md:sticky md:top-[72px] md:overflow-y-auto md:overscroll-contain md:pr-1"
+          :class="decidable ? 'md:max-h-[calc(100dvh-72px-7rem)]' : 'md:max-h-[calc(100dvh-72px-1rem)]'"
           aria-label="Fiche de la personne"
         >
           <FicheDeLaDemande

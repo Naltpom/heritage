@@ -254,6 +254,9 @@
        natifs) dans le bon thème. Sans cela, une barre de défilement claire
        borde un arbre sombre. */
     color-scheme: light dark;
+    /* L'en-tête est collé en haut (56 px, 52 sur téléphone) : une ancre ou un
+       champ amené à l'écran s'arrête dessous, pas derrière. */
+    scroll-padding-top: 64px;
   }
 
   body {

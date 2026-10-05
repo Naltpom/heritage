@@ -3,6 +3,8 @@ import {
   ECHELLE_MAX,
   echelleMin,
   jaugeDuZoom,
+  bornerSeuilDesNoms,
+  SEUIL_DES_NOMS,
   reductionDuTexte,
   echelleVerticale,
   niveau,
@@ -25,6 +27,26 @@ describe('niveaux de détail', () => {
     expect(niveau(0.45)).toBe(2)
     expect(niveau(0.44)).toBe(1)
     expect(niveau(1.8)).toBe(2)
+  })
+
+  it('écrit les noms dès le seuil choisi par le lecteur (grand écran, télévision)', () => {
+    expect(niveau(0.3, 0.25)).toBe(2)
+    expect(niveau(0.2, 0.25)).toBe(1)
+    // Relevé : les noms attendent davantage de zoom.
+    expect(niveau(0.6, 0.7)).toBe(1)
+    expect(niveau(0.7, 0.7)).toBe(2)
+  })
+
+  it('passe de l’Ensemble aux Fiches quand le seuil descend sous celui des familles', () => {
+    expect(niveau(0.11, 0.1)).toBe(2)
+    expect(niveau(0.09, 0.1)).toBe(0)
+  })
+
+  it('borne le seuil des noms, et rend le défaut pour une valeur illisible', () => {
+    expect(bornerSeuilDesNoms(0)).toBe(SEUIL_DES_NOMS.min)
+    expect(bornerSeuilDesNoms(5)).toBe(SEUIL_DES_NOMS.max)
+    expect(bornerSeuilDesNoms(Number.NaN)).toBe(0.45)
+    expect(bornerSeuilDesNoms(0.3)).toBe(0.3)
   })
 })
 

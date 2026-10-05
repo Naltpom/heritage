@@ -72,6 +72,7 @@ import { auFormat, entreePortrait, geometriePortrait, texteDePortrait } from '@/
 import { useFormatDesCartes } from '@/composables/formatDesCartes'
 import ReglageFormatDesCartes from '@/components/arbre/ReglageFormatDesCartes.vue'
 import InvitationFormatDesCartes from '@/components/arbre/InvitationFormatDesCartes.vue'
+import InterrupteurFiltre from '@/components/arbre/InterrupteurFiltre.vue'
 import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
 import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
 import { effectifSansLien, estSansLien, noeudsSansLien, sansPersonnesSansLien } from '@/histoire/sansLien'
@@ -79,6 +80,7 @@ import { poserEtiquettes } from '@/histoire/etiquettes'
 import {
   DUREE_VOL,
   PALIERS,
+  SEUILS,
   ajusterLargeur,
   niveau as niveauDe,
   syDe,
@@ -90,11 +92,13 @@ import {
   centrerSur,
   jaugeDuZoom,
   reductionDuTexte,
+  SEUIL_DES_NOMS,
+  bornerSeuilDesNoms,
   type Cadrage,
   type Canevas,
 } from '@/histoire/vue'
 import { memoriserVue, reprendreVue, type VueMemorisee } from '@/histoire/retour'
-import { ligneDe } from '@/histoire/ligneDirecte'
+import { ligneDe, seulementLaLigne } from '@/histoire/ligneDirecte'
 import { basculerFamille, familleDuClic, familleEclairee } from '@/histoire/eclairage'
 import PortraitFiche from '@/components/personne/PortraitFiche.vue'
 import IdentiteFiche from '@/components/personne/IdentiteFiche.vue'
@@ -134,6 +138,10 @@ const CLE_SANS_LIEN = 'heritage.arbre.sansLienConnu'
 const CLE_ALLIANCES_DANS_L_ARBRE = 'heritage.arbre.alliancesDansLArbre'
 /** Les fratries dans l'ordre des naissances (l'aîné à gauche) ; décochée, la règle d'avant. */
 const CLE_FRATRIES = 'heritage.arbre.fratriesParNaissance'
+/** La ligne directe : les autres fiches estompées (défaut), ou retirées de l'écran. */
+const CLE_LIGNE_SEULE = 'heritage.arbre.ligneDirecteSeule'
+/** Le zoom à partir duquel les noms s'écrivent (niveau Fiches), en fraction. */
+const CLE_SEUIL_DES_NOMS = 'heritage.arbre.seuilDesNoms'
 function lirePreference(cle: string, parDefaut: boolean): boolean {
   try {
     const v = localStorage.getItem(cle)
@@ -154,6 +162,24 @@ const avecAlliances = ref(lirePreference(CLE_ALLIANCES, false))
 const avecSansLien = ref(lirePreference(CLE_SANS_LIEN, false))
 const alliancesDansLArbre = ref(lirePreference(CLE_ALLIANCES_DANS_L_ARBRE, false))
 const fratriesParNaissance = ref(lirePreference(CLE_FRATRIES, false))
+const ligneSeule = ref(lirePreference(CLE_LIGNE_SEULE, false))
+function lireSeuilDesNoms(): number {
+  try {
+    const v = localStorage.getItem(CLE_SEUIL_DES_NOMS)
+    return v === null ? SEUIL_DES_NOMS.defaut : bornerSeuilDesNoms(Number(v))
+  } catch {
+    return SEUIL_DES_NOMS.defaut
+  }
+}
+const seuilDesNoms = ref(lireSeuilDesNoms())
+watch(seuilDesNoms, (v) => {
+  try {
+    if (v === SEUIL_DES_NOMS.defaut) localStorage.removeItem(CLE_SEUIL_DES_NOMS)
+    else localStorage.setItem(CLE_SEUIL_DES_NOMS, String(v))
+  } catch {
+    /* navigation privée : le réglage vaut pour la visite */
+  }
+})
 const grapheSansConjoint = computed(() => (grapheCharge.value ? sansFamilleDuConjoint(grapheCharge.value) : null))
 const aUneFamilleDeConjoint = computed(() => grapheSansConjoint.value !== grapheCharge.value)
 const aDesAlliances = computed(() => (grapheCharge.value ? aDesFamillesParAlliance(grapheCharge.value) : false))
@@ -181,8 +207,12 @@ function disposer(graphe: Graphe): void {
   const sansConjoint = avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
   // Les îlots sont repérés sur le graphe ENTIER : c'est lui qui dit ce qui est relié au lecteur.
   const filtre = avecSansLien.value ? sansConjoint : sansPersonnesSansLien(sansConjoint, noeudsSansLien(graphe))
+  // La ligne directe SEULE : tout le reste quitte l'écran, et l'arbre se refait sur elle.
+  const racine = cleLigneSeule.value
+  cleDisposee = racine
+  const reduit = racine !== null && filtre.noeuds.some((n) => n.id === racine) ? seulementLaLigne(filtre, racine) : filtre
   // Les boîtes en dernier : le tri des familles ne lit que les liens, jamais `w` ni `h`.
-  disposition.value = disposerLignees(auFormat(filtre, formatDesCartes.value), {
+  disposition.value = disposerLignees(auFormat(reduit, formatDesCartes.value), {
     alliances: alliancesDansLArbre.value ? 'dans-l-arbre' : 'a-part',
     fratriesParNaissance: fratriesParNaissance.value,
   })
@@ -270,6 +300,13 @@ function basculerSansLien(avec: boolean): void {
 function afficherSonAlliance(personId: number): void {
   const g = grapheCharge.value
   if (!g || disposition.value?.parPersonId.has(personId)) return
+  // Hors de la ligne directe affichée seule : l'arbre entier revient, puis on la cherche.
+  if (cleLigneSeule.value !== null) {
+    filtres.ligneDirecte = false
+    racineFigee.value = null
+    assurerLaDisposition()
+    if (disposition.value?.parPersonId.has(personId)) return
+  }
   if (!avecAlliances.value && estParAlliance(g, personId)) basculerAlliances(true)
   else if (!avecSansLien.value && estSansLien(g, personId)) basculerSansLien(true)
 }
@@ -364,12 +401,12 @@ const canevas = computed<Canevas>(() => ({
 
 const s = computed(() => cadrage.value.s)
 const sy = computed(() => syDe(cadrage.value.s, canevas.value))
-const niveau = computed(() => niveauDe(cadrage.value.s))
+const niveau = computed(() => niveauDe(cadrage.value.s, seuilDesNoms.value))
 
 /** La jauge de zoom, pour l'administration seulement : un repère chiffré sur
  *  les captures d'écran (« à 30 % les noms se chevauchent »), pas un réglage. */
 const { administrateur } = useSession()
-const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(cadrage.value.s, canevas.value) : null))
+const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(cadrage.value.s, canevas.value, seuilDesNoms.value) : null))
 const ensemble = computed(() => niveau.value === 0)
 
 const versEcranX = (x: number): number => cadrage.value.tx + x * s.value
@@ -409,14 +446,18 @@ function ajuster(): void {
 }
 
 function reprendre(v: VueMemorisee): void {
+  filtres.ligneDirecte = v.filtres.ligneDirecte
+  racineFigee.value = v.filtres.racineLigne ?? null
+  // Une vue mémorisée avant le 05/10/2026 : « Personnes vivantes » est devenu la pastille « Vivants ».
+  if (v.filtres.vivants) filtres.qualite = 'vivants'
+  // La ligne seule refait la disposition : le point mémorisé est dans CELLE-LÀ.
+  assurerLaDisposition()
   const d = disposition.value!
   const c = canevas.value
   cadrage.value = centrerSur(bornerEchelle(v.s, c), c, v.x, v.y, taille.value.l / 2, taille.value.h / 2)
   selection.value = v.selection !== null && d.parId.has(v.selection) ? v.selection : null
   const quarts = new Set<string>(d.quarts.map((q) => q.branche))
   filtres.masquees = v.filtres.masquees.filter((b): b is BrancheDeQuart => quarts.has(b))
-  filtres.ligneDirecte = v.filtres.ligneDirecte
-  filtres.vivants = v.filtres.vivants
 }
 
 /** Au départ vers une fiche : ce qu'il faut pour revenir exactement ici. */
@@ -427,7 +468,12 @@ function memoriserLaVue(): void {
     y: c.y,
     s: cadrage.value.s,
     selection: selection.value,
-    filtres: { masquees: [...filtres.masquees], ligneDirecte: filtres.ligneDirecte, vivants: filtres.vivants },
+    filtres: {
+      masquees: [...filtres.masquees],
+      ligneDirecte: filtres.ligneDirecte,
+      vivants: false,
+      racineLigne: racineFigee.value,
+    },
   })
 }
 
@@ -458,6 +504,17 @@ function zoomer(facteur: number): void {
   cadrage.value = zoomAutour(cadrage.value, canevas.value, taille.value.l / 2, taille.value.h / 2, facteur)
 }
 
+/**
+ * Le palier Familles (30 %) tombe sous le seuil des noms quand le lecteur l'a abaissé
+ * à moins de 30 % : il vise alors le milieu entre le seuil des familles et celui des noms,
+ * pour rester un vrai palier Familles.
+ */
+function echelleDuPalier(i: number, echelle: number): number {
+  const seuil = seuilDesNoms.value
+  if (i !== 1 || seuil > echelle) return echelle
+  return seuil > SEUILS[0] ? (SEUILS[0] + seuil) / 2 : echelle
+}
+
 function allerAuPalier(i: number): void {
   const d = disposition.value
   if (!d) return
@@ -468,7 +525,7 @@ function allerAuPalier(i: number): void {
     voler(cible.s, centre.x, centre.y)
   } else {
     const c = centreMonde()
-    voler(palier.echelle, c.x, c.y)
+    voler(echelleDuPalier(i, palier.echelle), c.x, c.y)
   }
 }
 
@@ -637,7 +694,7 @@ function voirFiche(f: FicheHistoire): void {
 function choisir(f: FicheHistoire): void {
   if (Date.now() - finDeGlisser < 80) return
   selection.value = f.id
-  if (s.value < 0.42) voler(1, f.cx, f.y + f.h / 2)
+  if (s.value < seuilDesNoms.value) voler(Math.max(1, seuilDesNoms.value), f.cx, f.y + f.h / 2)
 }
 
 /*
@@ -668,8 +725,15 @@ function surClicDuCanevas(e: MouseEvent): void {
 }
 
 function meTrouver(): void {
+  // La ligne seule d'une autre personne, où vous n'êtes pas : on rend l'arbre entier.
+  const ego = egoDuLecteur.value
+  if (ego !== null && cleLigneSeule.value !== null && !disposition.value?.parId.has(ego)) {
+    filtres.ligneDirecte = false
+    racineFigee.value = null
+    assurerLaDisposition()
+  }
   const d = disposition.value
-  const moi = d?.parId.get(d.ego)
+  const moi = ego !== null ? d?.parId.get(ego) : undefined
   if (!moi) return
   selection.value = moi.id
   voler(1, moi.cx, moi.y + moi.h / 2)
@@ -682,13 +746,16 @@ function meTrouver(): void {
 const filtres = reactive({
   masquees: [] as BrancheDeQuart[],
   ligneDirecte: false,
-  vivants: false,
-  /** Le filtre documentaire de la barre (Vérifiés, Sans source…) : un seul à la fois. */
+  /**
+   * Le filtre documentaire de la barre (Vérifiés, Sans source, Vivants…) : un seul à
+   * la fois. « Vivants » y est ; la case « Personnes vivantes » qui le doublait plus
+   * bas dans les filtres a été retirée (05/10/2026).
+   */
   qualite: null as IdFiltre | null,
 })
 /** Le nombre de filtres actifs, pour « Filtres · n » et le bouton de l'en-tête. */
 const nombreFiltresActifs = computed(
-  () => filtres.masquees.length + (filtres.ligneDirecte ? 1 : 0) + (filtres.vivants ? 1 : 0) + (filtres.qualite ? 1 : 0),
+  () => filtres.masquees.length + (filtres.ligneDirecte ? 1 : 0) + (filtres.qualite ? 1 : 0),
 )
 
 function fermerFiltres(): void {
@@ -697,7 +764,7 @@ function fermerFiltres(): void {
 function toutAfficher(): void {
   filtres.masquees = []
   filtres.ligneDirecte = false
-  filtres.vivants = false
+  racineFigee.value = null
   filtres.qualite = null
 }
 function basculerQualite(id: IdFiltre): void {
@@ -713,6 +780,32 @@ function basculerBranche(b: BrancheDeQuart): void {
   filtres.masquees = filtres.masquees.includes(b) ? filtres.masquees.filter((x) => x !== b) : [...filtres.masquees, b]
 }
 
+/*
+ * LE SEUIL DES NOMS : le zoom à partir duquel noms, prénoms et dates s'écrivent. Une
+ * jauge des filtres, en pour cent, de 10 à 90 (45 par défaut). Sur un écran 2K, 4K ou une
+ * télévision, les fiches restent grandes bien en deçà de 45 % : on l'abaisse pour lire
+ * les noms de plus loin. Ce n'est pas un filtre : ni dans « Filtres · n », ni dans
+ * « Réinitialiser » — une préférence de l'appareil, comme le format des fiches.
+ */
+const SEUIL_MIN = Math.round(SEUIL_DES_NOMS.min * 100)
+const SEUIL_MAX = Math.round(SEUIL_DES_NOMS.max * 100)
+const SEUIL_DEFAUT = Math.round(SEUIL_DES_NOMS.defaut * 100)
+const seuilEnPourcent = computed({
+  get: () => Math.round(seuilDesNoms.value * 100),
+  set: (p: number) => (seuilDesNoms.value = bornerSeuilDesNoms(p / 100)),
+})
+/** Le zoom affiché en ce moment, en pour cent : le repère sous la jauge. */
+const zoomEnPourcent = computed(() => Math.round(cadrage.value.s * 100))
+/** La place du zoom actuel sur la jauge (0 à 1), `null` hors de ses bornes. */
+const repereDuZoom = computed(() => {
+  const p = (zoomEnPourcent.value - SEUIL_MIN) / (SEUIL_MAX - SEUIL_MIN)
+  return p >= 0 && p <= 1 ? p : null
+})
+/** « Les noms dès maintenant » : le seuil pris au zoom affiché. */
+function seuilAuZoomActuel(): void {
+  seuilDesNoms.value = bornerSeuilDesNoms(Math.floor(cadrage.value.s * 20) / 20)
+}
+
 const OPTIONS_ALLIANCES = [
   { dans: false, libelle: 'À part', sous: 'chacune son bloc, à droite' },
   { dans: true, libelle: 'Dans mon arbre', sous: 'dans la branche qui les relie' },
@@ -726,11 +819,6 @@ const OPTIONS_ALLIANCES = [
 const VIDEO_FILTRES = videoParId('filtres-de-l-arbre')
 const aideFiltresOuverte = ref(false)
 
-const BASCULES = [
-  { cle: 'ligneDirecte', libelle: 'Ligne directe', sous: 'ancêtres et descendants' },
-  { cle: 'vivants', libelle: 'Personnes vivantes', sous: '' },
-] as const
-
 /**
  * La branche d'une fiche pour la TEINTE et les filtres : une fiche par alliance n'est
  * d'aucune branche du lecteur, quelle que soit celle que le serveur lui donne.
@@ -741,7 +829,6 @@ const brancheDe = (f: FicheHistoire): string =>
 function passe(f: FicheHistoire): boolean {
   if (brancheDe(f) !== 'hors' && (filtres.masquees as Branche[]).includes(f.branche)) return false
   if (filtres.ligneDirecte && enLigne(f) === null) return false
-  if (filtres.vivants && !f.noeud.vivant) return false
   if (filtres.qualite) {
     const def = FILTRES.find((d) => d.id === filtres.qualite)
     if (def && !def.test(f.noeud as NoeudPersonneEtendu)) return false
@@ -753,10 +840,81 @@ function passe(f: FicheHistoire): boolean {
  * LA LIGNE DIRECTE suit la personne choisie : ses ancêtres et ses descendants (les
  * vôtres quand personne n'est choisi). Une seule bascule, partagée par les Filtres, le
  * volet et le panneau du téléphone — elle reste cochée d'une personne à l'autre.
+ *
+ * DEUX MODES (05/10/2026) : « Estomper les autres », la vue d'avant — tout l'arbre
+ * reste en place, les autres fiches pâlissent ; et « Seulement elle » — les autres
+ * QUITTENT l'écran et la disposition se refait sur la ligne, resserrée. Dans ce
+ * second mode, la racine est FIGÉE au moment où on l'allume : choisir une fiche pour
+ * la lire ne refait pas tout l'arbre autour d'elle ; « Suivre sa ligne directe », dans
+ * son panneau, l'y déplace.
  */
-const racineDeLaLigne = computed<string | null>(() =>
-  filtres.ligneDirecte ? (ficheChoisie.value?.id ?? disposition.value?.ego ?? null) : null,
+const racineFigee = ref<string | null>(null)
+/** L'ego du lecteur, tel que le serveur l'a donné — pas celui d'une disposition réduite. */
+const egoDuLecteur = computed(() => grapheCharge.value?.ego ?? disposition.value?.ego ?? null)
+const racineDeLaLigne = computed<string | null>(() => {
+  if (!filtres.ligneDirecte) return null
+  if (ligneSeule.value) return racineFigee.value ?? egoDuLecteur.value
+  return ficheChoisie.value?.id ?? egoDuLecteur.value
+})
+/** La racine de la ligne quand elle est SEULE à l'écran ; `null` sinon. C'est la clé de la disposition. */
+const cleLigneSeule = computed<string | null>(() => (ligneSeule.value ? racineDeLaLigne.value : null))
+/** La clé avec laquelle la disposition affichée a été faite. */
+let cleDisposee: string | null = null
+/** La disposition refaite si la ligne seule a changé depuis la dernière (sans attendre l'observateur). */
+function assurerLaDisposition(): void {
+  if (cleLigneSeule.value !== cleDisposee) redisposerSurLaLigne()
+}
+/**
+ * Refait la disposition quand la ligne seule s'allume, s'éteint ou change de racine.
+ * Allumée : l'arbre réduit est ajusté à l'écran. Éteinte : l'arbre entier revient,
+ * centré sur la personne dont on suivait la ligne, au même zoom.
+ */
+function redisposerSurLaLigne(): void {
+  const avant = cleDisposee
+  const echelle = cadrage.value.s
+  redisposer()
+  const d = disposition.value
+  if (cleDisposee !== null || avant === null || !d) return
+  const f = d.parId.get(avant)
+  if (!f) return
+  const c = canevas.value
+  cadrage.value = centrerSur(bornerEchelle(echelle, c), c, f.cx, f.y + f.h / 2, taille.value.l / 2, taille.value.h / 2)
+}
+watch(cleLigneSeule, (cle) => {
+  if (cle !== cleDisposee) redisposerSurLaLigne()
+})
+watch(ligneSeule, (seule) => ecrirePreference(CLE_LIGNE_SEULE, seule))
+
+/** Allume ou éteint la ligne directe ; allumée, elle part de la personne choisie (ou de vous). */
+function basculerLigneDirecte(): void {
+  filtres.ligneDirecte = !filtres.ligneDirecte
+  racineFigee.value = filtres.ligneDirecte ? (ficheChoisie.value?.id ?? null) : null
+}
+function choisirModeLigne(seule: boolean): void {
+  // On fige la ligne qu'on regarde : celle de la personne choisie, sinon la vôtre.
+  if (seule && !ligneSeule.value) racineFigee.value = ficheChoisie.value?.id ?? null
+  ligneSeule.value = seule
+}
+/**
+ * La case « Afficher sa ligne directe » du panneau d'une personne. Cochée si c'est SA
+ * ligne qu'on voit ; en mode « Seulement elle », la cocher pour une autre personne y
+ * déplace la ligne au lieu de l'éteindre.
+ */
+const ligneDeLaChoisie = computed(
+  () => filtres.ligneDirecte && (!ligneSeule.value || racineDeLaLigne.value === ficheChoisie.value?.id),
 )
+function basculerLigneDeLaChoisie(): void {
+  if (filtres.ligneDirecte && ligneSeule.value && !ligneDeLaChoisie.value) {
+    racineFigee.value = ficheChoisie.value?.id ?? null
+    return
+  }
+  basculerLigneDirecte()
+}
+const OPTIONS_MODE_LIGNE = [
+  { valeur: 'estompee', libelle: 'Estomper les autres' },
+  { valeur: 'seule', libelle: 'Seulement elle' },
+] as const
+
 const ligne = computed<{ ascendants: Set<string>; descendants: Set<string> } | null>(() => {
   const racine = racineDeLaLigne.value
   const g = grapheCharge.value
@@ -774,8 +932,9 @@ const surligner = computed(() => filtres.ligneDirecte)
 /** Les traits dorés ne dessinent que VOTRE ligne directe : pour une autre personne, les fiches parlent. */
 const surlignerTraits = computed(() => surligner.value && racineDeLaLigne.value === disposition.value?.ego)
 const libelleLigne = computed(() => {
-  const f = ficheChoisie.value
-  if (!f || f.id === disposition.value?.ego) return 'Ma ligne directe'
+  const racine = filtres.ligneDirecte ? racineDeLaLigne.value : (ficheChoisie.value?.id ?? null)
+  const f = racine !== null ? disposition.value?.parId.get(racine) : undefined
+  if (!f || f.id === egoDuLecteur.value) return 'Ma ligne directe'
   const nom = f.noeud.visibilite === 'restreinte' ? 'cette personne' : f.noeud.displayName
   return `Ligne directe de ${nom}`
 })
@@ -1333,6 +1492,11 @@ onMounted(() => {
       if (premierAjustement) ajuster()
     })
     observateur.observe(el)
+    // Un bandeau qu'on ferme au-dessus (« Plus tard ») remonte l'arbre sans changer sa
+    // taille : c'est `<main>` qui grandit. On le surveille aussi, sinon un vide restait
+    // sous la recherche du bas.
+    const main = racine.value?.parentElement
+    if (main) observateur.observe(main)
   }
   void charger()
 })
@@ -1357,12 +1521,13 @@ onBeforeUnmount(() => {
     <!-- La barre d'écran commune : vue, pastilles, compteur, Filtres · n, actions. -->
     <BarreEcran
       ecran="Arbre"
+      titre-pastilles="Afficher seulement"
       :filtres-actifs="nombreFiltresActifs"
       :voir="`Voir ${effectifAffiche} personne${effectifAffiche > 1 ? 's' : ''}`"
       @reinitialiser="toutAfficher"
     >
       <template #vue>
-        <Segmente :options="OPTIONS_PALIERS" :valeur="niveau" etiquette="Niveau de détail" :colonnes="3" @choisir="allerAuPalier" />
+        <Segmente :options="OPTIONS_PALIERS" :valeur="niveau" etiquette="Niveau de détail" :colonnes="3" class="max-md:w-full" @choisir="allerAuPalier" />
       </template>
       <template #pastilles>
         <PastilleFiltre
@@ -1377,67 +1542,85 @@ onBeforeUnmount(() => {
       </template>
       <template #compteur>{{ effectifAffiche }} fiches sur {{ disposition?.fiches.length ?? 0 }}</template>
       <template v-if="disposition" #filtres>
-        <!-- Pas un filtre : la forme des fiches. Ni dans « Filtres · n », ni dans « Réinitialiser ». -->
-        <ReglageFormatDesCartes />
-        <div v-if="disposition.quarts.length" class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Branches</div>
-        <div class="grid grid-cols-2 gap-2">
-          <button
-            v-for="q in disposition.quarts"
-            :key="q.branche"
-            type="button"
-            class="flex min-h-11 items-center gap-2 rounded-champ border px-2.5 py-1.5 text-left"
-            :style="
-              filtres.masquees.includes(q.branche)
-                ? { opacity: '0.55' }
-                : { borderColor: couleurBranche(q.branche), background: `color-mix(in srgb, ${couleurBranche(q.branche)} 12%, transparent)` }
-            "
-            :class="filtres.masquees.includes(q.branche) ? 'border-ligne' : ''"
-            :aria-pressed="!filtres.masquees.includes(q.branche)"
-            @click="basculerBranche(q.branche)"
-          >
-            <span class="h-2.5 w-2.5 flex-none rounded-[3px]" :style="{ background: couleurBranche(q.branche) }" />
-            <span class="flex flex-col leading-tight">
-              <span class="text-[13px] font-semibold">{{ q.nom || '—' }}</span>
-              <span class="text-[11px] text-attenue">{{ q.libelle }}</span>
-            </span>
-          </button>
-        </div>
-        <template v-if="aUneFamilleDeConjoint">
-          <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Famille du conjoint</div>
-          <button
-            type="button"
-            role="checkbox"
-            :aria-checked="avecConjoint"
-            class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
-            @click="avecConjoint = !avecConjoint"
-          >
-            <span
-              class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
-              :class="avecConjoint ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
-            >{{ avecConjoint ? '✓' : '' }}</span>
-            <span class="flex-1 text-sm">Afficher sa famille</span>
-            <span class="text-xs text-attenue">masquée, l’arbre se resserre</span>
-          </button>
-        </template>
-        <template v-if="aDesAlliances">
-          <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Familles par alliance</div>
-          <button
-            type="button"
-            role="checkbox"
-            :aria-checked="avecAlliances"
-            class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
-            @click="basculerAlliances(!avecAlliances)"
-          >
-            <span
-              class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
-              :class="avecAlliances ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
-            >{{ avecAlliances ? '✓' : '' }}</span>
-            <span class="flex flex-1 flex-col leading-tight">
-              <span class="text-sm">Les afficher · {{ effectifAlliances }}</span>
-              <span class="text-xs text-attenue">les familles des conjoints de vos proches</span>
-            </span>
-          </button>
-          <div v-if="avecAlliances" class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Où afficher les familles par alliance">
+        <!--
+          Les filtres en quatre sections, toujours dans le même ordre (refonte du 05/10/2026) :
+          ce qu'on SUIT (la ligne directe), ce qu'on ESTOMPE (les branches), ce qui ENTRE dans
+          l'arbre (bascules qui le resserrent), puis l'AFFICHAGE (ni filtre, ni réinitialisé).
+          Les pastilles de qualité sont au-dessus, dans la barre (bureau) ou en tête du feuillet.
+        -->
+        <section class="filtres-section" aria-labelledby="filtres-ligne">
+          <h3 id="filtres-ligne" class="filtres-titre">Ligne directe</h3>
+          <InterrupteurFiltre
+            :libelle="libelleLigne"
+            sous="ses ancêtres et ses descendants"
+            :actif="filtres.ligneDirecte"
+            @basculer="basculerLigneDirecte"
+          />
+          <Segmente
+            v-if="filtres.ligneDirecte"
+            :options="OPTIONS_MODE_LIGNE"
+            :valeur="ligneSeule ? 'seule' : 'estompee'"
+            etiquette="Les autres fiches"
+            :colonnes="2"
+            class="w-full"
+            @choisir="(m) => choisirModeLigne(m === 'seule')"
+          />
+          <p v-if="filtres.ligneDirecte" class="m-0 text-xs text-attenue">
+            {{ ligneSeule ? 'Les autres fiches quittent l’écran : l’arbre se refait sur la ligne.' : 'Les autres fiches restent à leur place, estompées.' }}
+          </p>
+        </section>
+
+        <section v-if="disposition.quarts.length" class="filtres-section" aria-labelledby="filtres-branches">
+          <div class="flex items-baseline justify-between gap-2">
+            <h3 id="filtres-branches" class="filtres-titre">Branches</h3>
+            <span class="text-[11px] text-attenue">touchez pour estomper</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              v-for="q in disposition.quarts"
+              :key="q.branche"
+              type="button"
+              class="flex min-h-11 items-center gap-2 rounded-champ border px-2.5 py-1.5 text-left"
+              :style="
+                filtres.masquees.includes(q.branche)
+                  ? { opacity: '0.55' }
+                  : { borderColor: couleurBranche(q.branche), background: `color-mix(in srgb, ${couleurBranche(q.branche)} 12%, transparent)` }
+              "
+              :class="filtres.masquees.includes(q.branche) ? 'border-ligne' : ''"
+              :aria-pressed="!filtres.masquees.includes(q.branche)"
+              @click="basculerBranche(q.branche)"
+            >
+              <span class="h-2.5 w-2.5 flex-none rounded-[3px]" :style="{ background: couleurBranche(q.branche) }" />
+              <span class="flex min-w-0 flex-col leading-tight">
+                <span class="truncate text-[13px] font-semibold">{{ q.nom || '—' }}</span>
+                <span class="truncate text-[11px] text-attenue">{{ q.libelle }}</span>
+              </span>
+            </button>
+          </div>
+        </section>
+
+        <section
+          v-if="aUneFamilleDeConjoint || aDesAlliances || effectifSansLienConnu > 0"
+          class="filtres-section"
+          aria-labelledby="filtres-qui"
+        >
+          <h3 id="filtres-qui" class="filtres-titre">Qui apparaît</h3>
+          <p class="-mt-1 mb-0 text-xs text-attenue">Masquées, ces personnes quittent l’arbre, qui se resserre.</p>
+          <InterrupteurFiltre
+            v-if="aUneFamilleDeConjoint"
+            libelle="Famille du conjoint"
+            sous="ses parents, ses frères et sœurs"
+            :actif="avecConjoint"
+            @basculer="avecConjoint = !avecConjoint"
+          />
+          <InterrupteurFiltre
+            v-if="aDesAlliances"
+            :libelle="`Familles par alliance · ${effectifAlliances}`"
+            sous="les familles des conjoints de vos proches"
+            :actif="avecAlliances"
+            @basculer="basculerAlliances(!avecAlliances)"
+          />
+          <div v-if="aDesAlliances && avecAlliances" class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Où afficher les familles par alliance">
             <button
               v-for="o in OPTIONS_ALLIANCES"
               :key="o.libelle"
@@ -1452,67 +1635,76 @@ onBeforeUnmount(() => {
               <span class="text-[11px] text-attenue">{{ o.sous }}</span>
             </button>
           </div>
-        </template>
-        <template v-if="effectifSansLienConnu > 0">
-          <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Sans lien connu</div>
-          <button
-            type="button"
-            role="checkbox"
-            :aria-checked="avecSansLien"
-            class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
-            @click="basculerSansLien(!avecSansLien)"
-          >
-            <span
-              class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
-              :class="avecSansLien ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
-            >{{ avecSansLien ? '✓' : '' }}</span>
-            <span class="flex flex-1 flex-col leading-tight">
-              <span class="text-sm">Afficher les personnes sans lien connu · {{ effectifSansLienConnu }}</span>
-              <span class="text-xs text-attenue">aucun lien ne les relie encore à vous</span>
-            </span>
-          </button>
-        </template>
-        <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Fratries</div>
-        <button
-          type="button"
-          role="checkbox"
-          :aria-checked="fratriesParNaissance"
-          class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
-          @click="fratriesParNaissance = !fratriesParNaissance"
-        >
-          <span
-            class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
-            :class="fratriesParNaissance ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
-          >{{ fratriesParNaissance ? '✓' : '' }}</span>
-          <span class="flex flex-1 flex-col leading-tight">
-            <span class="text-sm">Par ordre de naissance</span>
-            <span class="text-xs text-attenue">l’aîné à gauche, le plus jeune à droite</span>
-          </span>
-        </button>
-        <div class="mt-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Afficher seulement</div>
-        <button
-          v-for="t in BASCULES"
-          :key="t.cle"
-          type="button"
-          role="checkbox"
-          :aria-checked="filtres[t.cle]"
-          class="flex min-h-11 items-center gap-3 border-b border-ligne/60 px-0.5 text-left"
-          @click="filtres[t.cle] = !filtres[t.cle]"
-        >
-          <span
-            class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
-            :class="filtres[t.cle] ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
-          >{{ filtres[t.cle] ? '✓' : '' }}</span>
-          <span class="flex-1 text-sm">{{ t.cle === 'ligneDirecte' ? libelleLigne : t.libelle }}</span>
-          <span class="text-xs text-attenue">{{ t.sous }}</span>
-        </button>
-        <p class="m-0 text-xs text-attenue">
-          Les autres fiches restent visibles, estompées.
-        </p>
+          <InterrupteurFiltre
+            v-if="effectifSansLienConnu > 0"
+            :libelle="`Sans lien connu · ${effectifSansLienConnu}`"
+            sous="aucun lien ne les relie encore à vous"
+            :actif="avecSansLien"
+            @basculer="basculerSansLien(!avecSansLien)"
+          />
+        </section>
+
+        <section class="filtres-section" aria-labelledby="filtres-affichage">
+          <h3 id="filtres-affichage" class="filtres-titre">Affichage</h3>
+          <!-- Pas des filtres : ni dans « Filtres · n », ni dans « Réinitialiser ». -->
+          <ReglageFormatDesCartes />
+          <InterrupteurFiltre
+            libelle="Fratries par ordre de naissance"
+            sous="l’aîné à gauche, le plus jeune à droite"
+            :actif="fratriesParNaissance"
+            @basculer="fratriesParNaissance = !fratriesParNaissance"
+          />
+          <div class="flex flex-col gap-1.5" data-seuil-des-noms>
+            <div class="flex items-baseline justify-between gap-2">
+              <label for="seuil-des-noms" class="text-sm">Noms et dates dès</label>
+              <span class="font-mono text-sm font-semibold tabular-nums">{{ seuilEnPourcent }} %</span>
+            </div>
+            <div class="relative">
+              <input
+                id="seuil-des-noms"
+                v-model.number="seuilEnPourcent"
+                type="range"
+                :min="SEUIL_MIN"
+                :max="SEUIL_MAX"
+                step="5"
+                class="seuil-des-noms h-8 w-full cursor-pointer"
+                aria-describedby="seuil-des-noms-aide"
+              />
+              <!-- Le zoom affiché en ce moment, sous la jauge. -->
+              <span
+                v-if="repereDuZoom !== null"
+                class="pointer-events-none absolute -bottom-1 h-0 w-0 -translate-x-1/2 border-x-[5px] border-b-[6px] border-x-transparent border-b-texte"
+                :style="{ left: `calc(8px + ${repereDuZoom} * (100% - 16px))` }"
+                aria-hidden="true"
+              />
+            </div>
+            <div class="flex items-center justify-between gap-2 text-xs text-attenue">
+              <span id="seuil-des-noms-aide">Zoom actuel : {{ zoomEnPourcent }} % · défaut {{ SEUIL_DEFAUT }} %</span>
+              <button
+                v-if="zoomEnPourcent >= SEUIL_MIN && zoomEnPourcent < seuilEnPourcent"
+                type="button"
+                class="min-h-8 font-semibold text-accent"
+                @click="seuilAuZoomActuel"
+              >
+                Dès ce zoom
+              </button>
+              <button
+                v-else-if="seuilEnPourcent !== SEUIL_DEFAUT"
+                type="button"
+                class="min-h-8 font-semibold text-accent"
+                @click="seuilEnPourcent = SEUIL_DEFAUT"
+              >
+                Par défaut
+              </button>
+            </div>
+            <p class="m-0 text-xs text-attenue">Plus bas, les noms restent écrits de plus loin : utile sur un grand écran ou une télévision.</p>
+          </div>
+        </section>
+
         <button
           type="button"
           data-aide-filtres
-          class="flex min-h-11 items-center gap-2 self-start text-left text-sm text-accent hover:underline"
+          class="flex min-h-11 items-center gap-2 self-start border-t border-ligne pt-3 text-left text-sm text-accent hover:underline"
           @click="aideFiltresOuverte = true"
         >
           <span class="flex size-5 flex-none items-center justify-center rounded-full border-[1.5px] border-current text-[11px] font-bold" aria-hidden="true">?</span>
@@ -1865,15 +2057,15 @@ onBeforeUnmount(() => {
           <button
             type="button"
             role="checkbox"
-            :aria-checked="filtres.ligneDirecte"
+            :aria-checked="ligneDeLaChoisie"
             class="flex min-h-9 items-center gap-2.5 text-left text-sm"
-            @click="filtres.ligneDirecte = !filtres.ligneDirecte"
+            @click="basculerLigneDeLaChoisie"
           >
             <span
               class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
-              :class="filtres.ligneDirecte ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
-            >{{ filtres.ligneDirecte ? '✓' : '' }}</span>
-            Afficher sa ligne directe
+              :class="ligneDeLaChoisie ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+            >{{ ligneDeLaChoisie ? '✓' : '' }}</span>
+            {{ filtres.ligneDirecte && ligneSeule && !ligneDeLaChoisie ? 'Suivre sa ligne directe' : 'Afficher sa ligne directe' }}
           </button>
           <div class="flex gap-2">
             <button
@@ -1983,17 +2175,19 @@ onBeforeUnmount(() => {
         <button
           type="button"
           role="checkbox"
-          :aria-checked="filtres.ligneDirecte"
+          :aria-checked="ligneDeLaChoisie"
           class="flex min-h-9 items-center gap-2.5 text-left text-sm"
-          @click="filtres.ligneDirecte = !filtres.ligneDirecte"
+          @click="basculerLigneDeLaChoisie"
         >
           <span
             class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
-            :class="filtres.ligneDirecte ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
-          >{{ filtres.ligneDirecte ? '✓' : '' }}</span>
+            :class="ligneDeLaChoisie ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+          >{{ ligneDeLaChoisie ? '✓' : '' }}</span>
           <span class="flex flex-col leading-tight">
-            <span>Afficher sa ligne directe</span>
-            <span class="text-xs text-attenue">ancêtres et descendants · reste cochée d’une personne à l’autre</span>
+            <span>{{ filtres.ligneDirecte && ligneSeule && !ligneDeLaChoisie ? 'Suivre sa ligne directe' : 'Afficher sa ligne directe' }}</span>
+            <span class="text-xs text-attenue">{{
+              ligneSeule ? 'ancêtres et descendants · les autres quittent l’écran' : 'ancêtres et descendants · reste cochée d’une personne à l’autre'
+            }}</span>
           </span>
         </button>
       </header>
@@ -2136,6 +2330,26 @@ onBeforeUnmount(() => {
 /* L'emplacement d'une photo absente, en Portrait : le cadre se voit, à la taille d'une vraie. */
 .cadre-portrait {
   background: color-mix(in srgb, var(--h-attenue) 14%, transparent);
+}
+.filtres-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.filtres-section + .filtres-section {
+  border-top: 1px solid var(--color-ligne);
+  padding-top: 0.875rem;
+}
+.filtres-titre {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-attenue);
+}
+.seuil-des-noms {
+  accent-color: var(--color-accent);
 }
 .gouttiere {
   background: linear-gradient(90deg, var(--h-fond) 62%, transparent);

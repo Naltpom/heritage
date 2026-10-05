@@ -34,6 +34,9 @@ declare module 'vue-router' {
     section?: Section
     /** Écran de DÉTAIL : sur téléphone, l'en-tête affiche « ‹ {libelle} » pour y remonter. */
     parent?: ParentDeDetail
+    /** L'écran porte sa propre recherche sur téléphone (l'arbre, en bas) : l'en-tête
+     *  n'y montre pas sa loupe, pour ne pas avoir deux recherches à l'écran. */
+    rechercheLocale?: boolean
   }
 }
 
@@ -200,7 +203,7 @@ export const routes: RouteRecordRaw[] = [
     path: '/arbre',
     name: 'arbre',
     component: () => import('@/views/HistoireView.vue'),
-    meta: { acces: 'membre', titre: 'Arbre' },
+    meta: { acces: 'membre', titre: 'Arbre', rechercheLocale: true },
   },
   {
     // `{id}` est un entier : un identifiant provisoire (`#12/p1`) ne correspond

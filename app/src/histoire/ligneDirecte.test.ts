@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AreteGraphe, Graphe } from '@/lib/api'
-import { ligneDe } from './ligneDirecte'
+import { ligneDe, seulementLaLigne } from './ligneDirecte'
 
 /**
  * La ligne directe de n'importe quelle personne : ses ancêtres et ses descendants,
@@ -41,5 +41,31 @@ describe('ligne directe', () => {
     const l = ligneDe(graphe(), 'oncle')
     expect([...l.ascendants].sort()).toEqual(['gm', 'gp', 'oncle'])
     expect(l.descendants.size).toBe(0)
+  })
+})
+
+describe('la ligne directe seule', () => {
+  const ids = (g: Graphe): string[] => g.noeuds.map((n) => n.id).sort()
+
+  it('ne garde que la ligne et les familles qui la relient', () => {
+    const g = seulementLaLigne(graphe(), 'moi')
+    expect(ids(g)).toEqual(['enfant', 'f1', 'f2', 'f3', 'f4', 'gm', 'gp', 'mere', 'moi', 'pere', 'petit'])
+    // Ni l'oncle, ni le conjoint, ni la belle-fille — ni les liens qui les touchaient.
+    expect(g.aretes.some((a) => ['oncle', 'conjoint', 'belleFille'].includes(a.de) || ['oncle', 'conjoint', 'belleFille'].includes(a.vers))).toBe(false)
+    expect(g.ego).toBe('moi')
+  })
+
+  it('prend la racine pour ego quand le lecteur n’est pas de sa ligne', () => {
+    const g = seulementLaLigne(graphe(), 'oncle')
+    expect(ids(g)).toEqual(['f1', 'gm', 'gp', 'oncle'])
+    expect(g.ego).toBe('oncle')
+  })
+
+  it('garde le lecteur pour ego quand il descend de la racine', () => {
+    const g = seulementLaLigne(graphe(), 'gp')
+    expect(g.ego).toBe('moi')
+    // Les descendants du grand-père, collatéraux du lecteur compris.
+    expect(ids(g)).toContain('oncle')
+    expect(ids(g)).not.toContain('gm')
   })
 })
