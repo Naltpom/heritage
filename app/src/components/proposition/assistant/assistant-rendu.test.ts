@@ -70,8 +70,8 @@ describe('« Proposer » : l’assistant d’abord, le formulaire caché', () =>
     const html = await rendreLaVue({ personne: '17' })
 
     expect(html).toContain('<textarea')
-    expect(html).toContain('Importer')
-    expect(html).toContain('Prendre en photo')
+    expect(html).toContain('Importer des documents')
+    expect(html).toContain('Prendre une photo')
     expect(html).toContain('capture="environment"')
     expect(html).toContain('accept="image/*,application/pdf,audio/*"')
     expect(html).toContain('Analyser')
@@ -88,6 +88,9 @@ describe('« Proposer » : l’assistant d’abord, le formulaire caché', () =>
     expect(html).toContain('Naissance et décès')
     expect(html).toContain('Envoyer la proposition')
     expect(html).toContain('Enregistrer sans envoyer')
+    // Le bloc photos, avec ses deux gestes dits en clair.
+    expect(html).toContain('Importer des photos')
+    expect(html).toContain('Prendre une photo')
     expect(html).not.toContain('Analyser')
   })
 
@@ -96,14 +99,16 @@ describe('« Proposer » : l’assistant d’abord, le formulaire caché', () =>
     const html = await rendreLaVue({ mode: 'assistant' })
 
     expect(html).not.toContain('Assistant IA')
-    expect(html).not.toContain('Prendre en photo')
+    // Le formulaire a lui aussi « Prendre une photo » : c'est l'import de
+    // documents qui signe l'assistant.
+    expect(html).not.toContain('Importer des documents')
     expect(html).toContain('Opale Romarin')
     etat.vueEmpruntee = null
   })
 
   it('une reprise force le formulaire', async () => {
     const html = await rendreLaVue({ mode: 'assistant', refaire: '8' })
-    expect(html).not.toContain('Prendre en photo')
+    expect(html).not.toContain('Importer des documents')
   })
 })
 

@@ -1,20 +1,15 @@
 <script setup lang="ts">
 /**
- * Les documents joints à l'analyse : **Importer**, **Prendre en photo** et
+ * Les documents joints à l'analyse : **Importer des documents**, **Prendre une
+ * photo** (`BoutonsPhotos.vue`, les deux mêmes boutons que partout ailleurs) et
  * **Enregistrer** (un témoignage audio, voir `EnregistrementAudio.vue`).
- *
- * Deux champs de fichier cachés, deux boutons visibles. « Prendre en photo »
- * pose `capture="environment"` : sur téléphone, l'appareil photo arrière s'ouvre
- * directement sur l'acte à photographier ; sur ordinateur, l'attribut est ignoré
- * et le sélecteur de fichiers s'ouvre — rien n'est cassé, rien n'est à cacher.
- * Les deux s'ouvrent par `click()` **dans le gestionnaire d'un vrai clic** : un
- * navigateur refuse d'ouvrir un sélecteur hors d'un geste de l'utilisateur.
  *
  * Le composant ne garde rien : la liste, les aperçus (URL d'objet) et leur
  * révocation vivent chez le parent, qui est seul à savoir quand un document
  * sert encore — il accompagne aussi le dépôt des preuves.
  */
-import { computed, useTemplateRef } from 'vue'
+import { computed } from 'vue'
+import BoutonsPhotos from '@/components/medias/BoutonsPhotos.vue'
 import { tailleLisible } from '@/components/medias/medias'
 import { dureeMesuree, rappelDesBornes } from './assistant'
 import EnregistrementAudio from './EnregistrementAudio.vue'
@@ -50,62 +45,19 @@ const ecoutes = computed(() =>
     .filter(({ document }) => document.audio && document.apercu !== null),
 )
 
-const champImport = useTemplateRef<HTMLInputElement>('champImport')
-const champPhoto = useTemplateRef<HTMLInputElement>('champPhoto')
-
-function recevoir(evenement: Event): void {
-  const cible = evenement.target as HTMLInputElement
-  const fichiers = Array.from(cible.files ?? [])
-  // Vidé pour qu'un même fichier puisse être choisi de nouveau après un retrait.
-  cible.value = ''
-  if (fichiers.length > 0) emit('ajouter', fichiers)
-}
 </script>
 
 <template>
   <div class="flex flex-col gap-2.5">
-    <div class="flex flex-wrap gap-2 max-md:grid max-md:grid-cols-2">
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-champ border border-ligne bg-panneau px-3.5 text-sm font-semibold text-texte transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-55 md:min-h-9"
-        :disabled="desactive"
-        @click="champImport?.click()"
-      >
-        <span aria-hidden="true" class="max-md:hidden">⤒</span>
-        Importer
-      </button>
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-champ border border-ligne bg-panneau px-3.5 text-sm font-semibold text-texte transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-55 md:min-h-9"
-        :disabled="desactive"
-        @click="champPhoto?.click()"
-      >
-        <span aria-hidden="true" class="max-md:hidden">◉</span>
-        Prendre en photo
-      </button>
-      <EnregistrementAudio :desactive="desactive" @enregistrement="emit('ajouter', [$event])" />
-
-      <input
-        ref="champImport"
-        type="file"
-        multiple
-        accept="image/*,application/pdf,audio/*"
-        class="sr-only"
-        tabindex="-1"
-        aria-hidden="true"
-        @change="recevoir"
-      />
-      <input
-        ref="champPhoto"
-        type="file"
-        accept="image/*"
-        capture="environment"
-        class="sr-only"
-        tabindex="-1"
-        aria-hidden="true"
-        @change="recevoir"
-      />
-    </div>
+    <BoutonsPhotos
+      importer="Importer des documents"
+      importer-aide="Photos, PDF ou enregistrements"
+      prendre-aide="Photographier un acte, une photo"
+      accept="image/*,application/pdf,audio/*"
+      :desactive="desactive"
+      @fichiers="emit('ajouter', $event)"
+    />
+    <EnregistrementAudio :desactive="desactive" @enregistrement="emit('ajouter', [$event])" />
 
     <p class="m-0 text-xs text-attenue">{{ rappelDesBornes() }}</p>
 
