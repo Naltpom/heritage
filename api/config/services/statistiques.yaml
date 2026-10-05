@@ -3,7 +3,7 @@
 #
 # L'autowiring déclaré dans config/services/_autoload.yaml couvre déjà toutes les classes
 # de src/Module/Statistiques/. On ne déclare ici que ce que le conteneur ne peut pas
-# deviner : les **alias d'interface** des trois ports. Le piège d'ordre de chargement est
+# deviner : les **alias d'interface** des quatre ports. Le piège d'ordre de chargement est
 # celui que décrit config/services/almanach.yaml — rien de concret ici, que des alias.
 
 services:
@@ -13,6 +13,10 @@ services:
     # entier est écrit sur l'interface.
     App\Module\Statistiques\Contract\PortStatistiquesArbre:
         alias: App\Module\Tree\Service\VueDeLArbrePourStatistiques
+
+    # ── La fiche du lecteur : « mon arbre » part d'elle ────────────────────────────
+    App\Module\Statistiques\Contract\PortPointDeVue:
+        alias: App\Module\Tree\Service\PointDeVuePourStatistiques
 
     # ── Le chantier (administration) : des comptes, jamais un nom ──────────────────
     App\Module\Statistiques\Contract\PortActiviteDesDemandes:

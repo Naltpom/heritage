@@ -16,12 +16,19 @@
  *   les fiches à compléter et l'activité. Un membre qui l'appellerait reçoit
  *   `403` ; l'écran ne l'appelle donc que pour un administrateur.
  *
+ * **La portée** (`?portee=arbre|tout`) : `arbre`, le défaut, ne compte que
+ * l'arbre du lecteur — la famille reliée à sa fiche, sans les personnes sans
+ * lien connu. `tout` couvre toute la base et n'est accordé qu'à
+ * l'administration : un membre qui le demanderait reçoit `arbre`, et la charge
+ * dit toujours la portée retenue.
+ *
  * **Chaque chiffre porte son échantillon** (`n`) : l'écran l'affiche, pour
  * qu'une moyenne sur trois personnes ne se lise pas comme une loi.
  * ────────────────────────────────────────────────────────────────────
  */
 
 import { requeteApi, type OptionsRequete } from './client'
+import type { PorteeExplorer } from './types'
 
 /** Une moyenne et son effectif. `moyenne` vaut `null` sur un échantillon vide. */
 export interface Moyenne {
@@ -72,8 +79,12 @@ export interface BrancheDesStats {
   verifiees: number
 }
 
+/** Ce que les chiffres couvrent : l'arbre du lecteur, ou toute la base (administration). */
+export type PorteeDesStatistiques = PorteeExplorer
+
 export interface Statistiques {
   calculeLe: string
+  portee: PorteeDesStatistiques
   seuilDeDiscretion: number
   arbre: {
     personnes: number
@@ -153,18 +164,21 @@ export interface Chantier {
   }
 }
 
-function options(signal?: AbortSignal): OptionsRequete {
-  const o: OptionsRequete = {}
+function options(portee: PorteeDesStatistiques, signal?: AbortSignal): OptionsRequete {
+  const o: OptionsRequete = { requete: { portee } }
   if (signal !== undefined) o.signal = signal
   return o
 }
 
 /** `GET /api/explorer/stats` — tout membre. */
-export function chargerStatistiques(signal?: AbortSignal): Promise<Statistiques> {
-  return requeteApi<Statistiques>('/explorer/stats', options(signal))
+export function chargerStatistiques(
+  portee: PorteeDesStatistiques = 'arbre',
+  signal?: AbortSignal,
+): Promise<Statistiques> {
+  return requeteApi<Statistiques>('/explorer/stats', options(portee, signal))
 }
 
 /** `GET /api/administration/stats/chantier` — administration seulement. */
-export function chargerChantier(signal?: AbortSignal): Promise<Chantier> {
-  return requeteApi<Chantier>('/administration/stats/chantier', options(signal))
+export function chargerChantier(portee: PorteeDesStatistiques = 'arbre', signal?: AbortSignal): Promise<Chantier> {
+  return requeteApi<Chantier>('/administration/stats/chantier', options(portee, signal))
 }

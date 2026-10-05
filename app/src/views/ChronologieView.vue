@@ -49,6 +49,7 @@
  * que des personnes décédées.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
+import { usePorteeExplorer } from '@/composables/usePorteeExplorer'
 import { hauteurDuCadre } from '@/views/cadre'
 import { useTiroirs } from '@/composables/useTiroirs'
 import { definirResume } from '@/composables/entete'
@@ -104,6 +105,9 @@ function cleDeDemande(r: Reglages | null): string {
 /** La dernière clé effectivement demandée, pour ne pas rappeler le serveur
  *  quand c'est lui qui vient de nous donner ces réglages. */
 let cleDemandee = ''
+// La bascule « Mon arbre / Toute la base » d'Explorer (administration) : la
+// changer recharge l'écran.
+const { portee } = usePorteeExplorer()
 let abandon: AbortController | null = null
 
 async function charger(): Promise<void> {
@@ -119,8 +123,8 @@ async function charger(): Promise<void> {
   try {
     const reponse = await chargerChronologie(
       r === null
-        ? {}
-        : { bande: r.bande, orientation: r.orientation, branches: r.branches },
+        ? { portee: portee.value }
+        : { bande: r.bande, orientation: r.orientation, branches: r.branches, portee: portee.value },
       controleur.signal,
     )
     if (controleur.signal.aborted) return
@@ -143,6 +147,8 @@ async function charger(): Promise<void> {
     if (!controleur.signal.aborted) chargement.value = false
   }
 }
+
+watch(portee, () => void charger())
 
 watch(
   () => cleDeDemande(reglages.value),

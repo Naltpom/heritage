@@ -9,6 +9,7 @@ use App\Module\Almanach\Contract\FluxDEvenements;
 use App\Module\Almanach\Contract\PortEvenementsArbre;
 use App\Module\Almanach\Contract\SujetDeLEvenement;
 use App\Module\Almanach\Contract\TypeDEvenement;
+use App\Module\Core\Contract\ArbreDuLecteurInterface;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Security\ReciprociteInterface;
 use App\Module\Core\ValueObject\UncertainDate;
@@ -96,6 +97,8 @@ final class FluxVisible
         private readonly CercleDeVisibiliteInterface $cercle,
         // ADR 0016 : la naissance d'un vivant ne sort qu'à travers la réciprocité.
         private readonly ReciprociteInterface $reciprocite,
+        // Décision du 05/10/2026 : seul l'arbre du lecteur, sauf « Toute la base » (admin).
+        private readonly ArbreDuLecteurInterface $arbreDuLecteur,
     ) {
     }
 
@@ -108,11 +111,14 @@ final class FluxVisible
      * normaliseurs ne publient d'ailleurs que les lieux effectivement portés par un
      * événement retenu : voir {@see NormaliseurDeLaCarte}.
      */
-    public function pourLeLecteur(): FluxDEvenements
+    public function pourLeLecteur(bool $toutLaBase = false): FluxDEvenements
     {
         $flux = $this->port->flux();
 
-        $visibles = array_flip($this->cercle->filtrerPersonnes($this->identifiantsDesSujets($flux)));
+        // L'arbre du lecteur resserre d'abord la liste, le cercle décide ensuite : un sujet
+        // doit passer les deux pour que son événement sorte.
+        $dansSonArbre = $this->arbreDuLecteur->filtrer($this->identifiantsDesSujets($flux), $toutLaBase);
+        $visibles = array_flip($this->cercle->filtrerPersonnes($dansSonArbre));
 
         $retenus = [];
 

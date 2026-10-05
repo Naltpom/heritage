@@ -50,7 +50,13 @@ export const LISTES_DU_CHANTIER = [
  *    Il n'est pas « masqué » pour un membre : il n'est jamais demandé — et le
  *    serveur le refuserait de toute façon (`/api/administration/…`).
  *
- * 5. **La mortalité des enfants est dite avec tact** : une phrase qui la situe
+ * 5. **La portée : l'arbre du lecteur.** Les chiffres ne comptent que la
+ *    famille reliée à sa fiche — pas les personnes sans lien connu. Seule
+ *    l'administration a une bascule « Mon arbre / Toute la base », posée au-dessus
+ *    des onglets d'Explorer (`usePorteeExplorer`) ; le serveur refuse `tout` à un
+ *    membre de toute façon (il reçoit `arbre`).
+ *
+ * 6. **La mortalité des enfants est dite avec tact** : une phrase qui la situe
  *    avant le chiffre, la couleur des choses graves sans dramatisation.
  * ────────────────────────────────────────────────────────────────────
  *
@@ -62,6 +68,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 import { hauteurDuCadre } from '@/views/cadre'
 import { definirResume } from '@/composables/entete'
 import { useSession } from '@/composables/useSession'
+import { usePorteeExplorer } from '@/composables/usePorteeExplorer'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
@@ -94,13 +101,19 @@ import {
   mortaliteParSiecle,
   parentsParSiecle,
 } from '@/components/statistiques/series'
-import { chargerChantier, chargerStatistiques, type Chantier, type CleDuChantier } from '@/lib/api'
+import {
+  chargerChantier,
+  chargerStatistiques,
+  type Chantier,
+  type CleDuChantier,
+} from '@/lib/api'
 
 const vue = shallowRef<Statistiques | null>(null)
 const chantier = shallowRef<Chantier | null>(null)
 const erreur = shallowRef<unknown>(null)
 const chargement = ref(false)
 const listeOuverte = ref<CleDuChantier | null>(null)
+const { portee } = usePorteeExplorer()
 
 const { administrateur } = useSession()
 
@@ -115,9 +128,9 @@ async function charger(): Promise<void> {
 
   try {
     const [stats, travaux] = await Promise.all([
-      chargerStatistiques(controleur.signal),
+      chargerStatistiques(portee.value, controleur.signal),
       // Décision 4 : jamais demandé pour un membre.
-      administrateur.value ? chargerChantier(controleur.signal) : Promise.resolve(null),
+      administrateur.value ? chargerChantier(portee.value, controleur.signal) : Promise.resolve(null),
     ])
     if (controleur.signal.aborted) return
     vue.value = stats
@@ -186,6 +199,8 @@ const resumeEntete = computed(() =>
   arbre.value === null ? '' : `${compte(arbre.value.personnes, 'personne')} · ${periode.value}`,
 )
 watch(resumeEntete, (texte) => definirResume(texte), { immediate: true })
+
+watch(portee, () => void charger())
 
 function basculerListe(cle: CleDuChantier): void {
   listeOuverte.value = listeOuverte.value === cle ? null : cle

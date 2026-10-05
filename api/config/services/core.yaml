@@ -84,6 +84,12 @@ services:
     App\Module\Core\Contract\CalqueEnAttenteInterface:
         alias: App\Module\Core\Contract\CalqueFerme
 
+    # L'arbre du lecteur, pour les onglets d'Explorer (décision du 05/10/2026). Repli
+    # **ouvert** : ce n'est pas un filtre de confidentialité, voir l'interface. `Tree`
+    # reprend la main dans `config/services/tree.yaml`, chargé après celui-ci.
+    App\Module\Core\Contract\ArbreDuLecteurInterface:
+        alias: App\Module\Core\Contract\ArbreDuLecteurOuvert
+
     # Le port vers les services push (Web Push). En production, l'envoi réel —
     # VAPID + `aes128gcm`, délai borné. En test, un double en mémoire le remplace (bloc
     # `when@test` ci-dessous) : aucun test ne sort sur le réseau. Déclaré ici plutôt que

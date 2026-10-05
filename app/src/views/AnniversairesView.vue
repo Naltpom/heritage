@@ -107,6 +107,7 @@ export function etatDeLEcran(vue: VueAnniversaires | null, erreur: unknown): Eta
  * mobile (« 31 événements datés ») est publié ici aussi.
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { usePorteeExplorer } from '@/composables/usePorteeExplorer'
 import { hauteurDuCadre } from '@/views/cadre'
 import { useTiroirs } from '@/composables/useTiroirs'
 import { definirResume } from '@/composables/entete'
@@ -148,6 +149,9 @@ const racine = ref<HTMLElement | null>(null)
 /* Chargement — une fois, au montage                                   */
 /* ------------------------------------------------------------------ */
 
+// La bascule « Mon arbre / Toute la base » d'Explorer (administration) : la
+// changer recharge l'écran.
+const { portee } = usePorteeExplorer()
 let abandon: AbortController | null = null
 
 async function charger(): Promise<void> {
@@ -159,7 +163,7 @@ async function charger(): Promise<void> {
   erreur.value = null
 
   try {
-    const reponse = await chargerAnniversaires(controleur.signal)
+    const reponse = await chargerAnniversaires(controleur.signal, portee.value)
     if (controleur.signal.aborted) return
     vue.value = reponse
   } catch (cause) {
@@ -168,6 +172,8 @@ async function charger(): Promise<void> {
     if (!controleur.signal.aborted) chargement.value = false
   }
 }
+
+watch(portee, () => void charger())
 
 const etat = computed(() => etatDeLEcran(vue.value, erreur.value))
 
