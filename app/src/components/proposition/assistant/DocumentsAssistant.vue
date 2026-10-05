@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Les documents joints à l'analyse : **Importer des documents**, **Prendre une
+ * Les documents joints à l'analyse : **Importer une photo ou un fichier**, **Prendre une
  * photo** (`BoutonsPhotos.vue`, les deux mêmes boutons que partout ailleurs) et
  * **Enregistrer** (un témoignage audio, voir `EnregistrementAudio.vue`).
  *
@@ -50,7 +50,6 @@ const ecoutes = computed(() =>
 <template>
   <div class="flex flex-col gap-2.5">
     <BoutonsPhotos
-      importer="Importer des documents"
       importer-aide="Photos, PDF ou enregistrements"
       prendre-aide="Photographier un acte, une photo"
       accept="image/*,application/pdf,audio/*"

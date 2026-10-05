@@ -367,6 +367,8 @@ onBeforeUnmount(() => avorteur?.abort())
             -->
             <BoutonsPhotos
               :multiple="false"
+              accept="image/*"
+              importer-aide="Depuis la galerie ou vos fichiers"
               :importer="apercusPhotos[question.id] ? 'Choisir une autre photo' : 'Importer une photo'"
               @fichiers="(f) => poserPhoto(question.id, f[0] ?? null)"
             />

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * **Importer des photos** et **Prendre une photo** — deux gros boutons, côte à
+ * **Importer une photo ou un fichier** et **Prendre une photo** — deux gros boutons, côte à
  * côte, partout où l'application reçoit une image.
  *
  * Le défaut réparé, dans les mots du commanditaire (05/10/2026) : « deux CTA bien
@@ -26,11 +26,11 @@
 import { useTemplateRef } from 'vue'
 
 const {
-  importer = 'Importer des photos',
-  importerAide = 'Depuis la galerie ou vos fichiers',
+  importer = 'Importer une photo ou un fichier',
+  importerAide = 'Galerie, fichiers ou PDF',
   prendre = 'Prendre une photo',
   prendreAide = 'Avec l’appareil photo',
-  accept = 'image/*',
+  accept = 'image/*,application/pdf',
   multiple = true,
   capture = 'environment',
   desactive = false,

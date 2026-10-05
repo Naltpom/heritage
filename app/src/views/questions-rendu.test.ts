@@ -110,7 +110,7 @@ describe('QuestionsView', () => {
    */
   it('demande la caméra arrière sur l’entrée de fichier', async () => {
     const html = await renderToString(
-      createSSRApp(BoutonsPhotos, { multiple: false, importer: 'Importer une photo' }),
+      createSSRApp(BoutonsPhotos, { multiple: false, accept: 'image/*', importer: 'Importer une photo' }),
     )
 
     expect(html).toContain('capture="environment"')
@@ -121,6 +121,7 @@ describe('QuestionsView', () => {
     expect(html).toContain('Importer une photo')
     expect(html).toContain('Prendre une photo')
     expect(html).not.toContain('multiple')
+    expect(html).not.toContain('application/pdf')
   })
 })
 

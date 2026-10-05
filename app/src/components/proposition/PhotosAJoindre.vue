@@ -72,18 +72,18 @@ async function pivoter(photo: PhotoAJoindre): Promise<void> {
 <template>
   <div class="flex flex-col gap-3">
     <p class="m-0 text-sm text-attenue">
-      Une photo de la personne, d’un acte, d’un livret de famille… Décrivez chacune : qui,
-      où, quand. Elles partent avec la proposition et attendent la même validation.
+      Une photo de la personne, un acte, un livret de famille, un PDF… Décrivez chacun : qui,
+      où, quand. Ils partent avec la proposition et attendent la même validation.
     </p>
 
     <BoutonsPhotos :desactive="desactive" @fichiers="ajouter" />
 
     <p class="m-0 text-xs text-attenue">
-      Images, {{ tailleLisible(TAILLE_MAX_PAR_DEFAUT) }} au maximum par photo. Les
+      Images ou PDF, {{ tailleLisible(TAILLE_MAX_PAR_DEFAUT) }} au maximum par fichier. Les
       coordonnées GPS des photos sont retirées par le serveur.
     </p>
 
-    <ul v-if="photos.length > 0" class="m-0 flex list-none flex-col gap-2 p-0" aria-label="Photos à joindre">
+    <ul v-if="photos.length > 0" class="m-0 flex list-none flex-col gap-2 p-0" aria-label="Photos et fichiers à joindre">
       <li
         v-for="(photo, index) in photos"
         :key="photo.cle"
@@ -94,14 +94,14 @@ async function pivoter(photo: PhotoAJoindre): Promise<void> {
           <img
             v-if="photo.apercu !== null"
             :src="photo.apercu"
-            :alt="`Photo ${index + 1}`"
+            :alt="`Fichier ${index + 1}`"
             class="size-20 shrink-0 rounded-champ border border-ligne bg-fond object-cover"
           />
           <div
             v-else
             class="flex size-20 shrink-0 items-center justify-center rounded-champ border border-ligne bg-fond text-xs text-attenue"
           >
-            Fichier
+            {{ photo.fichier.type === 'application/pdf' ? 'PDF' : 'Fichier' }}
           </div>
 
           <label class="flex min-w-0 flex-1 flex-col gap-1">

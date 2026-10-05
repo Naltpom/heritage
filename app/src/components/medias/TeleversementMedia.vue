@@ -189,11 +189,7 @@ function reprendre(envoi: EnvoiEnFile): void {
         </select>
       </div>
 
-      <BoutonsPhotos
-        importer-aide="Galerie, fichiers ou PDF"
-        accept="image/*,application/pdf"
-        @fichiers="ajouter"
-      />
+      <BoutonsPhotos @fichiers="ajouter" />
     </div>
 
     <p class="m-0 text-xs text-attenue">

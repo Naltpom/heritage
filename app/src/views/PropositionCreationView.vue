@@ -377,7 +377,7 @@ function refaire(demandeId: number | null): void {
              quoi elle y flotterait. -->
         <BlocLiens v-model="saisie" :erreurs="erreurs" />
 
-        <PanneauBase titre="Photos">
+        <PanneauBase titre="Photos ou fichiers">
           <PhotosAJoindre v-model="photos" :desactive="suspendu || envoi" />
         </PanneauBase>
 
@@ -417,7 +417,7 @@ function refaire(demandeId: number | null): void {
           role="alert"
         >
           Votre demande n° {{ demandeDeposee }} est enregistrée, mais
-          {{ photosEnEchec > 1 ? `${photosEnEchec} photos n’ont pas pu être envoyées` : 'une photo n’a pas pu être envoyée' }}.
+          {{ photosEnEchec > 1 ? `${photosEnEchec} fichiers n’ont pas pu être envoyés` : 'un fichier n’a pas pu être envoyé' }}.
           <RouterLink :to="{ name: 'demande.detail', params: { id: demandeDeposee } }" class="font-semibold underline">
             Voir ma demande sans elles
           </RouterLink>
@@ -425,7 +425,7 @@ function refaire(demandeId: number | null): void {
 
         <div class="flex flex-wrap items-center gap-2">
           <BoutonBase v-if="demandeDeposee !== null" type="submit" :chargement="envoi" :desactive="suspendu">
-            Réessayer l’envoi des photos
+            Réessayer l’envoi des fichiers
           </BoutonBase>
           <template v-else>
             <BoutonBase type="submit" :chargement="envoi" :desactive="suspendu">
