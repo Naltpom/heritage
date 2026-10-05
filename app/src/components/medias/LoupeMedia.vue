@@ -26,6 +26,11 @@
  * PDF, et la renvoyer vers un autre onglet revenait à ne pas la montrer sur la
  * fiche. Le lien vers l'onglet reste sous le lecteur, pour imprimer.
  *
+ * Une image se **zoome** (05/10/2026) : boutons − et +, touches `+` et `-`, ou un
+ * clic sur l'image, qui passe de « ajustée à l'écran » à deux fois plus grand et
+ * revient. Agrandie, elle défile dans la loupe — l'écriture d'un acte ancien ne se
+ * lit pas à la taille de l'écran.
+ *
  * Fermeture au clic sur le fond **et** à la touche Échap : une image en plein
  * écran sans échappement clavier est une impasse pour qui n'emploie pas la souris.
  */
@@ -47,6 +52,20 @@ const chargement = ref(false)
 
 const legende = computed(() => cible?.legende ?? '')
 
+/** Les crans de zoom ; `1` = ajustée à l'écran. */
+const CRANS = [1, 1.5, 2, 3, 4] as const
+const cran = ref(0)
+const zoom = computed(() => CRANS[cran.value] ?? 1)
+
+function zoomer(pas: number): void {
+  cran.value = Math.min(CRANS.length - 1, Math.max(0, cran.value + pas))
+}
+
+/** Le clic sur l'image : ajustée ↔ deux fois plus grande. */
+function basculerZoom(): void {
+  cran.value = cran.value === 0 ? CRANS.indexOf(2) : 0
+}
+
 const affichable = computed(() => {
   if (cible === null) return null
   if (cible.mode === 'direct') return { url: cible.url, estImage: cible.estImage }
@@ -54,6 +73,7 @@ const affichable = computed(() => {
 })
 
 async function resoudre(): Promise<void> {
+  cran.value = 0
   resolu.value = null
   erreur.value = null
   if (cible === null || cible.mode !== 'identifiant') return
@@ -77,6 +97,8 @@ watch(() => cible, resoudre, { immediate: true })
 
 function auClavier(evenement: KeyboardEvent): void {
   if (evenement.key === 'Escape') emit('fermer')
+  else if (evenement.key === '+' || evenement.key === '=') zoomer(1)
+  else if (evenement.key === '-') zoomer(-1)
 }
 
 onMounted(() => window.addEventListener('keydown', auClavier))
@@ -101,7 +123,36 @@ onBeforeUnmount(() => window.removeEventListener('keydown', auClavier))
       ×
     </button>
 
-    <div class="max-h-full w-full max-w-4xl overflow-y-auto">
+    <!-- Le zoom : pour une image seulement, le lecteur PDF a ses pages. -->
+    <div
+      v-if="affichable?.estImage && !chargement && erreur === null"
+      class="absolute top-3 left-4 z-10 flex items-center gap-1.5"
+      data-zoom
+    >
+      <button
+        type="button"
+        class="flex size-9 cursor-pointer items-center justify-center rounded-full border border-white/40 bg-black/50 text-xl leading-none text-white disabled:opacity-40"
+        aria-label="Dézoomer"
+        :disabled="cran === 0"
+        @click="zoomer(-1)"
+      >
+        −
+      </button>
+      <span class="min-w-12 text-center font-mono text-xs text-white/80 tnum" aria-live="polite">
+        {{ Math.round(zoom * 100) }} %
+      </span>
+      <button
+        type="button"
+        class="flex size-9 cursor-pointer items-center justify-center rounded-full border border-white/40 bg-black/50 text-xl leading-none text-white disabled:opacity-40"
+        aria-label="Zoomer"
+        :disabled="cran === CRANS.length - 1"
+        @click="zoomer(1)"
+      >
+        +
+      </button>
+    </div>
+
+    <div class="max-h-full w-full max-w-4xl overflow-auto" :class="zoom > 1 ? 'h-full' : ''">
       <SqueletteChargement v-if="chargement" :lignes="1" hauteur="h-64" />
 
       <MessageErreur v-else-if="erreur !== null" :erreur="erreur" @action="resoudre" />
@@ -111,8 +162,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', auClavier))
           v-if="affichable.estImage"
           :src="affichable.url"
           :alt="legende.length > 0 ? legende : 'Document d’archive'"
-          class="mx-auto block max-h-[80vh] max-w-full rounded-panneau bg-white"
+          class="mx-auto block rounded-panneau bg-white"
+          :class="zoom > 1 ? 'max-w-none cursor-zoom-out' : 'max-h-[80vh] max-w-full cursor-zoom-in'"
+          :style="zoom > 1 ? { width: `${zoom * 100}%` } : undefined"
           decoding="async"
+          @click="basculerZoom"
         />
 
         <!-- Un PDF : ses pages dessinées par pdf.js. Pas d'`<iframe>` — l'API

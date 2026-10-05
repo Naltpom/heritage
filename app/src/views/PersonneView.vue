@@ -138,7 +138,7 @@ const loupe = ref<CibleLoupe | null>(null)
  * haut de page à chaque navigation (`router/index.ts`), et la galerie n'existe
  * qu'une fois la fiche chargée et le nouvel onglet entré : on attend donc la
  * fin du coulissement (260 ms) avant d'amener la zone de dépôt à l'écran — le
- * bas du bloc, là où est le formulaire.
+ * haut du bloc, là où est le formulaire depuis le 05/10/2026.
  */
 let minuterieDepot: ReturnType<typeof setTimeout> | undefined
 watch(
@@ -149,7 +149,7 @@ watch(
     minuterieDepot = setTimeout(() => {
       document.getElementById('depot')?.scrollIntoView({
         behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-        block: 'end',
+        block: 'start',
       })
     }, 300)
   },

@@ -51,11 +51,12 @@ export type NatureMedia = 'portrait' | 'preuve'
 export type NatureSujetMedia = 'personne' | 'famille' | 'citation'
 
 /**
- * `med_media.status`. `refuse` **n'est pas** une suppression : « un refus n'est
+ * `med_media.status`. `remplace` est un **ancien portrait**, conservé : il se liste
+ * avec `status=remplace` et peut redevenir le portrait (§ 7.7). `refuse` **n'est pas** une suppression : « un refus n'est
  * pas une destruction, un média `refuse` garde son fichier sur disque jusqu'à
  * purge explicite » (§ 7.6).
  */
-export type StatutMedia = 'en_attente' | 'actif' | 'refuse'
+export type StatutMedia = 'en_attente' | 'actif' | 'remplace' | 'refuse'
 
 /**
  * Le doublon est un **avertissement, pas un refus** : le même acte de mariage
@@ -359,6 +360,15 @@ export function televerserPortraitDuCompte(fichier: File, signal?: AbortSignal):
  */
 export function pivoterMedia(id: number, angle: 90 | 180 | 270): Promise<Media> {
   return requeteApi<Media>(`/medias/${id}/pivoter`, { methode: 'POST', corps: { angle } })
+}
+
+/**
+ * `POST /api/medias/{id}/portrait-actif` — un **ancien portrait** (`remplace`)
+ * redevient le portrait de la personne ; celui qui était en place passe
+ * `remplace`. Administrateur seulement (§ 7.7).
+ */
+export function remettreEnPortrait(id: number): Promise<Media> {
+  return requeteApi<Media>(`/medias/${id}/portrait-actif`, { methode: 'POST' })
 }
 
 export function supprimerMedia(id: number): Promise<{ supprime: boolean; id: number }> {

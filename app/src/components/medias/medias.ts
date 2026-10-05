@@ -81,6 +81,9 @@ export function pastilleDeMedia(status: StatutMedia): PastilleDeMedia {
       return { etat: 'en_attente', libelle: 'En attente de validation' }
     case 'actif':
       return { etat: 'validee', libelle: 'Validé' }
+    case 'remplace':
+      // Pas un refus ni une suppression : un portrait qu'un plus récent a relayé.
+      return { etat: 'neutre', libelle: 'Ancien portrait' }
     case 'refuse':
       return { etat: 'refusee', libelle: 'Refusé' }
     default:
@@ -165,12 +168,25 @@ export function estImage(mimeType: string): boolean {
  * reste suit du plus récent au plus ancien.
  */
 export function ordonnerMedias(medias: Media[]): Media[] {
-  const rang: Record<string, number> = { en_attente: 0, actif: 1, refuse: 2 }
+  const rang: Record<string, number> = { en_attente: 0, actif: 1, remplace: 2, refuse: 3 }
   return [...medias].sort((a, b) => {
-    const ecart = (rang[a.status] ?? 3) - (rang[b.status] ?? 3)
+    const ecart = (rang[a.status] ?? 4) - (rang[b.status] ?? 4)
     if (ecart !== 0) return ecart
     return b.createdAt.localeCompare(a.createdAt)
   })
+}
+
+/**
+ * L'ordre du carrousel de portraits : **le portrait en place d'abord** — c'est
+ * celui que la fiche montre partout —, puis ce qui attend une décision, puis les
+ * anciens portraits du plus récent au plus ancien, puis les refusés.
+ */
+export function ordonnerPortraits(medias: Media[]): Media[] {
+  const rang = (m: Media): number =>
+    m.isActivePortrait ? 0 : ({ en_attente: 1, actif: 2, remplace: 3, refuse: 4 } as Record<string, number>)[m.status] ?? 5
+  return medias
+    .filter((m) => m.kind === 'portrait')
+    .sort((a, b) => rang(a) - rang(b) || b.createdAt.localeCompare(a.createdAt))
 }
 
 /**
