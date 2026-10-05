@@ -3829,6 +3829,7 @@ authentifiée qui applique le cercle (§ 6.5 du dossier).
 | `GET` | `/api/medias/{id}/fichier` | `MEMBRE` ¹ | — | `200` **octets** | `403` `regime_en_attente` · `404` | — |
 | `GET` | `/api/medias/{id}/vignette` | `MEMBRE` ¹ | — | `200` **octets** | `403` `regime_en_attente` · `404` | — |
 | `DELETE` | `/api/medias/{id}` | `ADMIN` | — | `200` `{"supprime": true, "id": 120}` | `404` · `409` | — |
+| `POST` | `/api/medias/{id}/portrait-actif` | `ADMIN` | — | `200` § 7.2 | `403` · `404` · `409` `portrait_non_remplace` · `409` `vue_comme_membre_active` | — |
 
 ¹ **Révision du 2026-10-01 (§ 12).** Un compte en attente ne lit qu'un média **qu'il a
 déposé lui-même** — sa photo d'inscription, que l'écran d'attente lui remontre. Tout autre
@@ -4032,6 +4033,9 @@ simplement pas encore attribué (§ 1.3). Après validation, la même route rend
 les siens** ; un administrateur reçoit tous ceux en attente — c'est sa file de validation
 (`idx_med_media_attente`).
 
+`status=remplace` rend les **anciens portraits** de la personne, sous les mêmes règles de
+cercle que les médias actifs : la fiche les montre dans son carrousel de portraits.
+
 ### 7.4 et 7.5 Servir le fichier et la vignette
 
 `GET /api/medias/120/fichier` rend les **octets**, avec le `Content-Type` réel constaté à
@@ -4099,6 +4103,13 @@ pouvoir cliquer dessus.
 dépose une demande. Sur un média `actif` rattaché à une citation encore référencée ⇒ `409`
 `media_reference`. Un refus n'est pas une destruction : un média `refuse` garde son fichier
 sur disque jusqu'à purge explicite (§ 6.3).
+
+### 7.7 Remettre un ancien portrait
+
+`POST /api/medias/{id}/portrait-actif`, sans corps — un portrait `remplace` redevient le
+portrait de la personne, et celui qui était en place passe `remplace`. Rien n'est détruit.
+`ADMIN` seulement, comme la suppression : un membre reçoit `403`. Sur un média qui n'est pas un ancien
+portrait ⇒ `409` `portrait_non_remplace`. Rend la charge § 7.2 du média remis en place.
 
 ---
 

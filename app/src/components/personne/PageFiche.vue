@@ -20,10 +20,11 @@
  *   attente », à côté de la valeur validée), pour un administrateur et une
  *   personne vivante l'autorisation signée (`AutorisationNaissance`, ADR 0016),
  *   les faits, puis `ParenteFiche` ;
- * - **Sources et documents** : `SourcesFiche` (sources et notes), puis
- *   `GalerieMedias` — qui charge ses propres médias, monté seulement quand
- *   l'onglet est ouvert, et dont la zone de dépôt porte l'ancre `#depot` —,
- *   puis les actes demandés (`ListeDemarches`) ;
+ * - **Sources et documents** (ordre du 05/10/2026) : `GalerieMedias` — le
+ *   dépôt en tête (ancre `#depot`), le carrousel des portraits, les preuves ;
+ *   elle charge ses propres médias, montée seulement quand l'onglet est
+ *   ouvert —, puis `SourcesFiche` (sources, puis notes), puis les actes
+ *   demandés (`ListeDemarches`) ;
  * - **Historique**, toujours présent : en tête, les `demandesEnAttente` que la
  *   fiche porte, vers `demande.detail` (quand il y en a) ; puis la frise de
  *   `HistoriqueFiche` — sources, notes, documents et révisions appliquées, du
@@ -267,21 +268,19 @@ function pluriel(n: number, mot: string): string {
             </template>
 
             <template v-else-if="onglet === 'sources'">
+              <!-- D'abord le dépôt, puis les portraits en carrousel, puis les
+                   preuves (`GalerieMedias`, qui porte l'ancre `#depot`) ;
+                   ensuite les sources et les notes. Un changement de portrait
+                   fait relire la fiche : l'en-tête le montre. -->
+              <GalerieMedias
+                :person-id="fiche.id"
+                :nom="fiche.displayName"
+                @agrandir="emit('agrandir', $event)"
+                @portrait="emit('recharger')"
+              />
+
               <SectionFiche titre="Sources et notes" data-panneau="sources">
                 <SourcesFiche :fiche="fiche" @agrandir="emit('agrandir', $event)" />
-              </SectionFiche>
-
-              <SectionFiche titre="Preuves et documents" data-panneau="documents">
-                <!-- `#depot` : « Joindre un document » du bouton Proposer mène
-                     ici. La zone de dépôt est au pied de la galerie : on vise
-                     le bas du bloc (`scroll-mb`). -->
-                <div id="depot" class="scroll-mt-4 scroll-mb-28">
-                  <GalerieMedias
-                    :person-id="fiche.id"
-                    :nom="fiche.displayName"
-                    @agrandir="emit('agrandir', $event)"
-                  />
-                </div>
               </SectionFiche>
 
               <!-- Les actes demandés pour cette personne, et où ils en sont : une
