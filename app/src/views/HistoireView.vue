@@ -47,7 +47,6 @@ import {
   type Branche,
   type Graphe,
   type FichePersonneComplete,
-  type NoeudNonPlace,
   type ResultatDeRecherche,
 } from '@/lib/api'
 import { FILTRES, filtreDisponible, nomDeFiche, type IdFiltre, type NoeudPersonneEtendu } from '@/components/arbre/graphe'
@@ -274,7 +273,6 @@ function afficherSonAlliance(personId: number): void {
   if (!avecAlliances.value && estParAlliance(g, personId)) basculerAlliances(true)
   else if (!avecSansLien.value && estSansLien(g, personId)) basculerSansLien(true)
 }
-const nonPlaces = ref<NoeudNonPlace[]>([])
 const chargement = ref(true)
 const erreur = ref<string | null>(null)
 
@@ -328,7 +326,6 @@ async function charger(): Promise<void> {
       ecrirePreference(CLE_SANS_LIEN, true)
     }
     disposer(graphe)
-    nonPlaces.value = graphe.calque.nonPlaces
     await nextTick()
     // Retour d'une fiche : la vue quittée, exactement ; sinon l'arbre ajusté.
     vueAReprendre = reprendreVue()
@@ -1538,23 +1535,6 @@ onBeforeUnmount(() => {
         </button>
       </template>
     </BarreEcran>
-
-    <!-- Les fiches proposées que le serveur n'a pas su placer : toujours les dire. -->
-    <div
-      v-if="nonPlaces.length"
-      class="flex flex-none flex-wrap items-center gap-x-2 gap-y-1 border-b border-ligne bg-panneau px-4 py-1.5 text-xs text-attenue"
-      role="status"
-    >
-      <span>{{ nonPlaces.length }} fiche{{ nonPlaces.length > 1 ? 's' : '' }} proposée{{ nonPlaces.length > 1 ? 's' : '' }} hors de l’arbre :</span>
-      <RouterLink
-        v-for="n in nonPlaces"
-        :key="n.noeudId"
-        :to="{ name: 'demande.detail', params: { id: n.demandeId } }"
-        class="text-accent hover:underline"
-      >
-        {{ n.displayName }}
-      </RouterLink>
-    </div>
 
     <div class="flex min-h-0 flex-1">
     <!-- Le canevas -->
