@@ -83,7 +83,7 @@ describe('« Proposer » : l’assistant d’abord, le formulaire caché', () =>
     etat.vueEmpruntee = null
     const html = await rendreLaVue({ mode: 'formulaire' })
 
-    expect(html).toContain('Proposer l’ajout d’une personne')
+    expect(html).toContain('Ajouter une personne')
     expect(html).toContain('Qui est cette personne')
     expect(html).toContain('Naissance et décès')
     expect(html).toContain('Envoyer la proposition')

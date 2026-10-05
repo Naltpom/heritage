@@ -152,6 +152,47 @@ final class PropositionsChaineesTest extends BaseDeDemandes
         );
     }
 
+    /**
+     * **Un brouillon non envoyé se retrouve aussi — par son seul auteur.**.
+     *
+     * « Il faut que la liste des personnes, même mes demandes non acceptées, fasse
+     * partie de la liste aussi » (05/10/2026). On enregistre la fiche du grand-père un
+     * soir sans l'envoyer ; le lendemain, on veut y rattacher son fils. Un brouillon
+     * n'est visible que de son auteur : ni un autre membre, ni l'administrateur ne le
+     * trouvent.
+     */
+    public function testUnBrouillonNonEnvoyeSeRetrouveParSonSeulAuteur(): void
+    {
+        $this->proposerBarnabe(self::OPALE, soumettre: false);
+
+        $recherche = $this->recherche();
+
+        $pourOpale = $recherche->resultats('Barnabé', 10, $this->lecteur(self::OPALE));
+        self::assertCount(1, $pourOpale['elements']);
+        self::assertFalse(
+            $this->serialiseur->resultatDeRecherche($pourOpale['elements'][0])['enAttente'],
+            'La charge dit que la fiche n\'est pas encore envoyée.',
+        );
+
+        self::assertSame([], $recherche->resultats('Barnabé', 10, $this->admin())['elements']);
+        self::assertSame([], $recherche->resultats('Barnabé', 10, $this->lecteur(self::TUF))['elements']);
+    }
+
+    /**
+     * Une demande peut désigner la fiche d'un brouillon de son auteur, et elle attend :
+     * le brouillon peut encore être envoyé, il n'est pas mort.
+     */
+    public function testUneDemandeQuiDesigneUnBrouillonAttendSonEnvoi(): void
+    {
+        $barnabe = $this->proposerBarnabe(self::OPALE, soumettre: false);
+        $celeste = $this->proposerCeleste(self::OPALE, $this->ficheDe($barnabe));
+
+        self::assertSame(
+            ResolutionPrevue::DependanceEnAttente,
+            $this->analyse->analyser($this->recharger($celeste))->resolution,
+        );
+    }
+
     // ---------------------------------------------------------------------------------
     // La désigner
     // ---------------------------------------------------------------------------------
@@ -606,12 +647,12 @@ final class PropositionsChaineesTest extends BaseDeDemandes
     }
 
     /** La demande A : Barnabé, rattaché à Jargon pour ne pas flotter hors de l'arbre. */
-    private function proposerBarnabe(int $auteur, string $prenom = 'Barnabé'): ChangeRequest
+    private function proposerBarnabe(int $auteur, string $prenom = 'Barnabé', bool $soumettre = true): ChangeRequest
     {
         return $this->depot->deposer([
             'kind' => 'creation_personne',
             'message' => 'mon arrière-grand-père, j\'ai son livret militaire',
-            'soumettre' => true,
+            'soumettre' => $soumettre,
             'brouillons' => [$this->ficheProposee($prenom)],
             'liens' => [[
                 'seq' => 1,

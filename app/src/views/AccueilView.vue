@@ -5,8 +5,10 @@
  * Trois choses, dans l'ordre où on les cherche en ouvrant l'application
  * (refonte du 30/09/2026, pensée pour le téléphone) :
  *
- * 1. **deux boutons sur une ligne** — « Arbre » et « Modifier l'arbre », qui
- *    ouvre l'assistant ;
+ * 1. **deux boutons sur une ligne** — « Arbre » et « Ajouter une personne », qui
+ *    ouvre le formulaire d'ajout (05/10/2026 : un formulaire, avec l'identité et
+ *    les liens vers les autres personnes, y compris celles qu'on a proposées et
+ *    qui ne sont pas encore validées) ;
  * 2. **mes événements** (02/10/2026 : une seule section, « le tirage au sort
  *    est un événement en soi ») — **tous** ceux qui m'attendent, le plus
  *    proche d'abord : les rassemblements où je suis invité ou que j'organise,
@@ -228,16 +230,16 @@ function surTouche(e: KeyboardEvent): void {
       </RouterLink>
       <RouterLink
         v-if="rattache && vueEmpruntee === null"
-        :to="{ name: 'proposition.creation' }"
+        :to="{ name: 'proposition.creation', query: { mode: 'formulaire' } }"
         class="flex items-center justify-center gap-2 rounded-panneau border border-accent bg-panneau px-3 py-3.5 text-sm font-semibold text-accent transition-colors hover:bg-accent-doux"
       >
         <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M13.5 3.5l3 3L7 16H4v-3z" />
+          <circle cx="8" cy="6.5" r="3" /><path d="M2.5 17c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><path d="M16 5v6M13 8h6" />
         </svg>
-        Modifier l’arbre
+        Ajouter une personne
       </RouterLink>
       <p v-else-if="!rattache" class="flex items-center rounded-panneau border border-dashed border-ligne p-3 text-xs text-attenue">
-        Vous pourrez modifier l’arbre une fois votre rattachement validé.
+        Vous pourrez ajouter des personnes une fois votre rattachement validé.
       </p>
       <!-- L'assistant en mode question : interroger l'arbre en conversation.
            Sur toute la largeur, sous les deux autres. -->

@@ -41,8 +41,10 @@
  * écrire librement, puis fait relire les demandes qu'il prépare
  * (`components/proposition/assistant/`).
  *
- * Le formulaire n'a plus de bouton, mais il reste servi dans trois cas :
- *  - `?mode=formulaire`, écrit à la main ;
+ * Le formulaire reste servi dans trois cas :
+ *  - `?mode=formulaire` : c'est le bouton « Ajouter une personne » de l'accueil
+ *    (05/10/2026 — « met moi plutôt ajouter une personne, et c'est une page
+ *    formulaire ») ;
  *  - une reprise (`?refaire=`) : c'est lui qui sait reprendre une demande ;
  *  - la bascule « voir comme un membre » : l'assistant n'écrit rien lui-même,
  *    mais son analyse est une écriture pour l'API (quota, journal), qui la
@@ -257,10 +259,12 @@ function refaire(demandeId: number | null): void {
 
     <template v-else>
     <header class="mb-5">
-      <h1 class="text-xl font-semibold tracking-tight">Proposer l’ajout d’une personne</h1>
+      <h1 class="text-xl font-semibold tracking-tight">Ajouter une personne</h1>
       <p class="mt-1.5 text-sm text-attenue">
         Votre proposition part en validation, comme une correction de fiche. La personne
         apparaîtra dans votre arbre en attendant, signalée comme non validée — et pour vous seul.
+        Vous pouvez la relier aux personnes de l’arbre comme à celles que vous avez déjà
+        proposées, même pas encore validées.
       </p>
     </header>
 
