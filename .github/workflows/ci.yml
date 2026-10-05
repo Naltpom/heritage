@@ -284,9 +284,13 @@ jobs:
     name: Docker — compose + build des deux images
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Après les portes de qualité : reconstruire deux images pour du code qui ne
-    # compile pas est du temps de machine dépensé pour rien.
-    needs: [api, app]
+    # EN MÊME TEMPS que les autres travaux, sans `needs:` (05/10/2026). Il attendait
+    # « api » et « app », pour ne pas reconstruire deux images pour du code qui ne
+    # compile pas. Mais le dépôt est public — les minutes ne coûtent rien — et la
+    # porte de `deploy.yml` exige de toute façon la CI ENTIÈRE au vert. L'attente
+    # ne protégeait rien et coûtait ses deux minutes à chaque CI : mesuré sur la
+    # #295, 8 min 05 de bout en bout, dont 2 min 10 de Docker posées APRÈS les
+    # 5 min 47 de l'API, alors qu'elles pouvaient courir pendant.
     steps:
       - uses: actions/checkout@v4
 
