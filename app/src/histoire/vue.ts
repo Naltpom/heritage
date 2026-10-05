@@ -11,6 +11,9 @@
  * | Familles  | 0,16 – 0,45 | fiches avec leur photo, noms de foyers     |
  * | Fiches    | ≥ 0,45      | tout le texte, réduit sous 0,8 (carte)    |
  *
+ * Le seuil des Fiches (0,45) est celui par défaut : le lecteur le règle
+ * (`SEUIL_DES_NOMS`).
+ *
  * **Il y avait un quatrième niveau, « Prénoms », entre 0,42 et 0,75, et il ne
  * tenait pas sa promesse.** Une fiche fait ~132 px de monde, dont 56 pour la
  * photo : à 0,42 il restait ~32 px d'écran pour écrire, soit trois lettres ; à
@@ -53,10 +56,29 @@ export const PALIERS: readonly Palier[] = [
   { libelle: 'Fiches', echelle: 1 },
 ]
 
-export function niveau(s: number): Niveau {
+/**
+ * Le seuil du niveau Fiches — le zoom à partir duquel les noms, prénoms et dates
+ * s'écrivent — est **réglable** par le lecteur (05/10/2026), dans les filtres de
+ * l'arbre. 45 % convient à un téléphone ou un portable ; sur un écran 2K, 4K ou
+ * une télévision, les fiches restent grandes bien plus loin, et l'on veut lire
+ * les noms plus tôt. À l'inverse, on peut le relever pour un arbre plus calme.
+ */
+export const SEUIL_DES_NOMS = { min: 0.1, max: 0.9, defaut: SEUILS[1] } as const
+
+/** Le seuil ramené dans ses bornes ; une valeur illisible rend le défaut. */
+export function bornerSeuilDesNoms(seuil: number): number {
+  if (!Number.isFinite(seuil)) return SEUIL_DES_NOMS.defaut
+  return Math.min(SEUIL_DES_NOMS.max, Math.max(SEUIL_DES_NOMS.min, seuil))
+}
+
+/**
+ * Le niveau de détail à l'échelle `s`. Sous un seuil des noms plus bas que celui
+ * des familles, le niveau Familles disparaît : on passe de l'Ensemble aux Fiches.
+ */
+export function niveau(s: number, seuilDesNoms: number = SEUILS[1]): Niveau {
+  if (s >= seuilDesNoms) return 2
   if (s < SEUILS[0]) return 0
-  if (s < SEUILS[1]) return 1
-  return 2
+  return 1
 }
 
 /**
@@ -190,10 +212,10 @@ export interface JaugeDuZoom {
   seuils: readonly [number, number]
 }
 
-export function jaugeDuZoom(s: number, c: Canevas): JaugeDuZoom {
+export function jaugeDuZoom(s: number, c: Canevas, seuilDesNoms: number = SEUILS[1]): JaugeDuZoom {
   const min = echelleMin(c.largeur, c.largeurMonde)
   const etendue = Math.log(ECHELLE_MAX) - Math.log(min)
   const place = (e: number): number =>
     etendue <= 0 ? 1 : Math.min(1, Math.max(0, (Math.log(e) - Math.log(min)) / etendue))
-  return { pourcent: Math.round(s * 100), position: place(s), seuils: [place(SEUILS[0]), place(SEUILS[1])] }
+  return { pourcent: Math.round(s * 100), position: place(s), seuils: [place(Math.min(SEUILS[0], seuilDesNoms)), place(seuilDesNoms)] }
 }
