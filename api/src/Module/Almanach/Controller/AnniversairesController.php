@@ -8,6 +8,7 @@ use App\Module\Almanach\Service\NormaliseurDesAnniversaires;
 use App\Module\Core\Security\ReserveAuxMembres;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -44,9 +45,13 @@ final class AnniversairesController extends AbstractController
      * calendrier d'un membre du cercle à un membre hors cercle.
      */
     #[Route('/api/anniversaires', name: 'almanach_anniversaires', methods: ['GET'])]
-    public function anniversaires(NormaliseurDesAnniversaires $normaliseur): JsonResponse
+    public function anniversaires(Request $requete, NormaliseurDesAnniversaires $normaliseur): JsonResponse
     {
-        $reponse = new JsonResponse($normaliseur->vue());
+        // `?portee=tout` (décision du 05/10/2026) : la bascule « Toute la base », accordée à
+        // l'administration seule ; tout autre lecteur ne voit que son arbre.
+        $toutLaBase = 'tout' === $requete->query->get('portee') && $this->isGranted('ROLE_ADMIN');
+
+        $reponse = new JsonResponse($normaliseur->vue($toutLaBase));
         $reponse->headers->set('Cache-Control', 'private, no-store');
         $reponse->headers->set('Vary', 'Cookie');
 

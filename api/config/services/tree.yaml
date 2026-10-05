@@ -60,9 +60,25 @@ services:
     App\Module\Tree\Service\GeocodeurEnLigne:
         alias: App\Module\Tree\Service\GeocodeurNominatim
 
+    # L'arbre du lecteur, pour les onglets d'Explorer (décision du 05/10/2026). Alias YAML
+    # et non `#[AsAlias]` : `core.yaml` déclare un repli ouvert, et ce fichier, chargé
+    # après lui, doit l'emporter (même raison que `CalqueEnAttenteInterface`).
+    App\Module\Core\Contract\ArbreDuLecteurInterface:
+        alias: App\Module\Tree\Service\ArbreDuLecteur
+
 # ─────────────────────────────────────────────────────────────────────────────
 when@test:
     services:
+        # L'arbre du lecteur : un double programmable, qui ne retire rien par défaut. Les
+        # suites d'Explorer servent leurs fiches par des doubles en mémoire, sans
+        # `tree_person` : l'implémentation réelle n'y trouverait aucune ancre.
+        App\Tests\Core\Double\ArbreDuLecteurEnMemoire:
+            public: true
+
+        App\Module\Core\Contract\ArbreDuLecteurInterface:
+            alias: App\Tests\Core\Double\ArbreDuLecteurEnMemoire
+            public: true
+
         # `_defaults` n'est hérité ni d'un fichier à l'autre, ni d'un bloc `when@` au
         # bloc principal : sans ces deux lignes, la définition ci-dessous **remplace**
         # celle du prototype et le service se construit sans aucun argument. L'erreur ne

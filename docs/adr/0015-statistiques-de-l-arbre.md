@@ -89,9 +89,18 @@ arbre »).
 Les deux routes prennent `?portee=arbre|tout`. `arbre` est le défaut ; `tout` (tout le
 périmètre, donc toute la base pour l'administrateur hors bascule) n'est accordé qu'à
 l'administration — un membre qui le demande reçoit `arbre`, sans erreur. La charge dit la
-portée retenue (`portee`). L'écran montre à l'administration une bascule « Mon arbre /
-Toute la base » ; un membre n'en a pas. La fiche du lecteur vient de `Tree` par le port
+portée retenue (`portee`). La fiche du lecteur vient de `Tree` par le port
 `PortPointDeVue`, la même réponse que pour la parenté et la mise en page du graphe.
+
+**Étendu aux autres onglets d'Explorer** (Chronologie, Carte, Calendrier) le même jour :
+`GET /api/chronologie`, `/api/carte` et `/api/anniversaires` prennent le même
+`?portee=arbre|tout`, avec la même règle. Ils passent par le contrat
+`Core\Contract\ArbreDuLecteurInterface`, implémenté dans `Tree` (`ArbreDuLecteur`, sur
+`tree_family` et `tree_child`), qui resserre la liste avant le cercle — ce n'est pas un
+filtre de confidentialité, d'où un repli ouvert. Les statistiques gardent leur calcul sur
+leur relevé (même définition, mêmes tables). La bascule « Mon arbre / Toute la base » est
+posée **une fois**, au-dessus des onglets d'Explorer, pour l'administration seule, et
+retenue par le navigateur ; un membre n'en a pas.
 
 ### Ce que « Vérifié » veut dire
 

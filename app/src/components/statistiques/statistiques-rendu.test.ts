@@ -14,7 +14,8 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import Barres from './Barres.vue'
 import CarteRecord from './CarteRecord.vue'
 import Palmares from './Palmares.vue'
-import { etatDeLEcran, LISTES_DU_CHANTIER, PORTEES } from '@/views/StatsView.vue'
+import { etatDeLEcran, LISTES_DU_CHANTIER } from '@/views/StatsView.vue'
+import { PORTEES, porteeEffective } from '@/composables/usePorteeExplorer'
 import type { Statistiques } from '@/lib/api'
 
 async function rendre(composant: unknown, props: Record<string, unknown>): Promise<string> {
@@ -112,7 +113,9 @@ describe('l’écran', () => {
     expect(LISTES_DU_CHANTIER.map((l) => l.cle)).toEqual(['sansDateDeNaissance', 'sansParents', 'sansSource', 'nonVerifiees'])
   })
 
-  it('la bascule d’administration part de « Mon arbre »', () => {
+  it('la bascule d’administration part de « Mon arbre », et un membre reste sur son arbre', () => {
     expect(PORTEES.map((p) => p.valeur)).toEqual(['arbre', 'tout'])
+    expect(porteeEffective(true, 'tout')).toBe('tout')
+    expect(porteeEffective(false, 'tout')).toBe('arbre')
   })
 })

@@ -82,6 +82,7 @@ import { computed, type ComponentPublicInstance } from 'vue'
 import { useRoute } from 'vue-router'
 import ContenuGlissant from '@/components/mise-en-page/ContenuGlissant.vue'
 import OngletsGlissants from '@/components/mise-en-page/OngletsGlissants.vue'
+import BasculePortee from '@/components/mise-en-page/BasculePortee.vue'
 
 const route = useRoute()
 const actif = computed(() => ongletDe(route.name))
@@ -113,14 +114,16 @@ function surEcranEnPlace(): void {
 
 <template>
   <div class="flex flex-col">
-    <div class="flex-none border-b border-ligne bg-fond md:px-5">
+    <div class="flex flex-none flex-wrap items-center justify-between gap-x-4 border-b border-ligne bg-fond md:px-5">
       <OngletsGlissants
         :onglets="ONGLETS_EXPLORER"
         :actif="actif"
         etiquette="Explorer"
         egaux
-        class="md:max-w-[520px]"
+        class="w-full md:max-w-[520px]"
       />
+      <!-- Administration seulement : « Mon arbre / Toute la base », pour les quatre onglets. -->
+      <BasculePortee class="px-4 py-2 md:px-0" />
     </div>
 
     <RouterView v-slot="{ Component, route: affichee }">

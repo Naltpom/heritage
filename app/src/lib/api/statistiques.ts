@@ -28,6 +28,7 @@
  */
 
 import { requeteApi, type OptionsRequete } from './client'
+import type { PorteeExplorer } from './types'
 
 /** Une moyenne et son effectif. `moyenne` vaut `null` sur un échantillon vide. */
 export interface Moyenne {
@@ -79,7 +80,7 @@ export interface BrancheDesStats {
 }
 
 /** Ce que les chiffres couvrent : l'arbre du lecteur, ou toute la base (administration). */
-export type PorteeDesStatistiques = 'arbre' | 'tout'
+export type PorteeDesStatistiques = PorteeExplorer
 
 export interface Statistiques {
   calculeLe: string

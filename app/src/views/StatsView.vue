@@ -24,12 +24,6 @@ export const LISTES_DU_CHANTIER = [
   { cle: 'sansSource', libelle: 'Sans source' },
   { cle: 'nonVerifiees', libelle: 'Non vérifiées' },
 ] as const
-
-/** Les deux portées de la bascule d'administration, dans l'ordre de la page. */
-export const PORTEES = [
-  { valeur: 'arbre', libelle: 'Mon arbre', titre: 'Seulement la famille reliée à ma fiche' },
-  { valeur: 'tout', libelle: 'Toute la base', titre: 'Toutes les fiches, personnes sans lien connu comprises' },
-] as const
 </script>
 
 <script setup lang="ts">
@@ -58,8 +52,9 @@ export const PORTEES = [
  *
  * 5. **La portée : l'arbre du lecteur.** Les chiffres ne comptent que la
  *    famille reliée à sa fiche — pas les personnes sans lien connu. Seule
- *    l'administration a une bascule « Mon arbre / Toute la base » ; le serveur
- *    refuse `tout` à un membre de toute façon (il reçoit `arbre`).
+ *    l'administration a une bascule « Mon arbre / Toute la base », posée au-dessus
+ *    des onglets d'Explorer (`usePorteeExplorer`) ; le serveur refuse `tout` à un
+ *    membre de toute façon (il reçoit `arbre`).
  *
  * 6. **La mortalité des enfants est dite avec tact** : une phrase qui la situe
  *    avant le chiffre, la couleur des choses graves sans dramatisation.
@@ -73,6 +68,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 import { hauteurDuCadre } from '@/views/cadre'
 import { definirResume } from '@/composables/entete'
 import { useSession } from '@/composables/useSession'
+import { usePorteeExplorer } from '@/composables/usePorteeExplorer'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
@@ -110,7 +106,6 @@ import {
   chargerStatistiques,
   type Chantier,
   type CleDuChantier,
-  type PorteeDesStatistiques,
 } from '@/lib/api'
 
 const vue = shallowRef<Statistiques | null>(null)
@@ -118,7 +113,7 @@ const chantier = shallowRef<Chantier | null>(null)
 const erreur = shallowRef<unknown>(null)
 const chargement = ref(false)
 const listeOuverte = ref<CleDuChantier | null>(null)
-const portee = ref<PorteeDesStatistiques>('arbre')
+const { portee } = usePorteeExplorer()
 
 const { administrateur } = useSession()
 
@@ -205,11 +200,7 @@ const resumeEntete = computed(() =>
 )
 watch(resumeEntete, (texte) => definirResume(texte), { immediate: true })
 
-function changerPortee(valeur: PorteeDesStatistiques): void {
-  if (valeur === portee.value) return
-  portee.value = valeur
-  void charger()
-}
+watch(portee, () => void charger())
 
 function basculerListe(cle: CleDuChantier): void {
   listeOuverte.value = listeOuverte.value === cle ? null : cle
@@ -258,24 +249,6 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-else-if="vue && arbre && vie" class="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-6">
-        <!-- ─── Portée (administration seulement, décision 5) ─────────── -->
-        <div v-if="administrateur" class="flex flex-wrap items-center gap-2" role="group" aria-label="Portée des statistiques">
-          <span class="text-xs text-attenue">Compter :</span>
-          <button
-            v-for="p in PORTEES"
-            :key="p.valeur"
-            type="button"
-            class="flex h-9 flex-none items-center rounded-pastille border px-[13px] text-[13px] disabled:cursor-wait"
-            :class="p.valeur === portee ? 'border-accent bg-accent-doux font-semibold' : 'border-ligne text-attenue'"
-            :aria-pressed="p.valeur === portee"
-            :title="p.titre"
-            :disabled="chargement"
-            @click="changerPortee(p.valeur)"
-          >
-            {{ p.libelle }}
-          </button>
-        </div>
-
         <!-- ─── 1. L'arbre en chiffres ─────────────────────────────────── -->
         <section aria-labelledby="stats-arbre" class="flex flex-col gap-3">
           <h2 id="stats-arbre" class="m-0 text-lg font-semibold tracking-tight">L’arbre en chiffres</h2>

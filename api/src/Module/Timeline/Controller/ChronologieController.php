@@ -78,7 +78,11 @@ final class ChronologieController extends AbstractController
         $preference = $this->preferences->pour($this->lecteur->userId());
         $parametres = $this->requetes->parametresDeVue($requete, $preference);
 
-        $reponse = new JsonResponse($normaliseur->vue($parametres));
+        // `?portee=tout` (décision du 05/10/2026) : la bascule « Toute la base », accordée à
+        // l'administration seule ; tout autre lecteur ne voit que son arbre.
+        $toutLaBase = 'tout' === $requete->query->get('portee') && $this->isGranted('ROLE_ADMIN');
+
+        $reponse = new JsonResponse($normaliseur->vue($parametres, toutLaBase: $toutLaBase));
         $reponse->headers->set('Cache-Control', 'private, no-store');
         $reponse->headers->set('Vary', 'Cookie');
 

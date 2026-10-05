@@ -40,7 +40,8 @@
  *    règle que la chronologie et la recherche.
  * ────────────────────────────────────────────────────────────────────
  */
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, watchEffect } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
+import { usePorteeExplorer } from '@/composables/usePorteeExplorer'
 import { useRouter } from 'vue-router'
 import { hauteurDuCadre } from '@/views/cadre'
 import { chargerCarte, type GenreEvenement, type VueCarte } from '@/lib/api'
@@ -82,6 +83,9 @@ const racine = ref<HTMLElement | null>(null)
 const carte = ref<InstanceType<typeof CarteLeaflet> | null>(null)
 const hauteurCadre = ref('70vh')
 
+// La bascule « Mon arbre / Toute la base » d'Explorer (administration) : la
+// changer recharge l'écran.
+const { portee } = usePorteeExplorer()
 let abandon: AbortController | null = null
 
 const regroupement = computed(() => regrouperParLieu(vue.value, actifs.value))
@@ -111,7 +115,7 @@ async function charger(): Promise<void> {
   chargement.value = true
   erreur.value = null
   try {
-    const reponse = await chargerCarte(controleur.signal)
+    const reponse = await chargerCarte(controleur.signal, portee.value)
     if (controleur.signal.aborted) return
     vue.value = reponse
   } catch (cause) {
@@ -120,6 +124,8 @@ async function charger(): Promise<void> {
     if (!controleur.signal.aborted) chargement.value = false
   }
 }
+
+watch(portee, () => void charger())
 
 function surGenre(genre: GenreEvenement): void {
   actifs.value = basculerGenre(actifs.value, genre)

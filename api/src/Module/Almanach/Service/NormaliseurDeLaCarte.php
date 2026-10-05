@@ -92,9 +92,9 @@ final class NormaliseurDeLaCarte
     }
 
     /** @return array<string, mixed> la charge complète de `GET /api/carte` */
-    public function vue(\DateTimeImmutable $maintenant = new \DateTimeImmutable()): array
+    public function vue(\DateTimeImmutable $maintenant = new \DateTimeImmutable(), bool $toutLaBase = false): array
     {
-        $flux = $this->flux->pourLeLecteur();
+        $flux = $this->flux->pourLeLecteur($toutLaBase);
 
         /** @var array<string, LieuResolu> $parCle */
         $parCle = [];
