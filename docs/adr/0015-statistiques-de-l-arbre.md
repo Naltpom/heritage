@@ -77,6 +77,22 @@ ne compte pas. Écrit une fois : `Statistiques\Service\DateRetenue`.
    sur des dates masquées, avec sa branche : de quoi le reconnaître. Pour une union ou une
    fratrie, il faut voir les deux époux (la règle du « ET » d'`Almanach`).
 
+### La portée : l'arbre du lecteur (révision du 2026-10-05)
+
+Les chiffres ne décrivent que **l'arbre du lecteur** : la composante reliée (parent,
+enfant, conjoint) qui contient sa fiche — celle du membre emprunté sous la bascule
+« voir comme », à défaut la racine. Les fiches **sans lien connu**, que le périmètre
+laisse lire ailleurs, n'y entrent pas : elles ne sont pas sa famille, et faisaient gonfler
+les comptes de l'administrateur (« j'ai des données de personnes non rattachées à mon
+arbre »).
+
+Les deux routes prennent `?portee=arbre|tout`. `arbre` est le défaut ; `tout` (tout le
+périmètre, donc toute la base pour l'administrateur hors bascule) n'est accordé qu'à
+l'administration — un membre qui le demande reçoit `arbre`, sans erreur. La charge dit la
+portée retenue (`portee`). L'écran montre à l'administration une bascule « Mon arbre /
+Toute la base » ; un membre n'en a pas. La fiche du lecteur vient de `Tree` par le port
+`PortPointDeVue`, la même réponse que pour la parenté et la mise en page du graphe.
+
 ### Ce que « Vérifié » veut dire
 
 La règle unique du produit : `best_quay ≥ 2`. La part vérifiée est celle des fiches ;

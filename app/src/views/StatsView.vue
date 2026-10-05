@@ -24,6 +24,12 @@ export const LISTES_DU_CHANTIER = [
   { cle: 'sansSource', libelle: 'Sans source' },
   { cle: 'nonVerifiees', libelle: 'Non vérifiées' },
 ] as const
+
+/** Les deux portées de la bascule d'administration, dans l'ordre de la page. */
+export const PORTEES = [
+  { valeur: 'arbre', libelle: 'Mon arbre', titre: 'Seulement la famille reliée à ma fiche' },
+  { valeur: 'tout', libelle: 'Toute la base', titre: 'Toutes les fiches, personnes sans lien connu comprises' },
+] as const
 </script>
 
 <script setup lang="ts">
@@ -50,7 +56,12 @@ export const LISTES_DU_CHANTIER = [
  *    Il n'est pas « masqué » pour un membre : il n'est jamais demandé — et le
  *    serveur le refuserait de toute façon (`/api/administration/…`).
  *
- * 5. **La mortalité des enfants est dite avec tact** : une phrase qui la situe
+ * 5. **La portée : l'arbre du lecteur.** Les chiffres ne comptent que la
+ *    famille reliée à sa fiche — pas les personnes sans lien connu. Seule
+ *    l'administration a une bascule « Mon arbre / Toute la base » ; le serveur
+ *    refuse `tout` à un membre de toute façon (il reçoit `arbre`).
+ *
+ * 6. **La mortalité des enfants est dite avec tact** : une phrase qui la situe
  *    avant le chiffre, la couleur des choses graves sans dramatisation.
  * ────────────────────────────────────────────────────────────────────
  *
@@ -94,13 +105,20 @@ import {
   mortaliteParSiecle,
   parentsParSiecle,
 } from '@/components/statistiques/series'
-import { chargerChantier, chargerStatistiques, type Chantier, type CleDuChantier } from '@/lib/api'
+import {
+  chargerChantier,
+  chargerStatistiques,
+  type Chantier,
+  type CleDuChantier,
+  type PorteeDesStatistiques,
+} from '@/lib/api'
 
 const vue = shallowRef<Statistiques | null>(null)
 const chantier = shallowRef<Chantier | null>(null)
 const erreur = shallowRef<unknown>(null)
 const chargement = ref(false)
 const listeOuverte = ref<CleDuChantier | null>(null)
+const portee = ref<PorteeDesStatistiques>('arbre')
 
 const { administrateur } = useSession()
 
@@ -115,9 +133,9 @@ async function charger(): Promise<void> {
 
   try {
     const [stats, travaux] = await Promise.all([
-      chargerStatistiques(controleur.signal),
+      chargerStatistiques(portee.value, controleur.signal),
       // Décision 4 : jamais demandé pour un membre.
-      administrateur.value ? chargerChantier(controleur.signal) : Promise.resolve(null),
+      administrateur.value ? chargerChantier(portee.value, controleur.signal) : Promise.resolve(null),
     ])
     if (controleur.signal.aborted) return
     vue.value = stats
@@ -187,6 +205,12 @@ const resumeEntete = computed(() =>
 )
 watch(resumeEntete, (texte) => definirResume(texte), { immediate: true })
 
+function changerPortee(valeur: PorteeDesStatistiques): void {
+  if (valeur === portee.value) return
+  portee.value = valeur
+  void charger()
+}
+
 function basculerListe(cle: CleDuChantier): void {
   listeOuverte.value = listeOuverte.value === cle ? null : cle
 }
@@ -234,6 +258,24 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-else-if="vue && arbre && vie" class="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-6">
+        <!-- ─── Portée (administration seulement, décision 5) ─────────── -->
+        <div v-if="administrateur" class="flex flex-wrap items-center gap-2" role="group" aria-label="Portée des statistiques">
+          <span class="text-xs text-attenue">Compter :</span>
+          <button
+            v-for="p in PORTEES"
+            :key="p.valeur"
+            type="button"
+            class="flex h-9 flex-none items-center rounded-pastille border px-[13px] text-[13px] disabled:cursor-wait"
+            :class="p.valeur === portee ? 'border-accent bg-accent-doux font-semibold' : 'border-ligne text-attenue'"
+            :aria-pressed="p.valeur === portee"
+            :title="p.titre"
+            :disabled="chargement"
+            @click="changerPortee(p.valeur)"
+          >
+            {{ p.libelle }}
+          </button>
+        </div>
+
         <!-- ─── 1. L'arbre en chiffres ─────────────────────────────────── -->
         <section aria-labelledby="stats-arbre" class="flex flex-col gap-3">
           <h2 id="stats-arbre" class="m-0 text-lg font-semibold tracking-tight">L’arbre en chiffres</h2>
