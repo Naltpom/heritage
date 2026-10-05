@@ -243,24 +243,26 @@ onBeforeUnmount(() => {
         </p>
         <div class="grid grid-cols-2 gap-3">
           <label
-            class="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-2 rounded-panneau border border-ligne p-3 text-center text-sm font-semibold hover:border-accent focus-within:border-accent"
+            class="flex min-h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-panneau border border-accent bg-panneau p-3 text-center text-accent hover:bg-accent-doux focus-within:bg-accent-doux"
           >
             <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true" class="text-accent">
               <path d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
-            Importer une photo
+            <span class="text-sm font-semibold">Importer une photo</span>
+            <span class="text-xs text-attenue">Depuis la galerie ou vos fichiers</span>
             <input type="file" accept="image/*" class="sr-only" @change="surFichier" />
           </label>
           <button
             type="button"
-            class="flex min-h-24 flex-col items-center justify-center gap-2 rounded-panneau border border-ligne p-3 text-sm font-semibold hover:border-accent"
+            class="flex min-h-24 flex-col items-center justify-center gap-1 rounded-panneau border border-accent bg-panneau p-3 text-center text-accent hover:bg-accent-doux"
             @click="ouvrirCamera"
           >
             <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true" class="text-accent">
               <path d="M4 8h3l2-3h6l2 3h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
               <circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8" />
             </svg>
-            Prendre une photo
+            <span class="text-sm font-semibold">Prendre une photo</span>
+            <span class="text-xs text-attenue">Avec l’appareil photo</span>
           </button>
           <!-- Repli sans caméra dans la page : l'appareil photo natif du téléphone. -->
           <label

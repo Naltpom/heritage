@@ -35,6 +35,10 @@
  * `GET /api/demandes/brouillons/recherche`, filtrée par la règle du § 13.3 —
  * l'auteur et les administrateurs, personne d'autre.
  *
+ * Les **brouillons non envoyés** du lecteur en font partie (05/10/2026 : « il
+ * faut que la liste des personnes, même mes demandes non acceptées, fasse partie
+ * de la liste aussi ») ; la ligne le dit, puisque `enAttente` y vaut `false`.
+ *
  * **Deux appels et deux groupes à l'écran, pas une liste fusionnée.** Une ligne
  * de l'arbre et une fiche proposée ne sont pas la même chose : l'une existe,
  * l'autre attend une décision. Les mélanger ferait désigner « le père » sans
@@ -292,7 +296,14 @@ const aucunResultat = computed(
                 {{ brouillon.ligneDates }}
               </span>
               <span class="block text-xs text-attenue">
-                Demande n° {{ brouillon.demandeId }}, proposée par {{ brouillon.authorLabel }}
+                <template v-if="brouillon.enAttente">
+                  Demande n° {{ brouillon.demandeId }}, proposée par {{ brouillon.authorLabel }}
+                </template>
+                <!-- Un brouillon que son auteur n'a pas encore envoyé : il ne le voit
+                     que lui, et la demande qui s'y appuie attendra son envoi. -->
+                <template v-else>
+                  Votre brouillon n° {{ brouillon.demandeId }}, pas encore envoyé
+                </template>
               </span>
             </span>
 

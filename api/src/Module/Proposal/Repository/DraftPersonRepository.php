@@ -84,7 +84,7 @@ class DraftPersonRepository extends ServiceEntityRepository
     }
 
     /**
-     * Les fiches proposées par les demandes **encore en attente** que ce lecteur a le
+     * Les fiches proposées par les demandes **non encore tranchées** que ce lecteur a le
      * droit de voir.
      *
      * `$auteurUserId` à `null` veut dire « toutes », et n'est passé que pour un
@@ -93,26 +93,41 @@ class DraftPersonRepository extends ServiceEntityRepository
      * l'appel** plutôt que nullable par défaut : un appelant qui l'oublierait
      * montrerait à n'importe quel membre les propositions des autres.
      *
-     * Seules les `en_attente` : un brouillon non soumis n'est pas une proposition —
-     * son auteur n'a pas encore dit qu'il la voulait —, et une demande tranchée n'a
-     * plus rien à offrir, soit qu'elle ait produit une personne réelle, soit qu'elle
-     * ait été refusée.
+     * Les `en_attente`, et **les brouillons de `$brouillonsDe`** — les siens, jamais ceux
+     * d'un autre, administrateur compris : un brouillon non envoyé n'est visible que de
+     * son auteur (§ 5.7). Le commanditaire, le 05/10/2026 : « il faut que la liste des
+     * personnes, même mes demandes non acceptées, fasse partie de la liste aussi ». On
+     * enregistre un soir la fiche du grand-père sans l'envoyer, et le lendemain on veut
+     * y rattacher son fils. Une demande tranchée, elle, n'a plus rien à offrir, soit
+     * qu'elle ait produit une personne réelle, soit qu'elle ait été refusée.
      *
      * @return list<DraftPerson>
      */
-    public function enAttenteVisibles(?int $auteurUserId): array
+    public function enAttenteVisibles(?int $auteurUserId, ?int $brouillonsDe = null): array
     {
         $qb = $this->createQueryBuilder('b')
             ->join('b.request', 'd')
-            ->andWhere('d.status = :statut')
-            ->setParameter('statut', RequestStatus::EnAttente)
             ->addOrderBy('d.submittedAt', 'ASC')
             ->addOrderBy('d.id', 'ASC')
             ->addOrderBy('b.localRef', 'ASC');
 
+        $soumises = null === $auteurUserId
+            ? 'd.status = :statut'
+            : '(d.status = :statut AND d.authorUserId = :auteur)';
+
         if (null !== $auteurUserId) {
-            $qb->andWhere('d.authorUserId = :auteur')->setParameter('auteur', $auteurUserId);
+            $qb->setParameter('auteur', $auteurUserId);
         }
+
+        if (null !== $brouillonsDe) {
+            $qb->andWhere($soumises.' OR (d.status = :brouillon AND d.authorUserId = :brouillonsDe)')
+                ->setParameter('brouillon', RequestStatus::Brouillon)
+                ->setParameter('brouillonsDe', $brouillonsDe);
+        } else {
+            $qb->andWhere($soumises);
+        }
+
+        $qb->setParameter('statut', RequestStatus::EnAttente);
 
         /** @var list<DraftPerson> $lignes */
         $lignes = $qb->getQuery()->getResult();

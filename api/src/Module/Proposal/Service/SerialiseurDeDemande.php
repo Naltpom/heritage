@@ -8,6 +8,7 @@ use App\Module\Core\Enum\SubjectKind;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\DraftPerson;
 use App\Module\Proposal\Entity\Revision;
+use App\Module\Proposal\Enum\RequestStatus;
 use App\Module\Proposal\Repository\ChangeRequestOpRepository;
 use App\Module\Proposal\Repository\ChangeRequestRepository;
 use App\Module\Proposal\Repository\DraftLinkRepository;
@@ -285,11 +286,11 @@ final readonly class SerialiseurDeDemande
             'deceased' => $brouillon->isDeceased(),
             'ligneDates' => $this->normaliseur->ligneDates($brouillon->getBirth(), $brouillon->getDeath()),
             'authorLabel' => $demande->getAuthorLabel(),
-            // Toujours `true` sur cette route — elle ne rend que des demandes en attente
-            // —, et rendu quand même : le front pose la même pastille que sur un nœud du
-            // graphe, et il la pose sur ce que la charge dit, pas sur ce qu'il déduit de
-            // la route qu'il a appelée.
-            'enAttente' => true,
+            // `false` pour un brouillon que son auteur n'a pas encore envoyé : le front le
+            // dit à côté du nom, parce qu'une demande qui s'y appuie attendra qu'il le
+            // soit. Il pose sa pastille sur ce que la charge dit, pas sur ce qu'il déduit
+            // de la route qu'il a appelée.
+            'enAttente' => RequestStatus::Brouillon !== $demande->getStatus(),
         ];
     }
 

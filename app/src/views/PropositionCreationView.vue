@@ -41,17 +41,19 @@
  * écrire librement, puis fait relire les demandes qu'il prépare
  * (`components/proposition/assistant/`).
  *
- * Le formulaire n'a plus de bouton, mais il reste servi dans trois cas :
- *  - `?mode=formulaire`, écrit à la main ;
+ * Le formulaire reste servi dans trois cas :
+ *  - `?mode=formulaire` : c'est le bouton « Ajouter une personne » de l'accueil
+ *    (05/10/2026 — « met moi plutôt ajouter une personne, et c'est une page
+ *    formulaire ») ;
  *  - une reprise (`?refaire=`) : c'est lui qui sait reprendre une demande ;
  *  - la bascule « voir comme un membre » : l'assistant n'écrit rien lui-même,
  *    mais son analyse est une écriture pour l'API (quota, journal), qui la
  *    refuserait en `409`.
  * ────────────────────────────────────────────────────────────────────
  */
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { creerDemande, invaliderGraphe, type OrigineReprise } from '@/lib/api'
+import { creerDemande, invaliderGraphe, televerserMedia, type OrigineReprise } from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import AssistantProposition from '@/components/proposition/assistant/AssistantProposition.vue'
@@ -64,6 +66,8 @@ import BlocLiens from '@/components/proposition/BlocLiens.vue'
 import ChampDateIncertaine from '@/components/proposition/ChampDateIncertaine.vue'
 import ChampsIdentite from '@/components/proposition/ChampsIdentite.vue'
 import PanneauConflit from '@/components/proposition/PanneauConflit.vue'
+import PhotosAJoindre, { type PhotoAJoindre } from '@/components/proposition/PhotosAJoindre.vue'
+import { envoyerLesPhotos, photosAEnvoyer } from '@/components/proposition/photos'
 import { conflitDeDemande, type ConflitDeDemande } from '@/components/proposition/conflit'
 import {
   corpsCreationPersonne,
@@ -87,6 +91,19 @@ const envoi = ref(false)
 const erreur = ref<unknown>(null)
 const conflit = ref<ConflitDeDemande | null>(null)
 const erreurs = ref<Record<string, string>>({})
+
+/** Les photos à joindre, chacune avec sa description. */
+const photos = ref<PhotoAJoindre[]>([])
+/**
+ * La demande déjà déposée quand des photos n'ont pas pu partir. Un second clic
+ * ne redépose pas la demande — elle existe — et ne renvoie que les photos
+ * restées en échec.
+ */
+const demandeDeposee = ref<number | null>(null)
+
+onBeforeUnmount(() => {
+  for (const photo of photos.value) if (photo.apercu) URL.revokeObjectURL(photo.apercu)
+})
 
 const suspendu = computed(() => ecrituresSuspendues(vueEmpruntee.value))
 const motifSuspendu = computed(() => motifSuspension(vueEmpruntee.value))
@@ -174,6 +191,12 @@ async function deposer(soumettre: boolean): Promise<void> {
   erreurs.value = {}
 
   try {
+    // La demande est déjà là : seules des photos restaient à envoyer.
+    if (demandeDeposee.value !== null) {
+      await terminer(demandeDeposee.value)
+      return
+    }
+
     const provenance = origine.value
     const options = { message: message.value, soumettre }
     const resultat = corpsCreationPersonne(
@@ -192,7 +215,8 @@ async function deposer(soumettre: boolean): Promise<void> {
     // de son auteur (§ 13.4) : l'`ETag` du graphe est donc périmé.
     invaliderGraphe()
 
-    await routeur.push({ name: 'demande.detail', params: { id: demande.id } })
+    demandeDeposee.value = demande.id
+    await terminer(demande.id)
   } catch (cause) {
     const reconnu = conflitDeDemande(cause)
     if (reconnu !== null) conflit.value = reconnu
@@ -201,6 +225,17 @@ async function deposer(soumettre: boolean): Promise<void> {
     envoi.value = false
   }
 }
+
+/** Envoie les photos, puis mène au suivi de la demande — sauf si l'une a échoué :
+ *  on reste alors ici, la photo dit pourquoi, et « Réessayer » la renvoie. */
+async function terminer(demandeId: number): Promise<void> {
+  const echecs = await envoyerLesPhotos(photos.value, demandeId, televerserMedia)
+  if (echecs === 0) await routeur.push({ name: 'demande.detail', params: { id: demandeId } })
+}
+
+const photosEnEchec = computed(() =>
+  demandeDeposee.value === null ? 0 : photosAEnvoyer(photos.value).length,
+)
 
 function refaire(demandeId: number | null): void {
   if (demandeId === null) return
@@ -257,10 +292,12 @@ function refaire(demandeId: number | null): void {
 
     <template v-else>
     <header class="mb-5">
-      <h1 class="text-xl font-semibold tracking-tight">Proposer l’ajout d’une personne</h1>
+      <h1 class="text-xl font-semibold tracking-tight">Ajouter une personne</h1>
       <p class="mt-1.5 text-sm text-attenue">
         Votre proposition part en validation, comme une correction de fiche. La personne
         apparaîtra dans votre arbre en attendant, signalée comme non validée — et pour vous seul.
+        Vous pouvez la relier aux personnes de l’arbre comme à celles que vous avez déjà
+        proposées, même pas encore validées.
       </p>
     </header>
 
@@ -340,6 +377,10 @@ function refaire(demandeId: number | null): void {
              quoi elle y flotterait. -->
         <BlocLiens v-model="saisie" :erreurs="erreurs" />
 
+        <PanneauBase titre="Photos ou fichiers">
+          <PhotosAJoindre v-model="photos" :desactive="suspendu || envoi" />
+        </PanneauBase>
+
         <PanneauBase titre="Ce que vous savez">
           <div class="flex flex-col gap-3">
             <label class="flex flex-col gap-1">
@@ -370,13 +411,30 @@ function refaire(demandeId: number | null): void {
           </div>
         </PanneauBase>
 
+        <p
+          v-if="photosEnEchec > 0"
+          class="m-0 rounded-panneau border border-alerte-bord bg-alerte-doux px-3.5 py-3 text-sm"
+          role="alert"
+        >
+          Votre demande n° {{ demandeDeposee }} est enregistrée, mais
+          {{ photosEnEchec > 1 ? `${photosEnEchec} fichiers n’ont pas pu être envoyés` : 'un fichier n’a pas pu être envoyé' }}.
+          <RouterLink :to="{ name: 'demande.detail', params: { id: demandeDeposee } }" class="font-semibold underline">
+            Voir ma demande sans elles
+          </RouterLink>
+        </p>
+
         <div class="flex flex-wrap items-center gap-2">
-          <BoutonBase type="submit" :chargement="envoi" :desactive="suspendu">
-            Envoyer la proposition
+          <BoutonBase v-if="demandeDeposee !== null" type="submit" :chargement="envoi" :desactive="suspendu">
+            Réessayer l’envoi des fichiers
           </BoutonBase>
-          <BoutonBase variante="secondaire" :desactive="suspendu || envoi" @click="deposer(false)">
-            Enregistrer sans envoyer
-          </BoutonBase>
+          <template v-else>
+            <BoutonBase type="submit" :chargement="envoi" :desactive="suspendu">
+              Envoyer la proposition
+            </BoutonBase>
+            <BoutonBase variante="secondaire" :desactive="suspendu || envoi" @click="deposer(false)">
+              Enregistrer sans envoyer
+            </BoutonBase>
+          </template>
           <RouterLink :to="{ name: 'arbre' }" class="text-sm text-attenue underline">
             Revenir à l’arbre
           </RouterLink>

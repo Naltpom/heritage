@@ -113,6 +113,7 @@ import { estPivotable, pivoterFichier } from '@/components/medias/pivotement'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
+import BoutonsPhotos from '@/components/medias/BoutonsPhotos.vue'
 import {
   chargerLesQuestions,
   jeNeSaisPas,
@@ -244,11 +245,6 @@ async function agir(question: Question, geste: () => Promise<void>): Promise<voi
 
 const erreursParQuestion = ref<Record<number, unknown>>({})
 
-function surFichier(question: Question, evenement: Event): void {
-  const entree = evenement.target as HTMLInputElement
-  poserPhoto(question.id, entree.files?.[0] ?? null)
-}
-
 /** L'aperçu de chaque photo choisie, pour qu'on voie si elle est couchée. */
 const apercusPhotos = ref<Record<number, string>>({})
 
@@ -361,22 +357,22 @@ onBeforeUnmount(() => avorteur?.abort())
             placeholder="Ce dont vous vous souvenez, même approximatif."
           />
 
-          <label class="flex flex-wrap items-center gap-2 text-xs text-attenue">
-            <span>{{ question.attendPhoto ? 'Une photo' : 'Une photo, si vous en avez une' }}</span>
+          <div class="flex flex-col gap-1.5">
+            <span class="text-xs text-attenue">{{ question.attendPhoto ? 'Une photo' : 'Une photo, si vous en avez une' }}</span>
             <!--
-              `capture="environment"` : sur mobile, l'appareil photo plutôt que la
-              galerie. Voir la décision 4 de l'en-tête pour les deux seules
-              valeurs admises — une valeur inventée reste du HTML valide et ne
-              produit aucune erreur, elle laisse juste le navigateur choisir.
+              Les deux boutons communs (`BoutonsPhotos`) : « Prendre une photo »
+              pose `capture="environment"` — l'appareil photo arrière, on
+              photographie un document ou une photo posée sur la table. Voir la
+              décision 4 de l'en-tête.
             -->
-            <input
-              type="file"
+            <BoutonsPhotos
+              :multiple="false"
               accept="image/*"
-              capture="environment"
-              class="text-xs"
-              @change="surFichier(question, $event)"
+              importer-aide="Depuis la galerie ou vos fichiers"
+              :importer="apercusPhotos[question.id] ? 'Choisir une autre photo' : 'Importer une photo'"
+              @fichiers="(f) => poserPhoto(question.id, f[0] ?? null)"
             />
-          </label>
+          </div>
 
           <div v-if="apercusPhotos[question.id]" class="flex items-center gap-2">
             <img

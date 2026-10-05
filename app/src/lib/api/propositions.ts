@@ -937,7 +937,8 @@ export interface BrouillonTrouve {
   ligneDates: string | null
   /** Qui l'a proposée. Un administrateur en voit d'autres que les siennes. */
   authorLabel: string
-  /** Toujours `true` sur cette route. Lu quand même, pas déduit de l'URL. */
+  /** `true` pour une demande envoyée, `false` pour un brouillon du lecteur pas
+   *  encore envoyé. Lu dans la charge, pas déduit de l'URL. */
   enAttente: boolean
 }
 

@@ -39,6 +39,7 @@ import BoutonBase from '@/components/base/BoutonBase.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import PartageNaissance from '@/components/compte/PartageNaissance.vue'
+import BoutonsPhotos from '@/components/medias/BoutonsPhotos.vue'
 import { partageParDefaut, resumePartage } from '@/components/compte/partageNaissance'
 
 const { personId } = defineProps<{ personId: number }>()
@@ -63,8 +64,6 @@ const note = ref('')
 const envoi = ref(false)
 const erreurEnvoi = ref<unknown>(null)
 const refusLocal = ref<string | null>(null)
-/** Remonte le `<input type="file">` : c'est la seule façon de le vider. */
-const versionFichier = ref(0)
 
 const champs = computed(() => analyserErreur(erreurEnvoi.value)?.champs ?? {})
 /** Ici, les refus arrivent sous `annee`, `mois`, `jour` — les champs du formulaire. */
@@ -92,8 +91,7 @@ async function charger(): Promise<void> {
 
 watch(() => personId, () => void charger(), { immediate: true })
 
-function choisirDocument(evenement: Event): void {
-  const fichier = (evenement.target as HTMLInputElement).files?.[0] ?? null
+function choisirDocument(fichier: File | null): void {
   refusLocal.value = fichier !== null && fichier.size > TAILLE_MAXIMALE ? 'Le document dépasse 10 Mo.' : null
   document.value = fichier
 }
@@ -110,7 +108,6 @@ async function deposer(): Promise<void> {
     document.value = null
     note.value = ''
     partage.value = partageParDefaut()
-    versionFichier.value++
   } catch (cause) {
     erreurEnvoi.value = cause
   } finally {
@@ -188,20 +185,27 @@ function ligneDHistorique(autorisation: AutorisationNaissance): string {
         novalidate
         @submit.prevent="deposer"
       >
-        <label class="flex flex-col gap-1">
+        <div class="flex flex-col gap-1.5">
           <span class="text-sm font-medium">
             {{ etat.autorisation === null ? 'Document signé' : 'Remplacer par un nouveau document signé' }}
           </span>
-          <input
-            :key="versionFichier"
-            type="file"
+          <BoutonsPhotos
+            :multiple="false"
             :accept="TYPES_ACCEPTES"
-            class="text-sm"
-            @change="choisirDocument"
+            importer="Importer le document"
+            importer-aide="PDF ou image"
+            prendre="Photographier le document"
+            prendre-aide="Avec l’appareil photo"
+            :desactive="envoi"
+            @fichiers="(f) => choisirDocument(f[0] ?? null)"
           />
+          <span v-if="document !== null" class="flex flex-wrap items-center gap-2 text-sm">
+            <span class="min-w-0 truncate">{{ document.name }}</span>
+            <button type="button" class="text-xs text-attenue underline" @click="choisirDocument(null)">Retirer</button>
+          </span>
           <span class="text-xs text-attenue">PDF, JPEG, PNG ou WebP, 10 Mo au plus.</span>
           <span v-if="refusDocument" class="text-xs text-alerte">{{ refusDocument }}</span>
-        </label>
+        </div>
 
         <PartageNaissance
           v-model="partage"

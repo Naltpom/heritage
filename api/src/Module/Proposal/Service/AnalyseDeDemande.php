@@ -183,7 +183,7 @@ final readonly class AnalyseDeDemande
      * | État | Ce que ça veut dire | Ce qui en découle |
      * |---|---|---|
      * | `resolue` | l'autre demande est validée, la personne existe | on applique, l'identifiant est connu |
-     * | `en_attente` | l'autre demande n'est pas tranchée | `dependance_en_attente` — on attend |
+     * | `en_attente` | l'autre demande n'est pas tranchée (soumise, ou encore en brouillon) | `dependance_en_attente` — on attend |
      * | `morte` | refusée, retirée ou caduque | caducité : la personne ne naîtra pas |
      * | `disparue` | la ligne `prp_draft_person` n'est plus là | caducité, pour la même raison |
      *
@@ -245,7 +245,9 @@ final readonly class AnalyseDeDemande
 
         $etat = match (true) {
             null !== $brouillon->getResolvedPersonId() => 'resolue',
-            RequestStatus::EnAttente === $autre->getStatus() => 'en_attente',
+            // Un brouillon non envoyé n'est pas mort : son auteur peut encore l'envoyer.
+            RequestStatus::EnAttente === $autre->getStatus(),
+            RequestStatus::Brouillon === $autre->getStatus() => 'en_attente',
             default => 'morte',
         };
 

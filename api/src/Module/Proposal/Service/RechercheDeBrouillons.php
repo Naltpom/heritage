@@ -39,6 +39,7 @@ use App\Module\Proposal\Repository\DraftPersonRepository;
  * |---------------------------------------------|--------------------------------------|
  * | Un membre                                   | les fiches de **ses** demandes        |
  * | Administrateur                              | celles de **toutes** les demandes     |
+ * |                                             | soumises, et de ses propres brouillons|
  * | Administrateur sous « voir comme un membre »| ce que verrait le membre emprunté     |
  * | Compte `en_attente`                         | rien — il ne dépose pas de demande    |
  *
@@ -101,11 +102,14 @@ final readonly class RechercheDeBrouillons
         }
 
         $auteur = $lecteur->voitToutesLesDemandes() ? null : $lecteur->identiteEffective();
+        // Les brouillons non envoyés : ceux du lecteur effectif, et de lui seul — un
+        // administrateur ne voit pas ce qu'un membre n'a pas encore envoyé.
+        $brouillonsDe = $lecteur->identiteEffective();
 
         $elements = [];
         $tronque = false;
 
-        foreach ($this->brouillons->enAttenteVisibles($auteur) as $brouillon) {
+        foreach ($this->brouillons->enAttenteVisibles($auteur, $brouillonsDe) as $brouillon) {
             if (!$this->correspond($brouillon, $mots)) {
                 continue;
             }
