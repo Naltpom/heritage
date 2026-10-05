@@ -99,6 +99,7 @@ import {
 } from '@/histoire/vue'
 import { memoriserVue, reprendreVue, type VueMemorisee } from '@/histoire/retour'
 import { ligneDe, seulementLaLigne } from '@/histoire/ligneDirecte'
+import { disposerEnPedigree } from '@/histoire/pedigree'
 import { basculerFamille, familleDuClic, familleEclairee } from '@/histoire/eclairage'
 import PortraitFiche from '@/components/personne/PortraitFiche.vue'
 import IdentiteFiche from '@/components/personne/IdentiteFiche.vue'
@@ -210,9 +211,13 @@ function disposer(graphe: Graphe): void {
   // La ligne directe SEULE : tout le reste quitte l'écran, et l'arbre se refait sur elle.
   const racine = cleLigneSeule.value
   cleDisposee = racine
-  const reduit = racine !== null && filtre.noeuds.some((n) => n.id === racine) ? seulementLaLigne(filtre, racine) : filtre
+  // Elle a sa propre forme : un arbre binaire, chacun au milieu de ses deux parents.
+  if (racine !== null && filtre.noeuds.some((n) => n.id === racine)) {
+    disposition.value = disposerEnPedigree(auFormat(seulementLaLigne(filtre, racine), formatDesCartes.value), racine, graphe.ego)
+    return
+  }
   // Les boîtes en dernier : le tri des familles ne lit que les liens, jamais `w` ni `h`.
-  disposition.value = disposerLignees(auFormat(reduit, formatDesCartes.value), {
+  disposition.value = disposerLignees(auFormat(filtre, formatDesCartes.value), {
     alliances: alliancesDansLArbre.value ? 'dans-l-arbre' : 'a-part',
     fratriesParNaissance: fratriesParNaissance.value,
   })
@@ -1228,7 +1233,7 @@ const etiquettesGouttiere = computed(() => {
         y: versEcranY(g.y) - (compact ? 8 : 14),
         libelle: mobile
           ? g.rangee === 0
-            ? 'Vous'
+            ? disposition.value?.parId.has(egoDuLecteur.value ?? '') ? 'Vous' : 'Racine'
             : `${g.rangee > 0 ? '+' : ''}${g.rangee}`
           : compact && annee
             ? `${g.libelle} · ${annee}`
