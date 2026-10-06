@@ -2,6 +2,13 @@
 
 Date : 2026-09-15 · Statut : acceptée
 
+> **À lire d'abord — révision du 2026-10-06, « l'arbre `/arbre` est en partie du HTML ».**
+> L'écran de l'arbre ne dessine en SVG que ses traits ; ses boîtes, ses textes et ses photos
+> sont du HTML. Les trois règles s'y appliquent, et ce qu'elles deviennent pour le HTML —
+> la couleur transparente au lieu d'`opacity`, une transformation par couche au lieu d'un
+> `viewBox`, un rendu Vue cadencé pour les seuls textes — est écrit dans la révision, en fin
+> de document.
+
 ## Contexte
 
 Le canevas à porter fait **377 nœuds et 377 arêtes**, soit ~750 éléments SVG, sur une boîte de
@@ -141,3 +148,59 @@ que la personne est vivante. C'est voulu, pas un oubli.
   ne s'en apercevra avant que tout soit lent.
 - Les fixtures doivent contenir au moins un divorce, sans quoi `.ar.divorce` n'est jamais rendu
   et sa conservation n'est jamais vérifiée (ADR 0006).
+
+## Révision du 2026-10-06 — l'arbre `/arbre` : des traits en SVG, des boîtes et des textes en HTML
+
+**Le constat.** L'écran de l'arbre (`views/HistoireView.vue`, la route `arbre`) n'est pas le
+canevas tout-SVG que cet ADR décrit. Il dessine les **traits** dans un `<svg>`, et les
+**boîtes** des fiches, leurs **textes** et leurs **photos** en HTML posé par-dessus. Et il
+enfreignait les trois règles : le `<svg>` était zoomé par `<g transform="… scale(…)">`, ses
+traits portaient `opacity`, les boîtes, textes et photos estompés aussi (plusieurs centaines
+d'éléments à la fois pendant une recherche), et **l'écran entier se rendait à nouveau à chaque
+image d'un glisser**, parce que les textes dépendaient d'un `ref` de cadrage.
+
+**Ce qui est fait, règle par règle** — et ce qui ne pouvait pas l'être à la lettre.
+
+- **Règle 1.** Le `<svg>` des traits (`histoire/TracesArbre.vue`) est zoomé par son **`viewBox`**,
+  une écriture par image (`viewBoxDe`), avec `preserveAspectRatio="none"` : l'échelle verticale
+  de l'arbre est séparée de l'horizontale (`syDe`), et le `viewBox` la porte telle quelle.
+  **Les boîtes HTML n'ont pas de `viewBox`.** Elles restent posées en coordonnées monde dans
+  **un seul** conteneur dont la transformation (`translate` + `scale`) est écrite à chaque image
+  (`transformationMonde`), sans `will-change` ni animation : le conteneur n'est pas promu en
+  couche, il est peint dans celle du canevas, découpée par le cadre en `overflow: hidden` —
+  le coût reste celui du visible. Les passer en SVG aurait perdu ce que le HTML leur donne :
+  un vrai bouton atteignable au clavier, des coins arrondis qui restent ronds sous une échelle
+  anisotrope, le liseré de branche. La couche des textes, en coordonnées écran, reçoit elle
+  aussi **une** transformation entre deux recalculs (`transformationRelative`).
+- **Règle 2.** Plus aucune `opacity` sur le canevas. Les traits : `stroke-opacity` (et
+  `fill-opacity` pour les silhouettes). Pour le HTML, l'équivalent de `fill-opacity` est une
+  **couleur partiellement transparente** dans la peinture même (`color-mix(… transparent)`,
+  `histoire/branches.ts › attenuer`) : fond et bordures d'une boîte estompée, couleur d'un
+  texte estompé. Une photo ne peut pas se peindre à moitié : elle reçoit un **voile** de la
+  couleur du fond par-dessus. Les animations d'apparition passent par `background-color`,
+  `border-color`, `stroke-opacity` et `visibility` — plus d'`opacity` ni de `transform` animés,
+  qui auraient fait de chaque fiche une couche de composition le temps de l'animation. Reste,
+  et c'est délibéré : la réduction du texte d'une fiche (`transform: scale(r)`, statique, sur
+  les seuls textes visibles) — une transformation 2D sans animation n'isole rien dans une
+  surface à part, et le corollaire ne la vise pas.
+- **Règle 3.** Les chemins du `<svg>` et les boîtes sont **construits impérativement** une fois
+  par disposition puis mutés (`TracesArbre.vue`, `FichesMonde.vue` : ni `v-for`, ni `:class`, ni
+  `v-if` dans le canevas), avec **un** écouteur délégué chacun. Le cadrage vit **hors de la
+  réactivité** (`histoire/useCadrage.ts`) : pendant un geste, rien d'autre que des écritures
+  dans le DOM — le `viewBox`, deux transformations, et le placement du bandeau des familles,
+  de la gouttière des générations et du cadre de la mini-carte. **L'exception, assumée :** les
+  textes et photos des fiches visibles, les noms de foyers et les anneaux sont rendus par Vue
+  (`CalqueLibelles.vue`), parce que leur **contenu** change avec la place (« Opale » ou
+  « Opale Bourrache »). Ils ne le sont jamais à chaque image : à partir d'un **instantané** du
+  cadrage, publié à la fin du geste, à un changement de niveau de détail, ou au plus toutes
+  les 160 ms pendant le geste (`histoire/cadence.ts`). Ils sont posés jusqu'à 40 % au-delà du
+  bord, pour qu'un glisser ne découvre pas des fiches muettes avant le recalcul suivant.
+
+**Ce qui le vérifie.** `histoire/rendu-adr0007.test.ts` lit le source des composants de
+l'arbre et refuse toute `opacity`, tout `transform` sur un groupe SVG et tout `v-for` sur les
+fiches ou les traits ; `histoire/cadrage-dom.test.ts` vérifie que le `viewBox`, la
+transformation des boîtes et celle des textes montrent exactement le même cadrage, et que la
+cadence publie au plus une fois par intervalle. Observé dans Chromium, sur un arbre de fixtures de 442
+fiches et une API simulée : une dizaine de recalculs des textes pour 60 images de glisser,
+là où l'écran entier se rendait 60 fois. Le protocole chiffré des Conséquences (zoom ×8 au
+clavier, recherche caractère par caractère, sur les vraies données) reste à passer.

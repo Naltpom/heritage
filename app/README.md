@@ -53,6 +53,9 @@ Les tests portent sur ce qui se casse en silence, pas sur les composants :
 | `src/lib/api/revalidation.test.ts` | l'`ETag` du graphe : en-tête envoyé, `304`, oubli |
 | `src/router/rechargement.test.ts` | après une mise en production, un écran disparu **recharge une fois** — jamais en boucle |
 | `src/composables/erreursGlobales.test.ts` | le filet global : il journalise et prévient, sans crier sur ce qui n'est pas une panne |
+| `src/histoire/magasinGraphe.test.ts` | le graphe gardé : un `304` le reprend sans rien recalculer, **un changement de session le vide** |
+| `src/histoire/rendu-adr0007.test.ts` | les règles de l'ADR 0007 dans le source de l'arbre : ni `opacity`, ni `scale()` sur le SVG, ni `v-for` sur les fiches |
+| `src/composables/useRecherchePersonnes.test.ts` | la recherche : chargement, **panne** (jamais « Personne ne correspond. »), vide, résultats, annulation |
 
 ## Production
 
@@ -115,6 +118,24 @@ toutes les interactions ultérieures (zoom, pan, surlignage de recherche,
 sélection) passent par des écritures directes dans le DOM — pas par des
 `ref()`/`computed()` liés au template. Les 377 nœuds ne doivent **jamais**
 figurer dans un `v-for` réactif.
+
+**Comment `/arbre` les tient** (`views/HistoireView.vue`, qui assemble ; les pièces
+sont dans `src/histoire/`). L'écran dessine ses traits en SVG, mais ses boîtes,
+textes et photos en HTML : ce que les règles deviennent pour le HTML est tranché
+par la révision du 2026-10-06 de l'ADR 0007. En bref :
+
+- `TracesArbre.vue` — le `<svg>` des traits, vide dans le gabarit, construit à la
+  main ; zoom par `viewBox` (`preserveAspectRatio="none"` : l'échelle verticale
+  est séparée), `stroke-opacity` seulement ;
+- `FichesMonde.vue` — les boîtes, construites à la main, un écouteur délégué ; le
+  pan et le zoom écrivent la transformation d'**un** conteneur ;
+- `useCadrage.ts` — le cadrage hors de la réactivité : pendant un geste, rien que
+  des écritures dans le DOM. Vue ne reçoit qu'un **instantané** (`rendu`), à la fin
+  du geste, à un changement de niveau, ou au plus toutes les 160 ms ;
+- `CalqueLibelles.vue` — les textes et photos des fiches visibles, recalculés
+  depuis cet instantané ; entre deux, une transformation sur leur conteneur ;
+- estomper une fiche, c'est **changer sa couleur** (`attenuer`, `apparence.ts`),
+  jamais poser `opacity` — `rendu-adr0007.test.ts` le refuse dans le source.
 
 ### Le mobile s'écrit en `max-md:`, et jamais autrement
 
@@ -186,6 +207,8 @@ app/
       avisGlobal.ts   l'avis global, une seule place (singleton)
       erreursGlobales.ts  errorHandler + unhandledrejection → journal + avis
       partage.ts      feuille de partage ou presse-papiers, adresse absolue
+      useRecherchePersonnes.ts  LA recherche de personnes : états, délai, annulation
+    histoire/         l'arbre `/arbre` : disposition, cadrage, couches, magasin du graphe
     lib/
       api/
         types.ts        types du contrat (§ 1 à § 16)
@@ -436,6 +459,23 @@ Revalider au montage de la vue, au retour d'onglet, et après **toute** action q
 L'`ETag` est aussi oublié à tout changement de session : il incorpore les
 demandes en attente du lecteur et, sous la bascule « voir comme un membre », le
 membre emprunté.
+
+L'arbre ne l'appelle pas directement : il passe par `src/histoire/magasinGraphe.ts`,
+qui garde **le graphe et sa disposition** d'une visite à l'autre (un retour de fiche
+s'affiche tout de suite, et un `304` ne recalcule rien), revalide au montage et au
+retour d'onglet (`visibilitychange`), et partage une requête en vol. Le magasin
+s'abonne à l'oubli des `ETag` (`surOubliEtag`) : quand le module de session les
+oublie tous — connexion, déconnexion, bascule « voir comme », incarnation (ADR 0010)
+—, il se vide, et une réponse partie avant est jetée. Un lecteur ne voit jamais
+l'arbre du précédent. Tout autre cache de ce genre doit s'abonner de la même façon.
+
+**La recherche de personnes** passe par `useRecherchePersonnes`
+(`src/composables/`), partagée par l'en-tête, la barre du bas de l'arbre et la page
+`recherche` (« Voir tous les résultats », jusqu'au plafond de 50 de l'API). Elle
+distingue cinq états — rien à chercher, chargement, **panne** (avec « Réessayer »),
+vide, résultats — : une coupure de réseau ne s'affiche jamais « Personne ne
+correspond. ». Les deux champs suivent le motif *combobox* de WAI-ARIA
+(`aria-expanded`, `aria-controls`, `aria-activedescendant`, options en `listbox`).
 
 ### 5. Afficher une erreur
 

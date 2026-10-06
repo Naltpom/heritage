@@ -2,7 +2,8 @@
 /**
  * Le canevas de la chronologie : le `<svg>` et ses gestes.
  *
- * Coquille, comme `CanevasArbre.vue` : il monte un `<svg>` vide, le confie à
+ * Coquille, comme `histoire/TracesArbre.vue` pour les traits de l'arbre : il
+ * monte un `<svg>` vide, le confie à
  * `construireCanevasChronologie()` et n'y touche plus que par l'interface
  * impérative que le pilote lui rend. Rien de ce qui est dans le canevas n'est
  * réactif.

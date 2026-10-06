@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { oublierEtag, requeteRevalidee } from './revalidation'
+import { oublierEtag, requeteRevalidee, surOubliEtag } from './revalidation'
 import { ErreurApi } from './erreurs'
 
 /**
@@ -145,5 +145,19 @@ describe('revalidation par ETag', () => {
     // Troisième appel sans `If-None-Match` : on ne revalide pas contre un état
     // qu'on n'a peut-être plus le droit de voir.
     expect(appels[2]?.ifNoneMatch).toBeNull()
+  })
+})
+
+describe('les abonnés à l’oubli', () => {
+  it('sont prévenus de la clé oubliée, ou de `undefined` quand tout est oublié', () => {
+    const recus: (string | undefined)[] = []
+    const desabonner = surOubliEtag((cle) => recus.push(cle))
+
+    oublierEtag(CLE)
+    oublierEtag()
+    desabonner()
+    oublierEtag()
+
+    expect(recus).toEqual([CLE, undefined])
   })
 })
