@@ -20,6 +20,10 @@
  *   menu déroulant sur bureau et le feuillet sur téléphone ;
  * - fermé, il est `max-md:hidden` (et `md:hidden`), jamais `inert`.
  *
+ * L'en-tête est collé en haut, en `z-30`. La barre vit en `z-20` (son menu
+ * passe au-dessus du contenu, sous l'en-tête) ; feuillet ouvert, elle monte en
+ * `z-40` pour que son voile couvre aussi l'en-tête.
+ *
  * La barre **n'a aucun état métier** : le nombre de filtres actifs et le
  * libellé du bouton « Voir … » lui sont donnés ; elle émet `reinitialiser`.
  */
@@ -107,8 +111,8 @@ function fermer(): void {
 
 <template>
   <div
-    class="relative z-20 flex flex-none items-center gap-2.5 border-b border-ligne whitespace-nowrap md:h-[50px] md:bg-fond md:px-5"
-    :class="$slots.vue ? 'max-md:bg-panneau max-md:px-3 max-md:pb-2.5' : 'max-md:contents'"
+    class="relative flex flex-none items-center gap-2.5 border-b border-ligne whitespace-nowrap md:h-[50px] md:bg-fond md:px-5"
+    :class="[$slots.vue ? 'max-md:bg-panneau max-md:px-3 max-md:pb-2.5' : 'max-md:contents', ouvertMobile ? 'z-40' : 'z-20']"
     @keydown.escape="fermer"
   >
     <span v-if="$slots.titre" class="mr-1 text-base font-semibold max-md:hidden"><slot name="titre" /></span>
@@ -153,7 +157,7 @@ function fermer(): void {
         ref="feuillet"
         role="group"
         :aria-label="`Filtres · ${ecran}`"
-        class="flex flex-col gap-3 border border-ligne bg-panneau shadow-panneau whitespace-normal md:absolute md:top-[calc(100%+8px)] md:right-0 md:z-40 md:w-[360px] md:rounded-panneau md:p-4 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:max-h-[84%] max-md:overflow-y-auto max-md:overscroll-contain max-md:rounded-t-2xl max-md:px-4 max-md:pt-2 max-md:pb-[max(16px,env(safe-area-inset-bottom))]"
+        class="flex flex-col gap-3 border border-ligne bg-panneau shadow-panneau whitespace-normal md:absolute md:top-[calc(100%+8px)] md:right-0 md:z-40 md:max-h-[calc(100dvh-140px)] md:w-[360px] md:overflow-y-auto md:overscroll-contain md:rounded-panneau md:p-4 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:max-h-[84%] max-md:overflow-y-auto max-md:overscroll-contain max-md:rounded-t-2xl max-md:px-4 max-md:pt-2 max-md:pb-[max(16px,env(safe-area-inset-bottom))]"
         :class="[ouvertMobile ? '' : 'max-md:hidden', menuBureau && $slots.filtres ? '' : 'md:hidden']"
       >
         <!-- La poignée : on tire le feuillet vers le bas pour le fermer. -->
@@ -166,7 +170,7 @@ function fermer(): void {
         </div>
         <div v-if="$slots.pastilles && estMobile" class="flex flex-col gap-2">
           <span class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">{{ titrePastilles }}</span>
-          <div class="flex flex-wrap gap-2 [&>*]:min-h-10"><slot name="pastilles" /></div>
+          <div class="grid grid-cols-2 gap-2 [&>*]:min-h-10"><slot name="pastilles" /></div>
         </div>
         <slot name="filtres" />
         <div v-if="$slots['actions-mobile'] && estMobile" class="flex flex-col gap-2"><slot name="actions-mobile" /></div>

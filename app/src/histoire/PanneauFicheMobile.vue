@@ -12,7 +12,11 @@ defineProps<{
   moi: boolean
   couleur: string
   parente: string | null
-  ligneDirecte: boolean
+  /** La case « sa ligne directe » : cochée si c'est SA ligne qu'on voit. */
+  ligneCochee: boolean
+  /** En mode « Seulement elle », la ligne d'une autre personne : la case « Suivre » l'y déplace. */
+  suivre: boolean
+  ligneSeule: boolean
 }>()
 
 const emit = defineEmits<{
@@ -47,15 +51,15 @@ const emit = defineEmits<{
     <button
       type="button"
       role="checkbox"
-      :aria-checked="ligneDirecte"
+      :aria-checked="ligneCochee"
       class="flex min-h-9 items-center gap-2.5 text-left text-sm"
       @click="emit('basculerLigne')"
     >
       <span
         class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
-        :class="ligneDirecte ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
-      >{{ ligneDirecte ? '✓' : '' }}</span>
-      Afficher sa ligne directe
+        :class="ligneCochee ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+      >{{ ligneCochee ? '✓' : '' }}</span>
+      {{ suivre ? 'Suivre sa ligne directe' : 'Afficher sa ligne directe' }}
     </button>
     <div class="flex gap-2">
       <button type="button" class="h-9 flex-1 rounded-champ border border-ligne font-semibold hover:bg-accent-doux" @click="emit('centrer')">

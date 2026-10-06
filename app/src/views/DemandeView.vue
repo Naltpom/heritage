@@ -64,7 +64,7 @@ import {
   type DemandeAdministration,
   type DependanceDeDemande,
 } from '@/lib/api'
-import { contexteDepuisRequete, demandeSuivante, requeteDeContexte } from '@/components/administration/file'
+import { contexteDepuisRequete, demandeSuivante, natureDeLOnglet, requeteDeContexte } from '@/components/administration/file'
 import { annonceEnchainement, issueDepuisRequete, type IssueDecision } from '@/components/administration/decision'
 import { legendeDeLaFiche, useFicheDeLaDemande } from '@/components/administration/fiche-de-la-demande'
 import { peutRetirer, useRetraitDeDemande } from '@/components/proposition/retrait'
@@ -146,12 +146,14 @@ async function apresDecision(enchainement?: IssueDecision): Promise<void> {
     return
   }
 
-  const { etat, auteur, tri } = contexte.value
+  const { etat, auteur, tri, onglet, recherche } = contexte.value
   const requete = requeteDeContexte(contexte.value)
   try {
     const file = await listerDemandesAdministration({
       status: etat === '' ? undefined : etat,
       auteur: auteur === 0 ? undefined : auteur,
+      kind: natureDeLOnglet(onglet),
+      q: recherche,
       parPage: 100,
     })
     const suivante = demandeSuivante(file.elements, courante, tri)
@@ -426,8 +428,8 @@ function dateLisible(valeur: string | null | undefined): string {
         <aside
           v-if="ficheAffichee"
           data-fiche-partagee
-          class="max-md:hidden md:sticky md:top-4 md:overflow-y-auto md:overscroll-contain md:pr-1"
-          :class="decidable ? 'md:max-h-[calc(100dvh-8rem)]' : 'md:max-h-[calc(100dvh-2rem)]'"
+          class="max-md:hidden md:sticky md:top-[72px] md:overflow-y-auto md:overscroll-contain md:pr-1"
+          :class="decidable ? 'md:max-h-[calc(100dvh-72px-7rem)]' : 'md:max-h-[calc(100dvh-72px-1rem)]'"
           aria-label="Fiche de la personne"
         >
           <FicheDeLaDemande

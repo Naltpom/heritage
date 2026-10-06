@@ -743,3 +743,11 @@ export interface DetailsConflitDemande {
   champs?: unknown[]
   cible?: { kind: string; id: number; label: string }
 }
+
+/**
+ * Ce que couvre un onglet d'Explorer (Chronologie, Carte, Calendrier, Stats) —
+ * décision du 05/10/2026. `arbre`, le défaut : l'arbre du lecteur, la famille
+ * reliée à sa fiche, sans les personnes sans lien connu. `tout` : toute la base,
+ * accordé à l'administration seule — un membre qui le demande reçoit `arbre`.
+ */
+export type PorteeExplorer = 'arbre' | 'tout'

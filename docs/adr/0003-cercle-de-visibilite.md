@@ -2,7 +2,17 @@
 
 Date : 2026-09-15 · Statut : acceptée · Révisée le 2026-10-01 (régime en attente : plus
 rien de l'arbre ; vivants hors cercle anonymes ; **puis, le même jour, vivants visibles de
-tout membre validé — le cercle ne ferme plus que les fiches confidentielles**)
+tout membre validé — le cercle ne ferme plus que les fiches confidentielles**) · Révisée
+le 2026-10-04 (**un arbre par famille : l'arbre d'un autre compte n'existe pas pour le
+lecteur**)
+
+> **À lire d'abord — révision du 2026-10-04, « un arbre par famille ».** La base peut
+> porter plusieurs arbres sans lien entre eux : la famille du commanditaire, puis celle de
+> chaque ami qu'il invite. Avant toutes les règles ci-dessous, une personne doit être dans
+> le **périmètre** du lecteur — l'arbre de sa fiche, plus les arbres « sans lien connu »
+> qu'aucun compte ne tient. Hors périmètre, elle **n'existe pas** pour lui, défunte
+> comprise : ni nœud masqué, ni fiche réduite, `404`. Détail : dernière révision de la
+> section « Conséquences ».
 
 > **À lire d'abord — révision du 2026-10-01, « les vivants visibles des membres ».** Depuis
 > cette date, un membre validé (régime `Cercle`) et l'administrateur voient **toutes** les
@@ -401,6 +411,64 @@ nouvel ADR ; elle ne l'est pas ici.
   toujours — c'est un binaire, maintenu à la main — et c'est précisément ce que le
   commanditaire choisit : fermer à la main les rares fiches qui doivent l'être, plutôt que
   fermer par défaut toutes les autres.
+- **Révision du 2026-10-04 — un arbre par famille.** Décision du commanditaire, avant
+  d'ouvrir l'application à des amis : *« les utilisateurs normaux devraient voir leur
+  famille + si activé les sans lien connu, et une personne sans lien connu, c'est un
+  arbre qui n'est rattaché à aucun utilisateur »*.
+  *Ce qui fuyait.* Tout ce texte suppose **un** arbre, celui d'une famille. La révision
+  du 2026-10-01 en tirait la conséquence — « les membres sont de la famille » — et
+  ouvrait à tout membre validé tous les vivants, et depuis l'origine tous les défunts et
+  toute la topologie. Un ami invité aurait lu la famille entière ; la famille aurait lu
+  celle de l'ami.
+  *La règle.* Un **arbre** est une composante reliée par les liens de famille (parent,
+  enfant, conjoint), sans borne ni distinction sang / alliance
+  (`Membership\Service\ArbresDistincts`). Il est **rattaché** dès qu'une de ses fiches
+  est réclamée par un compte — rattachement de tout statut, ou invitation active
+  pré-liée (`Port\RattachementsAuxArbres`) : inviter un ami sur sa fiche ferme son arbre
+  aux autres avant même qu'il s'inscrive. Le **périmètre** d'un lecteur est l'arbre de sa
+  fiche, plus chaque arbre non rattaché (« sans lien connu »), visible de tous ; la case
+  « Personnes sans lien connu » de `/arbre` ne fait que les montrer ou les cacher à
+  l'écran, masquée par défaut. L'administrateur hors bascule a tout ; sous la bascule,
+  le périmètre du membre emprunté. Le régime `Aucun` n'a que les arbres sans lien.
+  *Pourquoi on retire ici des nœuds, quand le cercle n'en retire jamais.* L'argument
+  « un arbre dont on retire des nœuds n'est plus un arbre » vaut à l'intérieur d'un
+  arbre. Un arbre entier retiré ne laisse aucun trou dans ceux qui restent — par
+  définition, aucun lien ne l'y relie —, et le garder sous forme de nœuds muets dirait
+  « une autre famille existe, de telle taille, avec tant de vivants ».
+  *Un mariage réunit deux arbres* : si une fiche de l'arbre d'un ami épouse une fiche de
+  la famille, il n'y a plus qu'un arbre, et chacun voit l'autre. Décision assumée du
+  commanditaire (« logique »).
+  *Où c'est écrit.* `CercleDeVisibiliteInterface::dansLePerimetre()`, et
+  `voitPersonne()` / `filtrerPersonnes()` rendent `false` hors périmètre **avant** la
+  règle des défunts — ce qui couvre d'un coup almanach, carte, chronologie, médias,
+  questions, démarches et événements. Les portes qui masquaient au lieu d'omettre, ou
+  qui laissaient passer les défunts sans demander, l'appellent explicitement : le graphe
+  (`GrapheDuPerimetre`), la fiche et la famille (`404`), la recherche, les statistiques
+  (le relevé est borné avant tout calcul, totaux compris), les outils de l'assistant et
+  du modèle qu'il interroge, les libellés des demandes (`ValeursMasquees`), le dépôt
+  d'une demande et l'inventaire d'une suppression (`404`), les tirages ouverts.
+  *Une fiche dont l'arbre est inconnu* (absente de la vue : identifiant pendant, vue non
+  branchée) n'est **pas** exclue : le périmètre ne retire que ce qu'on sait appartenir à
+  l'arbre d'un autre compte ; les règles d'avant la tiennent déjà pour vivante, donc
+  masquée.
+  *Ce qui ne change pas.* La formule `C(u)`, la liste blanche, le filtrage dans la
+  sérialisation, l'absence de mode « sans filtre », le régime en attente. Le périmètre
+  n'est **pas** mis en cache au-delà de la requête : l'empreinte de l'arbre ne bouge pas
+  quand un ami s'inscrit, et une invalidation de plus serait une invalidation à oublier.
+  L'`ETag` du graphe le suit sans rien de plus : il hache les fiches servies complètes,
+  qui en dépendent.
+  *Fermées le même jour, après relecture.* Le modèle de langage qui formule les
+  **questions** (ADR 0008) ne reçoit plus que le périmètre du destinataire
+  (`LacunesVisibles::bornerLeCorpus()`) : la parenté qu'il calcule ne traverse jamais
+  deux arbres. Un **invité** d'un événement ne compte plus que les invités de son
+  périmètre ; l'organisateur, qui les a conviés, les compte tous. L'**historique**
+  d'une citation, d'une note, d'un fait ou d'un média se ferme comme celui de la fiche
+  que visaient les demandes qui l'ont écrit (`RevisionRepository::ciblesDesDemandes()`).
+  *Ce qui reste, et qu'il faut savoir.* La **recherche de rattachement** à l'inscription
+  parcourt toute la base : un ami doit donc être invité par un lien **personnel pré-lié
+  à sa fiche**, jamais par le lien collectif de la famille. L'`ETag` du graphe porte
+  aussi l'empreinte globale de la base : une modification dans un autre arbre le change,
+  sans rien en dire.
 - La bascule « voir comme un membre » est **tracée au journal d'audit** : c'est une
   consultation de données personnelles sous une autre identité.
 - **Un test fonctionnel par porte de sortie** (les sept ci-dessus, **plus les libellés

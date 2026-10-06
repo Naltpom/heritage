@@ -260,6 +260,19 @@ final class ListeBlancheDeSerialisationTest extends ArbreWebTestCase
     }
 
     /**
+     * **Révision du 2026-10-04 — un arbre par famille.** Une défunte de l'arbre d'un autre
+     * compte n'apparaît pas dans la recherche : la règle des défunts ne vaut que dans le
+     * périmètre du lecteur.
+     */
+    public function testLaRechercheOmetUnDefuntDUnAutreArbre(): void
+    {
+        self::assertCount(1, $this->recherche('sureau', CercleDuLecteur::de([]))['elements']);
+
+        $autreArbre = $this->recherche('sureau', CercleDuLecteur::de([])->avecHorsPerimetre([$this->idDe('aieule')]));
+        self::assertSame([], $autreArbre['elements']);
+    }
+
+    /**
      * Le décompte est un champ dérivé, donc une donnée masquée (§ 9.2 du modèle). La
      * réponse ne porte **pas** de `total`, et `tronque` se calcule sur le jeu déjà
      * filtré.

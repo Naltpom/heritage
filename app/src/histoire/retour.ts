@@ -23,7 +23,14 @@ export interface VueMemorisee {
   /** Échelle horizontale. */
   s: number
   selection: string | null
-  filtres: { masquees: string[]; ligneDirecte: boolean; vivants: boolean }
+  filtres: {
+    masquees: string[]
+    ligneDirecte: boolean
+    /** Ancienne case « Personnes vivantes » : relue (devenue la pastille « Vivants »), plus écrite. */
+    vivants: boolean
+    /** La racine figée de la ligne directe affichée seule ; absente d'une vue d'avant le 05/10/2026. */
+    racineLigne?: string | null
+  }
   /** Horodatage de la mémorisation. */
   t: number
 }

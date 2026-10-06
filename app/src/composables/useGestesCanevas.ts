@@ -11,7 +11,7 @@
  * dans le composant appelant : elle change à chaque image d'un déplacement, et
  * la faire passer par le système réactif de Vue déclencherait un cycle de rendu
  * par mouvement de doigt, pour écrire un attribut que l'on sait écrire
- * soi-même (ADR 0007, et l'en-tête de `CanevasArbre`).
+ * soi-même (ADR 0007, et l'en-tête de `CanevasChronologie`).
  *
  * **La capture se fait par identifiant, et symétriquement.** Un élément peut
  * tenir plusieurs pointeurs à la fois ; capturer le second doigt et ne relâcher

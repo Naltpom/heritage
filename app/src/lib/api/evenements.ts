@@ -29,6 +29,7 @@
  * ────────────────────────────────────────────────────────────────────
  */
 import { requeteApi, type OptionsRequete } from './client'
+import type { PorteeExplorer } from './types'
 
 /** Le vocabulaire des pastilles — cinq genres, les mêmes sur les deux écrans. */
 export type GenreEvenement = 'naissance' | 'deces' | 'union' | 'bapteme' | 'autre'
@@ -172,13 +173,23 @@ function options(signal?: AbortSignal): OptionsRequete {
   return o
 }
 
-/** `GET /api/carte`. Sans paramètre — voir l'en-tête. */
-export function chargerCarte(signal?: AbortSignal): Promise<VueCarte> {
-  return requeteApi<VueCarte>('/carte', options(signal))
+/** La portée d'un onglet d'Explorer : l'arbre du lecteur, ou toute la base
+ *  (administration seulement — un membre qui demande `tout` reçoit son arbre). */
+function avecPortee(o: OptionsRequete, portee: PorteeExplorer): OptionsRequete {
+  o.requete = { portee }
+  return o
+}
+
+/** `GET /api/carte`. Seul paramètre : la portée (décision du 05/10/2026). */
+export function chargerCarte(signal?: AbortSignal, portee: PorteeExplorer = 'arbre'): Promise<VueCarte> {
+  return requeteApi<VueCarte>('/carte', avecPortee(options(signal), portee))
 }
 
 /** `GET /api/anniversaires`. L'**année entière**, en une fois : naviguer de mois
  *  en mois ne redemande donc rien, ce qui est tout l'intérêt des deux flèches. */
-export function chargerAnniversaires(signal?: AbortSignal): Promise<VueAnniversaires> {
-  return requeteApi<VueAnniversaires>('/anniversaires', options(signal))
+export function chargerAnniversaires(
+  signal?: AbortSignal,
+  portee: PorteeExplorer = 'arbre',
+): Promise<VueAnniversaires> {
+  return requeteApi<VueAnniversaires>('/anniversaires', avecPortee(options(signal), portee))
 }

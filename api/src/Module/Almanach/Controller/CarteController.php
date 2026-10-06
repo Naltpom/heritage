@@ -8,6 +8,7 @@ use App\Module\Almanach\Service\NormaliseurDeLaCarte;
 use App\Module\Core\Security\ReserveAuxMembres;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -55,9 +56,13 @@ final class CarteController extends AbstractController
      * quelqu'un d'autre. On s'en passe tant que personne n'a mesuré qu'il manque.
      */
     #[Route('/api/carte', name: 'almanach_carte', methods: ['GET'])]
-    public function carte(NormaliseurDeLaCarte $normaliseur): JsonResponse
+    public function carte(Request $requete, NormaliseurDeLaCarte $normaliseur): JsonResponse
     {
-        $reponse = new JsonResponse($normaliseur->vue());
+        // `?portee=tout` (décision du 05/10/2026) : la bascule « Toute la base », accordée à
+        // l'administration seule ; tout autre lecteur ne voit que son arbre.
+        $toutLaBase = 'tout' === $requete->query->get('portee') && $this->isGranted('ROLE_ADMIN');
+
+        $reponse = new JsonResponse($normaliseur->vue(toutLaBase: $toutLaBase));
         $reponse->headers->set('Cache-Control', 'private, no-store');
         $reponse->headers->set('Vary', 'Cookie');
 

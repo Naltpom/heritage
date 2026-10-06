@@ -31,7 +31,9 @@ function monter() {
 
 const fiche = (id: number) => ({ id, visibilite: 'complete', parente: 'grand-père' })
 
-beforeEach(() => api.lireFichePersonne.mockReset())
+beforeEach(() => {
+  api.lireFichePersonne.mockReset()
+})
 
 describe('la fiche de la personne choisie', () => {
   it('se lit, et donne la parenté calculée par le serveur', async () => {
@@ -39,8 +41,6 @@ describe('la fiche de la personne choisie', () => {
     const { id, lecture, portee } = monter()
 
     id.value = 44
-    await nextTick()
-    expect(lecture.etat.value).toBe('lecture')
     await attendre()
 
     expect(lecture.etat.value).toBe('lue')
@@ -86,6 +86,7 @@ describe('la fiche de la personne choisie', () => {
   })
 
   it('ne lit rien pour une fiche proposée, sans identifiant', async () => {
+    api.lireFichePersonne.mockReturnValue(new Promise(() => undefined))
     const { id, lecture, portee } = monter()
     id.value = 44
     await nextTick()

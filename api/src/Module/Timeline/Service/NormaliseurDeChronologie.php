@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Timeline\Service;
 
+use App\Module\Core\Contract\ArbreDuLecteurInterface;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Timeline\Contract\FaitDeLaChronologie;
@@ -69,17 +70,20 @@ final class NormaliseurDeChronologie
         private readonly CercleDeVisibiliteInterface $cercle,
         private readonly CalculDesBandes $calculDesBandes,
         private readonly IntervalleDAnnees $intervalles,
+        // Décision du 05/10/2026 : seul l'arbre du lecteur, sauf « Toute la base » (admin).
+        private readonly ArbreDuLecteurInterface $arbreDuLecteur,
     ) {
     }
 
     /** @return array<string, mixed> la charge complète du § 9.1 */
-    public function vue(RequeteDeChronologie $requete, \DateTimeImmutable $maintenant = new \DateTimeImmutable()): array
+    public function vue(RequeteDeChronologie $requete, \DateTimeImmutable $maintenant = new \DateTimeImmutable(), bool $toutLaBase = false): array
     {
         $arbre = $this->arbre->vue();
 
-        $visibles = array_flip($this->cercle->filtrerPersonnes(
+        $visibles = array_flip($this->cercle->filtrerPersonnes($this->arbreDuLecteur->filtrer(
             array_map(static fn (PersonneDeLaChronologie $p): int => $p->id, $arbre->personnes),
-        ));
+            $toutLaBase,
+        )));
 
         $barres = [];
         $annees = [];

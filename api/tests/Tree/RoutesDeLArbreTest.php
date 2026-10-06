@@ -791,6 +791,60 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
     }
 
     /**
+     * **Révision du 2026-10-04 de l'ADR 0003 — un arbre par famille.** Le socle porte deux
+     * arbres sans lien : {aïeul, aïeule, ego} et {cousin, conjointe, sansDate}. Un ami
+     * est rattaché au cousin : pour le membre rattaché à ego, le second arbre n'existe
+     * pas — ni ses vivants, ni sa défunte, ni sa famille, ni dans le graphe, ni dans la
+     * recherche — et réciproquement.
+     */
+    public function testLArbreDUnAutreCompteNExistePasPourLeMembre(): void
+    {
+        try {
+            ArbreEnMemoire::reinitialiser();
+            foreach (['ego' => true, 'conjointe' => true, 'cousin' => true, 'aieule' => false, 'aieul' => false, 'sansDate' => false] as $cle => $vivante) {
+                ArbreEnMemoire::ajouterPersonne($this->idDe($cle), $cle, '', vivante: $vivante);
+            }
+            ArbreEnMemoire::ajouterFamille([$this->idDe('aieul'), $this->idDe('aieule')], [$this->idDe('ego')]);
+            ArbreEnMemoire::ajouterFamille([$this->idDe('cousin'), $this->idDe('conjointe')], [$this->idDe('sansDate')]);
+
+            $this->rattacherAUnePersonne('membre@heritage.test', 'ego');
+            $this->rattacherAUnePersonne('ami@heritage.test', 'cousin');
+            $this->connexionDe('membre@heritage.test');
+
+            foreach (['cousin', 'conjointe', 'sansDate'] as $cle) {
+                $this->requete('/api/arbre/personnes/'.$this->idDe($cle));
+                self::assertSame(Response::HTTP_NOT_FOUND, $this->client->getResponse()->getStatusCode(), $cle);
+            }
+            $this->requete('/api/arbre/familles/'.$this->familles['mixte']->getId());
+            self::assertSame(Response::HTTP_NOT_FOUND, $this->client->getResponse()->getStatusCode());
+
+            $this->requete('/api/arbre/graphe');
+            $personnes = array_column($this->charge()['noeuds'], 'personId');
+            self::assertContains($this->idDe('aieule'), $personnes);
+            foreach (['cousin', 'conjointe', 'sansDate'] as $cle) {
+                self::assertNotContains($this->idDe($cle), $personnes, $cle);
+            }
+            self::assertNotContains($this->familles['mixte']->getId(), array_column($this->charge()['noeuds'], 'familyId'));
+            self::assertStringNotContainsString('Tilleul', (string) $this->client->getResponse()->getContent());
+
+            $this->requete('/api/arbre/recherche?q=tilleul');
+            self::assertSame([], $this->charge()['elements']);
+            $this->requete('/api/arbre/recherche?q=fenouil');
+            self::assertSame([], $this->charge()['elements'], 'Une défunte de l’autre arbre non plus.');
+
+            // Et dans l'autre sens : l'ami ne lit pas la famille.
+            $this->client->getCookieJar()->clear();
+            $this->connexionDe('ami@heritage.test');
+            $this->requete('/api/arbre/personnes/'.$this->idDe('aieule'));
+            self::assertSame(Response::HTTP_NOT_FOUND, $this->client->getResponse()->getStatusCode());
+            $this->requete('/api/arbre/personnes/'.$this->idDe('sansDate'));
+            self::assertSame(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
+        } finally {
+            ArbreEnMemoire::reinitialiser();
+        }
+    }
+
+    /**
      * L'arbre du socle, **tel que `Membership` le voit** : mêmes personnes, mêmes unions,
      * mêmes états vivants que la base de ce test.
      *

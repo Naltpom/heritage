@@ -30,12 +30,20 @@ const titre = ref('')
 const resume = ref('')
 const parent = ref<ParentDeDetail | null>(null)
 const filtresActifs = ref(0)
+const rechercheLocale = ref(false)
 
 /** Appelé par le routeur à chaque navigation. Remet à zéro ce que l'écran avait publié. */
-export function definirPage(p: { section: Section; titre: string; parent: ParentDeDetail | null }): void {
+export function definirPage(p: {
+  section: Section
+  titre: string
+  parent: ParentDeDetail | null
+  /** L'écran a sa propre recherche sur téléphone : l'en-tête n'affiche pas sa loupe. */
+  rechercheLocale?: boolean
+}): void {
   section.value = p.section
   titre.value = p.titre
   parent.value = p.parent
+  rechercheLocale.value = p.rechercheLocale ?? false
   resume.value = ''
   filtresActifs.value = 0
 }
@@ -57,6 +65,7 @@ export function useEntete() {
     resume: readonly(resume),
     parent: readonly(parent),
     filtresActifs: readonly(filtresActifs),
+    rechercheLocale: readonly(rechercheLocale),
   }
 }
 

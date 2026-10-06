@@ -25,7 +25,11 @@ const props = defineProps<{
   ficheLue: FichePersonneComplete | null
   etat: EtatDeLecture
   erreur: unknown
-  ligneDirecte: boolean
+  /** La case « sa ligne directe » : cochée si c'est SA ligne qu'on voit. */
+  ligneCochee: boolean
+  /** En mode « Seulement elle », la ligne d'une autre personne : la case « Suivre » l'y déplace. */
+  suivre: boolean
+  ligneSeule: boolean
 }>()
 
 const emit = defineEmits<{
@@ -92,17 +96,19 @@ const messageErreur = computed(() => (props.erreur === null ? '' : analyserErreu
       <button
         type="button"
         role="checkbox"
-        :aria-checked="ligneDirecte"
+        :aria-checked="ligneCochee"
         class="flex min-h-9 items-center gap-2.5 text-left text-sm"
         @click="emit('basculerLigne')"
       >
         <span
           class="flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border-[1.5px] text-[13px] font-bold text-fond"
-          :class="ligneDirecte ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
-        >{{ ligneDirecte ? '✓' : '' }}</span>
+          :class="ligneCochee ? 'border-accent bg-accent' : 'border-[var(--h-inconnu-bord)]'"
+        >{{ ligneCochee ? '✓' : '' }}</span>
         <span class="flex flex-col leading-tight">
-          <span>Afficher sa ligne directe</span>
-          <span class="text-xs text-attenue">ancêtres et descendants · reste cochée d’une personne à l’autre</span>
+          <span>{{ suivre ? 'Suivre sa ligne directe' : 'Afficher sa ligne directe' }}</span>
+          <span class="text-xs text-attenue">{{
+            ligneSeule ? 'ancêtres et descendants · les autres quittent l’écran' : 'ancêtres et descendants · reste cochée d’une personne à l’autre'
+          }}</span>
         </span>
       </button>
     </header>

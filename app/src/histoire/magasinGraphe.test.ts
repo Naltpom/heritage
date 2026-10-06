@@ -62,9 +62,11 @@ function graphe(empreinte = 'a'): Graphe {
 const REGLAGES: ReglagesDeDisposition = {
   avecConjoint: true,
   avecAlliances: false,
+  avecSansLien: true,
   alliancesDansLArbre: false,
   fratriesParNaissance: false,
   format: 'compact',
+  ligneSeule: null,
 }
 
 const nouveau = (g: Graphe): ResultatRevalide<Graphe> => ({ statut: 'nouveau', donnees: g, etag: '"e"' })
@@ -107,6 +109,10 @@ describe('le magasin du graphe', () => {
     expect(portrait).not.toBe(compacte)
     expect(disposer(g, { ...REGLAGES, format: 'portrait' })).toBe(portrait)
     expect(cleDesReglages(REGLAGES)).not.toBe(cleDesReglages({ ...REGLAGES, fratriesParNaissance: true }))
+    // La ligne directe seule : une autre forme, l'arbre binaire.
+    const ligne = disposer(g, { ...REGLAGES, ligneSeule: 'p1' })
+    expect(ligne).not.toBe(compacte)
+    expect(ligne.fiches.map((f) => f.id).sort()).toEqual(['p1', 'p2', 'p3'])
   })
 
   it('oublie la disposition gardée quand un graphe neuf arrive', async () => {

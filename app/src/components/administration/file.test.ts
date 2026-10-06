@@ -2,32 +2,27 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { Demande } from '@/lib/api'
+import type { NatureDemande } from '@/lib/api'
+import { LIBELLES_NATURE } from '@/components/proposition/mes-demandes'
 import {
   CONTEXTE_PAR_DEFAUT,
+  NATURES_DE_L_ONGLET,
+  autresSurLaMemeFiche,
   contexteDepuisRequete,
   demandeSuivante,
-  grouperParCible,
-  groupesEnConcurrence,
   ligneAuteur,
+  natureDeLOnglet,
+  nouvellesPersonnes,
   ordreDeLaFile,
-  personneDuGroupe,
+  personneDeLaDemande,
   requeteDeContexte,
   trierDemandes,
 } from './file'
 
 /**
- * Ce que ces tests protègent : **l'ordre du serveur, et le regroupement par
- * fiche.**
- *
- * Le serveur trie la file par date de soumission croissante — une file se prend
- * par le début. Le front regroupe par cible (§ 6.7, ADR 0004), et c'est tout ce
- * qu'il fait : un tri alphabétique ajouté ici défferait silencieusement celui du
- * serveur, et l'administrateur traiterait les demandes récentes avant les
- * anciennes sans jamais s'en apercevoir.
- *
- * Le regroupement lui-même n'est pas décoratif : deux demandes sur la même fiche
- * s'influencent. Valider la première peut rendre la seconde caduque, et les
- * traiter dans deux écrans séparés fait découvrir la caducité **après** le clic.
+ * Ce que ces tests protègent : **la file à plat, par numéro** (2026-10-04), ses
+ * onglets par nature, et ce que l'ancien regroupement par fiche protégeait — deux
+ * demandes sur la même fiche s'influencent, et chaque ligne le dit.
  */
 
 function demande(champs: Partial<Demande> & { id: number }): Demande {
@@ -52,143 +47,78 @@ function demande(champs: Partial<Demande> & { id: number }): Demande {
   }
 }
 
-describe('le regroupement par fiche', () => {
-  it('rassemble les demandes qui visent la même personne', () => {
-    const groupes = grouperParCible([
+describe('les onglets', () => {
+  it('rangent chaque nature dans un onglet, et une seule fois', () => {
+    const rangees = Object.values(NATURES_DE_L_ONGLET).flatMap((n) => n ?? [])
+    expect([...rangees].sort()).toEqual((Object.keys(LIBELLES_NATURE) as NatureDemande[]).sort())
+  })
+
+  it('donnent au serveur une liste séparée par des virgules, et rien pour « Toutes »', () => {
+    expect(natureDeLOnglet('toutes')).toBeUndefined()
+    expect(natureDeLOnglet('personnes')).toBe('creation_personne')
+    expect(natureDeLOnglet('liens')).toBe('ajout_lien,retrait_lien')
+  })
+})
+
+describe('les autres demandes sur la même fiche', () => {
+  it('se comptent pour chaque demande en attente, sans se compter elle-même', () => {
+    const autres = autresSurLaMemeFiche([
       demande({ id: 1 }),
-      demande({ id: 2, targetId: 55, targetLabel: 'Jargon Sarriette' }),
+      demande({ id: 2, targetId: 55 }),
       demande({ id: 3 }),
+      demande({ id: 4, status: 'validee' }),
     ])
 
-    expect(groupes).toHaveLength(2)
-    expect(groupes[0]?.demandes.map((d) => d.id)).toEqual([1, 3])
-    expect(groupes[1]?.demandes.map((d) => d.id)).toEqual([2])
+    expect(autres.get(1)).toBe(1)
+    expect(autres.get(3)).toBe(1)
+    expect(autres.has(2)).toBe(false)
+    expect(autres.has(4)).toBe(false)
   })
 
-  it('nomme le groupe par le libellé de la cible', () => {
-    const groupes = grouperParCible([demande({ id: 1 })])
-
-    expect(groupes[0]?.titre).toBe('Marne Dolomite Sureau')
-  })
-
-  it('ne confond pas une personne et une famille de même identifiant', () => {
-    // La clé porte la nature autant que l'identifiant : `personne:17` et
-    // `famille:17` sont deux fiches sans rapport.
-    const groupes = grouperParCible([
+  it('ne confondent pas une personne et une famille du même numéro, ni les créations entre elles', () => {
+    const autres = autresSurLaMemeFiche([
       demande({ id: 1, targetKind: 'personne', targetId: 17 }),
-      demande({ id: 2, targetKind: 'famille', targetId: 17, targetLabel: 'Une famille' }),
+      demande({ id: 2, targetKind: 'famille', targetId: 17 }),
+      demande({ id: 3, kind: 'creation_personne', targetKind: null, targetId: null }),
+      demande({ id: 4, kind: 'creation_personne', targetKind: null, targetId: null }),
     ])
 
-    expect(groupes).toHaveLength(2)
+    expect(autres.size).toBe(0)
   })
 })
 
-describe('les demandes sans cible', () => {
-  it('forment leur propre groupe', () => {
-    // Une création de personne n'a pas de cible et ne peut pas en avoir : la
-    // personne n'existe pas encore, c'est tout son objet.
-    const groupes = grouperParCible([
-      demande({ id: 1, kind: 'creation_personne', targetKind: null, targetId: null, targetLabel: null }),
-    ])
-
-    expect(groupes).toHaveLength(1)
-    expect(groupes[0]?.sansCible).toBe(true)
-    expect(groupes[0]?.titre).toBe('Personnes proposées')
-  })
-
-  it('restent à leur place dans l’ordre d’arrivée', () => {
-    // Ni remontées, ni reléguées en fin de liste : ce serait réordonner la file
-    // sur un critère que personne n'a demandé.
-    const groupes = grouperParCible([
-      demande({ id: 1, kind: 'creation_personne', targetKind: null, targetId: null }),
-      demande({ id: 2 }),
-    ])
-
-    expect(groupes.map((groupe) => groupe.sansCible)).toEqual([true, false])
+describe('les personnes ajoutées', () => {
+  it('se lisent par leur nom, séparées par des virgules', () => {
+    expect(nouvellesPersonnes(demande({ id: 1, nouvellesPersonnes: ['Jeanne Dupont', 'Paul Dupont'] }))).toBe(
+      'Jeanne Dupont, Paul Dupont',
+    )
+    expect(nouvellesPersonnes(demande({ id: 2 }))).toBe('')
   })
 })
 
-describe('l’ordre du serveur', () => {
-  it('est préservé, groupe par groupe', () => {
-    const groupes = grouperParCible([
-      demande({ id: 10, targetId: 55, targetLabel: 'Zir Sarriette' }),
-      demande({ id: 11, targetId: 17, targetLabel: 'Agate Sureau' }),
+describe('le tri, par numéro', () => {
+  it('met le plus petit numéro d’abord par défaut', () => {
+    expect(trierDemandes([demande({ id: 12 }), demande({ id: 3 }), demande({ id: 7 })], 'anciennes').map((d) => d.id)).toEqual([
+      3, 7, 12,
     ])
-
-    // Le premier groupe est celui de la demande la plus ancienne, pas celui dont
-    // le nom vient en premier dans l'alphabet.
-    expect(groupes.map((groupe) => groupe.titre)).toEqual(['Zir Sarriette', 'Agate Sureau'])
-  })
-
-  it('conserve l’ordre des demandes à l’intérieur d’un groupe', () => {
-    const groupes = grouperParCible([demande({ id: 5 }), demande({ id: 3 }), demande({ id: 9 })])
-
-    expect(groupes[0]?.demandes.map((d) => d.id)).toEqual([5, 3, 9])
-  })
-
-  it('rend une liste vide sur une file vide', () => {
-    expect(grouperParCible([])).toEqual([])
-  })
-})
-
-describe('le tri, quand on le demande', () => {
-  const ancienne = demande({ id: 1, submittedAt: '2026-08-01T10:00:00+02:00' })
-  const recente = demande({ id: 2, submittedAt: '2026-09-14T10:00:00+02:00' })
-  const brouillon = demande({ id: 3, status: 'brouillon', submittedAt: null })
-
-  it('met les plus anciennes d’abord par défaut — l’ordre du serveur', () => {
-    expect(trierDemandes([recente, ancienne], 'anciennes').map((d) => d.id)).toEqual([1, 2])
   })
 
   it('sait inverser quand on le lui demande', () => {
-    expect(trierDemandes([ancienne, recente], 'recentes').map((d) => d.id)).toEqual([2, 1])
+    expect(trierDemandes([demande({ id: 3 }), demande({ id: 12 })], 'recentes').map((d) => d.id)).toEqual([12, 3])
   })
 
-  it('range les demandes sans date de soumission en fin, dans les deux sens', () => {
-    // Un brouillon n'a jamais été soumis. Le traiter comme daté de 1970 le
-    // propulserait en tête du tri « anciennes », alors qu'il n'attend aucune
-    // décision de personne.
-    expect(trierDemandes([brouillon, recente, ancienne], 'anciennes').map((d) => d.id)).toEqual([
-      1, 2, 3,
-    ])
-    expect(trierDemandes([brouillon, ancienne, recente], 'recentes').map((d) => d.id)).toEqual([
-      2, 1, 3,
-    ])
+  it('ne regroupe rien : deux demandes sur la même fiche restent à leur numéro', () => {
+    const file = [demande({ id: 1, targetId: 17 }), demande({ id: 2, targetId: 18 }), demande({ id: 3, targetId: 17 })]
+    expect(ordreDeLaFile(file, 'anciennes').map((d) => d.id)).toEqual([1, 2, 3])
   })
 
   it('ne modifie pas le tableau qu’on lui donne', () => {
     // Il vient d'une `ref` que le composant relit : le trier sur place ferait
     // dépendre l'affichage de l'ordre de réveil des `computed`.
-    const entree = [recente, ancienne]
+    const entree = [demande({ id: 2 }), demande({ id: 1 })]
     trierDemandes(entree, 'anciennes')
 
     expect(entree.map((d) => d.id)).toEqual([2, 1])
-  })
-
-  it('survit à une date que le serveur aurait mal écrite', () => {
-    const cassee = demande({ id: 4, submittedAt: 'pas une date' })
-
-    expect(() => trierDemandes([cassee, ancienne], 'anciennes')).not.toThrow()
-    expect(trierDemandes([cassee, ancienne], 'anciennes')).toHaveLength(2)
-  })
-})
-
-describe('les groupes en concurrence', () => {
-  it('sont ceux qui portent plus d’une demande sur la même fiche', () => {
-    const groupes = grouperParCible([demande({ id: 1 }), demande({ id: 2 })])
-
-    expect(groupesEnConcurrence(groupes)).toHaveLength(1)
-  })
-
-  it('n’incluent pas le groupe des créations', () => {
-    // Deux créations ne se gênent pas : elles ne visent aucune fiche commune.
-    // Leur rapprochement passe par `doublonsProbables`, qui compare autre chose.
-    const groupes = grouperParCible([
-      demande({ id: 1, kind: 'creation_personne', targetKind: null, targetId: null }),
-      demande({ id: 2, kind: 'creation_personne', targetKind: null, targetId: null }),
-    ])
-
-    expect(groupesEnConcurrence(groupes)).toHaveLength(0)
   })
 })
 
@@ -207,42 +137,27 @@ describe('les groupes en concurrence', () => {
  * apparente vaut moins qu'un bouton absent.
  */
 describe('l’aperçu de la fiche visée', () => {
-  it('ouvre la personne que le groupe vise', () => {
-    const groupes = grouperParCible([demande({ id: 1 })])
-
-    expect(personneDuGroupe(groupes[0]!)).toBe(17)
+  it('ouvre la personne que la demande vise', () => {
+    expect(personneDeLaDemande(demande({ id: 1 }))).toBe(17)
   })
 
   it('ne s’ouvre pas sur une création : la personne n’existe pas encore', () => {
     /* Et son contenu proposé est déjà sous les yeux, dans le diff. */
-    const groupes = grouperParCible([
-      demande({ id: 1, kind: 'creation_personne', targetKind: null, targetId: null }),
-    ])
-
-    expect(personneDuGroupe(groupes[0]!)).toBeNull()
+    expect(personneDeLaDemande(demande({ id: 1, kind: 'creation_personne', targetKind: null, targetId: null }))).toBeNull()
   })
 
   it('ne confond pas une famille avec la personne du même numéro', () => {
-    const groupes = grouperParCible([
-      demande({ id: 1, kind: 'modification_famille', targetKind: 'famille', targetId: 17 }),
-    ])
-
-    expect(personneDuGroupe(groupes[0]!)).toBeNull()
+    expect(personneDeLaDemande(demande({ id: 1, kind: 'modification_famille', targetKind: 'famille', targetId: 17 }))).toBeNull()
   })
 
   it('ne confond pas non plus une source avec une personne', () => {
-    const groupes = grouperParCible([
-      demande({ id: 1, kind: 'modification_citation', targetKind: 'citation', targetId: 17 }),
-    ])
-
-    expect(personneDuGroupe(groupes[0]!)).toBeNull()
+    expect(personneDeLaDemande(demande({ id: 1, kind: 'modification_citation', targetKind: 'citation', targetId: 17 }))).toBeNull()
   })
 
   it('rend un identifiant, jamais un booléen : « ouvert sur personne » n’existe pas', () => {
     /* La vue tient `apercu: number | null`. Un drapeau séparé rendrait
        représentable l'état « ouverte, mais sur qui ? ». */
-    const groupes = grouperParCible([demande({ id: 1, targetId: 55 })])
-    const ouvert = personneDuGroupe(groupes[0]!)
+    const ouvert = personneDeLaDemande(demande({ id: 1, targetId: 55 }))
 
     expect(typeof ouvert).toBe('number')
     expect(ouvert).toBe(55)
@@ -368,15 +283,15 @@ describe('le contexte de la file voyage dans l’adresse', () => {
   })
 
   it('fait l’aller-retour, « toutes » comprise', () => {
-    const contexte = { etat: '' as const, auteur: 7, tri: 'recentes' as const }
+    const contexte = { etat: '' as const, auteur: 7, tri: 'recentes' as const, onglet: 'personnes' as const, recherche: '42' }
     const requete = requeteDeContexte(contexte)
 
-    expect(requete).toEqual({ etat: 'toutes', auteur: '7', tri: 'recentes' })
+    expect(requete).toEqual({ etat: 'toutes', auteur: '7', tri: 'recentes', onglet: 'personnes', q: '42' })
     expect(contexteDepuisRequete(requete)).toEqual(contexte)
   })
 
   it('ramène une adresse bricolée au défaut plutôt qu’à une file vide', () => {
-    expect(contexteDepuisRequete({ etat: 'n_importe', auteur: '-3', tri: 'hasard' })).toEqual(CONTEXTE_PAR_DEFAUT)
+    expect(contexteDepuisRequete({ etat: 'n_importe', auteur: '-3', tri: 'hasard', onglet: 'nulle_part' })).toEqual(CONTEXTE_PAR_DEFAUT)
     expect(contexteDepuisRequete({ etat: ['refusee', 'validee'] }).etat).toBe('refusee')
   })
 })
@@ -388,18 +303,18 @@ describe('la demande suivante', () => {
   const C = demande({ id: 3, targetId: 17, submittedAt: '2026-09-12T10:00:00+02:00' })
   const D = demande({ id: 4, targetKind: null, targetId: null, submittedAt: '2026-09-13T10:00:00+02:00' })
 
-  it('suit l’ordre affiché, regroupé par fiche, et non l’ordre de dépôt', () => {
-    // À l'écran : [A, C] (fiche 17), [B], [D]. Après A vient C, pas B.
-    expect(ordreDeLaFile([A, B, C, D], 'anciennes').map((d) => d.id)).toEqual([1, 3, 2, 4])
-    expect(demandeSuivante([B, C, D], A, 'anciennes')).toBe(3)
+  it('suit l’ordre affiché : par numéro, à plat', () => {
+    // À l'écran : A, B, C, D. Après A vient B.
+    expect(ordreDeLaFile([C, A, D, B], 'anciennes').map((d) => d.id)).toEqual([1, 2, 3, 4])
+    expect(demandeSuivante([B, C, D], A, 'anciennes')).toBe(2)
   })
 
   it('replace la courante, que le filtre « en attente » a retirée de la file relue', () => {
-    expect(demandeSuivante([A, B, D], C, 'anciennes')).toBe(2)
+    expect(demandeSuivante([A, B, D], C, 'anciennes')).toBe(4)
   })
 
   it('respecte le tri choisi', () => {
-    // Plus récentes d'abord : [D], [C, A], [B]. Après D vient C.
+    // Numéro décroissant : D, C, B, A. Après D vient C.
     expect(demandeSuivante([A, B, C], D, 'recentes')).toBe(3)
   })
 

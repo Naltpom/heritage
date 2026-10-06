@@ -34,11 +34,17 @@
  *  - un nœud restreint n'a pas de ligne de dates, et on ne la reconstitue pas ;
  *  - la recherche passe par l'API, jamais par un index local ;
  *  - un filtre **estompe**, il ne retire rien : la forme de l'arbre ne bouge pas —
- *    sauf deux bascules qui RETIRENT avant la disposition, pour que l'arbre se
- *    resserre : « Famille du conjoint » et « Familles par alliance » ;
+ *    sauf trois bascules qui RETIRENT avant la disposition, pour que l'arbre se
+ *    resserre : « Famille du conjoint », « Familles par alliance » et « Personnes
+ *    sans lien connu » ;
  *  - les familles par alliance (l'ascendance du mari d'une tante, vue de la nièce)
  *    sont masquées par défaut ; affichées, chacune a son bloc, à droite des branches
  *    du lecteur (`histoire/alliances.ts`, décision du 2026-10-01) ;
+ *  - les personnes sans lien connu (qu'aucun chemin ne relie au lecteur) sont
+ *    masquées par défaut ; affichées, elles gardent leur zone à droite
+ *    (`histoire/sansLien.ts`, décision du 2026-10-04) ;
+ *  - la ligne directe s'affiche en estompant les autres, ou SEULE, en arbre binaire
+ *    (`histoire/pedigree.ts`, 05/10/2026) ;
  *  - une personne vivante hors du cercle s'écrit « Personne vivante » : le serveur
  *    n'envoie plus son nom, et l'écran ne relit pas celui qu'il recevrait ;
  *  - deux étiquettes ne se recouvrent jamais (`histoire/etiquettes.ts`) ;
@@ -69,23 +75,26 @@ import CalqueLibelles from '@/histoire/CalqueLibelles.vue'
 import BandeauFamilles, { type BrancheMonde } from '@/histoire/BandeauFamilles.vue'
 import GouttiereGenerations, { type EtiquetteDeGeneration } from '@/histoire/GouttiereGenerations.vue'
 import MiniCarte from '@/histoire/MiniCarte.vue'
-import FeuilletFiltres, { type BasculeAffichage } from '@/histoire/FeuilletFiltres.vue'
+import FeuilletFiltres from '@/histoire/FeuilletFiltres.vue'
 import VoletFiche from '@/histoire/VoletFiche.vue'
 import PanneauFicheMobile from '@/histoire/PanneauFicheMobile.vue'
 import ChampRechercheArbre from '@/histoire/ChampRechercheArbre.vue'
 import { sansFamilleDuConjoint, type BrancheDeQuart, type DispositionHistoire, type FicheHistoire } from '@/histoire/lignees'
 import { aDesFamillesParAlliance, classerParente, estParAlliance } from '@/histoire/alliances'
+import { effectifSansLien, estSansLien } from '@/histoire/sansLien'
 import { couleurBranche } from '@/histoire/branches'
 import { alphaDeFiche, styleDeFiche } from '@/histoire/apparence'
 import { anneauDe, libellesDesFiches, libellesDesFoyers, type Anneau } from '@/histoire/libelles'
 import { disposer as disposerDuMagasin, grapheEnMemoire, revaliderGraphe, type ReglagesDeDisposition } from '@/histoire/magasinGraphe'
-import { usePreferencesArbre, ecrirePreference, CLE_ALLIANCES } from '@/histoire/usePreferencesArbre'
+import { usePreferencesArbre, ecrirePreference, CLE_ALLIANCES, CLE_SANS_LIEN } from '@/histoire/usePreferencesArbre'
 import { useCadrage } from '@/histoire/useCadrage'
 import { useRechercheArbre } from '@/histoire/useRechercheArbre'
 import { useFicheChoisie } from '@/histoire/useFicheChoisie'
 import {
   PALIERS,
+  SEUILS,
   ajusterLargeur,
+  bornerSeuilDesNoms,
   borner as bornerEchelle,
   centrerSur,
   jaugeDuZoom,
@@ -112,7 +121,6 @@ const routeur = useRouter()
 
 const disposition = shallowRef<DispositionHistoire | null>(null)
 const grapheCharge = shallowRef<Graphe | null>(null)
-const nonPlaces = computed(() => grapheCharge.value?.calque.nonPlaces ?? [])
 const chargement = ref(true)
 /** L'erreur brute du chargement ; son message vient d'`analyserErreur` (`messageDErreur`). */
 const erreur = shallowRef<unknown>(null)
@@ -126,7 +134,8 @@ const messageErreur = computed(() => (erreur.value === null ? '' : analyserErreu
  */
 const { format: formatDesCartes } = useFormatDesCartes()
 const enPortrait = computed(() => formatDesCartes.value === 'portrait')
-const { avecConjoint, avecAlliances, alliancesDansLArbre, fratriesParNaissance } = usePreferencesArbre(redisposer)
+const { avecConjoint, avecAlliances, avecSansLien, alliancesDansLArbre, fratriesParNaissance, ligneSeule, seuilDesNoms } =
+  usePreferencesArbre(redisposer)
 
 const grapheSansConjoint = computed(() => (grapheCharge.value ? sansFamilleDuConjoint(grapheCharge.value) : null))
 const aUneFamilleDeConjoint = computed(() => grapheSansConjoint.value !== grapheCharge.value)
@@ -139,18 +148,25 @@ const effectifAlliances = computed(() => {
   for (const c of classerParente(g).values()) if (c.parente === 'alliance') n++
   return n
 })
+/** Le nombre de personnes sans lien connu : 0, pas de bascule. */
+const effectifSansLienConnu = computed(() => (grapheCharge.value ? effectifSansLien(grapheCharge.value) : 0))
 
 const reglages = (): ReglagesDeDisposition => ({
   avecConjoint: avecConjoint.value,
   avecAlliances: avecAlliances.value,
+  avecSansLien: avecSansLien.value,
   alliancesDansLArbre: alliancesDansLArbre.value,
   fratriesParNaissance: fratriesParNaissance.value,
   format: formatDesCartes.value,
+  // La ligne directe SEULE : tout le reste quitte l'écran, et l'arbre se refait sur elle.
+  ligneSeule: cleLigneSeule.value,
 })
 
 /** La disposition, reprise du magasin si rien n'a changé depuis la dernière visite. */
 function disposer(graphe: Graphe): void {
-  disposition.value = disposerDuMagasin(graphe, reglages())
+  const r = reglages()
+  cleDisposee = r.ligneSeule
+  disposition.value = disposerDuMagasin(graphe, r)
 }
 
 /** Après une bascule : la disposition refaite, et ce qui n'existe plus oublié. */
@@ -214,15 +230,30 @@ function basculerAlliances(avec: boolean): void {
   ecrirePreference(CLE_ALLIANCES, avec)
   redisposer()
 }
+/** Même chose pour les personnes sans lien connu. */
+function basculerSansLien(avec: boolean): void {
+  if (avecSansLien.value === avec) return
+  avecSansLien.value = avec
+  ecrirePreference(CLE_SANS_LIEN, avec)
+  redisposer()
+}
 /**
- * Une personne qu'on cherche alors que sa famille par alliance est masquée : la
- * recherche la trouve (l'API ne sait rien de l'affichage) ; la choisir allume la
- * bascule, et la disposition refaite la contient.
+ * Une personne qu'on cherche alors que sa famille par alliance — ou la zone des
+ * personnes sans lien connu — est masquée : la recherche la trouve (l'API ne sait rien
+ * de l'affichage) ; la choisir allume la bascule, et la disposition refaite la contient.
  */
 function afficherSonAlliance(personId: number): void {
   const g = grapheCharge.value
-  if (!g || avecAlliances.value || disposition.value?.parPersonId.has(personId)) return
-  if (estParAlliance(g, personId)) basculerAlliances(true)
+  if (!g || disposition.value?.parPersonId.has(personId)) return
+  // Hors de la ligne directe affichée seule : l'arbre entier revient, puis on la cherche.
+  if (cleLigneSeule.value !== null) {
+    filtres.ligneDirecte = false
+    racineFigee.value = null
+    assurerLaDisposition()
+    if (disposition.value?.parPersonId.has(personId)) return
+  }
+  if (!avecAlliances.value && estParAlliance(g, personId)) basculerAlliances(true)
+  else if (!avecSansLien.value && estSansLien(g, personId)) basculerSansLien(true)
 }
 
 /*
@@ -265,6 +296,11 @@ async function afficher(graphe: Graphe): Promise<void> {
   if (demandee !== null && !avecAlliances.value && estParAlliance(graphe, demandee)) {
     avecAlliances.value = true
     ecrirePreference(CLE_ALLIANCES, true)
+  }
+  // De même vers une personne sans lien connu, zone masquée.
+  if (demandee !== null && !avecSansLien.value && estSansLien(graphe, demandee)) {
+    avecSansLien.value = true
+    ecrirePreference(CLE_SANS_LIEN, true)
   }
   disposer(graphe)
   await nextTick()
@@ -372,7 +408,7 @@ function appliquer(c: Cadrage): void {
   miniCarte.value?.placer(-c.tx / c.s, (cv.largeur - c.tx) / c.s)
 }
 
-const cadrage = useCadrage({ fenetre, canevas: () => canevas.value, appliquer })
+const cadrage = useCadrage({ fenetre, canevas: () => canevas.value, appliquer, seuilDesNoms: () => seuilDesNoms.value })
 const niveau = cadrage.niveau
 /** L'instantané publié à Vue : les textes, anneaux et noms de foyers s'en calculent. */
 const rendu = cadrage.rendu
@@ -390,7 +426,7 @@ watch(
 /** La jauge de zoom, pour l'administration seulement : un repère chiffré sur
  *  les captures d'écran (« à 30 % les noms se chevauchent »), pas un réglage. */
 const { administrateur } = useSession()
-const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(rendu.value.s, canevas.value) : null))
+const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(rendu.value.s, canevas.value, seuilDesNoms.value) : null))
 const ensemble = computed(() => niveau.value === 0)
 
 const versEcranX = (x: number): number => {
@@ -434,14 +470,18 @@ function ajuster(): void {
 }
 
 function reprendre(v: VueMemorisee): void {
+  filtres.ligneDirecte = v.filtres.ligneDirecte
+  racineFigee.value = v.filtres.racineLigne ?? null
+  // Une vue mémorisée avant le 05/10/2026 : « Personnes vivantes » est devenu la pastille « Vivants ».
+  if (v.filtres.vivants) filtres.qualite = 'vivants'
+  // La ligne seule refait la disposition : le point mémorisé est dans CELLE-LÀ.
+  assurerLaDisposition()
   const d = disposition.value!
   const c = canevas.value
   cadrage.definir(centrerSur(bornerEchelle(v.s, c), c, v.x, v.y, taille.value.l / 2, taille.value.h / 2))
   selection.value = v.selection !== null && d.parId.has(v.selection) ? v.selection : null
   const quarts = new Set<string>(d.quarts.map((q) => q.branche))
   filtres.masquees = v.filtres.masquees.filter((b): b is BrancheDeQuart => quarts.has(b))
-  filtres.ligneDirecte = v.filtres.ligneDirecte
-  filtres.vivants = v.filtres.vivants
 }
 
 /** Au départ vers une fiche : ce qu'il faut pour revenir exactement ici. */
@@ -452,8 +492,24 @@ function memoriserLaVue(): void {
     y: c.y,
     s: cadrage.lire().s,
     selection: selection.value,
-    filtres: { masquees: [...filtres.masquees], ligneDirecte: filtres.ligneDirecte, vivants: filtres.vivants },
+    filtres: {
+      masquees: [...filtres.masquees],
+      ligneDirecte: filtres.ligneDirecte,
+      vivants: false,
+      racineLigne: racineFigee.value,
+    },
   })
+}
+
+/**
+ * Le palier Familles (30 %) tombe sous le seuil des noms quand le lecteur l'a abaissé
+ * à moins de 30 % : il vise alors le milieu entre le seuil des familles et celui des noms,
+ * pour rester un vrai palier Familles.
+ */
+function echelleDuPalier(i: number, echelle: number): number {
+  const seuil = seuilDesNoms.value
+  if (i !== 1 || seuil > echelle) return echelle
+  return seuil > SEUILS[0] ? (SEUILS[0] + seuil) / 2 : echelle
 }
 
 function allerAuPalier(i: number): void {
@@ -466,7 +522,7 @@ function allerAuPalier(i: number): void {
     cadrage.voler(cible.s, centre.x, centre.y)
   } else {
     const c = cadrage.centreMonde()
-    cadrage.voler(palier.echelle, c.x, c.y)
+    cadrage.voler(echelleDuPalier(i, palier.echelle), c.x, c.y)
   }
 }
 
@@ -516,7 +572,7 @@ function voirFiche(f: FicheHistoire): void {
 function choisir(f: FicheHistoire): void {
   if (cadrage.vientDeGlisser()) return
   selection.value = f.id
-  if (cadrage.lire().s < 0.42) cadrage.voler(1, f.cx, f.y + f.h / 2)
+  if (cadrage.lire().s < seuilDesNoms.value) cadrage.voler(Math.max(1, seuilDesNoms.value), f.cx, f.y + f.h / 2)
 }
 
 /*
@@ -547,8 +603,15 @@ function surClicDuCanevas(e: MouseEvent): void {
 }
 
 function meTrouver(): void {
+  // La ligne seule d'une autre personne, où vous n'êtes pas : on rend l'arbre entier.
+  const ego = egoDuLecteur.value
+  if (ego !== null && cleLigneSeule.value !== null && !disposition.value?.parId.has(ego)) {
+    filtres.ligneDirecte = false
+    racineFigee.value = null
+    assurerLaDisposition()
+  }
   const d = disposition.value
-  const moi = d?.parId.get(d.ego)
+  const moi = ego !== null ? d?.parId.get(ego) : undefined
   if (!moi) return
   selection.value = moi.id
   cadrage.voler(1, moi.cx, moi.y + moi.h / 2)
@@ -561,13 +624,16 @@ function meTrouver(): void {
 const filtres = reactive({
   masquees: [] as BrancheDeQuart[],
   ligneDirecte: false,
-  vivants: false,
-  /** Le filtre documentaire de la barre (Vérifiés, Sans source…) : un seul à la fois. */
+  /**
+   * Le filtre documentaire de la barre (Vérifiés, Sans source, Vivants…) : un seul à
+   * la fois. « Vivants » y est ; la case « Personnes vivantes » qui le doublait plus
+   * bas dans les filtres a été retirée (05/10/2026).
+   */
   qualite: null as IdFiltre | null,
 })
 /** Le nombre de filtres actifs, pour « Filtres · n » et le bouton de l'en-tête. */
 const nombreFiltresActifs = computed(
-  () => filtres.masquees.length + (filtres.ligneDirecte ? 1 : 0) + (filtres.vivants ? 1 : 0) + (filtres.qualite ? 1 : 0),
+  () => filtres.masquees.length + (filtres.ligneDirecte ? 1 : 0) + (filtres.qualite ? 1 : 0),
 )
 
 function fermerFiltres(): void {
@@ -576,14 +642,11 @@ function fermerFiltres(): void {
 function toutAfficher(): void {
   filtres.masquees = []
   filtres.ligneDirecte = false
-  filtres.vivants = false
+  racineFigee.value = null
   filtres.qualite = null
 }
 function basculerQualite(id: IdFiltre): void {
   filtres.qualite = filtres.qualite === id ? null : id
-}
-function basculer(cle: BasculeAffichage): void {
-  filtres[cle] = !filtres[cle]
 }
 /** Un filtre documentaire sans donnée est désactivé, et sa pastille dit pourquoi. */
 const qualitesDisponibles = computed(() => {
@@ -613,7 +676,6 @@ const brancheDe = (f: FicheHistoire): string =>
 function passe(f: FicheHistoire): boolean {
   if (brancheDe(f) !== 'hors' && (filtres.masquees as Branche[]).includes(f.branche)) return false
   if (filtres.ligneDirecte && enLigne(f) === null) return false
-  if (filtres.vivants && !f.noeud.vivant) return false
   if (filtres.qualite) {
     const def = FILTRES.find((d) => d.id === filtres.qualite)
     if (def && !def.test(f.noeud as NoeudPersonneEtendu)) return false
@@ -625,10 +687,94 @@ function passe(f: FicheHistoire): boolean {
  * LA LIGNE DIRECTE suit la personne choisie : ses ancêtres et ses descendants (les
  * vôtres quand personne n'est choisi). Une seule bascule, partagée par les Filtres, le
  * volet et le panneau du téléphone — elle reste cochée d'une personne à l'autre.
+ *
+ * DEUX MODES (05/10/2026) : « Estomper les autres », la vue d'avant — tout l'arbre
+ * reste en place, les autres fiches pâlissent ; et « Seulement elle » — les autres
+ * QUITTENT l'écran et la disposition se refait sur la ligne, resserrée. Dans ce
+ * second mode, la racine est FIGÉE au moment où on l'allume : choisir une fiche pour
+ * la lire ne refait pas tout l'arbre autour d'elle ; « Suivre sa ligne directe », dans
+ * son panneau, l'y déplace.
  */
-const racineDeLaLigne = computed<string | null>(() =>
-  filtres.ligneDirecte ? (ficheChoisie.value?.id ?? disposition.value?.ego ?? null) : null,
+const racineFigee = ref<string | null>(null)
+/** L'ego du lecteur, tel que le serveur l'a donné — pas celui d'une disposition réduite. */
+const egoDuLecteur = computed(() => grapheCharge.value?.ego ?? disposition.value?.ego ?? null)
+const racineDeLaLigne = computed<string | null>(() => {
+  if (!filtres.ligneDirecte) return null
+  if (ligneSeule.value) return racineFigee.value ?? egoDuLecteur.value
+  return ficheChoisie.value?.id ?? egoDuLecteur.value
+})
+/** La racine de la ligne quand elle est SEULE à l'écran ; `null` sinon. C'est la clé de la disposition. */
+const cleLigneSeule = computed<string | null>(() => (ligneSeule.value ? racineDeLaLigne.value : null))
+/** La clé avec laquelle la disposition affichée a été faite. */
+let cleDisposee: string | null = null
+/** La disposition refaite si la ligne seule a changé depuis la dernière (sans attendre l'observateur). */
+function assurerLaDisposition(): void {
+  if (cleLigneSeule.value !== cleDisposee) redisposerSurLaLigne()
+}
+/**
+ * Refait la disposition quand la ligne seule s'allume, s'éteint ou change de racine.
+ * Allumée : l'arbre réduit est ajusté à l'écran. Éteinte : l'arbre entier revient,
+ * centré sur la personne dont on suivait la ligne, au même zoom.
+ */
+function redisposerSurLaLigne(): void {
+  const avant = cleDisposee
+  const echelle = cadrage.lire().s
+  redisposer()
+  const d = disposition.value
+  if (cleDisposee !== null || avant === null || !d) return
+  const f = d.parId.get(avant)
+  if (!f) return
+  const c = canevas.value
+  cadrage.definir(centrerSur(bornerEchelle(echelle, c), c, f.cx, f.y + f.h / 2, taille.value.l / 2, taille.value.h / 2))
+}
+watch(cleLigneSeule, (cle) => {
+  if (cle !== cleDisposee) redisposerSurLaLigne()
+})
+
+/** Allume ou éteint la ligne directe ; allumée, elle part de la personne choisie (ou de vous). */
+function basculerLigneDirecte(): void {
+  filtres.ligneDirecte = !filtres.ligneDirecte
+  racineFigee.value = filtres.ligneDirecte ? (ficheChoisie.value?.id ?? null) : null
+}
+function choisirModeLigne(seule: boolean): void {
+  // On fige la ligne qu'on regarde : celle de la personne choisie, sinon la vôtre.
+  if (seule && !ligneSeule.value) racineFigee.value = ficheChoisie.value?.id ?? null
+  ligneSeule.value = seule
+}
+/**
+ * La case « Afficher sa ligne directe » du panneau d'une personne. Cochée si c'est SA
+ * ligne qu'on voit ; en mode « Seulement elle », la cocher pour une autre personne y
+ * déplace la ligne au lieu de l'éteindre.
+ */
+const ligneDeLaChoisie = computed(
+  () => filtres.ligneDirecte && (!ligneSeule.value || racineDeLaLigne.value === ficheChoisie.value?.id),
 )
+/** « Suivre sa ligne directe » plutôt qu'« Afficher » : la ligne seule d'une autre personne est à l'écran. */
+const suivreLaLigne = computed(() => filtres.ligneDirecte && ligneSeule.value && !ligneDeLaChoisie.value)
+function basculerLigneDeLaChoisie(): void {
+  if (suivreLaLigne.value) {
+    racineFigee.value = ficheChoisie.value?.id ?? null
+    return
+  }
+  basculerLigneDirecte()
+}
+
+/*
+ * LE SEUIL DES NOMS (05/10/2026) : le zoom à partir duquel noms, prénoms et dates
+ * s'écrivent, réglé dans le feuillet des filtres (`FeuilletFiltres`). Une préférence
+ * de l'appareil, ni filtre ni réinitialisée.
+ */
+const seuilEnPourcent = computed({
+  get: () => Math.round(seuilDesNoms.value * 100),
+  set: (p: number) => (seuilDesNoms.value = bornerSeuilDesNoms(p / 100)),
+})
+/** Le zoom affiché, en pour cent : le repère sous la jauge (d'après l'instantané). */
+const zoomEnPourcent = computed(() => Math.round(rendu.value.s * 100))
+/** « Dès ce zoom » : le seuil pris au zoom affiché. */
+function seuilAuZoomActuel(): void {
+  seuilDesNoms.value = bornerSeuilDesNoms(Math.floor(cadrage.lire().s * 20) / 20)
+}
+
 const ligne = computed<{ ascendants: Set<string>; descendants: Set<string> } | null>(() => {
   const r = racineDeLaLigne.value
   const g = grapheCharge.value
@@ -646,8 +792,9 @@ const surligner = computed(() => filtres.ligneDirecte)
 /** Les traits dorés ne dessinent que VOTRE ligne directe : pour une autre personne, les fiches parlent. */
 const surlignerTraits = computed(() => surligner.value && racineDeLaLigne.value === disposition.value?.ego)
 const libelleLigne = computed(() => {
-  const f = ficheChoisie.value
-  if (!f || f.id === disposition.value?.ego) return 'Ma ligne directe'
+  const racine = filtres.ligneDirecte ? racineDeLaLigne.value : (ficheChoisie.value?.id ?? null)
+  const f = racine !== null ? disposition.value?.parId.get(racine) : undefined
+  if (!f || f.id === egoDuLecteur.value) return 'Ma ligne directe'
   const nom = f.noeud.visibilite === 'restreinte' ? 'cette personne' : f.noeud.displayName
   return `Ligne directe de ${nom}`
 })
@@ -785,7 +932,7 @@ const etiquettesGouttiere = computed<EtiquetteDeGeneration[]>(() => {
       y: g.y,
       libelle: mobile
         ? g.rangee === 0
-          ? 'Vous'
+          ? d.parId.has(egoDuLecteur.value ?? '') ? 'Vous' : 'Racine'
           : `${g.rangee > 0 ? '+' : ''}${g.rangee}`
         : compact && annee
           ? `${g.libelle} · ${annee}`
@@ -893,6 +1040,11 @@ onMounted(() => {
       if (premierAjustement) ajuster()
     })
     observateur.observe(el)
+    // Un bandeau qu'on ferme au-dessus (« Plus tard ») remonte l'arbre sans changer sa
+    // taille : c'est `<main>` qui grandit. On le surveille aussi, sinon un vide restait
+    // sous la recherche du bas.
+    const main = racine.value?.parentElement
+    if (main) observateur.observe(main)
   }
   void charger()
 })
@@ -914,12 +1066,13 @@ onBeforeUnmount(() => {
     <!-- La barre d'écran commune : vue, pastilles, compteur, Filtres · n, actions. -->
     <BarreEcran
       ecran="Arbre"
+      titre-pastilles="Afficher seulement"
       :filtres-actifs="nombreFiltresActifs"
       :voir="`Voir ${effectifAffiche} personne${effectifAffiche > 1 ? 's' : ''}`"
       @reinitialiser="toutAfficher"
     >
       <template #vue>
-        <Segmente :options="OPTIONS_PALIERS" :valeur="niveau" etiquette="Niveau de détail" :colonnes="3" @choisir="allerAuPalier" />
+        <Segmente :options="OPTIONS_PALIERS" :valeur="niveau" etiquette="Niveau de détail" :colonnes="3" class="max-md:w-full" @choisir="allerAuPalier" />
       </template>
       <template #pastilles>
         <PastilleFiltre
@@ -935,24 +1088,31 @@ onBeforeUnmount(() => {
       <template #compteur>{{ effectifAffiche }} fiches sur {{ disposition?.fiches.length ?? 0 }}</template>
       <template v-if="disposition" #filtres>
         <FeuilletFiltres
+          v-model:seuil="seuilEnPourcent"
           :quarts="disposition.quarts"
           :masquees="filtres.masquees"
+          :libelle-ligne="libelleLigne"
+          :ligne-directe="filtres.ligneDirecte"
+          :ligne-seule="ligneSeule"
           :a-une-famille-de-conjoint="aUneFamilleDeConjoint"
           :avec-conjoint="avecConjoint"
           :a-des-alliances="aDesAlliances"
           :avec-alliances="avecAlliances"
           :effectif-alliances="effectifAlliances"
           :alliances-dans-l-arbre="alliancesDansLArbre"
+          :effectif-sans-lien="effectifSansLienConnu"
+          :avec-sans-lien="avecSansLien"
           :fratries-par-naissance="fratriesParNaissance"
-          :ligne-directe="filtres.ligneDirecte"
-          :vivants="filtres.vivants"
-          :libelle-ligne="libelleLigne"
+          :zoom-en-pourcent="zoomEnPourcent"
+          @basculer-ligne="basculerLigneDirecte"
+          @mode-ligne="choisirModeLigne"
           @basculer-branche="basculerBranche"
           @basculer-conjoint="avecConjoint = !avecConjoint"
           @basculer-alliances="basculerAlliances(!avecAlliances)"
           @ranger-alliances="alliancesDansLArbre = $event"
+          @basculer-sans-lien="basculerSansLien(!avecSansLien)"
           @basculer-fratries="fratriesParNaissance = !fratriesParNaissance"
-          @basculer="basculer"
+          @seuil-au-zoom="seuilAuZoomActuel"
           @aide="aideFiltresOuverte = true"
         />
       </template>
@@ -972,23 +1132,6 @@ onBeforeUnmount(() => {
         </button>
       </template>
     </BarreEcran>
-
-    <!-- Les fiches proposées que le serveur n'a pas su placer : toujours les dire. -->
-    <div
-      v-if="nonPlaces.length"
-      class="flex flex-none flex-wrap items-center gap-x-2 gap-y-1 border-b border-ligne bg-panneau px-4 py-1.5 text-xs text-attenue"
-      role="status"
-    >
-      <span>{{ nonPlaces.length }} fiche{{ nonPlaces.length > 1 ? 's' : '' }} proposée{{ nonPlaces.length > 1 ? 's' : '' }} hors de l’arbre :</span>
-      <RouterLink
-        v-for="n in nonPlaces"
-        :key="n.noeudId"
-        :to="{ name: 'demande.detail', params: { id: n.demandeId } }"
-        class="text-accent hover:underline"
-      >
-        {{ n.displayName }}
-      </RouterLink>
-    </div>
 
     <div class="flex min-h-0 flex-1">
     <!-- Le canevas -->
@@ -1099,11 +1242,13 @@ onBeforeUnmount(() => {
           :moi="ficheChoisie.id === disposition.ego"
           :couleur="couleurBranche(brancheDe(ficheChoisie))"
           :parente="parente"
-          :ligne-directe="filtres.ligneDirecte"
+          :ligne-cochee="ligneDeLaChoisie"
+          :suivre="suivreLaLigne"
+          :ligne-seule="ligneSeule"
           @fermer="selection = null"
           @centrer="voirFiche(ficheChoisie)"
           @partir="memoriserLaVue"
-          @basculer-ligne="filtres.ligneDirecte = !filtres.ligneDirecte"
+          @basculer-ligne="basculerLigneDeLaChoisie"
         />
       </template>
 
@@ -1124,11 +1269,13 @@ onBeforeUnmount(() => {
       :fiche-lue="ficheLue"
       :etat="lecture.etat.value"
       :erreur="lecture.erreur.value"
-      :ligne-directe="filtres.ligneDirecte"
+      :ligne-cochee="ligneDeLaChoisie"
+      :suivre="suivreLaLigne"
+      :ligne-seule="ligneSeule"
       @fermer="selection = null"
       @centrer="voirFiche(ficheChoisie)"
       @partir="memoriserLaVue"
-      @basculer-ligne="filtres.ligneDirecte = !filtres.ligneDirecte"
+      @basculer-ligne="basculerLigneDeLaChoisie"
       @choisir-proche="choisirProche"
       @relire="lecture.relire"
     />

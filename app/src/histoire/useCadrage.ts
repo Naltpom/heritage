@@ -44,6 +44,8 @@ export interface OptionsCadrage {
   canevas: () => Canevas
   /** Écrit le cadrage dans le DOM, sans Vue. Appelé à chaque image. */
   appliquer: (c: Cadrage) => void
+  /** Le seuil des noms réglé par le lecteur (niveau Fiches), relu à chaque calcul. */
+  seuilDesNoms: () => number
 }
 
 /** Un doigt : sa position dans le canevas (`x`, `y`) et à l'écran (`cx`, `cy`). */
@@ -58,7 +60,7 @@ export function useCadrage(o: OptionsCadrage) {
   let courant: Cadrage = { s: 0.05, tx: 0, ty: 0 }
   /** L'instantané publié à Vue. */
   const rendu = shallowRef<Cadrage>(courant)
-  const niveau = ref<Niveau>(niveauDe(courant.s))
+  const niveau = ref<Niveau>(niveauDe(courant.s, o.seuilDesNoms()))
 
   const cadence = creerCadence(INTERVALLE_RENDU, () => {
     rendu.value = courant
@@ -74,7 +76,7 @@ export function useCadrage(o: OptionsCadrage) {
   function ecrire(c: Cadrage): void {
     courant = c
     o.appliquer(c)
-    const n = niveauDe(c.s)
+    const n = niveauDe(c.s, o.seuilDesNoms())
     if (n !== niveau.value) {
       niveau.value = n
       cadence.maintenant()
@@ -269,6 +271,10 @@ export function useCadrage(o: OptionsCadrage) {
 
   // Le canevas change de taille (volet, fenêtre, disposition) : les couches se réécrivent.
   watch(o.canevas, reappliquer, { flush: 'post' })
+  // Le seuil des noms bouge sous la jauge des filtres : le niveau se relit, sans geste.
+  watch(o.seuilDesNoms, (seuil) => {
+    niveau.value = niveauDe(courant.s, seuil)
+  })
 
   return {
     /** L'instantané publié à Vue : à lire dans les `computed` des couches de texte. */

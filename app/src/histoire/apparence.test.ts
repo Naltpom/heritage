@@ -153,7 +153,8 @@ describe('les textes posés sur les boîtes', () => {
     const moi = ls.find((l) => l.id === 'p1')!
     const f = fs.find((x) => x.id === 'p1')!
     expect(moi.forme).toBe('compact')
-    expect(moi.forme === 'compact' && moi.t1).toBe('Opale Bourrache')
+    // Le nom complet s'il tient, sinon le prénom (`texteDeFiche`).
+    expect(moi.forme === 'compact' && moi.t1).toMatch(/^Opale/)
     expect(moi.y).toBe(30 + f.y)
     expect(moi.estompe).toBe(false)
     expect(ls.find((l) => l.id !== 'p1')?.estompe).toBe(true)

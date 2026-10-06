@@ -198,6 +198,7 @@ contexte de construction : les binaires sont dans l'image, les fichiers de test 
 cd api && composer install          # une fois
 php vendor/bin/phpstan analyse --level=6      # l'existence et les types
 php vendor/bin/phpunit                        # le tout, et seul lui a le dernier mot
+php vendor/bin/paratest                       # le même, un processus par cœur (comme la CI)
 php bin/console lint:container                # la cohérence des définitions de services
 ```
 

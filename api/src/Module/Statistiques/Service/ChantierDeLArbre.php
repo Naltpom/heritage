@@ -53,9 +53,9 @@ final class ChantierDeLArbre
     }
 
     /** @return array<string, mixed> */
-    public function vue(): array
+    public function vue(PorteeDesStatistiques $portee = PorteeDesStatistiques::Arbre): array
     {
-        $population = $this->statistiques->population();
+        $population = $this->statistiques->population($portee);
         $maintenant = $this->horloge->now();
 
         $listes = [

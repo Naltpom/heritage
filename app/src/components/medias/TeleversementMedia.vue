@@ -38,6 +38,7 @@ import { computed, onBeforeUnmount, ref, useId } from 'vue'
 import { analyserErreur, proposerLeMedia, televerserMedia, type Media, type NatureMedia } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import ChampTexte from '@/components/base/ChampTexte.vue'
+import BoutonsPhotos from './BoutonsPhotos.vue'
 import { TAILLE_MAX_PAR_DEFAUT, tailleLisible, verifierAvantEnvoi } from './medias'
 import { estPivotable, pivoterFichier } from './pivotement'
 
@@ -72,9 +73,8 @@ const identifiantNature = useId()
 const aEnvoyer = computed(() => file.value.filter((envoi) => envoi.etat === 'attente'))
 const deposes = computed(() => file.value.filter((envoi) => envoi.etat === 'reussi').length)
 
-function ajouter(evenement: Event): void {
-  const cible = evenement.target as HTMLInputElement
-  for (const fichier of Array.from(cible.files ?? [])) {
+function ajouter(fichiers: File[]): void {
+  for (const fichier of fichiers) {
     const verdict = verifierAvantEnvoi(fichier)
     file.value.push({
       cle: ++compteur,
@@ -88,10 +88,7 @@ function ajouter(evenement: Event): void {
       erreur: null,
     })
   }
-  // Le champ est vidé pour qu'un même fichier puisse être re-sélectionné après
-  // un échec : sans cela, `change` ne se déclenche pas deux fois de suite sur
-  // la même valeur.
-  cible.value = ''
+  // `BoutonsPhotos` vide ses champs : un même fichier peut être repris après un échec.
 }
 
 function retirer(cle: number): void {
@@ -177,7 +174,7 @@ function reprendre(envoi: EnvoiEnFile): void {
       d’eux.
     </p>
 
-    <div class="flex flex-wrap items-end gap-3">
+    <div class="flex flex-col gap-3">
       <div class="flex flex-col gap-1">
         <label :for="identifiantNature" class="text-sm font-medium">Nature</label>
         <select
@@ -192,17 +189,7 @@ function reprendre(envoi: EnvoiEnFile): void {
         </select>
       </div>
 
-      <div class="flex flex-col gap-1">
-        <label class="text-sm font-medium" for="champ-fichier-media">Fichiers</label>
-        <input
-          id="champ-fichier-media"
-          type="file"
-          multiple
-          accept="image/*,application/pdf"
-          class="max-w-full text-sm file:mr-2 file:cursor-pointer file:rounded-champ file:border file:border-ligne file:bg-panneau file:px-3 file:py-1.5 file:text-sm file:text-texte"
-          @change="ajouter"
-        />
-      </div>
+      <BoutonsPhotos @fichiers="ajouter" />
     </div>
 
     <p class="m-0 text-xs text-attenue">
@@ -240,8 +227,8 @@ function reprendre(envoi: EnvoiEnFile): void {
         <ChampTexte
           v-if="envoi.etat === 'attente'"
           v-model="envoi.legende"
-          etiquette="Légende"
-          aide="Ce que montre ce document. 255 caractères."
+          etiquette="Description"
+          aide="Ce que montre ce document : qui, où, quand. 255 caractères."
           class="mt-2"
         />
 

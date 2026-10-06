@@ -77,9 +77,32 @@ final readonly class ServiceDesTirages
 
     public function estVisible(Tirage $tirage, LecteurDuTirage $lecteur): bool
     {
-        return $tirage->isOuvert()
+        return ($tirage->isOuvert() && $this->dansSonArbre($tirage))
             || $this->peutGerer($tirage, $lecteur)
             || (null !== $lecteur->personId && null !== $tirage->participant($lecteur->personId));
+    }
+
+    /**
+     * Un tirage ouvert ne l'est qu'aux membres de **l'arbre** de ses participants
+     * (révision du 2026-10-04 de l'ADR 0003, « un arbre par famille ») : le tirage de
+     * Noël d'une famille nomme ses participants, et la famille d'un ami n'a pas à les lire.
+     * Sans participant, il ne nomme personne : ouvert à tous, comme avant.
+     */
+    private function dansSonArbre(Tirage $tirage): bool
+    {
+        $participants = $tirage->getParticipants();
+
+        if ([] === $participants) {
+            return true;
+        }
+
+        foreach ($participants as $participant) {
+            if ($this->cercle->dansLePerimetre($participant->getPersonId())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function peutGerer(Tirage $tirage, LecteurDuTirage $lecteur): bool

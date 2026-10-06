@@ -41,6 +41,12 @@
  *   (`aria-expanded` + `aria-controls`), refermé par Échap ou un clic dehors.
  * - La vue empruntée et l'incarnation ne passent pas par ici : leurs bandeaux
  *   et leurs sorties sont montés par `App.vue`, sous l'en-tête.
+ * - **Collé en haut** (`sticky top-0`, 05/10/2026) : sur une page qui défile —
+ *   la fiche, Moi, les demandes —, l'en-tête restait en haut du document et
+ *   disparaissait au premier coup de pouce. Il reste maintenant à l'écran ; les
+ *   bandeaux montés dessous (portrait, installation, régime) défilent, eux. Son
+ *   `z-30` le garde au-dessus du contenu ; le feuillet des filtres, qui doit le
+ *   recouvrir, remonte sa barre en `z-40` le temps d'être ouvert (`BarreEcran`).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -55,7 +61,7 @@ import RechercheEntete from './RechercheEntete.vue'
 const routeur = useRouter()
 const { connecte, rattache } = useSession()
 const { ouvert, outilsDisponibles, basculerTiroir, fermerTiroirs } = useTiroirs()
-const { section, titre, resume, parent, filtresActifs } = useEntete()
+const { section, titre, resume, parent, filtresActifs, rechercheLocale } = useEntete()
 
 const boutonOutils = ref<HTMLButtonElement | null>(null)
 const boutonCompte = ref<HTMLButtonElement | null>(null)
@@ -153,7 +159,7 @@ const classeBoutonIcone =
 
 <template>
   <header
-    class="relative flex h-14 items-center gap-1 border-b border-ligne bg-panneau px-5 max-md:h-[52px] max-md:px-1"
+    class="sticky top-0 z-30 flex h-14 items-center gap-1 border-b border-ligne bg-panneau px-5 max-md:h-[52px] max-md:px-1"
     @keydown.escape="fermerEtRendreLeFocus"
   >
     <!-- Téléphone : le retour d'un écran de détail. -->
@@ -217,8 +223,9 @@ const classeBoutonIcone =
         </button>
       </div>
 
+      <!-- Pas de loupe sur un écran qui a sa recherche (l'arbre l'a en bas). -->
       <button
-        v-if="rattache"
+        v-if="rattache && !rechercheLocale"
         ref="boutonLoupe"
         type="button"
         :class="classeBoutonIcone"

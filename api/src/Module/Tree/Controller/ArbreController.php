@@ -7,6 +7,8 @@ namespace App\Module\Tree\Controller;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Security\ReserveAuxMembres;
+use App\Module\Tree\Entity\Family;
+use App\Module\Tree\Serializer\CercleDuLecteur;
 use App\Module\Tree\Serializer\EtagDuGraphe;
 use App\Module\Tree\Serializer\EtatVivant;
 use App\Module\Tree\Serializer\FabriqueDuCercle;
@@ -123,17 +125,19 @@ final class ArbreController extends AbstractController
     public function personne(int $id, NormaliseurDePersonne $normaliseur): JsonResponse
     {
         $personne = $this->lecture->personne($id);
+        $lecteur = $this->lecteurs->courant();
+        $cercle = $this->cercles->pour($lecteur);
 
-        if (null === $personne) {
+        // L'arbre d'une autre famille : `404`, comme une fiche qui n'existe pas — pas la
+        // fiche réduite d'un vivant hors cercle (révision du 2026-10-04 de l'ADR 0003).
+        if (null === $personne || !$cercle->connait($personne->getId())) {
             throw new NotFoundException();
         }
-
-        $lecteur = $this->lecteurs->courant();
 
         return new JsonResponse($normaliseur->fiche(
             $personne,
             $lecteur,
-            $this->cercles->pour($lecteur),
+            $cercle,
             $this->vivants,
         ));
     }
@@ -142,17 +146,20 @@ final class ArbreController extends AbstractController
     public function famille(int $id, NormaliseurDeFamille $normaliseur): JsonResponse
     {
         $famille = $this->lecture->famille($id);
+        $lecteur = $this->lecteurs->courant();
+        $cercle = $this->cercles->pour($lecteur);
 
-        if (null === $famille) {
+        // Une famille est dans l'arbre de ses époux : hors du périmètre du lecteur, `404`
+        // (révision du 2026-10-04 de l'ADR 0003). Sans époux connu, ses enfants en
+        // décident.
+        if (null === $famille || !$this->famillePerimetre($famille, $cercle)) {
             throw new NotFoundException();
         }
-
-        $lecteur = $this->lecteurs->courant();
 
         return new JsonResponse($normaliseur->fiche(
             $famille,
             $lecteur,
-            $this->cercles->pour($lecteur),
+            $cercle,
             $this->vivants,
         ));
     }
@@ -191,6 +198,26 @@ final class ArbreController extends AbstractController
             $this->vivants,
             '1' === $requete->query->get('vivants'),
         ));
+    }
+
+    /** Un membre de la famille — époux, sinon enfant — est-il dans le périmètre du lecteur ? */
+    private function famillePerimetre(Family $famille, CercleDuLecteur $cercle): bool
+    {
+        $membres = array_filter([$famille->getHusband()?->getId(), $famille->getWife()?->getId()]);
+
+        if ([] === $membres) {
+            foreach ($this->lecture->enfantsDe([$famille])[$famille->getId()] ?? [] as $ligne) {
+                $membres[] = $ligne->getPerson()->getId();
+            }
+        }
+
+        foreach ($membres as $id) {
+            if ($cercle->connait($id)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function enTetesDuGraphe(JsonResponse $reponse, string $etag): JsonResponse

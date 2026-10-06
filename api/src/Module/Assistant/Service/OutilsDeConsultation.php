@@ -243,7 +243,9 @@ final readonly class OutilsDeConsultation
             return ['erreur' => 'Le paramètre « personId » est un entier.'];
         }
 
-        $fiche = $this->arbre->fiche($id);
+        // L'arbre d'un autre compte n'existe pas pour ce lecteur, ni pour le modèle qui
+        // travaille en son nom : la même réponse qu'un identifiant inconnu.
+        $fiche = $this->vue->connait($id) ? $this->arbre->fiche($id) : null;
 
         if (null === $fiche) {
             return ['erreur' => \sprintf('Aucune personne n° %d dans l’arbre.', $id)];

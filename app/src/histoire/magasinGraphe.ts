@@ -21,15 +21,21 @@
 import { chargerGraphe, invaliderGraphe, surOubliEtag, type Graphe } from '@/lib/api'
 import { sansFamillesParAlliance } from './alliances'
 import { auFormat, type FormatDeCarte } from './cartes'
+import { seulementLaLigne } from './ligneDirecte'
 import { disposerLignees, sansFamilleDuConjoint, type DispositionHistoire } from './lignees'
+import { disposerEnPedigree } from './pedigree'
+import { noeudsSansLien, sansPersonnesSansLien } from './sansLien'
 
 /** Les réglages du lecteur qui changent la disposition (les autres filtres estompent). */
 export interface ReglagesDeDisposition {
   avecConjoint: boolean
   avecAlliances: boolean
+  avecSansLien: boolean
   alliancesDansLArbre: boolean
   fratriesParNaissance: boolean
   format: FormatDeCarte
+  /** La racine de la ligne directe affichée SEULE (en arbre binaire), ou `null`. */
+  ligneSeule: string | null
 }
 
 export type ResultatDuMagasin =
@@ -104,26 +110,34 @@ export function revaliderGraphe(): Promise<ResultatDuMagasin> {
 
 /** La clé d'un jeu de réglages : deux réglages égaux donnent la même disposition. */
 export function cleDesReglages(r: ReglagesDeDisposition): string {
-  return [r.avecConjoint, r.avecAlliances, r.alliancesDansLArbre, r.fratriesParNaissance, r.format].join('|')
+  return [r.avecConjoint, r.avecAlliances, r.avecSansLien, r.alliancesDansLArbre, r.fratriesParNaissance, r.format, r.ligneSeule ?? ''].join('|')
 }
 
 /**
  * La disposition d'un graphe pour des réglages — **recalculée seulement si l'un
- * des deux a changé**. Deux bascules RETIRENT des fiches avant la disposition
- * (« Famille du conjoint », « Familles par alliance »), pour que l'arbre se
- * resserre ; le format change la taille des boîtes.
+ * des deux a changé**. Trois bascules RETIRENT des fiches avant la disposition
+ * (« Famille du conjoint », « Familles par alliance », « Sans lien connu »), pour
+ * que l'arbre se resserre ; le format change la taille des boîtes ; la ligne
+ * directe seule a sa propre forme, un arbre binaire (`pedigree.ts`).
  */
 export function disposer(g: Graphe, r: ReglagesDeDisposition): DispositionHistoire {
   const cle = cleDesReglages(r)
   if (disposition !== null && disposition.graphe === g && disposition.cle === cle) return disposition.valeur
   // Les alliances d'abord, classées sur le graphe ENTIER : c'est lui que le serveur a classé.
   const sansAlliances = r.avecAlliances ? g : sansFamillesParAlliance(g)
-  const filtre = r.avecConjoint ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
-  // Les boîtes en dernier : le tri des familles ne lit que les liens, jamais `w` ni `h`.
-  const valeur = disposerLignees(auFormat(filtre, r.format), {
-    alliances: r.alliancesDansLArbre ? 'dans-l-arbre' : 'a-part',
-    fratriesParNaissance: r.fratriesParNaissance,
-  })
+  const sansConjoint = r.avecConjoint ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
+  // Les îlots sont repérés sur le graphe ENTIER : c'est lui qui dit ce qui est relié au lecteur.
+  const filtre = r.avecSansLien ? sansConjoint : sansPersonnesSansLien(sansConjoint, noeudsSansLien(g))
+  const racine = r.ligneSeule
+  const valeur =
+    racine !== null && filtre.noeuds.some((n) => n.id === racine)
+      ? // La ligne directe SEULE : tout le reste quitte l'écran, en arbre binaire.
+        disposerEnPedigree(auFormat(seulementLaLigne(filtre, racine), r.format), racine, g.ego)
+      : // Les boîtes en dernier : le tri des familles ne lit que les liens, jamais `w` ni `h`.
+        disposerLignees(auFormat(filtre, r.format), {
+          alliances: r.alliancesDansLArbre ? 'dans-l-arbre' : 'a-part',
+          fratriesParNaissance: r.fratriesParNaissance,
+        })
   // On ne garde que la disposition du graphe en mémoire : un graphe d'ailleurs (un test,
   // une réponse jetée) ne doit pas l'évincer.
   if (g === graphe) disposition = { graphe: g, cle, valeur }

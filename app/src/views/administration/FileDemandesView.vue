@@ -8,11 +8,13 @@
  * de notification, et deux endroits où oublier le message obligatoire au
  * refus » (ADR 0004).
  *
- * Le serveur trie par date de soumission **croissante** — une file se prend par
- * le début — et le front **regroupe par fiche visée**. Ce regroupement n'est pas
- * décoratif : deux demandes sur la même personne s'influencent, valider la
- * première peut rendre la seconde caduque, et les traiter dans deux écrans
- * séparés fait découvrir la caducité après le clic. Voir `file.ts`.
+ * Depuis le 2026-10-04, la file s'affiche **à plat, par numéro** — chaque ligne
+ * porte « n° 42 » —, en **onglets** par nature (Toutes, Modifications, Nouvelles
+ * personnes, Liens), avec une **recherche** qui accepte un numéro ou un texte
+ * (fiche, auteur, message, nom d'une personne proposée). Une création nomme les
+ * personnes qu'elle ajoute. Le regroupement par fiche a disparu ; ce qu'il
+ * protégeait reste dit sur la ligne : « 2 autres demandes sur cette fiche ».
+ * Voir `file.ts`.
  *
  * Le filtre par état est volontairement ouvert au-delà de `en_attente` : une
  * demande **caduque** ou **refusée** reste consultable, et c'est ce qui permet
@@ -36,7 +38,7 @@
  * La barre ne retient rien : `etat`, `auteur` et `tri` vivent ici.
  * ────────────────────────────────────────────────────────────────────
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { definirResume } from '@/composables/entete'
 import {
@@ -57,14 +59,19 @@ import Segmente from '@/components/mise-en-page/Segmente.vue'
 import OngletsAdministration from './OngletsAdministration.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
 import {
+  ONGLETS,
+  autresSurLaMemeFiche,
   contexteDepuisRequete,
-  grouperParCible,
   ligneAuteur,
-  personneDuGroupe,
+  natureDeLOnglet,
+  nouvellesPersonnes,
+  personneDeLaDemande,
   requeteDeContexte,
   trierDemandes,
+  type OngletDeFile,
   type SensDeTri,
 } from '@/components/administration/file'
+import { LIBELLES_NATURE } from '@/components/proposition/mes-demandes'
 import { annonceEnchainement, issueDepuisRequete } from '@/components/administration/decision'
 
 /** Les états proposés au filtre. `''` veut dire « tous ». `court` est le
@@ -77,21 +84,15 @@ const ETATS: { valeur: StatutDemande | ''; libelle: string; court: string }[] = 
   { valeur: '', libelle: 'Toutes', court: 'Toutes' },
 ]
 
-/** Les deux sens de tri, pour le bouton de bureau et le segmenté du feuillet. */
+/** Les deux sens de tri — par numéro —, pour le bouton de bureau et le segmenté du feuillet. */
 const TRIS: { valeur: SensDeTri; libelle: string }[] = [
-  { valeur: 'anciennes', libelle: 'Plus anciennes' },
-  { valeur: 'recentes', libelle: 'Plus récentes' },
+  { valeur: 'anciennes', libelle: 'N° croissant' },
+  { valeur: 'recentes', libelle: 'N° décroissant' },
 ]
 
-const NATURES: Record<string, string> = {
-  modification_personne: 'Modification',
-  modification_famille: 'Modification de famille',
-  modification_citation: 'Modification de source',
-  creation_personne: 'Ajout d’une personne',
-  ajout_lien: 'Ajout d’un lien',
-  ajout_media: 'Ajout d’un document',
-  retrait_lien: 'Retrait d’un lien',
-}
+/** Les libellés de nature, partagés avec « Mes demandes » : une seule table, complète
+ *  par construction (`Record<NatureDemande, string>`). */
+const NATURES: Record<string, string> = LIBELLES_NATURE
 
 const PASTILLES = ['en_attente', 'validee', 'refusee', 'caduque'] as const
 
@@ -128,12 +129,32 @@ const auteur = ref(depart.auteur)
  *  par la liste des utilisateurs : un sélecteur où presque toutes les entrées ne
  *  donnent aucun résultat est un sélecteur qu'on n'ouvre plus. */
 const auteurs = ref<readonly AuteurDeLaFile[]>([])
-/** Le défaut reprend l'ordre du serveur : la plus ancienne en premier. */
+/** Le défaut : le plus petit numéro en premier — c'est aussi le plus ancien dépôt. */
 const tri = ref<SensDeTri>(depart.tri)
+/** L'onglet : les natures affichées. */
+const onglet = ref<OngletDeFile>(depart.onglet)
+/** Ce que l'administrateur tape ; `recherche` en est la version posée, après une
+ *  courte pause, pour ne pas interroger le serveur à chaque touche. */
+const saisie = ref(depart.recherche)
+const recherche = ref(depart.recherche)
+let minuterie = 0
+watch(saisie, (valeur) => {
+  window.clearTimeout(minuterie)
+  minuterie = window.setTimeout(() => (recherche.value = valeur.trim()), 300)
+})
+onBeforeUnmount(() => window.clearTimeout(minuterie))
 
 /** Ce que la demande ouverte emporte de la file, pour que « & suivant »
  *  enchaîne dans la liste qu'on a sous les yeux. */
-const requeteDeLaFile = computed(() => requeteDeContexte({ etat: etat.value, auteur: auteur.value, tri: tri.value }))
+const requeteDeLaFile = computed(() =>
+  requeteDeContexte({
+    etat: etat.value,
+    auteur: auteur.value,
+    tri: tri.value,
+    onglet: onglet.value,
+    recherche: recherche.value,
+  }),
+)
 const demandes = ref<Demande[]>([])
 const total = ref(0)
 const chargement = ref(false)
@@ -146,9 +167,10 @@ const apercu = ref<number | null>(null)
  *  d'origine décodée à la fois : la loupe est tenue ici. */
 const loupe = ref<CibleLoupe | null>(null)
 
-// Trier **puis** grouper : le regroupement conserve l'ordre qu'on lui donne, et
-// c'est ce qui fait que changer le tri réordonne aussi les groupes entre eux.
-const groupes = computed(() => grouperParCible(trierDemandes(demandes.value, tri.value)))
+/** La file à plat, par numéro. */
+const liste = computed(() => trierDemandes(demandes.value, tri.value))
+/** Pour chaque demande en attente, les autres en attente sur la même fiche. */
+const autres = computed(() => autresSurLaMemeFiche(demandes.value))
 
 function pastille(statut: StatutDemande): (typeof PASTILLES)[number] | 'neutre' {
   return (PASTILLES as readonly string[]).includes(statut)
@@ -160,13 +182,15 @@ async function charger(): Promise<void> {
   chargement.value = true
   erreur.value = null
   try {
-    const liste = await listerDemandesAdministration({
+    const page = await listerDemandesAdministration({
       status: etat.value === '' ? undefined : etat.value,
       auteur: auteur.value === 0 ? undefined : auteur.value,
+      kind: natureDeLOnglet(onglet.value),
+      q: recherche.value,
       parPage: 100,
     })
-    demandes.value = liste.elements
-    total.value = liste.total
+    demandes.value = page.elements
+    total.value = page.total
   } catch (cause) {
     erreur.value = cause
   } finally {
@@ -195,7 +219,7 @@ onMounted(() => {
   void charger()
   void chargerLesAuteurs()
 })
-watch([etat, auteur], charger)
+watch([etat, auteur, onglet, recherche], charger)
 
 /* ------------------------------------------------------------------ */
 /* La barre d'écran                                                    */
@@ -212,14 +236,16 @@ const optionsEtat = computed(() =>
   })),
 )
 
-/** Le filtre par auteur est le seul filtre du feuillet ; le tri n'en est pas un. */
-const filtresActifs = computed(() => (auteur.value === 0 ? 0 : 1))
+/** L'auteur et la recherche sont les filtres ; le tri n'en est pas un, l'onglet est la vue. */
+const filtresActifs = computed(() => (auteur.value === 0 ? 0 : 1) + (recherche.value === '' ? 0 : 1))
 
-/** « Réinitialiser » du feuillet : tout le monde, la plus ancienne d'abord.
- *  L'état n'est pas un filtre du feuillet, c'est la vue : il ne bouge pas. */
+/** « Réinitialiser » du feuillet : tout le monde, sans recherche, le plus petit numéro
+ *  d'abord. L'état et l'onglet ne sont pas des filtres du feuillet, c'est la vue. */
 function reinitialiser(): void {
   auteur.value = 0
   tri.value = 'anciennes'
+  saisie.value = ''
+  recherche.value = ''
 }
 
 const libelleTotal = computed(() => `${total.value} demande${total.value > 1 ? 's' : ''}`)
@@ -348,6 +374,35 @@ function dateLisible(valeur: string | null): string {
   </BarreEcran>
 
   <div class="mx-auto w-full max-w-5xl px-4 py-6">
+    <div class="mb-4 flex flex-wrap items-center gap-2">
+      <div class="flex min-w-0 gap-2 overflow-x-auto" role="tablist" aria-label="Nature des demandes">
+        <button
+          v-for="o in ONGLETS"
+          :key="o.valeur"
+          type="button"
+          role="tab"
+          class="flex h-9 flex-none items-center rounded-pastille border px-[13px] text-[13px]"
+          :class="o.valeur === onglet ? 'border-accent bg-accent-doux font-semibold' : 'border-ligne text-attenue'"
+          :aria-selected="o.valeur === onglet"
+          @click="onglet = o.valeur"
+        >
+          {{ o.libelle }}
+        </button>
+      </div>
+      <label class="ml-auto flex h-9 min-w-[220px] items-center gap-2 rounded-champ border border-ligne bg-panneau px-3 text-sm max-md:ml-0 max-md:w-full">
+        <span class="sr-only">Rechercher une demande</span>
+        <span aria-hidden="true" class="text-attenue">⌕</span>
+        <input
+          id="recherche-file"
+          v-model="saisie"
+          type="search"
+          inputmode="search"
+          placeholder="N° de demande, nom, auteur…"
+          class="h-8 min-w-0 flex-1 bg-transparent text-sm focus:outline-none"
+        />
+      </label>
+    </div>
+
     <p
       v-if="annonceDeFin !== null"
       class="mb-4 rounded-panneau border border-ok-bord bg-ok-doux px-3.5 py-3 text-sm"
@@ -363,68 +418,68 @@ function dateLisible(valeur: string | null): string {
 
     <MessageErreur v-else-if="erreur !== null" :erreur="erreur" @action="charger" />
 
-    <PanneauBase v-else-if="groupes.length === 0">
+    <PanneauBase v-else-if="liste.length === 0">
       <p class="text-sm text-attenue">
         {{
-          etat === 'en_attente'
-            ? 'Rien n’attend de décision.'
-            : 'Aucune demande ne correspond à ce filtre.'
+          recherche !== ''
+            ? 'Aucune demande ne correspond à cette recherche.'
+            : etat === 'en_attente' && onglet === 'toutes'
+              ? 'Rien n’attend de décision.'
+              : 'Aucune demande ne correspond à ce filtre.'
         }}
       </p>
     </PanneauBase>
 
-    <div v-else class="flex flex-col gap-4">
-      <PanneauBase v-for="groupe in groupes" :key="groupe.cle">
-        <template #entete>
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <h2 class="text-sm font-semibold tracking-tight">{{ groupe.titre }}</h2>
-              <!-- Voir qui est visé sans perdre le filtre, le tri, ni sa place
-                   dans la file : revenir en arrière rechargerait tout. -->
-              <button
-                v-if="personneDuGroupe(groupe) !== null"
-                type="button"
-                class="cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline"
-                @click="apercu = personneDuGroupe(groupe)"
-              >
-                Voir la fiche
-              </button>
-            </div>
-            <!-- Deux demandes sur la même fiche : l'ordre de décision compte,
-                 et le dire ici évite de le découvrir en cliquant. -->
-            <span v-if="!groupe.sansCible && groupe.demandes.length > 1" class="text-xs text-alerte">
-              {{ groupe.demandes.length }} demandes sur cette fiche : décidez-les ensemble
-            </span>
+    <PanneauBase v-else>
+      <ul class="flex flex-col divide-y divide-ligne">
+        <li v-for="demande in liste" :key="demande.id" class="py-2.5 first:pt-0 last:pb-0">
+          <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span class="font-mono text-[13px] text-attenue tabular-nums">n° {{ demande.id }}</span>
+            <RouterLink
+              :to="{ name: 'demande.detail', params: { id: demande.id }, query: requeteDeLaFile }"
+              class="font-semibold text-accent underline"
+            >
+              {{ NATURES[demande.kind] ?? demande.kind }}
+            </RouterLink>
+            <PastilleEtat
+              :etat="pastille(demande.status)"
+              :libelle="LIBELLES_HORS_PASTILLE[demande.status] ?? ''"
+            />
+            <span v-if="demande.targetLabel" class="text-sm">{{ demande.targetLabel }}</span>
+            <!-- Voir qui est visé sans perdre le filtre, le tri, ni sa place dans la file. -->
+            <button
+              v-if="personneDeLaDemande(demande) !== null"
+              type="button"
+              class="cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline"
+              @click="apercu = personneDeLaDemande(demande)"
+            >
+              Voir la fiche
+            </button>
           </div>
-        </template>
 
-        <ul class="flex flex-col divide-y divide-ligne">
-          <li v-for="demande in groupe.demandes" :key="demande.id" class="py-2.5 first:pt-0 last:pb-0">
-            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <RouterLink
-                :to="{ name: 'demande.detail', params: { id: demande.id }, query: requeteDeLaFile }"
-                class="font-semibold text-accent underline"
-              >
-                {{ NATURES[demande.kind] ?? demande.kind }}
-              </RouterLink>
-              <PastilleEtat
-                :etat="pastille(demande.status)"
-                :libelle="LIBELLES_HORS_PASTILLE[demande.status] ?? ''"
-              />
-              <!-- Composée dans `file.ts` : la virgule se colle au nom, et aucun
-                   blanc de gabarit ne peut l’en détacher. -->
-              <span class="text-sm text-attenue">
-                {{ ligneAuteur(demande.authorLabel, dateLisible(demande.submittedAt)) }}
-              </span>
-            </div>
+          <!-- Les personnes que la demande ajoute à l'arbre, par leur nom. -->
+          <p v-if="nouvellesPersonnes(demande) !== ''" class="mt-1 text-sm">
+            <span class="text-attenue">Nouvelle{{ (demande.nouvellesPersonnes?.length ?? 0) > 1 ? 's' : '' }} personne{{ (demande.nouvellesPersonnes?.length ?? 0) > 1 ? 's' : '' }} :</span>
+            {{ nouvellesPersonnes(demande) }}
+          </p>
 
-            <p v-if="demande.message" class="mt-1 line-clamp-2 text-sm text-attenue">
-              {{ demande.message }}
-            </p>
-          </li>
-        </ul>
-      </PanneauBase>
-    </div>
+          <!-- Composée dans `file.ts` : la virgule se colle au nom, et aucun
+               blanc de gabarit ne peut l’en détacher. -->
+          <p class="mt-0.5 text-sm text-attenue">
+            {{ ligneAuteur(demande.authorLabel, dateLisible(demande.submittedAt)) }}
+          </p>
+
+          <!-- Ce que le regroupement par fiche montrait : l'ordre de décision compte. -->
+          <p v-if="autres.get(demande.id)" class="mt-0.5 text-xs text-alerte">
+            {{ autres.get(demande.id) }} autre{{ (autres.get(demande.id) ?? 0) > 1 ? 's' : '' }} demande{{ (autres.get(demande.id) ?? 0) > 1 ? 's' : '' }} en attente sur cette fiche : décidez-les ensemble
+          </p>
+
+          <p v-if="demande.message" class="mt-1 line-clamp-2 text-sm text-attenue">
+            {{ demande.message }}
+          </p>
+        </li>
+      </ul>
+    </PanneauBase>
 
     <!-- Déclarée après la file, donc peinte par-dessus. La loupe vient ensuite,
          pour passer par-dessus l'aperçu lui-même. -->
