@@ -72,6 +72,17 @@ services:
     App\Module\Proposal\Service\Port\NotificateurDeDemandes:
         alias: App\Module\Proposal\Service\Port\NotificateurParNotifications
 
+    # ⇢ `Tree` : les personnes qu'une création pourrait doubler (§ 6.3 ter). **Branché.**
+    #
+    #    Déclaré dans `Contract\` et non dans `Service\Port\` : c'est `Tree` qui
+    #    l'implémente, et la règle 3 de l'ADR 0002 ne laisse un module en citer un autre
+    #    que par sa surface publique. Pas de double en `when@test` : comme pour
+    #    `Demarche`, les tests sèment un vrai arbre (`tests/Tree/ArbreWebTestCase`) et
+    #    éprouvent l'adaptateur réel — c'est lui qui applique le cercle, et c'est le
+    #    cercle qu'il faut voir décider.
+    App\Module\Proposal\Contract\ArbrePourLesDoublons:
+        alias: App\Module\Tree\Service\VueDeLArbrePourLesDoublons
+
     # ⇢ `Tree`, `Media`, `Timeline` : le calque « en attente » et les nœuds proposés.
     #
     #    Alias YAML et non `#[AsAlias]`, et l'ordre de chargement est ici la raison :

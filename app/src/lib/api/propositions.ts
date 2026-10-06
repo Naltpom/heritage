@@ -872,6 +872,121 @@ export function creerDemande(corps: CorpsDemande): Promise<Demande> {
   return requeteApi<Demande>('/demandes', { methode: 'POST', corps })
 }
 
+/* ================================================================== */
+/* Les doublons probables, avant dépôt — § 6.3 ter                     */
+/* ================================================================== */
+
+/** Une référence courte à un proche : le nom suit déjà le cercle (le masque
+ *  « Personne vivante » pour une fiche confidentielle hors du cercle). */
+export interface ProcheDoublon {
+  personId: number
+  displayName: string
+}
+
+/** Sur quoi le serveur a rapproché — pour expliquer, jamais pour décider. */
+export type CritereDoublon =
+  | 'nom'
+  | 'prenom'
+  | 'naissance'
+  | 'deces'
+  | 'sexe'
+  | 'parents'
+  | 'conjoints'
+  | 'enfants'
+
+/**
+ * Une personne **de l'arbre** qui ressemble à la saisie — ce que la fiche
+ * (§ 5.3) montre déjà à ce lecteur, rien de plus. `birth` peut être un bloc
+ * `masquee` (ADR 0016) : il ne se compare pas.
+ */
+export interface PersonneDoublon {
+  personId: number
+  displayName: string
+  givenNames: string
+  surname: string
+  marriedName: string | null
+  nickname: string | null
+  sex: Sexe
+  deceased: boolean
+  vivant: boolean
+  birth: BlocDate
+  death: BlocDate
+  ligneDates: string
+  parents: ProcheDoublon[]
+  conjoints: ProcheDoublon[]
+  enfants: ProcheDoublon[]
+  criteres: CritereDoublon[]
+}
+
+/** Une fiche proposée **par le lecteur**, encore en attente — de quoi la
+ *  compléter : la demande, la référence de la fiche, ses liens (§ 6.5). */
+export interface MaDemandeDoublon {
+  demandeId: number
+  draftPersonId: number
+  localRef: string
+  noeudId: string
+  status: StatutDemande
+  submittedAt: string | null
+  displayName: string
+  givenNames: string
+  surname: string
+  marriedName: string | null
+  nickname: string | null
+  sex: Sexe
+  deceased: boolean
+  birth: BlocDate
+  death: BlocDate
+  ligneDates: string
+  note: string | null
+  liens: LienDemande[]
+  criteres: CritereDoublon[]
+}
+
+/**
+ * La réponse du § 6.3 ter.
+ *
+ * `enCoursAilleurs` est **tout** ce qui sort des demandes des autres membres :
+ * ni contenu, ni auteur, ni numéro, ni nombre — et seulement pour une personne
+ * décédée. Le contenu d'une demande en attente n'appartient qu'à son auteur
+ * (ADR 0004).
+ */
+export interface DoublonsProbables {
+  personnes: PersonneDoublon[]
+  mesDemandes: MaDemandeDoublon[]
+  enCoursAilleurs: boolean
+}
+
+/**
+ * `POST /api/demandes/doublons-probables` — **aucune écriture**.
+ *
+ * Le corps est celui d'une création (§ 6.3), tel que le formulaire le posterait.
+ * Plafonnée à 60 appels par heure et par compte (`429 trop_de_tentatives`).
+ */
+export function chercherDoublonsProbables(corps: CorpsCreationPersonne): Promise<DoublonsProbables> {
+  return requeteApi<DoublonsProbables>('/demandes/doublons-probables', { methode: 'POST', corps })
+}
+
+/**
+ * `POST /api/demandes/{id}/brouillons/{ref}/completer` — compléter **sa** fiche
+ * proposée encore en attente avec une nouvelle saisie (« Mettre à jour la
+ * demande existante »).
+ *
+ * Le corps est celui d'une création. Ce qui est saisi complète, ce qui est
+ * laissé vide ne retire rien ; la filiation saisie remplace celle de la fiche.
+ * La référence part **sans le dièse**, comme au détail d'un nœud (§ 6.6).
+ */
+export function completerDemande(
+  demandeId: number,
+  localRef: string,
+  corps: CorpsCreationPersonne,
+): Promise<Demande> {
+  const reference = encodeURIComponent(localRef.replace(/^#/, ''))
+  return requeteApi<Demande>(`/demandes/${demandeId}/brouillons/${reference}/completer`, {
+    methode: 'POST',
+    corps,
+  })
+}
+
 /**
  * La demande `ajout_media` d'un média qu'on vient de téléverser sur une fiche, soumise
  * d'emblée : c'est elle qui l'amène dans la file des demandes de l'administration.

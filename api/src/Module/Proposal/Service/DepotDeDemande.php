@@ -12,6 +12,8 @@ use App\Module\Proposal\Exception\AccesRefuse;
 use App\Module\Proposal\Exception\Conflit;
 use App\Module\Proposal\Exception\DonneesInvalides;
 use App\Module\Proposal\Exception\ErreurDeDemande;
+use App\Module\Proposal\Exception\Introuvable;
+use App\Module\Proposal\Repository\DraftPersonRepository;
 use App\Module\Proposal\Service\Port\NotificateurDeDemandes;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
@@ -43,6 +45,8 @@ final readonly class DepotDeDemande
         #[AutowireIterator('app.proposal.constructeur_de_demande')]
         private iterable $constructeurs,
         private NotificateurDeDemandes $notificateur,
+        private ConstructeurDeCreation $creation,
+        private DraftPersonRepository $brouillons,
     ) {
     }
 
@@ -185,6 +189,79 @@ final readonly class DepotDeDemande
 
         $demande->setStatus(RequestStatus::Annulee)->toucher();
         $this->em->flush();
+
+        return $demande;
+    }
+
+    /**
+     * **Compléter sa propre fiche proposée** avant décision — « Mettre à jour la demande
+     * existante » (§ 6.3 ter, ADR 0004 « Révision du 2026-10-06 »).
+     *
+     * Le membre qui s'apprête à proposer une personne qu'il a déjà proposée la veille
+     * avait deux issues, toutes deux mauvaises : déposer le doublon que la file
+     * d'administration passe son temps à rapprocher, ou retirer sa demande et la
+     * refaire en entier. Celle-ci en est une troisième, bornée à ce qui ne fait pas de
+     * tort au circuit :
+     *
+     * - **l'auteur seulement**, administrateur compris : compléter la demande d'un autre,
+     *   ce serait parler à sa place sans laisser de trace de décision ;
+     * - **avant toute décision** (`brouillon` ou `en_attente`) — une demande tranchée est
+     *   l'historique d'une discussion, elle ne se réécrit pas ;
+     * - **une création de personne**, et rien d'autre : c'est le seul cas qu'un
+     *   rapprochement de doublons fait naître ;
+     * - **les contrôles du dépôt**, par le même constructeur, et la clé de doublon
+     *   recalculée — le nom ou l'année ont pu changer ;
+     * - **tracé** comme toute écriture : le journal mécanique consigne chaque colonne de
+     *   la fiche et chaque lien ajouté ou remplacé, avec l'acteur.
+     *
+     * La demande **reste à sa place dans la file** (`submittedAt` inchangé) : elle n'est
+     * pas redéposée, elle est complétée. L'administrateur la lit telle qu'elle est au
+     * moment où il l'ouvre, comme toute demande.
+     *
+     * @param array<string, mixed> $corps le corps d'une création (§ 6.3), une seule fiche
+     */
+    public function completer(ChangeRequest $demande, string $reference, array $corps, Lecteur $lecteur): ChangeRequest
+    {
+        $this->verifierQuIlPeutEcrire($lecteur);
+        $this->verifierQuIlEstLAuteur($demande, $lecteur);
+
+        if ($demande->getStatus()->estDefinitif()) {
+            throw Conflit::dejaDecidee($demande->getStatus());
+        }
+
+        if (RequestKind::CreationPersonne !== $demande->getKind()) {
+            throw DonneesInvalides::pourChamp('kind', 'Seule une proposition de personne se complète ainsi.');
+        }
+
+        $cible = $this->brouillons->parReference($demande, $reference);
+
+        if (null === $cible) {
+            throw Introuvable::brouillon(ltrim($reference, '#'));
+        }
+
+        $message = $this->message($corps);
+
+        $this->em->wrapInTransaction(function () use ($demande, $cible, $corps, $lecteur, $message): void {
+            $this->creation->completer($cible, $corps, $lecteur);
+
+            // Le mot du demandeur **s'ajoute** au précédent, comme la note de la fiche :
+            // l'administrateur doit lire les deux, pas seulement le dernier.
+            $avant = $demande->getMessage();
+            if (null !== $message && (null === $avant || !str_contains($avant, $message))) {
+                $demande->setMessage(null === $avant ? $message : $avant."\n\n".$message);
+            }
+
+            $demande->toucher();
+            $this->em->flush();
+
+            // La clé de doublon suit la fiche : le nom ou l'année ont pu changer, et la
+            // file d'administration rapproche sur elle. Elle n'est posée qu'en attente,
+            // comme au dépôt.
+            if (RequestStatus::EnAttente === $demande->getStatus()) {
+                $this->creation->verifierAvantSoumission($demande);
+                $this->em->flush();
+            }
+        });
 
         return $demande;
     }

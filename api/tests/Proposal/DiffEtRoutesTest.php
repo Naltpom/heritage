@@ -173,6 +173,8 @@ final class DiffEtRoutesTest extends BaseDeDemandes
             'proposal_demande_retirer' => ['/api/demandes/{id}/retirer', 'POST'],
             'proposal_demande_refaire' => ['/api/demandes/{id}/refaire', 'GET'],
             'proposal_demande_brouillon' => ['/api/demandes/{id}/brouillons/{ref}', 'GET'],
+            'proposal_demande_completer' => ['/api/demandes/{id}/brouillons/{ref}/completer', 'POST'],
+            'proposal_demande_doublons_probables' => ['/api/demandes/doublons-probables', 'POST'],
             'proposal_demande_historique' => ['/api/demandes/historique/{subjectKind}/{subjectId}', 'GET'],
             'proposal_admin_demande_lister' => ['/api/administration/demandes', 'GET'],
             'proposal_admin_demande_voir' => ['/api/administration/demandes/{id}', 'GET'],

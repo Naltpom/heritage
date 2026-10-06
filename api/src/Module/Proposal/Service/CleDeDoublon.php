@@ -57,8 +57,8 @@ final class CleDeDoublon
      */
     public function pour(DraftPerson $brouillon): ?string
     {
-        $nom = $this->normaliser($brouillon->getSurname());
-        $prenom = $this->normaliser($this->premierPrenom($brouillon->getGivenNames()));
+        $nom = $this->nom($brouillon->getSurname());
+        $prenom = $this->prenom($brouillon->getGivenNames());
 
         if ('' === $nom && '' === $prenom) {
             return null;
@@ -67,6 +67,24 @@ final class CleDeDoublon
         $annee = $brouillon->getBirth()->getMin()?->format('Y') ?? '?';
 
         return mb_substr($nom.'|'.$prenom.'|'.$annee, 0, self::LONGUEUR_MAXIMALE);
+    }
+
+    /**
+     * Le patronyme **tel que la clé le compare** : minuscules, sans accents, ponctuation
+     * réduite. Public depuis que le rapprochement d'avant dépôt
+     * ({@see RapprochementDeDoublons}) compare les noms de la même façon : deux
+     * normalisations, et un doublon vu par l'administrateur ne le serait plus par le
+     * membre — ou l'inverse.
+     */
+    public function nom(?string $nom): string
+    {
+        return $this->normaliser($nom ?? '');
+    }
+
+    /** Le **premier** prénom, normalisé comme {@see nom()}. */
+    public function prenom(string $prenoms): string
+    {
+        return $this->normaliser($this->premierPrenom($prenoms));
     }
 
     /**

@@ -28,6 +28,14 @@
  *   exigé qu'à la soumission : on commence un soir, on finit le lendemain.
  * ────────────────────────────────────────────────────────────────────
  *
+ * **« Envoyer » ne dépose pas d'un coup** (§ 6.3 ter) : le formulaire cherche
+ * d'abord les doublons probables — dans l'arbre, dans les demandes en attente
+ * de l'auteur, et le seul drapeau de celles des autres —, puis ouvre
+ * `ModaleEnvoiCreation` : le récapitulatif s'il n'y a rien, l'avertissement et
+ * la comparaison champ par champ sinon, avec trois issues — c'est bien une
+ * nouvelle personne, mettre à jour ma demande (ou proposer la modification de la
+ * fiche de l'arbre), ne rien faire.
+ *
  * Après le dépôt, l'auteur est renvoyé vers le suivi de sa demande : c'est là
  * que se lira la décision, et **le motif s'il y a refus** — le commanditaire l'a
  * demandé explicitement, et le § 6.9 rend ce message obligatoire côté
@@ -50,8 +58,18 @@
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { creerDemande, invaliderGraphe, type OrigineReprise } from '@/lib/api'
+import { useRoute, useRouter, type HistoryState } from 'vue-router'
+import {
+  chercherDoublonsProbables,
+  completerDemande,
+  creerDemande,
+  invaliderGraphe,
+  type CorpsCreationPersonne,
+  type DoublonsProbables,
+  type MaDemandeDoublon,
+  type OrigineReprise,
+  type PersonneDoublon,
+} from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import AssistantProposition from '@/components/proposition/assistant/AssistantProposition.vue'
@@ -72,6 +90,8 @@ import {
   type SaisieCreation,
 } from '@/components/proposition/creation'
 import { chargerReprise, type Avertissement } from '@/components/proposition/reprise'
+import ModaleEnvoiCreation from '@/components/proposition/ModaleEnvoiCreation.vue'
+import { CLE_PRE_REMPLISSAGE, preRemplissageModification } from '@/components/proposition/doublons'
 
 const route = useRoute()
 const routeur = useRouter()
@@ -166,40 +186,142 @@ if (demandeAReprendre !== null) void reprendre(demandeAReprendre)
 
 /* --- Le dépôt ----------------------------------------------------- */
 
+/**
+ * « Envoyer » (`soumettre`) **ne part pas tout de suite** : il cherche d'abord
+ * les doublons probables (§ 6.3 ter), puis ouvre la modale — le récapitulatif
+ * s'il n'y en a pas, l'avertissement s'il y en a. « Enregistrer sans envoyer »
+ * part directement : un brouillon n'entre pas dans la file, il n'y a rien à
+ * rapprocher encore.
+ *
+ * **Une vérification qui échoue ne bloque pas.** C'est un contrôle de confort :
+ * la file d'administration rapproche de toute façon les doublons à la
+ * validation. On le dit, discrètement, et on montre le récapitulatif.
+ */
 async function deposer(soumettre: boolean): Promise<void> {
-  if (envoi.value) return
-  envoi.value = true
+  if (envoi.value || verification.value) return
   erreur.value = null
   conflit.value = null
   erreurs.value = {}
 
+  const provenance = origine.value
+  const options = { message: message.value, soumettre }
+  const resultat = corpsCreationPersonne(
+    saisie.value,
+    provenance === null ? options : { ...options, origine: provenance },
+  )
+
+  if (!resultat.valide) {
+    erreurs.value = erreursParChamp(resultat.erreurs)
+    return
+  }
+
+  if (!soumettre) {
+    await envoyer(resultat.corps)
+    return
+  }
+
+  verification.value = true
   try {
-    const provenance = origine.value
-    const options = { message: message.value, soumettre }
-    const resultat = corpsCreationPersonne(
-      saisie.value,
-      provenance === null ? options : { ...options, origine: provenance },
-    )
+    doublons.value = await chercherDoublonsProbables(resultat.corps)
+    verificationEchouee.value = false
+  } catch {
+    doublons.value = null
+    verificationEchouee.value = true
+  } finally {
+    verification.value = false
+  }
 
-    if (!resultat.valide) {
-      erreurs.value = erreursParChamp(resultat.erreurs)
-      return
-    }
+  corpsAEnvoyer.value = resultat.corps
+  erreurModale.value = null
+  modaleOuverte.value = true
+}
 
-    const demande = await creerDemande(resultat.corps)
+/** Le dépôt lui-même — après la modale, ou directement pour un brouillon. */
+async function envoyer(corps: CorpsCreationPersonne): Promise<void> {
+  if (envoi.value) return
+  envoi.value = true
+  erreurModale.value = null
+
+  try {
+    const demande = await creerDemande(corps)
 
     // Une personne proposée apparaît comme **nœud en attente** dans le graphe
     // de son auteur (§ 13.4) : l'`ETag` du graphe est donc périmé.
     invaliderGraphe()
 
+    modaleOuverte.value = false
     await routeur.push({ name: 'demande.detail', params: { id: demande.id } })
   } catch (cause) {
     const reconnu = conflitDeDemande(cause)
-    if (reconnu !== null) conflit.value = reconnu
-    else erreur.value = cause
+    if (reconnu !== null) {
+      modaleOuverte.value = false
+      conflit.value = reconnu
+    } else if (modaleOuverte.value) {
+      erreurModale.value = cause
+    } else {
+      erreur.value = cause
+    }
   } finally {
     envoi.value = false
   }
+}
+
+/* --- Les issues de la modale ----------------------------------------- */
+
+const modaleOuverte = ref(false)
+const verification = ref(false)
+const doublons = ref<DoublonsProbables | null>(null)
+const verificationEchouee = ref(false)
+const corpsAEnvoyer = ref<CorpsCreationPersonne | null>(null)
+const erreurModale = ref<unknown>(null)
+
+/** « C'est bien une nouvelle personne » — ou « Confirmer l'envoi ». */
+function confirmerNouvelle(): void {
+  if (corpsAEnvoyer.value !== null) void envoyer(corpsAEnvoyer.value)
+}
+
+/**
+ * « Mettre à jour la demande existante » : la saisie **complète** ma fiche
+ * proposée — ce qui est saisi s'ajoute ou remplace, ce qui est vide ne retire
+ * rien (règle du serveur). La demande reste à sa place dans la file.
+ */
+async function completerLaDemande(existante: MaDemandeDoublon): Promise<void> {
+  const corps = corpsAEnvoyer.value
+  if (corps === null || envoi.value) return
+  envoi.value = true
+  erreurModale.value = null
+  try {
+    const demande = await completerDemande(existante.demandeId, existante.localRef, corps)
+    invaliderGraphe()
+    modaleOuverte.value = false
+    await routeur.push({ name: 'demande.detail', params: { id: demande.id } })
+  } catch (cause) {
+    erreurModale.value = cause
+  } finally {
+    envoi.value = false
+  }
+}
+
+/**
+ * « Proposer une modification de la fiche existante » : l'écran de
+ * modification, **pré-rempli des seuls champs divergents ou ajoutés**. La
+ * saisie voyage dans `history.state`, jamais dans l'adresse ; elle est
+ * dé-réactivée d'abord, un `Proxy` ne se clonant pas.
+ */
+function modifierLaFiche(personne: PersonneDoublon): void {
+  const pre = JSON.parse(JSON.stringify(preRemplissageModification(saisie.value, personne))) as unknown
+  modaleOuverte.value = false
+  void routeur.push({
+    name: 'proposition.modification',
+    params: { id: personne.personId },
+    state: { [CLE_PRE_REMPLISSAGE]: pre } as HistoryState,
+  })
+}
+
+/** « Ne rien faire » : rien ne part, le formulaire reste tel quel. */
+function fermerLaModale(): void {
+  if (envoi.value) return
+  modaleOuverte.value = false
 }
 
 function refaire(demandeId: number | null): void {
@@ -371,17 +493,33 @@ function refaire(demandeId: number | null): void {
         </PanneauBase>
 
         <div class="flex flex-wrap items-center gap-2">
-          <BoutonBase type="submit" :chargement="envoi" :desactive="suspendu">
+          <BoutonBase type="submit" :chargement="envoi || verification" :desactive="suspendu">
             Envoyer la proposition
           </BoutonBase>
-          <BoutonBase variante="secondaire" :desactive="suspendu || envoi" @click="deposer(false)">
+          <BoutonBase variante="secondaire" :desactive="suspendu || envoi || verification" @click="deposer(false)">
             Enregistrer sans envoyer
           </BoutonBase>
           <RouterLink :to="{ name: 'arbre' }" class="text-sm text-attenue underline">
             Revenir à l’arbre
           </RouterLink>
+          <span v-if="verification" class="text-xs text-attenue" role="status">
+            Recherche de doublons…
+          </span>
         </div>
       </form>
+
+      <ModaleEnvoiCreation
+        :ouverte="modaleOuverte"
+        :saisie="saisie"
+        :doublons="doublons"
+        :verification-echouee="verificationEchouee"
+        :envoi="envoi"
+        :erreur="erreurModale"
+        @nouvelle="confirmerNouvelle"
+        @completer="completerLaDemande"
+        @modifier="modifierLaFiche"
+        @annuler="fermerLaModale"
+      />
     </template>
     </template>
   </div>

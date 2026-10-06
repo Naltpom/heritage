@@ -17,9 +17,12 @@ use App\Module\Proposal\Repository\ChangeRequestRepository;
 use App\Module\Proposal\Repository\DraftPersonRepository;
 use App\Module\Proposal\Repository\RevisionRepository;
 use App\Module\Proposal\Security\DemandeVoter;
+use App\Module\Proposal\Service\ConstructeurDeCreation;
 use App\Module\Proposal\Service\DepotDeDemande;
+use App\Module\Proposal\Service\DoublonsAvantDepot;
 use App\Module\Proposal\Service\FabriqueDeLecteur;
 use App\Module\Proposal\Service\InventaireDeLaSuppression;
+use App\Module\Proposal\Service\LimiteurDesDoublons;
 use App\Module\Proposal\Service\RechercheDeBrouillons;
 use App\Module\Proposal\Service\RefaireDemande;
 use App\Module\Proposal\Service\SerialiseurDeDemande;
@@ -51,6 +54,8 @@ use Symfony\Component\Routing\Attribute\Route;
  * | `GET /api/demandes/{id}` | non | — |
  * | `POST /api/demandes/{id}/soumettre` | oui | **oui** |
  * | `POST /api/demandes/{id}/retirer` | oui | **oui** |
+ * | `POST /api/demandes/{id}/brouillons/{ref}/completer` | oui | **oui** |
+ * | `POST /api/demandes/doublons-probables` | **non** | — |
  * | `GET /api/demandes/{id}/refaire` | **non** | — |
  * | `GET /api/demandes/{id}/brouillons/{ref}` | non | — |
  * | `GET /api/demandes/brouillons/recherche` | non | — |
@@ -153,6 +158,57 @@ final class DemandeController extends AbstractController
 
         return $this->charge($this->serialiseur->pourAuteur(
             $depot->retirer($demande, $this->lecteurs->courant()),
+        ));
+    }
+
+    /**
+     * Les doublons probables d'une création, **avant son dépôt** (§ 6.3 ter).
+     *
+     * `POST` et non `GET` parce que le corps est celui d'une création — une fiche, ses
+     * dates, ses liens — et qu'il n'a rien à faire dans une adresse, que les journaux
+     * du serveur et l'historique du navigateur gardent. Aucune écriture pour autant,
+     * donc aucun `refuserSiActive()` : sous la bascule « voir comme un membre », un
+     * administrateur doit pouvoir **lire** ce que le membre se verrait signaler, comme à
+     * la recherche des fiches proposées.
+     *
+     * Elle lit l'arbre : réservée aux membres, comme la recherche (ADR 0003, révision du
+     * 01/10/2026). Ce qu'elle rend, et surtout ce qu'elle tait des demandes des autres,
+     * est écrit en tête de {@see DoublonsAvantDepot}.
+     */
+    #[Route('/doublons-probables', name: 'proposal_demande_doublons_probables', methods: ['POST'])]
+    #[ReserveAuxMembres]
+    public function doublonsProbables(Request $requete, DoublonsAvantDepot $doublons, LimiteurDesDoublons $limiteur): JsonResponse
+    {
+        $lecteur = $this->lecteurs->courant();
+        $limiteur->entrer($lecteur);
+
+        return $this->charge($doublons->pour($this->corps($requete), $lecteur));
+    }
+
+    /**
+     * Compléter **sa** fiche proposée encore en attente (§ 6.3 ter) — « Mettre à jour la
+     * demande existante ». La référence sans le dièse, comme au détail du nœud (§ 6.6).
+     *
+     * Le corps est celui d'une création ; ce qui en est retenu, et ce qui ne l'est pas,
+     * est écrit sur {@see ConstructeurDeCreation::completer()}. La réponse est la demande
+     * complétée, sous la forme du § 6.5 — « une action qui réussit rend toujours l'état
+     * résultant ».
+     */
+    #[Route(
+        '/{id}/brouillons/{ref}/completer',
+        name: 'proposal_demande_completer',
+        requirements: ['id' => '\d+', 'ref' => '[A-Za-z]\d+'],
+        methods: ['POST'],
+    )]
+    public function completer(int $id, string $ref, Request $requete, DepotDeDemande $depot): JsonResponse
+    {
+        $this->bascule->refuserSiActive();
+
+        $demande = $this->trouver($id);
+        $this->exiger(DemandeVoter::MODIFIER, $demande);
+
+        return $this->charge($this->serialiseur->pourAuteur(
+            $depot->completer($demande, '#'.$ref, $this->corps($requete), $this->lecteurs->courant()),
         ));
     }
 
