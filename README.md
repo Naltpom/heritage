@@ -376,6 +376,21 @@ c'est un nginx, un Caddy ou un Traefik de l'hôte qui termine le TLS. Ce proxy *
 `X-Forwarded-Proto: https` — sans cet en-tête, Symfony se croit en clair, le cookie de
 session sort sans son drapeau `Secure` et les URL absolues sortent en `http`.
 
+Le flux de déploiement (`.github/workflows/deploy.yml`) **vide la base avant chaque mise en
+production**, après la construction et avant le démarrage — donc avant toute migration :
+`backup/deploiement-<horodatage UTC>-avant-<sha court>.dump` à la racine du clone du VPS
+(`pg_dump -Fc`, les 10 derniers gardés, ignoré par Git). Si le vidage échoue, le déploiement
+s'arrête sans toucher la pile en service. La restauration est **manuelle** et efface tout ce
+qui a été écrit depuis : base recréée vide, `pg_restore`, puis redémarrage de la version
+d'avant — pas à pas au § 11.6 de
+[`docs/deploiement/premiere-mise-en-ligne.md`](docs/deploiement/premiere-mise-en-ligne.md).
+Ces vidages restent sur la machine : ils ne remplacent pas la copie hors site des
+sauvegardes quotidiennes.
+
+Pour la surveillance, `GET /api/sante` rend `{"statut":"ok"}` (ou `503` sans détail) sans
+compte ni session, base comprise : c'est la cible d'une sonde extérieure, à doubler d'une
+alerte d'expiration du certificat (même document, § 13).
+
 ---
 
 ## Arborescence

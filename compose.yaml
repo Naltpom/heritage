@@ -267,6 +267,22 @@
 # dans son shell, qui l'emporte (voir l'en-tête).
 name: heritage
 
+# Journaux des conteneurs : plafonnés, sur TOUS les services.
+#
+# Le pilote `json-file` de Docker ne fait aucune rotation par défaut : un
+# conteneur bavard — une sonde qui journalise toutes les dix secondes, une boucle
+# d'erreurs — remplit le disque sans limite, et c'est la base qui tombe la
+# première quand il est plein. 10 Mo × 5 fichiers = 50 Mo au plus par conteneur.
+# `docker compose logs` ne lit que ce qui reste : au-delà, c'est perdu.
+#
+# Une ancre YAML ne traverse pas les fichiers : compose.prod.yaml redéclare la
+# même, à l'identique, pour ses propres services.
+x-logging: &journalisation
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
 
   # ---------------------------------------------------------------------------
@@ -274,6 +290,7 @@ services:
   # ---------------------------------------------------------------------------
   db:
     image: postgres:17-alpine
+    logging: *journalisation
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-heritage}
       POSTGRES_USER: ${POSTGRES_USER:-heritage}
@@ -332,6 +349,7 @@ services:
       #     tournant en mode production.
       target: prod
     image: ${IMAGE_PREFIX:-heritage}/api:${IMAGE_TAG:-dev}
+    logging: *journalisation
     environment:
       # Ces trois-là sont de VRAIES variables d'environnement du conteneur, et
       # non des lignes de api/.env : Symfony fait gagner l'environnement réel
@@ -461,6 +479,7 @@ services:
       # image contenant node et les sources, sans nginx. Le jour où cet étage
       # final recevrait un nom, on le déclarerait ici comme pour l'API.
     image: ${IMAGE_PREFIX:-heritage}/app:${IMAGE_TAG:-dev}
+    logging: *journalisation
     depends_on:
       # Possible grâce à la sonde portée par l'image de l'API : nginx ne démarre
       # qu'une fois l'API répondante. Sans cela, l'écran est servi pendant que
@@ -481,6 +500,7 @@ services:
   # une adresse de la famille pendant un essai). Il capte tout et n'envoie rien.
   mailpit:
     image: axllent/mailpit:v1.21
+    logging: *journalisation
     environment:
       MP_MAX_MESSAGES: 500
       # Le dev n'a ni compte ni TLS : on accepte toute authentification et le

@@ -18,13 +18,15 @@ declare(strict_types=1);
  * rien de plus. Il n'ouvre pas la base : une sonde qui dépend de la base fait redémarrer
  * un conteneur sain quand c'est la base qui tousse.
  *
- * Il n'expose aucune information : ni version, ni environnement, ni chemin. Et il n'est
- * pas joignable depuis le front, dont le nginx ne relaie que `/api`.
+ * Il n'expose aucune information : ni version, ni environnement, ni chemin. Le front le
+ * relaie tel quel (`location = /sante.php` d'app/nginx.conf) : c'est par là que le
+ * déploiement lit l'empreinte ci-dessous.
  *
- * À REMPLACER par la route `/api/sante` du module Core quand elle existera, si l'on veut
- * une sonde qui atteste aussi que le noyau démarre et que la base répond. Ce sera un
- * autre contrat — plus informatif, mais qui redémarre le conteneur pour des pannes qui
- * ne sont pas les siennes. Le choix devra être explicite.
+ * LA ROUTE `/api/sante` EXISTE (module Core, `SanteController`) et ne la remplace PAS. Elle
+ * amorce le noyau et interroge la base : c'est la cible d'une sonde EXTÉRIEURE, qui doit
+ * savoir si le site sert vraiment. Le `HEALTHCHECK` du conteneur reste ici, choix fait
+ * explicitement : une sonde de conteneur qui dépend de la base redémarre une API saine
+ * pour une panne qui n'est pas la sienne.
  */
 
 /*
