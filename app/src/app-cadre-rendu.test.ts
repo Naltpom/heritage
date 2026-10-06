@@ -64,3 +64,14 @@ describe('la barre du bas dans le cadre', () => {
     expect(main.split(/\s+/)).toContain('pb-[var(--hauteur-barre-bas,0px)]')
   })
 })
+
+describe('l’avis global', () => {
+  // Un écran qui n'a pas pu se charger après une mise en production le dit ici
+  // (`router/rechargement.ts`) : y compris la connexion, écran sans cadre.
+  it('est monté sur tout écran, avec ou sans cadre, et sa région annoncée est déjà là', async () => {
+    for (const cadre of [true, false]) {
+      const html = await rendre(cadre)
+      expect(html).toMatch(/<div[^>]*role="status" aria-live="polite" data-avis-global/)
+    }
+  })
+})
