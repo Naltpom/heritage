@@ -29,8 +29,12 @@ use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInt
  */
 final class AccountStatusSubscriber implements EventSubscriberInterface
 {
-    /** Les chemins `PUBLIC_ACCESS` du § 1.6 du contrat. */
-    private const array CHEMINS_PUBLICS = ['/api/connexion', '/api/inscription'];
+    /**
+     * Les chemins `PUBLIC_ACCESS` du § 1.6 du contrat. `/api/sante` y figure pour une raison
+     * de plus : lire l'utilisateur chargerait la session d'une requête qui porte un cookie,
+     * et la sonde publique ne doit toucher à aucune session (§ 26).
+     */
+    private const array CHEMINS_PUBLICS = ['/api/connexion', '/api/inscription', '/api/sante'];
 
     public function __construct(
         private readonly Security $security,
