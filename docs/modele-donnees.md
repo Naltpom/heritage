@@ -106,9 +106,10 @@ Ce que la base ne garantit plus, quatre mesures le compensent, **toutes obligato
 (ADR 0002) : résolution de toute référence par le service du module propriétaire *avant*
 écriture ; suppression et fusion **par événement, jamais par cascade** — une demande en
 cours devient alors `caduque` (§ 5.7) ; rafraîchissement des libellés par le même canal ;
-et la commande **`heritage:verifier-integrite`**, exécutée en CI sur les fixtures, qui
-parcourt toutes les références inter-modules et signale les pendantes. C'est le filet que
-la base ne tend plus ; sans elle, la règle est un pari.
+et la commande **`heritage:verifier-integrite`** (`api/src/Integrite/`), qui parcourt
+toutes les références inter-modules et signale les pendantes — ce qu'elle contrôle, colonne
+par colonne, est au § 10.8. C'est le filet que la base ne tend plus ; sans elle, la règle
+est un pari.
 
 ### 0.5 Les cinq colonnes d'une date incertaine
 
@@ -3823,6 +3824,84 @@ Lecture de cette carte :
   l'autre), mais par identifiants : il n'y a pas de cycle de dépendance de code, l'un et
   l'autre passent par un service applicatif.
 
+#### Ce que `heritage:verifier-integrite` contrôle
+
+Le diagramme date de la fondation ; les modules venus depuis — `Demarche`, `Evenement`,
+`Tirage`, `Question`, `Assistant` — y ajoutent leurs flèches, et la commande les parcourt
+toutes. **La liste ci-dessous est celle du code**, et le test
+`api/tests/Integrite/VerifierIntegriteCommandTest.php` la fige : 63 contrôles, dont 21
+tolérés.
+
+**Comment.** Aucune jointure ne franchit une frontière. Chaque module déclare les
+références qu'il porte, relevées dans ses propres tables
+(`Core\Contract\ReferencesInterModulesInterface`, étiquette `core.references_inter_modules`) ;
+le propriétaire de chaque cible dit lesquels des identifiants existent
+(`Core\Contract\CiblesDeReferenceInterface`, étiquette `core.cibles_de_reference` — `Core`
+pour `core_user`, `Tree` pour `tree_person`, `tree_family` et `tree_citation`, `Proposal`
+pour `prp_change_request`) ; `api/src/Integrite/VerificationDIntegrite` rapproche les deux.
+Chaque module n'émet qu'un `GROUP BY` et un `IN` : rien de propre à PostgreSQL ni à SQLite.
+Une cible sans propriétaire, ou revendiquée deux fois, est une **anomalie** qui fait échouer
+la commande au même titre qu'une violation.
+
+**Stricte ou tolérée.** Une référence **stricte** pendante est une violation : code de
+sortie `1`. Une référence **tolérée** est faite pour survivre à sa cible ; elle est relevée
+et montrée avec sa raison, sans changer le code de sortie. Les valeurs `NULL` ne sont
+jamais relevées. Une même colonne peut être déclarée sous deux portées.
+
+| Module | Référence (portée) | Cible | Sort d'une valeur pendante |
+|---|---|---|---|
+| `Tree` | `tree_note.author_user_id` | `core_user` | stricte |
+| `Membership` | `mbr_member.user_id`, `mbr_member.activated_by_user_id` | `core_user` | stricte |
+| `Membership` | `mbr_member.person_id` | `tree_person` | stricte |
+| `Membership` | `mbr_invitation.person_id` (invitations actives) | `tree_person` | stricte |
+| `Membership` | `mbr_invitation.person_id` (invitations utilisées, expirées ou révoquées) | `tree_person` | tolérée — historique |
+| `Membership` | `mbr_invitation.created_by_user_id`, `used_by_user_id`, `revoked_by_user_id` | `core_user` | stricte |
+| `Membership` | `mbr_autorisation_naissance.person_id` (autorisations actives) | `tree_person` | stricte |
+| `Membership` | `mbr_autorisation_naissance.person_id` (autorisations archivées) | `tree_person` | tolérée — preuve, « archivée, jamais supprimée » (ADR 0016) |
+| `Membership` | `mbr_autorisation_naissance.granted_by_user_id`, `archived_by_user_id` | `core_user` | stricte |
+| `Membership` | `mbr_demande_rgpd.user_id`, `traitee_par_user_id` | `core_user` | stricte |
+| `Proposal` | `prp_change_request.author_user_id`, `decided_by_user_id` ; `prp_revision.actor_user_id` | `core_user` | stricte |
+| `Proposal` | `prp_change_request.target_id` (`target_kind` = `personne`, `famille`, `citation`) | `tree_person`, `tree_family`, `tree_citation` | tolérée — une demande ouverte devient caduque (`cible_disparue`) à son examen, une demande tranchée est l'historique |
+| `Proposal` | `prp_change_op.subject_id` (`subject_kind` = `personne`, `famille`, `citation`) | idem | tolérée — même raison |
+| `Proposal` | `prp_draft_link.subject_person_id`, `other_person_id`, `other2_person_id` ; `family_id` | `tree_person` ; `tree_family` | tolérée — même raison |
+| `Proposal` | `prp_draft_link.resolved_family_id` ; `prp_draft_person.resolved_person_id` | `tree_family` ; `tree_person` | tolérée — historique de la validation |
+| `Proposal` | `prp_revision.subject_id` (`subject_kind` = `personne`, `famille`, `citation`) | idem | tolérée — une révision survit à son sujet |
+| `Media` | `med_media.subject_id` (`subject_kind` = `personne`, `famille`, `citation`), tous statuts | `tree_person`, `tree_family`, `tree_citation` | stricte |
+| `Media` | `med_media.subject_user_id`, `uploaded_by_user_id` | `core_user` | stricte |
+| `Media` | `med_media.subject_request_id`, `change_request_id` | `prp_change_request` | stricte |
+| `Timeline` | `tml_preference.user_id` | `core_user` | stricte |
+| `Assistant` | `ast_conversation.user_id` | `core_user` | stricte |
+| `Demarche` | `dmr_personne.person_id` | `tree_person` | stricte |
+| `Demarche` | `dmr_demarche.auteur_user_id`, `dmr_echange.saisi_par_user_id` | `core_user` | stricte |
+| `Evenement` | `evt_invitation.person_id` (événements à venir ou en cours, non annulés) | `tree_person` | stricte |
+| `Evenement` | `evt_invitation.person_id` (événements passés ou annulés) | `tree_person` | tolérée — le suivi d'un événement clos est l'historique (ADR 0014) |
+| `Evenement` | `evt_evenement.organisateur_user_id` ; `evt_invitation.invite_par_user_id`, `reponse_notee_par_user_id` | `core_user` | stricte |
+| `Tirage` | `trg_participant.person_id`, `referent_person_id` | `tree_person` | stricte |
+| `Tirage` | `trg_attribution.donneur_person_id`, `receveur_person_id` (éditions à venir) | `tree_person` | stricte |
+| `Tirage` | `trg_attribution.donneur_person_id`, `receveur_person_id` (éditions passées) | `tree_person` | tolérée — « les éditions passées gardent leurs attributions » (ADR 0009) |
+| `Tirage` | `trg_presence.person_id` | `tree_person` | tolérée — une présence ne vaut que pour un participant, relevé à part |
+| `Tirage` | `trg_tirage.organisateur_user_id`, `trg_participant.ajoute_par_user_id` | `core_user` | stricte |
+| `Question` | `qst_question.sujet_id` (`sujet_kind` = `personne`, `famille`) | `tree_person`, `tree_family` | stricte |
+| `Question` | `qst_question.destinataire_user_id` | `core_user` | stricte |
+| `Question` | `qst_question_demande.demande_id` | `prp_change_request` | stricte |
+
+« Aujourd'hui », pour les portées datées (événements, éditions), est la date du serveur.
+
+**Ce qui n'est pas contrôlé, et pourquoi.**
+
+- `ged_run.launched_by_user_id` (la flèche `GR` du diagramme) : le module d'import GEDCOM
+  est retiré du dépôt, tables `ged_*` comprises, et la commande ne le lit pas — `Gedcom`
+  n'implémente pas `ReferencesInterModulesInterface`.
+- Les colonnes `*_user_id` **internes à `Core`** (`core_audit_log.actor_user_id`,
+  `core_notification.recipient_user_id`…) : ce ne sont pas des références inter-modules.
+- Les identifiants rangés dans un `JSONB` (`prp_change_op.old_value` / `new_value`,
+  `prp_revision.changes`, `core_audit_log.changes`) et les sujets d'op de sorte `note`,
+  `fait` ou `media` : le § 10.8 ne les trace pas, et un historique n'a pas à résoudre.
+
+**La suppression d'une fiche ne laisse pendre que du toléré.** Chaque référence stricte vers
+`tree_person` bloque une demande `suppression_personne`, ou part avec la fiche
+(`qst_question`) — voir le § 6.4 quater du contrat d'API.
+
 ---
 
 ## 11. Ordre de création des tables
@@ -3900,6 +3979,6 @@ Points hors périmètre de ce document, signalés pour ne pas être découverts 
 | Chemin du volume de médias, quotas | `compose.yaml` / `.env.example` | Exploitation, pas modèle. |
 | Algorithme de la recherche floue de rattachement | `Membership\Service` | Le schéma fournit `search_key` et le plafond ; la distance retenue est un choix de service. |
 | Règle de normalisation des patronymes (`Bourrache` / `BOURRACHE`) | Une `ChangeRequest` par fiche, ou une commande de reprise | C'est une décision éditoriale du commanditaire, pas une contrainte de schéma. Le `README.md` la signale comme ouverte. |
-| Commande `heritage:verifier-integrite` | `api/src/` (au-dessus des modules) | L'ADR 0002 la **décide** ; le **§ 10.8 de ce document lui donne son cahier des charges** — c'est la carte complète des références inter-modules, table par table et colonne par colonne, avec leur cible. La commande n'a qu'à parcourir ce tableau. Son code, lui, n'est pas un sujet de schéma. |
+| Commande `heritage:verifier-integrite` | `api/src/Integrite/` (au-dessus des modules) — **livrée** | L'ADR 0002 la **décide** ; le **§ 10.8 de ce document lui donne son cahier des charges** et dit, depuis sa livraison, ce qu'elle contrôle colonne par colonne. Son code, lui, n'est pas un sujet de schéma. |
 | MFA TOTP : activation, récupération | `Core\Security` | Les colonnes existent (§ 2.1) ; le parcours reste à écrire. Le § 8 du dossier le classe « souhaitable, pas bloquant » — à porter dans la feuille de route s'il n'est pas fait. |
 | Fixtures anonymisées à graine fixe | `api/src/DataFixtures` | Doivent reproduire la **topologie et les pathologies** du vrai arbre. Le cahier des charges chiffré, vérifié par un test, est celui de l'**ADR 0006** ; il fait foi, et il est écrit dans le vocabulaire de colonnes de ce document. Rappel du minimum : 274 personnes, 103 familles, 12 générations, 78 lignes à `deceased = false` dont ~18 seulement calculées vivantes (§ 9.2), la même répartition par branche. |
