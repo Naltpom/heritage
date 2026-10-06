@@ -188,7 +188,7 @@ const PASTILLE_APPUI: Record<'acte' | 'index' | 'arbre', string> = {
           </button>
 
           <p
-            v-if="entree.demandeId !== null || entree.importGedcom || entree.nature !== 'revision'"
+            v-if="entree.demandeId !== null || entree.sansDemande || entree.nature !== 'revision'"
             class="m-0 mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs"
           >
             <RouterLink
@@ -199,7 +199,7 @@ const PASTILLE_APPUI: Record<'acte' | 'index' | 'arbre', string> = {
             >
               Demande n° {{ entree.demandeId }}
             </RouterLink>
-            <span v-else-if="entree.importGedcom" class="text-attenue">Import de l’arbre</span>
+            <span v-else-if="entree.sansDemande" class="text-attenue">Sans demande associée</span>
             <RouterLink
               v-if="entree.nature !== 'revision'"
               :to="{ name: 'personne.detail', params: { id: ficheId }, query: requeteDOnglet('sources') }"

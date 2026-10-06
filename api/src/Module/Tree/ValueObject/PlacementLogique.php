@@ -11,9 +11,9 @@ use App\Module\Tree\Enum\ParenteDansLArbre;
  * Les colonnes dérivées que l'arbre attend : génération et branche par personne,
  * génération et rang par famille.
  *
- * Les identifiants sont ceux de l'appelant : les `xref` GEDCOM (`@I500001@`) pendant
- * l'import, les identifiants de nœud (`p1`, `f28`) une fois l'arbre en base. Dans les
- * deux cas ils portent leur type, ce qui est indispensable : `tree_person.id` et
+ * Les identifiants sont ceux de l'appelant : les identifiants de nœud (`p1`, `f28`)
+ * de l'arbre en base — l'import GEDCOM, supprimé depuis (ADR 0017), y passait les `xref`
+ * (`@I500001@`). Ils portent leur type, ce qui est indispensable : `tree_person.id` et
  * `tree_family.id` sont deux séquences indépendantes, et la personne 1 comme la
  * famille 1 existent.
  *

@@ -29,7 +29,8 @@
  * du graphe servi, qui porte des personnes vivantes et **ne peut pas entrer dans le
  * dépôt** (ADR 0006). Exiger qu'ils tournent en CI aujourd'hui, ce serait nommer une
  * exigence qu'on ne peut pas satisfaire — la porte 2 bis de l'API refuse la même
- * chose pour `PlacementBaseImporteeTest`, et pour la même raison.
+ * chose pour `PlacementNonRegressionTest` et `PlacementFournisseurDoctrineTest`, et pour
+ * la même raison.
  *
  * Elle exige donc **un budget déclaré, et son exactitude** :
  *
@@ -49,9 +50,9 @@
  * Cette porte rend les 23 sauts **visibles et déclarés**. Elle ne les fait pas
  * tourner. Tant qu'aucun relevé de plus de cent nœuds portant les pathologies
  * réelles n'existe hors des données du commanditaire, ces 23 cas restent mesurés à
- * la main. Le dépôt n'a aujourd'hui qu'un `arbre-essai.ged` de 11 individus, très
- * en dessous du `expect(g.noeuds.length).toBeGreaterThan(100)` que le bloc s'impose
- * à lui-même.
+ * la main. Le dépôt n'a aujourd'hui que l'arbre d'essai des fixtures, 11 individus
+ * (`api/src/DataFixtures/ArbreDEssaiFixtures.php`), très en dessous du
+ * `expect(g.noeuds.length).toBeGreaterThan(100)` que le bloc s'impose à lui-même.
  */
 
 import { readFileSync } from 'node:fs'

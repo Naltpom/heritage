@@ -53,8 +53,10 @@ export interface EntreeHistorique {
   auteur: string | null
   /** La demande d'origine, quand on la connaît (`/demandes/{id}`). */
   demandeId: number | null
-  /** Une révision sans demande vient de l'import GEDCOM (§ 6.11). */
-  importGedcom: boolean
+  /** Une révision sans demande : sa demande a été effacée hors de l'application
+   *  (§ 6.11). Aucun chemin d'écriture n'en produit — l'import GEDCOM, qui n'en
+   *  écrivait pas non plus, a été supprimé (ADR 0017). */
+  sansDemande: boolean
   /** Un document : sa vignette, et de quoi l'ouvrir dans la loupe. */
   media: { mediaId: number; vignetteUrl: string; legende: string } | null
   /** Une source : son niveau d'appui, libellé du serveur. */
@@ -127,7 +129,7 @@ function depuisRevision(revision: RevisionDeFiche): EntreeHistorique {
     lignes: lignesDeRevision(revision),
     auteur: revision.actorLabel,
     demandeId: revision.requestId,
-    importGedcom: revision.requestId === null,
+    sansDemande: revision.requestId === null,
     media: null,
     appui: null,
   }
@@ -146,7 +148,7 @@ function depuisCitation(citation: CitationDeFiche): EntreeHistorique {
     ],
     auteur: null,
     demandeId: null,
-    importGedcom: false,
+    sansDemande: false,
     media: null,
     appui: { niveau: citation.appui, libelle: citation.appuiLabel },
   }
@@ -158,7 +160,7 @@ function instant(entree: EntreeHistorique): number {
   return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t
 }
 
-/** À instant égal (un import pose tout à la même seconde) : la révision, puis
+/** À instant égal (une validation pose tout à la même seconde) : la révision, puis
  *  ce qu'elle a apporté, dans un ordre stable. */
 const RANG_DE_NATURE: Record<NatureEntree, number> = { revision: 0, citation: 1, note: 2, media: 3 }
 
@@ -182,7 +184,7 @@ export function entreesDHistorique(
         lignes: [extrait(note.body)],
         auteur: note.authorLabel,
         demandeId: null,
-        importGedcom: false,
+        sansDemande: false,
         media: null,
         appui: null,
       }),
@@ -196,7 +198,7 @@ export function entreesDHistorique(
         lignes: media.caption ? [media.caption] : [],
         auteur: null,
         demandeId: null,
-        importGedcom: false,
+        sansDemande: false,
         media: {
           mediaId: media.mediaId,
           vignetteUrl: media.vignetteUrl,

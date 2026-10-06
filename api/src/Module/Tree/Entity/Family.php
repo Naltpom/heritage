@@ -36,7 +36,7 @@ class Family
     #[ORM\Column]
     private ?int $id = null;
 
-    /** `@F500028@`. Idempotence du ré-import (§ 9.8). */
+    /** `@F500028@`, ou `@F9xxxxx@` pour une union créée dans l'application. Identifiant stable (§ 9.8). */
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $gedcomXref = null;
 

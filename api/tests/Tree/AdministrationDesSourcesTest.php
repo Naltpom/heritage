@@ -106,7 +106,7 @@ final class AdministrationDesSourcesTest extends ArbreWebTestCase
             'publication' => 'archivesdepartementales.lenord.fr — registres paroissiaux et d’état civil',
             'note' => '',
             'sourceKind' => 'acte_etat_civil',
-            // Ignoré : la colonne appartient au ré-import.
+            // Ignoré : la référence GEDCOM n'est pas saisie à l'écran.
             'gedcomXref' => '@S500916@',
         ]);
         self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
@@ -145,7 +145,7 @@ final class AdministrationDesSourcesTest extends ArbreWebTestCase
         self::assertSame('Archives départementales de la Fougerie — état civil', $charge['title']);
         self::assertSame('Cotes 4 E (1802-1892)', $charge['publication']);
         self::assertSame('registre_officiel', $charge['sourceKind']);
-        self::assertSame('@S500011@', $charge['gedcomXref'], 'La clé du ré-import ne bouge pas.');
+        self::assertSame('@S500011@', $charge['gedcomXref'], 'La référence GEDCOM ne bouge pas.');
         self::assertSame(1, $charge['citationCount'], 'La citation suit la source.');
     }
 

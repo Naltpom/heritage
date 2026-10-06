@@ -477,7 +477,7 @@ final class EcritureDeLArbrePourProposalTest extends KernelTestCase
 
     /**
      * **Sans racine, aucune branche n'est posée** — et surtout, rien n'échoue. C'est
-     * l'état d'une base migrée mais pas encore importée.
+     * l'état d'une base migrée dont la racine n'a pas encore été choisie.
      */
     public function testSansRacineLesColonnesDeriveesRestentNulles(): void
     {

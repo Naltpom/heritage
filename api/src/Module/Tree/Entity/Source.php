@@ -32,7 +32,7 @@ class Source
     #[ORM\Column]
     private ?int $id = null;
 
-    /** `@S500001@`. Idempotence du ré-import. */
+    /** `@S500001@` pour une source venue du fichier d'origine ; `null` pour une source créée dans l'application. */
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $gedcomXref = null;
 
@@ -66,7 +66,8 @@ class Source
     /**
      * **Ajout par rapport au GEDCOM**, délibéré : c'est la qualification qui permet de
      * dire « ces 40 fiches reposent sur un arbre d'un autre utilisateur ». Posée à
-     * l'import depuis le `TITL`/`PUBL`, révisable à la main.
+     * l'import initial depuis le `TITL`/`PUBL`, choisie à la création d'une source, et
+     * révisable à la main.
      */
     #[ORM\Column(length: 24, enumType: SourceKind::class, options: ['default' => 'autre'])]
     private SourceKind $sourceKind = SourceKind::Autre;

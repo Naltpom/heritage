@@ -22,7 +22,7 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * Ce projet a **cinq** chemins d'écriture, et c'est ce qui condamne le compteur : la
  * validation d'une `prp_change_request`, l'édition directe d'un administrateur (une
- * demande auto-validée, § 9.4), l'import GEDCOM, le changement de
+ * demande auto-validée, § 9.4), le chargement de l'arbre d'essai, le changement de
  * `tree.personne_racine_id` — qui recalcule `branch` et `generation` — et toute
  * correction faite directement en base. Un compteur exigerait que les cinq pensent à
  * l'incrémenter, et que le sixième, le jour où il sera ajouté, y pense aussi. **Aucun
@@ -208,7 +208,7 @@ final class TreeFingerprint
 
     /**
      * À n'appeler qu'après une écriture structurante **dans le même processus** — une
-     * commande d'import, typiquement, qui recalcule et resert dans la foulée.
+     * commande qui réécrit l'arbre, typiquement, puis recalcule et resert dans la foulée.
      *
      * Ce n'est pas une invalidation de cache : il n'y en a pas à faire. C'est seulement
      * l'oubli de la valeur mémorisée pour la requête en cours.

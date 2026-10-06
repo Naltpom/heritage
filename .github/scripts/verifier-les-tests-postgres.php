@@ -24,11 +24,12 @@ declare(strict_types=1);
  *
  * ── Ce qu'il n'exige pas ────────────────────────────────────────────────────
  *
- * `PlacementBaseImporteeTest` est dans le même groupe `donnees-reelles` et continue
- * de se sauter : il lui faut `graphe.json`, hors dépôt parce qu'il contient des
- * personnes vivantes (ADR 0006), et deux dates réelles passées par l'environnement.
- * Aucun réglage de CI ne le fera tourner sur un dépôt public, et ce script ne le
- * réclame pas — il nommerait sinon une exigence qu'on ne peut pas satisfaire.
+ * `PlacementNonRegressionTest` et `PlacementFournisseurDoctrineTest` sont dans le même
+ * groupe `donnees-reelles` et continuent de se sauter : il leur faut `graphe.json`, hors
+ * dépôt parce qu'il contient des personnes vivantes (ADR 0006). Aucun réglage de CI ne
+ * les fera tourner sur un dépôt public, et ce script ne les réclame pas — il nommerait
+ * sinon une exigence qu'on ne peut pas satisfaire. (`PlacementBaseImporteeTest`, qui
+ * était dans ce cas, est parti avec l'import GEDCOM — ADR 0017.)
  */
 
 const RAPPORT = __DIR__.'/../../api/var/log/phpunit.xml';

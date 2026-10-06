@@ -11,10 +11,10 @@ doctrine:
         auto_mapping: true
 
         # Un espace de noms de mapping par module. Chaque module possède ses tables,
-        # préfixées par son nom (core_, tree_, mbr_, prp_, med_, tml_, ged_), et
+        # préfixées par son nom (core_, tree_, mbr_, prp_, med_, tml_, …), et
         # n'ouvre aucune relation Doctrine vers un autre module : on référence par
         # identifiant et on dénormalise le libellé utile. Cette frontière est ce qui
-        # permet de faire évoluer un module sans casser les six autres.
+        # permet de faire évoluer un module sans casser les autres.
         mappings:
             Core:
                 type: attribute
@@ -65,12 +65,6 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Module/Timeline/Entity'
                 prefix: 'App\Module\Timeline\Entity'
                 alias: Timeline
-            Gedcom:
-                type: attribute
-                is_bundle: false
-                dir: '%kernel.project_dir%/src/Module/Gedcom/Entity'
-                prefix: 'App\Module\Gedcom\Entity'
-                alias: Gedcom
             Question:
                 type: attribute
                 is_bundle: false

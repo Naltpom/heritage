@@ -28,7 +28,7 @@ traiter en face plutôt que découvrir à l'implémentation.
 | `Proposal` | demandes, diff, validation/refus, révisions | `prp_` |
 | `Media` | portraits et preuves, téléversement, vignettes | `med_` |
 | `Timeline` | vue chronologique | `tml_` (une seule table : `tml_preference`) |
-| `Gedcom` | import / export GEDCOM | `ged_` |
+| `Gedcom` | import / export GEDCOM — **supprimé le 2026-10-06 (ADR 0017)**, avec ses tables | `ged_` (plus aucune table) |
 | `Almanach` | carte des lieux, anniversaires | `alm_` (réservé — **aucune table dans cette livraison**) |
 | `Assistant` | l'assistant IA : propositions, rattachement assisté, questions sur l'arbre | `ast_` (depuis le 2026-10-01 : les conversations de « Poser une question ») |
 | `Statistiques` | Explorer › Stats : l'arbre en chiffres, le chantier (ADR 0015) | `stt_` (réservé — **aucune table**) |
@@ -159,6 +159,10 @@ l'on dessine un port.
 > ensemble.*
 
 ### `Gedcom → Tree` n'est pas une exception
+
+> **Remplacé par l'[ADR 0017](0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : le module `Gedcom` est supprimé. Cette section et la
+> suivante (la dette `EcrivainTree`) restent comme raisonnement ; la dette n'a pas été soldée
+> par `PortImportArbre`, elle a disparu avec son code.
 
 L'adaptateur d'import écrit des lignes de `Tree`, et il est tentant de le nommer comme une
 exception légitime : *un adaptateur construit par définition les entités du module qu'il
@@ -341,6 +345,10 @@ Compensation, en quatre mesures **toutes obligatoires** :
   | après les déplacements **mécaniques** | vocabulaire à monter dans `Core` (18) + ports à descendre dans `Contract\` (10) | **18** |
   | après la **dette** datée | import GEDCOM (10) | **8** |
   | après les **surfaces publiques à dessiner** | 8 | **0** |
+
+  > **Remplacé par l'[ADR 0017](0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : les 22 exemptions du module `Gedcom` (la dette
+  datée, 10, et 12 lignes de vocabulaire) sont parties avec lui. La ventilation est désormais
+  vocabulaire 6, ports 10, surfaces 8 : **24 → 8 → 0**, ce que vérifie le même test.
 
   Soit **46 → 18 → 8 → 0**. Une version antérieure de ce paragraphe annonçait
   « 55 → 11 → 1 → 0 » : elle partait du recensement **total** (55) au lieu du nombre

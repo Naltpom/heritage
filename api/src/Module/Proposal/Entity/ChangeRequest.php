@@ -163,7 +163,7 @@ class ChangeRequest
      * n° 21 », qui est la moitié de la valeur du circuit de refus motivé.
      *
      * `INT` et non `BIGINT` : la clé primaire de cette table est un `INT` (§ 0.2 du modèle
-     * — seules `core_audit_log`, `mbr_claim_attempt` et `ged_issue` croissent sans borne).
+     * — seules `core_audit_log` et `mbr_claim_attempt` croissent sans borne).
      * Doctrine dérive d'ailleurs le type de la colonne de jointure de celui de la cible.
      */
     #[ORM\ManyToOne(targetEntity: self::class)]

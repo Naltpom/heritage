@@ -145,7 +145,7 @@ final class Conflit extends ErreurDeDemande
 
     /**
      * L'`OptimisticLockException` du verrou n° 1 : deux transactions **concurrentes**
-     * — deux administrateurs, ou une validation qui croise un import. **Rien n'a été
+     * — deux administrateurs, ou une validation qui croise une autre écriture. **Rien n'a été
      * écrit, la demande reste `en_attente`, et réessayer est la bonne action**.
      */
     public static function verrouConcurrent(int $demandeId): self

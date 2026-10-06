@@ -26,6 +26,12 @@ Exclus par `.gitignore` : `*.ged`, `graphe.json`, `arbre-data.json`, `rendu-part
 - Les seules données du dépôt sont des **fixtures anonymisées, générées par Faker à graine
   fixe**. `docker compose up --build` doit suffire à obtenir une application fonctionnelle et
   peuplée.
+
+  > **État au 2026-10-06 (ADR 0017)** : ce générateur n'existe toujours pas. La seule donnée
+  > d'arbre du dépôt est l'**arbre d'essai** — onze personnes inventées, écrites à la main
+  > (`App\DataFixtures\ArbreDEssaiFixtures`, groupe `essai`) —, qui remplace le fichier
+  > `arbre-essai.ged` que chargeait l'import. Il ensemence la CI et une installation neuve ; il
+  > ne remplit pas le cahier des charges ci-dessous, et n'est pas chargé au démarrage.
 - **Une exception nommée, et elle va dans l'autre sens :
   `api/ressources/gazetteer/`.** Ce dossier porte de la **donnée publique de
   référence** — les communes et lieux-dits de France et les villes du monde, avec
@@ -45,6 +51,11 @@ Exclus par `.gitignore` : `*.ged`, `graphe.json`, `arbre-data.json`, `rendu-part
   Sans lui, la carte est vide.
 - L'import des vraies données est une **commande locale** — `bin/console heritage:import-gedcom`
   — jamais une fixture, jamais une étape de démarrage.
+
+  > **Remplacé par l'[ADR 0017](0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : la commande est supprimée. Les vraies données vivent
+  dans la base de production et ses sauvegardes ; elles se reprennent en **restaurant un
+  dump**, jamais par une fixture ni par une étape de démarrage. La règle de fond — elles
+  n'entrent pas dans le dépôt — est inchangée.
 - `.env.example` est versionné, complet et commenté, sans aucune valeur secrète.
 
 ## Ce que cela impose aux fixtures
@@ -236,6 +247,10 @@ utilisés jusqu'ici sont posés à la main hors dépôt.
   remariages, répartition par branche 134/64/51/20/5, racine `@I500001@`. S'y ajoutent, du
   même comptage : 174 filiations, 28 sources, 483 citations, 175 notes. Un import qui ne
   retombe pas exactement sur ces nombres est un import raté, et la commande doit le dire.
+
+  > **Remplacé par l'[ADR 0017](0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : ces totaux de contrôle sont partis avec l'import.
+  Ils décrivent l'arbre **au jour de l'import initial**, pas la base de production, qui a
+  évolué depuis par les demandes validées.
 - Le test de non-régression du moteur de placement contre `graphe.json` **ne tourne qu'en
   local** (ADR 0005), et il y compare les positions **exactement** — on porte un algorithme
   déterministe dont on possède le code (`docs/moteur-retrouve/graphe.py`). La CI, elle, n'a

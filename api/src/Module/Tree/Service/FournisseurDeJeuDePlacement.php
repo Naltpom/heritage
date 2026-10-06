@@ -18,8 +18,9 @@ use App\Module\Tree\ValueObject\JeuDePlacement;
  *
  * **1. L'ordre.** `personnes` et `familles` doivent être rendues dans un ordre
  * déterministe et stable — `ORDER BY id` sur `tree_person` puis sur `tree_family`.
- * L'import GEDCOM les crée dans l'ordre du fichier, donc cet ordre est celui du GEDCOM,
- * celui-là même que le script d'origine parcourait. Ce n'est pas une commodité : le
+ * L'import GEDCOM initial les a créées dans l'ordre du fichier, et les lignes créées
+ * depuis dans l'application viennent à la suite : cet ordre prolonge donc celui du
+ * GEDCOM, celui-là même que le script d'origine parcourait. Ce n'est pas une commodité : le
  * point fixe en 12 passes et le décrochage rangée par rangée y départagent les égalités
  * (voir {@see JeuDePlacement}).
  *

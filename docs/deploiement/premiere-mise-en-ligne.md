@@ -29,7 +29,7 @@ contraire.
 | Certificat TLS | ❌ | `certbot --nginx`. § 8. **Lire le § 8.2, le piège du compte ACME.** |
 | Secrets GitHub | ❌ | § 2.2. |
 | Premier administrateur | ❌ | § 9 — en console, il n'existe **aucune** route qui crée un compte. |
-| Import du GEDCOM | ❌ | § 10 — exige `--premier-import`. |
+| Données de l'arbre | ❌ | § 10 — restauration d'une sauvegarde. Il n'y a plus d'import GEDCOM (ADR 0017). |
 
 ---
 
@@ -594,55 +594,51 @@ verrouiller dehors n'a pas d'autre issue que celle-ci.
 
 ---
 
-## 10. Importer le GEDCOM — et le drapeau que personne ne mentionne
+## 10. Peupler l'arbre — restaurer une sauvegarde
 
-### 10.1 Le fichier ne monte pas par le dépôt
+> **Ce paragraphe décrivait l'import du GEDCOM** (`heritage:import-gedcom`, à blanc puis
+> avec `--premier-import`). L'import a été supprimé
+> ([ADR 0017](../adr/0017-suppression-de-l-import-gedcom.md)) : l'arbre réel vit dans la
+> base de production et dans ses sauvegardes, et une base neuve se peuple **en restaurant
+> un dump**. Il n'y a pas d'autre chemin.
+
+### 10.1 Le dump ne monte pas par le dépôt
 
 Il porte l'état civil de personnes vivantes. `docs/controle-donnees-reelles.md`
 fixe la règle : **aucune donnée réelle n'entre dans le dépôt**, ni nom, ni date
-exacte, ni lieu, ni cote d'archives. On le copie dans le conteneur, on importe,
-on l'efface.
+exacte, ni lieu, ni cote d'archives. On copie le dump sur le serveur, on le
+restaure, on l'efface. Il vient d'une sauvegarde du service `sauvegarde`
+(`base-AAAAMMJJ-HHMMSS.dump`, et l'archive `televersements-…tar.gz` du même
+horodatage pour les médias).
 
 ```
-poste$ scp <chemin local>/arbre.ged ubuntu@<vps>:/tmp/arbre.ged
+poste$ scp <chemin local>/base-AAAAMMJJ-HHMMSS.dump ubuntu@<vps>:/tmp/base.dump
 vps$  cd ~/apps/heritage
-vps$  docker compose --env-file .env --env-file .deploiement/env \
-        -f compose.yaml -f compose.prod.yaml cp /tmp/arbre.ged api:/tmp/arbre.ged
+vps$  docker compose … stop api app
+vps$  docker compose … exec -T db \
+        pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB" < /tmp/base.dump
+vps$  docker compose … up -d
+vps$  rm -f /tmp/base.dump
 ```
 
-### 10.2 À blanc d'abord
+`up -d` relance l'API, dont l'entrypoint rejoue les migrations plus récentes que le
+dump. Les téléversements se restaurent comme l'écrit la procédure au-dessus du service
+`sauvegarde` de `compose.prod.yaml`.
+
+### 10.2 Les comptes viennent avec le dump
+
+Le dump porte `core_user` : l'administrateur créé au § 9 est **remplacé** par les comptes
+de la sauvegarde. Pour reposer celui que décrit l'environnement sans rien purger :
 
 ```
-vps$ docker compose … exec api \
-       php bin/console heritage:import-gedcom /tmp/arbre.ged --dry-run
-```
-> Lit, compte et signale **sans rien écrire**. C'est le mode dans lequel on
-> découvre qu'un fichier est mauvais avant d'avoir touché la base.
-
-### 10.3 Puis pour de vrai — avec `--premier-import`
-
-```
-vps$ docker compose … exec api \
-       php bin/console heritage:import-gedcom /tmp/arbre.ged --premier-import
+vps$ docker compose … exec api php bin/console heritage:amorcer-comptes
 ```
 
-**`--premier-import` n'est pas un confort, et son absence donne un refus que rien
-n'explique.** La commande refuse de s'exécuter quand l'arbre est vide *alors que
-des comptes existent* : c'est la signature d'un schéma détruit sous des comptes
-vivants, et repeupler l'arbre réattribuerait les identifiants que les
-rattachements désignent. Or c'est **exactement** l'état dans lequel on se trouve
-ici : on vient de créer l'administrateur au § 9, et l'arbre est vide. Le drapeau
-dit « je sais, c'est un premier import légitime ».
+### 10.3 Sans dump : l'arbre d'essai, jamais en production
 
-Faites donc le § 9 **avant** le § 10 : dans l'autre ordre, l'import passe sans
-drapeau et l'on ne découvre la subtilité que la fois suivante.
-
-Ensuite, effacer le fichier des deux endroits :
-
-```
-vps$ docker compose … exec api rm -f /tmp/arbre.ged
-vps$ rm -f /tmp/arbre.ged
-```
+Une base de démonstration ou de recette peut partir de l'arbre d'essai anonymisé
+(onze personnes inventées, `doctrine:fixtures:load --group=essai --append`). Il refuse un
+arbre déjà peuplé, et il n'a **rien à faire** sur la base de l'arbre familial.
 
 ### 10.4 Situer les lieux — sinon la carte est vide
 
@@ -675,7 +671,7 @@ commande l'imprime, et un humain tranche en écrivant la ligne à la main
 
 > **Rejouée toute seule, désormais — mais pas sur-le-champ.** Le service `lieux`
 > relance la commande chaque nuit avec `--en-ligne`, et le déploiement la relance
-> à la fin de ses contrôles (§ 11.2). Après un réimport, on peut ne pas attendre :
+> à la fin de ses contrôles (§ 11.2). Après une restauration, on peut ne pas attendre :
 >
 > ```
 > vps$ docker compose … exec api \
@@ -692,8 +688,8 @@ commande l'imprime, et un humain tranche en écrivant la ligne à la main
 ### 10.5 Rattacher l'administrateur à sa personne
 
 Le rattachement se fait par **référence GEDCOM** (`@I500001@`), jamais par un
-`tree_person.id`. Mesuré le 15 septembre 2026 : après un réimport, les
-identifiants numériques ont glissé de 1–274 à 275–548. Un rattachement numérique
+`tree_person.id`. Mesuré le 15 septembre 2026 : après un réimport GEDCOM (l'import
+est supprimé depuis, ADR 0017), les identifiants numériques ont glissé de 1–274 à 275–548. Un rattachement numérique
 aurait désigné quelqu'un d'autre sans que rien ne le signale.
 
 ---

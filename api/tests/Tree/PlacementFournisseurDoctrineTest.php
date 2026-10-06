@@ -25,21 +25,17 @@ use PHPUnit\Framework\TestCase;
  * l'état vivant. Aucun de ces quatre n'est visible dans le moteur, et chacun déplace des
  * nœuds.
  *
- * ## Pourquoi une base construite ici plutôt que l'import GEDCOM
+ * ## Pourquoi une base construite ici
  *
- * L'import (`heritage:import-gedcom`) appartient à un autre module et n'est pas encore
- * en état de peupler une base pour un test. On construit donc les entités directement,
- * **depuis `graphe.json`**, en reconstituant les chaînes GEDCOM verbatim que l'import
- * écrirait dans `birth_raw` et `death_raw`.
+ * Il n'y a pas d'import GEDCOM (supprimé, ADR 0017) et la base réelle ne se versionne pas
+ * (ADR 0006). On construit donc les entités directement, **depuis `graphe.json`**, en
+ * reconstituant les chaînes GEDCOM verbatim que porte `birth_raw` et `death_raw` sur les
+ * fiches venues du fichier d'origine.
  *
  * La reconstitution est vérifiable et elle est vérifiée : `testLaReconstitutionDesDatesEstFidele`
  * repasse chaque chaîne reconstruite dans {@see EtiquetteDeDateGedcom} et exige de
  * retomber sur l'étiquette d'origine. Sans ce garde-fou, le test pourrait se tromper de
  * la même façon des deux côtés et rester vert.
- *
- * **Ce qui reste à faire, et qu'il ne faut pas croire acquis** : la chaîne complète
- * GEDCOM → `heritage:import-gedcom` → base → placement n'est pas couverte ici. Quand
- * l'import sera opérationnel, il faudra rejouer ce test sur la base qu'il produit.
  */
 #[Group('donnees-reelles')]
 final class PlacementFournisseurDoctrineTest extends TestCase
@@ -265,9 +261,9 @@ final class PlacementFournisseurDoctrineTest extends TestCase
     }
 
     /**
-     * L'ordre rendu par le fournisseur **est** celui du GEDCOM, parce que l'import crée
-     * les lignes dans l'ordre du fichier et qu'on trie par identifiant. C'est une entrée
-     * du calcul, pas une commodité.
+     * L'ordre rendu par le fournisseur **est** celui du GEDCOM, parce que l'import
+     * initial a créé les lignes dans l'ordre du fichier — comme cette base reconstruite —
+     * et qu'on trie par identifiant. C'est une entrée du calcul, pas une commodité.
      */
     public function testLOrdreRenduEstCeluiDuFichierDeReference(): void
     {

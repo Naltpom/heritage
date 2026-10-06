@@ -33,8 +33,9 @@ use PHPUnit\Framework\TestCase;
  * vert, aveugle à exactement ce qu'il devait voir.
  *
  * Le compte reste publié (voir `rapport()`), mais comme **mesure de
- * progression** : **46 aujourd'hui, 18 après les déplacements mécaniques, 8
- * après la dette, 0 ensuite.** Pas comme porte.
+ * progression** : **24 aujourd'hui, 8 après les déplacements mécaniques, 0
+ * ensuite.** Pas comme porte. (Il était de 46 le 2026-09-16 : les 22 lignes du
+ * module `Gedcom` sont parties avec lui, ADR 0017.)
  *
  * > **Ces quatre nombres étaient faux, et ils le sont restés parce que rien ne
  * > les lisait.** Ce paragraphe annonçait « 55 → 11 → 1 → 0 ». Le 55 est le
@@ -222,10 +223,12 @@ final class FrontieresInterModulesTest extends TestCase
      * Ce test existe parce que la réponse a été « non » pendant une livraison
      * entière, sans que rien ne puisse le dire. L'ADR, le docblock de
      * {@see ExemptionsDeFrontiere} et l'en-tête de ce fichier annonçaient tous les
-     * trois « 55 → 11 → 1 → 0 ». Le recensement réel donne **46 → 18 → 8 → 0** :
+     * trois « 55 → 11 → 1 → 0 ». Le recensement réel donnait **46 → 18 → 8 → 0** :
      * le 55 était le total (dont 9 références **licites**, qui n'ont jamais eu
      * vocation à disparaître), et les deux étapes intermédiaires ne
-     * correspondaient à aucune ventilation par motif.
+     * correspondaient à aucune ventilation par motif. Depuis la suppression du
+     * module `Gedcom` (ADR 0017), qui portait la dette datée et 12 lignes de
+     * vocabulaire, la trajectoire est **24 → 8 → 0**.
      *
      * **Ce qu'on vérifie n'est pas le total.** Un total est compensable — c'est
      * l'argument même de {@see ExemptionsDeFrontiere}, et il vaut aussi contre
@@ -248,9 +251,8 @@ final class FrontieresInterModulesTest extends TestCase
         }
 
         $attendue = [
-            ExemptionsDeFrontiere::VOCABULAIRE_A_MONTER_DANS_CORE => 18,
+            ExemptionsDeFrontiere::VOCABULAIRE_A_MONTER_DANS_CORE => 6,
             ExemptionsDeFrontiere::PORT_A_DESCENDRE_DANS_CONTRACT => 10,
-            ExemptionsDeFrontiere::DETTE_IMPORT_GEDCOM => 10,
             ExemptionsDeFrontiere::SURFACE_PUBLIQUE_A_DECLARER => 8,
         ];
 
@@ -281,12 +283,11 @@ final class FrontieresInterModulesTest extends TestCase
             + $attendue[ExemptionsDeFrontiere::PORT_A_DESCENDRE_DANS_CONTRACT];
 
         $apresMecaniques = $total - $mecaniques;
-        $apresLaDette = $apresMecaniques - $attendue[ExemptionsDeFrontiere::DETTE_IMPORT_GEDCOM];
 
         self::assertSame(
-            [46, 18, 8, 0],
-            [$total, $apresMecaniques, $apresLaDette, $apresLaDette - $attendue[ExemptionsDeFrontiere::SURFACE_PUBLIQUE_A_DECLARER]],
-            "La trajectoire « 46 → 18 → 8 → 0 » est citée par l'ADR 0002 et par deux docblocks.\n"
+            [24, 8, 0],
+            [$total, $apresMecaniques, $apresMecaniques - $attendue[ExemptionsDeFrontiere::SURFACE_PUBLIQUE_A_DECLARER]],
+            "La trajectoire « 24 → 8 → 0 » est citée par l'ADR 0002 et par deux docblocks.\n"
             .'Si elle change ici, elle doit changer là-bas — c’est tout l’objet de ce test.',
         );
     }
@@ -517,8 +518,8 @@ final class FrontieresInterModulesTest extends TestCase
      * La ventilation demandée par l'ADR est réellement produite — par couple de
      * modules ET par couche ciblée.
      *
-     * Ce n'est pas un ornement : « Gedcom cite Tree 22 fois » n'apprend rien,
-     * « dont 7 fois ses entités et 11 fois ses énumérations » désigne les deux
+     * Ce n'est pas un ornement : « Media cite Proposal 10 fois » n'apprend rien,
+     * « dont 2 fois ses entités et 5 fois ses énumérations » désigne les deux
      * gestes à faire et leur ordre. Un rapport qui perdrait la seconde
      * ventilation rendrait tout écart mystérieux, donc discutable, donc
      * discuté.
@@ -588,13 +589,6 @@ final class FrontieresInterModulesTest extends TestCase
             $lignes[] = '  '.$reference->decrire();
         }
 
-        $dettes = [];
-        foreach (ExemptionsDeFrontiere::toutes() as $exemption) {
-            if (ExemptionsDeFrontiere::DETTE_IMPORT_GEDCOM === $exemption['motif']) {
-                $dettes[] = '  '.$exemption['source'].' -> '.$exemption['cible'];
-            }
-        }
-
         return \sprintf(
             "%d référence(s) inter-modules franchissent une frontière sans être exemptées.\n\n"
             ."LA RÈGLE (ADR 0002 § « La surface publique d'un module ») : une référence d'un module vers\n"
@@ -612,15 +606,9 @@ final class FrontieresInterModulesTest extends TestCase
             ."  4. en dernier recours -> une ligne dans tests/Frontieres/ExemptionsDeFrontiere.php,\n"
             ."     avec son motif. Une tolérance sans date, sans propriétaire et sans geste de levée\n"
             ."     n'est pas une dette : c'est un renoncement.\n\n"
-            ."LES RÉFÉRENCES EN CAUSE :\n%s\n\n"
-            ."POUR MÉMOIRE, LA DETTE DÉJÀ INSCRITE (%d lignes — 2026-09-15, propriétaire : l'agent de\n"
-            ."l'import GEDCOM ; levée : Tree déclare Tree\\Contract\\PortImportArbre et la logique\n"
-            ."d'écriture remonte dans Tree ; ADR 0002 et docs/arbitrages.md point HH) :\n%s\n"
-            ."Ne l'agrandissez pas. Une dette qui grossit d'une ligne cesse d'être une dette.\n\n%s",
+            ."LES RÉFÉRENCES EN CAUSE :\n%s\n\n%s",
             \count($nonExemptees),
             implode("\n", $lignes),
-            \count($dettes),
-            implode("\n", $dettes),
             $rapport,
         );
     }

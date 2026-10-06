@@ -298,10 +298,10 @@ final readonly class SerialiseurDeDemande
      * Une révision de l'historique d'une fiche (§ 6.11).
      *
      * `changes` est rendu **formaté**, pas en brut : c'est un historique lisible, pas un
-     * vidage. `requestId` à `null` signale un **import GEDCOM**, jamais un raccourci
-     * d'écriture — il n'existe aucun chemin d'écriture applicatif qui contourne le
-     * mécanisme, l'édition directe d'un administrateur créant elle aussi une demande
-     * auto-validée (ADR 0004).
+     * vidage. `requestId` à `null` signale une demande effacée hors de l'application,
+     * jamais un raccourci d'écriture — il n'existe aucun chemin d'écriture applicatif qui
+     * contourne le mécanisme, l'édition directe d'un administrateur créant elle aussi une
+     * demande auto-validée (ADR 0004).
      *
      * @return array<string, mixed>
      */

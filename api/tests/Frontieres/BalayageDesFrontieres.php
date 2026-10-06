@@ -151,8 +151,8 @@ final class BalayageDesFrontieres
 
     /**
      * La ventilation demandée par l'ADR : **par couple de modules ET par couche
-     * ciblée**. C'est la seconde qui rend un écart diagnosticable — « Gedcom
-     * cite Tree 22 fois » n'apprend rien, « dont 7 fois ses entités » désigne le
+     * ciblée**. C'est la seconde qui rend un écart diagnosticable — « Media
+     * cite Proposal 10 fois » n'apprend rien, « dont 2 fois ses entités » désigne le
      * fichier à ouvrir.
      *
      * @param list<ReferenceInterModules> $nonExemptees

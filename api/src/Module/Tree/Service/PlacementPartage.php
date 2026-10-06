@@ -57,7 +57,7 @@ use Symfony\Contracts\Cache\ItemInterface;
  * Il n'existe donc **aucune liste de déclencheurs à tenir à jour**, et c'est tout
  * l'intérêt : la liste exhaustive qu'un compteur exigeait était une dette permanente, où
  * chaque nouveau chemin d'écriture — validation de proposition, édition d'administrateur,
- * import GEDCOM, correction en base — était une occasion d'oubli.
+ * restauration de la base, correction en base — était une occasion d'oubli.
  */
 final class PlacementPartage implements EmpreinteDeLaMiseEnPage
 {

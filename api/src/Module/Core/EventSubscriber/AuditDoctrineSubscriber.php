@@ -40,9 +40,10 @@ use Symfony\Component\Security\Core\Authentication\Token\SwitchUserToken;
  *    changement : sans cette règle, chaque connexion laisserait une ligne `modification`
  *    vide à côté de sa ligne `connexion`, et le journal deviendrait illisible là où il
  *    sert le plus.
- * 4. **Hors requête HTTP, on ne journalise pas.** Un import GEDCOM de 274 personnes
- *    écrirait 551 lignes sans acteur ni IP. Les commandes consignent ce qui les concerne
- *    par `AuditService::enregistrer()` — une ligne `import_gedcom`, pas 551.
+ * 4. **Hors requête HTTP, on ne journalise pas.** Une commande ou un chargement de
+ *    fixtures qui écrit des centaines de lignes en produirait autant sans acteur ni IP.
+ *    Les commandes consignent ce qui les concerne par `AuditService::enregistrer()` —
+ *    une ligne qui dit le geste, pas une par entité touchée.
  */
 #[AsDoctrineListener(event: Events::postPersist)]
 #[AsDoctrineListener(event: Events::preUpdate)]
