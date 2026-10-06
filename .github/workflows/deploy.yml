@@ -10,9 +10,10 @@
 # QUATRE ÉTAPES, DANS CET ORDRE, ET CHACUNE PEUT TOUT ARRÊTER :
 #
 #   1. porte-ci          la CI est-elle VERTE sur ce commit précis ?
-#   2. deploiement       SSH vers le VPS, construction, démarrage, et retour
-#                        arrière automatique si la nouvelle version ne répond pas
-#                        ou ne sert pas le bon code — API **et** front
+#   2. deploiement       SSH vers le VPS, construction, vidage de la base dans
+#                        `backup/` (pas de vidage, pas de démarrage), démarrage,
+#                        et retour arrière automatique si la nouvelle version ne
+#                        répond pas ou ne sert pas le bon code — API **et** front
 #   3. controle-public   depuis l'extérieur, par le vrai domaine et le vrai
 #                        certificat : https://<domaine>/sante.php répond-il, et
 #                        sert-il l'empreinte de l'API de ce commit ?
@@ -59,6 +60,14 @@
 #   SSH_PORT   secret   le port SSH
 #   APP_DIR    secret   le chemin du clone sur le VPS (ex. /home/…/apps/heritage)
 #
+#   VPS_SSH_FINGERPRINT  secret FACULTATIF  l'empreinte SHA256 de la clé d'hôte
+#                   du VPS (`SHA256:…`). Posée, `appleboy/ssh-action` refuse un
+#                   serveur qui présente une autre clé ; absente ou vide, la clé
+#                   d'hôte n'est PAS vérifiée — le comportement d'avant ce secret,
+#                   signalé par un avertissement dans le flux. Laquelle des clés
+#                   d'hôte prendre, et comment la lire : premiere-mise-en-ligne.md
+#                   § 2.2 bis.
+#
 #   DOMAINE_PUBLIC  variable (pas secret)  le domaine servi. Un domaine public
 #                   n'est pas un secret : le mettre dans un secret le rendrait
 #                   illisible dans les journaux au moment précis où on cherche
@@ -68,8 +77,9 @@
 # Les valeurs ne sont écrites NULLE PART dans ce dépôt. Voir
 # `docs/deploiement/premiere-mise-en-ligne.md`, § « Les gestes du commanditaire ».
 #
-# Épinglage des actions : à la version majeure, comme `ci.yml` et comme les autres
-# dépôts de ce serveur.
+# Épinglage des actions : au SHA de commit complet, l'étiquette en commentaire,
+# comme `ci.yml` (voir son en-tête). Ici plus qu'ailleurs : `appleboy/ssh-action`
+# reçoit la clé privée de déploiement.
 # =============================================================================
 
 name: Déploiement
@@ -257,8 +267,21 @@ jobs:
           fi
           echo "Les cinq secrets sont présents."
 
+      # Le sixième est FACULTATIF, et c'est pourquoi il n'est pas dans la boucle
+      # ci-dessus : son absence ne casse rien, elle laisse la clé d'hôte non
+      # vérifiée — comme avant qu'il existe. On le dit, sans arrêter le flux.
+      - name: L'empreinte de la clé d'hôte est-elle posée ?
+        env:
+          VPS_SSH_FINGERPRINT: ${{ secrets.VPS_SSH_FINGERPRINT }}
+        run: |
+          if [ -z "${VPS_SSH_FINGERPRINT:-}" ]; then
+            echo "::warning::VPS_SSH_FINGERPRINT absent : la clé d'hôte du VPS n'est pas vérifiée (voir premiere-mise-en-ligne.md § 2.2 bis)."
+          else
+            echo "Empreinte de la clé d'hôte posée : le serveur sera vérifié."
+          fi
+
       - name: Déployer
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         env:
           MODE: ${{ inputs.mode }}
           SHA: ${{ github.sha }}
@@ -268,6 +291,9 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          # Vide ou absent : aucune vérification de la clé d'hôte (comportement
+          # par défaut de l'action). Voir l'en-tête et l'étape au-dessus.
+          fingerprint: ${{ secrets.VPS_SSH_FINGERPRINT }}
           envs: MODE,SHA,APP_DIR
           # La construction des deux images sur un VPS sans swap est le poste
           # long. 35 minutes couvrent une construction complète sans cache ; le
@@ -304,7 +330,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # L'empreinte est recalculée ICI, sur le dépôt, par le MÊME script que
       # celui qui l'a gravée dans l'image. Trois calculs indépendants doivent
@@ -387,7 +413,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Recalculée ICI, sur le dépôt, par le MÊME script que celui qui l'a gravée
       # dans l'image. Une valeur recopiée d'un endroit à l'autre ne prouverait que

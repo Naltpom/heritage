@@ -242,6 +242,7 @@ dans `api/config/packages/framework.yaml`). **Aucun jeton dans un en-tête, aucu
 ```yaml
 - { path: ^/api/connexion,   roles: PUBLIC_ACCESS }
 - { path: ^/api/inscription, roles: PUBLIC_ACCESS }   # § 4 — 404 sur jeton invalide
+- { path: ^/api/sante$,      roles: PUBLIC_ACCESS }   # § 26 — sonde de disponibilité
 - { path: ^/api/administration, roles: ROLE_ADMIN }
 - { path: ^/api,             roles: ROLE_USER }
 ```
@@ -279,7 +280,7 @@ Chaque module déclare ses routes dans **son** fichier `config/routes/<module>.y
 
 | Préfixe | Module propriétaire |
 |---|---|
-| `/api/connexion`, `/api/deconnexion`, `/api/session`, `/api/notifications` | `Core` |
+| `/api/connexion`, `/api/deconnexion`, `/api/session`, `/api/notifications`, `/api/sante` | `Core` |
 | `/api/inscription` | `Membership` |
 | `/api/arbre` | `Tree` |
 | `/api/demandes` | `Proposal` |
@@ -5814,6 +5815,7 @@ agent recopiera la référence :
 | `demande_sans_lien` | 422 | soumettre une `creation_personne` | — |
 | `trop_de_tentatives` | 429 | § 1.9, **sauf la recherche de rattachement** | `{retryAfter}` |
 | `erreur_interne` | 500 | souscripteur d'exception | — |
+| `service_indisponible` | 503 | `GET /api/sante` — la base ne répond pas (§ 26) | — |
 
 ### 15.3 `404` plutôt que `403` — la règle générale
 
@@ -7009,3 +7011,31 @@ l'assistant de proposition, qui voit l'arbre entier.
 **Journal** : une ligne `appel_modele_langage`, sujet `Assistant\Question`, par question —
 des comptes (tours, appels d'outils, échanges transmis, fiches citées), **jamais** la
 question, la réponse ni un nom.
+
+## 26. Santé de l'API
+
+Module **`Core`** (`Core\Controller\SanteController`). La cible d'une **sonde extérieure** de
+disponibilité : elle amorce le noyau Symfony et lance un `SELECT 1` sur la base.
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/sante` | `PUBLIC` | — | `200` `{"statut": "ok"}` | `503` `service_indisponible` |
+
+```json
+{ "statut": "ok" }
+```
+
+- **Rien d'autre ne sort**, ni en succès ni en panne : aucune version, aucune empreinte,
+  aucun nom d'hôte. Le `503` porte l'enveloppe du § 15.1 avec un message générique ; la
+  cause réelle va au journal du serveur (niveau `error`), jamais dans la réponse.
+- **Aucune session** n'est lue ni démarrée, même si la requête porte un cookie, et aucun
+  cookie n'est posé. Pas de limiteur : la route ne fait qu'un `SELECT 1`.
+- `HEAD` est accepté comme `GET` (routeur Symfony), sans corps.
+- En-têtes : régime A du § 1.8, comme toute route JSON.
+- Ce n'est **pas** la sonde du conteneur. Le `HEALTHCHECK` de l'image api et le
+  déploiement interrogent `/sante.php`, servie sans noyau ni base et qui porte l'empreinte
+  de l'image : la santé du conteneur ne dépend pas de la base, sinon une base qui tousse
+  ferait redémarrer une API saine.
+- Joignable de l'extérieur par le front, qui relaie `/api` :
+  `https://<domaine>/api/sante`. Mise en place d'une sonde extérieure :
+  `docs/deploiement/premiere-mise-en-ligne.md`, § 13.
