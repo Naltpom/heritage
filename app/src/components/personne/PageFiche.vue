@@ -43,6 +43,10 @@
  * icônes que le bandeau desktop (`ActionsFiche`), et se pose au-dessus de la
  * barre de navigation du bas (`--hauteur-barre-bas`).
  *
+ * Le bandeau porte aussi « Partager » (`PartageFiche`), sur toutes les
+ * largeurs : partager ne modifie rien, il n'attend donc aucun droit — seulement
+ * qu'on ne soit pas en train de corriger.
+ *
  * ## Le mode édition (crayon, 02/10/2026)
  *
  * C'est **ici** qu'il vit, parce qu'il touche tout l'écran : le bandeau et les
@@ -84,6 +88,7 @@ import ModaleCorrection from './ModaleCorrection.vue'
 import { useEditionFiche } from './useEditionFiche'
 import { ongletsDeFiche, ongletVoisin, requeteDOnglet, sensDuGlissement, type OngletFiche } from './onglets'
 import ParenteFiche from './ParenteFiche.vue'
+import PartageFiche from './PartageFiche.vue'
 import SectionFiche from './SectionFiche.vue'
 import SourcesFiche from './SourcesFiche.vue'
 
@@ -179,6 +184,10 @@ function pluriel(n: number, mot: string): string {
       :edition="edition !== null"
       @agrandir="emit('agrandir', $event)"
     >
+      <!-- Partager ne modifie rien : offert à tout lecteur, retiré en édition. -->
+      <template #partage>
+        <PartageFiche v-if="edition === null" :fiche="fiche" />
+      </template>
       <template #actions>
         <ActionsFiche
           :fiche="fiche"

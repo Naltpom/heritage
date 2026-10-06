@@ -40,6 +40,9 @@ import InvitationNotifications from '@/components/notifications/InvitationNotifi
 // l'application. Même montage que la précédente ; elle passe AVANT elle, et les deux ne
 // s'ouvrent jamais ensemble (`composables/fenetresAutomatiques.ts`).
 import InvitationCleDAcces from '@/components/cles-d-acces/InvitationCleDAcces.vue'
+// L'avis global (un écran qui n'a pas pu se charger, une erreur que personne
+// n'a attrapée) : hors du bloc du cadre, un écran sans cadre peut échouer aussi.
+import AvisGlobal from '@/components/mise-en-page/AvisGlobal.vue'
 
 const route = useRoute()
 const avecCadre = computed(() => route.meta.cadre !== false)
@@ -76,4 +79,5 @@ const avecCadre = computed(() => route.meta.cadre !== false)
 
   <InvitationCleDAcces :avec-cadre="avecCadre" />
   <InvitationNotifications :avec-cadre="avecCadre" />
+  <AvisGlobal />
 </template>
