@@ -51,6 +51,8 @@ Les tests portent sur ce qui se casse en silence, pas sur les composants :
 | `src/lib/api/erreurs.test.ts` | la traduction d'une erreur d'API en message, et **la distinction des deux `409`** |
 | `src/router/acces.test.ts` | les gardes pour les **trois** régimes d'accès |
 | `src/lib/api/revalidation.test.ts` | l'`ETag` du graphe : en-tête envoyé, `304`, oubli |
+| `src/router/rechargement.test.ts` | après une mise en production, un écran disparu **recharge une fois** — jamais en boucle |
+| `src/composables/erreursGlobales.test.ts` | le filet global : il journalise et prévient, sans crier sur ce qui n'est pas une panne |
 
 ## Production
 
@@ -60,6 +62,16 @@ d'API**. Ce n'est pas un détail d'exploitation : c'est ce qui donne au front et
 à l'API une **origine unique**, donc un projet sans CORS ouvert et un cookie de
 session `HttpOnly` + `SameSite=Lax` sans exception. Le fichier est commenté
 directive par directive — le lire avant de le modifier.
+
+**Une mise en production et les onglets déjà ouverts.** Les morceaux de Vite
+sont empreintés et servis un an `immutable` ; `index.html` est en `no-cache`.
+Un onglet ouvert la veille — ou l'application installée, qu'on ne ferme jamais —
+nomme donc des morceaux que le serveur n'a plus, et chaque écran est paresseux.
+`src/router/rechargement.ts` rattrape l'échec (`routeur.onError`,
+`vite:preloadError`) par **un** rechargement complet vers la destination, gardé
+par un drapeau horodaté dans `sessionStorage` ; si la page rechargée échoue
+encore, il ne recharge plus et le dit, avec « Recharger ». Le service worker
+(`public/sw.js`) ne met rien en cache : il n'y est pour rien, et doit le rester.
 
 ---
 
@@ -159,7 +171,9 @@ app/
     assets/           images et ressources importées par le bundler
     components/
       base/           bouton, champ, panneau, pastille, erreur, squelette
-      mise-en-page/   en-tête (+ burger), bandeaux de régime, TiroirOutils
+      mise-en-page/   en-tête (+ burger), bandeaux de régime, TiroirOutils,
+                      AvisGlobal (le message non bloquant, voir § 5)
+      personne/       la fiche : bandeau, onglets, gestes, PartageFiche
       evenements/     filtres de genre, partagés carte + anniversaires
       carte/          Leaflet, agrégation par lieu, les deux échelles
       anniversaires/  grille du mois, navigation, regroupement par jour
@@ -169,6 +183,9 @@ app/
       tiroirs.ts      les deux tiroirs du mobile, en fonctions pures
       useTiroirs.ts   leur état partagé (portée module) + le seuil
       useGestesCanevas.ts  molette, déplacement et pincement à deux doigts
+      avisGlobal.ts   l'avis global, une seule place (singleton)
+      erreursGlobales.ts  errorHandler + unhandledrejection → journal + avis
+      partage.ts      feuille de partage ou presse-papiers, adresse absolue
     lib/
       api/
         types.ts        types du contrat (§ 1 à § 16)
@@ -182,6 +199,7 @@ app/
       acces.ts        les trois régimes + la garde, en fonctions pures
       routes.ts       la table des routes — pure donnée, sans `window`
       index.ts        l'instance, les deux gardes, la fermeture des tiroirs
+      rechargement.ts écran disparu après une mise en production → un rechargement
     styles/
       main.css        palette, thème sombre, base, utilitaires
       canevas.css     styles SVG de l'arbre et de la chronologie
@@ -205,7 +223,9 @@ app/
 - **Mode historique du routeur** : il va de pair avec le
   `try_files $uri $uri/ /index.html` de `nginx.conf`. Retirer l'un casse l'autre
   — un lien d'invitation collé dans un navigateur vierge est justement une route
-  profonde.
+  profonde. Le même repli rend la coque HTML à la place d'un morceau `.js`
+  disparu : l'import échoue (type MIME), et c'est `router/rechargement.ts` qui
+  le rattrape — voir « Production ».
 
 ---
 
@@ -344,7 +364,18 @@ Composants de base disponibles, tous dans `@/components/base/` :
 | `SqueletteChargement` | occupe la place du contenu à venir. |
 
 Et dans `@/components/mise-en-page/` : `EnTeteApplication` (créneau `actions` pour
-y greffer un compteur de notifications sans modifier le fichier), `BandeauRegime`.
+y greffer un compteur de notifications sans modifier le fichier), `BandeauRegime`,
+`AvisGlobal` (monté une fois par `App.vue` ; on ne le monte pas ailleurs, on
+appelle `afficherAvis()` — voir § 5).
+
+**Partager un lien** : `@/composables/partage` — `partagerOuCopier()` ouvre la
+feuille de partage du système quand elle existe, copie sinon, et distingue
+l'annulation (`AbortError`, on ne dit rien) d'un vrai refus (on affiche
+l'adresse). L'adresse se construit par `adresseAbsolue(routeur, { name, params })`
+— le `resolve()` du routeur posé sur l'origine —, jamais par concaténation à la
+main, et ne porte **que** la route : le destinataire se connecte et ne voit que
+ce que son cercle lui ouvre. Exemple : « Partager » sur la fiche
+(`PartageFiche.vue`).
 
 ### 4. Appeler l'API
 
@@ -440,6 +471,23 @@ Un écran qui afficherait « Réessayer » sur les deux ferait **boucler
 l'administrateur sur une demande morte**. Comme le libellé vient d'`erreurs.ts`
 et non de l'écran, aucun écran ne peut se tromper — et le jour où le contrat
 ajoute un code, il y a un seul fichier à modifier.
+
+**Ce qui n'a pas d'écran pour le dire.** Deux cas seulement passent par l'avis
+global (`afficherAvis()`, `composables/avisGlobal.ts`, une carte en bas d'écran,
+non bloquante, une seule à la fois) :
+
+- un écran **paresseux qui n'a pas pu se charger**, même après le rechargement
+  automatique (`router/rechargement.ts`, voir « Production ») ;
+- une erreur que **personne n'a attrapée** : `app.config.errorHandler` et
+  `unhandledrejection` (`composables/erreursGlobales.ts`, posés par `main.ts`).
+  Le filet journalise et prévient ; il ne dit rien d'une session tombée (le
+  rattrapage `401` s'en charge), d'une requête annulée, ni d'un `AbortError` /
+  `NotAllowedError` (partage annulé, lecture automatique refusée).
+
+Ce n'est **pas** un canal de plus pour les écrans : une erreur qu'un écran sait
+afficher s'affiche dans l'écran, par `MessageErreur`, à côté de ce qui l'a
+causée. Le filet ne voit d'ailleurs que ce qui a échappé à tout `try/catch` et à
+`useAppelApi`.
 
 Deux autres pièges, déjà traités par le client :
 

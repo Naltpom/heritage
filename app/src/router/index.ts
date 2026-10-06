@@ -17,6 +17,11 @@
  * `routes` est réexportée ci-dessous pour que rien de ce qui l'importait ne
  * casse ; un test, lui, importe `@/router/routes` directement, sans réveiller
  * `createWebHistory()`.
+ *
+ * Le rattrapage des écrans disparus après une mise en production
+ * (`routeur.onError`, `vite:preloadError`, un rechargement gardé) n'est pas
+ * ici : il vit dans `rechargement.ts`, éprouvé sur un routeur en mémoire, et
+ * `main.ts` le branche avant la navigation initiale.
  */
 
 import { createRouter, createWebHistory } from 'vue-router'
