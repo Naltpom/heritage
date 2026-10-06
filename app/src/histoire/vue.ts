@@ -197,3 +197,63 @@ export function jaugeDuZoom(s: number, c: Canevas): JaugeDuZoom {
     etendue <= 0 ? 1 : Math.min(1, Math.max(0, (Math.log(e) - Math.log(min)) / etendue))
   return { pourcent: Math.round(s * 100), position: place(s), seuils: [place(SEUILS[0]), place(SEUILS[1])] }
 }
+
+/* ------------------------------------------------------------------ */
+/* Écrire le cadrage dans le DOM (ADR 0007)                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Le `viewBox` du `<svg>` des traits (ADR 0007, règle 1) : il montre, dans un
+ * `<svg preserveAspectRatio="none">` de la taille du canevas, exactement ce que
+ * le cadrage montre — l'échelle verticale séparée comprise, d'où le `none`. Le
+ * découpage a lieu avant la rastérisation : seul le visible est peint.
+ */
+export function viewBoxDe(v: Cadrage, c: Canevas): string {
+  const sy = syDe(v.s, c)
+  const l = Math.max(1, c.largeur)
+  const h = Math.max(1, c.hauteur)
+  return `${-v.tx / v.s} ${-v.ty / sy} ${l / v.s} ${h / sy}`
+}
+
+/**
+ * La transformation de la couche HTML des boîtes, posées en coordonnées monde.
+ * Une seule écriture par image, sur un seul élément (note du 2026-10-06 à
+ * l'ADR 0007 : les boîtes sont du HTML, pas du SVG).
+ */
+export function transformationMonde(v: Cadrage, c: Canevas): string {
+  return `translate(${v.tx}px, ${v.ty}px) scale(${v.s}, ${syDe(v.s, c)})`
+}
+
+/**
+ * Ce qui amène une couche dessinée en coordonnées ÉCRAN pour le cadrage `depuis`
+ * à sa place sous le cadrage `vers` — `none` s'ils sont égaux.
+ *
+ * Les textes, photos et anneaux ne sont recalculés (rendu Vue) qu'à la fin d'un
+ * geste, à un changement de niveau, ou au plus quelques fois par seconde ; entre
+ * deux, cette transformation, posée sur leur conteneur, les garde collés à leur
+ * fiche. Un point écran `X` de `depuis` vient en `kx·X + ex`, avec `kx = s'/s`.
+ */
+export function transformationRelative(depuis: Cadrage, vers: Cadrage, c: Canevas): string {
+  if (depuis === vers) return 'none'
+  const kx = vers.s / depuis.s
+  const ky = syDe(vers.s, c) / syDe(depuis.s, c)
+  const ex = vers.tx - kx * depuis.tx
+  const ey = vers.ty - ky * depuis.ty
+  if (Math.abs(kx - 1) < 1e-9 && Math.abs(ky - 1) < 1e-9 && Math.abs(ex) < 1e-6 && Math.abs(ey) < 1e-6) return 'none'
+  return `matrix(${kx}, 0, 0, ${ky}, ${ex}, ${ey})`
+}
+
+/**
+ * Le rectangle monde `(x, y, w, h)` est-il à l'écran ? `marge` élargit la fenêtre
+ * d'une fraction de sa taille de chaque côté : les textes sont posés un peu
+ * au-delà du bord, pour qu'un glisser ne découvre pas des fiches muettes avant
+ * le recalcul suivant.
+ */
+export function dansLaFenetre(v: Cadrage, c: Canevas, x: number, y: number, w: number, h: number, marge = 0): boolean {
+  const sy = syDe(v.s, c)
+  const X = v.tx + x * v.s
+  const Y = v.ty + y * sy
+  const mx = marge * c.largeur
+  const my = marge * c.hauteur
+  return X + w * v.s > -mx && X < c.largeur + mx && Y + h * sy > -my && Y < c.hauteur + my
+}

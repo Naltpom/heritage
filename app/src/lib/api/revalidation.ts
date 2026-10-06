@@ -53,6 +53,26 @@ export function etagConnu(cle: string): string | undefined {
 export function oublierEtag(cle?: string): void {
   if (cle === undefined) etags.clear()
   else etags.delete(cle)
+  for (const ecouteur of [...ecouteursDOubli]) ecouteur(cle)
+}
+
+/**
+ * Ce qui garde **en mémoire** une charge revalidée — le graphe et sa disposition,
+ * que l'arbre conserve d'une visite à l'autre (`histoire/magasinGraphe.ts`) — doit
+ * l'oublier en même temps que son `ETag` : un `ETag` oublié et une charge gardée,
+ * c'est l'arbre du lecteur précédent affiché au suivant.
+ *
+ * `cle` vaut `undefined` quand **tous** les `ETag` sont oubliés : c'est le geste du
+ * module de session (connexion, déconnexion, bascule « voir comme », incarnation —
+ * ADR 0010). Une clé précise, c'est une écriture qui a périmé cette charge-là
+ * (`invaliderGraphe()`). Rend la fonction qui désabonne.
+ */
+export type EcouteurDOubli = (cle: string | undefined) => void
+const ecouteursDOubli = new Set<EcouteurDOubli>()
+
+export function surOubliEtag(ecouteur: EcouteurDOubli): () => void {
+  ecouteursDOubli.add(ecouteur)
+  return () => ecouteursDOubli.delete(ecouteur)
 }
 
 /**

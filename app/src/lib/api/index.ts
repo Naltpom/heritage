@@ -14,6 +14,7 @@ export {
   estRejouable,
   libelleDeConduite,
   messageDErreur,
+  CODE_ANNULE,
   CODE_AUTHENTIFICATION_REQUISE,
   CODE_CIBLE_DISPARUE,
   CODE_DEMANDE_CADUQUE,
@@ -25,8 +26,8 @@ export {
 export type { AnalyseErreur, ConduiteATenir } from './erreurs'
 export { appelBrut, construireUrl, requeteApi, surSessionPerdue } from './client'
 export type { MethodeHttp, OptionsRequete, ReponseBrute } from './client'
-export { etagConnu, oublierEtag, requeteRevalidee } from './revalidation'
-export type { ResultatRevalide } from './revalidation'
+export { etagConnu, oublierEtag, requeteRevalidee, surOubliEtag } from './revalidation'
+export type { EcouteurDOubli, ResultatRevalide } from './revalidation'
 export * from './routes'
 /* Module `Tree` : fiche, famille, recherche, détail d'un nœud en attente
    (§ 5.3, § 5.4, § 5.5, § 6.6). `routes.ts` ne porte que le graphe. */
