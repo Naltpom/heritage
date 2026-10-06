@@ -369,6 +369,7 @@ composant `RateLimiter` stockant ses compteurs dans le cache (§ 0.6 — pas de 
 | `POST /api/inscription/rattachement` | IP | 30 / heure | `429` `trop_de_tentatives` |
 | `POST /api/medias` | compte (administrateur exempté) | 20 / heure **par défaut**, réglable par compte (§ 10.1) | `429` `trop_de_tentatives` |
 | `POST /api/demandes` | compte | 30 / heure | `429` `trop_de_tentatives` |
+| `POST /api/demandes/doublons-probables` | compte | 60 / heure (`Proposal\Service\LimiteurDesDoublons`) | `429` `trop_de_tentatives`, `Retry-After` |
 
 Le plafond par jeton est le garde-fou du § 6.1 du dossier ; le plafond par IP est là pour le
 balayage distribué sur plusieurs jetons, que le premier ne voit pas. Les deux coexistent et
@@ -1258,6 +1259,7 @@ troisième (§ 11, révision du 2026-10-01).
 | `/api/arbre/graphe` | nœud complet | nœud complet | **nœud présent, réduit** (§ 11.2) |
 | `/api/arbre/personnes/{id}` | fiche complète | fiche complète | **`200`, fiche réduite** — pas `404` |
 | `/api/arbre/recherche` | présente | présente | **absente** |
+| `POST /api/demandes/doublons-probables` | présente | présente, naissance réduite (§ 5.6) | **absente** (§ 6.3 ter) |
 | `/api/chronologie` | barre présente | barre présente | **absente** (§ 9.1) |
 
 La quatrième colonne est toute la règle de l'ADR 0003 : **le graphe montre, il n'énumère
@@ -2203,6 +2205,8 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `GET` | `/api/demandes/{id}` | `MEMBRE` | — | `200` § 6.5 | `403` `acces_refuse` · `404` | — |
 | `POST` | `/api/demandes/{id}/soumettre` | `MEMBRE` | *(vide)* | `200` demande | `409` `demande_deja_soumise` · `422` `demande_sans_lien` | — |
 | `POST` | `/api/demandes/{id}/retirer` | `MEMBRE` | *(vide)* | `200` demande (`annulee`) | `409` `demande_deja_decidee` · `403` · `404` | — |
+| `POST` | `/api/demandes/doublons-probables` | `MEMBRE` | corps d'une création (§ 6.3) | `200` § 6.3 ter | `422` · `403` `regime_en_attente` · `429` | 60 / h |
+| `POST` | `/api/demandes/{id}/brouillons/{ref}/completer` | `MEMBRE`, auteur | corps d'une création (§ 6.3) | `200` demande (§ 6.5) | `403` `acces_refuse` · `404` · `409` `demande_deja_decidee` · `409` `vue_comme_membre_active` · `422` | — |
 | `GET` | `/api/demandes/{id}/refaire` | `MEMBRE` | — | `200` corps pré-rempli | `403` · `404` · `409` `demande_non_refaisable` | — |
 | `GET` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | — | `200` § 6.6 | `403` · `404` | — |
 | `GET` | `/api/demandes/brouillons/recherche` | `MEMBRE` | `?q=&limite=` | `200` § 6.6 bis | `422` (`q` < 2) | — |
@@ -2453,6 +2457,135 @@ vient de conforter, alors que le contributeur vient de voir la fiche dans sa lis
 **Une demande qui s'appuie sur une autre ne se valide pas avant elle.** C'est un ordre, pas un
 refus, et il est annoncé **avant le premier clic** par `resolutionPrevue` (§ 6.7) puis par
 `409 dependance_en_attente` (§ 6.8).
+
+### 6.3 ter Les doublons probables, **avant** le dépôt — et compléter sa demande
+
+Le besoin, dans les mots du commanditaire :
+
+> « Dans le formulaire de création de personne, vérifier si doublon soit dans l'arbre soit
+> déjà en demande. […] “Attention cette personne existe déjà ou est en cours de validation”,
+> voici les éléments saisis existants, voici ce qui diverge et ce que tu ajoutes ou modifies :
+> est-ce bien une nouvelle personne, ou souhaites-tu mettre à jour la demande existante, ou ne
+> rien faire. »
+
+Jusque-là, le seul rapprochement était celui de l'administrateur, **après** coup et entre
+demandes en attente (`doublonsProbables`, § 6.7). Deux routes le complètent.
+
+#### `POST /api/demandes/doublons-probables` — aucune écriture
+
+Le corps est **celui d'une création** (§ 6.3), tel que le formulaire le posterait — une seule
+fiche dans `brouillons`. Il est validé comme au dépôt : une fiche sans nom, un bloc date mal
+formé, une date de décès sans décès rendent la même `422`, au même chemin. `POST` et non
+`GET` : une saisie d'état civil n'a rien à faire dans une adresse. Réservée aux membres
+(`403 regime_en_attente`), plafonnée à **60 par heure et par compte** (§ 1.9) : elle compare
+des dates, et une boucle qui ferait varier l'année saisie ne doit pas pouvoir s'en servir
+d'oracle. Pas de garde de la bascule « voir comme un membre » : elle n'écrit rien, et
+l'administrateur doit pouvoir lire ce que le membre se verrait signaler.
+
+```json
+{
+  "personnes": [
+    {
+      "personId": 17,
+      "displayName": "Marne Dolomite Sureau",
+      "givenNames": "Marne Dolomite",
+      "surname": "Sureau",
+      "marriedName": null,
+      "nickname": null,
+      "sex": "feminin",
+      "deceased": true,
+      "vivant": false,
+      "birth": { "raw": "BET 1901 AND 1909", "qualifier": "entre", "min": "1901-01-01", "max": "1909-12-31", "place": "Saule, Ombrage, Sylvanie", "texte": "entre 1901 et 1909" },
+      "death": { "raw": "1987", "qualifier": "annee", "min": "1987-01-01", "max": "1987-12-31", "place": null, "texte": "1987" },
+      "ligneDates": "1901-1909 – 1987",
+      "parents": [],
+      "conjoints": [{ "personId": 21, "displayName": "Émeri Sarriette" }],
+      "enfants": [{ "personId": 30, "displayName": "Natron Romarin" }],
+      "criteres": ["nom", "prenom", "naissance", "sexe"]
+    }
+  ],
+  "mesDemandes": [
+    {
+      "demandeId": 12,
+      "draftPersonId": 7,
+      "localRef": "#p1",
+      "noeudId": "#12/p1",
+      "status": "en_attente",
+      "submittedAt": "2026-10-05T10:02:00+02:00",
+      "displayName": "Barnabé Muguet",
+      "givenNames": "Barnabé",
+      "surname": "Muguet",
+      "marriedName": null,
+      "nickname": null,
+      "sex": "masculin",
+      "deceased": true,
+      "birth": { "raw": "ABT 1901", "qualifier": "environ", "min": "1901-01-01", "max": "1901-12-31", "place": null, "texte": "vers 1901" },
+      "death": { "raw": null, "qualifier": "inconnue", "min": null, "max": null, "place": null, "texte": "" },
+      "ligneDates": "~1901",
+      "note": "Acte de naissance en ma possession.",
+      "liens": [],
+      "criteres": ["nom", "prenom", "naissance"]
+    }
+  ],
+  "enCoursAilleurs": false
+}
+```
+
+**Trois sources, trois règles de divulgation** — c'est le point à ne pas défaire :
+
+| Source | Ce qui est rendu | Pourquoi |
+|---|---|---|
+| `personnes` — l'arbre | la fiche telle que le § 5.3 la montre à ce lecteur, réduite à l'identité, aux dates et aux proches | **le filtre de la recherche** (§ 5.5) : une fiche confidentielle hors du cercle est **absente**, pas réduite ; la naissance d'un vivant passe par la réciprocité (§ 5.6) — bloc `masquee` servi, et **date réduite comparée** : le rapprochement ne compare jamais une composante que le lecteur ne voit pas ; un proche confidentiel hors du cercle est cité sous « Personne vivante » |
+| `mesDemandes` — ses demandes en attente | la fiche proposée en entier, la demande, ses liens (forme du § 6.5) | il en est l'auteur : c'est le calque qu'il voit déjà (§ 13.3) |
+| `enCoursAilleurs` — les demandes des autres | **un booléen, rien d'autre** — ni contenu, ni auteur, ni numéro, ni nombre ; et seulement pour une fiche proposée **décédée** | le contenu d'une demande en attente n'appartient qu'à son auteur (ADR 0004) ; le drapeau est le même degré d'information que « une modification est déjà en attente sur cette fiche ». Une fiche **vivante** proposée par un autre ne le lève pas : il s'allumerait sur la bonne année de naissance — l'oracle que l'ADR 0016 refuse — et rien ne dit qu'elle serait visible du lecteur une fois validée. Ce doublon-là reste rattrapé par l'administrateur (§ 6.7) |
+
+**La règle de rapprochement** (`Proposal\Service\RapprochementDeDoublons`) reprend la
+normalisation de la clé de l'administrateur (`CleDeDoublon` : patronyme replié, **premier**
+prénom), et l'élargit à ce que la clé ne voit pas : le **nom d'usage**, des deux côtés ; les
+dates **en recouvrement d'années** — deux dates connues qui ne peuvent pas désigner la même
+année écartent, une date « vers » s'élargit de deux ans, une date inconnue ne prouve rien ; un
+**sexe** connu et différent écarte ; un **proche commun** (même parent, conjoint ou enfant de
+l'arbre) compte comme un appui. Il faut le nom **et** le prénom, ou l'un des deux plus un appui
+— l'autre absent, jamais différent. Pas de phonétique, pas de distance d'édition : un
+avertissement qui crie au doublon à chaque saisie apprend à cliquer sans lire.
+
+`criteres` dit sur quoi le serveur a rapproché (`nom`, `prenom`, `naissance`, `deces`,
+`sexe`, `parents`, `conjoints`, `enfants`). Les deux listes sont triées, la meilleure
+correspondance d'abord, et plafonnées à **cinq**. Pas de `total` — même règle qu'au § 5.5.
+
+#### `POST /api/demandes/{id}/brouillons/{ref}/completer` — « mettre à jour la demande existante »
+
+Le membre complète **sa** fiche proposée au lieu d'en déposer une seconde. La référence part
+**sans le dièse** (`p1`), comme au § 6.6. Le corps est, là encore, celui d'une création ; la
+réponse est la demande complétée (§ 6.5), en `200`.
+
+| Garde | Réponse |
+|---|---|
+| un autre que l'auteur — administrateur compris | `403 acces_refuse` |
+| la demande est tranchée (`validee`, `refusee`, `caduque`, `annulee`) | `409 demande_deja_decidee` |
+| elle n'est pas une `creation_personne` | `422`, `champs.kind` |
+| la fiche `{ref}` n'est pas dans la demande | `404 introuvable` |
+| bascule « voir comme un membre » | `409 vue_comme_membre_active` |
+
+**On ajoute ce qui a été saisi, on ne retire rien** :
+
+- un texte non vide, un sexe connu, une date connue **remplacent** ; un champ laissé vide ne
+  vide rien ; « décès attesté » coché s'ajoute, décoché ne retire rien ; un lieu seul complète
+  la date existante ; une date sans lieu garde le lieu connu ;
+- la **note** de la fiche et le **message** de la demande **s'ajoutent** aux précédents ;
+- la **filiation** saisie remplace celle de la fiche, sauf si elle désigne les mêmes parents —
+  une personne n'a qu'un couple de parents ; une **union** avec un conjoint déjà lié complète
+  ses dates, une autre s'ajoute ; un **enfant** déjà lié reçoit son rang, un autre s'ajoute.
+
+Chaque lien ajouté passe les contrôles du dépôt (§ 6.3, § 6.3 bis), la cohérence décès/date est
+revérifiée sur la fiche **complétée**, et la clé de doublon est recalculée. La demande garde sa
+place dans la file (`submittedAt` inchangé) : elle est complétée, pas redéposée. Le journal
+d'audit consigne chaque colonne de la fiche et chaque lien ajouté ou remplacé (journal
+mécanique, § 10.3).
+
+La demande d'un autre membre ne se complète pas : l'écran ne l'offre pas, et la route rend
+`403`. Pour une fiche **de l'arbre**, l'équivalent est une modification ordinaire (§ 6.2) :
+le front ouvre l'écran de modification pré-rempli des seuls champs divergents ou ajoutés.
 
 ### 6.4 `kind = ajout_lien` et `kind = ajout_media`
 
@@ -5784,7 +5917,7 @@ agent recopiera la référence :
 | `dependance_en_attente` | 409 | validation (§ 6.8, issue 7) | `{demandeId, statut: "en_attente", rejouable: true, dependances[]}` |
 | `dependance_morte` | 409 | validation (§ 6.8, issue 8) | `{demandeId, statut: "caduque", rejouable: false, dependances[]}` |
 | `verrou_concurrent` | 409 | validation | `{demandeId, statut, rejouable: true}` |
-| `demande_deja_decidee` | 409 | valider, refuser, retirer | `{statut}` |
+| `demande_deja_decidee` | 409 | valider, refuser, retirer, compléter (§ 6.3 ter) | `{statut}` |
 | `demande_deja_soumise` | 409 | soumettre | `{statut}` |
 | `demande_non_refaisable` | 409 | refaire | `{statut}` |
 | `personne_deja_rattachee` | 409 | invitation, inscription, activation | `{personId}` |

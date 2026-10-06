@@ -159,6 +159,13 @@ doublons probables par **nom + année de naissance** (avec la tolérance qu'impo
 de dates), et l'administrateur peut refuser l'une **en renvoyant à l'autre** — le motif
 obligatoire sert exactement à ça.
 
+Depuis le 2026-10-06, le doublon est aussi signalé **avant** le dépôt, au membre lui-même
+(contrat d'API § 6.3 ter) : contre l'arbre — sous le filtre de la recherche, cercle et
+réciprocité compris —, contre **ses** demandes en attente, et, pour les demandes des **autres**,
+par un simple drapeau sans contenu, levé pour une personne décédée seulement. Le contenu d'une
+demande en attente reste l'affaire de son auteur et des administrateurs ; le rapprochement de
+l'administrateur à la validation reste le filet, en particulier pour les vivants.
+
 ## Alternatives considérées
 
 - **Le wiki** : traité ci-dessus.
@@ -201,3 +208,25 @@ obligatoire sert exactement à ça.
   (`prp_change_op.base_version`) est aussi ce qui rend possible la règle de rejeu ci-dessus,
   qui suppose de comparer op par op. Détail dans `docs/modele-donnees.md` § 9.6, journal dans
   `docs/arbitrages.md`.
+- **Révision du 2026-10-06 — une création se complète avant décision.** Jusque-là, une demande
+  déposée ne changeait plus que de statut (soumise, retirée, tranchée). Le commanditaire veut
+  qu'un membre qui s'apprête à reproposer une personne qu'il a déjà proposée puisse **mettre à
+  jour sa demande existante** plutôt que d'en déposer une seconde. D'où
+  `POST /api/demandes/{id}/brouillons/{ref}/completer` (contrat d'API § 6.3 ter), borné à ce
+  qui ne fait pas de tort au circuit :
+  - **l'auteur seulement**, administrateur compris, et **avant toute décision**
+    (`brouillon` ou `en_attente`) — une demande tranchée est l'historique d'une discussion,
+    elle ne se réécrit pas ;
+  - **une `creation_personne` seulement** : une modification de fiche porte des `oldValue` et
+    une `baseVersion` que compléter fausserait ; elle se retire et se redépose ;
+  - **on ajoute, on ne retire pas** : ce qui est saisi complète ou remplace, ce qui est laissé
+    vide ne vide rien, la note et le message s'ajoutent ; seule la filiation saisie remplace
+    celle de la fiche, parce qu'une personne n'a qu'un couple de parents ;
+  - **les mêmes contrôles qu'au dépôt**, par le même constructeur, et la clé de doublon
+    recalculée ; la demande **garde sa place** dans la file (`submittedAt` inchangé) ;
+  - **tracé** comme toute écriture, par le journal mécanique : chaque colonne de la fiche
+    proposée, chaque lien ajouté ou remplacé, avec l'acteur.
+  Ce n'est pas le « rebasage » écarté plus haut : celui-là réécrivait une demande sur une
+  version de l'arbre qui avait bougé ; celui-ci laisse l'auteur préciser **sa propre
+  proposition** tant qu'elle n'est pas tranchée. L'administrateur lit la demande
+  telle qu'elle est quand il l'ouvre, comme toute demande.

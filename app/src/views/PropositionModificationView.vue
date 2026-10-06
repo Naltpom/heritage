@@ -81,6 +81,7 @@ import {
   type SaisieModification,
 } from '@/components/proposition/operations'
 import { chargerReprise, phraseOrigine, saisieDepuisProposee } from '@/components/proposition/reprise'
+import { lirePreRemplissage } from '@/components/proposition/doublons'
 import type { Avertissement } from '@/components/proposition/reprise'
 
 const route = useRoute()
@@ -139,6 +140,7 @@ async function charger(): Promise<void> {
     saisie.value = saisieDepuisFiche(recue)
     liens.value = liensVides(recue.id)
     champsDeposes.value = null
+    appliquerPreRemplissage(recue)
 
     const demandeReprise = repriseDemandee.value
     if (demandeReprise !== null) await appliquerReprise(demandeReprise)
@@ -199,6 +201,38 @@ async function appliquerReprise(demandeId: number): Promise<void> {
         courante[champ] = typeof valeur === 'string' ? valeur : ''
         break
     }
+  }
+}
+
+/**
+ * « Proposer une modification de la fiche existante », depuis la modale des
+ * doublons d'une création (§ 6.3 ter) : la saisie arrive dans `history.state`,
+ * **réduite aux champs divergents ou ajoutés**, et se pose sur le formulaire
+ * exactement comme si le contributeur l'avait tapée. Rien ne part sans lui —
+ * l'écran le dit, et le dépôt reste le même.
+ *
+ * Comme une reprise, on part de la fiche **lue maintenant** : `oldValue` et
+ * `baseVersion` viennent de `instantane`, jamais du pré-remplissage. Une
+ * naissance que la réciprocité ne laisse pas voir entière (ADR 0016) n'est pas
+ * reprise : le champ est verrouillé, elle partirait sans qu'on la voie.
+ */
+const preRempli = ref(false)
+
+function appliquerPreRemplissage(recue: FichePersonneComplete): void {
+  const pre = lirePreRemplissage(typeof window === 'undefined' ? null : window.history.state, recue.id)
+  preRempli.value = pre !== null
+  if (pre === null || saisie.value === null) return
+
+  const courante = saisie.value
+  Object.assign(courante, pre.champs)
+  if (pre.naissance !== null && !naissanceVerrouillee(recue)) courante.naissance = pre.naissance
+  if (pre.deces !== null) courante.deces = pre.deces
+
+  liens.value = {
+    ...liens.value,
+    parents: pre.parents,
+    unions: pre.unions,
+    enfants: pre.enfants.map((enfant) => ({ ...enfant, familleId: null })),
   }
 }
 
@@ -372,6 +406,17 @@ function refaire(demandeId: number | null): void {
         class="mb-4 rounded-panneau border border-ligne bg-panneau px-3.5 py-3 text-sm"
       >
         {{ phraseOrigine(origine) }}
+      </p>
+
+      <p
+        v-if="preRempli"
+        class="mb-4 rounded-panneau border border-edition-bord bg-edition-doux px-3.5 py-3 text-sm"
+        role="status"
+        data-pre-rempli
+      >
+        Pré-rempli avec ce que vous aviez saisi pour une nouvelle personne : seuls les champs qui
+        diffèrent de cette fiche, et les proches qu’elle n’a pas encore, ont été repris. Relisez avant
+        d’envoyer.
       </p>
 
       <!-- Le calque est **signalé**, jamais recopié dans les champs. -->
