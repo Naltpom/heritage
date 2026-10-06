@@ -52,6 +52,38 @@ class RevisionRepository extends ServiceEntityRepository
     }
 
     /**
+     * Les **cibles des demandes** qui ont écrit l'historique de ce sujet — une personne ou
+     * une famille chacune. C'est ce qui rattache à l'arbre une citation, une note, un fait
+     * ou un média : la demande qui les a ajoutés portait sur une fiche (révision du
+     * 2026-10-04 de l'ADR 0003, « un arbre par famille »).
+     *
+     * @return list<array{kind: SubjectKind, id: int}>
+     */
+    public function ciblesDesDemandes(SubjectKind $kind, int $id): array
+    {
+        /** @var list<array{targetKind: SubjectKind|null, targetId: int|null}> $lignes */
+        $lignes = $this->createQueryBuilder('r')
+            ->select('DISTINCT d.targetKind, d.targetId')
+            ->join('r.request', 'd')
+            ->andWhere('r.subjectKind = :kind')
+            ->andWhere('r.subjectId = :id')
+            ->setParameter('kind', $kind)
+            ->setParameter('id', $id)
+            ->getQuery()
+            ->getArrayResult();
+
+        $cibles = [];
+
+        foreach ($lignes as $ligne) {
+            if (null !== $ligne['targetKind'] && null !== $ligne['targetId']) {
+                $cibles[] = ['kind' => $ligne['targetKind'], 'id' => (int) $ligne['targetId']];
+            }
+        }
+
+        return $cibles;
+    }
+
+    /**
      * « Qu'est-ce que cette validation a réellement produit ? ».
      *
      * Une création en génère plusieurs — la personne, la famille, les filiations —, et

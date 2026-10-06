@@ -118,6 +118,50 @@ final class PortraitEtValidationTest extends CasDeTestMedia
         self::assertNull($media->getSubjectRequestId());
     }
 
+    public function testUnAncienPortraitRedevientLePortrait(): void
+    {
+        // Le cas signalé le 05/10/2026 : la validation du second portrait a relégué le
+        // premier, et il faut pouvoir revenir en arrière — sans rien détruire.
+        $premier = $this->deposerPortrait($this->administrateur());
+        $second = $this->deposerPortrait($this->administrateur());
+        self::assertSame(MediaStatus::Remplace, $premier->getStatus());
+
+        $this->circuit->remettreEnPortrait($premier);
+
+        self::assertSame(MediaStatus::Actif, $premier->getStatus());
+        self::assertTrue($premier->isActivePortrait());
+        self::assertSame(MediaStatus::Remplace, $second->getStatus());
+        self::assertFalse($second->isActivePortrait());
+        self::assertSame($premier->getId(), $this->medias->portraitActif(17)?->getId());
+
+        // Et c'est en base : un seul portrait actif, les deux toujours là.
+        $this->em->clear();
+        self::assertCount(2, $this->medias->pourSujet(
+            MediaSubject::Personne, 17, [MediaStatus::Actif, MediaStatus::Remplace], MediaKind::Portrait,
+        ));
+        self::assertSame($premier->getId(), $this->medias->portraitActif(17)?->getId());
+    }
+
+    public function testSeulUnAncienPortraitPeutEtreRemisEnPlace(): void
+    {
+        $actif = $this->deposerPortrait($this->administrateur());
+        $enAttente = $this->deposerPortrait($this->membre());
+
+        foreach ([$actif, $enAttente] as $media) {
+            try {
+                $this->circuit->remettreEnPortrait($media);
+                self::fail('Seul un portrait `remplace` se remet en place.');
+            } catch (DomainException $erreur) {
+                self::assertSame(409, $erreur->statutHttp());
+                self::assertSame('portrait_non_remplace', $erreur->codeErreur());
+            }
+        }
+
+        // Rien n'a bougé.
+        self::assertSame($actif->getId(), $this->medias->portraitActif(17)?->getId());
+        self::assertSame(MediaStatus::EnAttente, $enAttente->getStatus());
+    }
+
     public function testLaSuppressionAdministrativeEmporteLesDeuxFichiers(): void
     {
         $media = $this->deposerPortrait($this->administrateur());

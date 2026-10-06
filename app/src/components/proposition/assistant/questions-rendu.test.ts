@@ -82,7 +82,7 @@ describe('l’écran de l’assistant : « Poser une question »', () => {
     expect(html).toContain('Google Gemini')
     expect(html).toContain('ne modifie rien')
     // Rien de la proposition : ni documents, ni « Analyser ».
-    expect(html).not.toContain('Prendre en photo')
+    expect(html).not.toContain('Prendre une photo')
     expect(html).not.toContain('Analyser')
   })
 

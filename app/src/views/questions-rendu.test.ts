@@ -20,6 +20,9 @@
  *    à la compilation, ni à l'exécution, ni dans un navigateur — elle laisse
  *    juste le téléphone choisir sa caméra, et souvent la mauvaise.
  *
+ * L'attribut vit dans `BoutonsPhotos.vue`, commun à tous les écrans qui
+ * reçoivent une photo : on rend ce composant, et on vérifie que la vue s'en sert.
+ *
  * Il ne prouve **rien de la peinture**, ni du comportement des trois boutons :
  * cela demande un navigateur.
  *
@@ -31,6 +34,7 @@ import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 
 import QuestionsView, { etatDeLEcran, mentionDuModele } from './QuestionsView.vue'
+import BoutonsPhotos from '@/components/medias/BoutonsPhotos.vue'
 
 describe('etatDeLEcran', () => {
   it('montre un squelette tant que rien n’est arrivé', () => {
@@ -105,46 +109,29 @@ describe('QuestionsView', () => {
    * photographie un document ou une photo posée sur la table, jamais soi-même.
    */
   it('demande la caméra arrière sur l’entrée de fichier', async () => {
-    const html = await renderToString(createSSRApp(CarteDeQuestionSeule))
+    const html = await renderToString(
+      createSSRApp(BoutonsPhotos, { multiple: false, accept: 'image/*', importer: 'Importer une photo' }),
+    )
 
     expect(html).toContain('capture="environment"')
     expect(html).toContain('accept="image/*"')
     expect(html).not.toContain('capture="camera"')
     expect(html).not.toContain('capture="user"')
+    // Deux gestes, dits en clair — et non un « Parcourir… » de navigateur.
+    expect(html).toContain('Importer une photo')
+    expect(html).toContain('Prendre une photo')
+    expect(html).not.toContain('multiple')
+    expect(html).not.toContain('application/pdf')
   })
 })
 
-/**
- * La vue rendue **avec une question en main**.
- *
- * Le rendu serveur n'exécute pas `onMounted`, donc la vue seule s'arrête à son
- * squelette et ne peint aucune carte. On ne peut pas non plus lui injecter la
- * charge par une propriété : elle n'en a pas, et lui en donner une pour le seul
- * besoin d'un test ajouterait à l'écran une entrée que rien n'utiliserait.
- *
- * On rend donc **le même balisage de carte**, extrait tel quel du gabarit.
- * C'est une copie, et une copie peut diverger — d'où la garde : si le gabarit
- * de la vue perdait son `capture`, ce fichier resterait vert. Le second cas
- * ci-dessous lit donc le **source** du composant, qui ne peut pas diverger de
- * lui-même.
- */
-const CarteDeQuestionSeule = {
-  template: `
-    <label>
-      <input type="file" accept="image/*" capture="environment" />
-    </label>
-  `,
-}
-
 describe('le gabarit de la vue lui-même', () => {
   /**
-   * La garde de la copie ci-dessus : on lit le **source** du composant.
-   *
-   * Sans elle, quelqu'un retirerait `capture` de `QuestionsView.vue` et le cas
-   * précédent resterait vert — il ne mesurerait plus que sa propre copie. Un
-   * test qui ne peut annoncer qu'un seul résultat n'informe de rien.
+   * Le rendu ci-dessus est celui du composant commun. Sans cette garde, la vue
+   * pourrait revenir à un `<input>` nu, ou passer `capture="user"`, et le cas
+   * précédent resterait vert. On lit donc le **source** de la vue.
    */
-  it('porte capture="environment" SUR SON INPUT, et pas seulement dans un commentaire', async () => {
+  it('passe par les deux boutons communs, sans caméra avant', async () => {
     const { readFile } = await import('node:fs/promises')
     const { fileURLToPath } = await import('node:url')
 
@@ -153,18 +140,9 @@ describe('le gabarit de la vue lui-même', () => {
       'utf8',
     )
 
-    // ── LA PRÉCISION DE CETTE EXPRESSION EST LE TEST ─────────────────────
-    //
-    // Une première version se contentait de `toContain('capture="environment"')`.
-    // **Elle ne mesurait rien** : le gabarit porte un commentaire qui explique
-    // l'attribut et le cite mot pour mot. Retirer l'attribut de l'`<input>` en
-    // laissant le commentaire — exactement ce que fait un remaniement pressé —
-    // laissait le cas au vert. Constaté en cassant le code exprès.
-    //
-    // On exige donc l'attribut **à l'intérieur d'une balise `<input>`**, ce
-    // qu'aucun commentaire ne peut satisfaire.
-    expect(source).toMatch(/<input\b[^>]*\bcapture="environment"/s)
-    expect(source).toMatch(/<input\b[^>]*\baccept="image\/\*"/s)
+    expect(source).toMatch(/<BoutonsPhotos\b/)
+    expect(source).not.toMatch(/<input\b[^>]*\btype="file"/s)
+    expect(source).not.toMatch(/capture="user"/)
   })
 })
 

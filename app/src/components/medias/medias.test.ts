@@ -4,6 +4,7 @@ import {
   estImage,
   fusionnerMedias,
   ordonnerMedias,
+  ordonnerPortraits,
   pastilleDeMedia,
   tailleLisible,
   TAILLE_MAX_PAR_DEFAUT,
@@ -72,6 +73,10 @@ describe('§ 7.1 — déposé n’est pas validé', () => {
     // Un refus n'est pas une destruction : le média reste, et le dire est le
     // seul moyen pour le déposant de savoir ce qui est arrivé à son envoi.
     expect(pastilleDeMedia('refuse').etat).toBe('refusee')
+  })
+
+  it('un ancien portrait se dit « Ancien portrait », pas « Refusé »', () => {
+    expect(pastilleDeMedia('remplace')).toEqual({ etat: 'neutre', libelle: 'Ancien portrait' })
   })
 
   it('montre un statut inconnu plutôt que de le taire', () => {
@@ -161,5 +166,19 @@ describe('fusionnerMedias — deux requêtes, une galerie', () => {
     const fusion = fusionnerMedias(valides, attente)
     expect(fusion).toHaveLength(2)
     expect(fusion.map((m) => m.id).sort()).toEqual([7, 8])
+  })
+})
+
+describe('ordonnerPortraits — le carrousel', () => {
+  it('le portrait en place d’abord, puis l’attente, puis les anciens du plus récent au plus ancien', () => {
+    const liste = [
+      media({ id: 1, kind: 'portrait', status: 'remplace', createdAt: '2026-01-01T00:00:00+01:00' }),
+      media({ id: 2, kind: 'portrait', status: 'actif', isActivePortrait: true, createdAt: '2026-10-04T00:00:00+02:00' }),
+      media({ id: 3, kind: 'portrait', status: 'remplace', createdAt: '2026-10-01T00:00:00+02:00' }),
+      media({ id: 4, kind: 'portrait', status: 'en_attente' }),
+      media({ id: 5, kind: 'preuve', status: 'actif' }),
+    ]
+
+    expect(ordonnerPortraits(liste).map((m) => m.id)).toEqual([2, 4, 3, 1])
   })
 })

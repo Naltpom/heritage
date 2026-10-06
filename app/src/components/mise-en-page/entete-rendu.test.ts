@@ -189,6 +189,22 @@ describe('ce que l’en-tête garde', () => {
     expect(html).toContain('aria-controls="recherche-entete"')
   })
 
+  it('n’a pas de loupe sur un écran qui porte sa propre recherche (l’arbre, en bas)', async () => {
+    definirPage({ section: 'arbre', titre: 'Arbre', parent: null, rechercheLocale: true })
+    const html = await rendre()
+
+    expect(html).not.toContain('aria-controls="recherche-entete"')
+    // La recherche du bureau, au centre de l'en-tête, reste.
+    expect((html.match(/type="search"/g) ?? []).length).toBe(1)
+  })
+
+  it('reste collé en haut quand la page défile', async () => {
+    const html = await rendre()
+    const entete = /<header[^>]*class="([^"]*)"/.exec(html)?.[1] ?? ''
+
+    expect(entete.split(/\s+/)).toEqual(expect.arrayContaining(['sticky', 'top-0', 'z-30']))
+  })
+
   it('met la marque, les onglets, la recherche, la cloche puis l’avatar dans cet ordre', async () => {
     const html = await rendre()
     const positions = [

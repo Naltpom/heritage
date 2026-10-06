@@ -40,7 +40,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
  *
  *                          └── Paul Romarin (1960, vivant)
  *                                   └── Natron Romarin (1990, vivant, le lecteur, racine)
- *   Cousin Éloigné (3 JUN 1920, vivant, fiche CONFIDENTIELLE hors du cercle du lecteur)
+ *   Cousin Éloigné (3 JUN 1920, vivant, fiche CONFIDENTIELLE hors du cercle du lecteur),
+ *   second époux de Rose Chardon
  * ```
  *
  * Cousin Éloigné aurait 106 ans : il est le doyen de l'arbre. Un membre ne le voit pas —
@@ -58,6 +59,7 @@ final class StatistiquesTest extends WebTestCase
     private const int ROSE = 18;
     private const int JEAN_PETIT_FILS = 17;
     private const int PAUL = 50;
+    private const int SANS_LIEN = 60;
 
     private KernelBrowser $client;
 
@@ -183,6 +185,73 @@ final class StatistiquesTest extends WebTestCase
             'Ni son nom, ni son prénom ne sortent, par aucune clé — records, prénoms, noms de famille.',
         );
         self::assertSame(10, $charge['arbre']['personnes'], 'Les comptes, eux, comptent tout le monde.');
+    }
+
+    /**
+     * **Révision du 2026-10-04 de l'ADR 0003 — un arbre par famille.** Un ami est rattaché
+     * au cousin, dont l'arbre (lui seul, ici) n'est relié à aucun autre : pour le membre,
+     * cet arbre n'existe pas — ni dans les records, ni même dans les totaux.
+     */
+    public function testLArbreDUnAutreCompteNeCompteNullePart(): void
+    {
+        $ami = $this->creerUtilisateur('ami@example.test');
+        $identifiant = $ami->getId();
+        \assert(null !== $identifiant);
+        $membre = new Member($identifiant, 'ami@example.test', self::HORS_CERCLE, 'Cousin Éloigné', MatchKind::PreLie);
+        $membre->setStatus(MemberStatus::Actif);
+        $membre->activer();
+        $this->em()->persist($membre);
+        $this->em()->flush();
+
+        $this->connecterUnMembre();
+        $this->requete('GET', '/api/explorer/stats');
+
+        self::assertResponseIsSuccessful();
+        self::assertSame(9, $this->charge()['arbre']['personnes'], 'Le cousin, rattaché à un autre compte, ne compte plus.');
+        self::assertStringNotContainsString('Cousin', (string) $this->client->getResponse()->getContent());
+    }
+
+    /**
+     * Décision du 05/10/2026 : les chiffres ne comptent que l'arbre du lecteur. Une fiche
+     * que rien ne relie aux Romarin est « sans lien connu » : le membre peut la lire
+     * ailleurs, mais elle n'entre pas dans ses statistiques — et `tout` ne lui est pas
+     * accordé.
+     */
+    public function testUnMembreNeCompteQueSonArbre(): void
+    {
+        $this->poser(self::SANS_LIEN, 'Isidore', 'Ermite', Sex::Masculin, '1700', '1750');
+        $this->connecterUnMembre();
+
+        foreach (['/api/explorer/stats', '/api/explorer/stats?portee=tout'] as $chemin) {
+            $this->requete('GET', $chemin);
+
+            self::assertResponseIsSuccessful();
+            $charge = $this->charge();
+            self::assertSame('arbre', $charge['portee'], $chemin);
+            self::assertSame(10, $charge['arbre']['personnes'], $chemin.' : la fiche sans lien ne compte pas.');
+            self::assertStringNotContainsString('Ermite', (string) $this->client->getResponse()->getContent(), $chemin);
+        }
+    }
+
+    public function testLAdministrateurBasculeEntreSonArbreEtToutLaBase(): void
+    {
+        $this->poser(self::SANS_LIEN, 'Isidore', 'Ermite', Sex::Masculin, '1700', '1750');
+        $this->connecterUnAdministrateur();
+
+        // Sans fiche à lui, l'administrateur part de la racine.
+        $this->requete('GET', '/api/explorer/stats');
+        self::assertSame('arbre', $this->charge()['portee']);
+        self::assertSame(10, $this->charge()['arbre']['personnes']);
+
+        $this->requete('GET', '/api/explorer/stats?portee=tout');
+        self::assertSame('tout', $this->charge()['portee']);
+        self::assertSame(11, $this->charge()['arbre']['personnes']);
+
+        $this->requete('GET', '/api/administration/stats/chantier');
+        self::assertSame(4, $this->charge()['fiches']['sansParents']['n'], 'Jean, Marie, Rose et le cousin.');
+
+        $this->requete('GET', '/api/administration/stats/chantier?portee=tout');
+        self::assertSame(5, $this->charge()['fiches']['sansParents']['n'], 'La fiche sans lien en plus.');
     }
 
     public function testLAdministrateurVoitLeDoyenConfidentiel(): void
@@ -314,6 +383,10 @@ final class StatistiquesTest extends WebTestCase
         // la racine (sosa 4) est le dernier Jean Romarin.
         ReleveEnMemoire::ajouterFamille(102, self::JEAN_PETIT_FILS, null, [self::PAUL], '', -2);
         ReleveEnMemoire::ajouterFamille(103, self::PAUL, null, [self::LECTEUR], '', -1);
+        // Le cousin a épousé Rose en secondes noces (sans date) : il est de l'arbre, donc
+        // des statistiques de chacun (décision du 05/10/2026, « mon arbre »). Le cercle,
+        // lui, ne connaît pas cette union : il reste hors de celui du lecteur.
+        ReleveEnMemoire::ajouterFamille(104, self::HORS_CERCLE, self::ROSE, [], '', -3);
         ReleveEnMemoire::racine(self::LECTEUR);
 
         ReleveEnMemoire::ajouterMetier(self::JEAN, 'tisserand', '1850');

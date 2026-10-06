@@ -261,6 +261,27 @@ final class RoutesDesEvenementsTest extends CasDeTestEvenements
         self::assertSame($nom, $this->charge()['quiVient']['presents'][0]['libelle']);
     }
 
+    /**
+     * **Révision du 2026-10-04 de l'ADR 0003 — un arbre par famille.** `voisine` n'est
+     * reliée à aucune autre fiche : son arbre est le sien. Un ami s'y rattache après
+     * l'invitation. Jaspe, invitée, ne compte plus que les invités de son périmètre ;
+     * l'organisatrice, qui les a conviés, les compte tous.
+     */
+    public function testUnInviteNeCompteQueLesInvitesDeSonArbre(): void
+    {
+        $this->semerLeCercle(voisineConfidentielle: false);
+        $id = $this->cousinade(['ego', 'conjointe', 'voisine']);
+        $this->rattacher('ami@example.invalid', 'voisine');
+
+        $this->connexionDe(self::JASPE);
+        $this->requete("/api/evenements/{$id}");
+        self::assertSame(2, $this->charge()['nombreDInvites']);
+
+        $this->connexionDe(self::OPALE);
+        $this->requete("/api/evenements/{$id}");
+        self::assertSame(3, $this->charge()['nombreDInvites']);
+    }
+
     /* ───────────────── Qui voit, qui gère ───────────────── */
 
     public function testUnEvenementEstIntrouvablePourQuiNEnEstPasMaisLAdministrateurVoitTout(): void

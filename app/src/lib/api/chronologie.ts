@@ -38,7 +38,7 @@
  */
 
 import { requeteApi, type OptionsRequete } from './client'
-import type { Branche, Sexe } from './types'
+import type { Branche, PorteeExplorer, Sexe } from './types'
 
 /** § 9.1 — sens de lecture. `lignes` : une **ligne** par tranche de N années,
  *  donc un axe du temps **vertical** (le plus ancien en haut), conforme au
@@ -201,6 +201,8 @@ export interface ParametresChronologie {
   bande?: number
   orientation?: OrientationChronologie
   branches?: readonly Branche[]
+  /** L'arbre du lecteur (défaut) ou toute la base (administration seulement). */
+  portee?: PorteeExplorer
 }
 
 /** `exactOptionalPropertyTypes` interdit de poser `signal: undefined` sur une
@@ -238,6 +240,7 @@ export function chargerChronologie(
       parametres.branches !== undefined && parametres.branches.length > 0
         ? parametres.branches.join(',')
         : undefined,
+    portee: parametres.portee,
   }
   return requeteApi<VueChronologie>('/chronologie', o)
 }

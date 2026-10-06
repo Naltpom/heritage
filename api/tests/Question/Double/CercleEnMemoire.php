@@ -31,6 +31,9 @@ final class CercleEnMemoire implements CercleDeVisibiliteInterface
     /** @var array<int, true> */
     private array $personnes = [];
 
+    /** @var array<int, true> les fiches de l'arbre d'un autre compte */
+    private array $horsPerimetre = [];
+
     /** @param list<int> $personnes */
     public function __construct(private Regime $regime = Regime::Cercle, array $personnes = [])
     {
@@ -58,9 +61,24 @@ final class CercleEnMemoire implements CercleDeVisibiliteInterface
         return $this->regime;
     }
 
+    /** Ces fiches sont de l'arbre d'un autre compte (ADR 0003, révision du 2026-10-04). */
+    public function horsPerimetre(int ...$personIds): self
+    {
+        foreach ($personIds as $id) {
+            $this->horsPerimetre[$id] = true;
+        }
+
+        return $this;
+    }
+
+    public function dansLePerimetre(int $personId): bool
+    {
+        return !isset($this->horsPerimetre[$personId]);
+    }
+
     public function voitPersonne(int $personId): bool
     {
-        return Regime::Cercle === $this->regime && isset($this->personnes[$personId]);
+        return Regime::Cercle === $this->regime && isset($this->personnes[$personId]) && $this->dansLePerimetre($personId);
     }
 
     public function filtrerPersonnes(array $personIds): array

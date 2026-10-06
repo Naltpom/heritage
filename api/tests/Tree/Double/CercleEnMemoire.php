@@ -48,6 +48,12 @@ final class CercleEnMemoire implements CercleDeVisibiliteInterface
         return $this->regime;
     }
 
+    /** Un seul arbre dans ce double : tout est dans le périmètre. */
+    public function dansLePerimetre(int $personId): bool
+    {
+        return true;
+    }
+
     public function voitPersonne(int $personId): bool
     {
         return Regime::Cercle === $this->regime && isset($this->personnes[$personId]);

@@ -78,10 +78,11 @@ final class AdministrationDemandeController extends AbstractController
             $page,
             $parPage,
             $this->auteur($requete),
+            $requete->query->getString('q'),
         );
 
         return $this->charge($this->serialiseur->enveloppe(
-            array_map($this->serialiseur->resume(...), $resultat['elements']),
+            $this->serialiseur->resumes($resultat['elements']),
             $resultat['total'],
             $page,
             $parPage,
@@ -261,11 +262,27 @@ final class AdministrationDemandeController extends AbstractController
         return '' === $brut ? null : RequestStatus::tryFrom($brut);
     }
 
-    private function nature(Request $requete): ?RequestKind
+    /**
+     * Une nature, ou plusieurs séparées par des virgules — les onglets de la file en
+     * regroupent (« Modifications », « Liens »). Une nature inconnue est ignorée, et
+     * aucune nature connue vaut pas de filtre — comme avant, pour une nature seule.
+     *
+     * @return list<RequestKind>|null
+     */
+    private function nature(Request $requete): ?array
     {
         $brut = $requete->query->getString('kind');
 
-        return '' === $brut ? null : RequestKind::tryFrom($brut);
+        if ('' === $brut) {
+            return null;
+        }
+
+        $natures = array_values(array_filter(array_map(
+            static fn (string $k): ?RequestKind => RequestKind::tryFrom(trim($k)),
+            explode(',', $brut),
+        )));
+
+        return [] === $natures ? null : $natures;
     }
 
     private function cible(Request $requete): ?int

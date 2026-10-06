@@ -6,6 +6,7 @@ namespace App\Module\Proposal\Controller;
 
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Security\ReserveAuxMembres;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Proposal\Entity\ChangeRequest;
@@ -113,7 +114,7 @@ final class DemandeController extends AbstractController
         );
 
         return $this->charge($this->serialiseur->enveloppe(
-            array_map($this->serialiseur->resume(...), $resultat['elements']),
+            $this->serialiseur->resumes($resultat['elements']),
             $resultat['total'],
             $page,
             $parPage,
@@ -327,6 +328,19 @@ final class DemandeController extends AbstractController
             throw new Introuvable('Historique introuvable.');
         }
 
+        // Une citation, une note, un fait, un média n'ont pas de nom à masquer, mais ils
+        // appartiennent à une fiche : celle que visaient les demandes qui les ont écrits.
+        // Fermée, ou dans l'arbre d'un autre compte (révision du 2026-10-04 de
+        // l'ADR 0003), l'historique l'est aussi — le même `404`.
+        if (SubjectKind::Personne !== $kind && SubjectKind::Famille !== $kind) {
+            foreach ($revisions->ciblesDesDemandes($kind, $subjectId) as $cible) {
+                if (\in_array($cible['kind'], [SubjectKind::Personne, SubjectKind::Famille], true)
+                    && $masques->sujetFerme($cible['kind'], $cible['id'])) {
+                    throw new Introuvable('Historique introuvable.');
+                }
+            }
+        }
+
         [$page, $parPage] = $this->pagination($requete);
         $resultat = $revisions->historique($kind, $subjectId, $page, $parPage);
 
@@ -376,11 +390,13 @@ final class DemandeController extends AbstractController
     // L'inventaire décrit une fiche de l'arbre : lecture réservée aux membres (ADR 0003,
     // révision du 01/10/2026). Un compte en attente ne dépose de toute façon rien.
     #[ReserveAuxMembres]
-    public function apercuDeSuppression(int $personneId, InventaireDeLaSuppression $inventaires): JsonResponse
+    public function apercuDeSuppression(int $personneId, InventaireDeLaSuppression $inventaires, CercleDeVisibiliteInterface $cercle): JsonResponse
     {
         $this->lecteurs->courant();
 
-        $inventaire = $inventaires->de($personneId);
+        // L'arbre d'une autre famille : `404`, comme une fiche inexistante (révision du
+        // 2026-10-04 de l'ADR 0003). L'inventaire nomme la fiche et ses descendants.
+        $inventaire = $cercle->dansLePerimetre($personneId) ? $inventaires->de($personneId) : null;
 
         if (null === $inventaire) {
             throw Introuvable::cible(SubjectKind::Personne->value, $personneId);

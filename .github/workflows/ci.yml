@@ -5,7 +5,7 @@
 # Cinq portes bloquantes, plus la construction des images :
 #
 #   1. phpstan niveau 6, zéro erreur          (travail « api »)
-#   2. phpunit                                 (travail « api »)
+#   2. phpunit, en parallèle (paratest)        (travail « api »)
 #   3. vue-tsc --noEmit                        (travail « app »)
 #   4. vitest, et 4 bis : ses sauts sont déclarés  (travail « app »)
 #   5. npm run build                           (travail « app »)
@@ -202,11 +202,22 @@ jobs:
       # en échecs. C'est le cœur de la porte 2 bis : ici, un saut ne veut pas dire
       # « sans objet », il veut dire « le service n'est pas branché » — et c'est
       # précisément ce qu'on ne doit pas apprendre en vert.
-      - name: Porte 2 — tests (phpunit)
+      #
+      # EN PARALLÈLE, un processus par cœur (paratest, 05/10/2026). La suite est la
+      # porte la plus longue de la CI — 4 min 24 sur la #295, les trois quarts du
+      # travail « api » — et son temps est réparti : 1923 cas d'environ 0,2 s, aucun
+      # au-delà de 4 s. Rien à gagner test par test ; tout à gagner en les
+      # répartissant. `tests/bootstrap.php` isolait déjà chaque processus (base
+      # SQLite, pools de cache et conteneur au nom du PID) : la suite était prête.
+      # Mesuré sur 4 cœurs, ceux d'un exécuteur de dépôt public : 5 min 40 → 2 min 02,
+      # mêmes 1923 cas, mêmes sauts, et le même rapport JUnit pour la porte 2 bis
+      # (paratest lit `phpunit.dist.xml`, `failOn*` et `<logging>` compris).
+      # `vendor/bin/phpunit` reste la commande d'un poste de développement.
+      - name: Porte 2 — tests (phpunit, en parallèle)
         env:
           HERITAGE_DSN_REEL: postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage
           HERITAGE_EXIGE_BASE_REELLE: '1'
-        run: php vendor/bin/phpunit
+        run: php vendor/bin/paratest --processes="$(nproc)"
 
       # Porte 2 bis. **Le décompte est lu, pas supposé.**
       #
@@ -284,9 +295,13 @@ jobs:
     name: Docker — compose + build des deux images
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Après les portes de qualité : reconstruire deux images pour du code qui ne
-    # compile pas est du temps de machine dépensé pour rien.
-    needs: [api, app]
+    # EN MÊME TEMPS que les autres travaux, sans `needs:` (05/10/2026). Il attendait
+    # « api » et « app », pour ne pas reconstruire deux images pour du code qui ne
+    # compile pas. Mais le dépôt est public — les minutes ne coûtent rien — et la
+    # porte de `deploy.yml` exige de toute façon la CI ENTIÈRE au vert. L'attente
+    # ne protégeait rien et coûtait ses deux minutes à chaque CI : mesuré sur la
+    # #295, 8 min 05 de bout en bout, dont 2 min 10 de Docker posées APRÈS les
+    # 5 min 47 de l'API, alors qu'elles pouvaient courir pendant.
     steps:
       - uses: actions/checkout@v4
 

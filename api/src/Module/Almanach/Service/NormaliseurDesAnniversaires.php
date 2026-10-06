@@ -65,9 +65,9 @@ final class NormaliseurDesAnniversaires
     }
 
     /** @return array<string, mixed> la charge complète de `GET /api/anniversaires` */
-    public function vue(): array
+    public function vue(bool $toutLaBase = false): array
     {
-        $flux = $this->flux->pourLeLecteur();
+        $flux = $this->flux->pourLeLecteur($toutLaBase);
 
         /** @var array<string, array{mois: int, jour: int, evenements: list<array<string, mixed>>}> $jours */
         $jours = [];

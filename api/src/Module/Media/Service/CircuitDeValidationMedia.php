@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Media\Service;
 
+use App\Module\Core\Exception\ConflictException;
 use App\Module\Media\Entity\Media;
 use App\Module\Media\Enum\MediaKind;
 use App\Module\Media\Enum\MediaStatus;
@@ -103,6 +104,43 @@ final class CircuitDeValidationMedia
             }
 
             $media->setActivePortrait(true);
+            $this->em->flush();
+        });
+    }
+
+    /**
+     * Un **ancien portrait** (`remplace`) redevient le portrait de la personne ; celui
+     * qui était en place passe à son tour `remplace`. Rien n'est détruit, ni d'un côté
+     * ni de l'autre : c'est le même échange que {@see valider()}, dans l'autre sens.
+     *
+     * Le cas qui l'a motivé (05/10/2026) : deux portraits de la même aïeule, déposés par
+     * deux membres de la famille ; la validation du second a relégué le premier, et
+     * aucun geste ne permettait de revenir en arrière.
+     *
+     * Seul un portrait `remplace` d'une personne s'y prête : un portrait en attente
+     * passe par la validation de sa demande, et un refusé n'a pas à revenir par ici.
+     *
+     * @throws ConflictException `portrait_non_remplace` sinon
+     */
+    public function remettreEnPortrait(Media $media): void
+    {
+        if (MediaKind::Portrait !== $media->getKind()
+            || MediaSubject::Personne !== $media->getSubjectKind()
+            || MediaStatus::Remplace !== $media->getStatus()
+            || null === $media->getSubjectId()) {
+            throw new ConflictException('portrait_non_remplace', 'Seul un ancien portrait peut redevenir le portrait de la personne.');
+        }
+
+        $this->em->wrapInTransaction(function () use ($media): void {
+            $actuel = $this->medias->portraitActif((int) $media->getSubjectId());
+
+            // La démotion d'abord, vidée seule : voir `valider()` pour l'index partiel.
+            if (null !== $actuel && $actuel->getId() !== $media->getId()) {
+                $actuel->setActivePortrait(false)->setStatus(MediaStatus::Remplace)->toucher();
+                $this->em->flush();
+            }
+
+            $media->setStatus(MediaStatus::Actif)->setActivePortrait(true)->toucher();
             $this->em->flush();
         });
     }

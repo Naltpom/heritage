@@ -453,6 +453,33 @@ final class MediaController extends AbstractController
     }
 
     /**
+     * Un **ancien portrait** redevient le portrait de la personne — sans corps.
+     *
+     * `ADMIN` seulement, comme la suppression (§ 7.6) : un membre ne change pas l'arbre
+     * directement. Il reçoit `403` — il a vu le média, son existence n'est pas un secret
+     * pour lui ; c'est l'action qui lui est refusée. `409 portrait_non_remplace` sur un
+     * média qui n'est pas un ancien portrait.
+     *
+     * Rend la charge du média, devenu `actif` et `isActivePortrait`.
+     */
+    #[Route('/{id}/portrait-actif', name: 'media_remettre_en_portrait', requirements: ['id' => '\d+'], methods: ['POST'])]
+    public function remettreEnPortrait(int $id): Response
+    {
+        $this->bascule->refuserSiActive();
+
+        $lecteur = $this->lecteur();
+        $media = $this->voir($id, $lecteur);
+
+        if (!$lecteur->administrateur) {
+            throw new ForbiddenException();
+        }
+
+        $this->circuit->remettreEnPortrait($media);
+
+        return $this->charge($this->normaliseur->normaliser($media, $lecteur));
+    }
+
+    /**
      * Le compte a-t-il un rattachement **en attente** ? — sans fiche validée, mais ni
      * suspendu ni inexistant. Lu à l'annuaire de `Core` (`membreDuCompte()`), que
      * `Membership` implémente : aucune dépendance nouvelle vers ce module.

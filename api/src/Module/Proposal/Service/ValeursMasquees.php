@@ -96,6 +96,12 @@ final readonly class ValeursMasquees
             return false;
         }
 
+        // L'arbre d'un autre compte : masquée, défunte comprise — la règle des défunts ne
+        // vaut que dans le périmètre (révision du 2026-10-04 de l'ADR 0003).
+        if (!$this->cercle->dansLePerimetre($id)) {
+            return true;
+        }
+
         $cible = $this->arbre->chargerCible($kind, $id);
 
         return null !== $cible && true !== (bool) ($cible->valeurs['deceased'] ?? false);
