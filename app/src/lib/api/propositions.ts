@@ -1536,8 +1536,8 @@ export type OperationDeRevision =
  * `changes` est rendu **formaté** côté serveur, champ par champ :
  * `{ "birth": { "avant": "1987", "apres": "entre 1901 et 1909" } }`. Pour une
  * création, `avant` vaut `null` partout ; sur une fiche masquée, `avant` est
- * **retiré** — d'où les deux clés facultatives. `requestId` à `null` signale un
- * import GEDCOM, jamais un raccourci d'écriture (§ 5.5).
+ * **retiré** — d'où les deux clés facultatives. `requestId` à `null` signale une
+ * demande effacée hors de l'application, jamais un raccourci d'écriture (§ 5.5).
  */
 export interface RevisionDeFiche {
   id: number

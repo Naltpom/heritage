@@ -59,7 +59,7 @@ final class EmpreinteDeLArbreTest extends TestCase
         self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $valeur);
     }
 
-    /** Sur un arbre vide aussi : la route du graphe doit répondre avant tout import. */
+    /** Sur un arbre vide aussi : la route du graphe doit répondre avant que l'arbre soit chargé. */
     public function testElleTientSurUnArbreVide(): void
     {
         self::assertMatchesRegularExpression('/^[0-9a-f]{64}$/', $this->empreinte->empreinte());

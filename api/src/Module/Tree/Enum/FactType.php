@@ -10,9 +10,9 @@ namespace App\Module\Tree\Enum;
  *
  * Ces quatre-là sont des colonnes de `tree_person` et `tree_family`, pas des
  * `tree_fact` : ils sont lus à chaque sérialisation, à chaque passage du moteur de
- * placement et à chaque barre de la vue chronologique. Corollaire à respecter à
- * l'import : `BIRT` et `DEAT` vont dans les colonnes et **n'en font pas aussi** des
- * faits. Un fait dupliqué est une divergence qui attend son heure.
+ * placement et à chaque barre de la vue chronologique. Corollaire à respecter par
+ * toute écriture : la naissance et le décès vont dans les colonnes et **n'en font pas
+ * aussi** des faits. Un fait dupliqué est une divergence qui attend son heure.
  */
 enum FactType: string
 {
@@ -34,20 +34,6 @@ enum FactType: string
             self::BaptemeReligieux => 'Baptême religieux',
             self::Bapteme => 'Baptême',
             self::Autre => 'Événement',
-        };
-    }
-
-    /** Le tag GEDCOM correspondant, pour l'import comme pour l'export. */
-    public function gedcom(): string
-    {
-        return match ($this) {
-            self::Profession => 'OCCU',
-            self::Residence => 'RESI',
-            self::Inhumation => 'BURI',
-            self::Recensement => 'CENS',
-            self::BaptemeReligieux => 'CHR',
-            self::Bapteme => 'BAPM',
-            self::Autre => 'EVEN',
         };
     }
 }

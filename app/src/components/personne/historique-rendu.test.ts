@@ -138,14 +138,14 @@ describe('historique.ts — une seule frise, du plus récent au plus ancien', ()
     expect(entrees.map((e) => e.cle)).toEqual(['note-2', 'citation-1'])
   })
 
-  it('une révision dit sa demande d’origine, ou l’import GEDCOM quand elle n’en a pas', () => {
-    const [modifiee, importee] = entreesDHistorique({ citations: [], notes: [], medias: [] }, [
+  it('une révision dit sa demande d’origine, ou qu’elle n’en a plus', () => {
+    const [modifiee, orpheline] = entreesDHistorique({ citations: [], notes: [], medias: [] }, [
       revision(),
       revision({ id: 150, requestId: null, appliedAt: '2026-08-01T08:00:00+02:00' }),
     ])
-    expect(modifiee).toMatchObject({ titre: 'Fiche modifiée', demandeId: 14, importGedcom: false })
+    expect(modifiee).toMatchObject({ titre: 'Fiche modifiée', demandeId: 14, sansDemande: false })
     expect(modifiee?.lignes).toEqual(['Naissance : 1987 → entre 1901 et 1909'])
-    expect(importee).toMatchObject({ demandeId: null, importGedcom: true })
+    expect(orpheline).toMatchObject({ demandeId: null, sansDemande: true })
   })
 
   it('traduit les noms de champ, garde les valeurs formatées du serveur, résume au-delà de quatre', () => {

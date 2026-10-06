@@ -7,7 +7,7 @@
  * (`vector-effect: non-scaling-stroke`) et aucun texte n'est dans le SVG — les
  * libellés des deux bouts sont du HTML, qu'aucun étirement ne déforme.
  *
- * Un seul point (un arbre importé ce mois-ci) se dessine en pastille : une
+ * Un seul point (un arbre commencé ce mois-ci) se dessine en pastille : une
  * courbe d'un point n'a pas de trait.
  */
 import { computed } from 'vue'

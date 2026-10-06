@@ -316,7 +316,7 @@ describe('le mois, troisième précision', () => {
  * `mois` est une précision légitime de ce corpus, et le contributeur qui la
  * connaît doit pouvoir l'écrire. C'est ce qui a été fait pour `mois`.
  *
- * Restent `depuis` et `jusqu_a`, que l'import produit mais qu'un contributeur
+ * Restent `depuis` et `jusqu_a`, que l'import initial a produits mais qu'un contributeur
  * n'écrit jamais : pour eux, c'est le refus — et il est verrouillé, pas vide.
  */
 describe('le cas de perte de donnée : une date que l’éditeur ne sait pas rééditer', () => {

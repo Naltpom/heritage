@@ -50,8 +50,8 @@ use App\Module\Proposal\Service\Port\PortArbre;
  * **rendu sur la fiche** par le normaliseur de personne. Le `Lecteur` reçu ici est
  * l'administrateur qui valide ; inscrire son nom sous le raisonnement d'un autre serait
  * faux deux fois — il n'a pas écrit la note, et le membre qui l'a écrite disparaîtrait.
- * `null` ne conviendrait pas davantage : pour cette colonne, `null` veut dire « importée
- * du GEDCOM » (§ 3.5).
+ * `null` ne conviendrait pas davantage : pour cette colonne, `null` veut dire « venue
+ * de l'import GEDCOM initial » (§ 3.5).
  *
  * ## Le sujet de la révision est la note
  *

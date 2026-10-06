@@ -90,7 +90,7 @@ final class CreerAdministrateurCommand extends Command
         $io->success(\sprintf('Administrateur « %s » créé.', $courriel));
 
         // Rappel utile : cette création n'est pas au journal d'audit. Le souscripteur
-        // Doctrine ne journalise pas hors requête HTTP (sinon un import GEDCOM écrirait
+        // Doctrine ne journalise pas hors requête HTTP (sinon une commande en écrirait
         // des centaines de lignes sans acteur ni IP). La trace d'un amorçage est dans
         // l'historique du serveur, pas dans l'application.
         $io->note('Création en console : non journalisée dans core_audit_log.');

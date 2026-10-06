@@ -126,8 +126,14 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * relance. Ce sont des **décisions** : l'invitation a sa table parce qu'elle a sa vie
      * propre (vue, réponse, relance, lien personnel) et qu'un événement en compte des
      * dizaines ; le compte de l'invité n'y est pas figé, il se lit au rattachement.
+     *
+     * **43 depuis le 2026-10-06** : `ged_run` et `ged_issue` sont supprimées avec le module
+     * `Gedcom` (`migrations/Version20261014090000.php`, ADR 0018). C'est une **décision** :
+     * l'import pouvait réécrire en silence ce que les demandes avaient fait valider, et ces
+     * deux tables n'en portaient que le journal. Les colonnes `gedcom_xref` restent : ce
+     * sont les identifiants stables de l'arbre.
      */
-    private const int NOMBRE_DE_TABLES = 45;
+    private const int NOMBRE_DE_TABLES = 43;
 
     public function testLeMappingEstValide(): void
     {
@@ -164,7 +170,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      */
     public function testChaqueTablePorteLePrefixeDeSonModule(): void
     {
-        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_', 'evt_', 'dmr_', 'ast_'];
+        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'qst_', 'trg_', 'evt_', 'dmr_', 'ast_'];
 
         foreach ($this->tablesDuMapping() as $table) {
             $porteUnPrefixe = array_filter(
@@ -174,7 +180,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
 
             self::assertNotEmpty(
                 $porteUnPrefixe,
-                \sprintf('La table « %s » ne porte aucun des huit préfixes de module.', $table),
+                \sprintf('La table « %s » ne porte aucun des préfixes de module.', $table),
             );
         }
     }
@@ -272,8 +278,9 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * Six formes, parce que ce sont celles que Doctrine produit :
      * `CREATE TABLE t (col def, …, PRIMARY KEY (…))`, `ALTER TABLE t ADD col def`,
      * `ALTER TABLE t DROP col`, `ALTER TABLE t ALTER col TYPE x [USING …]`,
-     * `ALTER TABLE t ALTER col DROP|SET NOT NULL` et
-     * `ALTER TABLE t ALTER col DROP DEFAULT|SET DEFAULT x`. Tout le reste — index,
+     * `ALTER TABLE t ALTER col DROP|SET NOT NULL`,
+     * `ALTER TABLE t ALTER col DROP DEFAULT|SET DEFAULT x` et `DROP TABLE t` — la
+     * dernière depuis la suppression de `ged_run` et `ged_issue` (ADR 0018). Tout le reste — index,
      * contraintes, données — est ignoré ici et couvert ailleurs.
      *
      * ⚠ **La quatrième manquait, et son absence rendait ce test faux dans un sens qu'on ne
@@ -311,6 +318,11 @@ final class SchemaSynchroniseTest extends KernelTestCase
                     [$nom, $definition] = $this->nomEtDefinition($morceau);
                     $tables[$t[1]][$nom] = $definition;
                 }
+                continue;
+            }
+
+            if (1 === preg_match('/^DROP TABLE ([a-z0-9_]+)$/i', $sql, $t)) {
+                unset($tables[$t[1]]);
                 continue;
             }
 
@@ -583,6 +595,11 @@ final class SchemaSynchroniseTest extends KernelTestCase
      *
      * C'est le cas qu'une simple inclusion laisserait passer — supprimer une entité sans
      * toucher à la migration, ou l'inverse.
+     *
+     * L'historique est **rejoué**, `DROP TABLE` compris : une table créée par une
+     * migration déjà jouée puis supprimée par une suivante (`ged_run`, `ged_issue` —
+     * ADR 0018) n'existe plus, et ne doit plus avoir d'entité. Retoucher la migration qui
+     * l'a créée pour la faire taire serait la faute que ce fichier existe pour empêcher.
      */
     public function testLaMigrationNeCreeQueDesTablesQuiOntUneEntite(): void
     {
@@ -590,10 +607,16 @@ final class SchemaSynchroniseTest extends KernelTestCase
 
         foreach ($this->sqlDesMigrations() as $instruction) {
             if (1 === preg_match('/^CREATE TABLE ([a-z0-9_]+) /i', $instruction, $trouve)) {
-                $tablesDeLaMigration[] = $trouve[1];
+                $tablesDeLaMigration[$trouve[1]] = $trouve[1];
+                continue;
+            }
+
+            if (1 === preg_match('/^DROP TABLE ([a-z0-9_]+)$/i', $instruction, $trouve)) {
+                unset($tablesDeLaMigration[$trouve[1]]);
             }
         }
 
+        $tablesDeLaMigration = array_values($tablesDeLaMigration);
         sort($tablesDeLaMigration);
         $tablesDuMapping = $this->tablesDuMapping();
 

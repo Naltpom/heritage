@@ -10,9 +10,9 @@ use App\Module\Core\Service\CleDeRecherche;
  * Normalise un terme de recherche dans la forme de `tree_person.search_key` : sans
  * accents, en majuscules, ponctuation retirée.
  *
- * **La duplication est levée.** La table de repliement vivait ici *et* dans
- * `Gedcom\Service\NormalisateurNom`, qui **écrit** `search_key` — `Tree` n'ayant pas le
- * droit de l'importer (ADR 0002, règle 3 : `Core` seul en liste blanche). Elle est
+ * **La duplication est levée.** La table de repliement vivait ici *et* dans le module
+ * `Gedcom` (supprimé depuis, ADR 0018), qui **écrivait** `search_key` — `Tree` n'ayant pas
+ * le droit de l'importer (ADR 0002, règle 3 : `Core` seul en liste blanche). Elle est
  * remontée dans {@see CleDeRecherche}, comme l'arbitrage **E** l'a fait pour
  * `UncertainDate`, `DateQualifier`, `Sex` et `Branch`. Il n'existe donc plus qu'une seule
  * définition, appelée des deux côtés — c'est elle qui porte le motif pour lequel `iconv
@@ -60,7 +60,8 @@ final class NormaliseurDeRequete
     /**
      * Le terme de recherche, dans la forme exacte de `tree_person.search_key`.
      *
-     * **Même appel que celui de l'import** : c'est toute la garantie. Si cette méthode
+     * **Même appel que celui qui écrit la colonne** ({@see \App\Module\Tree\Service\NormalisateurNom}) :
+     * c'est toute la garantie. Si cette méthode
      * cessait de passer par `Core`, la colonne et la requête pourraient à nouveau
      * diverger — et la recherche cesserait de trouver les noms accentués sans que rien
      * ne tombe.

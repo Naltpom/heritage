@@ -52,7 +52,7 @@ final class AuditService
 
     /**
      * Consigne une décision. `$acteur` à `null` = on prend l'utilisateur de la session
-     * courante ; il reste `null` pour les actions système (import en console).
+     * courante ; il reste `null` pour les actions système (commande en console).
      *
      * @param array<string, mixed>|null $changes
      */

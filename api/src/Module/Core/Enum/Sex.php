@@ -26,14 +26,4 @@ enum Sex: string
             self::Inconnu => 'Inconnu',
         };
     }
-
-    /** Le code GEDCOM correspondant, pour l'import comme pour l'export. */
-    public function gedcom(): string
-    {
-        return match ($this) {
-            self::Masculin => 'M',
-            self::Feminin => 'F',
-            self::Inconnu => 'U',
-        };
-    }
 }

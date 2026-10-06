@@ -249,9 +249,9 @@ class DraftPerson
      *
      * `'(sans nom)'` est inatteignable pour une fiche déposée aujourd'hui — le
      * constructeur exige un nom ou un prénom, et `ck_prp_draft_person_nom` le redit en
-     * base. Le repli reste pour les quatre individus sans `NAME` qu'un import GEDCOM
-     * pourrait un jour faire passer par ici : une ligne vide à l'écran de décision serait
-     * pire qu'une mention explicite.
+     * base. Le repli reste pour une ligne écrite avant cette contrainte ou hors de
+     * l'application : une ligne vide à l'écran de décision serait pire qu'une mention
+     * explicite.
      */
     public function nomPropose(): string
     {

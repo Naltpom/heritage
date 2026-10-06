@@ -59,8 +59,17 @@ ce qui n'affirme rien sur une personne n'entre pas dans la file.
   jamais ce numéro ; le jour où elle le ferait, le ré-import remplacerait notre notice par
   une autre, et ses citations changeraient de source sans bruit. La colonne est
   `NULL`-able et son index `UNIQUE` admet plusieurs `NULL` : rien ne manque au modèle.
+
+  > **Remplacé par l'[ADR 0018](0018-suppression-de-l-import-gedcom.md) (2026-10-06)** : il n'y a plus de ré-import. La règle reste —
+  `gedcom_xref` nul pour une source créée à l'écran, jamais modifiable par l'API — mais pour
+  une autre raison : la référence est l'identifiant stable des sources venues du fichier
+  d'origine, et en inventer une ferait passer pour l'une d'elles ce qui n'en est pas.
 - **Corriger une source importée** est permis, mais un ré-import GEDCOM la réécrira depuis
   le fichier. L'écran le dit sur toute source qui porte un xref.
+
+  > **Remplacé par l'[ADR 0018](0018-suppression-de-l-import-gedcom.md) (2026-10-06)** : plus rien ne réécrit une source corrigée. L'écran
+  dit seulement, sur une source qui porte un xref, qu'elle vient du GEDCOM d'origine et que
+  sa référence ne change pas.
 - **Pas de suppression.** `tree_citation.source_id` est en `RESTRICT`, ce qui protège une
   source citée ; mais une source jamais citée peut être désignée par une demande
   `ajout_citation` **en attente**, que `Tree` ne voit pas (ADR 0002), et dont la validation

@@ -50,7 +50,7 @@ describe('ce que le formulaire envoie', () => {
     })
   })
 
-  it('ne porte jamais gedcomXref : il appartient au ré-import', () => {
+  it('ne porte jamais gedcomXref : la référence GEDCOM ne se saisit pas', () => {
     expect(Object.keys(noticeDepuisSaisie(saisieDepuisSource({ ...SOURCE, gedcomXref: '@S500011@' })))).not.toContain(
       'gedcomXref',
     )

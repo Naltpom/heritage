@@ -10,16 +10,16 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
- * La filiation, c'est-à-dire le `CHIL` du GEDCOM — 174 lignes après import (§ 3.3).
+ * La filiation, c'est-à-dire le `CHIL` du GEDCOM — 174 lignes à l'import initial (§ 3.3).
  *
  * Table d'association **avec attributs** : l'ordre de fratrie et la nature du lien ne
  * rentrent pas dans un `ManyToMany` nu.
  *
  * **Pas d'unicité sur `person_id` seul**, volontairement : dans les données actuelles
  * chaque personne n'est enfant que d'une famille (174 pour 174), mais une adoption crée
- * légitimement un second rattachement. En revanche l'import **signale** (dans
- * `ged_issue`, sévérité `avertissement`) toute personne qui recevrait deux liens de
- * relation `naissance` : c'est un défaut de données, pas une adoption.
+ * légitimement un second rattachement. Deux liens de relation `naissance` pour une même
+ * personne seraient en revanche un défaut de données, pas une adoption : rien dans le
+ * schéma ne l'interdit, c'est aux écritures de l'arbre de ne pas le produire.
  */
 #[ORM\Entity(repositoryClass: ChildRepository::class)]
 #[ORM\Table(name: 'tree_child')]

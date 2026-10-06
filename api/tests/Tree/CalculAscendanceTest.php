@@ -12,9 +12,9 @@ use PHPUnit\Framework\TestCase;
 /**
  * Les garde-fous du calcul des colonnes dérivées, sur des arbres construits à la main.
  *
- * Le cas nominal — 12 générations et `pm 134, mm 64, mp 51, pp 20, tr 5` — est couvert
- * par `tests/Gedcom/AnalyseurGedcomTest.php` sur sa fixture, et par l'import réel. Ce qui
- * est vérifié ici, ce sont les situations que le fichier de référence ne contient pas
+ * Le cas nominal — 12 générations et `pm 134, mm 64, mp 51, pp 20, tr 5` — est celui de
+ * la base réelle, et `PlacementFournisseurDoctrineTest` le rejoue depuis `graphe.json`. Ce
+ * qui est vérifié ici, ce sont les situations que le fichier de référence ne contient pas
  * mais qu'une donnée **saisie dans l'application** peut produire : c'est désormais un cas
  * courant, puisqu'une proposition validée écrit dans l'arbre.
  */
@@ -61,7 +61,7 @@ final class CalculAscendanceTest extends TestCase
 
     /**
      * **Sans racine, on ne pose aucune branche.** C'est l'état que laisse la migration
-     * avant le premier import : `tree.personne_racine_id` vaut 0, et
+     * tant qu'aucune racine n'a été choisie : `tree.personne_racine_id` vaut 0, et
      * `JeuDePlacement::$egoId` est alors la chaîne vide. « Branche paternelle du père » ne
      * désigne rien — la colonne reste `NULL`, ce qu'elle sait faire.
      */
