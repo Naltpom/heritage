@@ -199,7 +199,17 @@ cd api && composer install          # une fois
 php vendor/bin/phpstan analyse --level=6      # l'existence et les types
 php vendor/bin/phpunit                        # le tout, et seul lui a le dernier mot
 php bin/console lint:container                # la cohérence des définitions de services
+php bin/console heritage:verifier-integrite   # aucune référence inter-modules pendante
 ```
+
+`heritage:verifier-integrite` lit la base désignée par `DATABASE_URL` — la vraie, pas celle
+des tests — et **n'écrit rien**. Elle parcourt les 63 références inter-modules que l'ADR 0002
+prive de clé étrangère (la liste : `docs/modele-donnees.md` § 10.8) et signale celles qui
+désignent une ligne absente. Sortie `0` : rien ne pend, ou seulement ce qui est fait pour
+survivre à sa cible (un historique, une preuve, une demande qui deviendra caduque), montré
+comme « tolérée » avec sa raison ; `1` : au moins une violation. `--format=json` pour un
+script. Sur le serveur :
+`docker compose exec api php bin/console heritage:verifier-integrite`.
 
 ```bash
 cd app && npm install               # une fois

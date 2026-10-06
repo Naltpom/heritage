@@ -1034,6 +1034,22 @@ export interface InventaireDeSuppression {
   membreId: number | null
   /** Invitations en attente désignant cette fiche — le même défaut, en différé. */
   invitationsActives: number
+  /**
+   * Ce que les autres modules accrochent à la fiche — démarches d'acte,
+   * événements à venir, tirages, autorisation de naissance, questions.
+   *
+   * `bloquante` vient du serveur et ne se redérive pas ici : c'est lui qui sait
+   * quelle nature bloque et laquelle part avec la fiche. Le front ne fait que
+   * la mettre en français (`components/proposition/suppression.ts`).
+   */
+  dependances: DependanceDeFiche[]
+}
+
+/** § 6.4 quater — une ligne de `dependances` : une nature, un compte, son sort. */
+export interface DependanceDeFiche {
+  nature: string
+  nombre: number
+  bloquante: boolean
 }
 
 /**

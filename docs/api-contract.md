@@ -2793,7 +2793,9 @@ reste dans l'arbre.
 PostgreSQL ne peut pas contraindre : effacer la fiche y laisserait des lignes pendantes et
 des octets sur le disque, sans plus aucun écran pour y mener. On ne supprime pas la preuve
 à la place de l'opérateur — `DELETE /api/medias/{id}` existe pour cela (§ 7.6), et c'est un
-geste qu'il aura vu.
+geste qu'il aura vu. **`medias` compte aussi les preuves d'une union ou d'une citation qui
+partiraient avec la fiche** — une union dont elle est le seul époux, une citation d'elle, de
+ses faits ou d'une union effacée : la preuve y deviendrait orpheline de la même façon.
 
 **Un compte membre dont la fiche est la racine.** `mbr_member.person_id` porte un
 `uniq_mbr_member_person` et aucune clé étrangère — le § 2.6 du modèle interdit la jointure
@@ -2815,7 +2817,31 @@ sortie de l'ADR 0003. Le numéro suffit à le retrouver dans `GET
 /api/administration/utilisateurs`, qui est le seul endroit où on peut le rattacher ailleurs.
 `invitationsActives` est un compte, pour la même raison.
 
-#### Règle 3 — rien ne part en silence
+**Ce que les autres modules accrochent à la fiche : `dependances`.** Cinq modules tiennent
+un `person_id` sans clé étrangère. Chacun mesure le sien
+(`Proposal\Contract\DependancesDUneFiche`), et la nature dit le sort
+(`Proposal\Contract\DependanceDeFiche`) :
+
+| `nature` | Ce qui pointe sur la fiche | Sort | Le geste qui débloque |
+|---|---|---|---|
+| `demarche` | `dmr_personne` — une démarche d'acte la concerne | **bloque** | « Corriger » sur la démarche, pour y désigner l'autre fiche |
+| `evenement_a_venir` | `evt_invitation` d'un événement à venir ou en cours, non annulé | **bloque** | l'organisateur la retire des invités |
+| `tirage` | `trg_participant` — elle participe à un tirage, ou y est référent | **bloque** | la retirer du tirage (organisateur, référent ou elle-même) |
+| `autorisation_naissance` | `mbr_autorisation_naissance` active | **bloque** | un administrateur la retire (`DELETE /api/administration/personnes/{id}/autorisation-naissance`) |
+| `question` | `qst_question` — une question posée à son sujet, ou sur une union emportée | **nettoyée** | — |
+
+Une nature **bloque** quand la référence est vivante et qu'un geste existant permet de la
+rediriger : le refus est au dépôt, sa raison s'ajoute à `raisons` et à `champs.targetId`,
+comme les autres. Elle est **nettoyée** quand la ligne n'a de sens que par la fiche et
+qu'aucun écran ne la redirigerait : elle part dans la transaction de la validation, annoncée
+par l'inventaire et par la phrase (« … emporte 2 questions posées à son sujet »), et tracée
+deux fois — dans `changes.dependances` de la révision, et au journal d'audit
+(`action: "suppression"`, `subjectType: "personne"`, `changes.questions` = les identifiants
+effacés). Comme les autres raisons, celles-ci **comptent sans nommer** : ni le titre d'un
+tirage, ni l'intitulé d'une démarche, ni le nom d'un événement ne sortent sur cette route.
+
+Chaque ligne porte `nature`, `nombre` et `bloquante`. `bloquante` est rendue par le serveur
+pour que le front l'affiche sans redériver la règle ; une nature à zéro n'apparaît pas.
 
 L'op fabriquée porte `old_value` = **l'inventaire de ce que la suppression emporte** au
 moment du dépôt, et `new_value` = `null` : après une suppression, il n'y a rien. C'est
@@ -2836,7 +2862,10 @@ l'exact miroir d'une création, où `avant` vaut `null` partout.
   "descendanceTotale": 0,
   "medias": 0,
   "membreId": null,
-  "invitationsActives": 0
+  "invitationsActives": 0,
+  "dependances": [
+    { "nature": "question", "nombre": 2, "bloquante": false }
+  ]
 }
 ```
 
@@ -2845,7 +2874,7 @@ comparaison porte sur le tableau entier, et `JSONB` ne préserve pas l'ordre d'�
 
 À la lecture d'administration (§ 6.7), l'op porte en plus `valeurCourante` — l'inventaire
 **d'aujourd'hui** — et `libelleDiff`, la phrase prête à afficher :
-« Suppression de la fiche « Marne Dolomite Sureau » : emporte 3 notes, 2 citations, 1 union. »
+« Suppression de la fiche « Marne Dolomite Sureau » : emporte 3 notes, 2 citations, 1 fait, 1 union, 1 rattachement à ses parents et 2 questions posées à son sujet. »
 
 **Si les deux inventaires diffèrent, `resolutionPrevue` vaut `caducite`** et la validation
 rend `409 demande_caduque`. Une note, une citation ou une preuve ajoutée entre le dépôt et
@@ -2869,6 +2898,9 @@ l'identifiant de la fiche effacée, `versionBefore` = sa dernière version, `ver
 entier nu, délibérément, et c'est ce qui permet à l'historique de survivre à son sujet.
 `changes` porte l'inventaire mesuré **dans la transaction**, clé par clé, `avant` renseigné
 et `apres` à `null`, plus une clé `resume` qui reprend la phrase montrée à l'administrateur.
+`changes.dependances` y dit ce que les autres modules ont **effacé** avec la fiche — les
+natures nettoyées ; une nature qui bloque ne peut pas y figurer, l'applicateur lève et
+annule la transaction s'il en trouve une.
 
 Ce qu'il advient de chaque référence à la fiche :
 
@@ -2879,11 +2911,21 @@ Ce qu'il advient de chaque référence à la fiche :
 | `tree_child` d'une union où elle est **parent** | **bloque** la suppression (règle 2) |
 | `tree_family.husband_id` / `wife_id` | mis à `NULL` si l'autre époux existe ; l'union est **effacée** dans deux cas, et l'inventaire les annonce par `unions[].supprimee` — voir ci-dessous |
 | `tree_source` | **intacte** : `ON DELETE RESTRICT`, la citation part, le registre reste |
-| `med_media` | **bloque** la suppression (règle 2) |
+| `med_media` | **bloque** la suppression (règle 2) — sur la fiche, ou sur une union ou une citation qui partirait avec elle |
 | `prp_draft_link`, `prp_change_op`, `prp_change_request` d'autres demandes | **laissés**. Les demandes en attente qui visent la fiche deviennent `cible_disparue` à leur prochain examen ; les demandes tranchées restent l'historique de la discussion — « une demande n'est jamais supprimée » |
 | `prp_revision`, `core_audit_log` | **laissés, et c'est le point** : un journal qu'une suppression pourrait amputer n'est pas un journal |
 | `mbr_member.person_id` | **bloque** la suppression (règle 2) |
 | `mbr_invitation.person_id` | **bloque** si l'invitation est `active` ; les autres sont de l'historique |
+| `mbr_autorisation_naissance.person_id` | **bloque** si l'autorisation est active ; une archivée est une preuve, **laissée** — « archivée, jamais supprimée » (ADR 0016) |
+| `dmr_personne.person_id` | **bloque** (`demarche`) |
+| `evt_invitation.person_id` | **bloque** si l'événement est à venir ou en cours, non annulé (`evenement_a_venir`) ; celle d'un événement passé ou annulé est **laissée** : le suivi est l'historique de la fête, sous le libellé de l'invité (ADR 0014) |
+| `trg_participant.person_id`, `referent_person_id` | **bloque** (`tirage`) |
+| `trg_attribution`, `trg_presence` | **laissées** : « les éditions passées gardent leurs attributions » (ADR 0009), libellés dénormalisés compris — et aucune trace d'effacement n'a à dire qui offrait à qui |
+| `qst_question.sujet_id` | **effacées** avec leurs liens `qst_question_demande`, dans la transaction, et tracées au journal d'audit (`question`) |
+
+Ce qui est **laissé** pend désormais vers une fiche absente, et c'est voulu :
+`heritage:verifier-integrite` le relève comme **toléré**, avec sa raison, sans échouer
+(`docs/modele-donnees.md` § 10.8). Ce qui pendrait sans raison bloque ou part.
 
 #### Les deux cas où une union est effacée plutôt que vidée
 
@@ -2914,7 +2956,7 @@ l'auteur doit voir ce qu'il efface **avant** d'écrire son motif, et non le déc
 
 ```json
 {
-  "inventaire": { "personneId": 17, "displayName": "Marne Dolomite Sureau", "notes": 3, "citations": 2, "faits": 1, "filiations": 1, "unions": [], "descendants": [], "descendanceTotale": 0, "medias": 0, "membreId": null, "invitationsActives": 0 },
+  "inventaire": { "personneId": 17, "displayName": "Marne Dolomite Sureau", "notes": 3, "citations": 2, "faits": 1, "filiations": 1, "unions": [], "descendants": [], "descendanceTotale": 0, "medias": 0, "membreId": null, "invitationsActives": 0, "dependances": [] },
   "resume": "Suppression de la fiche « Marne Dolomite Sureau » : emporte 3 notes, 2 citations, 1 fait et 1 rattachement à ses parents.",
   "bloquee": false,
   "raisons": []
