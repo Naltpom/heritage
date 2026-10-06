@@ -70,8 +70,8 @@ use Doctrine\ORM\Query;
  * `tree_person.id` et `tree_family.id` sont **deux séquences indépendantes** : 103 entiers
  * désignent à la fois une personne et une famille. Rien ici ne mélange les deux — chaque
  * méthode sait de quelle table elle parle, et les identifiants qui circulent au-delà sont
- * préfixés par {@see IdentifiantDeNoeud}. C'est la même discipline que l'import, qui
- * indexe tout par le `xref` GEDCOM, lequel porte son type dans son premier caractère.
+ * préfixés par {@see IdentifiantDeNoeud}. C'est la même discipline que le `xref` GEDCOM,
+ * qui porte son type dans son premier caractère.
  */
 final class EcritureDeLArbrePourProposal implements PortArbre
 {
@@ -258,7 +258,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         $ligne
             ->setPerson($personne)
             // L'auteur de la **demande**, pas celui qui valide : c'est lui que la fiche
-            // affichera sous la note, et `null` y voudrait dire « importée du GEDCOM ».
+            // affichera sous la note, et `null` y voudrait dire « venue de l'import initial ».
             ->setAuthor($note->auteurUserId, $note->auteurLabel);
 
         $this->em->persist($ligne);
@@ -693,8 +693,8 @@ final class EcritureDeLArbrePourProposal implements PortArbre
     private function libelleDeNote(Note $note): string
     {
         // Ni `strtok`, qui porte un état global d'un appel à l'autre, ni un découpage sur
-        // « \n » seul : l'import recolle les `CONT` du GEDCOM, et un corps saisi au
-        // navigateur arrive en « \r\n ». Les deux formes doivent donner la même première
+        // « \n » seul : les notes de l'import initial ont leurs `CONT` recollés en « \n »,
+        // un corps saisi au navigateur arrive en « \r\n ». Les deux formes doivent donner la même première
         // ligne, sinon le même texte produirait deux libellés selon sa provenance.
         $lignes = preg_split('/\R/u', $note->getBody(), 2) ?: [];
         $premiere = trim((string) ($lignes[0] ?? ''));
@@ -851,7 +851,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
      *
      * En largeur, une génération par tour, et deux requêtes par tour plutôt qu'une requête
      * par personne. L'ensemble `$vus` garantit la terminaison : une généalogie n'a pas de
-     * cycle, mais un import fautif peut en fabriquer un, et une boucle infinie dans une
+     * cycle, mais une donnée fautive peut en fabriquer un, et une boucle infinie dans une
      * lecture d'écran serait une panne plus coûteuse que le nombre qu'elle calcule.
      */
     private function compterLaDescendance(int $personneId): int
@@ -1886,9 +1886,10 @@ final class EcritureDeLArbrePourProposal implements PortArbre
      * L'identifiant GEDCOM d'une ligne créée dans l'application (§ 9.8).
      *
      * Le préfixe `9` la distingue au premier coup d'œil de la plage `@I5xxxxx@` de
-     * MyHeritage, dans un fichier exporté : on sait ce qui vient de l'import d'origine et
-     * ce qui a été ajouté depuis. Déterministe, sans séquence supplémentaire, et
-     * reconstructible si la colonne est perdue.
+     * MyHeritage : on sait ce qui vient du fichier d'origine et ce qui a été ajouté
+     * depuis. Déterministe, sans séquence supplémentaire, et reconstructible si la
+     * colonne est perdue. Il n'y a plus d'import ni d'export GEDCOM (ADR 0017) : la
+     * référence reste l'identifiant stable de la ligne, affiché sur la fiche.
      */
     private function xref(string $lettre, int $id): string
     {

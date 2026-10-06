@@ -9,10 +9,10 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * `413 fichier_trop_volumineux` (§ 15.2 du contrat d'API).
  *
- * Écrite par l'agent `Media`, montée ici telle quelle : le jour où `Gedcom` importera des
- * pièces jointes, il aura besoin du même code, et **deux exceptions au même code d'erreur
- * dans deux modules** est exactement le doublon qui finit par produire deux enveloppes
- * différentes pour la même panne.
+ * Écrite par l'agent `Media`, montée ici telle quelle : tout module qui reçoit un
+ * fichier a besoin du même code, et **deux exceptions au même code d'erreur dans deux
+ * modules** est exactement le doublon qui finit par produire deux enveloppes différentes
+ * pour la même panne.
  *
  * Comme toutes les sœurs de {@see DomainException}, elle ne construit aucune réponse
  * HTTP : l'enveloppe du § 15.1 est composée en un seul endroit,

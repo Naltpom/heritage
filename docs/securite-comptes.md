@@ -305,7 +305,7 @@ oubliés — c'est-à-dire ceux qu'on aurait eu le plus besoin de relire.
 | Champs sensibles | `password`, `totpSecret`, `tokenHash` → `"***"`, **jamais écrits** — ni l'ancienne valeur, ni la nouvelle |
 | Champs techniques | `updatedAt`, `lastLoginAt` ignorés ; si le diff est vide, **pas de ligne** |
 | Inaltérabilité | un `UPDATE` ou un `DELETE` sur `AuditLog` lève une `LogicException` |
-| Hors HTTP | pas de journalisation automatique — un import GEDCOM écrirait 551 lignes sans acteur ni IP ; les commandes consignent ce qui les concerne par `AuditService::enregistrer()` |
+| Hors HTTP | pas de journalisation automatique — une commande ou un chargement de fixtures écrirait des centaines de lignes sans acteur ni IP ; les commandes consignent ce qui les concerne par `AuditService::enregistrer()` |
 
 La règle des champs techniques n'est pas cosmétique : sans elle, **chaque connexion**
 laisserait une ligne `modification` vide à côté de sa ligne `connexion`, et le journal
@@ -351,9 +351,9 @@ ses huit filles sont **le seul mécanisme par lequel un service dit « non »** 
 | `FichierTropVolumineuxException` | 413 | `fichier_trop_volumineux`, `{maxOctets}` |
 | `TypeDeFichierRefuseException` | 415 | `type_de_fichier_refuse`, `{mimesAutorises}` |
 
-Les deux dernières ont été écrites par l'agent `Media` et montées ici : `Gedcom` aura le même
-besoin le jour où il importera des pièces jointes, et deux exceptions au même code d'erreur
-dans deux modules est le doublon qui finit par produire deux enveloppes pour la même panne.
+Les deux dernières ont été écrites par l'agent `Media` et montées ici : tout autre module qui
+recevra un fichier aura le même besoin, et deux exceptions au même code d'erreur dans deux
+modules est le doublon qui finit par produire deux enveloppes pour la même panne.
 
 > `TypeDeFichierRefuseException` **ne dit pas quel type a été détecté**, seulement ce qui est
 > accepté (§ 7.1). Renvoyer le type reniflé d'un fichier refusé, c'est offrir un service
@@ -555,8 +555,8 @@ nommée dans la signature. Les valeurs stockées ne changent pas — la colonne 
 
 ### Le repliement des accents — `Core\Service\CleDeRecherche`
 
-Il existait **en double** : dans le service qui **écrit** `tree_person.search_key` à
-l'import, et dans celui qui la **cherche**. La règle 3 interdisait à l'un d'importer
+Il existait **en double** : dans le service qui **écrivait** `tree_person.search_key` à
+l'import (module `Gedcom`, supprimé depuis — ADR 0017), et dans celui qui la **cherche**. La règle 3 interdisait à l'un d'importer
 l'autre, donc la table était recopiée.
 
 > Le jour où les deux auraient divergé d'un seul caractère, la recherche aurait cessé de
@@ -667,7 +667,7 @@ plutôt que de le relayer** (`server_name` explicite et un `server` par défaut 
 |---|---|---|
 | `Core\Security\CercleDeVisibiliteInterface` | `Membership` | alias dans `config/services/membership.yaml` ; défaut fermé `CercleFerme` |
 | `Core\Contract\CalqueEnAttenteInterface` | `Proposal` | alias dans `config/services/proposal.yaml` ; défaut fermé `CalqueFerme`. Consommé par `Tree`, `Media`, `Timeline` |
-| `Core\Service\CleDeRecherche` | — | **une seule** définition du repliement d'accents, appelée par l'import qui écrit `search_key` et par la recherche qui la lit |
+| `Core\Service\CleDeRecherche` | — | **une seule** définition du repliement d'accents, appelée par `Tree\Service\NormalisateurNom` qui écrit `search_key` et par la recherche qui la lit |
 | `Core\Enum\SubjectKind` | — | montée de `Proposal` : elle est nommée dans la signature du calque, et `Core` ne peut pas référencer un module |
 | `Core\Contract\AnnuaireDesMembresInterface` | `Membership` | idem ; défaut fermé `AnnuaireVide` — libellé d'un membre, charge `membre` d'un compte |
 | `Core\Contract\SessionPayloadContributorInterface` | `Membership` | tag `core.contributeur_session`, collecté par `#[AutowireIterator]` |
@@ -694,8 +694,9 @@ bin/console doctrine:fixtures:load --append --group=amorcage    # + le rattachem
 ```
 
 > **⚠ `doctrine:fixtures:load` sans `--append` purge la base.** C'est le piège central :
-> la fixture d'amorçage existe pour *survivre* à un réimport, et la jouer nue détruirait
-> les 274 personnes qu'on vient d'importer. La commande fait le même travail sans rien
+> la fixture d'amorçage existe pour *reposer* un compte sur une base garnie, et la jouer nue
+> détruirait l'arbre entier — qui ne revient plus que par la restauration d'une sauvegarde,
+> l'import GEDCOM ayant été supprimé (ADR 0017). La commande fait le même travail sans rien
 > purger ; les deux appellent le **même** service, donc elles ne peuvent pas diverger.
 
 Variables, toutes dans **`api/.env.local`** (ignoré par Git ; `api/.env` est *suivi* et ne
@@ -713,9 +714,12 @@ Trois règles, chacune payée par un incident :
    un administrateur que personne n'a décidé ; un mot de passe par convention est public.
 
 > **Le rattachement se fait par `gedcom_xref`, jamais par `tree_person.id`.** Poser
-> l'identifiant numérique produit, au premier réimport, un rattachement silencieusement
+> l'identifiant numérique produisait, au premier réimport, un rattachement silencieusement
 > dirigé vers **quelqu'un d'autre** — pire que de l'avoir perdu.
 
+L'import GEDCOM est supprimé (ADR 0017), mais la règle reste : `gedcom_xref` est
+l'identifiant stable d'une fiche, `tree_person.id` une identité qu'un repeuplement
+renumérote. Le tableau ci-dessous garde la mesure qui l'a fondée, du temps de l'import.
 Trois gestes de réimport, trois conséquences, et le troisième est le plus méchant :
 
 | geste | identifiants | effet sur `mbr_member.person_id` |
@@ -836,7 +840,8 @@ d'origine passent, ce qui est la meilleure preuve disponible de la fidélité de
 reconstruction. Ce n'en reste pas moins une reconstruction : **son auteur devrait la
 relire**. Le seul changement voulu est la délégation du repliement à `Core`.
 
-*(Le service a depuis été déplacé de `Gedcom` vers `Tree` par un autre agent.)*
+*(Le service a depuis été déplacé de `Gedcom` vers `Tree` par un autre agent, et le module
+`Gedcom` a été supprimé avec l'import — ADR 0017.)*
 
 **MFA TOTP administrateur** : les colonnes `totp_secret` et `totp_enabled_at` existent sur
 `Core\User` et la charge de session expose `totpEnabledAt`. Le second facteur lui-même n'est pas

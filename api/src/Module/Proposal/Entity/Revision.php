@@ -35,11 +35,14 @@ class Revision
     private ?int $id = null;
 
     /**
-     * FK **intra-module**. `null` **pour le seul import GEDCOM**.
+     * FK **intra-module**, `ON DELETE SET NULL`.
      *
-     * Une édition directe d'administrateur porte bien un `request_id` : elle crée une
-     * `ChangeRequest` auto-validée dans la même transaction (ADR 0004). Une révision sans
-     * demande est donc le signe d'un import, **jamais d'un raccourci**.
+     * Toute révision naît d'une demande validée : une édition directe d'administrateur
+     * porte bien un `request_id`, puisqu'elle crée une `ChangeRequest` auto-validée dans
+     * la même transaction (ADR 0004). Aucun chemin d'écriture de l'application n'en crée
+     * sans demande — l'import GEDCOM n'en écrivait pas non plus, et il a été supprimé
+     * (ADR 0017). `null` ne se rencontre donc que si la demande a été effacée hors de
+     * l'application, **jamais à la suite d'un raccourci**.
      */
     #[ORM\ManyToOne(targetEntity: ChangeRequest::class)]
     #[ORM\JoinColumn(name: 'request_id', nullable: true, onDelete: 'SET NULL')]

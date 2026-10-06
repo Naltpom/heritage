@@ -7,8 +7,8 @@ namespace App\Module\Core\Enum;
 /**
  * L'incertitude *qualitative* d'une date généalogique (§ 2.8 du modèle de données).
  *
- * Elle vit dans `Core` et non dans `Tree` : `Proposal`, `Media` et `Gedcom`
- * l'instancient aussi, et un noyau partagé qui s'installerait dans le plus gros des
+ * Elle vit dans `Core` et non dans `Tree` : `Proposal` et `Media` l'instancient aussi,
+ * et un noyau partagé qui s'installerait dans le plus gros des
  * modules ferait de `Tree` un second noyau (ADR 0002, règle 3).
  *
  * Les bornes `min`/`max` portent l'intervalle calendaire que la chaîne GEDCOM nomme ;

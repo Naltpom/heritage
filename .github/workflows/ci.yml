@@ -16,7 +16,7 @@
 # relit le rapport JUnit pour exiger que les tests qui en dépendent aient bien
 # TOURNÉ. Sans elle, monter une base pour des tests qui continueraient de se sauter
 # rendrait le même vert qu'avant, pour une machine de plus. La base est peuplée d'un
-# arbre d'essai **inventé** (`api/tests/Gedcom/fixtures/arbre-essai.ged`) : le dépôt
+# arbre d'essai **inventé** (`api/src/DataFixtures/ArbreDEssaiFixtures.php`) : le dépôt
 # est public et l'ADR 0006 interdit toute personne réelle.
 #
 # LE TRAVAIL « APP » A LA MÊME GARDE DEPUIS LE 23 SEPTEMBRE 2026, et il lui a
@@ -167,28 +167,23 @@ jobs:
 
       # ── L'ensemencement de la base PostgreSQL ────────────────────────────────
       #
-      # **Des personnes inventées, jamais réelles.** `arbre-essai.ged` est versionné
-      # et ne porte que des noms fabriqués (Persil, Thym, Bréval…). Le dépôt est
-      # public et l'ADR 0006 interdit toute personne réelle : aucune donnée de
-      # l'arbre du commanditaire n'entre ici, ni maintenant ni jamais.
+      # **Des personnes inventées, jamais réelles.** L'arbre d'essai des fixtures
+      # (groupe `essai`) ne porte que des noms fabriqués (Persil, Thym, Bréval…).
+      # Le dépôt est public et l'ADR 0006 interdit toute personne réelle : aucune
+      # donnée de l'arbre du commanditaire n'entre ici, ni maintenant ni jamais.
       #
-      # On passe par les migrations puis par la **vraie** commande d'import, et non
-      # par un `INSERT` de circonstance : ce que les tests liront ensuite est ce que
-      # l'import écrit réellement, pas ce qu'on aurait cru qu'il écrit.
-      #
-      # `--premier-import` parce que la commande refuse un arbre vide sous des
-      # comptes existants ; ici il n'y a ni comptes ni arbre, et ce drapeau dit que
-      # c'est légitime. `--attendus` parce que les totaux de contrôle sont indexés
-      # par empreinte de fichier et que celui-ci n'a pas de jeu de référence : onze
-      # individus, cinq familles, comptés dans le fichier lui-même.
+      # On passe par les migrations puis par les entités Doctrine, et non par un
+      # `INSERT` de circonstance : ce que les tests liront ensuite est ce que
+      # l'application écrit réellement. `--append` parce que, sans lui, le
+      # chargement purgerait `core_setting` que la migration vient de semer.
+      # L'import GEDCOM qui faisait ce travail a été supprimé (ADR 0017).
       - name: Ensemencer PostgreSQL avec l'arbre d'essai (données inventées)
         env:
           DATABASE_URL: "postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage?serverVersion=17&charset=utf8"
         run: |
           set -euo pipefail
           php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
-          php bin/console heritage:import-gedcom tests/Gedcom/fixtures/arbre-essai.ged \
-            --premier-import --attendus personnes=11,familles=5
+          php bin/console doctrine:fixtures:load --group=essai --append --no-interaction
 
       # Porte 1. `--level=6` en ligne de commande et non seulement dans
       # phpstan.neon : la CI est le contrat, elle ne doit pas pouvoir être

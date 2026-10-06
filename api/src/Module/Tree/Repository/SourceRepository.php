@@ -13,8 +13,7 @@ use Doctrine\Persistence\ManagerRegistry;
  * Dépôt de {@see Source}.
  *
  * Sa lectrice est l'écran d'administration des sources
- * ({@see \App\Module\Tree\Service\ServiceDesSources}, ADR 0012) ; l'import GEDCOM passe,
- * lui, par l'`EntityManager`.
+ * ({@see \App\Module\Tree\Service\ServiceDesSources}, ADR 0012).
  *
  * @extends ServiceEntityRepository<Source>
  */

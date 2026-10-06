@@ -16,8 +16,8 @@ use Symfony\Component\HttpFoundation\Response;
  * dire quoi faire oblige l'utilisateur à deviner.
  *
  * Même provenance que {@see FichierTropVolumineuxException} : écrite par l'agent `Media`,
- * montée dans `Core` parce que `Gedcom` aura le même besoin et qu'un code d'erreur du
- * contrat ne se définit qu'une fois.
+ * montée dans `Core` parce qu'un autre module qui reçoit un fichier aura le même besoin
+ * et qu'un code d'erreur du contrat ne se définit qu'une fois.
  */
 final class TypeDeFichierRefuseException extends DomainException
 {

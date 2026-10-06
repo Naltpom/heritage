@@ -45,7 +45,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * de l'adresse qui les sépare, et {@see AdressesDArbresEnLigne::designeUneFicheDArbre()}
  * qui le lit.
  *
- * Une liste de titres écrite en dur, elle, aurait vieilli au premier import suivant.
+ * Une liste de titres écrite en dur, elle, aurait vieilli à la première source ajoutée.
  *
  * ## Pourquoi une commande et pas une migration
  *

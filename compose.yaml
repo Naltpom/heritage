@@ -350,22 +350,19 @@ services:
       # particulier. Doit désigner le FRONT (qui relaie /api), pas l'API : c'est
       # dans un navigateur que le lien sera ouvert. À ajuster si APP_PORT change.
       DEFAULT_URI: ${DEFAULT_URI:-http://localhost:8080}
-      # Vides par défaut, et transmises quand même : sans ces deux lignes, les
+      # Vide par défaut, et transmise quand même : sans cette ligne, la
       # renseigner dans le .env de la racine ne ferait rien du tout — Compose
       # lirait la valeur sans jamais l'injecter dans le conteneur, et on
       # chercherait longtemps pourquoi.
       #
-      # GEDCOM_FILE : chemin DANS le conteneur, pas sur l'hôte (voir .env.example).
-      #   La commande refuse proprement la chaîne vide comme l'absence de valeur.
       # MEDIA_RACINE : vide = l'API retombe sur %kernel.project_dir%/uploads,
       #   c'est-à-dire /app/uploads, où est monté le volume `televersements`.
       #   À ne renseigner que si ce volume est monté ailleurs.
-      GEDCOM_FILE: ${GEDCOM_FILE:-}
       MEDIA_RACINE: ${MEDIA_RACINE:-}
       # Le compte administrateur d'amorçage, relu par `heritage:amorcer-comptes`
       # et par la fixture du groupe `amorcage`.
       #
-      # MÊME PIÈGE QUE LES DEUX LIGNES AU-DESSUS, et il a coûté une passe : ces
+      # MÊME PIÈGE QUE LA LIGNE AU-DESSUS, et il a coûté une passe : ces
       # valeurs vivent dans `api/.env.local`, que le `.dockerignore` de l'API
       # EXCLUT du contexte de construction — à raison, un secret n'a rien à faire
       # dans une image. Le conteneur ne voit donc jamais ce fichier, et la commande
@@ -374,8 +371,9 @@ services:
       # de la racine, qui est lu par Compose et injecté dans l'environnement réel.
       #
       # `HERITAGE_ADMIN_PERSONNE_XREF` porte une RÉFÉRENCE GEDCOM (`@I500001@`) et
-      # jamais un `tree_person.id`. Mesuré le 15 septembre 2026 : après un réimport,
-      # les identifiants ont glissé de 1–274 à 275–548. Un rattachement numérique
+      # jamais un `tree_person.id`. Mesuré le 15 septembre 2026 : après un réimport
+      # GEDCOM (l'import a été supprimé depuis, ADR 0017), les identifiants ont
+      # glissé de 1–274 à 275–548. Un rattachement numérique
       # aurait désigné quelqu'un d'autre sans que rien ne le signale ; la référence
       # GEDCOM, elle, porte une contrainte d'unicité et suit la personne.
       HERITAGE_ADMIN_EMAIL: ${HERITAGE_ADMIN_EMAIL:-}
@@ -434,13 +432,6 @@ services:
       # famille devait se reconnecter après chaque déploiement. Le chemin est
       # celui de `framework.session.save_path` (`var/sessions/<env>`).
       - sessions:/app/var/sessions
-      # Atelier généalogique, pour l'import du GEDCOM réel. Décommenter et
-      # ajuster le chemin de gauche selon la machine, puis poser
-      # `GEDCOM_FILE=/atelier/arbre-romarin-v5.ged` dans le .env.
-      # `:ro` non négociable : l'atelier est la source de vérité des données
-      # généalogiques et vit hors du dépôt ; rien dans cette application n'a le
-      # droit d'y écrire. L'alternative sans montage est `docker compose cp`.
-      # - C:/www/myHeritage:/atelier:ro
     ports:
       # Confort de mise au point : joindre l'API sans passer par nginx (curl,
       # client REST), et surtout faire fonctionner `npm run dev` lancé hors

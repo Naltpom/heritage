@@ -43,6 +43,10 @@ Le commanditaire a désigné la pile et le dépôt de référence
   à la famille.
 - Le GEDCOM `arbre-romarin-v5.ged` reste la **source de vérité amont** : l'application
   l'importe et sait le ré-exporter.
+
+  > **Remplacé par l'[ADR 0017](0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : l'application a été peuplée une fois par
+  l'import ; il est supprimé, et l'export n'a jamais été écrit. La source de vérité est la
+  base de production et ses sauvegardes.
 - **Pas de Redis, pas de file d'attente, pas de moteur de recherche.** Le cache Symfony sur
   système de fichiers suffit à 274 personnes.
 
@@ -119,6 +123,9 @@ d'en changer sur un projet plus petit et plus sensible.
   vérité, le GEDCOM l'est. Toute saisie faite dans webtrees et non ré-exportée est perdue pour
   l'application. À la mise en service : soit la saisie s'arrête dans webtrees, soit elle reste
   un chantier de recherche séparé, ré-importé à la main. On ne synchronise pas.
+
+  > **Remplacé par l'[ADR 0017](0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : il n'y a plus de ré-import possible ; une saisie
+  faite dans webtrees ou Gramps Web n'entre dans l'application que par une demande.
 - L'API est du JSON sur HTTP sans couplage au front : remplacer la SPA resterait un chantier
   front isolé.
 - Le recrutement futur n'est pas un critère ici — le projet a un seul développeur et des

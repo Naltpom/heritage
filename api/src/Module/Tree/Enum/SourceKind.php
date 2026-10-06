@@ -9,7 +9,8 @@ namespace App\Module\Tree\Enum;
  *
  * **Ajout par rapport au GEDCOM**, et c'est délibéré : c'est cette colonne qui permet
  * de dire « ces 40 fiches reposent sur l'arbre d'un autre utilisateur ». Posée à
- * l'import à partir du `TITL`/`PUBL`, révisable à la main.
+ * l'import initial à partir du `TITL`/`PUBL`, choisie à la création d'une source, et
+ * révisable à la main.
  */
 enum SourceKind: string
 {

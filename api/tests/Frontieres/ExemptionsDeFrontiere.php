@@ -26,13 +26,12 @@ namespace App\Tests\Frontieres;
  * fait échouer le test, sauf si elle figure ci-dessous, **fichier par fichier et
  * cible par cible**.
  *
- * ## Pourquoi cible par cible, et non `EcrivainTree -> Tree\Entity\*`
+ * ## Pourquoi cible par cible, et non `Source -> Module\Entity\*`
  *
- * Une exemption par motif générique se rouvre toute seule. `EcrivainTree ->
- * Tree\Entity\*` laisserait entrer demain une huitième entité sans que personne
- * ne le voie ; les sept lignes explicites, elles, ne couvrent que les sept
- * entités constatées. La dette reste donc **deux blocs** — un par fichier — mais
- * chacun énumère ses cibles.
+ * Une exemption par motif générique se rouvre toute seule. Un motif
+ * `Media\… -> Proposal\Entity\*` laisserait entrer demain une troisième entité
+ * sans que personne ne le voie ; les lignes explicites, elles, ne couvrent que
+ * les cibles constatées. Chaque bloc énumère donc ses cibles.
  *
  * ## Comment on solde
  *
@@ -53,39 +52,26 @@ namespace App\Tests\Frontieres;
  *
  * ## La trajectoire, ventilée par motif
  *
- * Compte au 2026-09-16 : **46 exemptions**, réparties ainsi — et la somme est le
+ * Compte au 2026-10-06 : **24 exemptions**, réparties ainsi — et la somme est le
  * seul contrôle qui vaille, parce qu'un total sans ventilation est compensable :
  *
  * | Motif | Lignes | Ce qu'il reste après l'avoir soldé |
  * |---|---:|---:|
- * | vocabulaire à monter dans `Core` | 18 | — |
- * | port à descendre dans `Contract\` | 10 | **18** (les deux gestes mécaniques, ensemble) |
- * | dette datée — import GEDCOM | 10 | **8** |
+ * | vocabulaire à monter dans `Core` | 6 | — |
+ * | port à descendre dans `Contract\` | 10 | **8** (les deux gestes mécaniques, ensemble) |
  * | surface publique à déclarer | 8 | **0** |
- * | **total** | **46** | |
+ * | **total** | **24** | |
  *
- * Soit **46 → 18 → 8 → 0**. Une rédaction antérieure annonçait « 11 après les
- * déplacements mécaniques, puis 1, puis 0 » : ces deux nombres ne correspondaient
- * à aucune ventilation réelle. `FrontieresInterModulesTest` les vérifie désormais
- * à chaque exécution, de sorte qu'ils ne puissent plus vieillir en silence.
+ * Soit **24 → 8 → 0**. Le compte du 2026-09-16 était de 46 (« 46 → 18 → 8 → 0 ») :
+ * 22 lignes partaient du module `Gedcom` — la dette datée de l'import (10 lignes,
+ * `EcrivainTree` et `AnalyseurGedcom` vers l'interne de `Tree`) et 12 lignes de
+ * vocabulaire. Le module a été supprimé avec l'import (ADR 0017) : la dette n'a pas
+ * été soldée par un port, elle a disparu avec son code. `FrontieresInterModulesTest`
+ * vérifie ces nombres à chaque exécution, de sorte qu'ils ne puissent plus vieillir
+ * en silence.
  */
 final class ExemptionsDeFrontiere
 {
-    /**
-     * Dette datée du 2026-09-15, propriétaire : l'agent de l'import GEDCOM.
-     * Portée : 10 références. Geste de levée : `Tree` déclare
-     * `Tree\Contract\PortImportArbre` avec ses propres objets de transfert, la
-     * logique d'écriture remonte dans `Tree` derrière ce port, `Gedcom` convertit
-     * ses `PersonneLue` / `FamilleLue` / … et appelle. Condition : adaptateurs
-     * stabilisés. Voir ADR 0002 et docs/arbitrages.md, point HH.
-     *
-     * Ce n'est PAS une exception : une exception n'a ni date, ni propriétaire,
-     * ni geste. Celle-ci a les trois, et elle est nommée dans le message d'échec
-     * du contrôle — un seuil non nul sans explication est un seuil que le
-     * prochain relèvera d'un cran.
-     */
-    public const string DETTE_IMPORT_GEDCOM = 'dette datée 2026-09-15 — import GEDCOM (ADR 0002 ; arbitrages HH)';
-
     /**
      * Vocabulaire partagé par deux modules : il monte dans `Core\Enum` ou
      * `Core\ValueObject`. Précédent : arbitrage E — `UncertainDate`,
@@ -94,7 +80,7 @@ final class ExemptionsDeFrontiere
      * n'appartient à personne.
      *
      * Geste mécanique : déplacer l'énumération, corriger les `use`. Il appartient
-     * au module qui DÉCLARE (ici `Tree`, `Proposal`, `Media`), pas à celui qui cite.
+     * au module qui DÉCLARE (ici `Proposal`, `Media`), pas à celui qui cite.
      */
     public const string VOCABULAIRE_A_MONTER_DANS_CORE = 'vocabulaire à monter dans Core (ADR 0002 règle 3 ; arbitrage E)';
 
@@ -121,98 +107,9 @@ final class ExemptionsDeFrontiere
     {
         return array_merge(
             // =================================================================
-            //  DETTE — 2 blocs, 10 lignes. Ne se solde pas à la légère :
-            //  `Gedcom\Service\EcrivainTree` fait 632 lignes au cœur d'un
-            //  pipeline d'import prouvé de bout en bout.
+            //  VOCABULAIRE À MONTER DANS Core — 6 lignes.
+            //  Le plus mécanique : 6 énumérations citées par un second module.
             // =================================================================
-            self::bloc(
-                \App\Module\Gedcom\Service\EcrivainTree::class,
-                self::DETTE_IMPORT_GEDCOM,
-                [
-                    \App\Module\Tree\Entity\Child::class,
-                    \App\Module\Tree\Entity\Citation::class,
-                    \App\Module\Tree\Entity\Fact::class,
-                    \App\Module\Tree\Entity\Family::class,
-                    \App\Module\Tree\Entity\Note::class,
-                    \App\Module\Tree\Entity\Person::class,
-                    \App\Module\Tree\Entity\Source::class,
-                ],
-            ),
-            self::bloc(
-                \App\Module\Gedcom\Service\AnalyseurGedcom::class,
-                self::DETTE_IMPORT_GEDCOM,
-                [
-                    \App\Module\Tree\Service\CalculAscendance::class,
-                    \App\Module\Tree\Service\NormalisateurNom::class,
-                    \App\Module\Tree\ValueObject\FamillePlacable::class,
-                ],
-            ),
-
-            // =================================================================
-            //  VOCABULAIRE À MONTER DANS Core — 18 lignes.
-            //  C'est le plus gros lot, et le plus mécanique : 17 énumérations
-            //  et 1 objet valeur, cités par un second module.
-            // =================================================================
-            self::bloc(
-                \App\Module\Gedcom\Dto\CitationLue::class,
-                self::VOCABULAIRE_A_MONTER_DANS_CORE,
-                [
-                    \App\Module\Tree\Enum\CitationContext::class,
-                    \App\Module\Tree\Enum\CitationQuality::class,
-                ],
-            ),
-            self::bloc(
-                \App\Module\Gedcom\Dto\FaitLu::class,
-                self::VOCABULAIRE_A_MONTER_DANS_CORE,
-                [
-                    \App\Module\Tree\Enum\FactType::class,
-                ],
-            ),
-            self::bloc(
-                \App\Module\Gedcom\Dto\NoteLue::class,
-                self::VOCABULAIRE_A_MONTER_DANS_CORE,
-                [
-                    \App\Module\Tree\Enum\NoteScope::class,
-                ],
-            ),
-            self::bloc(
-                \App\Module\Gedcom\Dto\ResultatAnalyse::class,
-                self::VOCABULAIRE_A_MONTER_DANS_CORE,
-                [
-                    \App\Module\Tree\ValueObject\PlacementLogique::class,
-                ],
-            ),
-            self::bloc(
-                \App\Module\Gedcom\Dto\SourceLue::class,
-                self::VOCABULAIRE_A_MONTER_DANS_CORE,
-                [
-                    \App\Module\Tree\Enum\SourceKind::class,
-                ],
-            ),
-            self::bloc(
-                \App\Module\Gedcom\Service\AnalyseurGedcom::class,
-                self::VOCABULAIRE_A_MONTER_DANS_CORE,
-                [
-                    \App\Module\Tree\Enum\CitationContext::class,
-                    \App\Module\Tree\Enum\CitationQuality::class,
-                    \App\Module\Tree\Enum\FactType::class,
-                    \App\Module\Tree\Enum\NoteScope::class,
-                ],
-            ),
-            self::bloc(
-                \App\Module\Gedcom\Service\EcrivainTree::class,
-                self::VOCABULAIRE_A_MONTER_DANS_CORE,
-                [
-                    \App\Module\Tree\Enum\ChildRelation::class,
-                ],
-            ),
-            self::bloc(
-                \App\Module\Gedcom\Service\QualificateurSource::class,
-                self::VOCABULAIRE_A_MONTER_DANS_CORE,
-                [
-                    \App\Module\Tree\Enum\SourceKind::class,
-                ],
-            ),
             self::bloc(
                 \App\Module\Media\Service\Proposition\ApplicateurDOperationMedia::class,
                 self::VOCABULAIRE_A_MONTER_DANS_CORE,

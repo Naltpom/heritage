@@ -14,8 +14,8 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * C'est le « service de `Tree` » que le § 3.1 du modèle désigne : ces colonnes sont
  * dérivées de `tree.personne_racine_id`, et elles doivent être **recalculées après toute
- * écriture structurante** — un import, une personne créée, une famille nouée, un enfant
- * rattaché, un changement de racine.
+ * écriture structurante** — une personne créée, une famille nouée, un enfant rattaché,
+ * un changement de racine, le chargement de l'arbre d'essai.
  *
  * ## Deux choses à savoir avant d'y toucher
  *
@@ -29,7 +29,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * changer : c'est une modification de sa fiche.
  *
  * **2. Sans racine, on ne pose rien.** Tant que `tree.personne_racine_id` vaut 0 — l'état
- * que laisse la migration avant le premier import —, « branche paternelle du père » ne
+ * que laisse la migration tant qu'aucune racine n'a été choisie —, « branche paternelle du père » ne
  * désigne rien. Les colonnes restent `NULL`, ce qu'elles savent faire, plutôt que de
  * recevoir une valeur tirée d'une racine arbitraire.
  */
@@ -46,7 +46,7 @@ final class RecalculDesColonnesDerivees
      * Recalcule et repose les colonnes dérivées de tout l'arbre.
      *
      * **Ne `flush()` pas** : l'appelant est dans une transaction dont il décide seul les
-     * bornes — c'est la règle du port de `Proposal`, et l'import s'y conforme aussi. Les
+     * bornes — c'est la règle du port de `Proposal`, et les fixtures s'y conforment aussi. Les
      * entités sont modifiées, il reste à les envoyer.
      *
      * @return int le nombre de lignes dont une colonne dérivée a réellement changé
