@@ -61,7 +61,7 @@ function sceneParticipation(t) {
   /* la voix de Jeanne : un enregistrement, à droite */
   const kv = fenetre(t, R.enregistrer - 0.25, R.aVerifier, 0.4, 0.5)
   if (kv > 0) {
-    const bx = 1500, by = 560, bl = 360, bh = 150
+    const bx = 1590, by = 600, bl = 300, bh = 150
     const parle = 1 - eio(prog(t, R.transforme - 0.2, R.transforme + 0.5)) // la voix devient du texte
     x.save(); x.globalAlpha = kv
     x.shadowColor = 'rgba(0,0,0,0.5)'; x.shadowBlur = 40; x.shadowOffsetY = 14
@@ -96,7 +96,7 @@ function sceneParticipation(t) {
     const t0 = R.transforme + 0.5 + i * 0.22
     const k = prog(t, t0, t0 + 0.4), vol = eio(prog(t, R.transforme + 1.7 + i * 0.1, R.aVerifier - 0.1 + i * 0.1))
     if (k <= 0 || vol >= 1) return
-    const sx = e.acte ? 1660 : 1500 + 20, sy = 860 + i * 52
+    const sx = 1590, sy = 880 + i * 46
     const cx = lerp(sx, cible ? cible.x + cible.w * 0.6 : 960, vol), cy = lerp(sy, cible ? cible.y + 20 + i * 40 : 540, vol)
     x.save(); x.globalAlpha = eout(k) * (1 - prog(vol, 0.75, 1))
     const l = pastille(`${e.libelle} · ${e.s}`, cx, cy, { taille: 17, coul: e.acte ? C.ok : C.accent, fond: 'rgba(29,31,34,0.95)', align: 'left' })

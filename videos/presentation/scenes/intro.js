@@ -13,7 +13,11 @@ const FAM = construireFamille()
 const JOS = FAM.vedette, [MAT, PER] = FAM.parentsVedette
 const FRANCOIS = FAM.conjointsDe(JOS)[0]
 // la famille dessinée : celle dont rushes.mjs a noté la place à l'écran
-const FAMILLE_INTRO = [JOS, MAT, PER, FRANCOIS, ...FAM.enfantsDe(JOS), ...FAM.enfantsDe(MAT).filter((p) => p !== JOS)]
+// (seules celles qui sont à l'écran au moment du relais : les autres n'auraient pas de place où se poser)
+const FAMILLE_INTRO = [JOS, MAT, PER, FRANCOIS, ...FAM.enfantsDe(JOS), ...FAM.enfantsDe(MAT).filter((p) => p !== JOS)].filter((p) => {
+  const r = repere('intro-recul', RUSH['intro-recul']?.debut ?? 0, 'p' + p.id)
+  return r && r.x > -r.w && r.x < W && r.y > -r.h && r.y < H
+})
 ASSETS_A_CHARGER.push('photos/lieu-1.jpg', 'photos/lieu-2.jpg', 'photos/lieu-3.jpg', 'photos/lieu-4.jpg', 'photos/lieu-6.jpg', 'photos/dos-1.jpg', 'photos/dos-2.jpg', 'photos/dos-3.jpg', 'photos/dos-4.jpg',
   'documents/acte-josselin-1868.jpg', 'documents/bapteme-1783.jpg', 'documents/deces-1901.jpg')
 

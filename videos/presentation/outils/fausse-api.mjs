@@ -125,8 +125,8 @@ function fiche(p) {
   })
   const faits = []
   if (p.metier) faits.push({ id: 300 + p.id, type: 'profession', label: p.metier, happened: blocDate(p.naissance + 25, 1, 1, p.lieu, false), address: null, age: null, cause: null })
-  if (!p.vivant || p.generation < 0) faits.push({ id: 600 + p.id, type: 'residence', label: p.id === A.vedette.id ? 'Rue des Tanneurs' : p.lieu, happened: blocDate(p.naissance + 30, 1, 1, p.lieu, false), address: null, age: null, cause: null })
-  if (p.id === A.vedette.id) faits.push({ id: 9, type: 'residence', label: 'Ploërmel', happened: blocDate(1921, 1, 1, 'Ploërmel', false), address: null, age: null, cause: null })
+  if (!p.vivant || p.generation < 0) faits.push({ id: 600 + p.id, type: 'résidence', label: p.id === A.vedette.id ? 'Rue des Tanneurs' : p.lieu, happened: blocDate(p.naissance + 30, 1, 1, p.lieu, false), address: null, age: null, cause: null })
+  if (p.id === A.vedette.id) faits.push({ id: 9, type: 'résidence', label: 'Ploërmel', happened: blocDate(1921, 1, 1, 'Ploërmel', false), address: null, age: null, cause: null })
   const cit = citations(p)
   return {
     visibilite: 'complete', id: p.id, gedcomXref: `@I5${pad(p.id).padStart(5, '0')}@`, displayName: nomAffiche(p), givenNames: p.prenom, surname: p.nom,

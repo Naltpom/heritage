@@ -29,7 +29,7 @@ function sceneFin(t) {
   const kMot = eout(prog(t, R.logoFin - 0.25, R.logoFin + 0.45))
   motHeritage(W / 2, 560 + (1 - kMot) * 10, 96, { a: kMot })
   const kPhrase = eout(prog(t, R.logoFin + 1.0, R.logoFin + 2.0))
-  texte(PHRASE_FIN, W / 2, 650 + (1 - kPhrase) * 8, { taille: 30, poids: 400, coul: C.attenue, align: 'center', a: kPhrase })
+  texte(PHRASE_FIN, W / 2, 650 + (1 - kPhrase) * 8, { taille: 34, poids: 400, coul: C.attenue, align: 'center', a: kPhrase })
   // le noir final
   const noir = prog(t, DUREE - 1.3, DUREE - 0.1)
   if (noir > 0) { x.save(); x.globalAlpha = eio(noir); x.fillStyle = '#000'; x.fillRect(0, 0, W, H); x.restore() }

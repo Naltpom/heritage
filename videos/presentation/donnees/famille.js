@@ -98,6 +98,8 @@
     // les quatre souches ont les noms des chapitres (Martin, Bernard, Dubois, Lefèvre)
     const renommerLignee = (n, nom) => { let k = n; while (sosa.get(k)) { sosa.get(k).nom = nom; k *= 2 } }
     renommerLignee(2, 'Martin'); renommerLignee(5, 'Bernard'); renommerLignee(3, 'Dubois'); renommerLignee(7, 'Lefèvre')
+    // la lignée de Joséphine (Sosa 25), avant les collatéraux : ses frères et sœurs porteront son nom
+    renommerLignee(50, 'Perrin'); sosa.get(25).nom = 'Perrin'
 
     /* ---- la descendance des frères et sœurs des ancêtres : les cousins ---- */
     const fecondite = (annee) => (annee < 1800 ? 5.2 : annee < 1900 ? 4.4 : annee < 1950 ? 2.9 : 2.1)
@@ -178,7 +180,6 @@
     // l'arrière-arrière-grand-mère dont on ouvre la fiche : Sosa 25, née en 1868 (côté Dubois),
     // choisie parce que la date de l'acte tombe sur sa naissance générée (ses enfants naissent de 1896 à 1906)
     const vedette = sosa.get(25)
-    renommerLignee(50, 'Perrin')
     Object.assign(vedette, { prenom: 'Joséphine', nom: 'Perrin', naissance: 1868, mois: 3, jour: 12, deces: 1949, moisDeces: 11, jourDeces: 4, vivant: false, lieu: 'Josselin', lieuDeces: 'Ploërmel', metier: 'couturière' })
     const parentsVedette = parentsDe(vedette)
     if (parentsVedette.length === 2) {
