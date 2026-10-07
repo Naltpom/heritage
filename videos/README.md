@@ -39,3 +39,5 @@ python planche.py <id>
 - En haut, environ 200 px restent libres pour la croix et le bouton du son du lecteur. En bas, environ 100 px restent libres pour la barre de progression.
 
 La voix est générée par la synthèse Edge de Microsoft (`fr-FR-DeniseNeural`, et `fr-FR-RemyMultilingualNeural` pour « Un mot de Nathan »). Seul le texte des phrases leur est envoyé.
+
+Pour une voix ElevenLabs (par exemple une voix clonée), `voix_elevenlabs.py <id>` remplace `voix.py <id>` : mêmes fichiers en sortie, le reste ne change pas. Il lit la clé dans `ELEVENLABS_API_KEY` et la voix dans `ELEVENLABS_VOICE_ID` ; là aussi, seul le texte des phrases est envoyé.
