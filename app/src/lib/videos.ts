@@ -78,7 +78,7 @@ export interface CheminsVideo {
  */
 const DUREES: Record<string, number> = {
   bienvenue: 43,
-  'un-mot-de-nathan': 120,
+  'un-mot-de-nathan': 113,
   decouvrir: 28,
   'lire-l-arbre': 35,
   'filtres-de-l-arbre': 38,
