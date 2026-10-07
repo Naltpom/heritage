@@ -166,6 +166,15 @@ describe('les dates ne s’aplatissent pas', () => {
     ).toBe('BET 1901 AND 1909')
   })
 
+  it('dit le lieu, y compris d’une date inconnue', () => {
+    const bloc = { raw: null, qualifier: 'inconnue', min: null, max: null, texte: '' }
+    expect(formaterValeur({ ...bloc, place: 'Montréal, Canada' } as never)).toBe('date inconnue, à Montréal, Canada')
+    expect(formaterValeur({ ...bloc, place: null } as never)).toBe('date inconnue')
+    expect(
+      formaterValeur({ raw: '1987', qualifier: 'annee', min: null, max: null, place: 'Saule', texte: '1987' } as never),
+    ).toBe('1987, à Saule')
+  })
+
   it('ne recompose jamais une date depuis `min` et `max`', () => {
     // « entre 1901 et 1909 » ne se fabrique pas depuis deux bornes sans
     // réimplémenter le formateur du serveur, et en divergeant de lui au premier

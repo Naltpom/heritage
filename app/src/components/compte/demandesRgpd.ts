@@ -11,9 +11,9 @@ import {
   type CorpsDemandeRgpd,
   type DemandeRgpd,
   type NatureDemandeRgpd,
-  type PartageNaissance,
+  type ComposantesCochees,
 } from '@/lib/api'
-import { dateDuVerrou, resumePartage } from './partageNaissance'
+import { dateDuVerrou, resumeComposantes } from './partageNaissance'
 
 /** Les natures, dans l'ordre du menu. */
 export const NATURES_RGPD: readonly { nature: NatureDemandeRgpd; libelle: string }[] = [
@@ -28,7 +28,7 @@ export function libelleNature(nature: string): string {
 
 /** « jour et mois » — ce qu'un retrait demande de retirer. */
 export function composantesARetirer(demande: Pick<DemandeRgpd, 'nature' | 'aRetirer'>): string | null {
-  return demande.nature === 'retrait_partage' ? resumePartage(demande.aRetirer) : null
+  return demande.nature === 'retrait_partage' ? resumeComposantes(demande.aRetirer) : null
 }
 
 /** « En attente », « Appliquée le 3 octobre 2026 », « Refusée le … ». */
@@ -48,11 +48,11 @@ export function pastilleDeDemande(demande: Pick<DemandeRgpd, 'decision'>): 'en_a
 /** Ce que le formulaire tient avant l'envoi. */
 export interface BrouillonDemandeRgpd {
   nature: NatureDemandeRgpd
-  aRetirer: PartageNaissance
+  aRetirer: ComposantesCochees
   message: string
 }
 
-export function brouillonVide(aRetirer?: Partial<PartageNaissance>): BrouillonDemandeRgpd {
+export function brouillonVide(aRetirer?: Partial<ComposantesCochees>): BrouillonDemandeRgpd {
   return {
     nature: 'retrait_partage',
     aRetirer: { annee: false, mois: false, jour: false, ...aRetirer },

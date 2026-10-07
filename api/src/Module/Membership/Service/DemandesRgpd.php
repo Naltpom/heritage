@@ -6,6 +6,7 @@ namespace App\Module\Membership\Service;
 
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\AuditAction;
+use App\Module\Core\Enum\NiveauDePartage;
 use App\Module\Core\Enum\NotificationKind;
 use App\Module\Core\Exception\ConflictException;
 use App\Module\Core\Exception\NotFoundException;
@@ -56,7 +57,7 @@ final readonly class DemandesRgpd
             throw new ValidationException(['nature' => 'Choisissez la nature de la demande.']);
         }
 
-        [$aRetirer, $erreurs] = ConsentementDeNaissance::lire($corps);
+        [$aRetirer, $erreurs] = ConsentementDeNaissance::lireLesComposantes($corps);
         $message = \is_string($corps['message'] ?? null) ? trim($corps['message']) : '';
 
         if (DemandeRgpd::RETRAIT_PARTAGE === $nature) {
@@ -130,15 +131,15 @@ final readonly class DemandesRgpd
             throw new ValidationException(['reponse' => 'Expliquez le refus au membre.']);
         }
 
-        // Un retrait appliqué retire les composantes visées, **sans** verrou.
+        // Un retrait appliqué passe les composantes visées à `personne`, **sans** verrou :
+        // c'est le retrait du consentement, entier. Le membre remonte ensuite à `proches`
+        // librement s'il le souhaite.
         if (DemandeRgpd::APPLIQUEE === $decision && DemandeRgpd::RETRAIT_PARTAGE === $demande->getNature()) {
             $membre = $this->membres->find($demande->getMemberId());
             if ($membre instanceof Member) {
-                $actuel = $membre->getPartageDeNaissance();
-                $retrait = $demande->getARetirer();
                 $this->consentements->enregistrer(
                     $membre,
-                    new ComposantesDeDate($actuel->annee && !$retrait->annee, $actuel->mois && !$retrait->mois, $actuel->jour && !$retrait->jour),
+                    $membre->getPartageDeNaissance()->avec($demande->getARetirer(), NiveauDePartage::Personne),
                     'administration',
                 );
             }
@@ -149,13 +150,16 @@ final readonly class DemandesRgpd
 
         $this->audit->enregistrer(AuditAction::DemandeRgpd, 'demande_rgpd', (string) $demande->getId(), $demande->getUserEmail(), ['geste' => 'traitee', 'nature' => $demande->getNature(), 'decision' => $decision]);
 
-        $this->notifications->notifier(
-            $demande->getUserId(),
-            NotificationKind::DemandeRgpdTraitee,
-            DemandeRgpd::APPLIQUEE === $decision ? 'Votre demande RGPD a été appliquée' : 'Votre demande RGPD a été refusée',
-            '' === $reponse ? null : $reponse,
-            'compte',
-        );
+        // L'administrateur qui traite sa propre demande n'a pas à en être notifié.
+        if ($demande->getUserId() !== $administrateur->getId()) {
+            $this->notifications->notifier(
+                $demande->getUserId(),
+                NotificationKind::DemandeRgpdTraitee,
+                DemandeRgpd::APPLIQUEE === $decision ? 'Votre demande RGPD a été appliquée' : 'Votre demande RGPD a été refusée',
+                '' === $reponse ? null : $reponse,
+                'compte',
+            );
+        }
 
         return $demande;
     }

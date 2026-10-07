@@ -1,17 +1,31 @@
 /**
- * Le choix de partage de la date de naissance (ADR 0016) — ce qui se calcule
- * sans monter de composant : le choix par défaut, la comparaison, les refus du
- * serveur et le résumé court de l'écran d'administration.
+ * Le choix de partage de la date de naissance (ADR 0016, révision du 7 octobre
+ * 2026) — ce qui se calcule sans monter de composant : le choix par défaut, la
+ * comparaison, les refus du serveur et le résumé court de l'écran
+ * d'administration.
  */
-import { estErreurApi, type PartageNaissance, type VerrouDePartage } from '@/lib/api'
+import {
+  estErreurApi,
+  type ComposantesCochees,
+  type NiveauDePartage,
+  type PartageNaissance,
+  type VerrouDePartage,
+} from '@/lib/api'
+
+/** Les trois niveaux, dans l'ordre des boutons : du plus ouvert au plus fermé. */
+export const NIVEAUX: readonly { niveau: NiveauDePartage; libelle: string }[] = [
+  { niveau: 'tous', libelle: 'Tous les vivants de l’arbre' },
+  { niveau: 'proches', libelle: 'Mes proches' },
+  { niveau: 'personne', libelle: 'Personne' },
+]
 
 /**
- * **Rien de coché par défaut.** Partager est un consentement : il se donne, il
- * ne se présume pas. Le candidat qui passe sans lire ne partage rien — et ne
- * voit rien des dates des autres vivants, ce que la phrase sous les cases dit.
+ * **Les proches par défaut.** Le candidat qui passe sans lire montre sa date à
+ * ses proches — parents, enfants, frères et sœurs, conjoint, beaux-parents —,
+ * qui la connaissent déjà, et voit la leur. Personne d'autre.
  */
 export function partageParDefaut(): PartageNaissance {
-  return { annee: false, mois: false, jour: false }
+  return { annee: 'proches', mois: 'proches', jour: 'proches' }
 }
 
 /** Les trois clés seulement : `modifieLe` n'entre pas dans un corps. */
@@ -39,24 +53,42 @@ export function erreursDePartage(
 }
 
 /**
- * Le choix en une phrase courte : « année, mois et jour », « jour et mois »,
- * « rien ». L'ordre est celui de la lecture d'une date française — jour, mois,
- * année —, sauf quand tout est partagé, dit dans l'ordre des cases.
+ * Des cases cochées en une phrase courte : « année, mois et jour », « jour et
+ * mois », « rien ». L'ordre est celui de la lecture d'une date française —
+ * jour, mois, année —, sauf quand tout est coché, dit dans l'ordre des cases.
  */
-export function resumePartage(partage: PartageNaissance): string {
-  if (partage.annee && partage.mois && partage.jour) return 'année, mois et jour'
-  const parties = [partage.jour ? 'jour' : null, partage.mois ? 'mois' : null, partage.annee ? 'année' : null]
+export function resumeComposantes(composantes: ComposantesCochees): string {
+  if (composantes.annee && composantes.mois && composantes.jour) return 'année, mois et jour'
+  const parties = [composantes.jour ? 'jour' : null, composantes.mois ? 'mois' : null, composantes.annee ? 'année' : null]
     .filter((p): p is string => p !== null)
   if (parties.length === 0) return 'rien'
   if (parties.length === 1) return parties[0]!
   return `${parties[0]} et ${parties[1]}`
 }
 
-/** Les initiales cochées, pour une pastille : « A M J », « M J », « — ». */
-export function initialesPartage(partage: PartageNaissance): string {
-  const lettres = [partage.annee ? 'A' : null, partage.mois ? 'M' : null, partage.jour ? 'J' : null]
-    .filter((l): l is string => l !== null)
-  return lettres.length === 0 ? '—' : lettres.join(' ')
+const NIVEAU_COURT: Readonly<Record<NiveauDePartage, string>> = {
+  tous: 'tous',
+  proches: 'proches',
+  personne: 'personne',
+}
+
+/**
+ * Le choix en une ligne, par niveau, du plus ouvert au plus fermé :
+ * « année, mois et jour : proches », « jour et mois : tous · année : personne ».
+ */
+export function resumePartage(partage: PartageNaissance): string {
+  return NIVEAUX.map(({ niveau }) => {
+    const composantes = {
+      annee: partage.annee === niveau,
+      mois: partage.mois === niveau,
+      jour: partage.jour === niveau,
+    }
+    return composantes.annee || composantes.mois || composantes.jour
+      ? `${resumeComposantes(composantes)} : ${NIVEAU_COURT[niveau]}`
+      : null
+  })
+    .filter((p): p is string => p !== null)
+    .join(' · ')
 }
 
 /** Le refus d'un retrait trop tôt (`409`) : la composante est verrouillée. */
@@ -81,16 +113,17 @@ export function verrouDuRefus(erreur: unknown): VerrouDePartage | null {
 }
 
 /**
- * Une case **cochée** que le verrou mentionne ne se décoche pas : la date dit
- * jusqu'à quand, au minimum. Une case non cochée n'est jamais bloquée —
- * partager est immédiat.
+ * Une composante **à « tous »** que le verrou mentionne ne redescend pas : la
+ * date dit jusqu'à quand, au minimum. Une composante à « proches » ou
+ * « personne » n'est jamais bloquée — partager est immédiat, et entre ces deux
+ * niveaux on va et vient librement.
  */
 export function verrouillee(
   partage: PartageNaissance,
   verrou: VerrouDePartage,
   cle: keyof PartageNaissance,
 ): string | null {
-  return partage[cle] && verrou[cle] !== undefined ? verrou[cle] : null
+  return partage[cle] === 'tous' && verrou[cle] !== undefined ? verrou[cle] : null
 }
 
 /** « 2 novembre 2026 » — la fin d'un verrou, en toutes lettres. */
@@ -101,7 +134,7 @@ export function dateDuVerrou(iso: string): string {
     : date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-/** Une composante non partagée hier l'est dans le choix en cours. */
-export function ajouteUneComposante(avant: PartageNaissance, apres: PartageNaissance): boolean {
-  return (!avant.annee && apres.annee) || (!avant.mois && apres.mois) || (!avant.jour && apres.jour)
+/** Une composante qui n'était pas à « tous » y passe dans le choix en cours : le verrou va courir. */
+export function ouvreATous(avant: PartageNaissance, apres: PartageNaissance): boolean {
+  return (['annee', 'mois', 'jour'] as const).some((cle) => avant[cle] !== 'tous' && apres[cle] === 'tous')
 }

@@ -1,38 +1,41 @@
 <script setup lang="ts">
 /**
- * « J'accepte de partager ma date de naissance » — trois cases **indépendantes**
- * (ADR 0016, réciprocité des vivants).
+ * « Qui voit ma date de naissance ? » — pour l'année, le mois et le jour,
+ * chacun **indépendamment** : tous les vivants de l'arbre, mes proches, ou
+ * personne (ADR 0016, révision du 7 octobre 2026).
  *
- * Année, mois, jour se cochent séparément : « le jour et le mois, pas
- * l'année » est le choix le plus courant — on souhaite l'anniversaire sans
- * dire l'âge. Aucune case n'en entraîne une autre, et l'écran n'en déduit
- * rien : c'est le serveur qui réduit les dates, à la composante près.
+ * « Le jour et le mois à tous, l'année à mes proches » est le choix le plus
+ * courant : on souhaite l'anniversaire sans dire l'âge. Aucune ligne n'en
+ * entraîne une autre, et l'écran n'en déduit rien : c'est le serveur qui
+ * réduit les dates, à la composante près.
  *
- * La règle est **réciproque**, et le texte le dit avant qu'on coche : ce
- * qu'on ne partage pas, on ne le voit pas non plus chez les autres personnes
- * vivantes. Les personnes décédées ne sont pas concernées. La phrase sur la
- * photo dit l'autre moitié de la règle — sans photo de soi, celles des
+ * La règle est **réciproque**, et le texte le dit avant qu'on choisisse : on
+ * voit d'une personne vivante ce que chacun montre à l'autre — à ses proches
+ * dès que les deux sont au moins à « Mes proches », aux autres si les deux
+ * sont à « Tous ». Les personnes décédées ne sont pas concernées. La phrase
+ * sur la photo dit l'autre moitié de la règle — sans photo de soi, celles des
  * vivants arrivent floutées — parce qu'on la découvre sinon sans explication.
  *
- * **Le verrou** : partager est immédiat, mais une composante partagée reste
- * visible au moins trente jours. La phrase d'avertissement le dit **avant**
- * qu'on coche. Une case cochée que `verrou` mentionne est éteinte, avec la
- * date jusqu'à laquelle elle tient et le moyen de la retirer plus tôt : une
- * demande RGPD (`@demande-rgpd`, avec la composante). Une case non cochée
- * n'est jamais éteinte. À l'inscription, il n'y a pas d'état antérieur, donc
- * pas de verrou.
+ * **Le verrou** : partager avec tous est immédiat, mais une composante à
+ * « Tous » le reste au moins trente jours. La phrase d'avertissement le dit
+ * **avant** qu'on choisisse. Une ligne à « Tous » que `verrou` mentionne a ses
+ * deux autres choix éteints, avec la date jusqu'à laquelle elle tient et le
+ * moyen d'en sortir plus tôt : une demande RGPD (`@demande-rgpd`, avec la
+ * composante). Entre « Mes proches » et « Personne », rien n'est jamais
+ * éteint. À l'inscription, il n'y a pas d'état antérieur, donc pas de verrou.
  *
- * Servi à l'inscription (étape 2) et dans « Mon compte ». Le composant ne
+ * Servi à l'inscription (étape 2), dans « Mon compte », et à l'administrateur
+ * qui dépose l'autorisation signée d'un vivant sans compte. Le composant ne
  * parle pas au serveur : il tient l'objet, l'écran l'envoie.
  */
 import { computed, useId } from 'vue'
-import type { PartageNaissance, VerrouDePartage } from '@/lib/api'
-import { dateDuVerrou, verrouillee } from './partageNaissance'
+import type { NiveauDePartage, PartageNaissance, VerrouDePartage } from '@/lib/api'
+import { NIVEAUX, dateDuVerrou, verrouillee } from './partageNaissance'
 
 const {
   erreurs = {},
   desactive = false,
-  legende = 'J’accepte de partager ma date de naissance',
+  legende = 'Qui voit ma date de naissance ?',
   sansExplication = false,
   verrou = {},
   avertissementAppuye = false,
@@ -42,16 +45,16 @@ const {
   desactive?: boolean
   legende?: string
   /** Pour l'autorisation signée d'un tiers : la règle s'adresse au membre
-   *  (« vous »), elle n'a rien à dire à l'administrateur qui coche pour un autre. */
+   *  (« vous »), elle n'a rien à dire à l'administrateur qui choisit pour un autre. */
   sansExplication?: boolean
-  /** Les composantes partagées il y a moins de trente jours (`verrouJusquAu`). */
+  /** Les composantes passées à « Tous » il y a moins de trente jours (`verrouJusquAu`). */
   verrou?: VerrouDePartage
-  /** L'avertissement des trente jours en gras : une case vient d'être cochée. */
+  /** L'avertissement des trente jours en gras : une composante vient de passer à « Tous ». */
   avertissementAppuye?: boolean
 }>()
 
 const emit = defineEmits<{
-  /** « Faites une demande RGPD » sous une case verrouillée. */
+  /** « Faites une demande RGPD » sous une ligne verrouillée. */
   'demande-rgpd': [cle: keyof PartageNaissance]
 }>()
 
@@ -65,16 +68,22 @@ const COMPOSANTES: readonly { cle: keyof PartageNaissance; libelle: string }[] =
   { cle: 'jour', libelle: 'Jour' },
 ]
 
-/** Un nouvel objet à chaque case : le parent garde un `ref` simple, et
- *  `defineModel` ne voit pas une mutation en place. */
-/** L'avertissement tient tant qu'il reste une case à cocher qui ne soit pas
- *  déjà partagée et verrouillée. */
-const resteACocher = computed(() =>
+/** L'avertissement tient tant qu'il reste une ligne qui ne soit pas déjà à
+ *  « Tous » et verrouillée. */
+const resteAOuvrir = computed(() =>
   COMPOSANTES.some((composante) => verrouillee(partage.value, verrou, composante.cle) === null),
 )
 
-function cocher(cle: keyof PartageNaissance, valeur: boolean): void {
-  partage.value = { ...partage.value, [cle]: valeur }
+/** Un choix éteint : tout désactivé, ou une ligne verrouillée à « Tous » dont
+ *  on voudrait descendre. */
+function eteint(cle: keyof PartageNaissance, niveau: NiveauDePartage): boolean {
+  return desactive || (niveau !== 'tous' && verrouillee(partage.value, verrou, cle) !== null)
+}
+
+/** Un nouvel objet à chaque choix : le parent garde un `ref` simple, et
+ *  `defineModel` ne voit pas une mutation en place. */
+function choisir(cle: keyof PartageNaissance, niveau: NiveauDePartage): void {
+  partage.value = { ...partage.value, [cle]: niveau }
 }
 </script>
 
@@ -86,18 +95,36 @@ function cocher(cle: keyof PartageNaissance, valeur: boolean): void {
   >
     <legend class="mb-1 text-sm font-medium">{{ legende }}</legend>
 
-    <div class="flex flex-wrap gap-x-5 gap-y-1.5">
-      <label v-for="composante in COMPOSANTES" :key="composante.cle" class="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          class="size-4 accent-[var(--color-accent)]"
-          :checked="partage[composante.cle]"
-          :disabled="desactive || verrouillee(partage, verrou, composante.cle) !== null"
-          :data-composante="composante.cle"
-          @change="cocher(composante.cle, ($event.target as HTMLInputElement).checked)"
-        />
-        {{ composante.libelle }}
-      </label>
+    <div class="flex flex-col gap-1.5">
+      <div
+        v-for="composante in COMPOSANTES"
+        :key="composante.cle"
+        class="flex flex-wrap items-center gap-x-4 gap-y-1"
+        role="radiogroup"
+        :aria-label="composante.libelle"
+        :data-ligne="composante.cle"
+      >
+        <span class="w-14 text-sm font-medium">{{ composante.libelle }}</span>
+        <label
+          v-for="choix in NIVEAUX"
+          :key="choix.niveau"
+          class="flex items-center gap-1.5 text-sm"
+          :class="eteint(composante.cle, choix.niveau) ? 'text-attenue' : ''"
+        >
+          <input
+            type="radio"
+            class="size-4 accent-[var(--color-accent)]"
+            :name="`${id}-${composante.cle}`"
+            :value="choix.niveau"
+            :checked="partage[composante.cle] === choix.niveau"
+            :disabled="eteint(composante.cle, choix.niveau)"
+            :data-composante="composante.cle"
+            :data-niveau="choix.niveau"
+            @change="choisir(composante.cle, choix.niveau)"
+          />
+          {{ choix.libelle }}
+        </label>
+      </div>
     </div>
 
     <template v-for="composante in COMPOSANTES" :key="`verrou-${composante.cle}`">
@@ -106,7 +133,7 @@ function cocher(cle: keyof PartageNaissance, valeur: boolean): void {
         class="text-xs text-attenue"
         :data-verrou="composante.cle"
       >
-        {{ composante.libelle }} — Partagé jusqu’au
+        {{ composante.libelle }} — Partagé avec tous jusqu’au
         {{ dateDuVerrou(verrouillee(partage, verrou, composante.cle)!) }} au minimum. Pour le retirer avant,
         <button
           type="button"
@@ -123,16 +150,22 @@ function cocher(cle: keyof PartageNaissance, valeur: boolean): void {
 
     <template v-if="!sansExplication">
       <p
-        v-if="resteACocher"
+        v-if="resteAOuvrir"
         class="text-xs leading-relaxed"
         :class="avertissementAppuye ? 'font-semibold text-alerte' : 'text-attenue'"
         data-avertissement-partage
       >
-        Une information partagée reste visible des autres membres au moins 30 jours.
+        Une information partagée avec tous le reste au moins 30 jours.
       </p>
       <p :id="`${id}-regle`" class="text-xs leading-relaxed text-attenue">
-        Ce que vous ne partagez pas, vous ne le verrez pas non plus chez les autres personnes vivantes.
-        Les personnes décédées ne sont pas concernées. Modifiable ensuite dans votre compte.
+        C’est réciproque : vous voyez la date d’une personne vivante seulement si chacun la montre à
+        l’autre — celle de vos proches si vous êtes tous deux au moins à « Mes proches », celle des
+        autres si vous êtes tous deux à « Tous ». Les personnes décédées ne sont pas concernées.
+        Modifiable ensuite dans votre compte.
+      </p>
+      <p class="text-xs leading-relaxed text-attenue" data-definition-proches>
+        Vos proches : vos parents et grands-parents, vos enfants et petits-enfants, vos frères et
+        sœurs, votre conjoint, ses parents et grands-parents, les conjoints de vos enfants et petits-enfants.
       </p>
       <p class="text-xs leading-relaxed text-attenue">
         Sans photo de vous (même en attente de validation), les photos des personnes vivantes

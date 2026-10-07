@@ -48,4 +48,10 @@ enum NotificationKind: string
     case DemandeRgpd = 'demande_rgpd';
     /** La demande RGPD du membre a été traitée — appliquée ou refusée. */
     case DemandeRgpdTraitee = 'demande_rgpd_traitee';
+    /**
+     * Le partage de la date de naissance passe à trois niveaux, `proches` par défaut
+     * (ADR 0016, révision du 2026-10-07) — posée une fois, par la migration, à chaque
+     * compte rattaché.
+     */
+    case PartageNaissanceRevu = 'partage_naissance_revu';
 }

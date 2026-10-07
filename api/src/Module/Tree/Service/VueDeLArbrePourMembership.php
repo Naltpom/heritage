@@ -198,7 +198,7 @@ final class VueDeLArbrePourMembership implements PortArbre
                 }
             }
 
-            $sortie[] = new FamilleDeLArbre($epoux, $enfants[$id] ?? []);
+            $sortie[] = new FamilleDeLArbre($epoux, $enfants[$id] ?? [], $famille->isDivorced());
         }
 
         return $sortie;

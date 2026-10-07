@@ -126,14 +126,18 @@ final class NormaliseurDeValeur
 
     /**
      * Le rendu d'une valeur en une ligne de français, pour `libelleDiff` :
-     * « Naissance : 1987 → entre 1901 et 1909 ».
+     * « Naissance : 1987 → entre 1901 et 1909, à Saule ».
      */
     public function enUneLigne(ValueKind $kind, mixed $json): string
     {
         if (ValueKind::DateIncertaine === $kind && \is_array($json)) {
             $texte = $this->reconstruire($json)->format();
+            $texte = '' === $texte ? '(inconnue)' : $texte;
+            // Le lieu se dit aussi : une demande peut ne changer que lui, et le taire
+            // donnait « Naissance : (inconnue) → (inconnue) ».
+            $lieu = \is_string($json['place'] ?? null) ? trim($json['place']) : '';
 
-            return '' === $texte ? '(inconnue)' : $texte;
+            return '' === $lieu ? $texte : $texte.', à '.$lieu;
         }
 
         return match (true) {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Core\Security;
 
 use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Core\ValueObject\PartageDeNaissance;
 
 /**
  * L'implémentation **par défaut** de {@see ReciprociteInterface} : aucune composante de
@@ -32,7 +33,7 @@ final class ReciprociteFermee implements ReciprociteInterface
         return false;
     }
 
-    public function partageDuLecteur(): ?ComposantesDeDate
+    public function partageDuLecteur(): ?PartageDeNaissance
     {
         return null;
     }

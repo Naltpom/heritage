@@ -67,6 +67,10 @@ final readonly class NotificateurParNotifications implements NotificateurDeDeman
 
     public function demandeValidee(ChangeRequest $demande, bool $rejouee): void
     {
+        if ($this->decideeParSonAuteur($demande)) {
+            return;
+        }
+
         // Le rejeu se dit à l'auteur : c'est une écriture qu'aucun humain n'a réexaminée
         // champ par champ, et elle doit se voir (§ 6.8 du contrat).
         $corps = $rejouee
@@ -85,6 +89,10 @@ final readonly class NotificateurParNotifications implements NotificateurDeDeman
 
     public function demandeRefusee(ChangeRequest $demande, string $message): void
     {
+        if ($this->decideeParSonAuteur($demande)) {
+            return;
+        }
+
         $this->notifications->notifier(
             $demande->getAuthorUserId(),
             NotificationKind::DemandeRefusee,
@@ -127,6 +135,16 @@ final readonly class NotificateurParNotifications implements NotificateurDeDeman
             'demande.refaire',
             ['id' => $demande->getId()],
         );
+    }
+
+    /**
+     * L'administrateur qui tranche sa **propre** demande vient de cliquer : lui annoncer
+     * sa décision serait du bruit (2026-10-07). La caducité, elle, part toujours — c'est
+     * le monde qui a bougé, pas lui.
+     */
+    private function decideeParSonAuteur(ChangeRequest $demande): bool
+    {
+        return null !== $demande->getDecidedByUserId() && $demande->getDecidedByUserId() === $demande->getAuthorUserId();
     }
 
     /** « sur Marne Dolomite Sureau », ou rien si la demande ne nomme pas sa cible. */

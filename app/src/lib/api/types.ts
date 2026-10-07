@@ -230,23 +230,38 @@ export interface ComposantesDate {
 }
 
 /**
- * ADR 0016 — ce que le membre accepte de partager de sa date de naissance.
- * Trois cases **indépendantes** : « le jour et le mois, pas l'année » est un
- * choix courant. Ce qu'il ne partage pas, il ne le voit pas non plus chez les
- * autres personnes vivantes.
+ * ADR 0016, révision du 7 octobre 2026 — **à qui** une composante de la date de
+ * naissance est montrée : tous les vivants de l'arbre, ses proches seulement
+ * (ascendants, descendants, frères et sœurs, conjoint, beaux-parents, conjoints
+ * des descendants), ou personne. `proches` est le défaut.
+ */
+export type NiveauDePartage = 'tous' | 'proches' | 'personne'
+
+/**
+ * ADR 0016 — ce que le membre partage de sa date de naissance : un niveau par
+ * composante, **indépendants** (« le jour et le mois à tous, l'année à mes
+ * proches » est un choix courant). Réciproque : on ne voit d'une personne que
+ * ce que chacun montre à l'autre.
  */
 export interface PartageNaissance {
+  annee: NiveauDePartage
+  mois: NiveauDePartage
+  jour: NiveauDePartage
+}
+
+/** Trois cases à cocher — les composantes visées par une demande RGPD de retrait. */
+export interface ComposantesCochees {
   annee: boolean
   mois: boolean
   jour: boolean
 }
 
 /**
- * Le **verrou** : une composante partagée reste visible au moins trente jours.
- * Partager est immédiat ; retirer ne l'est qu'une fois le verrou passé — avant,
- * il faut une demande RGPD. Seules les composantes **partagées et encore
- * verrouillées** sont présentes, avec la date (ISO) à partir de laquelle elles
- * se décochent.
+ * Le **verrou** : une composante partagée avec tous le reste au moins trente
+ * jours. Partager est immédiat ; revenir à « proches » ou « personne » ne l'est
+ * qu'une fois le verrou passé — avant, il faut une demande RGPD. Seules les
+ * composantes **à « tous » et encore verrouillées** sont présentes, avec la
+ * date (ISO) à partir de laquelle elles se libèrent.
  */
 export type VerrouDePartage = Partial<Record<keyof PartageNaissance, string>>
 

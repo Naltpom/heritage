@@ -81,8 +81,14 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * **56 depuis le 2026-10-02** : `evt_invitation.reponse` (module `Evenement`), en
      * `VARCHAR(8)` pour une plus longue valeur de sept signes (`present`). Deux valeurs et
      * pas de troisième — pas de « peut-être », c'est la demande.
+     *
+     * **62 depuis le 2026-10-07** : les trois composantes du partage de la date de
+     * naissance, sur `mbr_member` (`birth_share_*`) et sur `mbr_autorisation_naissance`
+     * (`share_*`), passent de `BOOLEAN` à `NiveauDePartage` (ADR 0016, révision du
+     * 2026-10-07), en `VARCHAR(8)` pour une plus longue valeur de huit signes
+     * (`personne`).
      */
-    private const int COLONNES_ENUM_ATTENDUES = 56;
+    private const int COLONNES_ENUM_ATTENDUES = 62;
 
     public function testChaqueColonneAccueilleLaPlusLongueValeurDeSonEnumeration(): void
     {

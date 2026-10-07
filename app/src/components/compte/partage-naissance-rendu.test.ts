@@ -5,12 +5,13 @@ import type { PartageNaissance as Partage, VerrouDePartage } from '@/lib/api'
 import PartageNaissance from './PartageNaissance.vue'
 
 /**
- * Le bloc « J'accepte de partager ma date de naissance » — rendu côté serveur.
+ * Le bloc « Qui voit ma date de naissance ? » — rendu côté serveur.
  *
- * Trois cases indépendantes, chacune avec sa valeur ; la règle de réciprocité
- * et la phrase sur la photo dites avant qu'on coche, avec l'avertissement des
- * trente jours ; une case cochée verrouillée éteinte, avec sa date et le
- * chemin de la demande RGPD.
+ * Trois lignes indépendantes, chacune à trois niveaux (tous, mes proches,
+ * personne) ; la règle de réciprocité, la définition des proches et la phrase
+ * sur la photo dites avant qu'on choisisse, avec l'avertissement des trente
+ * jours ; une ligne verrouillée à « tous », avec sa date et le chemin de la
+ * demande RGPD.
  */
 
 async function rendre(
@@ -22,62 +23,65 @@ async function rendre(
   )
 }
 
-/** La balise `<input>` d'une composante. */
-function caseDe(html: string, cle: string): string {
-  return new RegExp(`<input[^>]*data-composante="${cle}"[^>]*>`).exec(html)?.[0] ?? ''
+/** La balise `<input>` d'un niveau d'une composante. */
+function choixDe(html: string, cle: string, niveau: string): string {
+  return (
+    new RegExp(`<input[^>]*data-composante="${cle}"[^>]*data-niveau="${niveau}"[^>]*>`).exec(html)?.[0] ?? ''
+  )
 }
 
 describe('PartageNaissance', () => {
-  it('porte trois cases indépendantes et la règle de réciprocité', async () => {
-    const html = await rendre({ annee: false, mois: true, jour: true })
+  it('porte trois lignes à trois niveaux, la règle de réciprocité et la définition des proches', async () => {
+    const html = await rendre({ annee: 'personne', mois: 'tous', jour: 'proches' })
 
-    expect(html).toContain('J’accepte de partager ma date de naissance')
-    expect(html.match(/type="checkbox"/g)).toHaveLength(3)
-    expect(html).toMatch(/data-composante="annee"/)
-    expect(caseDe(html, 'annee')).not.toContain('checked')
-    expect(caseDe(html, 'mois')).toContain('checked')
-    expect(caseDe(html, 'jour')).toContain('checked')
-    expect(html).toContain('Ce que vous ne partagez pas, vous ne le verrez pas non plus chez les autres personnes vivantes.')
+    expect(html).toContain('Qui voit ma date de naissance ?')
+    expect(html.match(/type="radio"/g)).toHaveLength(9)
+    expect(choixDe(html, 'annee', 'personne')).toContain('checked')
+    expect(choixDe(html, 'annee', 'tous')).not.toContain('checked')
+    expect(choixDe(html, 'mois', 'tous')).toContain('checked')
+    expect(choixDe(html, 'jour', 'proches')).toContain('checked')
+    expect(html).toContain('Tous les vivants de l’arbre')
+    expect(html).toContain('Mes proches')
+    expect(html).toContain('C’est réciproque')
     expect(html).toContain('Les personnes décédées ne sont pas concernées.')
+    expect(html).toContain('data-definition-proches')
     expect(html).toContain('Sans photo de vous (même en attente de validation)')
   })
 
-  it('avertit des trente jours avant qu’on coche', async () => {
-    const html = await rendre({ annee: false, mois: false, jour: false })
+  it('avertit des trente jours avant qu’on choisisse « tous »', async () => {
+    const html = await rendre({ annee: 'proches', mois: 'proches', jour: 'proches' })
     expect(html).toContain('data-avertissement-partage')
-    expect(html).toContain('Une information partagée reste visible des autres membres au moins 30 jours.')
-    expect(html).not.toContain('retiré récemment')
+    expect(html).toContain('Une information partagée avec tous le reste au moins 30 jours.')
   })
 
-  it('éteint une case cochée verrouillée et dit jusqu’à quand, jamais une case non cochée', async () => {
-    const html = await rendre(
-      { annee: false, mois: true, jour: true },
-      { verrou: { annee: '2026-11-02T12:00:00+01:00', mois: '2026-11-02T12:00:00+01:00' } },
-    )
+  it('verrouille une ligne à « tous » et dit jusqu’à quand, jamais une ligne à « proches »', async () => {
+    const date = '2026-11-02T12:00:00+01:00'
+    const html = await rendre({ annee: 'proches', mois: 'tous', jour: 'tous' }, { verrou: { annee: date, mois: date } })
 
-    expect(caseDe(html, 'mois')).toContain('disabled')
-    // Non cochée : partager reste toujours possible.
-    expect(caseDe(html, 'annee')).not.toContain('disabled')
-    expect(caseDe(html, 'jour')).not.toContain('disabled')
+    expect(choixDe(html, 'mois', 'proches')).toContain('disabled')
+    expect(choixDe(html, 'mois', 'personne')).toContain('disabled')
+    expect(choixDe(html, 'mois', 'tous')).not.toContain('disabled')
+    // À « proches » : on va et vient librement, verrou ou pas.
+    expect(choixDe(html, 'annee', 'personne')).not.toContain('disabled')
+    expect(choixDe(html, 'jour', 'proches')).not.toContain('disabled')
     expect(html).toContain('data-verrou="mois"')
     expect(html).not.toContain('data-verrou="annee"')
-    expect(html).toMatch(/Partagé jusqu’au\s+2 novembre 2026 au minimum\. Pour le retirer avant,/)
+    expect(html).toMatch(/Partagé avec tous jusqu’au\s+2 novembre 2026 au minimum\. Pour le retirer avant,/)
     expect(html).toContain('data-demande-rgpd="mois"')
     expect(html).toContain('faites une demande RGPD')
-    // Il reste des cases à cocher : l'avertissement tient.
     expect(html).toContain('data-avertissement-partage')
   })
 
-  it('se tait sur l’avertissement quand tout est partagé et verrouillé', async () => {
+  it('se tait sur l’avertissement quand tout est à « tous » et verrouillé', async () => {
     const date = '2026-11-02T12:00:00+01:00'
-    const html = await rendre({ annee: true, mois: true, jour: true }, { verrou: { annee: date, mois: date, jour: date } })
-    expect(html.match(/disabled/g)).toHaveLength(3)
+    const html = await rendre({ annee: 'tous', mois: 'tous', jour: 'tous' }, { verrou: { annee: date, mois: date, jour: date } })
+    expect(html.match(/disabled/g)).toHaveLength(6)
     expect(html).not.toContain('data-avertissement-partage')
   })
 
-  it('se tait sur la règle quand l’administrateur coche pour un tiers', async () => {
-    const html = await rendre({ annee: true, mois: false, jour: false }, { sansExplication: true })
-    expect(html).not.toContain('Ce que vous ne partagez pas')
+  it('se tait sur la règle quand l’administrateur choisit pour un tiers', async () => {
+    const html = await rendre({ annee: 'tous', mois: 'proches', jour: 'personne' }, { sansExplication: true })
+    expect(html).not.toContain('C’est réciproque')
     expect(html).not.toContain('Sans photo de vous')
     expect(html).not.toContain('data-avertissement-partage')
   })

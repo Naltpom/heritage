@@ -1,6 +1,14 @@
 # ADR 0016 — La réciprocité des vivants (date de naissance et portrait)
 
-Date : 2026-10-03 · Statut : acceptée
+Date : 2026-10-03 · Statut : acceptée · Révisée le 2026-10-07 (**trois niveaux de partage :
+tous, proches, personne — proches par défaut**)
+
+> **À lire d'abord — révision du 2026-10-07, « les proches se voient ».** Chaque composante
+> de la date de naissance ne se partage plus par oui ou non, mais **avec qui** : `tous` les
+> vivants de l'arbre, ses `proches`, ou `personne`. Le défaut est `proches`. La règle
+> « on ne voit que ce que les deux partagent » devient « on ne voit que ce que **chacun montre
+> à l'autre** ». Partout où ce texte écrit « V partage c », lire : *V montre c à T*. Le détail,
+> le motif et ce qui ne change pas : section « Révision du 2026-10-07 », en fin de document.
 
 ## Contexte
 
@@ -138,3 +146,87 @@ composantes, empreinte du document), `restriction_naissance` (l'option d'adminis
   vivants en posant l'option sur son propre compte, et leurs photos floues tant que son
   compte n'a pas de photo. Le rattachement assisté (ADR 0013), qui compare des naissances,
   suppose l'option posée.
+
+## Révision du 2026-10-07 — trois niveaux, les proches par défaut
+
+### Le motif
+
+Sous la règle d'origine, un parent qui n'avait rien coché ne voyait pas la date de naissance de
+son propre enfant, ni l'enfant celle de ses parents. C'était le cas de presque tous les comptes :
+le partage était `false` par défaut et peu de membres l'avaient changé. Le commanditaire veut que
+**l'arbre de chacun montre ses proches**, et que pour les autres vivants la réciprocité joue comme
+avant.
+
+### La règle
+
+Chaque personne vivante partage l'année, le mois et le jour, **chacun à son niveau** :
+
+- `tous` — tous les vivants de l'arbre ;
+- `proches` — ses proches seulement — **le défaut** ;
+- `personne`.
+
+Les **proches** de u (`Membership\Service\CalculDesProches`) :
+
+```
+P(u) = Asc(u) ∪ Desc(u) ∪ Fratrie(u) ∪ Conj(u) ∪ Asc(Conj(u)) ∪ Conj(Desc(u)) \ { u }
+```
+
+ascendants et descendants à toute profondeur, frères et sœurs (demi-frères et demi-sœurs
+compris), conjoints **actuels** — une union rompue (`tree_family.divorced`) n'en fait plus, ni de
+ses parents —, ascendants des conjoints, conjoints des descendants. La relation est
+**symétrique** (`v ∈ P(u) ⇔ u ∈ P(v)`), et c'est voulu : « si je vois ta date, tu vois la
+mienne ». Ajouter un terme exige d'ajouter son miroir ; un test le vérifie sur tous les couples.
+
+Pour un lecteur V et un vivant T, V voit la composante c si **chacun la montre à l'autre** :
+
+| T est… | V voit c si… |
+|---|---|
+| un proche de V | V **et** T sont au moins à `proches` |
+| un autre vivant | V **et** T sont à `tous` |
+| V lui-même, ou décédé | toujours |
+
+Ce que T partage : le choix de son compte ; sinon l'autorisation signée active ; sinon **le
+défaut, `proches`** — un vivant sans compte est donc vu de ses proches. Un lecteur sans fiche
+(compte d'amorçage) ne montre rien et ne voit rien, sauf l'option d'administration.
+
+### Ce qui change ailleurs
+
+- **Le stockage** : `mbr_member.birth_share_*` et `mbr_autorisation_naissance.share_*` passent
+  de `BOOLEAN` à `VARCHAR(8)` (`NiveauDePartage`), avec `CHECK`. La migration
+  (`Version20261007090000`) passe **ce qui était partagé à `tous`, le reste à `proches`** :
+  personne ne perd ce qu'il voyait.
+- **Le verrou de 30 jours ne porte que sur `tous`** : passer à `tous` le pose, en redescendre
+  avant rend `409 partage_verrouille`. Entre `proches` et `personne`, on va et vient librement —
+  les proches connaissent déjà la date, et un membre qui découvre le nouveau défaut doit pouvoir
+  le refuser tout de suite. Les dates `birth_share_*_since` existantes gardent leur sens.
+- **La demande RGPD de retrait** passe les composantes visées à `personne`, sans verrou : c'est
+  le retrait du consentement, entier.
+- **L'empreinte** de la réciprocité intègre les proches du lecteur : un mariage ou une naissance
+  dans l'arbre change ce qu'il voit.
+- **Une naissance qu'on ne voit pas entière se propose à l'aveugle** : le `422
+  naissance_masquee` disparaît. Il empêchait d'ajouter la date d'une personne vivante qu'on
+  venait soi-même de créer, dès sa fiche validée. Le champ part vide ; l'`oldValue` du client
+  est ignoré et le serveur pose la valeur courante, sans contrôle d'ancienne valeur (son `409`
+  rendrait la date) ni refus d'une valeur identique (il dirait qu'on a deviné juste). La vue
+  auteur ne rend jamais cette valeur d'avant ; l'administrateur, qui voit tout, tranche.
+
+### L'écart au principe d'origine, et comment il se dit
+
+« Par défaut, rien n'est partagé » ne tient plus : `proches` est un partage que la personne n'a
+pas choisi elle-même. Le commanditaire l'a décidé **en connaissance de cause** : entre très
+proches, la date de naissance n'est pas une information nouvelle, et ce partage reste dans le
+cercle familial le plus étroit. En contrepartie :
+
+- **chaque compte rattaché reçoit une notification** (`partage_naissance_revu`), posée par la
+  migration, qui dit le changement et renvoie à « Mon compte » ;
+- **le journal d'audit** porte, pour chaque compte, une ligne `partage_naissance` de source
+  `migration`, avec l'avant et l'après ;
+- **`personne` est toujours à un clic**, sans verrou ;
+- la **fiche confidentielle** (`force_privacy`) passe toujours avant : le cercle s'applique
+  d'abord.
+
+### Ce qui ne change pas
+
+Le cercle d'abord, la réciprocité ensuite ; le filtrage au serveur ; l'option d'administration ;
+la règle des photos ; le corpus du modèle de langage, qui ne porte toujours aucune naissance de
+vivant.

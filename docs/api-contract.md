@@ -2132,35 +2132,48 @@ les routes qui servent l'une ou l'autre l'appliquent au serveur ; rien de retenu
 
 `masquee` n'existe que dans l'API (jamais en entrée). Le bloc est émis même pour une date
 inconnue. La fiche porte `naissanceModifiable` (`false` dès qu'une composante manque) ; une
-demande qui touche `birth` sur un tel vivant rend `422 naissance_masquee`. `ligneDates`, la
+demande qui touche `birth` sur un tel vivant se dépose **à l'aveugle** (révision du
+2026-10-07) : l'`oldValue` du client est ignoré, le serveur pose la valeur courante, sans
+`409` ni refus d'une valeur identique, et la vue auteur ne la rend jamais. `ligneDates`, la
 `naissance` des proches, l'`etiquetteDates` du graphe (« n. 3/1985 · vivant·e »), la
 recherche, la chronologie, la carte et les statistiques ne portent que la date réduite.
 
 **`GET /api/anniversaires`** — la naissance d'un vivant n'y est que si le jour et le mois
-sont partagés ; `annee` est alors **absente** quand l'année ne l'est pas (`texte` :
+sont vus du lecteur ; `annee` est alors **absente** quand l'année ne l'est pas (`texte` :
 « 12 mars »). Les autres ne sont pas comptés dans `resume.sansJour`.
 
 **La charge de session** (§ 2.2) gagne :
 
 ```json
-"partageNaissance": { "annee": true, "mois": true, "jour": false, "modifieLe": "2026-10-03T10:00:00+00:00", "verrouJusquAu": { "jour": "2026-11-02T10:00:00+00:00" } },
+"partageNaissance": { "annee": "proches", "mois": "tous", "jour": "tous", "modifieLe": "2026-10-07T10:00:00+00:00", "verrouJusquAu": { "jour": "2026-11-06T10:00:00+00:00" } },
 "reciprocite": { "restrictionIgnoree": false, "photo": true }
 ```
 
 `partageNaissance` est le choix du compte de la session (`null` sans rattachement) ;
 `reciprocite` vaut pour le lecteur effectif (le membre emprunté sous « voir comme »).
 
-**`PUT /api/session/partage-naissance`** — `{annee, mois, jour}` (booléens, absents = `false`)
+**`PUT /api/session/partage-naissance`** — `{annee, mois, jour}`, chacun `"tous"`,
+`"proches"` ou `"personne"` (absents = `"proches"`, ADR 0016, révision du 2026-10-07)
 → `200 {annee, mois, jour, modifieLe, verrouJusquAu}`. Partager est toujours immédiat ; une
-composante partagée reste visible au moins 30 jours — `verrouJusquAu` (`{mois: "<ATOM>"}`, les
-seules composantes encore verrouillées) le dit, et la retirer avant rend `409 partage_verrouille`
-(`details.jusquAu`) : il faut passer par une demande RGPD. `409 compte_non_rattache` sans rattachement,
-`409 vue_comme_membre_active` sous la bascule, `422` sur un type invalide. Journalisé
-(`partage_naissance`, source `profil`).
+composante à `tous` le reste au moins 30 jours — `verrouJusquAu` (`{mois: "<ATOM>"}`, les
+seules composantes encore verrouillées) le dit, et la faire redescendre avant rend
+`409 partage_verrouille` (`details.jusquAu`) : il faut passer par une demande RGPD. Entre
+`proches` et `personne`, rien n'est verrouillé. `409 compte_non_rattache` sans rattachement,
+`409 vue_comme_membre_active` sous la bascule, `422` sur une valeur inconnue (un booléen
+compris). Journalisé (`partage_naissance`, source `profil`).
+
+**La règle** : le lecteur voit une composante d'un vivant si chacun la montre à l'autre — les
+deux au moins à `proches` quand la personne est un **proche** du lecteur (ascendants,
+descendants, frères et sœurs, conjoints actuels, ascendants des conjoints, conjoints des
+descendants ; relation symétrique), les deux à `tous` sinon. Un vivant sans compte ni
+autorisation est à `proches`.
 
 **`POST /api/inscription/compte`** (§ 4.3) accepte `partageNaissance: {annee, mois, jour}`,
-facultatif (absent : rien n'est partagé, aucun choix n'est enregistré) ; erreurs de champ
-`partageNaissance.annee`… dans le `422` unique.
+facultatif (absent : le défaut `proches` tient, aucun choix n'est enregistré) ; erreurs de
+champ `partageNaissance.annee`… dans le `422` unique.
+
+**Les demandes RGPD** : un `retrait_partage` appliqué passe les composantes visées
+(`{annee, mois, jour}` en booléens) à `personne`, sans verrou.
 
 **`PATCH /api/administration/utilisateurs/{id}`** accepte `ignoreRestrictionNaissance`
 (booléen, journalisé `restriction_naissance`) ; la charge d'un compte porte
@@ -2171,7 +2184,7 @@ facultatif (absent : rien n'est partagé, aucun choix n'est enregistré) ; erreu
 | Route | Effet |
 |---|---|
 | `GET /api/administration/personnes/{id}/autorisation-naissance` | `{compteRattache, autorisation, historique}` |
-| `POST …/autorisation-naissance` (multipart `document`, `annee`, `mois`, `jour`, `note`) | `201` ; remplace et archive l'active ; `409 compte_rattache`, `422` défunt ou document refusé (PDF, JPEG, PNG, WebP, 10 Mo) |
+| `POST …/autorisation-naissance` (multipart `document`, `annee`, `mois`, `jour` — `tous` \| `proches` \| `personne` —, `note`) | `201` ; remplace et archive l'active ; `409 compte_rattache`, `422` défunt ou document refusé (PDF, JPEG, PNG, WebP, 10 Mo) |
 | `DELETE …/autorisation-naissance` | archive (`retiree`) ; `404` sans autorisation active |
 | `GET /api/administration/autorisations-naissance/{id}/document` | le document, `attachment`, `Cache-Control: no-store` |
 

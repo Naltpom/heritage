@@ -47,7 +47,7 @@ final class DiffEtRoutesTest extends BaseDeDemandes
         self::assertFalse($charge['ops'][0]['aBouge']);
         self::assertSame('1987', $charge['ops'][0]['valeurCourante']['texte']);
         self::assertSame(
-            'Naissance : 1987 → entre 1901 et 1909',
+            'Naissance : 1987 → entre 1901 et 1909, à Saule, Ombrage, Sylvanie',
             $charge['ops'][0]['libelleDiff'],
             'Le libellé de diff ne rend jamais un point là où la base a un intervalle.',
         );

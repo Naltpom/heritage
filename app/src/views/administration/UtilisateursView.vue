@@ -393,7 +393,7 @@ function dateLisible(valeur: string | null): string {
                   class="mt-1 text-xs text-attenue"
                   data-partage-du-membre
                 >
-                  Date de naissance partagée : {{ resumePartage(utilisateur.membre.partageNaissance) }}
+                  Date de naissance : {{ resumePartage(utilisateur.membre.partageNaissance) }}
                 </p>
                 <p
                   v-if="restrictionIgnoree(utilisateur)"

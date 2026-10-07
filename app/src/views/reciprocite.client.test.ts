@@ -78,14 +78,21 @@ const LienFactice = defineComponent({
 
 const nomme = (libelle: string) => (n: Noeud) => n.tag === 'button' && n.attributs['aria-label'] === libelle
 
-/** Coche ou décoche, comme un clic sur la case. */
-async function cocher(racine: Noeud, cle: string, valeur: boolean): Promise<void> {
-  const caseACocher = un(racine, (n) => n.tag === 'input' && n.attributs['data-composante'] === cle)
-  if (caseACocher === null) throw new Error(`Case absente : ${cle}`)
-  const ecouteur = caseACocher.ecouteurs['change']
-  if (typeof ecouteur !== 'function') throw new Error('La case n’écoute pas.')
-  ecouteur({ target: { checked: valeur } })
+/** Choisit un niveau pour une composante, comme un clic sur le bouton radio. */
+async function choisir(racine: Noeud, cle: string, niveau: string): Promise<void> {
+  const bouton = choixDe(racine, cle, niveau)
+  if (bouton === null) throw new Error(`Choix absent : ${cle} / ${niveau}`)
+  const ecouteur = bouton.ecouteurs['change']
+  if (typeof ecouteur !== 'function') throw new Error('Le choix n’écoute pas.')
+  ecouteur({ target: { checked: true } })
   await new Promise((fin) => setTimeout(fin, 0))
+}
+
+function choixDe(racine: Noeud, cle: string, niveau: string): Noeud | null {
+  return un(
+    racine,
+    (n) => n.tag === 'input' && n.attributs['data-composante'] === cle && n.attributs['data-niveau'] === niveau,
+  )
 }
 
 /** « Envoie » le formulaire qui contient ce nœud. */
@@ -116,7 +123,7 @@ function utilisateur(sur: Partial<UtilisateurAdministration> = {}): UtilisateurA
       invitationId: null,
       linkedAt: null,
       activatedAt: '2026-09-02T10:00:00+02:00',
-      partageNaissance: { annee: false, mois: true, jour: true, modifieLe: null },
+      partageNaissance: { annee: 'personne', mois: 'tous', jour: 'tous', modifieLe: null },
     },
     quotas: [],
     ignoreRestrictionNaissance: false,
@@ -146,7 +153,7 @@ describe('Utilisateurs — la restriction de date de naissance', () => {
     api.modifierUtilisateur.mockResolvedValue(utilisateur({ ignoreRestrictionNaissance: true }))
 
     const racine = await monterEnMemoire(UtilisateursView, { RouterLink: LienFactice })
-    expect(texte(un(racine, parAttribut('data-partage-du-membre'))!)).toContain('jour et mois')
+    expect(texte(un(racine, parAttribut('data-partage-du-membre'))!)).toContain('jour et mois : tous · année : personne')
     expect(un(racine, parAttribut('data-restriction-ignoree'))).toBeNull()
 
     api.listerUtilisateurs.mockResolvedValue({
@@ -182,58 +189,62 @@ function monterSection(partage: PartageNaissanceEnregistre): Promise<Noeud> {
 
 describe('Mon compte — le partage de ma date de naissance', () => {
   const ENREGISTRE: PartageNaissanceEnregistre = {
-    annee: true,
-    mois: true,
-    jour: true,
+    annee: 'tous',
+    mois: 'tous',
+    jour: 'tous',
     modifieLe: '2026-09-20T10:00:00+02:00',
   }
 
-  it('ne part qu’à « Enregistrer », avec les trois cases, puis relit la session', async () => {
-    api.modifierPartageNaissance.mockResolvedValue({ ...ENREGISTRE, annee: false })
+  it('ne part qu’à « Enregistrer », avec les trois niveaux, puis relit la session', async () => {
+    api.modifierPartageNaissance.mockResolvedValue({ ...ENREGISTRE, annee: 'proches' })
     const racine = await monterSection(ENREGISTRE)
 
     expect(texte(racine)).toContain('Choix modifié le 20 septembre 2026')
-    // Tout est partagé, rien n'est verrouillé : on peut décocher.
+    // Tout est à « tous », rien n'est verrouillé : on peut redescendre.
     expect(tous(racine, (n) => n.tag === 'input' && n.attributs['disabled'] === true)).toHaveLength(0)
     expect(un(racine, boutonNomme('Enregistrer'))?.attributs['disabled']).toBe(true)
 
-    await cocher(racine, 'annee', false)
+    await choisir(racine, 'annee', 'proches')
     expect(api.modifierPartageNaissance).not.toHaveBeenCalled()
     await soumettre(racine)
 
-    expect(api.modifierPartageNaissance).toHaveBeenCalledWith({ annee: false, mois: true, jour: true })
+    expect(api.modifierPartageNaissance).toHaveBeenCalledWith({ annee: 'proches', mois: 'tous', jour: 'tous' })
     expect(etat.rafraichir).toHaveBeenCalledTimes(1)
   })
 
-  it('l’avertissement des trente jours est là avant de cocher, et appuyé une fois coché', async () => {
-    const racine = await monterSection({ ...ENREGISTRE, annee: false })
+  it('l’avertissement des trente jours est là avant de choisir, et appuyé une fois « tous » choisi', async () => {
+    const racine = await monterSection({ ...ENREGISTRE, annee: 'proches' })
     const avertissement = () => un(racine, parAttribut('data-avertissement-partage'))
 
-    expect(texte(avertissement()!)).toContain('Une information partagée reste visible des autres membres au moins 30 jours.')
+    expect(texte(avertissement()!)).toContain('Une information partagée avec tous le reste au moins 30 jours.')
     expect(String(avertissement()!.attributs['class'])).not.toContain('text-alerte')
 
-    await cocher(racine, 'annee', true)
+    await choisir(racine, 'annee', 'personne')
+    expect(String(avertissement()!.attributs['class'])).not.toContain('text-alerte')
+
+    await choisir(racine, 'annee', 'tous')
     expect(String(avertissement()!.attributs['class'])).toContain('text-alerte')
   })
 
-  it('une case cochée verrouillée est éteinte, avec sa date et le lien vers la demande RGPD', async () => {
+  it('une ligne verrouillée à « tous » ne redescend pas, avec sa date et le lien vers la demande RGPD', async () => {
     const recus: string[] = []
     const racine = await monterEnMemoire(
       defineComponent({
         render: () =>
           h(SectionPartageNaissance, {
-            partage: { ...ENREGISTRE, annee: false, verrouJusquAu: { mois: '2026-11-02T12:00:00+01:00' } },
+            partage: { ...ENREGISTRE, annee: 'proches', verrouJusquAu: { mois: '2026-11-02T12:00:00+01:00' } },
             onDemandeRgpd: (cle: string) => recus.push(cle),
           }),
       }),
       { RouterLink: LienFactice },
     )
-    const caseDe = (cle: string) => un(racine, (n) => n.tag === 'input' && n.attributs['data-composante'] === cle)
-    expect(caseDe('mois')?.attributs['disabled']).toBe(true)
-    expect(caseDe('jour')?.attributs['disabled']).toBe(false)
-    // Non cochée : partager est immédiat, jamais éteint.
-    expect(caseDe('annee')?.attributs['disabled']).toBe(false)
-    expect(texte(un(racine, parAttribut('data-verrou'))!)).toContain('Partagé jusqu’au 2 novembre 2026 au minimum')
+    expect(choixDe(racine, 'mois', 'proches')?.attributs['disabled']).toBe(true)
+    expect(choixDe(racine, 'mois', 'personne')?.attributs['disabled']).toBe(true)
+    expect(choixDe(racine, 'jour', 'proches')?.attributs['disabled']).toBe(false)
+    // À « proches » : partager est immédiat, jamais éteint.
+    expect(choixDe(racine, 'annee', 'tous')?.attributs['disabled']).toBe(false)
+    expect(choixDe(racine, 'annee', 'personne')?.attributs['disabled']).toBe(false)
+    expect(texte(un(racine, parAttribut('data-verrou'))!)).toContain('Partagé avec tous jusqu’au 2 novembre 2026 au minimum')
 
     await cliquer(un(racine, (n) => n.tag === 'button' && n.attributs['data-demande-rgpd'] === 'mois'))
     expect(recus).toEqual(['mois'])
@@ -244,7 +255,7 @@ describe('Mon compte — le partage de ma date de naissance', () => {
       new ErreurApi(409, 'partage_verrouille', 'Trop tôt.', null, { jusquAu: { mois: '2026-11-02T12:00:00+01:00' } }),
     )
     const racine = await monterSection(ENREGISTRE)
-    await cocher(racine, 'mois', false)
+    await choisir(racine, 'mois', 'proches')
     await soumettre(racine)
 
     expect(un(racine, parAttribut('data-refus-verrou'))).not.toBeNull()
@@ -261,9 +272,9 @@ function autorisation(sur: Partial<EtatAutorisationNaissance> = {}): EtatAutoris
 
 const ACTIVE = {
   id: 3,
-  annee: false,
-  mois: true,
-  jour: true,
+  annee: 'personne' as const,
+  mois: 'tous' as const,
+  jour: 'tous' as const,
   note: 'Signée à la cousinade',
   mime: 'application/pdf',
   taille: 2048,
@@ -280,7 +291,7 @@ function monterAutorisation(): Promise<Noeud> {
 }
 
 describe('L’autorisation signée d’un vivant sans compte', () => {
-  it('se dépose avec son document et ses trois cases', async () => {
+  it('se dépose avec son document et ses trois niveaux', async () => {
     api.lireAutorisationNaissance.mockResolvedValue(autorisation())
     api.deposerAutorisationNaissance.mockResolvedValue(autorisation({ autorisation: ACTIVE }))
 
@@ -291,19 +302,20 @@ describe('L’autorisation signée d’un vivant sans compte', () => {
     const fichier = new File(['%PDF-1.4'], 'autorisation.pdf', { type: 'application/pdf' })
     const champ = un(racine, (n) => n.tag === 'input' && n.attributs['type'] === 'file')
     ;(champ!.ecouteurs['change'] as (e: unknown) => void)({ target: { files: [fichier] } })
-    await cocher(racine, 'jour', true)
-    await cocher(racine, 'mois', true)
+    await choisir(racine, 'jour', 'tous')
+    await choisir(racine, 'mois', 'tous')
+    await choisir(racine, 'annee', 'personne')
     await soumettre(racine)
 
     expect(api.deposerAutorisationNaissance).toHaveBeenCalledWith(71, {
-      annee: false,
-      mois: true,
-      jour: true,
+      annee: 'personne',
+      mois: 'tous',
+      jour: 'tous',
       document: fichier,
       note: '',
     })
     expect(un(racine, parAttribut('data-etat'))?.attributs['data-etat']).toBe('active')
-    expect(texte(racine)).toContain('jour et mois')
+    expect(texte(racine)).toContain('jour et mois : tous · année : personne')
     const liens = tous(racine, (n) => n.tag === 'a').map((a) => a.attributs['href'])
     expect(liens).toContain('/api/administration/autorisations-naissance/3/document')
   })

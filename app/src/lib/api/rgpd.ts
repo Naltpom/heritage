@@ -11,11 +11,11 @@
  * administrateur : la file (`GET /api/administration/demandes-rgpd`, en
  * attente d'abord, de la plus ancienne à la plus récente, puis les traitées)
  * et la décision (`POST …/{id}/traiter`). Appliquer un `retrait_partage`
- * retire les composantes **tout de suite**, verrou ou pas.
+ * passe les composantes visées à « personne » **tout de suite**, verrou ou pas.
  */
 
 import { requeteApi } from './client'
-import type { PartageNaissance } from './types'
+import type { ComposantesCochees } from './types'
 
 export type NatureDemandeRgpd = 'retrait_partage' | 'rectification' | 'autre'
 export type DecisionDemandeRgpd = 'appliquee' | 'refusee'
@@ -24,7 +24,7 @@ export interface DemandeRgpd {
   id: number
   nature: NatureDemandeRgpd
   /** Les composantes à retirer — toutes à `false` hors `retrait_partage`. */
-  aRetirer: PartageNaissance
+  aRetirer: ComposantesCochees
   message: string | null
   creeeLe: string
   traiteeLe: string | null

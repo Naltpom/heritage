@@ -46,12 +46,12 @@ final class InscriptionTest extends CasDeTestMembership
             'choix' => $reference,
             'email' => 'natron@example.net',
             'password' => 'un-mot-de-passe-de-douze-signes',
-            'partageNaissance' => ['annee' => false, 'mois' => true, 'jour' => true],
+            'partageNaissance' => ['annee' => 'personne', 'mois' => 'tous', 'jour' => 'proches'],
         ]);
 
         self::assertSame(201, $this->client->getResponse()->getStatusCode());
         self::assertSame(
-            ['annee' => false, 'mois' => true, 'jour' => true],
+            ['annee' => 'personne', 'mois' => 'tous', 'jour' => 'proches'],
             array_intersect_key($this->charge()['partageNaissance'], array_flip(['annee', 'mois', 'jour'])),
         );
 

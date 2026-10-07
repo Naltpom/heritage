@@ -261,23 +261,30 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
             throw DonneesInvalides::pourChamp("$chemin.baseVersion", 'La version vue à la lecture de la fiche est obligatoire : sans elle, une demande déposée lundi et validée vendredi écrase le travail de mardi.');
         }
 
-        // ADR 0016 : **avant** toute lecture de la valeur courante — le contrôle de
-        // l'ancienne valeur rendrait sinon la date complète dans son `409`.
-        if ('birth' === $field && $this->masques->naissanceMasquee($subjectKind, $subjectId)) {
-            throw DonneesInvalides::naissanceMasquee("$chemin.field");
-        }
+        // ADR 0016 : la naissance d'un vivant que l'auteur ne voit pas entière se propose
+        // **à l'aveugle** (révision du 2026-10-07). Avant, elle était refusée
+        // (`422 naissance_masquee`) : on ne pouvait plus ajouter la date d'une personne
+        // qu'on venait soi-même de créer. Désormais l'`oldValue` du client est ignoré et
+        // le serveur pose la valeur courante, lue en base — comme le fait déjà
+        // l'assistant. Ni contrôle de l'ancienne valeur (son `409` rendrait la date
+        // complète), ni refus d'une demande « qui ne modifie rien » (il dirait que la
+        // date proposée est la bonne). L'auteur ne relit jamais cette valeur d'avant
+        // ({@see SerialiseurDeDemande}) ; l'administrateur, qui voit tout, tranche.
+        $aLAveugle = 'birth' === $field && $this->masques->naissanceMasquee($subjectKind, $subjectId);
 
-        if (!\array_key_exists('oldValue', $brut) || !\array_key_exists('newValue', $brut)) {
+        if (!\array_key_exists('newValue', $brut) || (!$aLAveugle && !\array_key_exists('oldValue', $brut))) {
             throw DonneesInvalides::pourChamp($chemin, 'Un op porte toujours son ancienne et sa nouvelle valeur.');
         }
 
         // Les deux valeurs passent par le normaliseur : c'est là que les cinq clés d'un
         // bloc date sont exigées, que `texte` est refusé en entrée, et que les deux
         // contraintes `CHECK` sur les qualificatifs sont appliquées **avant** la base.
-        $ancienne = $this->normaliseur->versJson(
-            $valueKind,
-            $this->normaliseur->versPhp($valueKind, $brut['oldValue'], "$chemin.oldValue"),
-        );
+        $ancienne = $aLAveugle
+            ? $this->valeurCourante($subjectKind, $subjectId, $field, $valueKind)
+            : $this->normaliseur->versJson(
+                $valueKind,
+                $this->normaliseur->versPhp($valueKind, $brut['oldValue'], "$chemin.oldValue"),
+            );
         $nouvelle = $this->normaliseur->versJson(
             $valueKind,
             $this->normaliseur->versPhp($valueKind, $brut['newValue'], "$chemin.newValue"),
@@ -288,11 +295,13 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
             $nouvelle = AdresseDeCitation::controler(\is_string($nouvelle) ? $nouvelle : null, "$chemin.newValue");
         }
 
-        if ($ancienne === $nouvelle) {
-            throw DonneesInvalides::pourChamp("$chemin.newValue", 'Une modification qui ne modifie rien n\'a rien à faire dans une demande.');
-        }
+        if (!$aLAveugle) {
+            if ($ancienne === $nouvelle) {
+                throw DonneesInvalides::pourChamp("$chemin.newValue", 'Une modification qui ne modifie rien n\'a rien à faire dans une demande.');
+            }
 
-        $this->verifierAncienneValeur($subjectKind, $subjectId, $field, $valueKind, $ancienne, $chemin);
+            $this->verifierAncienneValeur($subjectKind, $subjectId, $field, $valueKind, $ancienne, $chemin);
+        }
 
         $op = new ChangeRequestOp($demande, $seq, $opKind, $subjectKind, $valueKind);
         $op->setField($field)
@@ -300,6 +309,14 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
             ->setValues($ancienne, $nouvelle);
 
         return $op;
+    }
+
+    /** La valeur courante d'un champ, telle qu'un op la stocke. */
+    private function valeurCourante(SubjectKind $kind, int $id, string $field, ValueKind $valueKind): mixed
+    {
+        $cible = $this->arbre->chargerCible($kind, $id) ?? throw Introuvable::cible($kind->value, $id);
+
+        return $this->normaliseur->versJson($valueKind, $cible->valeurs[$field] ?? null);
     }
 
     /**
