@@ -19,6 +19,7 @@ use App\Module\Tree\Serializer\NormaliseurDeGraphe;
 use App\Module\Tree\Serializer\NormaliseurDePersonne;
 use App\Module\Tree\Serializer\NormaliseurDeRecherche;
 use App\Module\Tree\Serializer\NormaliseurDeRequete;
+use App\Module\Tree\Service\ChronometreDuGraphe;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -97,20 +98,27 @@ final class ArbreController extends AbstractController
      * zéro au rechargement suivant.
      */
     #[Route('/api/arbre/graphe', name: 'tree_graphe', methods: ['GET'])]
-    public function graphe(Request $requete, NormaliseurDeGraphe $normaliseur, EtagDuGraphe $etags): JsonResponse
-    {
+    public function graphe(
+        Request $requete,
+        NormaliseurDeGraphe $normaliseur,
+        EtagDuGraphe $etags,
+        ChronometreDuGraphe $chrono,
+    ): JsonResponse {
+        $debut = hrtime(true);
         $lecteur = $this->lecteurs->courant();
-        $etag = $etags->pour($lecteur);
+        $etag = $chrono->mesure('etag', static fn (): string => $etags->pour($lecteur));
 
         if ($etags->correspond($requete->headers->get('If-None-Match'), $etag)) {
             $reponse = new JsonResponse(null, JsonResponse::HTTP_NOT_MODIFIED);
 
-            return $this->enTetesDuGraphe($reponse, $etag);
+            return $this->chronometre($this->enTetesDuGraphe($reponse, $etag), $chrono, $debut);
         }
 
-        $charge = $normaliseur->graphe($lecteur, $this->cercles->pour($lecteur));
+        $charge = $chrono->mesure('normalisation', fn () => $normaliseur->graphe($lecteur, $this->cercles->pour($lecteur)));
+        $reponse = $chrono->mesure('json', static fn (): JsonResponse => new JsonResponse($charge));
+        $chrono->note('effectif', (string) \count(\is_array($charge['noeuds'] ?? null) ? $charge['noeuds'] : []));
 
-        return $this->enTetesDuGraphe(new JsonResponse($charge), $etag);
+        return $this->chronometre($this->enTetesDuGraphe($reponse, $etag), $chrono, $debut);
     }
 
     /**
@@ -218,6 +226,20 @@ final class ArbreController extends AbstractController
         }
 
         return false;
+    }
+
+    /**
+     * `Server-Timing` : le temps du serveur, étape par étape (voir {@see ChronometreDuGraphe}).
+     * Il ne dit que des durées, un effectif et la mémoire — rien qui dépende de ce que le
+     * lecteur a le droit de voir au-delà du nombre de nœuds qu'il reçoit déjà.
+     */
+    private function chronometre(JsonResponse $reponse, ChronometreDuGraphe $chrono, int $debut): JsonResponse
+    {
+        $chrono->note('memoire', \sprintf('%.0fMo', memory_get_peak_usage(true) / 1048576));
+        $total = \sprintf('total;dur=%.1f', (hrtime(true) - $debut) / 1e6);
+        $reponse->headers->set('Server-Timing', implode(', ', array_filter([$chrono->enTete(), $total])));
+
+        return $reponse;
     }
 
     private function enTetesDuGraphe(JsonResponse $reponse, string $etag): JsonResponse

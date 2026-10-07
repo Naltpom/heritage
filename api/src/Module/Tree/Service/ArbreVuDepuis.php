@@ -74,6 +74,7 @@ final class ArbreVuDepuis
     public function __construct(
         private readonly CalculAscendance $ascendance,
         private readonly ?FournisseurDeJeuDePlacement $fournisseur = null,
+        private readonly ChronometreDuGraphe $chrono = new ChronometreDuGraphe(),
     ) {
     }
 
@@ -169,7 +170,8 @@ final class ArbreVuDepuis
             throw new \LogicException(\sprintf('Aucun service n\'implémente %s : l\'arbre ne peut pas être chargé depuis la base. Déclarer une implémentation dans config/services/tree.yaml.', FournisseurDeJeuDePlacement::class));
         }
 
-        $jeu = $this->fournisseur->jeuComplet();
+        $fournisseur = $this->fournisseur;
+        $jeu = $this->chrono->mesure('jeu', static fn (): JeuDePlacement => $fournisseur->jeuComplet());
 
         // Le point de vue demandé, ou celui que le jeu porte déjà — la racine.
         //
@@ -190,7 +192,7 @@ final class ArbreVuDepuis
         // `vuDuLecteur()` et non `pourLeJeu()` : mêmes générations, mais des branches qui
         // ne débordent plus par alliance, et la parenté de chacun (famille, conjoint,
         // alliance). La colonne persistée garde l'autre règle — voir la méthode.
-        $logique = $this->ascendance->vuDuLecteur($vu);
+        $logique = $this->chrono->mesure('ascendance', fn (): PlacementLogique => $this->ascendance->vuDuLecteur($vu));
 
         $this->logiques[$this->cle($egoPersonneId)] = $logique;
 

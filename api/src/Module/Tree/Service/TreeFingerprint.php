@@ -124,8 +124,10 @@ final class TreeFingerprint
      * une base, une connexion pointant sur une autre — qui rendrait une empreinte
      * plausible et fausse.
      */
-    public function __construct(private readonly EntityManagerInterface $em)
-    {
+    public function __construct(
+        private readonly EntityManagerInterface $em,
+        private readonly ChronometreDuGraphe $chrono = new ChronometreDuGraphe(),
+    ) {
     }
 
     private function connexion(): Connection
@@ -136,7 +138,7 @@ final class TreeFingerprint
     /** 64 caractères hexadécimaux, utilisables tels quels en segment de clé de cache. */
     public function empreinte(): string
     {
-        return $this->memoire ??= hash('sha256', $this->projectionCanonique());
+        return $this->memoire ??= $this->chrono->mesure('empreinte', fn (): string => hash('sha256', $this->projectionCanonique()));
     }
 
     /**

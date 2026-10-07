@@ -69,6 +69,7 @@ import {
   type FicheHistoire,
   type Quart,
 } from '@/histoire/lignees'
+import { apresLaPeinture, creerChronometre, premierChargement, publier, reseauDe, type Chronometre } from '@/histoire/chronometre'
 import { auFormat, entreePortrait, geometriePortrait, texteDePortrait } from '@/histoire/cartes'
 import { useFormatDesCartes } from '@/composables/formatDesCartes'
 import ReglageFormatDesCartes from '@/components/arbre/ReglageFormatDesCartes.vue'
@@ -206,7 +207,10 @@ const effectifSansLienConnu = computed(() => (grapheCharge.value ? effectifSansL
  */
 const { format: formatDesCartes } = useFormatDesCartes()
 const enPortrait = computed(() => formatDesCartes.value === 'portrait')
+/** Le chronomètre du premier affichage (`histoire/chronometre.ts`), `null` ensuite. */
+let chrono: Chronometre | null = null
 function disposer(graphe: Graphe): void {
+  const mesure = <T>(etape: string, calcul: () => T): T => (chrono ? chrono.mesure(etape, calcul) : calcul())
   // Les alliances d'abord, classées sur le graphe ENTIER : c'est lui que le serveur a classé.
   const sansAlliances = avecAlliances.value ? graphe : sansFamillesParAlliance(graphe)
   const sansConjoint = avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
@@ -220,14 +224,18 @@ function disposer(graphe: Graphe): void {
   cleDisposee = racine
   // Elle a sa propre forme : un arbre binaire, chacun au milieu de ses deux parents.
   if (racine !== null && filtre.noeuds.some((n) => n.id === racine)) {
-    disposition.value = disposerEnPedigree(auFormat(seulementLaLigne(filtre, racine), formatDesCartes.value), racine, graphe.ego)
+    disposition.value = mesure('dont placement', () =>
+      disposerEnPedigree(auFormat(seulementLaLigne(filtre, racine), formatDesCartes.value), racine, graphe.ego),
+    )
     return
   }
   // Les boîtes en dernier : le tri des familles ne lit que les liens, jamais `w` ni `h`.
-  disposition.value = disposerLignees(auFormat(filtre, formatDesCartes.value), {
-    alliances: alliancesDansLArbre.value ? 'dans-l-arbre' : 'a-part',
-    fratriesParNaissance: fratriesParNaissance.value,
-  })
+  disposition.value = mesure('dont placement', () =>
+    disposerLignees(auFormat(filtre, formatDesCartes.value), {
+      alliances: alliancesDansLArbre.value ? 'dans-l-arbre' : 'a-part',
+      fratriesParNaissance: fratriesParNaissance.value,
+    }),
+  )
 }
 /** Après une bascule : la disposition refaite, et ce qui n'existe plus oublié. */
 function redisposer(): void {
@@ -359,9 +367,12 @@ function apparition(id: string, nom: string, apres = 0): Record<string, string> 
 async function charger(): Promise<void> {
   chargement.value = true
   erreur.value = null
+  const apresUnF5 = premierChargement()
+  chrono = creerChronometre()
+  const c = chrono
   try {
-    const graphe = await requeteApi<Graphe>('/arbre/graphe')
-    grapheCharge.value = graphe
+    const graphe = await c.mesureAsync('requête + lecture JSON', () => requeteApi<Graphe>('/arbre/graphe'))
+    c.mesure('mise en mémoire', () => (grapheCharge.value = graphe))
     // « Voir dans l'arbre » vers une personne d'une famille par alliance masquée : on l'affiche.
     const demandee = Number(route.query['personne']) || null
     if (demandee !== null && !avecAlliances.value && estParAlliance(graphe, demandee)) {
@@ -373,8 +384,8 @@ async function charger(): Promise<void> {
       avecSansLien.value = true
       ecrirePreference(CLE_SANS_LIEN, true)
     }
-    disposer(graphe)
-    await nextTick()
+    c.mesure('disposition (filtres + placement)', () => disposer(graphe))
+    await c.mesureAsync('rendu Vue', () => nextTick())
     // Retour d'une fiche : la vue quittée, exactement ; sinon l'arbre ajusté.
     vueAReprendre = reprendreVue()
     // « Voir dans l'arbre » depuis une fiche : `?personne=<id>` l'emporte sur la vue mémorisée.
@@ -383,9 +394,18 @@ async function charger(): Promise<void> {
     mesurer()
     ajuster()
     lancerRevelation()
+    await c.mesureAsync('première image', () => apresLaPeinture())
+    publier({
+      depuisLaNavigation: apresUnF5 ? performance.now() : null,
+      etapes: c.etapes(),
+      reseau: reseauDe('/arbre/graphe'),
+      personnes: graphe.noeuds.filter((n) => n.type === 'personne').length,
+      noeuds: graphe.noeuds.length,
+    })
   } catch (e) {
     erreur.value = e instanceof Error ? e.message : "L'arbre n'a pas pu être chargé."
   } finally {
+    chrono = null
     chargement.value = false
   }
 }

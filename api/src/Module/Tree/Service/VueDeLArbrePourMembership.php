@@ -61,12 +61,13 @@ final class VueDeLArbrePourMembership implements PortArbre
         private readonly ReglagesDeLArbre $reglages,
         private readonly TreeFingerprint $empreinte,
         private readonly EtiquetteDeDateGedcom $dates = new EtiquetteDeDateGedcom(),
+        private readonly ChronometreDuGraphe $chrono = new ChronometreDuGraphe(),
     ) {
     }
 
     public function vue(): VueDeLArbre
     {
-        return $this->memoire ??= $this->charger();
+        return $this->memoire ??= $this->chrono->mesure('cercle', fn (): VueDeLArbre => $this->charger());
     }
 
     public function empreinte(): string
