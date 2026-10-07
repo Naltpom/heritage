@@ -371,35 +371,39 @@ const chargement = ref(true)
 const erreur = ref<string | null>(null)
 
 /*
- * L'APPARITION, au premier affichage : l'arbre éclot depuis vous, en étoile. Chaque
- * fiche apparaît avec un retard qui croît avec sa distance à la vôtre — les proches
- * d'abord, les lointains ensuite —, puis les traits et les noms. Rien n'est attendu :
- * la disposition est entière, seul le dessin s'échelonne. Une seule fois par chargement
- * (pas à chaque filtre), et jamais si le système demande moins d'animations.
+ * L'APPARITION, au premier affichage : un seul fondu de l'arbre entier — les fiches,
+ * puis les traits un peu après. Une seule fois par chargement (pas à chaque filtre), et
+ * jamais si le système demande moins d'animations.
+ *
+ * Jusqu'au 2026-10-07, elle était échelonnée fiche par fiche depuis la vôtre : une animation
+ * CSS par fiche — 5 294 sur l'arbre servi —, et les styles des fiches calculés deux
+ * fois, avec puis sans leur retard. La première image peinte prenait ~650 ms. Un fondu
+ * pour le calque des fiches, un pour celui des traits — et un par nom ou photo écrit
+ * à l'écran, les seules fiches visibles en reçoivent.
  */
-const DUREE_REVELATION = 1600
-const revelation = shallowRef<Map<string, number> | null>(null)
+const DUREE_REVELATION = 600
+/** Le fondu d'un calque ; `apres`, son retard. */
+const fondu = (apres = 0): Record<string, string> => ({
+  animation: `apparition-texte ${DUREE_REVELATION}ms ease-out ${apres}ms backwards`,
+})
+const revelation = shallowRef(false)
 let finRevelation = 0
+/*
+ * Les zones de clic des familles (un trait transparent par famille, des milliers) ne
+ * se voient pas : elles attendent que la première image soit peinte, pour ne pas la
+ * retarder. Un clic sur un trait dans cette image-là ne sélectionne pas sa famille.
+ */
+const zonesDeClic = shallowRef(false)
 function lancerRevelation(): void {
-  const d = disposition.value
-  const moi = d?.parId.get(d.ego)
-  if (!d || !moi) return
+  if (!disposition.value) return
   try {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   } catch {
     /* environnement sans matchMedia : on anime */
   }
-  const distance = (f: FicheHistoire): number => Math.hypot(f.cx - moi.cx, (f.y - moi.y) * 1.6)
-  let loin = 1
-  for (const f of d.fiches) loin = Math.max(loin, distance(f))
-  revelation.value = new Map(d.fiches.map((f) => [f.id, Math.round(DUREE_REVELATION * Math.pow(distance(f) / loin, 0.75))]))
+  revelation.value = true
   window.clearTimeout(finRevelation)
-  finRevelation = window.setTimeout(() => (revelation.value = null), DUREE_REVELATION + 900)
-}
-/** L'animation d'apparition d'un élément rattaché à une fiche, décalée de `apres` ms. */
-function apparition(id: string, nom: string, apres = 0): Record<string, string> {
-  const delai = revelation.value?.get(id)
-  return delai === undefined ? {} : { animation: `${nom} 420ms cubic-bezier(.2,.7,.3,1) ${delai + apres}ms backwards` }
+  finRevelation = window.setTimeout(() => (revelation.value = false), DUREE_REVELATION * 2)
 }
 
 /**
@@ -486,6 +490,8 @@ async function charger(): Promise<void> {
   } finally {
     chrono = null
     chargement.value = false
+    // Après la première image (ou l'échec) : les zones de clic des familles.
+    zonesDeClic.value = true
   }
 }
 
@@ -1111,7 +1117,6 @@ const stylesFiches = computed(() => {
       width: `${f.w}px`,
       height: `${f.h}px`,
       opacity: !passe(f) ? '0.1' : ciblees.size && !ciblees.has(f.id) ? '0.25' : '1',
-      ...apparition(f.id, 'apparition-fiche'),
     }
     if (loin) {
       const place = direct ? enLigne(f) : null
@@ -1872,7 +1877,7 @@ onBeforeUnmount(() => {
         <svg
           class="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
           aria-hidden="true"
-          :style="revelation ? { animation: `apparition-texte 900ms ease-out ${DUREE_REVELATION * 0.35}ms backwards` } : undefined"
+          :style="revelation ? fondu(DUREE_REVELATION * 0.35) : undefined"
         >
           <g :transform="transformationTraits">
             <path
@@ -1927,7 +1932,7 @@ onBeforeUnmount(() => {
           les fiches. Le SVG laisse passer le pointeur (le glisser du canevas continue de
           marcher) ; seuls les traits l'attrapent.
         -->
-        <svg class="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
+        <svg v-if="zonesDeClic" class="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
           <g :transform="transformationTraits">
             <path
               v-for="f in disposition.traces.familles"
@@ -1945,7 +1950,10 @@ onBeforeUnmount(() => {
           </g>
         </svg>
 
-        <div class="absolute top-0 left-0 origin-top-left" :style="{ transform: transformationMonde }">
+        <div
+          class="absolute top-0 left-0 origin-top-left"
+          :style="revelation ? { transform: transformationMonde, ...fondu() } : { transform: transformationMonde }"
+        >
           <FichesMonde :fiches="disposition.fiches" :styles="stylesFiches" @choisir="choisir" />
         </div>
 
@@ -1960,7 +1968,7 @@ onBeforeUnmount(() => {
             decoding="async"
             class="pointer-events-none absolute object-cover"
             :class="t.forme === 'portrait' ? 'rounded-[14%]' : 'rounded-full'"
-            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...apparition(t.id, 'apparition-texte', 120) }"
+            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...(revelation ? fondu(120) : {}) }"
           />
           <svg
             v-else
@@ -1968,7 +1976,7 @@ onBeforeUnmount(() => {
             :class="t.forme === 'portrait' ? 'cadre-portrait rounded-[14%]' : ''"
             viewBox="0 0 40 40"
             aria-hidden="true"
-            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...apparition(t.id, 'apparition-texte', 120) }"
+            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...(revelation ? fondu(120) : {}) }"
           >
             <circle cx="20" cy="13.6" r="6.8" class="silhouette" />
             <path d="M6.8,36.8 a13.2,13.2 0 0 1 26.4,0 Z" class="silhouette" />
@@ -1978,7 +1986,7 @@ onBeforeUnmount(() => {
           <div
             v-if="t.forme === 'compact' && t.t1 !== ''"
             class="pointer-events-none absolute flex origin-top-left flex-col justify-center overflow-hidden leading-tight"
-            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...apparition(t.id, 'apparition-texte', 160) }"
+            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...(revelation ? fondu(160) : {}) }"
           >
             <span
               class="truncate font-semibold"
@@ -1990,7 +1998,7 @@ onBeforeUnmount(() => {
           <div
             v-else-if="t.forme === 'portrait' && t.nom !== ''"
             class="pointer-events-none absolute flex origin-top-left flex-col items-center overflow-hidden text-center"
-            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...apparition(t.id, 'apparition-texte', 160) }"
+            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...(revelation ? fondu(160) : {}) }"
           >
             <span
               v-if="t.nom"
@@ -2412,12 +2420,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-@keyframes apparition-fiche {
-  from {
-    opacity: 0;
-    transform: scale(0.35);
-  }
-}
 @keyframes apparition-texte {
   from {
     opacity: 0;
