@@ -233,42 +233,43 @@ describe('le gabarit de la file compose la mention par la fonction', () => {
 })
 
 /**
- * La barre d'écran de l'administration (handoff § 2) : les trois sections en
- * onglets, en tête de barre, à la place de la navigation d'`AdministrationView`.
- * Les noms de route sont un contrat — liens profonds et favoris en dépendent —,
- * et les deux menus de la file restent des `<select>` natifs.
+ * Le mode administration (handoff « mode Administration », 1c) : les six
+ * onglets d'`OngletsAdministration` ont disparu, la navigation de
+ * l'application en tient lieu. Les noms de route restent un contrat — liens
+ * profonds, favoris et notifications en dépendent.
  */
-describe('les onglets de l’administration', () => {
+describe('la navigation de l’administration', () => {
   const lire = (chemin: string): string =>
     readFileSync(fileURLToPath(new URL(chemin, import.meta.url)), 'utf8')
 
-  it('nomment les quatre routes enfants, sans construire d’URL', () => {
-    const source = lire('../../views/administration/OngletsAdministration.vue')
+  it('nomme les quatre écrans du mode admin, sans construire d’URL', () => {
+    const source = lire('../../composables/modeAdmin.ts')
 
     for (const nom of [
-      'administration.demandes',
-      'administration.invitations',
+      'administration.a-traiter',
       'administration.utilisateurs',
+      'administration.invitations',
       'administration.sources',
-      'administration.rgpd',
     ]) {
       expect(source).toContain(`'${nom}'`)
     }
     expect(source).not.toContain("'/administration")
   })
 
-  it('sont en tête de la barre des quatre sous-écrans, et plus dans le cadre', () => {
-    for (const vue of ['FileDemandesView', 'InvitationsView', 'UtilisateursView', 'SourcesView', 'DemandesRgpdView']) {
-      expect(lire(`../../views/administration/${vue}.vue`), vue).toContain('<OngletsAdministration />')
+  it('n’a plus d’onglets dans les écrans ni dans le cadre', () => {
+    for (const vue of ['FileDemandesView', 'InvitationsView', 'UtilisateursView', 'SourcesView', 'ATraiterView']) {
+      expect(lire(`../../views/administration/${vue}.vue`), vue).not.toContain('OngletsAdministration')
     }
     expect(lire('../../views/AdministrationView.vue')).not.toContain('<nav')
   })
 
-  it('gardent à la file ses deux menus natifs, auteur et tri', () => {
+  it('met l’état, l’auteur et le tri de l’historique derrière un seul bouton et son feuillet', () => {
     const source = lire('../../views/administration/FileDemandesView.vue')
 
-    expect(source).toContain('id="filtre-auteur" v-model.number="auteur"')
-    expect(source).toContain('id="tri-file" v-model="tri"')
+    expect(source).toContain('data-ouvrir-filtres')
+    expect(source).toContain('<Feuillet :ouvert="filtresOuverts"')
+    expect(source).toContain('@click="auteur = a.userId"')
+    expect(source).toContain('@choisir="tri = $event"')
   })
 })
 
@@ -347,6 +348,8 @@ describe('la file transmet son contexte à la demande ouverte', () => {
   it('le détail enchaîne avec le même filtre, et remet un composant neuf à chaque demande', () => {
     const vue = lire('../../views/DemandeView.vue')
     expect(vue).toContain('demandeSuivante(file.elements, courante, tri)')
+    // En fin de file : « À traiter » si l'on venait de la file par défaut.
+    expect(vue).toContain("name: 'administration.a-traiter', query: { type: 'demande', ...trace }")
     expect(vue).toContain(':key="demande.id"')
     expect(vue).toContain('@decidee="apresDecision"')
   })

@@ -21,21 +21,18 @@
  * de répondre à quelqu'un qui demande ce qu'est devenue sa proposition.
  *
  * ────────────────────────────────────────────────────────────────────
- * **La barre d'écran** (handoff « En-tête, barres d'écran et fiche », § 2) :
+ * **L'historique** (handoff « mode Administration », § 4.6). Les demandes en
+ * attente se décident désormais dans « À traiter » ; cet écran garde la file
+ * complète, pour consulter ce qui a été traité. Le nom de route
+ * (`administration.demandes`) est conservé : c'est un contrat.
  *
- *     [ Demandes · Invitations · Utilisateurs ] | [ En attente · … · Toutes ] ——— [ n demandes ] [ Déposées par … ▾ ] [ Plus anciennes ▾ ]
+ * L'état, l'auteur et le tri passent derrière **un seul bouton** « {État} ▾ »,
+ * avec une pastille quand un filtre s'écarte du défaut. Il ouvre un feuillet :
+ * puces d'état, puces « Déposées par », segmenté « Trier », puis
+ * « Réinitialiser » et « Voir N demandes ». Les natures restent en puces
+ * défilantes au-dessus de la liste, la recherche à côté du bouton.
  *
- * Les onglets remplacent la navigation d'`AdministrationView` ; l'état devient
- * un segmenté ; les deux menus déroulants — auteur et tri — restent des
- * `<select>` natifs, restylés en boutons de 32 px : le comportement (et le
- * clavier) est celui du navigateur, seul le décor change.
- *
- * Sur téléphone, les onglets (42 px) et les états — en pastilles qui défilent —
- * restent visibles sous l'en-tête ; l'auteur et le tri passent dans le
- * feuillet, en boutons radio et en segmenté. Le seul **filtre** au sens du
- * compteur de l'en-tête est l'auteur : le tri range, il ne retire rien.
- *
- * La barre ne retient rien : `etat`, `auteur` et `tri` vivent ici.
+ * L'écran ne délègue rien : `etat`, `auteur` et `tri` vivent ici.
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -48,17 +45,18 @@ import {
   type Demande,
   type StatutDemande,
 } from '@/lib/api'
+import BoutonBase from '@/components/base/BoutonBase.vue'
+import Feuillet from '@/components/base/Feuillet.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import ApercuFiche from '@/components/administration/ApercuFiche.vue'
 import LoupeMedia from '@/components/medias/LoupeMedia.vue'
-import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
 import Segmente from '@/components/mise-en-page/Segmente.vue'
-import OngletsAdministration from './OngletsAdministration.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
 import {
+  CONTEXTE_PAR_DEFAUT,
   ONGLETS,
   autresSurLaMemeFiche,
   contexteDepuisRequete,
@@ -222,30 +220,27 @@ onMounted(() => {
 watch([etat, auteur, onglet, recherche], charger)
 
 /* ------------------------------------------------------------------ */
-/* La barre d'écran                                                    */
+/* Le feuillet des filtres                                             */
 /* ------------------------------------------------------------------ */
 
-/** Seul le compte de l'état affiché est connu — le `total` de la réponse. Les
- *  autres états n'affichent aucun nombre plutôt qu'un zéro inventé. */
-const optionsEtat = computed(() =>
-  ETATS.map((choix) => ({
-    valeur: choix.valeur,
-    libelle: choix.court,
-    compte:
-      choix.valeur === etat.value && !chargement.value && erreur.value === null ? total.value : undefined,
-  })),
+const filtresOuverts = ref(false)
+
+/** Le libellé du bouton : l'état affiché. */
+const libelleEtat = computed(() => ETATS.find((choix) => choix.valeur === etat.value)?.court ?? 'Toutes')
+
+/** Ce qui s'écarte du défaut dans le feuillet : l'état, l'auteur, le tri. */
+const filtresActifs = computed(
+  () =>
+    (etat.value === CONTEXTE_PAR_DEFAUT.etat ? 0 : 1) +
+    (auteur.value === 0 ? 0 : 1) +
+    (tri.value === CONTEXTE_PAR_DEFAUT.tri ? 0 : 1),
 )
 
-/** L'auteur et la recherche sont les filtres ; le tri n'en est pas un, l'onglet est la vue. */
-const filtresActifs = computed(() => (auteur.value === 0 ? 0 : 1) + (recherche.value === '' ? 0 : 1))
-
-/** « Réinitialiser » du feuillet : tout le monde, sans recherche, le plus petit numéro
- *  d'abord. L'état et l'onglet ne sont pas des filtres du feuillet, c'est la vue. */
+/** « Réinitialiser » du feuillet : en attente, tout le monde, le plus petit numéro d'abord. */
 function reinitialiser(): void {
+  etat.value = CONTEXTE_PAR_DEFAUT.etat
   auteur.value = 0
-  tri.value = 'anciennes'
-  saisie.value = ''
-  recherche.value = ''
+  tri.value = CONTEXTE_PAR_DEFAUT.tri
 }
 
 const libelleTotal = computed(() => `${total.value} demande${total.value > 1 ? 's' : ''}`)
@@ -276,120 +271,9 @@ function dateLisible(valeur: string | null): string {
 </script>
 
 <template>
-  <BarreEcran
-    ecran="Validation"
-    :filtres-actifs="filtresActifs"
-    :voir="`Voir ${libelleTotal}`"
-    @reinitialiser="reinitialiser"
-  >
-    <template #vue>
-      <div class="flex items-center gap-2.5 max-md:w-full max-md:flex-col max-md:items-stretch max-md:gap-2">
-        <!-- En tête sur bureau ; sur téléphone, rang du bas, sous les états. -->
-        <div class="max-md:order-last"><OngletsAdministration /></div>
-
-        <span class="h-5 w-px flex-none bg-ligne max-md:hidden" aria-hidden="true" />
-
-        <!-- Enveloppé : `Segmente` pose son `display` en style, qu'une classe
-             ne masquerait pas. -->
-        <div class="max-md:hidden">
-          <Segmente
-            :options="optionsEtat"
-            :valeur="etat"
-            etiquette="État des demandes affichées"
-            @choisir="etat = $event"
-          />
-        </div>
-
-        <div class="flex min-w-0 gap-2 overflow-x-auto md:hidden" role="group" aria-label="État des demandes affichées">
-          <button
-            v-for="(choix, i) in ETATS"
-            :key="choix.libelle"
-            type="button"
-            class="flex h-9 flex-none items-center rounded-pastille border px-[13px] text-[13px]"
-            :class="choix.valeur === etat ? 'border-accent bg-accent-doux font-semibold' : 'border-ligne text-attenue'"
-            :aria-pressed="choix.valeur === etat"
-            @click="etat = choix.valeur"
-          >
-            {{ choix.libelle }}<template v-if="optionsEtat[i]?.compte !== undefined"> · {{ optionsEtat[i]?.compte }}</template>
-          </button>
-        </div>
-      </div>
-    </template>
-
-    <template v-if="!chargement" #compteur>{{ libelleTotal }}</template>
-
-    <!-- Bureau : les deux menus déroulants d'avant, en boutons de 32 px. Le
-         `<select>` reste natif ; il est transparent dans son bouton. -->
-    <template #actions>
-      <label
-        for="filtre-auteur"
-        class="relative flex h-8 items-center gap-1.5 rounded-champ border bg-panneau px-[11px] text-[13px]"
-        :class="auteur === 0 ? 'border-ligne' : 'border-accent'"
-      >
-        <span class="text-attenue">Déposées par</span>
-        <select id="filtre-auteur" v-model.number="auteur" class="h-8 cursor-pointer appearance-none bg-transparent pr-4 text-[13px] text-texte focus:outline-none">
-          <option :value="0">Tout le monde</option>
-          <option v-for="a in auteurs" :key="a.userId" :value="a.userId">
-            {{ a.libelle }}
-          </option>
-        </select>
-        <span class="pointer-events-none absolute right-[11px]" aria-hidden="true">▾</span>
-      </label>
-
-      <label
-        for="tri-file"
-        class="relative flex h-8 items-center rounded-champ border border-ligne bg-panneau px-[11px] text-[13px]"
-      >
-        <span class="sr-only">Trier</span>
-        <select id="tri-file" v-model="tri" class="h-8 cursor-pointer appearance-none bg-transparent pr-4 text-[13px] text-texte focus:outline-none">
-          <option v-for="t in TRIS" :key="t.valeur" :value="t.valeur">{{ t.libelle }}</option>
-        </select>
-        <span class="pointer-events-none absolute right-[11px]" aria-hidden="true">▾</span>
-      </label>
-    </template>
-
-    <!-- Téléphone : dans le feuillet, des boutons radio et un segmenté. -->
-    <template #actions-mobile>
-      <fieldset class="flex flex-col">
-        <legend class="mb-1 text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Déposées par</legend>
-        <label
-          v-for="a in [{ userId: 0, libelle: 'Tout le monde' }, ...auteurs]"
-          :key="a.userId"
-          class="flex min-h-11 items-center gap-3 border-b border-ligne text-sm last:border-b-0"
-        >
-          <input
-            v-model.number="auteur"
-            type="radio"
-            name="file-auteur"
-            :value="a.userId"
-            class="h-[18px] w-[18px] accent-[var(--color-accent)]"
-          />
-          {{ a.libelle }}
-        </label>
-      </fieldset>
-
-      <span class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Trier</span>
-      <Segmente :options="TRIS" :valeur="tri" etiquette="Ordre de la file" :colonnes="2" @choisir="tri = $event" />
-    </template>
-  </BarreEcran>
-
-  <div class="mx-auto w-full max-w-5xl px-4 py-6">
-    <div class="mb-4 flex flex-wrap items-center gap-2">
-      <div class="flex min-w-0 gap-2 overflow-x-auto" role="tablist" aria-label="Nature des demandes">
-        <button
-          v-for="o in ONGLETS"
-          :key="o.valeur"
-          type="button"
-          role="tab"
-          class="flex h-9 flex-none items-center rounded-pastille border px-[13px] text-[13px]"
-          :class="o.valeur === onglet ? 'border-accent bg-accent-doux font-semibold' : 'border-ligne text-attenue'"
-          :aria-selected="o.valeur === onglet"
-          @click="onglet = o.valeur"
-        >
-          {{ o.libelle }}
-        </button>
-      </div>
-      <label class="ml-auto flex h-9 min-w-[220px] items-center gap-2 rounded-champ border border-ligne bg-panneau px-3 text-sm max-md:ml-0 max-md:w-full">
+  <div class="flex flex-col gap-4">
+    <div class="flex flex-wrap items-center gap-2">
+      <label class="flex min-h-11 min-w-0 flex-[1_1_240px] items-center gap-2 rounded-champ border border-ligne bg-panneau px-3 text-sm md:min-h-9">
         <span class="sr-only">Rechercher une demande</span>
         <span aria-hidden="true" class="text-attenue">⌕</span>
         <input
@@ -401,11 +285,45 @@ function dateLisible(valeur: string | null): string {
           class="h-8 min-w-0 flex-1 bg-transparent text-sm focus:outline-none"
         />
       </label>
+      <!-- L'état, l'auteur et le tri, derrière un seul bouton. -->
+      <button
+        type="button"
+        class="flex min-h-11 items-center gap-2 rounded-champ border bg-panneau px-3 text-[13.5px] md:min-h-9"
+        :class="filtresActifs > 0 ? 'border-accent' : 'border-ligne'"
+        aria-haspopup="dialog"
+        data-ouvrir-filtres
+        @click="filtresOuverts = true"
+      >
+        <span>{{ libelleEtat }}</span>
+        <span
+          v-if="filtresActifs > 0"
+          class="flex h-[18px] min-w-[18px] items-center justify-center rounded-pastille bg-accent px-[5px] text-[11px] font-bold text-fond"
+          :aria-label="`${filtresActifs} filtre${filtresActifs > 1 ? 's' : ''} actif${filtresActifs > 1 ? 's' : ''}`"
+        >{{ filtresActifs }}</span>
+        <span class="text-attenue" aria-hidden="true">▾</span>
+      </button>
     </div>
+
+    <div class="puces-defilantes flex gap-2 overflow-x-auto overflow-y-hidden py-0.5" role="tablist" aria-label="Nature des demandes">
+      <button
+        v-for="o in ONGLETS"
+        :key="o.valeur"
+        type="button"
+        role="tab"
+        class="flex min-h-11 flex-none items-center rounded-pastille border px-[13px] text-[13px] whitespace-nowrap md:min-h-9"
+        :class="o.valeur === onglet ? 'border-accent bg-accent-doux font-semibold text-texte' : 'border-ligne bg-panneau text-attenue'"
+        :aria-selected="o.valeur === onglet"
+        @click="onglet = o.valeur"
+      >
+        {{ o.libelle }}
+      </button>
+    </div>
+
+    <span v-if="!chargement" class="text-[13px] text-attenue">{{ libelleTotal }}</span>
 
     <p
       v-if="annonceDeFin !== null"
-      class="mb-4 rounded-panneau border border-ok-bord bg-ok-doux px-3.5 py-3 text-sm"
+      class="rounded-panneau border border-ok-bord bg-ok-doux px-3.5 py-3 text-sm"
       role="status"
     >
       {{ annonceDeFin }}
@@ -418,68 +336,67 @@ function dateLisible(valeur: string | null): string {
 
     <MessageErreur v-else-if="erreur !== null" :erreur="erreur" @action="charger" />
 
-    <PanneauBase v-else-if="liste.length === 0">
-      <p class="text-sm text-attenue">
-        {{
-          recherche !== ''
-            ? 'Aucune demande ne correspond à cette recherche.'
-            : etat === 'en_attente' && onglet === 'toutes'
-              ? 'Rien n’attend de décision.'
-              : 'Aucune demande ne correspond à ce filtre.'
-        }}
-      </p>
-    </PanneauBase>
+    <p
+      v-else-if="liste.length === 0"
+      class="rounded-panneau border border-ligne bg-panneau px-4 py-7 text-center text-attenue"
+    >
+      {{
+        recherche !== ''
+          ? 'Aucune demande ne correspond à cette recherche.'
+          : etat === 'en_attente' && onglet === 'toutes'
+            ? 'Rien n’attend de décision.'
+            : 'Aucune demande ne correspond à ce filtre.'
+      }}
+    </p>
 
-    <PanneauBase v-else>
-      <ul class="flex flex-col divide-y divide-ligne">
-        <li v-for="demande in liste" :key="demande.id" class="py-2.5 first:pt-0 last:pb-0">
-          <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span class="font-mono text-[13px] text-attenue tabular-nums">n° {{ demande.id }}</span>
-            <RouterLink
-              :to="{ name: 'demande.detail', params: { id: demande.id }, query: requeteDeLaFile }"
-              class="font-semibold text-accent underline"
-            >
-              {{ NATURES[demande.kind] ?? demande.kind }}
-            </RouterLink>
-            <PastilleEtat
-              :etat="pastille(demande.status)"
-              :libelle="LIBELLES_HORS_PASTILLE[demande.status] ?? ''"
-            />
-            <span v-if="demande.targetLabel" class="text-sm">{{ demande.targetLabel }}</span>
-            <!-- Voir qui est visé sans perdre le filtre, le tri, ni sa place dans la file. -->
-            <button
-              v-if="personneDeLaDemande(demande) !== null"
-              type="button"
-              class="cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline"
-              @click="apercu = personneDeLaDemande(demande)"
-            >
-              Voir la fiche
-            </button>
-          </div>
+    <ul v-else class="m-0 flex list-none flex-col gap-px overflow-hidden rounded-panneau border border-ligne bg-ligne p-0">
+      <li v-for="demande in liste" :key="demande.id" class="bg-panneau px-4 py-3">
+        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span class="font-mono text-[12.5px] text-attenue tabular-nums">n° {{ demande.id }}</span>
+          <RouterLink
+            :to="{ name: 'demande.detail', params: { id: demande.id }, query: requeteDeLaFile }"
+            class="font-semibold text-accent underline"
+          >
+            {{ NATURES[demande.kind] ?? demande.kind }}
+          </RouterLink>
+          <PastilleEtat
+            :etat="pastille(demande.status)"
+            :libelle="LIBELLES_HORS_PASTILLE[demande.status] ?? ''"
+          />
+          <span v-if="demande.targetLabel" class="text-sm">{{ demande.targetLabel }}</span>
+          <!-- Voir qui est visé sans perdre le filtre, le tri, ni sa place dans la file. -->
+          <button
+            v-if="personneDeLaDemande(demande) !== null"
+            type="button"
+            class="cursor-pointer border-0 bg-transparent p-0 text-xs text-accent underline"
+            @click="apercu = personneDeLaDemande(demande)"
+          >
+            Voir la fiche
+          </button>
+        </div>
 
-          <!-- Les personnes que la demande ajoute à l'arbre, par leur nom. -->
-          <p v-if="nouvellesPersonnes(demande) !== ''" class="mt-1 text-sm">
-            <span class="text-attenue">Nouvelle{{ (demande.nouvellesPersonnes?.length ?? 0) > 1 ? 's' : '' }} personne{{ (demande.nouvellesPersonnes?.length ?? 0) > 1 ? 's' : '' }} :</span>
-            {{ nouvellesPersonnes(demande) }}
-          </p>
+        <!-- Les personnes que la demande ajoute à l'arbre, par leur nom. -->
+        <p v-if="nouvellesPersonnes(demande) !== ''" class="mt-1 text-sm">
+          <span class="text-attenue">Nouvelle{{ (demande.nouvellesPersonnes?.length ?? 0) > 1 ? 's' : '' }} personne{{ (demande.nouvellesPersonnes?.length ?? 0) > 1 ? 's' : '' }} :</span>
+          {{ nouvellesPersonnes(demande) }}
+        </p>
 
-          <!-- Composée dans `file.ts` : la virgule se colle au nom, et aucun
-               blanc de gabarit ne peut l’en détacher. -->
-          <p class="mt-0.5 text-sm text-attenue">
-            {{ ligneAuteur(demande.authorLabel, dateLisible(demande.submittedAt)) }}
-          </p>
+        <!-- Composée dans `file.ts` : la virgule se colle au nom, et aucun
+             blanc de gabarit ne peut l’en détacher. -->
+        <p class="mt-0.5 text-[13px] text-attenue">
+          {{ ligneAuteur(demande.authorLabel, dateLisible(demande.submittedAt)) }}
+        </p>
 
-          <!-- Ce que le regroupement par fiche montrait : l'ordre de décision compte. -->
-          <p v-if="autres.get(demande.id)" class="mt-0.5 text-xs text-alerte">
-            {{ autres.get(demande.id) }} autre{{ (autres.get(demande.id) ?? 0) > 1 ? 's' : '' }} demande{{ (autres.get(demande.id) ?? 0) > 1 ? 's' : '' }} en attente sur cette fiche : décidez-les ensemble
-          </p>
+        <!-- Ce que le regroupement par fiche montrait : l'ordre de décision compte. -->
+        <p v-if="autres.get(demande.id)" class="mt-0.5 text-[12.5px] text-alerte">
+          {{ autres.get(demande.id) }} autre{{ (autres.get(demande.id) ?? 0) > 1 ? 's' : '' }} demande{{ (autres.get(demande.id) ?? 0) > 1 ? 's' : '' }} en attente sur cette fiche : décidez-les ensemble
+        </p>
 
-          <p v-if="demande.message" class="mt-1 line-clamp-2 text-sm text-attenue">
-            {{ demande.message }}
-          </p>
-        </li>
-      </ul>
-    </PanneauBase>
+        <p v-if="demande.message" class="mt-1 line-clamp-2 text-[13px] text-attenue">
+          « {{ demande.message }} »
+        </p>
+      </li>
+    </ul>
 
     <!-- Déclarée après la file, donc peinte par-dessus. La loupe vient ensuite,
          pour passer par-dessus l'aperçu lui-même. -->
@@ -487,4 +404,46 @@ function dateLisible(valeur: string | null): string {
   </div>
 
   <LoupeMedia :cible="loupe" @fermer="loupe = null" />
+
+  <Feuillet :ouvert="filtresOuverts" titre="Filtrer l’historique" @fermer="filtresOuverts = false">
+    <span class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">État</span>
+    <div class="flex flex-wrap gap-2" role="group" aria-label="État des demandes affichées">
+      <button
+        v-for="choix in ETATS"
+        :key="choix.libelle"
+        type="button"
+        class="flex min-h-11 items-center rounded-pastille border px-[13px] text-[13px] md:min-h-9"
+        :class="choix.valeur === etat ? 'border-accent bg-accent-doux font-semibold text-texte' : 'border-ligne bg-panneau text-attenue'"
+        :aria-pressed="choix.valeur === etat"
+        :data-etat="choix.valeur === '' ? 'toutes' : choix.valeur"
+        @click="etat = choix.valeur"
+      >
+        {{ choix.libelle }}
+      </button>
+    </div>
+
+    <span class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Déposées par</span>
+    <div class="flex flex-wrap gap-2" role="group" aria-label="Auteur des demandes affichées">
+      <button
+        v-for="a in [{ userId: 0, libelle: 'Tout le monde' }, ...auteurs]"
+        :key="a.userId"
+        type="button"
+        class="flex min-h-11 items-center rounded-pastille border px-[13px] text-[13px] md:min-h-9"
+        :class="a.userId === auteur ? 'border-accent bg-accent-doux font-semibold text-texte' : 'border-ligne bg-panneau text-attenue'"
+        :aria-pressed="a.userId === auteur"
+        :data-auteur="a.userId"
+        @click="auteur = a.userId"
+      >
+        {{ a.libelle }}
+      </button>
+    </div>
+
+    <span class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Trier</span>
+    <Segmente :options="TRIS" :valeur="tri" etiquette="Ordre de la file" :colonnes="2" @choisir="tri = $event" />
+
+    <div class="flex gap-2">
+      <BoutonBase variante="secondaire" class="min-h-11 flex-1" @click="reinitialiser">Réinitialiser</BoutonBase>
+      <BoutonBase class="min-h-11 flex-[2]" @click="filtresOuverts = false">Voir {{ libelleTotal }}</BoutonBase>
+    </div>
+  </Feuillet>
 </template>

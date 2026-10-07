@@ -17,6 +17,11 @@
  *
  * `rattachements.test.ts` tient ce que la carte imprime, état par état ; ici,
  * on tient ce que les gestes **appellent**.
+ *
+ * Depuis le mode administration (handoff 1c), les inscriptions à rattacher se
+ * décident dans « À traiter » (`ATraiterView`) : la carte y est le détail de
+ * l'élément choisi dans la liste. L'écran est monté filtré sur les
+ * rattachements, comme le fait la redirection de `administration.rattachements`.
  */
 import { defineComponent, h } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,6 +30,7 @@ import { boutonNomme, cliquer, monterEnMemoire, parAttribut, texte, un, type Noe
 
 const etat = vi.hoisted(() => ({
   vueEmpruntee: null as unknown as { value: unknown },
+  route: null as unknown as { params: Record<string, string>; query: Record<string, string> },
 }))
 
 vi.mock('@/composables/useSession', async () => {
@@ -41,12 +47,24 @@ vi.mock('@/composables/useSession', async () => {
   }
 })
 
-vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: {}, query: {} }),
-  useRouter: () => ({ push: () => Promise.resolve(), replace: () => Promise.resolve() }),
-}))
+// Une route réactive : « À traiter » tient le filtre et l'élément ouvert dans
+// l'adresse, et `replace` la change comme le ferait le routeur.
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue')
+  etat.route = reactive({ params: {}, query: { type: 'rattachement' } })
+  const naviguer = (vers: { query?: Record<string, string> }): Promise<void> => {
+    etat.route.query = { ...(vers.query ?? {}) }
+    return Promise.resolve()
+  }
+  return {
+    useRoute: () => etat.route,
+    useRouter: () => ({ push: naviguer, replace: naviguer, back: () => undefined }),
+  }
+})
 
 const api = vi.hoisted(() => ({
+  listerDemandesAdministration: vi.fn(),
+  listerDemandesRgpd: vi.fn(),
   listerRattachements: vi.fn(),
   lireSuggestionDeRattachement: vi.fn(),
   relancerSuggestionDeRattachement: vi.fn(),
@@ -61,7 +79,7 @@ vi.mock('@/lib/api', async (original) => ({
   ...api,
 }))
 
-import RattachementsView from './administration/RattachementsView.vue'
+import ATraiterView from './administration/ATraiterView.vue'
 
 const LienFactice = defineComponent({
   name: 'RouterLink',
@@ -136,6 +154,11 @@ const QUOTAS = {
 
 /* ------------------------------------------------------------------ */
 
+/** Ouvre l'inscription dans le détail, comme un clic sur sa ligne de la liste. */
+async function ouvrir(racine: Noeud, memberId: number): Promise<void> {
+  await cliquer(un(racine, (n) => n.tag === 'button' && n.attributs['data-cle'] === `r:${memberId}`))
+}
+
 function carte(racine: Noeud, memberId: number): Noeud {
   const trouvee = un(racine, (n) => n.tag === 'article' && n.attributs['data-compte'] === memberId)
   if (trouvee === null) throw new Error(`Carte absente : ${memberId}`)
@@ -157,7 +180,7 @@ async function taper(champ: Noeud | null, valeur: string): Promise<void> {
 }
 
 function monter(): Promise<Noeud> {
-  return monterEnMemoire(RattachementsView, { RouterLink: LienFactice })
+  return monterEnMemoire(ATraiterView, { RouterLink: LienFactice })
 }
 
 beforeEach(() => {
@@ -169,7 +192,10 @@ beforeEach(() => {
   })
   Object.values(api).forEach((f) => f.mockReset())
   etat.vueEmpruntee.value = null
+  etat.route.query = { type: 'rattachement' }
   api.listerQuotasGlobaux.mockResolvedValue(QUOTAS)
+  api.listerDemandesAdministration.mockResolvedValue({ elements: [], total: 0, page: 1, parPage: 100 })
+  api.listerDemandesRgpd.mockResolvedValue({ elements: [] })
 })
 
 describe('« À rattacher » : l’ouverture ne fait que lire', () => {
@@ -201,11 +227,13 @@ describe('« À rattacher » : l’ouverture ne fait que lire', () => {
     expect(api.lireSuggestionDeRattachement).toHaveBeenCalledTimes(1)
     expect(api.lireSuggestionDeRattachement.mock.calls[0]![0]).toBe(15)
 
+    // La plus ancienne est ouverte d'office.
     const premiere = carte(racine, 14)
     expect(un(premiere, boutonNomme('Transcrire le message vocal'))).not.toBeNull()
     expect(eteint(un(premiere, boutonNomme('Lancer la recherche')))).toBe(false)
     expect(texte(premiere)).toContain('37 appels à l’IA restants sur 40')
 
+    await ouvrir(racine, 15)
     const seconde = carte(racine, 15)
     expect(texte(seconde)).toContain('Aucune fiche ne correspond avec certitude.')
     expect(un(seconde, boutonNomme('Relancer la recherche'))).not.toBeNull()

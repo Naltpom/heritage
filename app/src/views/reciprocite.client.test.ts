@@ -148,7 +148,7 @@ beforeEach(() => {
 /* ------------------------------------------------------------------ */
 
 describe('Utilisateurs — la restriction de date de naissance', () => {
-  it('la ligne dit le partage du membre, et l’icône lève la restriction', async () => {
+  it('la carte dit le partage du membre, et le feuillet lève la restriction', async () => {
     api.listerUtilisateurs.mockResolvedValue({ elements: [utilisateur()], total: 1, page: 1, parPage: 100 })
     api.modifierUtilisateur.mockResolvedValue(utilisateur({ ignoreRestrictionNaissance: true }))
 
@@ -162,19 +162,29 @@ describe('Utilisateurs — la restriction de date de naissance', () => {
       page: 1,
       parPage: 100,
     })
-    await cliquer(un(racine, nomme('Ignorer la restriction de date de naissance')))
+    // Le geste est dans le feuillet d'actions du compte, nommé en toutes lettres.
+    await cliquer(un(racine, nomme('Autres actions')))
+    const ligne = un(racine, (n) => n.tag === 'button' && n.attributs['data-action'] === 'restriction')
+    expect(texte(ligne!)).toContain('Ignorer la restriction de date de naissance')
+    await cliquer(ligne)
 
     expect(api.modifierUtilisateur).toHaveBeenCalledWith(12, { ignoreRestrictionNaissance: true })
     expect(un(racine, parAttribut('data-restriction-ignoree'))).not.toBeNull()
-    expect(un(racine, nomme('Rétablir la restriction de date de naissance'))).not.toBeNull()
+    await cliquer(un(racine, nomme('Autres actions')))
+    expect(texte(un(racine, (n) => n.tag === 'button' && n.attributs['data-action'] === 'restriction')!)).toContain(
+      'Rétablir la restriction de date de naissance',
+    )
   })
 
-  it('sous une vue empruntée, l’icône est éteinte', async () => {
+  it('sous une vue empruntée, le geste est éteint', async () => {
     etat.vueEmpruntee.value = { memberId: 7, memberLabel: 'Cobalt Romarin', depuis: '2026-10-03T10:00:00+02:00' }
     api.listerUtilisateurs.mockResolvedValue({ elements: [utilisateur()], total: 1, page: 1, parPage: 100 })
 
     const racine = await monterEnMemoire(UtilisateursView, { RouterLink: LienFactice })
-    await cliquer(un(racine, nomme('Ignorer la restriction de date de naissance')))
+    await cliquer(un(racine, nomme('Autres actions')))
+    const ligne = un(racine, (n) => n.tag === 'button' && n.attributs['data-action'] === 'restriction')
+    expect(ligne?.attributs['disabled']).toBe(true)
+    await cliquer(ligne)
     expect(api.modifierUtilisateur).not.toHaveBeenCalled()
   })
 })

@@ -15,8 +15,13 @@
 import { readonly, ref } from 'vue'
 
 /** Les quatre entrées de la navigation (barre du bas, onglets du bureau),
- *  plus les zones qui n'en allument aucune. */
-export type Section = 'accueil' | 'arbre' | 'explorer' | 'moi' | 'autre'
+ *  plus les zones qui n'en allument aucune.
+ *
+ *  `administration` est le **mode administration** (handoff « mode
+ *  Administration », 1c) : toute route `administration.*`. L'en-tête passe
+ *  alors en fond accent et la navigation montre les quatre entrées de
+ *  l'administration à la place des quatre du membre (`composables/modeAdmin.ts`). */
+export type Section = 'accueil' | 'arbre' | 'explorer' | 'moi' | 'administration' | 'autre'
 
 export interface ParentDeDetail {
   /** Nom de route du parent. */
@@ -26,6 +31,9 @@ export interface ParentDeDetail {
 }
 
 const section = ref<Section>('autre')
+/** Le nom de la route courante. Seul le mode administration s'en sert : ses
+ *  quatre entrées partagent une section, l'entrée allumée se lit au nom. */
+const nomDeRoute = ref('')
 const titre = ref('')
 const resume = ref('')
 const parent = ref<ParentDeDetail | null>(null)
@@ -39,8 +47,11 @@ export function definirPage(p: {
   parent: ParentDeDetail | null
   /** L'écran a sa propre recherche sur téléphone : l'en-tête n'affiche pas sa loupe. */
   rechercheLocale?: boolean
+  /** Le nom de la route (`administration.utilisateurs`). */
+  nom?: string
 }): void {
   section.value = p.section
+  nomDeRoute.value = p.nom ?? ''
   titre.value = p.titre
   parent.value = p.parent
   rechercheLocale.value = p.rechercheLocale ?? false
@@ -61,6 +72,7 @@ export function publierFiltresActifs(n: number): void {
 export function useEntete() {
   return {
     section: readonly(section),
+    nomDeRoute: readonly(nomDeRoute),
     titre: readonly(titre),
     resume: readonly(resume),
     parent: readonly(parent),

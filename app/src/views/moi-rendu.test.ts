@@ -37,6 +37,8 @@ vi.mock('@/composables/useSession', async () => {
 
 vi.mock('@/lib/api', () => ({
   listerDemandesAdministration: () => Promise.resolve({ total: 0 }),
+  listerRattachements: () => Promise.resolve({ elements: [] }),
+  listerDemandesRgpd: () => Promise.resolve({ elements: [] }),
 }))
 
 vi.mock('vue-router', () => ({
@@ -93,7 +95,7 @@ describe('Moi, selon le régime', () => {
       'demarches',
       'questions',
       'aide',
-      'administration.demandes',
+      'administration.a-traiter',
     ])
     expect(html).not.toContain('Voir comme un membre')
     expect(html).toContain('Administrateur')

@@ -96,7 +96,7 @@ import {
   type QuotaRestant,
 } from './rattachements'
 
-const { compte, analyse, transcription, quota = null, suspendu = false, infobulle } = defineProps<{
+const { compte, analyse, transcription, quota = null, suspendu = false, infobulle, integree = false } = defineProps<{
   compte: CompteARattacher
   analyse: EtatDAnalyse
   /**
@@ -109,6 +109,11 @@ const { compte, analyse, transcription, quota = null, suspendu = false, infobull
   /** Écritures éteintes (bascule « voir comme »). */
   suspendu?: boolean
   infobulle?: string | undefined
+  /**
+   * Montée dans le détail de « À traiter » : ni bordure ni fond (le panneau du
+   * détail les porte déjà), et les décisions dans la barre d'actions collante.
+   */
+  integree?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -324,7 +329,8 @@ function dateLisible(iso: string): string {
 
 <template>
   <article
-    class="flex flex-col gap-3 rounded-panneau border border-ligne bg-panneau p-4"
+    class="flex flex-col gap-3"
+    :class="integree ? '' : 'rounded-panneau border border-ligne bg-panneau p-4'"
     :data-compte="compte.memberId"
     :aria-label="`Inscription de ${identite}`"
   >
@@ -517,7 +523,7 @@ function dateLisible(iso: string): string {
     <MessageErreur v-if="erreur !== null" :erreur="erreur" />
 
     <!-- ── Les décisions ──────────────────────────────────────────────── -->
-    <div class="flex flex-wrap gap-2">
+    <div :class="integree ? 'barre-actions-a-traiter' : 'flex flex-wrap gap-2'">
       <BoutonBase
         variante="secondaire"
         :desactive="suspendu || enCours"

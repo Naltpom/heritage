@@ -290,6 +290,49 @@
  * Chiffres de largeur constante. Les années et les fourchettes se comparent à
  * l'œil, en colonne : « 1901 » et « 1909 » doivent s'aligner.
  */
+/**
+ * La barre d'actions collante du détail de « À traiter » (handoff « mode
+ * Administration », § 4.1) : elle reste en bas de l'écran — au-dessus de la
+ * barre de navigation du téléphone — tant que le détail défile.
+ */
+.barre-actions-a-traiter {
+  position: sticky;
+  bottom: var(--hauteur-barre-bas, 0px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 12px 0;
+  background: var(--color-panneau);
+  border-top: 1px solid var(--color-ligne);
+}
+.barre-actions-a-traiter > * {
+  flex: 1 1 auto;
+}
+
+/**
+ * Les rangées de puces de l'administration défilent à l'horizontale, sans barre
+ * visible ; chaque puce garde sa largeur (`flex-none`).
+ */
+.puces-defilantes {
+  scrollbar-width: none;
+}
+.puces-defilantes::-webkit-scrollbar {
+  display: none;
+}
+
+/**
+ * Le survol d'une ligne cliquable des listes de l'administration (prototype :
+ * #faf6f0), et la ligne sélectionnée (#faf3ea). Dérivés de l'accent doux et du
+ * panneau, ils suivent le thème sombre.
+ */
+@utility bg-survol {
+  background-color: color-mix(in srgb, var(--h-accent-doux) 40%, var(--h-panneau));
+}
+@utility bg-selection {
+  background-color: color-mix(in srgb, var(--h-accent-doux) 55%, var(--h-panneau));
+}
+
 @utility tnum {
   font-variant-numeric: tabular-nums;
 }
