@@ -40,7 +40,11 @@ final class SessionsSansVerrou implements \SessionHandlerInterface, \SessionUpda
 {
     private const string PREFIXE = 'sess_';
 
-    /** Les sessions lues non vides pendant cette requête, par identifiant. @var array<string, true> */
+    /**
+     * Les sessions lues non vides pendant cette requête, par identifiant.
+     *
+     * @var array<string, true>
+     */
     private array $luesNonVides = [];
 
     public function __construct(
@@ -67,7 +71,7 @@ final class SessionsSansVerrou implements \SessionHandlerInterface, \SessionUpda
         return true;
     }
 
-    public function read(string $id): string|false
+    public function read(string $id): string
     {
         $chemin = $this->chemin($id);
 
@@ -130,7 +134,7 @@ final class SessionsSansVerrou implements \SessionHandlerInterface, \SessionUpda
         return true;
     }
 
-    public function gc(int $max_lifetime): int|false
+    public function gc(int $max_lifetime): int
     {
         $limite = time() - $max_lifetime;
         $supprimees = 0;
