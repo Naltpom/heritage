@@ -645,6 +645,21 @@ export function relectureFidele(bloc: BlocDate | ValeurDate | null): boolean {
 }
 
 /**
+ * **« Date connue » sans rien de tapé, c'est « pas de date ».**
+ *
+ * Pour les champs qui s'ouvrent directement sur la case de date (le mariage
+ * et le divorce d'une union, dans le panneau Famille) : un champ laissé vide
+ * ne doit ni s'afficher en erreur, ni bloquer l'envoi. La saisie repart alors
+ * en « Inconnue », lieu compris — un mariage sans date mais avec un lieu reste
+ * un lieu de mariage.
+ */
+export function videVautAucuneDate(saisie: SaisieDate): SaisieDate {
+  if (saisie.forme === 'inconnue') return saisie
+  if (saisie.debut.trim().length > 0 || saisie.fin.trim().length > 0) return saisie
+  return { ...saisie, forme: 'inconnue' }
+}
+
+/**
  * La valeur à envoyer pour un champ date, **garde-fou compris**.
  *
  * Quand la relecture n'est pas fidèle, on renvoie l'original : la valeur est

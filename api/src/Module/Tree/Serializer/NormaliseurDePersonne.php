@@ -349,6 +349,10 @@ final readonly class NormaliseurDePersonne
                 'divorce' => $famille->isDivorced() || $famille->getDivorce()->isKnown()
                     ? $this->dates->pourFiche($famille->getDivorce())
                     : null,
+                // La version de la famille : c'est le `baseVersion` d'une demande
+                // `modification_famille` qui corrige la date ou le lieu du mariage
+                // depuis la fiche (panneau Famille du mode édition).
+                'version' => $famille->getVersion(),
                 'enfants' => $enfants,
             ];
         }

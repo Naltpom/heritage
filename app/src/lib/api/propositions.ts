@@ -754,6 +754,14 @@ export interface CorpsModificationPersonne extends CorpsCommun {
   ops: OpProposee[]
 }
 
+/** § 6.2 — modifier une union existante : date et lieu du mariage, divorce. */
+export interface CorpsModificationFamille extends CorpsCommun {
+  kind: 'modification_famille'
+  targetKind: 'famille'
+  targetId: number
+  ops: OpProposee[]
+}
+
 /** § 6.3 — proposer une personne et ses liens. La demande ne décrit **aucune
  *  famille** : « le service en déduit les familles à créer au moment de la
  *  validation ». Un `familleRef` serait refusé en `422`. */
@@ -859,6 +867,7 @@ export interface CorpsAjoutMedia extends CorpsCommun {
 export type CorpsDemande =
   | CorpsAjoutMedia
   | CorpsModificationPersonne
+  | CorpsModificationFamille
   | CorpsCreationPersonne
   | CorpsAjoutLien
   | CorpsSuppressionPersonne

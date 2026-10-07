@@ -1830,6 +1830,7 @@ la référence de forme.
       },
       "divorced": false,
       "divorce": null,
+      "version": 3,
       "enfants": [
         { "personId": 63, "displayName": "Sodalite Sarriette" },
         { "personId": 64, "displayName": "Rubis Sarriette" }

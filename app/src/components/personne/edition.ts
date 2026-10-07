@@ -20,6 +20,7 @@
  * | des champs d'identité | `modification_personne` | un op par champ (`operations.ts`) |
  * | des liens retirés | `retrait_lien` | **une** demande, un retrait par lien |
  * | des liens ajoutés | `ajout_lien` | **une** demande, un lien par ajout (`liens.ts`) |
+ * | les dates d'une union existante | `modification_famille` | **une** demande par union, un op par champ |
  *
  * Trois demandes et non une par lien : l'administrateur décide d'une correction,
  * pas de cinq morceaux qu'il pourrait valider à moitié. Et pas une seule pour le
@@ -46,21 +47,41 @@
  * - **un frère ou une sœur** : pas de croix. La fratrie **se déduit** des parents
  *   — « enfant du même couple » (§ 6.4) — et n'a pas de lien à elle : on retire le
  *   frère depuis sa propre fiche, en retirant ses parents. L'écran le dit.
+ *
+ * ## Les dates d'une union : mariage (date, lieu) et divorce (date)
+ *
+ * Chaque union — existante ou ajoutée — porte trois cases : date du mariage,
+ * lieu du mariage, date du divorce. **Une date de divorce vide veut dire « pas
+ * divorcés »** ; une date saisie coche le divorce. Seule exception, pour ne
+ * rien effacer qu'on n'a pas touché : une union déjà marquée divorcée **sans**
+ * date le reste tant qu'on ne touche pas à sa case.
  * ────────────────────────────────────────────────────────────────────
  */
 
 import type {
   BlocDate,
   CorpsAjoutLien,
+  CorpsModificationFamille,
   CorpsModificationPersonne,
   CorpsRetraitLien,
   FichePersonneComplete,
+  OpProposee,
   RetraitPropose,
+  UnionDeFiche,
   ValeurDate,
 } from '@/lib/api'
 import { LIBELLES_SEXE, descriptionDeChamp, estChampDate, type ChampPersonne } from '@/components/proposition/champs'
 import { cleDuChoix, type ChoixDePersonne, type ErreurSaisie } from '@/components/proposition/creation'
-import { saisieVide } from '@/components/proposition/dates'
+import {
+  designeUneDate,
+  memeValeurDate,
+  sansTexte,
+  saisieDepuisBloc,
+  valeurAEnvoyer,
+  videVautAucuneDate,
+  type ResultatSaisieDate,
+  type SaisieDate,
+} from '@/components/proposition/dates'
 import { corpsAjoutLien, liensVides, type SaisieLiens } from '@/components/proposition/liens'
 import {
   construireOps,
@@ -111,6 +132,21 @@ export interface AjoutsDeLiens {
   enfants: EnfantAjoute[]
 }
 
+/** Les trois cases d'une union : le mariage (date et lieu), le divorce (date). */
+export interface DatesDUnion {
+  mariage: SaisieDate
+  divorce: SaisieDate
+}
+
+/** Une union telle que le crayon l'a lue — le cliché de `modification_famille`. */
+export interface UnionInitiale {
+  familleId: number
+  version: number
+  marriage: ValeurDate | null
+  divorced: boolean
+  divorce: ValeurDate | null
+}
+
 export interface EtatEdition {
   /** Le cliché du crayon : jamais rafraîchi tant qu'on édite (§ 9.6). */
   instantane: InstantaneFiche
@@ -118,6 +154,36 @@ export interface EtatEdition {
   /** Les clés des liens barrés ({@link LienAffiche}). */
   retraits: string[]
   ajouts: AjoutsDeLiens
+  /** Les unions de la fiche à l'entrée en édition — même règle que `instantane`. */
+  unionsInitiales: UnionInitiale[]
+  /** Les dates saisies, par {@link cleDUnion} (union existante) ou
+   *  {@link cleDUnionAjoutee} (conjoint ajouté). Une clé absente vaut des cases vides. */
+  unions: Record<string, DatesDUnion>
+}
+
+export function cleDUnion(familleId: number): string {
+  return `famille:${familleId}`
+}
+export function cleDUnionAjoutee(conjoint: ChoixDePersonne): string {
+  return `ajout:${cleDuChoix(conjoint)}`
+}
+
+/**
+ * Une date d'union **s'ouvre sur la case de date** : un bloc vide ou sans date
+ * passe en « Date connue », que {@link videVautAucuneDate} ramène à « pas de
+ * date » si on la laisse vide. Le lieu seul est conservé.
+ */
+export function saisieDeDateDUnion(bloc: BlocDate | ValeurDate | null): SaisieDate {
+  const saisie = saisieDepuisBloc(bloc)
+  return saisie.forme === 'inconnue' ? { ...saisie, forme: 'connue' } : saisie
+}
+
+export function datesDUnionVides(): DatesDUnion {
+  return { mariage: saisieDeDateDUnion(null), divorce: saisieDeDateDUnion(null) }
+}
+
+function datesDepuisUnion(union: UnionDeFiche): DatesDUnion {
+  return { mariage: saisieDeDateDUnion(union.marriage), divorce: saisieDeDateDUnion(union.divorce) }
 }
 
 export function entrerEnEdition(fiche: FichePersonneComplete): EtatEdition {
@@ -126,6 +192,14 @@ export function entrerEnEdition(fiche: FichePersonneComplete): EtatEdition {
     saisie: saisieDepuisFiche(fiche),
     retraits: [],
     ajouts: { parents: [], conjoints: [], enfants: [] },
+    unionsInitiales: fiche.unions.map((union) => ({
+      familleId: union.familyId,
+      version: union.version,
+      marriage: union.marriage === null ? null : sansTexte(union.marriage),
+      divorced: union.divorced,
+      divorce: union.divorce === null ? null : sansTexte(union.divorce),
+    })),
+    unions: Object.fromEntries(fiche.unions.map((union) => [cleDUnion(union.familyId), datesDepuisUnion(union)])),
   }
 }
 
@@ -250,23 +324,169 @@ export function retraitsDemandes(fiche: FichePersonneComplete, retraits: readonl
 /* ------------------------------------------------------------------ */
 
 /** Les ajouts dans la forme de `liens.ts`, qui sait déjà composer `ajout_lien`. */
-export function saisieDesAjouts(fiche: FichePersonneComplete, ajouts: AjoutsDeLiens): SaisieLiens {
+export function saisieDesAjouts(
+  fiche: FichePersonneComplete,
+  ajouts: AjoutsDeLiens,
+  unions: Readonly<Record<string, DatesDUnion>> = {},
+): SaisieLiens {
   return {
     ...liensVides(fiche.id),
     parents: [...ajouts.parents],
-    unions: ajouts.conjoints.map((personne) => ({
-      personne,
-      mariage: saisieVide(),
-      rompue: false,
-      rupture: saisieVide(),
-      note: '',
-    })),
+    unions: ajouts.conjoints.map((personne) => {
+      const dates = unions[cleDUnionAjoutee(personne)] ?? datesDUnionVides()
+      const divorce = valeurDUnion(dates.divorce)
+      return {
+        personne,
+        mariage: videVautAucuneDate(dates.mariage),
+        // Une date de divorce coche le divorce ; une date illisible aussi, pour
+        // que l'erreur remonte au lieu d'être tue.
+        rompue: !divorce.valide || divorce.valeur !== null,
+        rupture: videVautAucuneDate(dates.divorce),
+        note: '',
+      }
+    }),
     enfants: ajouts.enfants.map((enfant) => ({ personne: enfant.personne, familleId: enfant.familleId, rangFratrie: null })),
   }
 }
 
 export function nombreDAjouts(ajouts: AjoutsDeLiens): number {
   return ajouts.parents.length + ajouts.conjoints.length + ajouts.enfants.length
+}
+
+/* ------------------------------------------------------------------ */
+/* Les dates d'union, en corps de demande                              */
+/* ------------------------------------------------------------------ */
+
+/** La valeur d'une case de date d'union : vide, c'est « pas de date ». */
+export function valeurDUnion(saisie: SaisieDate): ResultatSaisieDate {
+  return valeurAEnvoyer(videVautAucuneDate(saisie))
+}
+
+/** Le nom du conjoint d'une union, pour les messages et le récapitulatif. */
+function libelleDUnion(fiche: FichePersonneComplete, familleId: number): string {
+  const conjoint = fiche.unions.find((u) => u.familyId === familleId)?.conjoint
+  return conjoint ? `avec ${conjoint.displayName}` : 'conjoint inconnu'
+}
+
+interface DatesConverties {
+  marriage: ValeurDate | null
+  divorced: boolean
+  divorce: ValeurDate | null
+}
+
+/**
+ * Convertit les trois cases, ou pousse ce qui ne va pas dans `erreurs`.
+ *
+ * `avant` est l'union telle qu'elle était lue (`null` pour un conjoint ajouté) :
+ * c'est lui qui garde « divorcés, date inconnue » quand on ne touche à rien.
+ */
+function convertirDates(
+  dates: DatesDUnion,
+  avant: UnionInitiale | null,
+  libelle: string,
+  erreurs: ErreurSaisie[],
+  prefixe: string,
+): DatesConverties | null {
+  const mariage = valeurDUnion(dates.mariage)
+  const divorce = valeurDUnion(dates.divorce)
+  if (!mariage.valide) erreurs.push({ champ: `${prefixe}.mariage`, message: `Mariage ${libelle} : ${mariage.message}` })
+  if (!divorce.valide) erreurs.push({ champ: `${prefixe}.divorce`, message: `Divorce ${libelle} : ${divorce.message}` })
+  if (!mariage.valide || !divorce.valide) return null
+
+  // `ck_tree_family_divorce_apres_mariage` : dit ici plutôt qu'en erreur de base.
+  const debutMariage = mariage.valeur?.min ?? null
+  const debutDivorce = divorce.valeur?.min ?? null
+  if (debutMariage !== null && debutDivorce !== null && debutDivorce < debutMariage) {
+    erreurs.push({ champ: `${prefixe}.divorce`, message: `Divorce ${libelle} : il ne peut pas précéder le mariage.` })
+    return null
+  }
+
+  const avecDate = divorce.valeur !== null && designeUneDate(divorce.valeur)
+  const inchange = avant !== null && memeValeurDate(blocDOp(divorce.valeur), blocDOp(avant.divorce))
+  return {
+    marriage: mariage.valeur,
+    divorced: avecDate || (inchange && avant.divorced),
+    divorce: divorce.valeur,
+  }
+}
+
+/**
+ * « Pas de date », tel qu'un op le transporte : le serveur exige toujours un bloc
+ * à cinq clés et refuse `null` (`NormaliseurDeValeur::blocDate`). C'est aussi ce
+ * qu'il relit pour une date inconnue, donc ce que `oldValue` doit annoncer.
+ */
+const AUCUNE_DATE: ValeurDate = { raw: null, qualifier: 'inconnue', min: null, max: null, place: null }
+
+function blocDOp(valeur: ValeurDate | null): ValeurDate {
+  return valeur ?? AUCUNE_DATE
+}
+
+/** Les ops d'une union existante : un par champ qui a changé. */
+function opsDUnion(avant: UnionInitiale, apres: DatesConverties): OpProposee[] {
+  const ops: OpProposee[] = []
+  const op = (field: string, valueKind: string, oldValue: OpProposee['oldValue'], newValue: OpProposee['newValue']) =>
+    ops.push({
+      seq: ops.length + 1,
+      opKind: 'champ',
+      subjectKind: 'famille',
+      subjectId: avant.familleId,
+      field,
+      valueKind,
+      oldValue,
+      newValue,
+      baseVersion: avant.version,
+    })
+
+  const date = (field: string, ancienne: ValeurDate | null, nouvelle: ValeurDate | null) => {
+    if (!memeValeurDate(blocDOp(ancienne), blocDOp(nouvelle))) {
+      op(field, 'date_incertaine', blocDOp(ancienne), blocDOp(nouvelle))
+    }
+  }
+  date('marriage', avant.marriage, apres.marriage)
+  if (avant.divorced !== apres.divorced) op('divorced', 'booleen', avant.divorced, apres.divorced)
+  date('divorce', avant.divorce, apres.divorce)
+  return ops
+}
+
+/** Une union dont le conjoint est barré part avec la croix : on ne la date pas. */
+function unionRetiree(fiche: FichePersonneComplete, etat: EtatEdition, familleId: number): boolean {
+  const conjoint = fiche.unions.find((u) => u.familyId === familleId)?.conjoint
+  return conjoint !== undefined && conjoint !== null && etat.retraits.includes(cleDeConjoint(conjoint.personId, familleId))
+}
+
+export interface UnionModifiee {
+  familleId: number
+  avant: UnionInitiale
+  ops: OpProposee[]
+}
+
+/** Les unions existantes dont une date a changé, avec leurs ops. */
+export function unionsModifiees(
+  fiche: FichePersonneComplete,
+  etat: EtatEdition,
+  erreurs: ErreurSaisie[] = [],
+): UnionModifiee[] {
+  const sortie: UnionModifiee[] = []
+  for (const avant of etat.unionsInitiales) {
+    if (unionRetiree(fiche, etat, avant.familleId)) continue
+    const dates = etat.unions[cleDUnion(avant.familleId)]
+    if (dates === undefined) continue
+    const apres = convertirDates(dates, avant, libelleDUnion(fiche, avant.familleId), erreurs, cleDUnion(avant.familleId))
+    if (apres === null) continue
+    const ops = opsDUnion(avant, apres)
+    if (ops.length > 0) sortie.push({ familleId: avant.familleId, avant, ops })
+  }
+  return sortie
+}
+
+/** Les erreurs des dates saisies pour les conjoints ajoutés. */
+function erreursDesAjouts(etat: EtatEdition): ErreurSaisie[] {
+  const erreurs: ErreurSaisie[] = []
+  for (const conjoint of etat.ajouts.conjoints) {
+    const cle = cleDUnionAjoutee(conjoint)
+    convertirDates(etat.unions[cle] ?? datesDUnionVides(), null, `avec ${conjoint.libelle}`, erreurs, cle)
+  }
+  return erreurs
 }
 
 /* ------------------------------------------------------------------ */
@@ -397,8 +617,30 @@ export function recapitulatif(fiche: FichePersonneComplete, etat: EtatEdition): 
   for (const parent of etat.ajouts.parents) {
     changements.push({ nature: 'ajout', texte: `Lien ajouté : enfant de ${parent.libelle}` })
   }
+  for (const union of unionsModifiees(fiche, etat)) {
+    for (const op of union.ops) {
+      const quoi = op.field === 'marriage' ? 'mariage' : op.field === 'divorce' ? 'date du divorce' : 'divorcés'
+      const lire = (v: unknown) => {
+        if (typeof v === 'boolean') return v ? 'oui' : 'non'
+        const bloc = (v ?? null) as ValeurDate | null
+        return designeUneDate(bloc) ? dateLisible(bloc) : '(vide)'
+      }
+      changements.push({
+        nature: 'champ',
+        texte: `Union ${libelleDUnion(fiche, union.familleId)}, ${quoi} : ${lire(op.oldValue)} → ${lire(op.newValue)}`,
+      })
+    }
+  }
   for (const conjoint of etat.ajouts.conjoints) {
-    changements.push({ nature: 'ajout', texte: `Lien ajouté : conjoint de ${conjoint.libelle}` })
+    const dates = etat.unions[cleDUnionAjoutee(conjoint)] ?? datesDUnionVides()
+    const mariage = valeurDUnion(dates.mariage)
+    const divorce = valeurDUnion(dates.divorce)
+    const details = [
+      mariage.valide && mariage.valeur !== null ? `mariage : ${dateLisible(mariage.valeur)}` : null,
+      divorce.valide && divorce.valeur !== null ? `divorce : ${dateLisible(divorce.valeur)}` : null,
+    ].filter((d) => d !== null)
+    const suite = details.length > 0 ? ` (${details.join(' ; ')})` : ''
+    changements.push({ nature: 'ajout', texte: `Lien ajouté : conjoint de ${conjoint.libelle}${suite}` })
   }
   for (const enfant of etat.ajouts.enfants) {
     const union = fiche.unions.find((u) => u.familyId === enfant.familleId)
@@ -413,7 +655,13 @@ export function recapitulatif(fiche: FichePersonneComplete, etat: EtatEdition): 
 /* Les demandes à déposer                                              */
 /* ------------------------------------------------------------------ */
 
-export type CorpsDEdition = CorpsModificationPersonne | CorpsRetraitLien | CorpsAjoutLien
+export type CorpsDEdition = CorpsModificationPersonne | CorpsRetraitLien | CorpsAjoutLien | CorpsModificationFamille
+
+/** Ce qui distingue deux dépôts d'une même session : la nature, et la cible
+ *  pour les unions — deux unions corrigées font deux demandes. */
+export function cleDeDepot(corps: CorpsDEdition): string {
+  return corps.kind === 'modification_famille' ? `${corps.kind}:${corps.targetId}` : corps.kind
+}
 
 export type DemandesDEdition =
   | { valide: true; corps: CorpsDEdition[] }
@@ -442,6 +690,11 @@ export function demandesDEdition(fiche: FichePersonneComplete, etat: EtatEdition
     }
   }
 
+  const erreursUnions: ErreurSaisie[] = []
+  const unions = unionsModifiees(fiche, etat, erreursUnions)
+  erreursUnions.push(...erreursDesAjouts(etat))
+  if (erreursUnions.length > 0) return { valide: false, erreurs: erreursUnions }
+
   if (construireOps(etat.instantane, conversion.valeurs).length > 0) {
     corps.push(corpsModificationPersonne(etat.instantane, conversion.valeurs, options))
   }
@@ -461,17 +714,34 @@ export function demandesDEdition(fiche: FichePersonneComplete, etat: EtatEdition
   }
 
   if (nombreDAjouts(etat.ajouts) > 0) {
-    const ajout = corpsAjoutLien(saisieDesAjouts(fiche, etat.ajouts), options)
+    const ajout = corpsAjoutLien(saisieDesAjouts(fiche, etat.ajouts, etat.unions), options)
     if (!ajout.valide) return { valide: false, erreurs: ajout.erreurs }
     corps.push(ajout.corps)
+  }
+
+  for (const union of unions) {
+    const modification: CorpsModificationFamille = {
+      kind: 'modification_famille',
+      soumettre: true,
+      targetKind: 'famille',
+      targetId: union.familleId,
+      ops: union.ops,
+    }
+    const mot = message.trim()
+    if (mot.length > 0) modification.message = mot
+    corps.push(modification)
   }
 
   return { valide: true, corps }
 }
 
 /** La session a-t-elle quelque chose à envoyer — ou à perdre si on l'annule ? */
-export function aDesModifications(etat: EtatEdition): boolean {
+export function aDesModifications(etat: EtatEdition, fiche?: FichePersonneComplete): boolean {
   if (etat.retraits.length > 0 || nombreDAjouts(etat.ajouts) > 0) return true
+  if (fiche !== undefined) {
+    const erreurs: ErreurSaisie[] = []
+    if (unionsModifiees(fiche, etat, erreurs).length > 0 || erreurs.length > 0) return true
+  }
   const conversion = valeursDepuisSaisie(etat.saisie)
   // Une saisie qui ne se convertit pas a forcément été touchée : une fiche lue
   // se reconvertit toujours.
@@ -484,4 +754,5 @@ export const LIBELLES_DEPOT: Record<CorpsDEdition['kind'], string> = {
   modification_personne: 'Correction de la fiche',
   retrait_lien: 'Liens retirés',
   ajout_lien: 'Liens ajoutés',
+  modification_famille: 'Dates d’union corrigées',
 }

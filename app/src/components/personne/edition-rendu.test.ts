@@ -87,6 +87,7 @@ function fiche(): FichePersonneComplete {
         marriage: null,
         divorced: false,
         divorce: null,
+        version: 1,
         enfants: [{ personId: 60, displayName: 'Pivoine Romarin' }],
       },
     ],
@@ -224,6 +225,32 @@ describe('EditionParente — une croix par lien, aucune sur la fratrie', () => {
     expect(html).toContain('Deux parents au plus')
     expect(html).toContain('+ Ajouter un conjoint')
     expect(html).toContain('+ Ajouter un enfant de ce couple')
+  })
+})
+
+describe('EditionParente — date et lieu du mariage, date du divorce', () => {
+  it('chaque union, existante ou ajoutée, porte ses trois cases', async () => {
+    const html = await rendre(EditionParente, {
+      fiche: fiche(),
+      retraits: [],
+      ajouts: { parents: [], conjoints: [{ personId: 70, libelle: 'Tourmaline Thym' }], enfants: [] },
+    })
+    expect(html).toContain('data-dates-union="9"')
+    expect(html.match(/Date de mariage/g)).toHaveLength(2)
+    expect(html.match(/Lieu de mariage/g)).toHaveLength(2)
+    expect(html.match(/Date de divorce/g)).toHaveLength(2)
+    expect(html).toContain('Vide : toujours unis.')
+    // Vide n'est pas une erreur : l'aperçu dit « aucune date ».
+    expect(html).toContain('Aucune date.')
+  })
+
+  it('un conjoint barré n’a plus de dates à corriger', async () => {
+    const html = await rendre(EditionParente, {
+      fiche: fiche(),
+      retraits: [cleDeConjoint(52, 9)],
+      ajouts: { parents: [], conjoints: [], enfants: [] },
+    })
+    expect(html).not.toContain('data-dates-union="9"')
   })
 })
 

@@ -21,6 +21,7 @@ import type { ErreurSaisie } from '@/components/proposition/creation'
 import { valeursDepuisSaisie } from '@/components/proposition/operations'
 import {
   aDesModifications,
+  cleDeDepot,
   demandesDEdition,
   entrerEnEdition,
   recapitulatif,
@@ -31,6 +32,8 @@ import {
 
 export interface DemandeDeposee {
   kind: CorpsDEdition['kind']
+  /** {@link cleDeDepot} : la nature, et la famille pour une union corrigée. */
+  cle: string
   id: number
 }
 
@@ -82,7 +85,7 @@ export function useEditionFiche(fiche: Ref<FichePersonneComplete> | (() => Fiche
 
   /** « Annuler » : on sort sans rien envoyer — après confirmation s'il y a de quoi perdre. */
   function annuler(): void {
-    if (edition.value !== null && aDesModifications(edition.value)) {
+    if (edition.value !== null && aDesModifications(edition.value, lire())) {
       confirmationAnnulation.value = {
         titre: 'Abandonner ces corrections ?',
         message: 'Rien n’a été envoyé : vos modifications seront perdues.',
@@ -116,9 +119,10 @@ export function useEditionFiche(fiche: Ref<FichePersonneComplete> | (() => Fiche
     erreurEnvoi.value = null
     try {
       for (const corps of demandes.corps) {
-        if (deposees.value.some((d) => d.kind === corps.kind)) continue
+        const cle = cleDeDepot(corps)
+        if (deposees.value.some((d) => d.cle === cle)) continue
         const demande = await creerDemande(corps)
-        deposees.value = [...deposees.value, { kind: corps.kind, id: demande.id }]
+        deposees.value = [...deposees.value, { kind: corps.kind, cle, id: demande.id }]
       }
       // Le graphe incorpore les nœuds en attente du lecteur : son `ETag` est
       // périmé dès qu'une demande naît (§ 5.2, § 13.4).
