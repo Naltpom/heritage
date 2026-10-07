@@ -119,6 +119,9 @@ def decouper():
         })
     json.dump({'source': 'ElevenLabs', 'reglages': a['reglages'], 'segments': sortie},
               open(os.path.join(ICI, 'voix.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+    # la même chose, lisible par la page de rendu ouverte en file:// (pas de fetch possible)
+    open(os.path.join(ICI, 'voix.js'), 'w', encoding='utf-8').write(
+        'window.VOIX = ' + json.dumps(sortie, ensure_ascii=False) + '\n')
     total = sum(s['duree'] for s in sortie)
     print(f'{len(sortie)} segments, {total:.1f} s de parole (prise : {duree:.1f} s)')
     for s in sortie:
