@@ -55,8 +55,8 @@ export function sansTexte(bloc: BlocDate | ValeurDate): ValeurDate {
   // Un bloc **masqué** (ADR 0016) n'a ni provenance ni bornes à rendre : le
   // serveur les a retirées. Il redevient le bloc qui n'affirme rien, lieu
   // compris — la même valeur des deux côtés de `construireOps`, donc aucun op.
-  // Le champ, lui, est verrouillé (`naissanceVerrouillee()`) : on ne part
-  // jamais d'une date qu'on ne voit pas.
+  // Le champ part donc vide : on ne part jamais d'une date qu'on ne voit pas,
+  // et ce qu'on y saisit se propose à l'aveugle (`naissanceVerrouillee()`).
   if (bloc.qualifier === 'masquee') {
     return { raw: null, qualifier: 'inconnue', min: null, max: null, place: bloc.place }
   }
@@ -595,7 +595,7 @@ export function saisieDepuisBloc(bloc: BlocDate | ValeurDate | null): SaisieDate
       return { ...base, forme: 'connue', debut: mmaaaa(bloc.min) }
 
     case 'inconnue':
-    // Masquée (ADR 0016) : rien à relire, et le champ n'est pas offert.
+    // Masquée (ADR 0016) : rien à relire, le champ part vide.
     case 'masquee':
       return base
   }

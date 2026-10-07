@@ -3,10 +3,11 @@
  * L'autorisation signée d'une personne vivante **sans compte** (ADR 0016) —
  * administrateur seulement, onglet Identité.
  *
- * Une personne vivante sans compte ne coche rien : elle ne partage donc rien de
- * sa date de naissance, et les membres n'en voient rien. Si elle a signé une
- * autorisation sur papier, l'administrateur en dépose le document (PDF ou
- * photo) et coche ce qu'elle accepte — année, mois, jour, indépendamment.
+ * Une personne vivante sans compte ne choisit rien : le défaut tient, sa date
+ * de naissance n'est montrée qu'à ses proches (révision du 7 octobre 2026). Si
+ * elle a signé une autorisation sur papier, l'administrateur en dépose le
+ * document (PDF ou photo) et pose ce qu'elle accepte — pour l'année, le mois
+ * et le jour, indépendamment : tous, ses proches, personne.
  *
  * Trois états, dits tels quels :
  *
@@ -154,7 +155,7 @@ function ligneDHistorique(autorisation: AutorisationNaissance): string {
 
       <div v-else-if="etat.autorisation !== null" class="flex flex-col gap-1.5" data-etat="active">
         <p class="m-0 text-sm">
-          Autorisation signée : partage
+          Autorisation signée :
           <strong>{{ resumePartage(etat.autorisation) }}</strong>,
           accordée le {{ dateLisible(etat.autorisation.accordeeLe) }}.
         </p>
@@ -175,8 +176,8 @@ function ligneDHistorique(autorisation: AutorisationNaissance): string {
       </div>
 
       <p v-else class="m-0 text-sm text-attenue" data-etat="aucune">
-        Aucune autorisation : sans compte, cette personne ne partage pas sa date de naissance avec les
-        membres.
+        Aucune autorisation : sans compte, cette personne ne montre sa date de naissance qu’à ses
+        proches.
       </p>
 
       <form
@@ -209,7 +210,7 @@ function ligneDHistorique(autorisation: AutorisationNaissance): string {
 
         <PartageNaissance
           v-model="partage"
-          legende="Ce que la personne accepte de partager"
+          legende="Qui voit sa date de naissance ?"
           sans-explication
           :erreurs="refusPartage"
           :desactive="envoi"

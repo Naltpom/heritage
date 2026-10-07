@@ -6,12 +6,14 @@ namespace App\Module\Membership\Service;
 
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\AuditAction;
+use App\Module\Core\Enum\NiveauDePartage;
 use App\Module\Core\Exception\ConflictException;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Security\ReciprociteInterface;
 use App\Module\Core\Service\AuditService;
 use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Core\ValueObject\PartageDeNaissance;
 use App\Module\Membership\Entity\AutorisationDeNaissance;
 use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Repository\AutorisationDeNaissanceRepository;
@@ -46,15 +48,51 @@ final readonly class ConsentementDeNaissance
     }
 
     /**
-     * Lit `{annee, mois, jour}` dans un corps de requête. Une clé absente vaut `false` ; une
-     * clé présente doit être un booléen.
+     * Lit `{annee, mois, jour}` dans un corps de requête : un niveau par composante,
+     * `tous`, `proches` ou `personne`. Une clé absente vaut `proches`, le défaut.
      *
      * @param array<mixed> $corps
      * @param string       $prefixe le chemin de champ des erreurs (`partageNaissance.`)
      *
-     * @return array{0: ComposantesDeDate, 1: array<string, string>} les composantes et les erreurs de champ
+     * @return array{0: PartageDeNaissance, 1: array<string, string>} le partage et les erreurs de champ
      */
     public static function lire(array $corps, string $prefixe = ''): array
+    {
+        $erreurs = [];
+        $niveaux = [];
+
+        foreach (['annee', 'mois', 'jour'] as $cle) {
+            $valeur = $corps[$cle] ?? NiveauDePartage::Proches->value;
+            $niveau = \is_string($valeur) ? NiveauDePartage::tryFrom($valeur) : null;
+
+            if (null === $niveau) {
+                $erreurs[$prefixe.$cle] = 'Doit valoir « tous », « proches » ou « personne ».';
+                continue;
+            }
+
+            $niveaux[$cle] = $niveau;
+        }
+
+        return [
+            new PartageDeNaissance(
+                $niveaux['annee'] ?? NiveauDePartage::Proches,
+                $niveaux['mois'] ?? NiveauDePartage::Proches,
+                $niveaux['jour'] ?? NiveauDePartage::Proches,
+            ),
+            $erreurs,
+        ];
+    }
+
+    /**
+     * Lit `{annee, mois, jour}` en **cases à cocher** — les composantes visées par une
+     * demande RGPD de retrait. Une clé absente vaut `false` ; une clé présente doit être un
+     * booléen.
+     *
+     * @param array<mixed> $corps
+     *
+     * @return array{0: ComposantesDeDate, 1: array<string, string>} les composantes et les erreurs de champ
+     */
+    public static function lireLesComposantes(array $corps, string $prefixe = ''): array
     {
         $erreurs = [];
         $valeurs = [];
@@ -89,21 +127,22 @@ final readonly class ConsentementDeNaissance
      *
      * @param 'inscription'|'profil'|'administration' $source
      */
-    public function enregistrer(Member $membre, ComposantesDeDate $partage, string $source, bool $flush = true): void
+    public function enregistrer(Member $membre, PartageDeNaissance $partage, string $source, bool $flush = true): void
     {
         $avant = $membre->getPartageDeNaissance();
 
-        // L'équité (ADR 0016) : une composante partagée reste visible au moins 30 jours. Le
-        // titulaire ne la retire pas avant ; l'administrateur, saisi par une demande RGPD, si.
+        // L'équité (ADR 0016) : une composante partagée avec tous le reste au moins 30
+        // jours. Le titulaire ne la retire pas avant ; l'administrateur, saisi par une
+        // demande RGPD, si. Entre `proches` et `personne`, rien n'est verrouillé.
         if ('administration' !== $source) {
             $bloquees = [];
             foreach ($membre->verrouDuPartage() as $cle => $fin) {
-                if ($avant->enTableau()[$cle] && !$partage->enTableau()[$cle]) {
+                if (NiveauDePartage::Tous === $avant->niveau($cle) && NiveauDePartage::Tous !== $partage->niveau($cle)) {
                     $bloquees[$cle] = $fin->format(\DateTimeInterface::ATOM);
                 }
             }
             if ([] !== $bloquees) {
-                throw new ConflictException('partage_verrouille', \sprintf('Une information partagée reste visible au moins %d jours. Pour la retirer avant, faites une demande RGPD.', Member::DUREE_MINIMALE_JOURS), ['jusquAu' => $bloquees]);
+                throw new ConflictException('partage_verrouille', \sprintf('Une information partagée avec tous reste visible de tous au moins %d jours. Pour la retirer avant, faites une demande RGPD.', Member::DUREE_MINIMALE_JOURS), ['jusquAu' => $bloquees]);
             }
         }
         $membre->partagerLaNaissance($partage, $source);
@@ -124,8 +163,9 @@ final readonly class ConsentementDeNaissance
     }
 
     /**
-     * Le choix d'un compte tel que les écrans le lisent : les trois composantes, la date du
-     * dernier choix, et jusqu'à quand chaque composante partagée ne peut pas être retirée.
+     * Le choix d'un compte tel que les écrans le lisent : le niveau des trois composantes, la
+     * date du dernier choix, et jusqu'à quand chaque composante partagée avec tous ne peut
+     * pas en être retirée.
      *
      * @return array<string, mixed>
      */
@@ -152,7 +192,7 @@ final readonly class ConsentementDeNaissance
     public function deposerAutorisation(
         int $personId,
         string $cheminTemporaire,
-        ComposantesDeDate $partage,
+        PartageDeNaissance $partage,
         ?string $note,
         User $administrateur,
     ): AutorisationDeNaissance {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Core\Security;
 
 use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Core\ValueObject\PartageDeNaissance;
 
 /**
  * **La réciprocité des vivants** — ADR 0016, réponse au RGPD : ce qu'un lecteur voit de la
@@ -17,11 +18,14 @@ use App\Module\Core\ValueObject\ComposantesDeDate;
  *
  * ## Les règles
  *
- * **Date de naissance** — un lecteur V voit la composante c (année, mois, jour) d'un vivant T
- * si et seulement si V partage c **et** T partage c. Ce que T « partage », c'est le
- * consentement de son compte s'il en a un ; sinon l'autorisation signée qu'un
- * administrateur a déposée ; sinon rien. Trois exceptions donnent tout : T est décédé,
- * T est la fiche de V, V porte l'option d'administration « ignorer la restriction ».
+ * **Date de naissance** — chacun partage chaque composante c (année, mois, jour) avec `tous`
+ * les vivants de l'arbre, avec ses `proches`, ou avec `personne` (révision du 2026-10-07).
+ * Un lecteur V voit c d'un vivant T si et seulement si **chacun la montre à l'autre** :
+ * les deux au moins à `proches` quand T est un proche de V, les deux à `tous` sinon. Ce que
+ * T partage, c'est le choix de son compte s'il en a un ; sinon l'autorisation signée qu'un
+ * administrateur a déposée ; sinon le défaut, `proches`. Trois exceptions donnent tout :
+ * T est décédé, T est la fiche de V, V porte l'option d'administration « ignorer la
+ * restriction ».
  *
  * **Portrait** — un vivant est servi net si V a lui-même une photo (validée ou en attente),
  * flou sinon. L'option d'administration **ne s'applique pas** aux photos.
@@ -52,10 +56,11 @@ interface ReciprociteInterface
     public function portraitNet(int $personId): bool;
 
     /**
-     * Ce que le lecteur courant partage lui-même ; `null` s'il n'a pas de rattachement
+     * Ce que le lecteur courant partage lui-même, niveau par composante ; `null` s'il n'a
+     * pas de rattachement
      * (compte d'amorçage, lecteur sans session).
      */
-    public function partageDuLecteur(): ?ComposantesDeDate;
+    public function partageDuLecteur(): ?PartageDeNaissance;
 
     /** Le lecteur porte-t-il l'option « ignorer la restriction de date de naissance » ? */
     public function restrictionIgnoree(): bool;
@@ -65,8 +70,8 @@ interface ReciprociteInterface
 
     /**
      * Une empreinte de tout ce qui fait varier les réponses ci-dessus pour ce lecteur :
-     * ses propres choix, l'option d'administration, sa photo, et les consentements de
-     * toutes les personnes. Elle entre dans les ETags et les clés de cache des vues qui
+     * ses propres choix, ses proches, l'option d'administration, sa photo, et les
+     * consentements de toutes les personnes. Elle entre dans les ETags et les clés de cache des vues qui
      * portent des naissances ou des portraits.
      */
     public function empreinte(): string;

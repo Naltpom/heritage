@@ -269,10 +269,11 @@ final class SchemaSynchroniseTest extends KernelTestCase
     /**
      * Rejoue un historique d'instructions et rend l'état final des colonnes, par table.
      *
-     * Cinq formes, parce que ce sont celles que Doctrine produit :
+     * Six formes, parce que ce sont celles que Doctrine produit :
      * `CREATE TABLE t (col def, …, PRIMARY KEY (…))`, `ALTER TABLE t ADD col def`,
-     * `ALTER TABLE t DROP col`, `ALTER TABLE t ALTER col TYPE x` et
-     * `ALTER TABLE t ALTER col DROP|SET NOT NULL`. Tout le reste — index,
+     * `ALTER TABLE t DROP col`, `ALTER TABLE t ALTER col TYPE x [USING …]`,
+     * `ALTER TABLE t ALTER col DROP|SET NOT NULL` et
+     * `ALTER TABLE t ALTER col DROP DEFAULT|SET DEFAULT x`. Tout le reste — index,
      * contraintes, données — est ignoré ici et couvert ailleurs.
      *
      * ⚠ **La quatrième manquait, et son absence rendait ce test faux dans un sens qu'on ne
@@ -324,12 +325,23 @@ final class SchemaSynchroniseTest extends KernelTestCase
                 continue;
             }
 
-            if (1 === preg_match('/^ALTER TABLE ([a-z0-9_]+) ALTER ([a-z0-9_]+) TYPE (.+)$/i', $sql, $t)) {
+            // `USING …` dit comment convertir les valeurs, pas ce que devient la colonne.
+            if (1 === preg_match('/^ALTER TABLE ([a-z0-9_]+) ALTER ([a-z0-9_]+) TYPE (.+?)(?:\s+USING\s.*)?$/is', $sql, $t)) {
                 // Une colonne que l'historique n'a pas encore créée ne se modifie pas : on
                 // laisse le trou, et la comparaison le signalera comme une absence — ce
                 // qu'il est réellement.
                 if (isset($tables[$t[1]][$t[2]])) {
                     $tables[$t[1]][$t[2]] = $this->typeRemplace($tables[$t[1]][$t[2]], trim($t[3]));
+                }
+                continue;
+            }
+
+            // Le défaut seul — les niveaux de partage de la naissance (2026-10-07) l'ont
+            // rencontré les premiers : un `BOOLEAN DEFAULT false` devenu `VARCHAR(8)`
+            // change de défaut en trois temps, `DROP DEFAULT`, `TYPE`, `SET DEFAULT`.
+            if (1 === preg_match('/^ALTER TABLE ([a-z0-9_]+) ALTER ([a-z0-9_]+) (?:DROP DEFAULT|SET DEFAULT (.+))$/i', $sql, $t)) {
+                if (isset($tables[$t[1]][$t[2]])) {
+                    $tables[$t[1]][$t[2]] = $this->defautRemplace($tables[$t[1]][$t[2]], isset($t[3]) ? trim($t[3]) : null);
                 }
                 continue;
             }
@@ -369,6 +381,25 @@ final class SchemaSynchroniseTest extends KernelTestCase
         }
 
         return $type;
+    }
+
+    /**
+     * Retire le défaut d'une définition, puis pose `$defaut` juste après le type — là où
+     * Doctrine l'écrit : `VARCHAR(8) DEFAULT 'proches' NOT NULL`.
+     */
+    private function defautRemplace(string $definition, ?string $defaut): string
+    {
+        $sansDefaut = trim((string) preg_replace("/\\s+DEFAULT\\s+(?:'[^']*'|\\S+)/i", '', $definition));
+
+        if (null === $defaut) {
+            return $sansDefaut;
+        }
+
+        if (1 === preg_match('/\s(?:NOT NULL|NULL|CHECK)\b.*$/is', $sansDefaut, $suite, \PREG_OFFSET_CAPTURE)) {
+            return substr($sansDefaut, 0, $suite[0][1]).' DEFAULT '.$defaut.$suite[0][0];
+        }
+
+        return $sansDefaut.' DEFAULT '.$defaut;
     }
 
     /**

@@ -760,10 +760,11 @@ export function resteDuQuota(quotas: readonly QuotaDeCompte[], cle: string): num
 /* ------------------------------------------------------------------ */
 
 /*
- * Une personne vivante **sans compte** ne peut pas cocher elle-même ce qu'elle
- * partage de sa date de naissance. Sans rien, elle ne partage rien. Un
- * administrateur peut déposer son **autorisation signée** (PDF ou photo du
- * papier) et cocher ce qu'elle accepte : année, mois, jour.
+ * Une personne vivante **sans compte** ne peut pas choisir elle-même ce qu'elle
+ * partage de sa date de naissance. Sans rien, le défaut tient : ses proches.
+ * Un administrateur peut déposer son **autorisation signée** (PDF ou photo du
+ * papier) et poser ce qu'elle accepte, composante par composante : tous,
+ * proches, personne.
  *
  * Dès qu'un compte est rattaché à la fiche, c'est **son** choix qui compte :
  * l'autorisation est archivée (`compte_rattache`) et un nouveau dépôt rend
@@ -804,7 +805,7 @@ export function lireAutorisationNaissance(personId: number): Promise<EtatAutoris
 /**
  * `POST /api/administration/personnes/{id}/autorisation-naissance` —
  * `multipart/form-data`. Le document (PDF, JPEG, PNG ou WebP, 10 Mo au plus)
- * et les trois cases, en `'true'`/`'false'`. Une autorisation active est
+ * et les trois niveaux (`tous`, `proches`, `personne`). Une autorisation active est
  * remplacée (archivée en `remplacee`). Aucun `Content-Type` posé : voir
  * `televerserMedia()`.
  */
@@ -814,9 +815,9 @@ export function deposerAutorisationNaissance(
 ): Promise<EtatAutorisationNaissance> {
   const formulaire = new FormData()
   formulaire.append('document', envoi.document, envoi.document.name)
-  formulaire.append('annee', envoi.annee ? 'true' : 'false')
-  formulaire.append('mois', envoi.mois ? 'true' : 'false')
-  formulaire.append('jour', envoi.jour ? 'true' : 'false')
+  formulaire.append('annee', envoi.annee)
+  formulaire.append('mois', envoi.mois)
+  formulaire.append('jour', envoi.jour)
   const note = envoi.note?.trim() ?? ''
   if (note.length > 0) formulaire.append('note', note)
   return requeteApi<EtatAutorisationNaissance>(`/administration/personnes/${personId}/autorisation-naissance`, {

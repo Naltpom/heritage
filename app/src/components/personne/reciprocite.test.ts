@@ -1,5 +1,3 @@
-import { createSSRApp, h } from 'vue'
-import { renderToString } from 'vue/server-renderer'
 import { describe, expect, it } from 'vitest'
 import type { BlocDate, FichePersonneComplete } from '@/lib/api'
 import { saisieDepuisBloc, sansTexte } from '@/components/proposition/dates'
@@ -10,18 +8,18 @@ import {
   saisieDepuisFiche,
   valeursDepuisSaisie,
 } from '@/components/proposition/operations'
-import ChampDateNonModifiable from '@/components/proposition/ChampDateNonModifiable.vue'
 import { NAISSANCE_NON_PARTAGEE, rendreDate } from './champs'
 import { aDesModifications, entrerEnEdition } from './edition'
 
 /**
  * La réciprocité des vivants (ADR 0016), côté fiche : une naissance **masquée**
- * — en partie ou en entier — se lit, mais ne se corrige pas.
+ * — en partie ou en entier — se lit, et se propose à l'aveugle.
  *
  * Ce que ces cas tiennent : un bloc `masquee` s'affiche par son `texte` partiel,
  * « non partagée » quand rien ne l'est (jamais « inconnue » : la date existe) ;
- * il n'entre dans aucun formulaire comme une vraie valeur ; et ouvrir puis
- * soumettre la fiche ne produit **aucun** op sur `birth`.
+ * il n'entre dans aucun formulaire comme une vraie valeur ; ouvrir puis
+ * soumettre la fiche ne produit **aucun** op sur `birth` ; une date saisie en
+ * produit un.
  *
  * Noms inventés.
  */
@@ -125,23 +123,16 @@ describe('une naissance masquée n’entre dans aucun formulaire', () => {
   })
 })
 
-describe('ChampDateNonModifiable', () => {
-  it('montre la date telle qu’elle est servie, et la raison, sans champ ni bouton', async () => {
-    const html = await renderToString(
-      createSSRApp({
-        render: () =>
-          h(ChampDateNonModifiable, {
-            etiquette: 'Naissance',
-            bloc: masquee('', 'Saule'),
-            motif: 'Pas entièrement partagée.',
-          }),
-      }),
-    )
-    expect(html).toContain('data-date-non-modifiable')
-    expect(html).toContain('non partagée')
-    expect(html).toContain('Saule')
-    expect(html).toContain('Pas entièrement partagée.')
-    expect(html).not.toContain('<input')
-    expect(html).not.toContain('<button')
+describe('une naissance masquée se propose à l’aveugle', () => {
+  it('une date saisie produit un op sur `birth`, dont le serveur ignorera l’ancienne valeur', () => {
+    const f = fiche()
+    const saisie = { ...saisieDepuisFiche(f), naissance: { ...saisieDepuisBloc(f.birth), forme: 'connue' as const, debut: '12/03/1985' } }
+    const conversion = valeursDepuisSaisie(saisie)
+    expect(conversion.valeurs).not.toBeNull()
+
+    const ops = construireOps(instantaneDeFiche(f), conversion.valeurs!)
+    expect(ops).toHaveLength(1)
+    expect(ops[0]!.field).toBe('birth')
+    expect(ops[0]!.newValue).toMatchObject({ qualifier: 'exacte', min: '1985-03-12', place: 'Saule' })
   })
 })

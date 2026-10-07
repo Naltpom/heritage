@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Module\Membership\Entity;
 
-use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Core\Enum\NiveauDePartage;
+use App\Module\Core\ValueObject\PartageDeNaissance;
 use App\Module\Membership\Repository\AutorisationDeNaissanceRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
@@ -12,7 +13,8 @@ use Doctrine\ORM\Mapping as ORM;
 /**
  * L'autorisation **signée** de partager la date de naissance d'une personne vivante **qui
  * n'a pas de compte** (ADR 0016) : un écrit, une capture de SMS, déposé par un
- * administrateur sur la fiche, avec les composantes accordées.
+ * administrateur sur la fiche, avec le niveau accordé à chaque composante — `tous`,
+ * `proches` ou `personne` (révision du 2026-10-07).
  *
  * ## Une preuve, donc on n'efface pas
  *
@@ -54,14 +56,14 @@ class AutorisationDeNaissance
     #[ORM\Column]
     private int $personId;
 
-    #[ORM\Column]
-    private bool $shareYear;
+    #[ORM\Column(length: 8, enumType: NiveauDePartage::class)]
+    private NiveauDePartage $shareYear;
 
-    #[ORM\Column]
-    private bool $shareMonth;
+    #[ORM\Column(length: 8, enumType: NiveauDePartage::class)]
+    private NiveauDePartage $shareMonth;
 
-    #[ORM\Column]
-    private bool $shareDay;
+    #[ORM\Column(length: 8, enumType: NiveauDePartage::class)]
+    private NiveauDePartage $shareDay;
 
     /** Nom aléatoire dans `StockageDesAutorisations`. */
     #[ORM\Column(length: 48)]
@@ -99,7 +101,7 @@ class AutorisationDeNaissance
 
     public function __construct(
         int $personId,
-        ComposantesDeDate $partage,
+        PartageDeNaissance $partage,
         string $documentName,
         string $documentMime,
         int $documentSize,
@@ -130,9 +132,9 @@ class AutorisationDeNaissance
         return $this->personId;
     }
 
-    public function getPartage(): ComposantesDeDate
+    public function getPartage(): PartageDeNaissance
     {
-        return new ComposantesDeDate($this->shareYear, $this->shareMonth, $this->shareDay);
+        return new PartageDeNaissance($this->shareYear, $this->shareMonth, $this->shareDay);
     }
 
     public function getDocumentName(): string

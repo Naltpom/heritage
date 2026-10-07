@@ -2678,18 +2678,21 @@ cercle et contiendrait encore `u` et ses conjoints. Détail et motif au § 4.5.
 
 Un **second filtre**, posé après le cercle, sur deux données seulement d'un vivant visible :
 sa **date de naissance** — vue composante par composante (année, mois, jour), et seulement
-ce que le lecteur **et** la personne partagent — et son **portrait**, servi flou au lecteur
+ce que le lecteur **et** la personne se montrent l'un à l'autre (`tous`, `proches` ou
+`personne`, révision du 2026-10-07) — et son **portrait**, servi flou au lecteur
 qui n'a pas de photo de lui. Les défunts et sa propre fiche ne sont jamais concernés.
 
 | Table | Colonnes | Rôle |
 |---|---|---|
-| `mbr_member` | `birth_share_year`, `birth_share_month`, `birth_share_day` (`false` par défaut), `birth_share_*_since` (date du partage : verrou de 30 jours), `birth_share_updated_at`, `birth_share_source` (`inscription` \| `profil` \| `administration`) | le consentement du titulaire du compte ; `ck_mbr_member_partage_trace`, `ck_mbr_member_partage_source` |
+| `mbr_member` | `birth_share_year`, `birth_share_month`, `birth_share_day` (`VARCHAR(8)` : `tous` \| `proches` \| `personne`, `proches` par défaut), `birth_share_*_since` (date du passage à `tous` : verrou de 30 jours), `birth_share_updated_at`, `birth_share_source` (`inscription` \| `profil` \| `administration`) | le choix du titulaire du compte ; `ck_mbr_member_partage_trace`, `ck_mbr_member_partage_source`, `ck_mbr_member_partage_niveaux` |
 | `mbr_demande_rgpd` | `member_id`, `user_id`, `user_email`, `nature` (`retrait_partage` \| `rectification` \| `autre`), `retirer_annee|mois|jour`, `message`, `created_at`, `traitee_at`, `traitee_par_user_id`, `decision` (`appliquee` \| `refusee`), `reponse` | le formulaire RGPD ; `ck_mbr_demande_rgpd_nature`, `ck_mbr_demande_rgpd_decision` |
 | `core_user` | `ignore_birth_restriction` (`false`) | l'option d'administration « ignorer la restriction de date de naissance » — les dates seulement |
-| `mbr_autorisation_naissance` | `person_id`, `share_year|month|day`, `document_name|mime|size|sha256`, `note`, `granted_by_user_id`, `granted_at`, `archived_at`, `archived_by_user_id`, `archive_reason` | l'autorisation signée d'un vivant **sans compte** ; une seule active par personne (`uniq_mbr_autorisation_active`), archivée et jamais supprimée (`remplacee`, `retiree`, `compte_rattache`) |
+| `mbr_autorisation_naissance` | `person_id`, `share_year|month|day` (`tous` \| `proches` \| `personne`, `ck_mbr_autorisation_niveaux`), `document_name|mime|size|sha256`, `note`, `granted_by_user_id`, `granted_at`, `archived_at`, `archived_by_user_id`, `archive_reason` | l'autorisation signée d'un vivant **sans compte** ; une seule active par personne (`uniq_mbr_autorisation_active`), archivée et jamais supprimée (`remplacee`, `retiree`, `compte_rattache`) |
 
-Ce que partage une personne : le consentement de son compte s'il en a un, **quel que soit
-son statut** ; sinon l'autorisation active ; sinon rien. Le dégradé d'une date passe par
+Ce que partage une personne : le choix de son compte s'il en a un, **quel que soit son
+statut** ; sinon l'autorisation active ; sinon le défaut, `proches`. Les proches se calculent
+à la volée (`Membership\Service\CalculDesProches`), comme le cercle : une union rompue
+(`tree_family.divorced`) n'en fait plus. Le dégradé d'une date passe par
 `UncertainDate::reduite()` et `formatPartiel()`, qui ne lisent **jamais `raw`**.
 
 ### 9.4 Les propositions de modification — comment stocker un diff

@@ -120,6 +120,9 @@ const LIBELLES_DE_TYPE: Readonly<Record<string, string>> = {
   // administrateurs (`administration.rgpd`) ; la réponse, au membre (`compte`).
   demande_rgpd: 'Demande RGPD',
   demande_rgpd_traitee: 'Réponse RGPD',
+  // Le partage de la naissance à trois niveaux (ADR 0016, révision du
+  // 07/10/2026) : posée une fois, par la migration, à chaque compte rattaché.
+  partage_naissance_revu: 'Confidentialité',
 }
 
 export function libelleDeType(kind: string): string {

@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Module\Membership\Service;
 
+use App\Module\Core\Enum\NiveauDePartage;
 use App\Module\Core\Enum\Regime;
 use App\Module\Core\Repository\UserRepository;
 use App\Module\Core\Security\ReciprociteInterface;
 use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Core\ValueObject\PartageDeNaissance;
 use App\Module\Membership\Contract\PortraitsDesComptes;
 use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Repository\MemberRepository;
@@ -29,11 +31,18 @@ use Symfony\Contracts\Service\ResetInterface;
  *
  * ## Ce que partage une personne
  *
- * Le consentement du compte rattaché à la fiche, **quel que soit son statut** — un compte
- * en attente a déjà dit ce qu'il voulait montrer. À défaut de compte, l'autorisation signée
- * active. À défaut, rien. Le compte l'emporte toujours : c'est ce que garantit l'ordre de
+ * Un niveau par composante — `tous`, `proches`, `personne` (révision du 2026-10-07). Celui
+ * du compte rattaché à la fiche, **quel que soit son statut** — un compte en attente a déjà
+ * dit ce qu'il voulait montrer. À défaut de compte, l'autorisation signée active. À défaut,
+ * le défaut : `proches`. Le compte l'emporte toujours : c'est ce que garantit l'ordre de
  * construction de {@see self::partages()}, et non l'archivage de l'autorisation, qui n'en
  * est que le ménage.
+ *
+ * ## Les proches du lecteur
+ *
+ * Calculés une fois par requête par {@see CalculDesProches}, depuis la fiche du lecteur.
+ * La relation est symétrique : la règle « chacun la montre à l'autre » se lit donc sur un
+ * seul booléen ({@see PartageDeNaissance::vuPar()}).
  *
  * ## Le coût
  *
@@ -47,8 +56,11 @@ final class Reciprocite implements ReciprociteInterface, ResetInterface
 
     private ?VueDeLArbre $vue = null;
 
-    /** @var array<int, ComposantesDeDate>|null person_id ⇒ ce que la personne partage */
+    /** @var array<int, PartageDeNaissance>|null person_id ⇒ ce que la personne partage */
     private ?array $partages = null;
+
+    /** @var array<int, true>|null les proches du lecteur */
+    private ?array $proches = null;
 
     /** @var array{membre: ?Member, chargé: bool} */
     private array $membre = ['membre' => null, 'chargé' => false];
@@ -64,6 +76,7 @@ final class Reciprocite implements ReciprociteInterface, ResetInterface
         private readonly UserRepository $utilisateurs,
         private readonly PortraitsDesComptes $portraits,
         private readonly Connection $connexion,
+        private readonly CalculDesProches $calculDesProches = new CalculDesProches(),
     ) {
     }
 
@@ -76,6 +89,7 @@ final class Reciprocite implements ReciprociteInterface, ResetInterface
         $this->lecteur = null;
         $this->vue = null;
         $this->partages = null;
+        $this->proches = null;
         $this->membre = ['membre' => null, 'chargé' => false];
         $this->photo = null;
         $this->ignoree = null;
@@ -95,9 +109,11 @@ final class Reciprocite implements ReciprociteInterface, ResetInterface
             return ComposantesDeDate::tout();
         }
 
-        $lecteur = $this->partageDuLecteur() ?? ComposantesDeDate::aucune();
+        // Sans fiche, le lecteur n'a rien à montrer : il ne voit rien.
+        $lecteur = $this->partageDuLecteur() ?? PartageDeNaissance::uniforme(NiveauDePartage::Personne);
+        $partage = $this->partages()[$personId] ?? PartageDeNaissance::parDefaut();
 
-        return $lecteur->inter($this->partages()[$personId] ?? ComposantesDeDate::aucune());
+        return $partage->vuPar($lecteur, isset($this->proches()[$personId]));
     }
 
     public function naissances(array $personIds): array
@@ -120,7 +136,7 @@ final class Reciprocite implements ReciprociteInterface, ResetInterface
             || $this->lecteurAUnePhoto();
     }
 
-    public function partageDuLecteur(): ?ComposantesDeDate
+    public function partageDuLecteur(): ?PartageDeNaissance
     {
         return $this->membreDuLecteur()?->getPartageDeNaissance();
     }
@@ -153,25 +169,28 @@ final class Reciprocite implements ReciprociteInterface, ResetInterface
     {
         $partages = [];
         foreach ($this->partages() as $id => $partage) {
-            $partages[] = $id.':'.$partage->masque();
+            $partages[] = $id.':'.$partage->code();
         }
         sort($partages);
+        $proches = array_keys($this->proches());
+        sort($proches);
 
         return hash('sha256', implode('|', [
             $this->lecteur()->regime->value,
             (string) ($this->membreDuLecteur()?->getPersonId() ?? '-'),
-            (string) ($this->partageDuLecteur()?->masque() ?? '-'),
+            $this->partageDuLecteur()?->code() ?? '-',
             $this->restrictionIgnoree() ? 'i' : '-',
             $this->lecteurAUnePhoto() ? 'p' : '-',
             implode(',', $partages),
+            implode(',', $proches),
         ]));
     }
 
     /**
      * Ce que chaque personne partage : les autorisations actives d'abord, puis les comptes
-     * par-dessus — **le compte l'emporte**, même s'il ne partage rien.
+     * par-dessus — **le compte l'emporte**, même s'il ne partage avec personne.
      *
-     * @return array<int, ComposantesDeDate>
+     * @return array<int, PartageDeNaissance>
      */
     private function partages(): array
     {
@@ -185,25 +204,40 @@ final class Reciprocite implements ReciprociteInterface, ResetInterface
             'SELECT person_id, share_year, share_month, share_day FROM mbr_autorisation_naissance WHERE archived_at IS NULL',
         );
         foreach ($autorisations as $ligne) {
-            $partages[(int) $ligne['person_id']] = new ComposantesDeDate(
-                (bool) $ligne['share_year'],
-                (bool) $ligne['share_month'],
-                (bool) $ligne['share_day'],
-            );
+            $partages[(int) $ligne['person_id']] = self::lireLaLigne($ligne['share_year'], $ligne['share_month'], $ligne['share_day']);
         }
 
         $comptes = $this->connexion->fetchAllAssociative(
             'SELECT person_id, birth_share_year, birth_share_month, birth_share_day FROM mbr_member WHERE person_id IS NOT NULL',
         );
         foreach ($comptes as $ligne) {
-            $partages[(int) $ligne['person_id']] = new ComposantesDeDate(
-                (bool) $ligne['birth_share_year'],
-                (bool) $ligne['birth_share_month'],
-                (bool) $ligne['birth_share_day'],
-            );
+            $partages[(int) $ligne['person_id']] = self::lireLaLigne($ligne['birth_share_year'], $ligne['birth_share_month'], $ligne['birth_share_day']);
         }
 
         return $this->partages = $partages;
+    }
+
+    /**
+     * Une valeur inconnue (ce que `ck_mbr_*_niveaux` interdit) vaut `personne` : le défaut
+     * est fermé.
+     */
+    private static function lireLaLigne(mixed $annee, mixed $mois, mixed $jour): PartageDeNaissance
+    {
+        $niveau = static fn (mixed $valeur): NiveauDePartage => NiveauDePartage::tryFrom((string) $valeur) ?? NiveauDePartage::Personne;
+
+        return new PartageDeNaissance($niveau($annee), $niveau($mois), $niveau($jour));
+    }
+
+    /** @return array<int, true> les proches du lecteur — aucun sans fiche */
+    private function proches(): array
+    {
+        if (null !== $this->proches) {
+            return $this->proches;
+        }
+
+        $personId = $this->membreDuLecteur()?->getPersonId();
+
+        return $this->proches = null === $personId ? [] : $this->calculDesProches->proches($this->vue(), $personId);
     }
 
     /** Sa propre fiche : on voit toujours tout de soi. */

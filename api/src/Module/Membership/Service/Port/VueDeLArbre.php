@@ -47,6 +47,12 @@ final readonly class VueDeLArbre
     public array $conjoints;
 
     /**
+     * @var array<int, list<int>> personne ⇒ ses conjoints **actuels** — hors unions
+     *                            rompues ; seuls les proches de la réciprocité le lisent
+     */
+    public array $conjointsActuels;
+
+    /**
      * @param list<PersonneDeLArbre> $personnes l'arbre validé complet, sans filtre : le cercle
      *                                          se calcule sur tout l'arbre, et c'est la
      *                                          sérialisation qui masque (§ 6.2 du dossier)
@@ -65,6 +71,7 @@ final readonly class VueDeLArbre
         $parents = [];
         $enfants = [];
         $conjoints = [];
+        $actuels = [];
 
         foreach ($familles as $famille) {
             foreach ($famille->epoux as $epoux) {
@@ -76,6 +83,9 @@ final readonly class VueDeLArbre
                 foreach ($famille->epoux as $autre) {
                     if ($autre !== $epoux) {
                         $conjoints[$epoux][] = $autre;
+                        if (!$famille->rompue) {
+                            $actuels[$epoux][] = $autre;
+                        }
                     }
                 }
             }
@@ -84,6 +94,7 @@ final readonly class VueDeLArbre
         $this->parents = self::deduplique($parents);
         $this->enfants = self::deduplique($enfants);
         $this->conjoints = self::deduplique($conjoints);
+        $this->conjointsActuels = self::deduplique($actuels);
     }
 
     public static function vide(): self
@@ -144,6 +155,12 @@ final readonly class VueDeLArbre
     public function conjointsDe(int $id): array
     {
         return $this->conjoints[$id] ?? [];
+    }
+
+    /** @return list<int> */
+    public function conjointsActuelsDe(int $id): array
+    {
+        return $this->conjointsActuels[$id] ?? [];
     }
 
     /**

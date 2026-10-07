@@ -62,11 +62,44 @@ final class DepotDeDemandeTest extends BaseDeDemandes
     }
 
     /**
-     * ADR 0016 : la naissance d'un **vivant** que l'auteur ne voit pas entière ne se
-     * corrige pas — `422 naissance_masquee`, levé **avant** le contrôle de l'ancienne
-     * valeur, dont le `409` rendrait sinon la date complète.
+     * ADR 0016, révision du 2026-10-07 : la naissance d'un **vivant** que l'auteur ne voit
+     * pas entière se propose **à l'aveugle**. L'`oldValue` du client est ignoré — ici, il
+     * est même faux — et le serveur pose la valeur courante : pas de `409` qui rendrait la
+     * date complète, et l'administrateur, qui voit tout, tranche.
      */
-    public function testLaNaissanceDUnVivantQuOnNeVoitPasNeSeCorrigePas(): void
+    public function testLaNaissanceDUnVivantQuOnNeVoitPasSeProposeALAveugle(): void
+    {
+        $this->poserUnVivantNeEn1987();
+
+        $op = $this->opDate();
+        $op['oldValue'] = $this->blocDate($this->annee(1950));
+
+        $demande = $this->depot->deposer($this->corpsDeModification([$op]), $this->lecteur(self::OPALE));
+
+        $ops = self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($demande);
+        self::assertCount(1, $ops);
+        self::assertSame('1987', $ops[0]->getOldValue()['raw'] ?? null, 'La valeur d’avant est celle de la base, pas celle du client.');
+        self::assertSame('entre', $ops[0]->getNewValue()['qualifier'] ?? null);
+    }
+
+    /**
+     * À l'aveugle, proposer **la date déjà en base** passe aussi : la refuser
+     * (« une modification qui ne modifie rien ») dirait à l'auteur qu'il a deviné juste.
+     */
+    public function testProposerALAveugleLaDateExacteNeLaRevelePas(): void
+    {
+        $this->poserUnVivantNeEn1987();
+
+        $op = $this->opDate();
+        unset($op['oldValue']);
+        $op['newValue'] = $this->blocDate($this->annee(1987));
+
+        $demande = $this->depot->deposer($this->corpsDeModification([$op]), $this->lecteur(self::OPALE));
+
+        self::assertCount(1, self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($demande));
+    }
+
+    private function poserUnVivantNeEn1987(): void
     {
         $this->arbre->poser(SubjectKind::Personne, self::PERSONNE, 'Marne Dolomite Sureau', 7, [
             'givenNames' => 'Marne Dolomite',
@@ -80,13 +113,6 @@ final class DepotDeDemandeTest extends BaseDeDemandes
             'forcePrivacy' => false,
             'privacyNote' => null,
         ]);
-
-        try {
-            $this->depot->deposer($this->corpsDeModification([$this->opDate()]), $this->lecteur(self::OPALE));
-            self::fail('La demande aurait dû être refusée.');
-        } catch (DonneesInvalides $refus) {
-            self::assertSame('naissance_masquee', $refus->codeErreur());
-        }
     }
 
     /**

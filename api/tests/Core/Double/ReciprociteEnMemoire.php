@@ -6,6 +6,7 @@ namespace App\Tests\Core\Double;
 
 use App\Module\Core\Security\ReciprociteInterface;
 use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Core\ValueObject\PartageDeNaissance;
 
 /**
  * Une réciprocité des vivants (ADR 0016) **pré-résolue**, pour les tests qui ne veulent pas
@@ -25,7 +26,7 @@ final class ReciprociteEnMemoire implements ReciprociteInterface
         public bool $photo = true,
         public array $portraitsFlous = [],
         public bool $ignoree = false,
-        public ?ComposantesDeDate $partageDuLecteur = null,
+        public ?PartageDeNaissance $partageDuLecteur = null,
     ) {
     }
 
@@ -49,7 +50,7 @@ final class ReciprociteEnMemoire implements ReciprociteInterface
         return $this->photo || !\in_array($personId, $this->portraitsFlous, true);
     }
 
-    public function partageDuLecteur(): ?ComposantesDeDate
+    public function partageDuLecteur(): ?PartageDeNaissance
     {
         return $this->partageDuLecteur;
     }

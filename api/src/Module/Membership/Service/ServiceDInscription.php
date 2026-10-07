@@ -13,7 +13,7 @@ use App\Module\Core\Exception\TooManyRequestsException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Repository\UserRepository;
 use App\Module\Core\Service\AuditService;
-use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Core\ValueObject\PartageDeNaissance;
 use App\Module\Membership\Contract\PortraitsDesComptes;
 use App\Module\Membership\Entity\ClaimAttempt;
 use App\Module\Membership\Entity\Invitation;
@@ -295,9 +295,9 @@ final readonly class ServiceDInscription
             $champs['telephone'] = $refusTelephone;
         }
 
-        // Le partage de la date de naissance (ADR 0016) : facultatif — absent, rien n'est
-        // partagé et aucun choix n'est enregistré ; présent, c'est un choix explicite, même
-        // tout à `false`.
+        // Le partage de la date de naissance (ADR 0016) : facultatif — absent, le défaut
+        // (`proches`) tient et aucun choix n'est enregistré ; présent, c'est un choix
+        // explicite, même identique au défaut.
         $partage = null;
         if (\array_key_exists('partageNaissance', $corps) && null !== $corps['partageNaissance']) {
             if (!\is_array($corps['partageNaissance'])) {
@@ -497,7 +497,7 @@ final readonly class ServiceDInscription
         DeclarationDeFamille $declaration,
         ?string $telephone = null,
         ?MessageVocalDeDeclaration $vocal = null,
-        ?ComposantesDeDate $partage = null,
+        ?PartageDeNaissance $partage = null,
     ): User {
         $utilisateur = new User($email);
         $utilisateur
@@ -531,7 +531,7 @@ final readonly class ServiceDInscription
         DeclarationDeFamille $declaration,
         ?MessageVocalDeDeclaration $vocal,
         ?string $nomDuVocal,
-        ?ComposantesDeDate $partage = null,
+        ?PartageDeNaissance $partage = null,
     ): Member {
         /** @var Member $membre */
         $membre = $this->em->wrapInTransaction(function () use ($invitation, $utilisateur, $email, $declaration, $vocal, $nomDuVocal, $partage): Member {
@@ -589,7 +589,7 @@ final readonly class ServiceDInscription
         return $membre;
     }
 
-    private function poserLePartage(Member $membre, ?ComposantesDeDate $partage): void
+    private function poserLePartage(Member $membre, ?PartageDeNaissance $partage): void
     {
         if (null !== $partage) {
             $membre->partagerLaNaissance($partage, 'inscription');
@@ -600,7 +600,7 @@ final readonly class ServiceDInscription
      * La preuve du consentement donné à l'inscription — le compte est l'acteur : il n'y a
      * pas encore de session.
      */
-    private function journaliserLePartage(Member $membre, ?ComposantesDeDate $partage, User $utilisateur): void
+    private function journaliserLePartage(Member $membre, ?PartageDeNaissance $partage, User $utilisateur): void
     {
         if (null === $partage) {
             return;

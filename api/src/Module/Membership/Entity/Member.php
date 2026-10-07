@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace App\Module\Membership\Entity;
 
-use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Core\Enum\NiveauDePartage;
+use App\Module\Core\ValueObject\PartageDeNaissance;
 use App\Module\Membership\Enum\MatchKind;
 use App\Module\Membership\Enum\MemberStatus;
 use App\Module\Membership\Repository\MemberRepository;
@@ -209,40 +210,42 @@ class Member
 
     // ── Le partage de la date de naissance (ADR 0016, réciprocité des vivants) ─────
     //
-    // Ce que le titulaire consent à montrer de sa naissance aux autres membres —
-    // l'année, le mois, le jour, indépendamment. C'est aussi ce qu'il verra des autres :
-    // `Service\Reciprocite` prend l'intersection. Tout à `false` par défaut, y compris pour
-    // les comptes antérieurs à la fonctionnalité : on ne présume pas un consentement.
+    // À qui le titulaire montre sa naissance — l'année, le mois, le jour, chacun à son
+    // niveau : `tous` les vivants de l'arbre, ses `proches`, ou `personne` (révision du
+    // 2026-10-07). C'est aussi ce qu'il verra des autres : `Service\Reciprocite` ne lui
+    // montre une composante que si chacun la montre à l'autre. **`proches` par défaut** :
+    // les proches se voient entre eux, et personne d'autre sans un choix exprimé.
     //
     // `birthShareUpdatedAt` et `birthShareSource` sont la **trace** du dernier choix
     // (`ck_mbr_member_partage_trace`) ; le détail de chaque changement est au journal
     // d'audit, avec son auteur.
 
-    #[ORM\Column(options: ['default' => false])]
-    private bool $birthShareYear = false;
+    #[ORM\Column(length: 8, enumType: NiveauDePartage::class, options: ['default' => 'proches'])]
+    private NiveauDePartage $birthShareYear = NiveauDePartage::Proches;
 
-    #[ORM\Column(options: ['default' => false])]
-    private bool $birthShareMonth = false;
+    #[ORM\Column(length: 8, enumType: NiveauDePartage::class, options: ['default' => 'proches'])]
+    private NiveauDePartage $birthShareMonth = NiveauDePartage::Proches;
 
-    #[ORM\Column(options: ['default' => false])]
-    private bool $birthShareDay = false;
+    #[ORM\Column(length: 8, enumType: NiveauDePartage::class, options: ['default' => 'proches'])]
+    private NiveauDePartage $birthShareDay = NiveauDePartage::Proches;
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $birthShareUpdatedAt = null;
 
-    /** `inscription` ou `profil` — d'où vient le dernier choix. */
+    /** `inscription`, `profil` ou `administration` — d'où vient le dernier choix. */
     #[ORM\Column(length: 16, nullable: true)]
     private ?string $birthShareSource = null;
 
-    // ── Le verrou après un partage (ADR 0016, équité) ───────────────────────────
+    // ── Le verrou après un partage avec tous (ADR 0016, équité) ─────────────────
     //
-    // Partager une composante est **immédiat**. Mais une composante partagée reste
-    // visible des autres **au moins {@see self::DUREE_MINIMALE_JOURS} jours** : sans quoi
-    // « je partage, je regarde, je retire » rendrait la réciprocité bidon pour ceux qui
-    // partagent vraiment. Décision du commanditaire, contraire à la lettre de l'art. 7.3 du
-    // RGPD et prise en connaissance de cause ; la soupape est la **demande RGPD**, que
-    // l'administrateur applique sans délai (source `administration`). Une date par
-    // composante : la date à laquelle elle a été partagée, `null` quand elle ne l'est pas.
+    // Passer une composante à `tous` est **immédiat**. Mais elle reste visible de tous
+    // **au moins {@see self::DUREE_MINIMALE_JOURS} jours** : sans quoi « je partage, je
+    // regarde, je retire » rendrait la réciprocité bidon pour ceux qui partagent vraiment.
+    // Décision du commanditaire, contraire à la lettre de l'art. 7.3 du RGPD et prise en
+    // connaissance de cause ; la soupape est la **demande RGPD**, que l'administrateur
+    // applique sans délai (source `administration`). Le verrou ne porte **que** sur `tous` :
+    // entre `proches` et `personne`, on va et vient librement — les proches connaissent
+    // déjà la date. Une date par composante : celle de son passage à `tous`, `null` sinon.
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $birthShareYearSince = null;
@@ -641,9 +644,9 @@ class Member
         return $this;
     }
 
-    public function getPartageDeNaissance(): ComposantesDeDate
+    public function getPartageDeNaissance(): PartageDeNaissance
     {
-        return new ComposantesDeDate($this->birthShareYear, $this->birthShareMonth, $this->birthShareDay);
+        return new PartageDeNaissance($this->birthShareYear, $this->birthShareMonth, $this->birthShareDay);
     }
 
     public function getPartageModifieLe(): ?\DateTimeImmutable
@@ -656,11 +659,11 @@ class Member
         return $this->birthShareSource;
     }
 
-    /** Combien de jours une composante partagée reste visible, au moins. */
+    /** Combien de jours une composante partagée avec tous le reste, au moins. */
     public const int DUREE_MINIMALE_JOURS = 30;
 
     /**
-     * Jusqu'à quand chaque composante **partagée** ne peut pas être retirée par le titulaire
+     * Jusqu'à quand chaque composante **partagée avec tous** ne peut pas en être retirée par le titulaire
      * — seules celles dont le verrou court encore à `$maintenant` figurent.
      *
      * @return array{annee?: \DateTimeImmutable, mois?: \DateTimeImmutable, jour?: \DateTimeImmutable}
@@ -680,12 +683,12 @@ class Member
     }
 
     /** @param 'inscription'|'profil'|'administration' $source */
-    public function partagerLaNaissance(ComposantesDeDate $partage, string $source, ?\DateTimeImmutable $le = null): self
+    public function partagerLaNaissance(PartageDeNaissance $partage, string $source, ?\DateTimeImmutable $le = null): self
     {
         $le ??= new \DateTimeImmutable();
 
-        // Chaque composante qui devient partagée pose sa date ; une composante retirée l'oublie.
-        $depuis = static fn (bool $avant, bool $apres, ?\DateTimeImmutable $date): ?\DateTimeImmutable => $apres ? ($avant ? $date : $le) : null;
+        // Chaque composante qui passe à `tous` pose sa date ; une composante qui en sort l'oublie.
+        $depuis = static fn (NiveauDePartage $avant, NiveauDePartage $apres, ?\DateTimeImmutable $date): ?\DateTimeImmutable => NiveauDePartage::Tous === $apres ? (NiveauDePartage::Tous === $avant ? $date : $le) : null;
         $this->birthShareYearSince = $depuis($this->birthShareYear, $partage->annee, $this->birthShareYearSince);
         $this->birthShareMonthSince = $depuis($this->birthShareMonth, $partage->mois, $this->birthShareMonthSince);
         $this->birthShareDaySince = $depuis($this->birthShareDay, $partage->jour, $this->birthShareDaySince);

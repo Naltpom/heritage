@@ -59,7 +59,6 @@ import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import { ecrituresSuspendues, motifSuspension } from '@/components/administration/ecriture'
 import ChampDateIncertaine from '@/components/proposition/ChampDateIncertaine.vue'
-import ChampDateNonModifiable from '@/components/proposition/ChampDateNonModifiable.vue'
 import ChampsIdentite from '@/components/proposition/ChampsIdentite.vue'
 import SectionLiens from '@/components/proposition/SectionLiens.vue'
 import PanneauConflit from '@/components/proposition/PanneauConflit.vue'
@@ -397,19 +396,13 @@ function refaire(demandeId: number | null): void {
 
         <PanneauBase titre="Naissance et décès">
           <div class="flex flex-col gap-4">
-            <!-- ADR 0016 : une naissance qu'on ne voit pas entière ne se
-                 corrige pas ; la saisie garde sa valeur d'origine. -->
-            <ChampDateNonModifiable
-              v-if="naissanceVerrouillee(fiche)"
-              :etiquette="etiquetteDeChamp('birth')"
-              :bloc="fiche.birth"
-              :motif="MOTIF_NAISSANCE_VERROUILLEE"
-            />
+            <!-- ADR 0016 : une naissance qu'on ne voit pas entière se propose
+                 à l'aveugle — le champ part vide, et le dit. -->
             <ChampDateIncertaine
-              v-else
               v-model="saisie.naissance"
               :etiquette="etiquetteDeChamp('birth')"
               :erreur="erreursAffichees['birth'] ?? ''"
+              :aide="naissanceVerrouillee(fiche) ? MOTIF_NAISSANCE_VERROUILLEE : ''"
             />
             <ChampDateIncertaine
               v-model="saisie.deces"
