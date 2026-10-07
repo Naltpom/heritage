@@ -103,6 +103,13 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Module/Assistant/Entity'
                 prefix: 'App\Module\Assistant\Entity'
                 alias: Assistant
+            # Les relevés Liberapay de « Soutenir le site » — préfixe `sou_`.
+            Soutien:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Soutien/Entity'
+                prefix: 'App\Module\Soutien\Entity'
+                alias: Soutien
 
 when@test:
     doctrine:

@@ -63,7 +63,7 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   // « Inscription » de sa barre du bas qui s'allume (ADR 0003, 01/10/2026).
   if (nom === 'inscription.etat') return 'accueil'
   if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires' || nom === 'stats' || nom === 'explorer') return 'explorer'
-  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
+  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom === 'soutien' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
 }
@@ -296,6 +296,18 @@ export const routes: RouteRecordRaw[] = [
     name: 'aide',
     component: () => import('@/views/AideView.vue'),
     meta: { acces: 'membre', titre: 'Aide' },
+  },
+
+  {
+    // **Soutenir le site** : le lien de don Liberapay, le rythme des dons et
+    // leur historique (module `Soutien`). Rien ne s'y paie : le bouton mène
+    // à Liberapay. On y entre par « Moi », comme l'aide — d'où `sectionDe`.
+    //
+    // `membre` : l'API réserve la route aux comptes actifs, comme le reste.
+    path: '/soutenir',
+    name: 'soutien',
+    component: () => import('@/views/SoutienView.vue'),
+    meta: { acces: 'membre', titre: 'Soutenir le site' },
   },
 
   {

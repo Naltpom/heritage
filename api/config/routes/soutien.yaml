@@ -1,0 +1,11 @@
+# Contrat : ce fichier est celui du module Soutien (« Soutenir le site »). Aucun autre module
+# n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# Les routes se déclarent par attributs #[Route] dans les contrôleurs du module ;
+# l'import ci-dessous suffit à les charger.
+
+soutien_controleurs:
+    resource:
+        path: ../../src/Module/Soutien/Controller/
+        namespace: App\Module\Soutien\Controller
+    type: attribute

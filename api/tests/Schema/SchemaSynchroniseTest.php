@@ -126,8 +126,13 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * relance. Ce sont des **décisions** : l'invitation a sa table parce qu'elle a sa vie
      * propre (vue, réponse, relance, lien personnel) et qu'un événement en compte des
      * dizaines ; le compte de l'invité n'y est pas figé, il se lit au rattachement.
+     *
+     * **46 depuis le 2026-10-07** : `sou_releve` (module `Soutien`,
+     * `migrations/Version20261007230000.php`) garde un relevé par jour du profil public
+     * Liberapay de « Soutenir le site ». C'est une **décision** : Liberapay ne publie que
+     * l'état présent, et sans cette table il n'y aurait ni mois ni année à afficher.
      */
-    private const int NOMBRE_DE_TABLES = 45;
+    private const int NOMBRE_DE_TABLES = 46;
 
     public function testLeMappingEstValide(): void
     {
@@ -164,7 +169,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      */
     public function testChaqueTablePorteLePrefixeDeSonModule(): void
     {
-        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_', 'evt_', 'dmr_', 'ast_'];
+        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_', 'evt_', 'dmr_', 'ast_', 'sou_'];
 
         foreach ($this->tablesDuMapping() as $table) {
             $porteUnPrefixe = array_filter(

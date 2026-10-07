@@ -7056,3 +7056,46 @@ l'assistant de proposition, qui voit l'arbre entier.
 **Journal** : une ligne `appel_modele_langage`, sujet `Assistant\Question`, par question —
 des comptes (tours, appels d'outils, échanges transmis, fiches citées), **jamais** la
 question, la réponse ni un nom.
+
+## 26. Soutenir le site
+
+```
+GET /api/soutien     tout membre — 403 regime_en_attente pour un compte en attente
+```
+
+Les dons passent par **Liberapay** : le site ne traite aucun paiement. La route rend le lien
+de don et ce que Liberapay publie du compte de soutien — ce qu'il reçoit **par semaine** et
+son nombre de donateurs —, relevé une fois par jour (`sou_releve`).
+
+```jsonc
+// Réglage `soutien.liberapay` vide (ou malformé) : les dons ne sont pas ouverts.
+{ "configure": false, "objectifMensuel": 45 }
+
+{
+  "configure": true,
+  "pseudo": "Naltpom",
+  "lien": "https://liberapay.com/Naltpom/donate",
+  "objectifMensuel": 45,                     // euros entiers ; 0 : pas de jauge
+  "actuel": {                                // null : aucun relevé encore
+    "parSemaine": 750, "parMois": 3250,      // centimes ; parMois = parSemaine × 52 / 12
+    "devise": "EUR", "donateurs": 3,
+    "releveLe": "2026-10-07T21:03:00+00:00"
+  },
+  "depuis": "2026-10-07",                    // premier relevé
+  "mois": [{ "mois": "2026-10", "centimes": 812, "complet": false }],   // le plus récent d'abord
+  "annees": [{ "annee": 2026, "centimes": 812 }]
+}
+```
+
+- **Une lecture qui écrit** : le premier appel du jour pose le relevé, en interrogeant
+  `https://liberapay.com/<pseudo>/public.json` (quatre secondes au plus). Liberapay muet ou
+  montant masqué : la réponse reste `200`, avec le dernier relevé connu (`actuel` à `null`
+  s'il n'y en a aucun), et l'appel n'est pas retenté avant une heure. Seul le pseudo sort de
+  la machine.
+- **Mois et années** : chaque jour vaut un septième du dernier relevé connu à cette date ; un
+  jour sans relevé garde le rythme de la veille. Ce sont des **dons promis**, pas les
+  versements encaissés — que seul l'espace Liberapay du propriétaire détaille.
+- Réglages (`PATCH /api/administration/reglages/{cle}`, § 10.2) : `soutien.liberapay`
+  (texte, pseudo Liberapay) et `soutien.objectif_mensuel` (entier, 0 à 10 000 €).
+- Commande : `heritage:soutien:relever` pose le relevé du jour sans attendre une visite.
+- `Cache-Control: private, no-store`.

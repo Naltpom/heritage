@@ -4,7 +4,7 @@
  *
  * Tout ce qui concerne **le compte qui lit** tient ici, et nulle part ailleurs :
  * mon compte, mes demandes, les événements (rassemblements et tirages au sort), les actes demandés, les questions,
- * l'aide (les vidéos de présentation), l'administration pour un administrateur, et la déconnexion. C'est la règle de
+ * l'aide (les vidéos de présentation), le soutien du site (les dons), l'administration pour un administrateur, et la déconnexion. C'est la règle de
  * la refonte : **chaque chose a une seule porte d'entrée**. L'en-tête ne porte
  * plus « Mes demandes », « Validation » ni « + Proposer » ; le tiroir du
  * téléphone a disparu. Sur téléphone, on arrive ici par l'entrée « Moi » de la
@@ -110,6 +110,9 @@ const entrees = computed<Entree[]>(() => {
       // Les vidéos de présentation. Ici et pas dans la barre du bas : quatre
       // entrées, pas une de plus — l'aide est une page qu'on ouvre rarement.
       { nom: 'aide', libelle: 'Aide et vidéos' },
+      // Les dons Liberapay qui paient le serveur : rien d'obligatoire, rien
+      // de débloqué — une page qu'on ouvre si l'on veut, en dernier.
+      { nom: 'soutien', libelle: 'Soutenir le site' },
     )
   }
   return liste
