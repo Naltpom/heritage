@@ -68,6 +68,7 @@ function mesure(s, taille, poids = 500, famille = SANS) { x.save(); x.font = pol
 
 /* -------- les images (captures de l'application, documents) -------- */
 const IMAGES = {}
+const ASSETS_A_CHARGER = [] // les scènes y ajoutent leurs images (chargées avant la première image)
 function charger(noms) {
   return Promise.all(noms.map((n) => new Promise((ok) => {
     const im = new Image()

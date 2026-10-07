@@ -5,12 +5,25 @@
 /* ------------------------------------------------------------------------ */
 const SCENES = [sceneIntro, sceneHeritage, sceneArbre, sceneExploration, sceneParticipation, sceneIA, sceneFin]
 
-function render(t) {
+function dessiner(t) {
   x.setTransform(RESOLUTION, 0, 0, RESOLUTION, 0, 0)
-  x.globalAlpha = 1; x.globalCompositeOperation = 'source-over'
+  x.globalAlpha = 1; x.globalCompositeOperation = 'source-over'; x.filter = 'none'
   fond(t)
   for (const s of SCENES) { x.save(); s(t); x.restore() }
   finition(t)
+}
+/**
+ * Une image : on dessine, et si des images de rush manquaient, on attend qu'elles
+ * arrivent et on redessine (au plus trois fois). Le résultat ne dépend que de t.
+ */
+async function render(t) {
+  for (let essai = 0; essai < 4; essai++) {
+    EN_ATTENTE.length = 0
+    dessiner(t)
+    if (!EN_ATTENTE.length) break
+    await Promise.all(EN_ATTENTE)
+  }
+  nettoyerCache()
 }
 
 /* Les bruitages sont posés une fois pour toutes par les scènes (fonctions `sons*`). */
@@ -25,8 +38,8 @@ window.PISTE = {
 }
 
 /* Le lecteur d'aperçu (page ouverte à la main) : image + voix, pour juger le rythme sans rendre. */
-const ASSETS = [...new Set(window.ASSETS_A_CHARGER ?? [])]
-Promise.all([charger(ASSETS), document.fonts.load(police(20, 500)), document.fonts.load(police(20, 400, MONO))]).then(() => {
+const ASSETS = [...new Set(ASSETS_A_CHARGER)]
+Promise.all([charger(ASSETS), ...[police(20, 500), police(20, 250), police(20, 700), police(20, 400, MONO), '40px "Mrs Saint Delafield"', '40px "Pinyon Script"'].map((f) => document.fonts.load(f))]).then(() => {
   window.PRET = true
   if (window.__capture) return
   const sons = Object.values(SEG).map((s, k) => ({ debut: s.debut, a: new Audio(`narration/voix/${k}.wav`) }))

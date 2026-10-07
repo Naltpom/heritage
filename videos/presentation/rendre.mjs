@@ -38,7 +38,7 @@ async function ouvrir() {
   await page.waitForFunction(() => window.PRET === true, { timeout: 60000 })
   return page
 }
-const image = (page, t, type) => page.evaluate((t, type) => { window.render(t); return document.getElementById('c').toDataURL(type, 0.95).split(',')[1] }, t, type)
+const image = (page, t, type) => page.evaluate(async (t, type) => { await window.render(t); return document.getElementById('c').toDataURL(type, 0.95).split(',')[1] }, t, type)
 
 const page0 = await ouvrir()
 const piste = await page0.evaluate(() => window.PISTE)

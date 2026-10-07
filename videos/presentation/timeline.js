@@ -59,7 +59,9 @@ function mot(seg, quoi, decalage = 0, bord = 'debut') {
   if (typeof quoi === 'number') m = s.mots[quoi < 0 ? s.mots.length + quoi : quoi]
   else {
     const q = quoi.toLowerCase()
-    m = s.mots.find((w) => w.mot.toLowerCase() === q) ?? s.mots.find((w) => w.mot.toLowerCase().startsWith(q))
+    // « arbre » trouve aussi « l’arbre » : on compare aussi ce qui suit une apostrophe
+    const nu = (w) => w.mot.toLowerCase().split(/[’']/).pop()
+    m = s.mots.find((w) => w.mot.toLowerCase() === q) ?? s.mots.find((w) => nu(w) === q) ?? s.mots.find((w) => w.mot.toLowerCase().startsWith(q))
   }
   if (!m) throw new Error(`mot introuvable : ${seg} / ${quoi}`)
   return m[bord] + decalage
