@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Tests\Membership;
 
 use App\Module\Core\Entity\AuditLog;
+use App\Module\Core\Entity\Notification;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\AuditAction;
 use App\Module\Core\Enum\NiveauDePartage;
+use App\Module\Core\Enum\NotificationKind;
 use App\Module\Core\Enum\Regime;
 use App\Module\Core\Repository\UserRepository;
 use App\Module\Core\ValueObject\ComposantesDeDate;
@@ -276,6 +278,21 @@ final class ReciprociteTest extends CasDeTestMembership
 
         $this->requete('POST', '/api/administration/demandes-rgpd/'.$id.'/traiter', ['decision' => 'refusee', 'reponse' => 'Non.']);
         self::assertResponseStatusCodeSame(409, 'Une demande ne se traite qu’une fois.');
+    }
+
+    /** L'administrateur qui traite **sa propre** demande RGPD n'en est pas notifié. */
+    public function testTraiterSaPropreDemandeRgpdNeNotifiePas(): void
+    {
+        $admin = $this->creerUtilisateur('admin@example.net', ['ROLE_ADMIN']);
+        $this->creerMembre($admin, ArbreFamilial::EGO, 'Natron Romarin');
+        $this->connexion('admin@example.net');
+
+        $this->requete('POST', '/api/session/demandes-rgpd', ['nature' => 'rectification', 'message' => 'Mon deuxième prénom.']);
+        $id = $this->charge()['id'];
+        $this->requete('POST', '/api/administration/demandes-rgpd/'.$id.'/traiter', ['decision' => 'appliquee']);
+        self::assertResponseIsSuccessful();
+
+        self::assertCount(0, $this->em()->getRepository(Notification::class)->findBy(['kind' => NotificationKind::DemandeRgpdTraitee]));
     }
 
     public function testUneDemandeRgpdMalFormeeEstRefusee(): void

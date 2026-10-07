@@ -150,13 +150,16 @@ final readonly class DemandesRgpd
 
         $this->audit->enregistrer(AuditAction::DemandeRgpd, 'demande_rgpd', (string) $demande->getId(), $demande->getUserEmail(), ['geste' => 'traitee', 'nature' => $demande->getNature(), 'decision' => $decision]);
 
-        $this->notifications->notifier(
-            $demande->getUserId(),
-            NotificationKind::DemandeRgpdTraitee,
-            DemandeRgpd::APPLIQUEE === $decision ? 'Votre demande RGPD a été appliquée' : 'Votre demande RGPD a été refusée',
-            '' === $reponse ? null : $reponse,
-            'compte',
-        );
+        // L'administrateur qui traite sa propre demande n'a pas à en être notifié.
+        if ($demande->getUserId() !== $administrateur->getId()) {
+            $this->notifications->notifier(
+                $demande->getUserId(),
+                NotificationKind::DemandeRgpdTraitee,
+                DemandeRgpd::APPLIQUEE === $decision ? 'Votre demande RGPD a été appliquée' : 'Votre demande RGPD a été refusée',
+                '' === $reponse ? null : $reponse,
+                'compte',
+            );
+        }
 
         return $demande;
     }
