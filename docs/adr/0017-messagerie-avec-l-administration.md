@@ -52,4 +52,11 @@ Un module **`Messagerie`** (préfixe `msg_`, deux tables), qui ne lit rien de l'
   leur libellé dénormalisé (ADR 0002, règle 2) : un compte supprimé laisse ses fils lisibles.
 - Le front : une carte sur l'accueil (trois boutons — question, idée, bug — et
   « Poursuivre » avec le nombre de réponses non lues), une entrée dans « Moi », l'écran
-  `/messages`, et l'onglet « Messages » de l'administration.
+  `/messages`.
+- Côté administration (mode admin) : un fil **qui attend une réponse** — ouvert, le dernier
+  mot au membre — entre dans la file **« À traiter »** (puce « Messages »), avec ce qui
+  attend une décision ; il compte dans sa pastille. Répondre, ou « Marquer réglé, sans
+  répondre », l'en fait sortir. Avoir lu n'est pas avoir répondu : un fil lu reste dans la
+  file. Toutes les conversations, réglées comprises, sont dans
+  `administration.messagerie` (« Conversations »), prolongement d'« À traiter » comme
+  l'historique des demandes.

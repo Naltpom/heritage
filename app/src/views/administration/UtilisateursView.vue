@@ -1,7 +1,15 @@
 <script setup lang="ts">
 /**
- * Les utilisateurs — § 10.1, en tableau : une ligne par compte, les gestes en
- * icônes (libellé au survol et pour les lecteurs d'écran).
+ * Les utilisateurs — § 10.1, **en cartes** (handoff « mode Administration »,
+ * § 4.2) : une carte par compte, un bouton principal contextuel (« Valider »,
+ * « Identifier sa fiche ») et, derrière « Actions ▾ » (« ⋯ » sur téléphone),
+ * un **feuillet** qui nomme chaque geste et dit ce qu'il fait. Le tableau de
+ * 940 px et ses six icônes sans libellé visible ont disparu : sur téléphone, il
+ * fallait le faire défiler pour atteindre les gestes, et l'on devinait le geste
+ * à l'icône.
+ *
+ * Une recherche (nom, courriel, n° de fiche) et des puces d'état — Tous · En
+ * attente · Actifs · Suspendus · Admins — filtrent la liste, sur place.
  *
  * **C'est aussi le seul écran où se diagnostique un compte qui regarde l'arbre
  * de quelqu'un d'autre.** Le point de vue d'un visiteur se choisit d'après la
@@ -19,8 +27,9 @@
  * depuis plusieurs jours.
  *
  * Sauf pour un compte **`a_rattacher`** (ADR 0013) : inscrit sans s'être
- * trouvé, il n'a pas de fiche à valider. Sa ligne renvoie à l'onglet
- * « À rattacher », où se lisent sa description et la suggestion.
+ * trouvé, il n'a pas de fiche à valider. Sa carte renvoie à « À traiter »,
+ * filtrée sur les rattachements et ouverte sur lui, où se lisent sa
+ * description et la suggestion.
  *
  * **La photo d'inscription se voit avant de valider.** Un compte en attente a
  * pu déposer sa photo ; la validation en fait **le portrait de sa fiche**, sans
@@ -41,17 +50,17 @@
  * `409 dernier_administrateur` : se verrouiller dehors est un incident sans
  * porte de secours autre que la console. Le message vient du serveur.
  *
- * **Les quotas d'usage** (analyses et questions de l'assistant, médias) : la
- * colonne « Quotas » lit, pour chaque compte, sa consommation sur sa limite
- * effective — lue sans être décomptée par le serveur —, et l'icône jauge ouvre
- * l'éditeur de ses limites personnelles (vide = défaut). Le rattachement
- * assisté compte sur une clé unique pour toute l'installation : il a son
- * panneau à lui, sous le tableau, et non une ligne par compte qui laisserait
- * croire qu'un administrateur a son propre compteur.
+ * **Les quotas d'usage** (analyses et questions de l'assistant, médias) :
+ * « Modifier les quotas », dans le feuillet, ouvre l'éditeur des limites
+ * personnelles du compte (vide = défaut) ; l'éditeur montre la consommation sur
+ * la limite effective. Le rattachement assisté compte sur une clé unique pour
+ * toute l'installation : il a son panneau à lui, sous la liste, et non une
+ * ligne par compte qui laisserait croire qu'un administrateur a son propre
+ * compteur.
  *
  * **La réciprocité des dates de naissance** (ADR 0016). La colonne
- * « Rattachement » dit ce que le membre partage de sa date de naissance, et
- * l'icône calendrier lève — ou rétablit — pour ce compte la restriction : il
+ * de rattachement dit ce que le membre partage de sa date de naissance, et le
+ * feuillet lève — ou rétablit — pour ce compte la restriction : il
  * voit alors les dates des vivants sans que son propre choix les réduise. Les
  * **photos** n'en dépendent pas : sans photo de lui, elles restent floutées.
  *
@@ -61,6 +70,9 @@
  * permanent du cadre.
  */
 import { computed, onMounted, ref } from 'vue'
+import { useEstMobile } from '@/composables/useTiroirs'
+import { cleDe } from '@/components/administration/fileATraiter'
+import { quotaDesRattachements } from '@/components/administration/rattachements'
 import { useRouter } from 'vue-router'
 import {
   activerMembre,
@@ -77,16 +89,13 @@ import {
   type UtilisateurAdministration,
 } from '@/lib/api'
 import { rafraichirSession, useSession } from '@/composables/useSession'
-import BoutonIcone from '@/components/base/BoutonIcone.vue'
+import BoutonBase from '@/components/base/BoutonBase.vue'
+import Feuillet from '@/components/base/Feuillet.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
-import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
-import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
-import OngletsAdministration from './OngletsAdministration.vue'
 import MentionDeRattachement from '@/components/administration/MentionDeRattachement.vue'
 import PortraitAValider from '@/components/administration/PortraitAValider.vue'
-import QuotasDuCompte from '@/components/administration/QuotasDuCompte.vue'
 import EditeurDeQuotas, { type EditionDeQuotas } from '@/components/administration/EditeurDeQuotas.vue'
 import { resumePartage } from '@/components/compte/partageNaissance'
 import {
@@ -97,6 +106,7 @@ import {
 
 const { session, vueEmpruntee } = useSession()
 const routeur = useRouter()
+const estMobile = useEstMobile()
 
 const utilisateurs = ref<UtilisateurAdministration[]>([])
 /** Les photos d'inscription en attente, par identifiant de **membre**. */
@@ -166,7 +176,7 @@ function estAdministrateur(utilisateur: UtilisateurAdministration): boolean {
   return utilisateur.roles.includes('ROLE_ADMIN')
 }
 
-/** Inscrit sans fiche, pas encore décidé : il se traite dans « À rattacher ». */
+/** Inscrit sans fiche, pas encore décidé : il se traite dans « À traiter ». */
 function aRattacher(utilisateur: UtilisateurAdministration): boolean {
   const membre = utilisateur.membre
   return membre !== null && membre.status === 'en_attente' && membre.matchKind === 'a_rattacher'
@@ -309,17 +319,97 @@ function dateLisible(valeur: string | null): string {
     ? valeur
     : date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
 }
+
+/* ───────────────── La recherche et les puces ───────────────── */
+
+type Puce = 'tous' | 'en_attente' | 'actif' | 'suspendu' | 'admins'
+const PUCES: { valeur: Puce; libelle: string }[] = [
+  { valeur: 'tous', libelle: 'Tous' },
+  { valeur: 'en_attente', libelle: 'En attente' },
+  { valeur: 'actif', libelle: 'Actifs' },
+  { valeur: 'suspendu', libelle: 'Suspendus' },
+  { valeur: 'admins', libelle: 'Admins' },
+]
+const puce = ref<Puce>('tous')
+const recherche = ref('')
+
+function dansLaPuce(utilisateur: UtilisateurAdministration, valeur: Puce): boolean {
+  if (valeur === 'tous') return true
+  if (valeur === 'admins') return estAdministrateur(utilisateur)
+  return utilisateur.status === valeur
+}
+
+const comptesParPuce = computed(
+  () => Object.fromEntries(PUCES.map((p) => [p.valeur, utilisateurs.value.filter((u) => dansLaPuce(u, p.valeur)).length])) as Record<Puce, number>,
+)
+
+/** Nom de la fiche ou du compte, courriel, n° de fiche : sans accents ni casse. */
+function normaliser(texte: string): string {
+  return texte.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+const affiches = computed(() => {
+  const terme = normaliser(recherche.value.trim().replace(/^(n°|#)\s*/i, ''))
+  return utilisateurs.value.filter((u) => {
+    if (!dansLaPuce(u, puce.value)) return false
+    if (terme === '') return true
+    const fiche = u.membre?.personId != null ? String(u.membre.personId) : ''
+    return [nomDeLaLigne(u), u.displayName, u.email, fiche].some((champ) => normaliser(champ).includes(terme))
+  })
+})
+
+/** Les initiales de l'avatar : deux lettres, du nom affiché. */
+function initiales(utilisateur: UtilisateurAdministration): string {
+  const mots = nomDeLaLigne(utilisateur).split(/[\s@.-]+/).filter((m) => m !== '')
+  return mots
+    .slice(0, 2)
+    .map((m) => m[0]?.toUpperCase() ?? '')
+    .join('')
+}
+
+/** « Date de naissance : … · vu le … » — ce qui se diagnostique d'un coup d'œil. */
+function ligneDeDetail(utilisateur: UtilisateurAdministration): string {
+  const morceaux: string[] = []
+  if (utilisateur.membre?.partageNaissance) morceaux.push(`Date de naissance : ${resumePartage(utilisateur.membre.partageNaissance)}`)
+  morceaux.push(utilisateur.lastLoginAt ? `vu le ${dateLisible(utilisateur.lastLoginAt)}` : 'jamais connecté')
+  return morceaux.join(' · ')
+}
+
+/** Le rattachement assisté : « 37 restantes sur 40 (24 h) ». */
+const quotaInstallation = computed(() => {
+  const restant = quotaDesRattachements(quotasGlobaux.value)
+  if (restant !== null) return `${restant.restant} restantes sur ${restant.limite} (${restant.fenetre})`
+  const premier = quotasGlobaux.value[0]
+  return premier === undefined ? '' : `${premier.consomme} sur ${premier.limite} ${premier.fenetre}`
+})
+
+/* ───────────────── Le feuillet d'actions ───────────────── */
+
+const actionsDe = ref<UtilisateurAdministration | null>(null)
+
+function ouvrirActions(utilisateur: UtilisateurAdministration): void {
+  actionsDe.value = utilisateur
+}
+
+/** Ferme le feuillet, puis fait le geste : la liste relue ne doit pas trouver un feuillet sur une ligne périmée. */
+function depuisLeFeuillet(geste: (u: UtilisateurAdministration) => unknown): void {
+  const utilisateur = actionsDe.value
+  actionsDe.value = null
+  if (utilisateur !== null) void geste(utilisateur)
+}
+
+/** Vers « À traiter », filtrée sur les rattachements et ouverte sur ce compte. */
+function lienDIdentification(utilisateur: UtilisateurAdministration) {
+  const membre = utilisateur.membre
+  return {
+    name: 'administration.a-traiter',
+    query: membre === null ? { type: 'rattachement' } : { type: 'rattachement', sel: cleDe('rattachement', membre.id) },
+  }
+}
 </script>
 
 <template>
-  <!-- La barre d'écran de l'administration : les trois sections en onglets,
-       et rien d'autre ici — pas de filtre, donc pas de feuillet ni de bouton
-       filtres sur téléphone. Voir `OngletsAdministration`. -->
-  <BarreEcran ecran="Administration" :reinitialisable="false">
-    <template #vue><OngletsAdministration /></template>
-  </BarreEcran>
-
-  <div class="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6">
+  <div class="flex flex-col gap-4">
     <!-- Une vue empruntée encore active éteint les gestes : on le redit ici, à
          côté des boutons éteints. On en sort par le bandeau du cadre. -->
     <p
@@ -330,226 +420,231 @@ function dateLisible(valeur: string | null): string {
       {{ raisonSuspension }}
     </p>
 
+    <label class="flex min-h-11 items-center gap-2 rounded-champ border border-ligne bg-panneau px-3 md:min-h-9">
+      <span class="text-attenue" aria-hidden="true">⌕</span>
+      <span class="sr-only">Chercher un compte</span>
+      <!-- `:value` + `@input` plutôt que `v-model` : l'écran se monte aussi dans
+           le rendu en mémoire des tests, qui ne connaît pas les directives. -->
+      <input
+        :value="recherche"
+        type="search"
+        placeholder="Nom, e-mail, n° de fiche…"
+        class="h-8 min-w-0 flex-1 bg-transparent text-sm focus:outline-none"
+        @input="recherche = ($event.target as HTMLInputElement).value"
+      />
+    </label>
+
+    <div class="puces-defilantes flex gap-2 overflow-x-auto overflow-y-hidden py-0.5" role="group" aria-label="État des comptes affichés">
+      <button
+        v-for="p in PUCES"
+        :key="p.valeur"
+        type="button"
+        class="flex min-h-11 flex-none items-center gap-1.5 rounded-pastille border px-[13px] text-[13px] whitespace-nowrap md:min-h-9"
+        :class="p.valeur === puce ? 'border-accent bg-accent-doux font-semibold text-texte' : 'border-ligne bg-panneau text-attenue'"
+        :aria-pressed="p.valeur === puce"
+        @click="puce = p.valeur"
+      >
+        {{ p.libelle }}<span class="font-medium text-attenue tnum">{{ comptesParPuce[p.valeur] }}</span>
+      </button>
+    </div>
+
     <MessageErreur v-if="erreur !== null" :erreur="erreur" @action="charger" />
 
-    <PanneauBase titre="Comptes">
-      <SqueletteChargement v-if="chargement && utilisateurs.length === 0" :lignes="4" />
+    <SqueletteChargement v-if="chargement && utilisateurs.length === 0" :lignes="4" />
 
-      <!-- Le tableau défile à l'horizontale sur un écran étroit plutôt que
-           d'écraser ses colonnes. -->
-      <div v-else class="overflow-x-auto">
-        <table class="w-full min-w-[940px] border-collapse text-sm">
-          <thead>
-            <tr class="border-b border-ligne text-left text-xs text-attenue">
-              <th scope="col" class="py-2 pr-3 font-semibold">Compte</th>
-              <th scope="col" class="py-2 pr-3 font-semibold">État</th>
-              <th scope="col" class="py-2 pr-3 font-semibold">Rattachement</th>
-              <th scope="col" class="py-2 pr-3 font-semibold whitespace-nowrap">Dernière connexion</th>
-              <th scope="col" class="py-2 pr-3 font-semibold">
-                Quotas
-                <span class="font-normal">(<span class="text-accent" aria-hidden="true">◆</span> personnalisé)</span>
-              </th>
-              <th scope="col" class="py-2 text-right font-semibold">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-ligne">
-            <tr v-for="utilisateur in utilisateurs" :key="utilisateur.id" class="align-top">
-              <td class="py-3 pr-3">
-                <!-- Rattaché : le nom de **sa fiche** (prénoms et nom de l'arbre),
-                     celui du compte en second s'il diffère. -->
-                <p class="font-medium">{{ nomDeLaLigne(utilisateur) }}</p>
-                <p
-                  v-if="
-                    nomDeLaLigne(utilisateur) !== utilisateur.displayName &&
-                    utilisateur.displayName !== utilisateur.email
-                  "
-                  class="text-xs text-attenue"
-                >
-                  compte « {{ utilisateur.displayName }} »
-                </p>
-                <p class="text-xs text-attenue [overflow-wrap:anywhere]">{{ utilisateur.email }}</p>
-                <p v-if="utilisateur.telephone" class="text-xs text-attenue">
-                  <a :href="`tel:${utilisateur.telephone.replace(/[^0-9+]/g, '')}`" class="underline">{{ utilisateur.telephone }}</a>
-                </p>
-              </td>
+    <p
+      v-else-if="affiches.length === 0"
+      class="rounded-panneau border border-ligne bg-panneau px-4 py-7 text-center text-attenue"
+    >
+      Aucun compte ne correspond.
+    </p>
 
-              <td class="py-3 pr-3">
-                <div class="flex flex-col items-start gap-1">
-                  <!-- Les trois valeurs de `StatutCompte` sont celles de la
-                       pastille, et la valeur affichée reste celle du modèle (§ 1.2). -->
-                  <PastilleEtat :etat="utilisateur.status" />
-                  <span v-if="estAdministrateur(utilisateur)" class="text-xs font-semibold text-accent">
-                    Administrateur
-                  </span>
-                </div>
-              </td>
+    <ul v-else class="m-0 flex list-none flex-col gap-px overflow-hidden rounded-panneau border border-ligne bg-ligne p-0">
+      <li
+        v-for="utilisateur in affiches"
+        :key="utilisateur.id"
+        class="flex flex-wrap items-center gap-x-4 gap-y-2.5 bg-panneau px-4 py-3"
+        :data-utilisateur="utilisateur.id"
+      >
+        <!-- L'identité : initiales, nom (celui de la fiche quand le cercle la
+             laisse voir), état, « Admin », courriel. -->
+        <div class="flex min-w-0 flex-[1_1_230px] items-center gap-3">
+          <span
+            class="flex size-[38px] flex-none items-center justify-center rounded-full bg-inconnu text-[13px] font-bold"
+            aria-hidden="true"
+          >{{ initiales(utilisateur) }}</span>
+          <span class="flex min-w-0 flex-col">
+            <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span class="font-semibold">{{ nomDeLaLigne(utilisateur) }}</span>
+              <!-- Les trois valeurs de `StatutCompte` sont celles de la
+                   pastille, et la valeur affichée reste celle du modèle (§ 1.2). -->
+              <PastilleEtat :etat="utilisateur.status" />
+              <span v-if="estAdministrateur(utilisateur)" class="text-[11.5px] font-semibold text-accent">Admin</span>
+            </span>
+            <span class="text-[12.5px] text-attenue [overflow-wrap:anywhere]">{{ utilisateur.email }}</span>
+            <span v-if="utilisateur.telephone" class="text-[12.5px] text-attenue">
+              <a :href="`tel:${utilisateur.telephone.replace(/[^0-9+]/g, '')}`" class="underline">{{ utilisateur.telephone }}</a>
+            </span>
+          </span>
+        </div>
 
-              <td class="max-w-80 py-3 pr-3">
-                <!-- Le rattachement, dans ses trois états — y compris celui où
-                     il n'y en a aucun. Le détail est dans `rattachement.ts`. -->
-                <MentionDeRattachement :membre="utilisateur.membre" />
-                <p
-                  v-if="utilisateur.membre?.partageNaissance"
-                  class="mt-1 text-xs text-attenue"
-                  data-partage-du-membre
-                >
-                  Date de naissance : {{ resumePartage(utilisateur.membre.partageNaissance) }}
-                </p>
-                <p
-                  v-if="restrictionIgnoree(utilisateur)"
-                  class="mt-1 text-xs font-semibold text-accent"
-                  data-restriction-ignoree
-                >
-                  Restriction de date de naissance ignorée
-                </p>
-                <PortraitAValider :photo="portraitAValider(utilisateur)" :nom="utilisateur.displayName" />
-              </td>
+        <!-- Le rattachement, dans ses trois états — y compris celui où il n'y
+             en a aucun. Le détail est dans `rattachement.ts`. -->
+        <div class="flex min-w-0 flex-[1_1_200px] flex-col text-[13px]">
+          <MentionDeRattachement :membre="utilisateur.membre" />
+          <span class="text-[12.5px] text-attenue" :data-partage-du-membre="utilisateur.membre?.partageNaissance ? '' : undefined">
+            {{ ligneDeDetail(utilisateur) }}
+          </span>
+          <span
+            v-if="restrictionIgnoree(utilisateur)"
+            class="text-[12.5px] font-semibold text-accent"
+            data-restriction-ignoree
+          >
+            Restriction de date de naissance ignorée
+          </span>
+        </div>
 
-              <td class="py-3 pr-3 whitespace-nowrap text-attenue">
-                {{ utilisateur.lastLoginAt ? dateLisible(utilisateur.lastLoginAt) : '—' }}
-              </td>
+        <div v-if="portraitAValider(utilisateur) !== null" class="flex-[0_1_210px] [&>*]:mt-0">
+          <PortraitAValider :photo="portraitAValider(utilisateur)" :nom="utilisateur.displayName" />
+        </div>
 
-              <td class="py-3 pr-3">
-                <QuotasDuCompte :quotas="utilisateur.quotas" />
-              </td>
+        <div class="ml-auto flex items-center gap-2">
+          <!-- Un compte `a_rattacher` n'a pas de fiche : « Valider » rendrait
+               `422` faute de `personId`. La décision se prend dans « À
+               traiter », avec la description et la suggestion. -->
+          <RouterLink
+            v-if="aRattacher(utilisateur)"
+            :to="lienDIdentification(utilisateur)"
+            class="inline-flex min-h-11 items-center rounded-champ border border-accent bg-accent px-3.5 text-[13.5px] font-semibold whitespace-nowrap text-fond hover:opacity-90 md:min-h-9"
+          >
+            Identifier sa fiche
+          </RouterLink>
+          <BoutonBase
+            v-else-if="utilisateur.membre !== null && utilisateur.membre.status === 'en_attente'"
+            class="min-h-11 md:min-h-9"
+            :chargement="enCours === utilisateur.id"
+            :desactive="suspendu || enCours !== null"
+            :title="infobulle"
+            @click="valider(utilisateur)"
+          >
+            Valider
+          </BoutonBase>
 
-              <td class="py-3">
-                <div class="flex justify-end gap-1.5">
-                  <!-- Un compte `a_rattacher` n'a pas de fiche : « Valider »
-                       rendrait `422` faute de `personId`. La décision se prend
-                       sur sa carte, avec la description et la suggestion. -->
-                  <RouterLink
-                    v-if="aRattacher(utilisateur)"
-                    :to="{ name: 'administration.rattachements' }"
-                    class="inline-flex size-8 items-center justify-center rounded-champ border border-accent text-accent hover:bg-accent-doux"
-                    aria-label="Identifier sa fiche"
-                    title="Identifier sa fiche"
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      class="size-4"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      aria-hidden="true"
-                    >
-                      <circle cx="11" cy="11" r="6" />
-                      <path d="M20 20l-4.5-4.5" />
-                    </svg>
-                  </RouterLink>
-
-                  <BoutonIcone
-                    v-else-if="utilisateur.membre !== null && utilisateur.membre.status === 'en_attente'"
-                    libelle="Valider le rattachement"
-                    variante="accent"
-                    :chargement="enCours === utilisateur.id"
-                    :desactive="suspendu"
-                    :infobulle="infobulle"
-                    @click="valider(utilisateur)"
-                  >
-                    <path d="M5 12.5l4.5 4.5L19 7.5" />
-                  </BoutonIcone>
-
-                  <BoutonIcone
-                    v-if="incarnable(utilisateur) && vueEmpruntee === null"
-                    libelle="Se connecter en tant que"
-                    :chargement="enCours === utilisateur.id"
-                    :desactive="suspendu || enCours !== null"
-                    :infobulle="infobulle"
-                    @click="incarner(utilisateur)"
-                  >
-                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                    <path d="M10 17l5-5-5-5" />
-                    <path d="M15 12H3" />
-                  </BoutonIcone>
-
-                  <BoutonIcone
-                    :libelle="
-                      restrictionIgnoree(utilisateur)
-                        ? 'Rétablir la restriction de date de naissance'
-                        : 'Ignorer la restriction de date de naissance'
-                    "
-                    :variante="restrictionIgnoree(utilisateur) ? 'accent' : 'neutre'"
-                    :desactive="suspendu || enCours !== null"
-                    :infobulle="infobulle"
-                    @click="basculerRestrictionNaissance(utilisateur)"
-                  >
-                    <rect x="4" y="5" width="16" height="15" rx="2" />
-                    <path d="M4 10h16M9 3v4M15 3v4" />
-                    <path v-if="!restrictionIgnoree(utilisateur)" d="M12 13v4" />
-                    <path v-else d="M9.5 15l2 2 3.5-3.5" />
-                  </BoutonIcone>
-
-                  <BoutonIcone
-                    libelle="Modifier les quotas"
-                    :desactive="suspendu || enCours !== null"
-                    :infobulle="infobulle"
-                    @click="editerLesQuotas(utilisateur)"
-                  >
-                    <path d="M4 15a8 8 0 1 1 16 0" />
-                    <path d="M12 15l4-5" />
-                    <path d="M4 19h16" />
-                  </BoutonIcone>
-
-                  <!-- On ne se suspend pas soi-même, et on ne se retire pas son
-                       propre rôle : les deux sont des façons de se verrouiller
-                       dehors, et le serveur n'attrape que la seconde. -->
-                  <template v-if="utilisateur.id !== moi">
-                    <BoutonIcone
-                      :libelle="estAdministrateur(utilisateur) ? 'Retirer l’administration' : 'Rendre administrateur'"
-                      :desactive="suspendu || enCours !== null"
-                      :infobulle="infobulle"
-                      @click="basculerRole(utilisateur)"
-                    >
-                      <path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z" />
-                      <path v-if="estAdministrateur(utilisateur)" d="M9 12h6" />
-                      <path v-else d="M12 9v6M9 12h6" />
-                    </BoutonIcone>
-
-                    <BoutonIcone
-                      v-if="suspensionBasculable(utilisateur)"
-                      :libelle="utilisateur.status === 'suspendu' ? 'Réactiver' : 'Suspendre'"
-                      :variante="utilisateur.status === 'suspendu' ? 'neutre' : 'danger'"
-                      :desactive="suspendu || enCours !== null"
-                      :infobulle="infobulle"
-                      @click="basculerSuspension(utilisateur)"
-                    >
-                      <path v-if="utilisateur.status === 'suspendu'" d="M8 5v14l11-7z" />
-                      <template v-else>
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M10 9v6M14 9v6" />
-                      </template>
-                    </BoutonIcone>
-                  </template>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </PanneauBase>
+          <button
+            type="button"
+            class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-champ border border-ligne bg-panneau px-2.5 text-[13.5px] whitespace-nowrap hover:border-accent md:min-h-9"
+            aria-label="Autres actions"
+            aria-haspopup="dialog"
+            @click="ouvrirActions(utilisateur)"
+          >
+            {{ estMobile ? '⋯' : 'Actions ▾' }}
+          </button>
+        </div>
+      </li>
+    </ul>
 
     <!-- Les quotas à clé globale : un compteur pour toute l'installation. -->
-    <PanneauBase v-if="quotasGlobaux.length > 0" titre="Quotas de l’installation">
-      <div class="flex items-start justify-between gap-3">
-        <div class="flex min-w-0 flex-col gap-1">
-          <QuotasDuCompte :quotas="quotasGlobaux.map((q) => ({ ...q, exempte: false }))" class="max-w-80" />
-          <p class="text-xs text-attenue">Partagés par tous les administrateurs, et non comptés par compte.</p>
-        </div>
-        <BoutonIcone
-          libelle="Modifier les quotas de l’installation"
-          :desactive="suspendu"
-          :infobulle="infobulle"
-          @click="editerLesQuotasGlobaux"
-        >
-          <path d="M4 15a8 8 0 1 1 16 0" />
-          <path d="M12 15l4-5" />
-          <path d="M4 19h16" />
-        </BoutonIcone>
-      </div>
-    </PanneauBase>
+    <div
+      v-if="quotasGlobaux.length > 0"
+      class="flex flex-wrap items-center justify-between gap-2 rounded-panneau border border-ligne bg-panneau px-4 py-3"
+    >
+      <span class="flex flex-col text-[13px]">
+        <span class="font-semibold">Quotas de l’installation</span>
+        <span class="text-attenue">
+          Rattachement assisté : {{ quotaInstallation }}. Partagé par tous les administrateurs.
+        </span>
+      </span>
+      <BoutonBase
+        variante="secondaire"
+        class="min-h-11 md:min-h-9"
+        :desactive="suspendu"
+        :title="infobulle"
+        @click="editerLesQuotasGlobaux"
+      >
+        Modifier
+      </BoutonBase>
+    </div>
   </div>
+
+  <!-- Le feuillet d'actions d'un compte : chaque geste nommé, et ce qu'il fait. -->
+  <Feuillet :ouvert="actionsDe !== null" :titre="actionsDe === null ? '' : nomDeLaLigne(actionsDe)" @fermer="actionsDe = null">
+    <template v-if="actionsDe !== null">
+      <p class="-mt-2 text-[13px] text-attenue [overflow-wrap:anywhere]">{{ actionsDe.email }}</p>
+      <p v-if="raisonSuspension !== null" class="text-[13px] text-accent">{{ raisonSuspension }}</p>
+      <div class="flex flex-col gap-px overflow-hidden rounded-panneau border border-ligne bg-ligne">
+        <button
+          v-if="incarnable(actionsDe) && vueEmpruntee === null"
+          type="button"
+          class="ligne-action"
+          :disabled="suspendu || enCours !== null"
+          data-action="incarner"
+          @click="depuisLeFeuillet(incarner)"
+        >
+          <span class="font-semibold">Se connecter en tant que</span>
+          <span class="text-[12.5px] text-attenue">Voir l’arbre avec ses droits</span>
+        </button>
+        <button
+          type="button"
+          class="ligne-action"
+          :disabled="suspendu || enCours !== null"
+          data-action="quotas"
+          @click="depuisLeFeuillet(editerLesQuotas)"
+        >
+          <span class="font-semibold">Modifier les quotas</span>
+          <span class="text-[12.5px] text-attenue">Analyses, questions, médias</span>
+        </button>
+        <button
+          type="button"
+          class="ligne-action"
+          :disabled="suspendu || enCours !== null"
+          data-action="restriction"
+          @click="depuisLeFeuillet(basculerRestrictionNaissance)"
+        >
+          <span class="font-semibold">
+            {{ restrictionIgnoree(actionsDe) ? 'Rétablir la restriction de date de naissance' : 'Ignorer la restriction de date de naissance' }}
+          </span>
+          <span class="text-[12.5px] text-attenue">
+            {{
+              restrictionIgnoree(actionsDe)
+                ? 'Ses propres choix de partage limitent de nouveau ce qu’il voit'
+                : 'Il voit les dates des vivants, quel que soit son propre partage'
+            }}
+          </span>
+        </button>
+        <!-- On ne se suspend pas soi-même, et on ne se retire pas son propre
+             rôle : les deux sont des façons de se verrouiller dehors, et le
+             serveur n'attrape que la seconde. -->
+        <template v-if="actionsDe.id !== moi">
+          <button
+            type="button"
+            class="ligne-action"
+            :disabled="suspendu || enCours !== null"
+            data-action="role"
+            @click="depuisLeFeuillet(basculerRole)"
+          >
+            <span class="font-semibold">{{ estAdministrateur(actionsDe) ? 'Retirer l’administration' : 'Rendre administrateur' }}</span>
+            <span class="text-[12.5px] text-attenue">
+              {{ estAdministrateur(actionsDe) ? 'Il redevient un membre' : 'Il accède à ce mode, et à tout ce qu’il décide' }}
+            </span>
+          </button>
+          <button
+            v-if="suspensionBasculable(actionsDe)"
+            type="button"
+            class="ligne-action"
+            :class="actionsDe.status === 'suspendu' ? '' : 'text-alerte'"
+            :disabled="suspendu || enCours !== null"
+            data-action="suspension"
+            @click="depuisLeFeuillet(basculerSuspension)"
+          >
+            <span class="font-semibold">{{ actionsDe.status === 'suspendu' ? 'Réactiver le compte' : 'Suspendre le compte' }}</span>
+            <span class="text-[12.5px] text-attenue">
+              {{ actionsDe.status === 'suspendu' ? 'Il peut de nouveau se connecter' : 'Il ne peut plus se connecter' }}
+            </span>
+          </button>
+        </template>
+      </div>
+    </template>
+  </Feuillet>
 
   <EditeurDeQuotas
     :edition="edition"
@@ -559,3 +654,23 @@ function dateLisible(valeur: string | null): string {
     @annuler="edition = null"
   />
 </template>
+
+<style scoped>
+.ligne-action {
+  display: flex;
+  min-height: 52px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8px 16px;
+  background: var(--color-panneau);
+  text-align: left;
+}
+.ligne-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--h-accent-doux) 40%, var(--h-panneau));
+}
+.ligne-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+</style>

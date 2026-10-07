@@ -20,8 +20,8 @@
  * 3. **écrire à l'administration** (07/10/2026) — « Une question, une idée,
  *    un bug ? » : trois boutons qui ouvrent une nouvelle conversation avec la
  *    nature déjà choisie, et « Poursuivre » quand on en a déjà une — avec le
- *    nombre de réponses non lues. Un administrateur y voit en plus combien de
- *    messages des membres l'attendent ;
+ *    nombre de réponses non lues. Les messages **des membres**, eux, attendent
+ *    l'administrateur dans « À traiter », avec la pastille du mode admin ;
  * 4. **les anniversaires**, en carrousel : on glisse (ou les flèches) pour voir
  *    les jours voisins. Les vivants d'abord, bien lisibles ; les défunts
  *    ensuite, en retrait, sous « En mémoire ».
@@ -37,7 +37,6 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import {
   chargerAnniversaires,
   listerEvenements,
-  listerFilsAdministration,
   listerMesFils,
   listerTirages,
   marquerVu,
@@ -65,7 +64,7 @@ import {
   libelleRelatif,
 } from '@/components/accueil/jours'
 
-const { rattache, administrateur, nomAffiche, vueEmpruntee } = useSession()
+const { rattache, nomAffiche, vueEmpruntee } = useSession()
 
 const aujourdhui = decaler(new Date(), 0)
 const prenom = computed(() => nomAffiche.value.split(/\s+/)[0] ?? '')
@@ -78,8 +77,6 @@ const tirages = shallowRef<ResumeDeTirage[]>([])
 const moi = shallowRef<PersonneDuTirage | null>(null)
 const evenements = shallowRef<ResumeDEvenement[]>([])
 const mesFils = shallowRef<ResumeDeFil[]>([])
-/** Les messages des membres que l'administration n'a pas encore ouverts. */
-const messagesDesMembres = ref(0)
 let avorteur: AbortController | null = null
 
 async function charger(): Promise<void> {
@@ -118,12 +115,6 @@ async function charger(): Promise<void> {
       (liste) => (mesFils.value = liste.elements),
       () => (mesFils.value = []),
     ),
-    administrateur.value && vueEmpruntee.value === null
-      ? listerFilsAdministration({ statut: 'ouvert' }, signal).then(
-          (liste) => (messagesDesMembres.value = liste.nonLus),
-          () => (messagesDesMembres.value = 0),
-        )
-      : Promise.resolve(),
   ])
 }
 
@@ -321,14 +312,6 @@ function surTouche(e: KeyboardEvent): void {
           class="flex h-[20px] min-w-[20px] items-center justify-center rounded-pastille bg-accent px-1.5 text-xs font-bold text-fond tnum"
           :aria-label="`${reponsesNonLues} réponse${reponsesNonLues > 1 ? 's' : ''} non lue${reponsesNonLues > 1 ? 's' : ''}`"
         >{{ reponsesNonLues }}</span>
-      </RouterLink>
-      <RouterLink
-        v-if="administrateur && messagesDesMembres > 0"
-        :to="{ name: 'administration.messagerie' }"
-        class="mt-2 flex items-center justify-between gap-2 rounded-champ border-t border-ligne px-1 pt-3 text-sm text-texte hover:text-accent"
-      >
-        <span>Messages des membres à lire</span>
-        <span class="flex h-[20px] min-w-[20px] items-center justify-center rounded-pastille bg-accent px-1.5 text-xs font-bold text-fond tnum">{{ messagesDesMembres }}</span>
       </RouterLink>
     </section>
 

@@ -30,11 +30,11 @@ function prefixe(f: ResumeDeFil): string {
 </script>
 
 <template>
-  <ul class="flex flex-col divide-y divide-ligne overflow-hidden rounded-panneau border border-ligne bg-panneau">
+  <ul class="m-0 flex list-none flex-col gap-px overflow-hidden rounded-panneau border border-ligne bg-ligne p-0">
     <li v-for="f in ranges" :key="f.id">
       <RouterLink
         :to="{ name: route, params: { id: f.id } }"
-        class="flex items-start gap-3 px-4 py-3 hover:bg-accent-doux"
+        class="flex items-start gap-3 bg-panneau py-3 pr-3.5 pl-4 hover:bg-survol"
         :data-fil="f.id"
       >
         <div class="min-w-0 flex-1">

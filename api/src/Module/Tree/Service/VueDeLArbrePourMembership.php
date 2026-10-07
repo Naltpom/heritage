@@ -12,6 +12,8 @@ use App\Module\Tree\Entity\Child;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Contracts\Cache\CacheInterface;
+use Symfony\Contracts\Cache\ItemInterface;
 
 /**
  * L'implémentation, côté `Tree`, de {@see PortArbre} — ce que `Membership` lit de l'arbre
@@ -62,12 +64,55 @@ final class VueDeLArbrePourMembership implements PortArbre
         private readonly TreeFingerprint $empreinte,
         private readonly EtiquetteDeDateGedcom $dates = new EtiquetteDeDateGedcom(),
         private readonly ChronometreDuGraphe $chrono = new ChronometreDuGraphe(),
+        private readonly ?CacheInterface $cacheArbre = null,
     ) {
     }
 
     public function vue(): VueDeLArbre
     {
-        return $this->memoire ??= $this->chrono->mesure('cercle', fn (): VueDeLArbre => $this->charger());
+        return $this->memoire ??= $this->chrono->mesure('cercle', fn (): VueDeLArbre => $this->enCache());
+    }
+
+    /**
+     * La vue, relue en base **une fois par état de l'arbre** et non à chaque requête.
+     *
+     * Mesuré en production le 07/10/2026 : 750 à 960 ms à 3 904 personnes, payés par
+     * chaque requête qui calcule un cercle — le graphe, mais aussi une vignette ou la file
+     * des demandes. Même règle de clé que le jeu de placement
+     * ({@see JeuDePlacementEnCache}) : empreinte de l'arbre, seuil « vivant »
+     * et année. La vue est complète, sans filtre de confidentialité (voir l'en-tête) : elle
+     * ne dépend d'aucun lecteur, et une seule entrée sert tout le monde.
+     */
+    private function enCache(): VueDeLArbre
+    {
+        // Au milieu d'une écriture, Doctrine rend les entités telles qu'en mémoire et
+        // l'empreinte (lue en SQL) les ignore : le cache servirait l'arbre d'avant.
+        if (null === $this->cacheArbre || $this->em->getConnection()->isTransactionActive()) {
+            $this->chrono->note('cercle', null === $this->cacheArbre ? 'cache=absent' : 'cache=transaction');
+
+            return $this->charger();
+        }
+
+        $calcule = false;
+
+        $cle = \sprintf(
+            'vue-membership.v1.%s.s%d.a%s',
+            $this->empreinte->empreinte(),
+            $this->reglages->seuilVivantAnnees(),
+            (new \DateTimeImmutable())->format('Y'),
+        );
+
+        $vue = $this->cacheArbre->get($cle, function (ItemInterface $entree) use (&$calcule): VueDeLArbre {
+            $entree->expiresAfter(PlacementPartage::TTL);
+            $calcule = true;
+
+            return $this->charger();
+        });
+        $this->chrono->note('cercle', $calcule ? 'cache=miss' : 'cache=hit', remplace: $calcule);
+
+        \assert($vue instanceof VueDeLArbre);
+
+        return $vue;
     }
 
     public function empreinte(): string

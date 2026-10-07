@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { oublierEtag, requeteRevalidee } from './revalidation'
+import { oublierEtag, requeteRevalidee, retenirEtag } from './revalidation'
 import { ErreurApi } from './erreurs'
 
 /**
@@ -126,6 +126,27 @@ describe('revalidation par ETag', () => {
     await requeteRevalidee(CLE, '/arbre/graphe')
 
     expect(appels[1]?.ifNoneMatch).toBeNull()
+  })
+
+  it('`retenirEtag()` : l’ETag d’un graphe GARDÉ part au premier appel, tel quel', async () => {
+    // Après un F5, la mémoire de l'arbre (`histoire/memoire.ts`) rend l'ETag du graphe
+    // qu'elle a gardé : le premier appel revalide, et un 304 rend ce graphe-là.
+    poserReponses([new Response(null, { status: 304 })])
+
+    retenirEtag(CLE, '"3f0a"')
+    const resultat = await requeteRevalidee(CLE, '/arbre/graphe')
+
+    expect(appels[0]?.ifNoneMatch).toBe('"3f0a"')
+    expect(resultat).toEqual({ statut: 'inchange' })
+  })
+
+  it('`retenirEtag()` refuse un ETag faible, comme la réception', async () => {
+    poserReponses([reponseJson({ v: 1 }, 200, '"88bd"')])
+
+    retenirEtag(CLE, 'W/"3f0a"')
+    await requeteRevalidee(CLE, '/arbre/graphe')
+
+    expect(appels[0]?.ifNoneMatch).toBeNull()
   })
 
   it('une erreur lève une `ErreurApi` et jette l’ETag mémorisé', async () => {

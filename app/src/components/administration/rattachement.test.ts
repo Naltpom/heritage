@@ -148,7 +148,7 @@ describe('mentionDeRattachement', () => {
    * `personLabel` (pas `null` : absents) ; la mention ne doit ni écrire « la
    * fiche n° undefined », ni promettre « Valider », mais renvoyer à l'onglet.
    */
-  it('nomme le compte sans fiche et renvoie à « À rattacher »', () => {
+  it('nomme le compte sans fiche et renvoie à « À traiter »', () => {
     const sansFiche: MembreAdministration = {
       id: 14,
       status: 'en_attente',
@@ -161,7 +161,7 @@ describe('mentionDeRattachement', () => {
 
     expect(mention.etat).toBe('inactif')
     expect(mention.etiquette).toContain('Fiche à identifier')
-    expect(mention.consequence).toContain('À rattacher')
+    expect(mention.consequence).toContain('À traiter')
     expect(`${mention.etiquette} ${mention.consequence}`).not.toContain('undefined')
   })
 

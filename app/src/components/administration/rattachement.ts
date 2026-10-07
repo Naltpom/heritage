@@ -72,7 +72,7 @@
  * fiche**, en attente. Il est `inactif` comme tout compte en attente, mais sa
  * phrase est propre : il ne retombe pas « sur la racine » — il n'a pas de
  * cercle du tout et ne voit que les défunts — et la décision se prend dans
- * l'onglet « À rattacher », pas par « Valider le rattachement ».
+ * « À traiter », pas par « Valider le rattachement ».
  *
  * **Il ne propose aucune réparation pour le cas `absent`**, et ce n'est pas un
  * oubli : il n'existe aujourd'hui aucune route pour rattacher un compte
@@ -161,7 +161,7 @@ export function mentionDeRattachement(
   const visee = fiche(membre)
 
   // Inscrit par « Je ne me trouve pas » : **aucune fiche** n'est visée, et la
-  // décision ne se prend pas ici mais sur la carte de l'onglet « À rattacher »,
+  // décision ne se prend pas ici mais sur sa carte, dans « À traiter »,
   // qui porte la description et la suggestion. « Valider le rattachement » n'a
   // pas de sens sur ce compte — le serveur le refuserait en `422` faute de
   // `personId` — et l'écran des utilisateurs le masque.
@@ -170,7 +170,7 @@ export function mentionDeRattachement(
       etat: 'inactif',
       etiquette: 'Fiche à identifier : ne s’est pas trouvé dans l’arbre',
       consequence:
-        'Sans fiche, il ne voit que les personnes décédées. Rattachez-le depuis « À rattacher ».',
+        'Sans fiche, il ne voit que les personnes décédées. Rattachez-le depuis « À traiter ».',
     }
   }
 

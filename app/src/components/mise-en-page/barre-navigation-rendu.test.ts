@@ -37,6 +37,9 @@ vi.mock('@/composables/useSession', async () => {
 
 vi.mock('@/lib/api', () => ({
   listerDemandesAdministration: () => Promise.resolve({ total: 3 }),
+  listerRattachements: () => Promise.resolve({ elements: [] }),
+  listerDemandesRgpd: () => Promise.resolve({ elements: [] }),
+  listerFilsAdministration: () => Promise.resolve({ elements: [], total: 0, nonLus: 0 }),
 }))
 
 const RouterLinkBouchon = {
@@ -44,9 +47,9 @@ const RouterLinkBouchon = {
   template: '<a href="#" :data-vers="typeof to === \'object\' ? to.name : to"><slot /></a>',
 }
 
-function rendre(regime = 'membre', section: Section = 'autre'): Promise<string> {
+function rendre(regime = 'membre', section: Section = 'autre', nom = ''): Promise<string> {
   etat.regime.value = regime
-  definirPage({ section, titre: '', parent: null })
+  definirPage({ section, titre: '', parent: null, nom })
   const app = createSSRApp({ render: () => h(BarreNavigation) })
   app.component('RouterLink', RouterLinkBouchon)
   return renderToString(app)
@@ -61,7 +64,7 @@ describe('la barre du bas', () => {
 
     expect(vers).toEqual(['accueil', 'arbre', 'explorer', 'moi'])
     for (const libelle of ['Accueil', 'Arbre', 'Explorer', 'Moi']) {
-      expect(html).toMatch(new RegExp(`<span>${libelle}</span>`))
+      expect(html).toMatch(new RegExp(`<span[^>]*>${libelle}</span>`))
     }
   })
 
@@ -72,8 +75,8 @@ describe('la barre du bas', () => {
     const vers = [...html.matchAll(/data-vers="([^"]+)"/g)].map((m) => m[1])
 
     expect(vers).toEqual(['inscription.etat', 'moi'])
-    expect(html).toMatch(/<span>Inscription<\/span>/)
-    expect(html).not.toMatch(/<span>(Accueil|Arbre|Explorer)<\/span>/)
+    expect(html).toMatch(/<span[^>]*>Inscription<\/span>/)
+    expect(html).not.toMatch(/<span[^>]*>(Accueil|Arbre|Explorer)<\/span>/)
     expect(html).toContain('grid-cols-2')
   })
 
@@ -156,5 +159,54 @@ describe('la barre du bas', () => {
     // Le compte part au montage, qui n'a pas lieu en SSR : la pastille ne
     // paraît qu'une fois le total connu.
     expect(await rendre('administrateur')).not.toContain('pastille-moi')
+  })
+})
+
+/**
+ * Le mode administration (handoff « mode Administration », 1c) : un 5ᵉ
+ * emplacement, l'interrupteur, pour les seuls administrateurs ; en mode admin,
+ * les quatre entrées de l'administration à la place de celles du membre.
+ */
+describe('la barre du bas, en mode administration', () => {
+  const vers = (html: string): string[] => [...html.matchAll(/data-vers="([^"]+)"/g)].map((m) => m[1] ?? '')
+
+  it('n’a ni interrupteur ni séparateur pour un membre', async () => {
+    const html = await rendre('membre', 'accueil', 'accueil')
+
+    expect(html).not.toContain('role="switch"')
+    expect(html).not.toContain('data-interrupteur')
+    expect(vers(html)).toEqual(['accueil', 'arbre', 'explorer', 'moi'])
+  })
+
+  it('ajoute l’interrupteur, éteint, pour un administrateur en mode membre', async () => {
+    const html = await rendre('administrateur', 'accueil', 'accueil')
+    const interrupteur = /<a[^>]*role="switch"[^>]*>/.exec(html)?.[0] ?? ''
+
+    expect(vers(html).slice(0, 4)).toEqual(['accueil', 'arbre', 'explorer', 'moi'])
+    expect(interrupteur).toContain('aria-checked="false"')
+    expect(interrupteur).toContain('aria-label="Mode administration"')
+    // Sans route admin retenue, il mène à « À traiter ».
+    expect(interrupteur).toContain('data-vers="administration.a-traiter"')
+  })
+
+  it('remplace les quatre entrées en mode admin, et allume l’écran courant', async () => {
+    const html = await rendre('administrateur', 'administration', 'administration.utilisateurs')
+
+    expect(vers(html).slice(0, 4)).toEqual([
+      'administration.a-traiter',
+      'administration.utilisateurs',
+      'administration.invitations',
+      'administration.sources',
+    ])
+    for (const libelle of ['À traiter', 'Utilisateurs', 'Invitations', 'Sources']) {
+      expect(html).toMatch(new RegExp(`<span[^>]*>${libelle}</span>`))
+    }
+    const actifs = [...html.matchAll(/<a[^>]*aria-current="page"[^>]*>/g)].map((m) => m[0])
+    expect(actifs).toHaveLength(1)
+    expect(actifs[0]).toContain('data-vers="administration.utilisateurs"')
+    // L'interrupteur est allumé, et ramène au mode membre (l'accueil, faute de mieux).
+    const interrupteur = /<a[^>]*role="switch"[^>]*>/.exec(html)?.[0] ?? ''
+    expect(interrupteur).toContain('aria-checked="true"')
+    expect(interrupteur).toContain('data-vers="accueil"')
   })
 })

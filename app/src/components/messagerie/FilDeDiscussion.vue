@@ -11,6 +11,13 @@
  *
  * La zone de saisie envoie à « Envoyer », ou à Ctrl/⌘ + Entrée : Entrée seule
  * va à la ligne, sur un téléphone c'est ce qu'on attend d'elle.
+ *
+ * `collante` : dans le détail d'« À traiter », la saisie reste en bas de l'écran
+ * — au-dessus de la barre du téléphone — comme la barre d'actions des autres
+ * éléments de la file. L'emplacement `actions` y ajoute ses boutons (« Marquer
+ * réglé »), à côté d'« Envoyer ». La liste des messages ne défile alors plus
+ * dans son propre cadre : c'est la page qui défile, sous la saisie — deux
+ * défilements imbriqués se disputent le pouce sur un téléphone.
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { DetailDeFil } from '@/lib/api'
@@ -31,12 +38,14 @@ const {
   erreurDEnvoi = null,
   desactive = false,
   motifDesactivation = null,
+  collante = false,
 } = defineProps<{
   fil: DetailDeFil
   envoiEnCours?: boolean
   erreurDEnvoi?: unknown
   desactive?: boolean
   motifDesactivation?: string | null
+  collante?: boolean
 }>()
 
 const emit = defineEmits<{ envoyer: [texte: string] }>()
@@ -105,7 +114,8 @@ function surTouche(e: KeyboardEvent): void {
   <div class="flex flex-col">
     <ol
       ref="liste"
-      class="flex max-h-[60dvh] min-h-48 flex-col gap-1 overflow-y-auto px-1 py-3"
+      class="flex min-h-48 flex-col gap-1 px-1 py-3"
+      :class="collante ? '' : 'max-h-[60dvh] overflow-y-auto'"
       aria-label="Messages"
       aria-live="polite"
     >
@@ -139,23 +149,37 @@ function surTouche(e: KeyboardEvent): void {
       </li>
     </ol>
 
-    <form class="flex flex-col gap-2 border-t border-ligne pt-3" @submit.prevent="envoyer">
+    <form
+      class="flex flex-col gap-2 border-t border-ligne pt-3"
+      :class="collante ? 'saisie-collante pb-3' : ''"
+      @submit.prevent="envoyer"
+    >
       <p v-if="desactive && motifDesactivation" class="m-0 text-xs text-attenue" role="status">{{ motifDesactivation }}</p>
       <MessageErreur v-if="erreurDEnvoi !== null" :erreur="erreurDEnvoi" titre="Le message n’est pas parti" />
       <div class="flex items-end gap-2">
         <label class="sr-only" for="message-du-fil">Votre message</label>
         <textarea
           id="message-du-fil"
-          v-model="brouillon"
+          :value="brouillon"
           rows="2"
           maxlength="5000"
           class="min-h-11 flex-1 resize-y rounded-champ border border-ligne bg-panneau px-3 py-2 text-[15px] text-texte placeholder:text-attenue focus:border-accent focus:outline-none"
           :placeholder="fil.statut === 'clos' && fil.cote === 'membre' ? 'Écrire de nouveau rouvre la conversation…' : 'Votre message…'"
           :disabled="desactive"
+          @input="brouillon = ($event.target as HTMLTextAreaElement).value"
           @keydown="surTouche"
         />
         <BoutonBase type="submit" :chargement="envoiEnCours" :desactive="!peutEnvoyer">Envoyer</BoutonBase>
       </div>
+      <div v-if="$slots.actions" class="flex flex-wrap gap-2"><slot name="actions" /></div>
     </form>
   </div>
 </template>
+
+<style scoped>
+.saisie-collante {
+  position: sticky;
+  bottom: var(--hauteur-barre-bas, 0px);
+  background: var(--color-panneau);
+}
+</style>

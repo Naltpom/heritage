@@ -1,5 +1,6 @@
 /// <reference types="vitest/config" />
-import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
@@ -48,6 +49,31 @@ function decodeursPdfJs(): Plugin {
   }
 }
 
+/**
+ * L'empreinte des sources du front (`src/`, tests exclus), posée dans le code sous
+ * `__EMPREINTE_DU_FRONT__`.
+ *
+ * Elle sert à `histoire/memoire.ts`, qui garde d'un F5 à l'autre les dispositions de
+ * l'arbre déjà calculées : une disposition gardée n'est relue que par le MÊME code que
+ * celui qui l'a calculée. Le serveur a son équivalent (l'empreinte de la mise en page,
+ * cinquième composante de l'`ETag`), mais l'algorithme du front est à part, et un
+ * déploiement qui le change doit périmer ce que les navigateurs ont gardé. Toutes les
+ * sources plutôt qu'une liste de fichiers : une liste s'oublie le jour où la disposition
+ * importe un module de plus, et un déploiement de trop ne coûte qu'un calcul.
+ */
+function empreinteDesSources(racine: string): string {
+  const h = createHash('sha256')
+  const parcourir = (dossier: string): void => {
+    for (const e of readdirSync(dossier, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const chemin = join(dossier, e.name)
+      if (e.isDirectory()) parcourir(chemin)
+      else if (!/\.test\.ts$/.test(e.name)) h.update(`${chemin.slice(racine.length)}\n`).update(readFileSync(chemin))
+    }
+  }
+  parcourir(racine)
+  return h.digest('hex').slice(0, 16)
+}
+
 export default defineConfig(({ mode }) => {
   // Préfixe vide : on veut aussi les variables passées par le shell ou par
   // Docker Compose, pas seulement celles préfixées VITE_ des fichiers .env.
@@ -61,6 +87,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [vue(), tailwindcss(), decodeursPdfJs()],
+    define: {
+      __EMPREINTE_DU_FRONT__: JSON.stringify(empreinteDesSources(fileURLToPath(new URL('./src', import.meta.url)))),
+    },
     test: {
       // Les tests de rendu passent par le SSR (`renderToString`), qui ne sait ni
       // attendre une lecture ni cliquer. Les fichiers `*.client.test.ts` montent

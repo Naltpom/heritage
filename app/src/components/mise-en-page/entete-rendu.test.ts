@@ -52,6 +52,9 @@ vi.mock('@/components/notifications/ClocheNotifications.vue', () => ({
 
 vi.mock('@/lib/api', () => ({
   listerDemandesAdministration: () => Promise.resolve({ total: 0 }),
+  listerRattachements: () => Promise.resolve({ elements: [] }),
+  listerDemandesRgpd: () => Promise.resolve({ elements: [] }),
+  listerFilsAdministration: () => Promise.resolve({ elements: [], total: 0, nonLus: 0 }),
   rechercherPersonnes: () => Promise.resolve({ elements: [], tronque: false }),
 }))
 
@@ -288,5 +291,61 @@ describe('l’état des tiroirs', () => {
     reinitialiserTiroirs()
 
     expect(ouvert.value).toBe('aucun')
+  })
+})
+
+/**
+ * Le mode administration (handoff « mode Administration », 1c) : l'en-tête
+ * passe en fond accent sur une route d'administration, ses onglets deviennent
+ * ceux de l'administration, et l'interrupteur Membre / Admin n'est rendu qu'à un
+ * administrateur.
+ */
+describe('l’en-tête en mode administration', () => {
+  const ouvertureDeLEntete = (html: string): string => /<header[^>]*>/.exec(html)?.[0] ?? ''
+
+  it('n’a pas d’interrupteur pour un membre', async () => {
+    definirPage({ section: 'accueil', titre: 'Accueil', parent: null, nom: 'accueil' })
+    const html = await rendre('membre')
+
+    expect(html).not.toContain('data-interrupteur')
+    expect(html).not.toContain('>Admin<')
+  })
+
+  it('porte l’interrupteur segmenté, avant l’avatar, pour un administrateur', async () => {
+    definirPage({ section: 'accueil', titre: 'Accueil', parent: null, nom: 'accueil' })
+    const html = await rendre('administrateur')
+
+    expect(html).toContain('data-interrupteur="segmente"')
+    expect(html.indexOf('data-interrupteur')).toBeLessThan(html.indexOf('aria-label="Moi"'))
+    // En mode membre, « Admin » est le lien vers « À traiter ».
+    expect(html).toMatch(/data-vers="administration\.a-traiter"[^>]*>(<!--\[-->)?\s*Admin\s*</)
+    expect(ouvertureDeLEntete(html)).not.toContain('bg-accent')
+  })
+
+  it('se déduit de la route : fond accent, onglets de l’administration, sur-titre', async () => {
+    definirPage({ section: 'administration', titre: 'Invitations', parent: null, nom: 'administration.invitations' })
+    const html = await rendre('administrateur')
+    const entete = ouvertureDeLEntete(html)
+
+    expect(entete).toContain('bg-accent')
+    expect(entete).toContain('text-fond')
+    expect(entete).toContain('data-mode="administration"')
+    expect(html).toContain('Mode administration')
+    for (const nom of ['administration.a-traiter', 'administration.utilisateurs', 'administration.invitations', 'administration.sources']) {
+      expect(liensVers(html, nom), nom).toBeGreaterThanOrEqual(1)
+    }
+    expect(liensVers(html, 'arbre')).toBe(0)
+    expect(liensVers(html, 'explorer')).toBe(0)
+    const actifs = [...html.matchAll(/<a[^>]*aria-current="page"[^>]*>/g)].map((m) => m[0])
+    expect(actifs).toHaveLength(1)
+    expect(actifs[0]).toContain('data-vers="administration.invitations"')
+  })
+
+  it('ne teinte rien pour un compte qui n’est pas administrateur, même sur une route admin', async () => {
+    definirPage({ section: 'administration', titre: 'Invitations', parent: null, nom: 'administration.invitations' })
+    const html = await rendre('membre')
+
+    expect(ouvertureDeLEntete(html)).not.toContain('bg-accent')
+    expect(html).not.toContain('Mode administration')
   })
 })

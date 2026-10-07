@@ -63,7 +63,10 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   // « Inscription » de sa barre du bas qui s'allume (ADR 0003, 01/10/2026).
   if (nom === 'inscription.etat') return 'accueil'
   if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires' || nom === 'stats' || nom === 'explorer') return 'explorer'
-  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions' || nom === 'messagerie' || nom.startsWith('administration')) return 'moi'
+  // Le mode administration se déduit de la route, il n'est pas un état à part :
+  // un lien profond ou un favori y entre, le bouton retour en sort.
+  if (nom === 'administration' || nom.startsWith('administration.')) return 'administration'
+  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions' || nom === 'messagerie') return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
 }
@@ -536,10 +539,15 @@ export const routes: RouteRecordRaw[] = [
 
   /* --- Administration -------------------------------------------- */
   {
+    // Le **mode administration** (handoff « mode Administration », option 1c).
+    // Toute route `administration.*` y est : l'en-tête passe en fond accent, la
+    // navigation montre À traiter · Utilisateurs · Invitations · Sources
+    // (`sectionDe` rend `administration`). Le mode se déduit de la route : un
+    // lien profond ou un favori y entre, le bouton retour en sort.
+    //
     // Les sous-écrans sont des **routes enfants**, chacune avec son `meta`
     // (`app/README.md`, « Ajouter une route »). Chacune a donc son chemin, donc
-    // son lien profond : un administrateur qui met la file de validation en
-    // favori doit retomber sur la file, pas sur un onglet par défaut.
+    // son lien profond.
     //
     // `redirect` est résolu **avant** la garde globale, qui verra donc le
     // `meta.acces` de l'enfant. Chaque enfant porte le sien explicitement plutôt
@@ -549,21 +557,35 @@ export const routes: RouteRecordRaw[] = [
     name: 'administration',
     component: () => import('@/views/AdministrationView.vue'),
     meta: { acces: 'administration', titre: 'Administration' },
-    redirect: { name: 'administration.demandes' },
+    redirect: { name: 'administration.a-traiter' },
     children: [
       {
+        // La file unique : demandes en attente, inscriptions à rattacher,
+        // demandes RGPD en attente. `?type=tout|demande|rattachement|rgpd`
+        // filtre, `?sel=<clé>` ouvre un élément (`d:42`, `r:7`, `g:3`).
+        path: 'a-traiter',
+        name: 'administration.a-traiter',
+        component: () => import('@/views/administration/ATraiterView.vue'),
+        meta: { acces: 'administration', titre: 'À traiter' },
+      },
+      {
+        // **Conservée** : les noms de route sont un contrat. Elle garde la file
+        // complète, filtres d'état compris, pour consulter les demandes
+        // **traitées** — validées, refusées, caduques. Les demandes en attente
+        // se décident dans « À traiter ».
         path: 'demandes',
         name: 'administration.demandes',
         component: () => import('@/views/administration/FileDemandesView.vue'),
-        meta: { acces: 'administration', titre: 'File de validation' },
+        meta: { acces: 'administration', titre: 'Historique des demandes' },
       },
       {
         // Les inscriptions sans fiche (ADR 0013). Le nom est un contrat : la
         // notification `compte_en_attente` d'une inscription à rattacher y mène
-        // (`linkRoute: 'administration.rattachements'`).
+        // (`linkRoute: 'administration.rattachements'`). Elles se décident
+        // désormais dans « À traiter ».
         path: 'rattachements',
         name: 'administration.rattachements',
-        component: () => import('@/views/administration/RattachementsView.vue'),
+        redirect: { name: 'administration.a-traiter', query: { type: 'rattachement' } },
         meta: { acces: 'administration', titre: 'À rattacher' },
       },
       {
@@ -588,20 +610,21 @@ export const routes: RouteRecordRaw[] = [
       {
         // Les demandes RGPD des membres (ADR 0016, révision du 3 octobre
         // 2026). Le nom est un contrat : la notification `demande_rgpd` y mène
-        // (`linkRoute: 'administration.rgpd'`).
+        // (`linkRoute: 'administration.rgpd'`). Elles se décident désormais
+        // dans « À traiter », filtrée sur le RGPD.
         path: 'rgpd',
         name: 'administration.rgpd',
-        component: () => import('@/views/administration/DemandesRgpdView.vue'),
+        redirect: { name: 'administration.a-traiter', query: { type: 'rgpd' } },
         meta: { acces: 'administration', titre: 'Demandes RGPD' },
       },
       {
-        // Ce que les membres écrivent à l'administration (module `Messagerie`).
-        // Le nom est un contrat : la notification `message_d_un_membre` y mène
+        // Toutes les conversations des membres (module `Messagerie`) ; celles qui
+        // attendent une réponse sont d'abord dans « À traiter ». Le nom est un contrat : la notification `message_d_un_membre` y mène
         // avec `{ id }` — l'identifiant, facultatif, ouvre la conversation.
         path: 'messages/:id(\\d+)?',
         name: 'administration.messagerie',
         component: () => import('@/views/administration/MessagerieAdministrationView.vue'),
-        meta: { acces: 'administration', titre: 'Messages' },
+        meta: { acces: 'administration', titre: 'Conversations' },
       },
     ],
   },
