@@ -243,7 +243,12 @@ function pluriel(n: number, mot: string): string {
                 <EditionIdentite v-model="edition.saisie" :fiche="fiche" :erreurs="erreursChamps" />
               </SectionFiche>
               <SectionFiche titre="Famille" edition data-panneau="famille">
-                <EditionParente v-model:retraits="edition.retraits" v-model:ajouts="edition.ajouts" :fiche="fiche" />
+                <EditionParente
+                  v-model:retraits="edition.retraits"
+                  v-model:ajouts="edition.ajouts"
+                  v-model:unions="edition.unions"
+                  :fiche="fiche"
+                />
               </SectionFiche>
             </template>
 

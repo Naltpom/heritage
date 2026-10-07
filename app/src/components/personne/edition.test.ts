@@ -4,10 +4,13 @@ import {
   aDesModifications,
   basculerRetrait,
   cleDEnfant,
+  cleDUnion,
+  cleDUnionAjoutee,
   cleDeConjoint,
   cleDeParent,
   dateLisible,
   dejaLies,
+  cleDeDepot,
   demandesDEdition,
   entrerEnEdition,
   gedcomEnFrancais,
@@ -63,6 +66,7 @@ function fiche(surcharge: Partial<FichePersonneComplete> = {}): FichePersonneCom
         marriage: null,
         divorced: false,
         divorce: null,
+        version: 1,
         enfants: [
           { personId: 60, displayName: 'Pivoine Romarin' },
           { personId: 61, displayName: 'Basalte Romarin' },
@@ -269,5 +273,145 @@ describe('les garde-fous de la recherche', () => {
     const e = etat(fiche(), (x) => (x.ajouts.conjoints = [{ personId: 70, libelle: 'Tourmaline' }]))
     const exclus = dejaLies(fiche(), e)
     for (const id of [17, 30, 31, 52, 60, 61, 70]) expect(exclus).toContain(`personne:${id}`)
+  })
+})
+
+describe('les dates d’une union — mariage (date, lieu) et divorce (date)', () => {
+  const mariageSaisi = (e: EtatEdition, cle: string, debut: string, lieu = '') => {
+    e.unions[cle] = { ...e.unions[cle]!, mariage: { ...e.unions[cle]!.mariage, debut, lieu } }
+  }
+  const divorceSaisi = (e: EtatEdition, cle: string, debut: string) => {
+    e.unions[cle] = { ...e.unions[cle]!, divorce: { ...e.unions[cle]!.divorce, debut } }
+  }
+
+  it('les cases s’ouvrent sur la date, et vides elles ne changent rien', () => {
+    const e = etat()
+    expect(e.unions[cleDUnion(9)]!.mariage.forme).toBe('connue')
+    expect(aDesModifications(e, fiche())).toBe(false)
+    const demandes = demandesDEdition(fiche(), e, '')
+    expect(demandes).toEqual({ valide: true, corps: [] })
+  })
+
+  it('une union existante : date et lieu du mariage partent en `modification_famille`', () => {
+    const e = etat(fiche(), (x) => mariageSaisi(x, cleDUnion(9), '12/06/1920', 'Saule'))
+    expect(aDesModifications(e, fiche())).toBe(true)
+    const demandes = demandesDEdition(fiche(), e, 'acte trouvé')
+    if (!demandes.valide) throw new Error('attendu valide')
+    expect(demandes.corps).toEqual([
+      {
+        kind: 'modification_famille',
+        soumettre: true,
+        targetKind: 'famille',
+        targetId: 9,
+        message: 'acte trouvé',
+        ops: [
+          {
+            seq: 1,
+            opKind: 'champ',
+            subjectKind: 'famille',
+            subjectId: 9,
+            field: 'marriage',
+            valueKind: 'date_incertaine',
+            oldValue: { raw: null, qualifier: 'inconnue', min: null, max: null, place: null },
+            newValue: { raw: '12 JUN 1920', qualifier: 'exacte', min: '1920-06-12', max: '1920-06-12', place: 'Saule' },
+            baseVersion: 1,
+          },
+        ],
+      },
+    ])
+    expect(cleDeDepot(demandes.corps[0]!)).toBe('modification_famille:9')
+    expect(recapitulatif(fiche(), e).map((c) => c.texte)).toContain(
+      'Union avec Cobalt Romarin, mariage : (vide) → 12 juin 1920, Saule',
+    )
+  })
+
+  it('une date de divorce coche le divorce ; vide, c’est toujours unis', () => {
+    const e = etat(fiche(), (x) => divorceSaisi(x, cleDUnion(9), '1935'))
+    const demandes = demandesDEdition(fiche(), e, '')
+    if (!demandes.valide) throw new Error('attendu valide')
+    const ops = demandes.corps[0]!.kind === 'modification_famille' ? demandes.corps[0]!.ops : []
+    expect(ops.map((o) => [o.field, o.newValue])).toEqual([
+      ['divorced', true],
+      ['divorce', { raw: '1935', qualifier: 'annee', min: '1935-01-01', max: '1935-12-31', place: null }],
+    ])
+  })
+
+  it('effacer la date de divorce, c’est ne plus être divorcés', () => {
+    const divorces = fiche({
+      unions: [
+        {
+          ...fiche().unions[0]!,
+          divorced: true,
+          divorce: { raw: '1935', qualifier: 'annee', min: '1935-01-01', max: '1935-12-31', place: null, texte: '1935' },
+        },
+      ],
+    })
+    const e = etat(divorces, (x) => divorceSaisi(x, cleDUnion(9), ''))
+    const demandes = demandesDEdition(divorces, e, '')
+    if (!demandes.valide) throw new Error('attendu valide')
+    const ops = demandes.corps[0]!.kind === 'modification_famille' ? demandes.corps[0]!.ops : []
+    expect(ops.map((o) => [o.field, o.newValue])).toEqual([
+      ['divorced', false],
+      ['divorce', { raw: null, qualifier: 'inconnue', min: null, max: null, place: null }],
+    ])
+  })
+
+  it('divorcés sans date : on ne l’efface pas si on ne touche pas à la case', () => {
+    const divorces = fiche({ unions: [{ ...fiche().unions[0]!, divorced: true, divorce: null }] })
+    expect(demandesDEdition(divorces, etat(divorces), '')).toEqual({ valide: true, corps: [] })
+  })
+
+  it('un divorce avant le mariage est refusé avant l’envoi', () => {
+    const e = etat(fiche(), (x) => {
+      mariageSaisi(x, cleDUnion(9), '1930')
+      divorceSaisi(x, cleDUnion(9), '1920')
+    })
+    const demandes = demandesDEdition(fiche(), e, '')
+    expect(demandes.valide).toBe(false)
+    if (demandes.valide) return
+    expect(demandes.erreurs[0]!.message).toContain('ne peut pas précéder le mariage')
+  })
+
+  it('un conjoint barré : ses dates ne partent pas', () => {
+    const e = etat(fiche(), (x) => {
+      mariageSaisi(x, cleDUnion(9), '1920')
+      x.retraits = [cleDeConjoint(52, 9)]
+    })
+    const demandes = demandesDEdition(fiche(), e, '')
+    if (!demandes.valide) throw new Error('attendu valide')
+    expect(demandes.corps.map((c) => c.kind)).toEqual(['retrait_lien'])
+  })
+
+  it('un conjoint ajouté emporte sa date et son lieu de mariage, et son divorce', () => {
+    const conjoint = { personId: 70, libelle: 'Tourmaline Thym' }
+    const e = etat(fiche(), (x) => {
+      x.ajouts.conjoints = [conjoint]
+      x.unions[cleDUnionAjoutee(conjoint)] = {
+        mariage: { forme: 'connue', debut: '1925', fin: '', lieu: 'Saule', origine: null },
+        divorce: { forme: 'connue', debut: '1940', fin: '', lieu: '', origine: null },
+      }
+    })
+    const demandes = demandesDEdition(fiche(), e, '')
+    if (!demandes.valide) throw new Error('attendu valide')
+    const ajout = demandes.corps.find((c) => c.kind === 'ajout_lien')
+    expect(ajout).toMatchObject({
+      liens: [
+        {
+          kind: 'conjoint_de',
+          marriage: { raw: '1925', place: 'Saule' },
+          divorced: true,
+          divorce: { raw: '1940' },
+        },
+      ],
+    })
+  })
+
+  it('un conjoint ajouté sans date : une union sans date, pas divorcés', () => {
+    const conjoint = { personId: 70, libelle: 'Tourmaline Thym' }
+    const e = etat(fiche(), (x) => (x.ajouts.conjoints = [conjoint]))
+    const demandes = demandesDEdition(fiche(), e, '')
+    if (!demandes.valide) throw new Error('attendu valide')
+    const ajout = demandes.corps.find((c) => c.kind === 'ajout_lien')
+    expect(ajout).toMatchObject({ liens: [{ kind: 'conjoint_de', divorced: false }] })
   })
 })

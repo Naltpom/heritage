@@ -29,16 +29,30 @@ import {
   relectureFidele,
   saisieDepuisBloc,
   valeurAEnvoyer,
+  videVautAucuneDate,
   type FormeDate,
   type SaisieDate,
 } from './dates'
 import type { ValeurDate } from '@/lib/api'
 
-const { etiquette, erreur = '', aide = '' } = defineProps<{
+const {
+  etiquette,
+  erreur = '',
+  aide = '',
+  sansLieu = false,
+  etiquetteLieu = 'Lieu',
+  videPermis = false,
+} = defineProps<{
   etiquette: string
   /** Message d'erreur venu de la validation locale ou de `champs` du § 15.1. */
   erreur?: string
   aide?: string
+  /** Pas de case « Lieu » (la date d'un divorce). Un lieu déjà enregistré est conservé. */
+  sansLieu?: boolean
+  etiquetteLieu?: string
+  /** Une date « connue » laissée vide vaut « pas de date » au lieu d'une erreur
+   *  ({@link videVautAucuneDate}). */
+  videPermis?: boolean
 }>()
 
 const saisie = defineModel<SaisieDate>({ required: true })
@@ -115,7 +129,7 @@ function annulerRemplacement(): void {
 
 /** Ce que la saisie produira, ou le motif du refus. Recalculé à chaque frappe :
  *  c'est ce qui rend la borne exclue visible avant l'envoi et non après. */
-const resultat = computed(() => valeurAEnvoyer(saisie.value))
+const resultat = computed(() => valeurAEnvoyer(videPermis ? videVautAucuneDate(saisie.value) : saisie.value))
 const apercu = computed(() =>
   resultat.value.valide ? apercuDeValeur(resultat.value.valeur) : resultat.value.message,
 )
@@ -197,8 +211,8 @@ const classeChamp = computed(() => [
 
     <!-- Le lieu reste saisissable même sans date : « né à Saule, date
          inconnue » est le cas courant ici, et le perdre perdrait une donnée. -->
-    <label v-if="!verrouille" class="flex flex-col gap-1">
-      <span class="text-xs text-attenue">Lieu</span>
+    <label v-if="!verrouille && !sansLieu" class="flex flex-col gap-1">
+      <span class="text-xs text-attenue">{{ etiquetteLieu }}</span>
       <input
         :value="saisie.lieu"
         type="text"

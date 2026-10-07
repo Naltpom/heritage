@@ -76,6 +76,8 @@ export interface UnionDeFiche {
   marriage: BlocDate | null
   divorced: boolean
   divorce: BlocDate | null
+  /** `version` de la famille — le `baseVersion` d'une `modification_famille`. */
+  version: number
   enfants: ReferencePersonne[]
 }
 

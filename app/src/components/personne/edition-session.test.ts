@@ -51,7 +51,7 @@ function fiche(id = 17): FichePersonneComplete {
     parents: [{ personId: 30, displayName: 'Galène Bourrache', relation: 'naissance', familyId: 4 }],
     fratrie: [],
     unions: [
-      { familyId: 9, conjoint: { personId: 52, displayName: 'Cobalt Romarin' }, marriage: null, divorced: false, divorce: null, enfants: [] },
+      { familyId: 9, conjoint: { personId: 52, displayName: 'Cobalt Romarin' }, marriage: null, divorced: false, divorce: null, version: 1, enfants: [] },
     ],
     faits: [],
     citations: [],
@@ -134,8 +134,8 @@ describe('« Corriger » puis « Confirmer »', () => {
     })
     expect(session.edition.value).toBeNull()
     expect(session.annonce.value).toEqual([
-      { kind: 'modification_personne', id: 801 },
-      { kind: 'retrait_lien', id: 802 },
+      { kind: 'modification_personne', cle: 'modification_personne', id: 801 },
+      { kind: 'retrait_lien', cle: 'retrait_lien', id: 802 },
     ])
     expect(api.invaliderGraphe).toHaveBeenCalledOnce()
     expect(surDepot).toHaveBeenCalledOnce()
