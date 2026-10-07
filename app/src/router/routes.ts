@@ -63,7 +63,7 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   // « Inscription » de sa barre du bas qui s'allume (ADR 0003, 01/10/2026).
   if (nom === 'inscription.etat') return 'accueil'
   if (nom === 'chronologie' || nom === 'carte' || nom === 'anniversaires' || nom === 'stats' || nom === 'explorer') return 'explorer'
-  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions' || nom.startsWith('administration')) return 'moi'
+  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions' || nom === 'messagerie' || nom.startsWith('administration')) return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
 }
@@ -314,6 +314,21 @@ export const routes: RouteRecordRaw[] = [
     name: 'notification.ouvrir',
     component: () => import('@/views/OuvrirNotificationView.vue'),
     meta: { acces: 'attente', titre: 'Notification', cadre: false },
+  },
+
+  {
+    // **Écrire à l'administration** (module `Messagerie`) : une question, une
+    // idée, un bug, en conversation — `/messages` pour poursuivre ou créer,
+    // `/messages/<id>` pour la conversation. Le NOM est un contrat : la
+    // notification `message_de_l_administration` y mène avec `{ id }`.
+    //
+    // `attente` et non `membre` : un compte dont l'inscription traîne a souvent
+    // une question à poser, et rien ici ne lit l'arbre. L'API ne lui rend que
+    // ses propres conversations.
+    path: '/messages/:id(\\d+)?',
+    name: 'messagerie',
+    component: () => import('@/views/MessagerieView.vue'),
+    meta: { acces: 'attente', titre: 'Écrire à l’administration' },
   },
 
   /* --- Contribution : rattachement validé exigé (§ 12.1) ---------- */
@@ -578,6 +593,15 @@ export const routes: RouteRecordRaw[] = [
         name: 'administration.rgpd',
         component: () => import('@/views/administration/DemandesRgpdView.vue'),
         meta: { acces: 'administration', titre: 'Demandes RGPD' },
+      },
+      {
+        // Ce que les membres écrivent à l'administration (module `Messagerie`).
+        // Le nom est un contrat : la notification `message_d_un_membre` y mène
+        // avec `{ id }` — l'identifiant, facultatif, ouvre la conversation.
+        path: 'messages/:id(\\d+)?',
+        name: 'administration.messagerie',
+        component: () => import('@/views/administration/MessagerieAdministrationView.vue'),
+        meta: { acces: 'administration', titre: 'Messages' },
       },
     ],
   },

@@ -83,3 +83,7 @@ export * from './clesDAcces'
 /* Module `Statistiques` : Explorer › Stats. Tout est calculé côté serveur, après
    le cercle de visibilité ; le chantier a sa propre route, d'administration. */
 export * from './statistiques'
+/* Module `Messagerie` : écrire à l'administration — une question, une
+   suggestion, un bug —, et sa réponse. Ouvrir un fil pose l'accusé de lecture
+   (« Vu à 14:32 ») sur les messages de l'autre côté. */
+export * from './messagerie'

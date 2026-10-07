@@ -1,0 +1,12 @@
+# Contrat : ce fichier est celui du module Messagerie (les échanges entre les membres et
+# l'administration — questions, suggestions, bugs). Aucun autre module n'y écrit — c'est
+# la règle qui évite les conflits de fusion.
+#
+# Les routes se déclarent par attributs #[Route] dans les contrôleurs du module ;
+# l'import ci-dessous suffit à les charger.
+
+messagerie_controleurs:
+    resource:
+        path: ../../src/Module/Messagerie/Controller/
+        namespace: App\Module\Messagerie\Controller
+    type: attribute

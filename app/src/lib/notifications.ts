@@ -123,6 +123,10 @@ const LIBELLES_DE_TYPE: Readonly<Record<string, string>> = {
   // Le partage de la naissance à trois niveaux (ADR 0016, révision du
   // 07/10/2026) : posée une fois, par la migration, à chaque compte rattaché.
   partage_naissance_revu: 'Confidentialité',
+  // La messagerie avec l'administration : un membre a écrit
+  // (`administration.messagerie`), l'administration a répondu (`messagerie`).
+  message_d_un_membre: 'Message d’un membre',
+  message_de_l_administration: 'Réponse de l’administration',
 }
 
 export function libelleDeType(kind: string): string {

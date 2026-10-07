@@ -1,23 +1,23 @@
 <script setup lang="ts">
 /**
- * Les six sous-sections de l'administration — Demandes · À rattacher ·
- * Invitations · Utilisateurs · Sources · RGPD —, en onglets à filet **en tête de la barre d'écran**
+ * Les sept sous-sections de l'administration — Demandes · À rattacher ·
+ * Invitations · Utilisateurs · Sources · RGPD · Messages —, en onglets à filet **en tête de la barre d'écran**
  * (handoff « En-tête, barres d'écran et fiche », § 2, « File de validation »).
  *
  * Ils remplacent la barre de navigation que portait `AdministrationView`.
  * Chaque sous-écran les pose dans l'emplacement `#vue` de sa `BarreEcran` :
- * c'est ce qui les garde visibles sur téléphone (un rang de 42 px, en six
+ * c'est ce qui les garde visibles sur téléphone (un rang de 42 px, en sept
  * colonnes), là où le reste de la barre part dans le feuillet.
  *
  * **Ce sont des liens, pas des onglets ARIA.** Chaque section est une route
  * enfant, avec son chemin et donc son lien profond ; les noms de route
  * (`administration.demandes`, `.rattachements`, `.invitations`,
- * `.utilisateurs`, `.sources`, `.rgpd`)
+ * `.utilisateurs`, `.sources`, `.rgpd`, `.messagerie`)
  * sont un contrat, et rien ici ne construit d'URL. Un `role="tablist"`
  * promettrait une navigation aux flèches qui n'existe pas ;
  * `aria-current="page"`, posé par `RouterLink`, dit déjà lequel est ouvert.
  */
-// Six colonnes sur un téléphone de 360 px laissent ~55 px par onglet :
+// Sept colonnes sur un téléphone de 360 px laissent ~48 px par onglet :
 // « Utilisateurs » y tient en 12 px, pas en 13,5. D'où la taille réduite sous
 // `md`, plutôt qu'un défilement horizontal qui cacherait un onglet.
 const SECTIONS = [
@@ -30,12 +30,14 @@ const SECTIONS = [
   { nom: 'administration.sources', libelle: 'Sources' },
   // Les demandes RGPD des membres (ADR 0016) : « RGPD » tient sur un téléphone.
   { nom: 'administration.rgpd', libelle: 'RGPD' },
+  // Ce que les membres écrivent à l'administration : questions, idées, bugs.
+  { nom: 'administration.messagerie', libelle: 'Messages' },
 ] as const
 </script>
 
 <template>
   <nav
-    class="flex gap-0.5 max-md:grid max-md:w-full max-md:grid-cols-6 max-md:border-t max-md:border-ligne"
+    class="flex gap-0.5 max-md:grid max-md:w-full max-md:grid-cols-7 max-md:border-t max-md:border-ligne"
     aria-label="Sections de l’administration"
   >
     <RouterLink

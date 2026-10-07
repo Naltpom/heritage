@@ -54,4 +54,11 @@ enum NotificationKind: string
      * compte rattaché.
      */
     case PartageNaissanceRevu = 'partage_naissance_revu';
+    /**
+     * Les deux notifications du module `Messagerie` (2026-10-07) : un membre a écrit à
+     * l'administration — une question, une suggestion, un bogue —, et l'administration
+     * lui a répondu. Elles ne portent jamais le texte d'un message.
+     */
+    case MessageDUnMembre = 'message_d_un_membre';
+    case MessageDeLAdministration = 'message_de_l_administration';
 }

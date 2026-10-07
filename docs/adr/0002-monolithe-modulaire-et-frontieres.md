@@ -32,6 +32,7 @@ traiter en face plutôt que découvrir à l'implémentation.
 | `Almanach` | carte des lieux, anniversaires | `alm_` (réservé — **aucune table dans cette livraison**) |
 | `Assistant` | l'assistant IA : propositions, rattachement assisté, questions sur l'arbre | `ast_` (depuis le 2026-10-01 : les conversations de « Poser une question ») |
 | `Statistiques` | Explorer › Stats : l'arbre en chiffres, le chantier (ADR 0015) | `stt_` (réservé — **aucune table**) |
+| `Messagerie` | écrire à l'administration : questions, suggestions, bugs, et leurs réponses (ADR 0017) | `msg_` |
 
 Règles de frontière :
 

@@ -7056,3 +7056,42 @@ l'assistant de proposition, qui voit l'arbre entier.
 **Journal** : une ligne `appel_modele_langage`, sujet `Assistant\Question`, par question —
 des comptes (tours, appels d'outils, échanges transmis, fiches citées), **jamais** la
 question, la réponse ni un nom.
+
+## 26. Écrire à l'administration
+
+Module **`Messagerie`**. Une question, une suggestion, un bug : un membre ouvre un fil ou
+poursuit le sien, l'administration y répond, et chacun voit ce que l'autre a lu. Décision :
+[`docs/adr/0017-messagerie-avec-l-administration.md`](adr/0017-messagerie-avec-l-administration.md).
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/messagerie/fils` | toute session | — | `200` `{elements, total}` (résumés, ses fils) | — |
+| `POST` | `/api/messagerie/fils` | toute session | `{nature, texte, sujet?}` | `201` (détail) | `409`, `422` |
+| `GET` | `/api/messagerie/fils/{id}` | son membre | — | `200` (détail) — **pose l'accusé** | `404` |
+| `POST` | `/api/messagerie/fils/{id}/messages` | son membre | `{texte}` | `201` (détail) | `404`, `409`, `422` |
+| `GET` | `/api/administration/messagerie/fils?statut=` | administrateur | — | `200` `{elements, total, nonLus}` | `409`, `422` |
+| `GET` | `/api/administration/messagerie/fils/{id}` | administrateur | — | `200` (détail) — **pose l'accusé** | `404`, `409` |
+| `POST` | `/api/administration/messagerie/fils/{id}/messages` | administrateur | `{texte}` | `201` (détail) | `404`, `409`, `422` |
+| `PUT` | `/api/administration/messagerie/fils/{id}/statut` | administrateur | `{statut}` | `200` (détail) | `404`, `409`, `422` |
+
+- `nature` : `question`, `suggestion` ou `bug`. `statut` : `ouvert` ou `clos` (« Réglé »).
+  `texte` : 1 à 5 000 caractères ; `sujet` : 160 au plus — absent ou vide, la première ligne
+  du message en tient lieu.
+- **Résumé** : `{id, nature, natureLibelle, sujet, statut, statutLibelle, membre: {userId,
+  libelle}, cote, nombreDeMessages, nonLus, dernierMessage: {extrait, deLAdministration,
+  envoyeLe, vuLe} | null, creeLe, modifieLe}`. `cote` vaut `membre` ou `administration` :
+  de quel côté se tient le lecteur. `nonLus` compte les messages **de l'autre côté** qu'il
+  n'a pas encore ouverts.
+- **Détail** : le résumé, plus `messages: [{id, texte, deLAdministration, auteur, estMoi,
+  envoyeLe, vuLe, vuPar}]`. `vuLe` est l'accusé de lecture, posé **une fois** à la première
+  ouverture par l'autre côté ; `vuPar` nomme l'administrateur qui a lu un message de membre.
+- Un membre qui écrit dans un fil `clos` le **rouvre**.
+- `404 ressource_introuvable` pour le fil d'un autre, même pour un administrateur côté
+  `/api/messagerie`. `409 vue_comme_membre_active` sur toute écriture sous la bascule, et sur
+  **toute** route d'administration de la messagerie, lectures comprises ; côté membre, une
+  lecture sous la bascule ne pose aucun accusé.
+- Notifications : `message_d_un_membre` (aux administrateurs, lien
+  `administration.messagerie` `{id}`) et `message_de_l_administration` (au membre, lien
+  `messagerie` `{id}`), **sans le texte d'aucun message** ; une seule tant que la
+  précédente n'est pas lue.
+- `Cache-Control: private, no-store`, `Vary: Cookie`.
