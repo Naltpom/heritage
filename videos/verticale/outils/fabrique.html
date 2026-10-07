@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Fabrique des images de la vidéo</title>
+<style>
+  @font-face { font-family: 'Pinyon'; src: url(../assets/polices/PinyonScript-Regular.ttf); }
+  @font-face { font-family: 'Delafield'; src: url(../assets/polices/MrsSaintDelafield-Regular.ttf); }
+  @font-face { font-family: 'Apple'; src: url(../assets/polices/HomemadeApple-Regular.ttf); }
+  @font-face { font-family: 'Cormorant'; src: url(../assets/polices/CormorantGaramond-Medium.ttf); font-weight: 500; }
+  @font-face { font-family: 'Cormorant'; src: url(../assets/polices/CormorantGaramond-SemiBold.ttf); font-weight: 600; }
+  @font-face { font-family: 'Cormorant'; src: url(../assets/polices/CormorantGaramond-MediumItalic.ttf); font-style: italic; }
+  @font-face { font-family: 'Inter Variable'; src: url(../assets/polices/inter-latin-wght-normal.woff2); font-weight: 100 900; }
+</style>
+</head>
+<body>
+<script>
+/* ------------------------------------------------------------------------ */
+/* Les images fabriquées pour la vidéo (et servies par la fausse API) :     */
+/* portraits anciens, avatar, actes d'archives. Rien n'est une vraie photo, */
+/* ni un vrai document : tout est dessiné ici, avec une graine fixe.        */
+/* `fabrique.mjs` appelle chaque fonction et enregistre le résultat.        */
+/* ------------------------------------------------------------------------ */
+function rnd(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296) }
+const toile = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c }
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v))
+
+/** Un bruit doux (taches basse fréquence) : des disques flous superposés. */
+function taches(g, w, h, r, n, coul, a0, a1, flou) {
+  g.save(); g.filter = `blur(${flou}px)`
+  for (let i = 0; i < n; i++) {
+    g.globalAlpha = a0 + r() * (a1 - a0); g.fillStyle = coul
+    g.beginPath(); g.ellipse(r() * w, r() * h, 20 + r() * w * 0.25, 20 + r() * h * 0.2, r() * 3, 0, Math.PI * 2); g.fill()
+  }
+  g.restore()
+}
+function grain(g, w, h, r, force) {
+  const d = g.getImageData(0, 0, w, h), p = d.data
+  for (let i = 0; i < p.length; i += 4) { const n = (r() - 0.5) * force; p[i] += n; p[i + 1] += n; p[i + 2] += n }
+  g.putImageData(d, 0, 0)
+}
+/** Le virage sépia : la luminance est recolorée sur un dégradé d'ombre chaude à papier. */
+function sepia(g, w, h, sombre = [38, 24, 14], clair = [236, 220, 190], gamma = 1) {
+  const d = g.getImageData(0, 0, w, h), p = d.data
+  for (let i = 0; i < p.length; i += 4) {
+    const l = Math.pow(clamp((0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2]) / 255), gamma)
+    const k = l, m = [0, 1, 2].map((j) => sombre[j] + (clair[j] - sombre[j]) * k)
+    // une pointe de chaleur dans les demi-teintes
+    p[i] = m[0] + 8 * Math.sin(Math.PI * l); p[i + 1] = m[1] + 2 * Math.sin(Math.PI * l); p[i + 2] = m[2] - 6 * Math.sin(Math.PI * l)
+  }
+  g.putImageData(d, 0, 0)
+}
+
+/* L'avatar du compte : un monogramme, comme une initiale de l'application */
+function avatar() {
+  const c = toile(256, 256), g = c.getContext('2d')
+  g.fillStyle = '#3a2c1d'; g.fillRect(0, 0, 256, 256)
+  g.fillStyle = '#d9a066'; g.font = '600 104px "Inter Variable"'; g.textAlign = 'center'; g.textBaseline = 'middle'
+  g.fillText('TM', 128, 136)
+  return c
+}
+
+/* ------------------------------------------------------------------ actes */
+/** Le papier d'un registre : fibreux, jauni, taché, bords assombris. */
+function papier(g, w, h, r, base = [226, 214, 186]) {
+  g.fillStyle = `rgb(${base.join(',')})`; g.fillRect(0, 0, w, h)
+  taches(g, w, h, r, 30, '#b59a68', 0.04, 0.12, 60)
+  taches(g, w, h, r, 10, '#8a6a3a', 0.04, 0.09, 30)
+  taches(g, w, h, r, 14, '#fff6e0', 0.05, 0.15, 50)
+  // les fibres
+  g.save(); g.strokeStyle = 'rgba(120,90,50,0.06)'; g.lineWidth = 1
+  for (let i = 0; i < 900; i++) { const x0 = r() * w, y0 = r() * h, a = r() * Math.PI; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + Math.cos(a) * 14, y0 + Math.sin(a) * 14); g.stroke() }
+  g.restore()
+  // les bords
+  const v = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.72)
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(90,60,25,0.38)')
+  g.fillStyle = v; g.fillRect(0, 0, w, h)
+  grain(g, w, h, r, 14)
+}
+/** Écrit un paragraphe à la plume : un mot à la fois, une légère irrégularité de ligne, d'encre et de pente. */
+function plume(g, r, texte, x0, y0, largeur, { taille = 46, interligne = 64, police = 'Pinyon', encre = [52, 36, 22], alinea = 0 } = {}) {
+  g.save(); g.textBaseline = 'alphabetic'
+  let x = x0 + alinea, y = y0
+  for (const mot of texte.split(' ')) {
+    g.font = `${taille}px ${police}`
+    const l = g.measureText(mot).width
+    if (x + l > x0 + largeur) { x = x0; y += interligne }
+    const a = 0.78 + r() * 0.2
+    g.fillStyle = `rgba(${encre.join(',')},${a})`
+    g.save(); g.translate(x, y + (r() - 0.5) * 4); g.rotate((r() - 0.5) * 0.025); g.fillText(mot, 0, 0); g.restore()
+    x += l + taille * (0.28 + r() * 0.1)
+  }
+  g.restore()
+  return y
+}
+function lignesReglees(g, x0, x1, y0, y1, pas) {
+  g.save(); g.strokeStyle = 'rgba(120,95,60,0.13)'; g.lineWidth = 1.2
+  for (let y = y0; y < y1; y += pas) { g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke() }
+  g.restore()
+}
+function tampon(g, cx, cy, rayon, haut, bas, coul = 'rgba(70,60,140,') {
+  g.save(); g.translate(cx, cy); g.rotate(-0.18)
+  g.strokeStyle = coul + '0.5)'; g.lineWidth = 4; g.beginPath(); g.arc(0, 0, rayon, 0, Math.PI * 2); g.stroke()
+  g.lineWidth = 2; g.beginPath(); g.arc(0, 0, rayon - 12, 0, Math.PI * 2); g.stroke()
+  g.fillStyle = coul + '0.5)'; g.font = `600 ${rayon * 0.2}px Cormorant`; g.textAlign = 'center'; g.textBaseline = 'middle'
+  const arc = (s, sens) => { const n = s.length; for (let i = 0; i < n; i++) { const a = (sens > 0 ? -Math.PI / 2 : Math.PI / 2) + sens * ((i - (n - 1) / 2) * 0.16); g.save(); g.rotate(a + (sens > 0 ? Math.PI / 2 : -Math.PI / 2)); g.fillText(s[i], 0, -sens * (rayon - 30)); g.restore() } }
+  arc(haut, 1); arc(bas, -1)
+  g.font = `600 ${rayon * 0.32}px Cormorant`; g.fillText('56', 0, 2)
+  g.restore()
+}
+
+/**
+ * L'acte de naissance de Joséphine Perrin, Josselin, 12 mars 1868 : la page du
+ * registre d'état civil, avec sa marge (numéro, nom), le texte à la plume selon
+ * la formule de l'époque, les signatures, la cote d'archives et le tampon.
+ */
+function acteNaissance() {
+  const w = 1600, h = 2200, r = rnd(1868), c = toile(w, h), g = c.getContext('2d')
+  papier(g, w, h, r)
+  lignesReglees(g, 330, w - 110, 420, h - 160, 68)
+  // la marge
+  g.save(); g.strokeStyle = 'rgba(120,80,40,0.35)'; g.lineWidth = 2; g.beginPath(); g.moveTo(300, 140); g.lineTo(300, h - 120); g.stroke(); g.restore()
+  // l'en-tête imprimé du registre
+  g.fillStyle = 'rgba(40,30,20,0.85)'; g.textAlign = 'center'
+  g.font = '600 46px Cormorant'; g.fillText('NAISSANCES', w / 2 + 120, 200)
+  g.font = '500 30px Cormorant'; g.fillText('Commune de Josselin — Arrondissement de Ploërmel — Année 1868', w / 2 + 120, 250)
+  g.fillRect(w / 2 - 200, 280, 640, 2)
+  g.textAlign = 'left'
+  // la cote, tapée à la machine par les archives, en haut à droite
+  g.font = '500 24px "Courier New", monospace'; g.fillStyle = 'rgba(30,30,40,0.7)'; g.fillText('AD56 — 3 E 87/14 — vue 17', w - 470, 80)
+  // la marge : numéro et nom
+  plume(g, r, 'N° 41', 70, 470, 220, { taille: 54 })
+  plume(g, r, 'Perrin', 70, 560, 220, { taille: 52 })
+  plume(g, r, 'Joséphine', 70, 640, 220, { taille: 48 })
+  const texte = 'L’an mil huit cent soixante-huit, le douze mars, à dix heures du matin, par-devant nous, Joseph Marie Le Clerc, Maire et Officier de l’état civil de la commune de Josselin, canton de Josselin, département du Morbihan, est comparu Mathurin Perrin, tisserand, âgé de trente-quatre ans, demeurant rue des Tanneurs, lequel nous a présenté un enfant du sexe féminin, né hier à quatre heures du soir, en sa demeure, de lui déclarant et de Perrine Le Gall, fileuse, âgée de vingt-neuf ans, son épouse, et auquel il a déclaré vouloir donner les prénoms de Joséphine Marie. Lesdites déclaration et présentation faites en présence de Julien Hamon, menuisier, âgé de quarante et un ans, et de Pierre Riou, marchand, âgé de trente-six ans, tous deux demeurant en cette commune ; et ont, le père et les témoins, signé avec nous le présent acte de naissance, après qu’il leur en a été fait lecture.'
+  const fin = plume(g, r, texte, 340, 486, w - 460, { taille: 47, interligne: 68, alinea: 80 })
+  // les signatures
+  plume(g, r, 'M. Perrin', 380, fin + 150, 400, { taille: 64, police: 'Delafield' })
+  plume(g, r, 'J. Hamon', 760, fin + 170, 400, { taille: 60, police: 'Delafield' })
+  plume(g, r, 'P. Riou', 1080, fin + 140, 400, { taille: 62, police: 'Delafield' })
+  plume(g, r, 'Le Clerc', 1120, fin + 280, 400, { taille: 70, police: 'Delafield' })
+  tampon(g, 1300, h - 330, 120, 'ARCHIVES DÉPART.', 'DU MORBIHAN')
+  // un pli et une tache d'humidité
+  g.save(); g.strokeStyle = 'rgba(80,55,25,0.12)'; g.lineWidth = 6; g.beginPath(); g.moveTo(0, h * 0.5); g.lineTo(w, h * 0.5 + 8); g.stroke(); g.restore()
+  taches(g, w, h, r, 3, '#9c7a45', 0.08, 0.14, 25)
+  return c
+}
+
+/** L'acte de naissance de Jean Martin, Mauron, 14 mai 1903 : celui qu'on retrouve « dans une boîte ». */
+function acteMauron() {
+  const w = 1600, h = 2200, r = rnd(1903), c = toile(w, h), g = c.getContext('2d')
+  papier(g, w, h, r, [230, 220, 196])
+  lignesReglees(g, 330, w - 110, 420, h - 160, 68)
+  g.save(); g.strokeStyle = 'rgba(120,80,40,0.35)'; g.lineWidth = 2; g.beginPath(); g.moveTo(300, 140); g.lineTo(300, h - 120); g.stroke(); g.restore()
+  g.fillStyle = 'rgba(40,30,20,0.85)'; g.textAlign = 'center'
+  g.font = '600 46px Cormorant'; g.fillText('NAISSANCES', w / 2 + 120, 200)
+  g.font = '500 30px Cormorant'; g.fillText('Commune de Mauron — Arrondissement de Ploërmel — Année 1903', w / 2 + 120, 250)
+  g.fillRect(w / 2 - 200, 280, 640, 2); g.textAlign = 'left'
+  plume(g, r, 'N° 23', 70, 470, 220, { taille: 54 }); plume(g, r, 'Martin', 70, 560, 220, { taille: 52 }); plume(g, r, 'Jean', 70, 640, 220, { taille: 50 })
+  const texte = 'L’an mil neuf cent trois, le quatorze mai, à neuf heures du matin, par-devant nous, Maire et Officier de l’état civil de la commune de Mauron, département du Morbihan, est comparu Pierre Martin, menuisier, âgé de trente et un ans, demeurant au bourg, lequel nous a présenté un enfant du sexe masculin, né ce matin à cinq heures, en sa demeure, de lui déclarant et de Marie Robin, ménagère, son épouse, et auquel il a déclaré donner le prénom de Jean. En présence de Joseph Hamon, charron, et de Louis Riou, cultivateur ; et ont signé avec nous, après lecture.'
+  const fin = plume(g, r, texte, 340, 486, w - 460, { taille: 47, interligne: 68, alinea: 80, encre: [30, 24, 20] })
+  plume(g, r, 'P. Martin', 380, fin + 150, 400, { taille: 64, police: 'Delafield' }); plume(g, r, 'J. Hamon', 800, fin + 170, 400, { taille: 60, police: 'Delafield' })
+  plume(g, r, 'Le Maire', 1120, fin + 280, 400, { taille: 66, police: 'Delafield' })
+  // il a dormi plié en quatre dans une boîte : deux plis francs, des bords jaunis
+  g.save(); g.strokeStyle = 'rgba(80,55,25,0.18)'; g.lineWidth = 7
+  g.beginPath(); g.moveTo(0, h * 0.5); g.lineTo(w, h * 0.5 + 6); g.moveTo(w * 0.5, 0); g.lineTo(w * 0.5 - 4, h); g.stroke(); g.restore()
+  taches(g, w, h, r, 4, '#9c7a45', 0.08, 0.16, 25)
+  return c
+}
+
+/** Un baptême, registre paroissial de 1783 : écriture plus ancienne, plus serrée. */
+function bapteme() {
+  const w = 1600, h = 1200, r = rnd(1783), c = toile(w, h), g = c.getContext('2d')
+  papier(g, w, h, r, [222, 206, 170])
+  plume(g, r, 'Mathurin Perrin', 70, 150, 300, { taille: 44, police: 'Delafield' })
+  const t = 'Le vingt-troisième jour de juin mil sept cent quatre-vingt-trois a été baptisé par nous recteur soussigné Mathurin, fils légitime de Jan Perrin, laboureur, et de Françoise Guého, sa femme, né ce jour au village de la Ville-Ruaud en cette paroisse ; parrain Mathurin Hervé, marraine Julienne Guého, qui ne signent.'
+  const fin = plume(g, r, t, 360, 150, w - 440, { taille: 44, interligne: 60, police: 'Delafield', encre: [60, 40, 25] })
+  plume(g, r, 'J. Le Breton, recteur', 900, fin + 110, 600, { taille: 52, police: 'Delafield' })
+  return c
+}
+/** Un décès, 1901 : registre d'état civil, encre plus noire. */
+function deces() {
+  const w = 1600, h = 1200, r = rnd(1901), c = toile(w, h), g = c.getContext('2d')
+  papier(g, w, h, r, [228, 218, 196])
+  g.fillStyle = 'rgba(40,30,20,0.8)'; g.font = '600 40px Cormorant'; g.textAlign = 'center'; g.fillText('DÉCÈS — 1901', w / 2, 110); g.textAlign = 'left'
+  plume(g, r, 'N° 12  Perrin', 70, 240, 260, { taille: 46 })
+  const t = 'L’an mil neuf cent un, le quatre février, à neuf heures du matin, par-devant nous, Maire de la commune de Josselin, ont comparu Pierre Perrin, cordonnier, et Julien Hamon, menuisier, lesquels nous ont déclaré que Mathurin Perrin, tisserand, âgé de soixante-sept ans, époux de Perrine Le Gall, est décédé hier en sa demeure, rue des Tanneurs.'
+  plume(g, r, t, 360, 240, w - 440, { taille: 46, interligne: 64, encre: [25, 20, 18] })
+  return c
+}
+
+
+/* ------------------------------------------------------------------ photos de lieux */
+/**
+ * Une vieille photo de lieu (maison, village, campagne), virée sépia, en carte
+ * d'atelier ou en tirage nu. Des formes simples, floues, et beaucoup de lumière :
+ * de loin et en mouvement, l'œil lit une photo ancienne, sans visage à inventer.
+ */
+function lieu(graine, { w = 900, h = 640, carte = false, legende = null } = {}) {
+  const r = rnd(graine * 104729 + 7), c = toile(w, h), g = c.getContext('2d')
+  const horizon = h * (0.5 + r() * 0.12)
+  // le ciel : clair, presque blanc (les ciels des émulsions anciennes sont brûlés)
+  const ciel = g.createLinearGradient(0, 0, 0, horizon); ciel.addColorStop(0, '#d8d8d8'); ciel.addColorStop(1, '#f4f4f4')
+  g.fillStyle = ciel; g.fillRect(0, 0, w, horizon)
+  // les collines lointaines
+  g.save(); g.filter = 'blur(6px)'; g.fillStyle = '#b8b8b8'; g.beginPath(); g.moveTo(0, horizon)
+  for (let x = 0; x <= w; x += 40) g.lineTo(x, horizon - 30 - 40 * Math.sin(x / w * 3 + r() * 0.4) - r() * 10)
+  g.lineTo(w, horizon); g.fill(); g.restore()
+  // le sol
+  const sol = g.createLinearGradient(0, horizon, 0, h); sol.addColorStop(0, '#9a9a9a'); sol.addColorStop(1, '#5a5a5a')
+  g.fillStyle = sol; g.fillRect(0, horizon, w, h - horizon)
+  taches(g, w, h, r, 16, '#3a3a3a', 0.06, 0.16, 18)
+  // un chemin qui part vers l'horizon
+  g.save(); g.filter = 'blur(3px)'; g.fillStyle = '#b0b0b0'; g.beginPath()
+  const cx = w * (0.3 + r() * 0.4); g.moveTo(cx - w * 0.25, h); g.lineTo(cx - 8, horizon + 6); g.lineTo(cx + 8, horizon + 6); g.lineTo(cx + w * 0.18, h); g.fill(); g.restore()
+  // des arbres : des masses sombres
+  g.save(); g.filter = 'blur(4px)'
+  for (let i = 0; i < 6; i++) {
+    const tx = r() * w, ty = horizon + (r() - 0.3) * 20, s = 30 + r() * 70, v = 40 + r() * 40
+    g.fillStyle = `rgb(${v},${v},${v})`
+    for (let k = 0; k < 5; k++) { g.beginPath(); g.arc(tx + (r() - 0.5) * s, ty - s * (0.6 + r() * 0.6), s * (0.35 + r() * 0.25), 0, Math.PI * 2); g.fill() }
+    g.fillRect(tx - 3, ty - s * 0.4, 6, s * 0.45)
+  }
+  g.restore()
+  // la maison : murs de pierre clairs au soleil, toit sombre, fenêtres noires
+  // des sillons, en perspective vers l'horizon
+  g.save(); g.filter = 'blur(1.5px)'; g.strokeStyle = 'rgba(40,40,40,0.25)'; g.lineWidth = 2
+  for (let k = -14; k <= 14; k++) { g.beginPath(); g.moveTo(w / 2 + k * 12, horizon + 4); g.lineTo(w / 2 + k * 120, h); g.stroke() }
+  g.restore()
+  // une rangée de peupliers
+  g.save(); g.filter = 'blur(3px)'
+  for (let i = 0; i < 9; i++) { const px = w * (0.05 + i * 0.11 + (r() - 0.5) * 0.03), ph = 90 + r() * 60, v = 50 + r() * 25; g.fillStyle = `rgb(${v},${v},${v})`; g.beginPath(); g.ellipse(px, horizon - ph * 0.55, 13 + r() * 6, ph * 0.55, 0, 0, Math.PI * 2); g.fill() }
+  g.restore()
+  for (let k = 0; k < 0; k++) { // (pas de bâtiments : dessinés, ils faisaient faux)
+    const mw = w * (nb > 1 ? 0.18 : 0.3), mh = mw * 0.55, mx = w * (nb > 1 ? 0.12 + k * 0.28 : 0.38 + (r() - 0.5) * 0.2), my = horizon + h * 0.08 - mh
+    g.save(); g.filter = 'blur(1.6px)'
+    g.fillStyle = '#cfcfcf'; g.fillRect(mx, my, mw, mh)
+    g.fillStyle = '#8a8a8a'; g.fillRect(mx + mw * 0.72, my, mw * 0.28, mh) // le pignon à l'ombre
+    g.fillStyle = '#3a3a3a'; g.beginPath(); g.moveTo(mx - 10, my); g.lineTo(mx + mw * 0.36, my - mh * 0.7); g.lineTo(mx + mw + 10, my); g.fill()
+    g.fillStyle = '#4a4a4a'; g.fillRect(mx + mw * 0.6, my - mh * 0.75, mw * 0.06, mh * 0.3) // la cheminée
+    g.fillStyle = '#1e1e1e'
+    for (const fx of [0.12, 0.42]) g.fillRect(mx + mw * fx, my + mh * 0.25, mw * 0.11, mh * 0.22)
+    g.fillRect(mx + mw * 0.26, my + mh * 0.45, mw * 0.11, mh * 0.55)
+    g.restore()
+  }
+  const c2 = toile(w, h), g2 = c2.getContext('2d')
+  g2.filter = 'blur(0.8px)'; g2.drawImage(c, 0, 0)
+  g2.filter = 'blur(16px)'; g2.globalAlpha = 0.3; g2.globalCompositeOperation = 'screen'; g2.drawImage(c, 0, 0)
+  g2.globalCompositeOperation = 'source-over'; g2.globalAlpha = 1; g2.filter = 'none'
+  grain(g2, w, h, r, 30)
+  sepia(g2, w, h, [34, 22, 12], [240, 226, 198], 1.0)
+  const v = g2.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.7)
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(50,30,12,0.5)')
+  g2.fillStyle = v; g2.fillRect(0, 0, w, h)
+  taches(g2, w, h, r, 5, '#f3e6c8', 0.05, 0.14, 30)
+  g2.save(); for (let i = 0; i < 50; i++) { g2.fillStyle = r() < 0.5 ? 'rgba(255,245,225,0.45)' : 'rgba(30,20,10,0.35)'; g2.beginPath(); g2.arc(r() * w, r() * h, r() * 1.6, 0, Math.PI * 2); g2.fill() } g2.restore()
+  if (!carte) return c2
+  const M = 46, W = w + 2 * M, H = h + 2 * M + (legende ? 70 : 0), c3 = toile(W, H), g3 = c3.getContext('2d')
+  g3.fillStyle = '#e6d9bd'; g3.fillRect(0, 0, W, H); taches(g3, W, H, r, 10, '#b89a6a', 0.05, 0.13, 40); grain(g3, W, H, r, 14)
+  g3.drawImage(c2, M, M)
+  if (legende) plume(g3, r, legende, M, h + M + 52, W - 2 * M, { taille: 40, police: 'Delafield', encre: [60, 45, 30] })
+  return c3
+}
+/** Le dos d'une photo : carton, une légende au crayon, un tampon d'atelier pâle. */
+function dosDePhoto(graine, texte, { w = 700, h = 480 } = {}) {
+  const r = rnd(graine * 31 + 5), c = toile(w, h), g = c.getContext('2d')
+  g.fillStyle = '#ece2cc'; g.fillRect(0, 0, w, h); taches(g, w, h, r, 12, '#b89a6a', 0.05, 0.14, 40); grain(g, w, h, r, 14)
+  g.save(); g.fillStyle = 'rgba(120,90,60,0.35)'; g.font = '600 26px Cormorant'; g.textAlign = 'center'; g.fillText('PHOTOGRAPHIE J. LE MOAL — VANNES', w / 2, h - 50); g.restore()
+  plume(g, r, texte, 60, 150, w - 120, { taille: 50, interligne: 70, police: 'Apple', encre: [70, 60, 55] })
+  return c
+}
+
+window.FABRIQUE = { acteMauron, lieu, dosDePhoto, avatar, acteNaissance, bapteme, deces }
+window.PRET = document.fonts.load('46px Pinyon').then(() => Promise.all(['46px Delafield', '30px Cormorant', '600 30px Cormorant', 'italic 30px Cormorant', '50px Apple', '600 40px "Inter Variable"'].map((f) => document.fonts.load(f))))
+</script>
+</body>
+</html>

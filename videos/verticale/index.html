@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Heritage — vidéo verticale</title>
+<style>
+  @font-face { font-family: 'Inter Variable'; src: url(assets/polices/inter-latin-wght-normal.woff2) format('woff2'); font-weight: 100 900; }
+  @font-face { font-family: 'IBM Plex Mono'; src: url(assets/polices/ibm-plex-mono-latin-400-normal.woff2) format('woff2'); font-weight: 400; }
+  @font-face { font-family: 'IBM Plex Mono'; src: url(assets/polices/ibm-plex-mono-latin-500-normal.woff2) format('woff2'); font-weight: 500; }
+  @font-face { font-family: 'Mrs Saint Delafield'; src: url(assets/polices/MrsSaintDelafield-Regular.ttf); }
+  @font-face { font-family: 'Pinyon Script'; src: url(assets/polices/PinyonScript-Regular.ttf); }
+  @font-face { font-family: 'Cormorant Garamond'; src: url(assets/polices/CormorantGaramond-Medium.ttf); font-weight: 500; }
+  html, body { margin: 0; background: #0b0c0d; color: #e8e6e2; font: 14px 'Inter Variable', sans-serif; }
+  /* un aperçu à l'échelle d'un téléphone : 9:16 */
+  canvas { display: block; height: 86vh; aspect-ratio: 9 / 16; margin: 10px auto; }
+  #barre { width: 48vh; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+  #barre input { flex: 1; }
+</style>
+</head>
+<body>
+<!-- Ouvert à la main : un lecteur avec la voix. Filmé par rendre.mjs : seul le canevas compte. -->
+<canvas id="c"></canvas>
+<div id="barre"><button id="lecture">▶</button><input id="pos" type="range" min="0" max="1" step="0.001" value="0"><span id="tc">0.0</span></div>
+<script src="narration/voix.js"></script>
+<script src="timeline.js"></script>
+<script src="moteur.js"></script>
+<script src="sortie/rushes/index.js"></script>
+<script src="donnees/vocabulaire.js"></script>
+<script src="donnees/famille.js"></script>
+<script src="ui/composants.js"></script>
+<script src="scenes/1-memoire.js"></script>
+<script src="scenes/2-dispersion.js"></script>
+<script src="scenes/3-creation.js"></script>
+<script src="scenes/4-arbre.js"></script>
+<script src="scenes/6-famille.js"></script>
+<script src="scenes/7-questions.js"></script>
+<script src="scenes/8-explorer.js"></script>
+<script src="scenes/9-fin.js"></script>
+<script src="composition.js"></script>
+</body>
+</html>

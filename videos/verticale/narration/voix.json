@@ -1,0 +1,1918 @@
+{
+ "modele": "eleven_v4",
+ "duree": 99.004,
+ "lignes": [
+  {
+   "texte": "Dans ma famille, on a un arbre généalogique qui commence à devenir franchement énorme.",
+   "debut": 0.08,
+   "fin": 4.48,
+   "mots": [
+    {
+     "mot": "Dans",
+     "debut": 0.08,
+     "fin": 0.16
+    },
+    {
+     "mot": "ma",
+     "debut": 0.24,
+     "fin": 0.32
+    },
+    {
+     "mot": "famille",
+     "debut": 0.4,
+     "fin": 0.8
+    },
+    {
+     "mot": "on",
+     "debut": 1.12,
+     "fin": 1.2
+    },
+    {
+     "mot": "a",
+     "debut": 1.24,
+     "fin": 1.28
+    },
+    {
+     "mot": "un",
+     "debut": 1.36,
+     "fin": 1.44
+    },
+    {
+     "mot": "arbre",
+     "debut": 1.48,
+     "fin": 1.76
+    },
+    {
+     "mot": "généalogique",
+     "debut": 1.8,
+     "fin": 2.4
+    },
+    {
+     "mot": "qui",
+     "debut": 2.48,
+     "fin": 2.56
+    },
+    {
+     "mot": "commence",
+     "debut": 2.64,
+     "fin": 2.88
+    },
+    {
+     "mot": "à",
+     "debut": 2.92,
+     "fin": 2.96
+    },
+    {
+     "mot": "devenir",
+     "debut": 3.0,
+     "fin": 3.36
+    },
+    {
+     "mot": "franchement",
+     "debut": 3.44,
+     "fin": 4.0
+    },
+    {
+     "mot": "énorme",
+     "debut": 4.08,
+     "fin": 4.48
+    }
+   ],
+   "avant": [
+    "[reflective]"
+   ]
+  },
+  {
+   "texte": "2 307 personnes.",
+   "debut": 5.64,
+   "fin": 7.44,
+   "mots": [
+    {
+     "mot": "Deux",
+     "debut": 5.64,
+     "fin": 5.76
+    },
+    {
+     "mot": "mille",
+     "debut": 5.84,
+     "fin": 6.0
+    },
+    {
+     "mot": "trois",
+     "debut": 6.08,
+     "fin": 6.32
+    },
+    {
+     "mot": "cent",
+     "debut": 6.4,
+     "fin": 6.48
+    },
+    {
+     "mot": "sept",
+     "debut": 6.64,
+     "fin": 6.8
+    },
+    {
+     "mot": "personnes",
+     "debut": 6.96,
+     "fin": 7.44
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  },
+  {
+   "texte": "14 générations.",
+   "debut": 7.96,
+   "fin": 9.04,
+   "mots": [
+    {
+     "mot": "Quatorze",
+     "debut": 7.96,
+     "fin": 8.32
+    },
+    {
+     "mot": "générations",
+     "debut": 8.4,
+     "fin": 9.04
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Et plus l’arbre grandit, plus l’histoire se disperse.",
+   "debut": 9.808,
+   "fin": 12.4,
+   "mots": [
+    {
+     "mot": "Et",
+     "debut": 9.808,
+     "fin": 9.84
+    },
+    {
+     "mot": "plus",
+     "debut": 9.92,
+     "fin": 10.0
+    },
+    {
+     "mot": "l’arbre",
+     "debut": 10.04,
+     "fin": 10.32
+    },
+    {
+     "mot": "grandit",
+     "debut": 10.48,
+     "fin": 10.8
+    },
+    {
+     "mot": "plus",
+     "debut": 11.2,
+     "fin": 11.28
+    },
+    {
+     "mot": "l’histoire",
+     "debut": 11.32,
+     "fin": 11.68
+    },
+    {
+     "mot": "se",
+     "debut": 11.76,
+     "fin": 11.84
+    },
+    {
+     "mot": "disperse",
+     "debut": 11.96,
+     "fin": 12.4
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  },
+  {
+   "texte": "Des photos sur les téléphones.",
+   "debut": 12.96,
+   "fin": 14.24,
+   "mots": [
+    {
+     "mot": "Des",
+     "debut": 12.96,
+     "fin": 13.04
+    },
+    {
+     "mot": "photos",
+     "debut": 13.2,
+     "fin": 13.36
+    },
+    {
+     "mot": "sur",
+     "debut": 13.4,
+     "fin": 13.44
+    },
+    {
+     "mot": "les",
+     "debut": 13.52,
+     "fin": 13.6
+    },
+    {
+     "mot": "téléphones",
+     "debut": 13.64,
+     "fin": 14.24
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Des actes dans des dossiers.",
+   "debut": 14.64,
+   "fin": 15.84,
+   "mots": [
+    {
+     "mot": "Des",
+     "debut": 14.64,
+     "fin": 14.72
+    },
+    {
+     "mot": "actes",
+     "debut": 14.8,
+     "fin": 15.12
+    },
+    {
+     "mot": "dans",
+     "debut": 15.147,
+     "fin": 15.2
+    },
+    {
+     "mot": "des",
+     "debut": 15.28,
+     "fin": 15.36
+    },
+    {
+     "mot": "dossiers",
+     "debut": 15.4,
+     "fin": 15.84
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Des noms et des dates un peu partout.",
+   "debut": 16.32,
+   "fin": 17.84,
+   "mots": [
+    {
+     "mot": "Des",
+     "debut": 16.32,
+     "fin": 16.4
+    },
+    {
+     "mot": "noms",
+     "debut": 16.44,
+     "fin": 16.64
+    },
+    {
+     "mot": "et",
+     "debut": 16.72,
+     "fin": 16.8
+    },
+    {
+     "mot": "des",
+     "debut": 16.84,
+     "fin": 16.88
+    },
+    {
+     "mot": "dates",
+     "debut": 16.96,
+     "fin": 17.2
+    },
+    {
+     "mot": "un",
+     "debut": 17.24,
+     "fin": 17.28
+    },
+    {
+     "mot": "peu",
+     "debut": 17.32,
+     "fin": 17.44
+    },
+    {
+     "mot": "partout",
+     "debut": 17.56,
+     "fin": 17.84
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Et surtout… plein de choses que personne n’a vraiment envie de voir disparaître.",
+   "debut": 18.36,
+   "fin": 22.0,
+   "mots": [
+    {
+     "mot": "Et",
+     "debut": 18.36,
+     "fin": 18.4
+    },
+    {
+     "mot": "surtout",
+     "debut": 18.44,
+     "fin": 18.88
+    },
+    {
+     "mot": "plein",
+     "debut": 19.4,
+     "fin": 19.52
+    },
+    {
+     "mot": "de",
+     "debut": 19.6,
+     "fin": 19.68
+    },
+    {
+     "mot": "choses",
+     "debut": 19.72,
+     "fin": 19.92
+    },
+    {
+     "mot": "que",
+     "debut": 20.04,
+     "fin": 20.16
+    },
+    {
+     "mot": "personne",
+     "debut": 20.32,
+     "fin": 20.56
+    },
+    {
+     "mot": "n’a",
+     "debut": 20.613,
+     "fin": 20.72
+    },
+    {
+     "mot": "vraiment",
+     "debut": 20.747,
+     "fin": 20.96
+    },
+    {
+     "mot": "envie",
+     "debut": 21.04,
+     "fin": 21.16
+    },
+    {
+     "mot": "de",
+     "debut": 21.2,
+     "fin": 21.253
+    },
+    {
+     "mot": "voir",
+     "debut": 21.307,
+     "fin": 21.36
+    },
+    {
+     "mot": "disparaître",
+     "debut": 21.48,
+     "fin": 22.0
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Du coup, j’ai créé Heritage.",
+   "debut": 22.88,
+   "fin": 24.72,
+   "mots": [
+    {
+     "mot": "Du",
+     "debut": 22.88,
+     "fin": 22.96
+    },
+    {
+     "mot": "coup",
+     "debut": 23.04,
+     "fin": 23.2
+    },
+    {
+     "mot": "j’ai",
+     "debut": 23.6,
+     "fin": 23.76
+    },
+    {
+     "mot": "créé",
+     "debut": 23.84,
+     "fin": 24.0
+    },
+    {
+     "mot": "Héritage",
+     "debut": 24.16,
+     "fin": 24.72
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  },
+  {
+   "texte": "Un endroit où toute l’histoire de la famille peut simplement être réunie.",
+   "debut": 25.333,
+   "fin": 28.24,
+   "mots": [
+    {
+     "mot": "Un",
+     "debut": 25.333,
+     "fin": 25.36
+    },
+    {
+     "mot": "endroit",
+     "debut": 25.44,
+     "fin": 25.68
+    },
+    {
+     "mot": "où",
+     "debut": 25.72,
+     "fin": 25.84
+    },
+    {
+     "mot": "toute",
+     "debut": 25.88,
+     "fin": 26.0
+    },
+    {
+     "mot": "l’histoire",
+     "debut": 26.08,
+     "fin": 26.4
+    },
+    {
+     "mot": "de",
+     "debut": 26.44,
+     "fin": 26.48
+    },
+    {
+     "mot": "la",
+     "debut": 26.56,
+     "fin": 26.6
+    },
+    {
+     "mot": "famille",
+     "debut": 26.64,
+     "fin": 26.96
+    },
+    {
+     "mot": "peut",
+     "debut": 27.04,
+     "fin": 27.2
+    },
+    {
+     "mot": "simplement",
+     "debut": 27.28,
+     "fin": 27.6
+    },
+    {
+     "mot": "être",
+     "debut": 27.72,
+     "fin": 27.84
+    },
+    {
+     "mot": "réunie",
+     "debut": 27.92,
+     "fin": 28.24
+    }
+   ],
+   "avant": [
+    "[softly]"
+   ]
+  },
+  {
+   "texte": "Tu peux parcourir l’arbre, zoomer dedans, retrouver quelqu’un en quelques secondes…",
+   "debut": 28.853,
+   "fin": 32.84,
+   "mots": [
+    {
+     "mot": "Tu",
+     "debut": 28.853,
+     "fin": 28.88
+    },
+    {
+     "mot": "peux",
+     "debut": 28.92,
+     "fin": 29.04
+    },
+    {
+     "mot": "parcourir",
+     "debut": 29.12,
+     "fin": 29.52
+    },
+    {
+     "mot": "l’arbre",
+     "debut": 29.56,
+     "fin": 29.92
+    },
+    {
+     "mot": "zoomer",
+     "debut": 30.24,
+     "fin": 30.48
+    },
+    {
+     "mot": "dedans",
+     "debut": 30.56,
+     "fin": 30.88
+    },
+    {
+     "mot": "retrouver",
+     "debut": 31.2,
+     "fin": 31.52
+    },
+    {
+     "mot": "quelqu’un",
+     "debut": 31.6,
+     "fin": 31.84
+    },
+    {
+     "mot": "en",
+     "debut": 31.92,
+     "fin": 32.0
+    },
+    {
+     "mot": "quelques",
+     "debut": 32.08,
+     "fin": 32.24
+    },
+    {
+     "mot": "secondes",
+     "debut": 32.44,
+     "fin": 32.84
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  },
+  {
+   "texte": "Voir ses parents, ses enfants, les lieux où elle a vécu.",
+   "debut": 33.08,
+   "fin": 35.84,
+   "mots": [
+    {
+     "mot": "Voir",
+     "debut": 33.08,
+     "fin": 33.2
+    },
+    {
+     "mot": "ses",
+     "debut": 33.28,
+     "fin": 33.44
+    },
+    {
+     "mot": "parents",
+     "debut": 33.64,
+     "fin": 33.84
+    },
+    {
+     "mot": "ses",
+     "debut": 34.08,
+     "fin": 34.16
+    },
+    {
+     "mot": "enfants",
+     "debut": 34.24,
+     "fin": 34.64
+    },
+    {
+     "mot": "les",
+     "debut": 34.92,
+     "fin": 34.96
+    },
+    {
+     "mot": "lieux",
+     "debut": 35.04,
+     "fin": 35.2
+    },
+    {
+     "mot": "où",
+     "debut": 35.24,
+     "fin": 35.32
+    },
+    {
+     "mot": "elle",
+     "debut": 35.36,
+     "fin": 35.44
+    },
+    {
+     "mot": "a",
+     "debut": 35.467,
+     "fin": 35.493
+    },
+    {
+     "mot": "vécu",
+     "debut": 35.52,
+     "fin": 35.84
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Et quand une information vient d’un vrai document, on peut même retrouver la source.",
+   "debut": 36.28,
+   "fin": 39.84,
+   "mots": [
+    {
+     "mot": "Et",
+     "debut": 36.28,
+     "fin": 36.32
+    },
+    {
+     "mot": "quand",
+     "debut": 36.36,
+     "fin": 36.48
+    },
+    {
+     "mot": "une",
+     "debut": 36.52,
+     "fin": 36.56
+    },
+    {
+     "mot": "information",
+     "debut": 36.64,
+     "fin": 37.12
+    },
+    {
+     "mot": "vient",
+     "debut": 37.16,
+     "fin": 37.36
+    },
+    {
+     "mot": "d’un",
+     "debut": 37.413,
+     "fin": 37.52
+    },
+    {
+     "mot": "vrai",
+     "debut": 37.573,
+     "fin": 37.68
+    },
+    {
+     "mot": "document",
+     "debut": 37.76,
+     "fin": 38.16
+    },
+    {
+     "mot": "on",
+     "debut": 38.48,
+     "fin": 38.56
+    },
+    {
+     "mot": "peut",
+     "debut": 38.6,
+     "fin": 38.72
+    },
+    {
+     "mot": "même",
+     "debut": 38.84,
+     "fin": 38.96
+    },
+    {
+     "mot": "retrouver",
+     "debut": 39.04,
+     "fin": 39.36
+    },
+    {
+     "mot": "la",
+     "debut": 39.4,
+     "fin": 39.44
+    },
+    {
+     "mot": "source",
+     "debut": 39.52,
+     "fin": 39.84
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Une date vérifiée par acte, par exemple.",
+   "debut": 40.32,
+   "fin": 42.0,
+   "mots": [
+    {
+     "mot": "Une",
+     "debut": 40.32,
+     "fin": 40.4
+    },
+    {
+     "mot": "date",
+     "debut": 40.48,
+     "fin": 40.64
+    },
+    {
+     "mot": "vérifiée",
+     "debut": 40.693,
+     "fin": 41.04
+    },
+    {
+     "mot": "par",
+     "debut": 41.12,
+     "fin": 41.2
+    },
+    {
+     "mot": "acte",
+     "debut": 41.28,
+     "fin": 41.44
+    },
+    {
+     "mot": "par",
+     "debut": 41.56,
+     "fin": 41.6
+    },
+    {
+     "mot": "exemple",
+     "debut": 41.68,
+     "fin": 42.0
+    }
+   ],
+   "avant": [
+    "[serious tone]"
+   ]
+  },
+  {
+   "texte": "Mais ce que je voulais surtout, c’est que l’arbre ne soit pas quelque chose de figé.",
+   "debut": 42.68,
+   "fin": 45.92,
+   "mots": [
+    {
+     "mot": "Mais",
+     "debut": 42.68,
+     "fin": 42.72
+    },
+    {
+     "mot": "ce",
+     "debut": 42.76,
+     "fin": 42.8
+    },
+    {
+     "mot": "que",
+     "debut": 42.84,
+     "fin": 42.88
+    },
+    {
+     "mot": "je",
+     "debut": 42.92,
+     "fin": 42.96
+    },
+    {
+     "mot": "voulais",
+     "debut": 42.987,
+     "fin": 43.2
+    },
+    {
+     "mot": "surtout",
+     "debut": 43.24,
+     "fin": 43.6
+    },
+    {
+     "mot": "c’est",
+     "debut": 43.88,
+     "fin": 44.0
+    },
+    {
+     "mot": "que",
+     "debut": 44.08,
+     "fin": 44.16
+    },
+    {
+     "mot": "l’arbre",
+     "debut": 44.2,
+     "fin": 44.48
+    },
+    {
+     "mot": "ne",
+     "debut": 44.52,
+     "fin": 44.56
+    },
+    {
+     "mot": "soit",
+     "debut": 44.64,
+     "fin": 44.8
+    },
+    {
+     "mot": "pas",
+     "debut": 44.84,
+     "fin": 44.88
+    },
+    {
+     "mot": "quelque",
+     "debut": 44.96,
+     "fin": 45.12
+    },
+    {
+     "mot": "chose",
+     "debut": 45.2,
+     "fin": 45.36
+    },
+    {
+     "mot": "de",
+     "debut": 45.44,
+     "fin": 45.52
+    },
+    {
+     "mot": "figé",
+     "debut": 45.6,
+     "fin": 45.92
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  },
+  {
+   "texte": "La famille peut continuer à l’enrichir.",
+   "debut": 46.32,
+   "fin": 47.92,
+   "mots": [
+    {
+     "mot": "La",
+     "debut": 46.32,
+     "fin": 46.4
+    },
+    {
+     "mot": "famille",
+     "debut": 46.44,
+     "fin": 46.64
+    },
+    {
+     "mot": "peut",
+     "debut": 46.72,
+     "fin": 46.88
+    },
+    {
+     "mot": "continuer",
+     "debut": 47.04,
+     "fin": 47.36
+    },
+    {
+     "mot": "à",
+     "debut": 47.387,
+     "fin": 47.413
+    },
+    {
+     "mot": "l’enrichir",
+     "debut": 47.44,
+     "fin": 47.92
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Tu peux raconter un souvenir.",
+   "debut": 48.32,
+   "fin": 49.52,
+   "mots": [
+    {
+     "mot": "Tu",
+     "debut": 48.32,
+     "fin": 48.4
+    },
+    {
+     "mot": "peux",
+     "debut": 48.44,
+     "fin": 48.533
+    },
+    {
+     "mot": "raconter",
+     "debut": 48.587,
+     "fin": 48.88
+    },
+    {
+     "mot": "un",
+     "debut": 48.92,
+     "fin": 48.96
+    },
+    {
+     "mot": "souvenir",
+     "debut": 49.0,
+     "fin": 49.52
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Envoyer une vieille photo.",
+   "debut": 49.76,
+   "fin": 50.8,
+   "mots": [
+    {
+     "mot": "Envoyer",
+     "debut": 49.76,
+     "fin": 50.08
+    },
+    {
+     "mot": "une",
+     "debut": 50.12,
+     "fin": 50.16
+    },
+    {
+     "mot": "vieille",
+     "debut": 50.24,
+     "fin": 50.4
+    },
+    {
+     "mot": "photo",
+     "debut": 50.6,
+     "fin": 50.8
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Prendre en photo un acte retrouvé dans une boîte.",
+   "debut": 51.04,
+   "fin": 53.12,
+   "mots": [
+    {
+     "mot": "Prendre",
+     "debut": 51.04,
+     "fin": 51.28
+    },
+    {
+     "mot": "en",
+     "debut": 51.32,
+     "fin": 51.36
+    },
+    {
+     "mot": "photo",
+     "debut": 51.44,
+     "fin": 51.68
+    },
+    {
+     "mot": "un",
+     "debut": 51.76,
+     "fin": 51.84
+    },
+    {
+     "mot": "acte",
+     "debut": 51.92,
+     "fin": 52.08
+    },
+    {
+     "mot": "retrouvé",
+     "debut": 52.16,
+     "fin": 52.48
+    },
+    {
+     "mot": "dans",
+     "debut": 52.52,
+     "fin": 52.64
+    },
+    {
+     "mot": "une",
+     "debut": 52.72,
+     "fin": 52.8
+    },
+    {
+     "mot": "boîte",
+     "debut": 52.84,
+     "fin": 53.12
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Ou même enregistrer quelqu’un qui raconte son histoire.",
+   "debut": 53.387,
+   "fin": 55.68,
+   "mots": [
+    {
+     "mot": "Ou",
+     "debut": 53.387,
+     "fin": 53.44
+    },
+    {
+     "mot": "même",
+     "debut": 53.52,
+     "fin": 53.68
+    },
+    {
+     "mot": "enregistrer",
+     "debut": 53.76,
+     "fin": 54.32
+    },
+    {
+     "mot": "quelqu’un",
+     "debut": 54.4,
+     "fin": 54.64
+    },
+    {
+     "mot": "qui",
+     "debut": 54.72,
+     "fin": 54.8
+    },
+    {
+     "mot": "raconte",
+     "debut": 54.88,
+     "fin": 55.12
+    },
+    {
+     "mot": "son",
+     "debut": 55.2,
+     "fin": 55.28
+    },
+    {
+     "mot": "histoire",
+     "debut": 55.48,
+     "fin": 55.68
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Heritage transforme tout ça en informations à vérifier.",
+   "debut": 56.224,
+   "fin": 58.88,
+   "mots": [
+    {
+     "mot": "Héritage",
+     "debut": 56.224,
+     "fin": 56.64
+    },
+    {
+     "mot": "transforme",
+     "debut": 56.84,
+     "fin": 57.12
+    },
+    {
+     "mot": "tout",
+     "debut": 57.2,
+     "fin": 57.28
+    },
+    {
+     "mot": "ça",
+     "debut": 57.36,
+     "fin": 57.44
+    },
+    {
+     "mot": "en",
+     "debut": 57.52,
+     "fin": 57.68
+    },
+    {
+     "mot": "informations",
+     "debut": 57.76,
+     "fin": 58.24
+    },
+    {
+     "mot": "à",
+     "debut": 58.32,
+     "fin": 58.4
+    },
+    {
+     "mot": "vérifier",
+     "debut": 58.453,
+     "fin": 58.88
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  },
+  {
+   "texte": "Ensuite, la famille relit, corrige, valide…",
+   "debut": 59.28,
+   "fin": 62.0,
+   "mots": [
+    {
+     "mot": "Ensuite",
+     "debut": 59.28,
+     "fin": 59.68
+    },
+    {
+     "mot": "la",
+     "debut": 59.88,
+     "fin": 59.92
+    },
+    {
+     "mot": "famille",
+     "debut": 60.0,
+     "fin": 60.32
+    },
+    {
+     "mot": "relit",
+     "debut": 60.44,
+     "fin": 60.72
+    },
+    {
+     "mot": "corrige",
+     "debut": 61.08,
+     "fin": 61.44
+    },
+    {
+     "mot": "valide",
+     "debut": 61.68,
+     "fin": 62.0
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "et l’arbre continue de grandir.",
+   "debut": 62.36,
+   "fin": 63.84,
+   "mots": [
+    {
+     "mot": "et",
+     "debut": 62.36,
+     "fin": 62.4
+    },
+    {
+     "mot": "l’arbre",
+     "debut": 62.44,
+     "fin": 62.88
+    },
+    {
+     "mot": "continue",
+     "debut": 63.08,
+     "fin": 63.28
+    },
+    {
+     "mot": "de",
+     "debut": 63.32,
+     "fin": 63.36
+    },
+    {
+     "mot": "grandir",
+     "debut": 63.48,
+     "fin": 63.84
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Et évidemment, on peut aussi lui poser des questions.",
+   "debut": 64.38,
+   "fin": 66.4,
+   "mots": [
+    {
+     "mot": "Et",
+     "debut": 64.38,
+     "fin": 64.4
+    },
+    {
+     "mot": "évidemment",
+     "debut": 64.48,
+     "fin": 64.96
+    },
+    {
+     "mot": "on",
+     "debut": 65.12,
+     "fin": 65.2
+    },
+    {
+     "mot": "peut",
+     "debut": 65.24,
+     "fin": 65.36
+    },
+    {
+     "mot": "aussi",
+     "debut": 65.44,
+     "fin": 65.56
+    },
+    {
+     "mot": "lui",
+     "debut": 65.6,
+     "fin": 65.68
+    },
+    {
+     "mot": "poser",
+     "debut": 65.76,
+     "fin": 65.92
+    },
+    {
+     "mot": "des",
+     "debut": 66.0,
+     "fin": 66.08
+    },
+    {
+     "mot": "questions",
+     "debut": 66.24,
+     "fin": 66.4
+    }
+   ],
+   "avant": [
+    "[lighthearted]"
+   ]
+  },
+  {
+   "texte": "« Qui étaient les parents de cette personne ? »",
+   "debut": 66.86,
+   "fin": 68.16,
+   "mots": [
+    {
+     "mot": "Qui",
+     "debut": 66.86,
+     "fin": 66.88
+    },
+    {
+     "mot": "étaient",
+     "debut": 66.96,
+     "fin": 67.12
+    },
+    {
+     "mot": "les",
+     "debut": 67.2,
+     "fin": 67.28
+    },
+    {
+     "mot": "parents",
+     "debut": 67.4,
+     "fin": 67.52
+    },
+    {
+     "mot": "de",
+     "debut": 67.547,
+     "fin": 67.573
+    },
+    {
+     "mot": "cette",
+     "debut": 67.6,
+     "fin": 67.76
+    },
+    {
+     "mot": "personne",
+     "debut": 67.92,
+     "fin": 68.16
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Heritage retrouve la réponse directement dans l’arbre.",
+   "debut": 68.68,
+   "fin": 70.96,
+   "mots": [
+    {
+     "mot": "Héritage",
+     "debut": 68.68,
+     "fin": 69.12
+    },
+    {
+     "mot": "retrouve",
+     "debut": 69.16,
+     "fin": 69.44
+    },
+    {
+     "mot": "la",
+     "debut": 69.48,
+     "fin": 69.52
+    },
+    {
+     "mot": "réponse",
+     "debut": 69.6,
+     "fin": 70.0
+    },
+    {
+     "mot": "directement",
+     "debut": 70.16,
+     "fin": 70.48
+    },
+    {
+     "mot": "dans",
+     "debut": 70.56,
+     "fin": 70.64
+    },
+    {
+     "mot": "l’arbre",
+     "debut": 70.68,
+     "fin": 70.96
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  },
+  {
+   "texte": "Et puis il y a tout ce qu’on découvre en explorant.",
+   "debut": 71.493,
+   "fin": 73.28,
+   "mots": [
+    {
+     "mot": "Et",
+     "debut": 71.493,
+     "fin": 71.52
+    },
+    {
+     "mot": "puis",
+     "debut": 71.56,
+     "fin": 71.68
+    },
+    {
+     "mot": "il",
+     "debut": 71.76,
+     "fin": 71.84
+    },
+    {
+     "mot": "y",
+     "debut": 71.867,
+     "fin": 71.893
+    },
+    {
+     "mot": "a",
+     "debut": 71.92,
+     "fin": 72.08
+    },
+    {
+     "mot": "tout",
+     "debut": 72.12,
+     "fin": 72.16
+    },
+    {
+     "mot": "ce",
+     "debut": 72.24,
+     "fin": 72.267
+    },
+    {
+     "mot": "qu’on",
+     "debut": 72.293,
+     "fin": 72.4
+    },
+    {
+     "mot": "découvre",
+     "debut": 72.44,
+     "fin": 72.72
+    },
+    {
+     "mot": "en",
+     "debut": 72.76,
+     "fin": 72.8
+    },
+    {
+     "mot": "explorant",
+     "debut": 72.88,
+     "fin": 73.28
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  },
+  {
+   "texte": "Les lieux où la famille a vécu.",
+   "debut": 73.68,
+   "fin": 75.2,
+   "mots": [
+    {
+     "mot": "Les",
+     "debut": 73.68,
+     "fin": 73.76
+    },
+    {
+     "mot": "lieux",
+     "debut": 73.84,
+     "fin": 74.0
+    },
+    {
+     "mot": "où",
+     "debut": 74.027,
+     "fin": 74.08
+    },
+    {
+     "mot": "la",
+     "debut": 74.12,
+     "fin": 74.16
+    },
+    {
+     "mot": "famille",
+     "debut": 74.24,
+     "fin": 74.48
+    },
+    {
+     "mot": "a",
+     "debut": 74.52,
+     "fin": 74.56
+    },
+    {
+     "mot": "vécu",
+     "debut": 74.6,
+     "fin": 75.2
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Les métiers qui revenaient le plus.",
+   "debut": 75.307,
+   "fin": 76.56,
+   "mots": [
+    {
+     "mot": "Les",
+     "debut": 75.307,
+     "fin": 75.36
+    },
+    {
+     "mot": "métiers",
+     "debut": 75.413,
+     "fin": 75.68
+    },
+    {
+     "mot": "qui",
+     "debut": 75.72,
+     "fin": 75.76
+    },
+    {
+     "mot": "revenaient",
+     "debut": 75.84,
+     "fin": 76.08
+    },
+    {
+     "mot": "le",
+     "debut": 76.16,
+     "fin": 76.24
+    },
+    {
+     "mot": "plus",
+     "debut": 76.4,
+     "fin": 76.56
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Les prénoms transmis de génération en génération.",
+   "debut": 76.84,
+   "fin": 79.12,
+   "mots": [
+    {
+     "mot": "Les",
+     "debut": 76.84,
+     "fin": 76.88
+    },
+    {
+     "mot": "prénoms",
+     "debut": 76.96,
+     "fin": 77.28
+    },
+    {
+     "mot": "transmis",
+     "debut": 77.4,
+     "fin": 77.76
+    },
+    {
+     "mot": "de",
+     "debut": 77.8,
+     "fin": 77.84
+    },
+    {
+     "mot": "génération",
+     "debut": 77.92,
+     "fin": 78.48
+    },
+    {
+     "mot": "en",
+     "debut": 78.56,
+     "fin": 78.64
+    },
+    {
+     "mot": "génération",
+     "debut": 78.693,
+     "fin": 79.12
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Les histoires qui se cachent derrière les chiffres.",
+   "debut": 79.52,
+   "fin": 81.52,
+   "mots": [
+    {
+     "mot": "Les",
+     "debut": 79.52,
+     "fin": 79.6
+    },
+    {
+     "mot": "histoires",
+     "debut": 79.68,
+     "fin": 80.16
+    },
+    {
+     "mot": "qui",
+     "debut": 80.2,
+     "fin": 80.24
+    },
+    {
+     "mot": "se",
+     "debut": 80.32,
+     "fin": 80.48
+    },
+    {
+     "mot": "cachent",
+     "debut": 80.533,
+     "fin": 80.72
+    },
+    {
+     "mot": "derrière",
+     "debut": 80.76,
+     "fin": 80.96
+    },
+    {
+     "mot": "les",
+     "debut": 81.04,
+     "fin": 81.12
+    },
+    {
+     "mot": "chiffres",
+     "debut": 81.2,
+     "fin": 81.52
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Au fond…",
+   "debut": 82.293,
+   "fin": 82.64,
+   "mots": [
+    {
+     "mot": "Au",
+     "debut": 82.293,
+     "fin": 82.32
+    },
+    {
+     "mot": "fond",
+     "debut": 82.36,
+     "fin": 82.64
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  },
+  {
+   "texte": "Heritage, ce n’est pas juste un arbre généalogique.",
+   "debut": 83.269,
+   "fin": 85.92,
+   "mots": [
+    {
+     "mot": "Héritage",
+     "debut": 83.269,
+     "fin": 83.76
+    },
+    {
+     "mot": "ce",
+     "debut": 84.12,
+     "fin": 84.16
+    },
+    {
+     "mot": "n’est",
+     "debut": 84.213,
+     "fin": 84.32
+    },
+    {
+     "mot": "pas",
+     "debut": 84.4,
+     "fin": 84.48
+    },
+    {
+     "mot": "juste",
+     "debut": 84.56,
+     "fin": 84.76
+    },
+    {
+     "mot": "un",
+     "debut": 84.8,
+     "fin": 84.88
+    },
+    {
+     "mot": "arbre",
+     "debut": 84.96,
+     "fin": 85.2
+    },
+    {
+     "mot": "généalogique",
+     "debut": 85.24,
+     "fin": 85.92
+    }
+   ],
+   "avant": [
+    "[softly]"
+   ]
+  },
+  {
+   "texte": "C’est une façon de garder une trace.",
+   "debut": 86.467,
+   "fin": 88.08,
+   "mots": [
+    {
+     "mot": "C’est",
+     "debut": 86.467,
+     "fin": 86.56
+    },
+    {
+     "mot": "une",
+     "debut": 86.64,
+     "fin": 86.72
+    },
+    {
+     "mot": "façon",
+     "debut": 86.8,
+     "fin": 87.04
+    },
+    {
+     "mot": "de",
+     "debut": 87.12,
+     "fin": 87.2
+    },
+    {
+     "mot": "garder",
+     "debut": 87.28,
+     "fin": 87.44
+    },
+    {
+     "mot": "une",
+     "debut": 87.52,
+     "fin": 87.6
+    },
+    {
+     "mot": "trace",
+     "debut": 87.68,
+     "fin": 88.08
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  },
+  {
+   "texte": "De ce qu’on sait.",
+   "debut": 88.44,
+   "fin": 89.04,
+   "mots": [
+    {
+     "mot": "De",
+     "debut": 88.44,
+     "fin": 88.48
+    },
+    {
+     "mot": "ce",
+     "debut": 88.56,
+     "fin": 88.6
+    },
+    {
+     "mot": "qu’on",
+     "debut": 88.64,
+     "fin": 88.8
+    },
+    {
+     "mot": "sait",
+     "debut": 88.88,
+     "fin": 89.04
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "De ce qu’on découvre.",
+   "debut": 89.4,
+   "fin": 90.16,
+   "mots": [
+    {
+     "mot": "De",
+     "debut": 89.4,
+     "fin": 89.44
+    },
+    {
+     "mot": "ce",
+     "debut": 89.52,
+     "fin": 89.547
+    },
+    {
+     "mot": "qu’on",
+     "debut": 89.573,
+     "fin": 89.68
+    },
+    {
+     "mot": "découvre",
+     "debut": 89.72,
+     "fin": 90.16
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Et de tout ce qu’on racontera encore demain.",
+   "debut": 90.52,
+   "fin": 92.16,
+   "mots": [
+    {
+     "mot": "Et",
+     "debut": 90.52,
+     "fin": 90.56
+    },
+    {
+     "mot": "de",
+     "debut": 90.64,
+     "fin": 90.8
+    },
+    {
+     "mot": "tout",
+     "debut": 90.84,
+     "fin": 90.88
+    },
+    {
+     "mot": "ce",
+     "debut": 90.96,
+     "fin": 90.987
+    },
+    {
+     "mot": "qu’on",
+     "debut": 91.013,
+     "fin": 91.12
+    },
+    {
+     "mot": "racontera",
+     "debut": 91.2,
+     "fin": 91.6
+    },
+    {
+     "mot": "encore",
+     "debut": 91.68,
+     "fin": 91.92
+    },
+    {
+     "mot": "demain",
+     "debut": 92.0,
+     "fin": 92.16
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Parce qu’une famille, ça change tout le temps.",
+   "debut": 92.865,
+   "fin": 94.64,
+   "mots": [
+    {
+     "mot": "Parce",
+     "debut": 92.865,
+     "fin": 92.96
+    },
+    {
+     "mot": "qu’une",
+     "debut": 93.013,
+     "fin": 93.12
+    },
+    {
+     "mot": "famille",
+     "debut": 93.2,
+     "fin": 93.52
+    },
+    {
+     "mot": "ça",
+     "debut": 93.92,
+     "fin": 94.0
+    },
+    {
+     "mot": "change",
+     "debut": 94.12,
+     "fin": 94.24
+    },
+    {
+     "mot": "tout",
+     "debut": 94.28,
+     "fin": 94.32
+    },
+    {
+     "mot": "le",
+     "debut": 94.4,
+     "fin": 94.48
+    },
+    {
+     "mot": "temps",
+     "debut": 94.56,
+     "fin": 94.64
+    }
+   ],
+   "avant": [
+    "[pause]",
+    "[softly]"
+   ]
+  },
+  {
+   "texte": "Mais son histoire… elle, mérite de rester.",
+   "debut": 95.12,
+   "fin": 97.6,
+   "mots": [
+    {
+     "mot": "Mais",
+     "debut": 95.12,
+     "fin": 95.2
+    },
+    {
+     "mot": "son",
+     "debut": 95.28,
+     "fin": 95.36
+    },
+    {
+     "mot": "histoire",
+     "debut": 95.64,
+     "fin": 95.92
+    },
+    {
+     "mot": "elle",
+     "debut": 96.36,
+     "fin": 96.48
+    },
+    {
+     "mot": "mérite",
+     "debut": 96.88,
+     "fin": 97.12
+    },
+    {
+     "mot": "de",
+     "debut": 97.16,
+     "fin": 97.2
+    },
+    {
+     "mot": "rester",
+     "debut": 97.28,
+     "fin": 97.6
+    }
+   ],
+   "avant": []
+  },
+  {
+   "texte": "Heritage.",
+   "debut": 98.227,
+   "fin": 98.8,
+   "mots": [
+    {
+     "mot": "Héritage",
+     "debut": 98.227,
+     "fin": 98.8
+    }
+   ],
+   "avant": [
+    "[pause]"
+   ]
+  }
+ ],
+ "pauses": [
+  {
+   "apres": 0,
+   "debut": 4.48,
+   "fin": 5.64
+  },
+  {
+   "apres": 2,
+   "debut": 9.04,
+   "fin": 9.808
+  },
+  {
+   "apres": 7,
+   "debut": 22.0,
+   "fin": 22.88
+  },
+  {
+   "apres": 9,
+   "debut": 28.24,
+   "fin": 28.853
+  },
+  {
+   "apres": 13,
+   "debut": 42.0,
+   "fin": 42.68
+  },
+  {
+   "apres": 19,
+   "debut": 55.68,
+   "fin": 56.224
+  },
+  {
+   "apres": 24,
+   "debut": 68.16,
+   "fin": 68.68
+  },
+  {
+   "apres": 25,
+   "debut": 70.96,
+   "fin": 71.493
+  },
+  {
+   "apres": 30,
+   "debut": 81.52,
+   "fin": 82.293
+  },
+  {
+   "apres": 32,
+   "debut": 85.92,
+   "fin": 86.467
+  },
+  {
+   "apres": 36,
+   "debut": 92.16,
+   "fin": 92.865
+  },
+  {
+   "apres": 38,
+   "debut": 97.6,
+   "fin": 98.227
+  }
+ ]
+}
