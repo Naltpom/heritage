@@ -62,8 +62,13 @@ framework:
     # `sessions` (compose.yaml) : un redéploiement recrée le conteneur sans
     # déconnecter personne. Sans `save_path`, PHP les écrivait dans le système
     # de fichiers du conteneur, perdu à chaque mise en production.
+    #
+    # **Sans verrou** depuis le 07/10/2026 : le gestionnaire natif verrouillait le fichier
+    # de session pendant toute la requête, et les requêtes d'un même compte passaient une
+    # par une — 1,9 s d'attente mesurée avant l'arbre. Mêmes fichiers, même format : voir
+    # `Core\Security\SessionsSansVerrou`, qui dit aussi ce que l'on perd.
     session:
-        handler_id: session.handler.native_file
+        handler_id: App\Module\Core\Security\SessionsSansVerrou
         save_path: '%kernel.project_dir%/var/sessions/%kernel.environment%'
         cookie_secure: auto
         cookie_samesite: lax
