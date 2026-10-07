@@ -20,9 +20,10 @@
  *  - un nœud restreint n'a pas de ligne de dates, et on ne la reconstitue pas ;
  *  - la recherche passe par l'API, jamais par un index local ;
  *  - un filtre **estompe**, il ne retire rien : la forme de l'arbre ne bouge pas —
- *    sauf trois bascules qui RETIRENT avant la disposition, pour que l'arbre se
- *    resserre : « Famille du conjoint », « Familles par alliance » et « Personnes
- *    sans lien connu » ;
+ *    sauf les branches masquées (`histoire/branches.ts`, le tronc reste) et trois
+ *    bascules, qui RETIRENT avant la disposition pour que l'arbre se resserre :
+ *    « Famille du conjoint », « Familles par alliance » et « Personnes sans lien
+ *    connu » ;
  *  - les familles par alliance (l'ascendance du mari d'une tante, vue de la nièce)
  *    sont masquées par défaut ; affichées, chacune a son bloc, à droite des branches
  *    du lecteur (`histoire/alliances.ts`, décision du 2026-10-01) ;
@@ -44,7 +45,6 @@ import {
   lireFichePersonne,
   rechercherPersonnes,
   requeteApi,
-  type Branche,
   type Graphe,
   type FichePersonneComplete,
   type ResultatDeRecherche,
@@ -67,6 +67,7 @@ import {
   type BrancheDeQuart,
   type DispositionHistoire,
   type FicheHistoire,
+  type Quart,
 } from '@/histoire/lignees'
 import { auFormat, entreePortrait, geometriePortrait, texteDePortrait } from '@/histoire/cartes'
 import { useFormatDesCartes } from '@/composables/formatDesCartes'
@@ -76,6 +77,7 @@ import InterrupteurFiltre from '@/components/arbre/InterrupteurFiltre.vue'
 import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
 import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
 import { effectifSansLien, estSansLien, noeudsSansLien, sansPersonnesSansLien } from '@/histoire/sansLien'
+import { quartsPresents, sansBranches } from '@/histoire/branches'
 import { poserEtiquettes } from '@/histoire/etiquettes'
 import {
   DUREE_VOL,
@@ -118,6 +120,8 @@ const { fermerTiroirs, unTiroirEstOuvert, ouvert: ouvertTiroir } = useTiroirs()
 
 const disposition = shallowRef<DispositionHistoire | null>(null)
 const grapheCharge = shallowRef<Graphe | null>(null)
+/** Les quarts que le graphe porte, masqués ou non : ceux qui ont un bouton. */
+const quartsMasquables = shallowRef<Set<BrancheDeQuart>>(new Set())
 
 /*
  * Trois bascules RETIRENT des fiches avant la disposition, pour que l'arbre se
@@ -207,7 +211,10 @@ function disposer(graphe: Graphe): void {
   const sansAlliances = avecAlliances.value ? graphe : sansFamillesParAlliance(graphe)
   const sansConjoint = avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
   // Les îlots sont repérés sur le graphe ENTIER : c'est lui qui dit ce qui est relié au lecteur.
-  const filtre = avecSansLien.value ? sansConjoint : sansPersonnesSansLien(sansConjoint, noeudsSansLien(graphe))
+  const avecLesLiens = avecSansLien.value ? sansConjoint : sansPersonnesSansLien(sansConjoint, noeudsSansLien(graphe))
+  // Les quarts masqués quittent l'écran : l'arbre se refait sans eux, le tronc reste.
+  quartsMasquables.value = quartsPresents(avecLesLiens, graphe)
+  const filtre = sansBranches(avecLesLiens, filtres.masquees, graphe)
   // La ligne directe SEULE : tout le reste quitte l'écran, et l'arbre se refait sur elle.
   const racine = cleLigneSeule.value
   cleDisposee = racine
@@ -229,8 +236,7 @@ function redisposer(): void {
   const d = disposition.value!
   if (selection.value !== null && !d.parId.has(selection.value)) selection.value = null
   if (!familleEclairee(d.traces.familles, familleChoisie.value)) familleChoisie.value = null
-  const quarts = new Set<string>(d.quarts.map((q) => q.branche))
-  filtres.masquees = filtres.masquees.filter((b) => quarts.has(b))
+  filtres.masquees = filtres.masquees.filter((b) => quartsMasquables.value.has(b))
   cadrage.value = ajusterLargeur(canevas.value, gouttiere.value)
 }
 watch(avecConjoint, (avec) => {
@@ -455,14 +461,14 @@ function reprendre(v: VueMemorisee): void {
   racineFigee.value = v.filtres.racineLigne ?? null
   // Une vue mémorisée avant le 05/10/2026 : « Personnes vivantes » est devenu la pastille « Vivants ».
   if (v.filtres.vivants) filtres.qualite = 'vivants'
-  // La ligne seule refait la disposition : le point mémorisé est dans CELLE-LÀ.
-  assurerLaDisposition()
+  // Les quarts masqués et la ligne seule refont la disposition : le point mémorisé est dans CELLE-LÀ.
+  filtres.masquees = v.filtres.masquees.filter((b): b is BrancheDeQuart => quartsMasquables.value.has(b as BrancheDeQuart))
+  if (filtres.masquees.length) redisposer()
+  else assurerLaDisposition()
   const d = disposition.value!
   const c = canevas.value
   cadrage.value = centrerSur(bornerEchelle(v.s, c), c, v.x, v.y, taille.value.l / 2, taille.value.h / 2)
   selection.value = v.selection !== null && d.parId.has(v.selection) ? v.selection : null
-  const quarts = new Set<string>(d.quarts.map((q) => q.branche))
-  filtres.masquees = v.filtres.masquees.filter((b): b is BrancheDeQuart => quarts.has(b))
 }
 
 /** Au départ vers une fiche : ce qu'il faut pour revenir exactement ici. */
@@ -745,7 +751,7 @@ function meTrouver(): void {
 }
 
 /* ------------------------------------------------------------------ */
-/* Filtres : ils estompent, ils ne retirent rien                        */
+/* Filtres : les branches retirent, les autres estompent               */
 /* ------------------------------------------------------------------ */
 
 const filtres = reactive({
@@ -767,10 +773,12 @@ function fermerFiltres(): void {
   fermerTiroirs()
 }
 function toutAfficher(): void {
+  const avaitDesQuarts = filtres.masquees.length > 0
   filtres.masquees = []
   filtres.ligneDirecte = false
   racineFigee.value = null
   filtres.qualite = null
+  if (avaitDesQuarts) redisposer()
 }
 function basculerQualite(id: IdFiltre): void {
   filtres.qualite = filtres.qualite === id ? null : id
@@ -781,9 +789,25 @@ const qualitesDisponibles = computed(() => {
   return new Set(FILTRES.filter((f) => filtreDisponible(f, personnes)).map((f) => f.id))
 })
 const OPTIONS_PALIERS = PALIERS.map((p, i) => ({ valeur: i, libelle: p.libelle }))
+/*
+ * Masquer une branche la RETIRE (décision du 2026-10-07, `histoire/branches.ts`) :
+ * ses fiches quittent l'écran et l'arbre se refait sans elle. Le lecteur, ses parents,
+ * sa fratrie et ses descendants — le tronc — restent toujours.
+ */
 function basculerBranche(b: BrancheDeQuart): void {
   filtres.masquees = filtres.masquees.includes(b) ? filtres.masquees.filter((x) => x !== b) : [...filtres.masquees, b]
+  redisposer()
 }
+/** Le dernier nom connu de chaque quart : un quart masqué n'est plus dans la disposition. */
+const quartsVus = new Map<BrancheDeQuart, Quart>()
+/** Les boutons « Branches » : les quarts affichés, et ceux qu'on a masqués, à leur place. */
+const boutonsDeBranche = computed<{ branche: BrancheDeQuart; nom: string; libelle: string }[]>(() => {
+  for (const q of disposition.value?.quarts ?? []) quartsVus.set(q.branche, q)
+  const ordre: BrancheDeQuart[] = ['pp', 'pm', 'mp', 'mm', 'cpp', 'cpm', 'cmp', 'cmm']
+  return ordre
+    .filter((b) => quartsMasquables.value.has(b))
+    .map((b) => ({ branche: b, nom: quartsVus.get(b)?.nom ?? '', libelle: LIBELLES_QUART[b] }))
+})
 
 /*
  * LE SEUIL DES NOMS : le zoom à partir duquel noms, prénoms et dates s'écrivent. Une
@@ -832,7 +856,6 @@ const brancheDe = (f: FicheHistoire): string =>
   f.parente === 'alliance' && !disposition.value?.alliancesDansLArbre ? 'hors' : f.branche
 
 function passe(f: FicheHistoire): boolean {
-  if (brancheDe(f) !== 'hors' && (filtres.masquees as Branche[]).includes(f.branche)) return false
   if (filtres.ligneDirecte && enLigne(f) === null) return false
   if (filtres.qualite) {
     const def = FILTRES.find((d) => d.id === filtres.qualite)
@@ -1549,7 +1572,7 @@ onBeforeUnmount(() => {
       <template v-if="disposition" #filtres>
         <!--
           Les filtres en quatre sections, toujours dans le même ordre (refonte du 05/10/2026) :
-          ce qu'on SUIT (la ligne directe), ce qu'on ESTOMPE (les branches), ce qui ENTRE dans
+          ce qu'on SUIT (la ligne directe), ce qu'on RETIRE (les branches), ce qui ENTRE dans
           l'arbre (bascules qui le resserrent), puis l'AFFICHAGE (ni filtre, ni réinitialisé).
           Les pastilles de qualité sont au-dessus, dans la barre (bureau) ou en tête du feuillet.
         -->
@@ -1575,14 +1598,15 @@ onBeforeUnmount(() => {
           </p>
         </section>
 
-        <section v-if="disposition.quarts.length" class="filtres-section" aria-labelledby="filtres-branches">
+        <section v-if="boutonsDeBranche.length" class="filtres-section" aria-labelledby="filtres-branches">
           <div class="flex items-baseline justify-between gap-2">
             <h3 id="filtres-branches" class="filtres-titre">Branches</h3>
-            <span class="text-[11px] text-attenue">touchez pour estomper</span>
+            <span class="text-[11px] text-attenue">touchez pour masquer</span>
           </div>
+          <p class="-mt-1 mb-0 text-xs text-attenue">Masquée, la branche quitte l’arbre, qui se refait sans elle.</p>
           <div class="grid grid-cols-2 gap-2">
             <button
-              v-for="q in disposition.quarts"
+              v-for="q in boutonsDeBranche"
               :key="q.branche"
               type="button"
               class="flex min-h-11 items-center gap-2 rounded-champ border px-2.5 py-1.5 text-left"
