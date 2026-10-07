@@ -275,7 +275,7 @@ final class AssistantHttpTest extends CasDeTestDemandesHttp
         self::assertSame(3, $op['baseVersion'], '`baseVersion` est lu en base, pas repris du modèle.');
         self::assertSame(['raw' => '1987', 'qualifier' => 'annee', 'min' => '1987-01-01', 'max' => '1987-12-31', 'place' => 'Brest'], $op['oldValue']);
         self::assertSame(['raw' => '4 MAY 1987', 'qualifier' => 'exacte', 'min' => '1987-05-04', 'max' => '1987-05-04', 'place' => 'Brest'], $op['newValue']);
-        self::assertSame([['libelle' => 'Naissance', 'avant' => '1987', 'apres' => '4 mai 1987']], $marne['changements']);
+        self::assertSame([['libelle' => 'Naissance', 'avant' => '1987, à Brest', 'apres' => '4 mai 1987, à Brest']], $marne['changements']);
         self::assertSame([['personId' => $this->marne, 'displayName' => 'Marne Dolomite Sureau', 'visibilite' => 'complete', 'ligneDates' => '1987 –']], $marne['personnes']);
 
         // ── d2 : Tuf, vivant hors cercle — proposée, mais rien de lui ne sort. ────

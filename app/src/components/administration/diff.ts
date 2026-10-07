@@ -143,10 +143,17 @@ export function formaterValeur(valeur: ValeurOp | undefined): string {
     // ── Un bloc date ───────────────────────────────────────────────────────
     // `texte` d'abord — le libellé du serveur —, puis `raw`, la chaîne source.
     // On ne descend **pas** dans `min` / `max` : voir l'en-tête de ce fichier.
-    const texte = chaineNonVide(valeur['texte'])
-    if (texte !== null) return texte
-    const brut = chaineNonVide(valeur['raw'])
-    if (brut !== null) return brut
+    // Le **lieu** se dit aussi : une demande peut ne changer que lui (« né à
+    // Montréal », date inconnue), et le taire affichait « (inconnue) →
+    // (inconnue) » — un diff qui ne montrait pas ce qu'il proposait.
+    const date =
+      chaineNonVide(valeur['texte']) ??
+      chaineNonVide(valeur['raw']) ??
+      (valeur['qualifier'] === 'inconnue' ? 'date inconnue' : null)
+    if (date !== null) {
+      const lieu = chaineNonVide(valeur['place'])
+      return lieu === null ? date : `${date}, à ${lieu}`
+    }
 
     // ── Une note (`ajout_note`) : `{body, scope}` ──────────────────────────
     // Le corps s'affiche **entier**. C'est ce que l'administrateur doit lire
