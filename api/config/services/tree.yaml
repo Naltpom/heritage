@@ -37,6 +37,24 @@ services:
         arguments:
             $cacheArbre: '@cache.arbre'
 
+    # Les deux lectures complètes de l'arbre, mises en cache par état de l'arbre dans le
+    # même pool que le placement (mesurées en production le 07/10/2026 : 600 et 800 ms
+    # à chaque requête, à 3 904 personnes).
+    # Le graphe lit le jeu par son enveloppe en cache ; l'écriture de l'arbre
+    # (RecalculDesColonnesDerivees) garde le fournisseur Doctrine nu, par l'alias plus
+    # bas — voir JeuDePlacementEnCache.
+    App\Module\Tree\Service\JeuDePlacementEnCache:
+        arguments:
+            $cacheArbre: '@cache.arbre'
+
+    App\Module\Tree\Service\ArbreVuDepuis:
+        arguments:
+            $fournisseur: '@App\Module\Tree\Service\JeuDePlacementEnCache'
+
+    App\Module\Tree\Service\VueDeLArbrePourMembership:
+        arguments:
+            $cacheArbre: '@cache.arbre'
+
     # L'`ETag` du graphe doit distinguer la mise en page, sinon un déploiement qui la
     # change n'atteint jamais un navigateur qui revalide (voir EtagDuGraphe). Il passe
     # par ce port étroit plutôt que par PlacementPartage lui-même, pour que la règle de
