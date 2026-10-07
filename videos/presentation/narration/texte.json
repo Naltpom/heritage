@@ -1,0 +1,26 @@
+{
+  "_lisezmoi": "La voix off, découpée en segments. `texte` est ce qui s'affiche (sous-titres), `dit` ce qu'on envoie à ElevenLabs quand il diffère (nombres en toutes lettres, accent de « Héritage » pour une prononciation française). Les pauses entre segments se règlent dans ../timeline.js, pas ici.",
+  "segments": [
+    { "id": "enorme", "texte": "Dans ma famille, on a un arbre généalogique assez énorme." },
+    { "id": "pas-le-mot", "texte": "Enfin… énorme, c’est peut-être même pas le mot." },
+    { "id": "chiffres", "texte": "Aujourd’hui, on a plus de 2 300 personnes, sur 14 générations.", "dit": "Aujourd’hui, on a plus de deux mille trois cents personnes, sur quatorze générations." },
+    { "id": "eparpille", "texte": "Et au départ, tout ça, c’était surtout des noms, des dates, des photos, des actes… un peu partout." },
+    { "id": "cree", "texte": "Du coup, j’ai créé Heritage.", "dit": "Du coup, j’ai créé Héritage." },
+    { "id": "idee", "texte": "L’idée est assez simple : rassembler toute l’histoire de notre famille au même endroit." },
+    { "id": "parcourir", "texte": "On peut parcourir l’arbre, remonter plusieurs générations, retrouver quelqu’un en quelques secondes, voir ses parents, ses enfants, ses lieux de vie…" },
+    { "id": "source", "texte": "Et surtout, chaque information peut être reliée à sa source." },
+    { "id": "acte", "texte": "Donc quand une date vient réellement d’un acte retrouvé aux archives, on le sait." },
+    { "id": "pas-juste", "texte": "Mais Heritage, ce n’est pas juste un arbre généalogique.", "dit": "Mais Héritage, ce n’est pas juste un arbre généalogique." },
+    { "id": "explorer", "texte": "On peut aussi explorer la famille dans le temps, voir les lieux où elle a vécu, les métiers qui revenaient le plus, les prénoms transmis de génération en génération, ou même quelques statistiques assez improbables." },
+    { "id": "participer", "texte": "Et surtout, la famille peut participer." },
+    { "id": "raconter", "texte": "Tu peux raconter un souvenir, envoyer une photo d’un acte, enregistrer quelqu’un qui raconte son histoire…" },
+    { "id": "transforme", "texte": "Heritage transforme tout ça en informations à vérifier et à intégrer dans l’arbre.", "dit": "Héritage transforme tout ça en informations à vérifier et à intégrer dans l’arbre." },
+    { "id": "questions", "texte": "Même chose pour les questions." },
+    { "id": "demander", "texte": "Tu peux simplement demander : « Qui étaient les parents de cette personne ? »" },
+    { "id": "reponse", "texte": "Et Heritage retrouve directement la réponse dans l’arbre.", "dit": "Et Héritage retrouve directement la réponse dans l’arbre." },
+    { "id": "but", "texte": "Le but, au fond, c’est pas juste de faire un joli arbre généalogique." },
+    { "id": "perde", "texte": "C’est de faire en sorte que toute cette histoire ne se perde pas." },
+    { "id": "cinquante", "texte": "Et que dans dix, vingt ou cinquante ans, quelqu’un puisse encore l’ouvrir et comprendre d’où il vient." },
+    { "id": "fin", "texte": "Ça, c’est Heritage.", "dit": "Ça, c’est Héritage." }
+  ]
+}
