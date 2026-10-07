@@ -442,17 +442,135 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
   const QUARTS_DU_LECTEUR = new Set<Branche | null>(['pp', 'pm', 'mp', 'mm'])
   const enJeu = (id: string): boolean => personnes.has(id) && !horsJeu.has(id)
 
-  const enfantsDe = (f: string): string[] => (index.enfantsParFamille.get(f) ?? []).filter(enJeu)
-  const epouxDe = (f: string): string[] => {
-    const enfants = new Set(index.enfantsParFamille.get(f) ?? [])
-    return (index.membresParFamille.get(f) ?? []).filter((id) => !enfants.has(id) && enJeu(id))
+  /*
+   * Les enfants et les époux EN JEU de chaque famille, calculés une fois et relus
+   * ensuite (2026-10-07, mesuré au F5 sur 3 904 personnes : la disposition prenait
+   * ~1 s). Les deux listes étaient refaites à chaque appel — un `Set` et deux `filter`
+   * par appel, des centaines de milliers d'appels sur un grand arbre, dans le
+   * rattrapage surtout, qui relit toutes les familles à chaque fiche rattachée.
+   *
+   * Elles ne dépendent que de `horsJeu` (les personnes du graphe, elles, ne changent
+   * pas) : `indexerLesFamilles()` les oublie, et c'est lui qu'on rappelle quand
+   * `horsJeu` se vide (`poserLesAlliances`). Les listes rendues sont PARTAGÉES : aucun
+   * appelant ne les modifie (`readonly`) — un `sort` se fait sur une copie filtrée.
+   */
+  const enfantsEnJeu = new Map<string, readonly string[]>()
+  const epouxEnJeu = new Map<string, readonly string[]>()
+  const enfantsDe = (f: string): readonly string[] => {
+    let l = enfantsEnJeu.get(f)
+    if (l === undefined) {
+      l = (index.enfantsParFamille.get(f) ?? []).filter(enJeu)
+      enfantsEnJeu.set(f, l)
+    }
+    return l
+  }
+  const epouxDe = (f: string): readonly string[] => {
+    let l = epouxEnJeu.get(f)
+    if (l === undefined) {
+      const enfants = new Set(index.enfantsParFamille.get(f) ?? [])
+      l = (index.membresParFamille.get(f) ?? []).filter((id) => !enfants.has(id) && enJeu(id))
+      epouxEnJeu.set(f, l)
+    }
+    return l
   }
   const famillesEnfant = new Map<string, string[]>()
   const famillesEpoux = new Map<string, string[]>()
+  /** Ajoute en bout de liste, sans recopier la liste (l'ancien `[...l, f]` était quadratique). */
+  const ajouterA = (m: Map<string, string[]>, cle: string, f: string): void => {
+    const l = m.get(cle)
+    if (l) l.push(f)
+    else m.set(cle, [f])
+  }
   function indexerLesFamilles(): void {
+    enfantsEnJeu.clear()
+    epouxEnJeu.clear()
     for (const f of familles.keys()) {
-      for (const e of enfantsDe(f)) famillesEnfant.set(e, [...(famillesEnfant.get(e) ?? []), f])
-      for (const e of epouxDe(f)) famillesEpoux.set(e, [...(famillesEpoux.get(e) ?? []), f])
+      for (const e of enfantsDe(f)) ajouterA(famillesEnfant, e, f)
+      for (const e of epouxDe(f)) ajouterA(famillesEpoux, e, f)
+    }
+    // L'occupation des rangées lit les époux en jeu : elle se refait aussi (voir `accrocher`).
+    oublierLesCouples()
+  }
+
+  /*
+   * L'OCCUPATION DES RANGÉES de l'arbre principal, tenue à jour au fil des poses.
+   *
+   * `accrocher()` cherche un creux pour chaque petit bloc rattaché ; il refaisait pour
+   * cela, à CHAQUE bloc, la liste de tout ce qui est pris : chaque fiche posée, et
+   * l'espace entre deux époux posés sur une même rangée — toutes les familles relues.
+   * Sur un grand arbre, des centaines de blocs × des milliers de fiches : c'était le
+   * premier poste de la disposition. On garde désormais ces intervalles d'un bloc à
+   * l'autre, et on ne relit que ce qui a été posé depuis.
+   *
+   * Pourquoi c'est le MÊME calcul : `racine.poses` ne fait que s'allonger (`fusionner`
+   * ajoute en bout de liste), et une fiche entrée dans l'arbre principal n'en bouge plus
+   * — `decaler` ne s'applique qu'aux blocs encore en main. Une fiche relue garde donc
+   * l'intervalle qu'on lui a lu. L'étendue d'une union ne change que si l'un de ses
+   * époux est (re)posé : on ne refait que les familles des fiches nouvelles. Et l'ordre
+   * des intervalles dans une rangée n'importe pas : la recherche du creux n'en prend
+   * qu'un maximum (ou un minimum).
+   */
+  /** La dernière pose de chaque personne dans l'arbre principal (la dernière l'emporte, comme avant). */
+  const poseDe = new Map<string, Pose>()
+  const xDeId = new Map<string, number>()
+  /** Les fiches posées, rangée par rangée. */
+  const fichesParRangeeOccupee = new Map<number, [number, number][]>()
+  /** L'étendue de chaque union dont au moins deux époux sont posés sur une même rangée. */
+  const coupleDe = new Map<string, { g: number; ab: [number, number] }>()
+  const couplesParRangee = new Map<number, Map<string, [number, number]>>()
+  /** « Dans mon arbre » : l'étendue de chaque quart du lecteur, rangée par rangée. */
+  const etendueDesQuarts = new Map<number, Map<Branche, [number, number]>>()
+  /** Combien de fiches de `racine.poses` ont été relues — pour les fiches, pour les unions. */
+  let fichesLues = 0
+  let couplesLus = 0
+  function oublierLesCouples(): void {
+    coupleDe.clear()
+    couplesParRangee.clear()
+    couplesLus = 0
+  }
+  /** L'étendue d'une union, refaite comme `accrocher` la faisait : époux en jeu et posés. */
+  function mesurerLeCouple(fam: string): void {
+    const avant = coupleDe.get(fam)
+    if (avant) {
+      couplesParRangee.get(avant.g)!.delete(fam)
+      coupleDe.delete(fam)
+    }
+    const ep = epouxDe(fam)
+      .map((e) => poseDe.get(e))
+      .filter((p): p is Pose => p !== undefined)
+    if (ep.length < 2 || ep.some((p) => p.g !== ep[0]!.g)) return
+    const g = ep[0]!.g
+    const ab: [number, number] = [Math.min(...ep.map((p) => p.x)), Math.max(...ep.map((p) => p.x))]
+    coupleDe.set(fam, { g, ab })
+    let rangee = couplesParRangee.get(g)
+    if (!rangee) couplesParRangee.set(g, (rangee = new Map()))
+    rangee.set(fam, ab)
+  }
+  /** Relit les fiches entrées dans l'arbre principal depuis la dernière fois. */
+  function synchroniser(): void {
+    const liste = racine.poses
+    for (; fichesLues < liste.length; fichesLues++) {
+      const p = liste[fichesLues]!
+      const w = largeur(p.id)
+      const l = fichesParRangeeOccupee.get(p.g)
+      if (l) l.push([p.x - w / 2, p.x + w / 2])
+      else fichesParRangeeOccupee.set(p.g, [[p.x - w / 2, p.x + w / 2]])
+      poseDe.set(p.id, p)
+      xDeId.set(p.id, p.x)
+      if (alliancesDansLArbre) {
+        const b = brancheVue(p.id)
+        if (b === null || !QUARTS_DU_LECTEUR.has(b)) continue
+        let parQuart = etendueDesQuarts.get(p.g)
+        if (!parQuart) etendueDesQuarts.set(p.g, (parQuart = new Map()))
+        const e = parQuart.get(b)
+        if (e) {
+          e[0] = Math.min(e[0], p.x - w / 2)
+          e[1] = Math.max(e[1], p.x + w / 2)
+        } else parQuart.set(b, [p.x - w / 2, p.x + w / 2])
+      }
+    }
+    for (; couplesLus < liste.length; couplesLus++) {
+      for (const fam of famillesEpoux.get(liste[couplesLus]!.id) ?? []) mesurerLeCouple(fam)
     }
   }
   indexerLesFamilles()
@@ -853,10 +971,14 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     lignees.flatMap(({ lignee: l }) => [...l.sosa].filter(([n]) => n > 1).map(([, id]) => id)),
   )
 
-  const xDe = (): Map<string, number> => {
-    const m = new Map<string, number>()
-    for (const p of racine.poses) m.set(p.id, p.x)
-    return m
+  /**
+   * Le x de chaque fiche de l'arbre principal (la dernière pose l'emporte). La carte est
+   * celle que `synchroniser()` tient à jour, pas une copie : un appelant la lit AVANT de
+   * rattacher quoi que ce soit, comme il lisait l'instantané d'avant.
+   */
+  const xDe = (): ReadonlyMap<string, number> => {
+    synchroniser()
+    return xDeId
   }
   const xEgo = racine.poses.find((p) => p.id === ego)?.x ?? 0
 
@@ -875,24 +997,18 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     if (cible !== undefined && bloc.poses.length <= PETIT_BLOC) {
       // Ce qui est pris, rangée par rangée : chaque fiche, et l'espace entre deux
       // époux posés — un bloc glissé là couperait leur trait d'union.
+      // (Tenu à jour d'un bloc à l'autre : voir `synchroniser()`. Seules les rangées du
+      // bloc comptent — la recherche du creux ne lit qu'elles.)
+      synchroniser()
+      const rangeesDuBloc = new Set(bloc.poses.map((p) => p.g))
       const occupe = new Map<number, [number, number][]>()
+      for (const g of rangeesDuBloc) {
+        const l = [...(fichesParRangeeOccupee.get(g) ?? [])]
+        for (const ab of couplesParRangee.get(g)?.values() ?? []) l.push(ab)
+        occupe.set(g, l)
+      }
       const prendre = (g: number, a: number, b: number): void => {
-        const l = occupe.get(g)
-        if (l) l.push([a, b])
-        else occupe.set(g, [[a, b]])
-      }
-      const xPose = new Map<string, Pose>()
-      for (const p of racine.poses) {
-        const w = largeur(p.id)
-        prendre(p.g, p.x - w / 2, p.x + w / 2)
-        xPose.set(p.id, p)
-      }
-      for (const fam of familles.keys()) {
-        const ep = epouxDe(fam)
-          .map((e) => xPose.get(e))
-          .filter((p): p is Pose => p !== undefined)
-        if (ep.length < 2 || ep.some((p) => p.g !== ep[0]!.g)) continue
-        prendre(ep[0]!.g, Math.min(...ep.map((p) => p.x)), Math.max(...ep.map((p) => p.x)))
+        occupe.get(g)?.push([a, b])
       }
       /*
        * « Dans mon arbre », une belle-famille reste dans la COLONNE de sa branche : sur
@@ -901,21 +1017,8 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
        * glissaient dans un trou au milieu des Provost (capture du 02/10).
        */
       if (alliancesDansLArbre && QUARTS_DU_LECTEUR.has(branche)) {
-        const rangees = new Set(bloc.poses.map((p) => p.g))
-        const etendue = new Map<string, [number, number]>()
-        for (const p of racine.poses) {
-          if (!rangees.has(p.g)) continue
-          const b = brancheVue(p.id)
-          if (b === branche || !QUARTS_DU_LECTEUR.has(b)) continue
-          const w = largeur(p.id)
-          const cle = `${p.g}|${b}`
-          const e = etendue.get(cle)
-          if (e) {
-            e[0] = Math.min(e[0], p.x - w / 2)
-            e[1] = Math.max(e[1], p.x + w / 2)
-          } else etendue.set(cle, [p.x - w / 2, p.x + w / 2])
-        }
-        for (const [cle, [a, b]] of etendue) prendre(Number(cle.split('|')[0]), a, b)
+        for (const g of rangeesDuBloc)
+          for (const [b, [lo, hi]] of etendueDesQuarts.get(g) ?? []) if (b !== branche) prendre(g, lo, hi)
       }
       // Les autres zones sont des MURS : le bloc ne les traverse pas pour trouver un creux
       // plus proche de l'autre côté. Les zones vont de gauche à droite dans l'ordre.
@@ -927,22 +1030,86 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
           if (z > zone) murD = Math.min(murD, a)
         }
       })
-      for (const g of new Set(bloc.poses.map((p) => p.g))) {
+      for (const g of rangeesDuBloc) {
         if (murG > -Infinity) prendre(g, -Infinity, murG)
         if (murD < Infinity) prendre(g, murD, Infinity)
       }
-      // Le premier creux libre dans un sens, depuis la cible.
+      /*
+       * Le premier creux libre dans un sens, depuis la cible : à chaque tour, le bloc
+       * saute au-delà de TOUT ce qu'il chevauche — vers la droite, de la fin la plus à
+       * droite des intervalles touchés ; vers la gauche, du début le plus à gauche.
+       *
+       * Chaque tour relisait toute la rangée, pour chaque fiche du bloc. On trie
+       * désormais chaque rangée une fois par bloc, et un tour ne fait plus qu'une
+       * recherche dichotomique par fiche. C'est la même réponse, exactement :
+       *
+       *  - vers la droite, un intervalle [a, b] est touché si `hi > a − écart` et
+       *    `lo < b + écart`. Rangés par `a` croissant, ceux qui passent le premier test
+       *    sont un DÉBUT de liste ; parmi eux, celui dont la fin est la plus grande passe
+       *    le second test si l'un d'eux le passe. Le pas est alors `b + écart − lo` pour
+       *    ce `b`-là : la plus grande des valeurs d'avant, puisque l'arrondi d'une somme
+       *    flottante est croissant avec ses termes ;
+       *  - vers la gauche, la même chose en miroir : rangés par `b` décroissant, le plus
+       *    petit `a` du début de liste.
+       *
+       * Les murs des autres zones (±∞) passent par le même chemin, et le plafond de
+       * 10 000 tours reste le même.
+       */
+      interface RangeeTriee {
+        /** Rangés par `a` croissant : `a − écart`, et le plus grand `b` jusque-là. */
+        aMoinsEcart: number[]
+        bMax: number[]
+        /** Rangés par `b` décroissant : `b + écart`, et le plus petit `a` jusque-là. */
+        bPlusEcart: number[]
+        aMin: number[]
+      }
+      const triees = new Map<number, RangeeTriee>()
+      for (const [g, l] of occupe) {
+        const ordre = (u: number, v: number): number => (u < v ? -1 : u > v ? 1 : 0)
+        const parA = [...l].sort((u, v) => ordre(u[0], v[0]))
+        const parB = [...l].sort((u, v) => ordre(v[1], u[1]))
+        const t: RangeeTriee = { aMoinsEcart: [], bMax: [], bPlusEcart: [], aMin: [] }
+        let bMax = -Infinity
+        for (const [a, b] of parA) {
+          t.aMoinsEcart.push(a - ECART_BLOC)
+          t.bMax.push((bMax = Math.max(bMax, b)))
+        }
+        let aMin = Infinity
+        for (const [a, b] of parB) {
+          t.bPlusEcart.push(b + ECART_BLOC)
+          t.aMin.push((aMin = Math.min(aMin, a)))
+        }
+        triees.set(g, t)
+      }
+      /** Combien de valeurs en tête de `l` passent `garder` (vrai sur un début de liste). */
+      const debut = (l: number[], garder: (v: number) => boolean): number => {
+        let bas = 0
+        let haut = l.length
+        while (bas < haut) {
+          const m = (bas + haut) >> 1
+          if (garder(l[m]!)) bas = m + 1
+          else haut = m
+        }
+        return bas
+      }
       const chercher = (sens: Cote): number => {
         let dx = cible - bloc.ancre
         for (let tour = 0; tour < 10_000; tour++) {
           let pas = 0
           for (const p of bloc.poses) {
+            const t = triees.get(p.g)
+            if (!t) continue
             const w = largeur(p.id)
             const lo = p.x + dx - w / 2
             const hi = p.x + dx + w / 2
-            for (const [a, b] of occupe.get(p.g) ?? []) {
-              if (lo >= b + ECART_BLOC || hi <= a - ECART_BLOC) continue
-              pas = sens === 'D' ? Math.max(pas, b + ECART_BLOC - lo) : Math.min(pas, a - ECART_BLOC - hi)
+            if (sens === 'D') {
+              const k = debut(t.aMoinsEcart, (v) => hi > v)
+              const b = k ? t.bMax[k - 1]! : -Infinity
+              if (k && lo < b + ECART_BLOC) pas = Math.max(pas, b + ECART_BLOC - lo)
+            } else {
+              const k = debut(t.bPlusEcart, (v) => lo < v)
+              const a = k ? t.aMin[k - 1]! : Infinity
+              if (k && hi > a - ECART_BLOC) pas = Math.min(pas, a - ECART_BLOC - hi)
             }
           }
           if (pas === 0) break
@@ -984,21 +1151,46 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     fusionner(racine, bloc)
   }
 
+  /*
+   * Le rattrapage : une famille à la fois, la PREMIÈRE (dans l'ordre des familles) qui a
+   * à la fois une personne posée et une personne libre, puis on repart du début — chaque
+   * rattachement peut en rendre une autre, plus haut dans l'ordre, rattachable. Cet ordre
+   * décide de la place de chacun ; il est gardé tel quel.
+   *
+   * Ce qui coûtait (2026-10-07) n'était pas l'ordre mais l'examen : pour CHAQUE famille
+   * de CHAQUE tour, quatre `filter` et une concaténation, et la carte des x refaite en
+   * tête de tour. On examine désormais une famille sans rien allouer (`aRattacher`), et
+   * on ne lit les x que pour celle qu'on rattache — rien ne bouge entre le début du tour
+   * et elle, la lecture est la même.
+   */
+  function aRattacher(fam: string, exclus: ReadonlySet<string>): boolean {
+    let posee = false
+    let libre = false
+    for (const e of epouxDe(fam)) {
+      if (poses.has(e)) posee = true
+      else if (exclus.has(e)) return false
+      else libre = true
+    }
+    for (const e of enfantsDe(fam)) {
+      if (poses.has(e)) posee = true
+      else if (exclus.has(e)) return false
+      else libre = true
+    }
+    return posee && libre
+  }
   function accrocherLesProches(exclus: ReadonlySet<string> = new Set()): void {
     let progres = true
     while (progres) {
       progres = false
-      const x = xDe()
       for (const fam of familles.keys()) {
+        if (!aRattacher(fam, exclus)) continue
+        const x = xDe()
         const ep = epouxDe(fam)
         const en = enfantsDe(fam)
         const epPoses = ep.filter((e) => poses.has(e))
         const enPoses = en.filter((e) => poses.has(e))
-        if (!epPoses.length && !enPoses.length) continue
         const epLibres = ep.filter((e) => !poses.has(e))
         const enLibres = en.filter((e) => !poses.has(e))
-        if (!epLibres.length && !enLibres.length) continue
-        if ([...epLibres, ...enLibres].some((e) => exclus.has(e))) continue
 
         const attache = epPoses[0] ?? enPoses[0]!
         const cote: Cote = (x.get(attache) ?? 0) < xEgo ? 'G' : 'D'
@@ -1086,19 +1278,67 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     accrocherLesProches()
   }
 
-  /** Le pont, son groupe, et les familles qui touchent le groupe — rien d'autre. */
+  /*
+   * Où se trouve chaque nœud, et chaque arête par son origine, dans les listes du graphe
+   * — pour `sousGraphe`, qui relisait les deux listes ENTIÈRES pour chaque famille par
+   * alliance (des centaines de groupes × des dizaines de milliers d'arêtes). Construit au
+   * premier groupe, une fois.
+   */
+  interface Positions {
+    noeuds: Map<string, number[]>
+    aretesParOrigine: Map<string, number[]>
+    aretesParNoeud: Map<string, number[]>
+  }
+  let positions: Positions | null = null
+  function lesPositions(): Positions {
+    if (positions) return positions
+    const noeuds = new Map<string, number[]>()
+    const aretesParOrigine = new Map<string, number[]>()
+    const aretesParNoeud = new Map<string, number[]>()
+    const noter = (m: Map<string, number[]>, cle: string, i: number): void => {
+      const l = m.get(cle)
+      if (l) l.push(i)
+      else m.set(cle, [i])
+    }
+    graphe.noeuds.forEach((n, i) => noter(noeuds, n.id, i))
+    graphe.aretes.forEach((a, i) => {
+      noter(aretesParOrigine, a.de, i)
+      noter(aretesParNoeud, a.de, i)
+      if (a.vers !== a.de) noter(aretesParNoeud, a.vers, i)
+    })
+    return (positions = { noeuds, aretesParOrigine, aretesParNoeud })
+  }
+
+  /**
+   * Le pont, son groupe, et les familles qui touchent le groupe — rien d'autre.
+   *
+   * Les mêmes nœuds et les mêmes arêtes, dans le même ordre, que le filtrage des deux
+   * listes entières : une arête qui touche un membre est l'une de SES arêtes ; une
+   * arête dont les deux bouts sont gardés part d'un nœud gardé. On ne lit donc que
+   * celles-là, puis on remet les positions dans l'ordre du graphe.
+   */
   function sousGraphe(pont: string, membres: string[]): Graphe {
+    const { noeuds, aretesParOrigine, aretesParNoeud } = lesPositions()
     const estMembre = new Set(membres)
     const garde = new Set([pont, ...membres])
-    for (const a of graphe.aretes) {
-      if (estMembre.has(a.de) && familles.has(a.vers)) garde.add(a.vers)
-      if (estMembre.has(a.vers) && familles.has(a.de)) garde.add(a.de)
+    for (const m of estMembre)
+      for (const i of aretesParNoeud.get(m) ?? []) {
+        const a = graphe.aretes[i]!
+        if (estMembre.has(a.de) && familles.has(a.vers)) garde.add(a.vers)
+        if (estMembre.has(a.vers) && familles.has(a.de)) garde.add(a.de)
+      }
+    const iNoeuds: number[] = []
+    const iAretes: number[] = []
+    for (const id of garde) {
+      for (const i of noeuds.get(id) ?? []) iNoeuds.push(i)
+      for (const i of aretesParOrigine.get(id) ?? []) if (garde.has(graphe.aretes[i]!.vers)) iAretes.push(i)
     }
+    const croissant = (a: number, b: number): number => a - b
     return {
       ...graphe,
       ego: pont,
-      noeuds: graphe.noeuds.filter((n) => garde.has(n.id)),
-      aretes: graphe.aretes.filter((a) => garde.has(a.de) && garde.has(a.vers)),
+      noeuds: iNoeuds.sort(croissant).map((i) => graphe.noeuds[i]!),
+      aretes: iAretes.sort(croissant).map((i) => graphe.aretes[i]!),
     }
   }
   if (groupes.size) poserLesAlliances()
@@ -1312,11 +1552,47 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     direct: FicheHistoire | undefined
   }
 
-  const fichesParRangee = new Map<number, FicheHistoire[]>()
-  for (const f of fiches) fichesParRangee.set(f.rangee, [...(fichesParRangee.get(f.rangee) ?? []), f])
-  /** Une fiche, autre que les époux, entre les deux sur leur rangée ? */
-  const separes = (a: FicheHistoire, b: FicheHistoire): boolean =>
-    (fichesParRangee.get(a.rangee) ?? []).some((f) => f !== a && f !== b && f.x < b.x && f.x + f.w > a.x + a.w)
+  /*
+   * Une fiche, autre que les époux, entre les deux sur leur rangée ? C'est-à-dire une
+   * fiche qui commence avant `b` (`f.x < b.x`) et finit après `a` (`f.x + f.w > a.x + a.w`).
+   * Ni `a` ni `b` ne passent ce test eux-mêmes (`b` ne commence pas avant lui-même, `a`
+   * ne finit pas après lui-même) : la question revient à « la fin la plus à droite des
+   * fiches qui commencent avant `b` dépasse-t-elle la fin de `a` ? ».
+   *
+   * On la posait en parcourant toute la rangée, pour chaque famille : des milliers de
+   * familles × des centaines de fiches par rangée. Chaque rangée est désormais triée par
+   * `x`, avec le maximum courant des fins : une recherche dichotomique, mêmes
+   * comparaisons sur les mêmes nombres, même réponse.
+   */
+  const rangeesTriees = new Map<number, { debuts: number[]; finMax: number[] }>()
+  {
+    const parRangeeDeFiches = new Map<number, FicheHistoire[]>()
+    for (const f of fiches) {
+      const l = parRangeeDeFiches.get(f.rangee)
+      if (l) l.push(f)
+      else parRangeeDeFiches.set(f.rangee, [f])
+    }
+    for (const [g, l] of parRangeeDeFiches) {
+      const triees = [...l].sort((a, b) => a.x - b.x)
+      const finMax: number[] = []
+      let m = -Infinity
+      for (const f of triees) finMax.push((m = Math.max(m, f.x + f.w)))
+      rangeesTriees.set(g, { debuts: triees.map((f) => f.x), finMax })
+    }
+  }
+  const separes = (a: FicheHistoire, b: FicheHistoire): boolean => {
+    const r = rangeesTriees.get(a.rangee)
+    if (!r) return false
+    // Le nombre de fiches qui commencent strictement avant `b`.
+    let lo = 0
+    let hi = r.debuts.length
+    while (lo < hi) {
+      const m = (lo + hi) >> 1
+      if (r.debuts[m]! < b.x) lo = m + 1
+      else hi = m
+    }
+    return lo > 0 && r.finMax[lo - 1]! > a.x + a.w
+  }
 
   const foyers: EtiquetteFoyer[] = []
   const traces: Trace[] = []
@@ -1450,7 +1726,9 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
   for (const t of traces) {
     if (!t.en.length || t.milieuX === null) continue
     const r = espaceDe(t)
-    parEspace.set(r, [...(parEspace.get(r) ?? []), t])
+    const l = parEspace.get(r)
+    if (l) l.push(t)
+    else parEspace.set(r, [t])
   }
   for (const liste of parEspace.values()) {
     // Ce qui ne bouge pas : les montants des unions qui contournent (sous les époux),
@@ -1463,7 +1741,9 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
     // Les descentes : à leur place si elle est libre, sinon au plus près dans leur plage.
     const descentes: { x: number; fam: string }[] = []
     for (const t of liste) {
-      t.departX = auPlusPres(t.departX, t.plage, (x) => libre(x, [...pris, ...descentes], t.fam))
+      // (Les deux listes lues l'une après l'autre : la même question que sur leur
+      // concaténation, sans en refaire une copie à chaque x essayé.)
+      t.departX = auPlusPres(t.departX, t.plage, (x) => libre(x, pris, t.fam) && libre(x, descentes, t.fam))
       descentes.push({ x: t.departX, fam: t.fam })
     }
     // Les chutes : une descente d'une autre famille sur leur x les fait glisser sur la fiche.
@@ -1506,7 +1786,11 @@ export function disposerLignees(graphe: Graphe, options: OptionsDeDisposition = 
   // Les couloirs, rangée par rangée.
   const parRangee = <T extends { rangee: number }>(liste: T[]): Map<number, T[]> => {
     const m = new Map<number, T[]>()
-    for (const it of liste) m.set(it.rangee, [...(m.get(it.rangee) ?? []), it])
+    for (const it of liste) {
+      const l = m.get(it.rangee)
+      if (l) l.push(it)
+      else m.set(it.rangee, [it])
+    }
     return m
   }
   for (const liste of parRangee(traces.flatMap((t) => (t.detour ? [t.detour] : []))).values()) repartir(liste, 10)

@@ -41,10 +41,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  CLE_ETAG_GRAPHE,
   NOM_D_UNE_PERSONNE_VIVANTE,
+  chargerGraphe,
   lireFichePersonne,
+  oublierEtag,
   rechercherPersonnes,
-  requeteApi,
+  retenirEtag,
   type Graphe,
   type FichePersonneComplete,
   type ResultatDeRecherche,
@@ -70,6 +73,7 @@ import {
   type Quart,
 } from '@/histoire/lignees'
 import { apresLaPeinture, creerChronometre, premierChargement, publier, reseauDe, type Chronometre } from '@/histoire/chronometre'
+import { cleDeDisposition, identiteDuLecteur, memoireDeLArbre } from '@/histoire/memoire'
 import { auFormat, entreePortrait, geometriePortrait, texteDePortrait } from '@/histoire/cartes'
 import { useFormatDesCartes } from '@/composables/formatDesCartes'
 import ReglageFormatDesCartes from '@/components/arbre/ReglageFormatDesCartes.vue'
@@ -209,6 +213,28 @@ const { format: formatDesCartes } = useFormatDesCartes()
 const enPortrait = computed(() => formatDesCartes.value === 'portrait')
 /** Le chronomètre du premier affichage (`histoire/chronometre.ts`), `null` ensuite. */
 let chrono: Chronometre | null = null
+/**
+ * Le graphe affiché tel qu'il est GARDÉ (`histoire/memoire.ts`) : pour quel lecteur,
+ * sous quel `ETag`. `null` quand rien ne se garde (pas d'`ETag`, pas de session).
+ */
+let grapheGarde: { identite: string; etag: string } | null = null
+/**
+ * La clé de la disposition `lignees` que `disposer()` ferait maintenant : TOUT ce qui
+ * entre dans son calcul, hors le graphe (que l'`ETag` désigne). La ligne seule n'y est
+ * pas : sa disposition en pedigree, petite, ne se garde pas, et quand elle ne s'applique
+ * pas la disposition `lignees` ne dépend pas d'elle.
+ */
+function cleDeLaDisposition(): string {
+  return cleDeDisposition({
+    avecAlliances: avecAlliances.value,
+    avecConjoint: avecConjoint.value,
+    avecSansLien: avecSansLien.value,
+    masquees: filtres.masquees,
+    format: formatDesCartes.value,
+    alliancesDansLArbre: alliancesDansLArbre.value,
+    fratriesParNaissance: fratriesParNaissance.value,
+  })
+}
 function disposer(graphe: Graphe): void {
   const mesure = <T>(etape: string, calcul: () => T): T => (chrono ? chrono.mesure(etape, calcul) : calcul())
   // Les alliances d'abord, classées sur le graphe ENTIER : c'est lui que le serveur a classé.
@@ -218,24 +244,36 @@ function disposer(graphe: Graphe): void {
   const avecLesLiens = avecSansLien.value ? sansConjoint : sansPersonnesSansLien(sansConjoint, noeudsSansLien(graphe))
   // Les quarts masqués quittent l'écran : l'arbre se refait sans eux, le tronc reste.
   quartsMasquables.value = quartsPresents(avecLesLiens, graphe)
-  const filtre = sansBranches(avecLesLiens, filtres.masquees, graphe)
+  // (Calculé à la demande : une disposition gardée n'en a pas besoin.)
+  let filtre: Graphe | null = null
+  const leFiltre = (): Graphe => (filtre ??= sansBranches(avecLesLiens, filtres.masquees, graphe))
   // La ligne directe SEULE : tout le reste quitte l'écran, et l'arbre se refait sur elle.
   const racine = cleLigneSeule.value
   cleDisposee = racine
   // Elle a sa propre forme : un arbre binaire, chacun au milieu de ses deux parents.
-  if (racine !== null && filtre.noeuds.some((n) => n.id === racine)) {
+  if (racine !== null && leFiltre().noeuds.some((n) => n.id === racine)) {
     disposition.value = mesure('dont placement', () =>
-      disposerEnPedigree(auFormat(seulementLaLigne(filtre, racine), formatDesCartes.value), racine, graphe.ego),
+      disposerEnPedigree(auFormat(seulementLaLigne(leFiltre(), racine), formatDesCartes.value), racine, graphe.ego),
     )
     return
   }
+  // Déjà calculée sur ce graphe, avec ces bascules (ce F5-ci ou un précédent) : on la reprend.
+  const garde = grapheGarde
+  const cle = garde ? cleDeLaDisposition() : null
+  const deja = garde && cle !== null ? memoireDeLArbre.dispositionGardee(garde.identite, garde.etag, cle) : null
+  if (deja) {
+    disposition.value = mesure('dont placement (reprise de la mémoire)', () => deja)
+    return
+  }
   // Les boîtes en dernier : le tri des familles ne lit que les liens, jamais `w` ni `h`.
-  disposition.value = mesure('dont placement', () =>
-    disposerLignees(auFormat(filtre, formatDesCartes.value), {
+  const calculee = mesure('dont placement', () =>
+    disposerLignees(auFormat(leFiltre(), formatDesCartes.value), {
       alliances: alliancesDansLArbre.value ? 'dans-l-arbre' : 'a-part',
       fratriesParNaissance: fratriesParNaissance.value,
     }),
   )
+  disposition.value = calculee
+  if (garde && cle !== null) void memoireDeLArbre.garderLaDisposition(garde.identite, garde.etag, cle, calculee)
 }
 /** Après une bascule : la disposition refaite, et ce qui n'existe plus oublié. */
 function redisposer(): void {
@@ -333,35 +371,72 @@ const chargement = ref(true)
 const erreur = ref<string | null>(null)
 
 /*
- * L'APPARITION, au premier affichage : l'arbre éclot depuis vous, en étoile. Chaque
- * fiche apparaît avec un retard qui croît avec sa distance à la vôtre — les proches
- * d'abord, les lointains ensuite —, puis les traits et les noms. Rien n'est attendu :
- * la disposition est entière, seul le dessin s'échelonne. Une seule fois par chargement
- * (pas à chaque filtre), et jamais si le système demande moins d'animations.
+ * L'APPARITION, au premier affichage : un seul fondu de l'arbre entier — les fiches,
+ * puis les traits un peu après. Une seule fois par chargement (pas à chaque filtre), et
+ * jamais si le système demande moins d'animations.
+ *
+ * Jusqu'au 2026-10-07, elle était échelonnée fiche par fiche depuis la vôtre : une animation
+ * CSS par fiche — 5 294 sur l'arbre servi —, et les styles des fiches calculés deux
+ * fois, avec puis sans leur retard. La première image peinte prenait ~650 ms. Un fondu
+ * pour le calque des fiches, un pour celui des traits — et un par nom ou photo écrit
+ * à l'écran, les seules fiches visibles en reçoivent.
  */
-const DUREE_REVELATION = 1600
-const revelation = shallowRef<Map<string, number> | null>(null)
+const DUREE_REVELATION = 600
+/** Le fondu d'un calque ; `apres`, son retard. */
+const fondu = (apres = 0): Record<string, string> => ({
+  animation: `apparition-texte ${DUREE_REVELATION}ms ease-out ${apres}ms backwards`,
+})
+const revelation = shallowRef(false)
 let finRevelation = 0
+/*
+ * Les zones de clic des familles (un trait transparent par famille, des milliers) ne
+ * se voient pas : elles attendent que la première image soit peinte, pour ne pas la
+ * retarder. Un clic sur un trait dans cette image-là ne sélectionne pas sa famille.
+ */
+const zonesDeClic = shallowRef(false)
 function lancerRevelation(): void {
-  const d = disposition.value
-  const moi = d?.parId.get(d.ego)
-  if (!d || !moi) return
+  if (!disposition.value) return
   try {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   } catch {
     /* environnement sans matchMedia : on anime */
   }
-  const distance = (f: FicheHistoire): number => Math.hypot(f.cx - moi.cx, (f.y - moi.y) * 1.6)
-  let loin = 1
-  for (const f of d.fiches) loin = Math.max(loin, distance(f))
-  revelation.value = new Map(d.fiches.map((f) => [f.id, Math.round(DUREE_REVELATION * Math.pow(distance(f) / loin, 0.75))]))
+  revelation.value = true
   window.clearTimeout(finRevelation)
-  finRevelation = window.setTimeout(() => (revelation.value = null), DUREE_REVELATION + 900)
+  finRevelation = window.setTimeout(() => (revelation.value = false), DUREE_REVELATION * 2)
 }
-/** L'animation d'apparition d'un élément rattaché à une fiche, décalée de `apres` ms. */
-function apparition(id: string, nom: string, apres = 0): Record<string, string> {
-  const delai = revelation.value?.get(id)
-  return delai === undefined ? {} : { animation: `${nom} 420ms cubic-bezier(.2,.7,.3,1) ${delai + apres}ms backwards` }
+
+/**
+ * Le graphe, REVALIDÉ contre celui qu'on a gardé d'un F5 à l'autre (`histoire/memoire.ts`).
+ *
+ * On présente en `If-None-Match` l'`ETag` du graphe gardé pour CE lecteur — celui-là et
+ * aucun autre : sur `304`, c'est exactement lui que le serveur déclare à jour, et on le
+ * reprend au lieu de le retélécharger. Rien ne s'affiche avant cette réponse. Sans
+ * graphe gardé, aucun `If-None-Match` : un `200`, comme avant. Le graphe gardé se relit
+ * pendant que la requête part.
+ */
+async function obtenirLeGraphe(c: Chronometre): Promise<{ graphe: Graphe; inchange: boolean }> {
+  const identite = identiteDuLecteur(session.value)
+  const etag = identite ? await c.mesureAsync('mémoire locale : ETag', () => memoireDeLArbre.etagGarde(identite)) : null
+  if (etag !== null) retenirEtag(CLE_ETAG_GRAPHE, etag)
+  else oublierEtag(CLE_ETAG_GRAPHE)
+  const enReserve = identite && etag !== null ? memoireDeLArbre.grapheGarde(identite, etag) : Promise.resolve(null)
+  let reponse = await c.mesureAsync('requête + lecture JSON', () => chargerGraphe())
+  if (reponse.statut === 'inchange') {
+    const garde = await c.mesureAsync('mémoire locale : graphe', () => enReserve)
+    if (garde && identite && etag !== null) {
+      grapheGarde = { identite, etag }
+      return { graphe: garde, inchange: true }
+    }
+    // Gardé, mais illisible entre-temps : on le redemande en entier, sans `If-None-Match`.
+    oublierEtag(CLE_ETAG_GRAPHE)
+    reponse = await c.mesureAsync('requête + lecture JSON', () => chargerGraphe())
+    if (reponse.statut === 'inchange') throw new Error("L'arbre n'a pas pu être chargé.")
+  }
+  const { donnees, etag: recu } = reponse
+  grapheGarde = identite && recu !== null && !recu.startsWith('W/') ? { identite, etag: recu } : null
+  if (grapheGarde) void memoireDeLArbre.garderLeGraphe(grapheGarde.identite, grapheGarde.etag, donnees)
+  return { graphe: donnees, inchange: false }
 }
 
 async function charger(): Promise<void> {
@@ -371,7 +446,7 @@ async function charger(): Promise<void> {
   chrono = creerChronometre()
   const c = chrono
   try {
-    const graphe = await c.mesureAsync('requête + lecture JSON', () => requeteApi<Graphe>('/arbre/graphe'))
+    const { graphe, inchange } = await obtenirLeGraphe(c)
     c.mesure('mise en mémoire', () => (grapheCharge.value = graphe))
     // « Voir dans l'arbre » vers une personne d'une famille par alliance masquée : on l'affiche.
     const demandee = Number(route.query['personne']) || null
@@ -383,6 +458,14 @@ async function charger(): Promise<void> {
     if (demandee !== null && !avecSansLien.value && estSansLien(graphe, demandee)) {
       avecSansLien.value = true
       ecrirePreference(CLE_SANS_LIEN, true)
+    }
+    // Graphe inchangé : la disposition de ces bascules est peut-être gardée — on la relit.
+    const garde = grapheGarde
+    if (inchange && garde && cleLigneSeule.value === null) {
+      const cle = cleDeLaDisposition()
+      await c.mesureAsync('mémoire locale : disposition', () =>
+        memoireDeLArbre.prechargerLaDisposition(garde.identite, garde.etag, cle),
+      )
     }
     c.mesure('disposition (filtres + placement)', () => disposer(graphe))
     await c.mesureAsync('rendu Vue', () => nextTick())
@@ -407,6 +490,8 @@ async function charger(): Promise<void> {
   } finally {
     chrono = null
     chargement.value = false
+    // Après la première image (ou l'échec) : les zones de clic des familles.
+    zonesDeClic.value = true
   }
 }
 
@@ -436,7 +521,7 @@ const niveau = computed(() => niveauDe(cadrage.value.s, seuilDesNoms.value))
 
 /** La jauge de zoom, pour l'administration seulement : un repère chiffré sur
  *  les captures d'écran (« à 30 % les noms se chevauchent »), pas un réglage. */
-const { administrateur } = useSession()
+const { administrateur, session } = useSession()
 const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(cadrage.value.s, canevas.value, seuilDesNoms.value) : null))
 const ensemble = computed(() => niveau.value === 0)
 
@@ -1032,7 +1117,6 @@ const stylesFiches = computed(() => {
       width: `${f.w}px`,
       height: `${f.h}px`,
       opacity: !passe(f) ? '0.1' : ciblees.size && !ciblees.has(f.id) ? '0.25' : '1',
-      ...apparition(f.id, 'apparition-fiche'),
     }
     if (loin) {
       const place = direct ? enLigne(f) : null
@@ -1793,7 +1877,7 @@ onBeforeUnmount(() => {
         <svg
           class="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
           aria-hidden="true"
-          :style="revelation ? { animation: `apparition-texte 900ms ease-out ${DUREE_REVELATION * 0.35}ms backwards` } : undefined"
+          :style="revelation ? fondu(DUREE_REVELATION * 0.35) : undefined"
         >
           <g :transform="transformationTraits">
             <path
@@ -1848,7 +1932,7 @@ onBeforeUnmount(() => {
           les fiches. Le SVG laisse passer le pointeur (le glisser du canevas continue de
           marcher) ; seuls les traits l'attrapent.
         -->
-        <svg class="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
+        <svg v-if="zonesDeClic" class="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
           <g :transform="transformationTraits">
             <path
               v-for="f in disposition.traces.familles"
@@ -1866,7 +1950,10 @@ onBeforeUnmount(() => {
           </g>
         </svg>
 
-        <div class="absolute top-0 left-0 origin-top-left" :style="{ transform: transformationMonde }">
+        <div
+          class="absolute top-0 left-0 origin-top-left"
+          :style="revelation ? { transform: transformationMonde, ...fondu() } : { transform: transformationMonde }"
+        >
           <FichesMonde :fiches="disposition.fiches" :styles="stylesFiches" @choisir="choisir" />
         </div>
 
@@ -1881,7 +1968,7 @@ onBeforeUnmount(() => {
             decoding="async"
             class="pointer-events-none absolute object-cover"
             :class="t.forme === 'portrait' ? 'rounded-[14%]' : 'rounded-full'"
-            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...apparition(t.id, 'apparition-texte', 120) }"
+            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...(revelation ? fondu(120) : {}) }"
           />
           <svg
             v-else
@@ -1889,7 +1976,7 @@ onBeforeUnmount(() => {
             :class="t.forme === 'portrait' ? 'cadre-portrait rounded-[14%]' : ''"
             viewBox="0 0 40 40"
             aria-hidden="true"
-            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...apparition(t.id, 'apparition-texte', 120) }"
+            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...(revelation ? fondu(120) : {}) }"
           >
             <circle cx="20" cy="13.6" r="6.8" class="silhouette" />
             <path d="M6.8,36.8 a13.2,13.2 0 0 1 26.4,0 Z" class="silhouette" />
@@ -1899,7 +1986,7 @@ onBeforeUnmount(() => {
           <div
             v-if="t.forme === 'compact' && t.t1 !== ''"
             class="pointer-events-none absolute flex origin-top-left flex-col justify-center overflow-hidden leading-tight"
-            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...apparition(t.id, 'apparition-texte', 160) }"
+            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...(revelation ? fondu(160) : {}) }"
           >
             <span
               class="truncate font-semibold"
@@ -1911,7 +1998,7 @@ onBeforeUnmount(() => {
           <div
             v-else-if="t.forme === 'portrait' && t.nom !== ''"
             class="pointer-events-none absolute flex origin-top-left flex-col items-center overflow-hidden text-center"
-            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...apparition(t.id, 'apparition-texte', 160) }"
+            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...(revelation ? fondu(160) : {}) }"
           >
             <span
               v-if="t.nom"
@@ -2333,12 +2420,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-@keyframes apparition-fiche {
-  from {
-    opacity: 0;
-    transform: scale(0.35);
-  }
-}
 @keyframes apparition-texte {
   from {
     opacity: 0;

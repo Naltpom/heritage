@@ -12,11 +12,13 @@ use App\Module\Question\Contract\FicheEtudiee;
 use App\Module\Tree\Entity\Citation;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Service\ChronometreDuGraphe;
 use App\Module\Tree\Service\ReglagesDeLArbreParSettings;
 use App\Module\Tree\Service\ReglePersonneVivante;
 use App\Module\Tree\Service\TreeFingerprint;
 use App\Module\Tree\Service\VueDeLArbrePourMembership;
 use App\Module\Tree\Service\VueDeLArbrePourQuestions;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 /**
  * Les trois coutures par lesquelles `Membership`, `Media` et `Question` lisent l'arbre
@@ -67,7 +69,23 @@ final class AdaptateursPourLesAutresModulesTest extends ArbreWebTestCase
         return $port;
     }
 
-    private function resolution(): ResolutionDuSujetInterface
+    /** Le même port, avec un cache et un chronomètre : chaque appel est une requête neuve. */
+    private function portMembershipEnCache(ArrayAdapter $cache, ChronometreDuGraphe $chrono): VueDeLArbrePourMembership
+    {
+        $reglages = self::getContainer()->get(SettingService::class);
+        \assert($reglages instanceof SettingService);
+
+        return new VueDeLArbrePourMembership(
+            $this->em(),
+            new ReglePersonneVivante(),
+            new ReglagesDeLArbreParSettings($reglages),
+            new TreeFingerprint($this->em()),
+            chrono: $chrono,
+            cacheArbre: $cache,
+        );
+    }
+
+        private function resolution(): ResolutionDuSujetInterface
     {
         $port = self::getContainer()->get(ResolutionDuSujetInterface::class);
         \assert($port instanceof ResolutionDuSujetInterface);
@@ -84,7 +102,41 @@ final class AdaptateursPourLesAutresModulesTest extends ArbreWebTestCase
      * l'objet de la bascule « voir comme un membre ». Un cercle amputé est faux, et un
      * cercle faux est une fuite ou une fiche muette selon le sens de l'erreur.
      */
-    public function testLaVueRendLArbreCompletSansAucunFiltre(): void
+    /**
+     * La vue est relue en base **une fois par état de l'arbre** (mesurée en production à
+     * 800 ms par requête, à 3 904 personnes). Un arbre inchangé la sert du cache, à
+     * l'identique ; un arbre modifié change l'empreinte, donc la clé, et la relit ; au
+     * milieu d'une transaction, le cache est écarté — Doctrine y rend des entités pas
+     * encore envoyées, que l'empreinte lue en SQL ignore.
+     */
+    public function testLaVueSeRelitDuCacheTantQueLArbreNeChangePas(): void
+    {
+        $cache = new ArrayAdapter();
+
+        $premiere = $this->portMembershipEnCache($cache, $chrono = new ChronometreDuGraphe())->vue();
+        self::assertStringContainsString('cache=miss', $chrono->enTete());
+
+        $seconde = $this->portMembershipEnCache($cache, $chrono = new ChronometreDuGraphe())->vue();
+        self::assertStringContainsString('cache=hit', $chrono->enTete());
+        self::assertEquals($premiere, $seconde, 'Servie du cache, la vue est la même.');
+
+        $this->personnes['cousin']->setDisplayName('Pyroxène Renommé');
+        $this->em()->flush();
+
+        $apres = $this->portMembershipEnCache($cache, $chrono = new ChronometreDuGraphe())->vue();
+        self::assertStringContainsString('cache=miss', $chrono->enTete(), 'Un arbre modifié ne se sert pas du cache.');
+        self::assertSame('Pyroxène Renommé', $apres->personnes[$this->idDe('cousin')]->libelle);
+
+        $this->em()->getConnection()->beginTransaction();
+        try {
+            $this->portMembershipEnCache($cache, $chrono = new ChronometreDuGraphe())->vue();
+            self::assertStringContainsString('cache=transaction', $chrono->enTete());
+        } finally {
+            $this->em()->getConnection()->rollBack();
+        }
+    }
+
+        public function testLaVueRendLArbreCompletSansAucunFiltre(): void
     {
         $vue = $this->portMembership()->vue();
 

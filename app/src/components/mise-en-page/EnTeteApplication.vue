@@ -47,6 +47,16 @@
  *   bandeaux montés dessous (portrait, installation, régime) défilent, eux. Son
  *   `z-30` le garde au-dessus du contenu ; le feuillet des filtres, qui doit le
  *   recouvrir, remonte sa barre en `z-40` le temps d'être ouvert (`BarreEcran`).
+ *
+ * **Le mode administration** (handoff « mode Administration », 1c). Sur toute
+ * route `administration.*`, l'en-tête passe en **fond accent**, texte couleur
+ * du fond, filet accent : on sait toujours dans quel mode on est. Sur
+ * téléphone, un sur-titre « MODE ADMINISTRATION » coiffe le titre ; sur bureau,
+ * les onglets Accueil · Arbre · Explorer cèdent la place à À traiter ·
+ * Utilisateurs · Invitations · Sources, et la recherche se retire (elle
+ * cherche dans l'arbre). Un administrateur a, juste avant l'avatar,
+ * l'interrupteur segmenté Membre / Admin (`InterrupteurMode`). Les autres
+ * comptes n'en voient rien.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -57,11 +67,21 @@ import { useEntete, type Section } from '@/composables/entete'
 import ClocheNotifications from '@/components/notifications/ClocheNotifications.vue'
 import MoiView from '@/views/MoiView.vue'
 import RechercheEntete from './RechercheEntete.vue'
+import InterrupteurMode from './InterrupteurMode.vue'
+import { ENTREES_ADMIN, compterATraiter, entreeAdminActive, useModeAdmin } from '@/composables/modeAdmin'
 
 const routeur = useRouter()
-const { connecte, rattache } = useSession()
+const { connecte, rattache, administrateur } = useSession()
 const { ouvert, outilsDisponibles, basculerTiroir, fermerTiroirs } = useTiroirs()
-const { section, titre, resume, parent, filtresActifs, rechercheLocale } = useEntete()
+const { section, nomDeRoute, titre, resume, parent, filtresActifs, rechercheLocale } = useEntete()
+const { estAdmin, aTraiter } = useModeAdmin()
+
+/** Le mode administration, pour un administrateur seulement. */
+const modeAdmin = computed(() => administrateur.value && estAdmin.value)
+
+onMounted(() => {
+  if (administrateur.value) void compterATraiter()
+})
 
 const boutonOutils = ref<HTMLButtonElement | null>(null)
 const boutonCompte = ref<HTMLButtonElement | null>(null)
@@ -153,20 +173,33 @@ const classeOnglet = (actif: boolean): string =>
     actif ? 'border-accent font-semibold text-accent' : 'border-transparent text-attenue hover:text-texte',
   ].join(' ')
 
-const classeBoutonIcone =
-  'flex h-11 w-11 flex-none items-center justify-center rounded-champ text-attenue hover:text-texte'
+/** Les onglets du mode admin : texte couleur du fond, filet de 2 px sous l'actif. */
+const classeOngletAdmin = (actif: boolean): string =>
+  [
+    'inline-flex h-14 items-center gap-1.5 border-b-2 px-3 text-sm whitespace-nowrap text-fond',
+    actif ? 'border-fond font-bold' : 'border-transparent font-medium opacity-[.78] hover:opacity-100',
+  ].join(' ')
+
+const classeBoutonIcone = computed(() =>
+  modeAdmin.value
+    ? 'flex h-11 w-11 flex-none items-center justify-center rounded-champ text-fond'
+    : 'flex h-11 w-11 flex-none items-center justify-center rounded-champ text-attenue hover:text-texte',
+)
 </script>
 
 <template>
   <header
-    class="sticky top-0 z-30 flex h-14 items-center gap-1 border-b border-ligne bg-panneau px-5 max-md:h-[52px] max-md:px-1"
+    class="sticky top-0 z-30 flex h-14 items-center gap-1 border-b px-5 max-md:h-[52px] max-md:px-1"
+    :class="modeAdmin ? 'entete-admin border-accent bg-accent text-fond' : 'border-ligne bg-panneau'"
+    :data-mode="modeAdmin ? 'administration' : undefined"
     @keydown.escape="fermerEtRendreLeFocus"
   >
     <!-- Téléphone : le retour d'un écran de détail. -->
     <button
       v-if="connecte && parent"
       type="button"
-      class="flex h-11 items-center gap-1 px-2 text-[15px] font-semibold whitespace-nowrap text-accent md:hidden"
+      class="flex h-11 items-center gap-1 px-2 text-[15px] font-semibold whitespace-nowrap md:hidden"
+      :class="modeAdmin ? 'text-fond' : 'text-accent'"
       @click="retour"
     >
       <span aria-hidden="true">‹</span> {{ parent.libelle }}
@@ -182,13 +215,33 @@ const classeBoutonIcone =
 
     <template v-if="connecte">
       <!-- Téléphone : le titre de l'écran et son résumé. -->
-      <div class="titre-ecran flex min-w-0 flex-1 flex-col leading-tight md:hidden" :class="parent ? '' : 'pl-3'">
+      <div v-if="modeAdmin" class="titre-ecran flex min-w-0 flex-1 flex-col leading-tight md:hidden" :class="parent ? '' : 'pl-3'">
+        <span class="text-[10.5px] font-bold tracking-[.1em] uppercase opacity-85">Mode administration</span>
+        <span class="truncate text-[17px] font-bold">{{ titre }}</span>
+        <span v-if="resume" class="truncate text-[12px] opacity-80">{{ resume }}</span>
+      </div>
+      <div v-else class="titre-ecran flex min-w-0 flex-1 flex-col leading-tight md:hidden" :class="parent ? '' : 'pl-3'">
         <span class="truncate text-base font-semibold">{{ titre }}</span>
         <span v-if="resume" class="truncate text-[11.5px] text-attenue">{{ resume }}</span>
       </div>
 
       <!-- Bureau : les onglets. Sur téléphone, c'est la barre du bas. -->
-      <nav aria-label="Navigation principale" class="flex h-14 items-stretch max-md:hidden">
+      <nav v-if="modeAdmin" aria-label="Navigation de l’administration" class="flex h-14 items-stretch max-md:hidden">
+        <RouterLink
+          v-for="o in ENTREES_ADMIN"
+          :key="o.nom"
+          :to="{ name: o.nom }"
+          :class="classeOngletAdmin(entreeAdminActive(nomDeRoute) === o.nom)"
+          :aria-current="entreeAdminActive(nomDeRoute) === o.nom ? 'page' : undefined"
+        >
+          {{ o.libelle }}
+          <span
+            v-if="o.nom === 'administration.a-traiter' && aTraiter !== null && aTraiter > 0"
+            class="compte-a-traiter flex h-5 min-w-5 items-center justify-center rounded-pastille bg-panneau px-1.5 text-[11.5px] font-bold text-accent tnum"
+          >{{ aTraiter }}</span>
+        </RouterLink>
+      </nav>
+      <nav v-else aria-label="Navigation principale" class="flex h-14 items-stretch max-md:hidden">
         <RouterLink
           v-for="o in onglets"
           :key="o.nom"
@@ -216,7 +269,9 @@ const classeBoutonIcone =
         "
       >
         <span class="flex-1 max-md:hidden" aria-hidden="true" />
-        <RechercheEntete class="max-md:w-auto max-md:flex-1" />
+        <!-- En mode admin, le bureau n'a pas de recherche : elle cherche dans
+             l'arbre. La loupe du téléphone, elle, garde sa logique. -->
+        <RechercheEntete class="max-md:w-auto max-md:flex-1 max-md:text-texte" :class="modeAdmin ? 'md:hidden' : ''" />
         <span class="flex-1 max-md:hidden" aria-hidden="true" />
         <button type="button" class="h-11 flex-none px-2 text-[15px] text-accent md:hidden" @click="fermerRecherche()">
           Annuler
@@ -241,7 +296,12 @@ const classeBoutonIcone =
         </svg>
       </button>
 
-      <ClocheNotifications />
+      <!-- `contents` : aucune boîte. Le conteneur ne sert qu'à rendre au
+           panneau de la cloche la couleur du texte, quand l'en-tête est en
+           mode admin (voir le style en bas). -->
+      <div class="cloche-entete contents text-texte">
+        <ClocheNotifications />
+      </div>
 
       <!-- Téléphone : le bouton filtres, au bout de la barre. -->
       <button
@@ -264,20 +324,25 @@ const classeBoutonIcone =
         >{{ filtresActifs }}</span>
       </button>
 
+      <!-- Bureau : l'interrupteur Membre / Admin, aux seuls administrateurs. -->
+      <div v-if="administrateur" class="ml-2 max-md:hidden">
+        <InterrupteurMode forme="segmente" />
+      </div>
+
       <!-- Bureau : l'avatar, dont le menu est Moi. -->
       <div class="relative max-md:hidden">
         <button
           ref="boutonCompte"
           type="button"
-          class="ml-1 flex h-[34px] items-center gap-1 rounded-pastille pr-1.5 pl-0.5 hover:bg-accent-doux"
-          :class="section === 'moi' ? 'bg-accent-doux' : ''"
+          class="ml-1 flex h-[34px] items-center gap-1 rounded-pastille pr-1.5 pl-0.5"
+          :class="modeAdmin ? 'hover:bg-[rgb(255_254_252/.12)]' : section === 'moi' ? 'bg-accent-doux hover:bg-accent-doux' : 'hover:bg-accent-doux'"
           :aria-expanded="ouvert === 'compte'"
           aria-controls="menu-compte"
           aria-label="Moi"
           @click="basculerTiroir('compte')"
         >
           <AvatarCompte :taille="32" />
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" class="text-attenue">
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" :class="modeAdmin ? 'opacity-80' : 'text-attenue'">
             <path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
         </button>
@@ -285,7 +350,7 @@ const classeBoutonIcone =
           v-if="ouvert === 'compte'"
           id="menu-compte"
           ref="menuCompte"
-          class="absolute top-[calc(100%+10px)] right-0 z-50 w-[280px] rounded-panneau border border-ligne bg-panneau shadow-panneau"
+          class="absolute top-[calc(100%+10px)] right-0 z-50 w-[280px] rounded-panneau border border-ligne bg-panneau text-texte shadow-panneau"
         >
           <MoiView forme="menu" />
         </div>
@@ -293,3 +358,14 @@ const classeBoutonIcone =
     </template>
   </header>
 </template>
+
+<style scoped>
+/* En mode admin, le bouton de la cloche prend la couleur du texte de
+   l'en-tête ; son panneau, lui, garde celle du texte ordinaire. */
+.entete-admin .cloche-entete :deep(> div > button) {
+  color: var(--color-fond);
+}
+.entete-admin .cloche-entete :deep(> div > button:hover) {
+  background: rgb(255 254 252 / 0.12);
+}
+</style>

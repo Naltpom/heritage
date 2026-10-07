@@ -25,7 +25,7 @@ export {
 export type { AnalyseErreur, ConduiteATenir } from './erreurs'
 export { appelBrut, construireUrl, requeteApi, surSessionPerdue } from './client'
 export type { MethodeHttp, OptionsRequete, ReponseBrute } from './client'
-export { etagConnu, oublierEtag, requeteRevalidee } from './revalidation'
+export { etagConnu, oublierEtag, requeteRevalidee, retenirEtag } from './revalidation'
 export type { ResultatRevalide } from './revalidation'
 export * from './routes'
 /* Module `Tree` : fiche, famille, recherche, détail d'un nœud en attente

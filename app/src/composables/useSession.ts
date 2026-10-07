@@ -27,6 +27,7 @@ import {
   type ChargeDeSession,
 } from '@/lib/api'
 import type { ReponseCleDAccesJson } from '@/lib/cleDAcces'
+import { memoireDeLArbre } from '@/histoire/memoire'
 import { regimeDeSession, type RegimeAcces } from '@/router/acces'
 
 const session = shallowRef<ChargeDeSession | null>(null)
@@ -63,8 +64,11 @@ export async function rafraichirSession(): Promise<void> {
   try {
     session.value = await lireSession()
   } catch (erreur) {
-    if (erreur instanceof ErreurApi && erreur.statut === 401) session.value = null
-    else throw erreur
+    if (erreur instanceof ErreurApi && erreur.statut === 401) {
+      session.value = null
+      // Plus personne : une session expirée sans déconnexion laissait l'arbre gardé.
+      oublierLArbreGarde()
+    } else throw erreur
   } finally {
     chargement.value = false
     // L'ETag du graphe incorpore les demandes en attente du lecteur et, sous la
@@ -75,6 +79,18 @@ export async function rafraichirSession(): Promise<void> {
   }
 }
 
+/**
+ * Un AUTRE lecteur arrive (connexion), ou celui-ci s'en va (déconnexion, session
+ * perdue) : le graphe de l'arbre gardé d'un F5 à l'autre (`histoire/memoire.ts`) porte
+ * des personnes vivantes vues avec SES droits, et IndexedDB est commun à l'origine. On
+ * l'efface — sur un ordinateur partagé, le suivant ne trouve rien. (Pas à la relecture
+ * de session : elle a lieu à chaque F5, et c'est l'identité du lecteur, dans chaque
+ * entrée, qui sépare « voir comme » et incarnation.)
+ */
+function oublierLArbreGarde(): void {
+  void memoireDeLArbre.oublier()
+}
+
 /** `POST /api/connexion`. Les erreurs (`identifiants_invalides`,
  *  `compte_suspendu`, `trop_de_tentatives`) remontent telles quelles à l'écran,
  *  qui les passe à `analyserErreur()`. */
@@ -83,6 +99,7 @@ export async function connecter(email: string, motDePasse: string): Promise<Char
   session.value = charge
   premierChargement = Promise.resolve()
   oublierEtag()
+  oublierLArbreGarde()
   return charge
 }
 
@@ -94,6 +111,7 @@ export async function connecterParCleDAcces(reponse: ReponseCleDAccesJson): Prom
   session.value = charge
   premierChargement = Promise.resolve()
   oublierEtag()
+  oublierLArbreGarde()
   return charge
 }
 
@@ -116,6 +134,7 @@ export async function deconnecter(): Promise<void> {
     session.value = null
     premierChargement = Promise.resolve()
     oublierEtag()
+    oublierLArbreGarde()
   }
 }
 
@@ -172,6 +191,7 @@ export function installerRattrapageSession(routeur: Router): void {
     session.value = null
     premierChargement = Promise.resolve()
     oublierEtag()
+    oublierLArbreGarde()
 
     const courante = routeur.currentRoute.value
     // Déjà sur un écran public : rien à faire, et surtout pas une redirection

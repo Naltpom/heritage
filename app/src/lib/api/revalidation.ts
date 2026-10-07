@@ -39,13 +39,25 @@ export type ResultatRevalide<T> =
   | { statut: 'inchange' }
   | { statut: 'nouveau'; donnees: T; etag: string | null }
 
-/** Mémoire des `ETag` par clé logique. Volontairement en mémoire seulement :
- *  la charge dépend du lecteur, elle n'a rien à faire dans un stockage qui
- *  survit à la session (§ 1.8, `Cache-Control: no-store` par défaut). */
+/** Mémoire des `ETag` par clé logique, en mémoire seulement : la charge dépend
+ *  du lecteur (§ 1.8). Ce qui en survit à un F5 — le graphe de l'arbre et son
+ *  `ETag` — est gardé à part, par lecteur, et effacé à chaque changement de
+ *  session (`histoire/memoire.ts`) ; c'est lui qui le rend ici par
+ *  {@link retenirEtag}, avant de revalider. */
 const etags = new Map<string, string>()
 
 export function etagConnu(cle: string): string | undefined {
   return etags.get(cle)
+}
+
+/**
+ * Pose l'`ETag` à présenter au prochain appel : celui du corps qu'on a GARDÉ, et
+ * rien d'autre — un `304` dit « ce que vous avez est à jour », il faut donc avoir
+ * ce dont l'`ETag` parle. Même règle qu'à la réception : tel quel, jamais faible.
+ */
+export function retenirEtag(cle: string, etag: string): void {
+  if (etag.startsWith('W/')) etags.delete(cle)
+  else etags.set(cle, etag)
 }
 
 /** Oublie un `ETag` (ou tous). À appeler à tout changement de session et après
