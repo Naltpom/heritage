@@ -15,8 +15,10 @@ import base64, json, os, re, ssl, sys, urllib.request
 
 ICI = os.path.dirname(os.path.abspath(__file__))
 MODELE = os.environ.get('ELEVENLABS_MODEL', 'eleven_multilingual_v2')
-# Une voix vive : peu de stabilité (plus d'intonation), du style, un débit un peu relevé.
-REGLAGES = {'stability': 0.35, 'similarity_boost': 0.85, 'style': 0.45, 'use_speaker_boost': True, 'speed': 1.05}
+# Une voix clonée garde les hésitations de l'enregistrement d'origine : avec peu de stabilité,
+# elle ajoute des « euh », répète des mots (« tu, tu ») et lit mal les nombres (« 1 800 »).
+# Beaucoup de stabilité et peu de style la tiennent au texte ; le débit reste un peu relevé.
+REGLAGES = {'stability': 0.8, 'similarity_boost': 0.85, 'style': 0.1, 'use_speaker_boost': True, 'speed': 1.05}
 
 
 def jetons_avec_positions(phrase):
