@@ -41,10 +41,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  CLE_ETAG_GRAPHE,
   NOM_D_UNE_PERSONNE_VIVANTE,
+  chargerGraphe,
   lireFichePersonne,
+  oublierEtag,
   rechercherPersonnes,
-  requeteApi,
+  retenirEtag,
   type Graphe,
   type FichePersonneComplete,
   type ResultatDeRecherche,
@@ -70,6 +73,7 @@ import {
   type Quart,
 } from '@/histoire/lignees'
 import { apresLaPeinture, creerChronometre, premierChargement, publier, reseauDe, type Chronometre } from '@/histoire/chronometre'
+import { cleDeDisposition, identiteDuLecteur, memoireDeLArbre } from '@/histoire/memoire'
 import { auFormat, entreePortrait, geometriePortrait, texteDePortrait } from '@/histoire/cartes'
 import { useFormatDesCartes } from '@/composables/formatDesCartes'
 import ReglageFormatDesCartes from '@/components/arbre/ReglageFormatDesCartes.vue'
@@ -209,6 +213,28 @@ const { format: formatDesCartes } = useFormatDesCartes()
 const enPortrait = computed(() => formatDesCartes.value === 'portrait')
 /** Le chronomètre du premier affichage (`histoire/chronometre.ts`), `null` ensuite. */
 let chrono: Chronometre | null = null
+/**
+ * Le graphe affiché tel qu'il est GARDÉ (`histoire/memoire.ts`) : pour quel lecteur,
+ * sous quel `ETag`. `null` quand rien ne se garde (pas d'`ETag`, pas de session).
+ */
+let grapheGarde: { identite: string; etag: string } | null = null
+/**
+ * La clé de la disposition `lignees` que `disposer()` ferait maintenant : TOUT ce qui
+ * entre dans son calcul, hors le graphe (que l'`ETag` désigne). La ligne seule n'y est
+ * pas : sa disposition en pedigree, petite, ne se garde pas, et quand elle ne s'applique
+ * pas la disposition `lignees` ne dépend pas d'elle.
+ */
+function cleDeLaDisposition(): string {
+  return cleDeDisposition({
+    avecAlliances: avecAlliances.value,
+    avecConjoint: avecConjoint.value,
+    avecSansLien: avecSansLien.value,
+    masquees: filtres.masquees,
+    format: formatDesCartes.value,
+    alliancesDansLArbre: alliancesDansLArbre.value,
+    fratriesParNaissance: fratriesParNaissance.value,
+  })
+}
 function disposer(graphe: Graphe): void {
   const mesure = <T>(etape: string, calcul: () => T): T => (chrono ? chrono.mesure(etape, calcul) : calcul())
   // Les alliances d'abord, classées sur le graphe ENTIER : c'est lui que le serveur a classé.
@@ -218,24 +244,36 @@ function disposer(graphe: Graphe): void {
   const avecLesLiens = avecSansLien.value ? sansConjoint : sansPersonnesSansLien(sansConjoint, noeudsSansLien(graphe))
   // Les quarts masqués quittent l'écran : l'arbre se refait sans eux, le tronc reste.
   quartsMasquables.value = quartsPresents(avecLesLiens, graphe)
-  const filtre = sansBranches(avecLesLiens, filtres.masquees, graphe)
+  // (Calculé à la demande : une disposition gardée n'en a pas besoin.)
+  let filtre: Graphe | null = null
+  const leFiltre = (): Graphe => (filtre ??= sansBranches(avecLesLiens, filtres.masquees, graphe))
   // La ligne directe SEULE : tout le reste quitte l'écran, et l'arbre se refait sur elle.
   const racine = cleLigneSeule.value
   cleDisposee = racine
   // Elle a sa propre forme : un arbre binaire, chacun au milieu de ses deux parents.
-  if (racine !== null && filtre.noeuds.some((n) => n.id === racine)) {
+  if (racine !== null && leFiltre().noeuds.some((n) => n.id === racine)) {
     disposition.value = mesure('dont placement', () =>
-      disposerEnPedigree(auFormat(seulementLaLigne(filtre, racine), formatDesCartes.value), racine, graphe.ego),
+      disposerEnPedigree(auFormat(seulementLaLigne(leFiltre(), racine), formatDesCartes.value), racine, graphe.ego),
     )
     return
   }
+  // Déjà calculée sur ce graphe, avec ces bascules (ce F5-ci ou un précédent) : on la reprend.
+  const garde = grapheGarde
+  const cle = garde ? cleDeLaDisposition() : null
+  const deja = garde && cle !== null ? memoireDeLArbre.dispositionGardee(garde.identite, garde.etag, cle) : null
+  if (deja) {
+    disposition.value = mesure('dont placement (reprise de la mémoire)', () => deja)
+    return
+  }
   // Les boîtes en dernier : le tri des familles ne lit que les liens, jamais `w` ni `h`.
-  disposition.value = mesure('dont placement', () =>
-    disposerLignees(auFormat(filtre, formatDesCartes.value), {
+  const calculee = mesure('dont placement', () =>
+    disposerLignees(auFormat(leFiltre(), formatDesCartes.value), {
       alliances: alliancesDansLArbre.value ? 'dans-l-arbre' : 'a-part',
       fratriesParNaissance: fratriesParNaissance.value,
     }),
   )
+  disposition.value = calculee
+  if (garde && cle !== null) void memoireDeLArbre.garderLaDisposition(garde.identite, garde.etag, cle, calculee)
 }
 /** Après une bascule : la disposition refaite, et ce qui n'existe plus oublié. */
 function redisposer(): void {
@@ -364,6 +402,39 @@ function apparition(id: string, nom: string, apres = 0): Record<string, string> 
   return delai === undefined ? {} : { animation: `${nom} 420ms cubic-bezier(.2,.7,.3,1) ${delai + apres}ms backwards` }
 }
 
+/**
+ * Le graphe, REVALIDÉ contre celui qu'on a gardé d'un F5 à l'autre (`histoire/memoire.ts`).
+ *
+ * On présente en `If-None-Match` l'`ETag` du graphe gardé pour CE lecteur — celui-là et
+ * aucun autre : sur `304`, c'est exactement lui que le serveur déclare à jour, et on le
+ * reprend au lieu de le retélécharger. Rien ne s'affiche avant cette réponse. Sans
+ * graphe gardé, aucun `If-None-Match` : un `200`, comme avant. Le graphe gardé se relit
+ * pendant que la requête part.
+ */
+async function obtenirLeGraphe(c: Chronometre): Promise<{ graphe: Graphe; inchange: boolean }> {
+  const identite = identiteDuLecteur(session.value)
+  const etag = identite ? await c.mesureAsync('mémoire locale : ETag', () => memoireDeLArbre.etagGarde(identite)) : null
+  if (etag !== null) retenirEtag(CLE_ETAG_GRAPHE, etag)
+  else oublierEtag(CLE_ETAG_GRAPHE)
+  const enReserve = identite && etag !== null ? memoireDeLArbre.grapheGarde(identite, etag) : Promise.resolve(null)
+  let reponse = await c.mesureAsync('requête + lecture JSON', () => chargerGraphe())
+  if (reponse.statut === 'inchange') {
+    const garde = await c.mesureAsync('mémoire locale : graphe', () => enReserve)
+    if (garde && identite && etag !== null) {
+      grapheGarde = { identite, etag }
+      return { graphe: garde, inchange: true }
+    }
+    // Gardé, mais illisible entre-temps : on le redemande en entier, sans `If-None-Match`.
+    oublierEtag(CLE_ETAG_GRAPHE)
+    reponse = await c.mesureAsync('requête + lecture JSON', () => chargerGraphe())
+    if (reponse.statut === 'inchange') throw new Error("L'arbre n'a pas pu être chargé.")
+  }
+  const { donnees, etag: recu } = reponse
+  grapheGarde = identite && recu !== null && !recu.startsWith('W/') ? { identite, etag: recu } : null
+  if (grapheGarde) void memoireDeLArbre.garderLeGraphe(grapheGarde.identite, grapheGarde.etag, donnees)
+  return { graphe: donnees, inchange: false }
+}
+
 async function charger(): Promise<void> {
   chargement.value = true
   erreur.value = null
@@ -371,7 +442,7 @@ async function charger(): Promise<void> {
   chrono = creerChronometre()
   const c = chrono
   try {
-    const graphe = await c.mesureAsync('requête + lecture JSON', () => requeteApi<Graphe>('/arbre/graphe'))
+    const { graphe, inchange } = await obtenirLeGraphe(c)
     c.mesure('mise en mémoire', () => (grapheCharge.value = graphe))
     // « Voir dans l'arbre » vers une personne d'une famille par alliance masquée : on l'affiche.
     const demandee = Number(route.query['personne']) || null
@@ -383,6 +454,14 @@ async function charger(): Promise<void> {
     if (demandee !== null && !avecSansLien.value && estSansLien(graphe, demandee)) {
       avecSansLien.value = true
       ecrirePreference(CLE_SANS_LIEN, true)
+    }
+    // Graphe inchangé : la disposition de ces bascules est peut-être gardée — on la relit.
+    const garde = grapheGarde
+    if (inchange && garde && cleLigneSeule.value === null) {
+      const cle = cleDeLaDisposition()
+      await c.mesureAsync('mémoire locale : disposition', () =>
+        memoireDeLArbre.prechargerLaDisposition(garde.identite, garde.etag, cle),
+      )
     }
     c.mesure('disposition (filtres + placement)', () => disposer(graphe))
     await c.mesureAsync('rendu Vue', () => nextTick())
@@ -436,7 +515,7 @@ const niveau = computed(() => niveauDe(cadrage.value.s, seuilDesNoms.value))
 
 /** La jauge de zoom, pour l'administration seulement : un repère chiffré sur
  *  les captures d'écran (« à 30 % les noms se chevauchent »), pas un réglage. */
-const { administrateur } = useSession()
+const { administrateur, session } = useSession()
 const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(cadrage.value.s, canevas.value, seuilDesNoms.value) : null))
 const ensemble = computed(() => niveau.value === 0)
 
