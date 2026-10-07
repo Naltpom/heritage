@@ -159,8 +159,14 @@ async function apresDecision(enchainement?: IssueDecision): Promise<void> {
     const suivante = demandeSuivante(file.elements, courante, tri)
     const trace = { precedente: String(courante.id), issue: enchainement }
 
+    // En fin de file : retour à « À traiter » quand on venait de la file par
+    // défaut (les demandes en attente), à l'historique filtré sinon.
+    const finDeFile =
+      Object.keys(requete).length === 0
+        ? { name: 'administration.a-traiter', query: { type: 'demande', ...trace } }
+        : { name: 'administration.demandes', query: { ...requete, ...trace } }
     await (suivante === null
-      ? routeur.push({ name: 'administration.demandes', query: { ...requete, ...trace } })
+      ? routeur.push(finDeFile)
       : routeur.push({ name: 'demande.detail', params: { id: suivante }, query: { ...requete, ...trace } }))
   } catch (cause) {
     // La décision est partie ; seule la relecture de la file a échoué. On

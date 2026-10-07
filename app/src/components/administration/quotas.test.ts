@@ -197,13 +197,14 @@ describe('l’écran Utilisateurs', () => {
     'utf8',
   )
 
-  it('a sa colonne « Quotas », son action en icône, et l’éditeur', () => {
-    expect(source).toContain('<QuotasDuCompte :quotas="utilisateur.quotas" />')
-    expect(source).toContain('libelle="Modifier les quotas"')
+  it('nomme « Modifier les quotas » dans le feuillet d’actions, et ouvre l’éditeur', () => {
+    expect(source).toContain('<span class="font-semibold">Modifier les quotas</span>')
+    expect(source).toContain('@click="depuisLeFeuillet(editerLesQuotas)"')
     expect(source).toContain('<EditeurDeQuotas')
   })
 
-  it('garde le défilement horizontal du tableau sur téléphone', () => {
-    expect(source).toContain('<div v-else class="overflow-x-auto">')
+  it('n’a plus de tableau : une carte par compte, rien à faire défiler sur téléphone', () => {
+    expect(source).not.toContain('<table')
+    expect(source).not.toContain('min-w-[940px]')
   })
 })

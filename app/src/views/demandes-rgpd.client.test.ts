@@ -7,14 +7,14 @@
  *     l'envoi part avec le bon corps et la demande rejoint la liste ; le lien
  *     d'une case verrouillée ouvre le formulaire, la composante cochée ; sous
  *     « voir comme », tout est éteint ;
- *  2. **Administration** : la file, « Appliquer » (réponse facultative),
- *     « Refuser » (réponse exigée), `409 demande_deja_traitee`.
+ *  2. **Administration** : décidées dans « À traiter » — voir
+ *     `a-traiter.client.test.ts`.
  *
  * Noms inventés.
  */
 import { defineComponent, h, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ErreurApi, type DemandeRgpd, type DemandeRgpdAdministration } from '@/lib/api'
+import { ErreurApi, type DemandeRgpd } from '@/lib/api'
 import { boutonNomme, cliquer, monterEnMemoire, parAttribut, texte, tous, un, type Noeud } from '@/test-utils/rendu-memoire'
 
 const etat = vi.hoisted(() => ({
@@ -55,7 +55,6 @@ vi.mock('@/lib/api', async (original) => ({
 }))
 
 import SectionDemandesRgpd from '@/components/compte/SectionDemandesRgpd.vue'
-import DemandesRgpdView from './administration/DemandesRgpdView.vue'
 
 const LienFactice = defineComponent({
   name: 'RouterLink',
@@ -220,91 +219,5 @@ describe('Mon compte — les demandes RGPD', () => {
     expect(un(racine, boutonNomme('Faire une demande RGPD'))?.attributs['disabled']).toBe(true)
     await cliquer(un(racine, parAttribut('data-lien-verrou')))
     expect(formulaire(racine)).toBeNull()
-  })
-})
-
-/* ------------------------------------------------------------------ */
-
-function demandeAdmin(sur: Partial<DemandeRgpdAdministration> = {}): DemandeRgpdAdministration {
-  return { ...demande(), memberId: 7, userId: 12, userEmail: 'ambre@example.net', ...sur }
-}
-
-const carte = (racine: Noeud, id: number) =>
-  un(racine, (n) => n.tag === 'article' && n.attributs['data-demande-rgpd'] === id)
-
-describe('Administration — la file des demandes RGPD', () => {
-  it('liste les demandes : courriel, nature, composantes, message, état', async () => {
-    api.listerDemandesRgpd.mockResolvedValue({
-      elements: [
-        demandeAdmin({ message: 'Je préfère garder mon âge pour moi.' }),
-        demandeAdmin({ id: 2, decision: 'appliquee', traiteeLe: '2026-10-01T10:00:00+02:00' }),
-      ],
-    })
-    const racine = await monterEnMemoire(DemandesRgpdView, { RouterLink: LienFactice })
-    const premiere = texte(carte(racine, 4)!)
-
-    expect(premiere).toContain('ambre@example.net')
-    expect(premiere).toContain('Retirer une date de naissance partagée')
-    expect(premiere).toContain('À retirer : année')
-    expect(premiere).toContain('Je préfère garder mon âge pour moi.')
-    expect(premiere).toContain('En attente')
-    expect(texte(carte(racine, 2)!)).toContain('Appliquée le 1 octobre 2026')
-    // Une demande traitée n'a plus de boutons.
-    expect(tous(carte(racine, 2)!, (n) => n.tag === 'button')).toHaveLength(0)
-    expect(texte(un(racine, parAttribut('data-compte-en-attente'))!)).toContain('1 en attente.')
-  })
-
-  it('« Appliquer » part sans réponse, et la ligne traitée prend la place', async () => {
-    api.listerDemandesRgpd.mockResolvedValue({ elements: [demandeAdmin()] })
-    api.traiterDemandeRgpd.mockResolvedValue(
-      demandeAdmin({ decision: 'appliquee', traiteeLe: '2026-10-03T12:00:00+02:00' }),
-    )
-    const racine = await monterEnMemoire(DemandesRgpdView, { RouterLink: LienFactice })
-    await soumettre(un(carte(racine, 4)!, (n) => n.tag === 'form'))
-
-    expect(api.traiterDemandeRgpd).toHaveBeenCalledWith(4, 'appliquee', undefined)
-    expect(texte(carte(racine, 4)!)).toContain('Appliquée le 3 octobre 2026')
-    expect(un(carte(racine, 4)!, (n) => n.tag === 'form')).toBeNull()
-  })
-
-  it('« Refuser » exige une réponse, puis l’envoie', async () => {
-    api.listerDemandesRgpd.mockResolvedValue({ elements: [demandeAdmin()] })
-    api.traiterDemandeRgpd.mockResolvedValue(
-      demandeAdmin({ decision: 'refusee', traiteeLe: '2026-10-03T12:00:00+02:00', reponse: 'Déjà retiré.' }),
-    )
-    const racine = await monterEnMemoire(DemandesRgpdView, { RouterLink: LienFactice })
-
-    await cliquer(un(carte(racine, 4)!, boutonNomme('Refuser')))
-    expect(api.traiterDemandeRgpd).not.toHaveBeenCalled()
-    expect(un(racine, parAttribut('data-reponse-manquante'))).not.toBeNull()
-
-    await declencher(un(racine, parAttribut('data-reponse-rgpd')), 'input', { value: 'Déjà retiré.' })
-    await cliquer(un(carte(racine, 4)!, boutonNomme('Refuser')))
-
-    expect(api.traiterDemandeRgpd).toHaveBeenCalledWith(4, 'refusee', 'Déjà retiré.')
-    expect(texte(carte(racine, 4)!)).toContain('Refusée le 3 octobre 2026')
-    expect(texte(carte(racine, 4)!)).toContain('Réponse : Déjà retiré.')
-  })
-
-  it('un 409 demande_deja_traitee relit la file et le dit', async () => {
-    api.listerDemandesRgpd.mockResolvedValueOnce({ elements: [demandeAdmin()] })
-    api.listerDemandesRgpd.mockResolvedValueOnce({
-      elements: [demandeAdmin({ decision: 'appliquee', traiteeLe: '2026-10-03T12:00:00+02:00' })],
-    })
-    api.traiterDemandeRgpd.mockRejectedValue(new ErreurApi(409, 'demande_deja_traitee', 'Déjà traitée.'))
-    const racine = await monterEnMemoire(DemandesRgpdView, { RouterLink: LienFactice })
-    await soumettre(un(carte(racine, 4)!, (n) => n.tag === 'form'))
-
-    expect(api.listerDemandesRgpd).toHaveBeenCalledTimes(2)
-    expect(un(racine, parAttribut('data-deja-traitee'))).not.toBeNull()
-    expect(texte(carte(racine, 4)!)).toContain('Appliquée le 3 octobre 2026')
-  })
-
-  it('sous « voir comme », la file ne se lit pas', async () => {
-    etat.vueEmpruntee.value = { memberId: 7, memberLabel: 'Cobalt Romarin', depuis: '2026-10-03T10:00:00+02:00' }
-    const racine = await monterEnMemoire(DemandesRgpdView, { RouterLink: LienFactice })
-
-    expect(api.listerDemandesRgpd).not.toHaveBeenCalled()
-    expect(texte(racine)).toContain('Les demandes RGPD ne s’affichent pas sous une vue empruntée.')
   })
 })

@@ -33,11 +33,11 @@
  * - **La déconnexion** est celle de l'ancien en-tête : on referme les tiroirs,
  *   on déconnecte, on part vers la connexion.
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { deconnecter, useSession } from '@/composables/useSession'
 import { useTiroirs } from '@/composables/useTiroirs'
-import { listerDemandesAdministration } from '@/lib/api'
+import { compterATraiter, useModeAdmin } from '@/composables/modeAdmin'
 import InstallationApplication from '@/components/mise-en-page/InstallationApplication.vue'
 import NotificationsTelephone from '@/components/notifications/NotificationsTelephone.vue'
 
@@ -63,23 +63,17 @@ const initiales = computed(() => {
 /** Les demandes du lecteur encore en attente — déjà dans la charge de session. */
 const demandesEnAttente = computed(() => etatSession.session?.value?.demandesEnAttente?.length ?? 0)
 
-/** La file de validation, pour un administrateur. Une requête d'une ligne :
- *  seul le total nous intéresse. Un échec rend 0 — un compteur absent vaut
- *  mieux qu'un écran en erreur pour une pastille. */
-const fileEnAttente = ref(0)
-async function compterLaFile(): Promise<void> {
-  if (!administrateur.value) {
-    fileEnAttente.value = 0
-    return
-  }
-  try {
-    fileEnAttente.value = (await listerDemandesAdministration({ status: 'en_attente', parPage: 1 })).total
-  } catch {
-    fileEnAttente.value = 0
-  }
+/** Ce qui attend un administrateur — demandes, inscriptions à rattacher,
+ *  demandes RGPD —, compté une fois pour l'en-tête, la barre du bas et ici
+ *  (`composables/modeAdmin.ts`). Un échec compte pour zéro : un compteur
+ *  absent vaut mieux qu'un écran en erreur pour une pastille. */
+const { aTraiter } = useModeAdmin()
+const fileEnAttente = computed(() => (administrateur.value ? (aTraiter.value ?? 0) : 0))
+function compterLaFile(): void {
+  if (administrateur.value) void compterATraiter()
 }
-watch(administrateur, () => void compterLaFile())
-onMounted(() => void compterLaFile())
+watch(administrateur, compterLaFile)
+onMounted(compterLaFile)
 
 async function quitter(): Promise<void> {
   fermerTiroirs()
@@ -118,7 +112,9 @@ const entrees = computed<Entree[]>(() => {
 const entreesAdministration = computed<Entree[]>(() =>
   administrateur.value
     ? [
-        { nom: 'administration.demandes', libelle: 'Administration', compte: fileEnAttente.value, urgent: true },
+        // L'entrée du mode administration : elle mène à « À traiter ». C'est la
+        // découverte ; l'interrupteur Membre / Admin fait ensuite le chemin.
+        { nom: 'administration.a-traiter', libelle: 'Administration', compte: fileEnAttente.value, urgent: true },
       ]
     : [],
 )

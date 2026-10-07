@@ -26,6 +26,7 @@ import { regimeDeSession, resoudreAcces, routeParDefaut } from './acces'
 // que ce fichier-ci appelle `createWebHistory()` dès son chargement.
 import { routes, sectionDe, titreDEntete } from './routes'
 import { definirPage } from '@/composables/entete'
+import { memoriserRoute } from '@/composables/modeAdmin'
 import { useTiroirs } from '@/composables/useTiroirs'
 
 export { routes }
@@ -59,13 +60,16 @@ routeur.afterEach((vers) => {
   const titre = typeof vers.meta.titre === 'string' ? vers.meta.titre : ''
   document.title = titre.length > 0 ? `${titre} — Heritage` : 'Heritage'
 
+  const section = sectionDe(String(vers.name ?? ''), vers.meta)
+
   // Ce que l'en-tête affiche de l'écran : il ne lit pas la route lui-même.
   definirPage({
-    section: sectionDe(String(vers.name ?? ''), vers.meta),
+    section,
     // Dans Explorer, « Explorer » : la rangée d'onglets nomme déjà l'écran.
     titre: titreDEntete(String(vers.name ?? ''), vers.meta),
     parent: vers.meta.parent ?? null,
     rechercheLocale: vers.meta.rechercheLocale === true,
+    nom: String(vers.name ?? ''),
   })
 
   // Les tiroirs du mobile se referment en changeant de page. C'est ici et non
@@ -74,6 +78,10 @@ routeur.afterEach((vers) => {
   // tous ses cas d'un coup. C'est aussi le bon endroit — refermer un tiroir
   // parce qu'on a navigué est une affaire de navigation.
   fermerLesTiroirs()
+
+  // La dernière route de chaque mode, pour que l'interrupteur Membre / Admin y
+  // ramène (`composables/modeAdmin.ts`).
+  memoriserRoute(section, vers.fullPath, vers.meta.cadre !== false)
 })
 
 export default routeur
