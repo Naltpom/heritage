@@ -33,7 +33,8 @@
  */
 import { computed, readonly, ref, type ComputedRef, type DeepReadonly, type Ref } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
-import { listerDemandesAdministration, listerDemandesRgpd, listerRattachements } from '@/lib/api'
+import { listerDemandesAdministration, listerDemandesRgpd, listerFilsAdministration, listerRattachements } from '@/lib/api'
+import { attendUneReponse } from '@/components/administration/fileATraiter'
 import { useEntete, type Section } from './entete'
 
 const CLE_ADMIN = 'heritage.mode.derniere-route-admin'
@@ -83,6 +84,8 @@ export interface CompteursATraiter {
   demandes: number
   rattachements: number
   rgpd: number
+  /** Les conversations dont le dernier mot est au membre (module `Messagerie`). */
+  messages: number
 }
 
 /** `null` tant que rien n'a été compté : la pastille n'invente pas de zéro. */
@@ -96,8 +99,9 @@ export function publierCompteurs(c: CompteursATraiter): void {
 
 /**
  * Compte ce qui attend : les demandes en attente (le total seul, une ligne), les
- * inscriptions à rattacher, les demandes RGPD sans décision. Chaque lecture
- * échoue seule : sous une vue empruntée, les rattachements et le RGPD rendent
+ * inscriptions à rattacher, les demandes RGPD sans décision, les messages des
+ * membres qui attendent une réponse. Chaque lecture échoue seule : sous une vue
+ * empruntée, les rattachements, le RGPD et les messages rendent
  * `409` — ils comptent alors pour zéro, comme l'écran qui ne les montre pas.
  * Un comptage en cours n'est pas relancé : l'en-tête et la barre le demandent
  * ensemble au montage.
@@ -105,15 +109,17 @@ export function publierCompteurs(c: CompteursATraiter): void {
 export function compterATraiter(): Promise<void> {
   if (comptageEnCours !== null) return comptageEnCours
   comptageEnCours = (async () => {
-    const [demandes, rattachements, rgpd] = await Promise.allSettled([
+    const [demandes, rattachements, rgpd, fils] = await Promise.allSettled([
       listerDemandesAdministration({ status: 'en_attente', parPage: 1 }),
       listerRattachements(),
       listerDemandesRgpd(),
+      listerFilsAdministration({ statut: 'ouvert' }),
     ])
     compteurs.value = {
       demandes: demandes.status === 'fulfilled' ? demandes.value.total : 0,
       rattachements: rattachements.status === 'fulfilled' ? rattachements.value.elements.length : 0,
       rgpd: rgpd.status === 'fulfilled' ? rgpd.value.elements.filter((d) => d.decision === null).length : 0,
+      messages: fils.status === 'fulfilled' ? fils.value.elements.filter(attendUneReponse).length : 0,
     }
   })().finally(() => {
     comptageEnCours = null
@@ -138,10 +144,11 @@ export const ENTREES_ADMIN = [
 
 /**
  * L'entrée de navigation allumée pour une route d'administration. L'historique
- * des demandes est un prolongement d'« À traiter » : c'est elle qui s'allume.
+ * des demandes et toutes les conversations des membres sont des prolongements
+ * d'« À traiter » : c'est elle qui s'allume.
  */
 export function entreeAdminActive(nomDeRoute: string): string | null {
-  if (nomDeRoute === 'administration.demandes') return 'administration.a-traiter'
+  if (nomDeRoute === 'administration.demandes' || nomDeRoute === 'administration.messagerie') return 'administration.a-traiter'
   return ENTREES_ADMIN.some((e) => e.nom === nomDeRoute) ? nomDeRoute : null
 }
 
@@ -168,7 +175,7 @@ export function useModeAdmin(): ModeAdmin {
     aTraiter: computed(() =>
       compteurs.value === null
         ? null
-        : compteurs.value.demandes + compteurs.value.rattachements + compteurs.value.rgpd,
+        : compteurs.value.demandes + compteurs.value.rattachements + compteurs.value.rgpd + compteurs.value.messages,
     ),
     compteurs: readonly(compteurs),
   }

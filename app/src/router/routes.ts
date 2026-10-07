@@ -66,7 +66,7 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   // Le mode administration se déduit de la route, il n'est pas un état à part :
   // un lien profond ou un favori y entre, le bouton retour en sort.
   if (nom === 'administration' || nom.startsWith('administration.')) return 'administration'
-  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions') return 'moi'
+  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions' || nom === 'messagerie') return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
 }
@@ -317,6 +317,21 @@ export const routes: RouteRecordRaw[] = [
     name: 'notification.ouvrir',
     component: () => import('@/views/OuvrirNotificationView.vue'),
     meta: { acces: 'attente', titre: 'Notification', cadre: false },
+  },
+
+  {
+    // **Écrire à l'administration** (module `Messagerie`) : une question, une
+    // idée, un bug, en conversation — `/messages` pour poursuivre ou créer,
+    // `/messages/<id>` pour la conversation. Le NOM est un contrat : la
+    // notification `message_de_l_administration` y mène avec `{ id }`.
+    //
+    // `attente` et non `membre` : un compte dont l'inscription traîne a souvent
+    // une question à poser, et rien ici ne lit l'arbre. L'API ne lui rend que
+    // ses propres conversations.
+    path: '/messages/:id(\\d+)?',
+    name: 'messagerie',
+    component: () => import('@/views/MessagerieView.vue'),
+    meta: { acces: 'attente', titre: 'Écrire à l’administration' },
   },
 
   /* --- Contribution : rattachement validé exigé (§ 12.1) ---------- */
@@ -601,6 +616,15 @@ export const routes: RouteRecordRaw[] = [
         name: 'administration.rgpd',
         redirect: { name: 'administration.a-traiter', query: { type: 'rgpd' } },
         meta: { acces: 'administration', titre: 'Demandes RGPD' },
+      },
+      {
+        // Toutes les conversations des membres (module `Messagerie`) ; celles qui
+        // attendent une réponse sont d'abord dans « À traiter ». Le nom est un contrat : la notification `message_d_un_membre` y mène
+        // avec `{ id }` — l'identifiant, facultatif, ouvre la conversation.
+        path: 'messages/:id(\\d+)?',
+        name: 'administration.messagerie',
+        component: () => import('@/views/administration/MessagerieAdministrationView.vue'),
+        meta: { acces: 'administration', titre: 'Conversations' },
       },
     ],
   },

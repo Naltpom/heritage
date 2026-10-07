@@ -1,0 +1,11 @@
+# Contrat : ce fichier est celui du module Messagerie (les échanges entre les membres et
+# l'administration — questions, suggestions, bugs). Aucun autre module n'y écrit — c'est
+# la règle qui évite les conflits de fusion.
+#
+# L'autowiring déclaré dans config/services/_autoload.yaml couvre déjà toutes les classes
+# de src/Module/Messagerie/, et le module n'a aucun port : il ne lit rien de l'arbre, et
+# ne parle à `Core` que par ses services (`NotificationService`, `BasculeVoirComme`).
+# Rien à déclarer ici, donc — le fichier existe pour que le module soit câblé quelque part
+# (`FrontieresInterModulesTest`), et pour que sa première déclaration ait sa place.
+
+services: ~

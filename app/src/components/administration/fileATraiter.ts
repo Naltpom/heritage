@@ -2,8 +2,10 @@
  * « À traiter » — la file unique du mode administration (handoff « mode
  * Administration », § 4.1), en fonctions pures.
  *
- * Trois sources, une file : les **demandes** en attente, les inscriptions **à
- * rattacher**, les demandes **RGPD** sans décision. Chaque élément a une clé
+ * Quatre sources, une file : les **demandes** en attente, les inscriptions **à
+ * rattacher**, les demandes **RGPD** sans décision, et les **messages** des
+ * membres qui attendent une réponse — un fil ouvert dont le dernier mot est au
+ * membre (module `Messagerie`, ADR 0017). Chaque élément a une clé
  * stable, qui voyage dans l'adresse (`?sel=d:42`) : un lien profond ouvre
  * l'élément, le bouton retour du téléphone referme le détail.
  *
@@ -11,11 +13,11 @@
  * attend depuis le plus longtemps qui passe en premier, quelle que soit sa
  * nature.
  */
-import type { CompteARattacher, Demande, DemandeRgpdAdministration } from '@/lib/api'
+import type { CompteARattacher, Demande, DemandeRgpdAdministration, ResumeDeFil } from '@/lib/api'
 import { libelleNature } from '@/components/compte/demandesRgpd'
 import { LIBELLES_NATURE } from '@/components/proposition/mes-demandes'
 
-export type TypeATraiter = 'demande' | 'rattachement' | 'rgpd'
+export type TypeATraiter = 'demande' | 'rattachement' | 'rgpd' | 'message'
 /** Le filtre des puces : un type, ou tout. */
 export type FiltreATraiter = 'tout' | TypeATraiter
 
@@ -23,12 +25,14 @@ export type ElementATraiter =
   | { cle: string; type: 'demande'; date: string; demande: Demande }
   | { cle: string; type: 'rattachement'; date: string; compte: CompteARattacher }
   | { cle: string; type: 'rgpd'; date: string; rgpd: DemandeRgpdAdministration }
+  | { cle: string; type: 'message'; date: string; fil: ResumeDeFil }
 
 export const PUCES: readonly { valeur: FiltreATraiter; libelle: string }[] = [
   { valeur: 'tout', libelle: 'Tout' },
   { valeur: 'demande', libelle: 'Demandes' },
   { valeur: 'rattachement', libelle: 'À rattacher' },
   { valeur: 'rgpd', libelle: 'RGPD' },
+  { valeur: 'message', libelle: 'Messages' },
 ]
 
 /** La pastille de chaque type : son libellé et le ton de `PastilleEtat`. */
@@ -38,9 +42,10 @@ export const PASTILLES_DE_TYPE: Readonly<
   demande: { libelle: 'Demande', ton: 'en_attente' },
   rattachement: { libelle: 'À rattacher', ton: 'validee' },
   rgpd: { libelle: 'RGPD', ton: 'neutre' },
+  message: { libelle: 'Message', ton: 'neutre' },
 }
 
-const PREFIXES: Readonly<Record<TypeATraiter, string>> = { demande: 'd', rattachement: 'r', rgpd: 'g' }
+const PREFIXES: Readonly<Record<TypeATraiter, string>> = { demande: 'd', rattachement: 'r', rgpd: 'g', message: 'm' }
 
 export function cleDe(type: TypeATraiter, id: number): string {
   return `${PREFIXES[type]}:${id}`
@@ -53,13 +58,13 @@ function premiere(valeur: unknown): unknown {
 /** `?type=` : une valeur inconnue vaut « tout », plutôt qu'une file vide sans raison. */
 export function filtreDepuisRequete(valeur: unknown): FiltreATraiter {
   const brut = premiere(valeur)
-  return brut === 'demande' || brut === 'rattachement' || brut === 'rgpd' ? brut : 'tout'
+  return brut === 'demande' || brut === 'rattachement' || brut === 'rgpd' || brut === 'message' ? brut : 'tout'
 }
 
 /** `?sel=` : la clé d'un élément, ou `null`. */
 export function selectionDepuisRequete(valeur: unknown): string | null {
   const brut = premiere(valeur)
-  return typeof brut === 'string' && /^[drg]:\d+$/.test(brut) ? brut : null
+  return typeof brut === 'string' && /^[drgm]:\d+$/.test(brut) ? brut : null
 }
 
 /** Toute la file, rangée du plus ancien au plus récent. */
@@ -67,6 +72,7 @@ export function construireFile(
   demandes: readonly Demande[],
   comptes: readonly CompteARattacher[],
   rgpd: readonly DemandeRgpdAdministration[],
+  fils: readonly ResumeDeFil[] = [],
 ): ElementATraiter[] {
   const elements: ElementATraiter[] = [
     ...demandes
@@ -86,6 +92,14 @@ export function construireFile(
     ...rgpd
       .filter((g) => g.decision === null)
       .map((g) => ({ cle: cleDe('rgpd', g.id), type: 'rgpd' as const, date: g.creeeLe, rgpd: g })),
+    ...fils
+      .filter(attendUneReponse)
+      .map((fil) => ({
+        cle: cleDe('message', fil.id),
+        type: 'message' as const,
+        date: fil.dernierMessage?.envoyeLe ?? fil.modifieLe,
+        fil,
+      })),
   ]
   return elements.sort((a, b) => horodatage(a.date) - horodatage(b.date) || a.cle.localeCompare(b.cle))
 }
@@ -101,7 +115,22 @@ export function filtrer(file: readonly ElementATraiter[], filtre: FiltreATraiter
 
 export function compter(file: readonly ElementATraiter[]): Record<FiltreATraiter, number> {
   const n = (type: TypeATraiter): number => file.filter((e) => e.type === type).length
-  return { tout: file.length, demande: n('demande'), rattachement: n('rattachement'), rgpd: n('rgpd') }
+  return {
+    tout: file.length,
+    demande: n('demande'),
+    rattachement: n('rattachement'),
+    rgpd: n('rgpd'),
+    message: n('message'),
+  }
+}
+
+/**
+ * Un fil attend une réponse quand il est ouvert et que **le dernier mot est au
+ * membre**. Lu ou non : avoir ouvert un message n'est pas y avoir répondu. Un
+ * fil réglé, ou dont l'administration a parlé en dernier, n'attend rien.
+ */
+export function attendUneReponse(fil: ResumeDeFil): boolean {
+  return fil.statut === 'ouvert' && fil.dernierMessage !== null && !fil.dernierMessage.deLAdministration
 }
 
 /** Le nom déclaré d'une inscription : « Léa Serpolet ». */
@@ -119,6 +148,8 @@ export function titreDe(element: ElementATraiter): string {
       return nomDeclare(element.compte)
     case 'rgpd':
       return libelleNature(element.rgpd.nature)
+    case 'message':
+      return element.fil.sujet
   }
 }
 
@@ -134,6 +165,8 @@ export function sousTitreDe(element: ElementATraiter): string {
       return element.compte.email
     case 'rgpd':
       return element.rgpd.userEmail
+    case 'message':
+      return `${element.fil.membre.libelle} · ${element.fil.natureLibelle}`
   }
 }
 

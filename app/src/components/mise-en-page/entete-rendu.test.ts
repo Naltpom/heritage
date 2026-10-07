@@ -54,6 +54,7 @@ vi.mock('@/lib/api', () => ({
   listerDemandesAdministration: () => Promise.resolve({ total: 0 }),
   listerRattachements: () => Promise.resolve({ elements: [] }),
   listerDemandesRgpd: () => Promise.resolve({ elements: [] }),
+  listerFilsAdministration: () => Promise.resolve({ elements: [], total: 0, nonLus: 0 }),
   rechercherPersonnes: () => Promise.resolve({ elements: [], tronque: false }),
 }))
 

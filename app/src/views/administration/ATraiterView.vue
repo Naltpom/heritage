@@ -5,15 +5,20 @@
  *
  * Ce qui attend une décision, quelle qu'en soit la nature, dans **une** liste :
  * les demandes en attente (§ 6.7), les inscriptions à rattacher (ADR 0013), les
- * demandes RGPD sans décision (ADR 0016). Elles étaient trois onglets ; un
- * administrateur ouvrait les trois pour savoir s'il avait quelque chose à faire.
+ * demandes RGPD sans décision (ADR 0016), et les messages des membres qui
+ * attendent une réponse (ADR 0017). Elles étaient des onglets ; un
+ * administrateur les ouvrait tous pour savoir s'il avait quelque chose à faire.
+ *
+ * Un message quitte la file quand on y répond, ou qu'on le règle sans répondre :
+ * le dernier mot n'est plus au membre. « Voir toutes les conversations », en
+ * bas de la liste, mène aux autres — réglées, ou en attente du membre.
  *
  * **Mise en page.** Bureau : la liste à gauche, le détail de l'élément choisi à
  * droite — le premier est choisi d'office. Téléphone : la liste seule ;
  * toucher un élément ouvre son détail en plein écran, avec « ‹ À traiter » pour
  * revenir.
  *
- * **L'adresse porte l'état** : `?type=demande|rattachement|rgpd` filtre, `?sel=d:42`
+ * **L'adresse porte l'état** : `?type=demande|rattachement|rgpd|message` filtre, `?sel=d:42`
  * ouvre un élément. Un lien profond (`administration.rgpd` redirige ici avec
  * `type=rgpd`) tombe donc sur la bonne file, et le bouton retour du téléphone
  * referme le détail.
@@ -34,9 +39,11 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   listerDemandesAdministration,
   listerDemandesRgpd,
+  listerFilsAdministration,
   quitterVueComme,
   type Demande,
   type DemandeRgpdAdministration,
+  type ResumeDeFil,
 } from '@/lib/api'
 import { rafraichirSession, useSession } from '@/composables/useSession'
 import { definirResume } from '@/composables/entete'
@@ -53,6 +60,7 @@ import type { CibleLoupe } from '@/components/medias/medias'
 import CarteARattacher from '@/components/administration/CarteARattacher.vue'
 import DetailDemandeATraiter from '@/components/administration/DetailDemandeATraiter.vue'
 import DetailRgpdATraiter from '@/components/administration/DetailRgpdATraiter.vue'
+import DetailMessageATraiter from '@/components/messagerie/DetailMessageATraiter.vue'
 import { ecrituresSuspendues, infobulleSuspension, motifSuspension } from '@/components/administration/ecriture'
 import { autresSurLaMemeFiche } from '@/components/administration/file'
 import { annonceEnchainement, issueDepuisRequete, type IssueDecision } from '@/components/administration/decision'
@@ -88,6 +96,7 @@ const demandes = ref<Demande[]>([])
 /** Le total des demandes en attente, au-delà des 100 lues. */
 const totalDemandes = ref(0)
 const rgpd = ref<DemandeRgpdAdministration[]>([])
+const fils = ref<ResumeDeFil[]>([])
 const rattachements = useRattachements(suspendu)
 const { comptes } = rattachements
 
@@ -101,7 +110,7 @@ const loupe = ref<CibleLoupe | null>(null)
 /* ───────────────── La file ───────────────── */
 
 const filtre = computed(() => filtreDepuisRequete(route.query['type']))
-const file = computed(() => construireFile(demandes.value, comptes.value, rgpd.value))
+const file = computed(() => construireFile(demandes.value, comptes.value, rgpd.value, fils.value))
 const comptesParType = computed(() => compter(file.value))
 const affichee = computed(() => filtrer(file.value, filtre.value))
 const autres = computed(() => autresSurLaMemeFiche(demandes.value))
@@ -150,13 +159,17 @@ async function charger(): Promise<void> {
   // propres erreurs (et leurs suggestions arrivent ensuite, une à une).
   const lectureDesRattachements = rattachements.charger()
   try {
-    const [page, demandesRgpd] = await Promise.all([
+    const [page, demandesRgpd, filsOuverts] = await Promise.all([
       listerDemandesAdministration({ status: 'en_attente', parPage: 100 }),
       suspendu.value ? Promise.resolve({ elements: [] }) : listerDemandesRgpd(),
+      // Lire un fil sous une vue empruntée poserait un accusé au nom de
+      // l'administration : le serveur rend `409`, on ne le demande pas.
+      suspendu.value ? Promise.resolve({ elements: [] }) : listerFilsAdministration({ statut: 'ouvert' }),
     ])
     demandes.value = page.elements
     totalDemandes.value = page.total
     rgpd.value = demandesRgpd.elements
+    fils.value = filsOuverts.elements
   } catch (cause) {
     erreur.value = cause
   }
@@ -167,16 +180,23 @@ async function charger(): Promise<void> {
 
 /** La pastille d'« À traiter » et le résumé de l'en-tête suivent la file. */
 watch(
-  [charge, totalDemandes, () => comptesParType.value.rattachement, () => comptesParType.value.rgpd],
+  [
+    charge,
+    totalDemandes,
+    () => comptesParType.value.rattachement,
+    () => comptesParType.value.rgpd,
+    () => comptesParType.value.message,
+  ],
   () => {
     if (!charge.value) return
     const c = {
       demandes: totalDemandes.value,
       rattachements: comptesParType.value.rattachement,
       rgpd: comptesParType.value.rgpd,
+      messages: comptesParType.value.message,
     }
     publierCompteurs(c)
-    definirResume(resumeATraiter(c.demandes + c.rattachements + c.rgpd))
+    definirResume(resumeATraiter(c.demandes + c.rattachements + c.rgpd + c.messages))
   },
 )
 
@@ -203,8 +223,10 @@ function retirer(element: ElementATraiter, annonce: string): void {
     totalDemandes.value = Math.max(0, totalDemandes.value - 1)
   } else if (element.type === 'rattachement') {
     rattachements.retirer(element.compte.memberId)
-  } else {
+  } else if (element.type === 'rgpd') {
     rgpd.value = rgpd.value.filter((g) => g.id !== element.rgpd.id)
+  } else {
+    fils.value = fils.value.filter((f) => f.id !== element.fil.id)
   }
   annoncer(annonce)
   const suivant = suivantApres(avant, element.cle, affichee.value)
@@ -225,6 +247,11 @@ function demandeDecidee(element: ElementATraiter & { type: 'demande' }, issue: I
 
 function rgpdDecidee(element: ElementATraiter & { type: 'rgpd' }, decision: 'appliquee' | 'refusee'): void {
   retirer(element, decision === 'appliquee' ? 'Demande RGPD appliquée.' : 'Demande RGPD refusée.')
+}
+
+function messageTraite(element: ElementATraiter & { type: 'message' }, issue: 'repondu' | 'regle'): void {
+  const membre = element.fil.membre.libelle
+  retirer(element, issue === 'repondu' ? `Réponse envoyée à ${membre}.` : `Conversation de ${membre} réglée.`)
 }
 
 function rattachementTraite(element: ElementATraiter & { type: 'rattachement' }): void {
@@ -265,11 +292,13 @@ function metaDu(element: ElementATraiter): string {
       return `Inscrit le ${dateLongue(element.compte.inscritLe)}`
     case 'rgpd':
       return `${element.rgpd.userEmail} · le ${dateDuVerrou(element.rgpd.creeeLe)}`
+    case 'message':
+      return `${element.fil.membre.libelle} · ${element.fil.natureLibelle}, depuis le ${dateLongue(element.fil.creeLe)}`
   }
 }
 
 function sousTitreDuDetail(element: ElementATraiter): string {
-  if (element.type === 'rgpd') return ''
+  if (element.type === 'rgpd' || element.type === 'message') return ''
   return sousTitreDe(element)
 }
 </script>
@@ -282,7 +311,9 @@ function sousTitreDuDetail(element: ElementATraiter): string {
       role="status"
     >
       <p>{{ raisonSuspension }}</p>
-      <p class="mt-1">Les inscriptions à rattacher et les demandes RGPD ne s’affichent pas sous une vue empruntée.</p>
+      <p class="mt-1">
+        Les inscriptions à rattacher, les demandes RGPD et les messages des membres ne s’affichent pas sous une vue empruntée.
+      </p>
       <div class="mt-2">
         <BoutonBase variante="secondaire" @click="quitter">Quitter la vue empruntée</BoutonBase>
       </div>
@@ -356,12 +387,20 @@ function sousTitreDuDetail(element: ElementATraiter): string {
           </li>
         </ul>
 
-        <RouterLink
-          :to="{ name: 'administration.demandes', query: { etat: 'toutes' } }"
-          class="self-start text-[13px] text-attenue underline hover:text-texte"
-        >
-          Voir l’historique des demandes
-        </RouterLink>
+        <div class="flex flex-wrap gap-x-4 gap-y-1">
+          <RouterLink
+            :to="{ name: 'administration.demandes', query: { etat: 'toutes' } }"
+            class="text-[13px] text-attenue underline hover:text-texte"
+          >
+            Voir l’historique des demandes
+          </RouterLink>
+          <RouterLink
+            :to="{ name: 'administration.messagerie' }"
+            class="text-[13px] text-attenue underline hover:text-texte"
+          >
+            Voir toutes les conversations
+          </RouterLink>
+        </div>
       </div>
 
       <!-- ── Le détail ────────────────────────────────────────────────── -->
@@ -415,6 +454,15 @@ function sousTitreDuDetail(element: ElementATraiter): string {
           @lancer="rattachements.lancerLaRecherche"
           @transcrire="rattachements.transcrire"
           @corrigee="rattachements.transcriptionCorrigee"
+        />
+
+        <DetailMessageATraiter
+          v-else-if="selection.type === 'message'"
+          :fil="selection.fil"
+          :suspendu="suspendu"
+          :infobulle="infobulle"
+          @repondu="messageTraite(selection as ElementATraiter & { type: 'message' }, 'repondu')"
+          @regle="messageTraite(selection as ElementATraiter & { type: 'message' }, 'regle')"
         />
 
         <DetailRgpdATraiter

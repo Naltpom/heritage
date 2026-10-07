@@ -29,12 +29,15 @@ const route = useRoute()
 const { message } = useToast()
 
 const DESCRIPTIONS: Record<string, string> = {
-  'administration.a-traiter': 'Demandes, inscriptions à rattacher et demandes RGPD, dans une seule file.',
+  'administration.a-traiter':
+    'Demandes, inscriptions à rattacher, demandes RGPD et messages des membres, dans une seule file.',
   'administration.demandes':
     'Toutes les demandes des membres, traitées comprises : validées, refusées, devenues caduques.',
   'administration.utilisateurs': 'Comptes, rattachements, rôles et quotas.',
   'administration.invitations': 'On n’entre sur l’arbre que par un lien d’invitation.',
   'administration.sources': 'Les notices des fonds cités par les fiches.',
+  'administration.messagerie':
+    'Les questions, idées et bugs des membres. Ouvrir une conversation leur montre que vous l’avez lue.',
 }
 
 const titre = computed(() => (typeof route.meta.titre === 'string' ? route.meta.titre : ''))

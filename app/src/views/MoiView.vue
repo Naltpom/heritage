@@ -4,7 +4,7 @@
  *
  * Tout ce qui concerne **le compte qui lit** tient ici, et nulle part ailleurs :
  * mon compte, mes demandes, les événements (rassemblements et tirages au sort), les actes demandés, les questions,
- * l'aide (les vidéos de présentation), l'administration pour un administrateur, et la déconnexion. C'est la règle de
+ * l'aide (les vidéos de présentation), écrire à l'administration, l'administration pour un administrateur, et la déconnexion. C'est la règle de
  * la refonte : **chaque chose a une seule porte d'entrée**. L'en-tête ne porte
  * plus « Mes demandes », « Validation » ni « + Proposer » ; le tiroir du
  * téléphone a disparu. Sur téléphone, on arrive ici par l'entrée « Moi » de la
@@ -106,6 +106,9 @@ const entrees = computed<Entree[]>(() => {
       { nom: 'aide', libelle: 'Aide et vidéos' },
     )
   }
+  // Une question, une idée, un bug : ouvert à tout compte, en attente compris —
+  // rien n'y lit l'arbre, et c'est souvent l'attente qui fait poser la question.
+  liste.push({ nom: 'messagerie', libelle: 'Écrire à l’administration' })
   return liste
 })
 

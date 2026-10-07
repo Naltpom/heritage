@@ -17,7 +17,12 @@
  *    tirages dont je suis ou que j'organise, repliés sur une ligne, dépliés
  *    pour régler ma présence, et une fois le tirage fait « Voir à qui je fais
  *    le cadeau » en violet, sans rien déplier (`CarteTirageAccueil`) ;
- * 3. **les anniversaires**, en carrousel : on glisse (ou les flèches) pour voir
+ * 3. **écrire à l'administration** (07/10/2026) — « Une question, une idée,
+ *    un bug ? » : trois boutons qui ouvrent une nouvelle conversation avec la
+ *    nature déjà choisie, et « Poursuivre » quand on en a déjà une — avec le
+ *    nombre de réponses non lues. Les messages **des membres**, eux, attendent
+ *    l'administrateur dans « À traiter », avec la pastille du mode admin ;
+ * 4. **les anniversaires**, en carrousel : on glisse (ou les flèches) pour voir
  *    les jours voisins. Les vivants d'abord, bien lisibles ; les défunts
  *    ensuite, en retrait, sous « En mémoire ».
  *
@@ -32,12 +37,14 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import {
   chargerAnniversaires,
   listerEvenements,
+  listerMesFils,
   listerTirages,
   marquerVu,
   repondreAEvenement,
   type PersonneDuTirage,
   type ReponseAInvitation,
   type ResumeDEvenement,
+  type ResumeDeFil,
   type ResumeDeTirage,
   type VueAnniversaires,
 } from '@/lib/api'
@@ -48,6 +55,7 @@ import LigneEvenement from '@/components/anniversaires/LigneEvenement.vue'
 import CarteTirageAccueil from '@/components/accueil/CarteTirageAccueil.vue'
 import CarteEvenementAccueil from '@/components/accueil/CarteEvenementAccueil.vue'
 import { mesEvenements } from '@/components/evenements-familiaux/liste-commune'
+import { NATURES } from '@/components/messagerie/messagerie'
 import {
   anniversairesDuJour,
   decaler,
@@ -68,6 +76,7 @@ const erreurAnniversaires = ref<unknown>(null)
 const tirages = shallowRef<ResumeDeTirage[]>([])
 const moi = shallowRef<PersonneDuTirage | null>(null)
 const evenements = shallowRef<ResumeDEvenement[]>([])
+const mesFils = shallowRef<ResumeDeFil[]>([])
 let avorteur: AbortController | null = null
 
 async function charger(): Promise<void> {
@@ -101,8 +110,18 @@ async function charger(): Promise<void> {
           () => (evenements.value = []),
         )
       : Promise.resolve(),
+    // La messagerie : au mieux, une panne n'ôte que la ligne « Poursuivre ».
+    listerMesFils(signal).then(
+      (liste) => (mesFils.value = liste.elements),
+      () => (mesFils.value = []),
+    ),
   ])
 }
+
+/* ───────────────── Écrire à l'administration ───────────────── */
+
+/** Les réponses de l'administration pas encore lues, toutes conversations confondues. */
+const reponsesNonLues = computed(() => mesFils.value.reduce((n, f) => n + f.nonLus, 0))
 
 onMounted(charger)
 onBeforeUnmount(() => avorteur?.abort())
@@ -255,6 +274,46 @@ function surTouche(e: KeyboardEvent): void {
         Poser une question sur l’arbre
       </RouterLink>
     </nav>
+
+    <!-- ───────── Écrire à l'administration : créer, ou poursuivre ───────── -->
+    <section
+      v-if="vueEmpruntee === null"
+      aria-labelledby="titre-ecrire-administration"
+      class="mb-6 rounded-panneau border border-ligne bg-panneau p-4"
+    >
+      <div class="flex items-start gap-3">
+        <svg class="mt-0.5 flex-none text-accent" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 3v-3H5a2 2 0 0 1-2-2z" />
+          <path d="M7 7.5h6M7 10.5h4" />
+        </svg>
+        <div class="min-w-0 flex-1">
+          <h2 id="titre-ecrire-administration" class="text-sm font-semibold text-texte">Une question, une idée, un bug ?</h2>
+          <p class="mt-0.5 text-xs text-attenue">Écrivez aux administrateurs : vous verrez quand ils l’auront lu.</p>
+        </div>
+      </div>
+      <div class="mt-3 grid grid-cols-3 gap-2">
+        <RouterLink
+          v-for="n in NATURES"
+          :key="n.valeur"
+          :to="{ name: 'messagerie', query: { nouveau: n.valeur } }"
+          class="flex items-center justify-center rounded-champ border border-ligne px-2 py-2.5 text-center text-[13px] font-semibold text-texte transition-colors hover:border-accent hover:text-accent"
+        >
+          {{ n.libelle }}
+        </RouterLink>
+      </div>
+      <RouterLink
+        v-if="mesFils.length > 0"
+        :to="{ name: 'messagerie' }"
+        class="mt-3 flex items-center justify-between gap-2 rounded-champ px-1 py-1 text-sm text-accent hover:underline"
+      >
+        <span>Poursuivre une conversation{{ mesFils.length > 1 ? ` (${mesFils.length})` : '' }}</span>
+        <span
+          v-if="reponsesNonLues > 0"
+          class="flex h-[20px] min-w-[20px] items-center justify-center rounded-pastille bg-accent px-1.5 text-xs font-bold text-fond tnum"
+          :aria-label="`${reponsesNonLues} réponse${reponsesNonLues > 1 ? 's' : ''} non lue${reponsesNonLues > 1 ? 's' : ''}`"
+        >{{ reponsesNonLues }}</span>
+      </RouterLink>
+    </section>
 
     <!-- ───────── Mes événements : rassemblements et tirages, le plus proche d'abord ───────── -->
     <section v-if="rattache && mesProchains.length > 0" aria-labelledby="titre-mes-evenements" class="mb-6">

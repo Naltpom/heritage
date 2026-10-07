@@ -39,6 +39,7 @@ vi.mock('@/lib/api', () => ({
   listerDemandesAdministration: () => Promise.resolve({ total: 0 }),
   listerRattachements: () => Promise.resolve({ elements: [] }),
   listerDemandesRgpd: () => Promise.resolve({ elements: [] }),
+  listerFilsAdministration: () => Promise.resolve({ elements: [], total: 0, nonLus: 0 }),
 }))
 
 vi.mock('vue-router', () => ({
@@ -69,17 +70,19 @@ describe('Moi, selon le régime', () => {
     expect(html).toMatch(/>CR<\/span>/)
   })
 
-  it('donne à un membre son compte, les quatre entrées de contribution et l’aide', async () => {
-    expect(vers(await rendre('membre'))).toEqual(['compte', 'demandes.miennes', 'evenements', 'demarches', 'questions', 'aide'])
+  it('donne à un membre son compte, les quatre entrées de contribution, l’aide et la messagerie', async () => {
+    expect(vers(await rendre('membre'))).toEqual(['compte', 'demandes.miennes', 'evenements', 'demarches', 'questions', 'aide', 'messagerie'])
   })
 
-  it('ne donne à un compte en attente que son inscription, son compte — et la déconnexion', async () => {
+  it('ne donne à un compte en attente que son inscription, son compte, la messagerie — et la déconnexion', async () => {
     // L'API lui refuserait le reste, et la garde de route le renverrait vers
     // l'écran d'attente : une entrée qui mène à un refus est pire qu'absente.
     // Son écran d'attente, lui, est en tête (ADR 0003, révision du 01/10/2026).
+    // La messagerie ne lit rien de l'arbre : c'est souvent l'attente qui fait
+    // écrire à l'administration.
     const html = await rendre('en_attente')
 
-    expect(vers(html)).toEqual(['inscription.etat', 'compte'])
+    expect(vers(html)).toEqual(['inscription.etat', 'compte', 'messagerie'])
     expect(html).toContain('Mon inscription')
     expect(html).toContain('En attente de validation')
     expect(html).toContain('Se déconnecter')
@@ -95,6 +98,7 @@ describe('Moi, selon le régime', () => {
       'demarches',
       'questions',
       'aide',
+      'messagerie',
       'administration.a-traiter',
     ])
     expect(html).not.toContain('Voir comme un membre')
@@ -137,6 +141,6 @@ describe('Moi, selon le régime', () => {
 
     expect(html).not.toContain('<h1')
     expect(html).not.toContain('min-h-12')
-    expect(vers(html)).toEqual(['compte', 'demandes.miennes', 'evenements', 'demarches', 'questions', 'aide'])
+    expect(vers(html)).toEqual(['compte', 'demandes.miennes', 'evenements', 'demarches', 'questions', 'aide', 'messagerie'])
   })
 })

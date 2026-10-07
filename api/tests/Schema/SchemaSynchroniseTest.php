@@ -126,8 +126,14 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * relance. Ce sont des **décisions** : l'invitation a sa table parce qu'elle a sa vie
      * propre (vue, réponse, relance, lien personnel) et qu'un événement en compte des
      * dizaines ; le compte de l'invité n'y est pas figé, il se lit au rattachement.
+     *
+     * **47 depuis le 2026-10-07** : `msg_fil` et `msg_message` (module `Messagerie`, préfixe
+     * `msg_`, `migrations/Version20261007180000.php`) portent ce que les membres écrivent à
+     * l'administration — questions, suggestions, bugs — et ses réponses. Ce sont des
+     * **décisions** : une conversation compte plusieurs messages, et chaque message porte
+     * son propre accusé de lecture (« Vu à 14 h 32 »), posé une fois.
      */
-    private const int NOMBRE_DE_TABLES = 45;
+    private const int NOMBRE_DE_TABLES = 47;
 
     public function testLeMappingEstValide(): void
     {
@@ -164,7 +170,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      */
     public function testChaqueTablePorteLePrefixeDeSonModule(): void
     {
-        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_', 'evt_', 'dmr_', 'ast_'];
+        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'ged_', 'qst_', 'trg_', 'evt_', 'dmr_', 'ast_', 'msg_'];
 
         foreach ($this->tablesDuMapping() as $table) {
             $porteUnPrefixe = array_filter(

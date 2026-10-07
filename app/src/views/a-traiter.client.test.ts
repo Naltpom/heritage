@@ -12,7 +12,9 @@
  *  3. **les décisions** : le message est exigé pour refuser, l'élément quitte
  *     la file, un toast le dit, le suivant s'ouvre ; un `409` « déjà traité »
  *     relit la file ;
- *  4. **sous « voir comme »**, ni rattachements ni RGPD ne se lisent.
+ *  4. **sous « voir comme »**, ni rattachements, ni RGPD, ni messages ne se lisent ;
+ *  5. **les messages des membres** qui attendent une réponse — et eux seuls —
+ *     entrent dans la file ; les régler les en fait sortir.
  *
  * Le détail des rattachements (transcription, recherche) est tenu par
  * `rattachements-a-la-demande.client.test.ts`. Noms inventés.
@@ -25,6 +27,7 @@ import {
   type Demande,
   type DemandeAdministration,
   type DemandeRgpdAdministration,
+  type ResumeDeFil,
 } from '@/lib/api'
 import { boutonNomme, cliquer, monterEnMemoire, parAttribut, texte, tous, un, type Noeud } from '@/test-utils/rendu-memoire'
 import { reinitialiserModeAdmin, useModeAdmin } from '@/composables/modeAdmin'
@@ -75,6 +78,10 @@ const api = vi.hoisted(() => ({
   listerQuotasGlobaux: vi.fn(),
   listerDemandesRgpd: vi.fn(),
   traiterDemandeRgpd: vi.fn(),
+  listerFilsAdministration: vi.fn(),
+  lireFilAdministration: vi.fn(),
+  repondreAuFil: vi.fn(),
+  changerStatutDuFil: vi.fn(),
   quitterVueComme: vi.fn(),
 }))
 
@@ -218,6 +225,7 @@ beforeEach(() => {
   api.listerDemandesRgpd.mockResolvedValue({
     elements: [rgpd(), rgpd({ id: 2, decision: 'appliquee', traiteeLe: '2026-10-01T10:00:00+02:00' })],
   })
+  api.listerFilsAdministration.mockResolvedValue({ elements: [], total: 0, nonLus: 0 })
 })
 
 afterEach(() => {
@@ -359,8 +367,65 @@ describe('« À traiter » sous « voir comme »', () => {
 
     expect(api.listerRattachements).not.toHaveBeenCalled()
     expect(api.listerDemandesRgpd).not.toHaveBeenCalled()
+    expect(api.listerFilsAdministration).not.toHaveBeenCalled()
     expect(texte(racine)).toContain('ne s’affichent pas sous une vue empruntée')
     expect(lignes(racine)).toEqual(['d:42'])
     expect(un(detail(racine)!, boutonNomme('Valider'))?.attributs['disabled']).toBe(true)
+  })
+})
+
+describe('« À traiter » : les messages des membres', () => {
+  function fil(id: number, deLAdministration: boolean, statut: 'ouvert' | 'clos' = 'ouvert'): ResumeDeFil {
+    return {
+      id,
+      nature: 'bug',
+      natureLibelle: 'Bug',
+      sujet: `La carte reste grise (${id})`,
+      statut,
+      statutLibelle: statut === 'ouvert' ? 'En cours' : 'Réglé',
+      membre: { userId: 3, libelle: 'Ambre Tilleul' },
+      cote: 'administration',
+      nombreDeMessages: 2,
+      nonLus: deLAdministration ? 0 : 1,
+      dernierMessage: { extrait: '…', deLAdministration, envoyeLe: '2026-10-04T10:00:00+02:00', vuLe: null },
+      creeLe: '2026-10-03T10:00:00+02:00',
+      modifieLe: '2026-10-04T10:00:00+02:00',
+    }
+  }
+
+  beforeEach(() => {
+    // Le fil 9 attend une réponse ; le 10 attend le membre.
+    api.listerFilsAdministration.mockResolvedValue({ elements: [fil(9, false), fil(10, true)], total: 2, nonLus: 1 })
+    api.lireFilAdministration.mockImplementation((id: number) =>
+      Promise.resolve({
+        ...fil(id, false),
+        messages: [
+          { id: 1, texte: 'La carte reste grise.', deLAdministration: false, auteur: 'Ambre Tilleul', estMoi: false, envoyeLe: '2026-10-04T10:00:00+02:00', vuLe: null, vuPar: null },
+        ],
+      }),
+    )
+  })
+
+  it('n’entre dans la file que le fil dont le dernier mot est au membre, et le compte', async () => {
+    etat.route.query = { type: 'message' }
+    const racine = await monter()
+
+    expect(lignes(racine)).toEqual(['m:9'])
+    expect(useModeAdmin().aTraiter.value).toBe(4)
+    // Ouvrir le détail relit le fil : c'est ce qui pose l'accusé chez le membre.
+    expect(api.lireFilAdministration).toHaveBeenCalledWith(9, expect.anything())
+    expect(texte(detail(racine)!)).toContain('La carte reste grise.')
+  })
+
+  it('« Marquer réglé, sans répondre » le fait sortir de la file, et le dit', async () => {
+    etat.route.query = { type: 'message' }
+    api.changerStatutDuFil.mockResolvedValue({ ...fil(9, false, 'clos'), messages: [] })
+    const racine = await monter()
+
+    await cliquer(un(detail(racine)!, parAttribut('data-regler')))
+
+    expect(api.changerStatutDuFil).toHaveBeenCalledWith(9, 'clos')
+    expect(useToast().message.value).toBe('Conversation de Ambre Tilleul réglée.')
+    expect(lignes(racine)).toEqual([])
   })
 })

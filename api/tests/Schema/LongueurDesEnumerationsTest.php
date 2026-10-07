@@ -87,8 +87,12 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * (`share_*`), passent de `BOOLEAN` à `NiveauDePartage` (ADR 0016, révision du
      * 2026-10-07), en `VARCHAR(8)` pour une plus longue valeur de huit signes
      * (`personne`).
+     *
+     * **64 depuis le 2026-10-07 (soir)** : le module `Messagerie` en porte deux sur
+     * `msg_fil` — `nature`, en `VARCHAR(12)` pour une plus longue valeur de dix signes
+     * (`suggestion`), et `statut`, en `VARCHAR(8)` pour `ouvert`.
      */
-    private const int COLONNES_ENUM_ATTENDUES = 62;
+    private const int COLONNES_ENUM_ATTENDUES = 64;
 
     public function testChaqueColonneAccueilleLaPlusLongueValeurDeSonEnumeration(): void
     {

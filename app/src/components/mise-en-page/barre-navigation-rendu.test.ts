@@ -39,6 +39,7 @@ vi.mock('@/lib/api', () => ({
   listerDemandesAdministration: () => Promise.resolve({ total: 3 }),
   listerRattachements: () => Promise.resolve({ elements: [] }),
   listerDemandesRgpd: () => Promise.resolve({ elements: [] }),
+  listerFilsAdministration: () => Promise.resolve({ elements: [], total: 0, nonLus: 0 }),
 }))
 
 const RouterLinkBouchon = {
