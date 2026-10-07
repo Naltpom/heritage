@@ -315,6 +315,26 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
     }
 
     /**
+     * Le jeu de placement et la vue du cercle sont relus en base **une fois par état de
+     * l'arbre** (mesurés en production à 600 et 800 ms par requête, à 3 904 personnes) :
+     * le second affichage d'un arbre inchangé les sert du cache, et rend la même charge.
+     */
+    public function testUnArbreInchangeSeRelitDuCache(): void
+    {
+        $this->connexionDe('membre@heritage.test');
+        $this->requete('/api/arbre/graphe');
+        self::assertSame(Response::HTTP_OK, $this->client->getResponse()->getStatusCode());
+        $premiere = $this->charge();
+
+        $this->requete('/api/arbre/graphe');
+        $minutage = (string) $this->client->getResponse()->headers->get('Server-Timing');
+
+        self::assertMatchesRegularExpression('/(^|, )jeu;dur=[\d.]+;desc="(x\d+ )?cache=hit"/', $minutage);
+        self::assertMatchesRegularExpression('/(^|, )cercle;dur=[\d.]+;desc="(x\d+ )?cache=hit"/', $minutage);
+        self::assertSame($premiere, $this->charge(), 'Servie du cache, la charge est identique au caractère près.');
+    }
+
+    /**
      * **La porte de sortie n° 2 du § 11.4** : le nœud d'une personne vivante hors cercle.
      *
      * Le nœud **reste présent, à sa place, avec ses arêtes** — un arbre dont on retire des
