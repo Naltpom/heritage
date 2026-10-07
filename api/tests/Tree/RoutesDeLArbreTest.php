@@ -282,6 +282,39 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
     }
 
     /**
+     * `Server-Timing` : le temps du serveur, étape par étape, lisible dans l'onglet Réseau
+     * du navigateur et relevé par la page de l'arbre (voir {@see \App\Module\Tree\Service\ChronometreDuGraphe}).
+     *
+     * Les étapes mesurées au fond des services (`placement`, `libelles`…) prouvent que le
+     * conteneur leur injecte **le même** chronomètre que le contrôleur : un argument par
+     * défaut resté en place donnerait un chronomètre à part, et un en-tête muet.
+     */
+    public function testLeGrapheDitSonTempsServeurEtapeParEtape(): void
+    {
+        $this->connexionDe('membre@heritage.test');
+        $this->requete('/api/arbre/graphe');
+
+        $reponse = $this->client->getResponse();
+        self::assertSame(Response::HTTP_OK, $reponse->getStatusCode());
+        $minutage = (string) $reponse->headers->get('Server-Timing');
+
+        foreach (['etag', 'normalisation', 'placement', 'libelles', 'calque', 'medias', 'noeuds', 'json'] as $etape) {
+            self::assertMatchesRegularExpression('/(^|, )'.$etape.';dur=\d+\.\d/', $minutage, \sprintf('L’étape « %s » manque : %s', $etape, $minutage));
+        }
+        self::assertMatchesRegularExpression('/placement;dur=[\d.]+(;desc="(x\d+ )?cache=(hit|miss)")/', $minutage);
+        self::assertMatchesRegularExpression('/effectif;desc="\d+"/', $minutage);
+        self::assertMatchesRegularExpression('/, total;dur=\d+\.\d$/', $minutage);
+
+        $this->client->request('GET', '/api/arbre/graphe', server: [
+            'HTTP_ACCEPT' => 'application/json',
+            'HTTP_IF_NONE_MATCH' => (string) $reponse->headers->get('ETag'),
+        ]);
+
+        self::assertSame(Response::HTTP_NOT_MODIFIED, $this->client->getResponse()->getStatusCode());
+        self::assertMatchesRegularExpression('/^etag;dur=.*, total;dur=\d+\.\d$/', (string) $this->client->getResponse()->headers->get('Server-Timing'), 'Un 304 dit aussi ce qu’il a coûté.');
+    }
+
+    /**
      * **La porte de sortie n° 2 du § 11.4** : le nœud d'une personne vivante hors cercle.
      *
      * Le nœud **reste présent, à sa place, avec ses arêtes** — un arbre dont on retire des

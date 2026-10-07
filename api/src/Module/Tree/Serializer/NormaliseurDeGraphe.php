@@ -12,6 +12,7 @@ use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Tree\Enum\ParenteDansLArbre;
 use App\Module\Tree\Service\ArbreVuDepuis;
+use App\Module\Tree\Service\ChronometreDuGraphe;
 use App\Module\Tree\Service\EtiquetteDeDateGedcom;
 use App\Module\Tree\Service\MesureDeFiche;
 use App\Module\Tree\Service\PlacementPartage;
@@ -100,6 +101,7 @@ final readonly class NormaliseurDeGraphe
         private ArbreVuDepuis $arbre,
         private MesureDeFiche $mesure = new MesureDeFiche(),
         private EtiquetteDeDateGedcom $etiquettes = new EtiquetteDeDateGedcom(),
+        private ChronometreDuGraphe $chrono = new ChronometreDuGraphe(),
     ) {
     }
 
@@ -131,7 +133,7 @@ final readonly class NormaliseurDeGraphe
         // la racine à tout le monde serait juste pour un compte et faux pour tous les
         // autres — voir {@see ArbreVuDepuis} et {@see PersonneDuLecteur}.
         $partage = $this->partage->placement($pointDeVue);
-        $libelles = $this->libelles($this->arbre->branches($pointDeVue));
+        $libelles = $this->chrono->mesure('libelles', fn () => $this->libelles($this->arbre->branches($pointDeVue)));
         // Famille, conjoint ou alliance, vu de ce lecteur — et le pont de chaque famille
         // par alliance. Calculés par le même parcours que les branches.
         $parentes = $this->arbre->parentes($pointDeVue);
@@ -140,7 +142,7 @@ final readonly class NormaliseurDeGraphe
         // décide *quelles* propositions ce lecteur a le droit de voir — les siennes, ou
         // toutes s'il est administrateur hors bascule —, celui-là décide ce qu'on dit de
         // chaque personne validée. Aucun des deux ne remplace l'autre.
-        $projection = $this->calque->projection($lecteur->pourLeCalque());
+        $projection = $this->chrono->mesure('calque', fn (): ProjectionEnAttente => $this->calque->projection($lecteur->pourLeCalque()));
 
         ['noeuds' => $proposes, 'renommage' => $renommage, 'ecartes' => $ecartes] = $this->traduction->preparer(
             $projection,
@@ -163,11 +165,11 @@ final readonly class NormaliseurDeGraphe
         // Une seule question pour tout l'arbre : le filtre « Avec image » de la barre
         // d'outils a besoin d'un booléen par nœud, et 274 appels unitaires coûteraient
         // 274 allers-retours pour l'obtenir.
-        $avecImage = $this->medias->personnesAvecMedia(array_keys($libelles['personnes']), $lecteur);
+        $avecImage = $this->chrono->mesure('medias', fn () => $this->medias->personnesAvecMedia(array_keys($libelles['personnes']), $lecteur));
 
         // Même geste pour la vignette du portrait, dessinée à gauche de chaque fiche :
         // une question pour tout l'arbre, et une personne masquée en est absente.
-        $vignettes = $this->medias->vignettesDePortraits(array_keys($libelles['personnes']), $lecteur);
+        $vignettes = $this->chrono->mesure('medias', fn () => $this->medias->vignettesDePortraits(array_keys($libelles['personnes']), $lecteur));
 
         $demandes = $projection->demandes;
         $nonPlaces = $this->nonPlaces($projection, $placement, $ecartes);
@@ -198,11 +200,11 @@ final readonly class NormaliseurDeGraphe
                 'places' => \count($projection->noeuds) - \count($nonPlaces),
                 'nonPlaces' => $nonPlaces,
             ],
-        ] + GrapheDuPerimetre::retirer(
+        ] + $this->chrono->mesure('noeuds', fn () => GrapheDuPerimetre::retirer(
             $this->noeuds($placement, $placables, $proposesParId, $libelles, $parentes, $renommage, $cercle, $avecImage, $vignettes, $this->naissancesReduites($placables, $cercle)),
             $this->aretes($placement, $renommage),
             $cercle,
-        );
+        ));
     }
 
     /**

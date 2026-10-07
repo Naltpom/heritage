@@ -88,6 +88,7 @@ final class PlacementPartage implements EmpreinteDeLaMiseEnPage
         private readonly TreeFingerprint $empreinte,
         private readonly CacheInterface $cacheArbre,
         private readonly ArbreVuDepuis $arbre,
+        private readonly ChronometreDuGraphe $chrono = new ChronometreDuGraphe(),
     ) {
     }
 
@@ -104,10 +105,20 @@ final class PlacementPartage implements EmpreinteDeLaMiseEnPage
      */
     public function placement(?int $egoPersonneId = null): Placement
     {
-        $resultat = $this->cacheArbre->get(
-            $this->cle($egoPersonneId),
-            fn (ItemInterface $entree): Placement => $this->calcule($entree, $egoPersonneId),
-        );
+        $calcule = false;
+        // Une fonction et non une flèche : la flèche capturerait `$calcule` par valeur, et
+        // le `cache=miss` ne remonterait jamais.
+        $resultat = $this->chrono->mesure('placement', function () use ($egoPersonneId, &$calcule): mixed {
+            return $this->cacheArbre->get(
+                $this->cle($egoPersonneId),
+                function (ItemInterface $entree) use ($egoPersonneId, &$calcule): Placement {
+                    $calcule = true;
+
+                    return $this->calcule($entree, $egoPersonneId);
+                },
+            );
+        });
+        $this->chrono->note('placement', $calcule ? 'cache=miss' : 'cache=hit', remplace: $calcule);
 
         \assert($resultat instanceof Placement);
 
