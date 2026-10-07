@@ -120,7 +120,7 @@ const PLANS = {
       const ens = { s: 0.0205, x: monde.l / 2, y: monde.h / 2 }
       return { camera: camera(t, [
         { t: R.recul1 - 0.6, s: 1.6, x: v.cx, y: v.cy - 30 },
-        { t: R.zoomArriere, s: 0.42, x: v.cx, y: v.cy - 120 },
+        { t: R.zoomArriere, s: 0.42, x: v.cx, y: (v.cy + monde.h / 2) / 2 },
         { t: R.generations + 0.3, ...ens, courbe: eio },
         { t: R.frNoms + 0.6, ...ens, s: 0.0196 },
       ]) }

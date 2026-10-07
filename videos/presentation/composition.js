@@ -11,6 +11,8 @@ function dessiner(t) {
   fond(t)
   for (const s of SCENES) { x.save(); s(t); x.restore() }
   finition(t)
+  // l'ouverture : un fondu depuis le noir
+  if (t < 1.0) { x.fillStyle = `rgba(0,0,0,${1 - eout(prog(t, 0.05, 1.0))})`; x.fillRect(0, 0, W, H) }
 }
 /**
  * Une image : on dessine, et si des images de rush manquaient, on attend qu'elles
