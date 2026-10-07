@@ -315,9 +315,10 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
     }
 
     /**
-     * Le jeu de placement et la vue du cercle sont relus en base **une fois par état de
-     * l'arbre** (mesurés en production à 600 et 800 ms par requête, à 3 904 personnes) :
-     * le second affichage d'un arbre inchangé les sert du cache, et rend la même charge.
+     * Le jeu de placement est relu en base **une fois par état de l'arbre** (mesuré en
+     * production à 600 ms par requête, à 3 904 personnes) : le second affichage d'un arbre
+     * inchangé le sert du cache, et rend la même charge. La vue du cercle, que le double de
+     * `PortArbre` remplace ici, est éprouvée dans {@see AdaptateursPourLesAutresModulesTest}.
      */
     public function testUnArbreInchangeSeRelitDuCache(): void
     {
@@ -330,7 +331,6 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
         $minutage = (string) $this->client->getResponse()->headers->get('Server-Timing');
 
         self::assertMatchesRegularExpression('/(^|, )jeu;dur=[\d.]+;desc="(x\d+ )?cache=hit"/', $minutage);
-        self::assertMatchesRegularExpression('/(^|, )cercle;dur=[\d.]+;desc="(x\d+ )?cache=hit"/', $minutage);
         self::assertSame($premiere, $this->charge(), 'Servie du cache, la charge est identique au caractère près.');
     }
 
