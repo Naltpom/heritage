@@ -22,6 +22,7 @@
  * retirer du serveur.
  */
 
+import { corpsDeFicheAComparer, LIMITE_DES_RESSEMBLANCES, type CritereDeRessemblance, type FicheAComparer } from './arbre'
 import { requeteApi, type OptionsRequete } from './client'
 import type { BlocDate, BlocDateOp, ListePaginee, Sexe } from './types'
 
@@ -998,6 +999,110 @@ export function lireFicheProposee(
   if (signal !== undefined) o.signal = signal
 
   return requeteApi<BrouillonTrouve>(`/demandes/brouillons/${draftPersonId}`, o)
+}
+
+/* ------------------------------------------------------------------ */
+/* Les propositions qui ressemblent à une saisie — § 6.6 quater        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Ce que le lecteur pourra faire d'une proposition semblable, **calculé par le
+ * serveur** :
+ *  - `completer` — la compléter sur place : il en est l'auteur, ou il est
+ *    administrateur et elle est en attente ;
+ *  - `complement` — déposer un complément rattaché, que l'administrateur
+ *    fusionnera. Toujours le cas d'une forme discrète.
+ *
+ * Aucun des deux gestes n'existe encore à l'écran : la carte est informative
+ * tant que l'API de complétion n'est pas livrée.
+ */
+export type ActionSurProposition = 'completer' | 'complement'
+
+/**
+ * Une proposition semblable **en clair** : celle du lecteur, celle de n'importe
+ * qui pour un administrateur, ou celle d'un défunt — « un défunt est un fait
+ * historique ». La ligne de recherche du § 6.6 bis, plus de quoi dire pourquoi
+ * elle ressemble.
+ */
+export interface RessemblancePropositionComplete {
+  forme: 'complete'
+  draftPersonId: number
+  demandeId: number
+  localRef: string
+  /**
+   * Le nœud **dans le graphe du lecteur**, ou `null` : un brouillon non envoyé,
+   * ou la proposition d'un défunt faite par un autre membre, n'y sont pas. Ce
+   * n'est pas le `noeudId` toujours composé de la recherche — et la projection
+   * peut encore écarter un nœud qu'elle ne sait pas placer : l'arbre vérifie
+   * qu'il est dessiné avant d'y aller.
+   */
+  noeudId: string | null
+  displayName: string
+  sex: Sexe
+  deceased: boolean
+  ligneDates: string | null
+  authorLabel: string
+  enAttente: boolean
+  lieuNaissance: string | null
+  statut: 'brouillon' | 'en_attente'
+  action: ActionSurProposition
+  criteres: CritereDeRessemblance[]
+  raisons: string[]
+  score: number
+}
+
+/**
+ * Une proposition semblable **discrète** : celle d'un vivant, faite par un autre
+ * membre. Cinq clés, et c'est tout ce qui existe — ni nom, ni date, ni lieu, ni
+ * auteur, ni numéro de demande, ni nœud. Seuls le nom, les prénoms et le sexe
+ * ont été comparés, et les raisons ne recopient aucune valeur de la fiche.
+ *
+ * **Le front ne reconstruit jamais ce qui est caché** : la carte dit « une
+ * proposition semblable attend déjà la validation », et rien d'autre.
+ * `draftPersonId` n'est là que pour qu'un complément puisse la citer.
+ */
+export interface RessemblancePropositionDiscrete {
+  forme: 'discrete'
+  draftPersonId: number
+  action: ActionSurProposition
+  criteres: CritereDeRessemblance[]
+  raisons: string[]
+}
+
+/** L'une ou l'autre forme, **choisie par le serveur**, fiche par fiche. */
+export type RessemblanceProposition = RessemblancePropositionComplete | RessemblancePropositionDiscrete
+
+export interface ReponseRessemblancesPropositions {
+  elements: RessemblanceProposition[]
+  tronque: boolean
+}
+
+/**
+ * `POST /api/demandes/brouillons/ressemblances` — « une proposition semblable
+ * attend déjà ».
+ *
+ * Le pendant du § 5.5 bis pour les fiches **proposées** : les demandes
+ * `creation_personne` en attente, tous auteurs confondus, et les brouillons du
+ * lecteur seul. Même corps, mêmes `422` — plus `sauf`, la demande à ne pas
+ * parcourir (celle qu'on serait en train de compléter). Un compte en attente
+ * reçoit `{ elements: [], tronque: false }`.
+ */
+export function chercherRessemblancesBrouillons(
+  fiche: FicheAComparer,
+  reglages: { limite?: number; sauf?: number | null } = {},
+  signal?: AbortSignal,
+): Promise<ReponseRessemblancesPropositions> {
+  const o: OptionsRequete = {
+    methode: 'POST',
+    corps: {
+      fiche: corpsDeFicheAComparer(fiche),
+      limite: reglages.limite ?? LIMITE_DES_RESSEMBLANCES,
+      sauf: reglages.sauf ?? null,
+    },
+  }
+  if (signal !== undefined) o.signal = signal
+
+  return requeteApi<ReponseRessemblancesPropositions>('/demandes/brouillons/ressemblances', o)
 }
 
 /**

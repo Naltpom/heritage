@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BrouillonDemande, Demande } from '@/lib/api'
-import { personneDeposee } from './depot'
+import { annonceDesDemandes, ficheCompletee, personneDeposee } from './depot'
 
 /**
  * Ce que le formulaire annonce après un dépôt. La propriété qui compte : le nœud
@@ -81,5 +81,25 @@ describe('personneDeposee', () => {
     expect(personneDeposee(demande({ brouillons: [brouillon({ givenNames: null, surname: ' Dupont ' })] })).libelle).toBe(
       'Dupont',
     )
+  })
+})
+
+describe('ficheCompletee : « C’est elle », sur une fiche qui existait', () => {
+  it('annonce la personne et toutes les demandes, sans nœud à fabriquer', () => {
+    expect(ficheCompletee(17, 'Marne Sureau', [41, 42, 43])).toEqual({
+      nature: 'fiche',
+      demandeIds: [41, 42, 43],
+      noeudId: null,
+      personId: 17,
+      libelle: 'Marne Sureau',
+      soumise: true,
+    })
+  })
+
+  it('dit les demandes déposées, au singulier comme au pluriel', () => {
+    expect(annonceDesDemandes([])).toBe('')
+    expect(annonceDesDemandes([12])).toBe('Demande n° 12 déposée')
+    expect(annonceDesDemandes([12, 13])).toBe('Demandes n° 12 et 13 déposées')
+    expect(annonceDesDemandes([12, 13, 14])).toBe('Demandes n° 12, 13 et 14 déposées')
   })
 })
