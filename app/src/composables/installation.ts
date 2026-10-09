@@ -8,20 +8,38 @@
  *   « Partager → Sur l'écran d'accueil ». On l'explique.
  * - **Déjà installée** (`display-mode: standalone`) : rien à proposer.
  *
+ * Qui le propose : la fenêtre automatique de l'arrivée, sur téléphone
+ * (`invitationInstallation.ts`), et le panneau de « Moi » et de « Mon compte »
+ * (`InstallationApplication.vue`), là tant qu'il y a quelque chose à installer.
+ *
  * L'écouteur est posé au CHARGEMENT du module, importé par `main.ts` : l'événement
  * peut partir avant le montage du premier écran, et un écouteur posé plus tard le
  * manquerait. Rien ici ne touche `window` hors navigateur — les tests rendent
- * côté serveur.
+ * côté serveur, et imposent ce que le navigateur aurait dit par
+ * `simulerInstallation()`.
  */
-import { readonly, ref } from 'vue'
+import { readonly, ref, shallowRef } from 'vue'
 
-interface InvitationDInstallation extends Event {
+/** L'événement `beforeinstallprompt`, tel qu'on s'en sert. */
+export interface InvitationDInstallation extends Event {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
+/**
+ * Ce qu'il est advenu d'« Installer » :
+ *
+ * - `acceptee` : le lecteur a dit oui dans la boîte du navigateur ;
+ * - `refusee` : il l'a fermée ou a dit non — c'est une réponse ;
+ * - `impossible` : rien à rejouer, ou le navigateur a refusé d'ouvrir sa boîte
+ *   (invitation déjà consommée, hors geste…) — ce n'en est pas une.
+ */
+export type IssueInstallation = 'acceptee' | 'refusee' | 'impossible'
+
 const invitation = ref<InvitationDInstallation | null>(null)
 const installee = ref(false)
+/** Pour les tests : impose la réponse de `surIos()`. `null` = la vraie. */
+const iosImpose = shallowRef<boolean | null>(null)
 
 const navigateur = typeof window !== 'undefined'
 
@@ -47,19 +65,51 @@ function surIos(): boolean {
   return ios && !/CriOS|FxiOS|EdgiOS/.test(ua)
 }
 
+export interface EtatInstallationSimule {
+  invitation?: InvitationDInstallation | null
+  installee?: boolean
+  ios?: boolean
+}
+
+/**
+ * Pour les tests (vitest tourne sous `node`, sans `window`) : ce que le
+ * navigateur aurait signalé. Seuls les champs donnés changent. `null` remet à
+ * zéro : aucune invitation, pas installée, détection réelle de l'iPhone.
+ */
+export function simulerInstallation(etat: EtatInstallationSimule | null): void {
+  if (etat === null) {
+    invitation.value = null
+    installee.value = false
+    iosImpose.value = null
+    return
+  }
+  if (etat.invitation !== undefined) invitation.value = etat.invitation
+  if (etat.installee !== undefined) installee.value = etat.installee
+  if (etat.ios !== undefined) iosImpose.value = etat.ios
+}
+
 export function useInstallation() {
   return {
     invitation: readonly(invitation),
     installee: readonly(installee),
-    ios: surIos(),
-    /** Rejoue l'invitation du navigateur ; rend `true` si l'installation est acceptée. */
-    async installer(): Promise<boolean> {
+    /** Lu à l'appel ; réactif seulement pour les tests, qui l'imposent. */
+    ios: iosImpose.value ?? surIos(),
+    /**
+     * Rejoue l'invitation du navigateur. **À appeler dans le clic** : `prompt()`
+     * part avant le premier `await`, tant que le geste court encore.
+     */
+    async installer(): Promise<IssueInstallation> {
       const i = invitation.value
-      if (!i) return false
+      if (!i) return 'impossible'
+      // Un `beforeinstallprompt` ne se rejoue qu'une fois : oublié d'emblée.
       invitation.value = null
-      await i.prompt()
-      const { outcome } = await i.userChoice
-      return outcome === 'accepted'
+      try {
+        await i.prompt()
+        const { outcome } = await i.userChoice
+        return outcome === 'accepted' ? 'acceptee' : 'refusee'
+      } catch {
+        return 'impossible'
+      }
     },
   }
 }
