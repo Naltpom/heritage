@@ -163,6 +163,8 @@ const CLE_ALLIANCES_DANS_L_ARBRE = 'heritage.arbre2.alliancesDansLArbre'
 const CLE_FRATRIES = 'heritage.arbre2.fratriesParNaissance'
 /** La ligne directe : les autres fiches estompées (défaut), ou retirées de l'écran. */
 const CLE_LIGNE_SEULE = 'heritage.arbre2.ligneDirecteSeule'
+/** Les rectangles des familles : affichés (défaut) ou masqués ; la disposition ne change pas. */
+const CLE_RECTANGLES = 'heritage.arbre2.rectangles'
 /** Le zoom à partir duquel les noms s'écrivent (niveau Fiches), en fraction. */
 const CLE_SEUIL_DES_NOMS = 'heritage.arbre2.seuilDesNoms'
 function lirePreference(cle: string, parDefaut: boolean): boolean {
@@ -186,6 +188,8 @@ const avecSansLien = ref(lirePreference(CLE_SANS_LIEN, false))
 const alliancesDansLArbre = ref(lirePreference(CLE_ALLIANCES_DANS_L_ARBRE, false))
 const fratriesParNaissance = ref(lirePreference(CLE_FRATRIES, false))
 const ligneSeule = ref(lirePreference(CLE_LIGNE_SEULE, false))
+const avecRectangles = ref(lirePreference(CLE_RECTANGLES, true))
+watch(avecRectangles, (avec) => ecrirePreference(CLE_RECTANGLES, avec))
 function lireSeuilDesNoms(): number {
   try {
     const v = localStorage.getItem(CLE_SEUIL_DES_NOMS)
@@ -1126,7 +1130,8 @@ const transformationMonde = computed(
  */
 const rectangles = computed<RectangleDeGroupe[]>(() => {
   const d = disposition.value
-  return d && 'groupes' in d ? d.groupes : []
+  // Masqués (réglage « Rectangles des familles ») : ni fond ni titre, les fiches ne bougent pas.
+  return avecRectangles.value && d && 'groupes' in d ? d.groupes : []
 })
 const couleurDuGroupe = (cle: string): string =>
   cle === 'alliances' ? 'var(--h-attenue)' : cle === 'sansLien' ? 'var(--h-branche-hors)' : couleurBranche(cle)
@@ -1786,6 +1791,12 @@ onBeforeUnmount(() => {
             sous="l’aîné à gauche, le plus jeune à droite"
             :actif="fratriesParNaissance"
             @basculer="fratriesParNaissance = !fratriesParNaissance"
+          />
+          <InterrupteurFiltre
+            libelle="Rectangles des familles"
+            sous="le cadre et le titre de chaque groupe"
+            :actif="avecRectangles"
+            @basculer="avecRectangles = !avecRectangles"
           />
           <div class="flex flex-col gap-1.5" data-seuil-des-noms>
             <div class="flex items-baseline justify-between gap-2">
