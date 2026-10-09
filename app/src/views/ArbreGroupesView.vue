@@ -94,6 +94,7 @@ import { useFormatDesCartes } from '@/composables/formatDesCartes'
 import ReglageFormatDesCartes from '@/components/arbre/ReglageFormatDesCartes.vue'
 import InvitationFormatDesCartes from '@/components/arbre/InvitationFormatDesCartes.vue'
 import InterrupteurFiltre from '@/components/arbre/InterrupteurFiltre.vue'
+import { toucheIgnoree } from '@/components/arbre/voletProposition'
 import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
 import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
 import { effectifSansLien, estSansLien, noeudsSansLien, sansPersonnesSansLien } from '@/histoire/sansLien'
@@ -291,13 +292,16 @@ watch(fratriesParNaissance, (oui) => {
   redisposer()
 })
 /*
- * Changer de format refait la disposition — les coordonnées du monde changent
- * toutes. Pour ne pas perdre le lecteur, on garde à l'écran la personne qu'il
- * regardait : la sélection s'il y en a une, sinon la fiche la plus proche du
- * centre ; au même zoom, à la même place. Sans arbre affiché (ou au niveau
- * Ensemble), on repart de l'arbre ajusté, comme après une bascule.
+ * Refaire la disposition — les coordonnées du monde changent toutes — sans perdre le
+ * lecteur : on garde à l'écran la personne qu'il regardait, la sélection s'il y en a
+ * une, sinon la fiche la plus proche du centre ; au même zoom, à la même place.
+ *
+ * `refaire` refait la disposition (`redisposer()`, qui recadre l'arbre ajusté).
+ * Sans repère — pas d'arbre affiché, ou le niveau Ensemble sans sélection —,
+ * `sansRepere` décide : `ajuster` garde l'arbre ajusté, comme après une bascule ;
+ * `garder` remet le cadrage d'avant, pour un arbre qui ne change que d'une fiche.
  */
-watch(formatDesCartes, () => {
+function garderLeRepere(refaire: () => void, sansRepere: 'ajuster' | 'garder' = 'ajuster'): void {
   const d = disposition.value
   if (!d || !grapheCharge.value) return
   const avant = cadrage.value
@@ -306,15 +310,20 @@ watch(formatDesCartes, () => {
   const ancre = choisie ?? (niveau.value > 0 ? ficheLaPlusProche(d, centreMonde()) : undefined)
   if (ancre) repere = { id: ancre.id, px: versEcranX(ancre.cx), py: versEcranY(ancre.y + ancre.h / 2) }
   arreterVol()
-  redisposer()
+  refaire()
   const f = repere ? disposition.value?.parId.get(repere.id) : undefined
-  if (!f || !repere) return
+  if (!f || !repere) {
+    if (sansRepere === 'garder') cadrage.value = avant
+    return
+  }
   const c = canevas.value
   // Le même point d'écran, sauf s'il était sorti de la fenêtre : alors au centre.
   const dedans = repere.px > 0 && repere.px < taille.value.l && repere.py > 0 && repere.py < taille.value.h
   const [px, py] = dedans ? [repere.px, repere.py] : [taille.value.l / 2, taille.value.h / 2]
   cadrage.value = centrerSur(bornerEchelle(avant.s, c), c, f.cx, f.y + f.h / 2, px, py)
-})
+}
+/* Changer de format change la taille des boîtes : la disposition se refait autour du repère. */
+watch(formatDesCartes, () => garderLeRepere(redisposer))
 /** La fiche dont le centre est le plus près d'un point du monde. */
 function ficheLaPlusProche(d: DispositionHistoire, p: { x: number; y: number }): FicheHistoire | undefined {
   let meilleure: FicheHistoire | undefined
@@ -765,16 +774,25 @@ watch(voletOuvert, async (ouvert) => {
   if (x < 40 || x > taille.value.l - 40) voler(s.value, f.cx, f.y + f.h / 2)
 })
 
-/** Un proche cliqué dans le volet : on le choisit dans l'arbre, et l'écran le rejoint. */
-function choisirProche(personId: number): void {
+/**
+ * Montre une personne dans l'arbre : sa famille par alliance ou sa zone « sans lien »
+ * s'allume s'il le faut, on la choisit, et l'écran la rejoint. **Ne quitte jamais
+ * `/arbre`** : le volet « Ajouter une personne » y garde une saisie, que la page de la
+ * fiche perdrait. Rend `false` quand la personne n'est pas dessinée — à l'appelant de
+ * le dire.
+ */
+function montrerPersonne(personId: number): boolean {
   afficherSonAlliance(personId)
   const f = disposition.value?.parPersonId.get(personId)
-  if (!f) {
-    void routeur.push({ name: 'personne.detail', params: { id: personId } })
-    return
-  }
+  if (!f) return false
   selection.value = f.id
   voler(Math.max(s.value, 0.6), f.cx, f.y + f.h / 2)
+  return true
+}
+
+/** Un proche cliqué dans le volet de la fiche : montré dans l'arbre, sinon sa page. */
+function choisirProche(personId: number): void {
+  if (!montrerPersonne(personId)) void routeur.push({ name: 'personne.detail', params: { id: personId } })
 }
 
 function voirFiche(f: FicheHistoire): void {
@@ -1581,8 +1599,8 @@ function surToucheRecherche(e: KeyboardEvent): void {
 /* ------------------------------------------------------------------ */
 
 function surToucheGlobale(e: KeyboardEvent): void {
-  const cible = e.target as HTMLElement | null
-  if (cible && (cible.tagName === 'INPUT' || cible.tagName === 'TEXTAREA' || cible.isContentEditable)) return
+  // Une saisie (champ, liste déroulante) ou le volet « Ajouter une personne » : pas l'arbre.
+  if (toucheIgnoree(e.target as HTMLElement | null)) return
   if (e.ctrlKey || e.metaKey || e.altKey) return
   if (e.key === '/') {
     e.preventDefault()
@@ -2393,6 +2411,28 @@ onBeforeUnmount(() => {
             >tout voir sur la fiche</RouterLink>
           </p>
         </template>
+        <!-- Un nœud EN ATTENTE (le calque des demandes) n'a pas de fiche à lire : la
+             personne n'existe que dans sa demande. Sans cette branche, « Lecture de la
+             fiche… » restait affiché sans fin. -->
+        <section
+          v-else-if="ficheChoisie.noeud.personId === null"
+          class="flex flex-col gap-2 rounded-panneau border border-dashed border-accent px-3.5 py-3"
+          data-noeud-propose
+        >
+          <h3 class="m-0 text-sm font-semibold text-accent">Proposée, en attente de validation</h3>
+          <p class="m-0 text-sm text-attenue">
+            Elle n’a pas encore de fiche : elle n’existe que dans sa demande, jusqu’à ce qu’un
+            administrateur la valide.
+          </p>
+          <RouterLink
+            v-if="ficheChoisie.noeud.demandeId !== undefined"
+            :to="{ name: 'demande.detail', params: { id: ficheChoisie.noeud.demandeId } }"
+            class="self-start text-sm font-semibold text-accent underline"
+            @click="memoriserLaVue"
+          >
+            Voir la demande n° {{ ficheChoisie.noeud.demandeId }}
+          </RouterLink>
+        </section>
         <p v-else-if="ficheChoisie.noeud.visibilite === 'restreinte'" class="m-0 text-sm text-attenue">
           Personne vivante : sa fiche n’est visible que de ses proches.
         </p>
