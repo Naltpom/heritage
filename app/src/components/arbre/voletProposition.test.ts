@@ -121,3 +121,28 @@ describe('confirmationDuDepot : ce que le volet dit après l’envoi', () => {
     expect(brouillon.phrase).toContain('qu’une fois la demande envoyée')
   })
 })
+
+describe('confirmationDuDepot : une fiche complétée (« C’est elle »)', () => {
+  const fiche: PersonneDeposee = {
+    nature: 'fiche',
+    demandeIds: [41, 42],
+    noeudId: null,
+    personId: 17,
+    libelle: 'Marne Sureau',
+    soumise: true,
+  }
+
+  it('annonce les demandes déposées, et que rien ne paraît avant validation', () => {
+    expect(confirmationDuDepot(fiche, 'placee')).toEqual({
+      titre: 'Demandes n° 41 et 42 déposées',
+      phrase: 'La fiche de Marne Sureau est choisie dans l’arbre ; vos compléments y paraîtront une fois validés.',
+    })
+  })
+
+  it('dit quand l’arbre ne la montre pas, sans parler de proposition', () => {
+    expect(confirmationDuDepot(fiche, 'absente').phrase).toContain('n’est pas dessinée dans l’arbre avec vos réglages')
+    expect(confirmationDuDepot(fiche, 'masquee').phrase).toContain('l’affichage la masque')
+    expect(confirmationDuDepot(fiche, 'recherche').phrase).toContain('se retrouve dans l’arbre')
+    expect(confirmationDuDepot(fiche, 'placee').titre).not.toContain('Proposition envoyée')
+  })
+})

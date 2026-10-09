@@ -16,6 +16,7 @@ import { defineComponent, h, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { attendre, boutonNomme, cliquer, monterEnMemoire, parAttribut, texte, un, type Noeud } from '@/test-utils/rendu-memoire'
 import type { PersonneDeposee } from '@/components/proposition/depot'
+import type { EnEvidence } from '@/components/proposition/ressemblances'
 import type { PlaceDansLArbre } from './voletProposition'
 
 const DEPOT: PersonneDeposee = {
@@ -27,7 +28,17 @@ const DEPOT: PersonneDeposee = {
   soumise: true,
 }
 
-const formulaire = vi.hoisted(() => ({ reinitialiser: vi.fn(), montages: 0 }))
+/** « C'est elle : compléter sa fiche » — rien de créé, deux demandes sur Marie (n° 17). */
+const FICHE_COMPLETEE: PersonneDeposee = {
+  nature: 'fiche',
+  demandeIds: [41, 42],
+  noeudId: null,
+  personId: 17,
+  libelle: 'Marie Dupont',
+  soumise: true,
+}
+
+const formulaire = vi.hoisted(() => ({ reinitialiser: vi.fn(), montages: 0, reponses: [] as boolean[] }))
 
 vi.mock('@/components/proposition/FormulaireCreationPersonne.vue', async () => {
   const { defineComponent: definir, h: rendre } = await import('vue')
@@ -35,15 +46,24 @@ vi.mock('@/components/proposition/FormulaireCreationPersonne.vue', async () => {
     default: definir({
       name: 'FormulaireCreationPersonne',
       props: { contexte: { type: String, required: true }, refaire: { type: Number, default: null } },
-      emits: ['deposee', 'refaire', 'sale'],
+      emits: ['deposee', 'refaire', 'sale', 'voir-personne', 'voir-proposition', 'en-evidence'],
       setup(props, { emit, expose }) {
         formulaire.montages++
         expose({ reinitialiser: formulaire.reinitialiser })
+        const repondre = (dessinee: boolean) => formulaire.reponses.push(dessinee)
         return () =>
           rendre('div', { 'data-formulaire': '', 'data-contexte': props.contexte, 'data-refaire': String(props.refaire) }, [
             rendre('button', { type: 'button', onClick: () => emit('sale', true) }, 'Saisir'),
             rendre('button', { type: 'button', onClick: () => emit('deposee', DEPOT) }, 'Déposer'),
+            rendre('button', { type: 'button', onClick: () => emit('deposee', FICHE_COMPLETEE) }, 'Compléter'),
             rendre('button', { type: 'button', onClick: () => emit('refaire', 91) }, 'Refaire'),
+            rendre('button', { type: 'button', onClick: () => emit('voir-personne', 17, repondre) }, 'Voir la personne'),
+            rendre('button', { type: 'button', onClick: () => emit('voir-proposition', '#12/p1', repondre) }, 'Voir la proposition'),
+            rendre(
+              'button',
+              { type: 'button', onClick: () => emit('en-evidence', { personIds: [17], noeudIds: ['#12/p1'] }) },
+              'Cercler',
+            ),
           ])
       },
     }),
@@ -64,14 +84,20 @@ interface Monte {
   ouvert: { value: boolean }
   fermetures: number[]
   deposees: PersonneDeposee[]
+  /** Ce que l'arbre a été prié de montrer, et de cercler. */
+  montrees: (number | string)[]
+  evidences: EnEvidence[]
 }
 
-/** Monté comme l'arbre le monte : `fermer` repasse `ouvert` à `false`. */
+/** Monté comme l'arbre le monte : `fermer` repasse `ouvert` à `false`. L'arbre
+ *  « dessine » la personne 17, pas le nœud proposé. */
 async function monter(): Promise<Monte> {
   const place = ref<PlaceDansLArbre>('recherche')
   const ouvert = ref(true)
   const fermetures: number[] = []
   const deposees: PersonneDeposee[] = []
+  const montrees: (number | string)[] = []
+  const evidences: EnEvidence[] = []
   const Hote = defineComponent({
     setup: () => () =>
       h(VoletProposition, {
@@ -82,10 +108,19 @@ async function monter(): Promise<Monte> {
           ouvert.value = false
         },
         onDeposee: (d: PersonneDeposee) => deposees.push(d),
+        onVoirPersonne: (personId: number, repondre: (dessinee: boolean) => void) => {
+          montrees.push(personId)
+          repondre(personId === 17)
+        },
+        onVoirProposition: (noeudId: string, repondre: (dessinee: boolean) => void) => {
+          montrees.push(noeudId)
+          repondre(false)
+        },
+        onEnEvidence: (e: EnEvidence) => evidences.push(e),
       }),
   })
   const racine = await monterEnMemoire(Hote, { RouterLink: LienFactice })
-  return { racine, place, ouvert, fermetures, deposees }
+  return { racine, place, ouvert, fermetures, deposees, montrees, evidences }
 }
 
 /** Le formulaire est-il à l'écran ? `v-show` masque son enveloppe. */
@@ -97,6 +132,7 @@ function formulaireVisible(racine: Noeud): boolean {
 beforeEach(() => {
   formulaire.reinitialiser.mockClear()
   formulaire.montages = 0
+  formulaire.reponses = []
 })
 
 describe('le volet « Ajouter une personne »', () => {
@@ -195,5 +231,45 @@ describe('le volet « Ajouter une personne »', () => {
 
     expect(formulaire.montages).toBe(2)
     expect(un(racine, parAttribut('data-formulaire'))?.attributs['data-refaire']).toBe('91')
+  })
+})
+
+describe('le volet et les ressemblances (« Est-ce déjà… ? »)', () => {
+  it('relaie « voir » à l’arbre, et rend sa réponse au formulaire', async () => {
+    const { racine, montrees } = await monter()
+
+    await cliquer(un(racine, boutonNomme('Voir la personne')))
+    await cliquer(un(racine, boutonNomme('Voir la proposition')))
+
+    expect(montrees).toEqual([17, '#12/p1'])
+    // La personne est dessinée, le nœud proposé non : le formulaire le saura.
+    expect(formulaire.reponses).toEqual([true, false])
+  })
+
+  it('relaie ce que l’arbre doit cercler', async () => {
+    const { racine, evidences } = await monter()
+
+    await cliquer(un(racine, boutonNomme('Cercler')))
+
+    expect(evidences).toEqual([{ personIds: [17], noeudIds: ['#12/p1'] }])
+  })
+
+  it('confirme une fiche complétée : ses demandes, un lien pour chacune', async () => {
+    const { racine, place, deposees } = await monter()
+    await cliquer(un(racine, boutonNomme('Compléter')))
+    place.value = 'placee'
+    await attendre()
+
+    expect(deposees).toEqual([FICHE_COMPLETEE])
+    const confirmation = un(racine, parAttribut('data-confirmation-depot'))
+    expect(texte(confirmation!)).toContain('Demandes n° 41 et 42 déposées')
+    expect(texte(confirmation!)).toContain('La fiche de Marie Dupont est choisie dans l’arbre')
+    expect(texte(confirmation!)).toContain('Voir la demande n° 41')
+    expect(texte(confirmation!)).toContain('Voir la demande n° 42')
+    expect(texte(confirmation!)).not.toContain('Proposition envoyée')
+
+    // « Ajouter une autre personne » repart d'une saisie vierge, comme après une création.
+    await cliquer(un(racine, boutonNomme('Ajouter une autre personne')))
+    expect(formulaire.reinitialiser).toHaveBeenCalledTimes(1)
   })
 })

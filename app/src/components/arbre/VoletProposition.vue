@@ -23,6 +23,12 @@
  * **Il ne navigue pas.** « Refaire cette demande » recharge le formulaire ici, sur
  * la demande morte, au lieu de partir vers la page ; seuls « Voir la demande » et
  * les liens qu'on choisit de suivre quittent l'arbre.
+ *
+ * **Les ressemblances passent par lui** (« Est-ce déjà… ? ») : « Voir dans
+ * l'arbre » remonte en `voir-personne` / `voir-proposition`, et l'arbre répond s'il
+ * a pu la montrer ; `en-evidence` lui dit quoi cercler en pointillé. Une fiche
+ * complétée (« C'est elle ») se confirme ici comme une proposition, un lien par
+ * demande déposée.
  * ────────────────────────────────────────────────────────────────────
  *
  * L'`aside` porte `data-volet-proposition` : les raccourcis clavier de l'arbre se
@@ -32,6 +38,7 @@ import { computed, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import FormulaireCreationPersonne from '@/components/proposition/FormulaireCreationPersonne.vue'
 import type { PersonneDeposee } from '@/components/proposition/depot'
+import type { EnEvidence } from '@/components/proposition/ressemblances'
 import { confirmationDuDepot, type PlaceDansLArbre } from './voletProposition'
 
 const { ouvert = true, place = 'recherche' } = defineProps<{
@@ -44,8 +51,15 @@ const { ouvert = true, place = 'recherche' } = defineProps<{
 const emit = defineEmits<{
   /** La croix, ou « Fermer » après un dépôt. */
   fermer: []
-  /** Le dépôt est fait, photos comprises : à l'arbre de se redessiner. */
+  /** Le dépôt est fait, photos comprises : à l'arbre de se redessiner. Une fiche
+   *  complétée (« C'est elle ») arrive aussi par là, `nature: 'fiche'`. */
   deposee: [depot: PersonneDeposee]
+  /** Relayés du formulaire : montrer une ressemblance dans l'arbre, sans quitter
+   *  `/arbre` — l'arbre répond si elle y est dessinée. */
+  'voir-personne': [personId: number, repondre: (dessinee: boolean) => void]
+  'voir-proposition': [noeudId: string, repondre: (dessinee: boolean) => void]
+  /** Relayé du formulaire : les ressemblances que l'arbre cercle en pointillé. */
+  'en-evidence': [cibles: EnEvidence]
 }>()
 
 const formulaire = useTemplateRef<InstanceType<typeof FormulaireCreationPersonne>>('formulaire')
@@ -158,11 +172,14 @@ watch(
           <p class="m-0 text-sm">{{ texte.phrase }}</p>
         </div>
         <div class="flex flex-wrap gap-2">
+          <!-- Une fiche complétée en dépose plusieurs : un lien par demande. -->
           <RouterLink
-            :to="{ name: 'demande.detail', params: { id: confirmation.demandeIds[0] } }"
+            v-for="id in confirmation.demandeIds"
+            :key="id"
+            :to="{ name: 'demande.detail', params: { id } }"
             class="inline-flex items-center justify-center rounded-champ border border-ligne bg-panneau px-3.5 py-1.5 text-sm font-semibold text-texte transition-colors hover:border-accent"
           >
-            Voir la demande
+            {{ confirmation.demandeIds.length > 1 ? `Voir la demande n° ${id}` : 'Voir la demande' }}
           </RouterLink>
           <BoutonBase @click="repartirDeZero">Ajouter une autre personne</BoutonBase>
           <BoutonBase variante="discret" @click="fermer">Fermer</BoutonBase>
@@ -180,6 +197,9 @@ watch(
           @deposee="surDepot"
           @refaire="surRefaire"
           @sale="(valeur) => (sale = valeur)"
+          @voir-personne="(personId, repondre) => emit('voir-personne', personId, repondre)"
+          @voir-proposition="(noeudId, repondre) => emit('voir-proposition', noeudId, repondre)"
+          @en-evidence="(cibles) => emit('en-evidence', cibles)"
         />
       </div>
     </div>
