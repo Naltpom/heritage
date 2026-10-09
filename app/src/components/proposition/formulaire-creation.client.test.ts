@@ -11,12 +11,16 @@
  *    navigation — c'est l'hôte (page ou volet) qui décide où l'on va ;
  * 3. **la reprise arrive par la prop `refaire`**, et « Refaire cette demande »
  *    remonte en événement au lieu de naviguer ;
- * 4. **`reinitialiser()` repart d'une saisie vierge**, et le volet le sait (`sale`).
+ * 4. **`reinitialiser()` repart d'une saisie vierge**, et le volet le sait (`sale`) ;
+ * 5. **« Est-ce déjà… ? »** : un seul appel par route après le délai, les cartes,
+ *    le rappel avant l'envoi — une fois, et jamais sur un brouillon — et « C'est
+ *    elle » qui dépose `modification_personne` puis `ajout_lien` sur la fiche
+ *    existante, sans toucher au routeur.
  */
 import { defineComponent, h, ref } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Demande } from '@/lib/api'
-import { attendre, boutonNomme, monterEnMemoire, texte, un, type Noeud } from '@/test-utils/rendu-memoire'
+import { attendre, boutonNomme, cliquer, demonterTout, monterEnMemoire, texte, un, type Noeud } from '@/test-utils/rendu-memoire'
 
 /* ------------------------------------------------------------------ */
 /* Les dépendances                                                     */
@@ -47,6 +51,10 @@ const api = vi.hoisted(() => ({
   creerDemande: vi.fn(),
   televerserMedia: vi.fn(),
   invaliderGraphe: vi.fn(),
+  chercherRessemblancesArbre: vi.fn(),
+  chercherRessemblancesBrouillons: vi.fn(),
+  lireFichePersonne: vi.fn(),
+  proposerLeMedia: vi.fn(),
 }))
 
 vi.mock('@/lib/api', async (original) => ({
@@ -68,9 +76,11 @@ vi.mock('@/components/proposition/ChampsIdentite.vue', async () => {
   return { default: definir({ name: 'ChampsIdentite', setup: () => () => rendre('div', { 'data-champs-identite': '' }) }) }
 })
 
-import { ErreurApi } from '@/lib/api'
+import { ErreurApi, type FichePersonneComplete, type RessemblanceDansLArbre } from '@/lib/api'
+import { DELAI_DES_RESSEMBLANCES_MS } from '@/composables/useRessemblances'
 import { creationVide } from './creation'
 import type { PersonneDeposee } from './depot'
+import type { EnEvidence } from './ressemblances'
 import FormulaireCreationPersonne from './FormulaireCreationPersonne.vue'
 
 const LienFactice = defineComponent({
@@ -130,6 +140,7 @@ interface Monte {
   deposees: PersonneDeposee[]
   refaites: number[]
   sale: boolean[]
+  evidences: EnEvidence[]
   formulaire: { value: { reinitialiser: () => void } | null }
 }
 
@@ -137,6 +148,7 @@ async function monter(refaire: number | null = 77): Promise<Monte> {
   const deposees: PersonneDeposee[] = []
   const refaites: number[] = []
   const sale: boolean[] = []
+  const evidences: EnEvidence[] = []
   const formulaire = ref<{ reinitialiser: () => void } | null>(null)
   const Hote = defineComponent({
     setup: () => () =>
@@ -147,10 +159,69 @@ async function monter(refaire: number | null = 77): Promise<Monte> {
         onDeposee: (d: PersonneDeposee) => deposees.push(d),
         onRefaire: (id: number) => refaites.push(id),
         onSale: (s: boolean) => sale.push(s),
+        onEnEvidence: (e: EnEvidence) => evidences.push(e),
       }),
   })
   const racine = await monterEnMemoire(Hote, { RouterLink: LienFactice })
-  return { racine, deposees, refaites, sale, formulaire }
+  return { racine, deposees, refaites, sale, evidences, formulaire }
+}
+
+/** Le calme que le formulaire attend avant de chercher, puis ce qui s'ensuit. */
+async function attendreLesRessemblances(): Promise<void> {
+  await new Promise((fin) => setTimeout(fin, DELAI_DES_RESSEMBLANCES_MS + 40))
+  await attendre()
+}
+
+/** Marie Dupont, déjà dans l'arbre (n° 17) : sexe inconnu, ni parents ni union. */
+const MARIE_DANS_L_ARBRE: RessemblanceDansLArbre = {
+  personId: 17,
+  displayName: 'Marie Dupont',
+  sex: 'inconnu',
+  vivant: false,
+  generation: -2,
+  branch: 'pp',
+  ligneDates: '1894 – 1968',
+  lieuNaissance: null,
+  criteres: ['nom', 'prenom'],
+  raisons: ['même nom', 'prénom Marie en commun'],
+  score: 2,
+}
+
+function ficheDeMarie(): FichePersonneComplete {
+  return {
+    visibilite: 'complete',
+    id: 17,
+    gedcomXref: null,
+    displayName: 'Marie Dupont',
+    givenNames: 'Marie',
+    surname: 'Dupont',
+    marriedName: null,
+    nickname: null,
+    sex: 'inconnu',
+    deceased: true,
+    vivant: false,
+    birth: null,
+    death: null,
+    ligneDates: '1894 – 1968',
+    branch: 'pp',
+    generation: -2,
+    bestQuay: null,
+    citationCount: 0,
+    forcePrivacy: false,
+    privacyNote: null,
+    version: 5,
+    parente: null,
+    portrait: null,
+    parents: [],
+    fratrie: [],
+    unions: [],
+    faits: [],
+    citations: [],
+    notes: [],
+    medias: [],
+    enAttente: {},
+    demandesEnAttente: [],
+  }
 }
 
 async function soumettre(racine: Noeud): Promise<void> {
@@ -168,6 +239,9 @@ beforeEach(() => {
   vi.stubGlobal('Document', class {})
   vi.stubGlobal('ShadowRoot', class {})
   Object.values(api).forEach((f) => f.mockReset())
+  // Par défaut, rien ne ressemble : les cas d'avant le panneau restent ce qu'ils étaient.
+  api.chercherRessemblancesArbre.mockResolvedValue({ elements: [], tronque: false })
+  api.chercherRessemblancesBrouillons.mockResolvedValue({ elements: [], tronque: false })
   reprise.chargerReprise.mockReset()
   routeur.useRoute.mockClear()
   routeur.useRouter.mockClear()
@@ -182,6 +256,10 @@ beforeEach(() => {
     avertissements: [],
   })
 })
+
+// Le formulaire attend le calme de la frappe avant de chercher : resté monté, son
+// minuteur partirait dans le test suivant.
+afterEach(demonterTout)
 
 /* ------------------------------------------------------------------ */
 /* Les cas                                                             */
@@ -293,5 +371,207 @@ describe('le formulaire extrait, hors de toute page', () => {
 
     expect(sale.at(-1)).toBe(false)
     expect(texte(racine)).not.toContain('Cette demande reprend la demande n° 77')
+  })
+})
+
+describe('« Est-ce déjà… ? » dans le formulaire', () => {
+  it('cherche une fois après le délai, sur les deux routes, et montre ce qui ressemble', async () => {
+    api.chercherRessemblancesArbre.mockResolvedValue({ elements: [MARIE_DANS_L_ARBRE], tronque: false })
+    const { racine, evidences } = await monter(77)
+
+    // La reprise vient de remplir la saisie : rien n'est encore parti.
+    expect(api.chercherRessemblancesArbre).not.toHaveBeenCalled()
+    expect(un(racine, (n) => 'data-ressemblances' in n.attributs)).toBeNull()
+
+    await attendreLesRessemblances()
+
+    expect(api.chercherRessemblancesArbre).toHaveBeenCalledTimes(1)
+    expect(api.chercherRessemblancesBrouillons).toHaveBeenCalledTimes(1)
+    // La fiche comparée, sans la note ni les liens de la saisie.
+    expect(api.chercherRessemblancesArbre.mock.calls[0]?.[0]).toMatchObject({ givenNames: 'Marie', surname: 'Dupont' })
+    expect(api.chercherRessemblancesArbre.mock.calls[0]?.[0]).not.toHaveProperty('note')
+
+    expect(texte(racine)).toContain('Est-ce déjà quelqu’un de connu ?')
+    expect(texte(racine)).toContain('Marie Dupont')
+    const resume = un(racine, (n) => 'data-resume-ressemblances' in n.attributs)
+    expect(resume?.attributs['aria-live']).toBe('polite')
+    expect(texte(resume!)).toBe('Une personne de l’arbre ressemble à votre saisie.')
+    // L'arbre est prié de la cercler.
+    expect(evidences.at(-1)).toEqual({ personIds: [17], noeudIds: [] })
+
+    // « Ce n'est pas elle » : la carte s'en va, le cercle aussi.
+    await cliquer(un(racine, boutonNomme('Ce n’est pas elle')))
+    expect(un(racine, (n) => 'data-ressemblances' in n.attributs)).toBeNull()
+    expect(evidences.at(-1)).toEqual({ personIds: [], noeudIds: [] })
+  })
+
+  it('« C’est elle » dépose modification_personne puis ajout_lien sur la fiche, sans changer de route', async () => {
+    api.chercherRessemblancesArbre.mockResolvedValue({ elements: [MARIE_DANS_L_ARBRE], tronque: false })
+    api.lireFichePersonne.mockResolvedValue(ficheDeMarie())
+    api.creerDemande.mockResolvedValueOnce({ ...reponse(), id: 8101 }).mockResolvedValueOnce({ ...reponse(), id: 8102 })
+    const saisie = saisieComplete()
+    saisie.brouillon.sex = 'feminin'
+    saisie.brouillon.note = 'Livret de famille.'
+    reprise.chargerReprise.mockResolvedValue({
+      kind: 'creation_personne',
+      message: 'J’ai le livret de famille.',
+      origine: { demandeId: 77, statut: 'refusee' },
+      saisie,
+      aResoudre: [],
+      brouillonsAResoudre: [],
+      avertissements: [],
+    })
+    const { racine, deposees, evidences } = await monter(77)
+    await attendreLesRessemblances()
+
+    await cliquer(un(racine, boutonNomme('C’est elle : compléter sa fiche')))
+    expect(api.lireFichePersonne).toHaveBeenCalledWith(17, expect.anything())
+    const completion = un(racine, (n) => 'data-completion' in n.attributs)
+    expect(texte(completion!)).toContain('Compléter la fiche de Marie Dupont')
+    // Le sexe manquait à la fiche : un complément, coché d'office ; le parent aussi.
+    expect(un(completion!, (n) => n.attributs['data-ecart'] === 'sex')?.attributs['data-nature']).toBe('complement')
+    expect(un(completion!, (n) => n.attributs['data-lien'] === 'parent:personne:12')?.attributs['data-statut']).toBe('proposable')
+
+    await cliquer(un(racine, boutonNomme('Proposer ces compléments')))
+
+    expect(api.creerDemande).toHaveBeenCalledTimes(2)
+    const [modification, liens] = api.creerDemande.mock.calls.map((appel) => appel[0] as Record<string, unknown>)
+    expect(modification).toMatchObject({
+      kind: 'modification_personne',
+      soumettre: true,
+      targetId: 17,
+      message: 'Livret de famille.\n\nJ’ai le livret de famille.',
+      ops: [{ field: 'sex', oldValue: 'inconnu', newValue: 'feminin', baseVersion: 5 }],
+    })
+    expect(liens).toMatchObject({
+      kind: 'ajout_lien',
+      targetId: 17,
+      liens: [{ kind: 'enfant_de', subjectPersonId: 17, otherPersonId: 12 }],
+    })
+    expect(api.invaliderGraphe).toHaveBeenCalled()
+    expect(deposees).toEqual([
+      { nature: 'fiche', demandeIds: [8101, 8102], noeudId: null, personId: 17, libelle: 'Marie Dupont', soumise: true },
+    ])
+    expect(routeur.push).not.toHaveBeenCalled()
+    expect(routeur.useRouter).not.toHaveBeenCalled()
+    // La saisie a servi : le panneau s'efface, et l'arbre ne cercle plus rien.
+    expect(un(racine, (n) => 'data-ressemblances' in n.attributs)).toBeNull()
+    expect(evidences.at(-1)).toEqual({ personIds: [], noeudIds: [] })
+  })
+
+  it('« C’est elle » : une 409 fait relire la fiche — explicitement, et on repart de la version relue', async () => {
+    api.chercherRessemblancesArbre.mockResolvedValue({ elements: [MARIE_DANS_L_ARBRE], tronque: false })
+    api.lireFichePersonne.mockResolvedValueOnce(ficheDeMarie()).mockResolvedValueOnce({ ...ficheDeMarie(), version: 6 })
+    api.creerDemande
+      .mockRejectedValueOnce(new ErreurApi(409, 'conflit', 'La fiche a changé.', null, {}))
+      .mockResolvedValueOnce({ ...reponse(), id: 8103 })
+    const saisie = saisieComplete()
+    saisie.brouillon.sex = 'feminin'
+    saisie.filiation.parents = []
+    reprise.chargerReprise.mockResolvedValue({
+      kind: 'creation_personne',
+      message: '',
+      origine: { demandeId: 77, statut: 'refusee' },
+      saisie,
+      aResoudre: [],
+      brouillonsAResoudre: [],
+      avertissements: [],
+    })
+    const { racine } = await monter(77)
+    await attendreLesRessemblances()
+    await cliquer(un(racine, boutonNomme('C’est elle : compléter sa fiche')))
+    await cliquer(un(racine, boutonNomme('Proposer ces compléments')))
+
+    expect(texte(racine)).toContain('La fiche a changé depuis que vous l’avez ouverte')
+    // Rien n'a été relu en douce.
+    expect(api.lireFichePersonne).toHaveBeenCalledTimes(1)
+
+    await cliquer(un(racine, boutonNomme('Relire la fiche')))
+    expect(api.lireFichePersonne).toHaveBeenCalledTimes(2)
+    expect(texte(racine)).not.toContain('La fiche a changé depuis que vous l’avez ouverte')
+
+    await cliquer(un(racine, boutonNomme('Proposer ces compléments')))
+    expect(api.creerDemande).toHaveBeenCalledTimes(2)
+    expect(api.creerDemande.mock.calls[1]?.[0]).toMatchObject({ ops: [{ field: 'sex', baseVersion: 6 }] })
+  })
+
+  it('« C’est elle » : un second clic ne redépose pas ce qui est parti', async () => {
+    api.chercherRessemblancesArbre.mockResolvedValue({ elements: [MARIE_DANS_L_ARBRE], tronque: false })
+    api.lireFichePersonne.mockResolvedValue(ficheDeMarie())
+    api.creerDemande
+      .mockResolvedValueOnce({ ...reponse(), id: 8101 })
+      .mockRejectedValueOnce(new ErreurApi(500, 'erreur_interne', 'Le serveur a trébuché.', null, null))
+      .mockResolvedValueOnce({ ...reponse(), id: 8102 })
+    const saisie = saisieComplete()
+    saisie.brouillon.sex = 'feminin'
+    reprise.chargerReprise.mockResolvedValue({
+      kind: 'creation_personne',
+      message: '',
+      origine: { demandeId: 77, statut: 'refusee' },
+      saisie,
+      aResoudre: [],
+      brouillonsAResoudre: [],
+      avertissements: [],
+    })
+    const { racine, deposees } = await monter(77)
+    await attendreLesRessemblances()
+    await cliquer(un(racine, boutonNomme('C’est elle : compléter sa fiche')))
+    await cliquer(un(racine, boutonNomme('Proposer ces compléments')))
+
+    expect(texte(racine)).toContain('Le serveur a trébuché.')
+    expect(deposees).toEqual([])
+
+    await cliquer(un(racine, boutonNomme('Réessayer l’envoi')))
+
+    expect(api.creerDemande.mock.calls.map((appel) => (appel[0] as { kind: string }).kind)).toEqual([
+      'modification_personne',
+      'ajout_lien',
+      'ajout_lien',
+    ])
+    expect(deposees.map((d) => d.demandeIds)).toEqual([[8101, 8102]])
+  })
+
+  it('une ressemblance forte retient le premier envoi, une fois ; un brouillon passe', async () => {
+    api.chercherRessemblancesArbre.mockResolvedValue({
+      elements: [{ ...MARIE_DANS_L_ARBRE, criteres: ['nom', 'prenom', 'naissance'], score: 3 }],
+      tronque: false,
+    })
+    api.creerDemande.mockResolvedValue(reponse())
+    const { racine, deposees } = await monter(77)
+    await attendreLesRessemblances()
+
+    await soumettre(racine)
+    expect(api.creerDemande).not.toHaveBeenCalled()
+    expect(texte(racine)).toContain('Vérifiez d’abord ces personnes.')
+
+    await cliquer(un(racine, boutonNomme('Envoyer quand même')))
+    expect(api.creerDemande).toHaveBeenCalledTimes(1)
+    expect(deposees.map((d) => d.nature)).toEqual(['creation'])
+  })
+
+  it('« Enregistrer sans envoyer » n’est pas freiné', async () => {
+    api.chercherRessemblancesArbre.mockResolvedValue({
+      elements: [{ ...MARIE_DANS_L_ARBRE, criteres: ['nom', 'prenom', 'naissance'], score: 3 }],
+      tronque: false,
+    })
+    api.creerDemande.mockResolvedValue({ ...reponse(), status: 'brouillon', submittedAt: null })
+    const { racine } = await monter(77)
+    await attendreLesRessemblances()
+
+    await cliquer(un(racine, boutonNomme('Enregistrer sans envoyer')))
+
+    expect(api.creerDemande).toHaveBeenCalledTimes(1)
+    expect(api.creerDemande.mock.calls[0]?.[0]).toMatchObject({ soumettre: false })
+    expect(texte(racine)).not.toContain('Vérifiez d’abord ces personnes.')
+  })
+
+  it('une ressemblance faible ne retient rien', async () => {
+    api.chercherRessemblancesArbre.mockResolvedValue({ elements: [MARIE_DANS_L_ARBRE], tronque: false })
+    api.creerDemande.mockResolvedValue(reponse())
+    const { racine } = await monter(77)
+    await attendreLesRessemblances()
+
+    await soumettre(racine)
+    expect(api.creerDemande).toHaveBeenCalledTimes(1)
   })
 })

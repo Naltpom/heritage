@@ -47,14 +47,15 @@
  *    refuserait en `409`.
  * ────────────────────────────────────────────────────────────────────
  */
-import { computed } from 'vue'
+import { computed, nextTick, shallowRef, useTemplateRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSession } from '@/composables/useSession'
 import AssistantProposition from '@/components/proposition/assistant/AssistantProposition.vue'
 import QuestionsAssistant from '@/components/proposition/assistant/QuestionsAssistant.vue'
 import { ecrituresSuspendues, motifSuspension } from '@/components/administration/ecriture'
 import FormulaireCreationPersonne from '@/components/proposition/FormulaireCreationPersonne.vue'
-import type { PersonneDeposee } from '@/components/proposition/depot'
+import { annonceDesDemandes, type PersonneDeposee } from '@/components/proposition/depot'
+import { prefereMoinsDAnimations } from '@/lib/videos'
 
 const route = useRoute()
 const routeur = useRouter()
@@ -107,11 +108,33 @@ const repriseDemandee = computed(() => {
   return Number.isInteger(valeur) && valeur > 0 ? valeur : null
 })
 
+const formulaire = useTemplateRef<InstanceType<typeof FormulaireCreationPersonne>>('formulaire')
+const bandeau = useTemplateRef<HTMLElement>('bandeau')
+
+/** La dernière fiche complétée par « C'est elle », annoncée en tête de page. */
+const ficheCompletee = shallowRef<PersonneDeposee | null>(null)
+
 /**
  * Le dépôt est fait, photos comprises : l'auteur est renvoyé vers le suivi de sa
  * demande — c'est là que se lira la décision, et le motif s'il y a refus.
+ *
+ * **Sauf pour une fiche complétée** (« C'est elle ») : plusieurs demandes sont
+ * parties sur une personne qui existait déjà, et aucune n'est « la » demande à
+ * suivre. On reste : le bandeau les annonce, et le formulaire repart d'une saisie
+ * vierge pour la personne suivante — on remonte jusqu'au bandeau.
  */
 function suivre(depot: PersonneDeposee): void {
+  if (depot.nature === 'fiche') {
+    ficheCompletee.value = depot
+    formulaire.value?.reinitialiser()
+    void nextTick(() => {
+      const element = bandeau.value
+      if (element !== null && typeof element.scrollIntoView === 'function') {
+        element.scrollIntoView({ behavior: prefereMoinsDAnimations() ? 'auto' : 'smooth', block: 'center' })
+      }
+    })
+    return
+  }
   void routeur.push({ name: 'demande.detail', params: { id: depot.demandeIds[0] } })
 }
 
@@ -187,7 +210,34 @@ function refaire(demandeId: number): void {
       {{ motifSuspendu }}
     </p>
 
+    <div
+      v-if="ficheCompletee !== null"
+      ref="bandeau"
+      class="mb-4 flex flex-col gap-1.5 rounded-panneau border border-accent bg-accent-doux px-3.5 py-3 text-sm"
+      role="status"
+      data-fiche-completee
+    >
+      <strong class="font-semibold">{{ annonceDesDemandes(ficheCompletee.demandeIds) }}</strong>
+      <span>
+        Vos compléments à la fiche de {{ ficheCompletee.libelle }} attendent la validation d’un
+        administrateur. Le formulaire est prêt pour une autre personne.
+      </span>
+      <span class="flex flex-wrap gap-x-4 gap-y-1">
+        <RouterLink
+          v-if="ficheCompletee.personId !== null"
+          :to="{ name: 'personne.detail', params: { id: ficheCompletee.personId } }"
+          class="font-semibold text-accent underline"
+        >
+          Voir sa fiche
+        </RouterLink>
+        <RouterLink :to="{ name: 'demandes.miennes' }" class="font-semibold text-accent underline">
+          Suivre mes demandes
+        </RouterLink>
+      </span>
+    </div>
+
     <FormulaireCreationPersonne
+      ref="formulaire"
       contexte="page"
       :refaire="repriseDemandee"
       @deposee="suivre"
