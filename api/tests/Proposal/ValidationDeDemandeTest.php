@@ -20,6 +20,7 @@ use App\Module\Proposal\Enum\RevisionOperation;
 use App\Module\Proposal\Enum\ValueKind;
 use App\Module\Proposal\Exception\Conflit;
 use App\Module\Proposal\Repository\RevisionRepository;
+use App\Module\Proposal\Service\EmpreinteDeDemande;
 use App\Module\Proposal\Service\ResolutionPrevue;
 use App\Module\Proposal\Service\ValidationDeDemande;
 
@@ -392,6 +393,7 @@ final class ValidationDeDemandeTest extends BaseDeDemandes
             $this->arbre,
             $this->normaliseur,
             $this->notificateur,
+            self::getContainer()->get(EmpreinteDeDemande::class),
             [],
             [$premier, $second],
         );
@@ -543,6 +545,7 @@ final class ValidationDeDemandeTest extends BaseDeDemandes
             $this->arbre,
             $this->normaliseur,
             $this->notificateur,
+            self::getContainer()->get(EmpreinteDeDemande::class),
             [$espion],
             [],
         );

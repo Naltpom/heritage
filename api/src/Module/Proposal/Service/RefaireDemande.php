@@ -33,6 +33,13 @@ use App\Module\Proposal\Service\Port\PortArbre;
  *
  * `soumettre` vaut `false` dans le corps rendu : on ne resoumet pas à l'insu de
  * l'auteur une demande qu'il doit d'abord relire contre les nouvelles valeurs.
+ *
+ * **`complementDe` n'est pas repris** (ADR 0017), et c'est une décision, pas un oubli :
+ * un complément refusé se refait en **création ordinaire**. La proposition qu'il complétait
+ * a pu être validée, fusionnée ou refusée depuis ; rattacher la reprise à l'aveugle la
+ * ferait refuser au dépôt (`proposition_plus_en_attente`) ou, pire, la verserait dans une
+ * fiche que son auteur ne voit plus. S'il veut compléter de nouveau, la ressemblance le lui
+ * proposera, sur l'état du jour.
  */
 final readonly class RefaireDemande
 {

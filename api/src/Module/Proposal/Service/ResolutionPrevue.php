@@ -67,6 +67,29 @@ enum ResolutionPrevue: string
      */
     case DependanceMorte = 'dependance_morte';
 
+    /**
+     * Cette proposition a des **compléments en attente** (ADR 0017) : d'autres membres y
+     * ont reconnu leur personne et ont déposé ce qu'ils savaient. La valider maintenant
+     * créerait la personne sans eux, et chaque complément deviendrait une seconde création
+     * de la même personne.
+     *
+     * Le front affiche « Fusionnez d'abord les compléments » et **éteint** le bouton, comme
+     * pour `dependance_en_attente` : rien n'est mort, il y a un ordre. La validation passe
+     * telle quelle dès que les compléments sont fusionnés ou refusés.
+     */
+    case ComplementsEnAttente = 'complements_en_attente';
+
+    /**
+     * Cette demande **est** un complément, et son origine est encore là — en attente, ou
+     * validée (ADR 0017). La valider créerait une seconde fiche de la même personne.
+     *
+     * Le front remplace « Valider » par « Fusionner dans la demande n° X » quand l'origine
+     * attend ; quand elle est validée, la fusion n'est plus possible et il reste le refus.
+     * Une origine refusée, retirée ou caduque rend le complément **autonome** : cette valeur
+     * n'est plus rendue, et il se valide comme une création ordinaire.
+     */
+    case ComplementAFusionner = 'complement_a_fusionner';
+
     public function estCaduque(): bool
     {
         return self::Caducite === $this

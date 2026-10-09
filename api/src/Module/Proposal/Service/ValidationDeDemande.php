@@ -37,7 +37,10 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
  * | cible disparue       | `409` | non                 | **`caduque`**        | « Refaire cette demande »|
  * | dépendance morte     | `409` | non                 | **`caduque`**        | « Refaire cette demande »|
  * | dépendance en attente| `409` | non                 | **`en_attente`**     | « Valider d'abord la n° X »|
+ * | compléments en attente | `409` | non               | **`en_attente`**     | « Fusionner d'abord »   |
+ * | complément à fusionner | `409` | non               | **`en_attente`**     | « Fusionner dans la n° X »|
  * | **verrou concurrent**| `409` | non                 | **`en_attente`**     | **« Réessayer »**       |
+ * | modifiée entre-temps | `409` | non                 | inchangé             | relire, puis décider    |
  * | déjà décidée         | `409` | non                 | inchangé             | recharger               |
  *
  * ── La séquence, et pourquoi elle est dans cet ordre ─────────────────────────────
@@ -94,6 +97,7 @@ final readonly class ValidationDeDemande
         private PortArbre $arbre,
         private NormaliseurDeValeur $normaliseur,
         private NotificateurDeDemandes $notificateur,
+        private EmpreinteDeDemande $empreintes,
         #[AutowireIterator('app.proposal.applicateur_d_operation')]
         private iterable $applicateurs,
         #[AutowireIterator('app.proposal.applicateur_de_demande')]
@@ -101,7 +105,14 @@ final readonly class ValidationDeDemande
     ) {
     }
 
-    public function valider(ChangeRequest $demande, Lecteur $lecteur): ResultatDeValidation
+    /**
+     * @param mixed $empreinte l'empreinte de la demande telle que l'écran l'a lue (§ 6.5),
+     *                         ou `null` — **facultative**, ajoutée le 10/10/2026 quand les
+     *                         demandes en attente ont commencé à se compléter : valider
+     *                         une fiche que son auteur vient de modifier, c'est valider ce
+     *                         qu'on n'a pas lu (`409 demande_modifiee_entre_temps`)
+     */
+    public function valider(ChangeRequest $demande, Lecteur $lecteur, mixed $empreinte = null): ResultatDeValidation
     {
         $this->verifierQuIlPeutEcrire($lecteur);
         self::accorderLeTemps();
@@ -111,10 +122,29 @@ final readonly class ValidationDeDemande
             throw Conflit::dejaDecidee($demande->getStatus());
         }
 
+        $this->empreintes->exiger($demande, $empreinte);
+
         $plan = $this->analyse->analyser($demande);
 
         if ($plan->resolution->estCaduque()) {
             $this->consigner($demande, $plan);
+        }
+
+        // **Les deux `409` des compléments n'écrivent rien non plus** (ADR 0017). Une
+        // proposition qui a des compléments en attente se valide **après** leur fusion :
+        // la valider avant créerait la personne sans eux, et chacun deviendrait une
+        // seconde création de la même personne. Un complément ne se valide pas tant que
+        // son origine vit : on le fusionne. Ni l'un ni l'autre n'est mort — rien n'est
+        // consigné, l'auteur n'est pas notifié.
+        if (ResolutionPrevue::ComplementsEnAttente === $plan->resolution) {
+            throw Conflit::complementsEnAttente($demande->getId() ?? 0, $plan->complementsEnAttente);
+        }
+
+        if (ResolutionPrevue::ComplementAFusionner === $plan->resolution
+            && null !== $plan->origineDemandeId
+            && null !== $plan->origineStatut
+        ) {
+            throw Conflit::complementAFusionner($demande->getId() ?? 0, $plan->origineDemandeId, $plan->origineStatut);
         }
 
         // **La seule `409` qui n'écrit rien, pas même un statut.** Cette demande

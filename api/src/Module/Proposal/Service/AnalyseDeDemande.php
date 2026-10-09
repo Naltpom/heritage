@@ -12,8 +12,10 @@ use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
 use App\Module\Proposal\Entity\DraftLink;
 use App\Module\Proposal\Enum\OpKind;
+use App\Module\Proposal\Enum\RequestKind;
 use App\Module\Proposal\Enum\RequestStatus;
 use App\Module\Proposal\Repository\ChangeRequestOpRepository;
+use App\Module\Proposal\Repository\ChangeRequestRepository;
 use App\Module\Proposal\Repository\DraftLinkRepository;
 use App\Module\Proposal\Repository\DraftPersonRepository;
 use App\Module\Proposal\Service\Port\EtatCible;
@@ -76,6 +78,7 @@ final readonly class AnalyseDeDemande
         private SurfaceEditable $surface,
         private InventaireDeLaSuppression $inventaire,
         private MesureDesRetraits $retraits,
+        private ChangeRequestRepository $demandes,
     ) {
     }
 
@@ -83,7 +86,64 @@ final readonly class AnalyseDeDemande
     {
         $plan = $this->analyserOps($this->ops->pourDemande($demande));
 
-        return $this->verifierLesLiens($demande, $plan);
+        return $this->verifierLesComplements($demande, $this->verifierLesLiens($demande, $plan));
+    }
+
+    /**
+     * Les **compléments** (ADR 0017), qui introduisent un second ordre de validation entre
+     * deux demandes — après celui des dépendances.
+     *
+     * | La demande | Ce qui bloque | Résolution |
+     * |---|---|---|
+     * | une proposition qui a des compléments **en attente** | les compléments, qu'on fusionne (ou refuse) d'abord | `complements_en_attente` |
+     * | un complément dont l'origine est **en attente** | l'origine, dans laquelle on le fusionne | `complement_a_fusionner` |
+     * | un complément dont l'origine est **validée** | la personne existe : le valider la doublerait | `complement_a_fusionner` |
+     * | un complément dont l'origine est refusée, retirée, caduque | rien : il est **autonome** | inchangée |
+     *
+     * **L'ordre est la règle** : ce qui condamne l'emporte sur ce qui fait attendre — une
+     * caducité reste une caducité, et un complément mort n'attend aucune fusion. Parmi ce
+     * qui fait attendre, le complément passe **avant** la dépendance : la fusion est un
+     * geste que l'administrateur fait depuis cet écran-ci, la dépendance l'envoie valider
+     * une autre demande — et une fois fusionné, le complément n'a plus de dépendance à
+     * attendre.
+     *
+     * Lecture seule, comme tout ce fichier : le validateur lève la `409` sans rien écrire.
+     */
+    private function verifierLesComplements(ChangeRequest $demande, PlanDeValidation $plan): PlanDeValidation
+    {
+        if (RequestKind::CreationPersonne !== $demande->getKind()) {
+            return $plan;
+        }
+
+        $enAttente = array_values(array_filter(array_map(
+            static fn (ChangeRequest $complement): ?int => $complement->getId(),
+            $this->demandes->complementsDe($demande, seulementEnAttente: true),
+        )));
+
+        $origine = $demande->getComplementDe()?->getRequest();
+        $aFusionner = null !== $origine
+            && \in_array($origine->getStatus(), [RequestStatus::EnAttente, RequestStatus::Validee], true);
+
+        if ([] === $enAttente && !$aFusionner) {
+            return $plan;
+        }
+
+        $resolution = match (true) {
+            $plan->resolution->estCaduque() => $plan->resolution,
+            $aFusionner => ResolutionPrevue::ComplementAFusionner,
+            default => ResolutionPrevue::ComplementsEnAttente,
+        };
+
+        return new PlanDeValidation(
+            $resolution,
+            $plan->ops,
+            $plan->cibles,
+            $plan->disparues,
+            $plan->dependances,
+            $enAttente,
+            $aFusionner ? $origine->getId() : null,
+            $aFusionner ? $origine->getStatus() : null,
+        );
     }
 
     /**
@@ -114,7 +174,7 @@ final readonly class AnalyseDeDemande
             }
         }
 
-        $dependances = $this->dependancesDe($liens);
+        $dependances = $this->dependancesDe($liens, $demande->getAuthorUserId());
 
         if ($disparues === $plan->disparues && [] === $dependances) {
             return $plan;
@@ -192,23 +252,30 @@ final readonly class AnalyseDeDemande
      * « qui a le droit de voir cette fiche » mais « cette fiche deviendra-t-elle une
      * personne ». Le filtre du § 13.3 s'applique au dépôt, où il a un sens.
      *
+     * Le **libellé** d'une dépendance est le nom de la fiche citée — sauf quand c'est la
+     * fiche d'un vivant proposée par un autre auteur que celui de la demande, ce qu'une
+     * fusion de complément peut produire en repointant ses liens (ADR 0017) : c'est alors
+     * le libellé stocké sur le lien, le nom que l'auteur avait lui-même saisi. La liste part
+     * telle quelle dans la notification de caducité, et l'auteur ne doit pas y lire un nom
+     * que la ressemblance lui avait caché ({@see LiensDUneFiche::nomPartageable()}).
+     *
      * @param list<DraftLink> $liens
      *
      * @return list<array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string}>
      */
-    private function dependancesDe(array $liens): array
+    private function dependancesDe(array $liens, int $auteur): array
     {
         $vues = [];
         $dependances = [];
 
         foreach ($liens as $lien) {
             $references = [
-                $lien->getSubjectDraftPersonId(),
-                $lien->getOtherDraftPersonId(),
-                $lien->getOther2DraftPersonId(),
+                [$lien->getSubjectDraftPersonId(), $lien->getSubjectLabel()],
+                [$lien->getOtherDraftPersonId(), $lien->getOtherLabel()],
+                [$lien->getOther2DraftPersonId(), $lien->getOther2Label()],
             ];
 
-            foreach ($references as $id) {
+            foreach ($references as [$id, $stocke]) {
                 // Une même fiche peut être désignée par plusieurs liens — père de l'un,
                 // conjoint de l'autre. On ne la compte qu'une fois : l'écran de décision
                 // afficherait sinon trois fois la même phrase.
@@ -217,7 +284,7 @@ final readonly class AnalyseDeDemande
                 }
 
                 $vues[$id] = true;
-                $dependances[] = $this->etatDeLaDependance($id);
+                $dependances[] = $this->etatDeLaDependance($id, $auteur, $stocke ?? '');
             }
         }
 
@@ -225,7 +292,7 @@ final readonly class AnalyseDeDemande
     }
 
     /** @return array{draftPersonId: int, demandeId: int|null, libelle: string, etat: string} */
-    private function etatDeLaDependance(int $draftPersonId): array
+    private function etatDeLaDependance(int $draftPersonId, int $auteur, string $libelleStocke): array
     {
         $brouillon = $this->brouillons->find($draftPersonId);
 
@@ -254,7 +321,7 @@ final readonly class AnalyseDeDemande
         return [
             'draftPersonId' => $draftPersonId,
             'demandeId' => $autre->getId(),
-            'libelle' => $brouillon->nomPropose(),
+            'libelle' => LiensDUneFiche::nomPartageable($brouillon, $auteur) ? $brouillon->nomPropose() : $libelleStocke,
             'etat' => $etat,
         ];
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Proposal\Service;
 
+use App\Module\Proposal\Enum\RequestStatus;
 use App\Module\Proposal\Service\Port\EtatCible;
 
 /**
@@ -31,6 +32,14 @@ final readonly class PlanDeValidation
      *                                                                                                         les fiches proposées par **d'autres** demandes
      *                                                                                                         que celle-ci désigne, avec leur état :
      *                                                                                                         `resolue`, `en_attente`, `morte` ou `disparue`
+     * @param list<int>                                                                           $complementsEnAttente
+     *                                                                                                         les compléments **en attente** de cette
+     *                                                                                                         proposition (ADR 0017) — ce qui bloque sa
+     *                                                                                                         validation en `complements_en_attente`
+     * @param int|null                                                                            $origineDemandeId
+     *                                                                                                         quand cette demande est un complément dont
+     *                                                                                                         l'origine bloque sa validation
+     *                                                                                                         (`complement_a_fusionner`) : la demande d'origine
      */
     public function __construct(
         public ResolutionPrevue $resolution,
@@ -38,6 +47,9 @@ final readonly class PlanDeValidation
         public array $cibles,
         public array $disparues = [],
         public array $dependances = [],
+        public array $complementsEnAttente = [],
+        public ?int $origineDemandeId = null,
+        public ?RequestStatus $origineStatut = null,
     ) {
     }
 
