@@ -85,10 +85,18 @@ describe('les maquettes retirées', () => {
   it('ne résolvent plus — aucune des sept', async () => {
     const routeur = table()
 
-    for (const chemin of ['/arbre-2', '/arbre-3', '/arbre-4', '/arbre-5', '/arbre-6', '/arbre-7', '/arbre-8']) {
+    // `/arbre-2` n'en fait plus partie : c'est l'arbre en rectangles de familles (09/10/2026).
+    for (const chemin of ['/arbre-3', '/arbre-4', '/arbre-5', '/arbre-6', '/arbre-7', '/arbre-8']) {
       await routeur.push(chemin)
       expect(routeur.currentRoute.value.name, chemin).toBe('introuvable')
     }
+  })
+
+  it('/arbre-2 sert l’arbre en rectangles, aux membres', async () => {
+    const routeur = table()
+    await routeur.push('/arbre-2')
+    expect(routeur.currentRoute.value.name).toBe('arbre.groupes')
+    expect(routeur.currentRoute.value.meta['acces']).toBe('membre')
   })
 
   it('n’ont plus de nom dans la table', () => {

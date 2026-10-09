@@ -209,6 +209,17 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Arbre', rechercheLocale: true },
   },
   {
+    // **`/arbre-2` : l'arbre en rectangles de familles** (demande du 09/10/2026). Le même
+    // écran que `/arbre`, un autre moteur (`arbre2/groupes.ts`) : chaque famille dans son
+    // rectangle, deux cartes entre deux rectangles. Aucun menu n'y mène encore, on y va
+    // par l'adresse ; `/arbre` n'en sait rien. Nom neuf : `arbre.blocs` était celui d'une
+    // maquette retirée le 30/09, et il ne doit pas revenir.
+    path: '/arbre-2',
+    name: 'arbre.groupes',
+    component: () => import('@/views/ArbreGroupesView.vue'),
+    meta: { acces: 'membre', titre: 'Arbre', rechercheLocale: true },
+  },
+  {
     // `{id}` est un entier : un identifiant provisoire (`#12/p1`) ne correspond
     // à aucune route côté API et n'a pas à en avoir une ici non plus. Le détail
     // d'un nœud en attente passe par la demande qui le porte (§ 6.6).

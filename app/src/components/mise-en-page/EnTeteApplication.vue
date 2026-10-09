@@ -154,7 +154,9 @@ function retour(): void {
   }
   const ici = routeur.currentRoute.value
   const personne = ici.name === 'personne.detail' ? ici.params['id'] : undefined
-  void routeur.push(typeof personne === 'string' ? { name: p.nom, query: { personne } } : { name: p.nom })
+  // Venu de l'arbre en rectangles (`/arbre-2`), on y retourne plutôt qu'à `/arbre`.
+  const nom = p.nom === 'arbre' && typeof precedent === 'string' && precedent.startsWith('/arbre-2') ? 'arbre.groupes' : p.nom
+  void routeur.push(typeof personne === 'string' ? { name: nom, query: { personne } } : { name: nom })
 }
 
 function surClicExterieur(e: MouseEvent): void {
