@@ -122,9 +122,15 @@ jobs:
     # Identifiants identiques à ceux de `compose.yaml` : c'est le DSN par défaut que
     # les tests utilisent quand `HERITAGE_DSN_REEL` n'est pas posée, et faire
     # coïncider les deux évite un réglage de plus à maintenir en double.
+    #
+    # L'image vient du MIROIR de Docker Hub tenu par Google (`mirror.gcr.io`), pas de
+    # Docker Hub (09/10/2026) : les exécuteurs partagent leurs adresses, et Docker Hub
+    # y refusait les téléchargements anonymes (« toomanyrequests », trois relances de
+    # suite) avant qu'une ligne de code ne tourne. Même image officielle, même
+    # étiquette ; seul le chemin change.
     services:
       postgres:
-        image: postgres:17
+        image: mirror.gcr.io/library/postgres:17
         env:
           POSTGRES_USER: heritage
           POSTGRES_PASSWORD: heritage_dev
@@ -214,6 +220,7 @@ jobs:
       # (paratest lit `phpunit.dist.xml`, `failOn*` et `<logging>` compris).
       # `vendor/bin/phpunit` reste la commande d'un poste de développement.
       - name: Porte 2 — tests (phpunit, en parallèle)
+        id: tests
         env:
           HERITAGE_DSN_REEL: postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage
           HERITAGE_EXIGE_BASE_REELLE: '1'
@@ -227,10 +234,14 @@ jobs:
       # plus pour ne rien mesurer. On relit donc la sortie JUnit et on exige le
       # nombre de cas, zéro saut.
       #
-      # `if: always()` : quand la porte 2 tombe, c'est là qu'on veut savoir si elle
-      # est tombée parce qu'un test a échoué ou parce qu'aucun n'a tourné.
+      # `always()` : quand la porte 2 tombe, c'est là qu'on veut savoir si elle
+      # est tombée parce qu'un test a échoué ou parce qu'aucun n'a tourné. Mais
+      # pas quand elle n'a pas été LANCÉE (le service ou l'installation tombés
+      # avant) : le dépôt n'est alors même pas extrait, et l'étape échouait sur
+      # « working directory …/api: No such file or directory » — une seconde
+      # erreur, sans rapport, affichée sous la vraie.
       - name: Porte 2 bis — les tests PostgreSQL ont TOURNÉ, et n'ont pas sauté
-        if: always()
+        if: always() && steps.tests.outcome != 'skipped'
         run: php ../.github/scripts/verifier-les-tests-postgres.php
 
   app:
@@ -312,6 +323,21 @@ jobs:
         run: |
           docker compose config --quiet
           docker compose -f compose.yaml -f compose.prod.yaml config --quiet
+
+      # Les images de base (frankenphp, node, nginx) viennent de Docker Hub, qui
+      # refuse les téléchargements anonymes au-delà d'un quota par adresse — et les
+      # exécuteurs partagent les leurs (« toomanyrequests », 09/10/2026). Le démon
+      # passe donc d'abord par le miroir de Google, et retombe sur Docker Hub pour
+      # ce que le miroir n'aurait pas. Les Dockerfile ne changent pas : la
+      # production construit toujours depuis Docker Hub. Le réglage existant du
+      # démon de l'exécuteur est fusionné, pas remplacé.
+      - name: Docker Hub par le miroir de Google
+        run: |
+          fichier=/etc/docker/daemon.json
+          existant="$(sudo cat "$fichier" 2>/dev/null || echo '{}')"
+          printf '%s' "$existant" | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' | sudo tee "$fichier" >/dev/null
+          sudo systemctl restart docker
+          docker info --format '{{json .RegistryConfig.Mirrors}}'
 
       # Porte 6. La seule vérification qui exerce réellement les deux
       # Dockerfile : installation des extensions PHP et de Composer d'un côté,
