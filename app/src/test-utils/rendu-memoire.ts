@@ -36,12 +36,15 @@ export interface Noeud {
    *  Le test qui s'en sert déclare `Document` et `ShadowRoot` (`vi.stubGlobal`) :
    *  la racine n'étant ni l'un ni l'autre, le champ prend la nouvelle valeur. */
   getRootNode?: () => Noeud
+  /** Ce que `v-show` écrit : `display: 'none'` quand l'élément est masqué. */
+  style?: Record<string, string>
 }
 
 export function noeud(type: Noeud['type'], tag = '', texte = ''): Noeud {
   const n: Noeud = { type, tag, texte, attributs: {}, ecouteurs: {}, enfants: [], parent: null }
   if (type === 'element') {
     n.focus = () => undefined
+    n.style = {}
     n.addEventListener = (type, ecouteur) => {
       const deja = n.ecouteurs[type]
       n.ecouteurs[type] = deja === undefined ? ecouteur : [...(Array.isArray(deja) ? deja : [deja]), ecouteur]

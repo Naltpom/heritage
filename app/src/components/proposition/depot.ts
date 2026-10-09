@@ -32,7 +32,8 @@ export interface PersonneDeposee {
   /** La personne de l'arbre, si la demande l'a déjà créée (une validation
    *  immédiate) ; `null` tant qu'elle attend. */
   personId: number | null
-  /** « Prénoms Nom », pour dire de qui l'on parle. */
+  /** « Prénoms Nom », pour dire de qui l'on parle ; « la personne proposée »
+   *  quand la fiche n'a ni prénom ni nom. */
   libelle: string
   /**
    * Partie en validation (`true`), ou gardée en brouillon (`false`) — lu sur le
@@ -55,7 +56,7 @@ export function personneDeposee(demande: Demande): PersonneDeposee {
     demandeIds: [demande.id],
     noeudId: fiche?.noeudId ?? null,
     personId: fiche?.resolvedPersonId ?? null,
-    libelle: libelle !== '' ? libelle : 'La personne proposée',
+    libelle: libelle !== '' ? libelle : 'la personne proposée',
     soumise: demande.status !== 'brouillon',
   }
 }

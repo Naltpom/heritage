@@ -63,7 +63,7 @@ describe('personneDeposee', () => {
     const depot = personneDeposee(demande({ brouillons: [] }))
 
     expect(depot.noeudId).toBeNull()
-    expect(depot.libelle).toBe('La personne proposée')
+    expect(depot.libelle).toBe('la personne proposée')
   })
 
   it('dit qu’un brouillon n’est pas parti, d’après le statut rendu', () => {
