@@ -97,4 +97,32 @@ interface PortMedias
      *                            énumération de `Media`, que `Proposal` ne peut pas nommer
      */
     public function compterLesMediasDe(string $subjectKind, int $subjectId): int;
+
+    /**
+     * **La fusion d'un complément** (ADR 0017) : les pièces jointes à la fiche du
+     * complément passent sur la fiche d'origine, **toujours proposée** — elles suivront
+     * ensuite la personne à la validation de l'origine, par
+     * {@see resoudreLesBrouillons()}, comme celles que l'auteur de l'origine avait jointes.
+     *
+     * ── Pourquoi déplacer, et non laisser en place ──────────────────────────────────
+     *
+     * Le complément est clos par la fusion (`refusee`, `duplicate_of_id`). Ses pièces, si
+     * elles restaient sur `#<complément>/p1`, ne seraient **jamais résolues** : la passe 6
+     * ne tourne qu'à la validation de la demande qui porte la référence, et celle-ci ne
+     * sera jamais validée. Ce serait la « preuve orpheline » de l'en-tête de ce port,
+     * revenue par la fusion — l'acte photographié, le travail le plus coûteux d'un
+     * complément, perdu au moment même où l'administration l'accepte.
+     *
+     * Le statut et l'auteur du téléversement ne bougent pas : une pièce `en_attente` le
+     * reste jusqu'à la validation, et `uploaded_by_user_id` dit toujours qui l'a apportée.
+     * Rien n'est écrit dans la base par cette méthode : les lignes sont modifiées dans
+     * l'unité de travail, et la transaction de la fusion les écrit avec le reste — ou ne
+     * les écrit pas.
+     *
+     * @param string $deRef   la référence du complément, **avec** son dièse (`#p1`)
+     * @param string $versRef celle de la fiche d'origine, **avec** son dièse
+     *
+     * @return int le nombre de pièces déplacées
+     */
+    public function faireSuivreLesMedias(int $deDemande, string $deRef, int $versDemande, string $versRef): int;
 }

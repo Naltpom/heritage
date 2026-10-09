@@ -296,6 +296,44 @@ final class CircuitDeValidationTest extends CasDeTestMedia
         self::assertSame([], $port->mediasDeBrouillon(12, '#p1'));
     }
 
+    /**
+     * **La fusion d'un complément, côté `Media`** (ADR 0017) : les pièces de `#21/p1`
+     * passent sur `#12/p2`, une proposition encore en attente. Elles **ne changent ni de
+     * statut, ni de déposant** — c'est la validation de l'origine qui les rendra actives,
+     * avec les autres. La preuve que le port est **appelé** est dans
+     * `Proposal\FusionDeComplementTest`.
+     */
+    public function testFaireSuivreLesPiecesLesDeplaceSansRienValider(): void
+    {
+        $media = $this->televersement->televerser(
+            new RequeteDeTeleversement(
+                cheminTemporaire: $this->fichierTemporaire(FabriqueDeFichiers::jpegNu(), '.jpg'),
+                nomOrigine: 'acte.jpg',
+                kind: MediaKind::Preuve,
+                subjectKind: MediaSubject::Personne,
+                demandeId: 21,
+                brouillonRef: 'p1',
+            ),
+            $this->membre(self::OPALE),
+        )->media;
+
+        $port = new MediasDeBrouillon($this->medias, $this->circuit);
+
+        self::assertSame(1, $port->faireSuivreLesMedias(21, '#p1', 12, '#p2'));
+        self::assertSame(12, $media->getSubjectRequestId());
+        self::assertSame('p2', $media->getSubjectDraftRef(), 'Sans dièse en base, comme partout dans `med_media`.');
+        self::assertNull($media->getSubjectId());
+        self::assertSame('en_attente', $media->getStatus()->value);
+        self::assertSame(self::OPALE, $media->getUploadedByUserId());
+
+        // Le port n'écrit pas : la transaction de la fusion le fait. Ici, on la remplace.
+        $this->em->flush();
+
+        self::assertSame([], $port->mediasDeBrouillon(21, '#p1'));
+        self::assertCount(1, $port->mediasDeBrouillon(12, '#p2'));
+        self::assertSame(0, $port->faireSuivreLesMedias(21, '#p1', 12, '#p2'), 'Rien à déplacer une seconde fois.');
+    }
+
     // ---------------------------------------------------------------------------------
 
     private function deposer(MediaKind $kind, bool $administrateur = false, int $deposant = self::OPALE): Media

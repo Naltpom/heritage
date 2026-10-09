@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Module\Media\Service;
 
+use App\Module\Core\Contract\FichesProposeesFermees;
+use App\Module\Core\Contract\FichesProposeesInterface;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Media\Entity\Media;
 use App\Module\Media\Enum\MediaKind;
@@ -33,9 +35,16 @@ use App\Module\Media\Security\VisibiliteDesSujetsInterface;
  */
 final class CatalogueMedia
 {
+    /**
+     * `$fichesProposees` a le **repli fermé** pour valeur par défaut : construit à la main
+     * (par plus d'un test), le catalogue applique la règle d'avant le 10/10/2026 — une
+     * pièce de proposition se lit par son déposant et l'administration. Le conteneur, lui,
+     * injecte l'implémentation de `Proposal`.
+     */
     public function __construct(
         private readonly MediaRepository $medias,
         private readonly VisibiliteDesSujetsInterface $visibilite,
+        private readonly FichesProposeesInterface $fichesProposees = new FichesProposeesFermees(),
     ) {
     }
 
@@ -129,8 +138,9 @@ final class CatalogueMedia
         // relire avec le motif, personne d'autre n'a à savoir qu'il a existé. Les
         // administrateurs le voient parce que c'est leur file de validation.
         $reserve = \in_array($media->getStatus(), [MediaStatus::EnAttente, MediaStatus::Refuse], true);
+        $proche = $lecteur->administrateur || $media->getUploadedByUserId() === $lecteur->userId;
 
-        if ($reserve && !$lecteur->administrateur && $media->getUploadedByUserId() !== $lecteur->userId) {
+        if ($reserve && !$proche && !$this->auteurDeLaProposition($media, $lecteur)) {
             return false;
         }
 
@@ -141,10 +151,28 @@ final class CatalogueMedia
             // la chercher, et le nœud en attente auquel elle appartient n'est montré qu'à
             // son auteur et aux administrateurs (§ 6.4 du dossier). C'est la seule
             // lecture qui ne passe pas par le cercle, faute de personne à lui soumettre.
-            return $lecteur->administrateur || $media->getUploadedByUserId() === $lecteur->userId;
+            //
+            // **Son auteur**, et non seulement le déposant de la pièce : depuis le
+            // 10/10/2026, une pièce de la proposition peut venir d'ailleurs — jointe par
+            // l'administrateur, ou versée par la fusion d'un complément (ADR 0017).
+            return $proche || $this->auteurDeLaProposition($media, $lecteur);
         }
 
         // Filtre 2 — le cercle, pour tout le monde.
         return $this->visibilite->estVisible($media->getSubjectKind(), $sujetId);
+    }
+
+    /**
+     * Le lecteur est-il **l'auteur de la proposition** qui porte cette pièce ? Une seule
+     * question à `Proposal`, par le noyau (ADR 0002, règle 3), et seulement pour une pièce
+     * jointe à une personne proposée — toute autre pièce n'a pas de proposition.
+     */
+    private function auteurDeLaProposition(Media $media, LecteurMedia $lecteur): bool
+    {
+        $demandeId = $media->getSubjectRequestId();
+
+        return null === $media->getSubjectId()
+            && null !== $demandeId
+            && $this->fichesProposees->estAuteurDe($demandeId, $lecteur->userId);
     }
 }

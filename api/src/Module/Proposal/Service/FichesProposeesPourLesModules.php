@@ -88,4 +88,14 @@ final readonly class FichesProposeesPourLesModules implements FichesProposeesInt
 
         return DepotSurFicheProposee::Introuvable;
     }
+
+    /**
+     * L'auteur de la demande, quel qu'en soit le statut : une demande tranchée reste
+     * consultable par son auteur avec ce qu'elle portait (ADR 0004). Une demande qui
+     * n'existe pas n'a pas d'auteur.
+     */
+    public function estAuteurDe(int $demandeId, int $userId): bool
+    {
+        return $this->demandes->find($demandeId)?->getAuthorUserId() === $userId;
+    }
 }

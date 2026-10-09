@@ -148,7 +148,10 @@ abstract class CasDeTestMedia extends TestCase
             $this->fichesProposees,
         );
 
-        $this->catalogue = new CatalogueMedia($medias, $this->visibilite);
+        // La même doublure que le téléversement : elle ne connaît aucun auteur tant qu'un cas
+        // n'en déclare pas (`auteurDe()`), et le catalogue lit alors comme avant le
+        // 10/10/2026 — déposant et administration.
+        $this->catalogue = new CatalogueMedia($medias, $this->visibilite, $this->fichesProposees);
         $this->suppression = new SuppressionMedia($this->em, $this->visibilite, $this->stockage);
     }
 

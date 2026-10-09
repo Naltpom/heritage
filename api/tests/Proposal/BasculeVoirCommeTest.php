@@ -13,7 +13,9 @@ use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Service\AuditService;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Proposal\Exception\Conflit;
+use App\Module\Proposal\Service\CompletionDeProposition;
 use App\Module\Proposal\Service\FabriqueDeLecteur;
+use App\Module\Proposal\Service\FusionDeComplement;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -86,8 +88,9 @@ final class BasculeVoirCommeTest extends BaseDeDemandes
     }
 
     /**
-     * Et une fois qu'elle arrive, elle **refuse toute écriture** — les trois gestes du
-     * membre et les deux de l'administrateur.
+     * Et une fois qu'elle arrive, elle **refuse toute écriture** — les gestes du membre
+     * (déposer, retirer, compléter) et ceux de l'administrateur (valider, refuser,
+     * fusionner).
      */
     public function testAucuneEcritureNePasseSousLaBascule(): void
     {
@@ -111,6 +114,13 @@ final class BasculeVoirCommeTest extends BaseDeDemandes
             'retirer' => fn (): mixed => $this->depot->retirer($demande, $emprunteur),
             'valider' => fn (): mixed => $this->validation->valider($demande, $emprunteur),
             'refuser' => fn (): mixed => $this->refus->refuser($demande, $emprunteur, 'Non.', null),
+            // Les deux écritures du 10/10/2026 (ADR 0017) : compléter sur place, fusionner un
+            // complément. La première réécrit une demande déjà enregistrée, la seconde en
+            // clôt une — sous une identité empruntée, ni l'une ni l'autre.
+            'completer' => fn (): mixed => self::getContainer()->get(CompletionDeProposition::class)
+                ->completer($demande, 'p1', ['fiche' => ['surname' => 'Sureau']], $emprunteur),
+            'fusionner' => fn (): mixed => self::getContainer()->get(FusionDeComplement::class)
+                ->fusionner($demande, $demande, [], $emprunteur),
         ];
 
         foreach ($gestes as $nom => $geste) {

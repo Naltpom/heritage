@@ -111,6 +111,38 @@ final readonly class MediasDeBrouillon implements PortMedias
         return $rattaches;
     }
 
+    /**
+     * La fusion d'un complément, côté `Media` (ADR 0017) : les pièces de
+     * `#<complément>/p1` passent sur `#<origine>/p2`. Le dièse est retiré ici, comme dans
+     * les deux autres méthodes de ce port — c'est la seule ligne du produit où les deux
+     * conventions se rencontrent.
+     *
+     * **Ni le statut, ni le déposant, ni le libellé ne changent.** Une pièce `en_attente`
+     * le reste : c'est la validation de l'origine qui la rendra active, par la passe 6,
+     * avec celles que l'auteur de l'origine avait jointes. `uploaded_by_user_id` dit
+     * toujours qui l'a apportée — l'historique d'une preuve ne se réécrit pas parce qu'elle
+     * a changé de dossier.
+     *
+     * Pas de `flush()` : l'appelant tient une transaction qui écrit tout ou rien.
+     */
+    public function faireSuivreLesMedias(int $deDemande, string $deRef, int $versDemande, string $versRef): int
+    {
+        $de = ltrim($deRef, '#');
+        $vers = ltrim($versRef, '#');
+
+        if ('' === $de || '' === $vers) {
+            return 0;
+        }
+
+        $medias = $this->medias->pourBrouillon($deDemande, $de);
+
+        foreach ($medias as $media) {
+            $media->rattacherAuBrouillon($vers, $versDemande)->toucher();
+        }
+
+        return \count($medias);
+    }
+
     public function mediasDeBrouillon(int $demandeId, string $localRef): array
     {
         $reference = ltrim($localRef, '#');

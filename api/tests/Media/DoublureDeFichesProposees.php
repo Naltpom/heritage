@@ -62,4 +62,20 @@ final class DoublureDeFichesProposees implements FichesProposeesInterface
     {
         return $this->questions;
     }
+
+    /** @var array<int, int> demande ⇒ auteur */
+    private array $auteurs = [];
+
+    /** Déclare l'auteur d'une demande, pour la lecture des pièces de ses fiches. */
+    public function auteurDe(int $demandeId, int $userId): self
+    {
+        $this->auteurs[$demandeId] = $userId;
+
+        return $this;
+    }
+
+    public function estAuteurDe(int $demandeId, int $userId): bool
+    {
+        return ($this->auteurs[$demandeId] ?? null) === $userId;
+    }
 }

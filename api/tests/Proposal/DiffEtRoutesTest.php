@@ -183,6 +183,9 @@ final class DiffEtRoutesTest extends BaseDeDemandes
             'proposal_demande_retirer' => ['/api/demandes/{id}/retirer', 'POST'],
             'proposal_demande_refaire' => ['/api/demandes/{id}/refaire', 'GET'],
             'proposal_demande_brouillon' => ['/api/demandes/{id}/brouillons/{ref}', 'GET'],
+            // Le même chemin en `PUT` : compléter sur place la fiche qu'on vient de lire
+            // (§ 6.6 ter, ADR 0017).
+            'proposal_demande_completer_brouillon' => ['/api/demandes/{id}/brouillons/{ref}', 'PUT'],
             // Un `POST` qui n'écrit rien (§ 6.6 quater) : la saisie — souvent la naissance
             // d'un vivant — reste hors de l'URL et des journaux.
             'proposal_demande_ressemblances' => ['/api/demandes/brouillons/ressemblances', 'POST'],
@@ -191,6 +194,9 @@ final class DiffEtRoutesTest extends BaseDeDemandes
             'proposal_admin_demande_voir' => ['/api/administration/demandes/{id}', 'GET'],
             'proposal_admin_demande_valider' => ['/api/administration/demandes/{id}/valider', 'POST'],
             'proposal_admin_demande_refuser' => ['/api/administration/demandes/{id}/refuser', 'POST'],
+            // La fusion d'un complément (§ 6.7 bis) : l'aperçu, qui n'écrit rien, et le geste.
+            'proposal_admin_demande_apercu_fusion' => ['/api/administration/demandes/{id}/fusionner/{complementId}', 'GET'],
+            'proposal_admin_demande_fusionner' => ['/api/administration/demandes/{id}/fusionner/{complementId}', 'POST'],
         ];
 
         $collection = $routeur->getRouteCollection();
@@ -218,6 +224,11 @@ final class DiffEtRoutesTest extends BaseDeDemandes
         self::assertNotNull($route);
 
         self::assertSame('[A-Za-z]\d+', $route->getRequirement('ref'));
+
+        // La complétion sur place prend la référence de la même façon, pour la même raison.
+        $completer = $routeur->getRouteCollection()->get('proposal_demande_completer_brouillon');
+        self::assertNotNull($completer);
+        self::assertSame('[A-Za-z]\d+', $completer->getRequirement('ref'));
         self::assertSame(
             '/api/demandes/12/brouillons/p1',
             $routeur->generate('proposal_demande_brouillon', ['id' => 12, 'ref' => 'p1']),

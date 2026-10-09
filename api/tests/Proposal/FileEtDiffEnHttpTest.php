@@ -64,16 +64,19 @@ final class FileEtDiffEnHttpTest extends CasDeTestDemandesHttp
     private const array CLES_DU_RESUME = [
         'id', 'kind', 'status', 'authorUserId', 'authorLabel', 'targetKind', 'targetId',
         'targetLabel', 'message', 'autoValidated', 'submittedAt', 'createdAt',
-        'nouvellesPersonnes',
+        // `complementDeDemandeId` (ADR 0017) : la demande que celle-ci complète, ou `null`.
+        'nouvellesPersonnes', 'complementDeDemandeId',
     ];
 
     /** Les clés du § 6.7 « administration » : le résumé de l'auteur, plus de quoi décider. */
     private const array CLES_DU_DIFF = [
         'id', 'kind', 'status', 'authorUserId', 'authorLabel', 'targetKind', 'targetId',
         'targetLabel', 'message', 'decisionMessage', 'decidedByLabel', 'decidedAt',
-        'autoValidated', 'duplicateOfId', 'submittedAt', 'createdAt', 'ops', 'brouillons',
-        'liens', 'revisions', 'cible', 'resolutionPrevue', 'dependances',
-        'demandesConcurrentes', 'doublonsProbables',
+        // `complementDe` et `empreinte` viennent du § 6.5 ; `complements`, du § 6.7 — les trois
+        // depuis le 10/10/2026 (ADR 0017).
+        'autoValidated', 'duplicateOfId', 'complementDe', 'submittedAt', 'createdAt', 'ops', 'brouillons',
+        'liens', 'revisions', 'empreinte', 'cible', 'resolutionPrevue', 'dependances',
+        'demandesConcurrentes', 'doublonsProbables', 'complements',
     ];
 
     // ---------------------------------------------------------------------------------

@@ -163,6 +163,36 @@ final class VisibiliteDesMediasTest extends CasDeTestMedia
         self::assertTrue($this->catalogue->lisible($media, $this->administrateur()));
     }
 
+    /**
+     * Une pièce de proposition se lit aussi par **l'auteur de la demande**, même s'il ne
+     * l'a pas déposée (ADR 0017) : l'administrateur peut en joindre une, et la fusion d'un
+     * complément y verse celles d'un autre membre. Sans quoi l'auteur verrait dans sa propre
+     * proposition des pièces dont les octets lui répondraient `404`.
+     *
+     * La question est posée à `Proposal` par le noyau ; ici, la doublure y répond.
+     */
+    public function testUnMediaDeBrouillonSeLitAussiParLAuteurDeLaDemande(): void
+    {
+        $media = $this->televersement->televerser(
+            new RequeteDeTeleversement(
+                cheminTemporaire: $this->fichierTemporaire(FabriqueDeFichiers::jpegNu(), '.jpg'),
+                nomOrigine: 'acte.jpg',
+                kind: MediaKind::Preuve,
+                subjectKind: MediaSubject::Personne,
+                demandeId: 12,
+                brouillonRef: 'p1',
+            ),
+            $this->membre(7),
+        )->media;
+
+        self::assertFalse($this->catalogue->lisible($media, $this->membre(9)), 'Avant : rien ne dit que 9 est l\'auteur de la demande 12.');
+
+        $this->fichesProposees->auteurDe(12, 9);
+
+        self::assertTrue($this->catalogue->lisible($media, $this->membre(9)), 'L\'auteur de la demande lit les pièces de sa proposition.');
+        self::assertFalse($this->catalogue->lisible($media, $this->membre(8)), 'Un troisième compte, toujours pas.');
+    }
+
     /** @param \Closure(): mixed $appel */
     private function erreur(\Closure $appel): DomainException
     {

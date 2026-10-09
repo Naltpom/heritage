@@ -54,16 +54,31 @@ final readonly class SerialiseurDeDemande
         private PortMedias $medias,
         private ValeursMasquees $masques,
         private RattachementDesFiliations $filiations,
+        private EmpreinteDeDemande $empreintes,
+        private FusionDeComplement $fusions,
     ) {
     }
 
     /**
      * Une demande vue par son auteur (§ 6.5).
      *
+     * Deux clés depuis le 10/10/2026 (ADR 0017) :
+     *
+     * - `complementDe` — `{draftPersonId}` quand la demande complète la proposition d'un
+     *   autre, `null` sinon. **L'identifiant de la fiche, rien de plus** : l'auteur d'un
+     *   complément ne voit pas la proposition qu'il complète (elle est le plus souvent
+     *   celle d'un vivant, proposée par un autre membre), et il tient déjà cet identifiant
+     *   — c'est celui qu'il a posté. La vue d'administration l'enrichit ;
+     * - `empreinte` — ce qu'il faut renvoyer pour compléter (§ 6.6 ter), fusionner
+     *   (§ 6.7 bis) ou valider (§ 6.8) **la demande qu'on a lue, et pas une autre**
+     *   ({@see EmpreinteDeDemande}).
+     *
      * @return array<string, mixed>
      */
     public function pourAuteur(ChangeRequest $demande): array
     {
+        $complementDe = $demande->getComplementDe();
+
         return [
             'id' => $demande->getId(),
             'kind' => $demande->getKind()->value,
@@ -81,12 +96,14 @@ final readonly class SerialiseurDeDemande
             'decidedAt' => $this->horodatage($demande->getDecidedAt()),
             'autoValidated' => $demande->isAutoValidated(),
             'duplicateOfId' => $demande->getDuplicateOf()?->getId(),
+            'complementDe' => null === $complementDe ? null : ['draftPersonId' => $complementDe->getId()],
             'submittedAt' => $this->horodatage($demande->getSubmittedAt()),
             'createdAt' => $this->horodatage($demande->getCreatedAt()),
             'ops' => $this->opsSimples($demande),
             'brouillons' => $this->brouillons($demande),
             'liens' => $this->liens($demande),
             'revisions' => array_map($this->revision(...), $this->revisions->pourDemande($demande)),
+            'empreinte' => $this->empreintes->de($demande),
         ];
     }
 
@@ -145,6 +162,11 @@ final readonly class SerialiseurDeDemande
             // Les personnes que la demande ajoute à l'arbre, par leur nom tel que saisi
             // par l'auteur — pas une fiche de l'arbre, rien à masquer.
             'nouvellesPersonnes' => $nouvellesPersonnes,
+            // La demande que celle-ci complète (ADR 0017), ou `null` : la file l'affiche
+            // « complète la n° 12 » sans ouvrir la demande, et l'auteur d'un complément y lit
+            // le même numéro que lui donnera la fusion (`duplicateOfId`). Un numéro, jamais
+            // un nom — l'auteur du complément ne voit pas la proposition qu'il complète.
+            'complementDeDemandeId' => $demande->getComplementDe()?->getRequest()->getId(),
         ];
     }
 
@@ -209,7 +231,61 @@ final readonly class SerialiseurDeDemande
             $this->demandes->doublonsProbablesDe($demande),
         );
 
+        // **Les compléments** (ADR 0017) — toujours un tableau, comme `dependances`. Chacun
+        // porte l'aperçu de sa fusion, calculé à blanc par le même code que la fusion
+        // elle-même : l'administrateur lit les champs remplis, les conflits à trancher et
+        // les liens repris **avant** de cliquer.
+        $charge['complements'] = array_map(
+            fn (ChangeRequest $complement): array => $this->complement($demande, $complement),
+            $this->demandes->complementsDe($demande),
+        );
+
+        // Sur un complément, `complementDe` dit **ce qu'il complète**, en clair : la vue
+        // d'auteur n'en donne que l'identifiant de fiche, l'administrateur voit tout.
+        $complementDe = $demande->getComplementDe();
+
+        if (null !== $complementDe) {
+            $origine = $complementDe->getRequest();
+
+            $charge['complementDe'] = [
+                'draftPersonId' => $complementDe->getId(),
+                'demandeId' => $origine->getId(),
+                'localRef' => $complementDe->getLocalRef(),
+                'displayName' => $complementDe->nomPropose(),
+                'status' => $origine->getStatus()->value,
+            ];
+        }
+
         return $charge;
+    }
+
+    /**
+     * Un complément tel que la vue de son origine le montre (§ 6.7).
+     *
+     * `apercu` est le rapport de fusion **calculé à blanc** ({@see FusionDeComplement}), ou
+     * `null` quand la fusion n'est plus possible — un complément déjà fusionné ou refusé
+     * reste listé avec son statut, pour l'historique, mais n'a plus rien à fusionner.
+     * `empreinte` est celle du complément : à renvoyer en `empreinteComplement` pour que la
+     * fusion échoue proprement si son auteur l'a complété entre-temps.
+     *
+     * @return array<string, mixed>
+     */
+    private function complement(ChangeRequest $origine, ChangeRequest $complement): array
+    {
+        $fiche = $this->brouillons->pourDemande($complement)[0] ?? null;
+
+        return [
+            'id' => $complement->getId(),
+            'authorLabel' => $complement->getAuthorLabel(),
+            'submittedAt' => $this->horodatage($complement->getSubmittedAt()),
+            'status' => $complement->getStatus()->value,
+            'draftPersonId' => $fiche?->getId(),
+            'origineDraftPersonId' => $complement->getComplementDe()?->getId(),
+            'displayName' => $fiche?->nomPropose(),
+            'ligneDates' => null === $fiche ? null : $this->normaliseur->ligneDates($fiche->getBirth(), $fiche->getDeath()),
+            'apercu' => $this->fusions->apercuSiPossible($origine, $complement),
+            'empreinte' => $this->empreintes->de($complement),
+        ];
     }
 
     /**
@@ -600,11 +676,11 @@ final readonly class SerialiseurDeDemande
                 'kind' => $lien->getKind()->value,
                 'subjectPersonId' => $lien->getSubjectPersonId(),
                 'subjectDraftRef' => $lien->getSubjectDraftRef(),
-                'subjectLabel' => $this->nommerLExtremite($lien->getSubjectDraftRef(), $lien->getSubjectLabel(), $noms, $lien->getSubjectDraftPersonId(), $lien->getSubjectPersonId()),
+                'subjectLabel' => $this->nommerLExtremite($lien->getSubjectDraftRef(), $lien->getSubjectLabel(), $noms, $lien->getSubjectDraftPersonId(), $lien->getSubjectPersonId(), $demande->getAuthorUserId()),
                 'subjectDraftPersonId' => $lien->getSubjectDraftPersonId(),
                 'otherPersonId' => $lien->getOtherPersonId(),
                 'otherDraftRef' => $lien->getOtherDraftRef(),
-                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms, $lien->getOtherDraftPersonId(), $lien->getOtherPersonId()),
+                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms, $lien->getOtherDraftPersonId(), $lien->getOtherPersonId(), $demande->getAuthorUserId()),
                 // La fiche proposée par une **autre** demande. Sans cette clé, elle se
                 // lisait comme une personne de l'arbre dont l'identifiant manquait — et
                 // le front n'avait aucun moyen de dire « proposée par la demande n° 12 ».
@@ -615,7 +691,7 @@ final readonly class SerialiseurDeDemande
                 // l'arbre ou une autre fiche de la même demande.
                 'other2DraftRef' => $lien->getOther2DraftRef(),
                 'other2DraftPersonId' => $lien->getOther2DraftPersonId(),
-                'other2Label' => $this->nommerLExtremite($lien->getOther2DraftRef(), $lien->getOther2Label(), $noms, $lien->getOther2DraftPersonId(), $lien->getOther2PersonId()),
+                'other2Label' => $this->nommerLExtremite($lien->getOther2DraftRef(), $lien->getOther2Label(), $noms, $lien->getOther2DraftPersonId(), $lien->getOther2PersonId(), $demande->getAuthorUserId()),
                 'familyId' => $lien->getFamilyId(),
                 // Le couple d'ancrage est stocké avec son libellé depuis
                 // `designerCoupleExistant()`. Ne rendre que `familyId` affichait un
@@ -661,7 +737,7 @@ final readonly class SerialiseurDeDemande
                 'otherPersonId' => $lien->getOtherPersonId(),
                 'otherDraftRef' => $lien->getOtherDraftRef(),
                 'otherDraftPersonId' => $lien->getOtherDraftPersonId(),
-                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms, $lien->getOtherDraftPersonId(), $lien->getOtherPersonId()),
+                'otherLabel' => $this->nommerLExtremite($lien->getOtherDraftRef(), $lien->getOtherLabel(), $noms, $lien->getOtherDraftPersonId(), $lien->getOtherPersonId(), $demande->getAuthorUserId()),
                 'note' => $lien->getNote(),
             ];
         }
@@ -731,14 +807,23 @@ final readonly class SerialiseurDeDemande
      * relire coûte un `find` par extrémité citée — quelques-uns par demande — et évite
      * qu'un écran de décision affiche un nom que plus personne ne propose.
      *
+     * **Sauf la fiche d'un vivant proposée par un autre auteur** que celui de la demande
+     * (ADR 0017). Un membre ne cite que ses propres fiches ; mais une **fusion** repointe
+     * les liens qui citaient la fiche d'un complément vers la fiche d'origine — celle d'un
+     * autre membre, que l'auteur du lien ne voit pas (décision du 09/10/2026). La relire
+     * lui donnerait le nom que la ressemblance lui avait caché. C'est alors le libellé
+     * stocké qui sert : le nom qu'il avait lui-même saisi
+     * ({@see LiensDUneFiche::nomPartageable()}).
+     *
      * @param array<string, string> $noms
      */
     private function nommerLExtremite(
         ?string $draftRef,
         ?string $stocke,
         array $noms,
-        ?int $draftPersonId = null,
-        ?int $personId = null,
+        ?int $draftPersonId,
+        ?int $personId,
+        int $auteurDuLien,
     ): ?string {
         if (null !== $personId && null === $draftRef && null === $draftPersonId) {
             return $this->masques->libelle(SubjectKind::Personne, $personId, $stocke);
@@ -754,7 +839,15 @@ final readonly class SerialiseurDeDemande
 
         $brouillon = $this->brouillons->find($draftPersonId);
 
-        return null === $brouillon ? $stocke : $brouillon->nomPropose().' (proposée)';
+        if (null === $brouillon) {
+            return $stocke;
+        }
+
+        if (!LiensDUneFiche::nomPartageable($brouillon, $auteurDuLien)) {
+            return null === $stocke ? null : $stocke.' (proposée)';
+        }
+
+        return $brouillon->nomPropose().' (proposée)';
     }
 
     /**

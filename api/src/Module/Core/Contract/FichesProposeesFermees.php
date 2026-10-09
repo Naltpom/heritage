@@ -29,4 +29,13 @@ final class FichesProposeesFermees implements FichesProposeesInterface
     {
         return DepotSurFicheProposee::Introuvable;
     }
+
+    /**
+     * Personne n'est l'auteur de rien : la lecture d'une pièce jointe à une personne
+     * proposée retombe sur son déposant et l'administration. Fermé, comme le reste.
+     */
+    public function estAuteurDe(int $demandeId, int $userId): bool
+    {
+        return false;
+    }
 }
