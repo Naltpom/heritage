@@ -6,8 +6,10 @@ namespace App\Module\Proposal\Repository;
 
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\DraftPerson;
+use App\Module\Proposal\Enum\RequestKind;
 use App\Module\Proposal\Enum\RequestStatus;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -133,6 +135,72 @@ class DraftPersonRepository extends ServiceEntityRepository
         $lignes = $qb->getQuery()->getResult();
 
         return $lignes;
+    }
+
+    /**
+     * Les fiches que la **ressemblance** parcourt (§ 6.6 quater) : celles des demandes
+     * `creation_personne` **en attente, tous auteurs confondus**, et les brouillons non
+     * envoyés **du lecteur effectif, et de lui seul**.
+     *
+     * ── Pourquoi tous les auteurs, quand {@see enAttenteVisibles()} s'en garde ────────
+     *
+     * C'est l'exception écrite au § 13.3 du contrat, et la décision du commanditaire du
+     * 09/10/2026 : un membre doit apprendre qu'**une proposition semblable attend déjà**,
+     * sans quoi il dépose le doublon que la file d'administration passera ensuite à
+     * écarter. Ce dépôt ne décide **rien** de ce qui sort : il rend des lignes, et c'est
+     * {@see \App\Module\Proposal\Service\RessemblanceDesPropositions} qui choisit, fiche
+     * par fiche, la forme complète ou la forme discrète — un vivant proposé par un autre
+     * ne sort jamais qu'en signal, sans nom, ni date, ni auteur, ni numéro de demande.
+     *
+     * ── Les brouillons non envoyés restent privés ───────────────────────────────────
+     *
+     * Ceux de `$lecteurEffectif` seulement, **administrateur compris** : un brouillon non
+     * envoyé n'est visible que de son auteur (§ 5.7), et le lecteur effectif est le membre
+     * emprunté sous la bascule « voir comme un membre » — c'est ce que verrait le membre.
+     *
+     * `$sauf` retire une demande entière : celle qu'on est en train de compléter ne doit
+     * pas se signaler à elle-même.
+     *
+     * @return list<DraftPerson>
+     */
+    public function pourRessemblance(int $lecteurEffectif, ?int $sauf): array
+    {
+        $qb = $this->createQueryBuilder('b')
+            ->addSelect('d')
+            ->join('b.request', 'd')
+            ->andWhere('d.kind = :creation')
+            ->andWhere('d.status = :enAttente OR (d.status = :brouillon AND d.authorUserId = :lecteur)')
+            ->setParameter('creation', RequestKind::CreationPersonne)
+            ->setParameter('enAttente', RequestStatus::EnAttente)
+            ->setParameter('brouillon', RequestStatus::Brouillon)
+            ->setParameter('lecteur', $lecteurEffectif)
+            ->addOrderBy('d.id', 'ASC')
+            ->addOrderBy('b.localRef', 'ASC');
+
+        if (null !== $sauf) {
+            $qb->andWhere('d.id <> :sauf')->setParameter('sauf', $sauf);
+        }
+
+        /** @var list<DraftPerson> $lignes */
+        $lignes = $this->sansLesComplements($qb)->getQuery()->getResult();
+
+        return $lignes;
+    }
+
+    /**
+     * **Le point d'accroche des compléments** — sans effet tant qu'ils n'existent pas.
+     *
+     * Le plan de la fonction (PR 4) ajoute `prp_change_request.complement_de_id` : une
+     * demande qui **complète** la proposition d'un autre membre, et que l'administrateur
+     * fusionne. Un complément porte une fiche, mais ce n'est pas une proposition de plus —
+     * le signaler comme « une proposition semblable attend déjà » montrerait deux fois la
+     * même personne, et inviterait à compléter le complément. Le jour où la colonne existe,
+     * cette méthode gagne `AND d.complementDe IS NULL`, et c'est le seul endroit à toucher :
+     * la ressemblance ne parcourt les fiches que par {@see pourRessemblance()}.
+     */
+    private function sansLesComplements(QueryBuilder $qb): QueryBuilder
+    {
+        return $qb;
     }
 
     /**

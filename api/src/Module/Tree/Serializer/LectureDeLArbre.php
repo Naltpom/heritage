@@ -344,4 +344,68 @@ final readonly class LectureDeLArbre
 
         return $lignes;
     }
+
+    /**
+     * Les candidats de la **ressemblance** (§ 5.5 bis) : toute personne dont la clé porte,
+     * en tête ou en début d'un autre mot, **l'un** des préfixes donnés — puis tout le reste
+     * se décide en PHP ({@see NormaliseurDeRessemblance}).
+     *
+     * ── Pourquoi un `OR`, quand la recherche fait un `AND` ──────────────────────────
+     *
+     * La recherche exige chaque mot parce qu'elle restreint : on sait ce qu'on cherche. La
+     * ressemblance, elle, doit **retrouver une faute de frappe** — « Tilleule » pour
+     * « Tilleul », « Pyroxenne » pour « Pyroxène ». Exiger chaque mot écarterait justement
+     * la fiche que la faute rend différente. On prend donc les **trois premières lettres**
+     * de chaque mot saisi (nom, nom d'usage, prénoms, surnom), en `OR` : une faute au-delà
+     * de la troisième lettre ne fait plus perdre la fiche, et une faute dans les trois
+     * premières lettres du nom est rattrapée par le prénom, qui est de toute façon exigé
+     * ensuite.
+     *
+     * ── Ce qui borne l'élargissement ────────────────────────────────────────────────
+     *
+     * - **Le filtre en PHP**, qui exige un nom proche **et** un prénom en commun : le
+     *   jeu de candidats peut être large, la réponse ne l'est pas.
+     * - **Le cercle**, qui décide seul, personne par personne, après cette requête. Elle ne
+     *   connaît ni le lecteur ni la confidentialité ; élargir ici ne peut exposer personne
+     *   (ADR 0003) — exactement l'argument de {@see self::candidatsDeRecherche()}.
+     * - **Le plafond**, `$plafond` lignes au plus, dans l'ordre des identifiants : un ordre
+     *   **stable**, qui ne dépend de rien de ce qu'on compare. Il ne mord pas aujourd'hui
+     *   (l'arbre compte moins de 300 fiches) ; s'il mordait, une ressemblance pourrait
+     *   manquer, mais aucune ne serait faussée et rien ne dirait combien on a coupé.
+     *
+     * Pas d'extension PostgreSQL (`pg_trgm`, `fuzzystrmatch`) : c'est une décision écrite
+     * du modèle (§ 0.6, « Ce que le modèle ne contient délibérément pas »), et elle tient à
+     * cette échelle — un balayage de préfixes, puis Levenshtein en PHP sur des clés
+     * repliées.
+     *
+     * @param list<string> $prefixes repliés par {@see \App\Module\Core\Service\CleDeRecherche} —
+     *                               donc `[A-Z0-9]+`, sans `%` ni `_` possibles
+     *
+     * @return list<Person>
+     */
+    public function candidatsDeRessemblance(array $prefixes, int $plafond): array
+    {
+        if ([] === $prefixes) {
+            return [];
+        }
+
+        $constructeur = $this->personnes->createQueryBuilder('p')
+            ->orderBy('p.id', 'ASC')
+            ->setMaxResults($plafond);
+
+        $ou = $constructeur->expr()->orX();
+
+        foreach (array_values($prefixes) as $rang => $prefixe) {
+            $ou->add($constructeur->expr()->like('p.searchKey', ':prefixe'.$rang));
+            $ou->add($constructeur->expr()->like('p.searchKey', ':infixe'.$rang));
+            $constructeur
+                ->setParameter('prefixe'.$rang, $prefixe.'%')
+                ->setParameter('infixe'.$rang, '% '.$prefixe.'%');
+        }
+
+        /** @var list<Person> $lignes */
+        $lignes = $constructeur->andWhere($ou)->getQuery()->getResult();
+
+        return $lignes;
+    }
 }

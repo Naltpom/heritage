@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Membership\Service;
 
 use App\Module\Core\Service\CleDeRecherche;
+use App\Module\Core\Service\ProximiteDeNoms;
 
 /**
  * La comparaison des noms pour la recherche de rattachement — **jamais pour l'affichage**.
@@ -31,10 +32,12 @@ use App\Module\Core\Service\CleDeRecherche;
  *
  * ## Ce que ce service ajoute, et pourquoi il ne disparaît pas
  *
- * `CleDeRecherche` replie ; il ne compare pas. La tolérance ci-dessous — **une** distance
- * d'édition, et seulement au-delà de quatre lettres — est une décision propre à ce module,
- * et elle est une décision de sécurité : chaque cran de tolérance élargit ce qu'un porteur
- * de jeton peut faire correspondre, donc ce qu'il peut apprendre.
+ * `CleDeRecherche` replie ; il ne compare pas. La comparaison elle-même — **une** distance
+ * d'édition, et seulement au-delà de quatre lettres — est désormais écrite une fois, dans
+ * {@see ProximiteDeNoms}, parce que la ressemblance de l'arbre et celle des propositions
+ * en ont eu besoin à leur tour. Ce service y délègue, et garde ce qui lui appartient : **le
+ * seuil**, qui est ici une décision de sécurité — chaque cran de tolérance élargit ce
+ * qu'un porteur de jeton peut faire correspondre, donc ce qu'il peut apprendre.
  *
  * **Rien de ce qui sort d'ici ne sort de l'API.** Ce qui sort est
  * {@see Port\PersonneDeLArbre::libelleMinimal()}, construit sur les valeurs d'origine ;
@@ -48,11 +51,24 @@ final readonly class NormalisationDeNom
      * frappe : elle change le nom. `Thym` et `Thyn` sont deux familles, `Bon` et `Bou`
      * aussi. Au-delà, `Romarin` et `Romari` sont bien la même, et `Tilleul` et `Tilleule`
      * également — c'est le cas réel qui a fixé le seuil.
+     *
+     * **Il reste ici, et il est passé à chaque appel**, alors que {@see ProximiteDeNoms}
+     * porte le même défaut : pour ce parcours, le seuil est une décision de sécurité (voir
+     * l'en-tête), et elle ne doit pas bouger le jour où l'on élargirait la ressemblance
+     * d'un autre écran.
      */
     private const int LONGUEUR_MINIMALE_POUR_TOLERANCE = 5;
 
-    public function __construct(private CleDeRecherche $repliement)
+    private ProximiteDeNoms $proximite;
+
+    /**
+     * La signature d'avant la remontée dans `Core`, gardée telle quelle : les tests de
+     * rattachement construisent ce service par `new NormalisationDeNom(new
+     * CleDeRecherche())`, et la règle n'a pas changé — seul son domicile a changé.
+     */
+    public function __construct(CleDeRecherche $repliement, ?ProximiteDeNoms $proximite = null)
     {
+        $this->proximite = $proximite ?? new ProximiteDeNoms($repliement);
     }
 
     /**
@@ -64,37 +80,19 @@ final readonly class NormalisationDeNom
      */
     public function normaliser(string $valeur): string
     {
-        return $this->repliement->replier($valeur);
+        return $this->proximite->normaliser($valeur);
     }
 
     /** @return list<string> les jetons d'une suite de prénoms, repliés, vides retirés */
     public function jetons(string $valeur): array
     {
-        $normalise = $this->normaliser($valeur);
-
-        if ('' === $normalise) {
-            return [];
-        }
-
-        return array_values(array_filter(explode(' ', $normalise), static fn (string $jeton): bool => '' !== $jeton));
+        return $this->proximite->jetons($valeur);
     }
 
     /** Deux valeurs désignent-elles le même nom, à une faute de frappe près ? */
     public function proche(string $a, string $b): bool
     {
-        if ('' === $a || '' === $b) {
-            return false;
-        }
-
-        if ($a === $b) {
-            return true;
-        }
-
-        if (min(\strlen($a), \strlen($b)) < self::LONGUEUR_MINIMALE_POUR_TOLERANCE) {
-            return false;
-        }
-
-        return levenshtein($a, $b) <= 1;
+        return $this->proximite->proche($a, $b, self::LONGUEUR_MINIMALE_POUR_TOLERANCE);
     }
 
     /**
@@ -110,14 +108,6 @@ final readonly class NormalisationDeNom
      */
     public function unPrenomEnCommun(array $soumis, array $fiche): bool
     {
-        foreach ($soumis as $unSoumis) {
-            foreach ($fiche as $unFiche) {
-                if ($this->proche($unSoumis, $unFiche)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return null !== $this->proximite->prenomEnCommun($soumis, $fiche, self::LONGUEUR_MINIMALE_POUR_TOLERANCE);
     }
 }

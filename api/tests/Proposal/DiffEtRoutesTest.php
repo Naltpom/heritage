@@ -164,7 +164,7 @@ final class DiffEtRoutesTest extends BaseDeDemandes
     }
 
     /**
-     * Les onze routes du § 6, aux chemins exacts du contrat d'API.
+     * Les routes du § 6, aux chemins exacts du contrat d'API.
      *
      * Le front est écrit contre ces chemins : une faute de frappe ici est une panne
      * là-bas, et elle se diagnostique mal. Le § 1.7 impose en outre que `/api/demandes`
@@ -183,6 +183,9 @@ final class DiffEtRoutesTest extends BaseDeDemandes
             'proposal_demande_retirer' => ['/api/demandes/{id}/retirer', 'POST'],
             'proposal_demande_refaire' => ['/api/demandes/{id}/refaire', 'GET'],
             'proposal_demande_brouillon' => ['/api/demandes/{id}/brouillons/{ref}', 'GET'],
+            // Un `POST` qui n'écrit rien (§ 6.6 quater) : la saisie — souvent la naissance
+            // d'un vivant — reste hors de l'URL et des journaux.
+            'proposal_demande_ressemblances' => ['/api/demandes/brouillons/ressemblances', 'POST'],
             'proposal_demande_historique' => ['/api/demandes/historique/{subjectKind}/{subjectId}', 'GET'],
             'proposal_admin_demande_lister' => ['/api/administration/demandes', 'GET'],
             'proposal_admin_demande_voir' => ['/api/administration/demandes/{id}', 'GET'],

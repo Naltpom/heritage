@@ -9,6 +9,7 @@ use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\Security\ReserveAuxMembres;
 use App\Module\Core\Service\BasculeVoirComme;
+use App\Module\Core\Service\LectureDeSaisieDIdentite;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Enum\RequestStatus;
 use App\Module\Proposal\Exception\AccesRefuse;
@@ -23,6 +24,7 @@ use App\Module\Proposal\Service\FabriqueDeLecteur;
 use App\Module\Proposal\Service\InventaireDeLaSuppression;
 use App\Module\Proposal\Service\RechercheDeBrouillons;
 use App\Module\Proposal\Service\RefaireDemande;
+use App\Module\Proposal\Service\RessemblanceDesPropositions;
 use App\Module\Proposal\Service\SerialiseurDeDemande;
 use App\Module\Proposal\Service\ValeursMasquees;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -55,6 +57,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * | `GET /api/demandes/{id}/refaire` | **non** | — |
  * | `GET /api/demandes/{id}/brouillons/{ref}` | non | — |
  * | `GET /api/demandes/brouillons/recherche` | non | — |
+ * | `POST /api/demandes/brouillons/ressemblances` | **non** | — |
  * | `GET /api/demandes/brouillons/{brouillonId}` | non | — |
  * | `GET /api/demandes/historique/{kind}/{id}` | non | — |
  *
@@ -64,6 +67,11 @@ use Symfony\Component\Routing\Attribute\Route;
  * garde-fou interdirait à l'administrateur de **lire** une reprise sous la bascule,
  * c'est-à-dire de vérifier ce que verrait le membre : exactement ce que la bascule
  * existe pour permettre.
+ *
+ * `ressemblances` mérite la sienne pour une raison voisine : c'est un **`POST` qui n'écrit
+ * rien**. Le verbe garde la saisie — un nom et une naissance, souvent d'un vivant — hors
+ * de l'URL et des journaux ; il ne dit pas une écriture, et le garde-fou n'a donc rien à
+ * y garder.
  *
  * ── Pourquoi le garde-fou est ici et pas seulement dans les services ────────────
  *
@@ -245,6 +253,53 @@ final class DemandeController extends AbstractController
             // propositions on ne montre pas.
             'tronque' => $resultat['tronque'],
         ]);
+    }
+
+    /**
+     * « Une proposition semblable attend déjà » — § 6.6 quater.
+     *
+     * ## Pourquoi cette route existe
+     *
+     * Le formulaire « Ajouter une personne » déposait une création sans rien vérifier. Un
+     * doublon vient aussi d'une personne **déjà proposée** — par soi-même un autre soir, ou
+     * par un autre membre —, que personne d'autre que l'administrateur ne pouvait voir.
+     * Cette route le dit pendant la saisie, et dit ce qu'on peut en faire
+     * (`action` : compléter sur place, ou déposer un complément).
+     *
+     * ## L'exception au § 13.3, et ce qui la borne
+     *
+     * Elle parcourt les propositions **de tous les membres**. Ce qui en sort est décidé par
+     * {@see RessemblanceDesPropositions}, fiche par fiche : en clair pour les siennes, pour
+     * un administrateur, et pour un défunt ; **en signal seul** pour un vivant proposé par
+     * un autre membre — ni nom, ni date, ni lieu, ni auteur, ni numéro de demande, et des
+     * dates qui ne sont même pas comparées.
+     *
+     * ## Un `POST` qui n'écrit rien
+     *
+     * Pour que noms et naissances de vivants ne partent pas dans l'URL — donc dans les
+     * journaux. Aucune écriture, donc aucun `refuserSiActive()` : sous la bascule « voir
+     * comme un membre », l'administrateur lit ce que lirait le membre, ce que
+     * `Lecteur::voitToutesLesDemandes()` lui rend, ni plus ni moins.
+     *
+     * Un compte en attente reçoit `{elements: [], tronque: false}`, comme à la recherche
+     * des brouillons — il ne dépose pas de demande, il n'a rien à compléter.
+     */
+    #[Route('/brouillons/ressemblances', name: 'proposal_demande_ressemblances', methods: ['POST'])]
+    public function ressemblances(
+        Request $requete,
+        RessemblanceDesPropositions $ressemblances,
+        LectureDeSaisieDIdentite $saisies,
+    ): JsonResponse {
+        $lecteur = $this->lecteurs->courant();
+        $corps = $this->corps($requete);
+        $saisie = $saisies->identite($corps);
+
+        return $this->charge($ressemblances->resultats(
+            $saisie,
+            $saisies->limite($corps['limite'] ?? null),
+            $lecteur,
+            $this->sauf($corps['sauf'] ?? null),
+        ));
     }
 
     /**
@@ -460,6 +515,23 @@ final class DemandeController extends AbstractController
         $parPage = min(100, max(1, $requete->query->getInt('parPage', 25)));
 
         return [$page, $parPage];
+    }
+
+    /**
+     * `sauf` : l'identifiant d'une demande à ne pas parcourir, ou rien. Un identifiant qui
+     * ne désigne aucune demande n'est pas une erreur — il n'exclut simplement rien.
+     */
+    private function sauf(mixed $brut): ?int
+    {
+        if (null === $brut) {
+            return null;
+        }
+
+        if (!\is_int($brut) || $brut < 1) {
+            throw DonneesInvalides::pourChamp('sauf', 'L\'identifiant de la demande à exclure est un entier positif, ou null.');
+        }
+
+        return $brut;
     }
 
     private function statut(Request $requete): ?RequestStatus
