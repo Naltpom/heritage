@@ -82,6 +82,16 @@ services:
     App\Module\Core\Contract\CalqueEnAttenteInterface:
         alias: App\Module\Proposal\Service\LectureDesPropositions
 
+    # ⇢ `Media` : qui peut joindre une pièce à une personne proposée (`POST /api/medias`
+    #    avec `demandeId` + `brouillonRef`). **Branché.**
+    #
+    #    Même mécanique, même raison que le calque juste au-dessus : `core.yaml` pose le
+    #    repli fermé `FichesProposeesFermees` (tout `Introuvable`, donc `404`), et cet
+    #    alias-ci le remplace parce que `proposal.yaml` est chargé après. Vérifié au
+    #    `debug:container`, pas déduit.
+    App\Module\Core\Contract\FichesProposeesInterface:
+        alias: App\Module\Proposal\Service\FichesProposeesPourLesModules
+
     # ⇢ `Media` : les médias joints à une personne encore proposée (§ 6.6). **Branché** —
     #    mais par **décoration**, et l'alias ci-dessous doit donc rester.
     #

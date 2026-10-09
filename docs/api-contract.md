@@ -3749,8 +3749,8 @@ Quatre règles, dans l'ordre où elles se trompent :
 
 #### Les médias attachés à une création
 
-Un média joint à une personne proposée porte `subject_draft_ref = '#p1'` **et**
-`subject_request_id = 12` : « une référence provisoire n'a de sens que dans le contexte de
+Un média joint à une personne proposée porte `subject_draft_ref = 'p1'` (sans dièse, § 7.1)
+**et** `subject_request_id = 12` : « une référence provisoire n'a de sens que dans le contexte de
 **sa** demande » (§ 6.1, `ck_med_media_brouillon_contexte`). Or une reprise crée une demande
 **neuve**, avec un **nouvel identifiant** — la référence pointe donc vers la mauvaise demande.
 
@@ -3841,7 +3841,7 @@ authentifiée qui applique le cercle (§ 6.5 du dossier).
 
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs | Débit |
 |---|---|---|---|---|---|---|
-| `POST` | `/api/medias` | `MEMBRE` | `multipart/form-data`, § 7.1 | `201` § 7.2 | `413` `fichier_trop_volumineux` · `415` `type_de_fichier_refuse` · `422` · `403` `regime_en_attente` · `429` | 20 / h |
+| `POST` | `/api/medias` | `MEMBRE` | `multipart/form-data`, § 7.1 | `201` § 7.2 | `413` `fichier_trop_volumineux` · `415` `type_de_fichier_refuse` · `422` · `403` `regime_en_attente` · `404` · `409` `demande_deja_decidee` · `409` `vue_comme_membre_active` · `429` | 20 / h |
 | `POST` | `/api/medias/portrait-du-compte` | `ATTENTE` | `multipart/form-data`, champ `fichier` seul | `201` § 7.2 | `409` `compte_non_rattache` · `409` `vue_comme_membre_active` · `413` · `415` · `422` · `429` | 20 / h |
 | `GET` | `/api/medias` | `MEMBRE` | `?subjectKind=&subjectId=&kind=&status=` | `200` liste non paginée | `403` `regime_en_attente` · `404` · `422` | — |
 | `GET` | `/api/medias/{id}` | `MEMBRE` ¹ | — | `200` § 7.2 | `403` `regime_en_attente` · `404` | — |
@@ -3866,11 +3866,11 @@ l'inexistant et un `403` sur l'existant feraient de la route un oracle d'énumé
 | `kind` | texte | `portrait` ou `preuve`. |
 | `subjectKind` | texte | **Toujours obligatoire**, dans les deux formes : `personne`, `famille`, `citation`. Voir l'encadré ci-dessous. |
 | `subjectId` | entier | La ligne visée. **Exclusif** avec le couple suivant. |
-| `subjectRequestId` + `subjectDraftRef` | entier + texte | Quand le média est joint à une personne **pas encore créée** : `12` + `"#p1"` — **avec le dièse**, voir l'encadré de nommage ci-dessous. |
+| `demandeId` + `brouillonRef` | entier + texte | Quand le média est joint à une personne **pas encore créée** : `12` + `"p1"` — **sans le dièse**, voir l'encadré de nommage ci-dessous. Réservé à l'auteur de la demande et à l'administrateur qui l'instruit : voir « Joindre une pièce à une personne proposée », plus bas. |
 | `caption` | texte | Légende, 255 caractères. |
 | `taken` | texte (JSON) | Bloc date à 5 clés (§ 14), sérialisé. Facultatif. |
 
-> **`subjectKind` accompagne toujours le couple `subjectRequestId` + `subjectDraftRef`, et il vaut
+> **`subjectKind` accompagne toujours le couple `demandeId` + `brouillonRef`, et il vaut
 > `"personne"`.** Il n'est jamais omis, et il n'existe **pas** de quatrième valeur
 > `"brouillon"`.
 
@@ -3890,35 +3890,37 @@ casserait la validation, qui se contente de poser `subject_id` et d'effacer
 aurait porté `"brouillon"` devrait être réécrite, et le jour où on l'oublierait, le média
 disparaîtrait de la fiche sans erreur.
 
-`subjectLabel` est `NOT NULL` lui aussi. Pour un brouillon, **le serveur le compose** depuis
-`prp_draft_person` (`givenNames` + `surname`) ; le client ne l'envoie pas, et un client qui
-l'enverrait le verrait ignoré. À la validation, il est repris depuis le `display_name` de la
-personne créée (§ 9.5, passe 6).
+`subjectLabel` est `NOT NULL` lui aussi. Pour un brouillon, **le serveur pose un libellé
+anonyme**, `"Personne proposée"` : le nom proposé appartient à `prp_draft_person`, et le
+recopier dans `med_media` en ferait un second exemplaire à filtrer, dans un module qui n'a pas
+de quoi le filtrer (`Media\Service\TeleversementMedia::LIBELLE_BROUILLON`). Le client ne
+l'envoie pas, et un client qui l'enverrait le verrait ignoré. À la validation, il est repris
+depuis le `display_name` de la personne créée (§ 9.5, passe 6).
 
-> **Nommage : `subjectRequestId` / `subjectDraftRef`, et non `demandeId` / `brouillonRef`.**
-> Une première rédaction de ce document employait les seconds. C'était une **entorse à sa
-> propre règle** (§ 1.2) : ces deux clés reflètent les colonnes `med_media.subject_request_id`
-> et `med_media.subject_draft_ref`, elles portent donc le nom de la propriété Doctrine. Le
-> préfixe `subject` n'est pas décoratif — il les rattache à `subjectKind` et `subjectId`, dont
-> elles sont les frères : les quatre décrivent **le sujet d'un média**, et deux d'entre elles
-> ne peuvent pas s'appeler autrement que les deux autres.
->
-> **La valeur porte le dièse** : `"#p1"`, comme `prp_draft_person.local_ref` en base (§ 5.3).
-> Le contrat ne retire le dièse qu'à un seul endroit, et pour une raison mécanique — le
-> segment d'URL de `GET /api/demandes/12/brouillons/p1`, où `#` est le séparateur de fragment
-> (§ 6.6).
->
-> **À ne pas confondre avec les clés du nœud de graphe.** Un nœud en attente porte
-> `demandeId` et `brouillonRef`, qui ne reflètent aucune colonne et restent donc en français.
-> Ce n'est pas la même relation : sur un média, `subjectDraftRef` dit « le **sujet** de ce
-> média est le brouillon #p1 » ; sur un nœud, `brouillonRef` dit « ce nœud **est** le
-> brouillon p1 ». Référence contre identité.
+> **Nommage : la requête et la réponse ne portent pas les mêmes clés.**
 >
 > | Où | Clés | Valeur | Pourquoi |
 > |---|---|---|---|
-> | Média (requête et réponse) | `subjectRequestId`, `subjectDraftRef` | `12`, `"#p1"` | reflètent des colonnes → nom de propriété Doctrine (§ 1.2) |
-> | Nœud du graphe | `demandeId`, `brouillonRef` | `12`, `"p1"` | aucune colonne → français ; `brouillonRef` alimente l'URL, donc sans dièse (§ 5.2) |
+> | Téléversement (parties du `multipart`) | `demandeId`, `brouillonRef` | `12`, `"p1"` | ce que `MediaController` lit, et ce que le front envoie (`app/src/lib/api/medias.ts`) |
+> | Charge d'un média (réponse, § 7.2) | `subjectRequestId`, `subjectDraftRef` | `12`, `"p1"` | reflètent les colonnes `med_media.subject_request_id` et `subject_draft_ref` → nom de propriété Doctrine (§ 1.2) |
+> | Nœud du graphe | `demandeId`, `brouillonRef` | `12`, `"p1"` | aucune colonne → français ; `brouillonRef` alimente l'URL (§ 5.2) |
 > | Segment d'URL | — | `p1` | `#` y est le séparateur de fragment |
+> | `prp_draft_person.local_ref` | — | `"#p1"` | la seule forme **avec** le dièse (§ 5.3) |
+>
+> **Correction du 09/10/2026.** Cet encadré annonçait `subjectRequestId` + `subjectDraftRef`
+> **en requête**, avec la valeur `"#p1"`. Le serveur n'a jamais lu ces deux parties : il lit
+> `demandeId` et `brouillonRef`, et refuse un dièse en `422` (« attendu : « p1 », sans
+> dièse »). Un client écrit d'après l'ancien texte recevait `422` « Indiquez soit un sujet
+> existant, soit une référence de brouillon avec sa demande ». Et `med_media.subject_draft_ref`
+> stocke la référence **sans** dièse — `Media\Service\Proposition\MediasDeBrouillon` le retire
+> au seul endroit où les deux conventions se rencontrent —, d'où `"p1"` aussi dans la charge
+> du § 7.2.
+>
+> Le préfixe `subject` de la réponse n'est pas décoratif : il rattache les deux clés à
+> `subjectKind` et `subjectId`, dont elles sont les frères — les quatre décrivent **le sujet
+> d'un média**. Sur un nœud, `brouillonRef` dit « ce nœud **est** le brouillon p1 » ; sur un
+> média, `subjectDraftRef` dit « le **sujet** de ce média est le brouillon p1 ». Référence
+> contre identité.
 
 Contrôles d'entrée, tous obligatoires (§ 6.5 du dossier) et tous reflétés dans la réponse :
 
@@ -3938,6 +3940,45 @@ Le média naît `status: "en_attente"` et suit **le même circuit de validation*
 modifications : il n'est visible que de son déposant et des administrateurs jusqu'à ce qu'une
 `ChangeRequest` de nature `ajout_media` (§ 6.4) soit validée. Un dépôt direct d'administrateur
 naît `actif`.
+
+#### Joindre une pièce à une personne proposée — qui le peut
+
+Depuis le 09/10/2026. À la validation d'une `creation_personne`, **tous** les médias joints à
+ses brouillons sont rattachés à la personne créée (§ 9.5, passe 6). Le couple `demandeId` +
+`brouillonRef` n'était pourtant contrôlé que dans sa **forme** : n'importe quel membre pouvait
+joindre une pièce à la proposition d'un autre, et la voir arriver sur la fiche validée comme
+si l'auteur l'avait jointe. Le dépôt est désormais soumis à la règle suivante, que `Media`
+demande à `Proposal` par `Core\Contract\FichesProposeesInterface` :
+
+| Qui dépose | `brouillon` | `en_attente` | tranchée (`validee`, `refusee`, `annulee`, `caduque`) |
+|---|---|---|---|
+| l'**auteur** de la demande | ✅ `201` | ✅ `201` | `409` `demande_deja_decidee` |
+| un **administrateur** qui n'en est pas l'auteur | `404` | ✅ `201` | `404` |
+| tout autre membre | `404` | `404` | `404` |
+
+Et, avant tout cela, pour tout le monde : une demande qui n'existe pas, ou une `brouillonRef`
+qui ne désigne aucune fiche **de cette demande** (`p2` dans une demande qui ne propose que
+`#p1`, toute référence d'une demande qui n'est pas une `creation_personne`), rend `404`.
+
+- **`404` indistinguable**, comme pour un sujet hors cercle (§ 15.3) : la demande n'existe pas,
+  la référence n'y existe pas, ou elle n'est pas au déposant — la réponse ne dit pas lequel.
+  Un `403` sur « pas à vous » et un `404` sur « n'existe pas » feraient de la route un moyen
+  d'énumérer les demandes des autres membres. C'est la différence avec
+  `GET /api/demandes/{id}`, qui rend `403` : là, le lecteur demande **la demande** ; ici, il
+  écrit dans une fiche qui n'est pas la sienne.
+- **`409` `demande_deja_decidee`** seulement pour **l'auteur** : il sait que sa demande
+  existe, et elle vient d'être tranchée — validée pendant qu'il choisissait sa photo, le plus
+  souvent. Le front la classe déjà comme sur les autres routes (`conduiteATenir()` :
+  `recharger`, « l'écran est en retard sur l'état »). `details` vaut **`null`**
+  (et non `{statut}` comme au § 15.2) : `Media` ne connaît pas les statuts de `Proposal`,
+  seulement le verdict.
+- **Avant le fichier.** Le contrôle tombe juste après la cohérence du formulaire, **avant** les
+  contrôles de taille et de type : un dépôt refusé n'a rien lu, rien ré-encodé et rien écrit
+  sur le disque. Un fichier qui serait refusé en `415` rend donc `404` sur une fiche qui n'est
+  pas la sienne. L'ordre complet : `403` `regime_en_attente`, `422` (forme du formulaire),
+  `404` / `409` (fiche proposée), `413`, `415`, `404` (sujet hors cercle).
+- La bascule « voir comme un membre » ne passe jamais jusque-là : toute écriture y rend `409`
+  `vue_comme_membre_active` (§ 10.4).
 
 #### Le portrait du compte — `POST /api/medias/portrait-du-compte`
 
@@ -4007,8 +4048,8 @@ alors que `subjectId` est `null` :
   "subjectKind": "personne",
   "subjectId": null,
   "subjectRequestId": 12,
-  "subjectDraftRef": "#p1",
-  "subjectLabel": "Tourmaline Muguet",
+  "subjectDraftRef": "p1",
+  "subjectLabel": "Personne proposée",
   "mimeType": "image/jpeg",
   "byteSize": 512804,
   "width": 1800,
@@ -5847,7 +5888,7 @@ agent recopiera la référence :
 | `dependance_en_attente` | 409 | validation (§ 6.8, issue 7) | `{demandeId, statut: "en_attente", rejouable: true, dependances[]}` |
 | `dependance_morte` | 409 | validation (§ 6.8, issue 8) | `{demandeId, statut: "caduque", rejouable: false, dependances[]}` |
 | `verrou_concurrent` | 409 | validation | `{demandeId, statut, rejouable: true}` |
-| `demande_deja_decidee` | 409 | valider, refuser, retirer | `{statut}` |
+| `demande_deja_decidee` | 409 | valider, refuser, retirer ; `POST /api/medias` sur une personne proposée de **sa** demande tranchée (§ 7.1) | `{statut}` — `null` au téléversement : `Media` ne connaît que le verdict |
 | `demande_deja_soumise` | 409 | soumettre | `{statut}` |
 | `demande_non_refaisable` | 409 | refaire | `{statut}` |
 | `personne_deja_rattachee` | 409 | invitation, inscription, activation | `{personId}` |
@@ -5874,7 +5915,8 @@ agent recopiera la référence :
 
 C'est ce qui donne : `404` sur un jeton d'invitation invalide (§ 4 — « un `403` confirmerait
 que la route existe »), `404` sur le fichier d'un média dont le sujet est hors cercle (§ 7.4),
-`404` sur l'historique d'une personne vivante hors cercle ; mais `403 acces_refuse` sur la
+`404` sur l'historique d'une personne vivante hors cercle, `404` sur le dépôt d'une pièce dans
+la proposition d'un autre membre (§ 7.1) ; mais `403 acces_refuse` sur la
 demande d'un autre membre — dont l'existence n'est pas un secret — et `403 regime_en_attente`
 sur une écriture.
 
