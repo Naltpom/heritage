@@ -102,6 +102,8 @@ describe('la fenêtre, forme « ios » (Safari sur iPhone)', () => {
     expect(lu).toContain(MESSAGE)
     expect(lu).toContain('Sur iPhone, c’est même nécessaire pour recevoir les notifications.')
     expect(lu).toContain('Dans Safari, touchez Partager')
+    // Safari récent range « Partager » derrière les trois points.
+    expect(lu).toMatch(/\(ou les trois points\s*,\s*puis Partager\s*\)/)
     expect(lu).toContain('Sur l’écran d’accueil')
     expect(html).toMatch(/<ol[^>]*>[\s\S]*<li>[\s\S]*<li>/)
     expect(boutons(html)).toEqual(['Compris'])

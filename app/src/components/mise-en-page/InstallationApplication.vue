@@ -55,8 +55,10 @@ async function surInstaller(): Promise<void> {
       <svg class="inline size-4 align-text-bottom" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 3v12M8 7l4-4 4 4M5 12v8h14v-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
-      (ou <strong class="text-texte">⋯</strong> puis <strong class="text-texte">Partager</strong>), puis
-      <strong class="text-texte">Sur l’écran d’accueil</strong>.
+      (ou les trois points
+      <svg class="inline size-4 align-text-bottom" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />
+      </svg>, puis <strong class="text-texte">Partager</strong>), puis <strong class="text-texte">Sur l’écran d’accueil</strong>.
     </p>
   </div>
 </template>
