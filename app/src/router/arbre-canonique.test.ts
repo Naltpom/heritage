@@ -38,6 +38,14 @@ describe('la route de l’arbre', () => {
     expect(routeur.currentRoute.value.meta['disposition']).toBeUndefined()
   })
 
+  it('sert les rectangles de familles sur `/arbre`, l’arbre d’avant sur `/arbre-2`', () => {
+    // Inversées le 09/10/2026 à la demande du commanditaire : la page en rectangles
+    // (`ArbreGroupesView`) est devenue l'arbre, celle d'avant (`HistoireView`) reste à côté.
+    const composant = (chemin: string): string => String(routes.find((r) => r.path === chemin)?.component)
+    expect(composant('/arbre')).toContain('ArbreGroupesView')
+    expect(composant('/arbre-2')).toContain('HistoireView')
+  })
+
   it('a retiré `/tree` et `/arbre/ancien` : un seul arbre', async () => {
     const routeur = table()
 
@@ -85,17 +93,17 @@ describe('les maquettes retirées', () => {
   it('ne résolvent plus — aucune des sept', async () => {
     const routeur = table()
 
-    // `/arbre-2` n'en fait plus partie : c'est l'arbre en rectangles de familles (09/10/2026).
+    // `/arbre-2` n'en fait plus partie : il garde l'arbre d'avant depuis que `/arbre` sert les rectangles (09/10/2026).
     for (const chemin of ['/arbre-3', '/arbre-4', '/arbre-5', '/arbre-6', '/arbre-7', '/arbre-8']) {
       await routeur.push(chemin)
       expect(routeur.currentRoute.value.name, chemin).toBe('introuvable')
     }
   })
 
-  it('/arbre-2 sert l’arbre en rectangles, aux membres', async () => {
+  it('/arbre-2 garde l’arbre d’avant, aux membres', async () => {
     const routeur = table()
     await routeur.push('/arbre-2')
-    expect(routeur.currentRoute.value.name).toBe('arbre.groupes')
+    expect(routeur.currentRoute.value.name).toBe('arbre.lignees')
     expect(routeur.currentRoute.value.meta['acces']).toBe('membre')
   })
 

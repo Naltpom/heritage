@@ -200,23 +200,24 @@ export const routes: RouteRecordRaw[] = [
    * de se perdre. Ils tombent désormais sur l'attrape-tout.
    */
   {
-    // **`/arbre` sert l'arbre à niveaux de détail** (`HistoireView`) : tout
-    // l'arbre d'un coup, plus on dézoome, moins on écrit. Le NOM `arbre` ne
-    // change pas — `routeParDefaut()` et les notifications y renvoient.
+    // **`/arbre` sert l'arbre en rectangles de familles** (`ArbreGroupesView`, moteur
+    // `arbre2/groupes.ts`) : chaque famille dans son rectangle, deux cartes entre deux
+    // rectangles. Né sur `/arbre-2` le 09/10/2026, passé sur `/arbre` le même jour à la
+    // demande du commanditaire. Le NOM `arbre` ne change pas — `routeParDefaut()`, le
+    // menu et les notifications y renvoient.
     path: '/arbre',
     name: 'arbre',
-    component: () => import('@/views/HistoireView.vue'),
+    component: () => import('@/views/ArbreGroupesView.vue'),
     meta: { acces: 'membre', titre: 'Arbre', rechercheLocale: true },
   },
   {
-    // **`/arbre-2` : l'arbre en rectangles de familles** (demande du 09/10/2026). Le même
-    // écran que `/arbre`, un autre moteur (`arbre2/groupes.ts`) : chaque famille dans son
-    // rectangle, deux cartes entre deux rectangles. Aucun menu n'y mène encore, on y va
-    // par l'adresse ; `/arbre` n'en sait rien. Nom neuf : `arbre.blocs` était celui d'une
-    // maquette retirée le 30/09, et il ne doit pas revenir.
+    // **`/arbre-2` garde l'arbre à niveaux de détail d'avant** (`HistoireView`, moteur
+    // `histoire/lignees.ts`) : tout l'arbre d'un coup, sans rectangles. Aucun menu n'y
+    // mène, on y va par l'adresse. Nom neuf : `arbre.blocs` était celui d'une maquette
+    // retirée le 30/09, et il ne doit pas revenir.
     path: '/arbre-2',
-    name: 'arbre.groupes',
-    component: () => import('@/views/ArbreGroupesView.vue'),
+    name: 'arbre.lignees',
+    component: () => import('@/views/HistoireView.vue'),
     meta: { acces: 'membre', titre: 'Arbre', rechercheLocale: true },
   },
   {

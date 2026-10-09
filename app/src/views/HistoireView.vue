@@ -557,7 +557,7 @@ function ajuster(): void {
     voler(1, cible.cx, cible.y + cible.h / 2)
     // La requête a servi : on la retire, pour qu'un rechargement reparte de l'arbre entier.
     // Le routeur republie alors la page et vide le résumé : on le remet.
-    void routeur.replace({ name: 'arbre' }).then(() => definirResume(compteur.value))
+    void routeur.replace({ path: route.path }).then(() => definirResume(compteur.value))
   }
 }
 
