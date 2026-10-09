@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Module\Media\Service;
 
+use App\Module\Core\Contract\FichesProposeesInterface;
+use App\Module\Core\Enum\DepotSurFicheProposee;
 use App\Module\Core\Enum\Regime;
+use App\Module\Core\Exception\ConflictException;
 use App\Module\Core\Exception\FichierTropVolumineuxException;
 use App\Module\Core\Exception\ForbiddenException;
 use App\Module\Core\Exception\NotFoundException;
@@ -27,6 +30,12 @@ use Doctrine\ORM\EntityManagerInterface;
  * ## L'ordre n'est pas indifférent
  *
  * 1. **Régime du déposant** — un compte en attente n'écrit rien (`403 regime_en_attente`).
+ *    Puis la cohérence du formulaire (`422`), qui ne lit que les champs.
+ * 1 bis. **Le droit de joindre une pièce à une personne proposée**, quand le dépôt vise
+ *    un brouillon (`demandeId` + `brouillonRef`) — demandé à `Proposal` par
+ *    {@see FichesProposeesInterface}, `404` ou `409 demande_deja_decidee`. **Avant le
+ *    fichier**, et c'est le point : un dépôt refusé ne doit avoir rien lu, rien purgé,
+ *    rien écrit sur le disque. Voir {@see self::verifierLeDroitSurLaFicheProposee()}.
  * 2. **Taille** — avant tout le reste : refuser 200 Mio ne doit pas coûter un décodage.
  * 3. **Type réel, par les octets d'en-tête** — jamais l'extension, jamais le
  *    `Content-Type` annoncé, et la réponse ne dit pas ce qui a été détecté.
@@ -90,6 +99,12 @@ final class TeleversementMedia
          * portrait ne bascule qu'à un seul endroit du module.
          */
         private readonly CircuitDeValidationMedia $circuit,
+        /**
+         * Le seul moyen de savoir si le déposant a le droit de joindre une pièce à une
+         * personne **proposée** : les demandes appartiennent à `Proposal`, que ce module
+         * n'a pas le droit de lire (ADR 0002, règle 3). Repli fermé dans `core.yaml`.
+         */
+        private readonly FichesProposeesInterface $fichesProposees,
     ) {
     }
 
@@ -103,6 +118,11 @@ final class TeleversementMedia
         }
 
         $this->verifierLaCoherenceDuSujet($requete);
+
+        // 1 bis — une personne proposée n'accepte de pièce que de son auteur, ou d'un
+        // administrateur qui instruit la demande. Avant le fichier : un refus ne coûte
+        // ni lecture, ni ré-encodage, ni octet sur le disque.
+        $this->verifierLeDroitSurLaFicheProposee($requete, $deposant);
 
         // 2 et 3 — taille, puis type réel.
         $mime = $this->controlerLeFichier($requete->cheminTemporaire);
@@ -372,6 +392,74 @@ final class TeleversementMedia
         }
     }
 
+    /**
+     * **Le déposant a-t-il le droit de joindre une pièce à cette personne proposée ?**
+     *
+     * ## La faille que ce contrôle ferme
+     *
+     * Avant lui, ce service vérifiait la **forme** du couple `demandeId` + `brouillonRef`
+     * ({@see self::verifierLaCoherenceDuSujet()}) et rien d'autre : ni que la demande
+     * existe, ni son statut, ni que le déposant en soit l'auteur. Or à la validation,
+     * `Proposal` rattache **tous** les médias du brouillon à la personne créée. N'importe
+     * quel membre pouvait donc glisser une pièce dans la proposition d'un autre — un
+     * numéro de demande se devine, `p1` est la référence de presque toutes —, et la voir
+     * arriver sur la fiche validée comme si l'auteur l'avait jointe.
+     *
+     * ## La règle n'est pas ici
+     *
+     * Elle appartient à `Proposal`, qui possède les demandes : l'auteur sur `brouillon`
+     * ou `en_attente`, un administrateur sur `en_attente`, et rien d'autre. Ce service ne
+     * fait que traduire le verdict — le contrat le décrit en entier
+     * ({@see FichesProposeesInterface}).
+     *
+     * ## Les deux réponses, et pourquoi elles diffèrent
+     *
+     * - `Introuvable` ⇒ **`404`**, le même que pour un sujet hors cercle
+     *   ({@see self::resoudreLeSujet()}) : la demande n'existe pas, la référence n'y existe
+     *   pas, ou elle n'est pas au déposant — indistinguables par construction (§ 15.3).
+     *   Un `403` sur « pas à vous » et un `404` sur « n'existe pas » feraient de cette
+     *   route un moyen d'énumérer les demandes des autres membres.
+     * - `Tranchee` ⇒ **`409 demande_deja_decidee`** : la demande est la sienne, il sait
+     *   qu'elle existe, et elle vient d'être tranchée sous ses yeux — validée pendant qu'il
+     *   choisissait sa photo, le plus souvent. Le même code que valider, refuser ou
+     *   retirer une demande tranchée (§ 15.2), que le front classe déjà en `recharger`
+     *   (`app/src/lib/api/erreurs.ts`, `conduiteATenir()`).
+     *   `details` est `null` et non `{statut}` comme sur ces trois routes : ce module ne
+     *   connaît pas les statuts de `Proposal`, seulement le verdict.
+     *
+     * ## Avant le fichier, et c'est vérifié
+     *
+     * L'appel précède {@see self::controlerLeFichier()}. Un dépôt refusé ici n'a donc rien
+     * lu, rien ré-encodé et rien écrit sur le disque — pas même le fichier temporaire de
+     * la purge. `tests/Media/TeleversementSurFicheProposeeTest.php` le vérifie en
+     * comptant les fichiers du stockage, et en envoyant un fichier que le contrôle de
+     * type aurait refusé : c'est le `404` qui doit sortir, pas le `415`.
+     */
+    private function verifierLeDroitSurLaFicheProposee(RequeteDeTeleversement $requete, LecteurMedia $deposant): void
+    {
+        // `verifierLaCoherenceDuSujet()` a déjà exigé que les deux aillent ensemble ; un
+        // dépôt sur une ligne existante (`subjectId`) n'a rien à demander à `Proposal`.
+        if (null === $requete->brouillonRef || null === $requete->demandeId) {
+            return;
+        }
+
+        $verdict = $this->fichesProposees->depot(
+            $requete->demandeId,
+            $requete->brouillonRef,
+            $deposant->userId,
+            $deposant->administrateur,
+        );
+
+        match ($verdict) {
+            DepotSurFicheProposee::Joignable => null,
+            DepotSurFicheProposee::Introuvable => throw new NotFoundException(),
+            DepotSurFicheProposee::Tranchee => throw new ConflictException(
+                'demande_deja_decidee',
+                'Cette demande a déjà été tranchée : on ne peut plus y joindre de pièce.',
+            ),
+        };
+    }
+
     private function resoudreLeSujet(RequeteDeTeleversement $requete): ?SujetMedia
     {
         if (null === $requete->subjectId) {
@@ -416,6 +504,9 @@ final class TeleversementMedia
         if (null !== $sujet) {
             $media->rattacherA($sujet->id);
         } else {
+            // Le couple a été confirmé par `Proposal` avant toute écriture
+            // (`verifierLeDroitSurLaFicheProposee()`) : la demande existe, la référence
+            // y désigne une fiche, et le déposant a le droit d'y joindre cette pièce.
             $media->rattacherAuBrouillon((string) $requete->brouillonRef, (int) $requete->demandeId);
         }
 
