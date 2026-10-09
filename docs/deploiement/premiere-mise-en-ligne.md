@@ -812,6 +812,34 @@ Les lieux non résolus y sont listés par nombre d'occurrences, chacun avec sa
 raison — homonymes (à trancher à la main), introuvable en ligne (daté), ou
 Nominatim injoignable (redemandé la nuit suivante).
 
+### Reprises ponctuelles, après un déploiement précis
+
+Certaines livraisons corrigent une **formule** dont le résultat est déjà écrit en
+base. Le déploiement ne réécrit pas ces colonnes — le flux du § 11 ne lance aucune
+commande de reprise, et c'est voulu : une reprise se lit à blanc, puis se décide.
+Chacune est **idempotente** : rejouée, elle ne trouve plus rien.
+
+| Après le déploiement de | Commande | Ce qu'elle reprend |
+|---|---|---|
+| la PR « clé de doublon sans `iconv` » (09/10/2026) | `heritage:recalculer-les-cles-de-doublon` | `prp_change_request.dedup_key` des créations **en attente** : l'ancien repliement donnait `g n vrolle` sous Alpine, et l'administrateur ne voyait pas les doublons probables |
+
+```
+vps$ cd ~/apps/heritage
+vps$ docker compose --env-file .env --env-file .deploiement/env \
+       -f compose.yaml -f compose.prod.yaml exec api \
+       php bin/console heritage:recalculer-les-cles-de-doublon --dry-run
+vps$ docker compose --env-file .env --env-file .deploiement/env \
+       -f compose.yaml -f compose.prod.yaml exec api \
+       php bin/console heritage:recalculer-les-cles-de-doublon
+```
+
+> Attendu : le `--dry-run` annonce `Clés à reprendre` (toute demande en attente
+> dont un nom porte un accent, en pratique) et `Demandes rapprochées d'au moins une
+> autre : avant : X, après : Y` — c'est **Y** que l'administrateur verra dans ses
+> doublons probables. Le second passage doit répondre « Toutes les clés de doublon
+> sont conformes ». `-v` détaille les clés demande par demande ; elles portent des
+> noms de personnes proposées, d'où leur absence de la sortie ordinaire.
+
 ### Sauvegardes
 
 Automatiques, une fois par jour, dans `${BACKUP_DIR}`, rétention 14 jours. La

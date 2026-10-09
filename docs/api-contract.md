@@ -2416,8 +2416,13 @@ Règles :
   demande décrit l'intention (« conjoint de X »), le service en déduit les familles à créer au
   moment de la validation » (§ 6.4 du dossier, § 9.5). Un front qui enverrait un `familleRef`
   sera refusé en `422`.
-- `dedup_key` est calculée par le serveur à la soumission (`search_key` + année de naissance).
-  Le client ne l'envoie pas et ne la voit que dans la vue d'administration.
+- `dedup_key` est calculée par le serveur à la soumission : `nom|premier prénom|année de
+  naissance` (borne basse, `?` si inconnue), sur la **première** fiche nommée de la demande —
+  par exemple `genevrolle|marne|1904`. Le client ne l'envoie pas et ne la voit que dans la vue
+  d'administration. Les noms sont repliés par `Core\Service\CleDeRecherche::replier()`, en
+  minuscules : la même règle d'accents que la recherche de l'arbre, sur toute machine. Jusqu'au
+  09/10/2026 elle passait par `iconv` `//TRANSLIT`, qui rendait `g n vrolle` sous l'Alpine de
+  production ; les clés déjà posées se reprennent par `heritage:recalculer-les-cles-de-doublon`.
 
 ### 6.3 bis Désigner une personne **proposée par une autre demande**
 
