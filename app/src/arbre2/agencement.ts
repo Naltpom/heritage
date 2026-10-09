@@ -363,13 +363,33 @@ function agencerUnIlot(
       return a
     }
     const position = new Map(rangee.map((f, i) => [f, i]))
+    /*
+     * Les fratries dans l'ordre des naissances : toute la fratrie se trie sur le MÊME
+     * point — le milieu de ses parents —, puis sur l'année. Sans cela, la clé d'un foyer
+     * marié est décalée de la demi-largeur de son conjoint, et une sœur mariée passait
+     * devant son aîné célibataire (relecture du 09/10/2026).
+     */
+    const ancre = new Map<Foyer, number>()
+    if (e.fratriesParNaissance) for (const f of rangee) ancre.set(f, ancreDe(f) ?? cle.get(f)!)
+    const premiere = e.fratriesParNaissance ? ancre : cle
     rangee.sort(
       (a, b) =>
         a.port - b.port ||
-        cle.get(a)! - cle.get(b)! ||
+        premiere.get(a)! - premiere.get(b)! ||
         (e.fratriesParNaissance ? naissance(a) - naissance(b) || 0 : 0) ||
+        cle.get(a)! - cle.get(b)! ||
         position.get(a)! - position.get(b)!,
     )
+  }
+  /** Le milieu des parents posés d'un foyer (ceux de sa première personne qui en a), ou `null`. */
+  function ancreDe(f: Foyer): number | null {
+    for (const id of f.personnes) {
+      const fam = e.famillesEnfant(id)[0]
+      if (fam === undefined) continue
+      const ps = e.epouxDe(fam).filter((p) => foyerDe.has(p) && e.rangee(p) < f.rangee)
+      if (ps.length) return ps.reduce((s, p) => s + centre(p), 0) / ps.length
+    }
+    return null
   }
 
   const ciblesDe = (rangee: Foyer[], sens: 'haut' | 'bas' | 'deux'): Map<Foyer, { cible: number; poids: number }[]> =>
@@ -474,6 +494,8 @@ function agencerUnIlot(
         change = false
         for (let i = 0; i + 1 < rangee.length; i++) {
           if (rangee[i]!.port !== rangee[i + 1]!.port) continue
+          // L'ordre des naissances, quand il est demandé, ne se défait pas pour un croisement.
+          if (e.fratriesParNaissance && [...rangee[i]!.fratries].some((fr) => rangee[i + 1]!.fratries.has(fr))) continue
           const [ea, eb] = [ext[i]!, ext[i + 1]!]
           const avant = inversions(ea.haut, eb.haut) + inversions(ea.bas, eb.bas)
           const apres = inversions(eb.haut, ea.haut) + inversions(eb.bas, ea.bas)

@@ -282,6 +282,73 @@ describe('disposition en groupes', () => {
   })
 })
 
+describe('les fratries par ordre de naissance', () => {
+  /** Des parents et quatre enfants : seul (1990), mariée (1995), ego (1998), seul (2001). */
+  function fratrie(): { graphe: Graphe; id: Record<string, string> } {
+    const noeuds: Graphe['noeuds'] = []
+    const aretes: AreteGraphe[] = []
+    const id: Record<string, string> = {}
+    let n = 1
+    const personne = (cle: string, sex: Sexe, annee: number): string => {
+      const p: NoeudPersonne = {
+        id: `p${n}`,
+        type: 'personne',
+        personId: n++,
+        x: 0,
+        y: 0,
+        w: 140,
+        h: 56,
+        displayName: cle,
+        etiquetteNom: `${cle} Martin`,
+        etiquetteDates: `${annee} – `,
+        sex,
+        generation: 0,
+        branch: 'tr',
+        vivant: true,
+        visibilite: 'complete',
+      }
+      noeuds.push(p)
+      id[cle] = p.id
+      return p.id
+    }
+    const famille = (epoux: string[], enfants: string[]): void => {
+      const f: NoeudFamille = { id: `f${n++}`, type: 'famille', familyId: n, x: 0, y: 0, w: 10, h: 10, divorced: false }
+      noeuds.push(f)
+      for (const e of epoux) aretes.push({ de: e, vers: f.id, genre: 'union' })
+      for (const e of enfants) aretes.push({ de: f.id, vers: e, genre: 'filiation' })
+    }
+    const pere = personne('pere', 'masculin', 1960)
+    const mere = personne('mere', 'feminin', 1962)
+    // Dans le désordre du graphe, exprès : seule l'option doit les ranger.
+    const d = personne('d', 'masculin', 2001)
+    const ego = personne('ego', 'masculin', 1998)
+    const b = personne('b', 'feminin', 1995)
+    const a = personne('a', 'masculin', 1990)
+    famille([pere, mere], [d, ego, b, a])
+    const mari = personne('mari', 'masculin', 1993)
+    famille([mari, b], [])
+    const graphe: Graphe = {
+      empreinte: '0'.repeat(64),
+      ego,
+      boite: { x: 0, y: 0, w: 1000, h: 1000 },
+      calque: { actif: false, demandes: [], proposes: 0, places: 0, nonPlaces: [] },
+      noeuds,
+      aretes,
+    }
+    return { graphe, id }
+  }
+
+  it('range l’aîné à gauche, même quand une sœur est mariée', () => {
+    const { graphe, id } = fratrie()
+    const d = disposerEnGroupes(graphe, { fratriesParNaissance: true })
+    const x = (k: string): number => d.parId.get(id[k]!)!.cx
+    expect(x('a')).toBeLessThan(x('b'))
+    expect(x('b')).toBeLessThan(x('ego'))
+    expect(x('ego')).toBeLessThan(x('d'))
+    expect(chevauchements(d)).toEqual([])
+  })
+})
+
 describe('les filtres', () => {
   it('masquer une branche retire son rectangle, et lui seul', () => {
     const { graphe } = construire()
