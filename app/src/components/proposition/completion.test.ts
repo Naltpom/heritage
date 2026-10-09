@@ -379,6 +379,10 @@ describe('liensPourFiche : les liens saisis, vus depuis la fiche', () => {
     expect(liensPourFiche(unParent, s, coches).map((l) => l.statut)).toEqual(['proposable', 'impossible'])
     // Décocher le premier libère la place.
     expect(liensPourFiche(unParent, s, []).map((l) => l.statut)).toEqual(['proposable', 'proposable'])
+    // Les deux cochés quand même : le second ne part pas — elle aurait trois parents.
+    const deux = ['parent:personne:80', 'parent:brouillon:7']
+    expect(liensPourFiche(unParent, s, deux).map((l) => l.statut)).toEqual(['proposable', 'impossible'])
+    expect(saisieLiensRetenus(unParent, s, deux, {}).parents).toEqual([{ personId: 80, libelle: 'Premier' }])
   })
 
   it('met un enfant dans la seule union de la fiche, ou d’elle seule à défaut', () => {

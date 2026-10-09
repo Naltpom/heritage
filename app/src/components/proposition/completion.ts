@@ -440,16 +440,19 @@ export function liensPourFiche(
 
   /* --- Les parents -------------------------------------------------------- */
   const cleDeParent = (choix: ChoixDePersonne) => `parent:${cleDuChoix(choix)}`
-  const nouveauxRetenus = saisie.filiation.parents.filter(
-    (choix) => !lies.has(cleDuChoix(choix)) && retenus.includes(cleDeParent(choix)),
-  )
-  const parents = parentsApresEdition(fiche, { retraits: [], ajouts: { parents: nouveauxRetenus, conjoints: [], enfants: [] } })
+  // Les parents nouveaux qu'on a cochés, **dans la limite des places** : au-delà,
+  // même coché, un parent ne part pas — la fiche en aurait trois.
+  const libres = Math.max(0, 2 - parentsApresEdition(fiche, SANS_CHANGEMENT))
+  const gardes = saisie.filiation.parents
+    .filter((choix) => !lies.has(cleDuChoix(choix)) && retenus.includes(cleDeParent(choix)))
+    .slice(0, libres)
+  const parents = parentsApresEdition(fiche, { retraits: [], ajouts: { parents: gardes, conjoints: [], enfants: [] } })
 
   for (const choix of saisie.filiation.parents) {
     const base = { cle: cleDeParent(choix), nature: 'parent' as const, libelle: `Parent : ${choix.libelle}` }
     const deja = dejaLa(choix, 'parent', 'Déjà son parent dans l’arbre.')
     if (deja !== null) liens.push({ ...base, ...deja })
-    else if (retenus.includes(base.cle) || parents < 2) liens.push({ ...base, ...PROPOSABLE })
+    else if (gardes.includes(choix) || parents < 2) liens.push({ ...base, ...PROPOSABLE })
     else {
       liens.push({
         ...base,

@@ -189,12 +189,16 @@ const liens = computed<LienPourFiche[]>(() =>
 watch(
   liens,
   (liste) => {
+    const lue = fiche.value
+    if (lue === null) return
     // Un lien nouveau dans la saisie se coche s'il est proposable — un parent ne
-    // l'est que s'il reste une place.
+    // l'est que s'il reste une place : on relit après chaque ajout, sans quoi deux
+    // parents nouveaux se cocheraient sur la même place libre.
     for (const lien of liste) {
       if (vusLiens.has(lien.cle)) continue
       vusLiens.add(lien.cle)
-      if (lien.statut === 'proposable') liensRetenus.value = [...liensRetenus.value, lien.cle]
+      const relu = liensPourFiche(lue, saisie, liensRetenus.value).find((l) => l.cle === lien.cle)
+      if (relu?.statut === 'proposable') liensRetenus.value = [...liensRetenus.value, lien.cle]
     }
   },
   { immediate: true },
