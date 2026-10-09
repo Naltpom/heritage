@@ -56,7 +56,9 @@
  *    dans un volet à gauche, l'arbre à côté (`VoletProposition`, demande du
  *    09/10/2026) : le volet ne quitte `/arbre` que par un lien qu'on choisit
  *    (« Voir la demande »), et la personne déposée y apparaît, choisie, sans
- *    rechargement.
+ *    rechargement. Les fiches qui ressemblent à la saisie (« Est-ce déjà… ? ») y
+ *    sont cerclées en pointillé, et « Voir dans l'arbre » les choisit
+ *    (`montrerPersonne`, `montrerNoeud`).
  */
 import {
   computed,
@@ -120,6 +122,7 @@ import {
   type PlaceDansLArbre,
 } from '@/components/arbre/voletProposition'
 import type { PersonneDeposee } from '@/components/proposition/depot'
+import type { EnEvidence } from '@/components/proposition/ressemblances'
 import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
 import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
 import { effectifSansLien, estSansLien, noeudsSansLien, sansPersonnesSansLien } from '@/histoire/sansLien'
@@ -938,7 +941,13 @@ const VoletProposition = defineAsyncComponent({
 /** Ce que l'arbre redessiné a trouvé de la dernière personne déposée. */
 const placeDuDepot = ref<PlaceDansLArbre>('recherche')
 
-/** Une personne vient d'être proposée dans le volet : l'arbre se relit, et la montre. */
+/**
+ * Une personne vient d'être proposée dans le volet : l'arbre se relit, et la montre.
+ *
+ * Une fiche **complétée** (« C'est elle », `nature: 'fiche'`) suit le même chemin :
+ * elle n'a pas de nœud à elle (`noeudId` nul), mais son `personId` — et ses
+ * demandes en attente changent le calque, donc l'`ETag` du graphe.
+ */
 async function surDepot(depot: PersonneDeposee): Promise<void> {
   // Un brouillon n'est pas dans le calque : rien à relire, rien à montrer.
   if (!depot.soumise) {
@@ -964,6 +973,40 @@ function montrerPersonne(personId: number): boolean {
   selection.value = f.id
   voler(Math.max(s.value, 0.6), f.cx, f.y + f.h / 2)
   return true
+}
+
+/**
+ * Montre un nœud — une proposition en attente — dans l'arbre, comme
+ * `montrerPersonne` : on le choisit et l'écran le rejoint, sans jamais quitter
+ * `/arbre`. Le `noeudId` est celui que le serveur a rendu ; la projection pouvant
+ * écarter un nœud qu'elle ne sait pas placer, ou un filtre le masquer, il n'est
+ * peut-être pas dessiné : `false`, et c'est au volet de le dire.
+ */
+function montrerNoeud(noeudId: string): boolean {
+  const f = disposition.value?.parId.get(noeudId)
+  if (!f) return false
+  selection.value = f.id
+  voler(Math.max(s.value, 0.6), f.cx, f.y + f.h / 2)
+  return true
+}
+
+/**
+ * Les ressemblances que le formulaire du volet affiche (« Est-ce déjà… ? ») :
+ * l'arbre les cercle en pointillé, pour qu'on les trouve en le parcourant.
+ */
+const ressemblancesEnEvidence = shallowRef<EnEvidence>({ personIds: [], noeudIds: [] })
+
+function mettreEnEvidence(cibles: EnEvidence): void {
+  ressemblancesEnEvidence.value = cibles
+}
+
+/** « Voir dans l'arbre », depuis une ressemblance du volet : l'arbre répond s'il a pu. */
+function voirLaPersonneDuVolet(personId: number, repondre: (dessinee: boolean) => void): void {
+  repondre(montrerPersonne(personId))
+}
+
+function voirLaPropositionDuVolet(noeudId: string, repondre: (dessinee: boolean) => void): void {
+  repondre(montrerNoeud(noeudId))
 }
 
 /** Un proche cliqué dans le volet de la fiche : montré dans l'arbre, sinon sa page. */
@@ -1604,6 +1647,29 @@ const anneauxCibles = computed(() =>
     })),
 )
 
+/**
+ * Les ressemblances du volet « Ajouter une personne », cerclées **en pointillé** :
+ * le trait plein dit « choisie » ou « trouvée », le pointillé « peut-être la même ».
+ * Seulement tant que le volet est à l'écran — fermé, la saisie attend, et les
+ * cercles n'expliqueraient plus rien.
+ */
+const anneauxRessemblances = computed(() => {
+  const d = disposition.value
+  if (!d || !propositionVisible.value) return []
+  const { personIds, noeudIds } = ressemblancesEnEvidence.value
+  const fiches = [
+    ...personIds.map((id) => d.parPersonId.get(id)),
+    ...noeudIds.map((id) => d.parId.get(id)),
+  ].filter((f): f is FicheHistoire => f !== undefined && dansLaFenetre(f.x, f.y, f.w, f.h))
+  return [...new Map(fiches.map((f) => [f.id, f])).values()].map((f) => ({
+    id: f.id,
+    x: versEcranX(f.x) - 5,
+    y: versEcranY(f.y) - 5,
+    w: f.w * s.value + 10,
+    h: f.h * sy.value + 10,
+  }))
+})
+
 /* Mini-carte (bureau). */
 const LARGEUR_MINI = 236
 const miniCarte = computed(() => {
@@ -2095,6 +2161,9 @@ onBeforeUnmount(() => {
       :place="placeDuDepot"
       @fermer="propositionOuverte = false"
       @deposee="surDepot"
+      @voir-personne="voirLaPersonneDuVolet"
+      @voir-proposition="voirLaPropositionDuVolet"
+      @en-evidence="mettreEnEvidence"
     />
     <!-- Le canevas -->
     <div
@@ -2300,6 +2369,13 @@ onBeforeUnmount(() => {
           class="pointer-events-none absolute rounded-[9px] border-[var(--hi-libelle-accent)]"
           :class="a.courante ? 'border-2 shadow-[0_0_0_5px_rgba(217,160,102,.25)]' : 'border'"
           :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
+        />
+        <div
+          v-for="a in anneauxRessemblances"
+          :key="`ressemblance-${a.id}`"
+          class="pointer-events-none absolute rounded-[10px] border-2 border-dashed border-[var(--h-accent)]"
+          :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
+          data-anneau-ressemblance
         />
         <div
           v-for="a in anneauxFamille"

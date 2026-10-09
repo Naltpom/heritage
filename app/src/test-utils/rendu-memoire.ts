@@ -166,6 +166,9 @@ export async function cliquer(n: Noeud | null): Promise<void> {
 }
 
 
+/** Les applications montées, que `demonterTout` défait. */
+const montees: { unmount: () => void }[] = []
+
 /** Monte `composant` dans une racine en mémoire et attend ses premières lectures. */
 export async function monterEnMemoire(
   composant: unknown,
@@ -175,6 +178,17 @@ export async function monterEnMemoire(
   const app = createApp(composant as Component)
   for (const [nom, global] of Object.entries(composantsGlobaux)) app.component(nom, global)
   app.mount(racine)
+  montees.push(app)
   await attendre()
   return racine
+}
+
+/**
+ * Démonte tout ce qui a été monté. Un écran qui garde un minuteur — une
+ * recherche qui attend le calme de la frappe — le garde aussi d'un test à
+ * l'autre s'il reste monté : son appel tomberait dans le test suivant, sur un
+ * espion remis à zéro. À poser en `afterEach` dans ces fichiers-là.
+ */
+export function demonterTout(): void {
+  for (const app of montees.splice(0)) app.unmount()
 }

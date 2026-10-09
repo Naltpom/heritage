@@ -36,10 +36,36 @@
  *   emploie cette référence provisoire. La validation la résout.
  * - **Il ne bloque pas un brouillon incomplet.** « Au moins un lien » n'est
  *   exigé qu'à la soumission : on commence un soir, on finit le lendemain.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **Il cherche les doublons pendant la saisie** (10/10/2026). Dès qu'il y a un nom
+ * et un prénom, les personnes de l'arbre et les propositions en attente qui
+ * ressemblent à la saisie paraissent entre « Naissance et décès » et les liens
+ * (`PanneauRessemblances`, `useRessemblances`). « C'est elle : compléter sa
+ * fiche » reporte la saisie sur la fiche existante au lieu d'en créer une seconde ;
+ * le dépôt remonte alors en `deposee` avec `nature: 'fiche'`.
+ *
+ * Une ressemblance **forte** retient le premier « Envoyer la proposition », une
+ * fois : le formulaire défile jusqu'au panneau, qui dit « Vérifiez d'abord ces
+ * personnes » et offre « Envoyer quand même ». « Enregistrer sans envoyer » n'est
+ * pas freiné — un brouillon n'entre dans aucune file.
+ *
+ * Dans le volet de `/arbre`, trois événements de plus vont à l'arbre :
+ * `voir-personne` et `voir-proposition` (montrer sans quitter la page, et dire si
+ * c'est dessiné), et `en-evidence` (cercler les ressemblances en pointillé).
+ * ────────────────────────────────────────────────────────────────────
  */
-import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
-import { creerDemande, invaliderGraphe, televerserMedia, type OrigineReprise } from '@/lib/api'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from 'vue'
+import {
+  creerDemande,
+  invaliderGraphe,
+  televerserMedia,
+  type OrigineReprise,
+  type RessemblanceDansLArbre,
+} from '@/lib/api'
 import { useSession } from '@/composables/useSession'
+import { useRessemblances } from '@/composables/useRessemblances'
+import { prefereMoinsDAnimations } from '@/lib/videos'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
@@ -60,6 +86,16 @@ import {
 } from '@/components/proposition/creation'
 import { chargerReprise, type Avertissement } from '@/components/proposition/reprise'
 import { personneDeposee, type PersonneDeposee } from '@/components/proposition/depot'
+import PanneauRessemblances from '@/components/proposition/PanneauRessemblances.vue'
+import {
+  designesDansLesLiens,
+  enEvidence,
+  estForte,
+  garderLOuverte,
+  resumeDesRessemblances,
+  visibles,
+  type EnEvidence,
+} from '@/components/proposition/ressemblances'
 
 const { contexte, refaire = null } = defineProps<{
   /** `page` : `/personnes/proposer` ; `volet` : le volet gauche de `/arbre`, 440 px. */
@@ -69,16 +105,25 @@ const { contexte, refaire = null } = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  /** La demande est déposée **et** ses photos sont parties. */
+  /** La demande est déposée **et** ses photos sont parties — ou, `nature: 'fiche'`,
+   *  la saisie a complété une fiche existante. */
   deposee: [depot: PersonneDeposee]
   /** « Refaire cette demande » : la demande morte dont on repart. */
   refaire: [demandeId: number]
   /** La saisie s'écarte (ou non) d'un formulaire vierge — le volet n'offre
    *  « Effacer » que lorsqu'il y a quelque chose à effacer. */
   sale: [sale: boolean]
+  /** Volet : montrer cette personne dans l'arbre, sans quitter `/arbre`.
+   *  `repondre(false)` : elle n'y est pas dessinée avec les réglages du lecteur. */
+  'voir-personne': [personId: number, repondre: (dessinee: boolean) => void]
+  /** Volet : choisir ce nœud proposé dans l'arbre — même réponse. */
+  'voir-proposition': [noeudId: string, repondre: (dessinee: boolean) => void]
+  /** Les ressemblances affichées, que l'arbre cercle en pointillé. Vide quand il
+   *  n'y en a plus. */
+  'en-evidence': [cibles: EnEvidence]
 }>()
 
-const { vueEmpruntee } = useSession()
+const { vueEmpruntee, session } = useSession()
 
 const saisie = ref<SaisieCreation>(creationVide())
 const message = ref('')
@@ -118,6 +163,112 @@ const suspendu = computed(() => ecrituresSuspendues(vueEmpruntee.value))
 
 /** Le volet fait 440 px : l'identité s'y écrit en une colonne. */
 const etroit = computed(() => contexte === 'volet')
+
+/* --- « Est-ce déjà… ? » --------------------------------------------- */
+
+/**
+ * Le mode complétion d'une proposition en attente — la saisie y complète une
+ * demande au lieu d'en créer une, et chercher des doublons n'y a plus de sens.
+ * Il arrive avec l'API qui le permet ; d'ici là, il est éteint.
+ */
+const enModeCompletion = ref(false)
+
+/**
+ * La saisie a complété une fiche (« C'est elle ») : elle a servi. Le panneau
+ * s'efface — et ses cercles dans l'arbre avec lui — jusqu'à la saisie suivante.
+ */
+const ficheDeposee = ref(false)
+
+const ressemblances = useRessemblances(() => saisie.value.brouillon, {
+  // Sous la bascule « voir comme un membre », « C'est elle » ne pourrait rien
+  // écrire : on ne cherche pas. Une fois la demande déposée — il ne reste que
+  // des photos à renvoyer — ou la fiche complétée, il n'y a plus rien à éviter.
+  actif: () => !suspendu.value && !enModeCompletion.value && depot.value === null && !ficheDeposee.value,
+})
+
+/** La personne dont la complétion est dépliée. Elle reste à l'écran même si la
+ *  dernière réponse ne la rend plus (`garderLOuverte`). */
+const ficheOuverte = shallowRef<RessemblanceDansLArbre | null>(null)
+
+const designes = computed(() => designesDansLesLiens(saisie.value))
+const ressemblancesArbre = computed(() =>
+  garderLOuverte(
+    visibles(ressemblances.arbre.value, ressemblances.ecartees.value, designes.value),
+    ficheOuverte.value,
+  ),
+)
+const ressemblancesPropositions = computed(() =>
+  visibles(ressemblances.propositions.value, ressemblances.ecartees.value, designes.value),
+)
+
+/**
+ * Le panneau n'existe qu'avec un résultat, et plus du tout une fois la demande
+ * déposée : il ne reste alors que des photos à renvoyer, et compléter une autre
+ * fiche n'aurait plus de sens.
+ */
+const panneauVisible = computed(
+  () =>
+    depot.value === null &&
+    !ficheDeposee.value &&
+    !enModeCompletion.value &&
+    ressemblancesArbre.value.length + ressemblancesPropositions.value.length > 0,
+)
+
+/** « C'est elle » a tout déposé : on l'annonce à l'hôte, qui décide de la suite. */
+function surFicheCompletee(fait: PersonneDeposee): void {
+  ficheDeposee.value = true
+  ficheOuverte.value = null
+  emit('deposee', fait)
+}
+
+/** Dit, sans prendre le focus, ce qui vient de paraître. */
+const resume = computed(() =>
+  panneauVisible.value
+    ? resumeDesRessemblances(ressemblancesArbre.value.length, ressemblancesPropositions.value.length)
+    : '',
+)
+
+/** Les demandes en attente du lecteur — « votre proposition ». */
+const mesDemandes = computed(() => session?.value?.demandesEnAttente ?? [])
+
+const AUCUNE_EVIDENCE: EnEvidence = { personIds: [], noeudIds: [] }
+const evidence = computed<EnEvidence>(() =>
+  panneauVisible.value ? enEvidence(ressemblancesArbre.value, ressemblancesPropositions.value) : AUCUNE_EVIDENCE,
+)
+watch(
+  () => JSON.stringify(evidence.value),
+  () => emit('en-evidence', evidence.value),
+)
+// Démonté (le volet rechargé sur une demande à refaire) : l'arbre ne garde pas
+// des cercles que plus rien n'explique.
+onBeforeUnmount(() => emit('en-evidence', AUCUNE_EVIDENCE))
+
+function ouvrir(personId: number): void {
+  ficheOuverte.value = ressemblancesArbre.value.find((r) => r.personId === personId) ?? null
+}
+
+/**
+ * Le rappel avant l'envoi : **une fois** par saisie, au premier « Envoyer la
+ * proposition », si une ressemblance forte reste affichée.
+ */
+const rappelFait = ref(false)
+const rappel = ref(false)
+const ancreDuPanneau = useTemplateRef<HTMLElement>('ancreDuPanneau')
+
+const forteAffichee = computed(
+  () =>
+    panneauVisible.value &&
+    [...ressemblancesArbre.value, ...ressemblancesPropositions.value].some(estForte),
+)
+
+async function montrerLeRappel(): Promise<void> {
+  rappelFait.value = true
+  rappel.value = true
+  await nextTick()
+  const ancre = ancreDuPanneau.value
+  if (ancre === null || typeof ancre.scrollIntoView !== 'function') return
+  ancre.scrollIntoView({ behavior: prefereMoinsDAnimations() ? 'auto' : 'smooth', block: 'start' })
+}
 
 /* --- Saisie entamée ? --------------------------------------------- */
 
@@ -191,6 +342,15 @@ async function deposer(soumettre: boolean): Promise<void> {
       return
     }
 
+    // Une saisie prête à partir, et une ressemblance forte encore affichée : on
+    // retient ce premier envoi, le temps de regarder. Une fois — le second clic,
+    // ou « Envoyer quand même », passe. Un brouillon n'est pas retenu.
+    if (soumettre && !rappelFait.value && forteAffichee.value) {
+      void montrerLeRappel()
+      return
+    }
+    rappel.value = false
+
     const demande = await creerDemande(resultat.corps)
 
     // Une personne proposée apparaît comme **nœud en attente** dans le graphe
@@ -249,6 +409,11 @@ function reinitialiser(): void {
   conflit.value = null
   erreurs.value = {}
   depot.value = null
+  ressemblances.reinitialiser()
+  ficheOuverte.value = null
+  ficheDeposee.value = false
+  rappelFait.value = false
+  rappel.value = false
 }
 
 defineExpose({ reinitialiser })
@@ -319,6 +484,31 @@ defineExpose({ reinitialiser })
           />
         </div>
       </PanneauBase>
+
+      <!-- « Est-ce déjà… ? » : la région vivante existe toujours — une région
+           qui naît avec son texte n'est pas lue par tous les lecteurs d'écran —,
+           le panneau seulement quand il y a quelque chose à montrer. -->
+      <p class="sr-only" aria-live="polite" data-resume-ressemblances>{{ resume }}</p>
+      <div v-if="panneauVisible" ref="ancreDuPanneau" class="scroll-mt-4">
+        <PanneauRessemblances
+          :arbre="ressemblancesArbre"
+          :propositions="ressemblancesPropositions"
+          :contexte="contexte"
+          :ouverte="ficheOuverte?.personId ?? null"
+          :rappel="rappel"
+          :saisie="saisie"
+          :message="message"
+          :photos="photos"
+          :mes-demandes="mesDemandes"
+          @ecarter="ressemblances.ecarter"
+          @ouvrir="ouvrir"
+          @fermer="ficheOuverte = null"
+          @voir-personne="(personId, repondre) => emit('voir-personne', personId, repondre)"
+          @voir-proposition="(noeudId, repondre) => emit('voir-proposition', noeudId, repondre)"
+          @envoyer-quand-meme="deposer(true)"
+          @deposee="surFicheCompletee"
+        />
+      </div>
 
       <!-- Les liens : c'est ce qui rattache la personne à l'arbre, et sans
            quoi elle y flotterait. -->

@@ -118,6 +118,38 @@ describe('montrer une personne sans quitter l’arbre', () => {
   })
 })
 
+describe('les ressemblances du volet (« Est-ce déjà… ? »)', () => {
+  it('« Voir dans l’arbre » passe par `montrerPersonne` et `montrerNoeud`, qui ne quittent pas `/arbre`', async () => {
+    const texte = await source()
+    const volet = baliseAvec(texte, '<VoletProposition')
+
+    expect(volet).toContain('@voir-personne="voirLaPersonneDuVolet"')
+    expect(volet).toContain('@voir-proposition="voirLaPropositionDuVolet"')
+    expect(volet).toContain('@en-evidence="mettreEnEvidence"')
+    expect(corpsDe(texte, 'voirLaPersonneDuVolet')).toContain('repondre(montrerPersonne(personId))')
+    expect(corpsDe(texte, 'voirLaPropositionDuVolet')).toContain('repondre(montrerNoeud(noeudId))')
+
+    const corps = corpsDe(texte, 'montrerNoeud')
+    expect(corps).not.toBe('')
+    expect(corps).not.toContain('routeur.')
+    expect(corps).toContain('disposition.value?.parId.get(noeudId)')
+    expect(corps).toContain('return false')
+  })
+
+  it('les cercle en pointillé, et seulement tant que le volet est à l’écran', async () => {
+    const texte = await source()
+    const debut = texte.indexOf('const anneauxRessemblances = computed(')
+    const calcul = texte.slice(debut, texte.indexOf('\n})', debut))
+
+    expect(debut).toBeGreaterThan(0)
+    expect(calcul).toContain('!propositionVisible.value')
+    expect(calcul).toContain('dansLaFenetre(')
+    const anneau = baliseAvec(texte, 'v-for="a in anneauxRessemblances"')
+    expect(anneau).toContain('border-dashed')
+    expect(anneau).toContain('pointer-events-none')
+  })
+})
+
 describe('le volet de la fiche sur un nœud en attente', () => {
   it('dit « Proposée, en attente de validation » et mène à la demande', async () => {
     const texte = await source()

@@ -26,7 +26,7 @@
  */
 
 import { requeteApi, type OptionsRequete } from './client'
-import type { BlocDate, Branche, Calque, Sexe, Visibilite } from './types'
+import type { BlocDate, BlocDateOp, Branche, Calque, Sexe, Visibilite } from './types'
 
 /* ------------------------------------------------------------------ */
 /* § 5.3 — la fiche d'une personne                                     */
@@ -332,6 +332,123 @@ export interface ReponseDeRecherche {
   elements: ResultatDeRecherche[]
   /** Le plafond `limite` a été atteint — sur le jeu **déjà filtré**. */
   tronque: boolean
+}
+
+/* ------------------------------------------------------------------ */
+/* § 5.5 bis — les ressemblances dans l'arbre                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * **La fiche qu'on compare** — le corps commun des deux routes de ressemblance
+ * (§ 5.5 bis, § 6.6 quater) : les clés d'un brouillon de `creation_personne`,
+ * **et elles seules**.
+ *
+ * Une clé de trop rend `422` sur `fiche` plutôt que d'être ignorée : un `birht`
+ * ignoré serait une naissance silencieusement non comparée. D'où un type fermé,
+ * et un corps recopié clé par clé ({@link corpsDeFicheAComparer}) — jamais l'objet
+ * du formulaire posté tel quel, qui porte aussi la note, les liens et les photos.
+ *
+ * Les blocs date sont des **`BlocDateOp`** : cinq clés, sans `texte`, refusé en
+ * entrée (§ 14.1). `deceased` est accepté et sans effet : une case non cochée ne
+ * prouve pas qu'une personne vit.
+ */
+export interface FicheAComparer {
+  givenNames: string | null
+  surname: string | null
+  marriedName: string | null
+  nickname: string | null
+  sex: Sexe
+  deceased: boolean
+  birth: BlocDateOp | null
+  death: BlocDateOp | null
+}
+
+/** Les codes des concordances, **dans cet ordre fixe** — celui des pastilles. */
+export type CritereDeRessemblance = 'nom' | 'prenom' | 'sexe' | 'naissance' | 'deces' | 'lieu'
+
+/**
+ * Une personne de l'arbre qui ressemble à la saisie (§ 5.5 bis).
+ *
+ * Une personne hors du cercle du lecteur est **absente**, comme à la recherche :
+ * elle n'arrive pas réduite, elle n'arrive pas. Pour un vivant, seule la
+ * naissance **réduite** à ce que le lecteur voit a été comparée — sans quoi la
+ * route serait un oracle de date de naissance.
+ */
+export interface RessemblanceDansLArbre {
+  personId: number
+  displayName: string
+  sex: Sexe
+  vivant: boolean
+  generation: number
+  branch: Branche | null
+  /** La ligne de dates de la recherche, réciprocité comprise (« — » quand rien
+   *  n'est partagé). */
+  ligneDates: string
+  /** Le `place` de la naissance tel que la fiche l'écrit, ou `null`. */
+  lieuNaissance: string | null
+  criteres: CritereDeRessemblance[]
+  /** Les mêmes concordances en français, **à afficher telles quelles**. */
+  raisons: string[]
+  /** Le nombre de critères concordants : 2 à 6. */
+  score: number
+}
+
+export interface ReponseRessemblancesArbre {
+  elements: RessemblanceDansLArbre[]
+  /** Le plafond `limite` a été atteint — sur le jeu déjà filtré et trié. */
+  tronque: boolean
+}
+
+/** Cinq clés, recopiées une à une : un bloc reçu d'une fiche porterait `texte`. */
+function blocAComparer(bloc: BlocDateOp | null): BlocDateOp | null {
+  if (bloc === null) return null
+  return { raw: bloc.raw, qualifier: bloc.qualifier, min: bloc.min, max: bloc.max, place: bloc.place }
+}
+
+/**
+ * Le corps de `fiche`, **clé par clé** : rien de ce que l'objet passé porterait
+ * en plus — une note, des liens, un `texte` dans une date — ne part, puisqu'une
+ * clé inconnue rend `422`. Commun aux deux routes : `propositions.ts` l'emploie.
+ */
+export function corpsDeFicheAComparer(fiche: FicheAComparer): FicheAComparer {
+  return {
+    givenNames: fiche.givenNames,
+    surname: fiche.surname,
+    marriedName: fiche.marriedName,
+    nickname: fiche.nickname,
+    sex: fiche.sex,
+    deceased: fiche.deceased,
+    birth: blocAComparer(fiche.birth),
+    death: blocAComparer(fiche.death),
+  }
+}
+
+/** Le plafond par défaut des deux routes : cinq, comme le serveur. */
+export const LIMITE_DES_RESSEMBLANCES = 5
+
+/**
+ * `POST /api/arbre/ressemblances` — « cette personne est peut-être déjà dans
+ * l'arbre ».
+ *
+ * **Un `POST` qui n'écrit rien** : en `GET`, le nom et la naissance — d'un
+ * vivant, le plus souvent — partiraient dans l'URL, donc dans les journaux et
+ * l'historique. Il reste ouvert sous la bascule « voir comme un membre » ; c'est
+ * le formulaire qui s'en abstient, parce que rien de ce qu'il en ferait ne
+ * pourrait s'écrire.
+ *
+ * `422 donnees_invalides` sans nom ni nom d'usage de deux lettres, ou sans
+ * prénom ni surnom : c'est à l'appelant de ne pas appeler avant
+ * (`ficheDeComparaison`). Un compte en attente reçoit `403 regime_en_attente`.
+ */
+export function chercherRessemblancesArbre(
+  fiche: FicheAComparer,
+  limite: number = LIMITE_DES_RESSEMBLANCES,
+  signal?: AbortSignal,
+): Promise<ReponseRessemblancesArbre> {
+  const o = options(signal)
+  o.methode = 'POST'
+  o.corps = { fiche: corpsDeFicheAComparer(fiche), limite }
+  return requeteApi<ReponseRessemblancesArbre>('/arbre/ressemblances', o)
 }
 
 /* ------------------------------------------------------------------ */

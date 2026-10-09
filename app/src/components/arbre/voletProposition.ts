@@ -12,7 +12,7 @@
  *  - **Après le dépôt**, ce que la confirmation dit de la personne dans l'arbre.
  */
 import type { Cadrage } from '@/histoire/vue'
-import type { PersonneDeposee } from '@/components/proposition/depot'
+import { annonceDesDemandes, type PersonneDeposee } from '@/components/proposition/depot'
 
 /** Sa largeur, en pixels : celle de `w-[440px]` sur son `<aside>`. */
 export const LARGEUR_VOLET_PROPOSITION = 440
@@ -87,6 +87,7 @@ export type PlaceDansLArbre = 'recherche' | 'placee' | 'masquee' | 'absente'
 export function confirmationDuDepot(depot: PersonneDeposee, place: PlaceDansLArbre): { titre: string; phrase: string } {
   const numero = depot.demandeIds[0]
   const fiche = `La fiche de ${depot.libelle}`
+  if (depot.nature === 'fiche') return confirmationDeLaFiche(depot, fiche, place)
   if (!depot.soumise) {
     return {
       titre: `Brouillon enregistré — demande n° ${numero}`,
@@ -109,6 +110,30 @@ export function confirmationDuDepot(depot: PersonneDeposee, place: PlaceDansLArb
         titre,
         phrase: `${fiche} n’est pas encore dessinée dans l’arbre. Le suivi de la demande la montre en attendant.`,
       }
+  }
+}
+
+/**
+ * « C'est elle : compléter sa fiche » : rien n'a été créé — la fiche était déjà
+ * dans l'arbre, et c'est elle que l'arbre va chercher. Ses compléments n'y
+ * paraîtront qu'une fois validés : on le dit, plutôt que de laisser croire que
+ * l'arbre les montre déjà.
+ */
+function confirmationDeLaFiche(depot: PersonneDeposee, fiche: string, place: PlaceDansLArbre): { titre: string; phrase: string } {
+  const titre = annonceDesDemandes(depot.demandeIds)
+  const suite = 'vos compléments y paraîtront une fois validés.'
+  switch (place) {
+    case 'recherche':
+      return { titre, phrase: `${fiche} se retrouve dans l’arbre…` }
+    case 'placee':
+      return { titre, phrase: `${fiche} est choisie dans l’arbre ; ${suite}` }
+    case 'masquee':
+      return {
+        titre,
+        phrase: `${fiche} est dans l’arbre, mais l’affichage la masque : une branche, la ligne directe seule ou une famille retirée par les filtres. ${suite.charAt(0).toUpperCase()}${suite.slice(1)}`,
+      }
+    case 'absente':
+      return { titre, phrase: `${fiche} n’est pas dessinée dans l’arbre avec vos réglages ; ${suite}` }
   }
 }
 
