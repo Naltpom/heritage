@@ -156,6 +156,7 @@ describe('aucun écran ne refait la formule dans son coin', () => {
    */
   const VUES = [
     'HistoireView.vue',
+    'ArbreGroupesView.vue',
     'ChronologieView.vue',
     'CarteView.vue',
     'AnniversairesView.vue',
