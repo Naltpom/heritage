@@ -7,6 +7,7 @@ namespace App\Module\Tree\Controller;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Security\ReserveAuxMembres;
+use App\Module\Core\Service\LectureDeSaisieDIdentite;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Serializer\CercleDuLecteur;
 use App\Module\Tree\Serializer\EtagDuGraphe;
@@ -19,6 +20,7 @@ use App\Module\Tree\Serializer\NormaliseurDeGraphe;
 use App\Module\Tree\Serializer\NormaliseurDePersonne;
 use App\Module\Tree\Serializer\NormaliseurDeRecherche;
 use App\Module\Tree\Serializer\NormaliseurDeRequete;
+use App\Module\Tree\Serializer\NormaliseurDeRessemblance;
 use App\Module\Tree\Service\ChronometreDuGraphe;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -26,16 +28,17 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Les quatre routes de lecture de l'arbre — § 5 du contrat d'API.
+ * Les cinq routes de lecture de l'arbre — § 5 du contrat d'API.
  *
  * ```
- * GET /api/arbre/graphe            MEMBRE   200 · 304
- * GET /api/arbre/personnes/{id}    MEMBRE   200      (réduite, jamais 404, si hors cercle)
- * GET /api/arbre/familles/{id}     MEMBRE   200
- * GET /api/arbre/recherche         MEMBRE   200 · 422
+ * GET  /api/arbre/graphe            MEMBRE   200 · 304
+ * GET  /api/arbre/personnes/{id}    MEMBRE   200      (réduite, jamais 404, si hors cercle)
+ * GET  /api/arbre/familles/{id}     MEMBRE   200
+ * GET  /api/arbre/recherche         MEMBRE   200 · 422
+ * POST /api/arbre/ressemblances     MEMBRE   200 · 422 (une lecture, malgré le verbe)
  * ```
  *
- * Compte en attente : `403 regime_en_attente` sur les quatre.
+ * Compte en attente : `403 regime_en_attente` sur les cinq.
  *
  * ## Ce contrôleur ne filtre rien, et c'est une règle et non un style
  *
@@ -45,7 +48,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * endroits qui décident de la confidentialité — et le second serait celui qu'on
  * oublierait de corriger.
  *
- * ## `MEMBRE` sur les quatre routes — révision du 01/10/2026 (ADR 0003)
+ * ## `MEMBRE` sur toutes les routes — révision du 01/10/2026 (ADR 0003)
  *
  * Un compte en attente de rattachement lisait jusque-là « l'arbre ancien » : les défunts
  * en entier, et chaque vivant en **nœud restreint** — nom complet, sexe, génération,
@@ -206,6 +209,68 @@ final class ArbreController extends AbstractController
             $this->vivants,
             '1' === $requete->query->get('vivants'),
         ));
+    }
+
+    /**
+     * « Cette personne est peut-être déjà dans l'arbre » — § 5.5 bis.
+     *
+     * ## Un `POST` qui n'écrit rien
+     *
+     * Le corps porte ce qu'on est en train de saisir : un nom, des prénoms, souvent une
+     * naissance — **d'une personne vivante**, le plus souvent. En `GET`, tout cela partirait
+     * dans l'URL, donc dans les journaux du serveur mandataire, l'historique du navigateur
+     * et l'en-tête `Referer`. Le verbe ne dit pas une écriture : il garde la saisie dans le
+     * corps. D'où aussi `Cache-Control: no-store` — la réponse dépend du lecteur et de ce
+     * qu'il a tapé, aucun cache n'a à la garder.
+     *
+     * Aucune écriture, donc pas de `refuserSiActive()` : sous la bascule « voir comme un
+     * membre », l'administrateur doit voir ce que le membre verrait, et le cercle comme la
+     * réciprocité sont déjà ceux du membre emprunté.
+     *
+     * Le cercle et la réciprocité s'appliquent dans {@see NormaliseurDeRessemblance}, pas
+     * ici — même règle que pour toutes les routes de ce contrôleur.
+     */
+    #[Route('/api/arbre/ressemblances', name: 'tree_ressemblances', methods: ['POST'])]
+    public function ressemblances(
+        Request $requete,
+        NormaliseurDeRessemblance $normaliseur,
+        LectureDeSaisieDIdentite $saisies,
+    ): JsonResponse {
+        $corps = $this->corps($requete);
+        $saisie = $saisies->identite($corps);
+        $lecteur = $this->lecteurs->courant();
+
+        $reponse = new JsonResponse($normaliseur->resultats(
+            $saisie,
+            $saisies->limite($corps['limite'] ?? null),
+            $this->cercles->pour($lecteur),
+            $this->vivants,
+        ));
+        $reponse->headers->set('Cache-Control', 'no-store');
+
+        return $reponse;
+    }
+
+    /**
+     * Le corps JSON, lu à la main : un objet, ou `422` sur le champ `corps`.
+     *
+     * @return array<array-key, mixed>
+     */
+    private function corps(Request $requete): array
+    {
+        $brut = $requete->getContent();
+
+        try {
+            $decode = '' === $brut ? [] : json_decode($brut, true, 32, \JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            throw new ValidationException(['corps' => 'Le corps de la requête n\'est pas du JSON valide.']);
+        }
+
+        if (!\is_array($decode)) {
+            throw new ValidationException(['corps' => 'Le corps de la requête est un objet JSON.']);
+        }
+
+        return $decode;
     }
 
     /** Un membre de la famille — époux, sinon enfant — est-il dans le périmètre du lecteur ? */
