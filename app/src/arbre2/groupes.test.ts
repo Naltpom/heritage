@@ -282,6 +282,54 @@ describe('disposition en groupes', () => {
   })
 })
 
+describe('les personnes sans branche', () => {
+  it('une personne PROPOSÉE va dans le groupe de qui la rattache, pas au tronc', () => {
+    // Le calque des demandes : le serveur sert ces nœuds sans branche (constaté le
+    // 09/10/2026 : 31 proposées au tronc du lecteur, qui n'en compte que 5).
+    const { graphe, id } = construire()
+    const propose = (cle: string, sex: Sexe): NoeudPersonne => ({
+      id: `#9/${cle}`,
+      type: 'personne',
+      personId: null,
+      enAttente: true,
+      x: 0,
+      y: 0,
+      w: 140,
+      h: 56,
+      displayName: cle,
+      etiquetteNom: `${cle} Proposé`,
+      sex,
+      generation: 0,
+      branch: null as unknown as Branche,
+      parente: 'famille',
+      vivant: false,
+      visibilite: 'complete',
+    })
+    const epouse = propose('epouse', 'feminin')
+    const fils = propose('fils', 'masculin')
+    const f: NoeudFamille = { id: 'f-propose', type: 'famille', familyId: 9999, x: 0, y: 0, w: 10, h: 10, divorced: false }
+    const avec: Graphe = {
+      ...graphe,
+      noeuds: [...graphe.noeuds, epouse, fils, f],
+      aretes: [
+        ...graphe.aretes,
+        { de: id.grandOncleD!, vers: f.id, genre: 'union' },
+        { de: epouse.id, vers: f.id, genre: 'union', enAttente: true },
+        { de: f.id, vers: fils.id, genre: 'filiation', enAttente: true },
+      ],
+    }
+    const d = disposerEnGroupes(avec)
+    const pm = d.groupes.find((g) => g.cle === 'pm')!
+    const tronc = d.groupes.find((g) => g.cle === 'tr')!
+    for (const n of [epouse, fils]) {
+      const fiche = d.parId.get(n.id)!
+      expect(fiche.x >= pm.x && fiche.x + fiche.w <= pm.x + pm.w, n.id).toBe(true)
+    }
+    // Le tronc n'a pas bougé d'une fiche.
+    expect(tronc.effectif).toBe(disposerEnGroupes(graphe).groupes.find((g) => g.cle === 'tr')!.effectif)
+  })
+})
+
 describe('les fratries par ordre de naissance', () => {
   /** Des parents et quatre enfants : seul (1990), mariée (1995), ego (1998), seul (2001). */
   function fratrie(): { graphe: Graphe; id: Record<string, string> } {

@@ -161,15 +161,47 @@ export function disposerEnGroupes(graphe: Graphe, options: OptionsGroupes = {}):
   const isoles = personnes.has(graphe.ego) ? noeudsSansLien(graphe) : new Set<string>()
   const classes = classerParente(graphe)
   const rattachement = brancheDeRattachement(graphe)
-  const versGroupe = (b: Branche | null | undefined): CleDeGroupe => (b && QUARTS.has(b) ? (b as CleDeGroupe) : 'tr')
+  /** Le groupe que dit une branche servie ; `null` quand elle n'en dit aucun. */
+  const versGroupe = (b: Branche | null | undefined): CleDeGroupe | null =>
+    b === 'tr' ? 'tr' : b && QUARTS.has(b) ? (b as CleDeGroupe) : null
   const groupeDe = new Map<string, CleDeGroupe>()
+  const sansGroupe: string[] = []
   for (const id of personnes.keys()) {
-    if (id === ego) groupeDe.set(id, 'tr')
-    else if (isoles.has(id)) groupeDe.set(id, 'sansLien')
-    else if (classes.get(id)?.parente === 'alliance')
-      groupeDe.set(id, alliancesDansLArbre ? versGroupe(rattachement(id)) : 'alliances')
-    else groupeDe.set(id, versGroupe(personnes.get(id)!.branch))
+    let g: CleDeGroupe | null
+    if (id === ego) g = 'tr'
+    else if (isoles.has(id)) g = 'sansLien'
+    else if (classes.get(id)?.parente === 'alliance') g = alliancesDansLArbre ? versGroupe(rattachement(id)) : 'alliances'
+    else g = versGroupe(personnes.get(id)!.branch)
+    if (g === null) sansGroupe.push(id)
+    else groupeDe.set(id, g)
   }
+  /*
+   * PERSONNE SANS BRANCHE : elle prend le groupe de qui la rattache. C'est surtout une
+   * personne PROPOSÉE (le calque des demandes en attente, servi à son auteur et aux
+   * administrateurs) : elle n'est pas encore dans l'arbre, le serveur ne lui donne aucune
+   * branche. Rangée d'office au tronc, elle le gonflait de toute une ascendance lointaine
+   * (31 proposées au tronc du lecteur p1, constaté le 09/10/2026). La règle est celle du
+   * serveur (`CalculAscendance::parAlliance()`) : le conjoint d'abord, puis les parents et
+   * les enfants, de proche en proche. Le tronc ne reste que le dernier recours.
+   */
+  for (let passe = 0, bouge = true; bouge && sansGroupe.length && passe <= personnes.size; passe++) {
+    bouge = false
+    const rattacher = (voisins: (id: string) => string[]): void => {
+      for (let i = sansGroupe.length - 1; i >= 0; i--) {
+        const id = sansGroupe[i]!
+        const g = voisins(id)
+          .map((v) => groupeDe.get(v))
+          .find((x): x is CleDeGroupe => x !== undefined && x !== 'sansLien' && x !== 'alliances')
+        if (g === undefined) continue
+        groupeDe.set(id, g)
+        sansGroupe.splice(i, 1)
+        bouge = true
+      }
+    }
+    rattacher((id) => epouxDans(id).flatMap((f) => epouxDe(f)).filter((c) => c !== id))
+    rattacher((id) => [...enfantDans(id).flatMap((f) => epouxDe(f)), ...epouxDans(id).flatMap((f) => enfantsDe(f))])
+  }
+  for (const id of sansGroupe) groupeDe.set(id, 'tr')
 
   /* 2. Les rangées : une génération par rangée, depuis l'ego (0 ; −1 ses parents). */
   const rangeeDe = new Map<string, number>()
