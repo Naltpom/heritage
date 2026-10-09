@@ -17,15 +17,26 @@
  * éditable. Un décès attesté sans date reste un décès attesté — 25 fiches de
  * cet arbre sont exactement dans ce cas.
  */
+import { computed } from 'vue'
 import type { Sexe } from '@/lib/api'
 import ChampTexte from '@/components/base/ChampTexte.vue'
 import { LIBELLES_SEXE, etiquetteDeChamp } from './champs'
 
-const { erreurs = {} } = defineProps<{
+const { erreurs = {}, uneColonne = false } = defineProps<{
   /** Messages par champ : `analyse.champs[nom]` du § 15.1, ou la validation
    *  locale. La clé est le nom de propriété Doctrine, comme côté serveur. */
   erreurs?: Record<string, string>
+  /**
+   * Une colonne, quelle que soit la place : le volet de `/arbre` fait 440 px, et
+   * deux champs de 13 rem n'y tiennent côte à côte que si la police de base est
+   * réduite — la règle `flex-wrap` les y mettrait alors à 180 px chacun.
+   */
+  uneColonne?: boolean
 }>()
+
+/** Les rangées de deux champs : côte à côte dès que la place existe, ou empilées. */
+const rangee = computed(() => (uneColonne ? 'flex flex-col gap-3' : 'flex flex-wrap gap-3'))
+const cellule = computed(() => (uneColonne ? '' : 'min-w-[13rem] flex-1'))
 
 const givenNames = defineModel<string>('givenNames', { required: true })
 const surname = defineModel<string>('surname', { required: true })
@@ -41,9 +52,9 @@ const SEXES: readonly Sexe[] = ['masculin', 'feminin', 'inconnu']
   <div class="flex flex-col gap-3">
     <!-- Deux colonnes dès que la place existe, une seule au téléphone : la
          règle est portée par `flex-wrap` et une largeur minimale, pas par un
-         point de rupture choisi au jugé. -->
-    <div class="flex flex-wrap gap-3">
-      <div class="min-w-[13rem] flex-1">
+         point de rupture choisi au jugé. `uneColonne` l'impose (volet de l'arbre). -->
+    <div :class="rangee">
+      <div :class="cellule">
         <ChampTexte
           v-model="givenNames"
           :etiquette="etiquetteDeChamp('givenNames')"
@@ -51,7 +62,7 @@ const SEXES: readonly Sexe[] = ['masculin', 'feminin', 'inconnu']
           autocomplete="off"
         />
       </div>
-      <div class="min-w-[13rem] flex-1">
+      <div :class="cellule">
         <ChampTexte
           v-model="surname"
           :etiquette="etiquetteDeChamp('surname')"
@@ -61,8 +72,8 @@ const SEXES: readonly Sexe[] = ['masculin', 'feminin', 'inconnu']
       </div>
     </div>
 
-    <div class="flex flex-wrap gap-3">
-      <div class="min-w-[13rem] flex-1">
+    <div :class="rangee">
+      <div :class="cellule">
         <ChampTexte
           v-model="marriedName"
           :etiquette="etiquetteDeChamp('marriedName')"
@@ -70,7 +81,7 @@ const SEXES: readonly Sexe[] = ['masculin', 'feminin', 'inconnu']
           autocomplete="off"
         />
       </div>
-      <div class="min-w-[13rem] flex-1">
+      <div :class="cellule">
         <ChampTexte
           v-model="nickname"
           :etiquette="etiquetteDeChamp('nickname')"

@@ -1,5 +1,5 @@
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 // `@/router` appellerait `createWebHistory()` au chargement, qui lit
 // `window.location` : c'est la table seule qu'on importe.
 import { routes } from '@/router/routes'
@@ -26,6 +26,19 @@ import { routeParDefaut } from '@/router/acces'
 function table() {
   return createRouter({ history: createMemoryHistory(), routes })
 }
+
+// Un `push` résout le composant de sa route, c'est-à-dire IMPORTE l'écran — l'arbre
+// entier pour `/arbre`. À froid, sous la charge de la suite complète, ce premier
+// import dépassait seul les 5 s d'un test (le même piège que `assistant-rendu`) :
+// les écrans visités ici sont chargés une fois, avant, avec le temps qu'il leur faut.
+beforeAll(async () => {
+  await Promise.all([
+    import('@/views/ArbreGroupesView.vue'),
+    import('@/views/HistoireView.vue'),
+    import('@/views/AccueilView.vue'),
+    import('@/views/PersonneView.vue'),
+  ])
+}, 60_000)
 
 describe('la route de l’arbre', () => {
   it('sert l’arbre à niveaux de détail, sous le nom `arbre`', async () => {

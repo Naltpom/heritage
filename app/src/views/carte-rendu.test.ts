@@ -138,11 +138,15 @@ describe('la barre d’outils est là dès le premier rendu', () => {
 })
 
 describe('le tiroir des filtres', () => {
-  it('n’est pas un `aside` — l’arbre n’en compte qu’un, et c’est sa fiche', async () => {
-    /* `arbre-revalidation.test.ts` localise le bloc qui rogne le panneau de
-       fiche par le PREMIER `<aside>` du document. Un tiroir rendu en `<aside>`
-       repointerait trois de ses quatre cas sur le mauvais élément. La règle vaut
-       pour tous les écrans qui montent un tiroir, celui-ci compris. */
+  it('n’est pas un `aside` — ce nom est réservé aux volets', async () => {
+    /* Un `<aside>`, dans ce produit, est un VOLET nommé qui partage l'écran avec
+       le contenu : sur l'arbre, « Ajouter une personne » à gauche et la fiche
+       choisie à droite, chacun avec son `aria-label` (et la colonne « Place dans
+       l'arbre » d'une fiche). Les lecteurs d'écran les listent comme régions
+       complémentaires. Un tiroir de filtres, qui s'ouvre par-dessus et se referme,
+       n'en est pas un : rendu en `<aside>`, il ajouterait à cette liste une région
+       anonyme. La règle vaut pour tous les écrans qui montent un tiroir
+       (`BarreEcran`, « jamais un `<aside>` »), celui-ci compris. */
     const html = await rendreLaVue()
 
     expect(html).not.toContain('<aside')
