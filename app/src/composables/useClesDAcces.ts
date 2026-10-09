@@ -53,7 +53,7 @@ import {
   type IdentifiantBrut,
   type SystemeAppareil,
 } from '@/lib/cleDAcces'
-import { libererApresLaCleDAcces, reserverPourLaCleDAcces } from './fenetresAutomatiques'
+import { libererApresLaCleDAcces, marquerOuverte, reserverPourLaCleDAcces } from './fenetresAutomatiques'
 
 /** Le serveur garde un défi cinq minutes ; on n'en sert pas un de plus de quatre. */
 export const DUREE_OPTIONS_MS = 4 * 60 * 1000
@@ -686,6 +686,8 @@ export function piloterInvitationCleDAcces(
     erreurMotDePasse.value = null
     erreur.value = null
     ouverte.value = true
+    // Le registre sait ce qui est à l'écran ; `fermer()` l'en retire.
+    marquerOuverte('cle-d-acces', true)
   }
 
   function fermer(): void {

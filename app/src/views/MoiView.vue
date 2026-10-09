@@ -194,7 +194,7 @@ const classePastille = (urgent: boolean | undefined): string =>
     <!-- Installer l'application : le panneau ne se montre que s'il y a quelque
          chose à installer (navigateur qui le propose, ou iPhone). -->
     <div v-if="page" class="mt-6 empty:hidden">
-      <InstallationApplication forme="panneau" />
+      <InstallationApplication />
     </div>
 
     <div :class="page ? 'mt-6' : 'my-1 border-t border-ligne pt-1'">

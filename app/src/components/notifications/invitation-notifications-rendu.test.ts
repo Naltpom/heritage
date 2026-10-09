@@ -2,9 +2,10 @@
  * La fenêtre « Activer les notifications », rendue côté serveur.
  *
  * Ce qu'on tient ici : une vraie **boîte de dialogue** pour les lecteurs
- * d'écran (rôle, modalité, titre et description reliés), le bon contenu pour
- * chaque forme, et **rien** quand elle est fermée. Quand elle s'ouvre est
- * l'affaire de `composables/invitationPush.test.ts`.
+ * d'écran (rôle, modalité, titre et description reliés), le bon contenu, et
+ * **rien** quand elle est fermée. Quand elle s'ouvre est l'affaire de
+ * `composables/invitationPush.test.ts`. L'iPhone à installer n'est plus son
+ * affaire : voir `mise-en-page/invitation-installation-rendu.test.ts`.
  */
 import { createSSRApp, h } from 'vue'
 import { renderToString } from 'vue/server-renderer'
@@ -52,23 +53,14 @@ describe('la fenêtre « Activer »', () => {
     const html = await rendre('activer')
     expect(html).toContain('Soyez prévenu quand une demande est traitée ou qu’un tirage est fait.')
     expect(boutons(html)).toEqual(['Plus tard', 'Activer'])
+    // L'installation est l'affaire de la fenêtre qui la précède.
+    expect(html).not.toContain('écran d’accueil')
   })
 
   it('pendant l’activation : « Activer » patiente, « Plus tard » est retenu', async () => {
     const html = await rendre('activer', true)
     expect(html).toMatch(/<button[^>]*disabled[^>]*>[\s\S]*?Plus tard/)
     expect(html).toMatch(/<button[^>]*aria-busy="true"[^>]*>[\s\S]*?Activer/)
-  })
-})
-
-describe('la fenêtre « Installer » (iPhone hors écran d’accueil)', () => {
-  it('dit les deux gestes de Safari et n’a qu’un bouton, « Compris »', async () => {
-    const html = await rendre('installer')
-    expect(html).toContain('C’est nécessaire pour recevoir les notifications')
-    expect(html).toContain('Partager')
-    expect(html).toContain('Sur l’écran d’accueil')
-    expect(boutons(html)).toEqual(['Compris'])
-    expect(html).not.toContain('Activer')
   })
 })
 
