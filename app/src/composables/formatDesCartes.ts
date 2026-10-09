@@ -18,8 +18,10 @@
  * - quand l'arbre est **dessiné** — choisir un affichage devant un écran vide
  *   ne veut rien dire ;
  * - quand **aucune autre fenêtre automatique** n'est en route (clé d'accès,
- *   notifications : voir `fenetresAutomatiques.ts`). Elle passe en dernier,
- *   et ne réserve sa place qu'en s'ouvrant.
+ *   installation, notifications : voir `fenetresAutomatiques.ts`). Elle passe
+ *   en dernier, et ne réserve sa place qu'en s'ouvrant — en signalant son
+ *   ouverture : l'installation, qui ne cède qu'aux fenêtres ouvertes, attend
+ *   alors qu'elle soit fermée.
  *
  * Toute réponse est **enregistrée**, y compris « Garder l'actuel », Échap et
  * un toucher sur le voile : la question ne revient pas. Avec un stockage
@@ -30,7 +32,7 @@
  */
 import { getCurrentScope, onScopeDispose, readonly, shallowRef, watch, type Ref } from 'vue'
 import type { FormatDeCarte } from '@/histoire/cartes'
-import { liberer, occuper, uneAutreFenetreQue } from './fenetresAutomatiques'
+import { liberer, marquerOuverte, uneAutreFenetreQue } from './fenetresAutomatiques'
 
 /** Clé `localStorage` du format choisi sur cet appareil. */
 export const CLE_FORMAT_DES_CARTES = 'heritage.arbre.formatDesCartes'
@@ -177,7 +179,8 @@ export function piloterInvitationFormat(
         // Proposée = répondue pour ce chargement, même si le stockage est
         // bloqué et que rien ne s'écrit.
         choixFaitCeChargement.value = true
-        occuper('format-des-cartes')
+        // Inscrite et ouverte d'un coup : elle ne réserve qu'en s'ouvrant.
+        marquerOuverte('format-des-cartes', true)
         ouverte.value = true
       }, DELAI_INVITATION_FORMAT_MS)
     },

@@ -25,7 +25,7 @@ import {
   useFormatDesCartes,
   type ContexteInvitationFormat,
 } from './formatDesCartes'
-import { liberer, occuper, uneAutreFenetreQue } from './fenetresAutomatiques'
+import { doitCeder, liberer, occuper, uneAutreFenetreQue } from './fenetresAutomatiques'
 
 /* ------------------------------------------------------------------ */
 /* Montage                                                             */
@@ -87,7 +87,7 @@ beforeEach(() => {
 afterEach(() => {
   portee?.stop()
   portee = null
-  for (const f of ['cle-d-acces', 'notifications', 'format-des-cartes'] as const) liberer(f)
+  for (const f of ['cle-d-acces', 'installation', 'notifications', 'format-des-cartes'] as const) liberer(f)
   vi.unstubAllGlobals()
   reinitialiserFormatDesCartes()
   vi.useRealTimers()
@@ -160,8 +160,12 @@ describe('le pilote', () => {
     expect(p.ouverte.value).toBe(false)
     await avancer(200)
     expect(p.ouverte.value).toBe(true)
-    // Ouverte, elle tient sa place.
+    // Ouverte, elle tient sa place, et le signale : même l'installation, qui
+    // la précède, attendra qu'elle soit fermée.
     expect(uneAutreFenetreQue('notifications')).toBe(true)
+    expect(doitCeder('installation')).toBe(true)
+    p.garder()
+    expect(doitCeder('installation')).toBe(false)
   })
 
   it('jamais sur bureau', async () => {
@@ -190,7 +194,7 @@ describe('le pilote', () => {
     expect(p.ouverte.value).toBe(true)
   })
 
-  it.each(['cle-d-acces', 'notifications'] as const)(
+  it.each(['cle-d-acces', 'installation', 'notifications'] as const)(
     'attend tant que « %s » tient la place, et ouvre après sa libération',
     async (autre) => {
       stockage()
