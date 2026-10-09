@@ -4,9 +4,9 @@ import type { PhotoAJoindre } from './PhotosAJoindre.vue'
 import { envoyerLesPhotos, photosAEnvoyer } from './photos'
 
 /**
- * Les photos d'une personne proposée partent **après** sa demande, sur la fiche
- * `p1` de cette demande, avec leur description. Ce qui est passé ne repart
- * jamais, et un refus de taille ne se rejoue pas.
+ * Les photos d'une personne proposée partent **après** sa demande, sur une fiche
+ * proposée de cette demande (`p1` par défaut), avec leur description. Ce qui est
+ * passé ne repart jamais, et un refus de taille ne se rejoue pas.
  */
 
 function photo(cle: number, champs: Partial<PhotoAJoindre> = {}): PhotoAJoindre {
@@ -45,6 +45,18 @@ describe('envoyerLesPhotos', () => {
     // Une description vide n'envoie pas de légende vide.
     expect(envois[1]).not.toHaveProperty('caption')
     expect(photos.map((p) => p.etat)).toEqual(['reussie', 'reussie'])
+  })
+
+  it('vise la fiche qu’on lui nomme, quand ce n’est pas la première', async () => {
+    // Compléter une proposition de l'assistant : la fiche complétée peut être `p3`.
+    const envois: EnvoiMedia[] = []
+
+    await envoyerLesPhotos([photo(1)], 42, async (envoi) => {
+      envois.push(envoi)
+      return MEDIA
+    }, 'p3')
+
+    expect(envois.map((e) => e.brouillon)).toEqual([{ demandeId: 42, brouillonRef: 'p3' }])
   })
 
   it('un échec n’arrête pas les suivantes, et seul l’échec repart ensuite', async () => {
