@@ -286,10 +286,11 @@ async function deposer(): Promise<void> {
     for (const corps of aDeposer) {
       const demande = await creerDemande(corps)
       deposees.value = [...deposees.value, { cle: cleDeDepot(corps), id: demande.id }]
+      // Le graphe porte le calque des demandes en attente du lecteur : son `ETag`
+      // est périmé dès qu'une demande naît (§ 5.2, § 13.4) — même si la suivante
+      // échoue.
+      invaliderGraphe()
     }
-    // Le graphe porte le calque des demandes en attente du lecteur : son `ETag`
-    // est périmé dès qu'une demande naît (§ 5.2, § 13.4).
-    if (aDeposer.length > 0) invaliderGraphe()
 
     if (photosAPartir > 0) {
       const envoye = await envoyerLesPhotosSurLaFiche(photos, personId, televersees, televerserMedia, proposerLeMedia)
