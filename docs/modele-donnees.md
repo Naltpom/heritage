@@ -586,7 +586,9 @@ dossier de mission).
 | `incarnation_fin` | Retour au compte d'origine. Écrite sous l'incarnation : acteur le compte incarné, incarnant l'administrateur. |
 
 **`NotificationKind`** — `demande_soumise`, `demande_validee`, `demande_refusee`,
-`demande_caduque`, `doublon_probable`, `invitation_utilisee`, `compte_en_attente`,
+`demande_caduque`, `demande_completee` et `complement_fusionne` (complétion sur place et fusion
+d'un complément, ADR 0017 — elles nomment la demande et les champs, jamais la personne ni le
+membre qui a fourni le complément), `doublon_probable`, `invitation_utilisee`, `compte_en_attente`,
 `compte_active` (au compte lui-même, à son activation — ADR 0003, révision du 2026-10-01),
 `media_valide`, `media_refuse`, `tirage_effectue` (module `Tirage`, ADR 0009 — elle ne nomme
 personne), `evenement_invitation`, `evenement_relance`, `evenement_annule`,
@@ -1399,7 +1401,8 @@ L'en-tête de la demande. Une ligne = une décision de l'administrateur.
 | `submitted_at` | `TIMESTAMPTZ` | oui | `NULL` | Passage de `brouillon` à `en_attente`. C'est l'horodatage qui ordonne la file d'attente, pas `created_at`. |
 | `duplicate_of_id` | `INT` | oui | `NULL` | **FK intra-module** → `prp_change_request(id)`, `ON DELETE SET NULL`. Auto-référence. Renseignée quand l'administrateur refuse une demande **en renvoyant à une autre** (§ 6.4 du dossier : « deux cousins peuvent proposer le même arrière-grand-oncle »). L'auteur voit alors « votre proposition rejoint la demande n° 12 », pas un refus sec. **Ne pas confondre avec `reprise_de_id`** — voir l'encadré ci-dessous. |
 | `reprise_de_id` | `INT` | oui | `NULL` | **FK intra-module** → `prp_change_request(id)`, `ON DELETE SET NULL`. Seconde auto-référence. La demande dont celle-ci est la **reprise**, après un refus ou une caducité — le bouton « refaire cette demande » du § 9.6. Sans elle, la demande d'origine affiche un dossier **amputé de ses pièces sans explication** (voir l'encadré). |
-| `dedup_key` | `VARCHAR(160)` | oui | `NULL` | Clé de rapprochement des doublons probables : `search_key` de la personne proposée + année de naissance (ou fourchette). Calculée à la soumission pour les demandes de création. Voir l'index ci-dessous. |
+| `complement_de_id` | `INT` | oui | `NULL` | **FK intra-module** → `prp_draft_person(id)`, `ON DELETE SET NULL`. Le troisième pointeur, et le seul qui vise une **fiche** plutôt qu'une demande : la fiche proposée par un **autre membre** que cette `creation_personne` **complète** (ADR 0017). L'administrateur fusionne le complément dans l'origine ; jusque-là, ni l'un ni l'autre ne se valide. Une fiche et non une demande, parce qu'une création peut en porter plusieurs. Réservée aux `creation_personne` (`ck_prp_request_complement`). Voir l'encadré ci-dessous. |
+| `dedup_key` | `VARCHAR(160)` | oui | `NULL` | Clé de rapprochement des doublons probables : `nom|premier prénom|année de naissance` de la **première fiche nommée** de la demande — noms repliés par `Core\Service\CleDeRecherche::replier()` puis mis en minuscules, année = borne basse de la naissance, `?` si inconnue (par exemple `genevrolle|marne|1904`). **Pas** la `search_key` de `tree_person`, ni une fourchette : c'est ce que cette ligne disait jusqu'au 10/10/2026, et ce n'a jamais été le calcul (`Proposal\Service\CleDeDoublon`). Posée **à la soumission** pour les créations (un brouillon n'en a pas), **recalculée** à chaque complétion sur place d'une demande en attente et à chaque fusion d'un complément ; les clés anciennes se reprennent par `heritage:recalculer-les-cles-de-doublon`. Voir l'index ci-dessous. |
 | `created_at` | `TIMESTAMPTZ` | non | `now()` | — |
 | `updated_at` | `TIMESTAMPTZ` | non | `now()` | — |
 
@@ -1411,7 +1414,8 @@ L'en-tête de la demande. Une ligne = une décision de l'administrateur.
 | `idx_prp_request_file` | `(status, submitted_at)` partiel `WHERE status = 'en_attente'` | **La file d'attente de l'administrateur**, dans l'ordre de soumission. C'est l'écran d'accueil de l'administration ; l'index partiel le sert en balayage d'index seul. |
 | `idx_prp_request_auteur` | `(author_user_id, created_at DESC)` | « Mes demandes » — y compris les refusées, qui **restent consultables par leur auteur avec le motif** (§ 6.3 du dossier). |
 | `idx_prp_request_cible` | `(target_kind, target_id, status)` | Deux usages, tous deux chauds : le **calque « en attente »** d'une fiche (l'API cherche, à chaque affichage de personne, s'il existe des demandes en cours sur elle), et la détection de demandes concurrentes avant validation. |
-| `idx_prp_request_dedup` | `(dedup_key)` partiel `WHERE dedup_key IS NOT NULL AND status = 'en_attente'` | Rapprochement des doublons du § 6.4 du dossier : à l'ouverture d'une demande de création, l'administrateur voit les autres demandes en attente portant la même clé. |
+| `idx_prp_request_dedup` | `(dedup_key)` partiel `WHERE dedup_key IS NOT NULL AND status = 'en_attente'` | Rapprochement des doublons du § 6.4 du dossier : à l'ouverture d'une demande de création, l'administrateur voit les autres demandes en attente portant la même clé — **hors** le couple formé par un complément et son origine, qui portent presque toujours la même. |
+| `idx_prp_request_complement` | `(complement_de_id)` | « Quels compléments attendent sur cette proposition ? » — la vue d'administration de l'origine, et le contrôle préalable qui en bloque la validation (`complements_en_attente`). Nommé dans le mapping, ce qui dispense Doctrine de poser son propre `IDX_…` sur la colonne de jointure. |
 
 > **Deux auto-références, deux sens : `duplicate_of_id` et `reprise_de_id`**
 >
@@ -1438,6 +1442,29 @@ L'en-tête de la demande. Une ligne = une décision de l'administrateur.
 > conclut à une perte de données. Un enregistrement faux qui ne dit pas pourquoi coûte plus
 > cher que la ligne qui l'explique.
 
+> **Le troisième pointeur : `complement_de_id`** (10/10/2026, ADR 0017)
+>
+> | | `duplicate_of_id` | `reprise_de_id` | `complement_de_id` |
+> |---|---|---|---|
+> | Vise | une **demande** | une **demande** | une **fiche** (`prp_draft_person`) |
+> | Qui | deux auteurs | le même auteur | **deux auteurs** |
+> | Quoi | la même personne proposée deux fois ; l'une est **refusée** en renvoyant à l'autre | sa propre demande, **refaite** | la proposition d'un autre, **complétée** — puis **fusionnée** dans l'origine |
+> | Posée par | l'administrateur, au refus — ou à la **fusion** | le service, à la reprise | le dépôt, sur `complementDe` |
+> | Ce que l'auteur lit | « votre proposition rejoint la demande n° 12 » | « refaite en n° 21 » | « votre complément a été fusionné dans la demande n° 12 » |
+>
+> **Après la fusion, un complément porte deux pointeurs, et c'est voulu** : `complement_de_id`
+> dit ce qu'il complétait, `duplicate_of_id` où il a été versé — le sens exact que cette
+> colonne porte depuis le premier jour (« votre proposition rejoint la demande n° 12 »). Son
+> statut est `refusee`, avec le motif « Fusionné dans la demande n° 12. » : c'est ce qui le sort
+> de la file, sans en faire un refus — son auteur reçoit `complement_fusionne`, jamais
+> `demande_refusee`.
+>
+> **Pourquoi une fiche.** Une création peut porter plusieurs fiches ; « complète la demande
+> n° 12 » ne dirait pas laquelle. **Pourquoi `SET NULL`.** Une fiche ne disparaît qu'avec sa
+> demande, ce qui n'arrive jamais ; si cela arrivait, le complément redeviendrait une création
+> autonome — l'état qu'il prend déjà quand son origine est refusée, retirée ou caduque.
+> `CASCADE` emporterait la contribution d'un membre avec la demande d'un autre.
+
 **Contraintes**
 
 ```sql
@@ -1459,7 +1486,14 @@ CONSTRAINT ck_prp_request_cible
 -- Une auto-validation est une validation : elle a un décideur, et c'est l'auteur.
 CONSTRAINT ck_prp_request_auto_validation
   CHECK (auto_validated = false
-         OR (status = 'validee' AND decided_by_user_id = author_user_id))
+         OR (status = 'validee' AND decided_by_user_id = author_user_id)),
+
+-- Seule une création complète une proposition (ADR 0017) : un `ajout_lien` ou une
+-- `modification_personne` qui porterait ce pointeur ne voudrait rien dire, et la fusion ne
+-- saurait pas quoi en verser. Le service le refuse en 422 avant la base ; la contrainte est
+-- là pour la console et les correctifs à chaud (Version20261010143715).
+CONSTRAINT ck_prp_request_complement
+  CHECK (complement_de_id IS NULL OR kind = 'creation_personne')
 ```
 
 ### 5.2 `prp_change_op`

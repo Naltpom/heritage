@@ -2346,13 +2346,14 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs | Débit |
 |---|---|---|---|---|---|---|
-| `POST` | `/api/demandes` | `MEMBRE` | § 6.1 à 6.4 | `201` demande | `422` · `403` `regime_en_attente` · `404` `introuvable` (cible) · `409` `vue_comme_membre_active` · `429` | 30 / h |
+| `POST` | `/api/demandes` | `MEMBRE` | § 6.1 à 6.4 (`complementDe` : § 6.3 ter) | `201` demande | `422` · `403` `regime_en_attente` · `404` `introuvable` (cible, fiche complétée) · `409` `proposition_plus_en_attente` · `409` `vue_comme_membre_active` · `429` | 30 / h |
 | `GET` | `/api/demandes` | `MEMBRE` | `?status=&page=&parPage=` | `200` liste paginée | `403` | — |
 | `GET` | `/api/demandes/{id}` | `MEMBRE` | — | `200` § 6.5 | `403` `acces_refuse` · `404` | — |
 | `POST` | `/api/demandes/{id}/soumettre` | `MEMBRE` | *(vide)* | `200` demande | `409` `demande_deja_soumise` · `422` `demande_sans_lien` | — |
 | `POST` | `/api/demandes/{id}/retirer` | `MEMBRE` | *(vide)* | `200` demande (`annulee`) | `409` `demande_deja_decidee` · `403` · `404` | — |
 | `GET` | `/api/demandes/{id}/refaire` | `MEMBRE` | — | `200` corps pré-rempli | `403` · `404` · `409` `demande_non_refaisable` | — |
 | `GET` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | — | `200` § 6.6 | `403` · `404` | — |
+| `PUT` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | `{fiche, liens, empreinte}` § 6.6 ter | `200` § 6.5 | `403` `acces_refuse` · `403` `regime_en_attente` · `404` · `409` `demande_deja_decidee` · `409` `demande_modifiee_entre_temps` · `409` `vue_comme_membre_active` · `422` | — |
 | `GET` | `/api/demandes/brouillons/recherche` | `MEMBRE` | `?q=&limite=` | `200` § 6.6 bis | `422` (`q` < 2) | — |
 | `POST` | `/api/demandes/brouillons/ressemblances` | `MEMBRE` | `{fiche, limite, sauf}` § 6.6 quater | `200` § 6.6 quater | `401` · `422` `donnees_invalides` | — |
 | `GET` | `/api/demandes/brouillons/{brouillonId}` | `MEMBRE` | — | `200` une ligne du § 6.6 bis | `404` | — |
@@ -2360,8 +2361,10 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `GET` | `/api/administration/demandes` | `ADMIN` | `?status=&kind=&targetId=&auteur=&q=&page=` | `200` liste paginée | — | — |
 | `GET` | `/api/administration/demandes/auteurs` | `ADMIN` | — | `200` `{elements}` | — | — |
 | `GET` | `/api/administration/demandes/{id}` | `ADMIN` | — | `200` § 6.7 | `404` | — |
-| `POST` | `/api/administration/demandes/{id}/valider` | `ADMIN` | *(vide)* | `200` § 6.8 | **`409` × 6 (§ 6.8)** · `404` · `409` `vue_comme_membre_active` | — |
+| `POST` | `/api/administration/demandes/{id}/valider` | `ADMIN` | *(vide)*, ou `{empreinte}` | `200` § 6.8 | **`409` × 9 (§ 6.8)** · `404` · `409` `vue_comme_membre_active` | — |
 | `POST` | `/api/administration/demandes/{id}/refuser` | `ADMIN` | `{message, doublonDeId?}` | `200` demande (`refusee`) | `422` `donnees_invalides` · `409` `demande_deja_decidee` · `409` `vue_comme_membre_active` | — |
+| `GET` | `/api/administration/demandes/{id}/fusionner/{complementId}` | `ADMIN` | — | `200` aperçu § 6.7 bis | `403` · `404` · `409` `demande_deja_decidee` · `422` | — |
+| `POST` | `/api/administration/demandes/{id}/fusionner/{complementId}` | `ADMIN` | `{retenir, empreinte, empreinteComplement}` § 6.7 bis | `200` § 6.7 bis | `403` · `404` · `409` `demande_deja_decidee` · `409` `demande_modifiee_entre_temps` · `409` `vue_comme_membre_active` · `422` | — |
 
 `GET /api/demandes/{id}` : accessible à **son auteur** et aux **administrateurs**, personne
 d'autre — `403 acces_refuse` sinon, par un voter (§ 8 du dossier). Pas `404` : à la différence
@@ -2559,6 +2562,11 @@ Règles :
   minuscules : la même règle d'accents que la recherche de l'arbre, sur toute machine. Jusqu'au
   09/10/2026 elle passait par `iconv` `//TRANSLIT`, qui rendait `g n vrolle` sous l'Alpine de
   production ; les clés déjà posées se reprennent par `heritage:recalculer-les-cles-de-doublon`.
+  Elle est **recalculée à chaque complétion** d'une demande en attente (§ 6.6 ter) et à chaque
+  fusion d'un complément (§ 6.7 bis) : un nom corrigé déplace la demande dans l'index.
+- `complementDe` (facultatif, premier niveau du corps) : la fiche proposée par **un autre
+  membre** que cette création complète — § 6.3 ter. Sur toute autre nature que
+  `creation_personne` ⇒ `422` `champs.complementDe`.
 
 ### 6.3 bis Désigner une personne **proposée par une autre demande**
 
@@ -2607,6 +2615,69 @@ vient de conforter, alors que le contributeur vient de voir la fiche dans sa lis
 **Une demande qui s'appuie sur une autre ne se valide pas avant elle.** C'est un ordre, pas un
 refus, et il est annoncé **avant le premier clic** par `resolutionPrevue` (§ 6.7) puis par
 `409 dependance_en_attente` (§ 6.8).
+
+**Depuis le 10/10/2026, la fiche citée doit être visible de l'auteur de la demande**, et non
+du lecteur. Les deux étaient la même personne tant qu'une demande ne s'écrivait qu'au dépôt ;
+ce n'est plus vrai depuis qu'un administrateur complète la demande d'un membre (§ 6.6 ter).
+Sans cette règle, il y glisserait une fiche que ce membre ne voit pas, et dont la validation
+dépendrait. Le troisième contrôle — une fiche de **la même demande** citée par sa ligne ⇒
+`422` — est devenu atteignable par la même porte : il l'est, et il est testé.
+
+### 6.3 ter Compléter la proposition d'un autre : le complément
+
+Décision du commanditaire du 09/10/2026 (ADR 0017). La ressemblance (§ 6.6 quater) apprend à
+un membre qu'**une proposition semblable attend déjà** — celle d'un autre membre, qu'il ne
+peut pas modifier. Plutôt que d'en déposer une seconde (le doublon que la file passerait à
+écarter), il dépose un **complément** : une `creation_personne` ordinaire, qui porte
+`complementDe`, l'identifiant de la **fiche** complétée (`draftPersonId` de la ressemblance,
+y compris sous sa forme discrète). L'administrateur le **fusionne** dans l'origine en un clic
+(§ 6.7 bis).
+
+```json
+{
+  "kind": "creation_personne",
+  "message": "c'est aussi mon arrière-grand-père, j'ai son acte de décès",
+  "soumettre": true,
+  "complementDe": 7,
+  "brouillons": [
+    { "localRef": "#p1", "givenNames": "Barnabé", "surname": "Muguet", "sex": "masculin", "deceased": true,
+      "death": { "raw": "1968", "qualifier": "annee", "min": "1968-01-01", "max": "1968-12-31", "place": "Saule" } }
+  ],
+  "liens": [
+    { "seq": 1, "kind": "parent_de", "subjectDraftRef": "#p1", "otherPersonId": 61 }
+  ]
+}
+```
+
+Une **fiche** et non une demande : une création peut en porter plusieurs, et « complète la
+demande n° 12 » ne dirait pas laquelle.
+
+| Cas | Réponse |
+|---|---|
+| `complementDe` sur une autre nature que `creation_personne` | `422` `champs.complementDe` |
+| pas un entier | `422` `champs.complementDe` |
+| plus d'une fiche dans `brouillons` | `422` `champs.brouillons` — un complément décrit **la** personne qu'il complète |
+| la fiche n'existe pas, ou c'est le **brouillon non envoyé d'un autre** | `404` `introuvable` — un brouillon n'est visible que de son auteur (§ 5.7) |
+| sa demande est tranchée (`validee`, `refusee`, `annulee`, `caduque`) | `409` `proposition_plus_en_attente`, **`details: null`** — l'issue n'est pas dite : le déposant ne voit pas la proposition d'un autre |
+| c'est **sa propre** proposition (envoyée ou non) | `422` `champs.complementDe` — elle se complète **sur place** (§ 6.6 ter) |
+| la fiche est **elle-même un complément** | `422` `champs.complementDe` — pas de chaîne : on complète l'origine |
+
+- **Au moins un lien reste exigé à la soumission** (`422 demande_sans_lien`), comme pour toute
+  création : le complément doit rester **validable seul**, parce que l'origine peut être
+  refusée, retirée ou rendue caduque avant la fusion — il devient alors une création
+  autonome.
+- Un complément enregistré en **brouillon** (`soumettre: false`) se soumet plus tard : la même
+  règle vaut alors, et une origine tranchée entre-temps rend `409
+  proposition_plus_en_attente` à `POST …/soumettre`.
+- La réponse (§ 6.5) porte `complementDe: {"draftPersonId": 7}` — **l'identifiant, rien de
+  plus** : l'auteur du complément ne voit pas la proposition qu'il complète. Sa ligne de liste
+  porte `complementDeDemandeId`.
+- **Il ne se valide pas tant que son origine vit** (`409 complement_a_fusionner`, § 6.8), et
+  l'origine ne se valide pas tant qu'il attend (`409 complements_en_attente`).
+- `GET …/refaire` ne reprend **pas** `complementDe` : un complément refusé se refait en
+  création ordinaire — on ne rattache pas à l'aveugle à une proposition qui a pu changer.
+- La ressemblance (§ 6.6 quater) ne parcourt **pas** les compléments, et `doublonsProbables`
+  (§ 6.7) ne les oppose pas à leur origine.
 
 ### 6.4 `kind = ajout_lien` et `kind = ajout_media`
 
@@ -3234,6 +3305,7 @@ l'arbre d'aujourd'hui, qui est la raison même de la reprise.
   "decidedAt": null,
   "autoValidated": false,
   "duplicateOfId": null,
+  "complementDe": null,
   "submittedAt": "2026-09-14T11:02:00+02:00",
   "createdAt": "2026-09-14T10:58:00+02:00",
   "ops": [],
@@ -3273,9 +3345,27 @@ l'arbre d'aujourd'hui, qui est la raison même de la reprise.
       "resolvedFamilyId": null
     }
   ],
-  "revisions": []
+  "revisions": [],
+  "empreinte": "9f2c…"
 }
 ```
+
+Deux clés depuis le 10/10/2026 (ADR 0017) :
+
+- **`complementDe`** — `null`, ou `{"draftPersonId": 7}` quand la demande est un **complément**
+  (§ 6.3 ter). L'identifiant de la fiche complétée, **rien de plus** : l'auteur d'un complément
+  ne voit pas la proposition qu'il complète. La vue d'administration l'enrichit (§ 6.7).
+- **`empreinte`** — un sha256 de ce que la demande est **maintenant** : son statut, son
+  `updatedAt` à la seconde, chaque champ de chaque fiche, le rang et les extrémités de chaque
+  lien. **Calculée, jamais stockée.** Elle se renvoie, **facultativement**, à la complétion
+  sur place (§ 6.6 ter), à la fusion (§ 6.7 bis) et à la validation (§ 6.8) : si la demande a
+  changé entre l'affichage et le clic — son auteur l'a complétée, un administrateur aussi —, la
+  route rend `409 demande_modifiee_entre_temps` sans rien écrire, plutôt que d'effacer ou de
+  valider ce que personne n'a relu. Un client qui ne la renvoie pas écrit comme avant.
+
+Chaque ligne d'une **liste** de demandes (« mes demandes », la file du § 6.7) porte en plus
+`complementDeDemandeId` : le numéro de la demande complétée, ou `null`. Un numéro, jamais un
+nom.
 
 `noeudId` est ajouté par l'API sur chaque brouillon : c'est **l'identifiant que ce brouillon
 porte dans le graphe** (§ 5.2). Le front ne le fabrique pas par concaténation ; il le lit ici
@@ -3303,6 +3393,13 @@ Trois conséquences de forme, toutes vérifiables sur la charge ci-dessus :
   « (proposée) » d'une fiche validée.
 - **`*DraftRef` reste servi à côté du libellé** — `otherDraftRef`, `other2DraftRef` — pour
   qu'un lecteur puisse distinguer les deux natures d'extrémité sans lire le texte.
+- **Une fiche proposée par une autre demande** (`*DraftPersonId`) se relit de même — **sauf la
+  fiche d'un vivant proposée par un autre auteur** que celui de la demande (10/10/2026). Un
+  membre ne cite que ses propres fiches, mais la fusion d'un complément (§ 6.7 bis) repointe
+  ses liens vers la fiche d'origine, celle d'un autre membre : la relire lui donnerait le nom
+  que la ressemblance lui avait caché. C'est alors le libellé stocké qui sert — le nom qu'il
+  avait lui-même saisi —, suivi de « (proposée) ». Même règle pour le `libelle` de
+  `dependances` (§ 6.7), qui part tel quel dans la notification de caducité.
 
 `familyLabel` accompagne `familyId` pour la même raison : une filiation vers un couple
 existant affichait « rattaché à la famille 28 », c'est-à-dire un identifiant de ligne, quand
@@ -3426,6 +3523,75 @@ sans elle, un écran de reprise afficherait « personne n° 7 », c'est-à-dire 
 les yeux du lecteur, ce que le dépôt s'interdit partout ailleurs. `404` sur la fiche d'un
 autre membre, jamais `403`.
 
+### 6.6 ter Compléter une fiche proposée
+
+`PUT /api/demandes/12/brouillons/p1` — **la référence sans le dièse**, comme la lecture du
+nœud (§ 6.6). Décision du commanditaire du 09/10/2026 (ADR 0017) : l'auteur d'une
+proposition, et l'administrateur, la **complètent sur place** — une date de décès retrouvée,
+un lien de plus — au lieu de la retirer pour tout ressaisir, ou d'en déposer une seconde.
+C'est la **première route qui réécrit une demande déjà enregistrée**.
+
+```json
+{
+  "fiche": {
+    "givenNames": "Barnabé",
+    "surname": "Muguet",
+    "marriedName": null,
+    "nickname": "Bébert",
+    "sex": "masculin",
+    "deceased": true,
+    "birth": { "raw": "1901", "qualifier": "annee", "min": "1901-01-01", "max": "1901-12-31", "place": "Saule" },
+    "death": { "raw": "1968", "qualifier": "annee", "min": "1968-01-01", "max": "1968-12-31", "place": null },
+    "note": "Acte de décès retrouvé aux archives de Saule."
+  },
+  "liens": [
+    { "kind": "parent_de", "subjectDraftRef": "#p1", "otherPersonId": 61 }
+  ],
+  "empreinte": "9f2c…"
+}
+```
+
+- **`fiche` remplace tous les champs éditables** — la forme d'un brouillon du § 6.3, blocs
+  date à cinq clés. **Une clé absente vaut `null`**, comme au dépôt : la complétion ne
+  rapièce pas, et un client qui veut garder une valeur la renvoie. `localRef` est toléré s'il
+  désigne la fiche de l'adresse (`422 champs["fiche.localRef"]` sinon). Mêmes `422` qu'au
+  dépôt : `fiche.surname` (ni nom ni prénom), `fiche.death` (une date de décès sans
+  `deceased: true`). `fiche` absent ou pas un objet ⇒ `422 champs.fiche`.
+- **`liens` ne fait qu'ajouter** — la forme du § 6.3, **sans `seq`** : le rang est attribué
+  par le serveur, à la suite du plus grand (`uniq_prp_draft_link_seq`), parce que le client ne
+  sait pas lesquels sont pris. Un `seq` envoyé ⇒ `422 champs["liens[n].seq"]`. Retirer un lien
+  ne se fait pas ici : c'est une autre proposition. Les mêmes contrôles qu'au dépôt
+  s'appliquent, dont celui du § 6.3 bis, **jugé pour l'auteur de la demande**.
+- **`empreinte`** (facultative, § 6.5) : périmée ⇒ `409 demande_modifiee_entre_temps`.
+
+| Lecteur | `brouillon` | `en_attente` | tranchée |
+|---|---|---|---|
+| l'**auteur** | ✅ | ✅ — les administrateurs sont prévenus (`demande_completee`) | `409` `demande_deja_decidee` |
+| un **administrateur**, sur la demande d'un autre | `403` `acces_refuse` — un brouillon est le travail en cours de son auteur | ✅ — l'auteur est prévenu (`demande_completee`, avec le **nom** des champs touchés) | `409` `demande_deja_decidee` |
+| un autre membre | `403` `acces_refuse` | `403` — il dépose un **complément** (§ 6.3 ter) | `403` |
+
+L'ordre des refus : bascule `409 vue_comme_membre_active`, demande inconnue `404`, autre membre
+`403` (voter), compte en attente `403 regime_en_attente`, demande tranchée `409`, brouillon
+d'autrui `403`, fiche absente de la demande `404`, empreinte périmée `409`, puis le corps
+(`422`). **Rien n'est écrit avant le dernier contrôle** — ni la fiche, ni un lien pourtant
+valide.
+
+Ce que la complétion entraîne :
+
+1. la fiche est réécrite **en place** : elle garde son identifiant, que d'autres demandes
+   citent sans clé étrangère (§ 6.3 bis) ;
+2. `dedupKey` est recalculée si la demande est en attente ;
+3. la demande est **touchée** (`updatedAt`) : l'`ETag` du graphe en dépend (§ 5.2), et un
+   `304` laisserait dans l'arbre le nœud au nom d'avant ;
+4. les libellés stockés des liens qui citent la fiche reprennent son nom — dans sa demande ;
+   dans une autre demande du **même auteur** (touchée à son tour) ; ailleurs **seulement si la
+   personne est décédée** ;
+5. un administrateur qui complète sa propre demande, ou un brouillon complété, ne prévient
+   personne. Une complétion qui ne change rien ne touche rien et ne prévient personne.
+
+La réponse est la demande entière (§ 6.5), avec sa **nouvelle `empreinte`** : le front
+enchaîne une seconde complétion sans relire.
+
 ### 6.6 quater Ressemblances parmi les propositions
 
 `POST /api/demandes/brouillons/ressemblances` — « une proposition semblable attend déjà ». Le
@@ -3454,7 +3620,9 @@ train de compléter. Tout autre chose qu'un entier positif rend `422` sur `sauf`
 **Ce qui est parcouru** : les fiches des demandes `creation_personne` **en attente, tous
 auteurs confondus** — c'est l'exception écrite au § 13.3 —, et les **brouillons non envoyés du
 lecteur effectif, et de lui seul**, administrateur compris. Ni les demandes tranchées,
-ni les autres natures. La règle de ressemblance est celle du § 5.5 bis.
+ni les autres natures, ni les **compléments** (§ 6.3 ter) : un complément n'est pas une
+proposition de plus, et le signaler inviterait à compléter un complément. La règle de
+ressemblance est celle du § 5.5 bis.
 
 **Deux formes, choisies par le serveur seul**, fiche par fiche :
 
@@ -3561,7 +3729,9 @@ Les filtres se posent **sur la même requête**, jamais l'un après l'autre en m
 
 Chaque ligne porte, en plus du résumé du § 6.5, `nouvellesPersonnes` : la liste des noms
 (« Prénoms Nom ») des personnes que la demande ajoute à l'arbre, vide sinon — chargée en
-une requête pour toute la page.
+une requête pour toute la page — et `complementDeDemandeId` (10/10/2026) : la demande que
+celle-ci complète (§ 6.3 ter), ou `null`. La file l'affiche « complète la n° 12 » : le geste
+attendu est une fusion, pas une validation.
 
 #### `GET /api/administration/demandes/auteurs`
 
@@ -3622,9 +3792,12 @@ Les auteurs qui ont **réellement déposé** quelque chose, pour peupler le filt
   "demandesConcurrentes": [
     { "id": 13, "authorLabel": "Tuf Romarin", "kind": "modification_personne", "submittedAt": "2026-09-14T15:40:00+02:00", "champs": ["surname"] }
   ],
-  "doublonsProbables": []
+  "doublonsProbables": [],
+  "complements": []
 }
 ```
+
+La charge porte aussi, comme au § 6.5, `complementDe` et `empreinte`.
 
 Trois blocs que le modèle suppose sans les nommer, et sans lesquels l'écran d'administration
 ne peut pas exister :
@@ -3642,8 +3815,10 @@ ne peut pas exister :
   | `"cible_disparue"` | La ligne visée n'existe plus. | même chose : c'est une caducité |
   | `"dependance_en_attente"` | Elle désigne une fiche proposée par **une autre demande non tranchée** (§ 6.3 bis). | « À valider après la demande n° X » — désactivé, mais **pas** à refaire |
   | `"dependance_morte"` | Cette autre demande a été refusée, retirée ou rendue caduque. | une caducité : la personne désignée n'existera jamais |
+  | `"complements_en_attente"` | Des **compléments** attendent sur cette proposition (§ 6.3 ter). | « Fusionnez d'abord les compléments » — désactivé, **pas** à refaire |
+  | `"complement_a_fusionner"` | Cette demande **est** un complément, et son origine est en attente ou validée. | « Fusionner dans la demande n° X » à la place de « Valider » (origine en attente) ; le refus seul (origine validée) |
 
-  Les cinq valeurs sont **à traiter exhaustivement**. Le front les discrimine dans un `switch`
+  Les huit valeurs sont **à traiter exhaustivement**. Le front les discrimine dans un `switch`
   sur l'union, et une valeur que le serveur rend mais que le client ignore ne tombe dans aucun
   cas — le calcul rend alors `undefined`, sur la seule demande qu'il fallait surtout ne pas
   valider.
@@ -3667,13 +3842,150 @@ ne peut pas exister :
   C'est `resolutionPrevue` qui dit ce que le clic fera, jamais cette liste.
 - **`doublonsProbables`** vient de `idx_prp_request_dedup` — les autres demandes `en_attente`
   de même `dedup_key` (§ 9.5). Il porte `{id, authorLabel, libelle, dedupKey}` ; il n'y a
-  aucun `personId`, puisque la personne n'existe pas.
+  aucun `personId`, puisque la personne n'existe pas. **Un complément n'y figure pas face à
+  son origine** (10/10/2026) — ni l'origine face à lui, ni deux compléments de la même
+  origine l'un face à l'autre : ils portent presque toujours la même clé, c'est tout l'objet,
+  et l'administrateur les voit déjà dans `complements` ou `complementDe`, avec le bon geste,
+  « Fusionner ». Les lister ici l'inviterait à refuser en renvoyant à l'autre (§ 6.9), ce qui
+  perdrait les liens et les pièces que la fusion reprend.
+- **`complements`** (10/10/2026, ADR 0017) — **toujours un tableau** : les compléments de cette
+  proposition, hors brouillons, dans l'ordre de soumission, **tranchés compris** (un complément
+  fusionné reste dans l'historique de l'origine, avec son statut) :
+
+  ```json
+  "complements": [
+    {
+      "id": 21,
+      "authorLabel": "Tuf Romarin",
+      "submittedAt": "2026-10-10T09:12:00+02:00",
+      "status": "en_attente",
+      "draftPersonId": 31,
+      "origineDraftPersonId": 7,
+      "displayName": "Barnabé Muguet",
+      "ligneDates": "1901 – 1968",
+      "apercu": {
+        "remplis": [ { "champ": "death", "valeur": { "raw": "1968", "qualifier": "annee", "min": "1968-01-01", "max": "1968-12-31", "place": null, "texte": "1968" } } ],
+        "conflits": [ { "champ": "sex", "origine": "feminin", "complement": "masculin", "retenu": "origine" } ],
+        "liensAjoutes": [ { "seqComplement": 1, "seq": 3 } ],
+        "liensIgnores": [],
+        "mediasDeplaces": 1,
+        "demandesRepointees": []
+      },
+      "empreinte": "41ab…"
+    }
+  ]
+  ```
+
+  `draftPersonId` est la fiche du complément, `origineDraftPersonId` celle de l'origine qu'il
+  complète (une origine peut en porter plusieurs). `apercu` est le **rapport de la fusion
+  calculé à blanc** (§ 6.7 bis) — `null` quand la fusion n'est plus possible (complément ou
+  origine tranchés). `empreinte` est celle du complément, à renvoyer en `empreinteComplement`.
+- **`complementDe`** — sur un complément, la vue d'administration dit **ce qu'il complète**, en
+  clair : `{draftPersonId, demandeId, localRef, displayName, status}` (`status` est celui de la
+  demande d'origine). `null` sinon.
+
+### 6.7 bis Fusionner un complément
+
+`GET /api/administration/demandes/12/fusionner/21` — **l'aperçu** : ce que la fusion ferait,
+**sans rien écrire** (pas de garde-fou de bascule : c'est une lecture).
+
+```json
+{
+  "origine": { "id": 12, "empreinte": "9f2c…" },
+  "complement": { "id": 21, "empreinte": "41ab…" },
+  "rapport": {
+    "remplis": [ { "champ": "nickname", "valeur": "Bébert" } ],
+    "conflits": [
+      {
+        "champ": "birth",
+        "origine": { "raw": "1901", "qualifier": "annee", "min": "1901-01-01", "max": "1901-12-31", "place": null, "texte": "1901" },
+        "complement": { "raw": "1903", "qualifier": "annee", "min": "1903-01-01", "max": "1903-12-31", "place": null, "texte": "1903" },
+        "retenu": "origine"
+      }
+    ],
+    "liensAjoutes": [ { "seqComplement": 2, "seq": 3 } ],
+    "liensIgnores": [ { "seqComplement": 1, "raison": "deja_present" } ],
+    "mediasDeplaces": 1,
+    "demandesRepointees": [ 23 ]
+  }
+}
+```
+
+`POST /api/administration/demandes/12/fusionner/21` — **la fusion**, en une transaction :
+
+```json
+{ "retenir": { "birth": "complement" }, "empreinte": "9f2c…", "empreinteComplement": "41ab…" }
+```
+
+Les trois clés sont facultatives. La réponse :
+
+```json
+{ "origine": { "…": "la vue d'administration du § 6.7" }, "complement": { "…": "sa ligne de liste" }, "rapport": { "…": "comme l'aperçu" } }
+```
+
+**Préconditions**, pour l'aperçu comme pour la fusion : les deux demandes **en attente**
+(`409 demande_deja_decidee`, `details.statut` de celle qui ne l'est pas), et le complément
+**rattaché à une fiche de cette origine** (`422 champs.complementId` sinon). Pour la fusion
+seulement : les empreintes fournies (`409 demande_modifiee_entre_temps`), et le garde-fou de la
+bascule (`409 vue_comme_membre_active`).
+
+**Les champs — l'origine l'emporte, le complément remplit ce qui est vide :**
+
+| Champ | L'origine est vide | Identiques | Ils divergent |
+|---|---|---|---|
+| `givenNames`, `surname` (vide = `""`) | rempli | rien | conflit |
+| `marriedName`, `nickname` (vide = `null`) | rempli | rien | conflit |
+| `sex` (vide = `inconnu`) | rempli | rien | conflit |
+| `deceased` | `false` → `true` recopié | rien | **jamais en conflit** |
+| `birth`, `death` | date inconnue → bloc recopié ; date connue **sans lieu** → **lieu seul** recopié | rien | conflit, sur le bloc entier |
+| `note` | **jamais en conflit** : s'ajoute sous « — Complément (demande n° 21) : … », avec le message de son auteur | | |
+
+- Les dates se comparent par **qualificatif et bornes**, jamais par `raw` : « 1901 » et
+  « en 1901 » ne sont pas un conflit.
+- Un **conflit se tranche en faveur de l'origine**, sauf `retenir[champ] = "complement"`, qui
+  prend la valeur du complément — un bloc date **entier**. `retenir` sur un champ **sans**
+  conflit, ou une autre valeur que `"origine"`/`"complement"` ⇒ `422 champs["retenir.<champ>"]`.
+- **Un décès recopié — rempli ou retenu — pose `deceased: true`.**
+- `remplis` liste `{champ, valeur}` (valeur affichable : un bloc date porte `texte`), dans
+  l'ordre des champs de la fiche, `deceased` et `note` compris quand ils changent ; `conflits`
+  liste `{champ, origine, complement, retenu}`.
+
+**Les liens** du complément sont **traduits** — sa référence `#p1` devient celle de la fiche
+d'origine — et ajoutés **aux rangs suivants** de l'origine (`liensAjoutes`, `{seqComplement,
+seq}`). Trois raisons d'en écarter un (`liensIgnores`, `{seqComplement, raison}`) :
+
+| `raison` | Ce qu'elle veut dire |
+|---|---|
+| `deja_present` | même nature, mêmes extrémités — dans les deux sens pour une union et pour les deux parents d'une filiation |
+| `fiche_proposee_ailleurs` | il désigne une fiche d'**une autre demande** par sa ligne (`*DraftPersonId`) : l'auteur de l'origine n'a pas forcément le droit de la citer (§ 6.3 bis) |
+| `meme_personne` | traduit, il relierait la personne à elle-même |
+
+**Le reste, dans la même transaction :**
+
+- les **pièces** jointes à la fiche du complément passent sur la fiche d'origine
+  (`mediasDeplaces`) — sans changer de statut ni de déposant ; elles suivront la personne à la
+  validation, et l'auteur de l'origine peut les lire (§ 7.4) ;
+- les **demandes non tranchées** qui citaient la fiche du complément par sa ligne la désignent
+  désormais par celle de l'origine (`demandesRepointees`), et sont touchées ; leur libellé
+  reste celui que **leur** auteur avait saisi quand l'origine est un vivant proposé par un
+  autre (§ 6.5) ;
+- l'**origine** reçoit sa nouvelle `dedupKey` et est touchée ;
+- le **complément est clos** : `status: "refusee"`, `duplicateOfId` = l'origine,
+  `decisionMessage` = « Fusionné dans la demande n° 12. ». **Ce n'est pas un refus sec** : son
+  auteur reçoit `complement_fusionne`, jamais `demande_refusee` ; l'auteur de l'origine reçoit
+  `demande_completee`, qui nomme les champs touchés et **jamais le contributeur** (§ 8).
+
+Après la fusion, l'origine se valide comme une création ordinaire, et crée **une** personne,
+avec toutes ses pièces.
 
 ### 6.8 Valider — six issues, et deux 409 aux conseils opposés
 
-`POST /api/administration/demandes/14/valider`, corps vide. Toute la séquence est
-transactionnelle et **le contrôle est intégralement fait avant la première écriture**
-(§ 9.4, point 2).
+`POST /api/administration/demandes/14/valider`, corps vide — ou, depuis le 10/10/2026,
+`{"empreinte": "…"}` (§ 6.5) : **facultatif**, et un corps vide valide comme avant. Toute la
+séquence est transactionnelle et **le contrôle est intégralement fait avant la première
+écriture** (§ 9.4, point 2). Le titre de cette section date d'avant les dépendances et les
+compléments : on compte aujourd'hui **onze** issues, dont trois `409` qui n'écrivent rien
+(issues 7, 9 et 10) et une qui refuse avant même l'analyse (issue 11).
 
 **Durée.** Les colonnes dérivées de l'arbre (`generation`, `branch`, `rank`) sont recalculées
 **une fois**, après toutes les écritures de la demande (`PortArbre::enUnLot()`), et non après
@@ -3842,6 +4154,52 @@ ou sa fiche a disparu : la personne désignée ne naîtra jamais. C'est une cadu
 nature que `cible_disparue`, elle **écrit** comme elle (statut `caduque`), et l'auteur est
 notifié — avec une phrase qui nomme la proposition perdue, et non un diff de champs, puisque
 rien n'a bougé sur aucune fiche.
+
+**Issue 9 — compléments en attente** (10/10/2026, ADR 0017). `409` :
+
+```json
+{
+  "erreur": {
+    "code": "complements_en_attente",
+    "message": "Des compléments attendent sur cette proposition : fusionnez-les (ou refusez-les) avant de la valider.",
+    "details": { "demandeId": 12, "statut": "en_attente", "rejouable": true, "complements": [21, 24] }
+  }
+}
+```
+
+La proposition a des **compléments** (§ 6.3 ter) qui attendent. La valider maintenant créerait
+la personne sans eux, et chacun deviendrait une seconde création de la même personne. **Rien
+n'est écrit**, l'auteur n'est pas notifié ; elle passera **telle quelle** dès que les
+compléments seront fusionnés (§ 6.7 bis) ou refusés — d'où `rejouable: true`, et la liste des
+compléments à traiter d'abord.
+
+**Issue 10 — complément à fusionner.** `409` :
+
+```json
+{
+  "erreur": {
+    "code": "complement_a_fusionner",
+    "message": "Cette demande complète une autre proposition : fusionnez-la dans celle-ci plutôt que de la valider.",
+    "details": { "demandeId": 21, "statut": "en_attente", "rejouable": false, "origineDemandeId": 12, "origineStatut": "en_attente" }
+  }
+}
+```
+
+Cette demande **est** un complément, et son origine vit encore : `en_attente` — le geste est la
+fusion —, ou `validee` — la personne existe, la valider la doublerait ; il reste le refus.
+`rejouable: false` : réessayer ne changera rien. **Rien n'est écrit.** Une origine refusée,
+retirée ou caduque rend au contraire le complément **autonome** : il se valide comme une
+création ordinaire.
+
+Ces deux issues passent **après** les caducités (ce qui condamne l'emporte sur ce qui fait
+attendre) et **avant** `dependance_en_attente` (la fusion est un geste de cet écran-ci).
+
+**Issue 11 — modifiée entre-temps.** `409` `demande_modifiee_entre_temps`, `details:
+{demandeId, empreinte, rejouable: true}` : l'`empreinte` envoyée ne correspond plus — l'auteur
+a complété sa demande pendant que l'administrateur la lisait. **Rien n'est écrit, pas même
+analysé** ; `details.empreinte` est l'empreinte courante, mais le front **relit** la demande et
+la montre avant de laisser décider, il ne s'en sert pas pour forcer. Tombe **après**
+`demande_deja_decidee`, qui est plus précise.
 
 ### 6.9 Refuser — message obligatoire
 
@@ -4368,6 +4726,14 @@ Le cercle est appliqué ici comme partout :
 | Personne vivante **hors cercle** | membre actif | **`404`** |
 | N'importe qui | compte `en_attente`, sujet vivant | **`404`** |
 | Média `en_attente` | quelqu'un d'autre que le déposant ou un administrateur | **`404`** |
+| Média joint à une **personne proposée** | le déposant, un administrateur, ou — depuis le 10/10/2026 — **l'auteur de la demande** qui porte la fiche | `200` ; `404` pour tout autre |
+
+**L'auteur de la demande**, et non seulement le déposant : une pièce de proposition peut
+désormais venir d'ailleurs — jointe par l'administrateur qui instruit, ou versée par la
+**fusion d'un complément** (§ 6.7 bis). Sans cette règle, l'auteur verrait dans le détail de
+son propre nœud (§ 6.6) des pièces dont les octets lui répondraient `404`. `Media` pose la
+question à `Proposal` par `Core\Contract\FichesProposeesInterface::estAuteurDe()` ; le repli
+fermé répond « non », et la lecture retombe sur le déposant et l'administration.
 
 **`404` et non `403`** : c'est la règle générale de l'API (§ 15.3). Une ressource que le
 lecteur n'a pas le droit de voir est introuvable ; un `403` confirmerait qu'elle existe, et
@@ -4469,6 +4835,29 @@ Module `Core`.
 - Le compteur est la requête la plus chaude de l'API (chaque chargement de page) et repose sur
   `idx_core_notif_non_lues`. Il ne renvoie **qu'un nombre**.
 - `POST /api/notifications/{id}/lue` sur une notification d'un autre compte ⇒ `404`.
+
+#### Les deux natures de la complétion (10/10/2026, ADR 0017)
+
+`kind` est une chaîne libre en base (`core_notification.kind`, `VARCHAR(32)`, sans `CHECK`) :
+deux natures s'ajoutent sans migration. Le front doit leur donner un libellé — une nature
+inconnue s'affiche, elle ne casse rien, mais elle s'affiche mal.
+
+| `kind` | Destinataire | `title` | `body` | `linkRoute` |
+|---|---|---|---|---|
+| `demande_completee` | l'**auteur**, quand l'administration a complété sa demande en attente — sur place (§ 6.6 ter) ou par la fusion d'un complément (§ 6.7 bis) | « L'administration a complété votre demande n° 12. » | « Ce qui a changé : Naissance, Note ; 1 lien ajouté. » | `demande.detail` `{id: 12}` |
+| `demande_completee` | les **administrateurs** (sauf l'auteur), quand l'auteur a complété sa demande en attente | « Opale Romarin a complété sa demande n° 12. » | idem | `demande.detail` `{id: 12}` |
+| `complement_fusionne` | l'**auteur du complément**, sauf s'il est l'administrateur qui a fusionné | « Votre complément (demande n° 21) a été fusionné dans la demande n° 12. » | « L'administration l'a repris dans la proposition qu'il complétait, qui sera validée avec lui. Vous n'avez rien d'autre à faire. » | `demande.detail` `{id: 21}` |
+
+Trois règles s'y lisent : **le numéro de la demande, jamais le nom de la personne** (le titre se
+relit des mois plus tard, et la personne est souvent vivante) ; **le nom des champs, jamais
+leurs valeurs** ; **jamais le nom du membre qui a fourni un complément** à l'auteur de
+l'origine. Rien ne part pour un brouillon complété, ni pour l'administrateur qui complète ou
+fusionne sa propre demande, ni pour une complétion qui ne change rien. Et une fusion ne part
+**pas** en `demande_refusee` : le complément est clos `refusee` techniquement, mais son
+travail est repris, pas écarté.
+
+La soumission d'un complément part en `demande_soumise`, titrée « Tuf Romarin propose un
+complément à la demande n° 12. ».
 
 ---
 
@@ -5878,6 +6267,15 @@ sort en clair, comme un défunt de l'arbre. Les brouillons non envoyés restent 
 Le calque, le graphe et la recherche du § 6.6 bis ne sont pas touchés : ce tableau reste
 exact pour eux.
 
+**Son prolongement, le complément (§ 6.3 ter, 10/10/2026)**, ne l'élargit pas : il **désigne**
+la fiche que la ressemblance a signalée, par le seul `draftPersonId` qu'elle a rendu, sans rien
+en lire. La réponse au dépôt ne dit rien de l'origine (`complementDe: {draftPersonId}`), un
+refus ne dit pas comment elle a été tranchée (`proposition_plus_en_attente`, `details: null`),
+et une fusion ne recopie pas le nom d'un vivant d'un auteur dans la demande d'un autre (§ 6.5).
+Le numéro de la demande d'origine, lui, est rendu à l'auteur du complément
+(`complementDeDemandeId`, puis `duplicateOfId` après la fusion) : un numéro n'apprend rien
+d'une personne, et la demande elle-même lui reste fermée (`403`).
+
 ### 13.4 Une personne proposée mais non validée
 
 Elle apparaît dans le graphe **pour son auteur seulement** (et pour les administrateurs), avec
@@ -6141,7 +6539,7 @@ agent recopiera la référence :
 | `authentification_requise` | 401 | partout | — |
 | `identifiants_invalides` | 401 | `POST /api/connexion` | — |
 | `compte_suspendu` | 401 | `POST /api/connexion` | — |
-| `acces_refuse` | 403 | voters — demande d'autrui, média d'autrui | — |
+| `acces_refuse` | 403 | voters — demande d'autrui, média d'autrui ; compléter le brouillon d'un autre (§ 6.6 ter) ; fusionner sans être administrateur | — |
 | `regime_en_attente` | 403 | `POST /api/demandes`, `POST /api/medias` ; depuis le 2026-10-01, **toute lecture de l'arbre** par un compte en attente (§ 12.1) | — |
 | `introuvable` | 404 | partout, **et sur tout ce que le lecteur n'a pas le droit de voir** | — |
 | `methode_non_autorisee` | 405 | routeur | `{"autorisees": ["GET"]}` |
@@ -6150,8 +6548,12 @@ agent recopiera la référence :
 | `cible_disparue` | 409 | validation | `{demandeId, statut, rejouable: false, cible}` |
 | `dependance_en_attente` | 409 | validation (§ 6.8, issue 7) | `{demandeId, statut: "en_attente", rejouable: true, dependances[]}` |
 | `dependance_morte` | 409 | validation (§ 6.8, issue 8) | `{demandeId, statut: "caduque", rejouable: false, dependances[]}` |
+| `complements_en_attente` | 409 | validation d'une proposition qui a des compléments en attente (§ 6.8, issue 9) | `{demandeId, statut: "en_attente", rejouable: true, complements[]}` |
+| `complement_a_fusionner` | 409 | validation d'un complément dont l'origine vit (§ 6.8, issue 10) | `{demandeId, statut: "en_attente", rejouable: false, origineDemandeId, origineStatut}` |
+| `demande_modifiee_entre_temps` | 409 | compléter (§ 6.6 ter), fusionner (§ 6.7 bis), valider (§ 6.8, issue 11) avec une `empreinte` périmée | `{demandeId, empreinte, rejouable: true}` |
+| `proposition_plus_en_attente` | 409 | déposer ou soumettre un complément dont la proposition a été tranchée (§ 6.3 ter) | `null` — l'issue n'est pas dite |
 | `verrou_concurrent` | 409 | validation | `{demandeId, statut, rejouable: true}` |
-| `demande_deja_decidee` | 409 | valider, refuser, retirer ; `POST /api/medias` sur une personne proposée de **sa** demande tranchée (§ 7.1) | `{statut}` — `null` au téléversement : `Media` ne connaît que le verdict |
+| `demande_deja_decidee` | 409 | valider, refuser, retirer, compléter, fusionner ; `POST /api/medias` sur une personne proposée de **sa** demande tranchée (§ 7.1) | `{statut}` — `null` au téléversement : `Media` ne connaît que le verdict |
 | `demande_deja_soumise` | 409 | soumettre | `{statut}` |
 | `demande_non_refaisable` | 409 | refaire | `{statut}` |
 | `personne_deja_rattachee` | 409 | invitation, inscription, activation | `{personId}` |
