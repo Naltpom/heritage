@@ -295,6 +295,71 @@ final readonly class SerialiseurDeDemande
     }
 
     /**
+     * Une ressemblance **en clair** (§ 6.6 quater) : la ligne de recherche du § 6.6 bis,
+     * plus de quoi dire pourquoi elle ressemble et ce qu'on peut en faire.
+     *
+     * `noeudId` n'est **pas** celui de la ligne de recherche, qui le compose toujours : il
+     * ne vaut ici que si le lecteur a ce nœud dans **son** graphe — le front s'en sert pour
+     * sélectionner la fiche dans /arbre, et un identifiant que le graphe ne porte pas le
+     * ferait chercher une personne qui n'y est pas. C'est l'appelant qui le décide
+     * ({@see RessemblanceDesPropositions}), parce qu'il connaît le lecteur.
+     *
+     * @param list<string> $criteres
+     * @param list<string> $raisons
+     *
+     * @return array<string, mixed>
+     */
+    public function ressemblanceComplete(
+        DraftPerson $brouillon,
+        ?string $noeudId,
+        string $action,
+        array $criteres,
+        array $raisons,
+        int $score,
+    ): array {
+        $lieu = trim($brouillon->getBirth()->getPlace() ?? '');
+
+        return ['forme' => 'complete']
+            + array_replace($this->resultatDeRecherche($brouillon), ['noeudId' => $noeudId])
+            + [
+                'lieuNaissance' => '' === $lieu ? null : $lieu,
+                'statut' => $brouillon->getRequest()->getStatus()->value,
+                'action' => $action,
+                'criteres' => $criteres,
+                'raisons' => $raisons,
+                'score' => $score,
+            ];
+    }
+
+    /**
+     * Une ressemblance **discrète** (§ 6.6 quater) — la proposition d'un vivant faite par un
+     * autre membre : « une proposition semblable attend déjà la validation », et rien
+     * d'autre.
+     *
+     * **Une liste blanche littérale de cinq clés**, écrite à part et jamais obtenue en
+     * retirant des clés à la forme complète : c'est la règle de la fiche réduite de l'arbre
+     * (`NormaliseurDePersonne`), et pour la même raison — une forme construite par
+     * soustraction laisse passer le premier champ ajouté après coup. Ni nom, ni date, ni
+     * lieu, ni auteur, ni numéro de demande, ni nœud : seulement l'identifiant de la fiche,
+     * qu'un complément devra citer, et des raisons qui ne recopient aucune valeur.
+     *
+     * @param list<string> $criteres
+     * @param list<string> $raisons
+     *
+     * @return array{forme: string, draftPersonId: int|null, action: string, criteres: list<string>, raisons: list<string>}
+     */
+    public function ressemblanceDiscrete(DraftPerson $brouillon, string $action, array $criteres, array $raisons): array
+    {
+        return [
+            'forme' => 'discrete',
+            'draftPersonId' => $brouillon->getId(),
+            'action' => $action,
+            'criteres' => $criteres,
+            'raisons' => $raisons,
+        ];
+    }
+
+    /**
      * Une révision de l'historique d'une fiche (§ 6.11).
      *
      * `changes` est rendu **formaté**, pas en brut : c'est un historique lisible, pas un
