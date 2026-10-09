@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /**
- * **`/arbre-2` — l'arbre en rectangles de familles** (demande du 09/10/2026).
+ * **`/arbre` — l'arbre en rectangles de familles** (demande du 09/10/2026 ; né sur
+ * `/arbre-2`, passé sur `/arbre` le même jour — l'arbre d'avant, `HistoireView`, est
+ * désormais sur `/arbre-2`).
  *
  * Copie de `HistoireView.vue` (`/arbre`), dont seul le MOTEUR change : chaque famille
  * — le tronc, les quatre quarts du lecteur, les quatre de son conjoint, les familles par
@@ -541,7 +543,7 @@ function ajuster(): void {
     voler(1, cible.cx, cible.y + cible.h / 2)
     // La requête a servi : on la retire, pour qu'un rechargement reparte de l'arbre entier.
     // Le routeur republie alors la page et vide le résumé : on le remet.
-    void routeur.replace({ name: 'arbre.groupes' }).then(() => definirResume(compteur.value))
+    void routeur.replace({ path: route.path }).then(() => definirResume(compteur.value))
   }
 }
 
