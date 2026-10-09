@@ -96,7 +96,11 @@ export default defineConfig(({ mode }) => {
       // l'écran dans un rendu en mémoire, sans DOM, et il leur faut les `.vue`
       // compilés **pour le client** — un composant compilé pour le serveur n'a
       // qu'un `ssrRender`, que rien ne peut monter.
-      testTransformMode: { web: ['**/*.client.test.ts'] },
+      //
+      // Le second motif : `**` ne traverse pas un dossier caché. Un dépôt extrait
+      // sous `.claude/worktrees/…` compilait donc ces tests pour le serveur, et
+      // les dix fichiers tombaient (« reading 'modules' ») — ailleurs que sur la CI.
+      testTransformMode: { web: ['**/*.client.test.ts', '**/.*/**/*.client.test.ts'] },
     },
     resolve: {
       alias: {
