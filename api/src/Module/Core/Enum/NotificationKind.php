@@ -17,6 +17,20 @@ enum NotificationKind: string
     case DemandeValidee = 'demande_validee';
     case DemandeRefusee = 'demande_refusee';
     case DemandeCaduque = 'demande_caduque';
+    /**
+     * Une proposition en attente a été **complétée** par quelqu'un d'autre que le
+     * destinataire (ADR 0017) : un administrateur l'a complétée sur place, ou y a fusionné
+     * un complément — l'auteur l'apprend, avec le nom des champs touchés, jamais celui du
+     * membre qui a fourni le complément. Dans l'autre sens, l'auteur qui complète sa
+     * demande en attente la fait savoir aux administrateurs.
+     */
+    case DemandeCompletee = 'demande_completee';
+    /**
+     * Le complément du destinataire a été **fusionné** dans la proposition qu'il complétait
+     * (ADR 0017). Ce n'est pas un refus, et il ne part pas comme tel : son travail est
+     * repris, pas écarté.
+     */
+    case ComplementFusionne = 'complement_fusionne';
     case DoublonProbable = 'doublon_probable';
     case InvitationUtilisee = 'invitation_utilisee';
     case CompteEnAttente = 'compte_en_attente';

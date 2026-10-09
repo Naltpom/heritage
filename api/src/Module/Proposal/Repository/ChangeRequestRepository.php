@@ -108,16 +108,75 @@ class ChangeRequestRepository extends ServiceEntityRepository
             return [];
         }
 
+        // **Un complément n'est pas un doublon de son origine** (ADR 0017) : il porte
+        // presque toujours la même clé — c'est la même personne, c'est tout l'objet —, et
+        // l'administrateur le voit déjà dans `complements` ou dans `complementDe`, avec le
+        // bouton qui convient, « Fusionner ». Le lister une seconde fois comme doublon
+        // probable l'inviterait au geste du § 6.9 — refuser en renvoyant à l'autre —, qui
+        // perdrait les liens et les pièces que la fusion reprend.
+        //
+        // Trois lignes à écarter, et la troisième se déduit des deux premières : les
+        // compléments de cette demande, son origine si elle est elle-même un complément,
+        // et les autres compléments de cette même origine — deux membres qui complètent la
+        // même proposition ne sont pas en concurrence, ils seront fusionnés tous les deux.
+        $origine = $demande->getComplementDe()?->getRequest();
+
         return $this->createQueryBuilder('d')
+            ->leftJoin('d.complementDe', 'f')
             ->andWhere('d.dedupKey = :cle')
             ->andWhere('d.status = :statut')
             ->andWhere('d.id <> :moi')
+            ->andWhere('f.id IS NULL OR IDENTITY(f.request) NOT IN (:demandesDeLaFamille)')
+            ->andWhere('d.id <> :origine')
             ->setParameter('cle', $cle)
             ->setParameter('statut', RequestStatus::EnAttente)
             ->setParameter('moi', $demande->getId() ?? 0)
+            ->setParameter('origine', $origine?->getId() ?? 0)
+            ->setParameter('demandesDeLaFamille', [$demande->getId() ?? 0, $origine?->getId() ?? 0])
             ->addOrderBy('d.submittedAt', 'ASC')
             ->getQuery()
             ->getResult();
+    }
+
+    /**
+     * Les **compléments** d'une proposition : les demandes dont `complement_de_id` désigne
+     * une de ses fiches (ADR 0017), dans l'ordre de soumission.
+     *
+     * Sans les brouillons — un complément non envoyé n'est visible que de son auteur
+     * (§ 5.7), et l'administrateur n'a rien à en fusionner — mais **avec** les tranchés : un
+     * complément déjà fusionné reste dans l'historique de l'origine, et la vue
+     * d'administration le montre avec son statut. `$seulementEnAttente` restreint aux
+     * compléments que la fusion peut encore prendre : c'est la question du contrôle
+     * préalable, qui bloque la validation de l'origine tant qu'il en reste un.
+     *
+     * Index : `idx_prp_request_complement`.
+     *
+     * @return list<ChangeRequest>
+     */
+    public function complementsDe(ChangeRequest $origine, bool $seulementEnAttente = false): array
+    {
+        if (null === $origine->getId()) {
+            return [];
+        }
+
+        $qb = $this->createQueryBuilder('d')
+            ->addSelect('f')
+            ->join('d.complementDe', 'f')
+            ->andWhere('f.request = :origine')
+            ->andWhere('d.status <> :brouillon')
+            ->setParameter('origine', $origine)
+            ->setParameter('brouillon', RequestStatus::Brouillon)
+            ->addOrderBy('d.submittedAt', 'ASC')
+            ->addOrderBy('d.id', 'ASC');
+
+        if ($seulementEnAttente) {
+            $qb->andWhere('d.status = :enAttente')->setParameter('enAttente', RequestStatus::EnAttente);
+        }
+
+        /** @var list<ChangeRequest> $complements */
+        $complements = $qb->getQuery()->getResult();
+
+        return $complements;
     }
 
     /**

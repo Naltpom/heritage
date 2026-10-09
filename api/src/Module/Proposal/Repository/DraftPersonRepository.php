@@ -188,19 +188,63 @@ class DraftPersonRepository extends ServiceEntityRepository
     }
 
     /**
-     * **Le point d'accroche des compléments** — sans effet tant qu'ils n'existent pas.
+     * **Les compléments ne se signalent pas comme des propositions** (ADR 0017).
      *
-     * Le plan de la fonction (PR 4) ajoute `prp_change_request.complement_de_id` : une
-     * demande qui **complète** la proposition d'un autre membre, et que l'administrateur
-     * fusionne. Un complément porte une fiche, mais ce n'est pas une proposition de plus —
-     * le signaler comme « une proposition semblable attend déjà » montrerait deux fois la
-     * même personne, et inviterait à compléter le complément. Le jour où la colonne existe,
-     * cette méthode gagne `AND d.complementDe IS NULL`, et c'est le seul endroit à toucher :
-     * la ressemblance ne parcourt les fiches que par {@see pourRessemblance()}.
+     * `prp_change_request.complement_de_id` désigne une demande qui **complète** la
+     * proposition d'un autre membre, et que l'administrateur fusionne. Un complément porte
+     * une fiche, mais ce n'est pas une proposition de plus — le signaler comme « une
+     * proposition semblable attend déjà » montrerait deux fois la même personne, et
+     * inviterait à compléter le complément, c'est-à-dire à bâtir la chaîne que le dépôt
+     * refuse (un complément ne se complète pas par un autre complément). C'est le seul
+     * endroit à toucher : la ressemblance ne parcourt les fiches que par
+     * {@see pourRessemblance()}.
+     *
+     * L'alias `d` est celui de la demande dans {@see pourRessemblance()} : la méthode n'a
+     * pas d'autre appelant, et elle est privée pour qu'elle n'en ait pas.
      */
     private function sansLesComplements(QueryBuilder $qb): QueryBuilder
     {
-        return $qb;
+        return $qb->andWhere('d.complementDe IS NULL');
+    }
+
+    /**
+     * La fiche qu'un **complément** veut compléter, si l'auteur du complément a le droit
+     * de la désigner — `null` sinon, c'est-à-dire un `404` (§ 6.3 ter du contrat).
+     *
+     * ── Pourquoi pas {@see visiblePourLecteur()} ────────────────────────────────────
+     *
+     * Celle-là borne un membre à **ses** fiches : la règle du § 13.3, la bonne pour
+     * désigner une fiche dans un lien. Or un complément vise précisément la proposition
+     * d'**un autre** — c'est sa raison d'être, et la ressemblance du § 6.6 quater vient de
+     * la lui signaler, en clair ou par la seule phrase. La règle est donc celle de la
+     * ressemblance, et d'elle seule :
+     *
+     * - une fiche d'une demande **soumise** se désigne, quel qu'en soit l'auteur — le statut
+     *   n'est pas filtré ici, parce qu'une demande tranchée se dit autrement (`409`) qu'une
+     *   fiche inexistante, et que ce n'est pas au dépôt de le décider ;
+     * - un **brouillon non envoyé** ne se désigne que par son auteur : il n'est visible de
+     *   personne d'autre (§ 5.7), administrateur compris, et la ressemblance ne le parcourt
+     *   que pour lui. Le dépôt refusera ensuite qu'on complète sa propre fiche — mais en
+     *   `422`, avec la bonne explication, et non en `404`.
+     *
+     * Le reste — la nature de la demande, sa fiche déjà complément d'une autre, son statut
+     * — est jugé par l'appelant ({@see \App\Module\Proposal\Service\ConstructeurDeCreation}),
+     * qui sait quoi répondre à chaque cas.
+     */
+    public function complementable(int $id, int $auteurDuComplement): ?DraftPerson
+    {
+        $ligne = $this->createQueryBuilder('b')
+            ->addSelect('d')
+            ->join('b.request', 'd')
+            ->andWhere('b.id = :id')
+            ->andWhere('d.status <> :brouillon OR d.authorUserId = :auteur')
+            ->setParameter('id', $id)
+            ->setParameter('brouillon', RequestStatus::Brouillon)
+            ->setParameter('auteur', $auteurDuComplement)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        return $ligne instanceof DraftPerson ? $ligne : null;
     }
 
     /**
