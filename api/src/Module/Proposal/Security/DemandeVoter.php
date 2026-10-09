@@ -37,13 +37,25 @@ final class DemandeVoter extends Voter
     /** Valider ou refuser : administrateur. */
     public const string DECIDER = 'prp_decider_demande';
 
+    /**
+     * Compléter sur place une fiche proposée (§ 6.6 ter, ADR 0017) : **son auteur, ou un
+     * administrateur**.
+     *
+     * Le voter ne juge que la personne ; le statut, il ne le voit pas, et c'est
+     * {@see \App\Module\Proposal\Service\CompletionDeProposition} qui le juge — l'auteur
+     * complète son brouillon comme sa demande en attente, l'administrateur la demande en
+     * attente d'un autre, jamais son brouillon. Un autre membre ne complète pas : il dépose
+     * un **complément**, que l'administrateur fusionne.
+     */
+    public const string COMPLETER = 'prp_completer_demande';
+
     public function __construct(private readonly Security $securite)
     {
     }
 
     protected function supports(string $attribute, mixed $subject): bool
     {
-        return \in_array($attribute, [self::VOIR, self::MODIFIER, self::DECIDER], true)
+        return \in_array($attribute, [self::VOIR, self::MODIFIER, self::DECIDER, self::COMPLETER], true)
             && $subject instanceof ChangeRequest;
     }
 
@@ -65,6 +77,7 @@ final class DemandeVoter extends Voter
             // a `valider` et `refuser`, qui en laissent une.
             self::MODIFIER => $estAuteur,
             self::DECIDER => $estAdministrateur,
+            self::COMPLETER => $estAuteur || $estAdministrateur,
             default => false,
         };
     }

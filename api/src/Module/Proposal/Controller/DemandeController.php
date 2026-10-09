@@ -19,6 +19,7 @@ use App\Module\Proposal\Repository\ChangeRequestRepository;
 use App\Module\Proposal\Repository\DraftPersonRepository;
 use App\Module\Proposal\Repository\RevisionRepository;
 use App\Module\Proposal\Security\DemandeVoter;
+use App\Module\Proposal\Service\CompletionDeProposition;
 use App\Module\Proposal\Service\DepotDeDemande;
 use App\Module\Proposal\Service\FabriqueDeLecteur;
 use App\Module\Proposal\Service\InventaireDeLaSuppression;
@@ -33,7 +34,8 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Les routes du membre : déposer, suivre, retirer, refaire (§ 6 du contrat d'API).
+ * Les routes du membre : déposer, suivre, retirer, refaire, compléter (§ 6 du contrat
+ * d'API).
  *
  * Les contrôleurs de ce module sont **délibérément maigres** : ils lisent la requête,
  * appellent un service, sérialisent. Toute la règle métier vit dans `Service/`, et
@@ -56,6 +58,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * | `POST /api/demandes/{id}/retirer` | oui | **oui** |
  * | `GET /api/demandes/{id}/refaire` | **non** | — |
  * | `GET /api/demandes/{id}/brouillons/{ref}` | non | — |
+ * | `PUT /api/demandes/{id}/brouillons/{ref}` | oui | **oui** |
  * | `GET /api/demandes/brouillons/recherche` | non | — |
  * | `POST /api/demandes/brouillons/ressemblances` | **non** | — |
  * | `GET /api/demandes/brouillons/{brouillonId}` | non | — |
@@ -72,6 +75,12 @@ use Symfony\Component\Routing\Attribute\Route;
  * rien**. Le verbe garde la saisie — un nom et une naissance, souvent d'un vivant — hors
  * de l'URL et des journaux ; il ne dit pas une écriture, et le garde-fou n'a donc rien à
  * y garder.
+ *
+ * Le `PUT` du 10/10/2026 (ADR 0017) est la **première route qui réécrit une demande déjà
+ * enregistrée** : jusque-là, une demande naissait au `POST` et ne changeait plus que de
+ * statut. Elle passe par le même garde-fou que les autres écritures, et `POST /api/demandes`
+ * accepte désormais `complementDe` — un complément est un dépôt comme un autre, il n'a pas
+ * de route à lui.
  *
  * ── Pourquoi le garde-fou est ici et pas seulement dans les services ────────────
  *
@@ -206,6 +215,37 @@ final class DemandeController extends AbstractController
         }
 
         return $this->charge($this->serialiseur->brouillon($brouillon));
+    }
+
+    /**
+     * **Compléter sur place** une fiche proposée — § 6.6 ter, ADR 0017.
+     *
+     * Le même chemin que la lecture du nœud, en `PUT` : la fiche est **remplacée** entière
+     * (`fiche`), des liens peuvent s'y **ajouter** (`liens`), et `empreinte` garantit qu'on
+     * complète la demande qu'on a lue. La référence s'écrit sans dièse, pour la raison de la
+     * route `GET` voisine.
+     *
+     * Le voter laisse passer l'auteur et l'administrateur ; le service tranche le statut
+     * (l'auteur sur `brouillon` ou `en_attente`, l'administrateur sur `en_attente`
+     * seulement). Rend la demande entière (§ 6.5), avec sa nouvelle empreinte : le front
+     * enchaîne une seconde complétion sans relire.
+     */
+    #[Route(
+        '/{id}/brouillons/{ref}',
+        name: 'proposal_demande_completer_brouillon',
+        requirements: ['id' => '\d+', 'ref' => '[A-Za-z]\d+'],
+        methods: ['PUT'],
+    )]
+    public function completer(int $id, string $ref, Request $requete, CompletionDeProposition $completion): JsonResponse
+    {
+        $this->bascule->refuserSiActive();
+
+        $demande = $this->trouver($id);
+        $this->exiger(DemandeVoter::COMPLETER, $demande);
+
+        return $this->charge($this->serialiseur->pourAuteur(
+            $completion->completer($demande, $ref, $this->corps($requete), $this->lecteurs->courant()),
+        ));
     }
 
     /**

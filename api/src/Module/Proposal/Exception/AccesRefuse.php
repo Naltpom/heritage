@@ -26,6 +26,20 @@ final class AccesRefuse extends ErreurDeDemande
     }
 
     /**
+     * Un administrateur qui voudrait compléter le **brouillon** d'un membre (§ 6.6 ter).
+     *
+     * Un brouillon non envoyé est le travail en cours de son auteur : il ne l'a pas encore
+     * soumis, et y écrire serait décider à sa place de ce qu'il enverra — la même raison
+     * qui interdit à l'administrateur d'y joindre une pièce (`FichesProposeesInterface`).
+     * Le même code `acces_refuse` qu'une demande d'autrui : le front n'a pas d'autre geste
+     * à proposer que d'attendre l'envoi.
+     */
+    public static function brouillonDAutrui(): self
+    {
+        return new self('acces_refuse', 'Un brouillon ne se complète que par son auteur : attendez qu\'il soit envoyé.');
+    }
+
+    /**
      * Un compte `en_attente` de validation ne dépose pas de demande : il n'a pas de
      * cercle de visibilité, donc rien sur quoi proposer une correction (§ 12).
      */

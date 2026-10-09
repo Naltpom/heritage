@@ -183,6 +183,103 @@ final class Conflit extends ErreurDeDemande
         );
     }
 
+    /**
+     * **La troisième `409` qui n'écrit rien** (ADR 0017) : cette proposition a des
+     * **compléments en attente**, déposés par d'autres membres qui y ont reconnu leur
+     * personne. La valider maintenant créerait la personne sans eux — et chacun deviendrait
+     * ensuite une seconde création de la même personne, c'est-à-dire le doublon que tout le
+     * circuit existe pour éviter.
+     *
+     * `rejouable: true` : rien n'a changé, rien n'est à refaire, et la validation passera
+     * telle quelle dès que les compléments seront fusionnés (ou refusés). `complements`
+     * nomme les demandes à traiter d'abord, pour que le front dise lesquelles plutôt que
+     * « réessayez ».
+     *
+     * @param list<int> $complements
+     */
+    public static function complementsEnAttente(int $demandeId, array $complements): self
+    {
+        return new self(
+            'complements_en_attente',
+            'Des compléments attendent sur cette proposition : fusionnez-les (ou refusez-les) avant de la valider.',
+            [
+                'demandeId' => $demandeId,
+                'statut' => RequestStatus::EnAttente->value,
+                'rejouable' => true,
+                'complements' => $complements,
+            ],
+        );
+    }
+
+    /**
+     * Cette demande est un **complément**, et son origine est encore là — en attente, ou
+     * déjà validée. La valider créerait une seconde fiche de la même personne.
+     *
+     * `rejouable: false`, à la différence de la précédente : réessayer ne servira à rien,
+     * le geste attendu est un autre. Origine `en_attente` : la **fusionner** dans
+     * l'origine. Origine `validee` : la fusion n'est plus possible — la personne existe —,
+     * et l'administrateur la refuse, ou son auteur propose une modification de la fiche.
+     * Une origine refusée, retirée ou caduque rend au contraire le complément **autonome** :
+     * cette `409` ne se lève plus, et il se valide comme une création ordinaire.
+     *
+     * **Rien n'est écrit**, pas même le statut : la demande n'est pas morte, elle attend le
+     * bon geste.
+     */
+    public static function complementAFusionner(int $demandeId, int $origineDemandeId, RequestStatus $origineStatut): self
+    {
+        return new self(
+            'complement_a_fusionner',
+            'Cette demande complète une autre proposition : fusionnez-la dans celle-ci plutôt que de la valider.',
+            [
+                'demandeId' => $demandeId,
+                'statut' => RequestStatus::EnAttente->value,
+                'rejouable' => false,
+                'origineDemandeId' => $origineDemandeId,
+                'origineStatut' => $origineStatut->value,
+            ],
+        );
+    }
+
+    /**
+     * L'**empreinte** envoyée ne correspond plus à la demande (§ 6.6 ter, § 6.7 bis) :
+     * quelqu'un l'a complétée — son auteur, un administrateur — entre l'affichage et le
+     * clic. Écrire par-dessus effacerait sans le voir ce qu'il vient d'ajouter.
+     *
+     * **Rien n'est écrit.** `rejouable: true` : le geste reste possible, mais sur la
+     * demande **relue** — d'où l'empreinte courante dans `details`, que le front n'utilise
+     * pas pour forcer : il relit, montre ce qui a changé, et laisse décider.
+     */
+    public static function demandeModifieeEntreTemps(int $demandeId, string $empreinte): self
+    {
+        return new self(
+            'demande_modifiee_entre_temps',
+            'Cette demande a été modifiée depuis que vous l\'avez ouverte : relisez-la avant de continuer.',
+            [
+                'demandeId' => $demandeId,
+                'empreinte' => $empreinte,
+                'rejouable' => true,
+            ],
+        );
+    }
+
+    /**
+     * La proposition qu'un complément veut compléter **n'attend plus** : validée, refusée,
+     * retirée ou caduque (§ 6.3 ter).
+     *
+     * **Sans détails**, et c'est voulu : le complément vise le plus souvent la proposition
+     * d'un autre membre, que son auteur ne voit pas. Dire laquelle de ces issues l'a
+     * emportée en apprendrait plus que la ressemblance n'en a montré. Ce que le front a à
+     * dire tient en une phrase — « cette proposition a été tranchée entre-temps » — et le
+     * geste suivant ne dépend pas de l'issue : relancer la ressemblance.
+     */
+    public static function propositionPlusEnAttente(): self
+    {
+        return new self(
+            'proposition_plus_en_attente',
+            'La proposition que vous complétiez a été tranchée entre-temps : elle ne se complète plus.',
+        );
+    }
+
     /** On ne valide pas deux fois : un double clic ne doit pas produire deux révisions. */
     public static function dejaDecidee(RequestStatus $statut): self
     {

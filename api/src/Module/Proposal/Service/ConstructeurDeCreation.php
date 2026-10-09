@@ -15,6 +15,7 @@ use App\Module\Proposal\Enum\LinkKind;
 use App\Module\Proposal\Enum\RequestKind;
 use App\Module\Proposal\Enum\RequestStatus;
 use App\Module\Proposal\Enum\ValueKind;
+use App\Module\Proposal\Exception\Conflit;
 use App\Module\Proposal\Exception\DonneesInvalides;
 use App\Module\Proposal\Exception\Introuvable;
 use App\Module\Proposal\Repository\DraftLinkRepository;
@@ -85,16 +86,42 @@ use Doctrine\ORM\EntityManagerInterface;
  * 3. **elle ne doit pas appartenir à la demande en cours** — dans sa propre demande, une
  *    fiche se désigne par `*DraftRef`, et laisser les deux formes cohabiter donnerait
  *    deux façons de dire la même chose, dont une que l'applicateur résout par une carte
- *    et l'autre par une relecture. Ce troisième contrôle est aujourd'hui **un filet et
- *    non un cas** : une demande naît vide, ses brouillons n'ont pas encore
- *    d'identifiant au moment où ses liens se construisent, et rien ne peut donc les
- *    citer. Il est écrit pour le jour où une demande déjà enregistrée se modifierait —
- *    l'unique chemin par lequel la forme deviendrait atteignable.
+ *    et l'autre par une relecture. Ce contrôle a longtemps été **un filet et non un
+ *    cas** : une demande naissait vide, ses brouillons n'avaient pas d'identifiant au
+ *    moment où ses liens se construisaient. **Il est devenu atteignable le 10/10/2026** :
+ *    une demande enregistrée se complète désormais sur place (§ 6.6 ter,
+ *    {@see CompletionDeProposition}), et ses fiches ont alors un identifiant qu'un lien
+ *    ajouté pourrait citer. Il est éprouvé par `CompletionDePropositionTest`.
+ *
+ * ── Le premier contrôle porte sur l'**auteur de la demande**, pas sur le lecteur ──
+ *
+ * Tant qu'une demande ne s'écrivait qu'au dépôt, les deux étaient la même personne. Ce
+ * n'est plus vrai : un administrateur complète la demande d'un membre. S'il pouvait y
+ * citer n'importe quelle fiche — il les voit toutes —, il glisserait dans la demande d'un
+ * membre une fiche que ce membre ne voit pas, et dont la validation dépendrait. La fiche
+ * citée doit donc être visible de **celui qui signe la demande**.
+ *
+ * ── Les compléments (ADR 0017) ──────────────────────────────────────────────────
+ *
+ * Une création peut **compléter** la proposition d'un autre membre : `complementDe`, au
+ * premier niveau du corps, désigne la fiche complétée. Les règles sont dans
+ * {@see rattacherALaProposition()} ; la fusion, dans {@see FusionDeComplement}.
  */
 final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
 {
     /** `#p1`, `#p2`… — la forme imposée par `uniq_prp_draft_person_ref` et le § 9.5. */
     private const string FORME_DE_REFERENCE = '/^#p[1-9]\d{0,2}$/';
+
+    /**
+     * Les champs d'une fiche proposée que le dépôt écrit **et** que la complétion réécrit,
+     * dans l'ordre où la notification les nomme. Ce sont exactement les colonnes éditables
+     * de `prp_draft_person` (§ 5.3 du modèle) — `localRef` et `resolvedPersonId` n'en sont
+     * pas : la première est l'identité de la fiche dans sa demande, la seconde le résultat
+     * d'une validation.
+     */
+    public const array CHAMPS_DE_FICHE = [
+        'givenNames', 'surname', 'marriedName', 'nickname', 'sex', 'deceased', 'birth', 'death', 'note',
+    ];
 
     public function __construct(
         private EntityManagerInterface $em,
@@ -116,7 +143,83 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         $creation = RequestKind::CreationPersonne === $demande->getKind();
 
         $brouillons = $this->construireLesBrouillons($demande, $corps, $creation);
+        $this->rattacherALaProposition($demande, $corps, $brouillons);
         $this->construireLesLiens($demande, $corps, $brouillons, $creation, $lecteur);
+    }
+
+    /**
+     * **Le complément** (§ 6.3 ter du contrat, ADR 0017) : cette création complète la
+     * fiche `complementDe`, proposée par un autre membre et encore en attente.
+     *
+     * ── Les règles, dans l'ordre où elles sont jugées ───────────────────────────────
+     *
+     * | Cas | Réponse |
+     * |---|---|
+     * | `complementDe` sur une autre nature que `creation_personne` | `422` — refusé plus tôt, par {@see DepotDeDemande}, pour toutes les natures ; ici pour `ajout_lien`, que ce constructeur partage |
+     * | pas un entier | `422` |
+     * | plus d'une fiche dans le corps | `422` — un complément décrit **la** personne qu'il complète, et la fusion ne saurait pas laquelle verser |
+     * | fiche inexistante, ou brouillon non envoyé d'un autre | `404` — comme au § 6.3 bis, l'existence d'un brouillon d'autrui ne s'annonce pas |
+     * | demande citée tranchée | `409 proposition_plus_en_attente`, **sans détails** |
+     * | sa propre proposition | `422` — elle se complète sur place (§ 6.6 ter) |
+     * | une fiche qui est elle-même un complément | `422` — pas de chaîne : on complète l'origine |
+     *
+     * **Au moins un lien reste exigé à la soumission**, comme pour toute création — et ce
+     * n'est pas un réflexe recopié : le complément doit rester **validable seul**, parce
+     * que l'origine peut mourir (refusée, retirée, caduque) avant la fusion, et qu'il
+     * devient alors une création ordinaire. Sans lien, il flotterait hors de l'arbre.
+     *
+     * La recherche de la fiche ne passe pas par {@see DraftPersonRepository::visiblePourLecteur()},
+     * qui borne un membre à ses propres fiches : un complément vise précisément celle d'un
+     * autre. Voir {@see DraftPersonRepository::complementable()}.
+     *
+     * @param array<string, mixed>       $corps
+     * @param array<string, DraftPerson> $brouillons
+     */
+    private function rattacherALaProposition(ChangeRequest $demande, array $corps, array $brouillons): void
+    {
+        $cible = $corps['complementDe'] ?? null;
+
+        if (null === $cible) {
+            return;
+        }
+
+        if (RequestKind::CreationPersonne !== $demande->getKind()) {
+            throw DonneesInvalides::pourChamp('complementDe', 'Seule une création de personne complète une proposition.');
+        }
+
+        if (!\is_int($cible)) {
+            throw DonneesInvalides::pourChamp('complementDe', 'L\'identifiant de la fiche complétée est un entier.');
+        }
+
+        if (1 !== \count($brouillons)) {
+            throw DonneesInvalides::pourChamp('brouillons', 'Un complément décrit une seule personne : celle qu\'il complète.');
+        }
+
+        $fiche = $this->brouillons->complementable($cible, $demande->getAuthorUserId());
+
+        if (null === $fiche) {
+            throw Introuvable::brouillonPropose($cible);
+        }
+
+        $origine = $fiche->getRequest();
+        $statut = $origine->getStatus();
+
+        // Tranchée : la fiche ne deviendra pas une personne par cette demande-là — ou elle
+        // l'est déjà devenue —, et il n'y a plus rien à fusionner. Sans dire laquelle des
+        // issues : voir {@see Conflit::propositionPlusEnAttente()}.
+        if (RequestStatus::EnAttente !== $statut && RequestStatus::Brouillon !== $statut) {
+            throw Conflit::propositionPlusEnAttente();
+        }
+
+        if ($origine->getAuthorUserId() === $demande->getAuthorUserId()) {
+            throw DonneesInvalides::pourChamp('complementDe', 'C\'est votre propre proposition : complétez-la sur place plutôt que d\'y joindre un complément.');
+        }
+
+        if (null !== $origine->getComplementDe()) {
+            throw DonneesInvalides::pourChamp('complementDe', 'Cette fiche complète déjà une autre proposition : un complément se rattache à la proposition d\'origine, pas à un autre complément.');
+        }
+
+        $demande->setComplementDe($fiche);
     }
 
     /**
@@ -133,6 +236,28 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
             throw DonneesInvalides::demandeSansLien();
         }
 
+        // Un complément enregistré en brouillon se soumet plus tard : la proposition qu'il
+        // complète a pu être tranchée entre-temps. La règle du dépôt vaut à la soumission —
+        // sans quoi il entrerait dans la file en désignant une origine morte, et
+        // l'administrateur hériterait d'un complément qu'aucune fusion ne peut prendre.
+        $origine = $demande->getComplementDe()?->getRequest();
+
+        if (null !== $origine && RequestStatus::EnAttente !== $origine->getStatus()) {
+            throw Conflit::propositionPlusEnAttente();
+        }
+
+        $this->poserLaCleDeDoublon($demande);
+    }
+
+    /**
+     * La clé de doublon d'une demande soumise — **et de nouveau à chaque complétion** d'une
+     * demande en attente (§ 6.6 ter) : un nom ou une naissance corrigés déplacent la
+     * demande dans `idx_prp_request_dedup`, et la laisser sous l'ancienne clé ferait
+     * manquer le rapprochement que l'administrateur attend. Une demande dont plus aucune
+     * fiche n'a de clé la perd.
+     */
+    public function poserLaCleDeDoublon(ChangeRequest $demande): void
+    {
         // La clé de doublon est calculée **par le serveur, à la soumission** (§ 6.3) :
         // le client ne l'envoie pas et ne la voit que dans la vue d'administration. À la
         // soumission parce qu'un brouillon n'a pas à encombrer l'index partiel, qui ne
@@ -141,11 +266,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         // La règle « la première fiche qui a une clé » vit dans `CleDeDoublon`, et non
         // plus ici : `heritage:recalculer-les-cles-de-doublon` doit refaire exactement ce
         // calcul, et deux copies d'une règle finissent par en faire deux.
-        $cle = $this->cleDeDoublon->pourLesBrouillons($this->brouillonsDe($demande));
-
-        if (null !== $cle) {
-            $demande->setDedupKey($cle);
-        }
+        $demande->setDedupKey($this->cleDeDoublon->pourLesBrouillons($this->brouillonsDe($demande)));
     }
 
     /**
@@ -272,25 +393,51 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
     /** @param array<string, mixed> $fiche */
     private function brouillon(ChangeRequest $demande, string $reference, array $fiche, int $index): DraftPerson
     {
-        $chemin = "brouillons[$index]";
-
         $brouillon = new DraftPerson($demande, $reference);
-        $brouillon
-            ->setGivenNames($this->texte($fiche, 'givenNames', $chemin) ?? '')
-            ->setSurname($this->texte($fiche, 'surname', $chemin) ?? '')
-            ->setMarriedName($this->texte($fiche, 'marriedName', $chemin))
-            ->setNickname($this->texte($fiche, 'nickname', $chemin))
-            ->setSex($this->sexe($fiche, $chemin))
-            ->setDeceased($this->booleen($fiche, 'deceased', $chemin))
-            ->setBirth($this->date($fiche, 'birth', $chemin))
-            ->setDeath($this->date($fiche, 'death', $chemin))
-            ->setNote($this->texte($fiche, 'note', $chemin));
+        $this->reecrireLaFiche($brouillon, $this->lireLaFiche($fiche, "brouillons[$index]"));
+
+        return $brouillon;
+    }
+
+    /**
+     * Lit et **valide** les champs d'une fiche proposée, **sans rien écrire** — la moitié
+     * commune du dépôt et de la complétion sur place (§ 6.6 ter).
+     *
+     * ── Pourquoi lire et écrire sont deux méthodes ──────────────────────────────────
+     *
+     * Au dépôt, la fiche est neuve : une `422` la laisse tomber avec la demande, rien n'est
+     * parti. À la complétion, elle est **en base et gérée** par l'unité de travail. Si ses
+     * champs étaient posés un à un puis la règle du décès refusée au dernier, l'entité
+     * resterait à moitié réécrite, et le premier `flush()` venu de la même requête — un
+     * journal, une notification — écrirait en base une fiche que la `422` venait de
+     * refuser. Valider tout, puis écrire tout, ferme la fenêtre par construction.
+     *
+     * **Toute clé absente vaut `null`**, comme au dépôt : la complétion remplace la fiche
+     * entière, elle ne la rapièce pas. Un client qui veut garder une valeur la renvoie.
+     *
+     * @param array<string, mixed> $fiche
+     *
+     * @return array{givenNames: string, surname: string, marriedName: string|null, nickname: string|null, sex: Sex, deceased: bool, birth: UncertainDate, death: UncertainDate, note: string|null}
+     */
+    public function lireLaFiche(array $fiche, string $chemin): array
+    {
+        $valeurs = [
+            'givenNames' => $this->texte($fiche, 'givenNames', $chemin) ?? '',
+            'surname' => $this->texte($fiche, 'surname', $chemin) ?? '',
+            'marriedName' => $this->texte($fiche, 'marriedName', $chemin),
+            'nickname' => $this->texte($fiche, 'nickname', $chemin),
+            'sex' => $this->sexe($fiche, $chemin),
+            'deceased' => $this->booleen($fiche, 'deceased', $chemin),
+            'birth' => $this->date($fiche, 'birth', $chemin),
+            'death' => $this->date($fiche, 'death', $chemin),
+            'note' => $this->texte($fiche, 'note', $chemin),
+        ];
 
         // `ck_prp_draft_person_nom` refuse en base une fiche sans le moindre nom. On le
         // dit ici en 422 plutôt que de laisser la contrainte produire une 500 : les
         // quatre individus sans `NAME` du GEDCOM existent par import, on n'en crée pas
         // de nouveaux à la main.
-        if ('' === trim($brouillon->getSurname()) && '' === trim($brouillon->getGivenNames())) {
+        if ('' === trim($valeurs['surname']) && '' === trim($valeurs['givenNames'])) {
             throw DonneesInvalides::pourChamp("$chemin.surname", 'Une fiche proposée porte au moins un nom ou un prénom.');
         }
 
@@ -303,15 +450,136 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         // un vivant hors cercle est absent de l'arbre, un défunt est visible de tout
         // compte connecté (ADR 0003). On ne bascule pas cela à la place de quelqu'un qui
         // n'a saisi qu'une date.
-        $deces = $brouillon->getDeath();
-
-        if (!$brouillon->isDeceased()
-            && (null !== $deces->getRaw() || null !== $deces->getMin() || null !== $deces->getMax())
-        ) {
+        if (!$valeurs['deceased'] && self::porteUneDate($valeurs['death'])) {
             throw DonneesInvalides::pourChamp("$chemin.death", 'Une date de décès implique le décès : cochez « personne décédée », ou retirez la date. Une fiche marquée décédée devient visible de tout compte connecté, et on ne bascule pas cela à votre place.');
         }
 
-        return $brouillon;
+        return $valeurs;
+    }
+
+    /**
+     * Écrit sur la fiche des valeurs **déjà validées** par {@see lireLaFiche()} — **en
+     * place** : la ligne garde son identifiant, et c'est l'essentiel.
+     *
+     * Une fiche proposée se cite depuis d'autres demandes par l'identifiant de sa ligne
+     * (`*_draft_person_id`, § 6.3 bis), **sans clé étrangère**. La supprimer pour en
+     * recréer une rendrait ces liens pendants en silence, et leur validation tomberait en
+     * `dependance_morte` — une caducité prononcée sur une personne qui existe toujours.
+     *
+     * @param array{givenNames: string, surname: string, marriedName: string|null, nickname: string|null, sex: Sex, deceased: bool, birth: UncertainDate, death: UncertainDate, note: string|null} $valeurs
+     *
+     * @return list<string> les champs qui ont **réellement** changé, dans l'ordre de
+     *                      {@see CHAMPS_DE_FICHE} — de quoi dire à l'auteur ce que
+     *                      l'administration a complété, sans comparer deux fois
+     */
+    public function reecrireLaFiche(DraftPerson $fiche, array $valeurs): array
+    {
+        $avant = $this->instantane($fiche);
+
+        $fiche
+            ->setGivenNames($valeurs['givenNames'])
+            ->setSurname($valeurs['surname'])
+            ->setMarriedName($valeurs['marriedName'])
+            ->setNickname($valeurs['nickname'])
+            ->setSex($valeurs['sex'])
+            ->setDeceased($valeurs['deceased'])
+            ->setBirth($valeurs['birth'])
+            ->setDeath($valeurs['death'])
+            ->setNote($valeurs['note']);
+
+        $apres = $this->instantane($fiche);
+
+        return array_values(array_filter(
+            self::CHAMPS_DE_FICHE,
+            static fn (string $champ): bool => $avant[$champ] !== $apres[$champ],
+        ));
+    }
+
+    /**
+     * Les champs d'une fiche sous une forme **comparable par `===`** : les dates passent
+     * par leur forme JSON normalisée — deux `UncertainDate` de même valeur ne sont pas
+     * `===`, et `==` comparerait des propriétés privées dans un ordre non garanti (voir
+     * l'en-tête de {@see AnalyseDeDemande}).
+     *
+     * @return array<string, mixed>
+     */
+    public function instantane(DraftPerson $fiche): array
+    {
+        return [
+            'givenNames' => $fiche->getGivenNames(),
+            'surname' => $fiche->getSurname(),
+            'marriedName' => $fiche->getMarriedName(),
+            'nickname' => $fiche->getNickname(),
+            'sex' => $fiche->getSex()->value,
+            'deceased' => $fiche->isDeceased(),
+            'birth' => $this->normaliseur->versJson(ValueKind::DateIncertaine, $fiche->getBirth()),
+            'death' => $this->normaliseur->versJson(ValueKind::DateIncertaine, $fiche->getDeath()),
+            'note' => $fiche->getNote(),
+        ];
+    }
+
+    /**
+     * Des liens **ajoutés** à une demande déjà enregistrée — la seconde moitié de la
+     * complétion sur place (§ 6.6 ter). Construits et validés, **pas encore persistés** :
+     * l'appelant les persiste une fois tout le corps accepté, pour la même raison que
+     * {@see lireLaFiche()} sépare lire et écrire.
+     *
+     * ── Le rang est attribué ici, jamais reçu ───────────────────────────────────────
+     *
+     * `uniq_prp_draft_link_seq` refuse deux liens de même rang dans une demande, et le
+     * client ne sait pas lesquels sont pris — une complétion de l'administrateur a pu en
+     * ajouter depuis son affichage. Un `seq` envoyé est donc **refusé** en `422` plutôt
+     * qu'ignoré : un client qui croit choisir l'ordre doit apprendre qu'il ne le choisit
+     * pas. Le rang vient du plus grand **en base** : {@see liensDe()} lirait la base dès
+     * que la demande a un identifiant, et ne verrait pas les liens persistés et non
+     * encore écrits — l'appelant n'en a pas, il compte donc juste.
+     *
+     * Les références `*DraftRef` désignent les fiches de la demande **telles qu'elles sont
+     * en base** : le libellé d'un lien qui cite la fiche qu'on est en train de compléter
+     * porte donc l'ancien nom, et c'est l'appelant qui le rafraîchit avec les autres liens
+     * qui la citent ({@see CompletionDeProposition}).
+     *
+     * @return list<DraftLink>
+     */
+    public function liensEnPlus(ChangeRequest $demande, mixed $brut, Lecteur $lecteur): array
+    {
+        if (null === $brut) {
+            return [];
+        }
+
+        if (!\is_array($brut)) {
+            throw DonneesInvalides::pourChamp('liens', 'Les liens forment un tableau.');
+        }
+
+        $brouillons = [];
+
+        foreach ($this->brouillons->pourDemande($demande) as $brouillon) {
+            $brouillons[$brouillon->getLocalRef()] = $brouillon;
+        }
+
+        $creation = RequestKind::CreationPersonne === $demande->getKind();
+        $rang = $this->liens->plusGrandRang($demande);
+        $construits = [];
+
+        foreach (array_values($brut) as $index => $lien) {
+            if (!\is_array($lien)) {
+                throw DonneesInvalides::pourChamp("liens[$index]", 'Chaque lien est un objet.');
+            }
+
+            if (null !== ($lien['seq'] ?? null)) {
+                throw DonneesInvalides::pourChamp("liens[$index].seq", 'Le rang d\'un lien ajouté est attribué par le serveur : ne l\'envoyez pas.');
+            }
+
+            $construits[] = $this->lien($demande, $lien, $index, ++$rang, $brouillons, $creation, $lecteur);
+        }
+
+        return $construits;
+    }
+
+    /** Un bloc date porte-t-il une **date**, au-delà d'un lieu seul ? */
+    private static function porteUneDate(UncertainDate $date): bool
+    {
+        return null !== $date->getRaw() || null !== $date->getMin() || null !== $date->getMax();
     }
 
     /**
@@ -343,7 +611,12 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
                 throw DonneesInvalides::pourChamp("liens[$index]", 'Chaque lien est un objet.');
             }
 
-            $construit = $this->lien($demande, $lien, $index, $brouillons, $creation, $lecteur);
+            $seq = $lien['seq'] ?? null;
+            if (!\is_int($seq) || $seq < 1) {
+                throw DonneesInvalides::pourChamp("liens[$index].seq", 'Le rang d\'un lien est un entier positif.');
+            }
+
+            $construit = $this->lien($demande, $lien, $index, $seq, $brouillons, $creation, $lecteur);
 
             if (\in_array($construit->getSeq(), $rangs, true)) {
                 throw DonneesInvalides::pourChamp("liens[$index].seq", 'Deux liens ne peuvent pas porter le même rang.');
@@ -474,6 +747,10 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
     }
 
     /**
+     * Un lien, à son rang. Le rang est **décidé par l'appelant** : lu dans le corps au
+     * dépôt, où le client ordonne ses liens ; attribué par le serveur à la complétion, où
+     * il ne sait pas lesquels sont pris ({@see liensEnPlus()}).
+     *
      * @param array<string, mixed>       $brut
      * @param array<string, DraftPerson> $brouillons indexés par référence provisoire
      */
@@ -481,16 +758,12 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         ChangeRequest $demande,
         array $brut,
         int $index,
+        int $seq,
         array $brouillons,
         bool $creation,
         Lecteur $lecteur,
     ): DraftLink {
         $chemin = "liens[$index]";
-
-        $seq = $brut['seq'] ?? null;
-        if (!\is_int($seq) || $seq < 1) {
-            throw DonneesInvalides::pourChamp("$chemin.seq", 'Le rang d\'un lien est un entier positif.');
-        }
 
         $kind = $brut['kind'] ?? null;
         $nature = \is_string($kind) ? LinkKind::tryFrom($kind) : null;
@@ -746,18 +1019,16 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
 
         // `404` et jamais `403` : la fiche proposée d'un autre membre ne doit pas
         // s'annoncer par le code de retour (§ 15.2, § 13.3).
-        $brouillon = $this->brouillons->visiblePourLecteur(
-            $brouillonId,
-            $lecteur->voitToutesLesDemandes() ? null : $lecteur->identiteEffective(),
-        );
+        $brouillon = $this->brouillons->visiblePourLecteur($brouillonId, $this->portee($demande, $lecteur));
 
         if (null === $brouillon) {
             throw Introuvable::brouillonPropose($brouillonId);
         }
 
-        // Le filet du point 3 de l'en-tête : inatteignable tant qu'une demande naît vide,
-        // conservé parce que c'est la seule ligne qui empêcherait deux résolutions
-        // concurrentes de la même fiche le jour où une demande enregistrée se modifierait.
+        // Le filet du point 3 de l'en-tête, **atteignable depuis la complétion sur place** :
+        // les fiches d'une demande enregistrée ont un identifiant, et un lien ajouté
+        // pourrait citer l'une d'elles par lui plutôt que par sa référence. C'est la seule
+        // ligne qui empêche deux désignations — et deux résolutions — de la même fiche.
         if ($brouillon->getRequest() === $demande) {
             throw DonneesInvalides::pourChamp($chemin, 'Cette fiche appartient à la demande en cours : désignez-la par sa référence provisoire.');
         }
@@ -783,6 +1054,31 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         }
 
         return [null, null, $brouillon->nomPropose(), $brouillonId];
+    }
+
+    /**
+     * **Les fiches que cette demande a le droit de citer** : celles que voit son **auteur**,
+     * pas forcément le lecteur — `null` veut dire « toutes ».
+     *
+     * Au dépôt, l'auteur **est** le lecteur (la demande porte son identifiant), et la règle
+     * reste celle du § 13.3 : ses propres fiches, ou toutes pour un administrateur hors
+     * bascule — l'écriture sous bascule est refusée plus haut.
+     *
+     * À la complétion d'une demande **d'un autre** (§ 6.6 ter), le lecteur est un
+     * administrateur : il voit tout, mais la demande ne lui appartient pas. Lui laisser sa
+     * propre portée, ce serait le laisser glisser dans la demande d'un membre une fiche que
+     * ce membre ne voit pas — et dont la validation dépendrait ensuite. La portée est donc
+     * celle de l'auteur, **ses fiches et elles seules**, même si cet auteur est lui-même
+     * administrateur : le compte ne dit pas son rôle, et la règle la plus étroite ne fait
+     * de tort à personne — l'auteur reste libre d'ajouter ce lien lui-même.
+     */
+    private function portee(ChangeRequest $demande, Lecteur $lecteur): ?int
+    {
+        if ($demande->getAuthorUserId() !== $lecteur->userId) {
+            return $demande->getAuthorUserId();
+        }
+
+        return $lecteur->voitToutesLesDemandes() ? null : $lecteur->identiteEffective();
     }
 
     /**

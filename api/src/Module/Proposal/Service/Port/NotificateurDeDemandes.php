@@ -13,8 +13,11 @@ use App\Module\Proposal\Entity\ChangeRequest;
  * `Proposal` ne sait pas notifier et n'a pas à l'apprendre : les notifications sont
  * une table et un écran de `Core` (`core_notification`, § 2.5 du modèle de données).
  * Cette interface est **la totalité** de ce que `Proposal` demande au module de
- * notification. Elle est volontairement minuscule : cinq événements, aucun retour,
- * aucune exception attendue.
+ * notification. Elle est volontairement minuscule : sept événements, aucun retour,
+ * aucune exception attendue. Les deux derniers — {@see demandeCompletee()} et
+ * {@see complementFusionne()} — sont venus le 10/10/2026 avec la complétion des
+ * propositions en attente (ADR 0017), et ont chacun leur `NotificationKind` : ce qui
+ * arrive au destinataire n'est ni une soumission, ni une décision.
  *
  * **Ce que l'agent « notifications » a à faire**, et rien d'autre :
  *
@@ -123,4 +126,41 @@ interface NotificateurDeDemandes
      *                                                                                                         la notification et l'écran disent exactement la même chose.
      */
     public function demandeCaduqueParDependance(ChangeRequest $demande, array $dependances): void;
+
+    /**
+     * Une proposition en attente vient d'être **complétée** (ADR 0017) — sur place, ou par
+     * la fusion d'un complément.
+     *
+     * Destinataires, selon `$parLAdministration` :
+     *
+     * - `true` — un administrateur a complété la demande **d'un autre**, ou y a fusionné un
+     *   complément : **l'auteur**, avec « L'administration a complété votre demande
+     *   n° N ». Jamais le nom du membre qui a fourni un complément : l'auteur ne le voit
+     *   pas, et la fusion est un geste de l'administration ;
+     * - `false` — l'auteur a complété **sa** demande en attente : **les administrateurs**,
+     *   sauf lui, parce que ce qu'ils avaient lu a changé.
+     *
+     * L'appelant ne l'appelle pas pour un brouillon (personne d'autre ne le voit), ni pour
+     * un administrateur qui complète sa propre demande (il vient de cliquer).
+     *
+     * @param list<string> $champs       les **libellés** des champs touchés (« Naissance »,
+     *                                   « Décès »), jamais leurs valeurs : une valeur de
+     *                                   vivant n'a rien à faire dans une notification qui se
+     *                                   relit des mois plus tard
+     * @param int          $liensAjoutes combien de liens la complétion a ajoutés
+     */
+    public function demandeCompletee(ChangeRequest $demande, bool $parLAdministration, array $champs, int $liensAjoutes): void;
+
+    /**
+     * Un complément vient d'être **fusionné** dans la proposition qu'il complétait
+     * (ADR 0017).
+     *
+     * Destinataire : **l'auteur du complément**, sauf s'il est l'administrateur qui a
+     * fusionné. Ce n'est pas {@see demandeRefusee()} — et c'est tout l'objet de cette
+     * méthode : techniquement le complément est clos en `refusee` avec `duplicate_of_id`,
+     * mais son travail est **repris**, et un « votre demande a été refusée » le dirait
+     * écarté. La notification ne nomme pas la personne : l'origine est le plus souvent la
+     * proposition d'un autre membre, qu'il ne voit pas.
+     */
+    public function complementFusionne(ChangeRequest $complement, ChangeRequest $origine): void;
 }
