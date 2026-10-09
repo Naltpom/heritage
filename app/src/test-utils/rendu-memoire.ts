@@ -28,11 +28,35 @@ export interface Noeud {
   showModal?: () => void
   close?: () => void
   focus?: () => void
+  /** Ce que `v-model` pose sur un champ natif : ses écouteurs (`input`,
+   *  `change`…) rejoignent ceux du gabarit, dans `ecouteurs`. */
+  addEventListener?: (type: string, ecouteur: unknown) => void
+  removeEventListener?: (type: string, ecouteur: unknown) => void
+  /** Lu par `v-model` quand la valeur change sous le champ : la racine du rendu.
+   *  Le test qui s'en sert déclare `Document` et `ShadowRoot` (`vi.stubGlobal`) :
+   *  la racine n'étant ni l'un ni l'autre, le champ prend la nouvelle valeur. */
+  getRootNode?: () => Noeud
 }
 
 export function noeud(type: Noeud['type'], tag = '', texte = ''): Noeud {
   const n: Noeud = { type, tag, texte, attributs: {}, ecouteurs: {}, enfants: [], parent: null }
-  if (type === 'element') n.focus = () => undefined
+  if (type === 'element') {
+    n.focus = () => undefined
+    n.addEventListener = (type, ecouteur) => {
+      const deja = n.ecouteurs[type]
+      n.ecouteurs[type] = deja === undefined ? ecouteur : [...(Array.isArray(deja) ? deja : [deja]), ecouteur]
+    }
+    n.removeEventListener = (type, ecouteur) => {
+      const deja = n.ecouteurs[type]
+      if (deja === ecouteur) delete n.ecouteurs[type]
+      else if (Array.isArray(deja)) n.ecouteurs[type] = deja.filter((e) => e !== ecouteur)
+    }
+    n.getRootNode = () => {
+      let racine = n
+      while (racine.parent !== null) racine = racine.parent
+      return racine
+    }
+  }
   if (tag === 'dialog') {
     n.open = false
     n.showModal = () => {
