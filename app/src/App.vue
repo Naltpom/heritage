@@ -22,7 +22,6 @@ import { useRoute } from 'vue-router'
 import EnTeteApplication from '@/components/mise-en-page/EnTeteApplication.vue'
 import BarreNavigation from '@/components/mise-en-page/BarreNavigation.vue'
 import BandeauPortrait from '@/components/mise-en-page/BandeauPortrait.vue'
-import InstallationApplication from '@/components/mise-en-page/InstallationApplication.vue'
 import BandeauRegime from '@/components/mise-en-page/BandeauRegime.vue'
 // Le créneau `quitter-vue` du bandeau existait, vide : la sortie de la bascule
 // doit être là où le bandeau est, c'est-à-dire partout. Un administrateur qui a
@@ -40,6 +39,10 @@ import InvitationNotifications from '@/components/notifications/InvitationNotifi
 // l'application. Même montage que la précédente ; elle passe AVANT elle, et les deux ne
 // s'ouvrent jamais ensemble (`composables/fenetresAutomatiques.ts`).
 import InvitationCleDAcces from '@/components/cles-d-acces/InvitationCleDAcces.vue'
+// L'invitation à installer Heritage sur le téléphone — une fenêtre, qui remplace
+// le bandeau monté jadis sous l'en-tête. Même montage ; elle passe entre les
+// deux autres : après la clé d'accès, avant les notifications.
+import InvitationInstallation from '@/components/mise-en-page/InvitationInstallation.vue'
 
 const route = useRoute()
 const avecCadre = computed(() => route.meta.cadre !== false)
@@ -57,7 +60,6 @@ const avecCadre = computed(() => route.meta.cadre !== false)
     <template v-if="avecCadre">
       <EnTeteApplication />
       <BandeauPortrait />
-      <InstallationApplication />
       <BandeauRegime>
         <template #quitter-vue>
           <QuitterVueEmpruntee />
@@ -75,5 +77,6 @@ const avecCadre = computed(() => route.meta.cadre !== false)
   </div>
 
   <InvitationCleDAcces :avec-cadre="avecCadre" />
+  <InvitationInstallation :avec-cadre="avecCadre" />
   <InvitationNotifications :avec-cadre="avecCadre" />
 </template>

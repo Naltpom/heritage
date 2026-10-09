@@ -51,9 +51,26 @@
  *  - deux formats de fiche, « Compact » et « Portrait » (`histoire/cartes.ts`), au
  *    choix du lecteur : une préférence de l'appareil, proposée d'elle-même sur
  *    téléphone à la première visite (`InvitationFormatDesCartes`) ;
- *  - aucun texte sous 10 px à l'écran.
+ *  - aucun texte sous 10 px à l'écran ;
+ *  - sur PC (dès `lg`), « Ajouter une personne » ouvre le formulaire de proposition
+ *    dans un volet à gauche, l'arbre à côté (`VoletProposition`, demande du
+ *    09/10/2026) : le volet ne quitte `/arbre` que par un lien qu'on choisit
+ *    (« Voir la demande »), et la personne déposée y apparaît, choisie, sans
+ *    rechargement.
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  defineComponent,
+  h,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   CLE_ETAG_GRAPHE,
@@ -68,7 +85,7 @@ import {
   type ResultatDeRecherche,
 } from '@/lib/api'
 import { FILTRES, filtreDisponible, nomDeFiche, type IdFiltre, type NoeudPersonneEtendu } from '@/components/arbre/graphe'
-import { useEstMobile, useTiroirs } from '@/composables/useTiroirs'
+import { useCorrespondance, useEstMobile, useTiroirs } from '@/composables/useTiroirs'
 import { definirResume } from '@/composables/entete'
 import { abonnerChoix, useRechercheGlobale } from '@/composables/rechercheGlobale'
 import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
@@ -94,6 +111,15 @@ import { useFormatDesCartes } from '@/composables/formatDesCartes'
 import ReglageFormatDesCartes from '@/components/arbre/ReglageFormatDesCartes.vue'
 import InvitationFormatDesCartes from '@/components/arbre/InvitationFormatDesCartes.vue'
 import InterrupteurFiltre from '@/components/arbre/InterrupteurFiltre.vue'
+import {
+  REQUETE_DEUX_VOLETS,
+  REQUETE_VOLET_PROPOSITION,
+  cadrageApresVolet,
+  toucheIgnoree,
+  voletDroitVisible,
+  type PlaceDansLArbre,
+} from '@/components/arbre/voletProposition'
+import type { PersonneDeposee } from '@/components/proposition/depot'
 import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
 import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
 import { effectifSansLien, estSansLien, noeudsSansLien, sansPersonnesSansLien } from '@/histoire/sansLien'
@@ -291,13 +317,16 @@ watch(fratriesParNaissance, (oui) => {
   redisposer()
 })
 /*
- * Changer de format refait la disposition — les coordonnées du monde changent
- * toutes. Pour ne pas perdre le lecteur, on garde à l'écran la personne qu'il
- * regardait : la sélection s'il y en a une, sinon la fiche la plus proche du
- * centre ; au même zoom, à la même place. Sans arbre affiché (ou au niveau
- * Ensemble), on repart de l'arbre ajusté, comme après une bascule.
+ * Refaire la disposition — les coordonnées du monde changent toutes — sans perdre le
+ * lecteur : on garde à l'écran la personne qu'il regardait, la sélection s'il y en a
+ * une, sinon la fiche la plus proche du centre ; au même zoom, à la même place.
+ *
+ * `refaire` refait la disposition (`redisposer()`, qui recadre l'arbre ajusté).
+ * Sans repère — pas d'arbre affiché, ou le niveau Ensemble sans sélection —,
+ * `sansRepere` décide : `ajuster` garde l'arbre ajusté, comme après une bascule ;
+ * `garder` remet le cadrage d'avant, pour un arbre qui ne change que d'une fiche.
  */
-watch(formatDesCartes, () => {
+function garderLeRepere(refaire: () => void, sansRepere: 'ajuster' | 'garder' = 'ajuster'): void {
   const d = disposition.value
   if (!d || !grapheCharge.value) return
   const avant = cadrage.value
@@ -306,15 +335,20 @@ watch(formatDesCartes, () => {
   const ancre = choisie ?? (niveau.value > 0 ? ficheLaPlusProche(d, centreMonde()) : undefined)
   if (ancre) repere = { id: ancre.id, px: versEcranX(ancre.cx), py: versEcranY(ancre.y + ancre.h / 2) }
   arreterVol()
-  redisposer()
+  refaire()
   const f = repere ? disposition.value?.parId.get(repere.id) : undefined
-  if (!f || !repere) return
+  if (!f || !repere) {
+    if (sansRepere === 'garder') cadrage.value = avant
+    return
+  }
   const c = canevas.value
   // Le même point d'écran, sauf s'il était sorti de la fenêtre : alors au centre.
   const dedans = repere.px > 0 && repere.px < taille.value.l && repere.py > 0 && repere.py < taille.value.h
   const [px, py] = dedans ? [repere.px, repere.py] : [taille.value.l / 2, taille.value.h / 2]
   cadrage.value = centrerSur(bornerEchelle(avant.s, c), c, f.cx, f.y + f.h / 2, px, py)
-})
+}
+/* Changer de format change la taille des boîtes : la disposition se refait autour du repère. */
+watch(formatDesCartes, () => garderLeRepere(redisposer))
 /** La fiche dont le centre est le plus près d'un point du monde. */
 function ficheLaPlusProche(d: DispositionHistoire, p: { x: number; y: number }): FicheHistoire | undefined {
   let meilleure: FicheHistoire | undefined
@@ -481,6 +515,60 @@ async function charger(): Promise<void> {
   }
 }
 
+/** Le dernier rafraîchissement lancé : une réponse plus ancienne n'écrit rien. */
+let jetonRafraichir = 0
+
+/**
+ * Après une proposition déposée depuis le volet : l'arbre relu et redessiné **sans
+ * repartir de zéro** — ni écran de chargement, ni recadrage d'ensemble, ni fondu
+ * d'apparition —, puis la personne choisie et rejointe.
+ *
+ * Le graphe se revalide comme au chargement (`obtenirLeGraphe`, l'`ETag` gardé) et
+ * revient en `200` : l'`ETag` du serveur porte une empreinte des demandes en attente
+ * du lecteur, bâtie sur leur `updated_at` (`CalqueEnAttenteInterface::
+ * empreinteDesDemandes`), qu'une demande de plus change. La disposition se refait
+ * autour du repère du lecteur (`garderLeRepere`) ; sans repère, le cadrage reste.
+ *
+ * `noeudId` est celui que la réponse du dépôt a rendu (`PersonneDeposee`), jamais
+ * recollé. Rend ce qu'on a trouvé, ou `null` si un rafraîchissement plus récent a
+ * pris la main.
+ */
+async function rafraichir(cible: { noeudId?: string | null; personId?: number | null }): Promise<PlaceDansLArbre | null> {
+  const jeton = ++jetonRafraichir
+  let graphe: Graphe
+  try {
+    graphe = (await obtenirLeGraphe(creerChronometre())).graphe
+  } catch {
+    return jeton === jetonRafraichir ? 'absente' : null
+  }
+  if (jeton !== jetonRafraichir) return null
+  // Pas d'arbre affiché (chargement en cours, ou échec) : rien à redessiner ici.
+  if (!disposition.value || chargement.value) return 'absente'
+  garderLeRepere(() => {
+    grapheCharge.value = graphe
+    redisposer()
+  }, 'garder')
+  return localiser(cible, graphe)
+}
+
+/** Choisit et rejoint la personne déposée dans la disposition refaite, ou dit pourquoi on ne la voit pas. */
+function localiser(cible: { noeudId?: string | null; personId?: number | null }, graphe: Graphe): PlaceDansLArbre {
+  const { noeudId = null, personId = null } = cible
+  const f = noeudId !== null ? disposition.value?.parId.get(noeudId) : undefined
+  if (f) {
+    selection.value = f.id
+    // Au zoom où les noms s'écrivent : la fiche en pointillé se lit en arrivant.
+    voler(Math.max(s.value, seuilDesNoms.value), f.cx, f.y + f.h / 2)
+    return 'placee'
+  }
+  if (personId !== null && montrerPersonne(personId)) return 'placee'
+  // Dans le graphe mais pas à l'écran : un réglage de l'affichage la retire.
+  const dansLeGraphe = graphe.noeuds.some(
+    (n) => n.id === noeudId || (personId !== null && n.type === 'personne' && n.personId === personId),
+  )
+  return dansLeGraphe ? 'masquee' : 'absente'
+}
+
 /* ------------------------------------------------------------------ */
 /* Cadrage                                                             */
 /* ------------------------------------------------------------------ */
@@ -507,7 +595,7 @@ const niveau = computed(() => niveauDe(cadrage.value.s, seuilDesNoms.value))
 
 /** La jauge de zoom, pour l'administration seulement : un repère chiffré sur
  *  les captures d'écran (« à 30 % les noms se chevauchent »), pas un réglage. */
-const { administrateur, session } = useSession()
+const { administrateur, session, rattache, vueEmpruntee } = useSession()
 const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(cadrage.value.s, canevas.value, seuilDesNoms.value) : null))
 const ensemble = computed(() => niveau.value === 0)
 
@@ -749,32 +837,138 @@ watch(ficheChoisie, (f, avant) => {
 })
 
 /*
- * Le VOLET (PC) : la fiche de la personne choisie, sur toute la droite. Il POUSSE
- * l'arbre — le canevas rétrécit, rien n'est caché dessous ; s'il venait couvrir la
- * fiche choisie, l'arbre la ramène dans la partie visible. Le téléphone garde le
- * panneau du bas.
+ * DEUX VOLETS (PC) encadrent le canevas, et tous deux le POUSSENT — le canevas
+ * rétrécit, rien n'est caché dessous :
+ *  - à droite, la FICHE de la personne choisie (le téléphone garde le panneau du bas) ;
+ *  - à gauche, « AJOUTER UNE PERSONNE » (`VoletProposition`, dès `lg`), ouvert par le
+ *    bouton de la barre.
+ * Ils ne tiennent ensemble qu'au-delà de 90 rem : en deçà, ouvrir la proposition masque
+ * la fiche — la sélection et son anneau restent, la fiche revient à la fermeture
+ * (`voletDroitVisible`, `components/arbre/voletProposition.ts`). Si un volet qui paraît
+ * couvre la fiche choisie, l'arbre la ramène dans la partie visible.
  */
-const voletOuvert = computed(() => !estMobile.value && ficheChoisie.value !== null)
-watch(voletOuvert, async (ouvert) => {
-  if (!ouvert) return
+/** Proposer est une écriture : un membre rattaché, hors de la bascule « voir comme un membre ». */
+const peutProposer = computed(() => rattache.value && vueEmpruntee.value === null)
+const estLarge = useCorrespondance(REQUETE_VOLET_PROPOSITION)
+const tresLarge = useCorrespondance(REQUETE_DEUX_VOLETS)
+
+/** Monté au premier clic, puis masqué ou affiché : la saisie survit à la fermeture. */
+const propositionMontee = ref(false)
+const propositionOuverte = ref(false)
+/** À l'écran : ouvert, assez large (sous `lg`, il se masque sans rien perdre), et permis. */
+const propositionVisible = computed(() => propositionOuverte.value && estLarge.value && peutProposer.value)
+
+const voletDroitOuvert = computed(() =>
+  voletDroitVisible({
+    estMobile: estMobile.value,
+    fiche: ficheChoisie.value,
+    propositionOuverte: propositionVisible.value,
+    tresLarge: tresLarge.value,
+  }),
+)
+
+/** Après qu'un volet a paru : le canevas remesuré, et la fiche choisie ramenée si elle est couverte. */
+async function rejoindreLaChoisieCouverte(): Promise<void> {
   await nextTick()
   mesurer()
   const f = ficheChoisie.value
   if (!f) return
   const x = versEcranX(f.cx)
   if (x < 40 || x > taille.value.l - 40) voler(s.value, f.cx, f.y + f.h / 2)
+}
+watch(voletDroitOuvert, (ouvert) => {
+  if (ouvert) void rejoindreLaChoisieCouverte()
 })
 
-/** Un proche cliqué dans le volet : on le choisit dans l'arbre, et l'écran le rejoint. */
-function choisirProche(personId: number): void {
-  afficherSonAlliance(personId)
-  const f = disposition.value?.parPersonId.get(personId)
-  if (!f) {
-    void routeur.push({ name: 'personne.detail', params: { id: personId } })
+/*
+ * Le volet de gauche se place AVANT le canevas : en paraissant, il fait glisser
+ * l'origine du canevas de 440 px vers la droite, et l'arbre avec elle. Le cadrage
+ * recule d'autant DANS LE MÊME TIC — l'observateur `pre` passe avant le rendu qui
+ * montre le volet —, et l'arbre ne bouge pas à l'écran ; l'inverse quand il
+ * s'efface, y compris quand la fenêtre repasse sous `lg`. Un vol en cours s'arrête :
+ * sa trajectoire visait l'ancien canevas. L'observateur de taille remesure ensuite.
+ */
+watch(propositionVisible, (visible) => {
+  arreterVol()
+  const pret = disposition.value !== null && taille.value.l > 0
+  cadrage.value = cadrageApresVolet(cadrage.value, visible, pret)
+  // Un glisser dont l'image attend encore : il repart du même décalage.
+  if (enAttente) enAttente = cadrageApresVolet(enAttente, visible, pret)
+  if (visible) void rejoindreLaChoisieCouverte()
+})
+
+function basculerProposition(): void {
+  if (propositionVisible.value) {
+    propositionOuverte.value = false
     return
   }
+  propositionMontee.value = true
+  propositionOuverte.value = true
+}
+
+/*
+ * Le volet est chargé à la demande : son formulaire (liens, dates, photos…)
+ * n'alourdit pas l'arbre de qui ne s'en sert pas. Pendant le chargement — ou s'il
+ * échoue —, une coquille de même largeur tient sa place : sans elle, l'arbre déjà
+ * reculé de 440 px sauterait le temps que le formulaire arrive.
+ */
+const coquilleDuVolet = (texte: string) =>
+  defineComponent({
+    setup: () => () =>
+      h(
+        'aside',
+        {
+          id: 'volet-proposition',
+          'data-volet-proposition': '',
+          'aria-label': 'Ajouter une personne',
+          class: 'flex w-[440px] flex-none flex-col border-r border-ligne bg-panneau',
+        },
+        [h('p', { class: 'm-0 px-4 py-3.5 text-sm text-attenue', role: 'status' }, texte)],
+      ),
+  })
+const VoletProposition = defineAsyncComponent({
+  loader: () => import('@/components/arbre/VoletProposition.vue'),
+  loadingComponent: coquilleDuVolet('Ouverture du formulaire…'),
+  errorComponent: coquilleDuVolet('Le formulaire n’a pas pu se charger. Rechargez la page pour réessayer.'),
+  delay: 0,
+  // Un réseau qui hoquette : deux nouvelles tentatives avant d'abandonner.
+  onError: (_erreur, reessayer, abandonner, tentatives) => (tentatives <= 2 ? reessayer() : abandonner()),
+})
+
+/** Ce que l'arbre redessiné a trouvé de la dernière personne déposée. */
+const placeDuDepot = ref<PlaceDansLArbre>('recherche')
+
+/** Une personne vient d'être proposée dans le volet : l'arbre se relit, et la montre. */
+async function surDepot(depot: PersonneDeposee): Promise<void> {
+  // Un brouillon n'est pas dans le calque : rien à relire, rien à montrer.
+  if (!depot.soumise) {
+    placeDuDepot.value = 'absente'
+    return
+  }
+  placeDuDepot.value = 'recherche'
+  const place = await rafraichir({ noeudId: depot.noeudId, personId: depot.personId })
+  if (place !== null) placeDuDepot.value = place
+}
+
+/**
+ * Montre une personne dans l'arbre : sa famille par alliance ou sa zone « sans lien »
+ * s'allume s'il le faut, on la choisit, et l'écran la rejoint. **Ne quitte jamais
+ * `/arbre`** : le volet « Ajouter une personne » y garde une saisie, que la page de la
+ * fiche perdrait. Rend `false` quand la personne n'est pas dessinée — à l'appelant de
+ * le dire.
+ */
+function montrerPersonne(personId: number): boolean {
+  afficherSonAlliance(personId)
+  const f = disposition.value?.parPersonId.get(personId)
+  if (!f) return false
   selection.value = f.id
   voler(Math.max(s.value, 0.6), f.cx, f.y + f.h / 2)
+  return true
+}
+
+/** Un proche cliqué dans le volet de la fiche : montré dans l'arbre, sinon sa page. */
+function choisirProche(personId: number): void {
+  if (!montrerPersonne(personId)) void routeur.push({ name: 'personne.detail', params: { id: personId } })
 }
 
 function voirFiche(f: FicheHistoire): void {
@@ -1581,8 +1775,8 @@ function surToucheRecherche(e: KeyboardEvent): void {
 /* ------------------------------------------------------------------ */
 
 function surToucheGlobale(e: KeyboardEvent): void {
-  const cible = e.target as HTMLElement | null
-  if (cible && (cible.tagName === 'INPUT' || cible.tagName === 'TEXTAREA' || cible.isContentEditable)) return
+  // Une saisie (champ, liste déroulante) ou le volet « Ajouter une personne » : pas l'arbre.
+  if (toucheIgnoree(e.target as HTMLElement | null)) return
   if (e.ctrlKey || e.metaKey || e.altKey) return
   if (e.key === '/') {
     e.preventDefault()
@@ -1868,6 +2062,22 @@ onBeforeUnmount(() => {
           aria-label="Raccourcis clavier"
           title="Raccourcis : / rechercher · Entrée ouvrir · 0 tout l’arbre · + / − zoomer · Échap désélectionner"
         >?</button>
+        <!-- Le formulaire « Ajouter une personne » dans un volet à gauche, l'arbre à
+             côté. Dès `lg` (1 024 px) : plus étroit, le canevas ne serait plus un arbre. -->
+        <button
+          v-if="peutProposer"
+          type="button"
+          data-ajouter-une-personne
+          class="inline-flex h-8 items-center gap-1.5 rounded-champ border border-accent bg-panneau px-3 text-[13px] font-semibold whitespace-nowrap text-accent hover:bg-accent-doux aria-expanded:bg-accent-doux max-lg:hidden"
+          :aria-expanded="propositionVisible"
+          aria-controls="volet-proposition"
+          @click="basculerProposition"
+        >
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="8" cy="6.5" r="3" /><path d="M2.5 17c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><path d="M16 5v6M13 8h6" />
+          </svg>
+          Ajouter une personne
+        </button>
         <button type="button" class="h-8 rounded-champ bg-accent px-3 text-[13px] font-semibold whitespace-nowrap text-fond" @click="meTrouver">
           Me trouver
         </button>
@@ -1875,6 +2085,17 @@ onBeforeUnmount(() => {
     </BarreEcran>
 
     <div class="flex min-h-0 flex-1">
+    <!-- Le volet « Ajouter une personne » (PC, dès `lg`) : AVANT le canevas, qu'il
+         pousse ; monté au premier clic, puis masqué sans être démonté — la saisie
+         survit à la fermeture. -->
+    <VoletProposition
+      v-if="propositionMontee"
+      v-show="propositionVisible"
+      :ouvert="propositionOuverte"
+      :place="placeDuDepot"
+      @fermer="propositionOuverte = false"
+      @deposee="surDepot"
+    />
     <!-- Le canevas -->
     <div
       ref="fenetre"
@@ -2277,9 +2498,10 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Le volet (PC) : la fiche de la personne choisie ; il pousse l'arbre. -->
+    <!-- Le volet (PC) : la fiche de la personne choisie ; il pousse l'arbre. Sous
+         90 rem, il cède la place au volet « Ajouter une personne ». -->
     <aside
-      v-if="voletOuvert && ficheChoisie && disposition"
+      v-if="voletDroitOuvert && ficheChoisie && disposition"
       class="flex w-[380px] flex-none flex-col border-l border-ligne bg-panneau"
       :style="{ borderTop: `3px solid ${couleurBranche(brancheDe(ficheChoisie))}` }"
       aria-label="Fiche de la personne choisie"
@@ -2393,6 +2615,28 @@ onBeforeUnmount(() => {
             >tout voir sur la fiche</RouterLink>
           </p>
         </template>
+        <!-- Un nœud EN ATTENTE (le calque des demandes) n'a pas de fiche à lire : la
+             personne n'existe que dans sa demande. Sans cette branche, « Lecture de la
+             fiche… » restait affiché sans fin. -->
+        <section
+          v-else-if="ficheChoisie.noeud.personId === null"
+          class="flex flex-col gap-2 rounded-panneau border border-dashed border-accent px-3.5 py-3"
+          data-noeud-propose
+        >
+          <h3 class="m-0 text-sm font-semibold text-accent">Proposée, en attente de validation</h3>
+          <p class="m-0 text-sm text-attenue">
+            Elle n’a pas encore de fiche : elle n’existe que dans sa demande, jusqu’à ce qu’un
+            administrateur la valide.
+          </p>
+          <RouterLink
+            v-if="ficheChoisie.noeud.demandeId !== undefined"
+            :to="{ name: 'demande.detail', params: { id: ficheChoisie.noeud.demandeId } }"
+            class="self-start text-sm font-semibold text-accent underline"
+            @click="memoriserLaVue"
+          >
+            Voir la demande n° {{ ficheChoisie.noeud.demandeId }}
+          </RouterLink>
+        </section>
         <p v-else-if="ficheChoisie.noeud.visibilite === 'restreinte'" class="m-0 text-sm text-attenue">
           Personne vivante : sa fiche n’est visible que de ses proches.
         </p>

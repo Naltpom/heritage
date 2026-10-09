@@ -59,7 +59,7 @@ import { enregistrerAbonnementPush, lireClePush, supprimerAbonnementPush } from 
 import { useSession } from '@/composables/useSession'
 import { useInstallation } from '@/composables/installation'
 import { rafraichirCompteur } from '@/composables/useNotifications'
-import { liberer, occuper, uneAutreFenetreQue } from '@/composables/fenetresAutomatiques'
+import { liberer, marquerOuverte, occuper, uneAutreFenetreQue } from '@/composables/fenetresAutomatiques'
 
 export type EtatPush = 'inconnu' | 'indisponible' | 'a_installer' | 'desactive' | 'active' | 'bloque'
 
@@ -468,27 +468,37 @@ export function usePush(): EtatPushExpose {
  * système ne peut pas s'ouvrir seule. On ouvre donc **notre** fenêtre, et c'est
  * son bouton « Activer » qui appelle `activerPush()` — dans le geste.
  *
- * Elle n'insiste pas. Elle ne s'ouvre qu'à qui un clic suffit (`desactive`) ou
- * à qui il suffit d'installer l'application (`a_installer`, iPhone) ; jamais à
- * qui a touché « Désactiver » dans Moi, jamais à qui le navigateur a bloqué
- * (aucun bouton n'y peut plus rien), jamais pendant une incarnation (ce serait
- * abonner le téléphone de l'administrateur au compte d'un autre). « Plus tard »
- * la fait taire **sept jours** sur cet appareil ; et une seule fois par
- * chargement de l'application, quoi qu'il arrive.
+ * Elle n'insiste pas. Elle ne s'ouvre qu'à qui un clic suffit (`desactive`) ;
+ * jamais à qui a touché « Désactiver » dans Moi, jamais à qui le navigateur a
+ * bloqué (aucun bouton n'y peut plus rien), jamais pendant une incarnation (ce
+ * serait abonner le téléphone de l'administrateur au compte d'un autre).
+ * « Plus tard » la fait taire **sept jours** sur cet appareil ; et une seule
+ * fois par chargement de l'application, quoi qu'il arrive.
+ *
+ * Sur iPhone hors écran d'accueil (`a_installer`), elle se tait aussi : c'est
+ * l'invitation à installer l'application (`invitationInstallation.ts`) qui
+ * parle, juste avant elle, et qui dit que l'installation est nécessaire aux
+ * notifications. Les deux fenêtres auraient dit la même chose l'une après
+ * l'autre. Une fois Heritage ouvert depuis l'écran d'accueil, l'état devient
+ * `desactive`, et elle s'ouvre là.
  *
  * Le compte **en attente** est invité aussi : c'est lui qui a le plus à gagner,
  * la validation de son inscription peut arriver n'importe quand.
  *
- * Elle **cède le pas** à l'invitation à créer une clé d'accès, qui passe
- * d'abord à l'arrivée : jamais deux fenêtres automatiques en même temps
- * (`fenetresAutomatiques.ts`). Elle s'ouvre ensuite, dans le même chargement,
- * dès que celle-là est réglée ou écartée. Elle-même **tient sa place** dès que
- * son attente démarre et jusqu'à sa fermeture : le choix du format des fiches
- * de l'arbre, qui ne réserve qu'en s'ouvrant, passe après elle.
+ * Elle **cède le pas** à toute autre fenêtre automatique en route — la clé
+ * d'accès et l'installation, qui passent avant elle à l'arrivée, le format des
+ * fiches s'il est déjà ouvert (`fenetresAutomatiques.ts`). Elle s'ouvre
+ * ensuite, dans le même chargement, dès que celles-là sont réglées ou
+ * écartées. Elle-même **tient sa place** dès que son attente démarre et
+ * jusqu'à sa fermeture, et signale son ouverture : le choix du format des
+ * fiches, qui ne réserve qu'en s'ouvrant, passe après elle ; l'installation,
+ * qui ne cède qu'à une fenêtre ouverte, la double pendant son attente mais
+ * attend sa fermeture.
  */
 
-/** Ce que la fenêtre propose : activer d'un clic, ou installer d'abord. */
-export type FormeInvitationPush = 'activer' | 'installer'
+/** Ce que la fenêtre propose : activer d'un clic. Une seule forme depuis que
+ *  l'iPhone à installer est l'affaire de `invitationInstallation.ts`. */
+export type FormeInvitationPush = 'activer'
 
 /** Clé `localStorage` : quand le lecteur a répondu « Plus tard » (ms epoch). */
 const CLE_PLUS_TARD = 'heritage.push.invitation.plus-tard'
@@ -537,8 +547,8 @@ export interface ContexteInvitationPush {
   /** Le dernier « Plus tard », ou `null`. */
   plusTardLe: number | null
   maintenant: number
-  /** Une autre fenêtre automatique est en route — la clé d'accès à
-   *  l'arrivée, ou le format des fiches ouvert sur l'arbre
+  /** Une autre fenêtre automatique est en route — la clé d'accès ou
+   *  l'installation à l'arrivée, ou le format des fiches ouvert sur l'arbre
    *  (`fenetresAutomatiques.ts`). Facultatif : absent vaut « non ». */
   autreFenetre?: boolean
 }
@@ -552,8 +562,8 @@ export function formeInvitationPush(c: ContexteInvitationPush): FormeInvitationP
   if (!c.connecte || c.incarnation || !c.avecCadre || c.refuse || c.autreFenetre === true) return null
   if (c.plusTardLe !== null && c.maintenant - c.plusTardLe < SILENCE_INVITATION_MS) return null
   // `active`, `bloque`, `indisponible`, `inconnu` : rien à proposer.
+  // `a_installer` : l'invitation à installer s'en charge (voir plus haut).
   if (c.etat === 'desactive') return 'activer'
-  if (c.etat === 'a_installer') return 'installer'
   return null
 }
 
@@ -565,7 +575,7 @@ export interface PilotageInvitationPush {
   enCours: Readonly<Ref<boolean>>
   /** « Activer » — à appeler **dans** le clic (voir `activerPush()`). */
   accepter: () => Promise<void>
-  /** « Plus tard », « Compris » ou Échap : sept jours de silence. */
+  /** « Plus tard » ou Échap : sept jours de silence. */
   plusTard: () => void
 }
 
@@ -612,11 +622,13 @@ export function piloterInvitationPush(
   }
 
   /** La place est tenue tant qu'une attente court ou que la fenêtre est
-   *  ouverte, et rendue dès que ni l'une ni l'autre. Appelée après chaque
-   *  changement de l'une des deux. */
+   *  ouverte, et rendue dès que ni l'une ni l'autre. L'ouverture est signalée
+   *  à part : l'installation ne cède qu'à une fenêtre ouverte. Appelée après
+   *  chaque changement de l'une des deux. */
   function tenirLaPlace(): void {
     if (attente !== null || forme.value !== null) occuper('notifications')
     else liberer('notifications')
+    marquerOuverte('notifications', forme.value !== null)
   }
 
   const arreter = watch(

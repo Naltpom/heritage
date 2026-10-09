@@ -84,6 +84,21 @@ services:
     App\Module\Core\Contract\CalqueEnAttenteInterface:
         alias: App\Module\Core\Contract\CalqueFerme
 
+    # Le droit de joindre une pièce à une personne **proposée** (`POST /api/medias` avec
+    # `demandeId` + `brouillonRef`) — implémenté par `Proposal`, consommé par `Media`.
+    # Repli **fermé** : `Introuvable` pour tout, donc `404` sur tout dépôt de ce genre.
+    # Le repli ouvert rouvrirait la faille que ce contrat ferme — n'importe quel membre
+    # glissant une pièce dans la proposition d'un autre, qui la verrait arriver sur la
+    # fiche validée. Lire l'en-tête de `Core\Contract\FichesProposeesInterface`.
+    #
+    # `Proposal` reprend la main dans `config/services/proposal.yaml`, chargé après
+    # celui-ci — pas par `#[AsAlias]`, pour la raison donnée au-dessus pour le calque.
+    # Vérification : `bin/console debug:container
+    # 'App\Module\Core\Contract\FichesProposeesInterface'` doit nommer
+    # `FichesProposeesPourLesModules`, jamais `FichesProposeesFermees`.
+    App\Module\Core\Contract\FichesProposeesInterface:
+        alias: App\Module\Core\Contract\FichesProposeesFermees
+
     # L'arbre du lecteur, pour les onglets d'Explorer (décision du 05/10/2026). Repli
     # **ouvert** : ce n'est pas un filtre de confidentialité, voir l'interface. `Tree`
     # reprend la main dans `config/services/tree.yaml`, chargé après celui-ci.

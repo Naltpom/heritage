@@ -135,25 +135,41 @@ export function reinitialiserTiroirs(): void {
  * `typeof … !== 'function'` couvre le rendu SSR des tests, où il n'y a pas de
  * fenêtre du tout.
  * ────────────────────────────────────────────────────────────────────
+ *
+ * La mécanique est celle de toute requête média : {@link useCorrespondance}.
  */
 export function useEstMobile(): Readonly<Ref<boolean>> {
+  return useCorrespondance(REQUETE_MOBILE)
+}
+
+/**
+ * Une requête média quelconque, sous forme réactive : `true` quand la fenêtre y
+ * répond. Même mécanique que {@link useEstMobile}, et pour les mêmes raisons —
+ * la valeur est lue **à la construction**, relue au montage, suivie ensuite, et
+ * vaut `false` hors navigateur (rendu serveur des tests).
+ *
+ * La requête s'écrit comme Tailwind la compile — `(width >= 64rem)` pour `lg:`,
+ * par exemple — pour que le CSS et le JavaScript basculent au même pixel, y
+ * compris sous zoom texte, où `64rem` ne vaut plus 1 024 px.
+ */
+export function useCorrespondance(requete: string): Readonly<Ref<boolean>> {
   const disponible = typeof globalThis.matchMedia === 'function'
-  const liste = disponible ? globalThis.matchMedia(REQUETE_MOBILE) : null
-  const estMobile = ref(liste?.matches ?? false)
+  const liste = disponible ? globalThis.matchMedia(requete) : null
+  const correspond = ref(liste?.matches ?? false)
 
   onMounted(() => {
     if (liste === null) return
     // Relu une fois : entre la construction et le montage, une image peut
     // s'être chargée et faire apparaître une barre de défilement.
-    estMobile.value = liste.matches
+    correspond.value = liste.matches
   })
 
   if (liste !== null) {
-    const detacherCelui = surveillerLargeur(liste, (mobile) => {
-      estMobile.value = mobile
+    const detacherCelui = surveillerLargeur(liste, (oui) => {
+      correspond.value = oui
     })
     onBeforeUnmount(detacherCelui)
   }
 
-  return readonly(estMobile)
+  return readonly(correspond)
 }

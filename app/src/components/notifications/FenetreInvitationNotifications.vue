@@ -8,19 +8,18 @@
  *
  * **Un `<dialog>` natif ouvert en modal**, comme `DialogueConfirmation` : il
  * piège le focus, rend le reste de la page inerte et se ferme à Échap sans une
- * ligne de JavaScript de plus. Échap vaut « Plus tard » (ou « Compris ») : le
- * lecteur qui ferme sans répondre n'a pas dit oui, et ne doit pas être relancé
- * demain. `role` et `aria-modal` sont redits pour les lecteurs d'écran
- * anciens, qui ne les déduisent pas de la balise.
+ * ligne de JavaScript de plus. Échap vaut « Plus tard » : le lecteur qui ferme
+ * sans répondre n'a pas dit oui, et ne doit pas être relancé demain. `role` et
+ * `aria-modal` sont redits pour les lecteurs d'écran anciens, qui ne les
+ * déduisent pas de la balise.
  *
- * **Deux formes**, un seul cadre :
+ * La phrase et deux boutons. Le focus part sur « Plus tard », pas sur le
+ * bouton qui agit — même parti que `DialogueConfirmation` : une demande de
+ * permission franchie d'un Entrée réflexe ne serait pas un choix.
  *
- * - `activer` : la phrase et les deux boutons. Le focus part sur « Plus tard »,
- *   pas sur le bouton qui agit — même parti que `DialogueConfirmation` : une
- *   demande de permission franchie d'un Entrée réflexe ne serait pas un choix ;
- * - `installer` (iPhone hors écran d'accueil) : Safari n'offre le push qu'à
- *   l'application installée. On dit les deux gestes, et un seul bouton,
- *   « Compris » — il n'y a rien d'autre à faire ici.
+ * L'iPhone hors écran d'accueil n'est plus invité ici : la fenêtre
+ * d'installation (`FenetreInvitationInstallation`), qui passe juste avant,
+ * lui dit les gestes de Safari et que c'est nécessaire aux notifications.
  *
  * **Feuille qui monte du bas sur téléphone, boîte centrée sur bureau.** La
  * feuille est collée au bas de l'écran, pleine largeur, coins arrondis en haut
@@ -96,35 +95,18 @@ function surAnnulation(evenement: Event): void {
           </svg>
         </span>
         <div class="flex min-w-0 flex-col gap-1.5">
-          <h2 :id="`${id}-titre`" class="m-0 text-base font-semibold">
-            {{ forme === 'activer' ? 'Activer les notifications' : 'Installez Heritage sur votre écran d’accueil' }}
-          </h2>
-          <p v-if="forme === 'activer'" :id="`${id}-message`" class="m-0 text-sm text-attenue">
+          <h2 :id="`${id}-titre`" class="m-0 text-base font-semibold">Activer les notifications</h2>
+          <p :id="`${id}-message`" class="m-0 text-sm text-attenue">
             Soyez prévenu quand une demande est traitée ou qu’un tirage est fait.
           </p>
-          <div v-else :id="`${id}-message`" class="flex flex-col gap-2 text-sm text-attenue">
-            <p class="m-0">C’est nécessaire pour recevoir les notifications.</p>
-            <ol class="m-0 flex list-decimal flex-col gap-1 pl-5">
-              <li>
-                Dans Safari, touchez <strong class="text-texte">Partager</strong>
-                <svg class="inline size-4 align-text-bottom" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 3v12M8 7l4-4 4 4M5 12v8h14v-8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-              </li>
-              <li>puis <strong class="text-texte">Sur l’écran d’accueil</strong>, et ouvrez Heritage depuis son icône.</li>
-            </ol>
-          </div>
         </div>
       </div>
 
       <div class="flex flex-wrap justify-end gap-2">
-        <template v-if="forme === 'activer'">
-          <BoutonBase ref="boutonSecondaire" variante="secondaire" :desactive="enCours" @click="emit('plus-tard')">
-            Plus tard
-          </BoutonBase>
-          <BoutonBase variante="principal" :chargement="enCours" @click="emit('activer')">Activer</BoutonBase>
-        </template>
-        <BoutonBase v-else ref="boutonSecondaire" variante="principal" @click="emit('plus-tard')">Compris</BoutonBase>
+        <BoutonBase ref="boutonSecondaire" variante="secondaire" :desactive="enCours" @click="emit('plus-tard')">
+          Plus tard
+        </BoutonBase>
+        <BoutonBase variante="principal" :chargement="enCours" @click="emit('activer')">Activer</BoutonBase>
       </div>
     </div>
   </dialog>

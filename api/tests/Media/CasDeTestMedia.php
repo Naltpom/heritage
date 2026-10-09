@@ -54,6 +54,12 @@ abstract class CasDeTestMedia extends TestCase
     protected StockageMedia $stockage;
     protected DoublureDeCercle $cercle;
     protected DoublureDeResolution $sujets;
+    /**
+     * Le droit de joindre une pièce à une personne proposée — **permissif** par défaut,
+     * pour que les cas qui déposent sur « la demande 12, `p1` » éprouvent ce qu'ils
+     * prétendent éprouver. Voir l'en-tête de {@see DoublureDeFichesProposees}.
+     */
+    protected DoublureDeFichesProposees $fichesProposees;
     protected VisibiliteParLeCercle $visibilite;
     protected TeleversementMedia $televersement;
     protected CatalogueMedia $catalogue;
@@ -127,6 +133,7 @@ abstract class CasDeTestMedia extends TestCase
         $medias = $this->medias = new MediaRepository(new DoublureDeRegistre($this->em));
 
         $this->circuit = new CircuitDeValidationMedia($this->em, $medias);
+        $this->fichesProposees = new DoublureDeFichesProposees();
 
         $this->televersement = new TeleversementMedia(
             $this->em,
@@ -138,6 +145,7 @@ abstract class CasDeTestMedia extends TestCase
             new GenerateurDeVignette($this->stockage, new NullLogger()),
             $this->visibilite,
             $this->circuit,
+            $this->fichesProposees,
         );
 
         $this->catalogue = new CatalogueMedia($medias, $this->visibilite);

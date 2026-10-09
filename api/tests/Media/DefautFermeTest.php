@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Media;
 
+use App\Module\Core\Contract\FichesProposeesFermees;
 use App\Module\Core\Exception\DomainException;
 use App\Module\Core\Security\CercleFerme;
 use App\Module\Media\Entity\Media;
@@ -50,6 +51,11 @@ use Psr\Log\NullLogger;
  * résolution des sujets (`Tree`). Chacune manquante suffit à fermer le module ; c'est
  * volontaire, parce qu'un test qui ne couvrirait que leur absence simultanée laisserait
  * passer le cas — bien plus probable — où une seule des deux est branchée.
+ *
+ * Une troisième s'y ajoute depuis le 09/10/2026, pour le seul dépôt sur une personne
+ * **proposée** : le droit de joindre une pièce, que tient `Proposal`
+ * (`Core\Contract\FichesProposeesInterface`). Elle échoue fermé elle aussi, et seule —
+ * cercle et sujets branchés.
  */
 final class DefautFermeTest extends CasDeTestMedia
 {
@@ -91,6 +97,7 @@ final class DefautFermeTest extends CasDeTestMedia
             new GenerateurDeVignette($this->stockage, new NullLogger()),
             $ferme,
             $this->circuit,
+            new FichesProposeesFermees(),
         );
     }
 
@@ -173,6 +180,58 @@ final class DefautFermeTest extends CasDeTestMedia
         self::assertInstanceOf(Media::class, $media);
 
         self::assertFalse($catalogue->lisible($media, $this->administrateur()));
+    }
+
+    /**
+     * **La troisième couture : `Proposal`.** Le cercle et les sujets sont branchés, le
+     * droit de joindre une pièce à une personne proposée ne l'est pas : fermé quand même.
+     *
+     * C'est le repli réel du noyau, `Core\Contract\FichesProposeesFermees`, monté tel que
+     * le conteneur le monterait si l'alias de `proposal.yaml` sautait. Un repli ouvert
+     * remettrait en service la faille que ce contrat ferme — n'importe quel membre
+     * joignant une pièce à la proposition d'un autre, rattachée à la fiche validée — et
+     * rien ne le montrerait. Le repli fermé rend `404` au premier dépôt : on le voit.
+     *
+     * Même l'administrateur, pour la raison que donne
+     * {@see self::testMemeLAdministrateurNeVoitRienQuandRienNEstBranche()} : une dérogation
+     * à son profit transformerait la panne de câblage en fonctionnement apparent.
+     */
+    public function testSansProposalAucunePieceNeSeJointAUnePersonneProposee(): void
+    {
+        $televersement = new TeleversementMedia(
+            $this->em,
+            $this->medias,
+            $this->reglages(),
+            new DetecteurDeType(),
+            new PurgeDesMetadonnees(sys_get_temp_dir()),
+            $this->stockage,
+            new GenerateurDeVignette($this->stockage, new NullLogger()),
+            $this->visibilite,
+            $this->circuit,
+            new FichesProposeesFermees(),
+        );
+
+        $avant = \count($this->medias->findAll());
+
+        try {
+            $televersement->televerser(
+                new RequeteDeTeleversement(
+                    cheminTemporaire: $this->fichierTemporaire(FabriqueDeFichiers::jpegNu(), '.jpg'),
+                    nomOrigine: 'acte.jpg',
+                    kind: MediaKind::Preuve,
+                    subjectKind: MediaSubject::Personne,
+                    demandeId: 12,
+                    brouillonRef: 'p1',
+                ),
+                $this->administrateur(),
+            );
+            self::fail('Sans `Proposal` branché, aucune pièce ne doit se joindre à une personne proposée.');
+        } catch (DomainException $erreur) {
+            self::assertSame(404, $erreur->statutHttp());
+            self::assertSame('introuvable', $erreur->codeErreur());
+        }
+
+        self::assertCount($avant, $this->medias->findAll(), 'Le refus ne laisse aucune ligne.');
     }
 
     /**

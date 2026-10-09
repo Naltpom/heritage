@@ -7,10 +7,11 @@
  * `Map` (vitest tourne sous `node`), remplacée au besoin par un stockage qui
  * lève — la navigation privée de Safari.
  *
- * Ce qui compte : la fenêtre ne s'ouvre **qu'à qui un clic suffit** (ou un
- * iPhone à installer), jamais sur un écran sans cadre, jamais pendant une
- * incarnation, jamais à qui a désactivé, pas avant sept jours après « Plus
- * tard », et une seule fois par chargement.
+ * Ce qui compte : la fenêtre ne s'ouvre **qu'à qui un clic suffit** — pas à
+ * l'iPhone hors écran d'accueil, dont l'invitation à installer s'occupe
+ * (`invitationInstallation.test.ts`) —, jamais sur un écran sans cadre, jamais
+ * pendant une incarnation, jamais à qui a désactivé, pas avant sept jours
+ * après « Plus tard », et une seule fois par chargement.
  */
 import { effectScope, nextTick, shallowRef, type EffectScope } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -53,7 +54,14 @@ import {
   type EnvironnementPush,
   type PermissionPush,
 } from './usePush'
-import { libererApresLaCleDAcces, reserverPourLaCleDAcces } from './fenetresAutomatiques'
+import {
+  doitCeder,
+  liberer,
+  libererApresLaCleDAcces,
+  occuper,
+  reserverPourLaCleDAcces,
+  uneAutreFenetreQue,
+} from './fenetresAutomatiques'
 
 /* ------------------------------------------------------------------ */
 /* Montage                                                             */
@@ -167,8 +175,8 @@ describe('formeInvitationPush()', () => {
     expect(formeInvitationPush(base)).toBe('activer')
   })
 
-  it('propose d’installer sur un iPhone hors écran d’accueil', () => {
-    expect(formeInvitationPush({ ...base, etat: 'a_installer' })).toBe('installer')
+  it('se tait sur un iPhone hors écran d’accueil : l’invitation à installer le dit déjà', () => {
+    expect(formeInvitationPush({ ...base, etat: 'a_installer' })).toBeNull()
   })
 
   it.each(['active', 'bloque', 'indisponible', 'inconnu'] as const)('se tait quand l’état est « %s »', (etat) => {
@@ -180,7 +188,6 @@ describe('formeInvitationPush()', () => {
     expect(formeInvitationPush({ ...base, avecCadre: false })).toBeNull()
     expect(formeInvitationPush({ ...base, incarnation: true })).toBeNull()
     expect(formeInvitationPush({ ...base, refuse: true })).toBeNull()
-    expect(formeInvitationPush({ ...base, etat: 'a_installer', refuse: true })).toBeNull()
   })
 
   it('se tait sept jours après « Plus tard », pas un de plus', () => {
@@ -188,7 +195,6 @@ describe('formeInvitationPush()', () => {
     expect(formeInvitationPush({ ...base, plusTardLe: il(60_000) })).toBeNull()
     expect(formeInvitationPush({ ...base, plusTardLe: il(SILENCE_INVITATION_MS - 1) })).toBeNull()
     expect(formeInvitationPush({ ...base, plusTardLe: il(SILENCE_INVITATION_MS) })).toBe('activer')
-    expect(formeInvitationPush({ ...base, etat: 'a_installer', plusTardLe: il(60_000) })).toBeNull()
   })
 })
 
@@ -274,14 +280,16 @@ describe('piloterInvitationPush()', () => {
     expect(forme.value).toBeNull()
   })
 
-  it('iPhone hors écran d’accueil : la forme « installer », et « Compris » vaut « Plus tard »', async () => {
+  it('iPhone hors écran d’accueil : rien, et rien de retenu — l’invitation à installer s’en charge', async () => {
     await charger({ aInstaller: true, pushPossible: false })
+    expect(usePush().etat.value).toBe('a_installer')
     const { forme, plusTard } = piloter()
-    vi.advanceTimersByTime(DELAI_INVITATION_MS)
-    expect(forme.value).toBe('installer')
-    plusTard()
+    vi.advanceTimersByTime(DELAI_INVITATION_MS * 3)
     expect(forme.value).toBeNull()
-    expect(memoire.get(CLE)).toBe(String(MAINTENANT))
+    // Fermée, « Plus tard » ne fait rien : les sept jours de silence restent
+    // entiers pour le jour où Heritage sera ouvert depuis l'écran d'accueil.
+    plusTard()
+    expect(memoire.has(CLE)).toBe(false)
   })
 
   it('« Plus tard » est retenu sept jours, d’un chargement à l’autre', async () => {
@@ -365,10 +373,10 @@ describe('le « Plus tard » stocké', () => {
 })
 
 /* ------------------------------------------------------------------ */
-/* Jamais en même temps que l'invitation à la clé d'accès               */
+/* Jamais en même temps qu'une autre fenêtre automatique               */
 /* ------------------------------------------------------------------ */
 
-describe('la clé d’accès passe d’abord', () => {
+describe('la clé d’accès et l’installation passent d’abord', () => {
   it('la décision se tait quand une autre fenêtre automatique a la priorité', () => {
     const base: ContexteInvitationPush = {
       etat: 'desactive',
@@ -412,5 +420,39 @@ describe('la clé d’accès passe d’abord', () => {
     } finally {
       libererApresLaCleDAcces()
     }
+  })
+
+  it('cède aussi à l’invitation à installer, même seulement en attente — et passe après elle', async () => {
+    await charger()
+    try {
+      occuper('installation')
+      const { forme } = piloter()
+      vi.advanceTimersByTime(DELAI_INVITATION_MS * 5)
+      expect(forme.value).toBeNull()
+
+      liberer('installation')
+      await nextTick()
+      vi.advanceTimersByTime(DELAI_INVITATION_MS)
+      expect(forme.value).toBe('activer')
+    } finally {
+      liberer('installation')
+    }
+  })
+
+  it('signale son ouverture : l’installation, qui ne cède qu’aux fenêtres ouvertes, l’attendra', async () => {
+    await charger()
+    const { forme, plusTard } = piloter()
+    vi.advanceTimersByTime(DELAI_INVITATION_MS - 100)
+    // En attente : inscrite, pas ouverte.
+    expect(uneAutreFenetreQue('installation')).toBe(true)
+    expect(doitCeder('installation')).toBe(false)
+
+    vi.advanceTimersByTime(100)
+    expect(forme.value).toBe('activer')
+    expect(doitCeder('installation')).toBe(true)
+
+    plusTard()
+    expect(doitCeder('installation')).toBe(false)
+    expect(uneAutreFenetreQue('installation')).toBe(false)
   })
 })

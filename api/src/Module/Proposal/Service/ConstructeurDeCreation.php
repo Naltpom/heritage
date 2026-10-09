@@ -137,14 +137,14 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         // le client ne l'envoie pas et ne la voit que dans la vue d'administration. À la
         // soumission parce qu'un brouillon n'a pas à encombrer l'index partiel, qui ne
         // porte que sur les demandes `en_attente`.
-        foreach ($this->brouillonsDe($demande) as $brouillon) {
-            $cle = $this->cleDeDoublon->pour($brouillon);
+        //
+        // La règle « la première fiche qui a une clé » vit dans `CleDeDoublon`, et non
+        // plus ici : `heritage:recalculer-les-cles-de-doublon` doit refaire exactement ce
+        // calcul, et deux copies d'une règle finissent par en faire deux.
+        $cle = $this->cleDeDoublon->pourLesBrouillons($this->brouillonsDe($demande));
 
-            if (null !== $cle) {
-                $demande->setDedupKey($cle);
-
-                return;
-            }
+        if (null !== $cle) {
+            $demande->setDedupKey($cle);
         }
     }
 

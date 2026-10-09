@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Media;
 
+use App\Module\Core\Enum\DepotSurFicheProposee;
 use App\Module\Core\Exception\DomainException;
 use App\Module\Media\Enum\MediaKind;
 use App\Module\Media\Enum\MediaStatus;
@@ -426,6 +427,132 @@ final class TeleversementMediaTest extends CasDeTestMedia
     }
 
     // ---------------------------------------------------------------------------------
+    // Le droit de joindre une pièce à une personne proposée — la traduction du verdict
+    // ---------------------------------------------------------------------------------
+    //
+    // La règle elle-même (qui peut, sur quel statut) appartient à `Proposal` et se teste
+    // là-bas, sur une vraie base : `tests/Proposal/FichesProposeesPourLesModulesTest.php`.
+    // De bout en bout, câblage compris : `TeleversementSurFicheProposeeTest`. Ici, ce que
+    // ce service fait du verdict — et surtout **quand** il le demande.
+
+    /**
+     * **Le refus tombe avant le fichier.** Le fichier envoyé est un texte déguisé en
+     * image, que le contrôle de type refuserait en `415` : si c'est le `404` qui sort,
+     * c'est que la question a été posée avant que le moindre octet soit lu. Et le
+     * stockage est resté vide — ni original, ni vignette.
+     */
+    public function testUnRefusSurUneFicheProposeeTombeAvantToutContactAvecLeFichier(): void
+    {
+        $this->fichesProposees->repondre(DepotSurFicheProposee::Introuvable);
+        $chemin = $this->fichierTemporaire(FabriqueDeFichiers::texteDeguiseEnImage(), '.jpg');
+
+        try {
+            $this->televersement->televerser($this->requeteSurBrouillon($chemin), $this->membre());
+            self::fail('La fiche proposée n’est pas joignable : le dépôt aurait dû rendre 404.');
+        } catch (DomainException $erreur) {
+            self::assertSame(404, $erreur->statutHttp(), 'Le 404 de la fiche proposée, pas le 415 du fichier : la question précède la lecture.');
+            self::assertSame('introuvable', $erreur->codeErreur());
+        }
+
+        self::assertSame([], $this->fichiersStockes(), 'Un dépôt refusé n’écrit rien sur le disque.');
+        self::assertSame([], $this->medias->findAll(), 'Ni aucune ligne en base.');
+    }
+
+    /**
+     * `Tranchee` ⇒ `409 demande_deja_decidee`, **sans** `details` : ce module ne connaît
+     * pas les statuts de `Proposal`, seulement le verdict — et un statut inventé ici serait
+     * pire qu'une clé absente.
+     */
+    public function testUneDemandeTrancheeRend409DemandeDejaDecidee(): void
+    {
+        $this->fichesProposees->repondre(DepotSurFicheProposee::Tranchee);
+        $chemin = $this->fichierTemporaire(FabriqueDeFichiers::jpegNu(), '.jpg');
+
+        try {
+            $this->televersement->televerser($this->requeteSurBrouillon($chemin), $this->membre());
+            self::fail('La demande est tranchée : le dépôt aurait dû rendre 409.');
+        } catch (DomainException $erreur) {
+            self::assertSame(409, $erreur->statutHttp());
+            self::assertSame('demande_deja_decidee', $erreur->codeErreur());
+            self::assertNull($erreur->details());
+        }
+
+        self::assertSame([], $this->fichiersStockes());
+    }
+
+    /**
+     * La question porte **ce que le service tient** : la demande, la référence telle
+     * qu'elle est arrivée (`p1`, sans dièse — c'est au contrat d'absorber l'écart), le
+     * compte et son rôle. Un rôle mal transmis ferait d'un administrateur un membre, ou
+     * l'inverse, et la règle déciderait juste sur une question fausse.
+     */
+    public function testLaQuestionPorteLaDemandeLaReferenceLeCompteEtLeRole(): void
+    {
+        $this->televersement->televerser(
+            $this->requeteSurBrouillon($this->fichierTemporaire(FabriqueDeFichiers::jpegNu(), '.jpg')),
+            $this->membre(7),
+        );
+        $this->televersement->televerser(
+            $this->requeteSurBrouillon($this->fichierTemporaire(FabriqueDeFichiers::jpegNu(64, 48), '.jpg')),
+            $this->administrateur(1),
+        );
+
+        self::assertSame(
+            [
+                ['demandeId' => 12, 'localRef' => 'p1', 'userId' => 7, 'administrateur' => false],
+                ['demandeId' => 12, 'localRef' => 'p1', 'userId' => 1, 'administrateur' => true],
+            ],
+            $this->fichesProposees->questions(),
+        );
+    }
+
+    /** Un dépôt sur une ligne existante n'a rien à demander à `Proposal`. */
+    public function testUnDepotSurUneLigneExistanteNeConsultePasLesFichesProposees(): void
+    {
+        $this->fichesProposees->repondre(DepotSurFicheProposee::Introuvable);
+
+        $this->televersement->televerser(
+            $this->requete($this->fichierTemporaire(FabriqueDeFichiers::jpegNu(), '.jpg')),
+            $this->membre(),
+        );
+
+        self::assertSame([], $this->fichesProposees->questions());
+    }
+
+    // ---------------------------------------------------------------------------------
+
+    private function requeteSurBrouillon(string $chemin): RequeteDeTeleversement
+    {
+        return new RequeteDeTeleversement(
+            cheminTemporaire: $chemin,
+            nomOrigine: 'acte.jpg',
+            kind: MediaKind::Preuve,
+            subjectKind: MediaSubject::Personne,
+            demandeId: 12,
+            brouillonRef: 'p1',
+        );
+    }
+
+    /**
+     * Tout ce que le stockage porte, originaux et vignettes confondus.
+     *
+     * @return list<string>
+     */
+    private function fichiersStockes(): array
+    {
+        if (!is_dir($this->racine)) {
+            return [];
+        }
+
+        $fichiers = [];
+
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($this->racine, \FilesystemIterator::SKIP_DOTS)) as $fichier) {
+            \assert($fichier instanceof \SplFileInfo);
+            $fichiers[] = $fichier->getPathname();
+        }
+
+        return $fichiers;
+    }
 
     private function requete(string $chemin, ?string $nom = 'acte.jpg', int $sujetId = 17): RequeteDeTeleversement
     {
@@ -450,6 +577,7 @@ final class TeleversementMediaTest extends CasDeTestMedia
             new GenerateurDeVignette($this->stockage, new NullLogger()),
             $this->visibilite,
             $this->circuit,
+            $this->fichesProposees,
         );
     }
 }

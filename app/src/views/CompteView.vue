@@ -287,7 +287,7 @@ function dateLisible(iso: string): string {
     <PanneauBase>
       <section class="flex flex-col gap-3 p-4">
         <h2 class="text-base font-semibold">Application</h2>
-        <InstallationApplication forme="panneau" />
+        <InstallationApplication />
         <p class="m-0 text-xs text-attenue">
           Sinon : menu du navigateur, puis « Ajouter à l’écran d’accueil ».
         </p>

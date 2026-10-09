@@ -364,6 +364,13 @@ moment où ça marche mal — une pile qui démarre avec les identifiants de dé
 l'air parfaitement saine, et la base de l'arbre familial est ouverte avec un mot de passe
 écrit dans un dépôt Git.
 
+Certaines livraisons demandent **une reprise en console après leur déploiement** — une
+colonne calculée par une formule qui a changé, que le déploiement ne réécrit pas tout seul.
+Elles sont listées, avec la commande exacte, dans
+[`docs/deploiement/premiere-mise-en-ligne.md`](docs/deploiement/premiere-mise-en-ligne.md)
+(§ 13, « Reprises ponctuelles ») ; la dernière en date est
+`heritage:recalculer-les-cles-de-doublon`.
+
 Le TLS n'est pas géré par la pile : elle ne publie qu'un port HTTP sur la boucle locale, et
 c'est un nginx, un Caddy ou un Traefik de l'hôte qui termine le TLS. Ce proxy **doit** poser
 `X-Forwarded-Proto: https` — sans cet en-tête, Symfony se croit en clair, le cookie de
