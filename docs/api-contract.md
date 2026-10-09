@@ -1241,6 +1241,7 @@ Module `Tree`.
 | `GET` | `/api/arbre/personnes/{id}` | `MEMBRE` | — | `200` § 5.3 | `401` · `403` `regime_en_attente` · `404` `introuvable` | — |
 | `GET` | `/api/arbre/familles/{id}` | `MEMBRE` | — | `200` § 5.4 | `401` · `403` `regime_en_attente` · `404` | — |
 | `GET` | `/api/arbre/recherche` | `MEMBRE` | `?q=&limite=&vivants=` | `200` § 5.5 | `401` · `403` `regime_en_attente` · `422` `donnees_invalides` | — |
+| `POST` | `/api/arbre/ressemblances` | `MEMBRE` | `{fiche, limite}` § 5.5 bis | `200` § 5.5 bis | `401` · `403` `regime_en_attente` · `422` `donnees_invalides` | — |
 
 `{id}` porte `requirements: ['id' => '\d+']`. Conséquence utile et voulue : un identifiant
 provisoire (`#12/p1`, § 5.2) **ne correspond tout simplement pas à la route** et produit une
@@ -1257,6 +1258,7 @@ troisième (§ 11, révision du 2026-10-01).
 | `/api/arbre/graphe` | nœud complet | nœud complet | **nœud présent, réduit** (§ 11.2) |
 | `/api/arbre/personnes/{id}` | fiche complète | fiche complète | **`200`, fiche réduite** — pas `404` |
 | `/api/arbre/recherche` | présente | présente | **absente** |
+| `/api/arbre/ressemblances` | présente | présente — naissance comparée **réduite** (§ 5.5 bis) | **absente** |
 | `/api/chronologie` | barre présente | barre présente | **absente** (§ 9.1) |
 
 La quatrième colonne est toute la règle de l'ADR 0003 : **le graphe montre, il n'énumère
@@ -2118,6 +2120,139 @@ intérêt l'arbre ancien qu'on lui ouvre justement pour que l'attente ait du sen
 
 ---
 
+### 5.5 bis Ressemblances dans l'arbre
+
+`POST /api/arbre/ressemblances` — « cette personne est peut-être déjà dans l'arbre ». Le
+formulaire « Ajouter une personne » envoie ce qu'on est en train de saisir ; la route rend les
+fiches de l'arbre qui lui ressemblent, pour qu'on complète la bonne au lieu d'en créer un
+double. Son pendant pour les propositions en attente est au § 6.6 quater ; les deux partagent
+le même corps, la même règle (`Core\Service\ComparaisonDIdentites`) et les mêmes refus.
+
+**Un `POST` qui n'écrit rien.** Le corps porte un nom, des prénoms et souvent une naissance —
+d'une personne vivante, le plus souvent. En `GET`, tout cela partirait dans l'URL, donc dans
+les journaux, l'historique et l'en-tête `Referer`. Réponse en `Cache-Control: no-store`.
+Aucune écriture : la route reste ouverte sous la bascule « voir comme un membre », où le
+cercle et la réciprocité sont ceux du membre emprunté.
+
+```json
+{
+  "fiche": {
+    "givenNames": "Pyroxène",
+    "surname": "Tilleule",
+    "marriedName": null,
+    "nickname": null,
+    "sex": "masculin",
+    "deceased": false,
+    "birth": { "raw": "ABT 1934", "qualifier": "environ", "min": "1934-01-01", "max": "1934-12-31", "place": "Sorbière" },
+    "death": null
+  },
+  "limite": 5
+}
+```
+
+- `fiche` : les clés d'un brouillon de `creation_personne` (§ 6.3), **et elles seules** — une
+  clé inconnue (`note`, `liens`, une faute de frappe) rend `422` sur `fiche` plutôt que d'être
+  ignorée : un `birht` ignoré serait une naissance silencieusement non comparée. Toute clé
+  absente vaut `null`. `birth` et `death` sont `null` ou un bloc date **à cinq clés**
+  (§ 14.1, `texte` refusé). `deceased` est accepté et **sans effet** : une case non cochée ne
+  prouve pas qu'une personne vit.
+- `422 donnees_invalides`, **toutes les erreurs ensemble**, chacune sur son champ
+  (`fiche.surname`, `fiche.birth`…) : sans nom **ni** nom d'usage d'au moins deux lettres
+  (`fiche.surname`) ; sans prénom ni surnom (`fiche.givenNames`) — la règle exige un prénom en
+  commun, un `200` vide ferait croire que la personne n'existe pas.
+- `limite` : défaut 5, maximum 10, **ramenée** au plafond sans erreur (§ 1.5).
+
+**La règle** — une fiche est retenue si :
+
+1. son nom ou son nom d'usage est **proche** du nom ou du nom d'usage saisi — identique une
+   fois replié (accents, casse, ponctuation), ou à une faute de frappe près (distance
+   d'édition 1, à partir de cinq lettres) ;
+2. **un prénom au moins** est en commun, surnoms compris, à la même tolérance ;
+3. les sexes, **s'ils sont connus des deux côtés**, ne sont pas opposés ;
+4. la naissance et le décès, **s'ils sont comparables des deux côtés**, se recouvrent. Un
+   « vers » (`environ`) est élargi de **deux ans** de chaque côté pour la comparaison —
+   jamais stocké ainsi (§ 9.1). Une date absente, inconnue ou non comparable n'écarte rien
+   et ne rapporte rien.
+
+Le **lieu** (premier segment, avant la première virgule, replié) est un **bonus, jamais un
+filtre**. Le **score** est le nombre de critères concordants — `nom`, `prenom`, `sexe`,
+`naissance`, `deces`, `lieu` —, donc 2 à 6. Tri : score décroissant, puis nom identique avant
+nom proche, puis `search_key`, puis identifiant.
+
+Les candidats viennent de `tree_person.search_key` : les **trois premières lettres** de
+chaque mot saisi (nom, nom d'usage, prénoms, surnom ; au plus 8), en `LIKE 'XXX%' OR LIKE
+'% XXX%'`, **en `OR`** — c'est ce qui retrouve une faute de frappe —, 500 lignes au plus,
+puis tout se décide en PHP. Aucune extension PostgreSQL (§ 0.6 du modèle).
+
+**La confidentialité — deux règles, appliquées dans `Tree\Serializer\NormaliseurDeRessemblance` :**
+
+- **Le cercle, comme au § 5.5.** Une personne que le cercle ne montre pas — vivante
+  confidentielle hors du cercle, ou d'un autre arbre — est **absente** : ni ligne, ni score, ni
+  effet sur `tronque`.
+- **La réciprocité (§ 5.6, ADR 0016).** Pour un vivant, seule la naissance **réduite** aux
+  composantes que le lecteur voit est comparée ; quand l'année même n'est pas vue, la
+  naissance est **non comparable** — ni filtre, ni critère, ni raison. Sans quoi la route
+  serait un **oracle de date de naissance** : saisir 1934, puis 1935, et regarder la fiche
+  disparaître. Un test exige des réponses identiques, octet pour octet, pour une saisie 1934,
+  1990 ou sans date sur un vivant dont la naissance n'est pas partagée. Le **lieu** de
+  naissance d'un vivant, lui, se compare et sort dans `lieuNaissance` : sa fiche le montre
+  déjà (§ 5.6, le bloc masqué garde `place`).
+
+```json
+{
+  "elements": [
+    {
+      "personId": 233,
+      "displayName": "Pyroxène Tilleul",
+      "sex": "masculin",
+      "vivant": true,
+      "generation": -2,
+      "branch": "mm",
+      "ligneDates": "—",
+      "lieuNaissance": "Sorbière, Fougerie, Florie",
+      "criteres": ["nom", "prenom", "sexe", "lieu"],
+      "raisons": ["nom proche : Tilleule / Tilleul", "prénom Pyroxène en commun", "même sexe", "même lieu de naissance : Sorbière"],
+      "score": 4
+    }
+  ],
+  "tronque": false
+}
+```
+
+Ici, la naissance du cousin n'est pas partagée avec le lecteur : `ligneDates` vaut « — », et
+« vers 1934 » saisi n'ajoute ni critère ni raison. Sur un défunt, tout se compare, et les
+raisons citent la fiche :
+
+```json
+{
+  "elements": [
+    {
+      "personId": 17,
+      "displayName": "Marne Dolomite Sureau",
+      "sex": "feminin",
+      "vivant": false,
+      "generation": -4,
+      "branch": "pm",
+      "ligneDates": "1901-1909 – 1987",
+      "lieuNaissance": "Saule, Ombrage, Sylvanie",
+      "criteres": ["nom", "prenom", "sexe", "naissance", "deces", "lieu"],
+      "raisons": ["même nom", "prénom Dolomite en commun", "même sexe", "naissance compatible : entre 1901 et 1909 dans la fiche", "décédée en 1987, comme dans la fiche", "même lieu de naissance : Saule"],
+      "score": 6
+    }
+  ],
+  "tronque": false
+}
+```
+
+- `criteres` : les codes, dans cet ordre fixe — c'est ce que le front lit pour ses pastilles.
+  `raisons` : les mêmes concordances en français, à afficher telles quelles ; le front ne les
+  reconstruit pas.
+- `ligneDates` est celle de la recherche (§ 5.5), réciprocité comprise ; `lieuNaissance` est le
+  `place` de la naissance tel que la fiche l'écrit, ou `null`.
+- **Pas de `total`**, et `tronque` se calcule sur le jeu **déjà filtré et trié** (§ 5.5).
+
+---
+
 ### 5.6 La réciprocité des vivants — naissance et portrait (ADR 0016)
 
 Un second filtre, **après** le cercle, sur la naissance et le portrait des vivants. Toutes
@@ -2219,6 +2354,7 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `GET` | `/api/demandes/{id}/refaire` | `MEMBRE` | — | `200` corps pré-rempli | `403` · `404` · `409` `demande_non_refaisable` | — |
 | `GET` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | — | `200` § 6.6 | `403` · `404` | — |
 | `GET` | `/api/demandes/brouillons/recherche` | `MEMBRE` | `?q=&limite=` | `200` § 6.6 bis | `422` (`q` < 2) | — |
+| `POST` | `/api/demandes/brouillons/ressemblances` | `MEMBRE` | `{fiche, limite, sauf}` § 6.6 quater | `200` § 6.6 quater | `401` · `422` `donnees_invalides` | — |
 | `GET` | `/api/demandes/brouillons/{brouillonId}` | `MEMBRE` | — | `200` une ligne du § 6.6 bis | `404` | — |
 | `GET` | `/api/demandes/historique/{subjectKind}/{subjectId}` | `MEMBRE` | `?page=&parPage=` | `200` liste paginée | `403` `regime_en_attente` · `404` | — |
 | `GET` | `/api/administration/demandes` | `ADMIN` | `?status=&kind=&targetId=&auteur=&q=&page=` | `200` liste paginée | — | — |
@@ -3259,8 +3395,9 @@ bis). Cette route est son pendant côté `Proposal`.
 
 **Deux routes et non une clé de plus dans la première**, parce que les deux réponses ne se
 filtrent pas pareil : l'arbre se filtre par le **cercle de visibilité** (ADR 0003), les
-propositions par la règle du § 13.3 — l'auteur et les administrateurs, personne d'autre. Une
-route par règle, c'est une règle par endroit. Et une ligne de l'arbre porte un `personId`
+propositions par la règle du § 13.3 — l'auteur et les administrateurs, personne d'autre (la
+seule exception, bornée, est la ressemblance du § 6.6 quater). Une route par règle, c'est une
+règle par endroit. Et une ligne de l'arbre porte un `personId`
 qu'une fiche proposée n'a pas : les glisser dans le même tableau obligerait chaque client à
 tester quelle forme il tient.
 
@@ -3283,6 +3420,120 @@ l'identifiant. Elle existe parce qu'un corps de lien ne transporte que `otherDra
 sans elle, un écran de reprise afficherait « personne n° 7 », c'est-à-dire un identifiant sous
 les yeux du lecteur, ce que le dépôt s'interdit partout ailleurs. `404` sur la fiche d'un
 autre membre, jamais `403`.
+
+### 6.6 quater Ressemblances parmi les propositions
+
+`POST /api/demandes/brouillons/ressemblances` — « une proposition semblable attend déjà ». Le
+pendant du § 5.5 bis pour les fiches **proposées** : le formulaire « Ajouter une personne »
+appelle les deux routes sur la même saisie. Un doublon ne vient pas seulement d'une personne
+déjà dans l'arbre : il vient aussi d'une personne **déjà proposée** — par soi-même un autre
+soir, ou par un autre membre —, que seul l'administrateur voyait, trop tard.
+
+**Corps** : celui du § 5.5 bis (`fiche`, `limite` — défaut 5, maximum 10 —, mêmes `422`), plus
+`sauf` : `null`, ou l'identifiant d'une demande à **ne pas** parcourir — celle qu'on est en
+train de compléter. Tout autre chose qu'un entier positif rend `422` sur `sauf`.
+
+```json
+{
+  "fiche": {
+    "givenNames": "Barnabé",
+    "surname": "Muguet",
+    "sex": "masculin",
+    "birth": { "raw": "1901", "qualifier": "annee", "min": "1901-01-01", "max": "1901-12-31", "place": null }
+  },
+  "limite": 5,
+  "sauf": null
+}
+```
+
+**Ce qui est parcouru** : les fiches des demandes `creation_personne` **en attente, tous
+auteurs confondus** — c'est l'exception écrite au § 13.3 —, et les **brouillons non envoyés du
+lecteur effectif, et de lui seul**, administrateur compris. Ni les demandes tranchées,
+ni les autres natures. La règle de ressemblance est celle du § 5.5 bis.
+
+**Deux formes, choisies par le serveur seul**, fiche par fiche :
+
+| La proposition | `forme` | Ce qui est comparé | Ce qui sort |
+|---|---|---|---|
+| du lecteur (identité effective), envoyée ou non | `complete` | tout | les clés ci-dessous |
+| de n'importe qui, lue par un **administrateur** hors bascule | `complete` | tout | les clés ci-dessous |
+| d'un **défunt** (`deceased = true`), par un autre membre | `complete` | tout | les clés ci-dessous — un défunt est un fait historique |
+| d'un **vivant**, par un autre membre | `discrete` | **nom, prénoms, sexe** | `{forme, draftPersonId, action, criteres, raisons}` — rien d'autre |
+| Compte `en_attente` | — | — | `{"elements": [], "tronque": false}` |
+
+**La forme discrète ne compare ni dates ni lieux** — ni ceux de la fiche, ni ceux de la
+saisie : sans quoi la route deviendrait un oracle de date de naissance (saisir 1934, puis
+1935, et regarder quand le signal s'éteint). Ses raisons sont génériques — « nom semblable »,
+« un prénom en commun », « même sexe » — et ne recopient **aucune** valeur de la fiche. Elle ne
+porte ni nom, ni date, ni lieu, ni auteur, ni numéro de demande, ni nœud : une phrase pour le
+lecteur (« une proposition semblable attend déjà la validation »), et `draftPersonId`, qu'un
+complément citera. Le front ne reconstruit jamais ce qui est caché.
+
+**`action`**, calculée par le serveur :
+
+- `completer` — le lecteur peut compléter la proposition **sur place** : il en est l'auteur
+  (`brouillon` ou `en_attente`), ou il est administrateur et elle est `en_attente` ;
+- `complement` — dans tous les autres cas : il dépose un complément rattaché, que
+  l'administrateur fusionnera. Une forme discrète porte toujours `complement`.
+
+**Sous la bascule « voir comme un membre »**, l'administrateur lit comme le membre emprunté :
+mêmes formes, mêmes brouillons parcourus (ceux du membre, pas les siens), mêmes actions.
+
+```json
+{
+  "elements": [
+    {
+      "forme": "complete",
+      "draftPersonId": 7,
+      "demandeId": 12,
+      "localRef": "#p1",
+      "noeudId": "#12/p1",
+      "displayName": "Barnabé Muguet",
+      "sex": "masculin",
+      "deceased": true,
+      "ligneDates": "1901 – 1968",
+      "authorLabel": "Cobalt Romarin",
+      "enAttente": true,
+      "lieuNaissance": "Saule, Ombrage, Sylvanie",
+      "statut": "en_attente",
+      "action": "completer",
+      "criteres": ["nom", "prenom", "sexe", "naissance"],
+      "raisons": ["même nom", "prénom Barnabé en commun", "même sexe", "né en 1901, comme dans la fiche"],
+      "score": 4
+    },
+    {
+      "forme": "discrete",
+      "draftPersonId": 9,
+      "action": "complement",
+      "criteres": ["nom", "prenom", "sexe"],
+      "raisons": ["nom semblable", "un prénom en commun", "même sexe"]
+    }
+  ],
+  "tronque": false
+}
+```
+
+Ici, la première proposition est celle du lecteur (Cobalt Romarin) ; la seconde, d'un autre
+membre, décrit un vivant.
+
+- La forme `complete` est la ligne du § 6.6 bis, plus `lieuNaissance` (le `place` de la
+  naissance, ou `null`), `statut` (`brouillon` ou `en_attente`), `action`, `criteres`,
+  `raisons` et `score`.
+- **`noeudId` n'est pas celui du § 6.6 bis** : il ne vaut que si le lecteur a ce nœud dans
+  **son** graphe — demande `en_attente`, et lecteur auteur ou administrateur hors bascule
+  (§ 13.4) — et `null` sinon : un brouillon non envoyé, ou la proposition d'un défunt faite
+  par un autre membre, n'est pas dans son graphe. Le front s'en sert pour sélectionner la
+  fiche dans /arbre ; la projection pouvant encore **écarter** un nœud qu'elle ne sait pas
+  placer (`ecartes`, § 5.2), il vérifie qu'il est dessiné.
+- Tri : score décroissant, nom identique avant nom proche, puis la clé de nom, puis
+  `draftPersonId`. Une forme discrète se trie sous **la saisie** et non sous son propre nom,
+  et ne passe jamais pour « nom identique » : l'ordre des réponses ne dit rien de plus que la
+  phrase.
+- **Pas de `total`** ; `tronque` sur le jeu filtré et trié (§ 5.5).
+
+Ni la recherche du § 6.6 bis, ni le graphe, ni le calque ne changent : un membre ne **voit**
+toujours pas les propositions des autres, il apprend seulement qu'une proposition semblable
+à la sienne existe.
 
 ### 6.7 La file d'administration et le diff
 
@@ -5401,7 +5652,8 @@ n'est revalidé (un `304` serait une autorisation de garder l'arbre à l'écran)
 | `GET /api/push/cle`, `PUT`/`DELETE /api/push/abonnement` | **normal** — elle lui arrive aussi sur le téléphone |
 | `POST /api/medias/portrait-du-compte` | **normal** — sa photo d'inscription (§ 7.1) |
 | `GET /api/medias/{id}`, `/fichier`, `/vignette` — **sa** photo d'inscription | `200` |
-| `GET /api/arbre/graphe`, `/personnes/{id}`, `/familles/{id}`, `/recherche` | **`403` `regime_en_attente`** |
+| `GET /api/arbre/graphe`, `/personnes/{id}`, `/familles/{id}`, `/recherche`, `POST /api/arbre/ressemblances` | **`403` `regime_en_attente`** |
+| `POST /api/demandes/brouillons/ressemblances` | `200` `{"elements": [], "tronque": false}` — il ne dépose pas de demande (§ 6.6 quater) |
 | `GET /api/chronologie`, `GET`/`PUT /api/chronologie/preferences` | **`403` `regime_en_attente`** |
 | `GET /api/carte`, `GET /api/anniversaires` | **`403` `regime_en_attente`** |
 | `GET /api/medias`, et `GET /api/medias/{id}` (`/fichier`, `/vignette`) de tout autre média, existant ou non | **`403` `regime_en_attente`** |
@@ -5568,6 +5820,17 @@ la personne, `idx_prp_op_sujet` pour charger les ops. **Il se fait à la sérial
 le même normaliseur que le cercle de visibilité (ADR 0004) — les deux filtres sont composés,
 ils ne se remplacent pas. Une personne vivante hors cercle n'a **pas** de clé `enAttente` du
 tout : la clé fait partie de ce qui n'est pas envoyé (§ 11.1).
+
+**Une exception écrite, et une seule : la ressemblance des propositions (§ 6.6 quater).**
+`POST /api/demandes/brouillons/ressemblances` parcourt les demandes `creation_personne` en
+attente **de tous les membres** — décision du commanditaire du 09/10/2026, pour qu'un membre
+apprenne qu'une proposition semblable attend déjà au lieu de déposer le doublon. L'exception
+est bornée par la forme de la réponse, que le serveur choisit seul : la proposition d'un
+**vivant** faite par un autre membre ne sort qu'en **signal** — ni nom, ni date, ni lieu, ni
+auteur, ni numéro de demande, et des dates qui ne sont même pas comparées ; celle d'un défunt
+sort en clair, comme un défunt de l'arbre. Les brouillons non envoyés restent à leur auteur.
+Le calque, le graphe et la recherche du § 6.6 bis ne sont pas touchés : ce tableau reste
+exact pour eux.
 
 ### 13.4 Une personne proposée mais non validée
 
