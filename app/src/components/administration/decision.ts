@@ -27,7 +27,7 @@
  *    lui, conserve.
  */
 
-import type { ResolutionPrevue, ResultatValidation } from '@/lib/api'
+import type { ComplementDe, ResolutionPrevue, ResultatValidation } from '@/lib/api'
 
 /* ------------------------------------------------------------------ */
 /* 1. Le motif de refus                                                */
@@ -82,8 +82,15 @@ export interface ActionValidation {
  * est fermé : sans information sur l'état de la cible, le bouton reste
  * désactivé plutôt que de promettre une validation dont personne ne sait ce
  * qu'elle ferait.
+ *
+ * `complementDe` — ce que la demande complète, tel que la vue d'administration
+ * le rend (ADR 0017) — ne sert qu'à **nommer** l'origine d'un complément : « à
+ * fusionner dans la demande n° 12 ». Absent, on le dit sans numéro.
  */
-export function actionValidation(resolution: ResolutionPrevue | undefined): ActionValidation {
+export function actionValidation(
+  resolution: ResolutionPrevue | undefined,
+  complementDe: ComplementDe | null = null,
+): ActionValidation {
   switch (resolution) {
     case 'application':
       return { libelle: 'Valider', desactive: false, explication: null }
@@ -141,6 +148,36 @@ export function actionValidation(resolution: ResolutionPrevue | undefined): Acti
         explication:
           'L’autre demande sur laquelle elle s’appuie n’aboutira pas. Son auteur peut la refaire.',
       }
+
+    case 'complements_en_attente':
+      // Comme une dépendance : un ordre, pas une mort. La valider maintenant
+      // créerait la personne sans ses compléments, et chacun deviendrait une
+      // seconde création de la même personne.
+      return {
+        libelle: 'Fusionnez d’abord les compléments',
+        desactive: true,
+        explication:
+          'Des compléments attendent sur cette proposition : fusionnez-les (ou refusez-les) d’abord. Elle se validera ensuite telle quelle, sans que son auteur ait à la refaire.',
+      }
+
+    case 'complement_a_fusionner': {
+      // Le geste est la fusion — sur l'origine en attente — ou le refus — sur une
+      // origine déjà validée, que valider ce complément doublerait.
+      const origine = complementDe?.demandeId
+      const laDemande = origine === undefined ? 'la proposition qu’elle complète' : `la demande n° ${origine}`
+      if (complementDe?.status === 'validee') {
+        return {
+          libelle: 'Validation impossible',
+          desactive: true,
+          explication: `Elle complète ${laDemande}, déjà validée : la valider créerait la personne une seconde fois. Il reste à la refuser.`,
+        }
+      }
+      return {
+        libelle: origine === undefined ? 'À fusionner' : `À fusionner dans la demande n° ${origine}`,
+        desactive: true,
+        explication: `Elle complète ${laDemande} : fusionnez-la plutôt que de la valider. Ses champs, ses liens et ses pièces y passeront.`,
+      }
+    }
 
     case undefined:
       return {

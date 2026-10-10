@@ -241,6 +241,11 @@ function changerFiltre(valeur: StatutDemande | ''): void {
                 </button>
                 <span class="text-sm text-attenue">
                   <template v-if="demande.targetLabel">sur {{ demande.targetLabel }} — </template>
+                  <!-- Un complément (ADR 0017) : le numéro qu'il complète, jamais un nom —
+                       la proposition est celle d'un autre membre. -->
+                  <template v-if="demande.complementDeDemandeId !== null">
+                    <span data-complement-du>complément du n° {{ demande.complementDeDemandeId }}</span> —
+                  </template>
                   déposée le {{ dateLisible(demande.submittedAt ?? demande.createdAt) }}
                 </span>
               </div>

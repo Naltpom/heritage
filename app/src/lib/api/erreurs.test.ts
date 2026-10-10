@@ -249,3 +249,45 @@ describe('autres conduites', () => {
     expect(analyse.libelleAction).toBe('Réessayer')
   })
 })
+
+describe('les 409 de la complétion (ADR 0017)', () => {
+  it('`demande_modifiee_entre_temps` : relire, jamais rejouer — même si rien n’a été écrit', () => {
+    // Le serveur dit `rejouable: true` : rien n'est écrit. Mais rejouer le même
+    // appel renverrait la même empreinte périmée — ou, sans elle, écraserait ce
+    // que l'autre vient d'écrire. Le contrat : « le front relit la demande ».
+    const analyse = analyserErreur(
+      erreurDepuisCorps(
+        409,
+        enveloppe('demande_modifiee_entre_temps', 'La demande a changé depuis votre lecture.', {
+          details: { demandeId: 12, empreinte: '41ab', rejouable: true },
+        }),
+      ),
+    )
+    expect(analyse.rejouable).toBe(true)
+    expect(analyse.conduite).toBe('recharger')
+    expect(analyse.libelleAction).toBe('Recharger')
+  })
+
+  it('`complements_en_attente` et `complement_a_fusionner` : relire, pour voir le geste qui fusionne', () => {
+    const cas: [string, Record<string, unknown>][] = [
+      ['complements_en_attente', { demandeId: 12, statut: 'en_attente', rejouable: true, complements: [21] }],
+      [
+        'complement_a_fusionner',
+        { demandeId: 21, statut: 'en_attente', rejouable: false, origineDemandeId: 12, origineStatut: 'en_attente' },
+      ],
+    ]
+    for (const [code, details] of cas) {
+      const analyse = analyserErreur(erreurDepuisCorps(409, enveloppe(code, 'Fusionnez d’abord.', { details })))
+      expect(analyse.conduite).toBe('recharger')
+      expect(analyse.libelleAction).not.toBe('Réessayer')
+    }
+  })
+
+  it('`proposition_plus_en_attente` ne propose rien : l’issue n’est pas dite, rien à relire', () => {
+    const analyse = analyserErreur(
+      erreurDepuisCorps(409, enveloppe('proposition_plus_en_attente', 'La proposition n’attend plus de validation.')),
+    )
+    expect(analyse.conduite).toBe('aucune')
+    expect(analyse.libelleAction).toBeNull()
+  })
+})

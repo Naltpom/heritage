@@ -28,7 +28,10 @@
  * bouton éteint sans explication se lit comme une panne.
  *
  * Le bouton « Valider » suit `resolutionPrevue` (§ 6.7) : sans ce calcul,
- * l'administrateur découvrirait la caducité en cliquant.
+ * l'administrateur découvrirait la caducité en cliquant. Il porte aussi
+ * l'**empreinte** de la demande lue (ADR 0017) : une demande en attente se
+ * complète désormais, et ce qui a bougé depuis la lecture ne se valide pas à
+ * l'aveugle — la conduite rendue est alors « recharger ».
  *
  * **« Valider & suivant » et « Refuser & suivant »** font exactement le même
  * appel — même garde, même motif obligatoire — puis demandent au parent
@@ -86,7 +89,7 @@ const suspendu = computed(() => ecrituresSuspendues(vueEmpruntee.value))
 const raisonSuspension = computed(() => motifSuspension(vueEmpruntee.value))
 const infobulle = computed(() => infobulleSuspension(vueEmpruntee.value))
 
-const validation = computed(() => actionValidation(demande.resolutionPrevue))
+const validation = computed(() => actionValidation(demande.resolutionPrevue, demande.complementDe ?? null))
 const decidable = computed(() => demande.status === 'en_attente')
 const doublons = computed(() => demande.doublonsProbables ?? [])
 
@@ -114,7 +117,9 @@ async function valider(enchainer = false): Promise<void> {
   envoi.value = true
   erreur.value = null
   try {
-    const resultat = await validerDemande(demande.id)
+    // L'empreinte de ce qu'on a lu : son auteur a pu compléter la demande pendant
+    // qu'on la relisait (ADR 0017). Périmée, rien n'est validé, et l'on relit.
+    const resultat = await validerDemande(demande.id, demande.empreinte)
     annonce.value = annonceValidation(resultat)
     // L'arbre a changé : l'`ETag` du graphe est périmé (§ 5.2).
     invaliderGraphe()

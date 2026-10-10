@@ -121,6 +121,8 @@ function complete(d: Demande): DemandeAdministration {
   return {
     ...d,
     resolutionPrevue: 'application',
+    // § 6.5 : ce qu'on a lu, renvoyé à la validation (ADR 0017).
+    empreinte: `empreinte-${d.id}`,
     ops: [
       {
         seq: 1,
@@ -305,7 +307,9 @@ describe('« À traiter » : les décisions', () => {
 
     await cliquer(un(detail(racine)!, boutonNomme('Valider')))
 
-    expect(api.validerDemande).toHaveBeenCalledWith(42)
+    // L'empreinte de la demande relue à l'ouverture part avec la validation :
+    // complétée depuis, elle ne se validerait pas à l'aveugle.
+    expect(api.validerDemande).toHaveBeenCalledWith(42, 'empreinte-42')
     expect(api.invaliderGraphe).toHaveBeenCalledTimes(1)
     expect(useToast().message.value).toBe('Demande n° 42 validée.')
     expect(texte(racine)).toContain('Rien n’attend de décision.')

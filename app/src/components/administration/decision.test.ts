@@ -244,6 +244,76 @@ describe('ce que propose le bouton « Valider »', () => {
     expect(action.desactive).toBe(true)
     expect(action.explication).not.toBeNull()
   })
+
+  it('sur `complements_en_attente` : fusionner d’abord — un ordre, pas une mort (ADR 0017)', () => {
+    // La valider maintenant créerait la personne sans ses compléments, et chacun
+    // deviendrait une seconde création de la même personne.
+    const action = actionValidation('complements_en_attente')
+    expect(action.desactive).toBe(true)
+    expect(action.libelle).toBe('Fusionnez d’abord les compléments')
+    expect(action.explication).toMatch(/fusionnez-les/i)
+    expect(action.explication).toMatch(/sans que son auteur ait à la refaire/i)
+  })
+
+  it('sur `complement_a_fusionner` : le geste est la fusion, dans la demande nommée', () => {
+    const origine = { draftPersonId: 7, demandeId: 12, localRef: '#p1', displayName: 'Barnabé Muguet', status: 'en_attente' as const }
+    const action = actionValidation('complement_a_fusionner', origine)
+    expect(action.desactive).toBe(true)
+    expect(action.libelle).toBe('À fusionner dans la demande n° 12')
+    expect(action.explication).toMatch(/fusionnez-la plutôt que de la valider/i)
+
+    // Sans le numéro (une charge qui ne le porte pas) : on le dit sans lui.
+    expect(actionValidation('complement_a_fusionner').libelle).toBe('À fusionner')
+  })
+
+  it('sur `complement_a_fusionner` dont l’origine est validée : il reste le refus', () => {
+    const action = actionValidation('complement_a_fusionner', {
+      draftPersonId: 7,
+      demandeId: 12,
+      status: 'validee',
+    })
+    expect(action.desactive).toBe(true)
+    expect(action.libelle).toBe('Validation impossible')
+    expect(action.explication).toMatch(/une seconde fois/)
+    expect(action.explication).toMatch(/refuser/)
+  })
+
+  it('traite chacune des huit valeurs sans jamais rendre `undefined`', () => {
+    const valeurs = [
+      'application',
+      'rejeu',
+      'caducite',
+      'cible_disparue',
+      'dependance_en_attente',
+      'dependance_morte',
+      'complements_en_attente',
+      'complement_a_fusionner',
+    ] as const
+    for (const valeur of valeurs) {
+      const action = actionValidation(valeur)
+      expect(action).toBeDefined()
+      expect(action.libelle.length).toBeGreaterThan(0)
+    }
+  })
+})
+
+describe('la validation porte l’empreinte de ce qu’on a lu (ADR 0017)', () => {
+  const SOURCE = readFileSync(fileURLToPath(new URL('./DecisionDemande.vue', import.meta.url)), 'utf8')
+
+  it('envoie l’empreinte de la demande affichée', () => {
+    expect(SOURCE).toContain('validerDemande(demande.id, demande.empreinte)')
+  })
+
+  it('une empreinte périmée fait relire, jamais rejouer', () => {
+    const analyse = analyserErreur(
+      new ErreurApi(409, 'demande_modifiee_entre_temps', 'La demande a changé.', null, {
+        demandeId: 14,
+        empreinte: '41ab',
+        rejouable: true,
+      }),
+    )
+    expect(analyse.conduite).toBe('recharger')
+  })
 })
 
 describe('un rejeu automatique se voit', () => {

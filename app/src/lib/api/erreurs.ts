@@ -83,6 +83,21 @@ export const CODE_VERROU_CONCURRENT = 'verrou_concurrent'
 export const CODE_REGIME_EN_ATTENTE = 'regime_en_attente'
 export const CODE_VUE_COMME_ACTIVE = 'vue_comme_membre_active'
 
+/**
+ * Les quatre `409` de la complétion (ADR 0017, § 15.2).
+ *
+ * `demande_modifiee_entre_temps` porte `rejouable: true` — rien n'a été écrit —,
+ * et c'est le piège : rejouer le **même** appel renverrait la même empreinte
+ * périmée, ou pire, sans elle, écraserait ce que l'autre vient d'écrire. Le
+ * contrat le dit : « le front **relit** la demande et la montre avant de laisser
+ * décider ». Sa conduite est donc `recharger`, écrite ici nommément pour que le
+ * repli « 409 rejouable ⇒ réessayer » ne la rattrape jamais.
+ */
+export const CODE_DEMANDE_MODIFIEE = 'demande_modifiee_entre_temps'
+export const CODE_COMPLEMENTS_EN_ATTENTE = 'complements_en_attente'
+export const CODE_COMPLEMENT_A_FUSIONNER = 'complement_a_fusionner'
+export const CODE_PROPOSITION_PLUS_EN_ATTENTE = 'proposition_plus_en_attente'
+
 export function estErreurApi(valeur: unknown): valeur is ErreurApi {
   return valeur instanceof ErreurApi
 }
@@ -196,6 +211,21 @@ export function conduiteATenir(erreur: ErreurApi): ConduiteATenir {
     case 'import_en_cours':
     case CODE_VUE_COMME_ACTIVE:
       return 'recharger'
+
+    // La demande a changé sous les yeux du lecteur : on la relit et on la montre,
+    // jamais on ne rejoue — même si rien n'a été écrit (`rejouable: true`).
+    case CODE_DEMANDE_MODIFIEE:
+    // Des compléments attendent : rejouer la validation tomberait sur le même
+    // `409`. Relire, c'est montrer les compléments et le geste qui les fusionne.
+    case CODE_COMPLEMENTS_EN_ATTENTE:
+    case CODE_COMPLEMENT_A_FUSIONNER:
+      return 'recharger'
+
+    // Le complément ne peut plus se rattacher : sa proposition a été tranchée, et
+    // l'issue n'est pas dite. Il n'y a rien à relire — l'écran qui dépose le sait,
+    // et propose d'en faire une proposition ordinaire.
+    case CODE_PROPOSITION_PLUS_EN_ATTENTE:
+      return 'aucune'
 
     case 'donnees_invalides':
     case 'valeur_hors_bornes':
