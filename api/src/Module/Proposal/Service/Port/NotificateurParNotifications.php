@@ -16,7 +16,7 @@ use App\Module\Proposal\Entity\ChangeRequest;
  *
  * L'en-tête du port demande « une classe de `Core` qui implémente cette interface ».
  * C'est le seul point sur lequel il faut s'en écarter, et le motif est structurel : cette
- * classe nomme `Proposal\Entity\ChangeRequest` dans ses quatre signatures. Une classe de
+ * classe nomme `Proposal\Entity\ChangeRequest` dans toutes ses signatures. Une classe de
  * `Core` qui la nommerait ferait référencer `Proposal` par le noyau, ce que le § 2.6 du
  * modèle interdit sans ambiguïté — « `Core` est le noyau : il est référencé, il ne
  * référence pas ». La dépendance va donc dans le bon sens : `Proposal` connaît
@@ -55,9 +55,17 @@ final readonly class NotificateurParNotifications implements NotificateurDeDeman
         // Vers les administrateurs, jamais l'auteur : il vient de cliquer — y compris
         // quand l'auteur est lui-même administrateur. `Proposal` ne tient pas la liste
         // des comptes — c'est `Core` qui sait qui est administrateur.
+        // Un complément se dit comme tel (ADR 0017) : l'administrateur n'a pas à le valider
+        // mais à le fusionner, et le titre l'envoie au bon geste avant même d'ouvrir la
+        // demande. Le numéro de l'origine suffit — les destinataires voient tout.
+        $origine = $demande->getComplementDe()?->getRequest()->getId();
+        $titre = null === $origine
+            ? \sprintf('%s propose une modification%s.', $demande->getAuthorLabel(), $this->sur($demande))
+            : \sprintf('%s propose un complément à la demande n° %d.', $demande->getAuthorLabel(), $origine);
+
         $this->notifications->notifierLesAdministrateurs(
             NotificationKind::DemandeSoumise,
-            \sprintf('%s propose une modification%s.', $demande->getAuthorLabel(), $this->sur($demande)),
+            $titre,
             $demande->getMessage(),
             'demande.detail',
             ['id' => $demande->getId()],
@@ -135,6 +143,96 @@ final readonly class NotificateurParNotifications implements NotificateurDeDeman
             'demande.refaire',
             ['id' => $demande->getId()],
         );
+    }
+
+    /**
+     * « L'administration a complété votre demande n° 12 » — ou, dans l'autre sens, « Opale
+     * Romarin a complété sa demande n° 12 » pour les administrateurs (ADR 0017).
+     *
+     * **Le numéro de la demande, jamais le nom de la personne.** Le titre est relu des mois
+     * plus tard ; le numéro mène à la demande, où le nom se lit sous les règles du jour. Le
+     * corps nomme les **champs** touchés, pas leurs valeurs — une naissance de vivant n'a
+     * rien à faire dans une ligne de `core_notification`. Et il ne nomme pas le membre qui
+     * a fourni un complément : pour l'auteur de l'origine, c'est l'administration qui a
+     * complété sa demande, et c'est exactement ce qui s'est passé.
+     */
+    public function demandeCompletee(ChangeRequest $demande, bool $parLAdministration, array $champs, int $liensAjoutes): void
+    {
+        $corps = $this->raconterLaCompletion($champs, $liensAjoutes);
+
+        if ($parLAdministration) {
+            $this->notifications->notifier(
+                $demande->getAuthorUserId(),
+                NotificationKind::DemandeCompletee,
+                \sprintf('L\'administration a complété votre demande n° %d.', $demande->getId() ?? 0),
+                $corps,
+                'demande.detail',
+                ['id' => $demande->getId()],
+            );
+
+            return;
+        }
+
+        // Vers les administrateurs, sauf l'auteur : ce qu'ils avaient lu a changé, et la
+        // validation se fera sur la version complétée.
+        $this->notifications->notifierLesAdministrateurs(
+            NotificationKind::DemandeCompletee,
+            \sprintf('%s a complété sa demande n° %d.', $demande->getAuthorLabel(), $demande->getId() ?? 0),
+            $corps,
+            'demande.detail',
+            ['id' => $demande->getId()],
+            $demande->getAuthorUserId(),
+        );
+    }
+
+    /**
+     * « Votre complément (demande n° 21) a été fusionné dans la demande n° 12. »
+     *
+     * Le complément est clos en `refusee` — c'est le statut qui le sort de la file —, mais
+     * cette notification n'est **pas** un refus, et elle ne passe pas par
+     * {@see demandeRefusee()} : son travail est repris, pas écarté. Elle ne nomme pas la
+     * personne : l'origine est le plus souvent la proposition d'un autre membre, et ce que
+     * celui-ci a écrit n'a pas à ressortir ici.
+     */
+    public function complementFusionne(ChangeRequest $complement, ChangeRequest $origine): void
+    {
+        if ($this->decideeParSonAuteur($complement)) {
+            return;
+        }
+
+        $this->notifications->notifier(
+            $complement->getAuthorUserId(),
+            NotificationKind::ComplementFusionne,
+            \sprintf(
+                'Votre complément (demande n° %d) a été fusionné dans la demande n° %d.',
+                $complement->getId() ?? 0,
+                $origine->getId() ?? 0,
+            ),
+            'L\'administration l\'a repris dans la proposition qu\'il complétait, qui sera validée avec lui. Vous n\'avez rien d\'autre à faire.',
+            'demande.detail',
+            ['id' => $complement->getId()],
+        );
+    }
+
+    /**
+     * « Ce qui a changé : Naissance, Décès ; 2 liens ajoutés. » — ou `null` si rien n'est à
+     * dire, ce que l'appelant évite déjà : il ne notifie pas une complétion vide.
+     *
+     * @param list<string> $champs
+     */
+    private function raconterLaCompletion(array $champs, int $liensAjoutes): ?string
+    {
+        $morceaux = [];
+
+        if ([] !== $champs) {
+            $morceaux[] = implode(', ', $champs);
+        }
+
+        if ($liensAjoutes > 0) {
+            $morceaux[] = 1 === $liensAjoutes ? '1 lien ajouté' : \sprintf('%d liens ajoutés', $liensAjoutes);
+        }
+
+        return [] === $morceaux ? null : 'Ce qui a changé : '.implode(' ; ', $morceaux).'.';
     }
 
     /**

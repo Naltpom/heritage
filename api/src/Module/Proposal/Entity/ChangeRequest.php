@@ -44,6 +44,11 @@ use Doctrine\ORM\Mapping as ORM;
     columns: ['dedup_key'],
     options: ['where' => "((dedup_key IS NOT NULL) AND ((status)::text = 'en_attente'::text))"],
 )]
+// « Quels compléments attendent sur cette proposition ? » — la vue d'administration de
+// l'origine, et le contrôle préalable qui en bloque la validation (ADR 0017). Nommé ici
+// plutôt que laissé à l'index que Doctrine pose de lui-même sur une colonne de jointure :
+// un `IDX_` haché ne dit rien à qui lit un plan d'exécution.
+#[ORM\Index(name: 'idx_prp_request_complement', columns: ['complement_de_id'])]
 class ChangeRequest
 {
     #[ORM\Id]
@@ -169,6 +174,40 @@ class ChangeRequest
     #[ORM\ManyToOne(targetEntity: self::class)]
     #[ORM\JoinColumn(name: 'reprise_de_id', nullable: true, onDelete: 'SET NULL')]
     private ?self $repriseDe = null;
+
+    /**
+     * La **fiche proposée** que cette demande complète — le troisième pointeur de la
+     * table, et le seul qui vise une fiche plutôt qu'une demande (ADR 0017).
+     *
+     * Un membre qui reconnaît, dans la proposition d'un **autre**, la personne qu'il
+     * s'apprêtait à saisir ne peut pas la modifier : elle n'est pas à lui. Il dépose donc
+     * une `creation_personne` ordinaire — une fiche, au moins un lien — qui porte ce
+     * pointeur, et l'administrateur la **fusionne** dans l'origine en un clic
+     * ({@see \App\Module\Proposal\Service\FusionDeComplement}).
+     *
+     * ── Pourquoi une fiche et non une demande ───────────────────────────────────────
+     *
+     * Une création peut porter plusieurs fiches — une branche de vingt-deux personnes en
+     * une demande. « Complète la demande n° 12 » ne dirait pas laquelle ; « complète la
+     * fiche 7 » ne laisse aucun doute, et la demande s'en lit par la jointure.
+     *
+     * ── Trois pointeurs, trois sens ─────────────────────────────────────────────────
+     *
+     * - `duplicateOf` : deux auteurs, une même personne, et l'une des deux demandes
+     *   **refusée** en renvoyant à l'autre ;
+     * - `repriseDe` : le même auteur, sa propre demande **refaite** ;
+     * - `complementDe` : deux auteurs, une même personne, et la seconde demande
+     *   **versée** dans la première. Après la fusion, le complément porte aussi
+     *   `duplicateOf` — c'est ce que son auteur lit : « fusionné dans la demande n° 12 ».
+     *
+     * `ON DELETE SET NULL` : une fiche ne disparaît qu'avec sa demande, ce qui n'arrive
+     * jamais (ADR 0004) ; si cela arrivait, le complément redeviendrait une création
+     * autonome — ce qu'il est déjà dès que son origine est refusée, retirée ou caduque.
+     * `ck_prp_request_complement` réserve la colonne aux `creation_personne`.
+     */
+    #[ORM\ManyToOne(targetEntity: DraftPerson::class)]
+    #[ORM\JoinColumn(name: 'complement_de_id', nullable: true, onDelete: 'SET NULL')]
+    private ?DraftPerson $complementDe = null;
 
     /**
      * Clé de rapprochement des doublons probables : `search_key` de la personne proposée
@@ -354,6 +393,18 @@ class ChangeRequest
     public function setRepriseDe(?self $repriseDe): self
     {
         $this->repriseDe = $repriseDe;
+
+        return $this;
+    }
+
+    public function getComplementDe(): ?DraftPerson
+    {
+        return $this->complementDe;
+    }
+
+    public function setComplementDe(?DraftPerson $complementDe): self
+    {
+        $this->complementDe = $complementDe;
 
         return $this;
     }

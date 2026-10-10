@@ -72,4 +72,29 @@ interface FichesProposeesInterface
      * @param bool   $administrateur `ROLE_ADMIN`, hors bascule « voir comme un membre »
      */
     public function depot(int $demandeId, string $localRef, int $userId, bool $administrateur): DepotSurFicheProposee;
+
+    /**
+     * Ce compte est-il **l'auteur de la demande** qui porte cette personne proposée ?
+     * — la question que `Media` pose pour **lire** une pièce jointe à une fiche proposée
+     * (`CatalogueMedia::lisible()`), depuis le 10/10/2026.
+     *
+     * ── Pourquoi la lecture a besoin de cette question ──────────────────────────────
+     *
+     * Une pièce sans sujet réel ne se lisait que par **son déposant** et l'administration :
+     * tant que seul l'auteur d'une demande y joignait des pièces, c'était la même personne.
+     * Ce n'est plus vrai. L'administrateur joint une pièce à la proposition d'un membre
+     * (règle 3 de {@see depot()}), et surtout la **fusion d'un complément** (ADR 0017)
+     * verse dans la proposition d'origine les pièces qu'un autre membre avait jointes au
+     * sien. Sans cette question, l'auteur de l'origine verrait dans sa propre proposition
+     * des vignettes cassées — des pièces listées par le détail du nœud (§ 6.6), dont les
+     * octets lui répondraient `404`.
+     *
+     * **Tous statuts confondus** : une demande refusée reste consultable par son auteur,
+     * avec ce qu'elle portait (ADR 0004). L'administrateur n'a pas besoin de cette
+     * question — il lit tout —, et le déposant non plus.
+     *
+     * Le repli fermé répond `false` : la lecture retombe sur la règle d'avant, déposant et
+     * administration.
+     */
+    public function estAuteurDe(int $demandeId, int $userId): bool;
 }

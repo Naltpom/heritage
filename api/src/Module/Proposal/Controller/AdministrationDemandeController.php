@@ -13,7 +13,9 @@ use App\Module\Proposal\Exception\DonneesInvalides;
 use App\Module\Proposal\Exception\Introuvable;
 use App\Module\Proposal\Repository\ChangeRequestRepository;
 use App\Module\Proposal\Security\DemandeVoter;
+use App\Module\Proposal\Service\EmpreinteDeDemande;
 use App\Module\Proposal\Service\FabriqueDeLecteur;
+use App\Module\Proposal\Service\FusionDeComplement;
 use App\Module\Proposal\Service\RefusDeDemande;
 use App\Module\Proposal\Service\ResultatDeValidation;
 use App\Module\Proposal\Service\SerialiseurDeDemande;
@@ -38,8 +40,15 @@ use Symfony\Component\Routing\Attribute\Route;
  * | `GET /api/administration/demandes/{id}` | non | — |
  * | `POST …/{id}/valider` | oui | **oui** |
  * | `POST …/{id}/refuser` | oui | **oui** |
+ * | `GET …/{id}/fusionner/{complementId}` | **non** — l'aperçu | — |
+ * | `POST …/{id}/fusionner/{complementId}` | oui | **oui** |
  *
- * Ce sont les deux routes où l'oubli coûterait le plus cher. **On ne tranche pas une
+ * La fusion (10/10/2026, ADR 0017) verse un **complément** dans la proposition qu'il
+ * complète et clôt le complément : c'est une décision au même titre que `valider` et
+ * `refuser`, et elle porte le même garde-fou. Son aperçu est une lecture, comme la vue de
+ * la demande, et reste ouvert sous la bascule.
+ *
+ * Ce sont les routes où l'oubli coûterait le plus cher. **On ne tranche pas une
  * demande sous une identité empruntée** : la `prp_revision` porterait l'administrateur
  * — avec les bons droits, le bon auteur, tout juste — pendant que l'écran qui a
  * déclenché le clic montrait le cercle de quelqu'un d'autre. Le journal d'audit
@@ -58,6 +67,7 @@ final class AdministrationDemandeController extends AbstractController
         private readonly SerialiseurDeDemande $serialiseur,
         private readonly ChangeRequestRepository $demandes,
         private readonly BasculeVoirComme $bascule,
+        private readonly EmpreinteDeDemande $empreintes,
     ) {
     }
 
@@ -137,16 +147,79 @@ final class AdministrationDemandeController extends AbstractController
      * réexaminée doit se voir.
      */
     #[Route('/{id}/valider', name: 'proposal_admin_demande_valider', requirements: ['id' => '\d+'], methods: ['POST'])]
-    public function valider(int $id, ValidationDeDemande $validation): JsonResponse
+    public function valider(int $id, Request $requete, ValidationDeDemande $validation): JsonResponse
     {
         $this->bascule->refuserSiActive();
 
         $demande = $this->trouver($id);
         $this->exigerDecideur($demande);
 
-        $resultat = $validation->valider($demande, $this->lecteurs->courant());
+        // Corps **facultatif** : `{"empreinte": "…"}` depuis le 10/10/2026 (ADR 0017). Un
+        // corps vide valide comme avant — l'ajout est compatible.
+        $resultat = $validation->valider(
+            $demande,
+            $this->lecteurs->courant(),
+            $this->corps($requete)['empreinte'] ?? null,
+        );
 
         return $this->charge($this->issue($resultat));
+    }
+
+    /**
+     * **L'aperçu d'une fusion** — ce que `POST` ferait, sans rien écrire (§ 6.7 bis).
+     *
+     * Une lecture : pas de `refuserSiActive()`, comme pour la vue de la demande. Elle rend
+     * les mêmes `409` et `422` que la fusion, pour que l'écran les apprenne avant le clic.
+     */
+    #[Route(
+        '/{id}/fusionner/{complementId}',
+        name: 'proposal_admin_demande_apercu_fusion',
+        requirements: ['id' => '\d+', 'complementId' => '\d+'],
+        methods: ['GET'],
+    )]
+    public function apercuDeFusion(int $id, int $complementId, FusionDeComplement $fusion): JsonResponse
+    {
+        $origine = $this->trouver($id);
+        $this->exigerDecideur($origine);
+        $complement = $this->trouver($complementId);
+        $this->exigerDecideur($complement);
+
+        return $this->charge([
+            'origine' => ['id' => $origine->getId(), 'empreinte' => $this->empreintes->de($origine)],
+            'complement' => ['id' => $complement->getId(), 'empreinte' => $this->empreintes->de($complement)],
+            'rapport' => $fusion->apercu($origine, $complement),
+        ]);
+    }
+
+    /**
+     * **Fusionner un complément** dans la proposition qu'il complète (§ 6.7 bis, ADR 0017).
+     *
+     * Une écriture, et une décision : le complément est clos. Le garde-fou de la bascule
+     * s'applique comme à `valider` et `refuser`, pour la même raison — on ne tranche pas
+     * sous une identité empruntée.
+     */
+    #[Route(
+        '/{id}/fusionner/{complementId}',
+        name: 'proposal_admin_demande_fusionner',
+        requirements: ['id' => '\d+', 'complementId' => '\d+'],
+        methods: ['POST'],
+    )]
+    public function fusionner(int $id, int $complementId, Request $requete, FusionDeComplement $fusion): JsonResponse
+    {
+        $this->bascule->refuserSiActive();
+
+        $origine = $this->trouver($id);
+        $this->exigerDecideur($origine);
+        $complement = $this->trouver($complementId);
+        $this->exigerDecideur($complement);
+
+        $rapport = $fusion->fusionner($origine, $complement, $this->corps($requete), $this->lecteurs->courant());
+
+        return $this->charge([
+            'origine' => $this->serialiseur->pourAdministration($origine),
+            'complement' => $this->serialiseur->resume($complement),
+            'rapport' => $rapport,
+        ]);
     }
 
     /**

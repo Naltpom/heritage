@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Proposal;
 
+use App\Module\Core\Contract\FichesProposeesFermees;
 use App\Module\Core\Contract\FichesProposeesInterface;
 use App\Module\Core\Enum\DepotSurFicheProposee;
 use App\Module\Core\Enum\SubjectKind;
@@ -214,6 +215,24 @@ final class FichesProposeesPourLesModulesTest extends BaseDeDemandes
         self::assertSame(DepotSurFicheProposee::Joignable, $this->fiches->depot((int) $deOpale->getId(), 'p1', self::OPALE, false));
         self::assertSame(DepotSurFicheProposee::Introuvable, $this->fiches->depot((int) $deTuf->getId(), 'p1', self::OPALE, false));
         self::assertSame(DepotSurFicheProposee::Joignable, $this->fiches->depot((int) $deTuf->getId(), 'p1', self::TUF, false));
+    }
+
+    /**
+     * **La lecture** (10/10/2026, ADR 0017) : l'auteur de la demande, et lui seul, quel qu'en
+     * soit le statut — une demande refusée reste consultable par son auteur, avec ses pièces.
+     * C'est ce que `Media` demande pour lire une pièce versée par la fusion d'un complément,
+     * ou jointe par l'administrateur.
+     */
+    public function testLAuteurDeLaDemandeEtLuiSeulEnLitLesPiecesQuelQuEnSoitLeStatut(): void
+    {
+        $refusee = $this->demandeAuStatut(RequestStatus::Refusee);
+        $enAttente = $this->proposer(self::OPALE);
+
+        self::assertTrue($this->fiches->estAuteurDe((int) $enAttente->getId(), self::OPALE));
+        self::assertTrue($this->fiches->estAuteurDe((int) $refusee->getId(), self::OPALE));
+        self::assertFalse($this->fiches->estAuteurDe((int) $enAttente->getId(), self::TUF));
+        self::assertFalse($this->fiches->estAuteurDe(999999, self::OPALE), 'Une demande qui n\'existe pas n\'a pas d\'auteur.');
+        self::assertFalse((new FichesProposeesFermees())->estAuteurDe((int) $enAttente->getId(), self::OPALE), 'Le repli est fermé.');
     }
 
     // ─────────────────────────────────────────────────────────────────────────────

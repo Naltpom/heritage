@@ -57,9 +57,10 @@ final readonly class DepotDeDemande
      */
     public function deposer(array $corps, Lecteur $lecteur): ChangeRequest
     {
-        $this->verifierQuIlPeutEcrire($lecteur);
+        self::verifierQuIlPeutEcrire($lecteur);
 
         $kind = $this->nature($corps);
+        self::refuserUnComplementHorsCreation($kind, $corps);
         $constructeur = $this->constructeurPour($kind);
 
         $demande = new ChangeRequest($kind, $lecteur->userId, $lecteur->libelle);
@@ -121,9 +122,10 @@ final readonly class DepotDeDemande
      */
     public function verifierSansEcrire(array $corps, Lecteur $lecteur): void
     {
-        $this->verifierQuIlPeutEcrire($lecteur);
+        self::verifierQuIlPeutEcrire($lecteur);
 
         $kind = $this->nature($corps);
+        self::refuserUnComplementHorsCreation($kind, $corps);
         $constructeur = $this->constructeurPour($kind);
 
         $demande = new ChangeRequest($kind, $lecteur->userId, $lecteur->libelle);
@@ -158,7 +160,7 @@ final readonly class DepotDeDemande
      */
     public function soumettre(ChangeRequest $demande, Lecteur $lecteur): ChangeRequest
     {
-        $this->verifierQuIlPeutEcrire($lecteur);
+        self::verifierQuIlPeutEcrire($lecteur);
         $this->verifierQuIlEstLAuteur($demande, $lecteur);
 
         if (RequestStatus::Brouillon !== $demande->getStatus()) {
@@ -184,7 +186,7 @@ final readonly class DepotDeDemande
      */
     public function retirer(ChangeRequest $demande, Lecteur $lecteur): ChangeRequest
     {
-        $this->verifierQuIlPeutEcrire($lecteur);
+        self::verifierQuIlPeutEcrire($lecteur);
         $this->verifierQuIlEstLAuteur($demande, $lecteur);
 
         if ($demande->getStatus()->estDefinitif()) {
@@ -240,7 +242,14 @@ final readonly class DepotDeDemande
         throw Introuvable::cible($kind->value, $id);
     }
 
-    private function verifierQuIlPeutEcrire(Lecteur $lecteur): void
+    /**
+     * **Partagé** depuis le 10/10/2026 : la complétion sur place
+     * ({@see CompletionDeProposition}) et la fusion d'un complément
+     * ({@see FusionDeComplement}) sont des écritures du module, et refusent les mêmes
+     * lecteurs pour les mêmes raisons. Une méthode statique et pure plutôt qu'une copie de
+     * plus : deux copies d'un garde-fou finissent par en faire deux.
+     */
+    public static function verifierQuIlPeutEcrire(Lecteur $lecteur): void
     {
         if ($lecteur->regimeEnAttente) {
             throw AccesRefuse::regimeEnAttente();
@@ -271,6 +280,26 @@ final readonly class DepotDeDemande
         }
 
         return $nature;
+    }
+
+    /**
+     * `complementDe` **hors d'une `creation_personne`** : refusé ici, pour toutes les
+     * natures, avant le constructeur (ADR 0017).
+     *
+     * Seul {@see ConstructeurDeCreation} lit cette clé. Sans ce contrôle, une
+     * `modification_personne` qui la porterait passerait par un autre constructeur, qui
+     * l'ignorerait — et le client croirait avoir déposé un complément que personne ne
+     * fusionnera. `ck_prp_request_complement` le refuserait aussi en base, mais trop tard :
+     * la colonne n'aurait jamais été posée. Une clé ignorée en silence est la pire des deux
+     * réponses.
+     *
+     * @param array<string, mixed> $corps
+     */
+    private static function refuserUnComplementHorsCreation(RequestKind $kind, array $corps): void
+    {
+        if (null !== ($corps['complementDe'] ?? null) && RequestKind::CreationPersonne !== $kind) {
+            throw DonneesInvalides::pourChamp('complementDe', 'Seule une création de personne complète une proposition.');
+        }
     }
 
     /** @param array<string, mixed> $corps */

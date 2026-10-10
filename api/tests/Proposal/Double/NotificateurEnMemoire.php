@@ -59,6 +59,27 @@ final class NotificateurEnMemoire implements NotificateurDeDemandes
         $this->enregistrer('demande_caduque_dependance', $demande, champs: $dependances);
     }
 
+    /**
+     * `rejouee` porte ici `$parLAdministration` — le seul booléen de l'événement —, et
+     * `champs` la liste des libellés suivie du nombre de liens ajoutés, sous la clé
+     * `liensAjoutes` : un test lit ce qui est parti, pas ce que le service croyait envoyer.
+     */
+    public function demandeCompletee(ChangeRequest $demande, bool $parLAdministration, array $champs, int $liensAjoutes): void
+    {
+        $this->enregistrer(
+            'demande_completee',
+            $demande,
+            rejouee: $parLAdministration,
+            champs: [['libelles' => $champs, 'liensAjoutes' => $liensAjoutes]],
+        );
+    }
+
+    /** `message` porte le numéro de l'origine, la seule chose que la notification en dit. */
+    public function complementFusionne(ChangeRequest $complement, ChangeRequest $origine): void
+    {
+        $this->enregistrer('complement_fusionne', $complement, message: (string) $origine->getId());
+    }
+
     /** @return list<array{evenement: string, demande: int|null, message: string|null, rejouee: bool, champs: list<array<string, mixed>>}> */
     public function de(string $evenement): array
     {

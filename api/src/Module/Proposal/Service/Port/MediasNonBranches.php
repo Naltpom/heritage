@@ -46,4 +46,13 @@ final readonly class MediasNonBranches implements PortMedias
     {
         return 0;
     }
+
+    /**
+     * Aucune pièce, donc aucune à déplacer : `0`, comme ce que rendrait le port branché sur
+     * un complément sans pièce jointe — le cas le plus courant.
+     */
+    public function faireSuivreLesMedias(int $deDemande, string $deRef, int $versDemande, string $versRef): int
+    {
+        return 0;
+    }
 }

@@ -305,6 +305,26 @@ class DraftLink
         return $this;
     }
 
+    /**
+     * Le libellé de l'autre extrémité **seul**, sans toucher à ce qu'elle désigne — le
+     * rafraîchissement d'un nom après la complétion d'une fiche proposée (§ 6.6 ter).
+     * {@see designerAutre()} réécrirait la désignation entière, couple compris.
+     */
+    public function setOtherLabel(?string $otherLabel): self
+    {
+        $this->otherLabel = $otherLabel;
+
+        return $this;
+    }
+
+    /** Même chose pour le second parent. */
+    public function setOther2Label(?string $other2Label): self
+    {
+        $this->other2Label = $other2Label;
+
+        return $this;
+    }
+
     public function getOther2PersonId(): ?int
     {
         return $this->other2PersonId;

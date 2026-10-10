@@ -139,6 +139,10 @@ final class SurfaceEditable
         'quay' => 'Qualité de la source',
         'dataText' => 'Transcription',
         'url' => 'Lien',
+        // Pas un champ éditable par op — une note de fiche proposée se complète sur place,
+        // ou par la fusion d'un complément (ADR 0017), et la notification qui le raconte
+        // la nomme avec les autres champs.
+        'note' => 'Note',
     ];
 
     /**
