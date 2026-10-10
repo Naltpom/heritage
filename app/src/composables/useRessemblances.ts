@@ -23,9 +23,10 @@
  *   ne relancent pas la recherche.
  *
  * **Éteint** quand `actif()` est faux : sous la bascule « voir comme un membre »
- * — « C'est elle » y serait un bouton qui ne peut rien écrire — et, plus tard, en
- * mode complétion d'une proposition, où l'on complète une fiche au lieu d'en
- * chercher une. Éteint, il oublie ce qu'il montrait.
+ * — « C'est elle » y serait un bouton qui ne peut rien écrire —, en mode
+ * complétion d'une proposition, où l'on complète une fiche au lieu d'en chercher
+ * une, et quand la saisie est devenue un complément (ADR 0017) : le choix est
+ * fait. Éteint, il oublie ce qu'il montrait.
  */
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import {

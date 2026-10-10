@@ -269,6 +269,31 @@ export interface RevisionDemande {
   appliedAt?: string
 }
 
+/**
+ * § 6.3 ter, § 6.5, § 6.7 — **ce qu'un complément complète** (ADR 0017).
+ *
+ * Deux formes sous un seul type, et c'est le serveur qui choisit :
+ *
+ * - la vue de **l'auteur** ne porte que `draftPersonId` — l'identifiant de la
+ *   fiche qu'il a lui-même postée, rien de plus : il ne voit pas la proposition
+ *   qu'il complète (le plus souvent celle d'un vivant, proposée par un autre) ;
+ * - la vue **d'administration** la dit en clair : le numéro de la demande
+ *   d'origine, sa référence, son nom et son statut.
+ *
+ * Les quatre clés de la seconde forme sont donc **facultatives au typage** : un
+ * écran qui veut le numéro doit tester qu'il est là, et ne peut pas le
+ * reconstruire. C'est la règle de ce fichier — on affiche ce que la charge porte.
+ */
+export interface ComplementDe {
+  draftPersonId: number
+  /** Vue d'administration : la demande d'origine. */
+  demandeId?: number
+  localRef?: string
+  displayName?: string
+  /** Le statut de la demande **d'origine**, pas celui du complément. */
+  status?: StatutDemande
+}
+
 /** § 6.5 — la demande telle que son auteur la voit. */
 export interface Demande {
   id: number
@@ -286,15 +311,39 @@ export interface Demande {
   /** § 6.8 — l'écriture n'a pas été réexaminée par un second humain. */
   autoValidated: boolean
   duplicateOfId: number | null
+  /**
+   * § 6.3 ter — `null`, ou la fiche que cette demande **complète** (ADR 0017).
+   * Facultatif au typage : une ligne de liste ne le porte pas, elle porte
+   * `complementDeDemandeId`.
+   */
+  complementDe?: ComplementDe | null
   submittedAt: string | null
   createdAt: string
   ops: OpDemande[]
   brouillons: BrouillonDemande[]
   liens: LienDemande[]
   revisions: RevisionDemande[]
+  /**
+   * § 6.5 — un sha256 de ce que la demande est **maintenant** : statut,
+   * `updatedAt`, chaque champ de chaque fiche, chaque lien. Calculée, jamais
+   * stockée. Elle se **renvoie** à la complétion, à la fusion et à la validation :
+   * si la demande a changé entre l'affichage et le clic, la route rend
+   * `409 demande_modifiee_entre_temps` sans rien écrire, plutôt que d'écraser ou
+   * de valider ce que personne n'a relu.
+   *
+   * Facultative au typage : une ligne de liste ne la porte pas — et l'écran qui
+   * écrit doit tester qu'il la tient, jamais en fabriquer une.
+   */
+  empreinte?: string
   /** Sur une ligne de liste (§ 6.7, 2026-10-04) : le nom des personnes que la
    *  demande ajoute à l'arbre, « Prénoms Nom ». Absent du détail. */
   nouvellesPersonnes?: string[]
+  /**
+   * Sur une ligne de liste (§ 6.5, 10/10/2026) : le **numéro** de la demande que
+   * celle-ci complète, ou `null`. Un numéro, jamais un nom. Absent du détail, qui
+   * porte `complementDe`.
+   */
+  complementDeDemandeId?: number | null
 }
 
 /**
@@ -326,6 +375,19 @@ export type ResolutionPrevue =
    * caduque : la personne désignée n'existera jamais. C'est une caducité.
    */
   | 'dependance_morte'
+  /**
+   * Des **compléments** attendent sur cette proposition (§ 6.3 ter, ADR 0017).
+   * La valider maintenant créerait la personne sans eux, et chacun deviendrait
+   * une seconde création de la même personne. Un ordre, pas une mort : elle se
+   * validera telle quelle une fois les compléments fusionnés ou refusés.
+   */
+  | 'complements_en_attente'
+  /**
+   * Cette demande **est** un complément, et son origine vit encore : en attente
+   * — le geste est la fusion —, ou validée — la valider doublerait la personne,
+   * il reste le refus.
+   */
+  | 'complement_a_fusionner'
 
 /**
  * § 6.7 — une fiche proposée par une autre demande que celle-ci désigne, et
@@ -387,6 +449,127 @@ export interface DemandeAdministration extends Demande {
   dependances?: DependanceDeDemande[]
   demandesConcurrentes?: DemandeConcurrente[]
   doublonsProbables?: DoublonProbable[]
+  /**
+   * § 6.7 (10/10/2026) — les **compléments** de cette proposition, hors
+   * brouillons, dans l'ordre de soumission, tranchés compris : un complément
+   * fusionné reste dans l'historique de l'origine, avec son statut. Toujours un
+   * tableau sur la route d'administration ; absent de la vue de l'auteur.
+   */
+  complements?: ComplementDeDemande[]
+}
+
+/* ------------------------------------------------------------------ */
+/* La fusion d'un complément — § 6.7 bis                               */
+/* ------------------------------------------------------------------ */
+
+/** Les champs d'une fiche proposée, dans l'ordre du serveur (`CHAMPS_DE_FICHE`). */
+export type ChampDeFiche =
+  | 'givenNames'
+  | 'surname'
+  | 'marriedName'
+  | 'nickname'
+  | 'sex'
+  | 'deceased'
+  | 'birth'
+  | 'death'
+  | 'note'
+
+/**
+ * Une valeur **affichable** du rapport : un texte, un booléen, le sexe en
+ * valeur du modèle, ou un bloc date **avec `texte`** — six clés, c'est une
+ * sortie, jamais reposté.
+ */
+export type ValeurDeFusion = string | boolean | null | BlocDate
+
+/** Un champ vide de l'origine que le complément remplit. */
+export interface ChampRempli {
+  champ: ChampDeFiche
+  valeur: ValeurDeFusion
+}
+
+/** Laquelle des deux valeurs l'emporte. L'origine, sauf choix contraire. */
+export type CoteRetenu = 'origine' | 'complement'
+
+/**
+ * Un champ où l'origine et le complément divergent. `deceased` et `note` n'en
+ * sont jamais : un décès ne se contredit pas, deux notes s'ajoutent.
+ */
+export interface ConflitDeFusion {
+  champ: ChampDeFiche
+  origine: ValeurDeFusion
+  complement: ValeurDeFusion
+  retenu: CoteRetenu
+}
+
+/** Pourquoi un lien du complément ne passe pas dans l'origine. */
+export type RaisonLienIgnore = 'deja_present' | 'fiche_proposee_ailleurs' | 'meme_personne'
+
+/**
+ * § 6.7 bis — ce que la fusion fait, ou ferait : le même rapport, calculé à blanc
+ * pour l'aperçu et rendu par la fusion elle-même.
+ *
+ * Les liens ne sont désignés que par leur **rang** (`seqComplement` dans le
+ * complément, `seq` dans l'origine) : c'est la demande du complément qui les
+ * nomme, et l'écran la lit pour les mettre en mots.
+ */
+export interface RapportDeFusion {
+  remplis: ChampRempli[]
+  conflits: ConflitDeFusion[]
+  liensAjoutes: { seqComplement: number; seq: number }[]
+  liensIgnores: { seqComplement: number; raison: RaisonLienIgnore }[]
+  mediasDeplaces: number
+  /** Les demandes non tranchées qui citaient la fiche du complément. */
+  demandesRepointees: number[]
+}
+
+/**
+ * § 6.7 — un complément tel que la vue de son origine le montre.
+ *
+ * `apercu` est `null` quand la fusion n'est plus possible — complément ou
+ * origine tranchés. `empreinte` est celle **du complément**, à renvoyer en
+ * `empreinteComplement`.
+ */
+export interface ComplementDeDemande {
+  id: number
+  authorLabel: string
+  submittedAt: string | null
+  status: StatutDemande
+  /** La fiche du complément. */
+  draftPersonId: number | null
+  /** La fiche de l'origine qu'il complète — une origine peut en porter plusieurs. */
+  origineDraftPersonId: number | null
+  displayName: string | null
+  ligneDates: string | null
+  apercu: RapportDeFusion | null
+  empreinte: string
+}
+
+/** `GET …/fusionner/{complementId}` — l'aperçu, sans rien écrire. */
+export interface ApercuDeFusion {
+  origine: { id: number; empreinte: string }
+  complement: { id: number; empreinte: string }
+  rapport: RapportDeFusion
+}
+
+/**
+ * Le corps de la fusion. Les trois clés sont facultatives — et posées clé par
+ * clé (`exactOptionalPropertyTypes`).
+ *
+ * `retenir` ne nomme **que des champs en conflit** : un autre rend `422
+ * retenir.<champ>`, plutôt que de laisser croire qu'on a tranché quelque chose
+ * que la fusion ne ferait pas.
+ */
+export interface CorpsFusion {
+  retenir?: Partial<Record<ChampDeFiche, CoteRetenu>>
+  empreinte?: string
+  empreinteComplement?: string
+}
+
+/** `POST …/fusionner/{complementId}` — l'origine relue, la ligne du complément clos, le rapport. */
+export interface ResultatFusion {
+  origine: DemandeAdministration
+  complement: Demande
+  rapport: RapportDeFusion
 }
 
 /** § 6.8 — le détail d'un rejeu automatique. */
@@ -449,6 +632,13 @@ export interface ResumeDemande {
   autoValidated: boolean
   submittedAt: string | null
   createdAt: string
+  /**
+   * La demande que celle-ci **complète** (§ 6.3 ter, ADR 0017), ou `null` : son
+   * numéro, jamais un nom — l'auteur d'un complément ne voit pas la proposition
+   * qu'il complète, mais son numéro ne lui apprend rien d'elle, et c'est celui
+   * que la fusion lui redonnera (`duplicateOfId`).
+   */
+  complementDeDemandeId: number | null
 }
 
 /**
@@ -545,17 +735,56 @@ export function lireDemandeAdministration(id: number): Promise<DemandeAdministra
 }
 
 /**
- * `POST /api/administration/demandes/{id}/valider` — corps vide.
+ * `POST /api/administration/demandes/{id}/valider` — corps vide, ou
+ * `{empreinte}` (10/10/2026).
  *
  * Six issues (§ 6.8), dont **deux `409` aux conseils opposés** :
  * `verrou_concurrent` (rien n'a été écrit, réessayer) et `demande_caduque` (la
  * demande est morte, ne pas réessayer). Elles ne sont **pas** retriées ici : le
  * socle les distingue dans `erreurs.ts`, et un écran qui les retraiterait
  * finirait par en oublier une.
+ *
+ * **`empreinte`** est celle de la demande **telle qu'on l'a lue** (§ 6.5) : une
+ * demande en attente n'est plus figée — son auteur peut la compléter pendant
+ * qu'on la relit (ADR 0017). Périmée, la route rend `409
+ * demande_modifiee_entre_temps` sans rien écrire, et l'écran relit au lieu de
+ * valider ce que personne n'a vu. Sans empreinte, elle valide comme avant.
  */
-export function validerDemande(id: number): Promise<ResultatValidation> {
-  return requeteApi<ResultatValidation>(`/administration/demandes/${id}/valider`, {
+export function validerDemande(id: number, empreinte?: string): Promise<ResultatValidation> {
+  const options: OptionsRequete = { methode: 'POST' }
+  if (empreinte !== undefined) options.corps = { empreinte }
+  return requeteApi<ResultatValidation>(`/administration/demandes/${id}/valider`, options)
+}
+
+/**
+ * `GET /api/administration/demandes/{id}/fusionner/{complementId}` — **ce que la
+ * fusion ferait, sans rien écrire** (§ 6.7 bis).
+ *
+ * Le même code que la fusion, à blanc : l'administrateur lit les champs remplis,
+ * les conflits à trancher et les liens repris **avant** de cliquer. La vue de
+ * l'origine porte déjà cet aperçu (`complements[].apercu`) ; cette route sert
+ * l'écran **du complément**, qui ne l'a pas.
+ */
+export function apercuFusion(id: number, complementId: number): Promise<ApercuDeFusion> {
+  return requeteApi<ApercuDeFusion>(`/administration/demandes/${id}/fusionner/${complementId}`)
+}
+
+/**
+ * `POST /api/administration/demandes/{id}/fusionner/{complementId}` — **la
+ * fusion**, en une transaction (§ 6.7 bis).
+ *
+ * L'origine l'emporte, le complément remplit ce qui est vide ; un conflit se
+ * tranche pour l'origine sauf `retenir[champ] = 'complement'`. Les liens passent
+ * (sauf les doublons), les pièces suivent, et le complément est clos — « Fusionné
+ * dans la demande n° O. », jamais un refus sec.
+ *
+ * Les deux empreintes protègent ce qu'on a lu : l'auteur de l'origine, ou celui
+ * du complément, a pu compléter sa demande entre l'aperçu et le clic.
+ */
+export function fusionnerComplement(id: number, complementId: number, corps: CorpsFusion = {}): Promise<ResultatFusion> {
+  return requeteApi<ResultatFusion>(`/administration/demandes/${id}/fusionner/${complementId}`, {
     methode: 'POST',
+    corps,
   })
 }
 
@@ -770,6 +999,80 @@ export interface CorpsCreationPersonne extends CorpsCommun {
   kind: 'creation_personne'
   brouillons: BrouillonPropose[]
   liens: LienPropose[]
+  /**
+   * § 6.3 ter — la fiche proposée **par un autre membre** que cette création
+   * complète : le `draftPersonId` de la ressemblance, y compris sous sa forme
+   * discrète. L'administrateur fusionnera le complément dans l'origine.
+   *
+   * Un seul brouillon, au moins un lien à la soumission — le complément doit
+   * rester validable seul, l'origine pouvant mourir avant la fusion. Sa propre
+   * proposition rend `422` (elle se complète sur place) ; une origine tranchée,
+   * `409 proposition_plus_en_attente`.
+   */
+  complementDe?: number
+}
+
+/**
+ * § 6.6 ter — la fiche d'une proposition **telle qu'elle doit être** après la
+ * complétion. Les champs d'un brouillon du § 6.3, blocs date à cinq clés.
+ *
+ * **Elle remplace tous les champs** : une clé absente vaut `null`, comme au
+ * dépôt. La complétion ne rapièce pas — un client qui veut garder une valeur la
+ * renvoie. `localRef` est toléré s'il désigne la fiche de l'adresse.
+ */
+export interface FicheACompleter {
+  localRef?: string
+  givenNames: string | null
+  surname: string | null
+  marriedName: string | null
+  nickname: string | null
+  sex: Sexe
+  deceased: boolean
+  birth: ValeurDate | null
+  death: ValeurDate | null
+  note: string | null
+}
+
+/** § 6.6 ter — un lien à **ajouter** : la forme du § 6.3, **sans `seq`** — le
+ *  serveur l'attribue à la suite du plus grand, et un `seq` envoyé rend `422`. */
+export type LienAAjouter = Omit<LienPropose, 'seq'>
+
+/**
+ * § 6.6 ter — le corps de `PUT /api/demandes/{id}/brouillons/{ref}`.
+ *
+ * `liens` **ne fait qu'ajouter** : retirer un lien, c'est une autre proposition.
+ * `empreinte` (facultative) protège ce que le lecteur a vu.
+ */
+export interface CorpsMiseAJourBrouillon {
+  fiche: FicheACompleter
+  liens?: LienAAjouter[]
+  empreinte?: string
+}
+
+/**
+ * `PUT /api/demandes/{id}/brouillons/{ref}` — **compléter sur place** une fiche
+ * proposée (§ 6.6 ter, ADR 0017).
+ *
+ * `ref` est la référence **sans le dièse** (`p1`), comme la lecture du nœud
+ * (§ 6.6) : `#` est le séparateur de fragment d'une URL. On la reçoit telle que le
+ * serveur l'a rendue — `brouillonRef` d'un nœud, ou `localRef` d'une demande, dont
+ * on retire le seul dièse de tête.
+ *
+ * Qui peut : l'auteur (brouillon ou en attente), l'administrateur (en attente
+ * seulement — un brouillon est le travail en cours de son auteur). La fiche est
+ * réécrite **en place**, jamais recréée : d'autres demandes la citent par sa
+ * ligne. La réponse est la demande entière vue par son auteur, avec sa **nouvelle
+ * empreinte** — de quoi enchaîner sans relire.
+ *
+ * Erreurs : `403`, `404`, `409 demande_deja_decidee`, `409
+ * demande_modifiee_entre_temps` (relire), `409 vue_comme_membre_active`, `422`.
+ */
+export function mettreAJourBrouillon(demandeId: number, ref: string, corps: CorpsMiseAJourBrouillon): Promise<Demande> {
+  const sansDiese = ref.startsWith('#') ? ref.slice(1) : ref
+  return requeteApi<Demande>(`/demandes/${demandeId}/brouillons/${encodeURIComponent(sansDiese)}`, {
+    methode: 'PUT',
+    corps,
+  })
 }
 
 /**
@@ -1013,8 +1316,10 @@ export function lireFicheProposee(
  *  - `complement` — déposer un complément rattaché, que l'administrateur
  *    fusionnera. Toujours le cas d'une forme discrète.
  *
- * Aucun des deux gestes n'existe encore à l'écran : la carte est informative
- * tant que l'API de complétion n'est pas livrée.
+ * La carte en fait un bouton (10/10/2026) : « Compléter cette proposition » fait
+ * passer le formulaire en mode complétion (`PUT …/brouillons/{ref}`), « Ajouter
+ * mes informations à cette proposition » dépose une création avec `complementDe`.
+ * Le front n'en déduit rien d'autre : c'est le serveur qui sait qui peut quoi.
  */
 export type ActionSurProposition = 'completer' | 'complement'
 
@@ -1195,7 +1500,8 @@ export function lireApercuDeSuppression(personneId: number): Promise<ApercuDeSup
  *
  * C'est **ici** que « au moins un lien » est contrôlé, et non à la création :
  * on peut enregistrer un brouillon incomplet, on ne peut pas le soumettre. Sans
- * lien ⇒ `422 demande_sans_lien` (§ 6.3).
+ * lien ⇒ `422 demande_sans_lien` (§ 6.3). Un complément dont l'origine a été
+ * tranchée entre-temps ⇒ `409 proposition_plus_en_attente` (§ 6.3 ter).
  */
 export function soumettreDemande(id: number): Promise<Demande> {
   return requeteApi<Demande>(`/demandes/${id}/soumettre`, { methode: 'POST' })

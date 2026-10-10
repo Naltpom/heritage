@@ -15,6 +15,7 @@ import { creationVide } from './creation'
  * 2. **les raisons du serveur s'affichent telles quelles**, en pastilles ;
  * 3. **les boutons de chaque carte**, et « Voir » qui, sur la page, ouvre un
  *    nouvel onglet — la saisie reste là — et, dans le volet, montre l'arbre ;
+ *    sur une proposition, le geste que l'`action` du serveur permet ;
  * 4. **le rappel avant l'envoi**.
  */
 
@@ -114,7 +115,7 @@ describe('le panneau « Est-ce déjà… ? »', () => {
     expect(lu).toContain('Ce n’est pas elle')
   })
 
-  it('une proposition en clair : nom, dates, lieu, auteur, statut, et la phrase sans promesse', async () => {
+  it('une proposition en clair : nom, dates, lieu, auteur, statut, et le geste qu’elle permet', async () => {
     const lu = texte(await rendre({ propositions: [COMPLETE] }))
 
     expect(lu).toContain('Barnabé Muguet')
@@ -122,9 +123,35 @@ describe('le panneau « Est-ce déjà… ? »', () => {
     expect(lu).toContain('Lieu de naissance : Saule, Ombrage, Sylvanie')
     expect(lu).toContain('Proposée par Cobalt Romarin')
     expect(lu).toContain('En attente de validation')
-    expect(lu).toContain('Une proposition semblable est déjà en attente : vérifiez avant d’envoyer la vôtre.')
+    expect(lu).toContain('Une proposition semblable est déjà en attente : complétez-la plutôt que d’en envoyer une seconde.')
     expect(lu).toContain('Voir la demande n° 12')
     for (const raison of COMPLETE.raisons) expect(lu).toContain(raison)
+  })
+
+  it('le bouton suit l’action du serveur : compléter sur place, ou ajouter un complément (ADR 0017)', async () => {
+    // `completer` : l'auteur ou l'administrateur la complète sur place.
+    const completer = await rendre({ propositions: [COMPLETE] })
+    expect(texte(completer)).toContain('Compléter cette proposition')
+    expect(completer).toContain('data-completer')
+    expect(texte(completer)).not.toContain('Ajouter mes informations à cette proposition')
+
+    // `complement`, en clair (un défunt d'un autre membre) : un complément, que
+    // l'administrateur fusionnera — et pas de lien vers une demande illisible.
+    const enClair = await rendre({ propositions: [{ ...COMPLETE, action: 'complement', noeudId: null }] })
+    expect(texte(enClair)).toContain('Ajouter mes informations à cette proposition')
+    expect(texte(enClair)).toContain('l’administrateur les fusionnera')
+    expect(texte(enClair)).not.toContain('Compléter cette proposition')
+
+    // `complement`, discrète : le même geste, et toujours rien de la fiche.
+    const discrete = await rendre({ propositions: [DISCRETE] })
+    expect(texte(discrete)).toContain('Ajouter mes informations à cette proposition')
+    expect(discrete).toContain('data-complement')
+    expect(texte(discrete)).not.toMatch(/\d{4}/)
+
+    // Un brouillon du lecteur : le compléter plutôt que d'en commencer un second.
+    const brouillon = texte(await rendre({ propositions: [{ ...COMPLETE, statut: 'brouillon', enAttente: false }] }))
+    expect(brouillon).toContain('complétez-la plutôt que d’en commencer une seconde')
+    expect(brouillon).toContain('Compléter cette proposition')
   })
 
   it('dit « votre proposition », et ne mène pas à une demande que le lecteur ne peut pas lire', async () => {

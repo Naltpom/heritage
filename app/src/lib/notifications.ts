@@ -123,6 +123,13 @@ const LIBELLES_DE_TYPE: Readonly<Record<string, string>> = {
   // Le partage de la naissance à trois niveaux (ADR 0016, révision du
   // 07/10/2026) : posée une fois, par la migration, à chaque compte rattaché.
   partage_naissance_revu: 'Confidentialité',
+  // Compléter une proposition en attente (ADR 0017, 10/10/2026). La première va
+  // à l'auteur quand l'administration a complété sa demande — sur place, ou par
+  // la fusion d'un complément —, et aux administrateurs quand l'auteur a complété
+  // la sienne ; la seconde, à l'auteur d'un complément repris par la fusion. Les
+  // deux mènent à `demande.detail`, et ne nomment ni la personne ni le contributeur.
+  demande_completee: 'Demande complétée',
+  complement_fusionne: 'Complément repris',
 }
 
 export function libelleDeType(kind: string): string {
@@ -140,7 +147,16 @@ export function tonDeType(kind: string): 'alerte' | 'ok' | 'neutre' {
   ) {
     return 'alerte'
   }
-  if (kind === 'demande_validee' || kind === 'media_valide' || kind === 'compte_active') return 'ok'
+  // Un complément fusionné est clos `refusee` en base, mais son travail est
+  // **repris** : c'est une bonne nouvelle, et elle ne doit pas se lire en alerte.
+  if (
+    kind === 'demande_validee' ||
+    kind === 'media_valide' ||
+    kind === 'compte_active' ||
+    kind === 'complement_fusionne'
+  ) {
+    return 'ok'
+  }
   return 'neutre'
 }
 

@@ -16,6 +16,7 @@ import { defineComponent, h, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { attendre, boutonNomme, cliquer, monterEnMemoire, parAttribut, texte, un, type Noeud } from '@/test-utils/rendu-memoire'
 import type { PersonneDeposee } from '@/components/proposition/depot'
+import type { DemandeDeCompletion } from '@/components/proposition/fusion'
 import type { EnEvidence } from '@/components/proposition/ressemblances'
 import type { PlaceDansLArbre } from './voletProposition'
 
@@ -38,6 +39,16 @@ const FICHE_COMPLETEE: PersonneDeposee = {
   soumise: true,
 }
 
+/** Une proposition en attente complétée sur place (ADR 0017) : la même demande. */
+const PROPOSITION_COMPLETEE: PersonneDeposee = {
+  nature: 'completion',
+  demandeIds: [12],
+  noeudId: '#12/p3',
+  personId: null,
+  libelle: 'Marie Dupont',
+  soumise: true,
+}
+
 const formulaire = vi.hoisted(() => ({ reinitialiser: vi.fn(), montages: 0, reponses: [] as boolean[] }))
 
 vi.mock('@/components/proposition/FormulaireCreationPersonne.vue', async () => {
@@ -45,26 +56,55 @@ vi.mock('@/components/proposition/FormulaireCreationPersonne.vue', async () => {
   return {
     default: definir({
       name: 'FormulaireCreationPersonne',
-      props: { contexte: { type: String, required: true }, refaire: { type: Number, default: null } },
-      emits: ['deposee', 'refaire', 'sale', 'voir-personne', 'voir-proposition', 'en-evidence'],
+      props: {
+        contexte: { type: String, required: true },
+        refaire: { type: Number, default: null },
+        completer: { type: Object, default: null },
+      },
+      emits: ['deposee', 'refaire', 'sale', 'voir-personne', 'voir-proposition', 'en-evidence', 'completion'],
       setup(props, { emit, expose }) {
         formulaire.montages++
         expose({ reinitialiser: formulaire.reinitialiser })
         const repondre = (dessinee: boolean) => formulaire.reponses.push(dessinee)
+        const cible = () => props.completer as { demandeId: number; ref: string; jeton?: number } | null
         return () =>
-          rendre('div', { 'data-formulaire': '', 'data-contexte': props.contexte, 'data-refaire': String(props.refaire) }, [
-            rendre('button', { type: 'button', onClick: () => emit('sale', true) }, 'Saisir'),
-            rendre('button', { type: 'button', onClick: () => emit('deposee', DEPOT) }, 'Déposer'),
-            rendre('button', { type: 'button', onClick: () => emit('deposee', FICHE_COMPLETEE) }, 'Compléter'),
-            rendre('button', { type: 'button', onClick: () => emit('refaire', 91) }, 'Refaire'),
-            rendre('button', { type: 'button', onClick: () => emit('voir-personne', 17, repondre) }, 'Voir la personne'),
-            rendre('button', { type: 'button', onClick: () => emit('voir-proposition', '#12/p1', repondre) }, 'Voir la proposition'),
-            rendre(
-              'button',
-              { type: 'button', onClick: () => emit('en-evidence', { personIds: [17], noeudIds: ['#12/p1'] }) },
-              'Cercler',
-            ),
-          ])
+          rendre(
+            'div',
+            {
+              'data-formulaire': '',
+              'data-contexte': props.contexte,
+              'data-refaire': String(props.refaire),
+              'data-completer': cible() === null ? 'null' : `${cible()!.demandeId}/${cible()!.ref}/${cible()!.jeton}`,
+            },
+            [
+              rendre('button', { type: 'button', onClick: () => emit('sale', true) }, 'Saisir'),
+              rendre('button', { type: 'button', onClick: () => emit('deposee', DEPOT) }, 'Déposer'),
+              rendre('button', { type: 'button', onClick: () => emit('deposee', FICHE_COMPLETEE) }, 'Compléter'),
+              rendre(
+                'button',
+                { type: 'button', onClick: () => emit('deposee', PROPOSITION_COMPLETEE) },
+                'Enregistrer les compléments',
+              ),
+              rendre(
+                'button',
+                { type: 'button', onClick: () => emit('completion', { demandeId: 12, ref: 'p3' }) },
+                'Entrer en complétion',
+              ),
+              rendre('button', { type: 'button', onClick: () => emit('completion', null) }, 'Revenir à une nouvelle personne'),
+              rendre('button', { type: 'button', onClick: () => emit('refaire', 91) }, 'Refaire'),
+              rendre('button', { type: 'button', onClick: () => emit('voir-personne', 17, repondre) }, 'Voir la personne'),
+              rendre(
+                'button',
+                { type: 'button', onClick: () => emit('voir-proposition', '#12/p1', repondre) },
+                'Voir la proposition',
+              ),
+              rendre(
+                'button',
+                { type: 'button', onClick: () => emit('en-evidence', { personIds: [17], noeudIds: ['#12/p1'] }) },
+                'Cercler',
+              ),
+            ],
+          )
       },
     }),
   }
@@ -82,6 +122,8 @@ interface Monte {
   racine: Noeud
   place: { value: PlaceDansLArbre }
   ouvert: { value: boolean }
+  /** « Compléter » sur un nœud de l'arbre : un jeton par clic. */
+  completer: { value: DemandeDeCompletion | null }
   fermetures: number[]
   deposees: PersonneDeposee[]
   /** Ce que l'arbre a été prié de montrer, et de cercler. */
@@ -94,6 +136,7 @@ interface Monte {
 async function monter(): Promise<Monte> {
   const place = ref<PlaceDansLArbre>('recherche')
   const ouvert = ref(true)
+  const completer = ref<DemandeDeCompletion | null>(null)
   const fermetures: number[] = []
   const deposees: PersonneDeposee[] = []
   const montrees: (number | string)[] = []
@@ -103,6 +146,7 @@ async function monter(): Promise<Monte> {
       h(VoletProposition, {
         ouvert: ouvert.value,
         place: place.value,
+        completer: completer.value,
         onFermer: () => {
           fermetures.push(1)
           ouvert.value = false
@@ -120,7 +164,12 @@ async function monter(): Promise<Monte> {
       }),
   })
   const racine = await monterEnMemoire(Hote, { RouterLink: LienFactice })
-  return { racine, place, ouvert, fermetures, deposees, montrees, evidences }
+  return { racine, place, ouvert, completer, fermetures, deposees, montrees, evidences }
+}
+
+/** Ce que le formulaire a reçu en `completer` : `12/p3/1`, ou `null`. */
+function completerRecu(racine: Noeud): unknown {
+  return un(racine, parAttribut('data-formulaire'))?.attributs['data-completer']
 }
 
 /** Le formulaire est-il à l'écran ? `v-show` masque son enveloppe. */
@@ -271,5 +320,83 @@ describe('le volet et les ressemblances (« Est-ce déjà… ? »)', () => {
     // « Ajouter une autre personne » repart d'une saisie vierge, comme après une création.
     await cliquer(un(racine, boutonNomme('Ajouter une autre personne')))
     expect(formulaire.reinitialiser).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('le volet et « Compléter » une proposition en attente (ADR 0017)', () => {
+  it('passe au formulaire la proposition demandée par l’arbre, une fois', async () => {
+    const { racine, completer } = await monter()
+    expect(completerRecu(racine)).toBe('null')
+
+    completer.value = { demandeId: 12, ref: 'p3', jeton: 1 }
+    await attendre()
+    expect(completerRecu(racine)).toBe('12/p3/1')
+
+    // Le formulaire en sort : la demande tombe, elle ne se rouvrira pas toute seule.
+    await cliquer(un(racine, boutonNomme('Revenir à une nouvelle personne')))
+    expect(completerRecu(racine)).toBe('null')
+
+    // Un nouveau clic sur le même nœud : un nouveau jeton, et elle repart.
+    completer.value = { demandeId: 12, ref: 'p3', jeton: 2 }
+    await attendre()
+    expect(completerRecu(racine)).toBe('12/p3/2')
+  })
+
+  it('le titre suit le mode du formulaire', async () => {
+    const { racine } = await monter()
+    await cliquer(un(racine, boutonNomme('Entrer en complétion')))
+    expect(texte(un(racine, (n) => n.tag === 'h2')!)).toBe('Compléter une proposition')
+
+    await cliquer(un(racine, boutonNomme('Revenir à une nouvelle personne')))
+    expect(texte(un(racine, (n) => n.tag === 'h2')!)).toBe('Ajouter une personne')
+  })
+
+  it('après une complétion, « Reprendre votre saisie » la remontre — sans l’effacer', async () => {
+    const { racine, deposees } = await monter()
+    // Le formulaire a rendu la saisie mise de côté : elle est « sale ».
+    await cliquer(un(racine, boutonNomme('Saisir')))
+    await cliquer(un(racine, boutonNomme('Enregistrer les compléments')))
+
+    expect(deposees).toEqual([PROPOSITION_COMPLETEE])
+    expect(texte(un(racine, parAttribut('data-confirmation-depot'))!)).toContain('Proposition complétée — demande n° 12')
+
+    await cliquer(un(racine, boutonNomme('Reprendre votre saisie')))
+    expect(formulaire.reinitialiser).not.toHaveBeenCalled()
+    expect(un(racine, parAttribut('data-confirmation-depot'))).toBeNull()
+    expect(formulaireVisible(racine)).toBe(true)
+  })
+
+  it('fermé après une complétion, il garde la saisie rendue', async () => {
+    const { racine } = await monter()
+    await cliquer(un(racine, boutonNomme('Saisir')))
+    await cliquer(un(racine, boutonNomme('Enregistrer les compléments')))
+    await cliquer(un(racine, boutonNomme('Fermer')))
+
+    expect(formulaire.reinitialiser).not.toHaveBeenCalled()
+    expect(un(racine, parAttribut('data-confirmation-depot'))).toBeNull()
+  })
+
+  it('« Compléter » après une création : la confirmation s’efface, le formulaire repart neuf', async () => {
+    const { racine, completer } = await monter()
+    await cliquer(un(racine, boutonNomme('Déposer')))
+    expect(un(racine, parAttribut('data-confirmation-depot'))).not.toBeNull()
+
+    completer.value = { demandeId: 12, ref: 'p3', jeton: 1 }
+    await attendre()
+
+    expect(formulaire.reinitialiser).toHaveBeenCalledTimes(1)
+    expect(un(racine, parAttribut('data-confirmation-depot'))).toBeNull()
+    expect(completerRecu(racine)).toBe('12/p3/1')
+  })
+
+  it('« Refaire cette demande » remonte le formulaire sans rouvrir la complétion', async () => {
+    const { racine, completer } = await monter()
+    completer.value = { demandeId: 12, ref: 'p3', jeton: 1 }
+    await attendre()
+
+    await cliquer(un(racine, boutonNomme('Refaire')))
+
+    expect(formulaire.montages).toBe(2)
+    expect(completerRecu(racine)).toBe('null')
   })
 })

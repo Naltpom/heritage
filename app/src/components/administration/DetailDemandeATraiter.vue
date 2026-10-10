@@ -86,7 +86,15 @@ async function lire(): Promise<void> {
 watch(() => demande.id, lire, { immediate: true })
 
 const lignes = computed(() => (complete.value === null ? [] : lignesDeDiff(complete.value.ops)))
-const validation = computed(() => actionValidation(complete.value?.resolutionPrevue))
+const validation = computed(() =>
+  actionValidation(complete.value?.resolutionPrevue, complete.value?.complementDe ?? null),
+)
+/** Un complément (ADR 0017) : le numéro qu'il complète, lu sur la ligne de la file. */
+const completeLa = computed(() => demande.complementDeDemandeId ?? null)
+/** Une proposition qui a des compléments en attente : elle se fusionne d'abord. */
+const complementsEnAttente = computed(
+  () => (complete.value?.complements ?? []).filter((complement) => complement.status === 'en_attente').length,
+)
 const nouvelles = computed(() => demande.nouvellesPersonnes ?? [])
 
 function saisir(valeur: string): void {
@@ -99,7 +107,9 @@ async function valider(): Promise<void> {
   envoi.value = 'valider'
   erreur.value = null
   try {
-    const resultat = await validerDemande(demande.id)
+    // L'empreinte de la demande relue à l'ouverture : complétée depuis, elle ne
+    // se valide pas à l'aveugle (ADR 0017).
+    const resultat = await validerDemande(demande.id, complete.value.empreinte)
     // L'arbre a changé : l'`ETag` du graphe est périmé (§ 5.2).
     invaliderGraphe()
     emit('decidee', issueDeValidation(resultat))
@@ -149,6 +159,26 @@ function suivreConduite(conduite: ConduiteATenir): void {
   <p v-if="nouvelles.length > 0" class="text-sm">
     <span class="text-attenue">Nouvelle{{ nouvelles.length > 1 ? 's' : '' }} personne{{ nouvelles.length > 1 ? 's' : '' }} :</span>
     {{ nouvelles.join(', ') }}
+  </p>
+
+  <!-- Un complément se fusionne dans sa proposition, depuis la demande complète. -->
+  <p
+    v-if="completeLa !== null"
+    class="rounded-champ border border-accent bg-accent-doux px-3 py-2 text-[13px]"
+    data-complete-la
+  >
+    Complète la <RouterLink
+      :to="{ name: 'demande.detail', params: { id: completeLa } }"
+      class="font-semibold text-accent underline"
+    >demande n° {{ completeLa }}</RouterLink> : le geste attendu est la fusion, depuis la demande complète.
+  </p>
+  <p
+    v-if="complementsEnAttente > 0"
+    class="rounded-champ border border-accent bg-accent-doux px-3 py-2 text-[13px]"
+    data-complements-a-fusionner
+  >
+    {{ complementsEnAttente > 1 ? `${complementsEnAttente} compléments attendent` : 'Un complément attend' }} sur cette
+    proposition : fusionnez-{{ complementsEnAttente > 1 ? 'les' : 'le' }} depuis la demande complète avant de la valider.
   </p>
 
   <SqueletteChargement v-if="lecture" :lignes="2" />

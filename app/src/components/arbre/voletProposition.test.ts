@@ -146,3 +146,56 @@ describe('confirmationDuDepot : une fiche complétée (« C’est elle »)', () 
     expect(confirmationDuDepot(fiche, 'placee').titre).not.toContain('Proposition envoyée')
   })
 })
+
+describe('confirmationDuDepot : une proposition complétée sur place (ADR 0017)', () => {
+  const completion: PersonneDeposee = {
+    nature: 'completion',
+    demandeIds: [12],
+    noeudId: '#12/p3',
+    personId: null,
+    libelle: 'Marie Dupont',
+    soumise: true,
+  }
+
+  it('dit « complétée » — la même demande, réécrite, pas une nouvelle', () => {
+    expect(confirmationDuDepot(completion, 'placee')).toEqual({
+      titre: 'Proposition complétée — demande n° 12',
+      phrase: 'La fiche de Marie Dupont est à jour dans l’arbre, en pointillé jusqu’à sa validation ; elle y est choisie.',
+    })
+    expect(confirmationDuDepot(completion, 'recherche').phrase).toContain('se met à jour')
+    expect(confirmationDuDepot(completion, 'absente').phrase).toContain('Le suivi de la demande la montre')
+    expect(confirmationDuDepot(completion, 'placee').titre).not.toContain('envoyée')
+  })
+
+  it('un brouillon complété n’est pas dans l’arbre', () => {
+    const brouillon = confirmationDuDepot({ ...completion, soumise: false }, 'absente')
+    expect(brouillon.titre).toBe('Brouillon complété — demande n° 12')
+    expect(brouillon.phrase).toContain('qu’une fois la demande envoyée')
+  })
+})
+
+describe('confirmationDuDepot : un complément (ADR 0017)', () => {
+  const complement: PersonneDeposee = {
+    nature: 'complement',
+    demandeIds: [8200],
+    noeudId: '#8200/p1',
+    personId: null,
+    libelle: 'Barnabé Muguet',
+    soumise: true,
+  }
+
+  it('dit que l’administrateur le fusionnera, où qu’il soit dans l’arbre', () => {
+    const placee = confirmationDuDepot(complement, 'placee')
+    expect(placee.titre).toBe('Complément envoyé — demande n° 8200')
+    expect(placee.phrase).toContain('en pointillé')
+    for (const place of ['recherche', 'placee', 'masquee', 'absente'] as const) {
+      expect(confirmationDuDepot(complement, place).phrase).toMatch(/l’administrateur la fusionnera dans la proposition existante/i)
+    }
+  })
+
+  it('un brouillon de complément se dit tel', () => {
+    expect(confirmationDuDepot({ ...complement, soumise: false }, 'absente').titre).toBe(
+      'Brouillon de complément enregistré — demande n° 8200',
+    )
+  })
+})

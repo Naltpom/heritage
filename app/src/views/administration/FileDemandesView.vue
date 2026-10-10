@@ -375,6 +375,17 @@ function dateLisible(valeur: string | null): string {
           </button>
         </div>
 
+        <!-- Un complément (ADR 0017) : le geste attendu est une fusion, pas une validation. -->
+        <p v-if="demande.complementDeDemandeId" class="mt-1 text-sm" data-complete-la>
+          <span class="text-attenue">Complète la </span><RouterLink
+            :to="{ name: 'demande.detail', params: { id: demande.complementDeDemandeId }, query: requeteDeLaFile }"
+            class="text-accent underline"
+          >n° {{ demande.complementDeDemandeId }}</RouterLink><span
+            v-if="demande.status === 'en_attente'"
+            class="text-attenue"
+          > — à fusionner</span>
+        </p>
+
         <!-- Les personnes que la demande ajoute à l'arbre, par leur nom. -->
         <p v-if="nouvellesPersonnes(demande) !== ''" class="mt-1 text-sm">
           <span class="text-attenue">Nouvelle{{ (demande.nouvellesPersonnes?.length ?? 0) > 1 ? 's' : '' }} personne{{ (demande.nouvellesPersonnes?.length ?? 0) > 1 ? 's' : '' }} :</span>

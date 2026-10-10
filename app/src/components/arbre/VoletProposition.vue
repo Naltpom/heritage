@@ -33,19 +33,31 @@
  *
  * L'`aside` porte `data-volet-proposition` : les raccourcis clavier de l'arbre se
  * taisent dans tout le volet (`toucheIgnoree`, `voletProposition.ts`).
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * **« Compléter » une proposition en attente** (ADR 0017). Le volet droit de
+ * l'arbre, sur un nœud en pointillé dont le lecteur est l'auteur — ou s'il est
+ * administrateur —, offre « Compléter » : l'arbre ouvre ce volet avec `completer`,
+ * et le formulaire passe en mode complétion sur cette fiche. Une saisie en cours y
+ * est mise de côté, pas perdue : « Revenir à une nouvelle personne » la rend, et
+ * la confirmation offre de la reprendre. Le titre suit le mode.
+ * ────────────────────────────────────────────────────────────────────
  */
 import { computed, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import FormulaireCreationPersonne from '@/components/proposition/FormulaireCreationPersonne.vue'
 import type { PersonneDeposee } from '@/components/proposition/depot'
+import type { DemandeDeCompletion } from '@/components/proposition/fusion'
 import type { EnEvidence } from '@/components/proposition/ressemblances'
 import { confirmationDuDepot, type PlaceDansLArbre } from './voletProposition'
 
-const { ouvert = true, place = 'recherche' } = defineProps<{
+const { ouvert = true, place = 'recherche', completer = null } = defineProps<{
   /** Ouvert par le lecteur — masqué ou non par la largeur de la fenêtre. */
   ouvert?: boolean
   /** Où l'arbre redessiné a trouvé la dernière personne déposée. */
   place?: PlaceDansLArbre
+  /** La proposition à compléter, demandée par l'arbre — un jeton par clic. */
+  completer?: DemandeDeCompletion | null
 }>()
 
 const emit = defineEmits<{
@@ -79,15 +91,63 @@ const confirmerEffacement = ref(false)
 const repriseDe = ref<number | null>(null)
 const cle = ref(0)
 
+/** Le formulaire complète une proposition : le titre le dit. */
+const enCompletion = ref(false)
+
 function surDepot(depot: PersonneDeposee): void {
   confirmation.value = depot
   confirmerEffacement.value = false
   emit('deposee', depot)
 }
 
+/**
+ * Après une **complétion**, le formulaire a déjà rendu la saisie mise de côté (ou
+ * repris à zéro si elle avait été versée dans la proposition) : on ne l'efface
+ * pas, on la remontre. Après une création, on repart d'une saisie vierge.
+ */
+const apresCompletion = computed(() => confirmation.value?.nature === 'completion')
+
+function continuer(): void {
+  if (apresCompletion.value) {
+    confirmation.value = null
+    confirmerEffacement.value = false
+    return
+  }
+  repartirDeZero()
+}
+
+/**
+ * La complétion que le formulaire doit ouvrir — **une fois** : elle tombe quand il
+ * en sort, et avant qu'il soit remonté sur une demande à refaire, sans quoi il la
+ * rouvrirait à son montage.
+ */
+const aCompleter = shallowRef<DemandeDeCompletion | null>(null)
+
+/*
+ * L'arbre demande une complétion (« Compléter » sur un nœud) : une confirmation
+ * encore affichée s'efface d'abord — et le formulaire d'une création faite repart
+ * d'une saisie neuve, sans quoi il resterait occupé par ses photos envoyées.
+ */
+watch(
+  () => completer?.jeton ?? null,
+  (jeton) => {
+    if (jeton === null || completer === null) return
+    if (confirmation.value !== null) continuer()
+    aCompleter.value = completer
+  },
+  { immediate: true },
+)
+
+function surCompletion(cible: DemandeDeCompletion | null): void {
+  enCompletion.value = cible !== null
+  if (cible === null) aCompleter.value = null
+}
+
 function surRefaire(demandeId: number): void {
   repriseDe.value = demandeId
   sale.value = false
+  aCompleter.value = null
+  enCompletion.value = false
   cle.value++
 }
 
@@ -116,7 +176,7 @@ watch(
   (estOuvert) => {
     if (estOuvert) return
     confirmerEffacement.value = false
-    if (confirmation.value !== null) repartirDeZero()
+    if (confirmation.value !== null) continuer()
   },
 )
 </script>
@@ -131,10 +191,13 @@ watch(
     <header class="flex flex-none flex-col gap-2 border-b border-ligne px-4 py-3.5">
       <div class="flex items-start gap-2">
         <div class="flex flex-1 flex-col leading-snug">
-          <h2 class="text-[17px] font-semibold">Ajouter une personne</h2>
+          <h2 class="text-[17px] font-semibold">{{ enCompletion ? 'Compléter une proposition' : 'Ajouter une personne' }}</h2>
           <span class="text-xs text-attenue">
-            Votre proposition part en validation. L’arbre reste à côté : cherchez-y ses proches
-            pendant la saisie.
+            {{
+              enCompletion
+                ? 'Vos compléments s’ajoutent à la proposition en attente. L’arbre reste à côté : cherchez-y ses proches.'
+                : 'Votre proposition part en validation. L’arbre reste à côté : cherchez-y ses proches pendant la saisie.'
+            }}
           </span>
         </div>
         <button
@@ -181,7 +244,10 @@ watch(
           >
             {{ confirmation.demandeIds.length > 1 ? `Voir la demande n° ${id}` : 'Voir la demande' }}
           </RouterLink>
-          <BoutonBase @click="repartirDeZero">Ajouter une autre personne</BoutonBase>
+          <!-- Après une complétion, la saisie mise de côté revient telle quelle. -->
+          <BoutonBase @click="continuer">
+            {{ apresCompletion && sale ? 'Reprendre votre saisie' : 'Ajouter une autre personne' }}
+          </BoutonBase>
           <BoutonBase variante="discret" @click="fermer">Fermer</BoutonBase>
         </div>
       </section>
@@ -194,8 +260,10 @@ watch(
           ref="formulaire"
           contexte="volet"
           :refaire="repriseDe"
+          :completer="aCompleter"
           @deposee="surDepot"
           @refaire="surRefaire"
+          @completion="surCompletion"
           @sale="(valeur) => (sale = valeur)"
           @voir-personne="(personId, repondre) => emit('voir-personne', personId, repondre)"
           @voir-proposition="(noeudId, repondre) => emit('voir-proposition', noeudId, repondre)"

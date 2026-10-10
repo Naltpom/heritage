@@ -28,7 +28,7 @@ describe('la pastille', () => {
 })
 
 describe('le type', () => {
-  it('a une étiquette lisible pour chacun des dix-huit types du serveur', () => {
+  it('a une étiquette lisible pour chacun des vingt types du serveur', () => {
     const types = [
       'demande_soumise',
       'demande_validee',
@@ -48,6 +48,8 @@ describe('le type', () => {
       'demande_rgpd',
       'demande_rgpd_traitee',
       'partage_naissance_revu',
+      'demande_completee',
+      'complement_fusionne',
     ]
     for (const t of types) {
       expect(libelleDeType(t)).not.toBe('Notification')
@@ -76,6 +78,15 @@ describe('le type', () => {
   it('nomme les deux types des demandes RGPD', () => {
     expect(libelleDeType('demande_rgpd')).toBe('Demande RGPD')
     expect(libelleDeType('demande_rgpd_traitee')).toBe('Réponse RGPD')
+  })
+
+  it('nomme les deux natures de la complétion (ADR 0017)', () => {
+    expect(libelleDeType('demande_completee')).toBe('Demande complétée')
+    expect(libelleDeType('complement_fusionne')).toBe('Complément repris')
+    // Une complétion n'est ni un refus ni une acceptation : neutre.
+    expect(tonDeType('demande_completee')).toBe('neutre')
+    // Un complément fusionné est clos « refusée » en base, mais repris : jamais en alerte.
+    expect(tonDeType('complement_fusionne')).toBe('ok')
   })
 })
 

@@ -26,9 +26,13 @@ export interface PersonneDeposee {
    * - `fiche` : « C'est elle : compléter sa fiche » — la saisie est partie sur une
    *   fiche **qui existait déjà** (`modification_personne`, `ajout_lien`, une
    *   `ajout_media` par photo). Rien n'a été créé : la page reste, le volet montre
-   *   la personne dans l'arbre.
+   *   la personne dans l'arbre ;
+   * - `completion` : une proposition **en attente** complétée sur place (§ 6.6
+   *   ter) — aucune demande neuve, la même, réécrite ; son nœud est à jour ;
+   * - `complement` : une `creation_personne` qui **complète** la proposition d'un
+   *   autre membre (§ 6.3 ter) — l'administrateur la fusionnera dans l'origine.
    */
-  nature: 'creation' | 'fiche'
+  nature: 'creation' | 'fiche' | 'completion' | 'complement'
   /** Les demandes déposées par ce geste — une seule pour une création, une par
    *  nature (et par photo) pour une fiche complétée. */
   demandeIds: number[]
@@ -50,16 +54,33 @@ export interface PersonneDeposee {
   soumise: boolean
 }
 
-/** Ce que le formulaire annonce, d'après la réponse de `creerDemande`. */
+/**
+ * Ce que le formulaire annonce, d'après la réponse de `creerDemande`.
+ *
+ * Un complément se reconnaît à la réponse, pas au bouton cliqué : c'est
+ * `complementDe` que le serveur a enregistré qui fait foi.
+ */
 export function personneDeposee(demande: Demande): PersonneDeposee {
-  const fiche = demande.brouillons[0]
+  return annonce(demande, demande.brouillons[0], demande.complementDe ? 'complement' : 'creation')
+}
+
+/**
+ * Ce que le formulaire annonce après une **complétion sur place** : la réponse du
+ * `PUT` (ou de la soumission qui l'a suivie), et la fiche complétée — qui n'est
+ * pas forcément la première de la demande.
+ */
+export function propositionCompletee(demande: Demande, localRef: string): PersonneDeposee {
+  return annonce(demande, demande.brouillons.find((b) => b.localRef === localRef), 'completion')
+}
+
+function annonce(demande: Demande, fiche: Demande['brouillons'][number] | undefined, nature: PersonneDeposee['nature']): PersonneDeposee {
   const libelle = [fiche?.givenNames, fiche?.surname]
     .map((morceau) => morceau?.trim() ?? '')
     .filter((morceau) => morceau !== '')
     .join(' ')
 
   return {
-    nature: 'creation',
+    nature,
     demandeIds: [demande.id],
     noeudId: fiche?.noeudId ?? null,
     personId: fiche?.resolvedPersonId ?? null,

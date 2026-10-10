@@ -65,6 +65,7 @@ function resume(fragment: Partial<ResumeDemande> & { id: number }): ResumeDemand
     autoValidated: false,
     submittedAt: '2026-09-16T10:56:18+00:00',
     createdAt: '2026-09-16T10:56:18+00:00',
+    complementDeDemandeId: null,
     ...fragment,
   }
 }
