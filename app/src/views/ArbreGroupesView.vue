@@ -84,6 +84,7 @@ import {
   retenirEtag,
   type Graphe,
   type FichePersonneComplete,
+  type NoeudPersonne,
   type ResultatDeRecherche,
 } from '@/lib/api'
 import { FILTRES, filtreDisponible, nomDeFiche, type IdFiltre, type NoeudPersonneEtendu } from '@/components/arbre/graphe'
@@ -122,6 +123,7 @@ import {
   type PlaceDansLArbre,
 } from '@/components/arbre/voletProposition'
 import type { PersonneDeposee } from '@/components/proposition/depot'
+import type { DemandeDeCompletion } from '@/components/proposition/fusion'
 import type { EnEvidence } from '@/components/proposition/ressemblances'
 import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
 import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
@@ -905,6 +907,30 @@ function basculerProposition(): void {
     propositionOuverte.value = false
     return
   }
+  propositionMontee.value = true
+  propositionOuverte.value = true
+}
+
+/*
+ * « COMPLÉTER » UNE PROPOSITION EN ATTENTE (ADR 0017). Sur un nœud en pointillé, le
+ * volet droit offre « Compléter » à qui peut la compléter sur place : son auteur
+ * (`demandesEnAttente` de la session), ou un administrateur. Le nœud porte déjà
+ * de quoi la désigner — `demandeId` et `brouillonRef`, envoyés séparément, jamais
+ * découpés dans l'identifiant `#12/p1`. Le volet gauche s'ouvre alors en mode
+ * complétion ; le serveur reste juge (`403`, `409`), et le formulaire dit pourquoi.
+ */
+const demandeDeCompletion = shallowRef<DemandeDeCompletion | null>(null)
+let jetonDeCompletion = 0
+
+function peutCompleter(noeud: NoeudPersonne): boolean {
+  if (!peutProposer.value || !estLarge.value) return false
+  if (noeud.personId !== null || noeud.demandeId === undefined || noeud.brouillonRef === undefined) return false
+  return administrateur.value || (session.value?.demandesEnAttente ?? []).includes(noeud.demandeId)
+}
+
+function completerLeNoeud(noeud: NoeudPersonne): void {
+  if (noeud.demandeId === undefined || noeud.brouillonRef === undefined) return
+  demandeDeCompletion.value = { demandeId: noeud.demandeId, ref: noeud.brouillonRef, jeton: ++jetonDeCompletion }
   propositionMontee.value = true
   propositionOuverte.value = true
 }
@@ -2159,6 +2185,7 @@ onBeforeUnmount(() => {
       v-show="propositionVisible"
       :ouvert="propositionOuverte"
       :place="placeDuDepot"
+      :completer="demandeDeCompletion"
       @fermer="propositionOuverte = false"
       @deposee="surDepot"
       @voir-personne="voirLaPersonneDuVolet"
@@ -2704,6 +2731,18 @@ onBeforeUnmount(() => {
             Elle n’a pas encore de fiche : elle n’existe que dans sa demande, jusqu’à ce qu’un
             administrateur la valide.
           </p>
+          <!-- Compléter sur place (ADR 0017) : son auteur, ou un administrateur. Le
+               formulaire s'ouvre à gauche, sur cette fiche ; l'arbre reste. -->
+          <button
+            v-if="peutCompleter(ficheChoisie.noeud)"
+            type="button"
+            data-completer-le-noeud
+            class="h-9 self-start rounded-champ border border-accent px-3 text-sm font-semibold text-accent hover:bg-accent-doux"
+            aria-controls="volet-proposition"
+            @click="completerLeNoeud(ficheChoisie.noeud)"
+          >
+            Compléter
+          </button>
           <RouterLink
             v-if="ficheChoisie.noeud.demandeId !== undefined"
             :to="{ name: 'demande.detail', params: { id: ficheChoisie.noeud.demandeId } }"

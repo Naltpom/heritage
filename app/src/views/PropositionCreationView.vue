@@ -37,24 +37,30 @@
  * écrire librement, puis fait relire les demandes qu'il prépare
  * (`components/proposition/assistant/`).
  *
- * Le formulaire reste servi dans trois cas :
+ * Le formulaire reste servi dans quatre cas :
  *  - `?mode=formulaire` : c'est le bouton « Ajouter une personne » de l'accueil
  *    (05/10/2026 — « met moi plutôt ajouter une personne, et c'est une page
  *    formulaire ») ;
  *  - une reprise (`?refaire=`) : c'est lui qui sait reprendre une demande ;
+ *  - une **complétion** (`?completer=<demande>&ref=<fiche>`, ADR 0017) : la
+ *    proposition en attente s'ouvre dans le formulaire, à compléter sur place.
+ *    L'adresse suit le mode — le formulaire l'annonce (`completion`) quand on y
+ *    entre depuis une ressemblance, et quand on en sort —, si bien qu'un
+ *    rechargement, ou un lien partagé, rouvre la même proposition ;
  *  - la bascule « voir comme un membre » : l'assistant n'écrit rien lui-même,
  *    mais son analyse est une écriture pour l'API (quota, journal), qui la
  *    refuserait en `409`.
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, nextTick, shallowRef, useTemplateRef } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { useSession } from '@/composables/useSession'
 import AssistantProposition from '@/components/proposition/assistant/AssistantProposition.vue'
 import QuestionsAssistant from '@/components/proposition/assistant/QuestionsAssistant.vue'
 import { ecrituresSuspendues, motifSuspension } from '@/components/administration/ecriture'
 import FormulaireCreationPersonne from '@/components/proposition/FormulaireCreationPersonne.vue'
 import { annonceDesDemandes, type PersonneDeposee } from '@/components/proposition/depot'
+import { completionDepuisRequete, type DemandeDeCompletion } from '@/components/proposition/fusion'
 import { prefereMoinsDAnimations } from '@/lib/videos'
 
 const route = useRoute()
@@ -85,7 +91,7 @@ function premiereValeur(brut: unknown): string | undefined {
 }
 
 const mode = computed<Mode>(() => {
-  if (suspendu.value || repriseDemandee.value !== null) return 'formulaire'
+  if (suspendu.value || repriseDemandee.value !== null || completionDemandee.value !== null) return 'formulaire'
   const demande = premiereValeur(route.query['mode'])
   if (demande === 'formulaire') return 'formulaire'
   return demande === 'question' ? 'question' : 'assistant'
@@ -107,6 +113,33 @@ const repriseDemandee = computed(() => {
   const valeur = Number(Array.isArray(brut) ? brut[0] : brut)
   return Number.isInteger(valeur) && valeur > 0 ? valeur : null
 })
+
+/** `?completer=12&ref=p1` : la proposition à compléter sur place (ADR 0017). */
+const completionDemandee = computed(() =>
+  completionDepuisRequete(premiereValeur(route.query['completer']), premiereValeur(route.query['ref'])),
+)
+
+/** Le mode complétion tel que le formulaire l'annonce : il change le titre de la page. */
+const enCompletion = shallowRef<DemandeDeCompletion | null>(null)
+
+/**
+ * Le formulaire entre en complétion, ou en sort : l'adresse suit, sans ajouter
+ * d'entrée à l'historique — « Retour » ne doit pas rouvrir une complétion qu'on
+ * vient de quitter.
+ */
+function surCompletion(cible: DemandeDeCompletion | null): void {
+  enCompletion.value = cible
+  const requete: LocationQueryRaw = { ...route.query }
+  if (cible === null) {
+    delete requete['completer']
+    delete requete['ref']
+  } else {
+    requete['mode'] = 'formulaire'
+    requete['completer'] = String(cible.demandeId)
+    requete['ref'] = cible.ref
+  }
+  if (JSON.stringify(requete) !== JSON.stringify(route.query)) void routeur.replace({ query: requete })
+}
 
 const formulaire = useTemplateRef<InstanceType<typeof FormulaireCreationPersonne>>('formulaire')
 const bandeau = useTemplateRef<HTMLElement>('bandeau')
@@ -192,7 +225,14 @@ function refaire(demandeId: number): void {
     </template>
 
     <template v-else>
-    <header class="mb-5">
+    <header v-if="enCompletion !== null" class="mb-5">
+      <h1 class="text-xl font-semibold tracking-tight">Compléter une proposition</h1>
+      <p class="mt-1.5 text-sm text-attenue">
+        Vos compléments s’ajoutent à la proposition, qui reste à valider par un administrateur :
+        rien n’est créé en double. Une date retrouvée, un lien de plus — sans tout ressaisir.
+      </p>
+    </header>
+    <header v-else class="mb-5">
       <h1 class="text-xl font-semibold tracking-tight">Ajouter une personne</h1>
       <p class="mt-1.5 text-sm text-attenue">
         Votre proposition part en validation, comme une correction de fiche. La personne
@@ -240,8 +280,10 @@ function refaire(demandeId: number): void {
       ref="formulaire"
       contexte="page"
       :refaire="repriseDemandee"
+      :completer="completionDemandee"
       @deposee="suivre"
       @refaire="refaire"
+      @completion="surCompletion"
     >
       <template #actions>
         <RouterLink :to="{ name: 'arbre' }" class="text-sm text-attenue underline">

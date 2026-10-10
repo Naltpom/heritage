@@ -9,7 +9,9 @@
  *    ne doit pas sauter pour autant.
  *  - **Les deux volets.** La fiche choisie garde le sien à droite ; à gauche, la
  *    proposition. Les deux ne tiennent ensemble qu'au-delà de 90 rem.
- *  - **Après le dépôt**, ce que la confirmation dit de la personne dans l'arbre.
+ *  - **Après le dépôt**, ce que la confirmation dit de la personne dans l'arbre —
+ *    une création, une fiche complétée, une proposition complétée sur place, ou
+ *    un complément (ADR 0017).
  */
 import type { Cadrage } from '@/histoire/vue'
 import { annonceDesDemandes, type PersonneDeposee } from '@/components/proposition/depot'
@@ -88,6 +90,8 @@ export function confirmationDuDepot(depot: PersonneDeposee, place: PlaceDansLArb
   const numero = depot.demandeIds[0]
   const fiche = `La fiche de ${depot.libelle}`
   if (depot.nature === 'fiche') return confirmationDeLaFiche(depot, fiche, place)
+  if (depot.nature === 'completion') return confirmationDeLaCompletion(depot, fiche, place)
+  if (depot.nature === 'complement') return confirmationDuComplement(depot, fiche, place)
   if (!depot.soumise) {
     return {
       titre: `Brouillon enregistré — demande n° ${numero}`,
@@ -134,6 +138,65 @@ function confirmationDeLaFiche(depot: PersonneDeposee, fiche: string, place: Pla
       }
     case 'absente':
       return { titre, phrase: `${fiche} n’est pas dessinée dans l’arbre avec vos réglages ; ${suite}` }
+  }
+}
+
+/**
+ * Une proposition **complétée sur place** (ADR 0017) : aucune demande neuve, la
+ * même, réécrite. Son nœud en pointillé porte déjà ce qu'on vient d'y ajouter —
+ * c'est la fiche proposée elle-même —, et l'arbre relu va le chercher.
+ */
+function confirmationDeLaCompletion(depot: PersonneDeposee, fiche: string, place: PlaceDansLArbre): { titre: string; phrase: string } {
+  const numero = depot.demandeIds[0]
+  if (!depot.soumise) {
+    return {
+      titre: `Brouillon complété — demande n° ${numero}`,
+      phrase: `${fiche} n’apparaîtra dans l’arbre qu’une fois la demande envoyée, depuis son suivi.`,
+    }
+  }
+  const titre = `Proposition complétée — demande n° ${numero}`
+  switch (place) {
+    case 'recherche':
+      return { titre, phrase: `${fiche} se met à jour dans l’arbre…` }
+    case 'placee':
+      return { titre, phrase: `${fiche} est à jour dans l’arbre, en pointillé jusqu’à sa validation ; elle y est choisie.` }
+    case 'masquee':
+      return {
+        titre,
+        phrase: `${fiche} est à jour dans l’arbre, mais l’affichage la masque : une branche, la ligne directe seule ou une famille retirée par les filtres.`,
+      }
+    case 'absente':
+      return { titre, phrase: `${fiche} n’est pas dessinée dans l’arbre. Le suivi de la demande la montre, complétée.` }
+  }
+}
+
+/**
+ * Un **complément** (ADR 0017) : une proposition de plus, rattachée à celle d'un
+ * autre membre, que l'administrateur fusionnera. Elle paraît dans l'arbre de son
+ * auteur, en pointillé, jusqu'à la fusion — c'est elle que l'arbre va chercher.
+ */
+function confirmationDuComplement(depot: PersonneDeposee, fiche: string, place: PlaceDansLArbre): { titre: string; phrase: string } {
+  const numero = depot.demandeIds[0]
+  const fusion = 'l’administrateur la fusionnera dans la proposition existante.'
+  if (!depot.soumise) {
+    return {
+      titre: `Brouillon de complément enregistré — demande n° ${numero}`,
+      phrase: `Envoyez-le depuis son suivi : ${fusion}`,
+    }
+  }
+  const titre = `Complément envoyé — demande n° ${numero}`
+  switch (place) {
+    case 'recherche':
+      return { titre, phrase: `${fiche} prend sa place dans l’arbre… ${fusion.charAt(0).toUpperCase()}${fusion.slice(1)}` }
+    case 'placee':
+      return { titre, phrase: `${fiche} est dans votre arbre, en pointillé, et y est choisie ; ${fusion}` }
+    case 'masquee':
+      return {
+        titre,
+        phrase: `${fiche} est dans votre arbre, mais l’affichage la masque. ${fusion.charAt(0).toUpperCase()}${fusion.slice(1)}`,
+      }
+    case 'absente':
+      return { titre, phrase: `${fiche} n’est pas dessinée dans l’arbre ; ${fusion}` }
   }
 }
 
