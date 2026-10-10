@@ -361,7 +361,16 @@ export function construireLiens(saisie: SaisieCreation): {
 /* Construction du brouillon                                           */
 /* ------------------------------------------------------------------ */
 
-function construireBrouillon(saisie: SaisieCreation): {
+/**
+ * La fiche proposée, composée depuis la saisie — ou ce qui l'en empêche.
+ *
+ * Exportée pour la **complétion** d'une proposition (`fusion.ts`) : le `PUT` du
+ * § 6.6 ter remplace la fiche entière, avec exactement les règles du dépôt — un
+ * prénom ou un nom, des dates lisibles, pas de décès daté sans « décès
+ * attesté ». Deux constructions de la même fiche finiraient par ne plus dire la
+ * même chose.
+ */
+export function construireBrouillon(saisie: SaisieCreation): {
   brouillon: BrouillonPropose | null
   erreurs: ErreurSaisie[]
 } {
@@ -432,7 +441,14 @@ function construireBrouillon(saisie: SaisieCreation): {
  */
 export function corpsCreationPersonne(
   saisie: SaisieCreation,
-  options: OptionsDepot,
+  options: OptionsDepot & {
+    /**
+     * § 6.3 ter — la fiche proposée par un autre membre que cette création
+     * **complète** (`draftPersonId`). Une création ordinaire pour le reste : une
+     * fiche, au moins un lien à la soumission.
+     */
+    complementDe?: number | null
+  },
 ): ResultatCreation {
   const fiche = construireBrouillon(saisie)
   const liens = construireLiens(saisie)
@@ -460,6 +476,8 @@ export function corpsCreationPersonne(
   const message = texteOuNull(options.message)
   if (message !== null) corps.message = message
   if (options.origine !== undefined) corps.origine = options.origine
+  // Posée seulement si elle existe : une création ordinaire n'envoie pas la clé.
+  if (options.complementDe !== undefined && options.complementDe !== null) corps.complementDe = options.complementDe
 
   return { valide: true, corps }
 }
