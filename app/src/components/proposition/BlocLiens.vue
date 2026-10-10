@@ -34,6 +34,14 @@
  * Au téléphone, chaque lien occupe sa propre carte et chaque champ sa propre
  * ligne : quatre blocs de liens mis côte à côte deviennent illisibles sous
  * 400 px, et rien ici ne force une largeur qui déborderait.
+ *
+ * ── En mode complétion d'une proposition (ADR 0017) ─────────────────────────
+ *
+ * Le bloc ne porte plus que les liens **à ajouter** : ceux de la proposition
+ * sont au-dessus, en lecture seule (`titre="Liens à ajouter"`). Trois réglages le
+ * disent : `dejaDesignes` éteint dans le sélecteur les proches déjà nommés,
+ * `placesDeParent` borne les parents à ce qui reste libre — une personne n'en a
+ * pas trois —, et `dejaRelies` compte les liens existants dans « au moins un ».
  */
 import { computed } from 'vue'
 import BoutonBase from '@/components/base/BoutonBase.vue'
@@ -49,9 +57,23 @@ import {
   type SaisieCreation,
 } from './creation'
 
-const { erreurs = {} } = defineProps<{
+const {
+  erreurs = {},
+  titre = '',
+  dejaDesignes = [],
+  dejaRelies = 0,
+  placesDeParent = 2,
+} = defineProps<{
   /** Messages indexés par `filiation`, `liens`, `unions.<n>.mariage`… */
   erreurs?: Record<string, string>
+  /** Un titre au-dessus des trois blocs — « Liens à ajouter » en complétion. */
+  titre?: string
+  /** Les proches que la proposition nomme déjà (`cleDuChoix`) : éteints au sélecteur. */
+  dejaDesignes?: string[]
+  /** Les liens que la proposition porte déjà : ils comptent dans « au moins un ». */
+  dejaRelies?: number
+  /** Les places de parent encore libres : 2, sauf en complétion. */
+  placesDeParent?: number
 }>()
 
 const saisie = defineModel<SaisieCreation>({ required: true })
@@ -60,6 +82,7 @@ const saisie = defineModel<SaisieCreation>({ required: true })
  *  masquer un résultat serait cacher ce que le serveur a rendu — mais éteint
  *  leur bouton. */
 const dejaChoisis = computed(() => [
+  ...dejaDesignes,
   ...saisie.value.filiation.parents.map(cleDuChoix),
   ...saisie.value.unions.map((union) => cleDuChoix(union.personne)),
   ...saisie.value.enfants.map((enfant) => cleDuChoix(enfant.personne)),
@@ -68,7 +91,7 @@ const dejaChoisis = computed(() => [
 const total = computed(() => nombreDeLiens(saisie.value))
 
 function ajouterParent(personne: ChoixDePersonne): void {
-  if (saisie.value.filiation.parents.length >= 2) return
+  if (saisie.value.filiation.parents.length >= placesDeParent) return
   saisie.value.filiation.parents.push(personne)
 }
 
@@ -108,9 +131,17 @@ function poserRang(index: number, brut: string): void {
 
 <template>
   <div class="flex flex-col gap-4">
+    <h2 v-if="titre !== ''" class="m-0 text-sm font-semibold tracking-tight" data-titre-liens>{{ titre }}</h2>
+
     <!-- ── Parents ────────────────────────────────────────────────── -->
     <PanneauBase titre="Parents">
       <div class="flex flex-col gap-3">
+        <p
+          v-if="placesDeParent === 0 && saisie.filiation.parents.length === 0 && saisie.filiation.famille === null"
+          class="m-0 text-sm text-attenue"
+        >
+          Ses parents sont déjà dans la proposition.
+        </p>
         <p v-if="saisie.filiation.famille !== null" class="flex flex-wrap items-center gap-2 text-sm">
           <span class="rounded-pastille border border-ligne px-2 py-0.5">
             Couple désigné : {{ saisie.filiation.famille.libelle }}
@@ -135,9 +166,9 @@ function poserRang(index: number, brut: string): void {
         </ul>
 
         <SelecteurPersonne
-          v-if="saisie.filiation.famille === null && saisie.filiation.parents.length < 2"
+          v-if="saisie.filiation.famille === null && saisie.filiation.parents.length < placesDeParent"
           etiquette="Ajouter un parent"
-          aide="Un ou deux parents."
+          :aide="placesDeParent < 2 ? 'Le second parent : la proposition en nomme déjà un.' : 'Un ou deux parents.'"
           :deja-choisis="dejaChoisis"
           @choisir="ajouterParent"
         />
@@ -262,6 +293,14 @@ function poserRang(index: number, brut: string): void {
       role="status"
     >
       <template v-if="erreurs['liens']">{{ erreurs['liens'] }}</template>
+      <!-- En complétion, la proposition est déjà reliée : il n'y a peut-être rien à ajouter. -->
+      <template v-else-if="dejaRelies > 0">
+        {{
+          total === 0
+            ? 'Aucun lien à ajouter : la proposition est déjà reliée à l’arbre.'
+            : `${total} lien${total > 1 ? 's' : ''} à ajouter à la proposition.`
+        }}
+      </template>
       <template v-else-if="total === 0">
         Ajoutez au moins un lien avant d’envoyer.
       </template>

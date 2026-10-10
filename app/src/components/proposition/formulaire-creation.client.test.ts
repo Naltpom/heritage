@@ -15,16 +15,34 @@
  * 5. **« Est-ce déjà… ? »** : un seul appel par route après le délai, les cartes,
  *    le rappel avant l'envoi — une fois, et jamais sur un brouillon — et « C'est
  *    elle » qui dépose `modification_personne` puis `ajout_lien` sur la fiche
- *    existante, sans toucher au routeur.
+ *    existante, sans toucher au routeur ;
+ * 6. **compléter une proposition en attente** (ADR 0017) : la saisie versée dans
+ *    la proposition, le `PUT` avec l'empreinte et sans les liens déjà là, la
+ *    relecture sur un `409`, la saisie mise de côté quand l'arbre demande la
+ *    complétion, les photos vers la bonne fiche ; et le **complément**, une
+ *    création qui porte `complementDe`.
  */
 import { defineComponent, h, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Demande } from '@/lib/api'
-import { attendre, boutonNomme, cliquer, demonterTout, monterEnMemoire, texte, un, type Noeud } from '@/test-utils/rendu-memoire'
+import {
+  attendre,
+  boutonNomme,
+  cliquer,
+  demonterTout,
+  monterEnMemoire,
+  parAttribut,
+  texte,
+  un,
+  type Noeud,
+} from '@/test-utils/rendu-memoire'
 
 /* ------------------------------------------------------------------ */
 /* Les dépendances                                                     */
 /* ------------------------------------------------------------------ */
+
+/** Qui lit : un membre (n° 3) par défaut ; un test peut en faire un administrateur. */
+const lecteur = vi.hoisted(() => ({ administrateur: false, id: 3 }))
 
 vi.mock('@/composables/useSession', async () => {
   const { computed } = await import('vue')
@@ -32,8 +50,9 @@ vi.mock('@/composables/useSession', async () => {
     useSession: () => ({
       rattache: computed(() => true),
       connecte: computed(() => true),
-      administrateur: computed(() => false),
+      administrateur: computed(() => lecteur.administrateur),
       vueEmpruntee: computed(() => null),
+      session: computed(() => ({ utilisateur: { id: lecteur.id }, demandesEnAttente: [] })),
     }),
   }
 })
@@ -55,6 +74,10 @@ const api = vi.hoisted(() => ({
   chercherRessemblancesBrouillons: vi.fn(),
   lireFichePersonne: vi.fn(),
   proposerLeMedia: vi.fn(),
+  lireDemande: vi.fn(),
+  lireDemandeAdministration: vi.fn(),
+  mettreAJourBrouillon: vi.fn(),
+  soumettreDemande: vi.fn(),
 }))
 
 vi.mock('@/lib/api', async (original) => ({
@@ -76,10 +99,18 @@ vi.mock('@/components/proposition/ChampsIdentite.vue', async () => {
   return { default: definir({ name: 'ChampsIdentite', setup: () => () => rendre('div', { 'data-champs-identite': '' }) }) }
 })
 
-import { ErreurApi, type FichePersonneComplete, type RessemblanceDansLArbre } from '@/lib/api'
+import {
+  ErreurApi,
+  type FichePersonneComplete,
+  type RessemblanceDansLArbre,
+  type RessemblancePropositionComplete,
+  type RessemblancePropositionDiscrete,
+} from '@/lib/api'
 import { DELAI_DES_RESSEMBLANCES_MS } from '@/composables/useRessemblances'
-import { creationVide } from './creation'
+import { creationVide, unionVide } from './creation'
+import { saisieVide } from './dates'
 import type { PersonneDeposee } from './depot'
+import type { DemandeDeCompletion } from './fusion'
 import type { EnEvidence } from './ressemblances'
 import FormulaireCreationPersonne from './FormulaireCreationPersonne.vue'
 
@@ -141,29 +172,37 @@ interface Monte {
   refaites: number[]
   sale: boolean[]
   evidences: EnEvidence[]
+  /** Ce que le formulaire annonce du mode complétion : la cible, puis `null`. */
+  completions: (DemandeDeCompletion | null)[]
   formulaire: { value: { reinitialiser: () => void } | null }
+  /** La complétion demandée par l'hôte — l'arbre, l'adresse de la page. */
+  completer: { value: DemandeDeCompletion | null }
 }
 
-async function monter(refaire: number | null = 77): Promise<Monte> {
+async function monter(refaire: number | null = 77, completerDEntree: DemandeDeCompletion | null = null): Promise<Monte> {
   const deposees: PersonneDeposee[] = []
   const refaites: number[] = []
   const sale: boolean[] = []
   const evidences: EnEvidence[] = []
+  const completions: (DemandeDeCompletion | null)[] = []
   const formulaire = ref<{ reinitialiser: () => void } | null>(null)
+  const completer = ref<DemandeDeCompletion | null>(completerDEntree)
   const Hote = defineComponent({
     setup: () => () =>
       h(FormulaireCreationPersonne, {
         ref: formulaire,
         contexte: 'volet',
         refaire,
+        completer: completer.value,
         onDeposee: (d: PersonneDeposee) => deposees.push(d),
         onRefaire: (id: number) => refaites.push(id),
         onSale: (s: boolean) => sale.push(s),
         onEnEvidence: (e: EnEvidence) => evidences.push(e),
+        onCompletion: (c: DemandeDeCompletion | null) => completions.push(c),
       }),
   })
   const racine = await monterEnMemoire(Hote, { RouterLink: LienFactice })
-  return { racine, deposees, refaites, sale, evidences, formulaire }
+  return { racine, deposees, refaites, sale, evidences, completions, formulaire, completer }
 }
 
 /** Le calme que le formulaire attend avant de chercher, puis ce qui s'ensuit. */
@@ -233,6 +272,8 @@ async function soumettre(racine: Noeud): Promise<void> {
 }
 
 beforeEach(() => {
+  lecteur.administrateur = false
+  lecteur.id = 3
   vi.stubGlobal('window', { addEventListener: () => undefined, removeEventListener: () => undefined })
   // Quand la valeur change sous un champ, `v-model` regarde si sa racine est un
   // document qui lui donne le focus : ici, ni document ni ombre.
@@ -573,5 +614,384 @@ describe('« Est-ce déjà… ? » dans le formulaire', () => {
 
     await soumettre(racine)
     expect(api.creerDemande).toHaveBeenCalledTimes(1)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Compléter une proposition en attente (ADR 0017)                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * La demande n° 12 d'Opale (n° 3) : Jean Dupont (`#p1`) et Marie Dupont (`#p3`),
+ * enfant de Jean Dupont de l'arbre (n° 12). Marie est la **troisième** fiche —
+ * c'est elle qu'on complète, pas `#p1`.
+ */
+function demandeAProposer(surcharge: Partial<Demande> = {}): Demande {
+  return {
+    ...reponse(),
+    id: 12,
+    authorUserId: 3,
+    complementDe: null,
+    empreinte: 'empreinte-1',
+    brouillons: [
+      { localRef: '#p1', noeudId: '#12/p1', givenNames: 'Jean', surname: 'Dupont', sex: 'masculin', deceased: true, resolvedPersonId: null },
+      {
+        localRef: '#p3',
+        noeudId: '#12/p3',
+        givenNames: 'Marie',
+        surname: 'Dupont',
+        sex: 'feminin',
+        deceased: false,
+        birth: { raw: '1894', qualifier: 'annee', min: '1894-01-01', max: '1894-12-31', place: null, texte: '1894' },
+        note: 'Acte de naissance.',
+        resolvedPersonId: null,
+      },
+    ],
+    liens: [{ seq: 1, kind: 'enfant_de', subjectDraftRef: '#p3', otherPersonId: 12, otherLabel: 'Jean Dupont' }],
+    ...surcharge,
+  }
+}
+
+/** La même, telle que la ressemblance la rend à son auteur : `completer`. */
+const MARIE_PROPOSEE: RessemblancePropositionComplete = {
+  forme: 'complete',
+  draftPersonId: 7,
+  demandeId: 12,
+  localRef: '#p3',
+  noeudId: '#12/p3',
+  displayName: 'Marie Dupont',
+  sex: 'feminin',
+  deceased: false,
+  ligneDates: '1894',
+  authorLabel: 'Opale Bourrache',
+  enAttente: true,
+  lieuNaissance: null,
+  statut: 'en_attente',
+  action: 'completer',
+  criteres: ['nom', 'prenom'],
+  raisons: ['même nom', 'prénom Marie en commun'],
+  score: 2,
+}
+
+/** Une proposition d'un autre membre, sur un vivant : la phrase seule. */
+const DISCRETE: RessemblancePropositionDiscrete = {
+  forme: 'discrete',
+  draftPersonId: 9,
+  action: 'complement',
+  criteres: ['nom', 'prenom'],
+  raisons: ['nom semblable', 'un prénom en commun'],
+}
+
+/** La reprise rend cette saisie : Marie Dupont, fille de Jean (n° 12), et ce qu'on y ajoute. */
+function repriseAvec(modifier: (saisie: ReturnType<typeof saisieComplete>) => void, message = ''): void {
+  const saisie = saisieComplete()
+  modifier(saisie)
+  reprise.chargerReprise.mockResolvedValue({
+    kind: 'creation_personne',
+    message,
+    origine: { demandeId: 77, statut: 'refusee' },
+    saisie,
+    aResoudre: [],
+    brouillonsAResoudre: [],
+    avertissements: [],
+  })
+}
+
+/** Joint un fichier par le champ « Importer une photo ou un fichier ». */
+async function joindreUnFichier(racine: Noeud): Promise<void> {
+  const champ = un(racine, (n) => n.tag === 'input' && n.attributs['type'] === 'file')
+  const surChoix = champ?.ecouteurs['change']
+  if (typeof surChoix !== 'function') throw new Error('Pas de champ de fichier.')
+  surChoix({ target: { files: [new File(['%PDF'], 'acte.pdf', { type: 'application/pdf' })], value: 'acte.pdf' } })
+  await attendre()
+}
+
+describe('compléter une proposition en attente, sur place', () => {
+  it('« Compléter cette proposition » y verse la saisie, et l’enregistre en PUT avec l’empreinte', async () => {
+    api.chercherRessemblancesBrouillons.mockResolvedValue({ elements: [MARIE_PROPOSEE], tronque: false })
+    api.lireDemande.mockResolvedValue(demandeAProposer())
+    api.mettreAJourBrouillon.mockResolvedValue(demandeAProposer({ empreinte: 'empreinte-2' }))
+    repriseAvec((saisie) => {
+      saisie.brouillon.nickname = 'Mimi'
+      saisie.brouillon.naissance = { ...saisieVide(), forme: 'connue', debut: '1895' }
+      saisie.unions = [unionVide({ personId: 30, libelle: 'Paul Martin' })]
+    }, 'Vu au registre.')
+    const { racine, deposees, completions } = await monter(77)
+    await attendreLesRessemblances()
+
+    await cliquer(un(racine, boutonNomme('Compléter cette proposition')))
+
+    // La demande entière est lue — la fiche **et** ses liens.
+    expect(api.lireDemande).toHaveBeenCalledWith(12)
+    expect(api.lireDemandeAdministration).not.toHaveBeenCalled()
+    expect(completions).toEqual([{ demandeId: 12, ref: 'p3' }])
+    expect(texte(un(racine, parAttribut('data-bandeau-completion'))!)).toContain(
+      'Vous complétez la proposition n° 12 — Marie Dupont',
+    )
+    // On a choisi : plus de ressemblances, ni de message à part.
+    expect(un(racine, parAttribut('data-ressemblances'))).toBeNull()
+    expect(un(racine, parAttribut('data-sans-message'))).not.toBeNull()
+
+    // La proposition l'emporte, et le désaccord se lit.
+    const divergence = un(racine, (n) => n.attributs['data-divergence'] === 'naissance')
+    expect(texte(divergence!)).toContain('Proposition : 1894')
+    expect(texte(divergence!)).toContain('Votre saisie : En 1895')
+    // Ce qu'elle porte déjà, en lecture seule ; puis ce qu'on ajoute.
+    expect(texte(un(racine, parAttribut('data-deja-proposes'))!)).toContain('Enfant de Jean Dupont')
+    expect(texte(un(racine, parAttribut('data-titre-liens'))!)).toBe('Liens à ajouter')
+
+    await soumettre(racine)
+
+    expect(api.creerDemande).not.toHaveBeenCalled()
+    expect(api.mettreAJourBrouillon).toHaveBeenCalledTimes(1)
+    const [demandeId, ref, corps] = api.mettreAJourBrouillon.mock.calls[0] as [number, string, Record<string, unknown>]
+    expect(demandeId).toBe(12)
+    expect(ref).toBe('p3')
+    expect(corps).toMatchObject({
+      empreinte: 'empreinte-1',
+      fiche: {
+        localRef: '#p3',
+        givenNames: 'Marie',
+        nickname: 'Mimi',
+        birth: { raw: '1894' },
+        // La note de la proposition, puis le message — qu'une complétion ne porte pas à part.
+        note: 'Acte de naissance.\n\nVu au registre.',
+      },
+    })
+    // Le parent déjà proposé ne repart pas ; l'union, si — sans rang.
+    expect(corps['liens']).toEqual([{ kind: 'conjoint_de', subjectDraftRef: '#p3', otherPersonId: 30, divorced: false }])
+    expect(JSON.stringify(corps)).not.toContain('texte')
+    expect(api.invaliderGraphe).toHaveBeenCalled()
+
+    expect(deposees).toEqual([
+      { nature: 'completion', demandeIds: [12], noeudId: '#12/p3', personId: null, libelle: 'Marie Dupont', soumise: true },
+    ])
+    expect(completions.at(-1)).toBeNull()
+    expect(routeur.push).not.toHaveBeenCalled()
+  })
+
+  it('une lecture ratée se reprend, et la saisie y est toujours versée', async () => {
+    api.chercherRessemblancesBrouillons.mockResolvedValue({ elements: [MARIE_PROPOSEE], tronque: false })
+    api.lireDemande
+      .mockRejectedValueOnce(new ErreurApi(500, 'erreur_interne', 'Le serveur a trébuché.', null, null))
+      .mockResolvedValueOnce(demandeAProposer())
+    repriseAvec((saisie) => {
+      saisie.brouillon.naissance = { ...saisieVide(), forme: 'connue', debut: '1895' }
+    })
+    const { racine } = await monter(77)
+    await attendreLesRessemblances()
+    await cliquer(un(racine, boutonNomme('Compléter cette proposition')))
+
+    expect(texte(racine)).toContain('La proposition n’a pas pu être lue.')
+    expect(un(racine, (n) => n.tag === 'form')).toBeNull()
+
+    await cliquer(un(racine, boutonNomme('Réessayer')))
+
+    expect(api.lireDemande).toHaveBeenCalledTimes(2)
+    expect(un(racine, (n) => n.attributs['data-divergence'] === 'naissance')).not.toBeNull()
+  })
+
+  it('« Prendre ma valeur » reprend la date saisie', async () => {
+    api.chercherRessemblancesBrouillons.mockResolvedValue({ elements: [MARIE_PROPOSEE], tronque: false })
+    api.lireDemande.mockResolvedValue(demandeAProposer())
+    api.mettreAJourBrouillon.mockResolvedValue(demandeAProposer())
+    repriseAvec((saisie) => {
+      saisie.brouillon.naissance = { ...saisieVide(), forme: 'connue', debut: '1895' }
+    })
+    const { racine } = await monter(77)
+    await attendreLesRessemblances()
+    await cliquer(un(racine, boutonNomme('Compléter cette proposition')))
+
+    await cliquer(un(racine, boutonNomme('Prendre ma valeur')))
+    expect(texte(racine)).toContain('Votre valeur est reprise.')
+    await soumettre(racine)
+
+    expect(api.mettreAJourBrouillon.mock.calls[0]?.[2]).toMatchObject({ fiche: { birth: { raw: '1895', qualifier: 'annee' } } })
+  })
+
+  it('une empreinte périmée : rien n’est relu en douce, « Relire la proposition » repart de la version relue', async () => {
+    api.chercherRessemblancesBrouillons.mockResolvedValue({ elements: [MARIE_PROPOSEE], tronque: false })
+    api.lireDemande
+      .mockResolvedValueOnce(demandeAProposer())
+      .mockResolvedValueOnce(demandeAProposer({ empreinte: 'empreinte-2' }))
+    api.mettreAJourBrouillon
+      .mockRejectedValueOnce(
+        new ErreurApi(409, 'demande_modifiee_entre_temps', 'La demande a changé.', null, {
+          demandeId: 12,
+          empreinte: 'empreinte-2',
+          rejouable: true,
+        }),
+      )
+      .mockResolvedValueOnce(demandeAProposer({ empreinte: 'empreinte-3' }))
+    repriseAvec(() => undefined)
+    const { racine, deposees } = await monter(77)
+    await attendreLesRessemblances()
+    await cliquer(un(racine, boutonNomme('Compléter cette proposition')))
+
+    await soumettre(racine)
+
+    expect(texte(un(racine, parAttribut('data-proposition-changee'))!)).toContain(
+      'La proposition a changé depuis que vous l’avez ouverte',
+    )
+    expect(api.lireDemande).toHaveBeenCalledTimes(1)
+    expect(deposees).toEqual([])
+
+    await cliquer(un(racine, boutonNomme('Relire la proposition')))
+    expect(api.lireDemande).toHaveBeenCalledTimes(2)
+    expect(un(racine, parAttribut('data-proposition-changee'))).toBeNull()
+
+    await soumettre(racine)
+    expect(api.mettreAJourBrouillon).toHaveBeenCalledTimes(2)
+    expect(api.mettreAJourBrouillon.mock.calls[1]?.[2]).toMatchObject({ empreinte: 'empreinte-2' })
+    expect(deposees.map((d) => d.nature)).toEqual(['completion'])
+  })
+
+  it('demandée par l’arbre : la saisie en cours est mise de côté, puis rendue intacte', async () => {
+    api.lireDemande.mockResolvedValue(demandeAProposer())
+    api.mettreAJourBrouillon.mockResolvedValue(demandeAProposer({ empreinte: 'empreinte-2' }))
+    api.creerDemande.mockResolvedValue(reponse())
+    // Une autre personne en cours de saisie : Paul Martin.
+    repriseAvec((saisie) => {
+      saisie.brouillon.givenNames = 'Paul'
+      saisie.brouillon.surname = 'Martin'
+    })
+    const { racine, completer, completions, deposees } = await monter(77)
+    expect(texte(racine)).toContain('Cette demande reprend la demande n° 77')
+
+    completer.value = { demandeId: 12, ref: 'p3', jeton: 1 }
+    await attendre()
+
+    expect(completions).toEqual([{ demandeId: 12, ref: 'p3' }])
+    // Rien n'est versé : ni divergence, ni la reprise, ni le parent de Paul.
+    expect(un(racine, parAttribut('data-divergences'))).toBeNull()
+    expect(texte(racine)).not.toContain('Cette demande reprend la demande n° 77')
+
+    await soumettre(racine)
+    const corps = api.mettreAJourBrouillon.mock.calls[0]?.[2] as Record<string, unknown>
+    expect(corps).toMatchObject({ fiche: { givenNames: 'Marie', note: 'Acte de naissance.' } })
+    expect(corps).not.toHaveProperty('liens')
+    expect(deposees.map((d) => d.nature)).toEqual(['completion'])
+
+    // Paul revient, sa reprise avec lui.
+    expect(texte(racine)).toContain('Cette demande reprend la demande n° 77')
+    await soumettre(racine)
+    expect(api.creerDemande.mock.calls[0]?.[0]).toMatchObject({
+      brouillons: [{ givenNames: 'Paul', surname: 'Martin' }],
+      origine: { demandeId: 77 },
+    })
+  })
+
+  it('« Revenir à une nouvelle personne » rend la saisie d’avant, sans rien enregistrer', async () => {
+    api.lireDemande.mockResolvedValue(demandeAProposer())
+    const { racine, completer, completions } = await monter(77)
+
+    completer.value = { demandeId: 12, ref: 'p3', jeton: 1 }
+    await attendre()
+    await cliquer(un(racine, boutonNomme('Revenir à une nouvelle personne')))
+
+    expect(api.mettreAJourBrouillon).not.toHaveBeenCalled()
+    expect(completions).toEqual([{ demandeId: 12, ref: 'p3' }, null])
+    expect(un(racine, parAttribut('data-bandeau-completion'))).toBeNull()
+    expect(texte(racine)).toContain('Cette demande reprend la demande n° 77')
+  })
+
+  it('les photos partent vers la fiche complétée, pas vers `p1`', async () => {
+    api.lireDemande.mockResolvedValue(demandeAProposer())
+    api.mettreAJourBrouillon.mockResolvedValue(demandeAProposer())
+    api.televerserMedia.mockResolvedValue({ id: 5 })
+    const { racine } = await monter(null, { demandeId: 12, ref: 'p3', jeton: 1 })
+
+    await joindreUnFichier(racine)
+    await soumettre(racine)
+
+    expect(api.televerserMedia.mock.calls[0]?.[0]).toMatchObject({ brouillon: { demandeId: 12, brouillonRef: 'p3' } })
+  })
+
+  it('un brouillon : « … et envoyer » le complète, puis le soumet', async () => {
+    api.lireDemande.mockResolvedValue(demandeAProposer({ status: 'brouillon', submittedAt: null }))
+    api.mettreAJourBrouillon.mockResolvedValue(demandeAProposer({ status: 'brouillon', submittedAt: null }))
+    api.soumettreDemande.mockResolvedValue(demandeAProposer())
+    const { racine, deposees } = await monter(null, { demandeId: 12, ref: 'p3', jeton: 1 })
+
+    expect(un(racine, boutonNomme('Enregistrer les compléments et envoyer'))).not.toBeNull()
+    expect(un(racine, boutonNomme('Enregistrer les compléments'))).not.toBeNull()
+    await soumettre(racine)
+
+    expect(api.mettreAJourBrouillon).toHaveBeenCalledTimes(1)
+    expect(api.soumettreDemande).toHaveBeenCalledWith(12)
+    expect(deposees.map((d) => [d.nature, d.soumise])).toEqual([['completion', true]])
+  })
+
+  it('un administrateur complète la proposition d’un autre : lue par l’administration, et son auteur averti', async () => {
+    lecteur.administrateur = true
+    lecteur.id = 1
+    api.lireDemandeAdministration.mockResolvedValue(demandeAProposer())
+    const { racine } = await monter(null, { demandeId: 12, ref: 'p3', jeton: 1 })
+
+    expect(api.lireDemandeAdministration).toHaveBeenCalledWith(12)
+    expect(api.lireDemande).not.toHaveBeenCalled()
+    expect(texte(un(racine, parAttribut('data-bandeau-completion'))!)).toContain(
+      'Proposée par Opale Bourrache : son auteur en sera averti.',
+    )
+  })
+
+  it('le brouillon d’un autre ne s’ouvre pas : on dit pourquoi, sans formulaire', async () => {
+    lecteur.administrateur = true
+    lecteur.id = 1
+    api.lireDemandeAdministration.mockResolvedValue(demandeAProposer({ status: 'brouillon' }))
+    const { racine } = await monter(null, { demandeId: 12, ref: 'p3', jeton: 1 })
+
+    expect(texte(un(racine, parAttribut('data-incompletable'))!)).toContain('seul son auteur peut le compléter')
+    expect(un(racine, (n) => n.tag === 'form')).toBeNull()
+  })
+})
+
+describe('ajouter ses informations à la proposition d’un autre : le complément', () => {
+  it('dépose une création ordinaire, qui porte `complementDe` — et seulement l’identifiant de la fiche', async () => {
+    api.chercherRessemblancesBrouillons.mockResolvedValue({ elements: [DISCRETE], tronque: false })
+    api.creerDemande.mockResolvedValue({ ...reponse(), id: 8200, complementDe: { draftPersonId: 9 } })
+    const { racine, deposees } = await monter(77)
+    await attendreLesRessemblances()
+
+    await cliquer(un(racine, boutonNomme('Ajouter mes informations à cette proposition')))
+
+    const bandeau = un(racine, parAttribut('data-bandeau-complement'))
+    expect(texte(bandeau!)).toContain('Vos informations seront ajoutées à la proposition existante par l’administrateur.')
+    // Une forme discrète : on ne nomme rien de ce qu'on ne sait pas.
+    expect(texte(bandeau!)).toContain('Vous complétez une proposition déjà en attente.')
+    expect(un(racine, parAttribut('data-ressemblances'))).toBeNull()
+    expect(un(racine, boutonNomme('Envoyer le complément'))).not.toBeNull()
+
+    await soumettre(racine)
+
+    expect(api.creerDemande).toHaveBeenCalledTimes(1)
+    expect(api.creerDemande.mock.calls[0]?.[0]).toMatchObject({ kind: 'creation_personne', soumettre: true, complementDe: 9 })
+    expect(api.mettreAJourBrouillon).not.toHaveBeenCalled()
+    expect(deposees.map((d) => [d.nature, d.demandeIds])).toEqual([['complement', [8200]]])
+  })
+
+  it('une proposition tranchée entre-temps : on le dit, et on en fait une proposition ordinaire', async () => {
+    api.chercherRessemblancesBrouillons.mockResolvedValue({ elements: [DISCRETE], tronque: false })
+    api.creerDemande
+      .mockRejectedValueOnce(new ErreurApi(409, 'proposition_plus_en_attente', 'La proposition n’attend plus de validation.', null, null))
+      .mockResolvedValueOnce(reponse())
+    const { racine, deposees } = await monter(77)
+    await attendreLesRessemblances()
+    await cliquer(un(racine, boutonNomme('Ajouter mes informations à cette proposition')))
+
+    await soumettre(racine)
+
+    expect(texte(un(racine, parAttribut('data-complement-perime'))!)).toContain(
+      'Cette proposition n’attend plus de validation : votre complément ne peut plus s’y rattacher.',
+    )
+    expect(deposees).toEqual([])
+
+    await cliquer(un(racine, boutonNomme('En faire une nouvelle proposition')))
+    expect(un(racine, parAttribut('data-bandeau-complement'))).toBeNull()
+
+    await soumettre(racine)
+    expect(api.creerDemande).toHaveBeenCalledTimes(2)
+    expect(api.creerDemande.mock.calls[1]?.[0]).not.toHaveProperty('complementDe')
+    expect(deposees.map((d) => d.nature)).toEqual(['creation'])
   })
 })

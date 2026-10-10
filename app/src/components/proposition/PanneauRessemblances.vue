@@ -21,8 +21,14 @@
  *   `complete` — la sienne, celle d'un défunt, ou toutes pour un administrateur —
  *   en clair ; `discrete` — un vivant proposé par un autre membre — **une phrase
  *   et rien d'autre**. On n'y reconstruit ni nom, ni date, ni auteur : il n'y en a
- *   pas, et c'est voulu (décision du 09/10/2026). Ces cartes sont informatives :
- *   compléter une proposition en attente viendra avec l'API qui le permet.
+ *   pas, et c'est voulu (décision du 09/10/2026).
+ *
+ *   Son bouton suit l'`action` **calculée par le serveur** (ADR 0017) :
+ *   `completer` — « Compléter cette proposition », le formulaire passe en mode
+ *   complétion sur elle ; `complement` — « Ajouter mes informations à cette
+ *   proposition », le dépôt devient un complément que l'administrateur fusionnera.
+ *   Une forme discrète porte toujours `complement`, et rien de plus que son
+ *   `draftPersonId` ne remonte.
  * ────────────────────────────────────────────────────────────────────
  *
  * **Le rappel avant l'envoi** (`rappel`) : le formulaire l'allume au premier
@@ -38,6 +44,12 @@ import CompletionDeFiche from './CompletionDeFiche.vue'
 import type { PhotoAJoindre } from './PhotosAJoindre.vue'
 import type { SaisieCreation } from './creation'
 import type { PersonneDeposee } from './depot'
+import {
+  complementDepuisRessemblance,
+  completionDepuisRessemblance,
+  type ComplementChoisi,
+  type DemandeDeCompletion,
+} from './fusion'
 import { cleDeRessemblance, estDuLecteur, estForte } from './ressemblances'
 
 const {
@@ -77,6 +89,10 @@ const emit = defineEmits<{
   'voir-proposition': [noeudId: string, repondre: (dessinee: boolean) => void]
   'envoyer-quand-meme': []
   deposee: [depot: PersonneDeposee]
+  /** « Compléter cette proposition » : le formulaire la complète sur place. */
+  completer: [cible: DemandeDeCompletion]
+  /** « Ajouter mes informations à cette proposition » : le dépôt devient un complément. */
+  complement: [choisi: ComplementChoisi]
 }>()
 
 /** Les cartes dont l'arbre a répondu « pas dessinée ». */
@@ -212,6 +228,9 @@ const LIEN_SECONDAIRE =
                  et rien que le serveur n'ait pas déjà rendu générique. -->
             <template v-if="r.forme === 'discrete'">
               <p class="m-0 text-sm font-semibold">Une proposition semblable attend déjà la validation.</p>
+              <p class="m-0 text-sm">
+                Si c’est elle, ajoutez-y vos informations : l’administrateur les fusionnera.
+              </p>
             </template>
             <template v-else>
               <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -239,13 +258,27 @@ const LIEN_SECONDAIRE =
 
             <p v-if="r.forme === 'complete'" class="m-0 text-sm">
               {{
-                r.statut === 'brouillon'
-                  ? 'Vous avez déjà une proposition semblable en brouillon : vérifiez avant d’envoyer celle-ci.'
-                  : 'Une proposition semblable est déjà en attente : vérifiez avant d’envoyer la vôtre.'
+                r.action === 'complement'
+                  ? 'Une proposition semblable est déjà en attente : si c’est elle, ajoutez-y vos informations, l’administrateur les fusionnera.'
+                  : r.statut === 'brouillon'
+                    ? 'Vous avez déjà une proposition semblable en brouillon : complétez-la plutôt que d’en commencer une seconde.'
+                    : 'Une proposition semblable est déjà en attente : complétez-la plutôt que d’en envoyer une seconde.'
               }}
             </p>
 
             <div class="flex flex-wrap items-center gap-2">
+              <!-- Le geste suit l'`action` du serveur : compléter sur place (l'auteur,
+                   l'administrateur), ou déposer un complément (tous les autres). -->
+              <BoutonBase
+                v-if="r.forme === 'complete' && r.action === 'completer'"
+                data-completer
+                @click="emit('completer', completionDepuisRessemblance(r))"
+              >
+                Compléter cette proposition
+              </BoutonBase>
+              <BoutonBase v-else-if="r.action === 'complement'" data-complement @click="emit('complement', complementDepuisRessemblance(r))">
+                Ajouter mes informations à cette proposition
+              </BoutonBase>
               <!-- Seuls l'auteur et l'administrateur lisent une demande ; c'est
                    aussi à eux que le serveur offre `completer`. -->
               <RouterLink
