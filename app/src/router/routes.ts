@@ -66,7 +66,7 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   // Le mode administration se déduit de la route, il n'est pas un état à part :
   // un lien profond ou un favori y entre, le bouton retour en sort.
   if (nom === 'administration' || nom.startsWith('administration.')) return 'administration'
-  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions') return 'moi'
+  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom === 'soutien' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions') return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
 }
@@ -311,6 +311,18 @@ export const routes: RouteRecordRaw[] = [
     name: 'aide',
     component: () => import('@/views/AideView.vue'),
     meta: { acces: 'membre', titre: 'Aide' },
+  },
+
+  {
+    // **Soutenir le site** : le lien de don Liberapay, le rythme des dons et
+    // leur historique (module `Soutien`). Rien ne s'y paie : le bouton mène
+    // à Liberapay. On y entre par « Moi », comme l'aide — d'où `sectionDe`.
+    //
+    // `membre` : l'API réserve la route aux comptes actifs, comme le reste.
+    path: '/soutenir',
+    name: 'soutien',
+    component: () => import('@/views/SoutienView.vue'),
+    meta: { acces: 'membre', titre: 'Soutenir le site' },
   },
 
   {

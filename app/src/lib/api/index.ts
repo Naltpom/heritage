@@ -87,3 +87,6 @@ export * from './clesDAcces'
 /* Module `Statistiques` : Explorer › Stats. Tout est calculé côté serveur, après
    le cercle de visibilité ; le chantier a sa propre route, d'administration. */
 export * from './statistiques'
+/* Module `Soutien` : « Soutenir le site ». Le lien de don Liberapay et ce que
+   Liberapay publie du compte, relevé une fois par jour côté serveur. */
+export * from './soutien'

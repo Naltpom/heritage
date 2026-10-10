@@ -393,6 +393,7 @@ heritage/
     Media/                portraits, preuves, vignettes, purge EXIF
     Membership/           invitations, inscription, cercle de visibilité
     Proposal/             propositions, diff, file de validation
+    Soutien/              « Soutenir le site » : dons Liberapay, relevé quotidien
     Timeline/             chronologie
     Tree/                 l'arbre, le placement, la sérialisation filtrée
   app/                    Vue 3 — voir app/README.md

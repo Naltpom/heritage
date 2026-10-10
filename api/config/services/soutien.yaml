@@ -1,0 +1,23 @@
+# Contrat : ce fichier est celui du module Soutien (« Soutenir le site » — les dons
+# Liberapay qui paient le serveur). Aucun autre module n'y écrit — c'est la règle qui évite
+# les conflits de fusion.
+#
+# L'autowiring de config/services/_autoload.yaml couvre toutes les classes du module. On ne
+# déclare ici que l'alias d'interface et son double de test.
+
+services:
+    # Le seul endroit où le module sort de la machine : le profil PUBLIC du compte
+    # Liberapay, par son pseudo — voir l'en-tête de `LiberapayEnLigne`.
+    App\Module\Soutien\Service\SourceLiberapay:
+        alias: App\Module\Soutien\Service\LiberapayEnLigne
+
+when@test:
+    services:
+        # **Aucun test ne doit joindre Liberapay.** Le conteneur de test reçoit un double
+        # programmable, public pour que les cas le règlent ; il répond « indisponible »
+        # tant qu'on ne lui a rien dit.
+        App\Tests\Soutien\SourceLiberapayProgrammable:
+            public: true
+
+        App\Module\Soutien\Service\SourceLiberapay:
+            alias: App\Tests\Soutien\SourceLiberapayProgrammable
