@@ -52,6 +52,18 @@
  * auteur seulement, tant que le statut le permet. Ce n'est pas un test de rôle
  * sur l'affichage — c'est une **action**, comme valider et refuser, et elle est
  * réservée à l'auteur par le serveur comme elles le sont à l'administration.
+ *
+ * **Compléter une proposition en attente** (ADR 0017, 10/10/2026) :
+ *
+ * - « Compléter cette proposition » mène au formulaire en mode complétion
+ *   (`?completer=&ref=`) — son auteur sur un brouillon ou une demande en attente,
+ *   l'administration sur une demande en attente : une action, comme « Annuler » ;
+ * - sur une proposition, le panneau **« Compléments proposés »**
+ *   (`ComplementsDeDemande`) montre ce que chaque complément apporte, et la
+ *   fusion — réservée à l'administration, comme valider ;
+ * - sur un complément, le bandeau **« Cette demande complète la demande n° X »**
+ *   (`BandeauDeComplement`) — le numéro si la charge le porte, rien sinon —, et
+ *   pour l'administration, la fusion elle-même.
  * ────────────────────────────────────────────────────────────────────
  */
 import { LIBELLES_NATURE } from '@/components/proposition/mes-demandes'
@@ -63,9 +75,14 @@ import {
   listerDemandesAdministration,
   type DemandeAdministration,
   type DependanceDeDemande,
+  type ResultatFusion,
 } from '@/lib/api'
 import { contexteDepuisRequete, demandeSuivante, natureDeLOnglet, requeteDeContexte } from '@/components/administration/file'
 import { annonceEnchainement, issueDepuisRequete, type IssueDecision } from '@/components/administration/decision'
+import { annonceDeFusion } from '@/components/administration/complements'
+import { nomDeLaFiche, referenceSansDiese } from '@/components/proposition/fusion'
+import BandeauDeComplement from '@/components/administration/BandeauDeComplement.vue'
+import ComplementsDeDemande from '@/components/administration/ComplementsDeDemande.vue'
 import { legendeDeLaFiche, useFicheDeLaDemande } from '@/components/administration/fiche-de-la-demande'
 import { peutRetirer, useRetraitDeDemande } from '@/components/proposition/retrait'
 import { useSession } from '@/composables/useSession'
@@ -273,6 +290,51 @@ const decidable = computed(
 )
 
 /* ------------------------------------------------------------------ */
+/* Compléter, et fusionner les compléments (ADR 0017)                  */
+/* ------------------------------------------------------------------ */
+
+/** Les compléments de cette proposition — la charge d'administration seule les porte. */
+const complements = computed(() => demande.value?.complements ?? [])
+
+/** « Demande n° 21 fusionnée dans la n° 12 : … » — gardée après la relecture. */
+const annonceFusion = ref<string | null>(null)
+
+/**
+ * La fusion est faite : on le dit, et on relit — l'origine a changé (champs,
+ * liens, empreinte), le complément est clos. Depuis la page du complément, la
+ * relecture le montre clos, rattaché à l'origine.
+ */
+async function apresFusion(resultat: ResultatFusion): Promise<void> {
+  annonceFusion.value = annonceDeFusion(resultat.origine.id, resultat.complement.id, resultat.rapport)
+  await charger()
+}
+
+/**
+ * « Compléter cette proposition » : le formulaire en mode complétion, sur l'une de
+ * ses fiches. Une **action** — comme « Annuler ma demande » —, offerte à qui le
+ * serveur la permet : l'auteur d'une création en brouillon ou en attente,
+ * l'administration sur une demande en attente (un brouillon est le travail en
+ * cours de son auteur). Le serveur tranche de toute façon (`403`, `409`).
+ */
+const fichesACompleter = computed(() => {
+  const d = demande.value
+  if (d === null || d.kind !== 'creation_personne' || suspendu.value) return []
+  const auteur = d.authorUserId !== undefined && d.authorUserId === lecteurId.value
+  const permis =
+    (auteur && (d.status === 'brouillon' || d.status === 'en_attente')) ||
+    (administrateur.value && d.status === 'en_attente')
+  if (!permis) return []
+  return d.brouillons.map((fiche) => ({
+    localRef: fiche.localRef,
+    libelle: nomDeLaFiche(fiche),
+    vers: {
+      name: 'proposition.creation',
+      query: { mode: 'formulaire', completer: String(d.id), ref: referenceSansDiese(fiche.localRef) },
+    },
+  }))
+})
+
+/* ------------------------------------------------------------------ */
 /* « Voir la fiche »                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -324,9 +386,10 @@ const { confirmation, envoi: retraitEnCours, erreur: erreurRetrait, suspendu, in
 const retirable = computed(() => demande.value !== null && peutRetirer(demande.value, lecteurId.value))
 
 // Une autre demande (« & suivant », lien d'une dépendance) : l'échec de la
-// précédente n'a plus rien à faire à l'écran.
+// précédente n'a plus rien à faire à l'écran, ni l'annonce de sa fusion.
 watch(identifiant, () => {
   erreurRetrait.value = null
+  annonceFusion.value = null
 })
 
 function dateLisible(valeur: string | null | undefined): string {
@@ -452,6 +515,17 @@ function dateLisible(valeur: string | null | undefined): string {
         <!-- « Ce qui changerait », et tout ce que la demande porte. -->
         <div class="min-w-0">
 
+      <!-- Un complément (ADR 0017) : ce qu'il complète — le numéro si la charge le
+           porte, rien sinon —, et pour l'administration, la fusion. -->
+      <BandeauDeComplement
+        v-if="demande.complementDe"
+        class="mb-4"
+        :demande="demande"
+        :peut-fusionner="decidable"
+        @fusionne="apresFusion"
+        @recharger="charger"
+      />
+
       <!-- « Une écriture qu'aucun humain n'a réexaminée doit se voir » (§ 2.7).
            `autoValidated` couvre les deux cas où cela arrive : valider sa propre
            demande, et éditer directement (§ 6.1). Vérifié sur l'API : valider sa
@@ -485,6 +559,18 @@ function dateLisible(valeur: string | null | undefined): string {
 
       <PanneauBase v-if="proposeUneParente" :titre="titreDeLaParente" class="mb-4">
         <FicheProposee :brouillons="demande.brouillons" :liens="demande.liens" />
+        <!-- Compléter sur place : une date retrouvée, un lien de plus — au lieu de
+             retirer la proposition pour tout ressaisir. -->
+        <p v-if="fichesACompleter.length > 0" class="mt-3 mb-0 flex flex-wrap gap-x-4 gap-y-1 text-sm" data-completer-la-fiche>
+          <RouterLink
+            v-for="fiche in fichesACompleter"
+            :key="fiche.localRef"
+            :to="fiche.vers"
+            class="font-semibold text-accent underline"
+          >
+            {{ fichesACompleter.length > 1 ? `Compléter la fiche de ${fiche.libelle}` : 'Compléter cette proposition' }}
+          </RouterLink>
+        </p>
       </PanneauBase>
 
       <PanneauBase v-if="demande.ops.length > 0" titre="Ce qui changerait" class="mb-4">
@@ -493,6 +579,26 @@ function dateLisible(valeur: string | null | undefined): string {
 
       <PanneauBase v-if="doublons.length > 0" titre="Doublons probables" class="mb-4">
         <DoublonsProbables :doublons="doublons" />
+      </PanneauBase>
+
+      <p
+        v-if="annonceFusion !== null"
+        class="mb-4 rounded-panneau border border-ok-bord bg-ok-doux px-3.5 py-3 text-sm"
+        role="status"
+        data-annonce-fusion
+      >
+        {{ annonceFusion }}
+      </p>
+
+      <!-- D'autres membres ont retrouvé la même personne : leurs compléments, et
+           leur fusion. Tant qu'un complément attend, la proposition ne se valide pas. -->
+      <PanneauBase v-if="complements.length > 0" titre="Compléments proposés" class="mb-4">
+        <ComplementsDeDemande
+          :origine="demande"
+          :peut-fusionner="decidable"
+          @fusionne="apresFusion"
+          @recharger="charger"
+        />
       </PanneauBase>
 
       <!-- Sur quoi cette demande s'appuie. Sans ce bloc, une demande
