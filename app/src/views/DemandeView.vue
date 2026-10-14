@@ -171,17 +171,18 @@ async function apresDecision(enchainement?: IssueDecision): Promise<void> {
       auteur: auteur === 0 ? undefined : auteur,
       kind: natureDeLOnglet(onglet),
       q: recherche,
+      tri,
       parPage: 100,
     })
     const suivante = demandeSuivante(file.elements, courante, tri)
     const trace = { precedente: String(courante.id), issue: enchainement }
 
-    // En fin de file : retour à « À traiter » quand on venait de la file par
-    // défaut (les demandes en attente), à l'historique filtré sinon.
-    const finDeFile =
-      Object.keys(requete).length === 0
-        ? { name: 'administration.a-traiter', query: { type: 'demande', ...trace } }
-        : { name: 'administration.demandes', query: { ...requete, ...trace } }
+    // En fin de file : retour à « À traiter » quand on venait des demandes en
+    // attente — avec son demandeur et son tri —, à l'historique filtré sinon.
+    const depuisATraiter = Object.keys(requete).every((cle) => cle === 'auteur' || cle === 'tri')
+    const finDeFile = depuisATraiter
+      ? { name: 'administration.a-traiter', query: { type: 'demande', ...requete, ...trace } }
+      : { name: 'administration.demandes', query: { ...requete, ...trace } }
     await (suivante === null
       ? routeur.push(finDeFile)
       : routeur.push({ name: 'demande.detail', params: { id: suivante }, query: { ...requete, ...trace } }))
@@ -542,7 +543,7 @@ function dateLisible(valeur: string | null | undefined): string {
 
       <!-- Le mot du demandeur. Souvent la pièce qui emporte la décision. -->
       <PanneauBase v-if="demande.message" titre="Ce que dit l’auteur" class="mb-4">
-        <p class="text-sm whitespace-pre-line">{{ demande.message }}</p>
+        <p class="text-sm whitespace-pre-line [overflow-wrap:anywhere]">{{ demande.message }}</p>
       </PanneauBase>
 
       <!-- Le bandeau du § 9.6 : la fiche a changé depuis le dépôt. Il ne
@@ -647,7 +648,7 @@ function dateLisible(valeur: string | null | undefined): string {
       <!-- Une demande refusée reste consultable **avec son motif** : c'est ce
            qui la distingue d'une contribution perdue (§ 6.3 du dossier). -->
       <PanneauBase v-if="demande.decisionMessage" titre="Motif de la décision" class="mb-4">
-        <p class="text-sm whitespace-pre-line">{{ demande.decisionMessage }}</p>
+        <p class="text-sm whitespace-pre-line [overflow-wrap:anywhere]">{{ demande.decisionMessage }}</p>
         <p v-if="demande.decidedByLabel" class="mt-2 text-xs text-attenue">
           {{ demande.decidedByLabel }}, le {{ dateLisible(demande.decidedAt) }}
         </p>

@@ -60,6 +60,7 @@ autres :
 | `GET` | `/api/administration/reglages` | `core_admin_reglages` | `ROLE_ADMIN` |
 | `PATCH` | `/api/administration/reglages/{cle}` | `core_admin_reglage_modifier` | `ROLE_ADMIN` |
 | `GET` | `/api/administration/utilisateurs` | `core_admin_utilisateurs` | `ROLE_ADMIN` |
+| `GET` | `/api/administration/utilisateurs/compteurs` | `core_admin_utilisateurs_compteurs` | `ROLE_ADMIN` |
 | `GET` | `/api/administration/utilisateurs/{id}` | `core_admin_utilisateur` | `ROLE_ADMIN` |
 | `PATCH` | `/api/administration/utilisateurs/{id}` | `core_admin_utilisateur_modifier` | `ROLE_ADMIN` |
 | `POST` | `/api/administration/voir-comme` | `core_admin_voir_comme` | `ROLE_ADMIN` |

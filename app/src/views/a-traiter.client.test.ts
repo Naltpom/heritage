@@ -66,6 +66,7 @@ vi.mock('vue-router', async () => {
 
 const api = vi.hoisted(() => ({
   listerDemandesAdministration: vi.fn(),
+  listerAuteursDesDemandes: vi.fn(),
   lireDemandeAdministration: vi.fn(),
   validerDemande: vi.fn(),
   refuserDemande: vi.fn(),
@@ -204,6 +205,7 @@ beforeEach(() => {
   etat.vueEmpruntee.value = null
   etat.route.query = {}
   api.listerQuotasGlobaux.mockResolvedValue({ quotas: [] })
+  api.listerAuteursDesDemandes.mockResolvedValue({ elements: [{ userId: 3, libelle: 'Opale Romarin' }] })
   api.listerDemandesAdministration.mockResolvedValue({
     elements: [demande({ id: 42, submittedAt: '2026-10-02T10:00:00+02:00' })],
     total: 1,
@@ -353,6 +355,94 @@ describe('« À traiter » : les décisions', () => {
     expect(api.listerDemandesRgpd).toHaveBeenCalledTimes(2)
     expect(un(racine, parAttribut('data-deja-traitee'))).not.toBeNull()
     expect(lignes(racine)).toEqual([])
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/* Le tri, le demandeur, la pagination (2026-10-14)                    */
+/* ------------------------------------------------------------------ */
+
+/** Une page de demandes, comme l'API la rend : `ids` pour la page, `total` pour toute la file. */
+function page(ids: number[], total: number, numero = 1) {
+  return {
+    elements: ids.map((id) => demande({ id, submittedAt: `2026-10-02T${String(10 + (id % 10)).padStart(2, '0')}:00:00+02:00` })),
+    total,
+    page: numero,
+    parPage: 25,
+  }
+}
+
+describe('« À traiter » : tri, demandeur et pagination côté serveur', () => {
+  it('demande la première page de 25, en attente, par n° croissant et pour tout le monde', async () => {
+    await monter()
+
+    expect(api.listerDemandesAdministration).toHaveBeenCalledWith({
+      status: 'en_attente',
+      auteur: undefined,
+      tri: 'anciennes',
+      page: 1,
+      parPage: 25,
+    })
+  })
+
+  it('le n° décroissant part au serveur, et renverse aussi l’ordre des inscriptions et du RGPD', async () => {
+    etat.route.query = { tri: 'recentes' }
+    const racine = await monter()
+
+    expect(api.listerDemandesAdministration).toHaveBeenCalledWith(expect.objectContaining({ tri: 'recentes' }))
+    // Le RGPD du 3, la demande du 2, l'inscription du 1ᵉʳ.
+    expect(lignes(racine)).toEqual(['g:4', 'd:42', 'r:14'])
+  })
+
+  it('« Demandé par » : l’auteur part au serveur, et le RGPD comme les inscriptions se filtrent ici', async () => {
+    const racine = await monter()
+
+    await cliquer(un(racine, parAttribut('data-ouvrir-filtres')))
+    // Le demandeur de la demande, celle du RGPD, l'inscrite : chacun une fois.
+    const choix = tous(racine, (n) => n.tag === 'button' && typeof n.attributs['data-auteur'] === 'number').map((n) =>
+      texte(n).trim(),
+    )
+    expect(choix).toEqual(['Tout le monde', 'ambre@example.net', 'Léa Serpolet', 'Opale Romarin'])
+
+    api.listerDemandesAdministration.mockClear()
+    await cliquer(un(racine, (n) => n.attributs['data-auteur'] === 12))
+
+    expect(etat.route.query['auteur']).toBe('12')
+    expect(api.listerDemandesAdministration).toHaveBeenCalledWith(expect.objectContaining({ auteur: 12, page: 1 }))
+    // La demande vient du serveur (simulé, il rend la même) ; l'inscription d'un autre compte est partie.
+    expect(lignes(racine)).toEqual(['d:42', 'g:4'])
+    expect(texte(un(racine, parAttribut('data-ouvrir-filtres'))!)).toContain('ambre@example.net')
+  })
+
+  it('pagine les demandes : « Suivante » relit la page 2, sans les inscriptions ni le RGPD', async () => {
+    api.listerDemandesAdministration.mockResolvedValue(page([1, 2, 3], 30))
+    const racine = await monter()
+
+    expect(texte(un(racine, parAttribut('data-pagination'))!)).toContain('1–25 sur 30 · page 1 sur 2')
+    expect(texte(un(racine, (n) => n.attributs['data-puce'] === 'demande')!)).toContain('30')
+    expect(lignes(racine)).toContain('r:14')
+
+    api.listerDemandesAdministration.mockResolvedValue(page([26, 27], 30, 2))
+    await cliquer(un(racine, parAttribut('data-page-suivante')))
+
+    expect(etat.route.query['page']).toBe('2')
+    expect(api.listerDemandesAdministration).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
+    expect(lignes(racine)).toEqual(['d:26', 'd:27'])
+    expect(un(racine, parAttribut('data-page-suivante'))?.attributs['disabled']).toBe(true)
+  })
+
+  it('après la dernière demande de la page, relit la page et ouvre celle qui remonte de la suivante', async () => {
+    etat.route.query = { type: 'demande', sel: 'd:3' }
+    api.listerDemandesAdministration.mockResolvedValue(page([1, 2, 3], 4))
+    api.refuserDemande.mockResolvedValue(demande({ id: 3, status: 'refusee' }))
+    const racine = await monter()
+
+    api.listerDemandesAdministration.mockResolvedValue(page([1, 2, 4], 3))
+    await saisir(un(racine, parAttribut('data-motif')), 'Doublon.')
+    await cliquer(un(detail(racine)!, boutonNomme('Refuser')))
+
+    expect(lignes(racine)).toEqual(['d:1', 'd:2', 'd:4'])
+    expect(etat.route.query['sel']).toBe('d:4')
   })
 })
 

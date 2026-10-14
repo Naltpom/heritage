@@ -16,7 +16,14 @@
  * **L'adresse porte l'état** : `?type=demande|rattachement|rgpd` filtre, `?sel=d:42`
  * ouvre un élément. Un lien profond (`administration.rgpd` redirige ici avec
  * `type=rgpd`) tombe donc sur la bonne file, et le bouton retour du téléphone
- * referme le détail.
+ * referme le détail. `?auteur=`, `?tri=` et `?page=` aussi.
+ *
+ * **Les demandes sont paginées par l'API** (2026-10-14) : la file en lisait
+ * cent, et il y en avait cent deux. Le tri par numéro (« N° croissant /
+ * décroissant ») et le filtre « Demandé par » partent donc au serveur — triée
+ * ou filtrée dans le navigateur, une page ne l'aurait été qu'en elle-même. Les
+ * inscriptions et le RGPD, rares et lus en entier, se filtrent ici, et se
+ * mêlent par date à la première page.
  *
  * **Après une décision**, l'élément quitte la file, un toast le confirme
  * (« Demande n° 42 validée. ») et l'élément suivant s'ouvre — la logique de
@@ -32,48 +39,66 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  listerAuteursDesDemandes,
   listerDemandesAdministration,
   listerDemandesRgpd,
   quitterVueComme,
+  type AuteurDeLaFile,
   type Demande,
   type DemandeRgpdAdministration,
 } from '@/lib/api'
 import { rafraichirSession, useSession } from '@/composables/useSession'
 import { definirResume } from '@/composables/entete'
-import { publierCompteurs } from '@/composables/modeAdmin'
+import { compterATraiter, publierCompteurs } from '@/composables/modeAdmin'
 import { annoncer } from '@/composables/toast'
 import { useEstMobile } from '@/composables/useTiroirs'
 import { useRattachements } from '@/composables/useRattachements'
 import BoutonBase from '@/components/base/BoutonBase.vue'
+import Feuillet from '@/components/base/Feuillet.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
+import PaginationListe from '@/components/base/PaginationListe.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
+import { nombreDePages, pageApresRetrait, pageDepuisRequete } from '@/components/base/pagination'
+import Segmente from '@/components/mise-en-page/Segmente.vue'
 import LoupeMedia from '@/components/medias/LoupeMedia.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
 import CarteARattacher from '@/components/administration/CarteARattacher.vue'
 import DetailDemandeATraiter from '@/components/administration/DetailDemandeATraiter.vue'
 import DetailRgpdATraiter from '@/components/administration/DetailRgpdATraiter.vue'
 import { ecrituresSuspendues, infobulleSuspension, motifSuspension } from '@/components/administration/ecriture'
-import { autresSurLaMemeFiche } from '@/components/administration/file'
+import { autresSurLaMemeFiche, requeteDeContexte, type SensDeTri } from '@/components/administration/file'
 import { annonceEnchainement, issueDepuisRequete, type IssueDecision } from '@/components/administration/decision'
 import { dateDuVerrou } from '@/components/compte/partageNaissance'
 import {
   PASTILLES_DE_TYPE,
   PUCES,
+  auteurDepuisRequete,
+  auteursDeLaFile,
   compter,
   construireFile,
   dateCourte,
+  demandesDe,
   filtreDepuisRequete,
-  filtrer,
   nomDeclare,
   resumeATraiter,
   selectionDepuisRequete,
   sousTitreDe,
   suivantApres,
   titreDe,
+  triDepuisRequete,
   type ElementATraiter,
   type FiltreATraiter,
 } from '@/components/administration/fileATraiter'
+
+/** Les demandes lues par page : assez pour une séance, assez peu pour la lire d'un coup d'œil. */
+const PAR_PAGE = 25
+
+/** Les deux sens de tri, par numéro — les mêmes libellés que l'historique. */
+const TRIS: { valeur: SensDeTri; libelle: string }[] = [
+  { valeur: 'anciennes', libelle: 'N° croissant' },
+  { valeur: 'recentes', libelle: 'N° décroissant' },
+]
 
 const route = useRoute()
 const routeur = useRouter()
@@ -84,38 +109,94 @@ const suspendu = computed(() => ecrituresSuspendues(vueEmpruntee.value))
 const raisonSuspension = computed(() => motifSuspension(vueEmpruntee.value))
 const infobulle = computed(() => infobulleSuspension(vueEmpruntee.value))
 
+/** La page de demandes affichée. */
 const demandes = ref<Demande[]>([])
-/** Le total des demandes en attente, au-delà des 100 lues. */
+/** Le total des demandes en attente — de ce demandeur, s'il est choisi —, toutes pages confondues. */
 const totalDemandes = ref(0)
 const rgpd = ref<DemandeRgpdAdministration[]>([])
+/** Ceux qui ont déposé une demande, pour le filtre « Demandé par ». */
+const deposants = ref<readonly AuteurDeLaFile[]>([])
 const rattachements = useRattachements(suspendu)
 const { comptes } = rattachements
 
 const chargement = ref(false)
+/** Une page de demandes est en cours de lecture. */
+const lecturePage = ref(false)
 /** Chargé au moins une fois : avant, rien n'est compté ni annoncé. */
 const charge = ref(false)
 const erreur = ref<unknown>(null)
 const dejaTraitee = ref(false)
 const loupe = ref<CibleLoupe | null>(null)
+/**
+ * Après une décision sur la dernière demande de la page, la suivante vient de
+ * la page d'après : le détail se tait le temps de la relire, plutôt que
+ * d'ouvrir un instant la première de la liste.
+ */
+const enAttenteDuSuivant = ref(false)
 
 /* ───────────────── La file ───────────────── */
 
 const filtre = computed(() => filtreDepuisRequete(route.query['type']))
-const file = computed(() => construireFile(demandes.value, comptes.value, rgpd.value))
-const comptesParType = computed(() => compter(file.value))
-const affichee = computed(() => filtrer(file.value, filtre.value))
+const auteur = computed(() => auteurDepuisRequete(route.query['auteur']))
+const tri = computed(() => triDepuisRequete(route.query['tri']))
+const page = computed(() => pageDepuisRequete(route.query['page']))
+
+/** Le RGPD sans décision et les inscriptions, de ce demandeur s'il est choisi. */
+const rgpdEnAttente = computed(() => demandesDe(rgpd.value.filter((g) => g.decision === null), auteur.value))
+const comptesDuDemandeur = computed(() => demandesDe(comptes.value, auteur.value))
+
+/** Tout ce que l'écran connaît — pour retrouver l'élément de l'adresse, même hors filtre. */
+const file = computed(() => construireFile(demandes.value, comptes.value, rgpd.value, tri.value))
+const comptesParType = computed(() =>
+  compter({
+    demande: totalDemandes.value,
+    rattachement: comptesDuDemandeur.value.length,
+    rgpd: rgpdEnAttente.value.length,
+  }),
+)
+/**
+ * La liste affichée. Sous « Tout », les inscriptions et le RGPD se mêlent à la
+ * **première** page de demandes ; les pages suivantes n'ont que des demandes.
+ */
+const affichee = computed(() => {
+  const premiere = page.value === 1
+  switch (filtre.value) {
+    case 'demande':
+      return construireFile(demandes.value, [], [], tri.value)
+    case 'rattachement':
+      return construireFile([], comptesDuDemandeur.value, [], tri.value)
+    case 'rgpd':
+      return construireFile([], [], rgpdEnAttente.value, tri.value)
+    default:
+      return construireFile(
+        demandes.value,
+        premiere ? comptesDuDemandeur.value : [],
+        premiere ? rgpdEnAttente.value : [],
+        tri.value,
+      )
+  }
+})
+/** La pagination ne concerne que les demandes. */
+const pagine = computed(() => filtre.value === 'tout' || filtre.value === 'demande')
 const autres = computed(() => autresSurLaMemeFiche(demandes.value))
+const auteurs = computed(() => auteursDeLaFile(deposants.value, comptes.value, rgpd.value))
 
 /** L'élément ouvert : celui de l'adresse ; sur bureau, le premier à défaut. */
 const selection = computed<ElementATraiter | null>(() => {
+  if (enAttenteDuSuivant.value) return null
   const cle = selectionDepuisRequete(route.query['sel'])
   const demande = cle === null ? undefined : file.value.find((e) => e.cle === cle)
   if (demande !== undefined) return demande
   return estMobile.value ? null : (affichee.value[0] ?? null)
 })
 
-/** Le contexte d'« Ouvrir la demande complète » : la file par défaut, rien à ajouter. */
-const requeteDeLaFile: Record<string, string> = {}
+/**
+ * Le contexte d'« Ouvrir la demande complète » : l'auteur et le tri choisis
+ * ici, pour que « & suivant » y enchaîne dans le même ordre.
+ */
+const requeteDeLaFile = computed(() =>
+  requeteDeContexte({ etat: 'en_attente', auteur: auteur.value, tri: tri.value, onglet: 'toutes', recherche: '' }),
+)
 
 function avecRequete(changements: Record<string, string | undefined>): Record<string, string> {
   const requete: Record<string, string> = {}
@@ -126,7 +207,40 @@ function avecRequete(changements: Record<string, string | undefined>): Record<st
 }
 
 function choisirFiltre(valeur: FiltreATraiter): void {
-  void routeur.replace({ query: avecRequete({ type: valeur === 'tout' ? undefined : valeur, sel: undefined }) })
+  void routeur.replace({
+    query: avecRequete({ type: valeur === 'tout' ? undefined : valeur, sel: undefined, page: undefined }),
+  })
+}
+
+/** Changer d'auteur ou de sens ramène à la première page : la page 3 d'une autre liste n'a pas de sens. */
+function choisirAuteur(userId: number): void {
+  void routeur.replace({
+    query: avecRequete({ auteur: userId === 0 ? undefined : String(userId), sel: undefined, page: undefined }),
+  })
+}
+
+function choisirTri(sens: SensDeTri): void {
+  void routeur.replace({
+    query: avecRequete({ tri: sens === 'anciennes' ? undefined : sens, sel: undefined, page: undefined }),
+  })
+}
+
+function allerALaPage(n: number): void {
+  void routeur.replace({ query: avecRequete({ page: n <= 1 ? undefined : String(n), sel: undefined }) })
+}
+
+/* ───────────────── Le feuillet « Trier et filtrer » ───────────────── */
+
+const filtresOuverts = ref(false)
+const libelleTri = computed(() => TRIS.find((t) => t.valeur === tri.value)?.libelle ?? 'N° croissant')
+const libelleAuteur = computed(() =>
+  auteur.value === 0 ? null : (auteurs.value.find((a) => a.userId === auteur.value)?.libelle ?? `Compte n° ${auteur.value}`),
+)
+/** Ce qui s'écarte du défaut : l'auteur, le tri. */
+const filtresActifs = computed(() => (auteur.value === 0 ? 0 : 1) + (tri.value === 'anciennes' ? 0 : 1))
+
+function reinitialiser(): void {
+  void routeur.replace({ query: avecRequete({ auteur: undefined, tri: undefined, sel: undefined, page: undefined }) })
 }
 
 /** Sur téléphone, ouvrir le détail est une page de plus : le retour la referme. */
@@ -143,19 +257,43 @@ function fermerDetail(): void {
 
 /* ───────────────── Le chargement ───────────────── */
 
+/** Le numéro de la dernière lecture de page : une réponse plus ancienne arrivée après est ignorée. */
+let lectureCourante = 0
+
+/** La page de demandes de l'adresse — avec son auteur et son sens. */
+async function lireLesDemandes(): Promise<void> {
+  const numero = ++lectureCourante
+  lecturePage.value = true
+  try {
+    const lue = await listerDemandesAdministration({
+      status: 'en_attente',
+      auteur: auteur.value === 0 ? undefined : auteur.value,
+      tri: tri.value,
+      page: page.value,
+      parPage: PAR_PAGE,
+    })
+    if (numero !== lectureCourante) return
+    demandes.value = lue.elements
+    totalDemandes.value = lue.total
+    // Une page au-delà de la fin (`?page=9` gardé d'une file plus longue) : la dernière.
+    const derniere = nombreDePages(lue.total, PAR_PAGE)
+    if (page.value > derniere) allerALaPage(derniere)
+  } finally {
+    if (numero === lectureCourante) lecturePage.value = false
+  }
+}
+
 async function charger(): Promise<void> {
   chargement.value = true
   erreur.value = null
-  // Les trois lectures partent ensemble ; les rattachements portent leurs
-  // propres erreurs (et leurs suggestions arrivent ensuite, une à une).
+  // Les lectures partent ensemble ; les rattachements portent leurs propres
+  // erreurs (et leurs suggestions arrivent ensuite, une à une).
   const lectureDesRattachements = rattachements.charger()
   try {
-    const [page, demandesRgpd] = await Promise.all([
-      listerDemandesAdministration({ status: 'en_attente', parPage: 100 }),
+    const [, demandesRgpd] = await Promise.all([
+      lireLesDemandes(),
       suspendu.value ? Promise.resolve({ elements: [] }) : listerDemandesRgpd(),
     ])
-    demandes.value = page.elements
-    totalDemandes.value = page.total
     rgpd.value = demandesRgpd.elements
   } catch (cause) {
     erreur.value = cause
@@ -165,23 +303,59 @@ async function charger(): Promise<void> {
   charge.value = true
 }
 
-/** La pastille d'« À traiter » et le résumé de l'en-tête suivent la file. */
+/** Une autre page, un autre auteur, un autre sens : seules les demandes se relisent. */
+async function changerDePage(): Promise<void> {
+  erreur.value = null
+  try {
+    await lireLesDemandes()
+  } catch (cause) {
+    erreur.value = cause
+  }
+}
+
+/**
+ * Le filtre « Demandé par » se peuple une fois, au montage. Son échec ne
+ * remonte pas : sans lui, le filtre ne propose que les inscrits et le RGPD, et
+ * la file fonctionne entièrement — même motif que l'historique.
+ */
+async function chargerLesDeposants(): Promise<void> {
+  try {
+    deposants.value = (await listerAuteursDesDemandes()).elements
+  } catch {
+    deposants.value = []
+  }
+}
+
+/**
+ * La pastille d'« À traiter » et le résumé de l'en-tête suivent la file. Filtrée
+ * par demandeur, la file ne dit plus combien attendent en tout : la pastille se
+ * recompte alors à part.
+ */
 watch(
-  [charge, totalDemandes, () => comptesParType.value.rattachement, () => comptesParType.value.rgpd],
+  [charge, lecturePage, totalDemandes, () => comptes.value.length, rgpd, auteur],
   () => {
-    if (!charge.value) return
-    const c = {
-      demandes: totalDemandes.value,
-      rattachements: comptesParType.value.rattachement,
-      rgpd: comptesParType.value.rgpd,
+    // Pendant la lecture d'une page, le total est encore celui de l'ancien filtre.
+    if (!charge.value || lecturePage.value) return
+    definirResume(resumeATraiter(comptesParType.value.tout))
+    if (auteur.value !== 0) {
+      void compterATraiter()
+      return
     }
-    publierCompteurs(c)
-    definirResume(resumeATraiter(c.demandes + c.rattachements + c.rgpd))
+    publierCompteurs({
+      demandes: totalDemandes.value,
+      rattachements: comptes.value.length,
+      rgpd: rgpd.value.filter((g) => g.decision === null).length,
+    })
   },
 )
 
+// Pas de garde sur `charge` : une page hors limites corrigée pendant le premier
+// chargement doit, elle aussi, être relue.
+watch([auteur, tri, page], () => void changerDePage())
+
 onMounted(() => {
   void charger()
+  void chargerLesDeposants()
   // Retour d'un « & suivant » qui a épuisé la file, depuis la demande complète.
   const precedente = Number(route.query['precedente'])
   const issue = issueDepuisRequete(route.query['issue'])
@@ -196,7 +370,13 @@ watch(suspendu, () => void charger())
 
 /* ───────────────── Après une décision ───────────────── */
 
-function retirer(element: ElementATraiter, annonce: string): void {
+/**
+ * L'élément quitte la file, et le suivant s'ouvre. Une demande décidée laisse
+ * un trou dans la page : s'il en reste au-delà, la page est relue pour le
+ * combler — et quand c'était la dernière de la page, la suivante est
+ * justement celle qui remonte. Une page vidée recule d'une page.
+ */
+async function retirer(element: ElementATraiter, annonce: string): Promise<void> {
   const avant = affichee.value
   if (element.type === 'demande') {
     demandes.value = demandes.value.filter((d) => d.id !== element.demande.id)
@@ -207,13 +387,37 @@ function retirer(element: ElementATraiter, annonce: string): void {
     rgpd.value = rgpd.value.filter((g) => g.id !== element.rgpd.id)
   }
   annoncer(annonce)
-  const suivant = suivantApres(avant, element.cle, affichee.value)
+
+  let suivant = suivantApres(avant, element.cle, affichee.value)
+  const position = avant.findIndex((e) => e.cle === element.cle)
+  const plusLoin = suivant !== null && avant.findIndex((e) => e.cle === suivant) > position
+  const resteAuDela = element.type === 'demande' && totalDemandes.value > (page.value - 1) * PAR_PAGE + demandes.value.length
+
+  if (resteAuDela && !plusLoin) {
+    enAttenteDuSuivant.value = true
+    try {
+      await lireLesDemandes()
+      suivant = suivantApres(avant, element.cle, affichee.value)
+    } catch {
+      // La page n'a pas pu se relire : on garde ce qu'on a, la décision est partie.
+    } finally {
+      enAttenteDuSuivant.value = false
+    }
+  } else if (resteAuDela) {
+    void lireLesDemandes().catch(() => undefined)
+  }
+
+  const nouvellePage = element.type === 'demande' ? pageApresRetrait(page.value, demandes.value.length) : page.value
+  if (nouvellePage !== page.value) {
+    allerALaPage(nouvellePage)
+    return
+  }
   void routeur.replace({ query: avecRequete({ sel: suivant ?? undefined }) })
 }
 
 function demandeDecidee(element: ElementATraiter & { type: 'demande' }, issue: IssueDecision): void {
   const n = element.demande.id
-  retirer(
+  void retirer(
     element,
     issue === 'refusee'
       ? `Demande n° ${n} refusée.`
@@ -224,11 +428,11 @@ function demandeDecidee(element: ElementATraiter & { type: 'demande' }, issue: I
 }
 
 function rgpdDecidee(element: ElementATraiter & { type: 'rgpd' }, decision: 'appliquee' | 'refusee'): void {
-  retirer(element, decision === 'appliquee' ? 'Demande RGPD appliquée.' : 'Demande RGPD refusée.')
+  void retirer(element, decision === 'appliquee' ? 'Demande RGPD appliquée.' : 'Demande RGPD refusée.')
 }
 
 function rattachementTraite(element: ElementATraiter & { type: 'rattachement' }): void {
-  retirer(element, `Inscription de ${nomDeclare(element.compte)} traitée.`)
+  void retirer(element, `Inscription de ${nomDeclare(element.compte)} traitée.`)
 }
 
 /** Un autre administrateur est passé avant : la file est relue, et on le dit. */
@@ -317,6 +521,24 @@ function sousTitreDuDetail(element: ElementATraiter): string {
           </button>
         </div>
 
+        <!-- Le tri et le demandeur, derrière un seul bouton — comme l'historique. -->
+        <button
+          type="button"
+          class="flex min-h-11 max-w-full min-w-0 items-center gap-2 self-start rounded-champ border bg-panneau px-3 text-[13.5px] md:min-h-9"
+          :class="filtresActifs > 0 ? 'border-accent' : 'border-ligne'"
+          aria-haspopup="dialog"
+          data-ouvrir-filtres
+          @click="filtresOuverts = true"
+        >
+          <span class="truncate">{{ libelleTri }}<template v-if="libelleAuteur !== null"> · {{ libelleAuteur }}</template></span>
+          <span
+            v-if="filtresActifs > 0"
+            class="flex h-[18px] min-w-[18px] flex-none items-center justify-center rounded-pastille bg-accent px-[5px] text-[11px] font-bold text-fond"
+            :aria-label="`${filtresActifs} filtre${filtresActifs > 1 ? 's' : ''} actif${filtresActifs > 1 ? 's' : ''}`"
+          >{{ filtresActifs }}</span>
+          <span class="text-attenue" aria-hidden="true">▾</span>
+        </button>
+
         <SqueletteChargement v-if="chargement && !charge" :lignes="4" />
 
         <p
@@ -324,7 +546,7 @@ function sousTitreDuDetail(element: ElementATraiter): string {
           class="rounded-panneau border border-ligne bg-panneau px-4 py-7 text-center text-attenue"
           role="status"
         >
-          Rien n’attend de décision.
+          {{ auteur === 0 ? 'Rien n’attend de décision.' : 'Rien n’attend de décision pour ce demandeur.' }}
         </p>
 
         <ul
@@ -350,11 +572,20 @@ function sousTitreDuDetail(element: ElementATraiter): string {
                 <span class="flex-1" />
                 <span class="text-xs whitespace-nowrap text-attenue">{{ dateCourte(element.date) }}</span>
               </span>
-              <span class="font-semibold">{{ titreDe(element) }}</span>
+              <span class="font-semibold [overflow-wrap:anywhere]">{{ titreDe(element) }}</span>
               <span class="text-[13px] text-attenue [overflow-wrap:anywhere]">{{ sousTitreDe(element) }}</span>
             </button>
           </li>
         </ul>
+
+        <PaginationListe
+          v-if="pagine"
+          :page="page"
+          :par-page="PAR_PAGE"
+          :total="totalDemandes"
+          :chargement="lecturePage"
+          @aller="allerALaPage"
+        />
 
         <RouterLink
           :to="{ name: 'administration.demandes', query: { etat: 'toutes' } }"
@@ -385,8 +616,8 @@ function sousTitreDuDetail(element: ElementATraiter): string {
             <PastilleEtat :etat="PASTILLES_DE_TYPE[selection.type].ton" :libelle="PASTILLES_DE_TYPE[selection.type].libelle" />
             <span class="text-[12.5px] text-attenue [overflow-wrap:anywhere]">{{ metaDu(selection) }}</span>
           </span>
-          <h3 class="text-lg font-bold tracking-[-.01em]">{{ titreDe(selection) }}</h3>
-          <span v-if="sousTitreDuDetail(selection)" class="text-attenue">{{ sousTitreDuDetail(selection) }}</span>
+          <h3 class="text-lg font-bold tracking-[-.01em] [overflow-wrap:anywhere]">{{ titreDe(selection) }}</h3>
+          <span v-if="sousTitreDuDetail(selection)" class="text-attenue [overflow-wrap:anywhere]">{{ sousTitreDuDetail(selection) }}</span>
         </div>
 
         <DetailDemandeATraiter
@@ -430,4 +661,32 @@ function sousTitreDuDetail(element: ElementATraiter): string {
   </div>
 
   <LoupeMedia :cible="loupe" @fermer="loupe = null" />
+
+  <Feuillet :ouvert="filtresOuverts" titre="Trier et filtrer" @fermer="filtresOuverts = false">
+    <span class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Demandé par</span>
+    <div class="flex flex-wrap gap-2" role="group" aria-label="Demandeur des éléments affichés">
+      <button
+        v-for="a in [{ userId: 0, libelle: 'Tout le monde' }, ...auteurs]"
+        :key="a.userId"
+        type="button"
+        class="flex min-h-11 max-w-full items-center rounded-pastille border px-[13px] text-left text-[13px] [overflow-wrap:anywhere] md:min-h-9"
+        :class="a.userId === auteur ? 'border-accent bg-accent-doux font-semibold text-texte' : 'border-ligne bg-panneau text-attenue'"
+        :aria-pressed="a.userId === auteur"
+        :data-auteur="a.userId"
+        @click="choisirAuteur(a.userId)"
+      >
+        {{ a.libelle }}
+      </button>
+    </div>
+
+    <span class="text-[11px] font-semibold tracking-[.08em] text-attenue uppercase">Trier</span>
+    <Segmente :options="TRIS" :valeur="tri" etiquette="Ordre de la file" :colonnes="2" @choisir="choisirTri" />
+
+    <div class="flex gap-2">
+      <BoutonBase variante="secondaire" class="min-h-11 flex-1" @click="reinitialiser">Réinitialiser</BoutonBase>
+      <BoutonBase class="min-h-11 flex-[2]" @click="filtresOuverts = false">
+        Voir {{ comptesParType[filtre] }} élément{{ comptesParType[filtre] > 1 ? 's' : '' }}
+      </BoutonBase>
+    </div>
+  </Feuillet>
 </template>

@@ -389,6 +389,37 @@ final class FileEtDiffEnHttpTest extends CasDeTestDemandesHttp
     }
 
     /**
+     * `tri=recentes` range **par numéro décroissant, sur toute la file** : la première
+     * page porte les plus grands numéros. Trié dans le navigateur, chaque page ne
+     * l'aurait été qu'en elle-même — la page 1 aurait montré les plus petits numéros à
+     * l'envers. Une valeur inconnue garde l'ordre de dépôt.
+     */
+    public function testLeTriParNumeroSeFaitSurLaFileEtNonSurLaPage(): void
+    {
+        $this->connexionContributeur();
+        $ids = [
+            $this->deposer([$this->opTexte('surname', 'Sureau', 'SUREAU')]),
+            $this->deposer([$this->opTexte('nickname', null, 'Perle', seq: 2)]),
+            $this->deposer([$this->opTexte('givenNames', 'Marne Dolomite', 'Marne', seq: 3)]),
+        ];
+
+        $this->connexionAdministrateur();
+
+        $this->requete('GET', '/api/administration/demandes?tri=recentes&page=1&parPage=2');
+        self::assertSame([$ids[2], $ids[1]], array_column((array) $this->charge()['elements'], 'id'));
+
+        $this->requete('GET', '/api/administration/demandes?tri=recentes&page=2&parPage=2');
+        self::assertSame([$ids[0]], array_column((array) $this->charge()['elements'], 'id'));
+
+        $this->requete('GET', '/api/administration/demandes?tri=anciennes&parPage=2');
+        self::assertSame([$ids[0], $ids[1]], array_column((array) $this->charge()['elements'], 'id'));
+
+        $this->requete('GET', '/api/administration/demandes?tri=nimporte');
+        self::assertResponseIsSuccessful();
+        self::assertSame($ids, array_column((array) $this->charge()['elements'], 'id'));
+    }
+
+    /**
      * Les bornes de `parPage` sont **appliquées, pas seulement documentées**.
      *
      * `min(100, max(1, …))` dans le contrôleur : sans ce test, un client qui demande

@@ -295,4 +295,29 @@ final class FileDesMembresHttpTest extends CasDeTestMembership
         self::assertSame(MemberStatus::EnAttente, $recharge->getStatus());
         self::assertNull($recharge->getActivatedAt());
     }
+
+    /**
+     * La recherche de l'écran Utilisateurs, paginée côté serveur (2026-10-14), trouve
+     * aussi un compte **par sa fiche** : son nom, ou son numéro — quel que soit le statut
+     * du rattachement. Le nom affiché de ces comptes est leur courriel : sans cette
+     * question posée à `Membership`, « Romarin » ne les trouverait pas.
+     */
+    public function testLaRechercheDesUtilisateursPasseParLaFicheRattachee(): void
+    {
+        $this->creerUtilisateur('natron@example.net', roles: ['ROLE_ADMIN']);
+        $cousin = $this->creerUtilisateur('cousin@example.net', statut: UserStatus::EnAttente);
+        $this->creerMembre($cousin, ArbreFamilial::COUSIN, 'Marbre Romarin', MemberStatus::EnAttente);
+        $this->creerUtilisateur('autre@example.net');
+
+        $this->connexion('natron@example.net');
+
+        $this->requete('GET', '/api/administration/utilisateurs?q=romarin');
+        self::assertSame(['cousin@example.net'], array_column($this->charge()['elements'], 'email'));
+
+        $this->requete('GET', '/api/administration/utilisateurs?q='.rawurlencode('n° '.ArbreFamilial::COUSIN));
+        self::assertSame(['cousin@example.net'], array_column($this->charge()['elements'], 'email'));
+
+        $this->requete('GET', '/api/administration/utilisateurs?q=introuvable');
+        self::assertSame(0, $this->charge()['total']);
+    }
 }

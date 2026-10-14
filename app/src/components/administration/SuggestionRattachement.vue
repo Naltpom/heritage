@@ -148,7 +148,7 @@ function horodatage(iso: string): string {
         La transcription a changé depuis cette recherche : relancez la recherche.
       </p>
       <p class="font-semibold" :data-verdict="suggestion.verdict">{{ LIBELLES_VERDICT[suggestion.verdict] }}</p>
-      <p class="whitespace-pre-line">{{ suggestion.resume }}</p>
+      <p class="whitespace-pre-line [overflow-wrap:anywhere]">{{ suggestion.resume }}</p>
 
       <ul v-if="suggestion.avertissements.length > 0" class="flex flex-col gap-1 text-xs text-accent">
         <li v-for="(avertissement, index) in suggestion.avertissements" :key="index">⚠ {{ avertissement }}</li>

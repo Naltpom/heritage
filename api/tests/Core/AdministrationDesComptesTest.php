@@ -172,6 +172,62 @@ final class AdministrationDesComptesTest extends CoreWebTestCase
         self::assertSame(0, $this->charge()['total']);
     }
 
+    /**
+     * La liste est paginée : la recherche et la puce « Admins » se font **ici**. Filtrées
+     * par l'écran, elles n'auraient filtré que la page reçue, et le total aurait menti.
+     */
+    public function testLaListeSeChercheEtSeFiltreParRoleAvantLaPagination(): void
+    {
+        $this->creerUtilisateur('natron@example.net', roles: ['ROLE_ADMIN'], nomAffiche: 'Natron');
+        $this->creerUtilisateur('opale.romarin@example.net', nomAffiche: 'Opale Romarin');
+        $this->creerUtilisateur('cobalt@example.net', nomAffiche: 'Cobalt Sureau');
+        $this->creerUtilisateur('cousin@example.net', statut: UserStatus::EnAttente);
+
+        $this->connexion('natron@example.net');
+
+        // Sans casse, dans le nom affiché comme dans le courriel.
+        $this->requete('GET', '/api/administration/utilisateurs?q=ROMARIN');
+        $charge = $this->charge();
+        self::assertSame(1, $charge['total']);
+        self::assertSame('opale.romarin@example.net', $charge['elements'][0]['email']);
+
+        $this->requete('GET', '/api/administration/utilisateurs?q=cobalt@');
+        self::assertSame(['cobalt@example.net'], array_column($this->charge()['elements'], 'email'));
+
+        $this->requete('GET', '/api/administration/utilisateurs?role=admin');
+        $charge = $this->charge();
+        self::assertSame(1, $charge['total']);
+        self::assertSame('natron@example.net', $charge['elements'][0]['email']);
+
+        // Le total est celui du filtre, la page n'en porte qu'une part.
+        $this->requete('GET', '/api/administration/utilisateurs?status=actif&parPage=2&page=2');
+        $charge = $this->charge();
+        self::assertSame(3, $charge['total']);
+        self::assertSame(2, $charge['page']);
+        self::assertCount(1, $charge['elements']);
+    }
+
+    public function testLesCompteursDesPucesNeDependentPasDeLaPage(): void
+    {
+        $this->creerUtilisateur('natron@example.net', roles: ['ROLE_ADMIN']);
+        $this->creerUtilisateur('opale@example.net');
+        $this->creerUtilisateur('cousin@example.net', statut: UserStatus::EnAttente);
+        $this->creerUtilisateur('ancien@example.net', statut: UserStatus::Suspendu);
+
+        $this->connexion('opale@example.net');
+        $this->requete('GET', '/api/administration/utilisateurs/compteurs');
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+
+        $this->requete('POST', '/api/deconnexion');
+        $this->connexion('natron@example.net');
+        $this->requete('GET', '/api/administration/utilisateurs/compteurs');
+        self::assertResponseIsSuccessful();
+        self::assertSame(
+            ['tous' => 4, 'en_attente' => 1, 'actif' => 2, 'suspendu' => 1, 'admins' => 1],
+            $this->charge(),
+        );
+    }
+
     private function premiere(AuditAction $action): ?AuditLog
     {
         foreach ($this->journal() as $ligne) {

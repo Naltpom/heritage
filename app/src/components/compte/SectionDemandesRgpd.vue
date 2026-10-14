@@ -255,7 +255,7 @@ async function envoyer(): Promise<void> {
         <p v-if="composantesARetirer(demande) !== null" class="m-0 text-xs text-attenue">
           À retirer : {{ composantesARetirer(demande) }}
         </p>
-        <p v-if="demande.message" class="m-0 whitespace-pre-line text-xs">{{ demande.message }}</p>
+        <p v-if="demande.message" class="m-0 whitespace-pre-line text-xs [overflow-wrap:anywhere]">{{ demande.message }}</p>
         <p class="m-0 text-xs text-attenue">Demandée le {{ dateDuVerrou(demande.creeeLe) }}</p>
         <p v-if="demande.reponse" class="m-0 whitespace-pre-line text-xs" data-reponse>
           Réponse : {{ demande.reponse }}

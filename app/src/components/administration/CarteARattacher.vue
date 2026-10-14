@@ -375,7 +375,7 @@ function dateLisible(iso: string): string {
     <!-- ── La description, telle qu'elle a été écrite ────────────────── -->
     <blockquote
       v-if="compte.declaration.description !== null && compte.declaration.description !== ''"
-      class="rounded-champ border-l-2 border-accent bg-fond px-3 py-2 text-sm whitespace-pre-line"
+      class="rounded-champ border-l-2 border-accent bg-fond px-3 py-2 text-sm whitespace-pre-line [overflow-wrap:anywhere]"
       data-description
     >
       {{ compte.declaration.description }}

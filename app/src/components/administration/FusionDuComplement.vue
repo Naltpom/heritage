@@ -176,7 +176,7 @@ function dateLisible(valeur: string | null): string {
       <h4 class="m-0 text-xs font-semibold tracking-wide text-attenue uppercase">Ce qu’il ajoute</h4>
       <ul class="m-0 flex list-none flex-col gap-0.5 p-0">
         <li v-for="r in lisible.remplis" :key="r.champ">
-          <span class="font-semibold">{{ r.etiquette }}</span> : <span class="whitespace-pre-line">{{ r.valeur }}</span>
+          <span class="font-semibold">{{ r.etiquette }}</span> : <span class="whitespace-pre-line [overflow-wrap:anywhere]">{{ r.valeur }}</span>
         </li>
       </ul>
     </section>

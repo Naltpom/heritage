@@ -8,8 +8,11 @@
  * fallait le faire défiler pour atteindre les gestes, et l'on devinait le geste
  * à l'icône.
  *
- * Une recherche (nom, courriel, n° de fiche) et des puces d'état — Tous · En
- * attente · Actifs · Suspendus · Admins — filtrent la liste, sur place.
+ * Une recherche (nom, courriel, nom ou n° de fiche) et des puces d'état — Tous ·
+ * En attente · Actifs · Suspendus · Admins — filtrent la liste. **Côté serveur**
+ * depuis le 2026-10-14 : la liste est paginée (25 comptes par page), et un
+ * filtre appliqué à la page reçue n'aurait filtré que cette page. Les compteurs
+ * des puces viennent de leur propre route.
  *
  * **C'est aussi le seul écran où se diagnostique un compte qui regarde l'arbre
  * de quelqu'un d'autre.** Le point de vue d'un visiteur se choisit d'après la
@@ -69,13 +72,14 @@
  * Une bascule restée active côté serveur se quitte toujours par le bandeau
  * permanent du cadre.
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useEstMobile } from '@/composables/useTiroirs'
 import { cleDe } from '@/components/administration/fileATraiter'
 import { quotaDesRattachements } from '@/components/administration/rattachements'
 import { useRouter } from 'vue-router'
 import {
   activerMembre,
+  compterUtilisateurs,
   incarnerUtilisateur,
   listerMembresEnAttente,
   listerQuotasGlobaux,
@@ -83,6 +87,7 @@ import {
   modifierQuotasGlobaux,
   modifierQuotasUtilisateur,
   modifierUtilisateur,
+  type CompteursUtilisateurs,
   type LimitesDeQuotas,
   type PhotoARattacher,
   type QuotaGlobal,
@@ -92,6 +97,7 @@ import { rafraichirSession, useSession } from '@/composables/useSession'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import Feuillet from '@/components/base/Feuillet.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
+import PaginationListe from '@/components/base/PaginationListe.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import MentionDeRattachement from '@/components/administration/MentionDeRattachement.vue'
@@ -108,7 +114,15 @@ const { session, vueEmpruntee } = useSession()
 const routeur = useRouter()
 const estMobile = useEstMobile()
 
+/** Les comptes lus par page. */
+const PAR_PAGE = 25
+
+/** La page de comptes affichée — déjà filtrée par la puce et la recherche. */
 const utilisateurs = ref<UtilisateurAdministration[]>([])
+const total = ref(0)
+const page = ref(1)
+/** Les compteurs des puces ; `null` tant qu'ils ne sont pas lus — ou s'ils n'ont pas pu l'être. */
+const compteurs = ref<CompteursUtilisateurs | null>(null)
 /** Les photos d'inscription en attente, par identifiant de **membre**. */
 const portraits = ref<ReadonlyMap<number, PhotoARattacher>>(new Map())
 const chargement = ref(false)
@@ -126,16 +140,43 @@ const raisonSuspension = computed(() => motifSuspension(vueEmpruntee.value))
 const infobulle = computed(() => infobulleSuspension(vueEmpruntee.value))
 const moi = computed(() => session.value?.utilisateur.id ?? null)
 
+/** Le numéro de la dernière lecture : une réponse plus ancienne arrivée après est ignorée. */
+let lectureCourante = 0
+
+/** Les comptes de la page, de la puce et de la recherche courantes. */
+function lireLaPage(): ReturnType<typeof listerUtilisateurs> {
+  const p = puce.value
+  return listerUtilisateurs({
+    status: p === 'en_attente' || p === 'actif' || p === 'suspendu' ? p : undefined,
+    role: p === 'admins' ? 'admin' : undefined,
+    q: terme.value,
+    page: page.value,
+    parPage: PAR_PAGE,
+  })
+}
+
+/**
+ * Les compteurs des puces. Leur échec ne remonte pas : sans eux, les puces
+ * n'affichent pas de nombre, et la liste fonctionne entièrement.
+ */
+async function lireLesCompteurs(): Promise<void> {
+  try {
+    compteurs.value = await compterUtilisateurs()
+  } catch {
+    compteurs.value = null
+  }
+}
+
 async function charger(): Promise<void> {
+  const numero = ++lectureCourante
   chargement.value = true
   erreur.value = null
+  void lireLesCompteurs()
   try {
-    const [liste, file, globaux] = await Promise.all([
-      listerUtilisateurs({ parPage: 100 }),
-      listerMembresEnAttente(),
-      listerQuotasGlobaux(),
-    ])
+    const [liste, file, globaux] = await Promise.all([lireLaPage(), listerMembresEnAttente(), listerQuotasGlobaux()])
+    if (numero !== lectureCourante) return
     utilisateurs.value = liste.elements
+    total.value = liste.total
     quotasGlobaux.value = globaux.quotas
     portraits.value = new Map(
       file.elements.flatMap((membre) =>
@@ -143,9 +184,26 @@ async function charger(): Promise<void> {
       ),
     )
   } catch (cause) {
-    erreur.value = cause
+    if (numero === lectureCourante) erreur.value = cause
   } finally {
-    chargement.value = false
+    if (numero === lectureCourante) chargement.value = false
+  }
+}
+
+/** Une autre page, une autre puce, une autre recherche : seule la liste se relit. */
+async function changerDePage(): Promise<void> {
+  const numero = ++lectureCourante
+  chargement.value = true
+  erreur.value = null
+  try {
+    const liste = await lireLaPage()
+    if (numero !== lectureCourante) return
+    utilisateurs.value = liste.elements
+    total.value = liste.total
+  } catch (cause) {
+    if (numero === lectureCourante) erreur.value = cause
+  } finally {
+    if (numero === lectureCourante) chargement.value = false
   }
 }
 
@@ -331,32 +389,23 @@ const PUCES: { valeur: Puce; libelle: string }[] = [
   { valeur: 'admins', libelle: 'Admins' },
 ]
 const puce = ref<Puce>('tous')
+/** Ce que l'administrateur tape ; `terme` en est la version posée, après une
+ *  courte pause, pour ne pas interroger le serveur à chaque touche. */
 const recherche = ref('')
-
-function dansLaPuce(utilisateur: UtilisateurAdministration, valeur: Puce): boolean {
-  if (valeur === 'tous') return true
-  if (valeur === 'admins') return estAdministrateur(utilisateur)
-  return utilisateur.status === valeur
-}
-
-const comptesParPuce = computed(
-  () => Object.fromEntries(PUCES.map((p) => [p.valeur, utilisateurs.value.filter((u) => dansLaPuce(u, p.valeur)).length])) as Record<Puce, number>,
-)
-
-/** Nom de la fiche ou du compte, courriel, n° de fiche : sans accents ni casse. */
-function normaliser(texte: string): string {
-  return texte.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-}
-
-const affiches = computed(() => {
-  const terme = normaliser(recherche.value.trim().replace(/^(n°|#)\s*/i, ''))
-  return utilisateurs.value.filter((u) => {
-    if (!dansLaPuce(u, puce.value)) return false
-    if (terme === '') return true
-    const fiche = u.membre?.personId != null ? String(u.membre.personId) : ''
-    return [nomDeLaLigne(u), u.displayName, u.email, fiche].some((champ) => normaliser(champ).includes(terme))
-  })
+const terme = ref('')
+let minuterie: ReturnType<typeof setTimeout> | undefined
+watch(recherche, (valeur) => {
+  clearTimeout(minuterie)
+  minuterie = setTimeout(() => (terme.value = valeur.trim()), 300)
 })
+onBeforeUnmount(() => clearTimeout(minuterie))
+
+// Une autre puce ou une autre recherche : retour à la première page, qui relit.
+watch([puce, terme], () => {
+  if (page.value !== 1) page.value = 1
+  else void changerDePage()
+})
+watch(page, () => void changerDePage())
 
 /** Les initiales de l'avatar : deux lettres, du nom affiché. */
 function initiales(utilisateur: UtilisateurAdministration): string {
@@ -428,7 +477,7 @@ function lienDIdentification(utilisateur: UtilisateurAdministration) {
       <input
         :value="recherche"
         type="search"
-        placeholder="Nom, e-mail, n° de fiche…"
+        placeholder="Nom, e-mail, nom ou n° de fiche…"
         class="h-8 min-w-0 flex-1 bg-transparent text-sm focus:outline-none"
         @input="recherche = ($event.target as HTMLInputElement).value"
       />
@@ -444,7 +493,7 @@ function lienDIdentification(utilisateur: UtilisateurAdministration) {
         :aria-pressed="p.valeur === puce"
         @click="puce = p.valeur"
       >
-        {{ p.libelle }}<span class="font-medium text-attenue tnum">{{ comptesParPuce[p.valeur] }}</span>
+        {{ p.libelle }}<span v-if="compteurs !== null" class="font-medium text-attenue tnum">{{ compteurs[p.valeur] }}</span>
       </button>
     </div>
 
@@ -453,7 +502,7 @@ function lienDIdentification(utilisateur: UtilisateurAdministration) {
     <SqueletteChargement v-if="chargement && utilisateurs.length === 0" :lignes="4" />
 
     <p
-      v-else-if="affiches.length === 0"
+      v-else-if="utilisateurs.length === 0"
       class="rounded-panneau border border-ligne bg-panneau px-4 py-7 text-center text-attenue"
     >
       Aucun compte ne correspond.
@@ -461,7 +510,7 @@ function lienDIdentification(utilisateur: UtilisateurAdministration) {
 
     <ul v-else class="m-0 flex list-none flex-col gap-px overflow-hidden rounded-panneau border border-ligne bg-ligne p-0">
       <li
-        v-for="utilisateur in affiches"
+        v-for="utilisateur in utilisateurs"
         :key="utilisateur.id"
         class="flex flex-wrap items-center gap-x-4 gap-y-2.5 bg-panneau px-4 py-3"
         :data-utilisateur="utilisateur.id"
@@ -475,7 +524,7 @@ function lienDIdentification(utilisateur: UtilisateurAdministration) {
           >{{ initiales(utilisateur) }}</span>
           <span class="flex min-w-0 flex-col">
             <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span class="font-semibold">{{ nomDeLaLigne(utilisateur) }}</span>
+              <span class="min-w-0 font-semibold [overflow-wrap:anywhere]">{{ nomDeLaLigne(utilisateur) }}</span>
               <!-- Les trois valeurs de `StatutCompte` sont celles de la
                    pastille, et la valeur affichée reste celle du modèle (§ 1.2). -->
               <PastilleEtat :etat="utilisateur.status" />
@@ -542,6 +591,15 @@ function lienDIdentification(utilisateur: UtilisateurAdministration) {
         </div>
       </li>
     </ul>
+
+    <PaginationListe
+      v-if="erreur === null"
+      :page="page"
+      :par-page="PAR_PAGE"
+      :total="total"
+      :chargement="chargement"
+      @aller="page = $event"
+    />
 
     <!-- Les quotas à clé globale : un compteur pour toute l'installation. -->
     <div

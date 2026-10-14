@@ -51,6 +51,7 @@ vi.mock('vue-router', () => ({
 
 const api = vi.hoisted(() => ({
   listerUtilisateurs: vi.fn(),
+  compterUtilisateurs: vi.fn(),
   listerMembresEnAttente: vi.fn(),
   listerQuotasGlobaux: vi.fn(),
   modifierUtilisateur: vi.fn(),
@@ -143,6 +144,7 @@ beforeEach(() => {
   etat.vueEmpruntee.value = null
   api.listerMembresEnAttente.mockResolvedValue({ elements: [], total: 0, page: 1, parPage: 100 })
   api.listerQuotasGlobaux.mockResolvedValue({ quotas: [] })
+  api.compterUtilisateurs.mockResolvedValue({ tous: 1, en_attente: 0, actif: 1, suspendu: 0, admins: 0 })
 })
 
 /* ------------------------------------------------------------------ */

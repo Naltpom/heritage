@@ -39,6 +39,11 @@ final class AnnuaireVide implements AnnuaireDesMembresInterface
         return null;
     }
 
+    public function comptesParFiche(string $terme): array
+    {
+        return [];
+    }
+
     /**
      * Aucun rattachement, donc aucun blocage — et **c'est la réponse la plus dangereuse
      * de cette classe**.

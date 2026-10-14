@@ -156,7 +156,7 @@ function suivreConduite(conduite: ConduiteATenir): void {
     décidez-les ensemble
   </p>
 
-  <p v-if="nouvelles.length > 0" class="text-sm">
+  <p v-if="nouvelles.length > 0" class="text-sm [overflow-wrap:anywhere]">
     <span class="text-attenue">Nouvelle{{ nouvelles.length > 1 ? 's' : '' }} personne{{ nouvelles.length > 1 ? 's' : '' }} :</span>
     {{ nouvelles.join(', ') }}
   </p>
@@ -213,7 +213,7 @@ function suivreConduite(conduite: ConduiteATenir): void {
     Cette demande ne modifie aucun champ existant.
   </p>
 
-  <p v-if="demande.message" class="text-attenue whitespace-pre-line">« {{ demande.message }} »</p>
+  <p v-if="demande.message" class="text-attenue whitespace-pre-line [overflow-wrap:anywhere]">« {{ demande.message }} »</p>
 
   <RouterLink
     :to="{ name: 'demande.detail', params: { id: demande.id }, query: requeteDeLaFile }"

@@ -239,6 +239,11 @@ final class VoirCommeTest extends CoreWebTestCase
                 return null;
             }
 
+            public function comptesParFiche(string $terme): array
+            {
+                return [];
+            }
+
             /**
              * Aucun rattachement : cette bascule-ci ne teste pas les suppressions.
              *

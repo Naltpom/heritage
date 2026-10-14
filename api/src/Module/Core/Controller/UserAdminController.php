@@ -31,6 +31,10 @@ final class UserAdminController extends AbstractController
     ) {
     }
 
+    /**
+     * `status`, `role=admin` et `q` filtrent **ici** : la liste est paginée, et un filtre
+     * appliqué à une page par l'écran ne filtrerait que cette page.
+     */
     #[Route('/api/administration/utilisateurs', name: 'core_admin_utilisateurs', methods: ['GET'])]
     public function lister(Request $requete): JsonResponse
     {
@@ -38,7 +42,16 @@ final class UserAdminController extends AbstractController
             $requete->query->getString('status') ?: null,
             $requete->query->getInt('page', 1),
             $requete->query->getInt('parPage', UserAdminService::PAR_PAGE_DEFAUT),
+            $requete->query->getString('q'),
+            'admin' === $requete->query->getString('role'),
         ));
+    }
+
+    /** Les compteurs des puces : `{tous, en_attente, actif, suspendu, admins}`. */
+    #[Route('/api/administration/utilisateurs/compteurs', name: 'core_admin_utilisateurs_compteurs', methods: ['GET'])]
+    public function compteurs(): JsonResponse
+    {
+        return new JsonResponse($this->comptes->compteurs());
     }
 
     #[Route('/api/administration/utilisateurs/{id}', name: 'core_admin_utilisateur', methods: ['GET'], requirements: ['id' => '\d+'])]

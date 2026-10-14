@@ -686,7 +686,8 @@ export function lireDemande(id: number): Promise<Demande> {
  * `GET /api/administration/demandes` — la file (§ 6.7).
  *
  * Triée par `submittedAt` **croissant** côté serveur : la plus ancienne en
- * premier, parce qu'une file se prend par le début.
+ * premier, parce qu'une file se prend par le début. `tri` la range par numéro.
+ * Paginée : 100 par page au plus.
  */
 /** Un auteur qui a réellement déposé quelque chose, pour peupler le filtre. */
 export interface AuteurDeLaFile {
@@ -702,6 +703,8 @@ export function listerDemandesAdministration(options: {
   auteur?: number | undefined
   /** Un numéro de demande (`42`, `#42`, `n° 42`), ou un texte : fiche, auteur, message, personnes proposées. */
   q?: string | undefined
+  /** Par numéro, croissant (`anciennes`) ou décroissant (`recentes`) — sur toute la file, pas sur la page. */
+  tri?: 'anciennes' | 'recentes' | undefined
   page?: number | undefined
   parPage?: number | undefined
 }): Promise<ListePaginee<Demande>> {
@@ -712,6 +715,7 @@ export function listerDemandesAdministration(options: {
       targetId: options.targetId,
       auteur: options.auteur,
       q: options.q === '' ? undefined : options.q,
+      tri: options.tri,
       page: options.page,
       parPage: options.parPage,
     },
