@@ -15,7 +15,7 @@
  *
  * **Une source venue du GEDCOM d'origine garde sa référence** (`gedcomXref`) : elle
  * n'est ni saisie ni modifiée ici, et l'application n'importe plus de GEDCOM qui
- * pourrait réécrire la notice (ADR 0017). Le formulaire le dit, à
+ * pourrait réécrire la notice (ADR 0018). Le formulaire le dit, à
  * côté des champs, plutôt que de laisser croire qu'une correction est définitive.
  */
 import { computed, onMounted, ref, watch } from 'vue'

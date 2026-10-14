@@ -72,7 +72,7 @@ class Person
      * différence de `id` qu'une restauration sur base neuve pourrait renuméroter.
      * `null` seulement entre la création applicative et le premier `flush` — le service
      * le remplit immédiatement. L'import GEDCOM qui s'appuyait dessus a été supprimé
-     * (ADR 0017) ; la référence, elle, reste.
+     * (ADR 0018) ; la référence, elle, reste.
      */
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $gedcomXref = null;

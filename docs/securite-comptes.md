@@ -556,7 +556,7 @@ nommée dans la signature. Les valeurs stockées ne changent pas — la colonne 
 ### Le repliement des accents — `Core\Service\CleDeRecherche`
 
 Il existait **en double** : dans le service qui **écrivait** `tree_person.search_key` à
-l'import (module `Gedcom`, supprimé depuis — ADR 0017), et dans celui qui la **cherche**. La règle 3 interdisait à l'un d'importer
+l'import (module `Gedcom`, supprimé depuis — ADR 0018), et dans celui qui la **cherche**. La règle 3 interdisait à l'un d'importer
 l'autre, donc la table était recopiée.
 
 > Le jour où les deux auraient divergé d'un seul caractère, la recherche aurait cessé de
@@ -696,7 +696,7 @@ bin/console doctrine:fixtures:load --append --group=amorcage    # + le rattachem
 > **⚠ `doctrine:fixtures:load` sans `--append` purge la base.** C'est le piège central :
 > la fixture d'amorçage existe pour *reposer* un compte sur une base garnie, et la jouer nue
 > détruirait l'arbre entier — qui ne revient plus que par la restauration d'une sauvegarde,
-> l'import GEDCOM ayant été supprimé (ADR 0017). La commande fait le même travail sans rien
+> l'import GEDCOM ayant été supprimé (ADR 0018). La commande fait le même travail sans rien
 > purger ; les deux appellent le **même** service, donc elles ne peuvent pas diverger.
 
 Variables, toutes dans **`api/.env.local`** (ignoré par Git ; `api/.env` est *suivi* et ne
@@ -717,7 +717,7 @@ Trois règles, chacune payée par un incident :
 > l'identifiant numérique produisait, au premier réimport, un rattachement silencieusement
 > dirigé vers **quelqu'un d'autre** — pire que de l'avoir perdu.
 
-L'import GEDCOM est supprimé (ADR 0017), mais la règle reste : `gedcom_xref` est
+L'import GEDCOM est supprimé (ADR 0018), mais la règle reste : `gedcom_xref` est
 l'identifiant stable d'une fiche, `tree_person.id` une identité qu'un repeuplement
 renumérote. Le tableau ci-dessous garde la mesure qui l'a fondée, du temps de l'import.
 Trois gestes de réimport, trois conséquences, et le troisième est le plus méchant :
@@ -841,7 +841,7 @@ reconstruction. Ce n'en reste pas moins une reconstruction : **son auteur devrai
 relire**. Le seul changement voulu est la délégation du repliement à `Core`.
 
 *(Le service a depuis été déplacé de `Gedcom` vers `Tree` par un autre agent, et le module
-`Gedcom` a été supprimé avec l'import — ADR 0017.)*
+`Gedcom` a été supprimé avec l'import — ADR 0018.)*
 
 **MFA TOTP administrateur** : les colonnes `totp_secret` et `totp_enabled_at` existent sur
 `Core\User` et la charge de session expose `totpEnabledAt`. Le second facteur lui-même n'est pas

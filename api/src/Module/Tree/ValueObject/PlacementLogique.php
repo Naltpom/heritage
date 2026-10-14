@@ -12,7 +12,7 @@ use App\Module\Tree\Enum\ParenteDansLArbre;
  * génération et rang par famille.
  *
  * Les identifiants sont ceux de l'appelant : les identifiants de nœud (`p1`, `f28`)
- * de l'arbre en base — l'import GEDCOM, supprimé depuis (ADR 0017), y passait les `xref`
+ * de l'arbre en base — l'import GEDCOM, supprimé depuis (ADR 0018), y passait les `xref`
  * (`@I500001@`). Ils portent leur type, ce qui est indispensable : `tree_person.id` et
  * `tree_family.id` sont deux séquences indépendantes, et la personne 1 comme la
  * famille 1 existent.

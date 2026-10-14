@@ -65,7 +65,7 @@ namespace App\Tests\Frontieres;
  * Soit **24 → 8 → 0**. Le compte du 2026-09-16 était de 46 (« 46 → 18 → 8 → 0 ») :
  * 22 lignes partaient du module `Gedcom` — la dette datée de l'import (10 lignes,
  * `EcrivainTree` et `AnalyseurGedcom` vers l'interne de `Tree`) et 12 lignes de
- * vocabulaire. Le module a été supprimé avec l'import (ADR 0017) : la dette n'a pas
+ * vocabulaire. Le module a été supprimé avec l'import (ADR 0018) : la dette n'a pas
  * été soldée par un port, elle a disparu avec son code. `FrontieresInterModulesTest`
  * vérifie ces nombres à chaque exécution, de sorte qu'ils ne puissent plus vieillir
  * en silence.

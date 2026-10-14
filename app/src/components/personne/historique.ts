@@ -55,7 +55,7 @@ export interface EntreeHistorique {
   demandeId: number | null
   /** Une révision sans demande : sa demande a été effacée hors de l'application
    *  (§ 6.11). Aucun chemin d'écriture n'en produit — l'import GEDCOM, qui n'en
-   *  écrivait pas non plus, a été supprimé (ADR 0017). */
+   *  écrivait pas non plus, a été supprimé (ADR 0018). */
   sansDemande: boolean
   /** Un document : sa vignette, et de quoi l'ouvrir dans la loupe. */
   media: { mediaId: number; vignetteUrl: string; legende: string } | null

@@ -42,7 +42,7 @@ final class SqueletteTest extends KernelTestCase
      * **Neuf depuis le 2026-09-27** : `Tirage` (les tirages au sort récurrents, ADR 0009).
      *
      * **Huit de nouveau depuis le 2026-10-06** : `Gedcom` est supprimé avec l'import
-     * GEDCOM (ADR 0017) — dossiers, fichier de routes et fichier de services compris.
+     * GEDCOM (ADR 0018) — dossiers, fichier de routes et fichier de services compris.
      */
     public function testLesHuitModulesSontPresents(): void
     {

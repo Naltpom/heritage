@@ -29,7 +29,7 @@ use Doctrine\ORM\EntityManagerInterface;
  *   `null` ne percute pas la contrainte d'unicité, et la référence d'une source
  *   existante n'est jamais réécrite — c'est son identifiant stable. (Elle était aussi
  *   la clé du ré-import GEDCOM, qui retrouvait une source par son xref et l'écrasait ;
- *   l'import a été supprimé, ADR 0017.)
+ *   l'import a été supprimé, ADR 0018.)
  * - **il ne supprime pas.** `tree_citation.source_id` est en `RESTRICT`, mais une source
  *   jamais citée peut encore être désignée par une demande `ajout_citation` en attente —
  *   que `Tree` ne voit pas, et dont la validation tomberait en `500`

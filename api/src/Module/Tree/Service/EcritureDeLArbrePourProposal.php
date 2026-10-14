@@ -1961,7 +1961,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
      * Le préfixe `9` la distingue au premier coup d'œil de la plage `@I5xxxxx@` de
      * MyHeritage : on sait ce qui vient du fichier d'origine et ce qui a été ajouté
      * depuis. Déterministe, sans séquence supplémentaire, et reconstructible si la
-     * colonne est perdue. Il n'y a plus d'import ni d'export GEDCOM (ADR 0017) : la
+     * colonne est perdue. Il n'y a plus d'import ni d'export GEDCOM (ADR 0018) : la
      * référence reste l'identifiant stable de la ligne, affiché sur la fiche.
      */
     private function xref(string $lettre, int $id): string

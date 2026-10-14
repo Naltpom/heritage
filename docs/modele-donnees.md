@@ -18,7 +18,7 @@
 ### 0.1 Nommage
 
 - **Tables** : `snake_case`, préfixées par module — `core_`, `tree_`, `mbr_`, `prp_`,
-  `med_`, `tml_`, `qst_`… (`ged_` a disparu avec le module `Gedcom`, [ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)). Le préfixe n'est pas décoratif : il permet de lire un plan
+  `med_`, `tml_`, `qst_`… (`ged_` a disparu avec le module `Gedcom`, [ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)). Le préfixe n'est pas décoratif : il permet de lire un plan
   d'exécution ou un `pg_dump` et de savoir immédiatement quel module est en cause.
 - **Colonnes** : `snake_case`. Les propriétés Doctrine sont en `camelCase` ; la
   conversion est automatique (`underscore` naming strategy), on ne déclare pas `name:`
@@ -242,14 +242,14 @@ Décisions d'exclusion, pour que personne ne les reprenne à zéro dans six mois
 **27 tables.** Le chiffre a bougé quatre fois depuis la rédaction initiale, qui en
 prévoyait 23 : `tree_place` (17/09), `core_email_change` (18/09), puis `qst_question` et
 `qst_question_demande` (23/09) ; `ged_run` et `ged_issue` ont été supprimées le
-2026-10-06 avec le module `Gedcom` ([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)). Les deux premières avaient été ajoutées sans que ce
+2026-10-06 avec le module `Gedcom` ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)). Les deux premières avaient été ajoutées sans que ce
 tableau soit repris — `tree_place` y manquait encore au 23/09 —, ce qui est exactement le
 défaut qu'un dénombrement écrit à la main finit par avoir. L'autorité est le mapping
 Doctrine, et le contrôle est
 `tests/Schema/SchemaSynchroniseTest::NOMBRE_DE_TABLES`, qui échoue quand les deux
 divergent. Les dénombrements de référence **au jour de l'import initial** (§ 4 du dossier
 de mission) se lisent ainsi — ils ne décrivent plus la base de production, qui a évolué depuis
-par les demandes validées, et l'import qui les contrôlait a été supprimé ([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)) :
+par les demandes validées, et l'import qui les contrôlait a été supprimé ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)) :
 
 | Attendu | Requête de contrôle |
 |---|---|
@@ -705,7 +705,7 @@ lignes de `tree_fact`. Ce n'est pas une incohérence, c'est un choix (§ 3.1, en
 | Objet | Définition | Requête servie |
 |---|---|---|
 | PK | `(id)` | — |
-| `uniq_tree_person_xref` | `UNIQUE (gedcom_xref)` | Deux fiches ne portent jamais la même référence : `@I500017@` désigne une seule personne, quelle que soit la base où on la cherche (§ 9.8). C'était aussi la clé d'idempotence du ré-import, supprimé depuis ([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)). |
+| `uniq_tree_person_xref` | `UNIQUE (gedcom_xref)` | Deux fiches ne portent jamais la même référence : `@I500017@` désigne une seule personne, quelle que soit la base où on la cherche (§ 9.8). C'était aussi la clé d'idempotence du ré-import, supprimé depuis ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)). |
 | `idx_tree_person_search` | `(search_key varchar_pattern_ops)` | Le **tri** de la recherche de l'arbre (`ORDER BY search_key`), et les `LIKE 'X%'` préfixés. `varchar_pattern_ops` : sans cet opérateur, un index `btree` sur une base non-`C` — la nôtre est en ICU `fr-FR` — ne sert pas les `LIKE` préfixés. **Il ne sert pas le filtre de la recherche** : celui-ci porte une branche infixe `'% X%'`, qu'aucun index btree ne peut satisfaire — `EXPLAIN` rend un `Seq Scan` même avec `enable_seqscan = off`. Ce n'est pas une régression du correctif multi-mots : la branche infixe préexistait. Corrigé ici parce que trois endroits du dépôt affirmaient le contraire. **Ce n'est pas non plus la recherche de rattachement** (§ 4.3), qui compare `surname` et `given_names` en PHP et ne lit jamais cette colonne. |
 | `idx_tree_person_surname` | `(surname, given_names)` | Liste alphabétique de l'index des noms. |
 | `idx_tree_person_birth` | `(birth_min)` | Vue chronologique (bornes de bande), tri des fratries, et le calcul du § 9.2. |
@@ -837,7 +837,7 @@ personne n'est enfant que d'une famille (174 pour 174), mais une adoption crée
 légitimement un second rattachement. Deux liens de relation `naissance` pour une même
 personne seraient en revanche un défaut de données, pas une adoption : rien dans le schéma
 ne l'interdit, c'est aux écritures de l'arbre de ne pas le produire. (L'import GEDCOM le
-signalait dans `ged_issue` ; table et import sont supprimés, [ADR 0017](adr/0017-suppression-de-l-import-gedcom.md).)
+signalait dans `ged_issue` ; table et import sont supprimés, [ADR 0018](adr/0018-suppression-de-l-import-gedcom.md).)
 
 ### 3.4 `tree_fact` — 87 lignes après import
 
@@ -1691,7 +1691,7 @@ auto-approuvée mais **tracée, pas passée sous silence** (§ 6.3 du dossier).
 | Colonne | Type | Null | Défaut | Rôle |
 |---|---|:-:|---|---|
 | `id` | `INT` | non | identité | PK |
-| `request_id` | `INT` | oui | `NULL` | **FK intra-module** → `prp_change_request(id)`, `ON DELETE SET NULL`. Une édition directe d'administrateur porte bien un `request_id` : elle crée une `prp_change_request` auto-validée dans la même transaction (§ 9.4, ADR 0004). **Il n'existe aucun chemin d'écriture applicatif qui contourne le mécanisme** — l'import GEDCOM n'écrivait pas de révision non plus, et il est supprimé ([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)). Une `prp_revision` sans demande ne peut donc venir que d'une demande effacée hors de l'application (`SET NULL`), jamais d'un raccourci. |
+| `request_id` | `INT` | oui | `NULL` | **FK intra-module** → `prp_change_request(id)`, `ON DELETE SET NULL`. Une édition directe d'administrateur porte bien un `request_id` : elle crée une `prp_change_request` auto-validée dans la même transaction (§ 9.4, ADR 0004). **Il n'existe aucun chemin d'écriture applicatif qui contourne le mécanisme** — l'import GEDCOM n'écrivait pas de révision non plus, et il est supprimé ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)). Une `prp_revision` sans demande ne peut donc venir que d'une demande effacée hors de l'application (`SET NULL`), jamais d'un raccourci. |
 | `subject_kind` | `VARCHAR(12)` | non | — | Énum `SubjectKind`. |
 | `subject_id` | `INT` | non | — | **⇢ inter-module**. La ligne touchée. |
 | `subject_label` | `VARCHAR(255)` | non | — | Libellé au moment des faits. |
@@ -1956,7 +1956,7 @@ CONSTRAINT ck_tml_preference_bande CHECK (band_years BETWEEN 1 AND 500)
 Le module `Gedcom` portait l'import GEDCOM (`bin/console heritage:import-gedcom`) et deux
 tables journalières, `ged_run` (une ligne par exécution) et `ged_issue` (les anomalies
 relevées dans le fichier lu). L'export qu'il annonçait n'a jamais été écrit. Le tout a été
-supprimé le 2026-10-06 ([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)) : l'import, idempotent par `gedcom_xref`, pouvait
+supprimé le 2026-10-06 ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)) : l'import, idempotent par `gedcom_xref`, pouvait
 réécrire en silence ce que les demandes avaient fait valider sur des données déjà en
 production. La migration `Version20261006100000` supprime les deux tables ; son `down()` les
 recrée vides.
@@ -3090,7 +3090,7 @@ de décision qui se paie trois ans plus tard.
 **Tranché : `gedcom_xref` est une colonne de `tree_person`, `tree_family` et
 `tree_source`. Pas de table de correspondance dans le module `Gedcom`.**
 
-> **Depuis l'[ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)** : il n'y a plus ni import ni export GEDCOM, et le module
+> **Depuis l'[ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)** : il n'y a plus ni import ni export GEDCOM, et le module
 > `Gedcom` est supprimé. La colonne reste, et le raisonnement ci-dessous avec elle — c'est
 > justement parce que la référence appartient à l'entité et non à l'importeur qu'elle survit
 > à l'importeur. Elle est désormais l'**identifiant stable** d'une ligne, rendu dans la fiche
@@ -3148,7 +3148,7 @@ gedcom_xref = '@F9' || lpad(id::text, 5, '0') || '@'      -- @F900104@
 Déterministe, sans séquence supplémentaire, sans risque de collision avec la plage
 `@I5xxxxx@` de MyHeritage, et reconstructible si la colonne est perdue. Le préfixe `9`
 rend immédiatement lisible ce qui vient du fichier d'origine et ce qui a été ajouté depuis.
-Cette attribution **reste** après la suppression de l'import ([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)) : c'est
+Cette attribution **reste** après la suppression de l'import ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)) : c'est
 `Tree\Service\EcritureDeLArbrePourProposal::xref()`. Une source créée à l'écran, elle, garde
 `gedcom_xref = NULL` (ADR 0012).
 
@@ -3162,7 +3162,7 @@ l'algorithme du § 9.5). C'est plus verbeux et ça ne surprend personne.
 **Le `_UID` et le `RIN`** ont été recopiés tels quels par l'import initial. Ils ne servent
 à rien dans l'application — le `README.md` les classe d'ailleurs parmi les « horodatages et
 identifiants internes MyHeritage, sans effet, ignorables ». On les garde comme provenance ;
-l'aller-retour qu'ils devaient rendre fidèle n'existe plus ([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)). Les lignes
+l'aller-retour qu'ils devaient rendre fidèle n'existe plus ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)). Les lignes
 créées dans l'application n'en reçoivent pas : `NULL`.
 
 ### 9.9 Le cache du moteur de placement
@@ -3608,7 +3608,7 @@ erDiagram
 ### 10.7 `Gedcom`
 
 Plus de tables : `ged_run` et `ged_issue` sont supprimées avec le module (§ 8,
-[ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)).
+[ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)).
 
 ### 10.8 Les références inter-modules
 
@@ -3796,8 +3796,8 @@ le même ordre pour ne pas violer de contrainte.
 | 19 | `prp_revision` | `prp_change_request` | 0 |
 | 20 | `med_media` | — | 31 |
 | 21 | `tml_preference` | — | 0 |
-| ~~22~~ | ~~`ged_run`~~ | — | supprimée ([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)) |
-| ~~23~~ | ~~`ged_issue`~~ | `ged_run` | supprimée ([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)) |
+| ~~22~~ | ~~`ged_run`~~ | — | supprimée ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)) |
+| ~~23~~ | ~~`ged_issue`~~ | `ged_run` | supprimée ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)) |
 | 24 | `tree_place` | — | variable (une ligne par graphie de lieu résolue, § 0.6) |
 | 25 | `core_email_change` | — | 0 (transitoire : une demande vit 24 h) |
 

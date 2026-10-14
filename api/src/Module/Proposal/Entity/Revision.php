@@ -41,7 +41,7 @@ class Revision
      * porte bien un `request_id`, puisqu'elle crée une `ChangeRequest` auto-validée dans
      * la même transaction (ADR 0004). Aucun chemin d'écriture de l'application n'en crée
      * sans demande — l'import GEDCOM n'en écrivait pas non plus, et il a été supprimé
-     * (ADR 0017). `null` ne se rencontre donc que si la demande a été effacée hors de
+     * (ADR 0018). `null` ne se rencontre donc que si la demande a été effacée hors de
      * l'application, **jamais à la suite d'un raccourci**.
      */
     #[ORM\ManyToOne(targetEntity: ChangeRequest::class)]

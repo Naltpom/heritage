@@ -25,11 +25,11 @@ use Doctrine\Persistence\ObjectManager;
  * C'est le point de départ d'une installation neuve (poste de développement, pile de
  * démonstration, base PostgreSQL de l'intégration continue). Les vraies données ne sont
  * jamais ici : elles vivent dans la base de production et dans ses sauvegardes, et se
- * reprennent en restaurant un dump (ADR 0006, ADR 0017). Le dépôt est public : aucun
+ * reprennent en restaurant un dump (ADR 0006, ADR 0018). Le dépôt est public : aucun
  * nom, aucune date, aucun lieu de cette classe ne désigne quelqu'un.
  *
  * Il remplace le fichier `arbre-essai.ged` que l'import GEDCOM chargeait avant sa
- * suppression (ADR 0017), et en reprend les personnes, les familles et la variété des
+ * suppression (ADR 0018), et en reprend les personnes, les familles et la variété des
  * dates — exacte, au mois, à l'année, « environ », « avant », « entre », et une chaîne
  * qu'aucune forme connue ne lit. C'est cette variété que les tests sur PostgreSQL
  * exigent (booléens, horodatages, dates nues), pas un nombre de personnes.

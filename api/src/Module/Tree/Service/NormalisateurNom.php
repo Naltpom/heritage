@@ -15,7 +15,7 @@ use App\Module\Core\Service\CleDeRecherche;
  * d'administrateur (qui passe elle aussi par une demande auto-validée) — et si chacun
  * composait le nom d'affichage à sa façon, une personne créée dans l'application ne
  * ressemblerait pas à ses voisines. (L'import GEDCOM en était un troisième ; il a été
- * supprimé, ADR 0017.) Les fixtures de l'arbre d'essai l'appellent aussi.
+ * supprimé, ADR 0018.) Les fixtures de l'arbre d'essai l'appellent aussi.
  *
  * **Le repliement des accents, lui, n'est pas ici** : il est dans
  * {@see CleDeRecherche}, que ce service et `Tree\Serializer\NormaliseurDeRequete`

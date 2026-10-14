@@ -67,7 +67,7 @@ Ce projet a **cinq chemins d'écriture**, et c'est ce qui condamne le compteur :
 
 1. la validation d'une `prp_change_request` ;
 2. l'édition directe d'un administrateur (une demande auto-validée, § 9.4) ;
-3. l'import GEDCOM (supprimé depuis, [ADR 0017](adr/0017-suppression-de-l-import-gedcom.md) — la restauration d'une sauvegarde
+3. l'import GEDCOM (supprimé depuis, [ADR 0018](adr/0018-suppression-de-l-import-gedcom.md) — la restauration d'une sauvegarde
    en tient lieu, et l'empreinte la voit de la même façon) ;
 4. le changement de `tree.personne_racine_id`, qui recalcule `branch` et `generation` ;
 5. toute correction faite directement en base.
@@ -555,7 +555,7 @@ pourrait pas exister sous cette forme.
 
 ## 9. Le dernier maillon — le placement sur la base réellement importée
 
-> **Section historique.** L'import GEDCOM a été supprimé le 2026-10-06 ([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)), et
+> **Section historique.** L'import GEDCOM a été supprimé le 2026-10-06 ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)), et
 > `PlacementBaseImporteeTest` avec lui : la base de production n'est plus reconstruite
 > depuis le GEDCOM, elle a évolué depuis par les demandes validées, et `graphe.json` n'en est
 > plus l'image. Le résultat ci-dessous reste vrai à sa date ; les deux autres tests
@@ -618,7 +618,7 @@ l'intersection de deux chemins.
 
 ### 9.3 Lancer ce test
 
-*(Retiré avec l'import — [ADR 0017](adr/0017-suppression-de-l-import-gedcom.md). La procédure qui suit est gardée comme trace.)*
+*(Retiré avec l'import — [ADR 0018](adr/0018-suppression-de-l-import-gedcom.md). La procédure qui suit est gardée comme trace.)*
 
 ```
 cd C:/www/heritage/api

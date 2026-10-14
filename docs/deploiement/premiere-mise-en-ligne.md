@@ -29,7 +29,7 @@ contraire.
 | Certificat TLS | ❌ | `certbot --nginx`. § 8. **Lire le § 8.2, le piège du compte ACME.** |
 | Secrets GitHub | ❌ | § 2.2. |
 | Premier administrateur | ❌ | § 9 — en console, il n'existe **aucune** route qui crée un compte. |
-| Données de l'arbre | ❌ | § 10 — restauration d'une sauvegarde. Il n'y a plus d'import GEDCOM (ADR 0017). |
+| Données de l'arbre | ❌ | § 10 — restauration d'une sauvegarde. Il n'y a plus d'import GEDCOM (ADR 0018). |
 
 ---
 
@@ -598,7 +598,7 @@ verrouiller dehors n'a pas d'autre issue que celle-ci.
 
 > **Ce paragraphe décrivait l'import du GEDCOM** (`heritage:import-gedcom`, à blanc puis
 > avec `--premier-import`). L'import a été supprimé
-> ([ADR 0017](../adr/0017-suppression-de-l-import-gedcom.md)) : l'arbre réel vit dans la
+> ([ADR 0018](../adr/0018-suppression-de-l-import-gedcom.md)) : l'arbre réel vit dans la
 > base de production et dans ses sauvegardes, et une base neuve se peuple **en restaurant
 > un dump**. Il n'y a pas d'autre chemin.
 
@@ -689,7 +689,7 @@ commande l'imprime, et un humain tranche en écrivant la ligne à la main
 
 Le rattachement se fait par **référence GEDCOM** (`@I500001@`), jamais par un
 `tree_person.id`. Mesuré le 15 septembre 2026 : après un réimport GEDCOM (l'import
-est supprimé depuis, ADR 0017), les identifiants numériques ont glissé de 1–274 à 275–548. Un rattachement numérique
+est supprimé depuis, ADR 0018), les identifiants numériques ont glissé de 1–274 à 275–548. Un rattachement numérique
 aurait désigné quelqu'un d'autre sans que rien ne le signale.
 
 ---

@@ -1,4 +1,4 @@
-# ADR 0017 — Suppression de l'import GEDCOM (et de l'export jamais écrit)
+# ADR 0018 — Suppression de l'import GEDCOM (et de l'export jamais écrit)
 
 Date : 2026-10-06 · Statut : acceptée
 

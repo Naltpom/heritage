@@ -49,7 +49,7 @@ circuit implique, et pourquoi c'est une file de validation plutôt qu'un wiki.
   `prp_revision.request_id` n'est `NULL` que pour l'import GEDCOM, jamais pour une édition
   d'administrateur.
 
-  > **Remplacé par l'[ADR 0017](0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : l'import est supprimé — et il n'écrivait d'ailleurs
+  > **Remplacé par l'[ADR 0018](0018-suppression-de-l-import-gedcom.md) (2026-10-06)** : l'import est supprimé — et il n'écrivait d'ailleurs
   aucune révision. Aucun chemin d'écriture ne produit plus de `request_id` nul ; il ne peut
   venir que d'une demande effacée hors de l'application.
 

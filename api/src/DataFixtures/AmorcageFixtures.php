@@ -50,7 +50,7 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  * base à l'autre : la colonne est une identité, qu'un rechargement sur base neuve
  * réattribue. `gedcom_xref` porte une contrainte d'unicité (`uniq_tree_person_xref`) et
  * désigne toujours la même personne. Poser l'identifiant numérique dans l'environnement
- * avait produit, au premier réimport GEDCOM (l'import a été supprimé depuis, ADR 0017),
+ * avait produit, au premier réimport GEDCOM (l'import a été supprimé depuis, ADR 0018),
  * un rattachement silencieusement dirigé vers quelqu'un d'autre — la pire des pannes de
  * la soirée, celle qui ment sans rien casser.
  */

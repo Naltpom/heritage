@@ -169,7 +169,7 @@ c'est le mode de défaillance que la liste blanche (§ 11.4) existe pour attrape
 
 > **Les identifiants des exemples n'ont aucune stabilité, et ne servent qu'à relier les
 > exemples entre eux.** `tree_person.id` est une colonne d'identité que tout repeuplement
-> réattribue : mesuré, du temps de l'import GEDCOM (supprimé depuis, ADR 0017), les
+> réattribue : mesuré, du temps de l'import GEDCOM (supprimé depuis, ADR 0018), les
 > identifiants 1–274 sont devenus 275–548 après neuf imports, et
 > Marne Dolomite Sureau, `17` dans ce document, porte aujourd'hui `291`. **Ne codez jamais un
 > identifiant en dur**, ni dans un test, ni dans une fixture, ni dans un lien : appariez sur
@@ -3839,7 +3839,7 @@ au plus ancien (`idx_prp_revision_sujet`). `subjectKind` accepte les six valeurs
 historique lisible, pas un dump. `requestId` à `null` signale une demande effacée hors de
 l'application, jamais un raccourci d'écriture — « il n'existe aucun chemin d'écriture
 applicatif qui contourne le mécanisme » (§ 5.5). L'import GEDCOM, supprimé depuis
-(ADR 0017), n'écrivait pas de révision.
+(ADR 0018), n'écrivait pas de révision.
 
 L'historique d'une personne **vivante hors cercle** n'est pas accessible : `404`. Il porte des
 dates et des lieux, c'est-à-dire tout ce que la liste blanche exclut. Même `404` pour
@@ -4486,7 +4486,7 @@ front n'a donc **aucun cas « pas de préférence »** à traiter : il lit toujo
 
 Modules `Core` (utilisateurs, réglages, bascule, journal) et `Membership` (membres) ; les
 sources (§ 10.7) relèvent de `Tree`. Il n'y a **aucune route GEDCOM** : l'import et l'export ont
-été retirés (§ 10.6, ADR 0017).
+été retirés (§ 10.6, ADR 0018).
 Tout le préfixe `/api/administration` est derrière `ROLE_ADMIN` par `access_control` — la
 règle est posée **avant** `^/api`, faute de quoi elle ne serait jamais atteinte (« seule la
 première règle qui correspond est appliquée »).
@@ -4970,7 +4970,7 @@ Ce paragraphe décrivait `POST /api/administration/gedcom/import`, `…/executio
 `…/executions/{id}`, `…/executions/{id}/fichier` et `POST /api/administration/gedcom/export`,
 avec le journal `ged_run` / `ged_issue` et le code `409 import_en_cours`. **Aucune de ces
 routes n'a été écrite**, et elles sont retirées du contrat avec l'import lui-même
-([ADR 0017](adr/0017-suppression-de-l-import-gedcom.md)) : l'application n'importe ni
+([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)) : l'application n'importe ni
 n'exporte de GEDCOM, et les tables `ged_run` / `ged_issue` sont supprimées. Les données
 réelles se reprennent en restaurant une sauvegarde de la base.
 
@@ -5003,7 +5003,7 @@ demande `ajout_citation` (§ 6.4 bis), qui désigne la source par son `id`.
   `publication`, `text`, `note` (10 000 chacun), `mediaType` (60). Un champ blanc vaut `null`.
   `PUT` **remplace** la notice : un champ facultatif absent est vidé.
 - `gedcomXref` est rendu mais **jamais lu** : c'est la référence d'une source venue du
-  GEDCOM d'origine, et une source créée ici le garde à `null` (ADR 0012, ADR 0017).
+  GEDCOM d'origine, et une source créée ici le garde à `null` (ADR 0012, ADR 0018).
 - Pas de `DELETE` (ADR 0012).
 
 ```json
@@ -6206,7 +6206,7 @@ document a retenu **en attendant** une correction de la source.
 | 10 | L'écran d'attente peut-il nommer la personne réclamée | **§ 4.5** est catégorique : « aucune personne vivante […] y compris celle à laquelle le compte prétend se rattacher » | pris **au pied de la lettre** : ni `personId` ni `personLabel` dans `GET /api/session` ni dans `/api/inscription/etat` tant que le compte est `en_attente` (§ 2.2, § 4.4) | à confirmer — c'est rude pour l'utilisateur, mais c'est ce qui est écrit |
 | 11 | Forme unique d'erreur contre le dépôt de référence | Le dépôt de référence émet **deux** formes, `{"error": …}` et `{"errors": …}` ; la mission demande une forme unique | `{"erreur": {code, message, champs, details}}`, y compris dans le point d'entrée 401 et le gestionnaire de `login_throttling` (§ 15.1) | — décision de ce document, à ne pas « recorriger » vers la référence |
 | 12 | Largeur `w` d'un nœud restreint | ~~Soupçon d'une fuite par la largeur~~ — **réfuté par la mesure** : `graphe.py` court-circuite `ligne_dates()` sur le drapeau privé et rend la constante `"vivant·e"` | `w` **identique pour tous les lecteurs**, calculée sur le nom et une constante (§ 11.2). Le moteur ne prend aucun paramètre de lecteur. Rien à corriger ailleurs | — **rien** : l'ADR 0005 avait raison, et le portage doit le reproduire à l'identique |
-| 13 | Chemin du GEDCOM à l'import | Le **§ 0 du dossier** impose une variable de configuration, « jamais un chemin en dur », et l'atelier est en lecture seule | le corps porte une **clé de source** déclarée dans `.env`, jamais un chemin de système de fichiers (§ 10.6) — un chemin libre serait une lecture de fichier arbitraire. **Sans objet depuis l'ADR 0017** : la route d'import est retirée | — |
+| 13 | Chemin du GEDCOM à l'import | Le **§ 0 du dossier** impose une variable de configuration, « jamais un chemin en dur », et l'atelier est en lecture seule | le corps porte une **clé de source** déclarée dans `.env`, jamais un chemin de système de fichiers (§ 10.6) — un chemin libre serait une lecture de fichier arbitraire. **Sans objet depuis l'ADR 0018** : la route d'import est retirée | — |
 | 15 | **L'étiquette de nom mesurée n'a pas de nom** | Le moteur mesure `(nickname ?? givenNames)` réduit à son **premier mot** + `surname` ; **rien dans le modèle ni dans l'ADR 0005 ne nomme cette chaîne**, et `display_name` (§ 3.1) est une autre composition — tous les prénoms. Mesuré : **220 fiches sur 274 débordent** si le canevas dessine `displayName`, jusqu'à 169 unités sur une boîte de 149 | clé **`etiquetteNom`** sur le nœud, servie par `MesureDeFiche::etiquetteNom()` (§ 5.2). Non dérivable côté client : un nom de famille peut contenir des espaces | ADR 0005 — la nommer dans le résumé de l'algorithme, à côté de `ligne_dates()` |
 | 14 | **Chaînage d'une reprise** | Aucune colonne n'enregistre qu'une demande en refait une autre, ni que les médias d'une demande caduque sont partis vers sa reprise (§ 6.10). `duplicate_of_id` ne convient pas : il porte le rapprochement de doublons **entre deux auteurs**, et lui donner un second sens rendrait les deux illisibles | `origine` est écrit en texte dans `message` ; les médias suivent et la demande d'origine ne les liste plus | **à trancher par le commanditaire** : veut-il lire « votre demande n° 12 a été refaite en n° 21 » ? Si oui, c'est une colonne `reprise_de_id` sur `prp_change_request`, et ce n'est pas à ce document de la décider |
 | 16 | **Les anniversaires contre « pas de liste, pas d'export »** | L'ADR 0003 refuse l'énumération ; or la page des anniversaires **est** une liste de personnes et de dates, triée, filtrable, et l'année entière tient en une requête | **absents, jamais réduits** — la décision du § 9.1 reprise mot pour mot. L'ensemble résiduel ne couvre que les défunts et les vivants déjà dans le cercle du lecteur, dont il lit les dates sur `/api/chronologie`. Vérifié par un test de **sous-ensemble** entre les deux routes (§ 20.5) | **à confirmer par le commanditaire** : l'ensemble n'est pas plus large, mais il est mieux trié et moins cher à parcourir qu'un SVG |

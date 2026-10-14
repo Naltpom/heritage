@@ -35,7 +35,7 @@ use PHPUnit\Framework\TestCase;
  * Le compte reste publié (voir `rapport()`), mais comme **mesure de
  * progression** : **24 aujourd'hui, 8 après les déplacements mécaniques, 0
  * ensuite.** Pas comme porte. (Il était de 46 le 2026-09-16 : les 22 lignes du
- * module `Gedcom` sont parties avec lui, ADR 0017.)
+ * module `Gedcom` sont parties avec lui, ADR 0018.)
  *
  * > **Ces quatre nombres étaient faux, et ils le sont restés parce que rien ne
  * > les lisait.** Ce paragraphe annonçait « 55 → 11 → 1 → 0 ». Le 55 est le
@@ -227,7 +227,7 @@ final class FrontieresInterModulesTest extends TestCase
      * le 55 était le total (dont 9 références **licites**, qui n'ont jamais eu
      * vocation à disparaître), et les deux étapes intermédiaires ne
      * correspondaient à aucune ventilation par motif. Depuis la suppression du
-     * module `Gedcom` (ADR 0017), qui portait la dette datée et 12 lignes de
+     * module `Gedcom` (ADR 0018), qui portait la dette datée et 12 lignes de
      * vocabulaire, la trajectoire est **24 → 8 → 0**.
      *
      * **Ce qu'on vérifie n'est pas le total.** Un total est compensable — c'est

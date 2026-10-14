@@ -27,7 +27,7 @@ Exclus par `.gitignore` : `*.ged`, `graphe.json`, `arbre-data.json`, `rendu-part
   fixe**. `docker compose up --build` doit suffire à obtenir une application fonctionnelle et
   peuplée.
 
-  > **État au 2026-10-06 (ADR 0017)** : ce générateur n'existe toujours pas. La seule donnée
+  > **État au 2026-10-06 (ADR 0018)** : ce générateur n'existe toujours pas. La seule donnée
   > d'arbre du dépôt est l'**arbre d'essai** — onze personnes inventées, écrites à la main
   > (`App\DataFixtures\ArbreDEssaiFixtures`, groupe `essai`) —, qui remplace le fichier
   > `arbre-essai.ged` que chargeait l'import. Il ensemence la CI et une installation neuve ; il
@@ -52,7 +52,7 @@ Exclus par `.gitignore` : `*.ged`, `graphe.json`, `arbre-data.json`, `rendu-part
 - L'import des vraies données est une **commande locale** — `bin/console heritage:import-gedcom`
   — jamais une fixture, jamais une étape de démarrage.
 
-  > **Remplacé par l'[ADR 0017](0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : la commande est supprimée. Les vraies données vivent
+  > **Remplacé par l'[ADR 0018](0018-suppression-de-l-import-gedcom.md) (2026-10-06)** : la commande est supprimée. Les vraies données vivent
   dans la base de production et ses sauvegardes ; elles se reprennent en **restaurant un
   dump**, jamais par une fixture ni par une étape de démarrage. La règle de fond — elles
   n'entrent pas dans le dépôt — est inchangée.
@@ -248,7 +248,7 @@ utilisés jusqu'ici sont posés à la main hors dépôt.
   même comptage : 174 filiations, 28 sources, 483 citations, 175 notes. Un import qui ne
   retombe pas exactement sur ces nombres est un import raté, et la commande doit le dire.
 
-  > **Remplacé par l'[ADR 0017](0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : ces totaux de contrôle sont partis avec l'import.
+  > **Remplacé par l'[ADR 0018](0018-suppression-de-l-import-gedcom.md) (2026-10-06)** : ces totaux de contrôle sont partis avec l'import.
   Ils décrivent l'arbre **au jour de l'import initial**, pas la base de production, qui a
   évolué depuis par les demandes validées.
 - Le test de non-régression du moteur de placement contre `graphe.json` **ne tourne qu'en

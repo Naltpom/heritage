@@ -390,7 +390,7 @@ services:
       #
       # `HERITAGE_ADMIN_PERSONNE_XREF` porte une RÉFÉRENCE GEDCOM (`@I500001@`) et
       # jamais un `tree_person.id`. Mesuré le 15 septembre 2026 : après un réimport
-      # GEDCOM (l'import a été supprimé depuis, ADR 0017), les identifiants ont
+      # GEDCOM (l'import a été supprimé depuis, ADR 0018), les identifiants ont
       # glissé de 1–274 à 275–548. Un rattachement numérique
       # aurait désigné quelqu'un d'autre sans que rien ne le signale ; la référence
       # GEDCOM, elle, porte une contrainte d'unicité et suit la personne.

@@ -203,7 +203,7 @@ jobs:
       # `INSERT` de circonstance : ce que les tests liront ensuite est ce que
       # l'application écrit réellement. `--append` parce que, sans lui, le
       # chargement purgerait `core_setting` que la migration vient de semer.
-      # L'import GEDCOM qui faisait ce travail a été supprimé (ADR 0017).
+      # L'import GEDCOM qui faisait ce travail a été supprimé (ADR 0018).
       - name: Ensemencer PostgreSQL avec l'arbre d'essai (données inventées)
         env:
           DATABASE_URL: "postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage?serverVersion=17&charset=utf8"

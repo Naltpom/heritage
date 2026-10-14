@@ -11,7 +11,7 @@ use App\Module\Core\Service\CleDeRecherche;
  * accents, en majuscules, ponctuation retirée.
  *
  * **La duplication est levée.** La table de repliement vivait ici *et* dans le module
- * `Gedcom` (supprimé depuis, ADR 0017), qui **écrivait** `search_key` — `Tree` n'ayant pas
+ * `Gedcom` (supprimé depuis, ADR 0018), qui **écrivait** `search_key` — `Tree` n'ayant pas
  * le droit de l'importer (ADR 0002, règle 3 : `Core` seul en liste blanche). Elle est
  * remontée dans {@see CleDeRecherche}, comme l'arbitrage **E** l'a fait pour
  * `UncertainDate`, `DateQualifier`, `Sex` et `Branch`. Il n'existe donc plus qu'une seule

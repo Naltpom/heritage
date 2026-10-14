@@ -8,7 +8,7 @@ use Doctrine\DBAL\Schema\Schema;
 use Doctrine\Migrations\AbstractMigration;
 
 /**
- * **Suppression de l'import GEDCOM** (ADR 0017) : les tables `ged_run` et `ged_issue`
+ * **Suppression de l'import GEDCOM** (ADR 0018) : les tables `ged_run` et `ged_issue`
  * disparaissent avec le module `Gedcom`.
  *
  * Elles ne portaient que le journal des exécutions de `heritage:import-gedcom` et les
@@ -35,7 +35,7 @@ final class Version20261006100000 extends AbstractMigration
 {
     public function getDescription(): string
     {
-        return 'Suppression de l’import GEDCOM : ged_issue et ged_run supprimées (ADR 0017).';
+        return 'Suppression de l’import GEDCOM : ged_issue et ged_run supprimées (ADR 0018).';
     }
 
     public function up(Schema $schema): void

@@ -21,7 +21,7 @@ namespace App\Module\Core\Service;
  * ## Pourquoi elle est dans `Core`
  *
  * Elle a existé en double : dans le module `Gedcom` (supprimé depuis avec l'import,
- * ADR 0017), qui composait la colonne à l'import, et dans
+ * ADR 0018), qui composait la colonne à l'import, et dans
  * `Tree\Serializer\NormaliseurDeRequete`, qui normalise le terme de recherche. La règle 3
  * de l'ADR 0002 interdit à un module d'importer l'autre, donc les deux tables étaient
  * recopiées. Aujourd'hui la colonne s'écrit par `Tree\Service\NormalisateurNom` et se

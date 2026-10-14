@@ -27,7 +27,7 @@ use App\Module\Tree\ValueObject\PlacementLogique;
  * base, et c'est cette contrainte qui le rend comparable à `graphe.json`.
  *
  * **L'entrée n'est pas un `JeuDePlacement` mais ses deux morceaux utiles**, et c'est
- * délibéré : l'import GEDCOM (supprimé depuis, ADR 0017) appelait ce calcul **avant** que l'arbre soit en base — c'est
+ * délibéré : l'import GEDCOM (supprimé depuis, ADR 0018) appelait ce calcul **avant** que l'arbre soit en base — c'est
  * ce qui permet à son `--dry-run` d'annoncer 12 générations et la répartition par branche
  * sans rien écrire. Lui imposer un `JeuDePlacement` complet l'obligerait à fabriquer des
  * `PersonnePlacable` dont il n'a pas encore les champs, donc à inventer de la donnée pour

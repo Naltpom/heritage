@@ -30,7 +30,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
  * à l'analyse statique, déclenché par la donnée, et dont la probabilité **augmente avec le
  * temps** — on ajoute une valeur d'énumération au fil des fonctionnalités, et la nouvelle
  * est souvent plus longue que les anciennes. Les deux débordements trouvés à l'écriture
- * du schéma (`ged_issue.severity` — table supprimée depuis, ADR 0017 —, et
+ * du schéma (`ged_issue.severity` — table supprimée depuis, ADR 0018 —, et
  * `mbr_member.match_kind`) ont tous deux cette forme : une valeur descriptive ajoutée
  * après que la largeur eut été fixée sur les courtes.
  *
@@ -85,7 +85,7 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      *
      * **53 depuis le 2026-10-06** : `ged_run.direction`, `ged_run.status` et
      * `ged_issue.severity` partent avec les deux tables du module `Gedcom`, supprimé
-     * (ADR 0017, `migrations/Version20261006100000.php`).
+     * (ADR 0018, `migrations/Version20261006100000.php`).
      */
     private const int COLONNES_ENUM_ATTENDUES = 53;
 

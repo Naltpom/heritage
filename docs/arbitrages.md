@@ -429,7 +429,7 @@ nombre de **fiches** dont la meilleure citation atteint `QUAY ≥ 2`
 (`count(*) FROM tree_person WHERE best_quay >= 2`), pas un nombre de citations ni de faits :
 les citations à `quay ≥ 2` sont 177. La commande d'import doit vérifier le bon des deux.
 
-> **Remplacé par l'[ADR 0017](adr/0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : la commande d'import et ses totaux de contrôle sont supprimés.
+> **Remplacé par l'[ADR 0018](adr/0018-suppression-de-l-import-gedcom.md) (2026-10-06)** : la commande d'import et ses totaux de contrôle sont supprimés.
 
 ### Z, BB, CC, DD — Le moteur n'était pas perdu, et trois choses en découlent
 
@@ -840,7 +840,7 @@ un seuil que le prochain relèvera d'un cran, puis d'un autre. Un seuil qui dit 
 références restantes, dont 10 sont la dette `EcrivainTree`, voir ADR 0002 » se défend tout
 seul, et se solde quand quelqu'un a le temps.
 
-> **Remplacé par l'[ADR 0017](adr/0017-suppression-de-l-import-gedcom.md) (2026-10-06)** : la dette n'a pas été soldée par `PortImportArbre` :
+> **Remplacé par l'[ADR 0018](adr/0018-suppression-de-l-import-gedcom.md) (2026-10-06)** : la dette n'a pas été soldée par `PortImportArbre` :
 > le module `Gedcom` a été supprimé avec l'import, et ses 22 exemptions avec lui. La
 > trajectoire est désormais « 24 → 8 → 0 » (`tests/Frontieres/ExemptionsDeFrontiere.php`).
 

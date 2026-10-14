@@ -20,7 +20,7 @@ ainsi qu'a été trouvée la collision entre `tree_person.id` et `tree_family.id
 sur les références GEDCOM `@I…@` / `@F…@`.
 
 Un troisième, `PlacementBaseImporteeTest`, vérifiait le placement sur la base que
-produisait `heritage:import-gedcom`. Il est parti avec l'import (ADR 0017) : la base réelle
+produisait `heritage:import-gedcom`. Il est parti avec l'import (ADR 0018) : la base réelle
 n'est plus jamais reconstruite depuis le GEDCOM, elle vit en production et se restaure
 depuis ses sauvegardes, et elle a évolué depuis par les demandes validées — `graphe.json`
 n'en est plus l'image.
@@ -62,7 +62,7 @@ ADR 0005 : *« Le test d'égalité exacte doit être lancé au moins une fois av
 service, sur la machine du commanditaire, et son résultat consigné. »*
 
 **2026-09-15, poste du commanditaire, PHP 8.4.4, PHPUnit 13.3.4** (la première ligne vient
-de `PlacementBaseImporteeTest`, supprimé depuis avec l'import — ADR 0017) **:**
+de `PlacementBaseImporteeTest`, supprimé depuis avec l'import — ADR 0018) **:**
 
 ```
 Placement — depuis la base importée : 377/377 nœuds exacts.

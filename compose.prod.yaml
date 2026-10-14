@@ -122,7 +122,7 @@
 #
 #  6. DONNÉES RÉELLES — elles vivent dans la base de production et dans ses
 #     sauvegardes, jamais dans le dépôt ni dans une fixture. Il n'y a plus
-#     d'import GEDCOM (ADR 0017) : une base neuve se peuple en RESTAURANT un
+#     d'import GEDCOM (ADR 0018) : une base neuve se peuple en RESTAURANT un
 #     dump (procédure au-dessus du service `sauvegarde`). Le dump ne monte pas
 #     sur le serveur par le dépôt ; le supprimer de la machine une fois restauré.
 #

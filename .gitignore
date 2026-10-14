@@ -16,7 +16,7 @@
 # (`doctrine:fixtures:load --group=essai --append`) suffit à le faire tourner.
 
 # --- GEDCOM : de la donnée réelle, sous toutes ses versions et sauvegardes ---
-# L'application n'importe plus de GEDCOM (ADR 0017) : la donnée réelle vit dans
+# L'application n'importe plus de GEDCOM (ADR 0018) : la donnée réelle vit dans
 # la base de production et ses sauvegardes. Un .ged reste pourtant de la donnée
 # réelle — l'export MyHeritage d'origine, un arbre de travail, une sauvegarde —
 # et le dépôt ne doit jamais en porter. D'où un motif volontairement non ancré

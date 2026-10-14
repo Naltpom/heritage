@@ -128,7 +128,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * dizaines ; le compte de l'invité n'y est pas figé, il se lit au rattachement.
      *
      * **43 depuis le 2026-10-06** : `ged_run` et `ged_issue` sont supprimées avec le module
-     * `Gedcom` (`migrations/Version20261006100000.php`, ADR 0017). C'est une **décision** :
+     * `Gedcom` (`migrations/Version20261006100000.php`, ADR 0018). C'est une **décision** :
      * l'import pouvait réécrire en silence ce que les demandes avaient fait valider, et ces
      * deux tables n'en portaient que le journal. Les colonnes `gedcom_xref` restent : ce
      * sont les identifiants stables de l'arbre.
@@ -279,7 +279,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * `CREATE TABLE t (col def, …, PRIMARY KEY (…))`, `ALTER TABLE t ADD col def`,
      * `ALTER TABLE t DROP col`, `ALTER TABLE t ALTER col TYPE x`,
      * `ALTER TABLE t ALTER col DROP|SET NOT NULL` et `DROP TABLE t` — la dernière depuis
-     * la suppression de `ged_run` et `ged_issue` (ADR 0017). Tout le reste — index,
+     * la suppression de `ged_run` et `ged_issue` (ADR 0018). Tout le reste — index,
      * contraintes, données — est ignoré ici et couvert ailleurs.
      *
      * ⚠ **La quatrième manquait, et son absence rendait ce test faux dans un sens qu'on ne
@@ -567,7 +567,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      *
      * L'historique est **rejoué**, `DROP TABLE` compris : une table créée par une
      * migration déjà jouée puis supprimée par une suivante (`ged_run`, `ged_issue` —
-     * ADR 0017) n'existe plus, et ne doit plus avoir d'entité. Retoucher la migration qui
+     * ADR 0018) n'existe plus, et ne doit plus avoir d'entité. Retoucher la migration qui
      * l'a créée pour la faire taire serait la faute que ce fichier existe pour empêcher.
      */
     public function testLaMigrationNeCreeQueDesTablesQuiOntUneEntite(): void

@@ -17,7 +17,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 /**
  * L'arbre d'essai — le point de départ d'une installation neuve depuis la suppression de
- * l'import GEDCOM (ADR 0017), et ce qui ensemence la base PostgreSQL de la CI.
+ * l'import GEDCOM (ADR 0018), et ce qui ensemence la base PostgreSQL de la CI.
  *
  * Il doit tenir trois promesses : écrire l'arbre entier, poser la personne racine et les
  * colonnes dérivées comme l'application le fait, et **refuser** une base qui porte déjà

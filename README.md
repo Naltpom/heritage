@@ -18,7 +18,7 @@ contraintes, et tout le reste en découle :
    [ADR 0006](docs/adr/0006-donnees-reelles-non-versionnees.md). Ce que vous clonez
    démarre sur un arbre d'essai anonymisé ; les vraies données vivent dans la base de
    production et ses sauvegardes, et il n'y a pas d'import GEDCOM —
-   [ADR 0017](docs/adr/0017-suppression-de-l-import-gedcom.md).
+   [ADR 0018](docs/adr/0018-suppression-de-l-import-gedcom.md).
 
 | | |
 |---|---|
@@ -135,7 +135,7 @@ de toute la pile.
 ## Peupler l'arbre
 
 Deux chemins, qui ne se mélangent pas. **Il n'y a pas de troisième** : l'import GEDCOM a été
-supprimé ([ADR 0017](docs/adr/0017-suppression-de-l-import-gedcom.md)) parce qu'il pouvait
+supprimé ([ADR 0018](docs/adr/0018-suppression-de-l-import-gedcom.md)) parce qu'il pouvait
 réécrire en silence ce que les demandes avaient fait valider. Les **références GEDCOM**
 (`gedcom_xref`, `@I500001@`, `@I9xxxxx@` pour une fiche créée dans l'application) restent :
 ce sont les identifiants stables des fiches.
@@ -300,7 +300,7 @@ pas leur contenu : un fichier modifié après coup ne sera pas rejoué, et votre
 en silence de celui de tout le monde. On corrige par une **nouvelle** migration.
 
 **Ne faites jamais `TRUNCATE tree_person`.** Il n'y a plus d'import pour repeupler l'arbre
-([ADR 0017](docs/adr/0017-suppression-de-l-import-gedcom.md)) : ce qui est effacé ne revient
+([ADR 0018](docs/adr/0018-suppression-de-l-import-gedcom.md)) : ce qui est effacé ne revient
 que par la restauration d'une sauvegarde, et tout ce qui a été validé depuis est perdu. Et
 les identifiants sont une identité, réattribuée à tout repeuplement : mesuré le 15 septembre
 2026, après un réimport, ils ont glissé de 1–274 à 275–548. Tout rattachement de membre

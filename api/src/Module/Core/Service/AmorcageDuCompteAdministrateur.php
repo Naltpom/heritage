@@ -17,7 +17,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
  * ## Pourquoi il ne suffit pas de le créer une fois à la main
  *
  * `doctrine:fixtures:load` **purge la base** (voir l'avertissement de
- * `config/bundles.php`), et un réimport GEDCOM — supprimé depuis, ADR 0017 — remettait
+ * `config/bundles.php`), et un réimport GEDCOM — supprimé depuis, ADR 0018 — remettait
  * `core_user` à zéro. Un compte créé à la main n'a survécu ni à l'un ni à l'autre — il a
  * déjà été perdu deux fois. Un compte dont la
  * définition vit dans l'environnement se repose en une commande, sans que personne ait à

@@ -27,7 +27,7 @@ use PHPUnit\Framework\TestCase;
  *
  * ## Pourquoi une base construite ici
  *
- * Il n'y a pas d'import GEDCOM (supprimé, ADR 0017) et la base réelle ne se versionne pas
+ * Il n'y a pas d'import GEDCOM (supprimé, ADR 0018) et la base réelle ne se versionne pas
  * (ADR 0006). On construit donc les entités directement, **depuis `graphe.json`**, en
  * reconstituant les chaînes GEDCOM verbatim que porte `birth_raw` et `death_raw` sur les
  * fiches venues du fichier d'origine.
