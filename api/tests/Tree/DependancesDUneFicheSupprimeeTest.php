@@ -8,9 +8,10 @@ use App\Integrite\ControleDIntegrite;
 use App\Integrite\VerificationDIntegrite;
 use App\Module\Core\Entity\AuditLog;
 use App\Module\Core\Enum\AuditAction;
+use App\Module\Core\Enum\NiveauDePartage;
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
-use App\Module\Core\ValueObject\ComposantesDeDate;
+use App\Module\Core\ValueObject\PartageDeNaissance;
 use App\Module\Demarche\Entity\Demarche;
 use App\Module\Demarche\Enum\FormeDActe;
 use App\Module\Demarche\Enum\NatureDActe;
@@ -446,7 +447,7 @@ final class DependancesDUneFicheSupprimeeTest extends BaseDeDemandeSurArbreReel
 
     private function autorisation(int $personneId): AutorisationDeNaissance
     {
-        return new AutorisationDeNaissance($personneId, new ComposantesDeDate(true, true, false), 'a1b2c3.pdf', 'application/pdf', 1_200, str_repeat('b', 64), 'Courrier signé', self::ADMIN);
+        return new AutorisationDeNaissance($personneId, new PartageDeNaissance(NiveauDePartage::Tous, NiveauDePartage::Tous, NiveauDePartage::Personne), 'a1b2c3.pdf', 'application/pdf', 1_200, str_repeat('b', 64), 'Courrier signé', self::ADMIN);
     }
 
     private function preuve(MediaSubject $sujet, int $sujetId): void

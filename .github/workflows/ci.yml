@@ -196,6 +196,16 @@ jobs:
           php bin/console heritage:import-gedcom tests/Gedcom/fixtures/arbre-essai.ged \
             --premier-import --attendus personnes=11,familles=5
 
+      # L'intégrité des références inter-modules (ADR 0002, § 10.8 du modèle de
+      # données), sur le schéma PostgreSQL migré et ensemencé : la commande ne
+      # tourne pas sur la base SQLite des tests, que ceux-ci bâtissent en mémoire.
+      # Sur l'arbre d'essai, elle prouve surtout que son SQL passe sur
+      # PostgreSQL 17 ; les cas de références cassées sont couverts par phpunit.
+      - name: Intégrité des références inter-modules
+        env:
+          DATABASE_URL: "postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage?serverVersion=17&charset=utf8"
+        run: php bin/console heritage:verifier-integrite
+
       # Porte 1. `--level=6` en ligne de commande et non seulement dans
       # phpstan.neon : la CI est le contrat, elle ne doit pas pouvoir être
       # assouplie en abaissant le niveau dans le fichier de configuration.
