@@ -269,6 +269,13 @@ export const LIBELLES_QUART: Record<BrancheDeQuart, string> = {
   cmm: 'Conjoint · Mère de la mère',
 }
 
+/** Le libellé d'une branche quelconque — un quart, le tronc, ou rien de connu.
+ *  Celui que les résultats de recherche affichent sous le nom. */
+export function libelleDeBranche(b: string): string {
+  if (b === 'tr') return 'Tronc'
+  return (LIBELLES_QUART as Record<string, string>)[b] ?? 'Hors branche'
+}
+
 /** Sosa du grand-parent de tête de chaque quart. */
 const SOSA_DU_QUART: Record<'pp' | 'pm' | 'mp' | 'mm', number> = { pp: 4, pm: 5, mp: 6, mm: 7 }
 

@@ -80,7 +80,6 @@ import {
   chargerGraphe,
   lireFichePersonne,
   oublierEtag,
-  rechercherPersonnes,
   retenirEtag,
   type Graphe,
   type FichePersonneComplete,
@@ -91,6 +90,8 @@ import { FILTRES, filtreDisponible, nomDeFiche, type IdFiltre, type NoeudPersonn
 import { useCorrespondance, useEstMobile, useTiroirs } from '@/composables/useTiroirs'
 import { definirResume } from '@/composables/entete'
 import { abonnerChoix, useRechercheGlobale } from '@/composables/rechercheGlobale'
+import { LIMITE_MAXIMALE, LONGUEUR_MINIMALE, useRecherchePersonnes } from '@/composables/useRecherchePersonnes'
+import ChampRechercheArbre from '@/components/arbre/ChampRechercheArbre.vue'
 import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
 import Segmente from '@/components/mise-en-page/Segmente.vue'
 import PastilleFiltre from '@/components/evenements/PastilleFiltre.vue'
@@ -1309,15 +1310,31 @@ const libelleLigne = computed(() => {
   return `Ligne directe de ${nom}`
 })
 
-/* L'état de la recherche, lu par le rendu : les cibles sont mises en évidence. */
-const recherche = ref('')
-const resultats = ref<ResultatDeRecherche[]>([])
-const tronque = ref(false)
+/*
+ * L'état de la recherche, lu par le rendu : les cibles sont mises en évidence.
+ * Deux sources, selon la largeur : le champ du bas sur téléphone (`rechercheMobile`,
+ * qui interroge l'API), l'en-tête sur grand écran (ce qu'il publie, voir plus bas).
+ */
 const curseur = ref(0)
 const listeOuverte = ref(false)
+const rechercheMobile = useRecherchePersonnes({
+  // Jusqu'au plafond de l'API : toutes les personnes trouvées sont mises en évidence.
+  limite: () => LIMITE_MAXIMALE,
+  delai: 120,
+  surResultats(texte, liste) {
+    if (texte.length < LONGUEUR_MINIMALE) return
+    curseur.value = 0
+    listeOuverte.value = true
+    if (liste.length) cadrerCibles()
+  },
+})
+const texteEntete = ref('')
+const resultatsEntete = shallowRef<ResultatDeRecherche[]>([])
+const recherche = computed(() => (estMobile.value ? rechercheMobile.texte.value : texteEntete.value))
+const resultats = computed(() => (estMobile.value ? rechercheMobile.resultats.value : resultatsEntete.value))
 const cibles = computed<FicheHistoire[]>(() => {
   const d = disposition.value
-  if (!d || recherche.value.trim().length < 2) return []
+  if (!d || recherche.value.trim().length < LONGUEUR_MINIMALE) return []
   return resultats.value.map((r) => d.parPersonId.get(r.personId)).filter((f): f is FicheHistoire => f !== undefined)
 })
 const idsCibles = computed(() => new Set(cibles.value.map((f) => f.id)))
@@ -1747,41 +1764,13 @@ const compteur = computed(() => {
 /* Recherche : par l'API, jamais par un index local                     */
 /* ------------------------------------------------------------------ */
 
-const champ = ref<HTMLInputElement | null>(null)
-let minuterie = 0
-let requete: AbortController | null = null
-
-/**
- * À chaque frappe : l'API rend jusqu'à 50 personnes (son plafond), toutes sont
- * mises en évidence sur le canevas et la vue se cadre sur elles ; la liste
- * reste affichée pour choisir.
- */
-watch(recherche, (q) => {
-  // Sur grand écran, la recherche est celle de l'en-tête (voir plus bas).
-  if (!estMobile.value) return
-  window.clearTimeout(minuterie)
-  requete?.abort()
-  const texte = q.trim()
-  if (texte.length < 2) {
-    resultats.value = []
-    tronque.value = false
-    return
-  }
-  minuterie = window.setTimeout(() => {
-    requete = new AbortController()
-    rechercherPersonnes(texte, 50, requete.signal)
-      .then((r) => {
-        resultats.value = r.elements
-        tronque.value = r.tronque
-        curseur.value = 0
-        listeOuverte.value = true
-        cadrerCibles()
-      })
-      .catch(() => {})
-  }, 120)
-})
+const champ = ref<InstanceType<typeof ChampRechercheArbre> | null>(null)
 
 /*
+ * Sur téléphone, à chaque frappe : l'API rend jusqu'à 50 personnes (son plafond),
+ * toutes sont mises en évidence sur le canevas et la vue se cadre sur elles ; la
+ * liste reste affichée pour choisir (`rechercheMobile`, plus haut).
+ *
  * Sur grand écran, le champ est dans l'en-tête (`RechercheEntete`) : l'arbre
  * s'abonne à ses résultats pour les mettre en évidence et cadrer la vue, suit
  * son curseur, et reçoit le choix final (voler vers la personne).
@@ -1791,8 +1780,8 @@ watch(
   () => globale.resultats.value,
   (liste) => {
     if (estMobile.value) return
-    recherche.value = globale.requete.value
-    resultats.value = [...liste]
+    texteEntete.value = globale.requete.value
+    resultatsEntete.value = [...liste]
     curseur.value = 0
     if (liste.length) cadrerCibles()
   },
@@ -1834,8 +1823,9 @@ function allerA(r: ResultatDeRecherche): void {
   // Une personne d'une famille par alliance masquée : la choisir allume la bascule.
   afficherSonAlliance(r.personId)
   const f = disposition.value?.parPersonId.get(r.personId)
-  recherche.value = ''
-  resultats.value = []
+  rechercheMobile.vider()
+  texteEntete.value = ''
+  resultatsEntete.value = []
   listeOuverte.value = false
   champ.value?.blur()
   if (!f) return
@@ -1853,10 +1843,16 @@ function surToucheRecherche(e: KeyboardEvent): void {
     listeOuverte.value = true
     surCurseur(curseur.value - 1)
   } else if (e.key === 'Enter') {
+    // Entrée sur une panne relance ; ailleurs qu'une liste à jour, elle ne choisit rien.
+    if (rechercheMobile.etat.value === 'erreur') {
+      rechercheMobile.reessayer()
+      return
+    }
+    if (rechercheMobile.etat.value !== 'resultats') return
     const r = resultats.value[curseur.value]
     if (r) allerA(r)
   } else if (e.key === 'Escape') {
-    recherche.value = ''
+    rechercheMobile.vider()
     listeOuverte.value = false
     champ.value?.blur()
   }
@@ -1935,8 +1931,6 @@ onBeforeUnmount(() => {
   observateur?.disconnect()
   arreterVol()
   cancelAnimationFrame(image)
-  window.clearTimeout(minuterie)
-  requete?.abort()
   lecture?.abort()
 })
 </script>
@@ -2761,49 +2755,23 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Téléphone : la recherche en bas -->
-    <div v-if="estMobile" class="relative z-10 flex flex-none items-center gap-2 border-t border-ligne bg-panneau px-3 pt-2.5 pb-[max(18px,env(safe-area-inset-bottom))]">
-      <div class="relative flex-1">
-        <input
-          ref="champ"
-          v-model="recherche"
-          type="search"
-          enterkeyhint="search"
-          autocomplete="off"
-          placeholder="Aller à une personne…"
-          aria-label="Aller à une personne"
-          class="h-11 w-full rounded-pastille border border-ligne bg-fond px-4 text-[15px] outline-none focus:border-accent"
-          @keydown="surToucheRecherche"
-          @focus="listeOuverte = true"
-          @blur="listeOuverte = false"
-        />
-        <div
-          v-if="listeOuverte && recherche.trim().length >= 2"
-          class="absolute bottom-[52px] left-0 -right-[52px] z-20 rounded-panneau border border-ligne bg-panneau py-1 shadow-[0_-10px_30px_rgba(0,0,0,.5)] max-h-[60vh] overflow-y-auto"
-          role="listbox"
-          @pointerdown.prevent
-        >
-          <div class="px-3 pt-1 pb-1.5 text-[11px] text-attenue">
-            <template v-if="resultats.length">{{ resultats.length }}{{ tronque ? '+' : '' }} personne{{ resultats.length > 1 ? 's' : '' }} · ↑ ↓ pour parcourir</template>
-            <template v-else>Personne ne correspond.</template>
-          </div>
-          <button
-            v-for="(r, i) in resultats"
-            :id="`resultat-histoire-${i}`"
-            :key="r.personId"
-            type="button"
-            role="option"
-            :aria-selected="i === curseur"
-            class="flex min-h-11 w-full flex-col items-start justify-center px-3 py-1 text-left leading-snug"
-            :class="i === curseur ? 'bg-accent-doux' : ''"
-            @click="allerA(r)"
-          >
-            <span class="text-sm font-semibold">{{ r.displayName }}</span>
-            <span class="text-xs text-attenue">{{ libelleBranche(r.branch) }}<template v-if="r.ligneDates"> · {{ r.ligneDates }}</template></span>
-          </button>
-        </div>
-      </div>
-      <button type="button" class="h-11 rounded-pastille bg-accent px-3.5 font-semibold text-fond" @click="meTrouver">Moi</button>
-    </div>
+    <ChampRechercheArbre
+      v-if="estMobile"
+      ref="champ"
+      v-model:texte="rechercheMobile.texte.value"
+      :etat="rechercheMobile.etat.value"
+      :resultats="rechercheMobile.resultats.value"
+      :tronque="rechercheMobile.tronque.value"
+      :message="rechercheMobile.message.value"
+      :curseur="curseur"
+      :ouverte="listeOuverte"
+      @touche="surToucheRecherche"
+      @choisir="allerA"
+      @reessayer="rechercheMobile.reessayer()"
+      @ouvrir="listeOuverte = true"
+      @fermer="listeOuverte = false"
+      @moi="meTrouver"
+    />
 
     <!-- Téléphone, première visite : Compact ou Portrait ? Une fois, jamais avec une autre fenêtre. -->
     <InvitationFormatDesCartes :pret="disposition !== null && !chargement && ouvertTiroir === 'aucun'" />

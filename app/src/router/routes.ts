@@ -230,6 +230,15 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Fiche', parent: VERS_ARBRE },
   },
   {
+    // « Voir tous les résultats », depuis la recherche de l'en-tête (qui s'arrête à
+    // huit) : la même recherche, jusqu'au plafond de l'API — 50, non paginée (§ 5.5).
+    // `?q=` porte la saisie. `membre`, comme l'arbre qu'elle lit.
+    path: '/recherche',
+    name: 'recherche',
+    component: () => import('@/views/RechercheView.vue'),
+    meta: { acces: 'membre', titre: 'Recherche', section: 'arbre', parent: VERS_ARBRE },
+  },
+  {
     // **Explorer** : une page, quatre onglets qui glissent — Chronologie, Carte,
     // Calendrier (refonte du 30/09/2026), puis Stats (02/10/2026). Les trois
     // premiers écrans sont devenus des routes enfants et **gardent leur nom** (`chronologie`, `carte`, `anniversaires`) :
