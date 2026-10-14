@@ -54,9 +54,6 @@ enum AuditAction: string
     case Televersement = 'televersement';
     case MediaSupprime = 'media_supprime';
 
-    case ImportGedcom = 'import_gedcom';
-    case ExportGedcom = 'export_gedcom';
-
     /** Bascule « voir comme un membre » : tracée, parce que c'est une lecture de données masquées. */
     case VueCommeMembre = 'vue_comme_membre';
 

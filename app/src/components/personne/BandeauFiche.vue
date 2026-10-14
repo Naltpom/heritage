@@ -29,6 +29,10 @@
  * dans la page, qui pose **les mêmes** icônes dans la barre fixe du téléphone. Sur
  * mobile, le bandeau n'en montre aucune.
  *
+ * Avant elles, l'emplacement `partage` : le bouton « Partager »
+ * (`PartageFiche`), lui, reste **sur toutes les largeurs** — sur mobile, il est
+ * le seul geste du bandeau, réduit à son icône.
+ *
  * ## Le mode édition
  *
  * `edition` passe le bandeau au violet (`--color-edition`) — un liseré et un fond
@@ -148,9 +152,13 @@ const confidentialite = computed(() => noteDeConfidentialite(fiche))
           </p>
         </div>
 
-        <!-- Les actions desktop. Sur mobile, elles sont dans la barre du bas. -->
-        <div class="flex flex-none self-start max-md:hidden">
-          <slot name="actions" />
+        <!-- « Partager », sur toutes les largeurs ; puis les actions desktop —
+             sur mobile, celles-ci sont dans la barre du bas. -->
+        <div class="flex flex-none items-start gap-2 self-start">
+          <slot name="partage" />
+          <div class="flex flex-none self-start max-md:hidden">
+            <slot name="actions" />
+          </div>
         </div>
       </div>
 

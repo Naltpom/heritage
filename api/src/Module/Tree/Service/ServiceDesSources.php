@@ -23,12 +23,13 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * Trois choses que ce service ne fait pas, délibérément :
  *
- * - **il ne pose jamais `gedcom_xref`.** Cette colonne est la clé d'idempotence du
- *   ré-import (`Gedcom\Service\EcrivainTree::ecrireSources()` retrouve une source par
- *   son xref et **l'écrase**). Inventer `@S500916@` pour une source créée ici, c'est
- *   parier que la prochaine exportation MyHeritage n'utilisera jamais ce numéro ; le
- *   jour où elle le fait, le ré-import écrase notre notice avec une autre, et toutes ses
- *   citations changent de source sans bruit. `null` ne peut rien percuter ;
+ * - **il ne pose jamais `gedcom_xref`.** Cette colonne porte la référence des sources
+ *   venues du fichier d'origine (`@S500001@`) : une source créée ici n'en a pas, et lui
+ *   en inventer une ferait passer pour une notice du fichier ce qui n'en est pas une.
+ *   `null` ne percute pas la contrainte d'unicité, et la référence d'une source
+ *   existante n'est jamais réécrite — c'est son identifiant stable. (Elle était aussi
+ *   la clé du ré-import GEDCOM, qui retrouvait une source par son xref et l'écrasait ;
+ *   l'import a été supprimé, ADR 0018.)
  * - **il ne supprime pas.** `tree_citation.source_id` est en `RESTRICT`, mais une source
  *   jamais citée peut encore être désignée par une demande `ajout_citation` en attente —
  *   que `Tree` ne voit pas, et dont la validation tomberait en `500`

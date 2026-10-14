@@ -15,8 +15,8 @@ namespace App\Module\Tree\ValueObject;
  * d'une fiche sans qu'aucun invariant ne s'en plaigne.
  *
  * Dans l'application, l'ordre à fournir est celui de `tree_person.id` puis
- * `tree_family.id` croissants — l'import GEDCOM les crée dans l'ordre du fichier, donc
- * les deux coïncident.
+ * `tree_family.id` croissants — l'import GEDCOM initial les a créées dans l'ordre du
+ * fichier, donc les deux coïncident, et les lignes créées depuis viennent à la suite.
  */
 final readonly class JeuDePlacement
 {

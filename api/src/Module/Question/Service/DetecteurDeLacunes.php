@@ -163,7 +163,7 @@ final class DetecteurDeLacunes
      * `min` **ou** `max`, et pas `raw` : une chaîne GEDCOM qu'aucune forme connue n'a su
      * analyser (§ 0.5 du modèle) est une provenance, pas une date. La demander de nouveau
      * est exactement ce qu'il faut faire — c'est même le cas le plus utile du lot, celui
-     * où l'import a gardé quelque chose que personne n'a pu lire.
+     * où l'import initial a gardé quelque chose que personne n'a pu lire.
      *
      * On ne regarde pas non plus `qualifier` : `entre 1901 et 1909` est une date, et
      * redemander une fourchette déjà établie ferait douter de ce qui est écrit.

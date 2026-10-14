@@ -435,7 +435,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
 
         // `ck_prp_draft_person_nom` refuse en base une fiche sans le moindre nom. On le
         // dit ici en 422 plutôt que de laisser la contrainte produire une 500 : les
-        // quatre individus sans `NAME` du GEDCOM existent par import, on n'en crée pas
+        // quatre individus sans `NAME` du GEDCOM existent depuis l'import initial, on n'en crée pas
         // de nouveaux à la main.
         if ('' === trim($valeurs['surname']) && '' === trim($valeurs['givenNames'])) {
             throw DonneesInvalides::pourChamp("$chemin.surname", 'Une fiche proposée porte au moins un nom ou un prénom.');

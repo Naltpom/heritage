@@ -26,8 +26,9 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * **1. L'ordre fait foi, et il est explicite.** `ORDER BY p.id` pour les personnes,
  * `ORDER BY f.id` pour les familles, `sibling_order` puis `id` pour les enfants d'une
- * famille. L'import GEDCOM crée les lignes dans l'ordre du fichier, donc cet ordre **est**
- * celui que parcourait le script d'origine. Ce n'est pas une commodité de lecture : le
+ * famille. L'import GEDCOM initial a créé les lignes dans l'ordre du fichier, et celles
+ * créées depuis viennent à la suite : cet ordre **prolonge** celui que parcourait le
+ * script d'origine. Ce n'est pas une commodité de lecture : le
  * point fixe en 12 passes et le décrochage rangée par rangée départagent par l'ordre de
  * parcours deux nœuds à égalité de position. Une requête sans `ORDER BY` rendrait
  * PostgreSQL libre de son ordre, et le graphe changerait au gré des `VACUUM`.

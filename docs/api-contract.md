@@ -53,7 +53,7 @@
 | 7 | Médias |
 | 8 | Notifications |
 | 9 | Chronologie |
-| 10 | Administration et GEDCOM |
+| 10 | Administration |
 | 11 | Le cercle de visibilité dans les réponses — la même fiche deux fois |
 | 12 | Le régime du compte en attente de validation |
 | 13 | Le calque « en attente » |
@@ -168,12 +168,13 @@ c'est le mode de défaillance que la liste blanche (§ 11.4) existe pour attrape
 | Montant, coordonnée | nombre, décimales non tronquées | `-412.5` |
 
 > **Les identifiants des exemples n'ont aucune stabilité, et ne servent qu'à relier les
-> exemples entre eux.** `tree_person.id` est une colonne d'identité que le réimport
-> réattribue : mesuré, les identifiants 1–274 sont devenus 275–548 après neuf imports, et
+> exemples entre eux.** `tree_person.id` est une colonne d'identité que tout repeuplement
+> réattribue : mesuré, du temps de l'import GEDCOM (supprimé depuis, ADR 0018), les
+> identifiants 1–274 sont devenus 275–548 après neuf imports, et
 > Marne Dolomite Sureau, `17` dans ce document, porte aujourd'hui `291`. **Ne codez jamais un
 > identifiant en dur**, ni dans un test, ni dans une fixture, ni dans un lien : appariez sur
-> **`gedcomXref`** (`@I500017@`), qui est l'identité externe de l'enregistrement et survit à
-> l'aller-retour (§ 9.8). Les identifiants d'URL restent des entiers — courts et lisibles
+> **`gedcomXref`** (`@I500017@`, ou `@I9xxxxx@` pour une fiche créée dans l'application),
+> qui est l'identité stable de l'enregistrement (§ 9.8). Les identifiants d'URL restent des entiers — courts et lisibles
 > (§ 0.2) — mais ce sont des poignées, pas des clés.
 
 Les coordonnées `x` et `y` du graphe sont des flottants et **ne sont jamais arrondies à
@@ -242,6 +243,7 @@ dans `api/config/packages/framework.yaml`). **Aucun jeton dans un en-tête, aucu
 ```yaml
 - { path: ^/api/connexion,   roles: PUBLIC_ACCESS }
 - { path: ^/api/inscription, roles: PUBLIC_ACCESS }   # § 4 — 404 sur jeton invalide
+- { path: ^/api/sante$,      roles: PUBLIC_ACCESS }   # § 26 — sonde de disponibilité
 - { path: ^/api/administration, roles: ROLE_ADMIN }
 - { path: ^/api,             roles: ROLE_USER }
 ```
@@ -279,7 +281,7 @@ Chaque module déclare ses routes dans **son** fichier `config/routes/<module>.y
 
 | Préfixe | Module propriétaire |
 |---|---|
-| `/api/connexion`, `/api/deconnexion`, `/api/session`, `/api/notifications` | `Core` |
+| `/api/connexion`, `/api/deconnexion`, `/api/session`, `/api/notifications`, `/api/sante` | `Core` |
 | `/api/inscription` | `Membership` |
 | `/api/arbre` | `Tree` |
 | `/api/demandes` | `Proposal` |
@@ -296,7 +298,6 @@ public, pas un domaine. Le troisième segment tranche, sans ambiguïté possible
 | `/api/administration/utilisateurs`, `/reglages`, `/voir-comme`, `/journal` | `Core` |
 | `/api/administration/invitations`, `/membres` | `Membership` |
 | `/api/administration/demandes` | `Proposal` |
-| `/api/administration/gedcom` | `Gedcom` |
 | `/api/administration/sources` | `Tree` (ADR 0012) |
 
 ### 1.8 En-têtes
@@ -4115,8 +4116,8 @@ distinction.
 >    c'est-à-dire à réimplémenter `UncertainDate::format()` — et à en diverger.
 > 2. **`modifieePar` est toujours présent, à `null` quand le serveur ne sait pas** qui a écrit
 >    la valeur courante. Absent voudrait dire « tu n'as pas le droit de le savoir » (§ 1.3),
->    ce qui est faux : on l'ignore, c'est tout — une correction faite en base, un import, une
->    révision sans demande. Le front écrit `modifieePar?.auteur ?? "auteur inconnu"` sans avoir
+>    ce qui est faux : on l'ignore, c'est tout — une correction faite en base, une valeur
+>    venue de l'import initial, une révision sans demande. Le front écrit `modifieePar?.auteur ?? "auteur inconnu"` sans avoir
 >    à tester la présence de la clé.
 > 3. **`champs` est toujours un tableau**, vide plutôt qu'absent quand la caducité ne vient pas
 >    d'une valeur — `cible_disparue`, par exemple, où c'est `details.cible` qui porte
@@ -4150,7 +4151,7 @@ est la seconde barrière.
 ```
 
 C'est l'`OptimisticLockException` du verrou n° 1 (§ 9.6) : deux transactions **concurrentes**
-— deux administrateurs, ou une validation qui croise un import. **Rien n'a été écrit, la
+— deux administrateurs, ou une validation qui croise une autre écriture. **Rien n'a été écrit, la
 demande reste `en_attente`, et réessayer est la bonne action.**
 
 > **Les deux `409` donnent des conseils opposés, et c'est pour cela qu'elles ont deux codes.**
@@ -4464,9 +4465,10 @@ au plus ancien (`idx_prp_revision_sujet`). `subjectKind` accepte les six valeurs
 ```
 
 `changes` est rendu **formaté** (`format()` sur les blocs date), pas en brut : c'est un
-historique lisible, pas un dump. `requestId` à `null` signale un import GEDCOM, jamais un
-raccourci d'écriture — « il n'existe aucun chemin d'écriture applicatif qui contourne le
-mécanisme » (§ 5.5).
+historique lisible, pas un dump. `requestId` à `null` signale une demande effacée hors de
+l'application, jamais un raccourci d'écriture — « il n'existe aucun chemin d'écriture
+applicatif qui contourne le mécanisme » (§ 5.5). L'import GEDCOM, supprimé depuis
+(ADR 0018), n'écrivait pas de révision.
 
 L'historique d'une personne **vivante hors cercle** n'est pas accessible : `404`. Il porte des
 dates et des lieux, c'est-à-dire tout ce que la liste blanche exclut. Même `404` pour
@@ -5181,9 +5183,11 @@ front n'a donc **aucun cas « pas de préférence »** à traiter : il lit toujo
 
 ---
 
-## 10. Administration et GEDCOM
+## 10. Administration
 
-Modules `Core` (utilisateurs, réglages, bascule, journal), `Membership` (membres) et `Gedcom`.
+Modules `Core` (utilisateurs, réglages, bascule, journal) et `Membership` (membres) ; les
+sources (§ 10.7) relèvent de `Tree`. Il n'y a **aucune route GEDCOM** : l'import et l'export ont
+été retirés (§ 10.6, ADR 0018).
 Tout le préfixe `/api/administration` est derrière `ROLE_ADMIN` par `access_control` — la
 règle est posée **avant** `^/api`, faute de quoi elle ne serait jamais atteinte (« seule la
 première règle qui correspond est appliquée »).
@@ -5208,11 +5212,6 @@ première règle qui correspond est appliquée »).
 | `POST` | `/api/administration/voir-comme` | `ADMIN` | `{memberId}` | `200` session | `404` · `422` |
 | `DELETE` | `/api/administration/voir-comme` | `ADMIN` | — | `200` session | — |
 | `GET` | `/api/administration/journal` | `ADMIN` | `?action=&actorUserId=&subjectType=&subjectId=&page=` | `200` liste paginée | — |
-| `POST` | `/api/administration/gedcom/import` | `ADMIN` | `{chemin, dryRun}` | `202` § 10.6 | `422` · `409` `import_en_cours` |
-| `GET` | `/api/administration/gedcom/executions` | `ADMIN` | `?direction=&page=` | `200` liste paginée | — |
-| `GET` | `/api/administration/gedcom/executions/{id}` | `ADMIN` | — | `200` § 10.6 | `404` |
-| `GET` | `/api/administration/gedcom/executions/{id}/fichier` | `ADMIN` | — | `200` **octets** | `404` |
-| `POST` | `/api/administration/gedcom/export` | `ADMIN` | *(vide)* | `202` § 10.6 | `409` |
 
 ### 10.1 Utilisateurs et rôles
 
@@ -5667,65 +5666,22 @@ filtrées**. Ce qu'un administrateur voit de plus tient en trois choses, toutes 
 - il voit les demandes et les médias `en_attente` de tout le monde, pas seulement les siens ;
 - il voit `sha256`, `originalName`, le journal d'audit et les invitations.
 
-### 10.6 Import et export GEDCOM
+### 10.6 Import et export GEDCOM — retirés
 
-`POST /api/administration/gedcom/import` avec `{"chemin": "…", "dryRun": true}`.
+Ce paragraphe décrivait `POST /api/administration/gedcom/import`, `…/executions`,
+`…/executions/{id}`, `…/executions/{id}/fichier` et `POST /api/administration/gedcom/export`,
+avec le journal `ged_run` / `ged_issue` et le code `409 import_en_cours`. **Aucune de ces
+routes n'a été écrite**, et elles sont retirées du contrat avec l'import lui-même
+([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)) : l'application n'importe ni
+n'exporte de GEDCOM, et les tables `ged_run` / `ged_issue` sont supprimées. Les données
+réelles se reprennent en restaurant une sauvegarde de la base.
 
-- `chemin` est **une variable de configuration résolue côté serveur**, pas un chemin libre
-  envoyé par le client : le § 0 du dossier impose que le chemin du GEDCOM soit une variable
-  d'environnement, « jamais un chemin en dur », et l'atelier `C:\www\myHeritage` est en
-  **lecture seule**. Le corps ne porte donc qu'une **clé de source** déclarée dans
-  `.env` (`gedcom.source_defaut`), jamais un chemin de système de fichiers — un chemin libre
-  serait une lecture de fichier arbitraire déguisée en fonctionnalité d'administration.
-- `dryRun: true` lit, compte, signale, **n'écrit rien** : « c'est le mode dans lequel on
-  découvre qu'un fichier est mauvais avant d'avoir touché la base » (§ 8.1).
-- `202 Accepted` : l'exécution est synchrone côté console mais longue côté HTTP ; l'API rend
-  la ligne `ged_run` à l'état `en_cours` et le front interroge
-  `GET /api/administration/gedcom/executions/{id}`. Une exécution déjà en cours ⇒ `409`
-  `import_en_cours`.
+Ce qui reste du GEDCOM est la **référence** : `gedcomXref` sur la fiche (§ 5), la famille et
+la source (§ 10.7), identifiant stable de l'enregistrement — `@I500017@` pour une fiche venue
+du fichier d'origine, `@I9xxxxx@` pour une fiche créée dans l'application (§ 9.8 du modèle).
+Elle est rendue, jamais lue en entrée.
 
-```json
-{
-  "id": 3,
-  "direction": "import",
-  "status": "reussi",
-  "filename": "arbre-romarin-v5.ged",
-  "fileSha256": "c1a9…",
-  "byteSize": 464812,
-  "gedcomCharset": "UTF-8",
-  "dryRun": true,
-  "counts": {
-    "individus": 274, "familles": 103, "filiations": 174,
-    "sources": 28, "citations": 483, "faits": 87, "notes": 175, "medias": 31
-  },
-  "startedAt": "2026-09-15T22:00:00+02:00",
-  "finishedAt": "2026-09-15T22:00:14+02:00",
-  "error": null,
-  "launchedByLabel": "natron@example.net",
-  "anomalies": {
-    "info": 525,
-    "avertissement": 12,
-    "erreur": 0,
-    "extrait": [
-      { "severity": "avertissement", "code": "nom_vide", "lineNo": 4471, "gedcomXref": "@I500188@", "tag": "NAME", "message": "Individu sans ligne NAME : ancêtre inconnu, branche de recherche ouverte." }
-    ]
-  }
-}
-```
-
-`counts` est la table de contrôle du § 4 du dossier — « un import qui ne retombe pas exactement
-sur ces nombres est un import raté ». Un écart émet `dénombrement_inattendu` en sévérité
-`erreur` et **bloque l'import hors `dry_run`** (§ 8.2).
-
-`anomalies.extrait` est plafonné à 50 lignes ; le rapport complet se lit par
-`GET /api/administration/gedcom/executions/3?severity=avertissement&page=2`, qui pagine les
-`ged_issue`.
-
-`POST /api/administration/gedcom/export` produit un fichier GEDCOM et une ligne `ged_run` de
-direction `export`. Le fichier se récupère par `GET .../executions/{id}/fichier`, route
-authentifiée comme celles des médias. **Un export contient l'arbre entier, personnes vivantes
-comprises** : il est réservé à `ROLE_ADMIN`, journalisé `export_gedcom`, et il n'existe
-**aucune route d'export pour un membre** — « pas de liste, pas d'export » (ADR 0003).
+Le numéro du paragraphe est gardé pour que les renvois au § 10.7 restent justes.
 
 ### 10.7 Sources
 
@@ -5748,8 +5704,8 @@ demande `ajout_citation` (§ 6.4 bis), qui désigne la source par son `id`.
   `arbre_tiers`, `publication`, `temoignage`, `autre`), et, facultatifs, `author` (255),
   `publication`, `text`, `note` (10 000 chacun), `mediaType` (60). Un champ blanc vaut `null`.
   `PUT` **remplace** la notice : un champ facultatif absent est vidé.
-- `gedcomXref` est rendu mais **jamais lu** : il appartient au ré-import GEDCOM, et une
-  source créée ici le garde à `null` (ADR 0012).
+- `gedcomXref` est rendu mais **jamais lu** : c'est la référence d'une source venue du
+  GEDCOM d'origine, et une source créée ici le garde à `null` (ADR 0012, ADR 0018).
 - Pas de `DELETE` (ADR 0012).
 
 ```json
@@ -6608,7 +6564,6 @@ agent recopiera la référence :
 | `dernier_administrateur` | 409 | `PATCH` utilisateur | — |
 | `rattachement_non_etabli` | 409 | `PATCH` utilisateur (`status: actif`) | `{memberId}` |
 | `media_reference` | 409 | `DELETE` média | `{citationIds}` |
-| `import_en_cours` | 409 | import GEDCOM | `{runId}` |
 | `fichier_trop_volumineux` | 413 | téléversement | `{maxOctets}` |
 | `type_de_fichier_refuse` | 415 | téléversement | `{mimesAutorises}` |
 | `donnees_invalides` | 422 | partout | `champs` rempli |
@@ -6616,6 +6571,7 @@ agent recopiera la référence :
 | `demande_sans_lien` | 422 | soumettre une `creation_personne` | — |
 | `trop_de_tentatives` | 429 | § 1.9, **sauf la recherche de rattachement** | `{retryAfter}` |
 | `erreur_interne` | 500 | souscripteur d'exception | — |
+| `service_indisponible` | 503 | `GET /api/sante` — la base ne répond pas (§ 26) | — |
 
 ### 15.3 `404` plutôt que `403` — la règle générale
 
@@ -6978,7 +6934,7 @@ document a retenu **en attendant** une correction de la source.
 | 10 | L'écran d'attente peut-il nommer la personne réclamée | **§ 4.5** est catégorique : « aucune personne vivante […] y compris celle à laquelle le compte prétend se rattacher » | pris **au pied de la lettre** : ni `personId` ni `personLabel` dans `GET /api/session` ni dans `/api/inscription/etat` tant que le compte est `en_attente` (§ 2.2, § 4.4) | à confirmer — c'est rude pour l'utilisateur, mais c'est ce qui est écrit |
 | 11 | Forme unique d'erreur contre le dépôt de référence | Le dépôt de référence émet **deux** formes, `{"error": …}` et `{"errors": …}` ; la mission demande une forme unique | `{"erreur": {code, message, champs, details}}`, y compris dans le point d'entrée 401 et le gestionnaire de `login_throttling` (§ 15.1) | — décision de ce document, à ne pas « recorriger » vers la référence |
 | 12 | Largeur `w` d'un nœud restreint | ~~Soupçon d'une fuite par la largeur~~ — **réfuté par la mesure** : `graphe.py` court-circuite `ligne_dates()` sur le drapeau privé et rend la constante `"vivant·e"` | `w` **identique pour tous les lecteurs**, calculée sur le nom et une constante (§ 11.2). Le moteur ne prend aucun paramètre de lecteur. Rien à corriger ailleurs | — **rien** : l'ADR 0005 avait raison, et le portage doit le reproduire à l'identique |
-| 13 | Chemin du GEDCOM à l'import | Le **§ 0 du dossier** impose une variable de configuration, « jamais un chemin en dur », et l'atelier est en lecture seule | le corps porte une **clé de source** déclarée dans `.env`, jamais un chemin de système de fichiers (§ 10.6) — un chemin libre serait une lecture de fichier arbitraire | — |
+| 13 | Chemin du GEDCOM à l'import | Le **§ 0 du dossier** impose une variable de configuration, « jamais un chemin en dur », et l'atelier est en lecture seule | le corps porte une **clé de source** déclarée dans `.env`, jamais un chemin de système de fichiers (§ 10.6) — un chemin libre serait une lecture de fichier arbitraire. **Sans objet depuis l'ADR 0018** : la route d'import est retirée | — |
 | 15 | **L'étiquette de nom mesurée n'a pas de nom** | Le moteur mesure `(nickname ?? givenNames)` réduit à son **premier mot** + `surname` ; **rien dans le modèle ni dans l'ADR 0005 ne nomme cette chaîne**, et `display_name` (§ 3.1) est une autre composition — tous les prénoms. Mesuré : **220 fiches sur 274 débordent** si le canevas dessine `displayName`, jusqu'à 169 unités sur une boîte de 149 | clé **`etiquetteNom`** sur le nœud, servie par `MesureDeFiche::etiquetteNom()` (§ 5.2). Non dérivable côté client : un nom de famille peut contenir des espaces | ADR 0005 — la nommer dans le résumé de l'algorithme, à côté de `ligne_dates()` |
 | 14 | **Chaînage d'une reprise** | Aucune colonne n'enregistre qu'une demande en refait une autre, ni que les médias d'une demande caduque sont partis vers sa reprise (§ 6.10). `duplicate_of_id` ne convient pas : il porte le rapprochement de doublons **entre deux auteurs**, et lui donner un second sens rendrait les deux illisibles | `origine` est écrit en texte dans `message` ; les médias suivent et la demande d'origine ne les liste plus | **à trancher par le commanditaire** : veut-il lire « votre demande n° 12 a été refaite en n° 21 » ? Si oui, c'est une colonne `reprise_de_id` sur `prp_change_request`, et ce n'est pas à ce document de la décider |
 | 16 | **Les anniversaires contre « pas de liste, pas d'export »** | L'ADR 0003 refuse l'énumération ; or la page des anniversaires **est** une liste de personnes et de dates, triée, filtrable, et l'année entière tient en une requête | **absents, jamais réduits** — la décision du § 9.1 reprise mot pour mot. L'ensemble résiduel ne couvre que les défunts et les vivants déjà dans le cercle du lecteur, dont il lit les dates sur `/api/chronologie`. Vérifié par un test de **sous-ensemble** entre les deux routes (§ 20.5) | **à confirmer par le commanditaire** : l'ensemble n'est pas plus large, mais il est mieux trié et moins cher à parcourir qu'un SVG |
@@ -7812,3 +7768,31 @@ l'assistant de proposition, qui voit l'arbre entier.
 **Journal** : une ligne `appel_modele_langage`, sujet `Assistant\Question`, par question —
 des comptes (tours, appels d'outils, échanges transmis, fiches citées), **jamais** la
 question, la réponse ni un nom.
+
+## 26. Santé de l'API
+
+Module **`Core`** (`Core\Controller\SanteController`). La cible d'une **sonde extérieure** de
+disponibilité : elle amorce le noyau Symfony et lance un `SELECT 1` sur la base.
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/sante` | `PUBLIC` | — | `200` `{"statut": "ok"}` | `503` `service_indisponible` |
+
+```json
+{ "statut": "ok" }
+```
+
+- **Rien d'autre ne sort**, ni en succès ni en panne : aucune version, aucune empreinte,
+  aucun nom d'hôte. Le `503` porte l'enveloppe du § 15.1 avec un message générique ; la
+  cause réelle va au journal du serveur (niveau `error`), jamais dans la réponse.
+- **Aucune session** n'est lue ni démarrée, même si la requête porte un cookie, et aucun
+  cookie n'est posé. Pas de limiteur : la route ne fait qu'un `SELECT 1`.
+- `HEAD` est accepté comme `GET` (routeur Symfony), sans corps.
+- En-têtes : régime A du § 1.8, comme toute route JSON.
+- Ce n'est **pas** la sonde du conteneur. Le `HEALTHCHECK` de l'image api et le
+  déploiement interrogent `/sante.php`, servie sans noyau ni base et qui porte l'empreinte
+  de l'image : la santé du conteneur ne dépend pas de la base, sinon une base qui tousse
+  ferait redémarrer une API saine.
+- Joignable de l'extérieur par le front, qui relaie `/api` :
+  `https://<domaine>/api/sante`. Mise en place d'une sonde extérieure :
+  `docs/deploiement/premiere-mise-en-ligne.md`, § 13.

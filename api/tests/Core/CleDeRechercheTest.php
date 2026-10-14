@@ -19,7 +19,7 @@ use PHPUnit\Framework\TestCase;
  *   qu'aucune liste d'exemples ne couvre, et c'est elle qui verrait rouge si un `'e` ou
  *   un `?` s'invitait — c'est-à-dire si quelqu'un remplaçait la table par `iconv
  *   //TRANSLIT`, dont le résultat dépend de la bibliothèque du système ;
- * - l'**aller-retour** : ce qu'écrit l'import et ce que cherche l'arbre sont la même
+ * - l'**aller-retour** : ce qu'écrit `Tree` en base et ce que cherche l'arbre sont la même
  *   chaîne. C'est la panne que la remontée dans `Core` supprime, et la seule qui compte
  *   vraiment : une clé juste des deux côtés mais calculée deux fois se met à diverger un
  *   jour, et personne ne le voit.
@@ -29,7 +29,7 @@ final class CleDeRechercheTest extends TestCase
     /**
      * L'aller-retour, sur les noms accentués de l'arbre.
      *
-     * Écrire avec `Gedcom`, chercher avec `Tree`, et retrouver la même chose. Les deux
+     * Écrire avec `NormalisateurNom`, chercher avec `NormaliseurDeRequete`, et retrouver la même chose. Les deux
      * classes sont instanciées telles qu'elles le sont en production.
      */
     #[DataProvider('nomsDeLArbre')]

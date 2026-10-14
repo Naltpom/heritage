@@ -26,7 +26,7 @@ use Symfony\Contracts\Cache\ItemInterface;
  *
  * La clé porte {@see PortStatistiquesArbre::jeton()} : un compte et une date de dernière
  * modification par table lue, plus le jour courant. Toute écriture validée dans l'arbre
- * (une demande appliquée, un import, une citation ajoutée) la change ; la page suivante
+ * (une demande appliquée, une citation ajoutée, une restauration) la change ; la page suivante
  * relit l'arbre. Une heure de vie en plus, pour qu'un changement qui échapperait au jeton
  * (une ligne modifiée sans horodatage) ne survive pas au-delà.
  */

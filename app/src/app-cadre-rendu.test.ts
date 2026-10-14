@@ -80,6 +80,17 @@ describe('la barre du bas dans le cadre', () => {
   })
 })
 
+describe('l’avis global', () => {
+  // Un écran qui n'a pas pu se charger après une mise en production le dit ici
+  // (`router/rechargement.ts`) : y compris la connexion, écran sans cadre.
+  it('est monté sur tout écran, avec ou sans cadre, et sa région annoncée est déjà là', async () => {
+    for (const cadre of [true, false]) {
+      const html = await rendre(cadre)
+      expect(html).toMatch(/<div[^>]*role="status" aria-live="polite" data-avis-global/)
+    }
+  })
+})
+
 /**
  * Les fenêtres qui s'ouvrent d'elles-mêmes à l'arrivée. Montées **hors** du
  * bloc du cadre, qui ne leur passe que `avec-cadre` : la connexion est un écran
