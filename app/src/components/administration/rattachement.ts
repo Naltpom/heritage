@@ -51,7 +51,7 @@
  * `AmorcageDuCompteAdministrateur` créent un `User` `ROLE_ADMIN` sans `Member`,
  * et `AmorcageFixtures::rattacher()` ressort sans rien poser dans cinq
  * conditions (pas d'identifiant, XREF absent, rattachement déjà là, arbre pas
- * encore importé, personne déjà réclamée).
+ * encore chargé, personne déjà réclamée).
  *
  * Or ce compte-là retombe sur la racine **et la racine est justement sa fiche**
  * : il obtient le bon arbre par coïncidence. Lui coller un ton d'alerte

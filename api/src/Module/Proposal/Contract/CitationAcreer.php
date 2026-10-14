@@ -26,9 +26,10 @@ namespace App\Module\Proposal\Contract;
  * frontière passe par `Contract\`, et rien n'oblige les anciens à déménager avant lui.
  *
  * **Ce qu'elle ne porte pas** : ni `evenContext`, ni `role`, ni `dataDateRaw`.
- * Ce sont des colonnes de provenance GEDCOM, écrites par l'import et conservées pour
- * l'export ; un contributeur n'a rien à y mettre, et les ouvrir ici ferait entrer dans
- * l'arbre des valeurs qu'aucun écran ne sait relire. Ni `version`, ni `createdAt`, qui
+ * Ce sont des colonnes de provenance GEDCOM, écrites par l'import initial et conservées
+ * telles quelles (il n'y a ni import ni export GEDCOM depuis l'ADR 0018) ; un
+ * contributeur n'a rien à y mettre, et les ouvrir ici ferait entrer dans l'arbre des
+ * valeurs qu'aucun écran ne sait relire. Ni `version`, ni `createdAt`, qui
  * appartiennent à `Tree`.
  *
  * ── `quay` traverse en `int`, et c'est l'exception assumée du § 2.7 ──────────────

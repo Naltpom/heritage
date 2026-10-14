@@ -49,6 +49,10 @@ circuit implique, et pourquoi c'est une file de validation plutôt qu'un wiki.
   `prp_revision.request_id` n'est `NULL` que pour l'import GEDCOM, jamais pour une édition
   d'administrateur.
 
+  > **Remplacé par l'[ADR 0018](0018-suppression-de-l-import-gedcom.md) (2026-10-06)** : l'import est supprimé — et il n'écrivait d'ailleurs
+  aucune révision. Aucun chemin d'écriture ne produit plus de `request_id` nul ; il ne peut
+  venir que d'une demande effacée hors de l'application.
+
 ## Pourquoi une file de validation plutôt qu'un wiki
 
 Le wiki — chacun écrit, on révoque après coup — est le modèle de Wikipédia, de Geneanet et de

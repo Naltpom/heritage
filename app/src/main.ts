@@ -15,6 +15,17 @@
  * L'appel de l'étape 2 est mémoïsé et ne rejette jamais : la garde le réclame
  * aussi, et il n'y aura qu'un seul `GET /api/session` pour toute la vie de
  * l'onglet.
+ *
+ * Deux filets se posent **avant** `mount()`, et le premier avant même
+ * `use(routeur)`, qui lance la navigation initiale :
+ *
+ * - `installerRattrapageChargement(routeur)` (`router/rechargement.ts`) — un
+ *   écran paresseux qui n'existe plus sur le serveur (mise en production
+ *   pendant que l'onglet était ouvert) recharge la page **une fois** vers sa
+ *   destination, au lieu d'un clic qui ne fait rien ;
+ * - `installerFiletDErreurs(app, …)` (`composables/erreursGlobales.ts`) —
+ *   `app.config.errorHandler` et `unhandledrejection` : ce que personne n'a
+ *   attrapé est journalisé et dit, par l'avis global, sans bloquer l'écran.
  */
 import { createApp } from 'vue'
 import App from './App.vue'
@@ -23,15 +34,20 @@ import { assurerSessionChargee, installerRattrapageSession } from './composables
 // Importé tôt : l'invitation d'installation peut partir avant le premier écran.
 import { enregistrerServiceWorker } from './composables/installation'
 import { demarrerPush } from './composables/usePush'
+import { installerFiletDErreurs } from './composables/erreursGlobales'
+import { installerRattrapageChargement } from './router/rechargement'
 import './styles/main.css'
 
 async function demarrer(): Promise<void> {
   installerRattrapageSession(routeur)
+  const rattrapage = installerRattrapageChargement(routeur)
   enregistrerServiceWorker()
 
   await assurerSessionChargee()
 
-  createApp(App).use(routeur).mount('#app')
+  const app = createApp(App)
+  installerFiletDErreurs(app, { signalerEchecDeChargement: rattrapage.signalerEchec })
+  app.use(routeur).mount('#app')
 
   // 4. Le push, **après** le montage et sans l'attendre : à chaque session
   //    connectée, l'abonnement du téléphone est vérifié et renvoyé au serveur.

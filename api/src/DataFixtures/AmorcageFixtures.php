@@ -23,8 +23,8 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  *
  * C'est écrit dans `config/bundles.php` et ça vaut d'être répété ici, parce que cette
  * fixture-ci est précisément celle qu'on serait tenté de jouer sur une base garnie :
- * elle existe pour **survivre** à un réimport, pas pour en provoquer un. Sur une base
- * qui porte les 274 personnes, on passe par
+ * elle existe pour **reposer** un compte, pas pour vider l'arbre. Sur une base qui porte
+ * des personnes, on passe par
  *
  *     bin/console heritage:amorcer-comptes
  *
@@ -45,21 +45,22 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  *
  * ## Le rattachement se fait par référence GEDCOM, jamais par identifiant
  *
- * `HERITAGE_ADMIN_PERSONNE_XREF` vaut `@I500001@`. **Le `tree_person.id` n'est pas
- * stable** d'un import à l'autre : la colonne est une identité, et un réimport sur base
- * purgée la réattribue. `gedcom_xref` porte une contrainte d'unicité
- * (`uniq_tree_person_xref`) et désigne la même personne quel que soit l'import. Poser
- * l'identifiant numérique dans l'environnement aurait produit, au premier réimport, un
- * rattachement silencieusement dirigé vers quelqu'un d'autre — la pire des pannes de la
- * soirée, celle qui ment sans rien casser.
+ * `HERITAGE_ADMIN_PERSONNE_XREF` vaut `@I500001@` sur la base réelle (`@I1@` sur l'arbre
+ * d'essai de {@see ArbreDEssaiFixtures}). **Le `tree_person.id` n'est pas stable** d'une
+ * base à l'autre : la colonne est une identité, qu'un rechargement sur base neuve
+ * réattribue. `gedcom_xref` porte une contrainte d'unicité (`uniq_tree_person_xref`) et
+ * désigne toujours la même personne. Poser l'identifiant numérique dans l'environnement
+ * avait produit, au premier réimport GEDCOM (l'import a été supprimé depuis, ADR 0018),
+ * un rattachement silencieusement dirigé vers quelqu'un d'autre — la pire des pannes de
+ * la soirée, celle qui ment sans rien casser.
  */
 final class AmorcageFixtures extends Fixture implements FixtureGroupInterface
 {
     /**
      * Un groupe nommé, pour pouvoir jouer **cet** amorçage seul :
      * `doctrine:fixtures:load --append --group=amorcage`. Sans le groupe, on entraîne
-     * les fixtures anonymisées du § 9 du dossier, qui n'ont rien à faire sur une base
-     * portant les vraies données.
+     * l'arbre d'essai anonymisé ({@see ArbreDEssaiFixtures}), qui n'a rien à faire sur une
+     * base portant les vraies données — et qui la refuserait.
      *
      * @return list<string>
      */
@@ -124,9 +125,9 @@ final class AmorcageFixtures extends Fixture implements FixtureGroupInterface
         $personne = $this->personnes->findOneBy(['gedcomXref' => trim((string) $this->xrefDeLEgo)]);
 
         if (!$personne instanceof Person) {
-            // L'arbre n'est pas importé : ce n'est pas une erreur, c'est l'ordre normal
-            // des choses sur une base neuve. On le dit et on continue.
-            return \sprintf('Personne « %s » introuvable : importer le GEDCOM puis rejouer l’amorçage.', (string) $this->xrefDeLEgo);
+            // L'arbre n'est pas encore chargé : ce n'est pas une erreur, c'est l'ordre
+            // normal des choses sur une base neuve. On le dit et on continue.
+            return \sprintf('Personne « %s » introuvable : restaurer la base (ou charger l’arbre d’essai) puis rejouer l’amorçage.', (string) $this->xrefDeLEgo);
         }
 
         $personneId = $personne->getId();

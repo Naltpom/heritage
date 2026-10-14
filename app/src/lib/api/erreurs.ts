@@ -208,7 +208,6 @@ export function conduiteATenir(erreur: ErreurApi): ConduiteATenir {
     case 'invitation_deja_consommee':
     case 'personne_deja_rattachee':
     case 'invitation_en_cours':
-    case 'import_en_cours':
     case CODE_VUE_COMME_ACTIVE:
       return 'recharger'
 

@@ -43,6 +43,9 @@ import InvitationCleDAcces from '@/components/cles-d-acces/InvitationCleDAcces.v
 // le bandeau monté jadis sous l'en-tête. Même montage ; elle passe entre les
 // deux autres : après la clé d'accès, avant les notifications.
 import InvitationInstallation from '@/components/mise-en-page/InvitationInstallation.vue'
+// L'avis global (un écran qui n'a pas pu se charger, une erreur que personne
+// n'a attrapée) : hors du bloc du cadre, un écran sans cadre peut échouer aussi.
+import AvisGlobal from '@/components/mise-en-page/AvisGlobal.vue'
 
 const route = useRoute()
 const avecCadre = computed(() => route.meta.cadre !== false)
@@ -79,4 +82,5 @@ const avecCadre = computed(() => route.meta.cadre !== false)
   <InvitationCleDAcces :avec-cadre="avecCadre" />
   <InvitationInstallation :avec-cadre="avecCadre" />
   <InvitationNotifications :avec-cadre="avecCadre" />
+  <AvisGlobal />
 </template>

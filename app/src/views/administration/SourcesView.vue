@@ -14,8 +14,9 @@
  * 0012) : une source jamais citée peut encore être désignée par une demande en
  * attente.
  *
- * **Une source importée se réécrit au ré-import** : `EcrivainTree` la retrouve
- * par son `gedcomXref` et l'écrase depuis le fichier. Le formulaire le dit, à
+ * **Une source venue du GEDCOM d'origine garde sa référence** (`gedcomXref`) : elle
+ * n'est ni saisie ni modifiée ici, et l'application n'importe plus de GEDCOM qui
+ * pourrait réécrire la notice (ADR 0018). Le formulaire le dit, à
  * côté des champs, plutôt que de laisser croire qu'une correction est définitive.
  */
 import { computed, onMounted, ref, watch } from 'vue'
@@ -215,8 +216,8 @@ const libelleTotal = computed(() => `${total.value} source${total.value > 1 ? 's
   >
     <form novalidate class="flex flex-col gap-3.5" @submit.prevent="enregistrer">
       <p v-if="enEdition?.gedcomXref" class="text-[12.5px] text-attenue">
-        Source importée du GEDCOM (<span class="font-mono">{{ enEdition.gedcomXref }}</span>) : un nouvel import la
-        réécrira depuis le fichier.
+        Source venue du GEDCOM d’origine (<span class="font-mono">{{ enEdition.gedcomXref }}</span>) :
+        sa référence ne change pas.
       </p>
 
       <ChampTexte

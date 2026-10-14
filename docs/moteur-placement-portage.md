@@ -67,7 +67,8 @@ Ce projet a **cinq chemins d'écriture**, et c'est ce qui condamne le compteur :
 
 1. la validation d'une `prp_change_request` ;
 2. l'édition directe d'un administrateur (une demande auto-validée, § 9.4) ;
-3. l'import GEDCOM ;
+3. l'import GEDCOM (supprimé depuis, [ADR 0018](adr/0018-suppression-de-l-import-gedcom.md) — la restauration d'une sauvegarde
+   en tient lieu, et l'empreinte la voit de la même façon) ;
 4. le changement de `tree.personne_racine_id`, qui recalcule `branch` et `generation` ;
 5. toute correction faite directement en base.
 
@@ -554,6 +555,13 @@ pourrait pas exister sous cette forme.
 
 ## 9. Le dernier maillon — le placement sur la base réellement importée
 
+> **Section historique.** L'import GEDCOM a été supprimé le 2026-10-06 ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)), et
+> `PlacementBaseImporteeTest` avec lui : la base de production n'est plus reconstruite
+> depuis le GEDCOM, elle a évolué depuis par les demandes validées, et `graphe.json` n'en est
+> plus l'image. Le résultat ci-dessous reste vrai à sa date ; les deux autres tests
+> (`PlacementNonRegressionTest`, `PlacementFournisseurDoctrineTest`) gardent la chaîne de la
+> base au dessin.
+
 Ajouté une fois l'import GEDCOM opérationnel. C'est le seul trou qui restait côté serveur,
 et il est fermé.
 
@@ -609,6 +617,8 @@ l'intersection de deux chemins.
   propres enfants et générait six incohérences en cascade. Un test dédié la surveille.
 
 ### 9.3 Lancer ce test
+
+*(Retiré avec l'import — [ADR 0018](adr/0018-suppression-de-l-import-gedcom.md). La procédure qui suit est gardée comme trace.)*
 
 ```
 cd C:/www/heritage/api
@@ -676,8 +686,8 @@ Les pilotes ne rendent pas les mêmes valeurs pour la même donnée :
 | `deceased` | `t` / `f` | `1` / `0` |
 | `created_at` | `2026-09-15 18:24:05+00` | `2026-09-15 18:24:05` |
 
-`EmpreinteEntreMoteursTest` lit les 274 + 103 + 174 lignes réellement importées depuis
-PostgreSQL, les recopie dans un SQLite en mémoire **en les réécrivant à la façon de
+`EmpreinteEntreMoteursTest` lit les lignes présentes dans PostgreSQL (les 274 + 103 + 174
+de l'import, à l'époque ; en CI, l'arbre d'essai des fixtures), les recopie dans un SQLite en mémoire **en les réécrivant à la façon de
 SQLite**, et exige la même empreinte. Écrire les valeurs verbatim n'aurait rien prouvé :
 SQLite les aurait rendues telles quelles et on aurait comparé PostgreSQL à lui-même — d'où
 un second test qui vérifie que les deux moteurs stockent bien **différemment**, sans quoi

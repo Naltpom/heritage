@@ -45,7 +45,7 @@ class AuditLog
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     private \DateTimeImmutable $occurredAt;
 
-    /** ⇢ inter-module (`core_user`). `null` pour les actions système (import CLI). */
+    /** ⇢ inter-module (`core_user`). `null` pour les actions système (commande en console). */
     #[ORM\Column(nullable: true)]
     private ?int $actorUserId = null;
 

@@ -29,7 +29,7 @@ final class ReglagesMediaTest extends TestCase
 
     protected function setUp(): void
     {
-        $configuration = ORMSetup::createAttributeMetadataConfiguration(
+        $configuration = ORMSetup::createAttributeMetadataConfig(
             [\dirname(__DIR__, 2).'/src/Module/Core/Entity'],
             isDevMode: true,
         );

@@ -12,11 +12,28 @@
 #   6. docker compose build, les deux images   (travail « docker »)
 #   7. la chaîne de déploiement se tient       (travail « deploiement »)
 #
+# Et deux AUDITS de vulnérabilités, qui ne sont PAS des portes :
+#
+#   a. composer audit                              (travail « api »)
+#   b. npm audit --omit=dev --audit-level=high     (travail « app »)
+#
+# `continue-on-error: true` sur les deux. Un avis de sécurité publié cette nuit
+# sur une dépendance rendrait rouge TOUTE demande de fusion, quel qu'en soit le
+# contenu : la CI cesserait de parler du changement relu, et un rouge qui ne
+# dépend pas de ce qu'on a écrit apprend à ignorer la CI — même raisonnement que
+# pour php-cs-fixer plus bas. L'étape échouée reste marquée en rouge dans le
+# journal de son travail — c'est là qu'elle se lit ; le travail et l'exécution
+# restent verts, et la porte de `deploy.yml`, qui lit la conclusion de
+# l'exécution, n'en est pas affectée.
+# Le correctif arrive par Dependabot (`.github/dependabot.yml`). Placés dans les
+# travaux existants, après l'installation des dépendances : aucune machine de
+# plus.
+#
 # Le travail « api » monte en plus un service **PostgreSQL 17**, et la porte 2 bis
 # relit le rapport JUnit pour exiger que les tests qui en dépendent aient bien
 # TOURNÉ. Sans elle, monter une base pour des tests qui continueraient de se sauter
 # rendrait le même vert qu'avant, pour une machine de plus. La base est peuplée d'un
-# arbre d'essai **inventé** (`api/tests/Gedcom/fixtures/arbre-essai.ged`) : le dépôt
+# arbre d'essai **inventé** (`api/src/DataFixtures/ArbreDEssaiFixtures.php`) : le dépôt
 # est public et l'ADR 0006 interdit toute personne réelle.
 #
 # LE TRAVAIL « APP » A LA MÊME GARDE DEPUIS LE 23 SEPTEMBRE 2026, et il lui a
@@ -47,9 +64,12 @@
 # manquant apprend à ignorer la CI. Il se lance à la main :
 #   php vendor/bin/php-cs-fixer fix
 #
-# Épinglage des actions : à la version majeure, comme le dépôt de référence.
-# Le cran au-dessus, si la chaîne d'approvisionnement devient une préoccupation,
-# est d'épingler au SHA de commit — une étiquette peut être redéplacée, pas un SHA.
+# Épinglage des actions : au SHA de commit COMPLET, l'étiquette en commentaire
+# (`@<40 hex> # v4.4.0`). Une étiquette peut être redéplacée vers un autre code,
+# pas un SHA : c'est le seul épinglage qui fige ce qui s'exécute avec nos
+# secrets. Le commentaire n'est lu que par les humains et par Dependabot
+# (`.github/dependabot.yml`), qui propose les montées en réécrivant les deux.
+# Toute action ajoutée s'épingle de la même façon.
 # =============================================================================
 
 name: CI
@@ -147,9 +167,9 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.4'
           # intl et gd sont exigées par composer.json (tri des noms accentués,
@@ -162,7 +182,7 @@ jobs:
           coverage: none
 
       - name: Cache des dépendances Composer
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.composer/cache
           key: composer-${{ hashFiles('api/composer.lock') }}
@@ -171,30 +191,42 @@ jobs:
       - name: Installer les dépendances
         run: composer install --no-interaction --prefer-dist --no-progress
 
+      # Audit a — NON bloquant, voir l'en-tête. Lit `composer.lock` et interroge
+      # la base d'avis de Packagist. Un échec ici n'arrête ni le travail ni la
+      # fusion : il se lit.
+      - name: Audit (non bloquant) — vulnérabilités connues des dépendances Composer
+        continue-on-error: true
+        run: composer audit --no-interaction
+
       # ── L'ensemencement de la base PostgreSQL ────────────────────────────────
       #
-      # **Des personnes inventées, jamais réelles.** `arbre-essai.ged` est versionné
-      # et ne porte que des noms fabriqués (Persil, Thym, Bréval…). Le dépôt est
-      # public et l'ADR 0006 interdit toute personne réelle : aucune donnée de
-      # l'arbre du commanditaire n'entre ici, ni maintenant ni jamais.
+      # **Des personnes inventées, jamais réelles.** L'arbre d'essai des fixtures
+      # (groupe `essai`) ne porte que des noms fabriqués (Persil, Thym, Bréval…).
+      # Le dépôt est public et l'ADR 0006 interdit toute personne réelle : aucune
+      # donnée de l'arbre du commanditaire n'entre ici, ni maintenant ni jamais.
       #
-      # On passe par les migrations puis par la **vraie** commande d'import, et non
-      # par un `INSERT` de circonstance : ce que les tests liront ensuite est ce que
-      # l'import écrit réellement, pas ce qu'on aurait cru qu'il écrit.
-      #
-      # `--premier-import` parce que la commande refuse un arbre vide sous des
-      # comptes existants ; ici il n'y a ni comptes ni arbre, et ce drapeau dit que
-      # c'est légitime. `--attendus` parce que les totaux de contrôle sont indexés
-      # par empreinte de fichier et que celui-ci n'a pas de jeu de référence : onze
-      # individus, cinq familles, comptés dans le fichier lui-même.
+      # On passe par les migrations puis par les entités Doctrine, et non par un
+      # `INSERT` de circonstance : ce que les tests liront ensuite est ce que
+      # l'application écrit réellement. `--append` parce que, sans lui, le
+      # chargement purgerait `core_setting` que la migration vient de semer.
+      # L'import GEDCOM qui faisait ce travail a été supprimé (ADR 0018).
       - name: Ensemencer PostgreSQL avec l'arbre d'essai (données inventées)
         env:
           DATABASE_URL: "postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage?serverVersion=17&charset=utf8"
         run: |
           set -euo pipefail
           php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
-          php bin/console heritage:import-gedcom tests/Gedcom/fixtures/arbre-essai.ged \
-            --premier-import --attendus personnes=11,familles=5
+          php bin/console doctrine:fixtures:load --group=essai --append --no-interaction
+
+      # L'intégrité des références inter-modules (ADR 0002, § 10.8 du modèle de
+      # données), sur le schéma PostgreSQL migré et ensemencé : la commande ne
+      # tourne pas sur la base SQLite des tests, que ceux-ci bâtissent en mémoire.
+      # Sur l'arbre d'essai, elle prouve surtout que son SQL passe sur
+      # PostgreSQL 17 ; les cas de références cassées sont couverts par phpunit.
+      - name: Intégrité des références inter-modules
+        env:
+          DATABASE_URL: "postgresql://heritage:heritage_dev@127.0.0.1:5432/heritage?serverVersion=17&charset=utf8"
+        run: php bin/console heritage:verifier-integrite
 
       # Porte 1. `--level=6` en ligne de commande et non seulement dans
       # phpstan.neon : la CI est le contrat, elle ne doit pas pouvoir être
@@ -252,9 +284,9 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: npm
@@ -262,6 +294,17 @@ jobs:
 
       - name: Installer les dépendances
         run: npm ci --no-audit --no-fund
+
+      # Audit b — NON bloquant, voir l'en-tête. `--omit=dev` : seules les
+      # dépendances qui finissent dans le paquet servi au navigateur ; l'outillage
+      # de construction et de test ne sort pas du runner. `--audit-level=high` :
+      # l'étape n'échoue qu'à partir d'un avis « high », les autres s'affichent
+      # sans la faire échouer. (`--no-audit` sur `npm ci` ci-dessus coupe le
+      # rapport automatique de l'installation, qui ne ferait échouer rien : l'audit
+      # se fait ici, une fois, avec ces réglages-là.)
+      - name: Audit (non bloquant) — vulnérabilités connues des dépendances npm servies
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
 
       # Porte 3. `vue-tsc --noEmit` et non `tsc` : seul vue-tsc comprend les
       # blocs `<script setup lang="ts">` des composants.
@@ -314,7 +357,7 @@ jobs:
     # #295, 8 min 05 de bout en bout, dont 2 min 10 de Docker posées APRÈS les
     # 5 min 47 de l'API, alors qu'elles pouvaient courir pendant.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Les deux fichiers doivent se rendre sans substitution manquante. Sans
       # `.env` sur le runner : c'est aussi la vérification que tous les replis de
@@ -386,7 +429,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Le script tourne sur le VPS, sous `set -euo pipefail`, et manipule un
       # `git reset --hard`. Une faute de quotation y est bien plus coûteuse
@@ -505,7 +548,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Calculer l'empreinte
         run: |
           set -euo pipefail
@@ -513,7 +556,7 @@ jobs:
           echo "$arbre" > arbre.txt
           echo "ARBRE=$arbre" >> "$GITHUB_ENV"
           echo "Arborescence testée : $arbre (commit $(git rev-parse HEAD))"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: arbre-${{ env.ARBRE }}
           path: arbre.txt

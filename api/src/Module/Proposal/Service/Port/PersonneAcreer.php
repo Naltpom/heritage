@@ -17,7 +17,7 @@ use App\Module\Core\ValueObject\UncertainDate;
  * **Ce qu'elle ne porte pas** : ni `displayName`, ni `searchKey`, ni `branch`, ni
  * `generation`, ni `gedcomXref`, ni `version`. Ce sont des colonnes dérivées, et c'est
  * `Tree` qui les pose — lui seul sait composer un nom d'affichage comme il le fait pour
- * les 274 autres, et lui seul attribue un `gedcom_xref` après le `flush` (§ 9.8). Les
+ * toutes les autres, et lui seul attribue un `gedcom_xref` après le `flush` (§ 9.8). Les
  * calculer ici produirait une personne créée qui ne ressemble pas à ses voisines.
  *
  * `sex` traverse en **chaîne** — la valeur de `Core\Enum\Sex` — comme tout ce qui est
