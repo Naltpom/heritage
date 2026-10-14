@@ -348,8 +348,11 @@ describe('la file transmet son contexte à la demande ouverte', () => {
   it('le détail enchaîne avec le même filtre, et remet un composant neuf à chaque demande', () => {
     const vue = lire('../../views/DemandeView.vue')
     expect(vue).toContain('demandeSuivante(file.elements, courante, tri)')
-    // En fin de file : « À traiter » si l'on venait de la file par défaut.
-    expect(vue).toContain("name: 'administration.a-traiter', query: { type: 'demande', ...trace }")
+    // En fin de file : « À traiter » si l'on venait des demandes en attente, avec
+    // le demandeur et le tri choisis là-bas ; le tri part au serveur.
+    expect(vue).toContain("name: 'administration.a-traiter', query: { type: 'demande', ...requete, ...trace }")
+    expect(vue).toContain("Object.keys(requete).every((cle) => cle === 'auteur' || cle === 'tri')")
+    expect(vue).toMatch(/q: recherche,\s+tri,\s+parPage: 100,/)
     expect(vue).toContain(':key="demande.id"')
     expect(vue).toContain('@decidee="apresDecision"')
   })

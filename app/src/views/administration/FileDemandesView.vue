@@ -32,7 +32,8 @@
  * « Réinitialiser » et « Voir N demandes ». Les natures restent en puces
  * défilantes au-dessus de la liste, la recherche à côté du bouton.
  *
- * L'écran ne délègue rien : `etat`, `auteur` et `tri` vivent ici.
+ * L'écran ne délègue rien : `etat`, `auteur` et `tri` vivent ici. Ils partent
+ * au serveur avec la page (2026-10-14) : la liste est paginée, par 25.
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -48,6 +49,7 @@ import {
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import Feuillet from '@/components/base/Feuillet.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
+import PaginationListe from '@/components/base/PaginationListe.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
@@ -153,6 +155,9 @@ const requeteDeLaFile = computed(() =>
     recherche: recherche.value,
   }),
 )
+/** Les demandes lues par page. */
+const PAR_PAGE = 25
+const page = ref(1)
 const demandes = ref<Demande[]>([])
 const total = ref(0)
 const chargement = ref(false)
@@ -176,23 +181,35 @@ function pastille(statut: StatutDemande): (typeof PASTILLES)[number] | 'neutre' 
     : 'neutre'
 }
 
+/** Le numéro de la dernière lecture : une réponse plus ancienne arrivée après est ignorée. */
+let lectureCourante = 0
+
+/**
+ * Une page de la file, **triée et filtrée par le serveur** (2026-10-14) : la
+ * file en avait lu cent, sur plus de six mille demandes traitées. Trié dans le
+ * navigateur, le « N° décroissant » n'aurait renversé que ces cent-là.
+ */
 async function charger(): Promise<void> {
+  const numero = ++lectureCourante
   chargement.value = true
   erreur.value = null
   try {
-    const page = await listerDemandesAdministration({
+    const lue = await listerDemandesAdministration({
       status: etat.value === '' ? undefined : etat.value,
       auteur: auteur.value === 0 ? undefined : auteur.value,
       kind: natureDeLOnglet(onglet.value),
       q: recherche.value,
-      parPage: 100,
+      tri: tri.value,
+      page: page.value,
+      parPage: PAR_PAGE,
     })
-    demandes.value = page.elements
-    total.value = page.total
+    if (numero !== lectureCourante) return
+    demandes.value = lue.elements
+    total.value = lue.total
   } catch (cause) {
-    erreur.value = cause
+    if (numero === lectureCourante) erreur.value = cause
   } finally {
-    chargement.value = false
+    if (numero === lectureCourante) chargement.value = false
   }
 }
 
@@ -217,7 +234,12 @@ onMounted(() => {
   void charger()
   void chargerLesAuteurs()
 })
-watch([etat, auteur, onglet, recherche], charger)
+// Un autre filtre ou un autre sens : retour à la première page, qui relit.
+watch([etat, auteur, onglet, recherche, tri], () => {
+  if (page.value !== 1) page.value = 1
+  else void charger()
+})
+watch(page, () => void charger())
 
 /* ------------------------------------------------------------------ */
 /* Le feuillet des filtres                                             */
@@ -363,7 +385,7 @@ function dateLisible(valeur: string | null): string {
             :etat="pastille(demande.status)"
             :libelle="LIBELLES_HORS_PASTILLE[demande.status] ?? ''"
           />
-          <span v-if="demande.targetLabel" class="text-sm">{{ demande.targetLabel }}</span>
+          <span v-if="demande.targetLabel" class="min-w-0 text-sm [overflow-wrap:anywhere]">{{ demande.targetLabel }}</span>
           <!-- Voir qui est visé sans perdre le filtre, le tri, ni sa place dans la file. -->
           <button
             v-if="personneDeLaDemande(demande) !== null"
@@ -387,7 +409,7 @@ function dateLisible(valeur: string | null): string {
         </p>
 
         <!-- Les personnes que la demande ajoute à l'arbre, par leur nom. -->
-        <p v-if="nouvellesPersonnes(demande) !== ''" class="mt-1 text-sm">
+        <p v-if="nouvellesPersonnes(demande) !== ''" class="mt-1 text-sm [overflow-wrap:anywhere]">
           <span class="text-attenue">Nouvelle{{ (demande.nouvellesPersonnes?.length ?? 0) > 1 ? 's' : '' }} personne{{ (demande.nouvellesPersonnes?.length ?? 0) > 1 ? 's' : '' }} :</span>
           {{ nouvellesPersonnes(demande) }}
         </p>
@@ -403,11 +425,20 @@ function dateLisible(valeur: string | null): string {
           {{ autres.get(demande.id) }} autre{{ (autres.get(demande.id) ?? 0) > 1 ? 's' : '' }} demande{{ (autres.get(demande.id) ?? 0) > 1 ? 's' : '' }} en attente sur cette fiche : décidez-les ensemble
         </p>
 
-        <p v-if="demande.message" class="mt-1 line-clamp-2 text-[13px] text-attenue">
+        <p v-if="demande.message" class="mt-1 line-clamp-2 text-[13px] text-attenue [overflow-wrap:anywhere]">
           « {{ demande.message }} »
         </p>
       </li>
     </ul>
+
+    <PaginationListe
+      v-if="erreur === null"
+      :page="page"
+      :par-page="PAR_PAGE"
+      :total="total"
+      :chargement="chargement"
+      @aller="page = $event"
+    />
 
     <!-- Déclarée après la file, donc peinte par-dessus. La loupe vient ensuite,
          pour passer par-dessus l'aperçu lui-même. -->

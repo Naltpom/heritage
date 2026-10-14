@@ -82,7 +82,7 @@ async function traiter(decision: DecisionDemandeRgpd): Promise<void> {
   <p v-if="composantesARetirer(rgpd) !== null">
     À retirer : <strong>{{ composantesARetirer(rgpd) }}</strong>
   </p>
-  <p v-if="rgpd.message" class="text-attenue whitespace-pre-line">« {{ rgpd.message }} »</p>
+  <p v-if="rgpd.message" class="text-attenue whitespace-pre-line [overflow-wrap:anywhere]">« {{ rgpd.message }} »</p>
 
   <label class="flex flex-col gap-1">
     <span class="text-[12.5px] font-medium">Réponse au membre (exigée pour refuser)</span>

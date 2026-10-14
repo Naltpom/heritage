@@ -188,7 +188,7 @@ const PASTILLE: Record<CitationDeFiche['appui'], string> = {
               class="ml-1.5 rounded-pastille bg-accent-doux px-1.5 py-px font-semibold text-accent"
             >la plus récente</span>
           </p>
-          <p class="m-0 whitespace-pre-line">{{ note.body }}</p>
+          <p class="m-0 whitespace-pre-line [overflow-wrap:anywhere]">{{ note.body }}</p>
         </li>
       </ol>
     </section>

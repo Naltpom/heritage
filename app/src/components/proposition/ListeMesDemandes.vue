@@ -258,7 +258,7 @@ function changerFiltre(valeur: StatutDemande | ''): void {
                 @action="emit('recharger')"
               />
 
-              <p v-if="demande.message" class="mt-1.5 text-sm text-attenue">
+              <p v-if="demande.message" class="mt-1.5 text-sm text-attenue [overflow-wrap:anywhere]">
                 « {{ demande.message }} »
               </p>
 
@@ -271,7 +271,7 @@ function changerFiltre(valeur: StatutDemande | ''): void {
                   class="mt-3 rounded-panneau border border-alerte-bord bg-alerte-doux px-3.5 py-3 text-sm"
                 >
                   <p class="mb-1 font-semibold">Motif du refus</p>
-                  <p class="whitespace-pre-line">{{ motifs.get(demande.id)!.message }}</p>
+                  <p class="whitespace-pre-line [overflow-wrap:anywhere]">{{ motifs.get(demande.id)!.message }}</p>
                   <p v-if="motifs.get(demande.id)!.parQui" class="mt-2 text-xs text-attenue">
                     {{ motifs.get(demande.id)!.parQui }}<template v-if="motifs.get(demande.id)!.quand">,
                     le {{ dateLisible(motifs.get(demande.id)!.quand) }}</template>

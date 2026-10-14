@@ -239,14 +239,42 @@ export function modifierQuotasGlobaux(limites: LimitesDeQuotas): Promise<{ quota
   })
 }
 
+/**
+ * `GET /api/administration/utilisateurs` (§ 10.1) — **filtrée et paginée côté
+ * serveur** (2026-10-14) : `q` cherche dans le nom affiché, le courriel, le nom
+ * et le numéro de la fiche rattachée ; `role: 'admin'` ne garde que les
+ * administrateurs.
+ */
 export function listerUtilisateurs(options: {
   status?: StatutCompte | undefined
+  role?: 'admin' | undefined
+  q?: string | undefined
   page?: number | undefined
   parPage?: number | undefined
 }): Promise<ListePaginee<UtilisateurAdministration>> {
   return requeteApi<ListePaginee<UtilisateurAdministration>>('/administration/utilisateurs', {
-    requete: { status: options.status, page: options.page, parPage: options.parPage },
+    requete: {
+      status: options.status,
+      role: options.role,
+      q: options.q === '' ? undefined : options.q,
+      page: options.page,
+      parPage: options.parPage,
+    },
   })
+}
+
+/** Les compteurs des puces de l'écran Utilisateurs, indépendants de la page et de la recherche. */
+export interface CompteursUtilisateurs {
+  tous: number
+  en_attente: number
+  actif: number
+  suspendu: number
+  admins: number
+}
+
+/** `GET /api/administration/utilisateurs/compteurs`. */
+export function compterUtilisateurs(): Promise<CompteursUtilisateurs> {
+  return requeteApi<CompteursUtilisateurs>('/administration/utilisateurs/compteurs')
 }
 
 /**
