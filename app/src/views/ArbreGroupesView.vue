@@ -9,9 +9,24 @@
  * alliance à part, les personnes sans lien — a son rectangle, séparé des autres de deux
  * cartes au moins (`arbre2/groupes.ts`). Tout le reste (zoom, niveaux de détail,
  * recherche, filtres, panneau de la fiche) est celui de `/arbre`, sans rien y toucher :
- * les préférences de cet écran ont leurs propres clés (`heritage.arbre2.*`), il ne
- * garde aucune disposition dans la mémoire de `/arbre` et ne lui laisse aucune vue à
- * reprendre. Le graphe gardé (même `ETag`, même contenu) est partagé.
+ * les préférences de cet écran ont leurs propres clés (`heritage.arbre2.*`), il ne lui
+ * laisse aucune vue à reprendre, et ses dispositions se gardent dans la même mémoire
+ * sous des clés à elles (`moteur: 'groupes'`, `histoire/memoire.ts`). Le graphe gardé
+ * (même `ETag`, même contenu) est partagé.
+ *
+ * ── LE RENDU : l'ADR 0007, et sa révision du 2026-10-14 pour cet écran ──────────
+ *  1. **Le zoom des traits passe par le `viewBox`** (`arbre2/TracesGroupes.vue`),
+ *     jamais par `transform: scale()` : seul le visible est peint.
+ *  2. **Jamais `opacity` sur le canevas** : `stroke-opacity`, `fill-opacity`, ou une
+ *     couleur transparente dans la peinture (`arbre2/apparence.ts › attenuer`) — pas
+ *     un contexte d'empilement par fiche.
+ *  3. **Vue ne tient ni une fiche, ni un trait** (`TracesGroupes`, `FichesGroupes`,
+ *     construits impérativement, un écouteur délégué), et **le cadrage vit hors de la
+ *     réactivité** (`arbre2/useCadrage.ts`) : pendant un geste, rien ne se rend ; les
+ *     textes visibles se recalculent d'après un instantané, au plus toutes les 160 ms.
+ *  Les boîtes sont du HTML, sans `viewBox` : UNE transformation sur leur seul
+ *  conteneur — c'est la révision. `arbre2/rendu-adr0007.test.ts` lit ce fichier et
+ *  rougit si une règle est enfreinte.
  *
  * Ce qui suit est l'en-tête de `/arbre`, qui vaut ici aussi.
  *
@@ -77,16 +92,15 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   CLE_ETAG_GRAPHE,
   NOM_D_UNE_PERSONNE_VIVANTE,
+  analyserErreur,
   chargerGraphe,
-  lireFichePersonne,
   oublierEtag,
   retenirEtag,
   type Graphe,
-  type FichePersonneComplete,
   type NoeudPersonne,
   type ResultatDeRecherche,
 } from '@/lib/api'
-import { FILTRES, filtreDisponible, nomDeFiche, type IdFiltre, type NoeudPersonneEtendu } from '@/components/arbre/graphe'
+import { FILTRES, filtreDisponible, type IdFiltre, type NoeudPersonneEtendu } from '@/components/arbre/graphe'
 import { useCorrespondance, useEstMobile, useTiroirs } from '@/composables/useTiroirs'
 import { definirResume } from '@/composables/entete'
 import { abonnerChoix, useRechercheGlobale } from '@/composables/rechercheGlobale'
@@ -96,11 +110,21 @@ import BarreEcran from '@/components/mise-en-page/BarreEcran.vue'
 import Segmente from '@/components/mise-en-page/Segmente.vue'
 import PastilleFiltre from '@/components/evenements/PastilleFiltre.vue'
 import { hauteurDuCadre } from '@/views/cadre'
-import FichesMonde from '@/histoire/FichesMonde.vue'
+import FichesGroupes from '@/arbre2/FichesGroupes.vue'
+import TracesGroupes from '@/arbre2/TracesGroupes.vue'
+import CalqueLibelles from '@/arbre2/CalqueLibelles.vue'
+import BandeauFamilles, { type BrancheMonde } from '@/arbre2/BandeauFamilles.vue'
+import GouttiereGenerations, { type EtiquetteDeGeneration } from '@/arbre2/GouttiereGenerations.vue'
+import TitresDesRectangles, { type TitreDeRectangle } from '@/arbre2/TitresDesRectangles.vue'
+import MiniCarte from '@/arbre2/MiniCarte.vue'
+import { useCadrage } from '@/arbre2/useCadrage'
+import { dansLaFenetre, transformationMonde, transformationRelative, viewBoxDe } from '@/arbre2/cadrage'
+import { alphaDeFiche, couleurBranche, styleDeFiche } from '@/arbre2/apparence'
+import { MARGE, anneauDe, creerMemoireDesTextes, libellesDesFiches, libellesDesFoyers, type Anneau } from '@/arbre2/libelles'
+import { useLectureDeLaFiche } from '@/arbre2/lectureFiche'
+import { useRelectureDeLArbre } from '@/arbre2/relecture'
 import {
   LIBELLES_QUART,
-  nomEcrit,
-  prenomDe,
   sansFamilleDuConjoint,
   type BrancheDeQuart,
   type DispositionHistoire,
@@ -108,9 +132,9 @@ import {
   type Quart,
 } from '@/histoire/lignees'
 import { apresLaPeinture, creerChronometre, premierChargement, publier, reseauDe, type Chronometre } from '@/histoire/chronometre'
-import { identiteDuLecteur, memoireDeLArbre } from '@/histoire/memoire'
+import { cleDeDisposition, identiteDuLecteur, memoireDeLArbre } from '@/histoire/memoire'
 import { disposerEnGroupes, type DispositionGroupes, type RectangleDeGroupe } from '@/arbre2/groupes'
-import { auFormat, entreePortrait, geometriePortrait, texteDePortrait } from '@/histoire/cartes'
+import { auFormat } from '@/histoire/cartes'
 import { useFormatDesCartes } from '@/composables/formatDesCartes'
 import ReglageFormatDesCartes from '@/components/arbre/ReglageFormatDesCartes.vue'
 import InvitationFormatDesCartes from '@/components/arbre/InvitationFormatDesCartes.vue'
@@ -126,26 +150,18 @@ import {
 import type { PersonneDeposee } from '@/components/proposition/depot'
 import type { DemandeDeCompletion } from '@/components/proposition/fusion'
 import type { EnEvidence } from '@/components/proposition/ressemblances'
-import { bandeauDesFamilles, type BrancheDuBandeau } from '@/histoire/bandeau'
 import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
 import { effectifSansLien, estSansLien, noeudsSansLien, sansPersonnesSansLien } from '@/histoire/sansLien'
 import { quartsPresents, sansBranches } from '@/histoire/branches'
-import { poserEtiquettes } from '@/histoire/etiquettes'
 import {
-  DUREE_VOL,
   PALIERS,
   SEUILS,
   ajusterLargeur,
-  niveau as niveauDe,
   syDe,
-  texteDeFiche,
-  trajectoire,
   versMonde,
-  zoomAutour,
   borner as bornerEchelle,
   centrerSur,
   jaugeDuZoom,
-  reductionDuTexte,
   SEUIL_DES_NOMS,
   bornerSeuilDesNoms,
   type Cadrage,
@@ -269,6 +285,25 @@ let chrono: Chronometre | null = null
  * sous quel `ETag`. `null` quand rien ne se garde (pas d'`ETag`, pas de session).
  */
 let grapheGarde: { identite: string; etag: string } | null = null
+/**
+ * La clé de la disposition en groupes que `disposer()` ferait maintenant : TOUT ce qui
+ * entre dans son calcul, hors le graphe (que l'`ETag` désigne), et le moteur — `/arbre-2`
+ * garde les siennes dans la même mémoire. La ligne seule n'y est pas : sa disposition
+ * en pedigree, petite, ne se garde pas. Les rectangles affichés ou masqués non plus :
+ * ils ne changent pas la disposition.
+ */
+function cleDeLaDisposition(): string {
+  return cleDeDisposition({
+    moteur: 'groupes',
+    avecAlliances: avecAlliances.value,
+    avecConjoint: avecConjoint.value,
+    avecSansLien: avecSansLien.value,
+    masquees: filtres.masquees,
+    format: formatDesCartes.value,
+    alliancesDansLArbre: alliancesDansLArbre.value,
+    fratriesParNaissance: fratriesParNaissance.value,
+  })
+}
 function disposer(graphe: Graphe): void {
   const mesure = <T>(etape: string, calcul: () => T): T => (chrono ? chrono.mesure(etape, calcul) : calcul())
   // Les alliances d'abord, classées sur le graphe ENTIER : c'est lui que le serveur a classé.
@@ -291,14 +326,23 @@ function disposer(graphe: Graphe): void {
     )
     return
   }
-  // Les rectangles de familles (`arbre2/groupes.ts`). Rien ne se garde : la mémoire des
-  // dispositions est celle de `/arbre`, et ses clés ne distinguent pas les moteurs.
-  disposition.value = mesure('dont placement', () =>
+  // Déjà calculée sur ce graphe, avec ces bascules (ce F5-ci ou un précédent) : on la reprend.
+  const garde = grapheGarde
+  const cle = garde ? cleDeLaDisposition() : null
+  const deja = garde && cle !== null ? memoireDeLArbre.dispositionGardee(garde.identite, garde.etag, cle) : null
+  if (deja && 'groupes' in deja) {
+    disposition.value = mesure('dont placement (reprise de la mémoire)', () => deja as DispositionGroupes)
+    return
+  }
+  // Les rectangles de familles (`arbre2/groupes.ts`).
+  const calculee = mesure('dont placement', () =>
     disposerEnGroupes(auFormat(leFiltre(), formatDesCartes.value), {
       alliances: alliancesDansLArbre.value ? 'dans-l-arbre' : 'a-part',
       fratriesParNaissance: fratriesParNaissance.value,
     }),
   )
+  disposition.value = calculee
+  if (garde && cle !== null) void memoireDeLArbre.garderLaDisposition(garde.identite, garde.etag, cle, calculee)
 }
 /** Après une bascule : la disposition refaite, et ce qui n'existe plus oublié. */
 function redisposer(): void {
@@ -308,7 +352,7 @@ function redisposer(): void {
   if (selection.value !== null && !d.parId.has(selection.value)) selection.value = null
   if (!familleEclairee(d.traces.familles, familleChoisie.value)) familleChoisie.value = null
   filtres.masquees = filtres.masquees.filter((b) => quartsMasquables.value.has(b))
-  cadrage.value = ajusterLargeur(canevas.value, gouttiere.value)
+  cadrage.definir(ajusterLargeur(canevas.value, gouttiere.value))
 }
 watch(avecConjoint, (avec) => {
   ecrirePreference(CLE_CONJOINT, avec)
@@ -335,23 +379,23 @@ watch(fratriesParNaissance, (oui) => {
 function garderLeRepere(refaire: () => void, sansRepere: 'ajuster' | 'garder' = 'ajuster'): void {
   const d = disposition.value
   if (!d || !grapheCharge.value) return
-  const avant = cadrage.value
+  const avant = cadrage.lire()
   let repere: { id: string; px: number; py: number } | null = null
   const choisie = selection.value !== null ? d.parId.get(selection.value) : undefined
   const ancre = choisie ?? (niveau.value > 0 ? ficheLaPlusProche(d, centreMonde()) : undefined)
   if (ancre) repere = { id: ancre.id, px: versEcranX(ancre.cx), py: versEcranY(ancre.y + ancre.h / 2) }
-  arreterVol()
+  cadrage.arreterVol()
   refaire()
   const f = repere ? disposition.value?.parId.get(repere.id) : undefined
   if (!f || !repere) {
-    if (sansRepere === 'garder') cadrage.value = avant
+    if (sansRepere === 'garder') cadrage.definir(avant)
     return
   }
   const c = canevas.value
   // Le même point d'écran, sauf s'il était sorti de la fenêtre : alors au centre.
   const dedans = repere.px > 0 && repere.px < taille.value.l && repere.py > 0 && repere.py < taille.value.h
   const [px, py] = dedans ? [repere.px, repere.py] : [taille.value.l / 2, taille.value.h / 2]
-  cadrage.value = centrerSur(bornerEchelle(avant.s, c), c, f.cx, f.y + f.h / 2, px, py)
+  cadrage.definir(centrerSur(bornerEchelle(avant.s, c), c, f.cx, f.y + f.h / 2, px, py))
 }
 /* Changer de format change la taille des boîtes : la disposition se refait autour du repère. */
 watch(formatDesCartes, () => garderLeRepere(redisposer))
@@ -410,15 +454,14 @@ const erreur = ref<string | null>(null)
  *
  * Jusqu'au 2026-10-07, elle était échelonnée fiche par fiche depuis la vôtre : une animation
  * CSS par fiche — 5 294 sur l'arbre servi —, et les styles des fiches calculés deux
- * fois, avec puis sans leur retard. La première image peinte prenait ~650 ms. Un fondu
- * pour le calque des fiches, un pour celui des traits — et un par nom ou photo écrit
- * à l'écran, les seules fiches visibles en reçoivent.
+ * fois, avec puis sans leur retard. La première image peinte prenait ~650 ms. Depuis le
+ * 2026-10-14, un fondu par CALQUE et rien d'autre : celui des fiches et celui des textes
+ * (`.calque-apparait`, sur leur seul conteneur), les traits par `stroke-opacity`
+ * (`TracesGroupes`) — plus un fondu par nom ou photo écrit à l'écran, qui faisait de
+ * chacun une couche de composition le temps de l'animation (ADR 0007, révision du
+ * 2026-10-14).
  */
 const DUREE_REVELATION = 600
-/** Le fondu d'un calque ; `apres`, son retard. */
-const fondu = (apres = 0): Record<string, string> => ({
-  animation: `apparition-texte ${DUREE_REVELATION}ms ease-out ${apres}ms backwards`,
-})
 const revelation = shallowRef(false)
 let finRevelation = 0
 /*
@@ -439,6 +482,13 @@ function lancerRevelation(): void {
   finRevelation = window.setTimeout(() => (revelation.value = false), DUREE_REVELATION * 2)
 }
 
+/** Le graphe obtenu, et sous quelle clé il est gardé (`null` : rien ne se garde). */
+interface GrapheObtenu {
+  graphe: Graphe
+  inchange: boolean
+  garde: { identite: string; etag: string } | null
+}
+
 /**
  * Le graphe, REVALIDÉ contre celui qu'on a gardé d'un F5 à l'autre (`histoire/memoire.ts`).
  *
@@ -447,39 +497,47 @@ function lancerRevelation(): void {
  * reprend au lieu de le retélécharger. Rien ne s'affiche avant cette réponse. Sans
  * graphe gardé, aucun `If-None-Match` : un `200`, comme avant. Le graphe gardé se relit
  * pendant que la requête part.
+ *
+ * `signal` abandonne la requête (démontage, autre lecteur) ; c'est à l'appelant de
+ * poser `grapheGarde`, s'il est toujours le dernier à avoir demandé.
  */
-async function obtenirLeGraphe(c: Chronometre): Promise<{ graphe: Graphe; inchange: boolean }> {
+async function obtenirLeGraphe(c: Chronometre, signal: AbortSignal): Promise<GrapheObtenu> {
   const identite = identiteDuLecteur(session.value)
   const etag = identite ? await c.mesureAsync('mémoire locale : ETag', () => memoireDeLArbre.etagGarde(identite)) : null
   if (etag !== null) retenirEtag(CLE_ETAG_GRAPHE, etag)
   else oublierEtag(CLE_ETAG_GRAPHE)
   const enReserve = identite && etag !== null ? memoireDeLArbre.grapheGarde(identite, etag) : Promise.resolve(null)
-  let reponse = await c.mesureAsync('requête + lecture JSON', () => chargerGraphe())
+  let reponse = await c.mesureAsync('requête + lecture JSON', () => chargerGraphe(signal))
   if (reponse.statut === 'inchange') {
     const garde = await c.mesureAsync('mémoire locale : graphe', () => enReserve)
-    if (garde && identite && etag !== null) {
-      grapheGarde = { identite, etag }
-      return { graphe: garde, inchange: true }
-    }
+    if (garde && identite && etag !== null) return { graphe: garde, inchange: true, garde: { identite, etag } }
     // Gardé, mais illisible entre-temps : on le redemande en entier, sans `If-None-Match`.
     oublierEtag(CLE_ETAG_GRAPHE)
-    reponse = await c.mesureAsync('requête + lecture JSON', () => chargerGraphe())
+    reponse = await c.mesureAsync('requête + lecture JSON', () => chargerGraphe(signal))
     if (reponse.statut === 'inchange') throw new Error("L'arbre n'a pas pu être chargé.")
   }
   const { donnees, etag: recu } = reponse
-  grapheGarde = identite && recu !== null && !recu.startsWith('W/') ? { identite, etag: recu } : null
-  if (grapheGarde) void memoireDeLArbre.garderLeGraphe(grapheGarde.identite, grapheGarde.etag, donnees)
-  return { graphe: donnees, inchange: false }
+  const garde = identite && recu !== null && !recu.startsWith('W/') ? { identite, etag: recu } : null
+  if (garde) void memoireDeLArbre.garderLeGraphe(garde.identite, garde.etag, donnees)
+  return { graphe: donnees, inchange: false, garde }
 }
 
+/** Le dernier chargement lancé : un chargement abandonné (autre lecteur, démontage) n'écrit rien. */
+let jetonChargement = 0
+
 async function charger(): Promise<void> {
+  const jeton = ++jetonChargement
+  const signal = relecture.signal()
   chargement.value = true
   erreur.value = null
   const apresUnF5 = premierChargement()
   chrono = creerChronometre()
   const c = chrono
   try {
-    const { graphe } = await obtenirLeGraphe(c)
+    const obtenu = await obtenirLeGraphe(c, signal)
+    if (jeton !== jetonChargement) return
+    const { graphe, inchange } = obtenu
+    grapheGarde = obtenu.garde
     c.mesure('mise en mémoire', () => (grapheCharge.value = graphe))
     // « Voir dans l'arbre » vers une personne d'une famille par alliance masquée : on l'affiche.
     const demandee = Number(route.query['personne']) || null
@@ -492,8 +550,18 @@ async function charger(): Promise<void> {
       avecSansLien.value = true
       ecrirePreference(CLE_SANS_LIEN, true)
     }
+    // Graphe inchangé : la disposition de ces bascules est peut-être gardée — on la relit.
+    const garde = grapheGarde
+    if (inchange && garde && cleLigneSeule.value === null) {
+      const cle = cleDeLaDisposition()
+      await c.mesureAsync('mémoire locale : disposition', () =>
+        memoireDeLArbre.prechargerLaDisposition(garde.identite, garde.etag, cle),
+      )
+      if (jeton !== jetonChargement) return
+    }
     c.mesure('disposition (filtres + placement)', () => disposer(graphe))
     await c.mesureAsync('rendu Vue', () => nextTick())
+    if (jeton !== jetonChargement) return
     // La vue quittée au départ vers une fiche est celle de `/arbre` (`histoire/retour.ts`) :
     // cet écran ne la reprend pas, et ne l'écrit pas — l'arbre ajusté, toujours.
     vueAReprendre = null
@@ -512,17 +580,32 @@ async function charger(): Promise<void> {
       noeuds: graphe.noeuds.length,
     })
   } catch (e) {
-    erreur.value = e instanceof Error ? e.message : "L'arbre n'a pas pu être chargé."
+    // Abandonné (démontage, autre lecteur) : un chargement plus récent a la main, ou plus personne.
+    if (jeton !== jetonChargement) return
+    erreur.value = analyserErreur(e).message
   } finally {
-    chrono = null
-    chargement.value = false
-    // Après la première image (ou l'échec) : les zones de clic des familles.
-    zonesDeClic.value = true
+    if (jeton === jetonChargement) {
+      chrono = null
+      chargement.value = false
+      // Après la première image (ou l'échec) : les zones de clic des familles.
+      zonesDeClic.value = true
+    }
   }
 }
 
 /** Le dernier rafraîchissement lancé : une réponse plus ancienne n'écrit rien. */
 let jetonRafraichir = 0
+/** La dernière revalidation au retour sur l'onglet ; un dépôt, plus récent, l'emporte. */
+let jetonRevalidation = 0
+
+/** Redessine l'arbre sur un graphe relu, autour du repère du lecteur, sans repartir de zéro. */
+function redessiner(obtenu: GrapheObtenu): void {
+  grapheGarde = obtenu.garde
+  garderLeRepere(() => {
+    grapheCharge.value = obtenu.graphe
+    redisposer()
+  }, 'garder')
+}
 
 /**
  * Après une proposition déposée depuis le volet : l'arbre relu et redessiné **sans
@@ -536,25 +619,68 @@ let jetonRafraichir = 0
  * autour du repère du lecteur (`garderLeRepere`) ; sans repère, le cadrage reste.
  *
  * `noeudId` est celui que la réponse du dépôt a rendu (`PersonneDeposee`), jamais
- * recollé. Rend ce qu'on a trouvé, ou `null` si un rafraîchissement plus récent a
- * pris la main.
+ * recollé. Rend ce qu'on a trouvé, `echec` si l'arbre n'a pas pu se relire (le dépôt,
+ * lui, est fait : on ne dit pas qu'elle est absente), ou `null` si un rafraîchissement
+ * plus récent a pris la main.
  */
 async function rafraichir(cible: { noeudId?: string | null; personId?: number | null }): Promise<PlaceDansLArbre | null> {
   const jeton = ++jetonRafraichir
-  let graphe: Graphe
+  // Une revalidation en vol écrirait un graphe d'avant le dépôt : celle-ci l'emporte.
+  jetonRevalidation++
+  let obtenu: GrapheObtenu
   try {
-    graphe = (await obtenirLeGraphe(creerChronometre())).graphe
+    obtenu = await obtenirLeGraphe(creerChronometre(), relecture.signal())
   } catch {
-    return jeton === jetonRafraichir ? 'absente' : null
+    return jeton === jetonRafraichir ? 'echec' : null
   }
   if (jeton !== jetonRafraichir) return null
   // Pas d'arbre affiché (chargement en cours, ou échec) : rien à redessiner ici.
   if (!disposition.value || chargement.value) return 'absente'
   garderLeRepere(() => {
-    grapheCharge.value = graphe
+    grapheGarde = obtenu.garde
+    grapheCharge.value = obtenu.graphe
     redisposer()
   }, 'garder')
-  return localiser(cible, graphe)
+  return localiser(cible, obtenu.graphe)
+}
+
+/**
+ * Au retour sur l'onglet (`arbre2/relecture.ts`) : le graphe revalidé en silence. Sur
+ * `304`, rien ne bouge ; sinon l'arbre se redessine autour du repère du lecteur, comme
+ * après un dépôt. Une revalidation qui échoue laisse l'arbre tel qu'il est.
+ */
+async function revaliderEnSilence(): Promise<void> {
+  if (chargement.value || !disposition.value) return
+  const jeton = ++jetonRevalidation
+  let obtenu: GrapheObtenu
+  try {
+    obtenu = await obtenirLeGraphe(creerChronometre(), relecture.signal())
+  } catch {
+    return
+  }
+  if (jeton !== jetonRevalidation || chargement.value || !disposition.value) return
+  if (obtenu.graphe === grapheCharge.value) return
+  redessiner(obtenu)
+}
+
+/**
+ * Un AUTRE lecteur (« Quitter la vue empruntée », une incarnation, un autre compte) :
+ * le graphe affiché a été filtré pour le précédent. Il quitte l'écran tout de suite —
+ * graphe, disposition, sélection, noms des branches —, et celui du nouveau lecteur se
+ * charge comme au premier affichage.
+ */
+function changerDeLecteur(): void {
+  jetonRafraichir++
+  jetonRevalidation++
+  cadrage.arreterVol()
+  selection.value = null
+  familleChoisie.value = null
+  grapheGarde = null
+  grapheCharge.value = null
+  disposition.value = null
+  quartsVus.clear()
+  zonesDeClic.value = false
+  void charger()
 }
 
 /** Choisit et rejoint la personne déposée dans la disposition refaite, ou dit pourquoi on ne la voit pas. */
@@ -564,7 +690,7 @@ function localiser(cible: { noeudId?: string | null; personId?: number | null },
   if (f) {
     selection.value = f.id
     // Au zoom où les noms s'écrivent : la fiche en pointillé se lit en arrivant.
-    voler(Math.max(s.value, seuilDesNoms.value), f.cx, f.y + f.h / 2)
+    voler(Math.max(echelle(), seuilDesNoms.value), f.cx, f.y + f.h / 2)
     return 'placee'
   }
   if (personId !== null && montrerPersonne(personId)) return 'placee'
@@ -583,7 +709,6 @@ const racine = ref<HTMLElement | null>(null)
 const fenetre = ref<HTMLElement | null>(null)
 const hauteurCadre = ref('70vh')
 const taille = ref({ l: 0, h: 0 })
-const cadrage = ref<Cadrage>({ s: 0.05, tx: 0, ty: 0 })
 
 let premierAjustement = true
 const gouttiere = computed(() => (estMobile.value ? 64 : 170))
@@ -595,18 +720,84 @@ const canevas = computed<Canevas>(() => ({
   hauteurMonde: disposition.value?.hauteur ?? 1,
 }))
 
-const s = computed(() => cadrage.value.s)
-const sy = computed(() => syDe(cadrage.value.s, canevas.value))
-const niveau = computed(() => niveauDe(cadrage.value.s, seuilDesNoms.value))
+/*
+ * Les couches écrites à chaque image, SANS Vue (ADR 0007, règle 3) : le `viewBox` des
+ * traits, la transformation des boîtes, celle de la couche des textes, et la place du
+ * bandeau, de la gouttière, des titres des rectangles et du cadre de la mini-carte.
+ * Jusqu'au 2026-10-14, un `ref` de cadrage écrit à chaque image d'un glisser rendait
+ * l'écran entier à nouveau — les milliers de zones de clic, les rectangles, le volet,
+ * le feuillet des filtres —, soixante fois par seconde.
+ */
+const traces = ref<InstanceType<typeof TracesGroupes> | null>(null)
+const boites = ref<InstanceType<typeof FichesGroupes> | null>(null)
+const calqueEcran = ref<HTMLElement | null>(null)
+const titres = ref<InstanceType<typeof TitresDesRectangles> | null>(null)
+const bandeau = ref<InstanceType<typeof BandeauFamilles> | null>(null)
+const generations = ref<InstanceType<typeof GouttiereGenerations> | null>(null)
+const miniCarte = ref<InstanceType<typeof MiniCarte> | null>(null)
+/** L'instantané d'après lequel la couche des textes est rendue en ce moment. */
+let renduApplique: Cadrage | null = null
+
+function appliquer(c: Cadrage): void {
+  const cv = canevas.value
+  traces.value?.cadrer(viewBoxDe(c, cv))
+  boites.value?.cadrer(transformationMonde(c, cv))
+  if (calqueEcran.value) calqueEcran.value.style.transform = transformationRelative(renduApplique ?? c, c, cv)
+  titres.value?.placer(c, cv)
+  bandeau.value?.placer(c, cv)
+  generations.value?.placer(c, cv)
+  miniCarte.value?.placer(c, cv)
+}
+
+/** Le cadrage, hors de la réactivité (`arbre2/useCadrage.ts`). */
+const cadrage = useCadrage({ fenetre, canevas: () => canevas.value, appliquer, seuilDesNoms: () => seuilDesNoms.value })
+const niveau = cadrage.niveau
+/** L'instantané publié à Vue : les textes, les anneaux, les noms de foyer s'en calculent. */
+const rendu = cadrage.rendu
+const { surPointeurBas, surPointeurDeplace, surPointeurHaut } = cadrage.gestes
+const voler = cadrage.voler
+
+/*
+ * Après chaque rendu des couches (un nouvel instantané, une autre disposition, une autre
+ * taille) : elles sont à jour, la transformation de la couche des textes repart de zéro
+ * et tout se réécrit pour le cadrage courant.
+ */
+watch(
+  [rendu, disposition, canevas, estMobile],
+  () => {
+    renduApplique = rendu.value
+    cadrage.reappliquer()
+  },
+  { flush: 'post' },
+)
 
 /** La jauge de zoom, pour l'administration seulement : un repère chiffré sur
  *  les captures d'écran (« à 30 % les noms se chevauchent »), pas un réglage. */
 const { administrateur, session, rattache, vueEmpruntee } = useSession()
-const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(cadrage.value.s, canevas.value, seuilDesNoms.value) : null))
+const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(rendu.value.s, canevas.value, seuilDesNoms.value) : null))
 const ensemble = computed(() => niveau.value === 0)
 
-const versEcranX = (x: number): number => cadrage.value.tx + x * s.value
-const versEcranY = (y: number): number => cadrage.value.ty + y * sy.value
+/*
+ * Le graphe relu quand le lecteur change, et au retour sur l'onglet ; les requêtes en
+ * vol abandonnées au démontage (`arbre2/relecture.ts`).
+ */
+const relecture = useRelectureDeLArbre({
+  identite: () => identiteDuLecteur(session.value),
+  nouveauLecteur: changerDeLecteur,
+  revalider: () => void revaliderEnSilence(),
+})
+
+/** Monde → écran, pour le cadrage courant (celui d'un geste en cours compris). */
+const versEcranX = (x: number): number => {
+  const c = cadrage.lire()
+  return c.tx + x * c.s
+}
+const versEcranY = (y: number): number => {
+  const c = cadrage.lire()
+  return c.ty + y * syDe(c.s, canevas.value)
+}
+/** L'échelle courante. */
+const echelle = (): number => cadrage.lire().s
 
 function mesurer(): void {
   if (racine.value) hauteurCadre.value = hauteurDuCadre(racine.value.getBoundingClientRect().top)
@@ -629,7 +820,7 @@ function ajuster(): void {
     reprendre(v)
     return
   }
-  cadrage.value = ajusterLargeur(canevas.value, gouttiere.value)
+  cadrage.definir(ajusterLargeur(canevas.value, gouttiere.value))
   const cible = personneDemandee !== null ? disposition.value.parPersonId.get(personneDemandee) : undefined
   personneDemandee = null
   if (cible) {
@@ -652,7 +843,7 @@ function reprendre(v: VueMemorisee): void {
   else assurerLaDisposition()
   const d = disposition.value!
   const c = canevas.value
-  cadrage.value = centrerSur(bornerEchelle(v.s, c), c, v.x, v.y, taille.value.l / 2, taille.value.h / 2)
+  cadrage.definir(centrerSur(bornerEchelle(v.s, c), c, v.x, v.y, taille.value.l / 2, taille.value.h / 2))
   selection.value = v.selection !== null && d.parId.has(v.selection) ? v.selection : null
 }
 
@@ -661,32 +852,8 @@ function memoriserLaVue(): void {
   /* Voir `charger()` : la mémoire du retour appartient à `/arbre`. */
 }
 
-/* Le vol animé. Tout geste l'interrompt. */
-let animation = 0
-function arreterVol(): void {
-  cancelAnimationFrame(animation)
-  animation = 0
-}
-function voler(sCible: number, x: number, y: number): void {
-  arreterVol()
-  const vol = trajectoire(cadrage.value, canevas.value, sCible, x, y)
-  const debut = performance.now()
-  const pas = (maintenant: number): void => {
-    const t = Math.min(1, (maintenant - debut) / DUREE_VOL)
-    cadrage.value = vol(t)
-    animation = t < 1 ? requestAnimationFrame(pas) : 0
-  }
-  animation = requestAnimationFrame(pas)
-}
-
-function centreMonde(): { x: number; y: number } {
-  return versMonde(cadrage.value, canevas.value, taille.value.l / 2, taille.value.h / 2)
-}
-
-function zoomer(facteur: number): void {
-  arreterVol()
-  cadrage.value = zoomAutour(cadrage.value, canevas.value, taille.value.l / 2, taille.value.h / 2, facteur)
-}
+const centreMonde = (): { x: number; y: number } => cadrage.centreMonde()
+const zoomer = (facteur: number): void => cadrage.zoomer(facteur)
 
 /**
  * Le palier Familles (30 %) tombe sous le seuil des noms quand le lecteur l'a abaissé
@@ -714,133 +881,20 @@ function allerAuPalier(i: number): void {
 }
 
 /* ------------------------------------------------------------------ */
-/* Gestes : glisser, pincer, molette                                   */
-/* ------------------------------------------------------------------ */
-
-/** Un doigt : sa position dans le canevas (`x`, `y`) et à l'écran (`cx`, `cy`). */
-interface Pointeur {
-  x: number
-  y: number
-  cx: number
-  cy: number
-}
-const pointeurs = new Map<number, Pointeur>()
-let glisser: { x: number; y: number; tx: number; ty: number; bouge: boolean } | null = null
-let pincement: number | null = null
-let finDeGlisser = 0
-let enAttente: Cadrage | null = null
-let image = 0
-
-/** Un seul recalcul par image pendant un glisser. */
-function planifier(c: Cadrage): void {
-  enAttente = c
-  if (image) return
-  image = requestAnimationFrame(() => {
-    image = 0
-    if (enAttente) cadrage.value = enAttente
-    enAttente = null
-  })
-}
-
-function local(e: PointerEvent | WheelEvent): { x: number; y: number } {
-  const r = fenetre.value!.getBoundingClientRect()
-  return { x: e.clientX - r.left, y: e.clientY - r.top }
-}
-
-function surPointeurBas(e: PointerEvent): void {
-  if (e.button !== 0 && e.pointerType === 'mouse') return
-  arreterVol()
-  pointeurs.set(e.pointerId, { ...local(e), cx: e.clientX, cy: e.clientY })
-  if (pointeurs.size === 1) glisser = { x: e.clientX, y: e.clientY, tx: cadrage.value.tx, ty: cadrage.value.ty, bouge: false }
-  if (pointeurs.size === 2) {
-    const [a, b] = [...pointeurs.values()] as [Pointeur, Pointeur]
-    pincement = Math.hypot(a.x - b.x, a.y - b.y)
-    // Le glissement à un doigt s'arrête : son point de départ date d'avant le zoom.
-    glisser = null
-    finDeGlisser = Date.now()
-  }
-}
-
-/**
- * Le cadrage le plus récent, y compris celui qui attend la prochaine image.
- * C'est de lui qu'un geste doit repartir, jamais du dernier dessiné.
- */
-const cadrageCourant = (): Cadrage => enAttente ?? cadrage.value
-
-function surPointeurDeplace(e: PointerEvent): void {
-  if (!pointeurs.has(e.pointerId)) return
-  pointeurs.set(e.pointerId, { ...local(e), cx: e.clientX, cy: e.clientY })
-  if (pointeurs.size >= 2) {
-    if (!pincement) return
-    const [a, b] = [...pointeurs.values()] as [Pointeur, Pointeur]
-    const d = Math.hypot(a.x - b.x, a.y - b.y)
-    planifier(zoomAutour(cadrageCourant(), canevas.value, (a.x + b.x) / 2, (a.y + b.y) / 2, d / pincement))
-    pincement = d
-    return
-  }
-  if (!glisser) return
-  const dx = e.clientX - glisser.x
-  const dy = e.clientY - glisser.y
-  if (!glisser.bouge && Math.abs(dx) + Math.abs(dy) > 5) {
-    glisser.bouge = true
-    fenetre.value?.setPointerCapture(e.pointerId)
-  }
-  if (glisser.bouge) planifier({ s: cadrageCourant().s, tx: glisser.tx + dx, ty: glisser.ty + dy })
-}
-
-function surPointeurHaut(e: PointerEvent): void {
-  if (!pointeurs.delete(e.pointerId)) return
-  if (pointeurs.size < 2) pincement = null
-  if (pointeurs.size === 1) {
-    // Fin d'un pincement, un doigt reste posé : le glissement REPART d'ici, de ce
-    // doigt et du cadrage d'après le zoom. Reprendre l'ancien point de départ
-    // faisait sauter la vue loin de l'arbre.
-    const [reste] = [...pointeurs.values()] as [Pointeur]
-    const c = cadrageCourant()
-    glisser = { x: reste.cx, y: reste.cy, tx: c.tx, ty: c.ty, bouge: true }
-    finDeGlisser = Date.now()
-  }
-  if (pointeurs.size === 0) {
-    if (glisser?.bouge) finDeGlisser = Date.now()
-    glisser = null
-  }
-}
-
-function surMolette(e: WheelEvent): void {
-  e.preventDefault()
-  arreterVol()
-  const { x, y } = local(e)
-  planifier(zoomAutour(enAttente ?? cadrage.value, canevas.value, x, y, Math.exp(-e.deltaY * 0.0016)))
-}
-
-/* ------------------------------------------------------------------ */
 /* Sélection                                                           */
 /* ------------------------------------------------------------------ */
 
 const selection = ref<string | null>(null)
 const ficheChoisie = computed(() => (selection.value ? disposition.value?.parId.get(selection.value) ?? null : null))
-const parente = ref<string | null>(null)
-/** La fiche entière de la personne choisie, pour le volet (PC) ; `null` tant qu'elle se lit. */
-const ficheLue = ref<FichePersonneComplete | null>(null)
-let lecture: AbortController | null = null
-
-watch(ficheChoisie, (f, avant) => {
-  if (f?.id === avant?.id) return
-  lecture?.abort()
-  parente.value = null
-  ficheLue.value = null
-  const personId = f?.noeud.personId
-  if (personId === null || personId === undefined) return
-  lecture = new AbortController()
-  // La parenté est calculée par le serveur, relativement au lecteur : on ne la recalcule pas.
-  lireFichePersonne(personId, lecture.signal)
-    .then((fiche) => {
-      if (fiche.visibilite !== 'complete') return
-      parente.value = fiche.parente
-      ficheLue.value = fiche
-    })
-    .catch(() => {})
-})
+/**
+ * La fiche entière de la personne choisie, pour le volet (PC) et la parenté du panneau
+ * (téléphone) : chaque issue a son état, l'échec compris (`arbre2/lectureFiche.ts`).
+ */
+const lectureDeLaFiche = useLectureDeLaFiche(() => ficheChoisie.value?.noeud.personId ?? null)
+const etatDeLaFiche = lectureDeLaFiche.etat
+const ficheLue = computed(() => (etatDeLaFiche.value.etat === 'complete' ? etatDeLaFiche.value.fiche : null))
+// La parenté est calculée par le serveur, relativement au lecteur : on ne la recalcule pas.
+const parente = computed(() => ficheLue.value?.parente ?? null)
 
 /*
  * DEUX VOLETS (PC) encadrent le canevas, et tous deux le POUSSENT — le canevas
@@ -880,7 +934,7 @@ async function rejoindreLaChoisieCouverte(): Promise<void> {
   const f = ficheChoisie.value
   if (!f) return
   const x = versEcranX(f.cx)
-  if (x < 40 || x > taille.value.l - 40) voler(s.value, f.cx, f.y + f.h / 2)
+  if (x < 40 || x > taille.value.l - 40) voler(echelle(), f.cx, f.y + f.h / 2)
 }
 watch(voletDroitOuvert, (ouvert) => {
   if (ouvert) void rejoindreLaChoisieCouverte()
@@ -895,11 +949,9 @@ watch(voletDroitOuvert, (ouvert) => {
  * sa trajectoire visait l'ancien canevas. L'observateur de taille remesure ensuite.
  */
 watch(propositionVisible, (visible) => {
-  arreterVol()
   const pret = disposition.value !== null && taille.value.l > 0
-  cadrage.value = cadrageApresVolet(cadrage.value, visible, pret)
-  // Un glisser dont l'image attend encore : il repart du même décalage.
-  if (enAttente) enAttente = cadrageApresVolet(enAttente, visible, pret)
+  // Écrit dans le DOM tout de suite, et appliqué aussi au glisser dont l'image attend encore.
+  cadrage.decaler((c) => cadrageApresVolet(c, visible, pret))
   if (visible) void rejoindreLaChoisieCouverte()
 })
 
@@ -998,7 +1050,7 @@ function montrerPersonne(personId: number): boolean {
   const f = disposition.value?.parPersonId.get(personId)
   if (!f) return false
   selection.value = f.id
-  voler(Math.max(s.value, 0.6), f.cx, f.y + f.h / 2)
+  voler(Math.max(echelle(), 0.6), f.cx, f.y + f.h / 2)
   return true
 }
 
@@ -1013,7 +1065,7 @@ function montrerNoeud(noeudId: string): boolean {
   const f = disposition.value?.parId.get(noeudId)
   if (!f) return false
   selection.value = f.id
-  voler(Math.max(s.value, 0.6), f.cx, f.y + f.h / 2)
+  voler(Math.max(echelle(), 0.6), f.cx, f.y + f.h / 2)
   return true
 }
 
@@ -1042,13 +1094,13 @@ function choisirProche(personId: number): void {
 }
 
 function voirFiche(f: FicheHistoire): void {
-  voler(Math.max(s.value, 1), f.cx, f.y + f.h / 2)
+  voler(Math.max(echelle(), 1), f.cx, f.y + f.h / 2)
 }
 
 function choisir(f: FicheHistoire): void {
-  if (Date.now() - finDeGlisser < 80) return
+  if (cadrage.vientDeGlisser()) return
   selection.value = f.id
-  if (s.value < seuilDesNoms.value) voler(Math.max(1, seuilDesNoms.value), f.cx, f.y + f.h / 2)
+  if (echelle() < seuilDesNoms.value) voler(Math.max(1, seuilDesNoms.value), f.cx, f.y + f.h / 2)
 }
 
 /*
@@ -1066,7 +1118,7 @@ const eclairage = computed(() => (disposition.value ? familleEclairee(dispositio
  * pas un clic — même garde que pour les fiches.
  */
 function surClicDuCanevas(e: MouseEvent): void {
-  if (Date.now() - finDeGlisser < 80) return
+  if (cadrage.vientDeGlisser()) return
   const cliquee = familleDuClic(e.target)
   if (cliquee !== null) {
     familleChoisie.value = basculerFamille(familleChoisie.value, cliquee)
@@ -1166,8 +1218,8 @@ const seuilEnPourcent = computed({
   get: () => Math.round(seuilDesNoms.value * 100),
   set: (p: number) => (seuilDesNoms.value = bornerSeuilDesNoms(p / 100)),
 })
-/** Le zoom affiché en ce moment, en pour cent : le repère sous la jauge. */
-const zoomEnPourcent = computed(() => Math.round(cadrage.value.s * 100))
+/** Le zoom affiché en ce moment, en pour cent : le repère sous la jauge (d'après l'instantané). */
+const zoomEnPourcent = computed(() => Math.round(rendu.value.s * 100))
 /** La place du zoom actuel sur la jauge (0 à 1), `null` hors de ses bornes. */
 const repereDuZoom = computed(() => {
   const p = (zoomEnPourcent.value - SEUIL_MIN) / (SEUIL_MAX - SEUIL_MIN)
@@ -1175,7 +1227,7 @@ const repereDuZoom = computed(() => {
 })
 /** « Les noms dès maintenant » : le seuil pris au zoom affiché. */
 function seuilAuZoomActuel(): void {
-  seuilDesNoms.value = bornerSeuilDesNoms(Math.floor(cadrage.value.s * 20) / 20)
+  seuilDesNoms.value = bornerSeuilDesNoms(Math.floor(echelle() * 20) / 20)
 }
 
 const OPTIONS_ALLIANCES = [
@@ -1198,14 +1250,24 @@ const aideFiltresOuverte = ref(false)
 const brancheDe = (f: FicheHistoire): string =>
   f.parente === 'alliance' && !disposition.value?.alliancesDansLArbre ? 'hors' : f.branche
 
-function passe(f: FicheHistoire): boolean {
-  if (filtres.ligneDirecte && enLigne(f) === null) return false
-  if (filtres.qualite) {
-    const def = FILTRES.find((d) => d.id === filtres.qualite)
-    if (def && !def.test(f.noeud as NoeudPersonneEtendu)) return false
+/**
+ * Les fiches qui passent les filtres (ligne directe, filtre documentaire), une fois par
+ * changement de filtre ou de disposition — jamais par fiche et par image : les textes
+ * visibles, les styles des boîtes et le compteur le lisent.
+ */
+const passent = computed<ReadonlySet<string>>(() => {
+  const d = disposition.value
+  if (!d) return new Set()
+  const direct = filtres.ligneDirecte
+  const def = filtres.qualite ? FILTRES.find((x) => x.id === filtres.qualite) : undefined
+  const ids = new Set<string>()
+  for (const f of d.fiches) {
+    if (direct && enLigne(f) === null) continue
+    if (def && !def.test(f.noeud as NoeudPersonneEtendu)) continue
+    ids.add(f.id)
   }
-  return true
-}
+  return ids
+})
 
 /*
  * LA LIGNE DIRECTE suit la personne choisie : ses ancêtres et ses descendants (les
@@ -1242,14 +1304,14 @@ function assurerLaDisposition(): void {
  */
 function redisposerSurLaLigne(): void {
   const avant = cleDisposee
-  const echelle = cadrage.value.s
+  const echelleAvant = echelle()
   redisposer()
   const d = disposition.value
   if (cleDisposee !== null || avant === null || !d) return
   const f = d.parId.get(avant)
   if (!f) return
   const c = canevas.value
-  cadrage.value = centrerSur(bornerEchelle(echelle, c), c, f.cx, f.y + f.h / 2, taille.value.l / 2, taille.value.h / 2)
+  cadrage.definir(centrerSur(bornerEchelle(echelleAvant, c), c, f.cx, f.y + f.h / 2, taille.value.l / 2, taille.value.h / 2))
 }
 watch(cleLigneSeule, (cle) => {
   if (cle !== cleDisposee) redisposerSurLaLigne()
@@ -1339,73 +1401,40 @@ const cibles = computed<FicheHistoire[]>(() => {
 })
 const idsCibles = computed(() => new Set(cibles.value.map((f) => f.id)))
 
-const effectifAffiche = computed(() => disposition.value?.fiches.filter(passe).length ?? 0)
+const effectifAffiche = computed(() => passent.value.size)
 
 /* ------------------------------------------------------------------ */
 /* Rendu : boîtes (monde), textes (écran)                               */
 /* ------------------------------------------------------------------ */
 
-const BRANCHES_CONNUES = new Set(['pp', 'pm', 'mp', 'mm', 'tr', 'cpp', 'cpm', 'cmp', 'cmm'])
-const couleurBranche = (b: string): string => `var(--h-branche-${BRANCHES_CONNUES.has(b) ? b : 'hors'})`
-
 const LIBELLES_BRANCHE: Record<string, string> = { ...LIBELLES_QUART, tr: 'Tronc' }
 const libelleBranche = (b: string): string => LIBELLES_BRANCHE[b] ?? 'Hors branche'
 
 /**
- * Les styles des boîtes. Ils ne dépendent que du niveau Ensemble et des
- * filtres : déplacer la vue ne les recalcule pas.
+ * Les styles des boîtes (`arbre2/apparence.ts`), un `cssText` par fiche. Ils ne
+ * dépendent que du niveau Ensemble, des filtres et de la recherche : déplacer la vue ne
+ * les recalcule pas. Une fiche estompée l'est dans la couleur de sa peinture, jamais
+ * par `opacity`.
  */
-const stylesFiches = computed(() => {
+const stylesFiches = computed<string[]>(() => {
   const d = disposition.value
   if (!d) return []
   const loin = ensemble.value
   const direct = surligner.value
   const ciblees = idsCibles.value
   const portrait = enPortrait.value
-  return d.fiches.map((f) => {
-    const n = f.noeud
-    const sexe = n.sex === 'masculin' ? 'homme' : n.sex === 'feminin' ? 'femme' : 'inconnu'
-    const base: Record<string, string> = {
-      left: `${f.x}px`,
-      top: `${f.y}px`,
-      width: `${f.w}px`,
-      height: `${f.h}px`,
-      opacity: !passe(f) ? '0.1' : ciblees.size && !ciblees.has(f.id) ? '0.25' : '1',
-    }
-    if (loin) {
-      const place = direct ? enLigne(f) : null
-      base.background =
-        place === 'ascendant'
-          ? 'var(--hi-direct-plein)'
-          : place === 'descendant'
-            ? 'color-mix(in srgb, var(--hi-direct-plein) 55%, transparent)'
-            : `color-mix(in srgb, ${couleurBranche(brancheDe(f))} 70%, transparent)`
-      return base
-    }
-    base.background = `var(--h-${sexe})`
-    const place = direct ? enLigne(f) : null
-    base.border = place === 'ascendant'
-      ? '1px solid var(--h-accent)'
-      : place === 'descendant'
-        ? '1px dashed var(--h-accent)'
-        : n.enAttente
-        ? '1px dashed var(--h-accent)'
-        : `1px ${n.vivant ? 'dashed' : 'solid'} var(--h-${sexe}-bord)`
-    // Le liseré de branche : à gauche d'une fiche couchée, en haut d'une fiche debout.
-    base[portrait ? 'borderTop' : 'borderLeft'] = `4px solid ${couleurBranche(brancheDe(f))}`
-    base.borderRadius = portrait ? '10px' : '7px'
-    return base
-  })
+  const ids = passent.value
+  return d.fiches.map((f) =>
+    styleDeFiche(f, {
+      ensemble: loin,
+      portrait,
+      alpha: alphaDeFiche(ids.has(f.id), ciblees, f.id),
+      place: direct ? enLigne(f) : null,
+      branche: brancheDe(f),
+    }),
+  )
 })
 
-/** Sans lignée surlignée, le niveau Ensemble garde tous les liens, en discret. */
-const opaciteOrdinaire = computed(() =>
-  niveau.value === 0 ? (surligner.value ? 0 : 0.35) : niveau.value === 1 ? 0.55 : 0.9,
-)
-
-const transformationMonde = computed(
-  () => `translate(${cadrage.value.tx}px, ${cadrage.value.ty}px) scale(${s.value}, ${sy.value})`,
-)
 /**
  * Les RECTANGLES des familles (`arbre2/groupes.ts`) : un fond léger de la couleur de la
  * branche, sous les traits. Rien en ligne directe seule (pedigree) : il n'y a pas de groupes.
@@ -1417,179 +1446,49 @@ const rectangles = computed<RectangleDeGroupe[]>(() => {
 })
 const couleurDuGroupe = (cle: string): string =>
   cle === 'alliances' ? 'var(--h-attenue)' : cle === 'sansLien' ? 'var(--h-branche-hors)' : couleurBranche(cle)
-/** Le titre de chaque rectangle visible, en haut à gauche ; il suit le bord gauche de l'écran quand le rectangle en déborde. */
-const titresDesRectangles = computed(() => {
-  if (!rectangles.value.length) return []
-  return rectangles.value
-    .filter((r) => dansLaFenetre(r.x, r.y, r.w, r.h))
-    .map((r) => {
-      // Jamais sous la gouttière des générations, à gauche.
-      const x = Math.max(versEcranX(r.x) + 8, gouttiere.value + 8)
-      const y = versEcranY(r.y) + 4
-      const largeur = versEcranX(r.x + r.w) - x - 8
-      return {
-        cle: r.cle,
-        x,
-        y,
-        largeur,
-        couleur: couleurDuGroupe(r.cle),
-        texte: r.nom !== '' ? `${r.libelle} · ${r.nom}` : r.libelle,
-        effectif: r.effectif,
-      }
-    })
-    .filter((t) => t.largeur > 40)
-})
-const transformationTraits = computed(() => `translate(${cadrage.value.tx} ${cadrage.value.ty}) scale(${s.value} ${sy.value})`)
+/** Le titre de chaque rectangle, en coordonnées monde : `TitresDesRectangles` le place à chaque image. */
+const titresDesRectangles = computed<TitreDeRectangle[]>(() =>
+  rectangles.value.map((r) => ({
+    cle: r.cle,
+    x: r.x,
+    y: r.y,
+    w: r.w,
+    h: r.h,
+    couleur: couleurDuGroupe(r.cle),
+    texte: r.nom !== '' ? `${r.libelle} · ${r.nom}` : r.libelle,
+    effectif: r.effectif,
+  })),
+)
 
-function dansLaFenetre(x: number, y: number, w: number, h: number): boolean {
-  const X = versEcranX(x)
-  const Y = versEcranY(y)
-  return X + w * s.value > 0 && X < taille.value.l && Y + h * sy.value > 0 && Y < taille.value.h
-}
+/** Les textes déjà ajustés à l'échelle courante : un glisser n'en réajuste aucun. */
+const memoireDesTextes = creerMemoireDesTextes()
 
-/** L'emplacement photo mesuré par le moteur (`LARGEUR_PHOTO`, `ESPACE_PHOTO`) : 40 px, 8 px de marge. */
-const LARGEUR_PHOTO = 40
-const ESPACE_PHOTO = 8
-
-interface LibelleCommun {
-  id: string
-  /** `src` : le portrait s'il y en a un (clé absente sur une fiche restreinte), la silhouette sinon. */
-  photo: { x: number; y: number; d: number; src: string | null }
-  x: number
-  y: number
-  w: number
-  h: number
-  directe: boolean
-  estompe: boolean
-  /** Le texte est posé à la taille qu'il aurait à 80 % (`w`, `h` en
-   *  coordonnées de ce zoom-là) puis réduit de ce facteur (`reductionDuTexte`). */
-  reduction: number
-}
-/** Compact : la photo à gauche, une ou deux lignes à côté (`texteDeFiche`). */
-interface LibelleCompact extends LibelleCommun {
-  forme: 'compact'
-  t1: string
-  t2: string
-  taille: number
-}
-/** Portrait : la photo en haut, NOM, prénom et dates dessous (`texteDePortrait`). */
-interface LibellePortrait extends LibelleCommun {
-  forme: 'portrait'
-  nom: string
-  prenom: string
-  dates: string[]
-  /** « Personne vivante » : ni capitales, ni rien d'autre. */
-  restreinte: boolean
-}
-type Libelle = LibelleCompact | LibellePortrait
-
-/** Le texte des fiches visibles, en coordonnées écran (culling). */
-const libelles = computed<Libelle[]>(() => {
+/** Le texte des fiches visibles, en coordonnées écran, pour l'instantané du cadrage. */
+const libelles = computed(() => {
   const d = disposition.value
-  // Familles : les photos seules (si elles existent), sans texte ; Fiches : tout.
-  if (!d || niveau.value < 1) return []
-  const avecTexte = niveau.value >= 2
-  const r = reductionDuTexte(s.value)
+  if (!d) return []
   const direct = surligner.value
   const ciblees = idsCibles.value
-  const visibles = d.fiches.filter((f) => passe(f) && dansLaFenetre(f.x, f.y, f.w, f.h))
-  const commun = (f: FicheHistoire) => ({
-    id: f.id,
-    directe: direct && enLigne(f) !== null,
-    estompe: ciblees.size > 0 && !ciblees.has(f.id),
-    reduction: r,
-  })
-  const src = (f: FicheHistoire): string | null => (typeof f.noeud.portrait === 'string' ? f.noeud.portrait : null)
-
-  if (enPortrait.value) {
-    return visibles.map((f): LibellePortrait => {
-      const g = geometriePortrait(versEcranX(f.x), versEcranY(f.y), s.value, sy.value)
-      const entree = entreePortrait(f.noeud)
-      const w = g.texte.w / r
-      const h = g.texte.h / r
-      const texte = avecTexte ? texteDePortrait(entree, w, h) : { nom: '', prenom: '', dates: [] }
-      return {
-        ...commun(f),
-        forme: 'portrait',
-        ...texte,
-        restreinte: entree.restreinte,
-        photo: { ...g.photo, src: src(f) },
-        ...g.texte,
-        w,
-        h,
-      }
-    })
-  }
-
-  const d0 = LARGEUR_PHOTO * Math.min(s.value, sy.value)
-  const texte = (ESPACE_PHOTO * 2 + LARGEUR_PHOTO) * s.value
-  return visibles.map((f): LibelleCompact => {
-    const w = Math.max(0, f.w * s.value - texte - 4) / r
-    const h = (f.h * sy.value) / r
-    return {
-      ...commun(f),
-      forme: 'compact',
-      ...(avecTexte ? texteDeFiche(
-        {
-          // Un nœud restreint s'écrit « Personne vivante », quoi que porte `etiquetteNom`.
-          nom: f.noeud.visibilite === 'restreinte' ? nomEcrit(f.noeud) : nomDeFiche(f.noeud).texte,
-          prenom: prenomDe(f.noeud),
-          // Absente sur un nœud restreint : ni tiret, ni case vide.
-          dates: typeof f.noeud.etiquetteDates === 'string' ? f.noeud.etiquetteDates : '',
-        },
-        w,
-        h,
-      ) : { t1: '', t2: '', taille: 12 }),
-      photo: {
-        x: versEcranX(f.x) + ESPACE_PHOTO * s.value,
-        y: versEcranY(f.y) + (f.h * sy.value - d0) / 2,
-        d: d0,
-        src: src(f),
-      },
-      x: versEcranX(f.x) + texte,
-      y: versEcranY(f.y),
-      w,
-      h,
-    }
-  })
+  return libellesDesFiches(
+    {
+      fiches: d.fiches,
+      passent: passent.value,
+      cadrage: rendu.value,
+      canevas: canevas.value,
+      niveau: niveau.value,
+      portrait: enPortrait.value,
+      directe: (f) => direct && enLigne(f) !== null,
+      estompe: (f) => ciblees.size > 0 && !ciblees.has(f.id),
+    },
+    memoireDesTextes,
+  )
 })
 
-/**
- * Les noms de foyer du niveau Familles. Ils ne se recouvrent jamais : posés par
- * priorité — les couples d'ancêtres, puis les plus larges —, chacun dans la largeur
- * de son couple et seulement là où rien n'est déjà écrit ; un nom qui ne tient pas
- * se tronque (« Ducat… ») ou se tait (`histoire/etiquettes.ts`).
- */
+/** Les noms de foyer du niveau Familles, qui ne se recouvrent jamais (`arbre2/libelles.ts`). */
 const libellesFoyers = computed(() => {
   const d = disposition.value
-  if (!d || niveau.value !== 1) return []
-  const fort = surlignerTraits.value
-  const demandes = d.foyers
-    .filter((c) => (c.ancetres || s.value > 0.25) && c.envergure * s.value > 44 && dansLaFenetre(c.x - 40, c.y - 20, 80, 20))
-    .map((c, i) => {
-      const x = versEcranX(c.x)
-      // Un peu plus large que le couple : un nom court déborde volontiers de deux fiches serrées.
-      const demi = (c.envergure * s.value) / 2 + 12
-      return {
-        cle: String(i),
-        x,
-        y: versEcranY(c.y) - 15,
-        nom: c.nom,
-        taille: c.ancetres && fort ? 11.5 : 10.5,
-        min: x - demi,
-        max: x + demi,
-        priorite: (c.ancetres ? 1e9 : 0) + c.envergure,
-        ancetres: c.ancetres,
-      }
-    })
-  const ancetres = new Map(demandes.map((x) => [x.cle, x.ancetres]))
-  return poserEtiquettes(demandes, { marge: 6, hauteur: 14 }).map((e) => ({
-    cle: e.cle,
-    x: e.x,
-    y: e.y,
-    nom: e.nom,
-    ancetres: ancetres.get(e.cle) ?? false,
-  }))
+  if (!d) return []
+  return libellesDesFoyers(d.foyers, rendu.value, canevas.value, niveau.value, surlignerTraits.value)
 })
 
 /**
@@ -1597,18 +1496,19 @@ const libellesFoyers = computed(() => {
  * garde son nom visible tant qu'elle occupe l'écran (`histoire/bandeau.ts`).
  * Il remplace les grands titres de branche posés au-dessus de l'arbre, qui
  * disparaissaient dès qu'on zoomait ou qu'on descendait dans les générations.
+ * En coordonnées monde : `BandeauFamilles` se place lui-même, à chaque image.
  */
-const bandeauFamilles = computed(() => {
+const branchesBandeau = computed<BrancheMonde[]>(() => {
   const d = disposition.value
   if (!d) return []
   const mobile = estMobile.value
-  const branches: BrancheDuBandeau[] = d.quarts.map((q) => ({
+  const branches: BrancheMonde[] = d.quarts.map((q) => ({
     cle: q.branche as string,
     couleur: couleurBranche(q.branche),
     nom: q.nom !== '' ? q.nom : q.libelle,
     sous: mobile ? '' : `${q.libelle} · ${q.effectif}`,
-    x0: versEcranX(q.x0),
-    x1: versEcranX(q.x1),
+    x0: q.x0,
+    x1: q.x1,
   }))
   for (const a of d.alliances) {
     branches.push({
@@ -1616,8 +1516,8 @@ const bandeauFamilles = computed(() => {
       couleur: 'var(--h-attenue)',
       nom: a.nom !== '' ? a.nom : 'Par alliance',
       sous: mobile ? '' : `famille par alliance · ${a.effectif}`,
-      x0: versEcranX(a.x0),
-      x1: versEcranX(a.x1),
+      x0: a.x0,
+      x1: a.x1,
     })
   }
   const z = d.zoneDetachee
@@ -1627,43 +1527,45 @@ const bandeauFamilles = computed(() => {
       couleur: 'var(--h-attenue)',
       nom: 'Sans lien connu',
       sous: mobile ? '' : `position estimée · ${z.effectif}`,
-      x0: versEcranX(z.x0),
-      x1: versEcranX(z.x1),
+      x0: z.x0,
+      x1: z.x1,
     })
   }
-  return bandeauDesFamilles(branches, gouttiere.value, taille.value.l, mobile ? 12 : 13)
+  return branches
 })
 
-const etiquettesGouttiere = computed(() => {
+/** Une rangée trop basse n'a la place que pour une ligne (d'après l'instantané). */
+const gouttiereCompacte = computed(() => (disposition.value?.pasRangee ?? 0) * syDe(rendu.value.s, canevas.value) < 38)
+/** Les libellés de la gouttière, en coordonnées monde : `GouttiereGenerations` les place à chaque image. */
+const etiquettesGouttiere = computed<EtiquetteDeGeneration[]>(() => {
   const d = disposition.value
   if (!d) return []
-  const compact = d.pasRangee * sy.value < 38
+  const compact = gouttiereCompacte.value
   const mobile = estMobile.value
-  return d.generations
-    .map((g) => {
-      const annee = g.annees?.replace('vers ', '') ?? ''
-      return {
-        rangee: g.rangee,
-        y: versEcranY(g.y) - (compact ? 8 : 14),
-        libelle: mobile
-          ? g.rangee === 0
-            ? disposition.value?.parId.has(egoDuLecteur.value ?? '') ? 'Vous' : 'Racine'
-            : `${g.rangee > 0 ? '+' : ''}${g.rangee}`
-          : compact && annee
-            ? `${g.libelle} · ${annee}`
-            : g.libelle,
-        // Une rangée trop basse n'a la place que pour une ligne.
-        annee: compact ? '' : mobile ? annee : (g.annees ?? ''),
-      }
-    })
-    .filter((g) => g.y > -20 && g.y < taille.value.h)
+  return d.generations.map((g) => {
+    const annee = g.annees?.replace('vers ', '') ?? ''
+    return {
+      rangee: g.rangee,
+      y: g.y,
+      libelle: mobile
+        ? g.rangee === 0
+          ? d.parId.has(egoDuLecteur.value ?? '') ? 'Vous' : 'Racine'
+          : `${g.rangee > 0 ? '+' : ''}${g.rangee}`
+        : compact && annee
+          ? `${g.libelle} · ${annee}`
+          : g.libelle,
+      // Une rangée trop basse n'a la place que pour une ligne.
+      annee: compact ? '' : mobile ? annee : (g.annees ?? ''),
+    }
+  })
 })
 
-const anneau = computed(() => {
-  const f = ficheChoisie.value
-  if (!f || !dansLaFenetre(f.x, f.y, f.w, f.h)) return null
-  return { x: versEcranX(f.x) - 4, y: versEcranY(f.y) - 4, w: f.w * s.value + 8, h: f.h * sy.value + 8 }
-})
+/*
+ * Les ANNEAUX — la fiche choisie, la famille en surbrillance, les cibles de la recherche,
+ * les ressemblances du volet — en coordonnées écran, dans la couche des textes : d'après
+ * l'instantané du cadrage, posés jusqu'à la marge au-delà du bord (`MARGE`).
+ */
+const anneau = computed(() => (ficheChoisie.value ? anneauDe(ficheChoisie.value, rendu.value, canevas.value, 4) : null))
 
 /** Les fiches de la famille en surbrillance, visibles à l'écran. */
 const anneauxFamille = computed(() => {
@@ -1672,22 +1574,18 @@ const anneauxFamille = computed(() => {
   if (!d || !f) return []
   return f.personnes
     .map((id) => d.parId.get(id))
-    .filter((p): p is FicheHistoire => p !== undefined && dansLaFenetre(p.x, p.y, p.w, p.h))
-    .map((p) => ({ id: p.id, x: versEcranX(p.x) - 3, y: versEcranY(p.y) - 3, w: p.w * s.value + 6, h: p.h * sy.value + 6 }))
+    .map((p) => (p ? anneauDe(p, rendu.value, canevas.value, 3) : null))
+    .filter((a): a is Anneau => a !== null)
 })
 
 /** Les cibles de la recherche visibles à l'écran ; celle du curseur est plus marquée. */
 const anneauxCibles = computed(() =>
   cibles.value
-    .filter((f) => dansLaFenetre(f.x, f.y, f.w, f.h))
-    .map((f) => ({
-      id: f.id,
-      courante: resultats.value[curseur.value]?.personId === f.noeud.personId,
-      x: versEcranX(f.x) - 3,
-      y: versEcranY(f.y) - 3,
-      w: f.w * s.value + 6,
-      h: f.h * sy.value + 6,
-    })),
+    .map((f) => {
+      const a = anneauDe(f, rendu.value, canevas.value, 3)
+      return a ? { ...a, courante: resultats.value[curseur.value]?.personId === f.noeud.personId } : null
+    })
+    .filter((a): a is Anneau & { courante: boolean } => a !== null),
 )
 
 /**
@@ -1699,49 +1597,19 @@ const anneauxCibles = computed(() =>
 const anneauxRessemblances = computed(() => {
   const d = disposition.value
   if (!d || !propositionVisible.value) return []
+  const v = rendu.value
+  const cv = canevas.value
   const { personIds, noeudIds } = ressemblancesEnEvidence.value
   const fiches = [
     ...personIds.map((id) => d.parPersonId.get(id)),
     ...noeudIds.map((id) => d.parId.get(id)),
-  ].filter((f): f is FicheHistoire => f !== undefined && dansLaFenetre(f.x, f.y, f.w, f.h))
-  return [...new Map(fiches.map((f) => [f.id, f])).values()].map((f) => ({
-    id: f.id,
-    x: versEcranX(f.x) - 5,
-    y: versEcranY(f.y) - 5,
-    w: f.w * s.value + 10,
-    h: f.h * sy.value + 10,
-  }))
+  ].filter((f): f is FicheHistoire => f !== undefined && dansLaFenetre(v, cv, f.x, f.y, f.w, f.h, MARGE))
+  return [...new Map(fiches.map((f) => [f.id, f])).values()].map((f) => anneauDe(f, v, cv, 5)!)
 })
 
-/* Mini-carte (bureau). */
-const LARGEUR_MINI = 236
-const miniCarte = computed(() => {
-  const d = disposition.value
-  if (!d) return null
-  const k = LARGEUR_MINI / d.largeur
-  const x0 = Math.max(0, -cadrage.value.tx / s.value)
-  const x1 = Math.min(d.largeur, (taille.value.l - cadrage.value.tx) / s.value)
-  return {
-    bandes: d.quarts
-      .filter((q) => !q.branche.startsWith('c'))
-      .map((q) => ({ cle: q.branche as string, branche: q.branche as string, x: q.x0 * k, w: Math.max(2, (q.x1 - q.x0) * k) }))
-      .concat(
-        d.alliances.map((a) => ({ cle: `alliance-${a.pont}`, branche: 'hors', x: a.x0 * k, w: Math.max(2, (a.x1 - a.x0) * k) })),
-        d.zoneDetachee
-          ? [{ cle: 'detaches', branche: 'hors', x: d.zoneDetachee.x0 * k, w: Math.max(2, (d.zoneDetachee.x1 - d.zoneDetachee.x0) * k) }]
-          : [],
-      ),
-    vue: { x: x0 * k, w: Math.max(6, (x1 - x0) * k) },
-    k,
-  }
-})
-
-function surMiniCarte(e: MouseEvent): void {
-  const m = miniCarte.value
-  if (!m) return
-  const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  const x = (e.clientX - r.left - 12) / m.k
-  voler(Math.max(s.value, 0.3), x, centreMonde().y)
+/** Un clic sur la mini-carte (bureau) : la vue y vole, au même étage. */
+function centrerDepuisMiniCarte(x: number): void {
+  voler(Math.max(echelle(), 0.3), x, centreMonde().y)
 }
 
 const bulle = computed(() => {
@@ -1799,7 +1667,7 @@ function cadrerCibles(): void {
   if (!fs.length) return
   if (fs.length === 1) {
     const f = fs[0]!
-    voler(Math.max(s.value, 0.9), f.cx, f.y + f.h / 2)
+    voler(Math.max(echelle(), 0.9), f.cx, f.y + f.h / 2)
     return
   }
   const x0 = Math.min(...fs.map((f) => f.x))
@@ -1815,7 +1683,7 @@ function surCurseur(i: number): void {
   if (!n) return
   curseur.value = (i + n) % n
   const f = disposition.value?.parPersonId.get(resultats.value[curseur.value]!.personId)
-  if (f) voler(Math.max(s.value, 0.9), f.cx, f.y + f.h / 2)
+  if (f) voler(Math.max(echelle(), 0.9), f.cx, f.y + f.h / 2)
   document.getElementById(`resultat-histoire-${curseur.value}`)?.scrollIntoView({ block: 'nearest' })
 }
 
@@ -1906,8 +1774,7 @@ onMounted(() => {
   document.addEventListener('gesturestart', bloquerZoomDePage)
   const el = fenetre.value
   if (el) {
-    // Non passif, pour pouvoir empêcher le défilement de la page.
-    el.addEventListener('wheel', surMolette, { passive: false })
+    // (La molette, non passive, est écoutée par `useCadrage`.)
     observateur = new ResizeObserver(() => {
       mesurer()
       if (premierAjustement) ajuster()
@@ -1927,11 +1794,11 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', surRedimension)
   window.removeEventListener('keydown', surToucheGlobale)
   document.removeEventListener('gesturestart', bloquerZoomDePage)
-  fenetre.value?.removeEventListener('wheel', surMolette)
   observateur?.disconnect()
-  arreterVol()
-  cancelAnimationFrame(image)
-  lecture?.abort()
+  // Les requêtes en vol sont abandonnées (`useRelectureDeLArbre`) ; leurs réponses n'écrivent plus rien.
+  jetonChargement++
+  jetonRafraichir++
+  jetonRevalidation++
 })
 </script>
 
@@ -2198,241 +2065,72 @@ onBeforeUnmount(() => {
       @click="surClicDuCanevas"
     >
       <template v-if="disposition">
-        <svg
-          class="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-          aria-hidden="true"
-          :style="revelation ? fondu(DUREE_REVELATION * 0.35) : undefined"
-        >
-          <g :transform="transformationTraits">
-            <!-- Les rectangles des familles, sous tout le reste. -->
-            <rect
-              v-for="r in rectangles"
-              :key="`rect-${r.cle}`"
-              :x="r.x"
-              :y="r.y"
-              :width="r.w"
-              :height="r.h"
-              rx="14"
-              :style="{
-                fill: `color-mix(in srgb, ${couleurDuGroupe(r.cle)} 7%, transparent)`,
-                stroke: `color-mix(in srgb, ${couleurDuGroupe(r.cle)} 55%, transparent)`,
-              }"
-              stroke-width="1.5"
-              vector-effect="non-scaling-stroke"
-            />
-            <path
-              :d="disposition.traces.ordinaires"
-              fill="none"
-              stroke="var(--hi-arete)"
-              stroke-width="1.2"
-              vector-effect="non-scaling-stroke"
-              :opacity="opaciteOrdinaire"
-            />
-            <path
-              :d="disposition.traces.divorces"
-              fill="none"
-              stroke="var(--h-alerte)"
-              stroke-width="1.2"
-              stroke-dasharray="5 4"
-              vector-effect="non-scaling-stroke"
-              :opacity="niveau === 0 ? 0 : 0.7"
-            />
-            <path
-              :d="disposition.traces.attente"
-              fill="none"
-              stroke="var(--h-accent)"
-              stroke-width="1.2"
-              stroke-dasharray="7 4"
-              vector-effect="non-scaling-stroke"
-              :opacity="niveau === 0 ? 0 : 0.7"
-            />
-            <path
-              :d="disposition.traces.directs"
-              fill="none"
-              :stroke="surlignerTraits ? 'var(--h-accent)' : 'var(--hi-arete)'"
-              :stroke-width="surlignerTraits ? (niveau === 0 ? 2.5 : 2) : 1.2"
-              vector-effect="non-scaling-stroke"
-              :opacity="surlignerTraits ? 1 : opaciteOrdinaire"
-            />
-            <!-- La famille en surbrillance, par-dessus ses traits ordinaires. -->
-            <path
-              v-if="eclairage"
-              :d="eclairage.d"
-              fill="none"
-              stroke="var(--h-accent)"
-              stroke-width="3"
-              stroke-linecap="round"
-              vector-effect="non-scaling-stroke"
-            />
-          </g>
-        </svg>
-
         <!--
-          Les ZONES DE CLIC des familles : un trait transparent et large par famille, sous
-          les fiches. Le SVG laisse passer le pointeur (le glisser du canevas continue de
-          marcher) ; seuls les traits l'attrapent.
+          Les traits, les rectangles des familles et les zones de clic : un seul `<svg>`,
+          construit impérativement et zoomé par son `viewBox` (ADR 0007). Les zones de
+          clic laissent passer le pointeur (le glisser du canevas continue de marcher) ;
+          seuls leurs traits l'attrapent.
         -->
-        <svg v-if="zonesDeClic" class="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
-          <g :transform="transformationTraits">
-            <path
-              v-for="f in disposition.traces.familles"
-              :key="f.id"
-              :d="f.d"
-              :data-famille="f.id"
-              class="cursor-pointer"
-              fill="none"
-              stroke="transparent"
-              stroke-width="12"
-              stroke-linecap="round"
-              vector-effect="non-scaling-stroke"
-              pointer-events="stroke"
-            />
-          </g>
-        </svg>
+        <TracesGroupes
+          ref="traces"
+          :traces="disposition.traces"
+          :rectangles="rectangles"
+          :couleur="couleurDuGroupe"
+          :niveau="niveau"
+          :surligner="surligner"
+          :surligner-traits="surlignerTraits"
+          :eclairage="eclairage?.d ?? null"
+          :zones="zonesDeClic"
+          :revelation="revelation"
+        />
 
-        <div
-          class="absolute top-0 left-0 origin-top-left"
-          :style="revelation ? { transform: transformationMonde, ...fondu() } : { transform: transformationMonde }"
-        >
-          <FichesMonde :fiches="disposition.fiches" :styles="stylesFiches" @choisir="choisir" />
-        </div>
+        <!-- Les boîtes, en coordonnées monde : un seul conteneur transformé, sans Vue à chaque image. -->
+        <FichesGroupes ref="boites" :fiches="disposition.fiches" :styles="stylesFiches" :revelation="revelation" @choisir="choisir" />
 
         <!-- Le titre de chaque rectangle de famille. -->
-        <div
-          v-for="t in titresDesRectangles"
-          :key="`titre-${t.cle}`"
-          class="titre-rectangle pointer-events-none absolute truncate"
-          :style="{ left: `${t.x}px`, top: `${t.y}px`, maxWidth: `${t.largeur}px`, color: t.couleur }"
-        >
-          {{ t.texte }} <span class="titre-rectangle-effectif">· {{ t.effectif }}</span>
-        </div>
+        <TitresDesRectangles ref="titres" :titres="titresDesRectangles" :gouttiere="gouttiere" />
 
-        <!-- Photos et textes, en coordonnées écran : seules les fiches visibles en reçoivent -->
-        <template v-for="t in libelles" :key="`photo-${t.id}`">
-          <!-- Compact : un rond ; Portrait : un carré aux coins arrondis, le cadre d'une photo. -->
-          <img
-            v-if="t.photo.src"
-            :src="t.photo.src"
-            alt=""
-            loading="lazy"
-            decoding="async"
-            class="pointer-events-none absolute object-cover"
-            :class="t.forme === 'portrait' ? 'rounded-[14%]' : 'rounded-full'"
-            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...(revelation ? fondu(120) : {}) }"
+        <!--
+          Photos, textes, noms de foyer et anneaux, en coordonnées écran, d'après
+          l'instantané du cadrage : entre deux rendus, UNE transformation sur ce conteneur
+          les garde collés aux boîtes (`transformationRelative`).
+        -->
+        <div
+          ref="calqueEcran"
+          class="pointer-events-none absolute inset-0 origin-top-left"
+          :class="revelation ? 'calque-apparait calque-apparait-apres' : ''"
+        >
+          <CalqueLibelles :libelles="libelles" :foyers="libellesFoyers" :surligner="surligner" :surligner-traits="surlignerTraits" />
+
+          <div
+            v-for="a in anneauxCibles"
+            :key="`cible-${a.id}`"
+            class="pointer-events-none absolute rounded-[9px] border-[var(--hi-libelle-accent)]"
+            :class="a.courante ? 'border-2 shadow-[0_0_0_5px_rgba(217,160,102,.25)]' : 'border'"
+            :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
           />
-          <svg
-            v-else
-            class="pointer-events-none absolute"
-            :class="t.forme === 'portrait' ? 'cadre-portrait rounded-[14%]' : ''"
-            viewBox="0 0 40 40"
-            aria-hidden="true"
-            :style="{ left: `${t.photo.x}px`, top: `${t.photo.y}px`, width: `${t.photo.d}px`, height: `${t.photo.d}px`, opacity: t.estompe ? 0.3 : 1, ...(revelation ? fondu(120) : {}) }"
-          >
-            <circle cx="20" cy="13.6" r="6.8" class="silhouette" />
-            <path d="M6.8,36.8 a13.2,13.2 0 0 1 26.4,0 Z" class="silhouette" />
-          </svg>
-        </template>
-        <template v-for="t in libelles" :key="t.id">
           <div
-            v-if="t.forme === 'compact' && t.t1 !== ''"
-            class="pointer-events-none absolute flex origin-top-left flex-col justify-center overflow-hidden leading-tight"
-            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...(revelation ? fondu(160) : {}) }"
-          >
-            <span
-              class="truncate font-semibold"
-              :style="{ fontSize: `${t.taille}px`, color: t.directe ? 'var(--hi-direct-texte)' : 'var(--h-texte)' }"
-            >{{ t.t1 }}</span>
-            <span v-if="t.t2" class="truncate font-mono text-[10.5px] text-attenue">{{ t.t2 }}</span>
-          </div>
-          <!-- Portrait : des hauteurs de ligne fixes (15, 15, 13), celles de `LIGNES_PORTRAIT`. -->
+            v-for="a in anneauxRessemblances"
+            :key="`ressemblance-${a.id}`"
+            class="pointer-events-none absolute rounded-[10px] border-2 border-dashed border-[var(--h-accent)]"
+            :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
+            data-anneau-ressemblance
+          />
           <div
-            v-else-if="t.forme === 'portrait' && t.nom !== ''"
-            class="pointer-events-none absolute flex origin-top-left flex-col items-center overflow-hidden text-center"
-            :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined, opacity: t.estompe ? 0.35 : 1, ...(revelation ? fondu(160) : {}) }"
-          >
-            <span
-              v-if="t.nom"
-              class="block h-[15px] max-w-full truncate text-xs leading-[15px] font-semibold"
-              :class="t.restreinte ? 'text-attenue' : 'tracking-[.02em] uppercase'"
-              :style="t.restreinte ? undefined : { color: t.directe ? 'var(--hi-direct-texte)' : 'var(--h-texte)' }"
-            >{{ t.nom }}</span>
-            <span
-              v-if="t.prenom"
-              class="block h-[15px] max-w-full truncate text-[11.5px] leading-[15px]"
-              :class="t.restreinte ? 'font-semibold text-attenue' : ''"
-              :style="t.restreinte ? undefined : { color: t.directe ? 'var(--hi-direct-texte)' : 'var(--h-texte)' }"
-            >{{ t.prenom }}</span>
-            <span
-              v-for="(ligne, i) in t.dates"
-              :key="i"
-              class="block h-[13px] max-w-full truncate font-mono text-[10.5px] leading-[13px] text-attenue"
-            >{{ ligne }}</span>
-          </div>
-        </template>
-
-        <div
-          v-for="c in libellesFoyers"
-          :key="c.cle"
-          class="pointer-events-none absolute -translate-x-1/2 font-bold whitespace-nowrap [text-shadow:0_1px_3px_var(--h-fond)]"
-          :style="{
-            left: `${c.x}px`,
-            top: `${c.y}px`,
-            fontSize: c.ancetres && surligner ? '11.5px' : '10.5px',
-            color: c.ancetres && surlignerTraits ? 'var(--hi-libelle-accent)' : 'var(--h-attenue)',
-          }"
-        >
-          {{ c.nom }}
+            v-for="a in anneauxFamille"
+            :key="`famille-${a.id}`"
+            class="pointer-events-none absolute rounded-[8px] border-2 border-[var(--h-accent)]"
+            :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
+          />
+          <div
+            v-if="anneau"
+            class="pointer-events-none absolute rounded-[9px] border-2 border-[var(--hi-libelle-accent)] shadow-[0_0_0_5px_rgba(217,160,102,.2)]"
+            :style="{ left: `${anneau.x}px`, top: `${anneau.y}px`, width: `${anneau.w}px`, height: `${anneau.h}px` }"
+          />
         </div>
-
-        <div
-          v-for="a in anneauxCibles"
-          :key="`cible-${a.id}`"
-          class="pointer-events-none absolute rounded-[9px] border-[var(--hi-libelle-accent)]"
-          :class="a.courante ? 'border-2 shadow-[0_0_0_5px_rgba(217,160,102,.25)]' : 'border'"
-          :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
-        />
-        <div
-          v-for="a in anneauxRessemblances"
-          :key="`ressemblance-${a.id}`"
-          class="pointer-events-none absolute rounded-[10px] border-2 border-dashed border-[var(--h-accent)]"
-          :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
-          data-anneau-ressemblance
-        />
-        <div
-          v-for="a in anneauxFamille"
-          :key="`famille-${a.id}`"
-          class="pointer-events-none absolute rounded-[8px] border-2 border-[var(--h-accent)]"
-          :style="{ left: `${a.x}px`, top: `${a.y}px`, width: `${a.w}px`, height: `${a.h}px` }"
-        />
-        <div
-          v-if="anneau"
-          class="pointer-events-none absolute rounded-[9px] border-2 border-[var(--hi-libelle-accent)] shadow-[0_0_0_5px_rgba(217,160,102,.2)]"
-          :style="{ left: `${anneau.x}px`, top: `${anneau.y}px`, width: `${anneau.w}px`, height: `${anneau.h}px` }"
-        />
 
         <!-- Bandeau des familles : collé en haut, à tous les zooms -->
-        <div
-          class="bandeau-familles pointer-events-none absolute inset-x-0 top-0 z-[1]"
-          :style="{ height: `${estMobile ? 30 : 40}px` }"
-          aria-hidden="true"
-        >
-          <template v-for="b in bandeauFamilles" :key="b.cle">
-            <div
-              class="absolute bottom-0 h-[3px] rounded-full"
-              :style="{ left: `${b.gauche}px`, width: `${b.largeur}px`, background: b.couleur }"
-            />
-            <div
-              v-if="b.etiquette"
-              class="absolute top-1 flex -translate-x-1/2 flex-col items-center leading-tight whitespace-nowrap"
-              :style="{ left: `${b.etiquette.x}px` }"
-            >
-              <span class="font-bold tracking-tight" :class="estMobile ? 'text-xs' : 'text-[13px]'" :style="{ color: b.couleur }">{{
-                b.etiquette.nom
-              }}</span>
-              <span v-if="b.etiquette.sous" class="text-[11px] text-attenue">{{ b.etiquette.sous }}</span>
-            </div>
-          </template>
-        </div>
+        <BandeauFamilles ref="bandeau" :branches="branchesBandeau" :gouttiere="gouttiere" :mobile="estMobile" />
 
         <!-- Jauge de zoom (administration) : le pourcentage et sa place entre
              le zoom minimal et le maximal, avec les seuils Familles et Fiches. -->
@@ -2457,44 +2155,22 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Gouttière des générations -->
-        <div class="gouttiere pointer-events-none absolute inset-y-0 left-0" :style="{ width: `${gouttiere}px` }">
-          <div
-            v-for="g in etiquettesGouttiere"
-            :key="g.rangee"
-            class="absolute left-3 flex flex-col leading-tight"
-            :style="{ top: `${g.y}px` }"
-          >
-            <span class="font-semibold whitespace-nowrap text-[var(--hi-gouttiere-texte)]" :class="estMobile ? 'text-[11px]' : 'text-xs'">{{ g.libelle }}</span>
-            <span v-if="g.annee" class="font-mono text-[10.5px] whitespace-nowrap text-[var(--hi-gouttiere-annee)]">{{ g.annee }}</span>
-          </div>
-        </div>
+        <GouttiereGenerations
+          ref="generations"
+          :generations="etiquettesGouttiere"
+          :largeur="gouttiere"
+          :mobile="estMobile"
+          :decalage="gouttiereCompacte ? 8 : 14"
+        />
 
         <!-- Mini-carte -->
-        <div
-          v-if="!estMobile && miniCarte"
-          class="absolute right-4 bottom-4 flex w-[260px] cursor-pointer flex-col gap-1.5 rounded-panneau border border-ligne bg-panneau/95 px-3 py-2.5"
-          role="button"
-          aria-label="Mini-carte : cliquer pour centrer la vue"
-          @pointerdown.stop
-          @click="surMiniCarte"
-        >
-          <div class="relative h-[18px] overflow-hidden rounded bg-ligne/60">
-            <div
-              v-for="b in miniCarte.bandes"
-              :key="b.cle"
-              class="absolute inset-y-0 opacity-75"
-              :style="{ left: `${b.x}px`, width: `${b.w}px`, background: couleurBranche(b.branche) }"
-            />
-            <div
-              class="absolute -inset-y-px box-border rounded-[3px] border-2 border-texte"
-              :style="{ left: `${miniCarte.vue.x}px`, width: `${miniCarte.vue.w}px` }"
-            />
-          </div>
-          <div class="flex justify-between text-[10.5px] text-attenue">
-            <span>Côté père</span><span>{{ PALIERS[niveau]!.libelle }}</span><span>Côté mère</span>
-          </div>
-        </div>
-
+        <MiniCarte
+          v-if="!estMobile"
+          ref="miniCarte"
+          :disposition="disposition"
+          :palier="PALIERS[niveau]!.libelle"
+          @centrer="centrerDepuisMiniCarte"
+        />
         <div
           v-if="bulle"
           class="pointer-events-none absolute rounded-pastille border border-ligne bg-panneau/95 px-3.5 py-1.5 text-xs whitespace-nowrap text-[var(--hi-gouttiere-texte)]"
@@ -2746,9 +2422,24 @@ onBeforeUnmount(() => {
             Voir la demande n° {{ ficheChoisie.noeud.demandeId }}
           </RouterLink>
         </section>
-        <p v-else-if="ficheChoisie.noeud.visibilite === 'restreinte'" class="m-0 text-sm text-attenue">
+        <!-- Restreinte d'après le graphe, ou d'après le serveur (un cercle qui a changé depuis). -->
+        <p
+          v-else-if="ficheChoisie.noeud.visibilite === 'restreinte' || etatDeLaFiche.etat === 'restreinte'"
+          class="m-0 text-sm text-attenue"
+        >
           Personne vivante : sa fiche n’est visible que de ses proches.
         </p>
+        <!-- L'échec se dit, et se relance : « Lecture de la fiche… » ne reste plus affiché sans fin. -->
+        <div v-else-if="etatDeLaFiche.etat === 'erreur'" class="flex flex-col items-start gap-2" role="alert" data-fiche-en-erreur>
+          <p class="m-0 text-sm text-attenue">La fiche n’a pas pu être lue. {{ etatDeLaFiche.message }}</p>
+          <button
+            type="button"
+            class="h-9 rounded-champ border border-ligne px-3 text-sm font-semibold hover:bg-accent-doux"
+            @click="lectureDeLaFiche.reessayer()"
+          >
+            Réessayer
+          </button>
+        </div>
         <p v-else class="m-0 text-sm text-attenue">Lecture de la fiche…</p>
       </div>
     </aside>
@@ -2786,10 +2477,23 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-@keyframes apparition-texte {
+/*
+ * L'APPARITION d'un calque entier (les boîtes, la couche des textes), au premier
+ * affichage : un seul fondu, sur le seul conteneur du calque, une fois par chargement.
+ * C'est l'unique `opacity` du canevas, et elle est délibérée (ADR 0007, révision du
+ * 2026-10-14) : UN contexte d'empilement par calque, 600 ms, jamais un par fiche. Les
+ * traits, eux, apparaissent par `stroke-opacity` (`TracesGroupes.vue`).
+ */
+@keyframes apparition-calque {
   from {
     opacity: 0;
   }
+}
+.calque-apparait {
+  animation: apparition-calque 600ms ease-out backwards;
+}
+.calque-apparait-apres {
+  animation-delay: 120ms;
 }
 </style>
 
@@ -2819,14 +2523,6 @@ onBeforeUnmount(() => {
   background-image: radial-gradient(var(--hi-grille) 1px, transparent 1px);
   background-size: 22px 22px;
 }
-.silhouette {
-  fill: var(--h-attenue);
-  fill-opacity: 0.35;
-}
-/* L'emplacement d'une photo absente, en Portrait : le cadre se voit, à la taille d'une vraie. */
-.cadre-portrait {
-  background: color-mix(in srgb, var(--h-attenue) 14%, transparent);
-}
 .filtres-section {
   display: flex;
   flex-direction: column;
@@ -2846,22 +2542,5 @@ onBeforeUnmount(() => {
 }
 .seuil-des-noms {
   accent-color: var(--color-accent);
-}
-.gouttiere {
-  background: linear-gradient(90deg, var(--h-fond) 62%, transparent);
-}
-.titre-rectangle {
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 14px;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-.titre-rectangle-effectif {
-  font-weight: 400;
-  opacity: 0.75;
-}
-.bandeau-familles {
-  background: linear-gradient(180deg, var(--h-fond) 70%, transparent);
 }
 </style>

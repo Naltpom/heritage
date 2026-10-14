@@ -216,3 +216,11 @@ describe('l’identité du lecteur', () => {
     expect(identiteDuLecteur(null)).toBeNull()
   })
 })
+
+describe('la clé d’une disposition', () => {
+  it('distingue le moteur : `/arbre` (groupes) ne relit jamais une disposition de `/arbre-2` (lignées)', () => {
+    const lignees = cleDeDisposition(ENTREES, 'v1')
+    expect(cleDeDisposition({ ...ENTREES, moteur: 'lignees' }, 'v1')).toBe(lignees)
+    expect(cleDeDisposition({ ...ENTREES, moteur: 'groupes' }, 'v1')).not.toBe(lignees)
+  })
+})

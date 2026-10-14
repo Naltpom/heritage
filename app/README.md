@@ -106,6 +106,25 @@ sélection) passent par des écritures directes dans le DOM — pas par des
 `ref()`/`computed()` liés au template. Les 377 nœuds ne doivent **jamais**
 figurer dans un `v-for` réactif.
 
+**`/arbre` (`views/ArbreGroupesView.vue`)** tient ces règles depuis le 2026-10-14, avec
+la révision de l'ADR qui lui est propre (des boîtes HTML, sans `viewBox`) :
+
+- les traits, les rectangles des familles et leurs zones de clic sont **un** `<svg>`
+  construit impérativement et zoomé par son `viewBox` (`arbre2/TracesGroupes.vue`) ;
+  les boîtes, un seul conteneur transformé, construit impérativement avec **un**
+  écouteur délégué (`arbre2/FichesGroupes.vue`) ;
+- le cadrage vit **hors de la réactivité** (`arbre2/useCadrage.ts`) : pendant un
+  geste, rien ne se rend — bandeau, gouttière, titres des rectangles et mini-carte se
+  placent eux-mêmes (`placer()`) ; les textes, les anneaux et le « Zoom actuel » des
+  filtres se recalculent d'après un **instantané** publié au plus toutes les 160 ms et
+  à la fin du geste (`arbre2/cadence.ts`, `arbre2/libelles.ts`) ;
+- rien n'est estompé par `opacity` : une couleur transparente (`arbre2/apparence.ts`).
+
+`arbre2/rendu-adr0007.test.ts` lit ces sources et rougit si une règle revient. Le
+même écran relit son graphe quand le lecteur change (« Quitter la vue empruntée ») et
+au retour sur l'onglet, et abandonne ses requêtes au démontage (`arbre2/relecture.ts`).
+`/arbre-2` (`HistoireView.vue`) n'a pas encore ce découpage.
+
 ### Le mobile s'écrit en `max-md:`, et jamais autrement
 
 En deçà de `md` (48 rem), l'en-tête passe dans un tiroir à gauche et les barres

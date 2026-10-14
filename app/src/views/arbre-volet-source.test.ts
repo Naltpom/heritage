@@ -74,7 +74,9 @@ describe('le volet « Ajouter une personne »', () => {
   it('recule le cadrage dans le même tic qu’il paraît, et le volet de droite lui cède la place', async () => {
     const texte = await source()
 
-    expect(texte).toContain('cadrageApresVolet(cadrage.value, visible, pret)')
+    // Le cadrage vit hors de Vue (`arbre2/useCadrage.ts`) : `decaler` l'écrit dans le DOM
+    // tout de suite, et décale aussi l'image d'un glisser qui attend encore.
+    expect(texte).toContain('cadrage.decaler((c) => cadrageApresVolet(c, visible, pret))')
     expect(texte).toContain('voletDroitVisible({')
     expect(texte).toContain('v-if="voletDroitOuvert && ficheChoisie && disposition"')
   })
