@@ -24,6 +24,7 @@
  */
 import { onMounted, ref, watch } from 'vue'
 import BoutonBase from '@/components/base/BoutonBase.vue'
+import { copierTexte, partager as ouvrirFeuilleDePartage, peutPartager as navigateurSaitPartager } from '@/composables/partage'
 
 const { libelle, adresse, message, dejaCopie = false } = defineProps<{
   libelle: string
@@ -47,25 +48,17 @@ watch(
 /** Lu au montage seulement : le rendu serveur n'a pas de `navigator`. */
 const peutPartager = ref(false)
 onMounted(() => {
-  peutPartager.value = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+  peutPartager.value = navigateurSaitPartager()
 })
 
 async function copier(): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(adresse)
-    copie.value = true
-  } catch {
-    // Refusé : l'URL reste affichée en entier, sélectionnable. Ce n'est pas une panne.
-    copie.value = false
-  }
+  // Refusé : l'URL reste affichée en entier, sélectionnable. Ce n'est pas une panne.
+  copie.value = await copierTexte(adresse)
 }
 
 async function partager(): Promise<void> {
-  try {
-    await navigator.share({ title: message, text: message, url: adresse })
-  } catch {
-    // Annulé par la personne, ou refusé : rien à dire, le bouton « Copier » reste là.
-  }
+  // Annulé par la personne, ou refusé : rien à dire, le bouton « Copier » reste là.
+  await ouvrirFeuilleDePartage({ titre: message, texte: message, url: adresse })
 }
 </script>
 
