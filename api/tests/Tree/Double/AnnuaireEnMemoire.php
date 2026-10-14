@@ -42,6 +42,11 @@ final class AnnuaireEnMemoire implements AnnuaireDesMembresInterface
         return null;
     }
 
+    public function comptesParFiche(string $terme): array
+    {
+        return [];
+    }
+
     /** @return array{membreId: int|null, membreLibelle: string|null, invitationsActives: int} */
     public function rattachementsDeLaPersonne(int $personneId): array
     {

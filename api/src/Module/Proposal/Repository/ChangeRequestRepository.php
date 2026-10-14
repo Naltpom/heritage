@@ -217,7 +217,13 @@ class ChangeRequestRepository extends ServiceEntityRepository
      * demande** (`42`, `#42`, `n° 42`) la désigne seule ; tout autre texte cherche, sans
      * casse, dans la fiche visée, l'auteur, le message et le nom des personnes proposées.
      *
+     * `$tri` (2026-10-14) range **par numéro**, comme l'écran l'affiche : `anciennes`, le
+     * plus petit d'abord ; `recentes`, l'inverse. Le tri doit se faire ici et non dans le
+     * navigateur : la file est paginée, et trier une page ne trie pas la file. Absent, il
+     * garde l'ordre de dépôt.
+     *
      * @param RequestKind|list<RequestKind>|null $kind
+     * @param 'anciennes'|'recentes'|null        $tri
      *
      * @return array{elements: list<ChangeRequest>, total: int}
      */
@@ -229,10 +235,15 @@ class ChangeRequestRepository extends ServiceEntityRepository
         int $parPage,
         ?int $auteurUserId = null,
         ?string $recherche = null,
+        ?string $tri = null,
     ): array {
-        $qb = $this->createQueryBuilder('d')
-            ->addOrderBy('d.submittedAt', 'ASC')
-            ->addOrderBy('d.id', 'ASC');
+        $qb = $this->createQueryBuilder('d');
+
+        if (null === $tri) {
+            $qb->addOrderBy('d.submittedAt', 'ASC')->addOrderBy('d.id', 'ASC');
+        } else {
+            $qb->addOrderBy('d.id', 'recentes' === $tri ? 'DESC' : 'ASC');
+        }
 
         if (null !== $statut) {
             $qb->andWhere('d.status = :statut')->setParameter('statut', $statut);

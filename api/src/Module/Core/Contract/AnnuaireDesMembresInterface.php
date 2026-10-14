@@ -89,6 +89,19 @@ interface AnnuaireDesMembresInterface
     public function personneDuCompte(int $userId): ?int;
 
     /**
+     * Les `core_user.id` dont la fiche rattachée **correspond à une saisie** : son libellé
+     * la contient (sans casse), ou son numéro est celui tapé (`12`, `#12`, `n° 12`).
+     *
+     * Elle sert la recherche de `GET /api/administration/utilisateurs`, paginée côté
+     * serveur depuis le 2026-10-14 : chercher « Dupont » doit trouver le compte rattaché à
+     * la fiche de Jeanne Dupont, même quand son nom affiché est un courriel. Comme les
+     * autres questions de ce contrat, elle ne filtre rien — écran `ROLE_ADMIN` seulement.
+     *
+     * @return list<int>
+     */
+    public function comptesParFiche(string $terme): array;
+
+    /**
      * ═══════════════════════════════════════════════════════════════════════════
      * **CE QUI, CÔTÉ COMPTES, DÉPEND D'UNE FICHE DE L'ARBRE.**.
      *

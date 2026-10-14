@@ -51,10 +51,24 @@ final class UserAdminService
     }
 
     /**
+     * La liste, **filtrée et paginée ici** (2026-10-14) : l'écran ne reçoit qu'une page,
+     * et filtrer une page ne filtre pas la liste.
+     *
+     * - `$statut` : `en_attente`, `actif`, `suspendu` ;
+     * - `$administrateurs` : seulement les comptes `ROLE_ADMIN` ;
+     * - `$recherche` : sans casse, dans le nom affiché et le courriel — et, par
+     *   {@see AnnuaireDesMembresInterface::comptesParFiche()}, dans le nom ou le numéro de
+     *   la fiche rattachée (`n° 12`, `#12`, `12`).
+     *
      * @return array{elements: list<array<string, mixed>>, total: int, page: int, parPage: int}
      */
-    public function lister(?string $statut, int $page, int $parPage): array
-    {
+    public function lister(
+        ?string $statut,
+        int $page,
+        int $parPage,
+        ?string $recherche = null,
+        bool $administrateurs = false,
+    ): array {
         $page = max(1, $page);
         $parPage = min(self::PAR_PAGE_MAX, max(1, $parPage));
 
@@ -63,6 +77,26 @@ final class UserAdminService
         // Un statut inconnu n'est pas une erreur : c'est un filtre qui ne ramène rien.
         if (null !== $statut && '' !== $statut) {
             $qb->andWhere('u.status = :statut')->setParameter('statut', UserStatus::tryFrom($statut) ?? $statut);
+        }
+
+        if ($administrateurs) {
+            // `roles` est un JSONB : le DQL ne sait pas y chercher, le SQL si.
+            $qb->andWhere('u.id IN (:administrateurs)')->setParameter('administrateurs', $this->idsDesAdministrateurs() ?: [0]);
+        }
+
+        $terme = trim((string) $recherche);
+        if ('' !== $terme) {
+            // Un `%` ou un `_` tapé reste un joker, comme dans la file des demandes : la
+            // route est réservée à l'administration.
+            $motif = '%'.mb_strtolower($terme).'%';
+            $parFiche = $this->annuaire->comptesParFiche($terme);
+            $qb->andWhere($qb->expr()->orX(
+                'LOWER(u.email) LIKE :motif',
+                'LOWER(u.displayName) LIKE :motif',
+                'u.id IN (:parFiche)',
+            ))
+                ->setParameter('motif', $motif)
+                ->setParameter('parFiche', [] === $parFiche ? [0] : $parFiche);
         }
 
         $total = (int) (clone $qb)->select('COUNT(u.id)')->getQuery()->getSingleScalarResult();
@@ -82,6 +116,65 @@ final class UserAdminService
             'page' => $page,
             'parPage' => $parPage,
         ];
+    }
+
+    /**
+     * Les compteurs des puces de l'écran — `GET /api/administration/utilisateurs/compteurs`.
+     *
+     * Une route à part plutôt qu'une clé de plus sur la liste : l'enveloppe d'une liste
+     * paginée a quatre clés (§ 1.5). Ils ne suivent pas la recherche, comme avant : ils
+     * disent ce que chaque puce contient, pas ce que la saisie en retient.
+     *
+     * @return array{tous: int, en_attente: int, actif: int, suspendu: int, admins: int}
+     */
+    public function compteurs(): array
+    {
+        /** @var list<array{status: UserStatus, n: int|string}> $lignes */
+        $lignes = $this->utilisateurs->createQueryBuilder('u')
+            ->select('u.status AS status', 'COUNT(u.id) AS n')
+            ->groupBy('u.status')
+            ->getQuery()
+            ->getResult();
+
+        $compteurs = ['tous' => 0, 'en_attente' => 0, 'actif' => 0, 'suspendu' => 0, 'admins' => \count($this->idsDesAdministrateurs())];
+        foreach ($lignes as $ligne) {
+            $statut = $ligne['status'] instanceof UserStatus ? $ligne['status']->value : (string) $ligne['status'];
+            $compteurs['tous'] += (int) $ligne['n'];
+            if (\array_key_exists($statut, $compteurs)) {
+                $compteurs[$statut] = (int) $ligne['n'];
+            }
+        }
+
+        return $compteurs;
+    }
+
+    /**
+     * Les comptes `ROLE_ADMIN`, tous statuts confondus.
+     *
+     * `roles` est un JSONB, où le DQL ne sait pas chercher ; on relit donc les rôles et on
+     * filtre ici, comme `NotificationService::administrateurs()`. Une requête SQL propre à
+     * PostgreSQL (`@>`) aurait fait diverger la suite de tests, qui tourne sur SQLite. La
+     * table des comptes d'une famille se compte en dizaines.
+     *
+     * @return list<int>
+     */
+    private function idsDesAdministrateurs(): array
+    {
+        /** @var list<array{id: int|string, roles: list<string>|string|null}> $lignes */
+        $lignes = $this->utilisateurs->createQueryBuilder('u')
+            ->select('u.id', 'u.roles')
+            ->getQuery()
+            ->getArrayResult();
+
+        $ids = [];
+        foreach ($lignes as $ligne) {
+            $roles = \is_string($ligne['roles']) ? json_decode($ligne['roles'], true) : $ligne['roles'];
+            if (\is_array($roles) && \in_array('ROLE_ADMIN', $roles, true)) {
+                $ids[] = (int) $ligne['id'];
+            }
+        }
+
+        return $ids;
     }
 
     /** @throws NotFoundException */

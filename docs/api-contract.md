@@ -2358,7 +2358,7 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `POST` | `/api/demandes/brouillons/ressemblances` | `MEMBRE` | `{fiche, limite, sauf}` § 6.6 quater | `200` § 6.6 quater | `401` · `422` `donnees_invalides` | — |
 | `GET` | `/api/demandes/brouillons/{brouillonId}` | `MEMBRE` | — | `200` une ligne du § 6.6 bis | `404` | — |
 | `GET` | `/api/demandes/historique/{subjectKind}/{subjectId}` | `MEMBRE` | `?page=&parPage=` | `200` liste paginée | `403` `regime_en_attente` · `404` | — |
-| `GET` | `/api/administration/demandes` | `ADMIN` | `?status=&kind=&targetId=&auteur=&q=&page=` | `200` liste paginée | — | — |
+| `GET` | `/api/administration/demandes` | `ADMIN` | `?status=&kind=&targetId=&auteur=&q=&tri=&page=` | `200` liste paginée | — | — |
 | `GET` | `/api/administration/demandes/auteurs` | `ADMIN` | — | `200` `{elements}` | — | — |
 | `GET` | `/api/administration/demandes/{id}` | `ADMIN` | — | `200` § 6.7 | `404` | — |
 | `POST` | `/api/administration/demandes/{id}/valider` | `ADMIN` | *(vide)*, ou `{empreinte}` | `200` § 6.8 | **`409` × 9 (§ 6.8)** · `404` · `409` `vue_comme_membre_active` | — |
@@ -3722,6 +3722,7 @@ fiche), en onglets par nature ; l'API rend toujours `targetKind`/`targetId`.
 | `targetId` | toutes | un `tree_person.id` |
 | `auteur` | tout le monde | un `authorUserId` |
 | `q` | — | un **numéro** de demande (`42`, `#42`, `n° 42`) la désigne seule ; tout autre texte cherche, sans casse, dans `targetLabel`, `authorLabel`, `message` et le nom des personnes proposées |
+| `tri` | ordre de dépôt | `anciennes` (numéro croissant) ou `recentes` (numéro décroissant), sur toute la file et non sur la page ; une autre valeur vaut le défaut |
 | `page`, `parPage` | 1, 25 (max 100) | § 1.5 |
 
 Les filtres se posent **sur la même requête**, jamais l'un après l'autre en mémoire :
@@ -5147,7 +5148,8 @@ première règle qui correspond est appliquée »).
 
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs |
 |---|---|---|---|---|---|
-| `GET` | `/api/administration/utilisateurs` | `ADMIN` | `?status=&page=` | `200` liste paginée | — |
+| `GET` | `/api/administration/utilisateurs` | `ADMIN` | `?status=&role=admin&q=&page=&parPage=` | `200` liste paginée ; `q` cherche sans casse dans le nom affiché, le courriel, le nom et le numéro de la fiche rattachée | — |
+| `GET` | `/api/administration/utilisateurs/compteurs` | `ADMIN` | — | `200` `{tous, en_attente, actif, suspendu, admins}` | — |
 | `GET` | `/api/administration/utilisateurs/{id}` | `ADMIN` | — | `200` § 10.1 | `404` |
 | `PATCH` | `/api/administration/utilisateurs/{id}` | `ADMIN` | `{roles?, status?, displayName?}` | `200` utilisateur | `422` · `409` `dernier_administrateur`, `rattachement_non_etabli` · `404` |
 | `POST` | `/api/administration/membres/{id}/activer` | `ADMIN` | `{personId?}` — **obligatoire** pour un compte `a_rattacher` | `200` membre | `404` · `409` `personne_deja_rattachee`, `compte_deja_decide` · `409` `vue_comme_membre_active` · `422` |

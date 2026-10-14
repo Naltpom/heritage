@@ -204,6 +204,11 @@ final class BasculeVoirCommeTest extends BaseDeDemandes
                 return null;
             }
 
+            public function comptesParFiche(string $terme): array
+            {
+                return [];
+            }
+
             /**
              * Aucun rattachement : cette bascule-ci ne teste pas les suppressions.
              *

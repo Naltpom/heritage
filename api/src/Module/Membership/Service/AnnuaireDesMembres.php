@@ -112,6 +112,29 @@ final readonly class AnnuaireDesMembres implements AnnuaireDesMembresInterface
     }
 
     /**
+     * Tous les statuts de rattachement : l'écran des utilisateurs montre aussi les
+     * comptes en attente, et c'est souvent eux qu'on cherche.
+     */
+    public function comptesParFiche(string $terme): array
+    {
+        $terme = trim($terme);
+
+        if ('' === $terme) {
+            return [];
+        }
+
+        $qb = $this->membres->createQueryBuilder('m')->select('m.userId');
+
+        if (1 === preg_match('/^(?:n°|no|#)?\s*(\d+)$/iu', $terme, $numero)) {
+            $qb->andWhere('m.personId = :numero')->setParameter('numero', (int) $numero[1]);
+        } else {
+            $qb->andWhere('LOWER(m.personLabel) LIKE :motif')->setParameter('motif', '%'.mb_strtolower($terme).'%');
+        }
+
+        return array_values(array_unique(array_map(intval(...), array_column($qb->getQuery()->getScalarResult(), 'userId'))));
+    }
+
+    /**
      * Ce qui, côté comptes, dépend d'une fiche — la question que `Proposal` pose avant
      * d'accepter une demande de suppression.
      *

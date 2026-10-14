@@ -72,8 +72,8 @@ final class AdministrationDemandeController extends AbstractController
     }
 
     /**
-     * La file, triée par `submittedAt` **croissant** et regroupée par personne côté
-     * affichage : l'API rend `targetKind`/`targetId`, le front groupe (§ 6.7).
+     * La file, triée par `submittedAt` **croissant** — ou par numéro, avec
+     * `tri=anciennes|recentes` — et paginée (`page`, `parPage`, 100 au plus).
      */
     #[Route('', name: 'proposal_admin_demande_lister', methods: ['GET'])]
     public function lister(Request $requete): JsonResponse
@@ -89,6 +89,7 @@ final class AdministrationDemandeController extends AbstractController
             $parPage,
             $this->auteur($requete),
             $requete->query->getString('q'),
+            $this->tri($requete),
         );
 
         return $this->charge($this->serialiseur->enveloppe(
@@ -375,6 +376,21 @@ final class AdministrationDemandeController extends AbstractController
         $brut = $requete->query->getInt('auteur');
 
         return 0 === $brut ? null : $brut;
+    }
+
+    /**
+     * `tri=anciennes|recentes` : par numéro, croissant ou décroissant. Une valeur
+     * inconnue vaut absence — l'ordre de dépôt —, comme une nature inconnue.
+     *
+     * @return 'anciennes'|'recentes'|null
+     */
+    private function tri(Request $requete): ?string
+    {
+        return match ($requete->query->getString('tri')) {
+            'anciennes' => 'anciennes',
+            'recentes' => 'recentes',
+            default => null,
+        };
     }
 
     /** @param array<string, mixed> $charge */
