@@ -523,21 +523,6 @@ final readonly class SerialiseurDeDemande
         return $rendus;
     }
 
-    /**
-     * Les liens **dont cette fiche proposée est le sujet**, sous la forme complète du
-     * § 6.5 — pour le rapprochement des doublons (§ 6.3 ter), qui compare la parenté
-     * saisie à celle de la demande existante.
-     *
-     * @return list<array<string, mixed>>
-     */
-    public function liensDuSujet(DraftPerson $brouillon): array
-    {
-        return array_values(array_filter(
-            $this->liens($brouillon->getRequest()),
-            static fn (array $lien): bool => $lien['subjectDraftRef'] === $brouillon->getLocalRef(),
-        ));
-    }
-
     /** @return list<array<string, mixed>> */
     private function liens(ChangeRequest $demande): array
     {
