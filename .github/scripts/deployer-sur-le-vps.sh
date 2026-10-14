@@ -31,6 +31,13 @@
 # Voir docs/deploiement/premiere-mise-en-ligne.md, § « Ce que le retour arrière
 # ne rattrape pas ».
 #
+# CE QUI RESTE POSSIBLE À LA MAIN : en mode production, la base est vidée
+# (`pg_dump -Fc`) dans `backup/` APRÈS la construction et AVANT le démarrage,
+# donc avant que l'entrypoint ne joue la moindre migration. Pas de vidage, pas de
+# déploiement : la pile en service n'est alors pas touchée. Le retour arrière,
+# lui, ne vide rien. La restauration n'est jamais automatique — voir § 11.6 de
+# docs/deploiement/premiere-mise-en-ligne.md.
+#
 # -----------------------------------------------------------------------------
 #  POURQUOI UNE ÉTIQUETTE D'IMAGE PAR COMMIT
 # -----------------------------------------------------------------------------
@@ -60,6 +67,15 @@
 #   .deploiement/precedent   le SHA complet d'avant, cible du retour arrière
 #   .deploiement/journal     une ligne par déploiement, en ajout
 #
+# Et, à part parce que ce n'est pas un état mais de la donnée personnelle :
+#
+#   backup/deploiement-<AAAAMMJJTHHMMSSZ>-avant-<etiquette>.dump
+#                            la base telle qu'elle était juste avant le
+#                            démarrage de <etiquette> ; les 10 plus récents
+#                            sont gardés. Répertoire en 700, fichiers en 600,
+#                            ignoré par Git (`/backup/` dans `.gitignore`) —
+#                            donc, lui aussi, intact après `git reset --hard`.
+#
 # (À SIGNALER au lot qui tient `.gitignore` : y ajouter `/.deploiement/` éviterait
 #  que ce répertoire apparaisse en « non suivi » dans un `git status` sur le VPS.
 #  Ce n'est pas bloquant — `git reset --hard` l'ignore de toute façon.)
@@ -87,6 +103,13 @@ ETIQUETTES_CONSERVEES=5
 
 ETAT=".deploiement"
 JOURNAL="$ETAT/journal"
+
+# Vidages de la base pris à chaque déploiement de production, à la racine du
+# clone. Dix suffisent à remonter de plusieurs déploiements ; ce ne sont pas les
+# sauvegardes quotidiennes (service `sauvegarde`, `${BACKUP_DIR}`), qui restent
+# la seule copie à faire partir hors site.
+SAUVEGARDES="backup"
+SAUVEGARDES_CONSERVEES=10
 
 dire()  { printf '[deploiement] %s\n' "$*"; }
 crier() { printf '[deploiement] %s\n' "$*" >&2; }
@@ -211,6 +234,124 @@ pile() {
 
 ecrire_etiquette() {
     printf 'IMAGE_TAG=%s\n' "$1" > "$ETAT/env"
+}
+
+# -----------------------------------------------------------------------------
+# Sauvegarde de la base, avant que l'entrypoint ne joue les migrations
+# -----------------------------------------------------------------------------
+#
+# Rend 0 si un vidage complet est en place, OU s'il n'existe encore aucune base
+# (premier déploiement) ; 1 dans tous les autres cas, et l'appelant arrête le
+# déploiement. Un déploiement sans sa sauvegarde ne part pas.
+#
+# ATTENTION, `set -e` NE JOUE PAS ICI : la fonction est appelée dans un `if`, et
+# bash suspend `set -e` pour tout ce qu'elle exécute. Chaque étape qui compte
+# porte donc son propre `|| return 1` — sans eux, un `mkdir` raté passerait.
+#
+# « Aucune base » se décide sur le VOLUME, pas sur le conteneur : un conteneur
+# `db` arrêté au-dessus d'un volume plein n'est pas un premier déploiement, c'est
+# une base qu'on ne sait pas sauvegarder — donc un refus.
+sauvegarder_la_base() {
+    local en_service projet volume horodatage nom final partiel octets
+
+    # Une commande Docker qui ÉCHOUE ne doit jamais se lire « pas de base » : ce
+    # serait déployer sans sauvegarde sur une panne du démon. D'où les `if !`.
+    if ! en_service="$(pile ps --status running --quiet db)"; then
+        crier "sauvegarde : « docker compose ps » a echoue — etat de la base inconnu."
+        return 1
+    fi
+
+    if [ -z "$en_service" ]; then
+        # `name:` est la première ligne de `config` ; elle tient compte d'un
+        # COMPOSE_PROJECT_NAME posé dans `.env`. Le reste de la sortie (secrets
+        # compris) ne quitte pas le tube.
+        projet="$(pile config 2>/dev/null | sed -n 's/^name:[[:space:]]*//p' | head -n 1 || true)"
+        if [ -z "$projet" ]; then
+            crier "sauvegarde : nom du projet Compose illisible — impossible de dire s'il existe une base."
+            return 1
+        fi
+        if ! volume="$(docker volume ls --quiet \
+                --filter "label=com.docker.compose.project=$projet" \
+                --filter "label=com.docker.compose.volume=base-de-donnees")"; then
+            crier "sauvegarde : « docker volume ls » a echoue — impossible de dire s'il existe une base."
+            return 1
+        fi
+        if [ -n "$volume" ]; then
+            crier "sauvegarde : le volume $volume existe mais le conteneur db ne tourne pas."
+            crier "sauvegarde : la base ne peut pas etre videe, et on ne la demarre pas d'office."
+            crier "Demarrez-la (avec son garde-fou garde-secrets), puis relancez le flux :"
+            crier "    docker compose --env-file .env --env-file $ETAT/env \\"
+            crier "        -f compose.yaml -f compose.prod.yaml up -d db"
+            return 1
+        fi
+        crier "sauvegarde : AUCUNE BASE — ni conteneur db en service, ni volume base-de-donnees"
+        crier "sauvegarde : pour le projet « $projet ». C'est le cas d'un PREMIER deploiement :"
+        crier "sauvegarde : rien a sauvegarder, le deploiement continue SANS vidage."
+        printf '%s\tSAUVEGARDE\tavant=%s\taucune base (premier deploiement)\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$TAG_CIBLE" >> "$JOURNAL"
+        return 0
+    fi
+
+    mkdir -p "$SAUVEGARDES" || return 1
+    chmod 700 "$SAUVEGARDES" || return 1
+
+    # Restes d'un passage interrompu (SSH coupé, délai du flux dépassé). Seul
+    # NOTRE motif temporaire est visé, rien d'autre de ce répertoire.
+    find "$SAUVEGARDES" -maxdepth 1 -type f -name '.deploiement-*.dump.partiel' -delete || true
+
+    horodatage="$(date -u +%Y%m%dT%H%M%SZ)"
+    nom="deploiement-${horodatage}-avant-${TAG_CIBLE}.dump"
+    final="$SAUVEGARDES/$nom"
+    # Nom caché et suffixe distinct : un vidage en cours d'écriture ne ressemble
+    # jamais à un vidage fini, ni pour un humain qui liste, ni pour le ménage.
+    partiel="$SAUVEGARDES/.$nom.partiel"
+
+    # `-T` : sans terminal, sinon les octets du format custom passeraient par un
+    # pseudo-terminal qui les altère. `umask 077` dans le sous-shell : le fichier
+    # naît en 600, il porte l'arbre entier, personnes vivantes comprises.
+    # Les variables sont celles du CONTENEUR db (apostrophes) ; la connexion passe
+    # par le socket local, sans mot de passe — comme la restauration écrite au-
+    # dessus du service `sauvegarde` de compose.prod.yaml.
+    dire "sauvegarde : pg_dump -Fc de la base vers $final"
+    # SC2016 écarté : les apostrophes sont voulues, les variables se développent
+    # dans le conteneur et non ici.
+    # shellcheck disable=SC2016
+    if ! ( umask 077 && pile exec -T db \
+            sh -c 'exec pg_dump --format=custom -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+            > "$partiel" ); then
+        rm -f "$partiel"
+        crier "sauvegarde : ECHEC du pg_dump (sortie d'erreur ci-dessus)."
+        return 1
+    fi
+
+    # Un code 0 ne suffit pas à croire le fichier : vide, ou sans l'en-tête du
+    # format custom (`PGDMP`), il ne se restaurerait pas.
+    if [ ! -s "$partiel" ] || [ "$(head -c 5 "$partiel")" != "PGDMP" ]; then
+        rm -f "$partiel"
+        crier "sauvegarde : le vidage est vide ou n'est pas au format custom de pg_dump."
+        return 1
+    fi
+
+    # Même répertoire, donc renommage atomique : le nom final n'existe que complet.
+    mv -f "$partiel" "$final" || { rm -f "$partiel"; return 1; }
+    octets="$(wc -c < "$final" | tr -d '[:space:]')"
+    dire "sauvegarde : $final ($octets octets)"
+    printf '%s\tSAUVEGARDE\tavant=%s\tfichier=%s\toctets=%s\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$TAG_CIBLE" "$final" "$octets" >> "$JOURNAL"
+
+    # Rétention — APRÈS le succès, jamais avant : un vidage raté ne doit coûter
+    # aucun des anciens. Seuls les noms de NOTRE motif exact sont comptés et
+    # supprimés ; l'horodatage en tête rend l'ordre alphabétique chronologique.
+    find "$SAUVEGARDES" -maxdepth 1 -type f -name 'deploiement-*-avant-*.dump' -printf '%f\n' \
+        | grep -E '^deploiement-[0-9]{8}T[0-9]{6}Z-avant-[0-9a-f]+\.dump$' \
+        | sort -r \
+        | tail -n "+$((SAUVEGARDES_CONSERVEES + 1))" \
+        | while read -r ancien; do
+            rm -f -- "$SAUVEGARDES/$ancien"
+            dire "sauvegarde : $ancien supprime (au-dela des $SAUVEGARDES_CONSERVEES plus recents)"
+        done || true
+
+    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -343,6 +484,25 @@ ecrire_etiquette "$TAG_CIBLE"
 if [ "$RECONSTRUIRE" -eq 1 ]; then
     dire "construction des images sous l'etiquette $TAG_CIBLE"
     pile build || revenir_en_arriere "la construction des images a echoue" || exit 1
+fi
+
+# Le vidage vient APRÈS la construction, qui peut durer longtemps, et juste
+# avant le `up` : ce qu'on écrit dans la base pendant la construction y figure
+# donc. Rien n'a encore touché la pile en service — on peut s'arrêter net.
+if [ "$MODE" = "production" ]; then
+    if ! sauvegarder_la_base; then
+        crier "DEPLOIEMENT INTERROMPU AVANT LE DEMARRAGE : pas de sauvegarde, pas de migration."
+        crier "La pile en service n'a pas ete touchee. Le clone, lui, est deja sur $SHA_CIBLE"
+        crier "(le flux a fait son « git reset --hard ») : relancez le flux une fois la cause reparee."
+        # L'étiquette écrite pour la construction ne décrit pas ce qui tourne :
+        # un `up` manuel démarrerait sinon la nouvelle version, migrations comprises,
+        # sans sauvegarde.
+        if [ -n "$TAG_AVANT" ]; then
+            ecrire_etiquette "$TAG_AVANT"
+            crier "$ETAT/env remis sur l'etiquette en service ($TAG_AVANT)."
+        fi
+        exit 1
+    fi
 fi
 
 dire "demarrage"
