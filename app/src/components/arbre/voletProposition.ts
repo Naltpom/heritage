@@ -77,9 +77,14 @@ export function voletDroitVisible(etat: EtatDesVolets): boolean {
  *  - `masquee` : dans le graphe, mais un réglage de l'affichage la retire de l'écran
  *    (branche masquée, ligne directe seule, familles par alliance…) ;
  *  - `absente` : pas dans le graphe — un brouillon, ou une fiche que le serveur n'a
- *    pas su rattacher (`calque.nonPlaces`).
+ *    pas su rattacher (`calque.nonPlaces`) ;
+ *  - `echec` : le dépôt est fait, mais l'arbre n'a pas pu se relire (réseau, serveur).
+ *    Ce n'est pas `absente` : on ne sait pas où elle est, on ne dit pas qu'elle n'y est pas.
  */
-export type PlaceDansLArbre = 'recherche' | 'placee' | 'masquee' | 'absente'
+export type PlaceDansLArbre = 'recherche' | 'placee' | 'masquee' | 'absente' | 'echec'
+
+/** La phrase commune à toutes les natures, quand l'arbre n'a pas pu se relire après le dépôt. */
+const ARBRE_NON_RELU = 'L’arbre n’a pas pu se relire : rechargez la page pour l’y voir.'
 
 /**
  * Le titre et la phrase de la confirmation, après un dépôt. Le sujet est « la
@@ -114,6 +119,8 @@ export function confirmationDuDepot(depot: PersonneDeposee, place: PlaceDansLArb
         titre,
         phrase: `${fiche} n’est pas encore dessinée dans l’arbre. Le suivi de la demande la montre en attendant.`,
       }
+    case 'echec':
+      return { titre, phrase: `${ARBRE_NON_RELU} Le suivi de la demande la montre en attendant.` }
   }
 }
 
@@ -138,6 +145,8 @@ function confirmationDeLaFiche(depot: PersonneDeposee, fiche: string, place: Pla
       }
     case 'absente':
       return { titre, phrase: `${fiche} n’est pas dessinée dans l’arbre avec vos réglages ; ${suite}` }
+    case 'echec':
+      return { titre, phrase: `${ARBRE_NON_RELU} ${suite.charAt(0).toUpperCase()}${suite.slice(1)}` }
   }
 }
 
@@ -167,6 +176,8 @@ function confirmationDeLaCompletion(depot: PersonneDeposee, fiche: string, place
       }
     case 'absente':
       return { titre, phrase: `${fiche} n’est pas dessinée dans l’arbre. Le suivi de la demande la montre, complétée.` }
+    case 'echec':
+      return { titre, phrase: `${ARBRE_NON_RELU} Le suivi de la demande la montre, complétée.` }
   }
 }
 
@@ -197,6 +208,8 @@ function confirmationDuComplement(depot: PersonneDeposee, fiche: string, place: 
       }
     case 'absente':
       return { titre, phrase: `${fiche} n’est pas dessinée dans l’arbre ; ${fusion}` }
+    case 'echec':
+      return { titre, phrase: `${ARBRE_NON_RELU} ${fusion.charAt(0).toUpperCase()}${fusion.slice(1)}` }
   }
 }
 

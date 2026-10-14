@@ -157,8 +157,15 @@ export function identiteDuLecteur(session: ChargeDeSession | null): string | nul
   return `compte:${utilisateur.id}|voirComme:${voirComme?.memberId ?? ''}|par:${incarnation?.par.id ?? ''}`
 }
 
-/** Tout ce qui entre dans `disposer()` (`HistoireView.vue`), hors le graphe lui-même. */
+/** Tout ce qui entre dans `disposer()` (`HistoireView.vue`, `ArbreGroupesView.vue`), hors le graphe lui-même. */
 export interface EntreesDeLaDisposition {
+  /**
+   * Le moteur de placement : `lignees` (`/arbre-2`, par défaut) ou `groupes` (`/arbre`,
+   * les rectangles de familles). Les deux écrans partagent le graphe gardé, et les mêmes
+   * bascules donnent deux dispositions différentes : sans lui, l'un relirait celle de
+   * l'autre.
+   */
+  moteur?: 'lignees' | 'groupes'
   avecAlliances: boolean
   avecConjoint: boolean
   avecSansLien: boolean
@@ -173,6 +180,7 @@ export interface EntreesDeLaDisposition {
 export function cleDeDisposition(e: EntreesDeLaDisposition, version: string = EMPREINTE_DU_FRONT): string {
   return JSON.stringify([
     version,
+    e.moteur ?? 'lignees',
     e.avecAlliances,
     e.avecConjoint,
     e.avecSansLien,

@@ -114,6 +114,13 @@ describe('confirmationDuDepot : ce que le volet dit après l’envoi', () => {
     expect(confirmationDuDepot(depot, 'recherche').phrase).toContain('prend sa place')
   })
 
+  it('ne dit pas « absente » quand l’arbre n’a pas pu se relire après le dépôt', () => {
+    const echec = confirmationDuDepot(depot, 'echec')
+    expect(echec.titre).toBe('Proposition envoyée — demande n° 8000')
+    expect(echec.phrase).toContain('L’arbre n’a pas pu se relire')
+    expect(echec.phrase).not.toContain('pas encore dessinée')
+  })
+
   it('ne dit pas « envoyée » d’un brouillon, ni qu’il est dans l’arbre', () => {
     const brouillon = confirmationDuDepot({ ...depot, soumise: false }, 'absente')
 
@@ -188,7 +195,7 @@ describe('confirmationDuDepot : un complément (ADR 0017)', () => {
     const placee = confirmationDuDepot(complement, 'placee')
     expect(placee.titre).toBe('Complément envoyé — demande n° 8200')
     expect(placee.phrase).toContain('en pointillé')
-    for (const place of ['recherche', 'placee', 'masquee', 'absente'] as const) {
+    for (const place of ['recherche', 'placee', 'masquee', 'absente', 'echec'] as const) {
       expect(confirmationDuDepot(complement, place).phrase).toMatch(/l’administrateur la fusionnera dans la proposition existante/i)
     }
   })

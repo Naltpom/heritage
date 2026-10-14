@@ -153,9 +153,11 @@ export const CLE_ETAG_GRAPHE = 'arbre.graphe'
  * `inchange` ⇒ le canevas reste **en place**, on ne le reconstruit pas et on ne
  * le vide pas. `nouveau` ⇒ reconstruction **complète**, pas de réconciliation
  * maison (ADR 0007, règle 3).
+ *
+ * `signal` abandonne la requête : l'écran qui se démonte, ou dont le lecteur change.
  */
-export function chargerGraphe(): Promise<ResultatRevalide<Graphe>> {
-  return requeteRevalidee<Graphe>(CLE_ETAG_GRAPHE, '/arbre/graphe')
+export function chargerGraphe(signal?: AbortSignal): Promise<ResultatRevalide<Graphe>> {
+  return requeteRevalidee<Graphe>(CLE_ETAG_GRAPHE, '/arbre/graphe', signal ? { signal } : {})
 }
 
 /**
