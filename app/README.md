@@ -53,6 +53,8 @@ Les tests portent sur ce qui se casse en silence, pas sur les composants :
 | `src/lib/api/revalidation.test.ts` | l'`ETag` du graphe : en-tête envoyé, `304`, oubli |
 | `src/router/rechargement.test.ts` | après une mise en production, un écran disparu **recharge une fois** — jamais en boucle |
 | `src/composables/erreursGlobales.test.ts` | le filet global : il journalise et prévient, sans crier sur ce qui n'est pas une panne |
+| `src/composables/useRecherchePersonnes.test.ts` | la recherche : chargement, **panne** (jamais « Personne ne correspond. »), vide, résultats, annulation, réponse périmée |
+| `src/components/mise-en-page/recherche-entete.client.test.ts` | le motif *combobox* de l'en-tête, ses états, « Voir tous les résultats » |
 
 ## Production
 
@@ -186,6 +188,7 @@ app/
       avisGlobal.ts   l'avis global, une seule place (singleton)
       erreursGlobales.ts  errorHandler + unhandledrejection → journal + avis
       partage.ts      feuille de partage ou presse-papiers, adresse absolue
+      useRecherchePersonnes.ts  LA recherche de personnes : états, délai, annulation
     lib/
       api/
         types.ts        types du contrat (§ 1 à § 16)
@@ -436,6 +439,18 @@ Revalider au montage de la vue, au retour d'onglet, et après **toute** action q
 L'`ETag` est aussi oublié à tout changement de session : il incorpore les
 demandes en attente du lecteur et, sous la bascule « voir comme un membre », le
 membre emprunté.
+
+**La recherche de personnes** passe par `useRecherchePersonnes`
+(`src/composables/`), partagée par l'en-tête, la barre du bas des deux arbres
+(`components/arbre/ChampRechercheArbre.vue`), la page `recherche` et le sélecteur
+des formulaires (`SelecteurPersonne`). Toujours par l'API, jamais par un index
+local. Elle distingue cinq états — rien à chercher, chargement, **panne** (avec
+« Réessayer »), vide, résultats — : une coupure de réseau ne s'affiche jamais
+« Personne ne correspond. ». Les champs de l'en-tête et des arbres suivent le
+motif *combobox* de WAI-ARIA (`aria-expanded`, `aria-controls`,
+`aria-activedescendant`, options en `listbox`). L'en-tête s'arrête à huit
+résultats ; tronquée, sa liste finit par « Voir tous les résultats », vers
+`/recherche?q=…`, qui va jusqu'au plafond de 50 de l'API (§ 5.5, non paginé).
 
 ### 5. Afficher une erreur
 

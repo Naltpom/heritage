@@ -53,15 +53,17 @@
  * `q` doit faire au moins deux caractères, sinon l'API rend `422` : « c'est à
  * l'appelant de ne pas appeler avant ».
  */
-import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
+import { computed, useId } from 'vue'
 import {
   rechercherBrouillons,
   rechercherPersonnes,
   type BrouillonTrouve,
+  type ReponseDeRecherche,
   type ResultatDeRecherche,
 } from '@/lib/api'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import PastilleEtat from '@/components/base/PastilleEtat.vue'
+import { useRecherchePersonnes } from '@/composables/useRecherchePersonnes'
 import { cleDuChoix, type ChoixDePersonne } from './creation'
 
 const {
@@ -92,16 +94,6 @@ const {
 
 const emit = defineEmits<{ choisir: [personne: ChoixDePersonne] }>()
 
-const terme = ref('')
-const resultats = ref<ResultatDeRecherche[]>([])
-const propositions = ref<BrouillonTrouve[]>([])
-const tronque = ref(false)
-const chargement = ref(false)
-const erreur = ref<unknown>(null)
-/** Une recherche a-t-elle abouti depuis la dernière frappe ? Sans ce drapeau,
- *  « aucun résultat » s'afficherait avant même le premier appel. */
-const interroge = ref(false)
-
 const aideParDefaut = computed(() =>
   vivantsSeulement
     ? 'Parmi les personnes vivantes que vous pouvez voir.'
@@ -111,82 +103,50 @@ const aideParDefaut = computed(() =>
 const identifiant = useId()
 const idAide = computed(() => `${identifiant}-aide`)
 
-const MINIMUM = 2
 const DELAI_MS = 250
+const LIMITE = 10
 
-let minuterie: ReturnType<typeof setTimeout> | null = null
-let enCours: AbortController | null = null
-
-function annuler(): void {
-  if (minuterie !== null) clearTimeout(minuterie)
-  minuterie = null
-  enCours?.abort()
-  enCours = null
+/** La réponse de l'arbre, et les fiches proposées qui l'accompagnent. */
+interface ReponseAvecPropositions extends ReponseDeRecherche {
+  propositions: BrouillonTrouve[]
 }
 
-async function chercher(q: string): Promise<void> {
-  const controleur = new AbortController()
-  enCours = controleur
-  chargement.value = true
-  erreur.value = null
+/*
+ * Le délai de frappe, l'annulation, la réponse périmée et les états sont ceux de
+ * `useRecherchePersonnes`, comme dans l'en-tête et l'arbre : « Aucune personne ne
+ * correspond » n'apparaît qu'après une réponse, jamais sur une panne.
+ */
+const recherche = useRecherchePersonnes<ReponseAvecPropositions>({
+  limite: () => LIMITE,
+  delai: DELAI_MS,
+  async chercher(q, limite, signal) {
+    // Les deux appels partent **en parallèle** : ils n'ont rien à s'apprendre, et
+    // les enchaîner doublerait le temps d'attente sous la frappe.
+    const arbre = rechercherPersonnes(q, limite, signal, vivantsSeulement)
+    const enAttente = avecPropositions
+      ? rechercherBrouillons(q, limite, signal)
+      : Promise.resolve({ elements: [], tronque: false })
 
-  // Les deux appels partent **en parallèle** : ils n'ont rien à s'apprendre, et
-  // les enchaîner doublerait le temps d'attente sous la frappe.
-  const arbre = rechercherPersonnes(q, 10, controleur.signal, vivantsSeulement)
-  const enAttente = avecPropositions
-    ? rechercherBrouillons(q, 10, controleur.signal)
-    : Promise.resolve({ elements: [], tronque: false })
-
-  try {
     // `allSettled` et non `all` : l'échec des propositions ne doit pas emporter
     // le résultat de l'arbre, qui est le cas courant de cet écran.
     const [deLArbre, desDemandes] = await Promise.allSettled([arbre, enAttente])
-    if (controleur.signal.aborted) return
-
-    if (deLArbre.status === 'fulfilled') {
-      resultats.value = deLArbre.value.elements
-      tronque.value = deLArbre.value.tronque
-    } else {
-      resultats.value = []
-      tronque.value = false
-      erreur.value = deLArbre.reason
-    }
+    if (deLArbre.status === 'rejected') throw deLArbre.reason
 
     // Une panne du complément se tait : elle laisse le groupe vide, et l'écran
     // reste utilisable. La signaler comme une erreur de recherche ferait croire
     // que l'arbre n'a pas répondu.
-    propositions.value = desDemandes.status === 'fulfilled' ? desDemandes.value.elements : []
-
-    interroge.value = true
-  } finally {
-    if (enCours === controleur) {
-      chargement.value = false
-      enCours = null
+    return {
+      ...deLArbre.value,
+      propositions: desDemandes.status === 'fulfilled' ? desDemandes.value.elements : [],
     }
-  }
-}
-
-watch(terme, (valeur) => {
-  annuler()
-  const q = valeur.trim()
-  if (q.length < MINIMUM) {
-    resultats.value = []
-    propositions.value = []
-    tronque.value = false
-    interroge.value = false
-    return
-  }
-  minuterie = setTimeout(() => void chercher(q), DELAI_MS)
+  },
 })
-
-onBeforeUnmount(annuler)
+const { texte: terme, etat, resultats, tronque, erreur, reessayer } = recherche
+const propositions = computed(() => recherche.reponse.value?.propositions ?? [])
 
 function choisir(choix: ChoixDePersonne): void {
   emit('choisir', choix)
-  terme.value = ''
-  resultats.value = []
-  propositions.value = []
-  interroge.value = false
+  recherche.vider()
 }
 
 function choisirPersonne(resultat: ResultatDeRecherche): void {
@@ -205,14 +165,8 @@ function estDejaChoisi(choix: ChoixDePersonne): boolean {
   return dejaChoisis.includes(cleDuChoix(choix))
 }
 
-const aucunResultat = computed(
-  () =>
-    interroge.value &&
-    !chargement.value &&
-    erreur.value === null &&
-    resultats.value.length === 0 &&
-    propositions.value.length === 0,
-)
+/** Le serveur a répondu, et ni l'arbre ni les propositions n'ont personne. */
+const aucunResultat = computed(() => etat.value === 'vide' && propositions.value.length === 0)
 </script>
 
 <template>
@@ -233,9 +187,9 @@ const aucunResultat = computed(
       {{ aide.length > 0 ? aide : aideParDefaut }}
     </p>
 
-    <p v-if="chargement" class="text-xs text-attenue" role="status">Recherche…</p>
+    <p v-if="etat === 'chargement'" class="text-xs text-attenue" role="status">Recherche…</p>
 
-    <MessageErreur v-if="erreur !== null" :erreur="erreur" @action="() => void chercher(terme.trim())" />
+    <MessageErreur v-if="etat === 'erreur'" :erreur="erreur" @action="reessayer" />
 
     <!-- Une absence de résultat est une réponse, pas un incident : ton neutre,
          pas de `role="alert"`, pas de cadre d'alerte. -->
