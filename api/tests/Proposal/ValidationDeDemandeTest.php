@@ -64,8 +64,8 @@ final class ValidationDeDemandeTest extends BaseDeDemandes
         self::assertSame(8, $revisions[0]->getVersionAfter());
         self::assertSame(self::PERSONNE, $revisions[0]->getSubjectId());
         self::assertSame('Natron Romarin', $revisions[0]->getActorLabel());
-        // `request_id` n'est `NULL` que pour l'import GEDCOM, jamais pour une écriture
-        // applicative : il n'existe aucun chemin qui contourne le mécanisme.
+        // `request_id` n'est jamais `NULL` pour une écriture applicative : il n'existe
+        // aucun chemin qui contourne le mécanisme.
         self::assertSame($demande->getId(), $revisions[0]->getRequest()?->getId());
         self::assertSame(
             ['surname' => ['avant' => 'Sureau', 'apres' => 'SUREAU']],

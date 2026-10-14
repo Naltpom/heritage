@@ -37,7 +37,7 @@ const { administrateur } = useSession()
 
 const lignes = computed(() => {
   // Seule exception au rôle du lecteur, et elle ne fait que retirer : la
-  // référence technique de l'import ne parle qu'à l'administrateur.
+  // référence GEDCOM, technique, ne parle qu'à l'administrateur.
   const toutes = construireLignes(fiche).filter(
     (ligne) => ligne.cle !== 'gedcomXref' || administrateur.value,
   )

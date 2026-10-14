@@ -123,7 +123,7 @@ export function memeValeurDate(a: ValeurDate | null, b: ValeurDate | null): bool
  * elle se lit dans ce qu'il écrit.
  *
  * `depuis` et `jusqu_a` (les `FROM` / `TO` du GEDCOM) ne sont pas proposés à la
- * saisie : ils décrivent une période en cours, que l'import produit mais qu'un
+ * saisie : ils décrivent une période en cours, que l'import initial a produite mais qu'un
  * contributeur n'a jamais à écrire. Un champ qui en porte une se **verrouille**
  * plutôt que de se vider — voir `relectureFidele()`, et le motif qui va avec.
  */
@@ -631,7 +631,7 @@ function jjmmaaaa(date: string | null): string {
  * verrouillé, affiché tel quel, et sa valeur d'origine repart intacte.
  *
  * Aujourd'hui cela ne concerne que `depuis` et `jusqu_a` — les `FROM` / `TO` du
- * GEDCOM, qu'un contributeur n'a jamais à écrire mais que l'import produit.
+ * GEDCOM, qu'un contributeur n'a jamais à écrire mais que l'import initial a produites.
  * `mois` en faisait partie jusqu'à ce que la saisie sache l'exprimer, ce qui est
  * la bonne façon de réduire cette liste : apprendre une forme, pas la masquer.
  */

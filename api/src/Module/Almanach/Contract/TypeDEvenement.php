@@ -16,9 +16,9 @@ namespace App\Module\Almanach\Contract;
  *
  * > La nature d'un événement daté **autre que** naissance, décès, mariage et divorce.
  * > Ces quatre-là sont des colonnes de `tree_person` et `tree_family`, pas des
- * > `tree_fact` […] Corollaire à respecter à l'import : `BIRT` et `DEAT` vont dans les
- * > colonnes et **n'en font pas aussi** des faits. Un fait dupliqué est une divergence
- * > qui attend son heure.
+ * > `tree_fact` […] Corollaire à respecter par toute écriture : la naissance et le
+ * > décès vont dans les colonnes et **n'en font pas aussi** des faits. Un fait dupliqué
+ * > est une divergence qui attend son heure.
  *
  * Les quatre premiers cas d'ici sont **exactement ceux que cet en-tête interdit d'ajouter
  * là-bas**. Ce n'est donc pas un doublon à résorber : ce sont deux vocabulaires qui
@@ -32,7 +32,7 @@ namespace App\Module\Almanach\Contract;
  * | où il vit | `Enum/`, interne à `Tree` | `Contract/`, surface publique d'`Almanach` |
  *
  * **Fusionner les deux ferait rentrer `naissance` dans `FactType`**, donc rendrait
- * exprimable en base le fait dupliqué que l'import interdit. Le gain serait quatre cas
+ * exprimable en base le fait dupliqué que cette règle interdit. Le gain serait quatre cas
  * économisés ; le prix, une naissance qui existe deux fois et deux barres qui divergent.
  *
  * ## Les sept dernières valeurs sont celles de `FactType`, **verbatim**

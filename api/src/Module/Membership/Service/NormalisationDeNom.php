@@ -18,7 +18,7 @@ use App\Module\Core\Service\ProximiteDeNoms;
  * ## Le repliement vient de `Core`, et il n'y en a qu'un
  *
  * {@see CleDeRecherche} est **la** définition du repliement d'accents du projet : celle
- * qui écrit `tree_person.search_key` à l'import et celle qui la cherche. Ce service
+ * qui écrit `tree_person.search_key` et celle qui la cherche. Ce service
  * n'en pose pas une troisième — il l'appelle.
  *
  * **Ce fichier employait `iconv` avec `//TRANSLIT`, et c'était un bogue de plateforme.**

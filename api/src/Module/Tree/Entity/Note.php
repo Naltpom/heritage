@@ -60,7 +60,7 @@ class Note
     #[ORM\Column(type: Types::TEXT)]
     private string $body;
 
-    /** ⇢ inter-module (`core_user`). `null` pour les notes importées du GEDCOM. */
+    /** ⇢ inter-module (`core_user`). `null` pour les notes venues de l'import GEDCOM initial. */
     #[ORM\Column(nullable: true)]
     private ?int $authorUserId = null;
 

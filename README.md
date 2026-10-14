@@ -16,7 +16,9 @@ contraintes, et tout le reste en découle :
    [ADR 0004](docs/adr/0004-ecriture-par-proposition.md).
 3. **Les données réelles ne sont pas dans ce dépôt**, et n'y entreront pas —
    [ADR 0006](docs/adr/0006-donnees-reelles-non-versionnees.md). Ce que vous clonez
-   démarre sur des fixtures anonymisées.
+   démarre sur un arbre d'essai anonymisé ; les vraies données vivent dans la base de
+   production et ses sauvegardes, et il n'y a pas d'import GEDCOM —
+   [ADR 0018](docs/adr/0018-suppression-de-l-import-gedcom.md).
 
 | | |
 |---|---|
@@ -132,25 +134,31 @@ de toute la pile.
 
 ## Peupler l'arbre
 
-Deux chemins, qui ne se mélangent pas.
+Deux chemins, qui ne se mélangent pas. **Il n'y a pas de troisième** : l'import GEDCOM a été
+supprimé ([ADR 0018](docs/adr/0018-suppression-de-l-import-gedcom.md)) parce qu'il pouvait
+réécrire en silence ce que les demandes avaient fait valider. Les **références GEDCOM**
+(`gedcom_xref`, `@I500001@`, `@I9xxxxx@` pour une fiche créée dans l'application) restent :
+ce sont les identifiants stables des fiches.
 
-### Fixtures anonymisées — le chemin normal pour développer
+### Arbre d'essai — une installation neuve
 
-Elles reproduisent la **topologie et les pathologies** du vrai arbre : 12 générations,
-branches déséquilibrées, fratries jusqu'à 9, remariages, divorces, dates en fourchette,
-ancêtres sans nom, un tiers de personnes sans parents connus. Le cahier des charges chiffré
-est dans [l'ADR 0006](docs/adr/0006-donnees-reelles-non-versionnees.md), et il est **vérifié
-par un test** : des fixtures plates feraient découvrir chaque bug à l'import des vraies
-données, c'est-à-dire chez le commanditaire, en production, sans filet.
+Onze personnes **inventées**, cinq familles, trois générations, avec une date de chaque
+forme (exacte, au mois, à l'année, « vers », « avant », « entre », une chaîne illisible) :
+`api/src/DataFixtures/ArbreDEssaiFixtures.php`. C'est ce qui ensemence la base PostgreSQL de
+la CI. Il **ne reproduit pas** la topologie du vrai arbre : le générateur à graine fixe que
+décrit l'[ADR 0006](docs/adr/0006-donnees-reelles-non-versionnees.md) n'existe pas encore.
 
 ```bash
-docker compose exec -T api php bin/console doctrine:fixtures:load --append
+docker compose exec -T api php bin/console doctrine:fixtures:load --group=essai --append
 ```
 
+Il refuse de s'écrire sur un arbre qui porte déjà des personnes. Sa racine est `@I1@` : pour
+rattacher le compte d'amorçage, poser `HERITAGE_ADMIN_PERSONNE_XREF=@I1@`.
+
 > ⚠ **`--append` n'est pas une commodité.** Sans lui, `doctrine:fixtures:load` **purge la
-> base** avant de charger : comptes, rattachements, propositions, médias, tout. Si vous
-> l'oubliez sur une base qui portait déjà l'arbre réel et des comptes, vous ne perdez pas
-> des fixtures, vous perdez le travail.
+> base** avant de charger : comptes, rattachements, propositions, médias, réglages, tout. Si
+> vous l'oubliez sur une base qui portait déjà l'arbre réel et des comptes, vous ne perdez
+> pas des fixtures, vous perdez le travail.
 
 Pour rejouer le seul amorçage du compte administrateur, sans entraîner le reste :
 
@@ -158,34 +166,26 @@ Pour rejouer le seul amorçage du compte administrateur, sans entraîner le rest
 docker compose exec -T api php bin/console doctrine:fixtures:load --append --group=amorcage
 ```
 
-### Import GEDCOM — les données réelles
+### Données réelles — restaurer une sauvegarde
 
-C'est une **commande locale**, jamais une fixture, jamais une étape de démarrage. Le fichier
-ne vient pas du dépôt : il vit hors de lui.
+Elles vivent dans la base de production, et dans les sauvegardes qu'en écrit le service
+`sauvegarde` de [`compose.prod.yaml`](compose.prod.yaml) (`pg_dump` de la base et archive des
+téléversements, au même horodatage). Pour les reprendre — machine neuve, incident — on
+**restaure un dump** ; c'est le seul chemin. La procédure complète est écrite au-dessus du
+service `sauvegarde`. En développement :
 
 ```bash
-# 1. Déposer le fichier dans le conteneur (il n'y a aucun montage du GEDCOM par défaut).
-docker compose cp arbre.ged api:/tmp/arbre.ged
+# 1. Restaurer la base (--clean recrée les objets existants). Le dump vient de hors du dépôt.
+docker compose exec -T db pg_restore --clean --if-exists -U heritage -d heritage < base-AAAAMMJJ-HHMMSS.dump
 
-# 2. LIRE D'ABORD, ÉCRIRE ENSUITE. --dry-run compte et signale sans rien toucher :
-#    c'est le mode dans lequel on découvre qu'un fichier est mauvais avant la base.
-docker compose exec -T api php bin/console heritage:import-gedcom /tmp/arbre.ged --dry-run
+# 2. Rejouer les migrations plus récentes que le dump (l'entrypoint le fait aussi au démarrage).
+docker compose exec -T api php bin/console doctrine:migrations:migrate --no-interaction
 
-# 3. L'import réel. --ego désigne la racine par sa RÉFÉRENCE GEDCOM, jamais par un id.
-docker compose exec -T api php bin/console heritage:import-gedcom /tmp/arbre.ged --ego '@I500001@'
-
-# 4. Retirer le fichier du conteneur.
+# 3. Effacer le dump de la machine s'il n'a rien à y faire.
 ```
 
-Sur une base neuve où des comptes existent déjà, ajoutez `--premier-import` : la commande
-refuse sinon de s'exécuter, et elle a raison — un arbre vide sous des comptes vivants est la
-signature d'un schéma détruit, et repeupler réattribuerait les identifiants que les
-rattachements désignent.
-
-L'import est **idempotent** : personnes, familles et sources sont retrouvées par leur
-identifiant GEDCOM, un second passage ne crée pas de doublon. En alternative au `cp`, le
-montage d'un atelier en lecture seule est préparé (commenté) dans `compose.yaml`, service
-`api` ; le `:ro` n'y est pas négociable.
+Un dump, comme un `.ged`, est de la donnée réelle : il n'entre jamais dans le dépôt
+(`*.dump`, `*.sql` et `backups/` sont exclus par `.gitignore`).
 
 ---
 
@@ -289,11 +289,14 @@ Chacune de ces lignes a coûté une panne réelle.
 pas leur contenu : un fichier modifié après coup ne sera pas rejoué, et votre schéma diverge
 en silence de celui de tout le monde. On corrige par une **nouvelle** migration.
 
-**Ne faites jamais `TRUNCATE tree_person`.** Les identifiants sont une identité, réattribuée
-au réimport suivant : mesuré le 15 septembre 2026, ils ont glissé de 1–274 à 275–548. Tout
-rattachement de membre enregistré par son numéro désigne alors **quelqu'un d'autre**, sans
-qu'aucune erreur ne se déclenche. C'est pourquoi l'ego s'écrit `@I500001@` et non `3` :
-`gedcom_xref` porte une contrainte d'unicité et suit la personne.
+**Ne faites jamais `TRUNCATE tree_person`.** Il n'y a plus d'import pour repeupler l'arbre
+([ADR 0018](docs/adr/0018-suppression-de-l-import-gedcom.md)) : ce qui est effacé ne revient
+que par la restauration d'une sauvegarde, et tout ce qui a été validé depuis est perdu. Et
+les identifiants sont une identité, réattribuée à tout repeuplement : mesuré le 15 septembre
+2026, après un réimport, ils ont glissé de 1–274 à 275–548. Tout rattachement de membre
+enregistré par son numéro désigne alors **quelqu'un d'autre**, sans qu'aucune erreur ne se
+déclenche. C'est pourquoi l'ego s'écrit `@I500001@` et non `3` : `gedcom_xref` porte une
+contrainte d'unicité et suit la personne.
 
 **`doctrine:fixtures:load` sans `--append` purge la base.** Répété ici parce que c'est la
 faute la plus facile à commettre et la plus coûteuse.
@@ -349,8 +352,8 @@ et il n'y a **aucun en-tête d'autorisation à poser nulle part**.
 
 Tout est dans [`compose.prod.yaml`](compose.prod.yaml), y compris les **sept étapes qui ne
 s'automatisent pas** et qui ne sont pas facultatives : secrets, domaine, TLS et proxy
-amont, SPF/DKIM/DMARC, sauvegardes hors site, import des données réelles, épinglage de
-`IMAGE_TAG`.
+amont, SPF/DKIM/DMARC, sauvegardes hors site, données réelles (par restauration d'un dump),
+épinglage de `IMAGE_TAG`.
 
 ```bash
 cp .env.example .env     # puis remplacer les quatre variables « ⚠ À REMPLACER »
@@ -401,10 +404,9 @@ heritage/
   compose.prod.yaml       surcouche de production (ne se suffit pas à elle-même)
   .env.example            modèle versionné des variables d'orchestration
   .github/workflows/      CI : 5 portes bloquantes
-  api/                    Symfony 8 — 8 modules sous src/Module/
+  api/                    Symfony 8 — 13 modules sous src/Module/, dont :
     Almanach/             carte des lieux et anniversaires — lecture seule
     Core/                 comptes, audit, erreurs, URL publiques
-    Gedcom/               analyse et import GEDCOM
     Media/                portraits, preuves, vignettes, purge EXIF
     Membership/           invitations, inscription, cercle de visibilité
     Proposal/             propositions, diff, file de validation

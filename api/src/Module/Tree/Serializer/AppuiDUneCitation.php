@@ -47,7 +47,7 @@ use App\Module\Tree\Enum\SourceKind;
  *
  * Le niveau est donc le **plus bas des deux**, et c'est la seule composition sûre : une
  * fiche ne doit jamais paraître mieux tenue qu'elle ne l'est. Le cas se produit — les
- * citations d'arbres tiers de ce fonds sont cotées `2` par l'import, qui a recopié un
+ * citations d'arbres tiers de ce fonds ont été cotées `2` par l'import initial, qui a recopié un
  * `QUAY` posé par le logiciel d'origine.
  *
  * ## Pourquoi c'est ici et pas dans le front
@@ -62,7 +62,7 @@ final class AppuiDUneCitation
      * Les fonds qui **ne peuvent pas** tenir mieux qu'une recopie, quel que soit le `QUAY`.
      *
      * `Autre` n'y est pas, et c'est un choix prudent dans le sens qui coûte : il couvre
-     * aussi bien un site familial qu'un acte mal classé à l'import. Le classer d'office en
+     * aussi bien un site familial qu'un acte mal classé à l'import initial. Le classer d'office en
      * `arbre` marquerait comme recopie des fiches qui tiennent. C'est
      * {@see \App\Module\Tree\Command\ReclasserLesArbresTiersCommand} qui range les sites
      * familiaux là où ils doivent être, sur preuve de leur adresse, plutôt que cette liste

@@ -34,8 +34,8 @@ use PHPUnit\Framework\TestCase;
  * | `created_at` (horodatage daté) | `2026-09-15 18:24:05+00` | `2026-09-15 18:24:05` |
  * | `birth_min` (date nue) | `1901-01-01` | `1901-01-01` |
  *
- * Le test lit les personnes, familles et filiations **telles que l'import les a
- * écrites** dans PostgreSQL, les recopie dans une base SQLite en mémoire **en les
+ * Le test lit les personnes, familles et filiations **telles qu'elles sont écrites**
+ * dans PostgreSQL, les recopie dans une base SQLite en mémoire **en les
  * écrivant à la façon de SQLite** — booléens en `0`/`1`, horodatages sans décalage —,
  * puis compare les deux empreintes. C'est le scénario réel : la même donnée logique,
  * stockée par chaque moteur selon ses conventions.
@@ -45,8 +45,9 @@ use PHPUnit\Framework\TestCase;
  * du commanditaire, ce qui le rendait juste sur une seule machine au monde. Ce qu'il
  * démontre — que l'empreinte est indifférente au moteur — ne dépend pas de *quelles*
  * personnes sont en base, seulement de la présence de booléens, d'horodatages et de
- * dates nues. En intégration continue il tourne donc sur `tests/Gedcom/fixtures/
- * arbre-essai.ged`, onze individus inventés, et il y prouve exactement la même chose.
+ * dates nues. En intégration continue il tourne donc sur l'arbre d'essai des fixtures
+ * (`App\DataFixtures\ArbreDEssaiFixtures`, groupe `essai`), onze individus inventés, et
+ * il y prouve exactement la même chose.
  *
  * Écrire les valeurs verbatim n'aurait rien prouvé : SQLite les aurait rendues telles
  * quelles, et on aurait comparé PostgreSQL à lui-même.
@@ -62,6 +63,9 @@ final class EmpreinteEntreMoteursTest extends TestCase
 
     /** Posée par la CI : interdit les sauts, voir {@see exigeLaBaseReelle()}. */
     public const string VARIABLE_EXIGENCE = 'HERITAGE_EXIGE_BASE_REELLE';
+
+    /** Le DSN de la base PostgreSQL à lire ; à défaut, celle de `compose.yaml`. */
+    public const string VARIABLE_ENV = 'HERITAGE_DSN_REEL';
 
     private EntityManagerInterface $postgres;
     private EntityManagerInterface $sqlite;
@@ -112,7 +116,7 @@ final class EmpreinteEntreMoteursTest extends TestCase
         }
 
         if (0 === $personnes) {
-            self::absente('Base réelle vide : lancer `bin/console heritage:import-gedcom` d\'abord.');
+            self::absente('Base réelle vide : restaurer un dump, ou charger l\'arbre d\'essai (`bin/console doctrine:fixtures:load --group=essai --append`).');
         }
 
         $this->sqlite = FabriqueDEntityManager::enMemoire();
@@ -121,7 +125,7 @@ final class EmpreinteEntreMoteursTest extends TestCase
 
     private static function dsn(): string
     {
-        $configure = $_SERVER[PlacementBaseImporteeTest::VARIABLE_ENV] ?? $_ENV[PlacementBaseImporteeTest::VARIABLE_ENV] ?? null;
+        $configure = $_SERVER[self::VARIABLE_ENV] ?? $_ENV[self::VARIABLE_ENV] ?? null;
 
         return \is_string($configure) && '' !== $configure
             ? $configure
@@ -184,7 +188,7 @@ final class EmpreinteEntreMoteursTest extends TestCase
      * commanditaire. C'était juste sur sa machine et faux partout ailleurs : sur la
      * base d'essai de la CI, peuplée de personnes inventées, il aurait **échoué** au
      * lieu de mesurer quoi que ce soit. Or ce qu'il vérifie n'a jamais été « l'arbre
-     * fait 274 personnes » — c'est `PlacementBaseImporteeTest` qui dit cela — mais
+     * fait 274 personnes » — mais
      * « la recopie n'a pas perdu de lignes en route ». Comparer à la source dit
      * exactement cela, et le dit pour n'importe quel jeu de données.
      *

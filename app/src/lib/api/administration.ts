@@ -702,8 +702,9 @@ export const GENRES_DE_SOURCE: readonly { valeur: GenreDeSource; libelle: string
 
 /**
  * Une source — la **notice** d'un fonds, pas son usage : la page et le `QUAY`
- * sont portés par la citation. `gedcomXref` n'est jamais envoyé : il appartient
- * au ré-import GEDCOM, et une source créée à l'écran le garde à `null`.
+ * sont portés par la citation. `gedcomXref` n'est jamais envoyé : c'est la
+ * référence d'une source venue du GEDCOM d'origine, et une source créée à l'écran
+ * le garde à `null`.
  */
 export interface SourceAdministration {
   id: number

@@ -66,9 +66,13 @@ class Person
     private ?int $id = null;
 
     /**
-     * L'identifiant GEDCOM avec ses arobases : `@I500001@`. C'est lui qui rend le
-     * ré-import **idempotent** (§ 9.8). `null` seulement entre la création applicative
-     * et le premier `flush` — le service le remplit immédiatement.
+     * L'identifiant GEDCOM avec ses arobases : `@I500001@` pour une fiche venue du
+     * fichier d'origine, `@I9xxxxx@` pour une fiche créée dans l'application (§ 9.8).
+     * C'est l'identifiant **stable** d'une personne — unique, jamais réattribué, à la
+     * différence de `id` qu'une restauration sur base neuve pourrait renuméroter.
+     * `null` seulement entre la création applicative et le premier `flush` — le service
+     * le remplit immédiatement. L'import GEDCOM qui s'appuyait dessus a été supprimé
+     * (ADR 0018) ; la référence, elle, reste.
      */
     #[ORM\Column(length: 20, nullable: true)]
     private ?string $gedcomXref = null;

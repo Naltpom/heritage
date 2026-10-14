@@ -182,7 +182,7 @@ describe('§ 14 — la fourchette arrive telle quelle jusqu’au HTML', () => {
 })
 
 describe('§ 1.3 — une valeur nulle garde sa ligne, un champ interdit n’en a pas', () => {
-  it('n’écrit la référence d’import qu’à l’administrateur', async () => {
+  it('n’écrit la référence GEDCOM qu’à l’administrateur', async () => {
     const html = await rendre(IdentiteFiche, { fiche: ficheComplete() })
     expect(html).toContain('Prénoms')
     expect(html).not.toContain('Référence GEDCOM')

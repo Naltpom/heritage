@@ -20,10 +20,12 @@ namespace App\Module\Core\Service;
  *
  * ## Pourquoi elle est dans `Core`
  *
- * Elle a existé en double : dans `Gedcom\Service\NormalisateurNom`, qui compose la
- * colonne à l'import, et dans `Tree\Serializer\NormaliseurDeRequete`, qui normalise le
- * terme de recherche. La règle 3 de l'ADR 0002 interdit à l'un d'importer l'autre, donc
- * les deux tables étaient recopiées.
+ * Elle a existé en double : dans le module `Gedcom` (supprimé depuis avec l'import,
+ * ADR 0018), qui composait la colonne à l'import, et dans
+ * `Tree\Serializer\NormaliseurDeRequete`, qui normalise le terme de recherche. La règle 3
+ * de l'ADR 0002 interdit à un module d'importer l'autre, donc les deux tables étaient
+ * recopiées. Aujourd'hui la colonne s'écrit par `Tree\Service\NormalisateurNom` et se
+ * cherche par `NormaliseurDeRequete` : deux appelants, une seule table.
  *
  * **Le jour où elles auraient divergé d'un seul caractère, la recherche aurait cessé de
  * trouver les noms qui le portent — sans erreur, sans test rouge.** Sur un arbre plein de
@@ -44,7 +46,7 @@ namespace App\Module\Core\Service;
  * | musl — **Alpine, l'image Docker du projet** | `?` |
  *
  * C'est exactement le scénario de ce projet : développement sous Windows, exécution dans
- * une image Alpine. La clé écrite à l'import et la clé cherchée à la requête seraient
+ * une image Alpine. La clé écrite en base et la clé cherchée à la requête seraient
  * calculées par deux bibliothèques différentes — soit la panne silencieuse que cette
  * classe existe pour supprimer, réintroduite par le moyen choisi pour l'empêcher.
  *
@@ -81,7 +83,7 @@ final class CleDeRecherche
 
     private const string REPLIES = 'AAAAAAaaaaaaEEEEeeeeIIIIiiiiOOOOOOooooooUUUUuuuuYYyyCcNnSsZzAaEeIiOoUuLlCcSsZzZz';
 
-    /** @var array<string, string>|null mémorisée : la clé est calculée 274 fois à l'import */
+    /** @var array<string, string>|null mémorisée : la clé se calcule une fois par fiche écrite */
     private static ?array $table = null;
 
     /**

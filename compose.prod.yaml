@@ -120,12 +120,11 @@
 #     snapshot du fournisseur) et, une fois, faire une VRAIE restauration d'essai
 #     — la procédure est écrite au-dessus du service.
 #
-#  6. DONNÉES RÉELLES — l'import du GEDCOM est une commande locale, jamais une
-#     fixture, et le fichier ne monte pas sur le serveur par le dépôt :
-#        docker compose -f compose.yaml -f compose.prod.yaml cp arbre.ged api:/tmp/
-#        docker compose -f compose.yaml -f compose.prod.yaml exec api \
-#            php bin/console heritage:import-gedcom /tmp/arbre.ged
-#     Supprimer le fichier du conteneur ensuite.
+#  6. DONNÉES RÉELLES — elles vivent dans la base de production et dans ses
+#     sauvegardes, jamais dans le dépôt ni dans une fixture. Il n'y a plus
+#     d'import GEDCOM (ADR 0018) : une base neuve se peuple en RESTAURANT un
+#     dump (procédure au-dessus du service `sauvegarde`). Le dump ne monte pas
+#     sur le serveur par le dépôt ; le supprimer de la machine une fois restauré.
 #
 #  7. MISES À JOUR — figer `IMAGE_TAG` sur une version (`IMAGE_TAG=2026-09-15`)
 #     plutôt que de laisser `prod` flotter : on veut pouvoir revenir en arrière
@@ -327,8 +326,8 @@ services:
       APP_DEBUG: 0
       # Sans cette ligne, le `garde-secrets` exigerait une variable que l'API ne
       # verrait jamais, et la pile démarrerait « vérifiée » en refusant le domaine
-      # réel sur toutes les requêtes. C'est le piège déjà payé sur GEDCOM_FILE et
-      # MEDIA_RACINE (voir compose.yaml) : Compose lit une variable du `.env` de la
+      # réel sur toutes les requêtes. C'est le piège déjà payé sur MEDIA_RACINE
+      # (voir compose.yaml) : Compose lit une variable du `.env` de la
       # racine sans jamais l'injecter dans un conteneur qui ne la déclare pas. Les
       # `environment:` fusionnent par clé entre les deux fichiers, la déclarer ici
       # suffit — et c'est sa place, la production étant le seul cas où elle doit

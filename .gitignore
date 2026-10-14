@@ -12,31 +12,25 @@
 # dossier sans avoir vérifié qu'il est bien couvert ci-dessous, et on n'utilise
 # ni `git add -A` ni `git add .` tant que la racine héberge ces fichiers.
 #
-# Le projet reste démarrable sans eux : les fixtures anonymisées à graine fixe
-# reproduisent la même topologie d'arbre (cf. dossier de mission § 9).
+# Le projet reste démarrable sans eux : l'arbre d'essai anonymisé des fixtures
+# (`doctrine:fixtures:load --group=essai --append`) suffit à le faire tourner.
 
-# --- GEDCOM : la source de vérité, sous toutes ses versions et sauvegardes ----
-# Motif volontairement non ancré ET sans nom de fichier : un .ged déposé
-# n'importe où, sous n'importe quel nom, reste de la donnée réelle. `*.ged`
-# couvre donc tout — l'arbre de travail quel que soit son nom, *-gardien.ged,
-# *.backup.ged et l'export MyHeritage d'origine (nee649_…_A.ged). Ne jamais
-# remplacer ce motif par un nom particulier : le fichier sur le poste ne porte
-# pas forcément le nom écrit dans la documentation, et un motif nommé qui rate
-# publierait la donnée elle-même.
+# --- GEDCOM : de la donnée réelle, sous toutes ses versions et sauvegardes ---
+# L'application n'importe plus de GEDCOM (ADR 0018) : la donnée réelle vit dans
+# la base de production et ses sauvegardes. Un .ged reste pourtant de la donnée
+# réelle — l'export MyHeritage d'origine, un arbre de travail, une sauvegarde —
+# et le dépôt ne doit jamais en porter. D'où un motif volontairement non ancré
+# ET sans nom de fichier : un .ged déposé n'importe où, sous n'importe quel nom,
+# est couvert — l'arbre de travail quel que soit son nom, *-gardien.ged,
+# *.backup.ged et l'export d'origine (nee649_…_A.ged). Ne jamais remplacer ce
+# motif par un nom particulier : le fichier sur le poste ne porte pas forcément
+# le nom écrit dans la documentation, et un motif nommé qui rate publierait la
+# donnée elle-même. Aucune exception : la fixture `.ged` des tests est partie
+# avec l'import, et l'arbre d'essai est désormais écrit en PHP
+# (api/src/DataFixtures/ArbreDEssaiFixtures.php).
 *.ged
 *.ged.bak
 *.gedcom
-
-# Seule exception, nommée et ancrée : les fixtures de test. Elles sont
-# synthétiques (en-tête « Fixture écrite à la main », « Collection d'essai,
-# sans valeur documentaire ») et deux tests les lisent —
-# api/tests/Gedcom/AnalyseurGedcomTest.php et ImportGedcomCommandTest.php.
-# Sans cette ré-inclusion elles ne sont dans aucun clone et l'intégration
-# continue échoue dès sa première exécution. L'ancrage sur ce seul répertoire
-# est ce qui empêche l'exception de rattraper un .ged réel posé ailleurs :
-# contre-épreuve à rejouer, `git check-ignore -v arbre-romarin-v5.ged` doit
-# continuer de rendre le code 0.
-!/api/tests/Gedcom/fixtures/*.ged
 
 # --- Sorties du chantier généalogique (racine du dépôt) ----------------------
 # Graphes Graphviz et rendus SVG de l'arbre. Ancrés à la racine : l'interface

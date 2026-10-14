@@ -17,7 +17,7 @@ use PHPUnit\Framework\TestCase;
  *
  * | forme            | exemple                | où                                    |
  * |------------------|------------------------|---------------------------------------|
- * | GEDCOM           | `BET 1901 AND 1909`    | fixtures, contrat, convertisseur      |
+ * | GEDCOM           | `BET 1901 AND 1909`    | fixtures, contrat, saisie (`raw`)     |
  * | compacte (§ 14.4)| `1901-1909`            | `ligneDates`, `etiquetteDates`        |
  * | prose            | « entre 1901 et 1909 » | `UncertainDate::format()`, les docs   |
  * | ligne complète   | `1901-1909 – 1987`     | fiche, recherche, barre de chronologie|
@@ -131,7 +131,7 @@ final class CoherenceDesFourchettesTest extends TestCase
     private const RACINES = [
         'docs' => ['md', 'py'],
         'api/src' => ['php'],
-        'api/tests' => ['php', 'ged'],
+        'api/tests' => ['php'],
         'app/src' => ['ts', 'vue'],
     ];
 

@@ -88,7 +88,7 @@ function changerForme(valeur: string): void {
 /**
  * **Cette date se rouvre-t-elle sans risque ?**
  *
- * Certaines formes que l'import produit — les `FROM` et `TO` du GEDCOM — ne se
+ * Certaines formes que l'import initial a produites — les `FROM` et `TO` du GEDCOM — ne se
  * laissent pas exprimer par ce champ. Les afficher quand même les viderait, et
  * un champ vide se compose en « aucune date », c'est-à-dire en **proposition de
  * suppression** d'une date sourcée que personne n'a demandé d'effacer.

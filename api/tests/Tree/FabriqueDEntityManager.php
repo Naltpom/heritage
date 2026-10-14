@@ -14,8 +14,8 @@ use Doctrine\ORM\ORMSetup;
 /**
  * Monte un `EntityManager` autonome sur les seules entités de `Tree`.
  *
- * Deux usages : une base SQLite jetable en mémoire ({@see BaseDArbreEnMemoire}) et la
- * base PostgreSQL réellement peuplée par l'import ({@see PlacementBaseImporteeTest}).
+ * Deux usages : une base SQLite jetable en mémoire ({@see BaseDArbreEnMemoire}) et une
+ * base PostgreSQL réellement peuplée ({@see EmpreinteEntreMoteursTest}).
  * Les deux partagent exactement la même configuration Doctrine — c'est ce qui rend les
  * deux mesures comparables.
  *

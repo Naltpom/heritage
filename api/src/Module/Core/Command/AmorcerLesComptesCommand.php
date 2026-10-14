@@ -17,10 +17,10 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * ## Pourquoi cette commande existe à côté de la fixture
  *
  * `doctrine:fixtures:load` **purge la base** (avertissement de `config/bundles.php`).
- * Or l'amorçage est précisément ce qu'on veut rejouer **sur une base garnie**, après un
- * réimport GEDCOM qui a remis `core_user` à zéro. Passer par les fixtures pour cela
- * détruirait les 274 personnes qu'on vient d'importer — la commande qui répare devenant
- * la commande qui casse.
+ * Or l'amorçage est précisément ce qu'on veut rejouer **sur une base garnie** — par
+ * exemple une base restaurée dont `core_user` ne porte pas le compte attendu. Passer par
+ * les fixtures pour cela détruirait l'arbre entier — la commande qui répare devenant la
+ * commande qui casse.
  *
  * Les deux chemins appellent le **même** service, donc ils ne peuvent pas diverger.
  *
