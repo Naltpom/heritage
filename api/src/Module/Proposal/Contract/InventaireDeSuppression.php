@@ -14,8 +14,9 @@ namespace App\Module\Proposal\Contract;
  * Supprimer une personne n'est pas supprimer une ligne. `tree_person` est référencée par
  * six clés étrangères — `tree_child.person_id`, `tree_citation.person_id`,
  * `tree_fact.person_id`, `tree_note.person_id` en `ON DELETE CASCADE`,
- * `tree_family.husband_id` et `wife_id` en `ON DELETE SET NULL` — et par une demi-douzaine
- * de colonnes sans contrainte, dans `med_media`, `prp_*` et `mbr_*`. Un `DELETE` écrit à la
+ * `tree_family.husband_id` et `wife_id` en `ON DELETE SET NULL` — et par une vingtaine
+ * de colonnes sans contrainte, dans `med_media`, `prp_*`, `mbr_*`, `dmr_*`, `evt_*`, `trg_*`
+ * et `qst_*` (la carte complète : `heritage:verifier-integrite`). Un `DELETE` écrit à la
  * main dans un client SQL emporte donc les quatre premières **sans que personne ne sache
  * combien**, et laisse les autres pendantes.
  *
@@ -67,6 +68,16 @@ namespace App\Module\Proposal\Contract;
  *
  * Les deux sont **refusés au dépôt** et non à la validation : un contributeur doit
  * apprendre tout de suite que ce n'est pas cette fiche-là qu'il faut effacer.
+ *
+ * ## Ce que les autres modules y accrochent : `dependances`
+ *
+ * Quatre modules tiennent un `person_id` **sans clé étrangère** que rien ne consultait —
+ * une démarche d'acte, une invitation à un événement, une participation à un tirage, une
+ * autorisation de partage de naissance — et un cinquième des questions posées sur la
+ * fiche. Chacun mesure désormais les siennes ({@see DependancesDUneFiche}), et
+ * {@see DependanceDeFiche} dit, nature par nature, si elle **bloque** ou si elle est
+ * **nettoyée** dans la transaction. Elles entrent dans la comparaison comme le reste : une
+ * démarche ouverte sur la fiche entre le dépôt et la validation rend la demande caduque.
  */
 final readonly class InventaireDeSuppression
 {
@@ -86,11 +97,20 @@ final readonly class InventaireDeSuppression
      *                                                                                                        **Non vide interdit.**
      * @param int                                                                         $descendanceTotale  le nombre de fiches qui descendent de celle-ci,
      *                                                                                                        **toutes générations confondues**. Voir l'en-tête.
-     * @param int                                                                         $medias             `med_media` visant la personne. **Non nul interdit.**
+     * @param int                                                                         $medias             `med_media` visant la personne, ou une union ou une citation qui
+     *                                                                                                        partirait avec elle. **Non nul interdit.**
      * @param int|null                                                                    $membreId           le rattachement `mbr_member` dont cette fiche est la
      *                                                                                                        racine. **Non nul interdit.**
      * @param int                                                                         $invitationsActives invitations en attente désignant cette fiche.
      *                                                                                                        **Non nul interdit.**
+     * @param list<DependanceMesuree>                                                     $dependances        ce que les autres modules y accrochent, dans l'ordre de
+     *                                                                                                        {@see DependanceDeFiche} — voir l'en-tête
+     * @param list<int>                                                                   $citationsEmportees les `tree_citation` qui partiraient avec la fiche — les siennes,
+     *                                                                                                        celles de ses faits et des unions effacées. **Pas dans
+     *                                                                                                        `versJson()`** : c'est l'outil qui permet à `Proposal` de
+     *                                                                                                        compter les preuves qui les visent, et `medias` porte déjà
+     *                                                                                                        ce compte. Un inventaire relu depuis la base n'en a plus
+     *                                                                                                        besoin.
      */
     public function __construct(
         public int $personneId,
@@ -105,7 +125,27 @@ final readonly class InventaireDeSuppression
         public int $medias = 0,
         public ?int $membreId = null,
         public int $invitationsActives = 0,
+        public array $dependances = [],
+        public array $citationsEmportees = [],
     ) {
+    }
+
+    /**
+     * Les unions qui partent avec la fiche — celles dont `supprimee` vaut `true`.
+     *
+     * @return list<int>
+     */
+    public function famillesEmportees(): array
+    {
+        $familles = [];
+
+        foreach ($this->unions as $union) {
+            if ($union['supprimee']) {
+                $familles[] = $union['familleId'];
+            }
+        }
+
+        return $familles;
     }
 
     /**
@@ -132,6 +172,8 @@ final readonly class InventaireDeSuppression
             $medias,
             $this->membreId,
             $this->invitationsActives,
+            $this->dependances,
+            $this->citationsEmportees,
         );
     }
 
@@ -158,6 +200,39 @@ final readonly class InventaireDeSuppression
             $this->medias,
             $membreId,
             $invitationsActives,
+            $this->dependances,
+            $this->citationsEmportees,
+        );
+    }
+
+    /**
+     * Le même inventaire, avec ce que les autres modules ont répondu
+     * ({@see DependancesDUneFiche::mesurer()}).
+     *
+     * Les mesures sont remises dans l'ordre de {@see DependanceDeFiche}, une nature
+     * répondue deux fois est additionnée, une nature à zéro est retirée : c'est ce qui rend
+     * l'inventaire comparable quel que soit l'ordre dans lequel le conteneur a rangé les
+     * modules.
+     *
+     * @param list<DependanceMesuree> $dependances
+     */
+    public function avecDependances(array $dependances): self
+    {
+        return new self(
+            $this->personneId,
+            $this->displayName,
+            $this->notes,
+            $this->citations,
+            $this->faits,
+            $this->filiations,
+            $this->unions,
+            $this->descendants,
+            $this->descendanceTotale,
+            $this->medias,
+            $this->membreId,
+            $this->invitationsActives,
+            self::ordonner($dependances),
+            $this->citationsEmportees,
         );
     }
 
@@ -173,7 +248,14 @@ final readonly class InventaireDeSuppression
         return [] !== $this->descendants
             || $this->medias > 0
             || null !== $this->membreId
-            || $this->invitationsActives > 0;
+            || $this->invitationsActives > 0
+            || [] !== $this->dependancesBloquantes();
+    }
+
+    /** @return list<DependanceMesuree> */
+    public function dependancesBloquantes(): array
+    {
+        return array_values(array_filter($this->dependances, static fn (DependanceMesuree $d): bool => $d->nature->bloque()));
     }
 
     /**
@@ -235,6 +317,12 @@ final readonly class InventaireDeSuppression
                 .'un compte sans racine dans l\'arbre. Révoquez-la ou redirigez-la vers une autre fiche d\'abord.';
         }
 
+        // Ce que les autres modules y accrochent, chacun avec son geste — la phrase est
+        // celle de l'énumération, pour qu'une nature n'ait qu'une seule façon d'être dite.
+        foreach ($this->dependancesBloquantes() as $dependance) {
+            $raisons[] = $dependance->nature->raison($dependance->nombre);
+        }
+
         return $raisons;
     }
 
@@ -259,6 +347,14 @@ final readonly class InventaireDeSuppression
         ] as [$nombre, $singulier, $pluriel]) {
             if ($nombre > 0) {
                 $morceaux[] = \sprintf('%d %s', $nombre, 1 === $nombre ? $singulier : $pluriel);
+            }
+        }
+
+        // Ce qui part avec elle dans les autres modules. Une nature qui bloque n'y figure
+        // pas : elle n'emporte rien, elle empêche — `raisonsDuBlocage()` la dit.
+        foreach ($this->dependances as $dependance) {
+            if (!$dependance->nature->bloque()) {
+                $morceaux[] = $dependance->nature->enMorceau($dependance->nombre);
             }
         }
 
@@ -309,6 +405,16 @@ final readonly class InventaireDeSuppression
             'medias' => $this->medias,
             'membreId' => $this->membreId,
             'invitationsActives' => $this->invitationsActives,
+            // `bloquante` est recopiée de l'énumération : elle sert le front, qui l'affiche
+            // sans redériver la règle.
+            'dependances' => array_map(
+                static fn (DependanceMesuree $d): array => [
+                    'nature' => $d->nature->value,
+                    'nombre' => $d->nombre,
+                    'bloquante' => $d->nature->bloque(),
+                ],
+                $this->dependances,
+            ),
         ];
     }
 
@@ -338,7 +444,58 @@ final readonly class InventaireDeSuppression
             self::entier($json['medias'] ?? null),
             \is_numeric($json['membreId'] ?? null) ? (int) $json['membreId'] : null,
             self::entier($json['invitationsActives'] ?? null),
+            // Absente d'un inventaire déposé avant elle : aucune dépendance. C'est le sens
+            // sûr — une dépendance apparue depuis fera diverger la comparaison.
+            self::ordonner(self::dependances($json['dependances'] ?? null)),
         );
+    }
+
+    /**
+     * Une nature inconnue — retirée de l'énumération depuis le dépôt — est ignorée : elle
+     * ne peut plus rien bloquer, et la relire ferait lever un affichage.
+     *
+     * @return list<DependanceMesuree>
+     */
+    private static function dependances(mixed $brut): array
+    {
+        $dependances = [];
+
+        foreach (\is_array($brut) ? $brut : [] as $ligne) {
+            $nature = \is_array($ligne) && \is_string($ligne['nature'] ?? null) ? DependanceDeFiche::tryFrom($ligne['nature']) : null;
+
+            if (null !== $nature) {
+                $dependances[] = new DependanceMesuree($nature, self::entier($ligne['nombre'] ?? null));
+            }
+        }
+
+        return $dependances;
+    }
+
+    /**
+     * L'ordre canonique : celui des cas de {@see DependanceDeFiche}, une ligne par nature,
+     * aucune à zéro.
+     *
+     * @param list<DependanceMesuree> $dependances
+     *
+     * @return list<DependanceMesuree>
+     */
+    private static function ordonner(array $dependances): array
+    {
+        $parNature = [];
+
+        foreach ($dependances as $dependance) {
+            $parNature[$dependance->nature->value] = ($parNature[$dependance->nature->value] ?? 0) + $dependance->nombre;
+        }
+
+        $ordonnees = [];
+
+        foreach (DependanceDeFiche::cases() as $nature) {
+            if (($parNature[$nature->value] ?? 0) > 0) {
+                $ordonnees[] = new DependanceMesuree($nature, $parNature[$nature->value]);
+            }
+        }
+
+        return $ordonnees;
     }
 
     /** @return list<array{familleId: int, libelle: string, enfants: int, supprimee: bool}> */

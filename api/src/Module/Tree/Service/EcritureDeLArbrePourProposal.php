@@ -880,7 +880,29 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             // le total vaut zéro et trois requêtes par génération seraient dépensées pour
             // l'apprendre. C'est le cas courant — la fiche vide d'un doublon.
             [] === $descendants ? 0 : $this->compterLaDescendance($id),
+            // Les citations qui partiraient, **par identifiant** : une preuve peut viser une
+            // citation (`med_media.subject_kind = 'citation'`), et `Proposal` doit pouvoir
+            // demander à `Media` combien en pendraient. Même condition que le compte
+            // ci-dessus, par la même requête — un nombre et une liste qui divergeraient
+            // annonceraient une chose et en bloqueraient une autre.
+            citationsEmportees: $this->identifiantsDesAnnexes(Citation::class, $id, $faits, $famillesEffacees),
         );
+    }
+
+    /**
+     * @param class-string<Citation|Note> $entite
+     * @param list<int>                   $faits
+     * @param list<int>                   $famillesEffacees
+     *
+     * @return list<int>
+     */
+    private function identifiantsDesAnnexes(string $entite, int $personneId, array $faits, array $famillesEffacees): array
+    {
+        /** @var list<array{id: int}> $lignes */
+        $lignes = $this->requeteDAnnexes('SELECT x.id FROM %s x WHERE %s ORDER BY x.id ASC', $entite, $personneId, $faits, $famillesEffacees)
+            ->getArrayResult();
+
+        return array_map(static fn (array $ligne): int => (int) $ligne['id'], $lignes);
     }
 
     /**

@@ -262,6 +262,21 @@ Compensation, en quatre mesures **toutes obligatoires** :
    en local. Elle parcourt toutes les références inter-modules et signale les pendantes.
    C'est le filet que la base ne tend plus. Sans elle, la règle 2 est un pari ; avec elle,
    c'est un choix.
+   *Livrée le 2026-10-06, à la racine de `api/src/` comme le prévoit la section
+   « Conséquences » : `api/src/Integrite/`. Elle ne lit aucune table elle-même — chaque
+   module déclare ses références (`Core\Contract\ReferencesInterModulesInterface`) et le
+   propriétaire de chaque cible dit ce qui existe (`Core\Contract\CiblesDeReferenceInterface`),
+   si bien qu'aucune jointure ne franchit une frontière. Elle distingue les références
+   **strictes**, dont une valeur pendante la fait sortir en `1`, des références **tolérées**,
+   faites pour survivre à leur cible (historique, preuve, caducité prévue). Le détail,
+   colonne par colonne, est au § 10.8 de `docs/modele-donnees.md`. En CI, elle se branche
+   sur la base PostgreSQL migrée du travail « api » de `.github/workflows/ci.yml` ; ses
+   tests, eux, tournent sur SQLite avec le reste de la suite.*
+   *La mesure 2 a pris, pour la suppression d'une fiche, la forme d'un point de greffe
+   plutôt que d'un événement — le dépôt n'a pas de bus : `Proposal` déclare
+   `Proposal\Contract\DependancesDUneFiche`, chaque module qui tient un `person_id` y répond
+   pour ses tables, et la décision écrite pour chaque cas (bloquer, ou nettoyer dans la
+   transaction avec une trace) est `Proposal\Contract\DependanceDeFiche`.*
 
 ## Alternatives considérées
 

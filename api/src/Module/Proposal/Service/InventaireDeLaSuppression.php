@@ -6,9 +6,12 @@ namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Contract\AnnuaireDesMembresInterface;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Proposal\Contract\DependancesDUneFiche;
+use App\Module\Proposal\Contract\FicheASupprimer;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
 use App\Module\Proposal\Service\Port\PortArbre;
 use App\Module\Proposal\Service\Port\PortMedias;
+use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -33,6 +36,21 @@ use App\Module\Proposal\Service\Port\PortMedias;
  * trois chemins existaient déjà. Ce service ne fait donc qu'une chose : les appeler
  * ensemble, **toujours ensemble**, et dans cet ordre.
  *
+ * ## Et ce que les autres modules y accrochent
+ *
+ * Une quatrième source s'y ajoute, par greffe plutôt que par port : `Demarche`,
+ * `Evenement`, `Tirage`, `Membership` et `Question` tiennent eux aussi un `person_id` sans
+ * clé étrangère, et chacun répond pour le sien ({@see DependancesDUneFiche}). Ils sont
+ * rassemblés par l'étiquette `proposal.dependances_d_une_fiche` : un module qui en ajoute
+ * un n'a rien à modifier ici.
+ *
+ * ## Les preuves de ce qui part avec la fiche
+ *
+ * `medias` compte les preuves visant la fiche **et** celles qui visent une union ou une
+ * citation emportées avec elle. Une union dont elle est le seul époux part avec elle, une
+ * citation de ses faits aussi — et une preuve rattachée à l'une d'elles serait devenue
+ * orpheline exactement comme celle de la fiche, sans que le compte l'ait annoncée.
+ *
  * ## Pourquoi une classe pour trois appels
  *
  * Parce que trois endroits ont besoin du même inventaire complet — le constructeur au
@@ -49,6 +67,9 @@ final readonly class InventaireDeLaSuppression
         private PortArbre $arbre,
         private PortMedias $medias,
         private AnnuaireDesMembresInterface $annuaire,
+        /** @var iterable<DependancesDUneFiche> */
+        #[AutowireIterator('proposal.dependances_d_une_fiche')]
+        private iterable $dependances = [],
     ) {
     }
 
@@ -69,9 +90,32 @@ final readonly class InventaireDeLaSuppression
         }
 
         $comptes = $this->annuaire->rattachementsDeLaPersonne($personneId);
+        $fiche = new FicheASupprimer($personneId, $arbre->famillesEmportees());
+
+        $mesures = [];
+        foreach ($this->dependances as $module) {
+            $mesures = [...$mesures, ...$module->mesurer($fiche)];
+        }
 
         return $arbre
-            ->avecMedias($this->medias->compterLesMediasDe(SubjectKind::Personne->value, $personneId))
-            ->avecComptes($comptes['membreId'], $comptes['invitationsActives']);
+            ->avecMedias($this->compterLesPreuves($arbre))
+            ->avecComptes($comptes['membreId'], $comptes['invitationsActives'])
+            ->avecDependances($mesures);
+    }
+
+    /** Les preuves de la fiche, de ses unions emportées et de ses citations emportées. */
+    private function compterLesPreuves(InventaireDeSuppression $arbre): int
+    {
+        $preuves = $this->medias->compterLesMediasDe(SubjectKind::Personne->value, $arbre->personneId);
+
+        foreach ($arbre->famillesEmportees() as $familleId) {
+            $preuves += $this->medias->compterLesMediasDe(SubjectKind::Famille->value, $familleId);
+        }
+
+        foreach ($arbre->citationsEmportees as $citationId) {
+            $preuves += $this->medias->compterLesMediasDe(SubjectKind::Citation->value, $citationId);
+        }
+
+        return $preuves;
     }
 }
