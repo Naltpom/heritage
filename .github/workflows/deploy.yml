@@ -299,7 +299,8 @@ jobs:
           # long. 35 minutes couvrent une construction complète sans cache ; le
           # `timeout-minutes` du travail, à 40, reste la borne extérieure.
           command_timeout: 35m
-          script_stop: true
+          # Pas de `script_stop` : l'action épinglée ne le connaît plus. C'est le
+          # `set -eu` en tête du script qui l'arrête à la première erreur.
           script: |
             set -eu
             cd "$APP_DIR"
