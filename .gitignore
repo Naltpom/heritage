@@ -134,6 +134,10 @@ symfony.lock.bak
 # donnée que la section du haut.
 uploads/
 backups/
+# Vidages pris par `.github/scripts/deployer-sur-le-vps.sh` avant chaque mise en
+# production, à la racine du clone du VPS. Ignoré, donc intact après le
+# `git reset --hard` du déploiement (le script ne fait aucun `git clean`).
+/backup/
 *.sql
 *.sql.gz
 *.dump

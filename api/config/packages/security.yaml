@@ -99,6 +99,10 @@ security:
         # un `404` unique, un limiteur par IP (`Evenement\Service\LimiteurDesLiens`) — et
         # le même `/` final, qui n'ouvre rien d'autre sous `/api/evenements`.
         - { path: ^/api/evenements/lien/, roles: PUBLIC_ACCESS }
+        # La sonde de disponibilité (`Core\Controller\SanteController`), pour une sonde
+        # extérieure qui n'a pas de compte. Elle ne rend que `{"statut":"ok"}` ou un `503`
+        # sans détail. Ancrée des deux côtés : elle n'ouvre rien d'autre que ce chemin.
+        - { path: ^/api/sante$, roles: PUBLIC_ACCESS }
         # Avant `^/api`, faute de quoi cette règle ne serait jamais atteinte. Le journal
         # d'audit, les réglages, la bascule « voir comme un membre » et la gestion des
         # comptes vivent tous derrière.

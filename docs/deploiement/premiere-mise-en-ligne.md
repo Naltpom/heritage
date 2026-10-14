@@ -75,6 +75,7 @@ vps$ ssh -T github-heritage
 | `SSH_KEY` | secret | **la clé privée** de la paire *GitHub Actions → VPS*, en entier |
 | `SSH_PORT` | secret | `22` |
 | `APP_DIR` | secret | `/home/ubuntu/apps/heritage` |
+| `VPS_SSH_FINGERPRINT` | secret, **facultatif mais recommandé** | l'empreinte de la clé d'hôte du VPS, `SHA256:…` — § 2.2 bis |
 | `DOMAINE_PUBLIC` | **variable**, pas secret | `heritage.naltpom.fr` |
 
 Sur `SSH_KEY`, trois détails qui font échouer le flux avec un message
@@ -100,6 +101,45 @@ rendrait masqué (`***`) dans les journaux d'exécution, au moment précis où l
 cherche pourquoi un contrôle échoue. Le flux a de toute façon un repli en dur sur
 `heritage.naltpom.fr` : la variable ne sert qu'à pouvoir changer de domaine sans
 toucher au dépôt.
+
+### 2.2 bis L'empreinte de la clé d'hôte — `VPS_SSH_FINGERPRINT`
+
+Sans ce secret, le flux se connecte à **n'importe quel serveur** qui répond à
+`SSH_HOST` : la clé d'hôte n'est pas vérifiée. Avec lui, `appleboy/ssh-action`
+compare l'empreinte SHA256 de la clé que présente le serveur à celle-ci, et
+refuse de se connecter si elles diffèrent. Un secret absent ou vide garde le
+comportement d'avant ; le flux le signale alors par un avertissement (étape
+« L'empreinte de la clé d'hôte est-elle posée ? »).
+
+**Quelle clé.** Un serveur OpenSSH en a d'ordinaire trois (ECDSA, RSA, Ed25519)
+et n'en présente qu'une, celle que le client préfère. Le client de l'action est
+écrit en Go (`golang.org/x/crypto/ssh`) et ne demande rien de particulier : sa
+préférence par défaut est **ECDSA, puis RSA, puis Ed25519**. C'est donc
+l'empreinte de la clé ECDSA qu'il faut, si le serveur en a une.
+
+À lire **sur le serveur**, dans une session SSH déjà établie — pas avec
+`ssh-keyscan` depuis ailleurs, qui croit celui qui répond, c'est-à-dire
+exactement ce qu'on veut cesser de faire :
+
+```
+vps$ for k in /etc/ssh/ssh_host_ecdsa_key.pub /etc/ssh/ssh_host_rsa_key.pub \
+              /etc/ssh/ssh_host_ed25519_key.pub; do
+       [ -f "$k" ] && ssh-keygen -E sha256 -lf "$k"
+     done
+```
+
+> Attendu : une ligne par clé, la première étant l'ECDSA si elle existe :
+> `256 SHA256:AbC…xyz root@vps (ECDSA)`. **La valeur du secret est le deuxième
+> champ de la première ligne, `SHA256:` compris.**
+
+Puis **Settings → Secrets and variables → Actions → New repository secret** :
+`VPS_SSH_FINGERPRINT` = cette valeur.
+
+Si le déploiement suivant échoue à l'étape « Déployer » sur une erreur
+`fingerprint mismatch`, c'est presque toujours la mauvaise des trois clés :
+relire l'ordre ci-dessus. Et après une réinstallation du serveur (clés d'hôte
+régénérées), ce secret est à refaire — c'est précisément le cas où le refus est
+souhaitable tant qu'on n'a pas vérifié.
 
 ### 2.3 Choisir et noter le SMTP des invitations
 
@@ -355,7 +395,7 @@ plus) — c'est pourquoi ces deux variables sont aussi injectées dans le servic
 `lieux`.
 
 Ce recours tourne **tout seul**, à deux moments : à la fin de chaque
-déploiement (§ 11.2, étape 8) et chaque nuit (service `lieux` de
+déploiement (§ 11.2, étape 9) et chaque nuit (service `lieux` de
 `compose.prod.yaml`). Il ne traite que les lieux **jamais situés**, jamais une
 correction manuelle, jamais un nom porté par plusieurs communes (la commande ne
 laisse pas un tiers choisir à sa place), et ne redemande pas avant **trente
@@ -688,20 +728,38 @@ Sur le VPS, `.github/scripts/deployer-sur-le-vps.sh` :
    tard, `git rev-parse HEAD` rend déjà la nouvelle valeur) ;
 2. `git fetch` + `git reset --hard <sha>` ;
 3. construit les deux images sous l'étiquette `IMAGE_TAG=<sha court>` ;
-4. `up -d`, puis attend jusqu'à 5 minutes une réponse sur `/sante.php` ;
-5. **compare l'empreinte servie à celle que le dépôt produit** ;
-6. vérifie qu'un `Host` inconnu est toujours fermé, et que `/` rend `200` ;
-7. n'enregistre le déploiement comme réussi qu'après ces quatre contrôles ;
-8. **puis seulement**, situe les lieux nouveaux :
+4. **vide la base** (`pg_dump -Fc`, par le conteneur `db`) dans
+   `backup/deploiement-<AAAAMMJJTHHMMSSZ>-avant-<sha court>.dump`, à la racine
+   du clone — **avant** le démarrage, donc avant que l'entrypoint ne joue la
+   moindre migration. Le fichier s'écrit sous un nom temporaire et ne prend son
+   nom qu'une fois complet ; le répertoire est en `700`, les fichiers en `600` ;
+   les **10 plus récents** sont gardés, les autres supprimés (seulement ceux de
+   ce motif, et seulement après un vidage réussi). **Pas de vidage, pas de
+   déploiement** : le script s'arrête sans avoir touché la pile en service. Seule
+   exception, dite en toutes lettres dans le journal du flux : aucune base
+   n'existe encore (ni conteneur `db` en service, ni volume) — c'est le premier
+   déploiement, il n'y a rien à sauvegarder. Un conteneur `db` arrêté au-dessus
+   d'un volume existant, lui, est un refus ;
+5. `up -d`, puis attend jusqu'à 5 minutes une réponse sur `/sante.php` ;
+6. **compare l'empreinte servie à celle que le dépôt produit** ;
+7. vérifie qu'un `Host` inconnu est toujours fermé, et que `/` rend `200` ;
+8. n'enregistre le déploiement comme réussi qu'après ces quatre contrôles ;
+9. **puis seulement**, situe les lieux nouveaux :
    `heritage:resoudre-les-lieux --en-ligne` dans le conteneur `api`, borné à cinq
    minutes. Cette étape vient **après** tout ce qui décide du retour arrière et
    ne peut pas en déclencher un : si Nominatim est tombé ou si la commande
    échoue, le script le dit et le déploiement reste réussi — le service `lieux`
    rejouera la nuit suivante.
 
-**Si l'un échoue, il revient tout seul** : `git reset --hard` sur le commit
-précédent, `IMAGE_TAG` remis à l'étiquette précédente, `up -d` **sans
-reconstruction** — l'image d'avant est encore là, entière, et c'est tout
+**Un vidage raté n'entraîne pas de retour arrière** : rien n'a été démarré, la
+version en service tourne toujours, et `.deploiement/env` est remis sur
+l'étiquette qu'il portait avant ce déploiement. Le clone, lui, est déjà sur le
+nouveau commit ; réparer la cause, puis relancer le flux.
+
+**Si la construction, le démarrage ou l'un des contrôles échoue, il revient tout
+seul** :
+`git reset --hard` sur le commit précédent, `IMAGE_TAG` remis à l'étiquette
+précédente, `up -d` **sans reconstruction** — l'image d'avant est encore là, entière, et c'est tout
 l'intérêt d'une étiquette par commit. Le flux sort en erreur quand même : un
 retour arrière réussi reste un déploiement raté.
 
@@ -711,8 +769,14 @@ intact après le `git reset --hard`, ce qui est précisément le moment où il s
 ```
 vps$ cat ~/apps/heritage/.deploiement/courant      # le SHA en service
 vps$ cat ~/apps/heritage/.deploiement/precedent    # la cible du retour arrière
-vps$ tail -5 ~/apps/heritage/.deploiement/journal  # l'historique
+vps$ tail -5 ~/apps/heritage/.deploiement/journal  # l'historique, vidages compris
+vps$ ls -l ~/apps/heritage/backup/                  # les vidages d'avant déploiement
 ```
+
+`backup/` est ignoré par Git (`/backup/` dans `.gitignore`) : le `git reset
+--hard` du flux ne le touche pas, et le script ne fait aucun `git clean`. Les
+images ne le voient pas non plus — leurs contextes de construction sont `api/`
+et `app/`.
 
 ### 11.3 Le contrôle public
 
@@ -752,6 +816,52 @@ Conséquence pratique, et c'est une règle de conception, pas une précaution :
 Ne sont pas rattrapés non plus : les courriels déjà partis, les jetons
 d'invitation déjà consommés, les fichiers déjà téléversés.
 
+Ce qui reste possible, **à la main** : restaurer le vidage pris juste avant le
+déploiement fautif (§ 11.6). Au prix de tout ce qui a été écrit depuis.
+
+### 11.6 Restaurer le vidage d'un déploiement
+
+`backup/deploiement-<horodatage>-avant-<etiquette>.dump` est la base **telle que
+la servait la version d'avant `<etiquette>`**, juste avant son démarrage. Le
+restaurer efface tout ce qui a été écrit depuis (demandes, comptes, réglages) :
+c'est le dernier recours contre une migration qui a abîmé les données, pas un
+geste de routine. Il ne contient que la base — les fichiers téléversés (volume
+`televersements`) ne sont ni dans le vidage ni touchés par sa restauration.
+
+```
+vps$ cd ~/apps/heritage
+vps$ C="docker compose --env-file .env --env-file .deploiement/env -f compose.yaml -f compose.prod.yaml"
+vps$ ls -l backup/ ; tail -n 10 .deploiement/journal     # choisir le vidage
+vps$ $C stop app api lieux sauvegarde                    # plus rien n'écrit
+vps$ $C exec -T db sh -c 'dropdb -U "$POSTGRES_USER" --force "$POSTGRES_DB" \
+       && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
+vps$ $C exec -T db sh -c 'pg_restore --exit-on-error -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+       < backup/deploiement-<horodatage>-avant-<etiquette>.dump ; echo "code=$?"
+```
+
+> Attendu : `code=0`, sans message `error`. Sinon, reprendre au `dropdb`.
+
+**On repart d'une base vide, et ce n'est pas un excès de prudence.**
+`pg_restore --clean` ne supprime que les objets **présents dans le vidage** : les
+tables et colonnes créées par les migrations de `<etiquette>` survivraient, et
+la reprise suivante de ces migrations échouerait sur des objets déjà là. La base
+recréée hérite de la collation ICU `fr-FR` du cluster (`POSTGRES_INITDB_ARGS`) ;
+rien à repréciser.
+
+Reste à redémarrer **une version qui va avec cette base** :
+
+- **la version d'avant `<etiquette>`** si c'est une migration de `<etiquette>` qu'on
+  veut défaire. Si le flux est déjà revenu tout seul sur elle (§ 11.2),
+  `$C up -d` suffit ; si `<etiquette>` est encore en service, lancer le retour
+  arrière (§ 11.4, ou `bash .github/scripts/deployer-sur-le-vps.sh retour-arriere`
+  sur le VPS) ;
+- **jamais `<etiquette>` elle-même** dans ce cas : son entrypoint rejouerait
+  aussitôt les migrations qu'on vient de défaire.
+
+Toute version **au moins aussi récente** que le vidage est cohérente avec lui :
+l'entrypoint joue les migrations manquantes, dans l'ordre. Une version **plus
+ancienne** ne l'est pas — même raison qu'au § 11.5.
+
 ---
 
 ## 12. Recette — la liste à cocher
@@ -771,6 +881,8 @@ d'invitation déjà consommés, les fichiers déjà téléversés.
 | 11 | connexion avec le compte du § 9 | l'arbre s'affiche |
 | 12 | inviter une adresse à soi et **ouvrir le lien reçu** | il pointe sur `https://heritage.naltpom.fr`, **pas** `localhost` |
 | 13 | `ls ~/backups/heritage` (le lendemain) | un `.dump` et un `.tar.gz` |
+| 14 | `curl -s https://heritage.naltpom.fr/api/sante` | `{"statut":"ok"}` |
+| 15 | `ls -l ~/apps/heritage/backup/` (après un déploiement par le flux) | un `deploiement-…-avant-<sha court>.dump`, `-rw-------` |
 
 La ligne 12 est celle qu'on saute, et c'est la seule qui teste la chaîne entière
 du courriel. Utilisez une adresse à vous : un lien d'invitation est à usage
@@ -792,6 +904,34 @@ Cette double option `--env-file` est **obligatoire** dans toutes les commandes
 manuelles : dès qu'on passe `--env-file`, Compose cesse de charger `.env` tout
 seul, et les deux doivent être nommés, `.env` en premier. Sans le second, Compose
 prendrait le `IMAGE_TAG` de `.env` (`dev`) et parlerait d'une autre pile.
+
+Les journaux de chaque conteneur sont **plafonnés** (ancre `x-logging` des deux
+fichiers Compose) : 5 fichiers de 10 Mo au plus, 50 Mo par conteneur. Au-delà,
+les plus anciennes lignes sont perdues — ce qui doit durer plus longtemps ne
+s'y cherche pas.
+
+### Sonde extérieure — à poser, rien ne prévient sinon
+
+Rien dans la pile ne prévient quand le site tombe : le flux de déploiement ne
+regarde qu'au moment où il tourne. **Poser une sonde de disponibilité hébergée
+AILLEURS** que sur ce VPS — une sonde sur la machine qu'elle surveille tombe avec
+elle — (un service de surveillance en ligne, ou un Uptime Kuma sur une autre
+machine), qui :
+
+- interroge **`https://heritage.naltpom.fr/api/sante`** toutes les 1 à 5 minutes,
+  et attend `200` avec `{"statut":"ok"}` ;
+- **alerte sur l'expiration du certificat TLS**, deux semaines avant. C'est la
+  parade directe au piège du § 8.2 : un certificat rattaché à un compte ACME
+  fantôme meurt à 90 jours sans un mot.
+
+Pourquoi `/api/sante` et non `/sante.php` : `/sante.php` ne prouve que « PHP
+s'exécute », sans noyau ni base — c'est voulu, c'est la sonde du conteneur.
+`/api/sante` traverse tout ce que traverse un membre de la famille : DNS,
+certificat, nginx de l'hôte, nginx du conteneur `app`, Symfony, **et PostgreSQL**
+(un `SELECT 1`). Un `503` dit « la base » ; une connexion refusée ou un `502`
+disent « en amont ». Elle ne rend rien d'autre que son statut, n'ouvre aucune
+session, et une panne y laisse une ligne `error` par appel dans le journal
+`api` — sans détail dans la réponse (contrat d'API, § 26).
 
 ### Résolution des lieux, chaque nuit
 
@@ -842,6 +982,11 @@ Automatiques, une fois par jour, dans `${BACKUP_DIR}`, rétention 14 jours. La
 procédure de **restauration** est écrite au-dessus du service `sauvegarde` dans
 `compose.prod.yaml`. Essayez-la une fois **avant** d'en avoir besoin : une
 restauration qu'on n'a jamais faite n'est pas une sauvegarde, c'est une intention.
+
+S'y ajoutent les vidages pris par **chaque déploiement** dans
+`~/apps/heritage/backup/` (§ 11.2, étape 4 ; les 10 derniers), restaurables par
+le § 11.6. Ils dorment sur la même machine que la base : ce ne sont **pas** des
+sauvegardes hors site, et ils ne remplacent pas la copie décidée au § 2.4.
 
 ### Place disque
 

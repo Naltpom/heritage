@@ -409,6 +409,22 @@ describe('PageFiche — bandeau, onglets, icônes', () => {
     expect(empruntee).not.toContain('data-geste="editer"')
     expect(empruntee).not.toContain('data-actions-fiche')
   })
+
+  it('« Partager » est offert à tout lecteur de la fiche, une fois, compte en attente compris', async () => {
+    const membre = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
+    // Un seul bouton, sur toutes les largeurs : ni dans la rangée desktop
+    // cachée sous `md`, ni dans la barre du bas.
+    expect(membre.match(/data-partage(?=[\s>])/g)).toHaveLength(1)
+    expect(membre).toContain('>Partager</span>')
+    // La région annoncée est là avant tout clic.
+    expect(membre).toMatch(/role="status" aria-live="polite"/)
+
+    // Partager ne modifie rien : aucun droit requis, et ce n'est pas un `data-geste`.
+    etat.regime.value = 'en_attente'
+    const attente = await rendre(PageFiche, { fiche: ficheComplete(), onglet: 'identite' })
+    expect(attente).toContain('data-partage')
+    expect(attente).not.toContain('data-geste=')
+  })
 })
 
 describe('CarteRestreinte — ni onglets, ni barre d’action', () => {
