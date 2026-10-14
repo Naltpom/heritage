@@ -12,6 +12,23 @@
 #   6. docker compose build, les deux images   (travail « docker »)
 #   7. la chaîne de déploiement se tient       (travail « deploiement »)
 #
+# Et deux AUDITS de vulnérabilités, qui ne sont PAS des portes :
+#
+#   a. composer audit                              (travail « api »)
+#   b. npm audit --omit=dev --audit-level=high     (travail « app »)
+#
+# `continue-on-error: true` sur les deux. Un avis de sécurité publié cette nuit
+# sur une dépendance rendrait rouge TOUTE demande de fusion, quel qu'en soit le
+# contenu : la CI cesserait de parler du changement relu, et un rouge qui ne
+# dépend pas de ce qu'on a écrit apprend à ignorer la CI — même raisonnement que
+# pour php-cs-fixer plus bas. L'étape échouée reste marquée en rouge dans le
+# journal de son travail — c'est là qu'elle se lit ; le travail et l'exécution
+# restent verts, et la porte de `deploy.yml`, qui lit la conclusion de
+# l'exécution, n'en est pas affectée.
+# Le correctif arrive par Dependabot (`.github/dependabot.yml`). Placés dans les
+# travaux existants, après l'installation des dépendances : aucune machine de
+# plus.
+#
 # Le travail « api » monte en plus un service **PostgreSQL 17**, et la porte 2 bis
 # relit le rapport JUnit pour exiger que les tests qui en dépendent aient bien
 # TOURNÉ. Sans elle, monter une base pour des tests qui continueraient de se sauter
@@ -47,9 +64,12 @@
 # manquant apprend à ignorer la CI. Il se lance à la main :
 #   php vendor/bin/php-cs-fixer fix
 #
-# Épinglage des actions : à la version majeure, comme le dépôt de référence.
-# Le cran au-dessus, si la chaîne d'approvisionnement devient une préoccupation,
-# est d'épingler au SHA de commit — une étiquette peut être redéplacée, pas un SHA.
+# Épinglage des actions : au SHA de commit COMPLET, l'étiquette en commentaire
+# (`@<40 hex> # v4.4.0`). Une étiquette peut être redéplacée vers un autre code,
+# pas un SHA : c'est le seul épinglage qui fige ce qui s'exécute avec nos
+# secrets. Le commentaire n'est lu que par les humains et par Dependabot
+# (`.github/dependabot.yml`), qui propose les montées en réécrivant les deux.
+# Toute action ajoutée s'épingle de la même façon.
 # =============================================================================
 
 name: CI
@@ -147,9 +167,9 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.4'
           # intl et gd sont exigées par composer.json (tri des noms accentués,
@@ -162,7 +182,7 @@ jobs:
           coverage: none
 
       - name: Cache des dépendances Composer
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.composer/cache
           key: composer-${{ hashFiles('api/composer.lock') }}
@@ -170,6 +190,13 @@ jobs:
 
       - name: Installer les dépendances
         run: composer install --no-interaction --prefer-dist --no-progress
+
+      # Audit a — NON bloquant, voir l'en-tête. Lit `composer.lock` et interroge
+      # la base d'avis de Packagist. Un échec ici n'arrête ni le travail ni la
+      # fusion : il se lit.
+      - name: Audit (non bloquant) — vulnérabilités connues des dépendances Composer
+        continue-on-error: true
+        run: composer audit --no-interaction
 
       # ── L'ensemencement de la base PostgreSQL ────────────────────────────────
       #
@@ -252,9 +279,9 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: npm
@@ -262,6 +289,17 @@ jobs:
 
       - name: Installer les dépendances
         run: npm ci --no-audit --no-fund
+
+      # Audit b — NON bloquant, voir l'en-tête. `--omit=dev` : seules les
+      # dépendances qui finissent dans le paquet servi au navigateur ; l'outillage
+      # de construction et de test ne sort pas du runner. `--audit-level=high` :
+      # l'étape n'échoue qu'à partir d'un avis « high », les autres s'affichent
+      # sans la faire échouer. (`--no-audit` sur `npm ci` ci-dessus coupe le
+      # rapport automatique de l'installation, qui ne ferait échouer rien : l'audit
+      # se fait ici, une fois, avec ces réglages-là.)
+      - name: Audit (non bloquant) — vulnérabilités connues des dépendances npm servies
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
 
       # Porte 3. `vue-tsc --noEmit` et non `tsc` : seul vue-tsc comprend les
       # blocs `<script setup lang="ts">` des composants.
@@ -314,7 +352,7 @@ jobs:
     # #295, 8 min 05 de bout en bout, dont 2 min 10 de Docker posées APRÈS les
     # 5 min 47 de l'API, alors qu'elles pouvaient courir pendant.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Les deux fichiers doivent se rendre sans substitution manquante. Sans
       # `.env` sur le runner : c'est aussi la vérification que tous les replis de
@@ -386,7 +424,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Le script tourne sur le VPS, sous `set -euo pipefail`, et manipule un
       # `git reset --hard`. Une faute de quotation y est bien plus coûteuse
@@ -505,7 +543,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Calculer l'empreinte
         run: |
           set -euo pipefail
@@ -513,7 +551,7 @@ jobs:
           echo "$arbre" > arbre.txt
           echo "ARBRE=$arbre" >> "$GITHUB_ENV"
           echo "Arborescence testée : $arbre (commit $(git rev-parse HEAD))"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: arbre-${{ env.ARBRE }}
           path: arbre.txt

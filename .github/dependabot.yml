@@ -1,0 +1,106 @@
+# =============================================================================
+#  Dependabot — les montées de version, proposées en demandes de fusion
+# =============================================================================
+#
+# Cinq sources, une fois par semaine, le lundi matin (heure de Paris) :
+#
+#   composer         api/      dépendances PHP (composer.json / composer.lock)
+#   npm              app/      dépendances du front (package.json / package-lock.json)
+#   github-actions   /         les actions des flux de .github/workflows/
+#   docker           api/      les images de base de api/Dockerfile
+#   docker           app/      les images de base de app/Dockerfile
+#
+# MINEURES ET CORRECTIVES GROUPÉES, MAJEURES À PART. Une montée mineure ou
+# corrective n'a, par contrat, rien à casser : les regrouper donne UNE demande
+# par source et par semaine au lieu d'une par paquet, et c'est la différence
+# entre des demandes qu'on lit et des demandes qu'on ferme. Une majeure arrive
+# seule, parce qu'elle se relit seule.
+#
+# Les plafonds de demandes ouvertes sont bas exprès : au-delà, une file que
+# personne ne vide cesse d'être lue. Une demande de Dependabot passe la CI
+# (`pull_request`) comme toute autre, et la règle est la même : on ne fusionne
+# pas sur du rouge. Ce fichier ne règle que les montées de VERSION : les avis de
+# sécurité se lisent dans les deux audits non bloquants de ci.yml (et dans les
+# alertes Dependabot, si elles sont activées dans les réglages du dépôt).
+#
+# Les actions sont épinglées au SHA de commit, l'étiquette en commentaire
+# (`@<40 hex> # v4.4.0`) : Dependabot réécrit les deux ensemble.
+#
+# Préfixe des messages : la forme « Sujet : description » de l'historique du
+# dépôt. Le préfixe finit lui-même par « : » : Dependabot n'ajoute son propre
+# deux-points qu'à un préfixe qui finit par une lettre ou un chiffre.
+# =============================================================================
+
+version: 2
+
+updates:
+
+  - package-ecosystem: composer
+    directory: /api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "Dépendances API :"
+    groups:
+      mineures-et-correctives:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "Dépendances front :"
+    groups:
+      mineures-et-correctives:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "CI, actions :"
+    groups:
+      mineures-et-correctives:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "Image api :"
+    groups:
+      mineures-et-correctives:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /app
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "Image app :"
+    groups:
+      mineures-et-correctives:
+        update-types: [minor, patch]
