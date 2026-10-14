@@ -8,12 +8,16 @@ use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Proposal\Contract\ApplicateurDOperation;
 use App\Module\Proposal\Contract\DemandeEnCours;
+use App\Module\Proposal\Contract\DependanceMesuree;
+use App\Module\Proposal\Contract\DependancesDUneFiche;
 use App\Module\Proposal\Contract\EcritureDeRevision;
+use App\Module\Proposal\Contract\FicheASupprimer;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
 use App\Module\Proposal\Contract\OpEnAttente;
 use App\Module\Proposal\Enum\OpKind;
 use App\Module\Proposal\Enum\RevisionOperation;
 use App\Module\Proposal\Service\Port\PortArbre;
+use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -64,8 +68,12 @@ use App\Module\Proposal\Service\Port\PortArbre;
  */
 final readonly class ApplicateurDOperationSuppressionDePersonne implements ApplicateurDOperation
 {
-    public function __construct(private PortArbre $arbre)
-    {
+    /** @param iterable<DependancesDUneFiche> $dependances */
+    public function __construct(
+        private PortArbre $arbre,
+        #[AutowireIterator('proposal.dependances_d_une_fiche')]
+        private iterable $dependances = [],
+    ) {
     }
 
     public function natures(): array
@@ -81,6 +89,7 @@ final readonly class ApplicateurDOperationSuppressionDePersonne implements Appli
             $personneId = $this->personneVisee($op);
 
             $inventaire = $this->arbre->supprimerPersonne($personneId);
+            $inventaire = $inventaire->avecDependances($this->detacher(new FicheASupprimer($personneId, $inventaire->famillesEmportees())));
 
             $ecritures[] = new EcritureDeRevision(
                 SubjectKind::Personne,
@@ -93,6 +102,44 @@ final readonly class ApplicateurDOperationSuppressionDePersonne implements Appli
         }
 
         return $ecritures;
+    }
+
+    /**
+     * Ce que les autres modules accrochaient à la fiche, **défait dans la même
+     * transaction** — ou la validation entière annulée.
+     *
+     * Deux temps, et l'ordre est le filet :
+     *
+     * 1. **une nature qui bloque ne doit plus être là.** Le dépôt l'a refusée, le contrôle
+     *    préalable en a fait une caducité ; en trouver une ici veut dire qu'un chemin les a
+     *    contournés. On lève, comme `Tree` lève sur une descendance : l'annulation de la
+     *    transaction remet la fiche en place, et c'est le seul recours qui ne laisse rien
+     *    pendre ;
+     * 2. **les natures nettoyées sont effacées** par leur module, qui les trace au journal
+     *    d'audit. Ce qu'ils rendent entre dans la révision avec le reste de l'inventaire :
+     *    `prp_revision.changes.dependances` dit ce qui est parti, `resume` le dit en une
+     *    phrase.
+     *
+     * Le tout se fait **après** l'effacement de la fiche : c'est l'inventaire réellement
+     * effacé qui dit quelles unions sont parties avec elle.
+     *
+     * @return list<DependanceMesuree>
+     */
+    private function detacher(FicheASupprimer $fiche): array
+    {
+        $detachees = [];
+
+        foreach ($this->dependances as $module) {
+            foreach ($module->mesurer($fiche) as $dependance) {
+                if ($dependance->nature->bloque()) {
+                    throw new \RuntimeException(\sprintf('La personne %d porte encore %d dépendance(s) « %s » : la supprimer les laisserait pendantes.', $fiche->personneId, $dependance->nombre, $dependance->nature->value));
+                }
+            }
+
+            $detachees = [...$detachees, ...$module->detacher($fiche)];
+        }
+
+        return $detachees;
     }
 
     /**

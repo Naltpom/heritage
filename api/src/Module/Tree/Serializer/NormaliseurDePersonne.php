@@ -444,7 +444,7 @@ final readonly class NormaliseurDePersonne
                 // Quand la citation est entrée dans l'arbre — l'écran la date comme une
                 // note, et l'onglet Historique de la fiche s'en sert pour ranger ce qui
                 // a été ajouté. C'est la date de la **ligne**, pas celle de l'acte : une
-                // citation importée du GEDCOM porte la date de l'import.
+                // citation venue de l'import GEDCOM initial porte la date de cet import.
                 'createdAt' => $citation->getCreatedAt()->format(\DateTimeInterface::ATOM),
             ];
         }

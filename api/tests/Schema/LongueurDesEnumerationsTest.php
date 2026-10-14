@@ -18,8 +18,8 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
  * - `doctrine:schema:validate` est **vert** : la colonne existe, son type et sa longueur
  *   correspondent exactement au mapping. Les deux disent la même chose ; ils ont tort
  *   ensemble.
- * - `phpstan` est **vert** : côté PHP, la propriété est bien typée `IssueSeverity`, et il
- *   n'y a rien à redire à une énumération.
+ * - `phpstan` est **vert** : côté PHP, la propriété est bien typée `IssueSeverity` (du
+ *   module `Gedcom`, supprimé depuis), et il n'y a rien à redire à une énumération.
  * - la migration **passe** : `VARCHAR(12)` est une déclaration parfaitement valide.
  *
  * Rien ne se manifeste **jusqu'au premier `INSERT` réel avec la valeur longue** —
@@ -30,8 +30,9 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
  * à l'analyse statique, déclenché par la donnée, et dont la probabilité **augmente avec le
  * temps** — on ajoute une valeur d'énumération au fil des fonctionnalités, et la nouvelle
  * est souvent plus longue que les anciennes. Les deux débordements trouvés à l'écriture
- * du schéma (`ged_issue.severity`, `mbr_member.match_kind`) ont tous deux cette forme :
- * une valeur descriptive ajoutée après que la largeur eut été fixée sur les courtes.
+ * du schéma (`ged_issue.severity` — table supprimée depuis, ADR 0018 —, et
+ * `mbr_member.match_kind`) ont tous deux cette forme : une valeur descriptive ajoutée
+ * après que la largeur eut été fixée sur les courtes.
  *
  * Le balayage se fait **par réflexion sur le mapping Doctrine**, jamais sur une liste
  * écrite à la main : une liste vieillit, et elle vieillit en silence — c'est-à-dire
@@ -87,8 +88,12 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * (`share_*`), passent de `BOOLEAN` à `NiveauDePartage` (ADR 0016, révision du
      * 2026-10-07), en `VARCHAR(8)` pour une plus longue valeur de huit signes
      * (`personne`).
+     *
+     * **59 depuis la suppression du module `Gedcom`** : `ged_run.direction`, `ged_run.status`
+     * et `ged_issue.severity` partent avec leurs deux tables (ADR 0018,
+     * `migrations/Version20261014090000.php`).
      */
-    private const int COLONNES_ENUM_ATTENDUES = 62;
+    private const int COLONNES_ENUM_ATTENDUES = 59;
 
     public function testChaqueColonneAccueilleLaPlusLongueValeurDeSonEnumeration(): void
     {

@@ -73,7 +73,7 @@ abstract class CasDeTestMedia extends TestCase
     {
         $this->racine = sys_get_temp_dir().'/heritage-medias-'.bin2hex(random_bytes(6));
 
-        $configuration = ORMSetup::createAttributeMetadataConfiguration(
+        $configuration = ORMSetup::createAttributeMetadataConfig(
             [
                 \dirname(__DIR__, 2).'/src/Module/Media/Entity',
                 // L'objet valeur incrusté `UncertainDate` vit dans `Core` : sans son

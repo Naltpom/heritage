@@ -28,7 +28,7 @@ traiter en face plutôt que découvrir à l'implémentation.
 | `Proposal` | demandes, diff, validation/refus, révisions | `prp_` |
 | `Media` | portraits et preuves, téléversement, vignettes | `med_` |
 | `Timeline` | vue chronologique | `tml_` (une seule table : `tml_preference`) |
-| `Gedcom` | import / export GEDCOM | `ged_` |
+| `Gedcom` | import / export GEDCOM — **supprimé le 2026-10-06 (ADR 0018)**, avec ses tables | `ged_` (plus aucune table) |
 | `Almanach` | carte des lieux, anniversaires | `alm_` (réservé — **aucune table dans cette livraison**) |
 | `Assistant` | l'assistant IA : propositions, rattachement assisté, questions sur l'arbre | `ast_` (depuis le 2026-10-01 : les conversations de « Poser une question ») |
 | `Statistiques` | Explorer › Stats : l'arbre en chiffres, le chantier (ADR 0015) | `stt_` (réservé — **aucune table**) |
@@ -160,6 +160,10 @@ l'on dessine un port.
 
 ### `Gedcom → Tree` n'est pas une exception
 
+> **Remplacé par l'[ADR 0018](0018-suppression-de-l-import-gedcom.md) (2026-10-06)** : le module `Gedcom` est supprimé. Cette section et la
+> suivante (la dette `EcrivainTree`) restent comme raisonnement ; la dette n'a pas été soldée
+> par `PortImportArbre`, elle a disparu avec son code.
+
 L'adaptateur d'import écrit des lignes de `Tree`, et il est tentant de le nommer comme une
 exception légitime : *un adaptateur construit par définition les entités du module qu'il
 peuple.* **On l'écarte**, pour trois raisons dans cet ordre.
@@ -258,6 +262,21 @@ Compensation, en quatre mesures **toutes obligatoires** :
    en local. Elle parcourt toutes les références inter-modules et signale les pendantes.
    C'est le filet que la base ne tend plus. Sans elle, la règle 2 est un pari ; avec elle,
    c'est un choix.
+   *Livrée le 2026-10-06, à la racine de `api/src/` comme le prévoit la section
+   « Conséquences » : `api/src/Integrite/`. Elle ne lit aucune table elle-même — chaque
+   module déclare ses références (`Core\Contract\ReferencesInterModulesInterface`) et le
+   propriétaire de chaque cible dit ce qui existe (`Core\Contract\CiblesDeReferenceInterface`),
+   si bien qu'aucune jointure ne franchit une frontière. Elle distingue les références
+   **strictes**, dont une valeur pendante la fait sortir en `1`, des références **tolérées**,
+   faites pour survivre à leur cible (historique, preuve, caducité prévue). Le détail,
+   colonne par colonne, est au § 10.8 de `docs/modele-donnees.md`. En CI, elle se branche
+   sur la base PostgreSQL migrée du travail « api » de `.github/workflows/ci.yml` ; ses
+   tests, eux, tournent sur SQLite avec le reste de la suite.*
+   *La mesure 2 a pris, pour la suppression d'une fiche, la forme d'un point de greffe
+   plutôt que d'un événement — le dépôt n'a pas de bus : `Proposal` déclare
+   `Proposal\Contract\DependancesDUneFiche`, chaque module qui tient un `person_id` y répond
+   pour ses tables, et la décision écrite pour chaque cas (bloquer, ou nettoyer dans la
+   transaction avec une trace) est `Proposal\Contract\DependanceDeFiche`.*
 
 ## Alternatives considérées
 
@@ -341,6 +360,10 @@ Compensation, en quatre mesures **toutes obligatoires** :
   | après les déplacements **mécaniques** | vocabulaire à monter dans `Core` (18) + ports à descendre dans `Contract\` (10) | **18** |
   | après la **dette** datée | import GEDCOM (10) | **8** |
   | après les **surfaces publiques à dessiner** | 8 | **0** |
+
+  > **Remplacé par l'[ADR 0018](0018-suppression-de-l-import-gedcom.md) (2026-10-06)** : les 22 exemptions du module `Gedcom` (la dette
+  datée, 10, et 12 lignes de vocabulaire) sont parties avec lui. La ventilation est désormais
+  vocabulaire 6, ports 10, surfaces 8 : **24 → 8 → 0**, ce que vérifie le même test.
 
   Soit **46 → 18 → 8 → 0**. Une version antérieure de ce paragraphe annonçait
   « 55 → 11 → 1 → 0 » : elle partait du recensement **total** (55) au lieu du nombre

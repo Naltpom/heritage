@@ -19,7 +19,7 @@ namespace App\Module\Proposal\Contract;
  *
  * `tree_note.author_user_id` et `author_label` sont rendus sur la fiche : le normaliseur
  * de personne expose `authorLabel` dans chaque note. Les laisser vides ferait passer la
- * contribution d'un membre pour une ligne importée du GEDCOM — c'est ce que `null`
+ * contribution d'un membre pour une ligne venue de l'import GEDCOM initial — c'est ce que `null`
  * signifie pour cette colonne, et c'est ce qu'il signifiera pour tout lecteur.
  *
  * L'auteur porté ici est donc celui de la **demande**, pas le `Lecteur` reçu par

@@ -8,32 +8,22 @@ familles, qui ne prouvent pas la même chose.
 |---|---|---|
 | `PlacementNonRegressionTest` | **non** | l'égalité **exacte** avec `graphe.json` — le **moteur** est un portage fidèle |
 | `PlacementFournisseurDoctrineTest` | **non** | le **fournisseur** lit et ordonne juste (base reconstruite depuis `graphe.json`) |
-| `PlacementBaseImporteeTest` | **non** | l'**import** écrit ce que le placement attend (base issue du GEDCOM) |
 | `PlacementInvariantsTest` | oui | des invariants sur une topologie inventée — un filet, pas une preuve |
 | `PlacementProjectionTest` | oui | l'étage 2 n'insère que localement et ne réorganise rien |
 
-Les trois premiers ne se remplacent pas : chacun isole une couche, et c'est leur
-superposition qui prouve la chaîne, du fichier GEDCOM aux coordonnées du dessin.
+Les deux premiers ne se remplacent pas : chacun isole une couche, et c'est leur
+superposition qui prouve la chaîne serveur, de la base aux coordonnées du dessin.
 
 Ce que couvre le second et que le premier ne voit pas : l'ordre des lignes, la
 reconstruction des adjacences, l'étiquette des dates et le calcul de l'état vivant. C'est
 ainsi qu'a été trouvée la collision entre `tree_person.id` et `tree_family.id`, invisible
 sur les références GEDCOM `@I…@` / `@F…@`.
 
-Ce que couvre le troisième et que les deux autres ne voient pas : un écart entre ce que
-l'import **écrit** et ce que `graphe.json` **contient**. Il échapperait aux totaux de
-contrôle de l'import — qui comptent des lignes, pas des largeurs — comme au test de
-non-régression, qui ne lit jamais la base.
-
-Le troisième a besoin de PostgreSQL et de `pdo_pgsql`, que le PHP de la machine ne charge
-pas par défaut :
-
-```
-php -d extension=pdo_pgsql vendor/bin/phpunit tests/Tree/PlacementBaseImporteeTest.php
-```
-
-Il vise la base de `compose.yaml` ; `HERITAGE_DSN_REEL` en désigne une autre. **Lecture
-seule** : il n'écrit rien, ne crée aucun schéma, ne vide aucune table.
+Un troisième, `PlacementBaseImporteeTest`, vérifiait le placement sur la base que
+produisait `heritage:import-gedcom`. Il est parti avec l'import (ADR 0018) : la base réelle
+n'est plus jamais reconstruite depuis le GEDCOM, elle vit en production et se restaure
+depuis ses sauvegardes, et elle a évolué depuis par les demandes validées — `graphe.json`
+n'en est plus l'image.
 
 > **La CI peut passer au vert sur un portage faux.** Elle n'a aucun étalon à comparer :
 > `graphe.json` n'est pas versionné (ADR 0006). C'est écrit ici parce que personne ne le
@@ -71,7 +61,8 @@ vendor/bin/phpunit --group donnees-reelles
 ADR 0005 : *« Le test d'égalité exacte doit être lancé au moins une fois avant la mise en
 service, sur la machine du commanditaire, et son résultat consigné. »*
 
-**2026-09-15, poste du commanditaire, PHP 8.4.4, PHPUnit 13.3.4 :**
+**2026-09-15, poste du commanditaire, PHP 8.4.4, PHPUnit 13.3.4** (la première ligne vient
+de `PlacementBaseImporteeTest`, supprimé depuis avec l'import — ADR 0018) **:**
 
 ```
 Placement — depuis la base importée : 377/377 nœuds exacts.
@@ -98,8 +89,9 @@ Marne Dolomite Sureau (`@I500017@`) traverse l'import sans être aplatie.
 > dépôt par variable d'environnement. Si vous trouvez le brief et croyez à un oubli : ce n'en
 > est pas un. Ne pas « réparer ».
 
-**La chaîne serveur est donc prouvée de bout en bout**, du fichier GEDCOM aux coordonnées
-du dessin.
+**La chaîne serveur était donc prouvée de bout en bout**, du fichier GEDCOM aux
+coordonnées du dessin, à la date de l'import initial. Depuis la suppression de l'import, les
+deux tests restants en gardent la partie qui existe encore : de la base au dessin.
 
 ## En cas d'écart
 

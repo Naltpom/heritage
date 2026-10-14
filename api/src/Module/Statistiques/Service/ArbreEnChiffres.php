@@ -36,7 +36,7 @@ use App\Module\Statistiques\Contract\PorteeDeLAppui;
  *
  * - une citation ou une fiche **supprimée** depuis disparaît aussi du passé ;
  * - une citation dont la **qualité a été relevée** après coup compte depuis sa saisie ;
- * - tout ce qui vient de l'**import GEDCOM** porte la date de l'import — l'arbre « commence »
+ * - tout ce qui vient de l'**import GEDCOM initial** porte la date de cet import — l'arbre « commence »
  *   ce jour-là, même pour des recherches de plusieurs années.
  *
  * C'est donc l'évolution **dans l'application**, pas l'histoire de la recherche.

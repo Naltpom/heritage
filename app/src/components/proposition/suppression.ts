@@ -30,6 +30,7 @@
 import type {
   ApercuDeSuppression,
   CorpsSuppressionPersonne,
+  DependanceDeFiche,
   InventaireDeSuppression,
 } from '@/lib/api'
 
@@ -105,6 +106,13 @@ export function lignesEmportees(inventaire: InventaireDeSuppression): LigneEmpor
     })
   }
 
+  // Ce que les autres modules accrochent et qui part avec elle — les questions
+  // posées à son sujet. Celles qui bloquent viennent plus bas, avec les autres.
+  const dependances = inventaire.dependances ?? []
+  for (const dependance of dependances.filter((d) => !d.bloquante)) {
+    lignes.push({ libelle: libelleDeDependance(dependance), bloquante: false })
+  }
+
   // Les deux blocages en dernier, et marqués : ce sont les seules lignes qui
   // demandent une action avant de pouvoir continuer.
   if (inventaire.medias > 0) {
@@ -148,7 +156,42 @@ export function lignesEmportees(inventaire: InventaireDeSuppression): LigneEmpor
     })
   }
 
+  // Les autres modules : une démarche, un événement, un tirage, une autorisation.
+  // Le serveur dit lesquelles bloquent ; `raisons` dit quoi faire pour chacune.
+  for (const dependance of dependances.filter((d) => d.bloquante)) {
+    lignes.push({ libelle: libelleDeDependance(dependance), bloquante: true })
+  }
+
   return lignes
+}
+
+/**
+ * Une dépendance d'un autre module, en français.
+ *
+ * Le libellé est ici et non dans la charge : l'inventaire est comparé en entier
+ * à la validation, et un libellé reformulé entre le dépôt et la validation y
+ * rendrait caduque une demande que rien ne contredit. Une nature que ce front ne
+ * connaît pas encore s'affiche quand même, avec son nom brut — une ligne
+ * maladroite vaut mieux qu'une ligne absente sur l'écran qui détruit.
+ */
+export function libelleDeDependance(dependance: DependanceDeFiche): string {
+  const n = dependance.nombre
+  const s = n > 1 ? 's' : ''
+
+  switch (dependance.nature) {
+    case 'demarche':
+      return `${n} démarche${s} d’acte qui la concerne${n > 1 ? 'nt' : ''}`
+    case 'evenement_a_venir':
+      return `${n} invitation${s} à un événement à venir`
+    case 'tirage':
+      return `${n} participation${s} à un tirage au sort`
+    case 'autorisation_naissance':
+      return 'une autorisation signée de partager sa date de naissance'
+    case 'question':
+      return `${n} question${s} posée${s} à son sujet`
+    default:
+      return `${n} élément${s} lié${s} à cette fiche (${dependance.nature})`
+  }
 }
 
 /**

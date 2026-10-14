@@ -120,18 +120,29 @@
 #     snapshot du fournisseur) et, une fois, faire une VRAIE restauration d'essai
 #     — la procédure est écrite au-dessus du service.
 #
-#  6. DONNÉES RÉELLES — l'import du GEDCOM est une commande locale, jamais une
-#     fixture, et le fichier ne monte pas sur le serveur par le dépôt :
-#        docker compose -f compose.yaml -f compose.prod.yaml cp arbre.ged api:/tmp/
-#        docker compose -f compose.yaml -f compose.prod.yaml exec api \
-#            php bin/console heritage:import-gedcom /tmp/arbre.ged
-#     Supprimer le fichier du conteneur ensuite.
+#  6. DONNÉES RÉELLES — elles vivent dans la base de production et dans ses
+#     sauvegardes, jamais dans le dépôt ni dans une fixture. Il n'y a plus
+#     d'import GEDCOM (ADR 0018) : une base neuve se peuple en RESTAURANT un
+#     dump (procédure au-dessus du service `sauvegarde`). Le dump ne monte pas
+#     sur le serveur par le dépôt ; le supprimer de la machine une fois restauré.
 #
 #  7. MISES À JOUR — figer `IMAGE_TAG` sur une version (`IMAGE_TAG=2026-09-15`)
 #     plutôt que de laisser `prod` flotter : on veut pouvoir revenir en arrière
 #     sans reconstruire.
 #
 # =============================================================================
+
+# Journaux plafonnés : la même ancre que compose.yaml (voir son commentaire), à
+# l'identique — une ancre YAML ne traverse pas les fichiers. Posée sur CHAQUE
+# service de ce fichier, y compris ceux qui l'héritent déjà de compose.yaml :
+# les trois services propres à la production (`garde-secrets`, `sauvegarde`,
+# `lieux`) n'ont qu'ici où la recevoir, et la redire sur les autres évite qu'un
+# service hérité perde son plafond le jour où sa base change.
+x-logging: &journalisation
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
 
@@ -151,6 +162,7 @@ services:
   garde-secrets:
     image: alpine:3.21
     restart: "no"
+    logging: *journalisation
     environment:
       APP_SECRET: ${APP_SECRET:-d3v3l0ppement_secret_local_jetable}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-heritage_dev}
@@ -276,6 +288,7 @@ services:
   # ---------------------------------------------------------------------------
   db:
     restart: unless-stopped
+    logging: *journalisation
     depends_on:
       garde-secrets:
         condition: service_completed_successfully
@@ -291,6 +304,7 @@ services:
   api:
     restart: unless-stopped
     image: ${IMAGE_PREFIX:-heritage}/api:${IMAGE_TAG:-prod}
+    logging: *journalisation
     # `target: prod` déclaré ici, et pas seulement hérité.
     #
     # Sans cette ligne, cette surcouche reprend le `build:` de compose.yaml et la
@@ -312,8 +326,8 @@ services:
       APP_DEBUG: 0
       # Sans cette ligne, le `garde-secrets` exigerait une variable que l'API ne
       # verrait jamais, et la pile démarrerait « vérifiée » en refusant le domaine
-      # réel sur toutes les requêtes. C'est le piège déjà payé sur GEDCOM_FILE et
-      # MEDIA_RACINE (voir compose.yaml) : Compose lit une variable du `.env` de la
+      # réel sur toutes les requêtes. C'est le piège déjà payé sur MEDIA_RACINE
+      # (voir compose.yaml) : Compose lit une variable du `.env` de la
       # racine sans jamais l'injecter dans un conteneur qui ne la déclare pas. Les
       # `environment:` fusionnent par clé entre les deux fichiers, la déclarer ici
       # suffit — et c'est sa place, la production étant le seul cas où elle doit
@@ -363,6 +377,7 @@ services:
   app:
     restart: unless-stopped
     image: ${IMAGE_PREFIX:-heritage}/app:${IMAGE_TAG:-prod}
+    logging: *journalisation
     environment:
       # LE DOMAINE PUBLIC ENTRE DANS `server_name` PAR ICI, ET NULLE PART AILLEURS.
       #
@@ -429,6 +444,7 @@ services:
   # sans authentification contenant les liens d'invitation en clair.
   mailpit:
     profiles: ["jamais-en-production"]
+    logging: *journalisation
     ports: !reset []
 
   # ---------------------------------------------------------------------------
@@ -458,6 +474,7 @@ services:
   sauvegarde:
     image: postgres:17-alpine
     restart: unless-stopped
+    logging: *journalisation
     depends_on:
       db:
         condition: service_healthy
@@ -532,6 +549,7 @@ services:
   lieux:
     image: ${IMAGE_PREFIX:-heritage}/api:${IMAGE_TAG:-prod}
     restart: unless-stopped
+    logging: *journalisation
     depends_on:
       api:
         condition: service_healthy

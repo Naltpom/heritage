@@ -33,6 +33,7 @@ function inventaire(surcharge: Partial<InventaireDeSuppression> = {}): Inventair
     medias: 0,
     membreId: null,
     invitationsActives: 0,
+    dependances: [],
     ...surcharge,
   }
 }
@@ -155,6 +156,47 @@ describe('les deux blocages qui ne parlent pas de l’arbre', () => {
     const bloquantes = lignesEmportees(inventaire({ invitationsActives: 1 })).filter((l) => l.bloquante)
 
     expect(bloquantes[0]?.libelle).toContain('à son acceptation')
+  })
+})
+
+describe('ce que les autres modules accrochent à la fiche', () => {
+  it('range parmi les blocages ce que le serveur dit bloquant, et nomme chaque nature', () => {
+    const lignes = lignesEmportees(
+      inventaire({
+        dependances: [
+          { nature: 'demarche', nombre: 2, bloquante: true },
+          { nature: 'evenement_a_venir', nombre: 1, bloquante: true },
+          { nature: 'tirage', nombre: 1, bloquante: true },
+          { nature: 'autorisation_naissance', nombre: 1, bloquante: true },
+        ],
+      }),
+    )
+
+    expect(lignes.filter((l) => l.bloquante).map((l) => l.libelle)).toEqual([
+      '2 démarches d’acte qui la concernent',
+      '1 invitation à un événement à venir',
+      '1 participation à un tirage au sort',
+      'une autorisation signée de partager sa date de naissance',
+    ])
+  })
+
+  it('montre les questions qui partent avec la fiche, sans bloquer', () => {
+    const lignes = lignesEmportees(inventaire({ dependances: [{ nature: 'question', nombre: 3, bloquante: false }] }))
+
+    expect(lignes).toEqual([{ libelle: '3 questions posées à son sujet', bloquante: false }])
+  })
+
+  it('affiche une nature inconnue plutôt que de la taire, avec le sort que dit le serveur', () => {
+    const lignes = lignesEmportees(inventaire({ dependances: [{ nature: 'nouveaute', nombre: 2, bloquante: true }] }))
+
+    expect(lignes).toEqual([{ libelle: '2 éléments liés à cette fiche (nouveaute)', bloquante: true }])
+  })
+
+  it('lit un inventaire d’avant les dépendances sans rien ajouter', () => {
+    const ancien = inventaire()
+    delete (ancien as Partial<InventaireDeSuppression>).dependances
+
+    expect(lignesEmportees(ancien)).toEqual([])
   })
 })
 

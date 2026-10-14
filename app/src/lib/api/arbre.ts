@@ -147,8 +147,8 @@ export interface CitationDeFiche {
   medias: MediaDeCitation[]
   /**
    * ATOM — quand la citation est **entrée dans l'arbre**, comme `createdAt` d'une
-   * note. C'est la date de la ligne, pas celle de l'acte : une citation importée
-   * du GEDCOM porte la date de l'import. L'onglet Historique range par elle.
+   * note. C'est la date de la ligne, pas celle de l'acte : une citation venue de
+   * l'import GEDCOM initial porte la date de cet import. L'onglet Historique range par elle.
    */
   createdAt: string
 }
