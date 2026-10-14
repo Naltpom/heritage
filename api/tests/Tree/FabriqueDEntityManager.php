@@ -45,7 +45,7 @@ final class FabriqueDEntityManager
     {
         $racine = \dirname(__DIR__, 2).'/src/Module';
 
-        $configuration = ORMSetup::createAttributeMetadataConfiguration(
+        $configuration = ORMSetup::createAttributeMetadataConfig(
             paths: [$racine.'/Tree/Entity', $racine.'/Core/ValueObject'],
             isDevMode: true,
         );
