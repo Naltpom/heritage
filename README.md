@@ -358,6 +358,23 @@ et il n'y a **aucun en-tête d'autorisation à poser nulle part**.
 
 ---
 
+## Suivi en direct
+
+- **Ouvrir** : <http://127.0.0.1:8080/administration/suivi> (lien « Suivi en direct » en tête d'« À traiter »), **administrateurs seulement**.
+- **Contenu** : santé de l'API, file « À traiter », journal d'audit filtrable, appels au modèle de langage, chantier. Lecture seule, sans route d'API dédiée : l'écran ne lit que des routes d'administration existantes.
+- **Téléphone** : l'onglet « Téléphone » affiche un code QR de l'adresse, calculé dans le navigateur. Il demande la même connexion administrateur. En développement, la pile n'écoute que sur 127.0.0.1 : un téléphone ne la joint pas.
+- **Rafraîchissement** : sonde toutes les 2 s sur « En direct », 10 s ailleurs, en pause quand l'onglet est caché.
+- **Ajouter une métrique** : un calcul pur dans `app/src/components/suivi/suivi.ts` (avec son test), puis une carte dans `app/src/views/administration/SuiviView.vue`. Une donnée que l'API ne sert pas encore passe d'abord par une route d'administration de son module propriétaire.
+
+### Le Monde (maquette 3D)
+
+- **Ouvrir** : <http://127.0.0.1:8080/administration/monde> (bouton « Monde 3D » du suivi), administrateurs seulement. Mêmes données que le suivi, en carnet d'archiviste : une île, un objet par partie du système, animé par les données réelles.
+- **Paramètres** : `#theme=dark|light` (sinon le thème du système, ou le choix du bouton), `#zone=maison|file|comptes|portail|nuage|arbre|phare` pour ouvrir une zone, `#tour=0` pour couper la visite automatique (elle démarre après 20 s sans geste). Exemple : `/administration/monde#theme=dark&zone=phare&tour=0`.
+- **Technique** : Three.js 0.160.0 en dépendance npm (la CSP interdit les CDN et les scripts en ligne), chargé seulement par cet écran. Sans WebGL, le dock et les panneaux restent utilisables.
+- **Ajouter une zone** : son entrée dans `ZONES` et sa traduction données → état dans `etatDuMonde()` (`app/src/components/monde/monde.ts`, avec son test), son objet et son emplacement dans `scene.ts`, puis son panneau dans `MondeView.vue`.
+
+---
+
 ## Production
 
 Tout est dans [`compose.prod.yaml`](compose.prod.yaml), y compris les **sept étapes qui ne
