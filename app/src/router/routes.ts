@@ -211,6 +211,17 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Arbre', rechercheLocale: true },
   },
   {
+    // **Le Monde de l'arbre** : le même graphe en maquette 3D — le lecteur au
+    // sommet du tronc, ses ancêtres en couronne, ses descendants en racines.
+    // `membre`, comme l'arbre qu'il lit ; la confidentialité est celle du graphe
+    // servi (ADR 0003). Plein cadre : l'écran porte son propre en-tête, et le
+    // retour à l'arbre classique y est toujours visible.
+    path: '/arbre/monde',
+    name: 'arbre.monde',
+    component: () => import('@/views/ArbreMondeView.vue'),
+    meta: { acces: 'membre', titre: 'Monde de l’arbre', cadre: false, section: 'arbre' },
+  },
+  {
     // **`/arbre-2` garde l'arbre à niveaux de détail d'avant** (`HistoireView`, moteur
     // `histoire/lignees.ts`) : tout l'arbre d'un coup, sans rectangles. Aucun menu n'y
     // mène, on y va par l'adresse. Nom neuf : `arbre.blocs` était celui d'une maquette
