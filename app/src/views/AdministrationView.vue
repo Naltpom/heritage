@@ -48,6 +48,16 @@ const description = computed(() => DESCRIPTIONS[String(route.name ?? '')] ?? '')
       <p v-if="description" class="text-sm text-attenue">{{ description }}</p>
     </div>
 
+    <!-- Le tableau de suivi s'ouvre d'ici, sur bureau comme sur téléphone. -->
+    <RouterLink
+      v-if="route.name === 'administration.a-traiter'"
+      :to="{ name: 'administration.suivi' }"
+      class="self-start text-sm text-accent underline"
+      data-vers-suivi
+    >
+      Suivi en direct ›
+    </RouterLink>
+
     <RouterView />
   </div>
 

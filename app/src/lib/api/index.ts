@@ -87,3 +87,6 @@ export * from './clesDAcces'
 /* Module `Statistiques` : Explorer › Stats. Tout est calculé côté serveur, après
    le cercle de visibilité ; le chantier a sa propre route, d'administration. */
 export * from './statistiques'
+/* Le suivi en direct de l'administration : la sonde de santé chronométrée et le
+   journal d'audit. Aucune route nouvelle — voir l'en-tête du module. */
+export * from './suivi'

@@ -545,6 +545,31 @@ export const routes: RouteRecordRaw[] = [
 
   /* --- Administration -------------------------------------------- */
   {
+    // Le **suivi en direct** : un tableau de bord plein cadre, sombre, à lire de
+    // loin — santé du service, file « À traiter », journal d'audit, chantier.
+    // Lecture seule, sans route d'API nouvelle (`lib/api/suivi.ts`).
+    //
+    // Route de premier niveau, et non enfant d'`administration` : l'enfant
+    // hériterait du cadre de 1 080 px d'`AdministrationView`, et l'écran veut
+    // toute la largeur. `cadre: false` retire l'en-tête et la barre du bas ;
+    // l'écran porte son propre en-tête et sa sortie. Le nom commence par
+    // `administration.` : la section, donc le mode admin, s'en déduit.
+    path: '/administration/suivi',
+    name: 'administration.suivi',
+    component: () => import('@/views/administration/SuiviView.vue'),
+    meta: { acces: 'administration', titre: 'Suivi en direct', cadre: false },
+  },
+  {
+    // Le **Monde** : le même suivi en maquette 3D — une île, un objet par
+    // partie du système, animé par les données réelles. Mêmes lectures que le
+    // suivi, aucune route d'API nouvelle ; Three.js n'est chargé que par cet
+    // écran. Plein cadre, comme le suivi, et pour la même raison.
+    path: '/administration/monde',
+    name: 'administration.monde',
+    component: () => import('@/views/administration/MondeView.vue'),
+    meta: { acces: 'administration', titre: 'Monde', cadre: false },
+  },
+  {
     // Le **mode administration** (handoff « mode Administration », option 1c).
     // Toute route `administration.*` y est : l'en-tête passe en fond accent, la
     // navigation montre À traiter · Utilisateurs · Invitations · Sources
