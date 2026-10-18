@@ -77,6 +77,13 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Module/Tirage/Entity'
                 prefix: 'App\Module\Tirage\Entity'
                 alias: Tirage
+            # Le site du tirage de Noël (noel2026) — préfixe `noel_`.
+            Noel:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Module/Noel/Entity'
+                prefix: 'App\Module\Noel\Entity'
+                alias: Noel
             # Les événements de famille — « Cousinade été 2027 » — préfixe `evt_`.
             Evenement:
                 type: attribute

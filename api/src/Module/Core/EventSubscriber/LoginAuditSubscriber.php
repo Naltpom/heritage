@@ -8,6 +8,7 @@ use App\Module\Core\Entity\AuditLog;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\AuditAction;
 use App\Module\Core\Security\CleDAccesBadge;
+use App\Module\Core\Security\GoogleBadge;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -106,7 +107,11 @@ final class LoginAuditSubscriber implements EventSubscriberInterface
             return null;
         }
 
-        return ['methode' => $passeport->hasBadge(CleDAccesBadge::class) ? 'cle_d_acces' : 'mot_de_passe'];
+        return ['methode' => match (true) {
+            $passeport->hasBadge(CleDAccesBadge::class) => 'cle_d_acces',
+            $passeport->hasBadge(GoogleBadge::class) => 'google',
+            default => 'mot_de_passe',
+        }];
     }
 
     /** @param array<string, mixed>|null $changes */

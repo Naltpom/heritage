@@ -1,0 +1,16 @@
+# Contrat : ce fichier est celui du module Noel (le site du tirage de Noël, noel2026).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# L'autowiring de config/services/_autoload.yaml couvre toutes les classes du module. On
+# ne déclare ici que les alias des deux ports — lire l'en-tête de `timeline.yaml` sur le
+# piège d'ordre de chargement avant d'y ajouter un service concret.
+
+services:
+    # Les comptes : la déclaration d'un compte né sur noel2026, et l'identité des comptes
+    # d'un tirage. `Membership` l'implémente.
+    App\Module\Noel\Contract\PortComptesPourNoel:
+        alias: App\Module\Membership\Service\ComptesPourNoel
+
+    # Les photos : le portrait de la fiche, sinon celui du compte. `Media` l'implémente.
+    App\Module\Noel\Contract\PortPhotosPourNoel:
+        alias: App\Module\Media\Service\PhotosPourNoel

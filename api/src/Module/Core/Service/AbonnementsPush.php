@@ -37,15 +37,15 @@ final class AbonnementsPush
     ) {
     }
 
-    public function inscrire(User $compte, string $endpoint, string $p256dh, string $auth): PushSubscription
+    public function inscrire(User $compte, string $endpoint, string $p256dh, string $auth, string $origine = PushSubscription::ORIGINE_HERITAGE): PushSubscription
     {
         $abonnement = $this->depot->parEndpoint($endpoint);
 
         if (null === $abonnement) {
-            $abonnement = new PushSubscription($compte, $endpoint, $p256dh, $auth);
+            $abonnement = new PushSubscription($compte, $endpoint, $p256dh, $auth, $origine);
             $this->em->persist($abonnement);
         } else {
-            $abonnement->reattribuer($compte, $p256dh, $auth);
+            $abonnement->reattribuer($compte, $p256dh, $auth, $origine);
         }
 
         // Deux inscriptions simultanées du même endpoint neuf buteraient sur l'index

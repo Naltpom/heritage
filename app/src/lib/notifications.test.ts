@@ -28,7 +28,7 @@ describe('la pastille', () => {
 })
 
 describe('le type', () => {
-  it('a une étiquette lisible pour chacun des vingt types du serveur', () => {
+  it('a une étiquette lisible pour chacun des vingt-deux types du serveur', () => {
     const types = [
       'demande_soumise',
       'demande_validee',
@@ -50,6 +50,8 @@ describe('le type', () => {
       'partage_naissance_revu',
       'demande_completee',
       'complement_fusionne',
+      'noel_tirage_effectue',
+      'noel_tirage_modifie',
     ]
     for (const t of types) {
       expect(libelleDeType(t)).not.toBe('Notification')

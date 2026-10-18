@@ -176,6 +176,12 @@ final class DiffusionPush implements ResetInterface
             $appareilsParCompte[$compte] ??= $this->appareilsDe($compte);
 
             foreach ($appareilsParCompte[$compte] as $appareil) {
+                // Un appareil abonné depuis noel2026 ne reçoit que les notifications de
+                // Noël : son service worker n'ouvre que les liens de ce site-là.
+                if (PushSubscription::ORIGINE_NOEL === $appareil->getOrigine() && !$notification->getKind()->estDeNoel()) {
+                    continue;
+                }
+
                 $messages[] = ['abonnement' => $appareil, 'charge' => $this->charge($notification)];
             }
         }

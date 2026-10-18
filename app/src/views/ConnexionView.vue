@@ -63,6 +63,7 @@ import PanneauBase from '@/components/base/PanneauBase.vue'
 import CadreEntree from '@/components/inscription/CadreEntree.vue'
 import { piloterConnexionCleDAcces } from '@/composables/useClesDAcces'
 import { delaiAvantNouvelEssai, destinationApresConnexion } from './connexion'
+import { adresseDeConnexionGoogle, configurationGoogle, messageDuRetourGoogle } from '@/lib/api/google'
 
 const route = useRoute()
 const routeur = useRouter()
@@ -112,7 +113,21 @@ const autoremplissage = cle.conditionnel
  *  les suggestions du champ. Seulement si l'autoremplissage est armé. */
 const autocompleteCourriel = computed(() => (autoremplissage.value ? 'username webauthn' : 'username'))
 
-onMounted(() => void cle.demarrer())
+/** Google, par redirection : seulement si le serveur est configuré pour. */
+const googleDisponible = ref(false)
+const adresseGoogle = computed(() => adresseDeConnexionGoogle(route.query['suite']))
+const messageGoogle = computed(() => messageDuRetourGoogle(route.query['google']))
+
+onMounted(() => {
+  void cle.demarrer()
+  configurationGoogle()
+    .then((configuration) => {
+      googleDisponible.value = configuration.redirection
+    })
+    .catch(() => {
+      googleDisponible.value = false
+    })
+})
 
 async function soumettre(): Promise<void> {
   if (!peutEnvoyer.value) return
@@ -208,6 +223,23 @@ async function soumettre(): Promise<void> {
         <!-- Annulé, ou impossible sur cet appareil : une phrase, sans alarme.
              Le mot de passe est juste au-dessus. -->
         <p v-if="messageCle !== null" class="m-0 text-sm text-attenue" role="status">{{ messageCle }}</p>
+      </div>
+
+      <!-- Google, par une simple navigation : aucun script tiers dans la page. -->
+      <div v-if="googleDisponible || messageGoogle !== null" class="mt-4 flex flex-col gap-3" data-connexion-google>
+        <div v-if="!cle.possible" class="flex items-center gap-3 text-xs text-attenue" aria-hidden="true">
+          <span class="h-px flex-1 bg-ligne" />
+          ou
+          <span class="h-px flex-1 bg-ligne" />
+        </div>
+        <a
+          v-if="googleDisponible"
+          :href="adresseGoogle"
+          class="inline-flex w-full items-center justify-center gap-2 rounded-champ border border-ligne bg-panneau px-3.5 py-1.5 text-sm font-semibold text-texte no-underline transition-colors hover:border-accent"
+        >
+          Continuer avec Google
+        </a>
+        <p v-if="messageGoogle !== null" class="m-0 text-sm text-attenue" role="status">{{ messageGoogle }}</p>
       </div>
     </PanneauBase>
 

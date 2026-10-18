@@ -64,6 +64,7 @@ security:
             # sont celles des gestionnaires de `json_login`, au caractère près.
             custom_authenticators:
                 - App\Module\Core\Security\CleDAccesAuthenticator
+                - App\Module\Core\Security\GoogleAuthenticator
 
             # Anti-force brute : 5 tentatives par couple identifiant+IP sur 15 minutes,
             # compteur remis à zéro à chaque connexion réussie. Symfony double la mesure
@@ -99,6 +100,10 @@ security:
         # un `404` unique, un limiteur par IP (`Evenement\Service\LimiteurDesLiens`) — et
         # le même `/` final, qui n'ouvre rien d'autre sous `/api/evenements`.
         - { path: ^/api/evenements/lien/, roles: PUBLIC_ACCESS }
+        # Le site du tirage de Noël : l'inscription publique, et la présentation d'un
+        # tirage à qui ouvre son lien sans être connecté.
+        - { path: ^/api/noel/inscription$, roles: PUBLIC_ACCESS }
+        - { path: ^/api/noel/tirages/[A-Za-z0-9]+$, methods: [GET], roles: PUBLIC_ACCESS }
         # La sonde de disponibilité (`Core\Controller\SanteController`), pour une sonde
         # extérieure qui n'a pas de compte. Elle ne rend que `{"statut":"ok"}` ou un `503`
         # sans détail. Ancrée des deux côtés : elle n'ouvre rien d'autre que ce chemin.

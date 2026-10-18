@@ -132,8 +132,14 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * l'import pouvait réécrire en silence ce que les demandes avaient fait valider, et ces
      * deux tables n'en portaient que le journal. Les colonnes `gedcom_xref` restent : ce
      * sont les identifiants stables de l'arbre.
+     *
+     * **46 depuis le 2026-10-19** : `noel_tirage`, `noel_participation` et
+     * `noel_attribution` (module `Noel`, `migrations/Version20261019090000.php`) portent le
+     * site du tirage de Noël — un tirage entre **comptes**, une seule fois, par un code
+     * partagé. Une **décision** : `trg_*` tire entre fiches, chaque année, et un compte en
+     * attente n'y a pas de place ; les deux ne se fondent pas l'un dans l'autre.
      */
-    private const int NOMBRE_DE_TABLES = 43;
+    private const int NOMBRE_DE_TABLES = 46;
 
     public function testLeMappingEstValide(): void
     {
@@ -170,7 +176,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      */
     public function testChaqueTablePorteLePrefixeDeSonModule(): void
     {
-        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'qst_', 'trg_', 'evt_', 'dmr_', 'ast_'];
+        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'qst_', 'trg_', 'evt_', 'dmr_', 'ast_', 'noel_'];
 
         foreach ($this->tablesDuMapping() as $table) {
             $porteUnPrefixe = array_filter(

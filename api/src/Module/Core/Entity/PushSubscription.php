@@ -47,6 +47,12 @@ class PushSubscription
      */
     public const int ENDPOINT_MAX = 2048;
 
+    public const string ORIGINE_HERITAGE = 'heritage';
+
+    public const string ORIGINE_NOEL = 'noel';
+
+    public const array ORIGINES = [self::ORIGINE_HERITAGE, self::ORIGINE_NOEL];
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -67,6 +73,13 @@ class PushSubscription
     #[ORM\Column(length: 255)]
     private string $auth;
 
+    /**
+     * Le site qui a posé l'abonnement — `heritage`, ou `noel` (noel2026) : chaque service
+     * worker ne sait ouvrir que ses propres liens. Voir {@see self::ORIGINES}.
+     */
+    #[ORM\Column(length: 16, options: ['default' => 'heritage'])]
+    private string $origine = self::ORIGINE_HERITAGE;
+
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     private \DateTimeImmutable $createdAt;
 
@@ -77,9 +90,10 @@ class PushSubscription
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE, nullable: true)]
     private ?\DateTimeImmutable $lastUsedAt = null;
 
-    public function __construct(User $user, string $endpoint, string $p256dh, string $auth)
+    public function __construct(User $user, string $endpoint, string $p256dh, string $auth, string $origine = self::ORIGINE_HERITAGE)
     {
         $this->user = $user;
+        $this->origine = $origine;
         $this->endpoint = $endpoint;
         $this->p256dh = $p256dh;
         $this->auth = $auth;
@@ -90,9 +104,10 @@ class PushSubscription
      * Le navigateur a renouvelé ses clés, ou un autre compte s'est connecté sur le même
      * appareil : on reprend la ligne telle que le navigateur la décrit maintenant.
      */
-    public function reattribuer(User $user, string $p256dh, string $auth): self
+    public function reattribuer(User $user, string $p256dh, string $auth, ?string $origine = null): self
     {
         $this->user = $user;
+        $this->origine = $origine ?? $this->origine;
         $this->p256dh = $p256dh;
         $this->auth = $auth;
 
@@ -102,6 +117,11 @@ class PushSubscription
     public function getId(): ?int
     {
         return $this->id;
+    }
+
+    public function getOrigine(): string
+    {
+        return $this->origine;
     }
 
     public function getUser(): User

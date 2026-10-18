@@ -130,6 +130,10 @@ const LIBELLES_DE_TYPE: Readonly<Record<string, string>> = {
   // deux mènent à `demande.detail`, et ne nomment ni la personne ni le contributeur.
   demande_completee: 'Demande complétée',
   complement_fusionne: 'Complément repris',
+  // Le site du tirage de Noël (noel2026, module `Noel`) : les deux mènent à
+  // `noel.tirage`, qui renvoie vers noel2026.naltpom.fr.
+  noel_tirage_effectue: 'Tirage de Noël',
+  noel_tirage_modifie: 'Tirage de Noël',
 }
 
 export function libelleDeType(kind: string): string {

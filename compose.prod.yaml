@@ -596,3 +596,28 @@ services:
             echo "[lieux] ECHEC de la resolution (code $$?) — la carte garde son etat de la veille, nouvelle tentative la nuit prochaine" >&2
           fi
         done
+
+  # Les tirages de Noël (noel2026) arrivés à leur date : tirés toutes les cinq minutes.
+  # Un tirage impossible (moins de trois participants) reste ouvert et sera retenté.
+  noel-echeances:
+    image: ${IMAGE_PREFIX:-heritage}/api:${IMAGE_TAG:-prod}
+    restart: unless-stopped
+    logging: *journalisation
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: 0
+      APP_SECRET: ${APP_SECRET:-d3v3l0ppement_secret_local_jetable}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-heritage}:${POSTGRES_PASSWORD:-heritage_dev}@db:5432/${POSTGRES_DB:-heritage}?serverVersion=17&charset=utf8"
+      HERITAGE_URL_PUBLIQUE: ${HERITAGE_URL_PUBLIQUE:-}
+    healthcheck:
+      disable: true
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          php bin/console heritage:noel:tirer-les-echeances --no-interaction || echo "[noel] ECHEC (code $$?)" >&2
+          sleep 300
+        done
