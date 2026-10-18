@@ -34,6 +34,8 @@ class TirageNoel
 
     public const int MESSAGE_MAX = 2000;
 
+    public const int PRESENTATION_MAX = 5000;
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -59,6 +61,14 @@ class TirageNoel
 
     #[ORM\Column(type: Types::TEXT, nullable: true)]
     private ?string $message = null;
+
+    /**
+     * Le texte de présentation, écrit par l'organisateur pour **son** public — avec les
+     * balises `{organisateur}`, `{date_tirage}`, `{date_remise}`, `{budget}` et `{lieu}`,
+     * que le site remplit. `null` : le texte par défaut du site.
+     */
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $presentation = null;
 
     #[ORM\ManyToOne(targetEntity: User::class)]
     #[ORM\JoinColumn(name: 'createur_user_id', nullable: false, onDelete: 'CASCADE')]
@@ -187,6 +197,18 @@ class TirageNoel
     public function setMessage(?string $message): self
     {
         $this->message = $message;
+
+        return $this;
+    }
+
+    public function getPresentation(): ?string
+    {
+        return $this->presentation;
+    }
+
+    public function setPresentation(?string $presentation): self
+    {
+        $this->presentation = $presentation;
 
         return $this;
     }

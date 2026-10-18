@@ -16,6 +16,8 @@ final readonly class ReglagesDuTirageNoel
         public ?string $message,
         public bool $lieuFourni = false,
         public bool $messageFourni = false,
+        public ?string $presentation = null,
+        public bool $presentationFournie = false,
     ) {
     }
 }

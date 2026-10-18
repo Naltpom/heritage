@@ -246,6 +246,14 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         // Les trois autres participants — pas l'organisateur, qui vient de le faire.
         self::assertCount(3, $this->em()->getRepository(Notification::class)->findBy(['kind' => NotificationKind::NoelTirageModifie]));
 
+        // Le texte de présentation : propre au tirage, effaçable (retour au texte par défaut).
+        $this->envoyer('PUT', "/api/noel/tirages/{$code}", ['presentation' => "Coucou les cousins !\nLe tirage se fera le {date_tirage}."]);
+        self::assertSame("Coucou les cousins !\nLe tirage se fera le {date_tirage}.", $this->charge()['presentation']);
+        $this->envoyer('PUT', "/api/noel/tirages/{$code}", ['presentation' => null]);
+        self::assertNull($this->charge()['presentation']);
+        $this->envoyer('PUT', "/api/noel/tirages/{$code}", ['presentation' => str_repeat('x', 5001)]);
+        self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
+
         $this->envoyer('PUT', "/api/noel/tirages/{$code}", ['dateTirage' => '2000-01-01T10:00:00+01:00']);
         self::assertSame(Response::HTTP_UNPROCESSABLE_ENTITY, $this->statut());
     }

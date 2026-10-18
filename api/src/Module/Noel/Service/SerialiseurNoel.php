@@ -33,6 +33,7 @@ final readonly class SerialiseurNoel
             'budget' => $tirage->getBudget(),
             'lieu' => $tirage->getLieu(),
             'message' => $tirage->getMessage(),
+            'presentation' => $tirage->getPresentation(),
             'statut' => $tirage->getStatut()->value,
             'tireLe' => null !== $tirage->getTireLe() ? self::instant($tirage->getTireLe()) : null,
             'nbParticipants' => \count($participants),
