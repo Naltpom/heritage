@@ -86,7 +86,7 @@ final class ServiceDesTiragesNoel
         $this->verifierLesDates($reglages->dateTirage, $reglages->dateEvenement, $maintenant);
 
         $tirage = new TirageNoel($this->nouveauCode(), $createur, $reglages->titre, $reglages->dateTirage, $reglages->dateEvenement, $reglages->budget);
-        $tirage->setLieu($reglages->lieu)->setMessage($reglages->message);
+        $tirage->setLieu($reglages->lieu)->setMessage($reglages->message)->setPresentation($reglages->presentation);
 
         $this->em->persist($tirage);
         $this->em->flush();
@@ -117,6 +117,9 @@ final class ServiceDesTiragesNoel
         }
         if ($reglages->messageFourni) {
             $tirage->setMessage($reglages->message);
+        }
+        if ($reglages->presentationFournie) {
+            $tirage->setPresentation($reglages->presentation);
         }
         $tirage->toucher();
         $this->em->flush();

@@ -51,6 +51,7 @@ final class LectureNoel
 
         $lieu = $this->texte($corps, 'lieu', TirageNoel::LIEU_MAX, $champs);
         $message = $this->texte($corps, 'message', TirageNoel::MESSAGE_MAX, $champs);
+        $presentation = $this->texte($corps, 'presentation', TirageNoel::PRESENTATION_MAX, $champs);
 
         if ([] !== $champs) {
             throw new ValidationException($champs);
@@ -65,6 +66,8 @@ final class LectureNoel
             $message,
             \array_key_exists('lieu', $corps),
             \array_key_exists('message', $corps),
+            $presentation,
+            \array_key_exists('presentation', $corps),
         );
     }
 
