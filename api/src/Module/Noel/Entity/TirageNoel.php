@@ -76,7 +76,7 @@ class TirageNoel
 
     /** @var Collection<int, Participation> */
     #[ORM\OneToMany(targetEntity: Participation::class, mappedBy: 'tirage', cascade: ['persist'])]
-    #[ORM\OrderBy(['id' => 'ASC'])]
+    #[ORM\OrderBy(['id' => \SortDirection::Ascending])]
     private Collection $participations;
 
     /** @var Collection<int, AttributionNoel> */
