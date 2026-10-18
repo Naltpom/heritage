@@ -20,13 +20,17 @@ use Symfony\Component\Security\Core\User\UserInterface;
  * besoin de « qui a fait ça » lit ici ; un module qui a besoin de « quelle personne de
  * l'arbre est-ce » lit `mbr_member`. Aucun des deux ne dépend de l'autre.
  *
- * Les comptes naissent **exclusivement** du parcours d'invitation ou de la commande
- * console d'amorçage : il n'existe aucune route publique d'inscription (§ 6.1 du
- * dossier de mission).
+ * Les comptes naissent du parcours d'invitation, de la commande console d'amorçage, ou
+ * de l'inscription publique du site du tirage de Noël (`Noel`, noel2026) — cette
+ * dernière ne crée que des comptes **en attente**, à rattacher par un administrateur.
+ *
+ * `googleSub` est l'identifiant stable Google (`sub` de l'ID token) d'un compte qui se
+ * connecte avec Google ; `avatarUrl`, la photo de profil Google, servie telle quelle.
  */
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: 'core_user')]
 #[ORM\UniqueConstraint(name: 'uniq_core_user_email', columns: ['email'])]
+#[ORM\UniqueConstraint(name: 'uniq_core_user_google_sub', columns: ['google_sub'])]
 // Index partiel : la table est presque intégralement `actif`, indexer les deux ou trois
 // lignes utiles suffit à servir la pastille « comptes à activer » du tableau de bord.
 #[ORM\Index(
@@ -94,6 +98,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, Equatab
     #[ORM\Column(options: ['default' => false])]
     private bool $ignoreBirthRestriction = false;
 
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $googleSub = null;
+
+    #[ORM\Column(length: 512, nullable: true)]
+    private ?string $avatarUrl = null;
+
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     private \DateTimeImmutable $createdAt;
 
@@ -133,6 +143,30 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface, Equatab
     public function setTelephone(?string $telephone): self
     {
         $this->telephone = $telephone;
+
+        return $this;
+    }
+
+    public function getGoogleSub(): ?string
+    {
+        return $this->googleSub;
+    }
+
+    public function setGoogleSub(?string $googleSub): self
+    {
+        $this->googleSub = $googleSub;
+
+        return $this;
+    }
+
+    public function getAvatarUrl(): ?string
+    {
+        return $this->avatarUrl;
+    }
+
+    public function setAvatarUrl(?string $avatarUrl): self
+    {
+        $this->avatarUrl = $avatarUrl;
 
         return $this;
     }

@@ -71,6 +71,9 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   return 'autre'
 }
 
+/** Le site du tirage de Noël (noel2026), vers lequel renvoie `noel.tirage`. */
+export const SITE_DE_NOEL = 'https://noel2026.naltpom.fr'
+
 /** Exportée pour que les tests montent la table sur un historique en mémoire :
  *  `createWebHistory()` a besoin d'un `window`, que la suite de tests n'a pas. */
 export const routes: RouteRecordRaw[] = [
@@ -378,6 +381,18 @@ export const routes: RouteRecordRaw[] = [
     name: 'tirage.detail',
     component: () => import('@/views/TirageView.vue'),
     meta: { acces: 'membre', titre: 'Tirage au sort', parent: { nom: 'evenements', libelle: 'Événements' } },
+  },
+  {
+    // Nom cité par les notifications `noel_tirage_*` : le tirage de Noël vit sur
+    // son propre site (noel2026), la route ne fait qu'y renvoyer.
+    path: '/noel/:code',
+    name: 'noel.tirage',
+    component: () => import('@/views/IntrouvableView.vue'),
+    beforeEnter: (vers) => {
+      window.location.assign(`${SITE_DE_NOEL}/t/${encodeURIComponent(String(vers.params.code))}`)
+      return false
+    },
+    meta: { acces: 'public', titre: 'Tirage de Noël' },
   },
   {
     // **Le lien personnel d'un participant** (ADR 0009, révision du 30/09/2026) :

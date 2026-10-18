@@ -428,6 +428,11 @@ services:
       # `0` = coupé pour toute l'instance. Même piège qu'au-dessus : sans cette
       # ligne, la poser dans le .env de la racine ne ferait rien.
       HERITAGE_GEOCODAGE_EN_LIGNE: ${HERITAGE_GEOCODAGE_EN_LIGNE:-}
+      # La connexion avec Google (bouton de noel2026, redirection d'heritage). Vide =
+      # Google désactivé. L'identifiant suffit au bouton ; le secret n'est requis que
+      # par la redirection (`/api/connexion/google/debut`).
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     # Aucune sonde déclarée ici : l'image en porte désormais une juste
     # (`HEALTHCHECK` dans api/Dockerfile, sur http://localhost:8000/). C'est sa
     # place — une image doit être correcte seule, pas seulement sous un

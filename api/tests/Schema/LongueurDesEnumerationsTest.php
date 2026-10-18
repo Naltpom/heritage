@@ -92,8 +92,12 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * **59 depuis la suppression du module `Gedcom`** : `ged_run.direction`, `ged_run.status`
      * et `ged_issue.severity` partent avec leurs deux tables (ADR 0018,
      * `migrations/Version20261014090000.php`).
+     *
+     * **64 depuis le 2026-10-19** : le module `Noel` — `noel_tirage.statut` et
+     * `noel_tirage.revelation`, `noel_participation.reponse`, `.presence` et `.vote`
+     * (`migrations/Version20261019090000.php`).
      */
-    private const int COLONNES_ENUM_ATTENDUES = 59;
+    private const int COLONNES_ENUM_ATTENDUES = 64;
 
     public function testChaqueColonneAccueilleLaPlusLongueValeurDeSonEnumeration(): void
     {

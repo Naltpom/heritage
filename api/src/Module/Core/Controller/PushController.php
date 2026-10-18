@@ -98,6 +98,12 @@ final class PushController extends AbstractController
             $champs['keys.auth'] = 'Secret d’authentification attendu (base64url, 16 octets).';
         }
 
+        // `origine` : le site qui s'abonne (`noel` pour noel2026). Absente : heritage.
+        $origine = $corps['origine'] ?? PushSubscription::ORIGINE_HERITAGE;
+        if (!\in_array($origine, PushSubscription::ORIGINES, true)) {
+            $champs['origine'] = 'Origine attendue : heritage ou noel.';
+        }
+
         if ([] !== $champs || null === $endpoint || !\is_string($p256dh) || !\is_string($auth)) {
             return $this->refus($champs);
         }
@@ -112,7 +118,8 @@ final class PushController extends AbstractController
             return new Response(null, Response::HTTP_NO_CONTENT);
         }
 
-        $this->abonnements->inscrire($compte, $endpoint, $p256dh, $auth);
+        \assert(\is_string($origine));
+        $this->abonnements->inscrire($compte, $endpoint, $p256dh, $auth, $origine);
 
         return new Response(null, Response::HTTP_NO_CONTENT);
     }

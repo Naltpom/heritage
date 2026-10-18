@@ -68,4 +68,17 @@ enum NotificationKind: string
      * compte rattaché.
      */
     case PartageNaissanceRevu = 'partage_naissance_revu';
+    /**
+     * Un tirage de Noël du site noel2026 (module `Noel`) vient d'être fait : à chaque
+     * participant, sans nommer personne. Lien `noel.tirage` `{code}`.
+     */
+    case NoelTirageEffectue = 'noel_tirage_effectue';
+    /** L'organisateur d'un tirage de Noël en a changé la date ou le budget. */
+    case NoelTirageModifie = 'noel_tirage_modifie';
+
+    /** Les types propres au site noel2026 : ses abonnements push ne reçoivent que ceux-là. */
+    public function estDeNoel(): bool
+    {
+        return self::NoelTirageEffectue === $this || self::NoelTirageModifie === $this;
+    }
 }

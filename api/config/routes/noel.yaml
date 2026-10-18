@@ -1,0 +1,11 @@
+# Contrat : ce fichier est celui du module Noel (le site du tirage de Noël, noel2026).
+# Aucun autre module n'y écrit — c'est la règle qui évite les conflits de fusion.
+#
+# Les routes se déclarent par attributs #[Route] dans les contrôleurs du module ;
+# l'import ci-dessous suffit à les charger.
+
+noel_controleurs:
+    resource:
+        path: ../../src/Module/Noel/Controller/
+        namespace: App\Module\Noel\Controller
+    type: attribute
