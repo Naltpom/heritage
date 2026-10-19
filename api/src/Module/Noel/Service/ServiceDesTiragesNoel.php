@@ -158,20 +158,38 @@ final class ServiceDesTiragesNoel
             $this->em->persist($participation);
         }
         $participation->repondre($reponse->reponse, $reponse->presence, $reponse->vote, $conjoint);
-
-        // Qui part ne reste le conjoint de personne.
-        if (!$participation->participe()) {
-            foreach ($tirage->getParticipations() as $autre) {
-                if ($autre->getConjoint()?->getId() === $compte->getId()) {
-                    $autre->repondre($autre->getReponse(), $autre->getPresence(), $autre->getVote(), null);
-                }
-            }
-        }
+        $this->accorderLesConjoints($tirage, $participation);
 
         $tirage->toucher();
         $this->em->flush();
 
         return $tirage;
+    }
+
+    /**
+     * Le lien de conjoint est **réciproque** : une seule réponse suffit. Qui me désigne me
+     * voit le désigner ; qui je quitte — ou qui part — ne me désigne plus ; et un tiers qui
+     * désignait l'un de nous deux est délié.
+     */
+    private function accorderLesConjoints(TirageNoel $tirage, Participation $participation): void
+    {
+        $moi = $participation->getUser()->getId();
+        $conjoint = $participation->getConjoint();
+
+        foreach ($tirage->getParticipations() as $autre) {
+            if ($autre === $participation) {
+                continue;
+            }
+
+            $estMonConjoint = null !== $conjoint && $autre->getUser()->getId() === $conjoint->getId();
+            $designe = $autre->getConjoint()?->getId();
+
+            if ($estMonConjoint) {
+                $autre->repondre($autre->getReponse(), $autre->getPresence(), $autre->getVote(), $participation->getUser());
+            } elseif (null !== $designe && ($designe === $moi || $designe === $conjoint?->getId())) {
+                $autre->repondre($autre->getReponse(), $autre->getPresence(), $autre->getVote(), null);
+            }
+        }
     }
 
     /** Le tirage en avance, par l'organisateur. */
