@@ -24,11 +24,17 @@ use Symfony\Component\RateLimiter\Storage\CacheStorage;
 /**
  * **L'inscription publique** du site de Noël — la seule d'heritage.
  *
- * Elle ne crée que des comptes **en attente** : le compte se connecte, participe aux
- * tirages de Noël, et voit d'heritage ce que voit tout compte en attente (les défunts).
- * L'identité déclarée — nom de naissance, prénom, date de naissance, téléphone — part
- * chez `Membership` comme un membre « à rattacher » : l'administrateur le relie ensuite
- * à sa fiche, par le parcours habituel.
+ * Elle crée des comptes **en attente** : le compte se connecte, participe aux tirages de
+ * Noël, et voit d'heritage ce que voit tout compte en attente (les défunts). L'identité
+ * déclarée — nom de naissance, prénom, date de naissance, téléphone — part chez
+ * `Membership` comme un membre « à rattacher » : l'administrateur le relie ensuite à sa
+ * fiche, par le parcours habituel.
+ *
+ * **Sauf** quand cette identité désigne sans ambiguïté une fiche vivante et libre (même
+ * nom, un prénom, la date au jour près) : `Membership` l'y rattache, et le compte naît
+ * **actif**. C'est une décision du commanditaire, prise en connaissance de cause : qui
+ * connaît le nom et la date de naissance d'un vivant peut ainsi prendre sa fiche. Les
+ * administrateurs en sont prévenus et peuvent défaire le rattachement.
  *
  * Avec Google, le courriel et le `sub` viennent du **jeton d'inscription signé** rendu par
  * `POST /api/connexion/google`, jamais du corps de la requête.
@@ -120,7 +126,9 @@ final class InscriptionAuSiteDeNoel
 
             $id = $compte->getId();
             \assert(null !== $id);
-            $this->comptes->declarerUnCompteEnAttente($id, $email, $nom, $prenom, $naissance);
+            if ($this->comptes->declarerUnCompte($id, $email, $nom, $prenom, $naissance)) {
+                $compte->setStatus(UserStatus::Actif);
+            }
 
             $this->em->flush();
             $this->em->commit();

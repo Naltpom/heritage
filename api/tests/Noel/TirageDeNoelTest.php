@@ -14,6 +14,7 @@ use App\Module\Membership\Enum\MatchKind;
 use App\Module\Noel\Entity\TirageNoel;
 use App\Module\Noel\Service\ServiceDesTiragesNoel;
 use App\Module\Tree\Serializer\ParenteDuLecteur;
+use App\Tests\Membership\Double\ArbreEnMemoire;
 use App\Tests\Tree\ArbreWebTestCase;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\HttpClient\MockHttpClient;
@@ -61,6 +62,38 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         $this->requete('/api/noel/moi');
         self::assertSame(Response::HTTP_OK, $this->statut());
         self::assertSame(['Paul', 'Martin'], [$this->charge()['prenom'], $this->charge()['nom']]);
+    }
+
+    public function testLInscriptionQuiDesigneUneFicheSansAmbiguiteLaRattacheEtActiveLeCompte(): void
+    {
+        ArbreEnMemoire::reinitialiser();
+        ArbreEnMemoire::ajouterPersonne(501, 'Paul Émile', 'Martin', true, 1960, '12.5.1960');
+        ArbreEnMemoire::ajouterPersonne(502, 'Léa', 'Martin', true, 1990, '1990');
+        ArbreEnMemoire::ajouterPersonne(503, 'Hugo', 'Durand', true, 2015, '25.12.2015');
+        ArbreEnMemoire::ajouterPersonne(504, 'Hugo', 'Durand', true, 2015, '25.12.2015');
+
+        // Prénom d'usage, casse et accents libres : rattaché à 501, actif d'emblée.
+        $this->inscrire('papa@example.invalid', 'MARTIN', 'paul', '1960-05-12');
+        self::assertSame(Response::HTTP_CREATED, $this->statut(), $this->corps());
+        self::assertSame('actif', $this->charge()['utilisateur']['status'] ?? null);
+        $membre = $this->membreDe('papa@example.invalid');
+        self::assertSame([501, MatchKind::RechercheConfirmee, 'actif'], [$membre->getPersonId(), $membre->getMatchKind(), $membre->getStatus()->value]);
+        self::assertSame(UserStatus::Actif, $this->compte('papa@example.invalid')->getStatus());
+
+        // La même fiche ne se prend pas deux fois.
+        $this->deconnexion();
+        $this->inscrire('usurpateur@example.invalid', 'Martin', 'Paul', '1960-05-12');
+        self::assertSame('en_attente', $this->charge()['utilisateur']['status'] ?? null);
+        self::assertNull($this->membreDe('usurpateur@example.invalid')->getPersonId());
+
+        // Une fiche datée à l'année seulement, ou deux fiches qui correspondent : à rattacher.
+        $this->deconnexion();
+        $this->inscrire('fille@example.invalid', 'Martin', 'Léa', '1990-07-08');
+        self::assertSame('en_attente', $this->charge()['utilisateur']['status'] ?? null);
+        $this->deconnexion();
+        $this->inscrire('fils@example.invalid', 'Durand', 'Hugo', '2015-12-25');
+        self::assertSame('en_attente', $this->charge()['utilisateur']['status'] ?? null);
+        self::assertSame(MatchKind::ARattacher, $this->membreDe('fils@example.invalid')->getMatchKind());
     }
 
     public function testLInscriptionRefuseUnCourrielDejaPrisEtDesChampsInvalides(): void
@@ -234,16 +267,15 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         self::assertNull($this->charge()['maParticipation']['conjointUserId']);
     }
 
-    public function testUnAdministrateurLitSonLienDeParenteAvecChaqueParticipant(): void
+    public function testChacunLitSonLienDeParenteAvecChaqueParticipant(): void
     {
         $code = $this->tirageAvecQuatreParticipants();
 
         $attendu = self::getContainer()->get(ParenteDuLecteur::class)->depuis($this->idDe('aieul'), $this->idDe('ego'));
         self::assertNotNull($attendu);
 
-        // Paul est administrateur, rattaché à `aieul` ; Julie, sa conjointe au tirage, l'est
+        // Paul est rattaché à `aieul` ; Julie, sa conjointe au tirage, l'est
         // à `aieule` — son épouse dans l'arbre —, Léa à `ego`, Hugo à rien.
-        $this->compte('papa@example.invalid')->setRoles(['ROLE_ADMIN']);
         foreach (['papa@example.invalid' => 'aieul', 'maman@example.invalid' => 'aieule', 'fille@example.invalid' => 'ego'] as $email => $fiche) {
             $membre = $this->em()->getRepository(Member::class)->findOneBy(['userId' => $this->compte($email)->getId()]);
             self::assertNotNull($membre);
@@ -272,17 +304,17 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         $this->requete("/api/noel/tirages/{$code}/mon-attribution");
         self::assertArrayHasKey('lien', $this->charge());
 
-        // Un participant qui n'est pas administrateur ne reçoit pas la clé.
+        // Léa, sans être administratrice, lit les siens depuis sa fiche (`ego`).
         $this->connexion('fille@example.invalid');
         $this->requete('/api/noel/tirages/'.$code);
         $participants = $this->charge()['participants'];
         self::assertIsArray($participants);
-        foreach ($participants as $participant) {
-            self::assertIsArray($participant);
-            self::assertArrayNotHasKey('lien', $participant);
-        }
-        $this->requete("/api/noel/tirages/{$code}/mon-attribution");
-        self::assertArrayNotHasKey('lien', $this->charge());
+        $liens = array_column($participants, 'lien', 'userId');
+        self::assertSame(
+            self::getContainer()->get(ParenteDuLecteur::class)->depuis($this->idDe('ego'), $this->idDe('aieule')),
+            $liens[$id('maman@example.invalid')],
+        );
+        self::assertNull($liens[$id('fils@example.invalid')]);
     }
 
     public function testMoinsDeTroisParticipantsNeSeTirentPas(): void
@@ -463,6 +495,14 @@ final class TirageDeNoelTest extends ArbreWebTestCase
     private function deconnexion(): void
     {
         $this->client->getCookieJar()->clear();
+    }
+
+    private function membreDe(string $email): Member
+    {
+        $membre = $this->em()->getRepository(Member::class)->findOneBy(['userId' => $this->compte($email)->getId()]);
+        self::assertNotNull($membre);
+
+        return $membre;
     }
 
     private function compte(string $email): User
