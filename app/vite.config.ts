@@ -74,6 +74,9 @@ function empreinteDesSources(racine: string): string {
   return h.digest('hex').slice(0, 16)
 }
 
+/** Les tests montés dans un rendu client en mémoire — voir `test.projects` plus bas. */
+const TESTS_CLIENT = ['**/*.client.test.ts', '**/.*/**/*.client.test.ts']
+
 export default defineConfig(({ mode }) => {
   // Préfixe vide : on veut aussi les variables passées par le shell ou par
   // Docker Compose, pas seulement celles préfixées VITE_ des fichiers .env.
@@ -100,7 +103,20 @@ export default defineConfig(({ mode }) => {
       // Le second motif : `**` ne traverse pas un dossier caché. Un dépôt extrait
       // sous `.claude/worktrees/…` compilait donc ces tests pour le serveur, et
       // les dix fichiers tombaient (« reading 'modules' ») — ailleurs que sur la CI.
-      testTransformMode: { web: ['**/*.client.test.ts', '**/.*/**/*.client.test.ts'] },
+      //
+      // Depuis Vitest 4, `testTransformMode` n'existe plus : ces fichiers forment un
+      // projet à part, dont l'environnement compile pour le client
+      // (`vitest.environnement-client.ts`). Les autres restent compilés pour le SSR.
+      projects: [
+        {
+          extends: true,
+          test: { name: 'ssr', include: ['**/*.test.ts'], exclude: [...TESTS_CLIENT, '**/node_modules/**'] },
+        },
+        {
+          extends: true,
+          test: { name: 'client', include: TESTS_CLIENT, environment: './vitest.environnement-client.ts' },
+        },
+      ],
     },
     resolve: {
       alias: {
