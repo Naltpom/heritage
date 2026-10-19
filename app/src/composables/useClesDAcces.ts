@@ -721,7 +721,7 @@ export function piloterInvitationCleDAcces(
       // La priorité, tout de suite : les notifications s'abstiennent tant que
       // ce n'est pas tranché.
       reserverPourLaCleDAcces()
-      // Écran sans cadre (connexion, lien de tirage…) : on attend le suivant,
+      // Écran sans cadre (connexion, lien d'invitation…) : on attend le suivant,
       // en gardant la priorité.
       if (!avecCadre) return
       attente = setTimeout(() => {

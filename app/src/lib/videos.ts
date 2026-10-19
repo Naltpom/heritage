@@ -164,7 +164,7 @@ export const VIDEOS: readonly VideoAide[] = [
   {
     id: 'les-evenements',
     titre: 'Les événements',
-    description: 'Un rassemblement ou un tirage au sort : inviter, les réponses, les relances.',
+    description: 'Un rassemblement ou un tirage de Noël : inviter, les réponses, les relances.',
     dureeSecondes: duree('les-evenements'),
     groupe: 'fonctionnalite',
     ecran: { nom: 'evenements', libelle: 'Voir les événements' },

@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import type { LigneDeSuivi, ResumeDEvenement, SuiviDEvenement } from '@/lib/api'
 import {
+  adresseDuLien,
   annonceAEnvoyer,
   bilan,
   compteDInvites,
@@ -203,5 +204,17 @@ describe('l’annonce', () => {
       lieu: null,
       description: 'Venez !\nAvec un plat.',
     })
+  })
+})
+
+describe('adresseDuLien', () => {
+  it('rend absolue l’url relative de l’API', () => {
+    expect(adresseDuLien('/e/abc', 'https://heritage.local')).toBe('https://heritage.local/e/abc')
+    expect(adresseDuLien('/e/abc', 'https://heritage.local/')).toBe('https://heritage.local/e/abc')
+    expect(adresseDuLien('e/abc', 'http://localhost:5173')).toBe('http://localhost:5173/e/abc')
+  })
+
+  it('laisse une url déjà absolue telle quelle', () => {
+    expect(adresseDuLien('https://a.b/e/x', 'https://c.d')).toBe('https://a.b/e/x')
   })
 })

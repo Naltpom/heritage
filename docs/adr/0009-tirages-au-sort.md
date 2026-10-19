@@ -1,6 +1,13 @@
 # ADR 0009 — Les tirages au sort récurrents
 
-Date : 2026-09-27 · Statut : acceptée
+Date : 2026-09-27 · Statut : **remplacée** le 2026-10-20
+
+> **Module retiré (2026-10-20).** Décision du propriétaire : le module `Tirage`, ses routes
+> `/api/tirages…` et ses tables `trg_*` sont supprimés, **données comprises** (migration
+> `Version20261020090000`, irréversible). Les tirages de Noël du module `Noel` (site
+> noel2026, tables `noel_*`) les remplacent : un tirage entre **comptes**, une fois, par un
+> code partagé — heritage les montre à ses membres actifs dans « Mes événements » par
+> `GET /api/noel/tirages`. Le texte ci-dessous est conservé comme historique.
 
 ## Contexte
 

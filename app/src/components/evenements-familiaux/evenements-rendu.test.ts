@@ -8,8 +8,8 @@
  * 3. **Le suivi** : les quatre groupes, les fantômes nommés comme tels, le
  *    « vu il y a … », et le geste du lien pour qui n'a pas de compte.
  * 4. **Le sélecteur** : le compteur, « Tous les vivants », les branches.
- * 5. **Le choix du type** (02/10/2026) : deux grandes cartes, Rassemblement et
- *    Tirage au sort, chacune menant au bon formulaire.
+ * 5. **Le choix du type** (02/10/2026) : deux grandes cartes — Rassemblement,
+ *    qui mène au formulaire, et Tirage de Noël, qui mène au site de Noël.
  * 6. **La réponse notée** par l'organisateur et **les dates changées** : le
  *    suivi le dit, l'invité par lien voit le bandeau.
  */
@@ -204,15 +204,18 @@ describe('ChoixDuType', () => {
       h('a', { href: typeof props.to === 'string' ? props.to : `?type=${String((props.to as { query?: { type?: string } }).query?.type)}` }, slots['default']?.()),
   })
 
-  it('deux grandes cartes, chacune menant à son formulaire', async () => {
+  it('deux grandes cartes : le formulaire du rassemblement, le site de Noël pour un tirage', async () => {
     const app = createSSRApp({ render: () => h(ChoixDuType) })
     app.component('RouterLink', LienFactice)
     const html = await renderToString(app)
 
     expect(html).toContain('Rassemblement')
-    expect(html).toContain('Tirage au sort')
     expect(html).toContain('href="?type=rassemblement"')
-    expect(html).toContain('href="?type=tirage"')
+    expect(html).toContain('Tirage de Noël')
+    expect(html).toContain('href="https://noel2026.naltpom.fr/creer"')
+    expect(html).toContain('Créer sur le site de Noël')
+    expect(html).not.toContain('?type=tirage')
+    expect(html).not.toContain('Tirage au sort')
   })
 })
 

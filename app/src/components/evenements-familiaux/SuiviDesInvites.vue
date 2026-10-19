@@ -32,7 +32,7 @@ import { computed, ref, watch } from 'vue'
 import type { LigneDeSuivi, ReponseAInvitation, SuiviDEvenement } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import BoutonsDeReponse from './BoutonsDeReponse.vue'
-import ActionsDuLien from '@/components/tirages/ActionsDuLien.vue'
+import ActionsDuLien from './ActionsDuLien.vue'
 import LienDeLInvite from './LienDeLInvite.vue'
 import { GROUPES_DU_SUIVI, detailDeLaLigne, etatDeLaRelance, rappelDesLiens } from './evenements'
 

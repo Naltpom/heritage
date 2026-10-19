@@ -166,7 +166,6 @@ describe('ce que les autres modules accrochent à la fiche', () => {
         dependances: [
           { nature: 'demarche', nombre: 2, bloquante: true },
           { nature: 'evenement_a_venir', nombre: 1, bloquante: true },
-          { nature: 'tirage', nombre: 1, bloquante: true },
           { nature: 'autorisation_naissance', nombre: 1, bloquante: true },
         ],
       }),
@@ -175,7 +174,6 @@ describe('ce que les autres modules accrochent à la fiche', () => {
     expect(lignes.filter((l) => l.bloquante).map((l) => l.libelle)).toEqual([
       '2 démarches d’acte qui la concernent',
       '1 invitation à un événement à venir',
-      '1 participation à un tirage au sort',
       'une autorisation signée de partager sa date de naissance',
     ])
   })

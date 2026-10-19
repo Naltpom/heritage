@@ -1,6 +1,9 @@
 <script setup lang="ts">
 /**
- * Les gestes du lien personnel, sur la ligne d'un participant (page du tirage).
+ * Les gestes du lien personnel, sur la ligne d'un invité sans compte (suivi
+ * de l'organisateur, page de l'événement). Né avec les tirages au sort
+ * d'heritage, il est resté quand ils sont partis : les rassemblements s'en
+ * servent tels quels.
  *
  * Deux états, et le libellé du bouton principal en dépend — c'est tout
  * l'enjeu d'une clé qu'on ne garde qu'en empreinte :

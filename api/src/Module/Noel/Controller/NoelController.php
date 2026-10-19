@@ -6,6 +6,7 @@ namespace App\Module\Noel\Controller;
 
 use App\Module\Core\Entity\User;
 use App\Module\Core\Exception\NotFoundException;
+use App\Module\Core\Security\ReserveAuxMembres;
 use App\Module\Core\Service\Incarnation;
 use App\Module\Noel\Entity\TirageNoel;
 use App\Module\Noel\Service\LectureNoel;
@@ -25,6 +26,7 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  * GET  /api/noel/tirages/{code}                  public ; complet avec une session
  * POST /api/noel/tirages                         créer                  201
  * GET  /api/noel/mes-tirages                     les miens
+ * GET  /api/noel/tirages                         tous (membres d'heritage seulement)
  * PUT  /api/noel/tirages/{code}                  régler (organisateur, tant qu'ouvert)
  * PUT  /api/noel/tirages/{code}/participation    répondre (tant qu'ouvert)
  * POST /api/noel/tirages/{code}/lancer           tirer en avance (organisateur) — irréversible
@@ -34,6 +36,15 @@ use Symfony\Component\Security\Http\Attribute\CurrentUser;
  *
  * Tout compte connecté, **en attente compris** : c'est le public du site. Il n'existe
  * aucune route d'annulation d'un tirage.
+ *
+ * Une exception, `GET /api/noel/tirages` : la liste de **tous** les tirages, qu'heritage
+ * montre dans « Mes événements » depuis le retrait de son module `Tirage` (ADR 0009,
+ * remplacé). Elle porte {@see ReserveAuxMembres} — le même contrôle que l'ancien
+ * contrôleur des tirages et que celui des événements — parce qu'un compte en attente,
+ * qui s'est peut-être inscrit sur noel2026 sous un faux nom, n'a pas à découvrir les
+ * tirages auxquels on ne l'a pas convié : il reçoit `403 regime_en_attente`. Sans
+ * session, `access_control` rend `401` — la règle publique ne s'ouvre qu'à
+ * `/tirages/{code}`.
  */
 #[Route('/api/noel')]
 final class NoelController extends AbstractController
@@ -69,6 +80,16 @@ final class NoelController extends AbstractController
         return new JsonResponse(array_map(
             fn (TirageNoel $t): array => $this->serialiseur->resume($t, $compte),
             $this->service->duCompte($compte),
+        ));
+    }
+
+    #[Route('/tirages', name: 'noel_tous_les_tirages', methods: ['GET'])]
+    #[ReserveAuxMembres]
+    public function tousLesTirages(#[CurrentUser] User $compte): JsonResponse
+    {
+        return new JsonResponse(array_map(
+            fn (TirageNoel $t): array => $this->serialiseur->resume($t, $compte),
+            $this->service->tous(),
         ));
     }
 

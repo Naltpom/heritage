@@ -134,9 +134,10 @@
   --h-ok-doux: color-mix(in srgb, var(--h-ok) 13%, transparent);
   --h-ok-bord: color-mix(in srgb, var(--h-ok) 35%, transparent);
 
-  /* Le violet du cadeau : le seul geste de l'accueil qu'on doit repérer d'un
-     coup d'œil, donc la seule teinte qui n'appartient ni à l'accent ni aux
-     états. Réservé à « Voir à qui je fais le cadeau ». */
+  /* Le violet du cadeau : celui des tirages de Noël (pastille « Noël », cartes
+     de l'accueil et de la liste, « Découvrir à qui j'offre »), qu'on doit
+     repérer d'un coup d'œil — donc la seule teinte qui n'appartient ni à
+     l'accent ni aux états. `cadeau-texte` est le texte POSÉ SUR le violet plein. */
   --h-cadeau: #6b3fa0;
   --h-cadeau-texte: #ffffff;
   --h-cadeau-doux: color-mix(in srgb, var(--h-cadeau) 12%, transparent);

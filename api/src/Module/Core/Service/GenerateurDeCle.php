@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Module\Core\Service;
 
 /**
- * La clé d'un **lien personnel** — celui d'un participant de tirage (`/t/<clé>`), celui d'un
- * invité à un événement (`/e/<clé>`) : sa génération, son empreinte, sa forme.
+ * La clé d'un **lien personnel** — celui d'un invité à un événement (`/e/<clé>`) : sa
+ * génération, son empreinte, sa forme.
  *
  * ## Une copie devenue commune
  *
@@ -15,8 +15,9 @@ namespace App\Module\Core\Service;
  * vers `Core\…` ou un `Contract\`, et ce qui ne sert qu'à deux modules est dupliqué plutôt
  * qu'installé dans le noyau (règle 3). L'en-tête de cette copie fixait la suite : « si un
  * troisième module en a besoin, c'est le moment de le monter dans `Core` ». Le module
- * `Evenement` (2026-10-02) est ce troisième : la classe vit donc ici, et `Tirage` comme
- * `Evenement` l'emploient telle quelle. `Membership` garde son générateur de jeton : il porte
+ * `Evenement` (2026-10-02) est ce troisième : la classe vit donc ici, et `Evenement`
+ * l'emploie telle quelle — seul, depuis le retrait du module `Tirage` (2026-10-20), sans
+ * que cela justifie de la redescendre. `Membership` garde son générateur de jeton : il porte
  * en plus un préfixe affichable, propre aux invitations, et le déplacer ne servirait personne.
  *
  * ## Ce qui est stocké
@@ -30,8 +31,8 @@ namespace App\Module\Core\Service;
  *
  * 32 octets aléatoires en **base64url sans remplissage**, soit 43 caractères
  * `[A-Za-z0-9_-]` : 256 bits, qu'aucun limiteur n'a besoin de protéger contre la devinette
- * — le limiteur de chaque module (`Tirage\Service\LimiteurDesLiens`,
- * `Evenement\Service\LimiteurDesLiens`) n'est là que par défense en profondeur.
+ * — le limiteur du module qui s'en sert (`Evenement\Service\LimiteurDesLiens`) n'est là
+ * que par défense en profondeur.
  *
  * ## Pourquoi `hash_equals` n'apparaît nulle part
  *
@@ -49,8 +50,7 @@ final class GenerateurDeCle
         return rtrim(strtr(base64_encode(random_bytes(self::OCTETS)), '+/', '-_'), '=');
     }
 
-    /** `hash('sha256', $cle)` en hexadécimal — les 64 caractères de `trg_participant.lien_token_hash` et
-     * de `evt_invitation.lien_token_hash`. */
+    /** `hash('sha256', $cle)` en hexadécimal — les 64 caractères de `evt_invitation.lien_token_hash`. */
     public function empreinte(string $cle): string
     {
         return hash('sha256', $cle);

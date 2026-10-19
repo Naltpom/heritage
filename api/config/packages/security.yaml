@@ -89,19 +89,16 @@ security:
         # raison que l'inscription : on clique depuis le courriel, souvent sur un autre
         # appareil, sans session. Sa protection est le jeton, et son refus un `404`.
         - { path: ^/api/session/courriel/confirmer, roles: PUBLIC_ACCESS }
-        # Le lien personnel d'un participant de tirage (ADR 0009, révision du 2026-10-01) :
-        # une personne sans compte y suit son tirage. Public pour la même raison que
-        # l'inscription ; sa protection est la clé, son refus un `404` unique, et un
-        # limiteur par IP (`Tirage\Service\LimiteurDesLiens`). Le `/` final compte : il
-        # n'ouvre rien d'autre sous `/api/tirages`.
-        - { path: ^/api/tirages/lien/, roles: PUBLIC_ACCESS }
         # Le lien personnel d'un invité à un événement : une personne sans compte y lit
-        # l'annonce et répond présente ou absente. Même raison, même protection — la clé,
-        # un `404` unique, un limiteur par IP (`Evenement\Service\LimiteurDesLiens`) — et
-        # le même `/` final, qui n'ouvre rien d'autre sous `/api/evenements`.
+        # l'annonce et répond présente ou absente. Public pour la même raison que
+        # l'inscription ; sa protection est la clé, son refus un `404` unique, et un
+        # limiteur par IP (`Evenement\Service\LimiteurDesLiens`). Le `/` final compte : il
+        # n'ouvre rien d'autre sous `/api/evenements`.
         - { path: ^/api/evenements/lien/, roles: PUBLIC_ACCESS }
         # Le site du tirage de Noël : l'inscription publique, et la présentation d'un
-        # tirage à qui ouvre son lien sans être connecté.
+        # tirage à qui ouvre son lien sans être connecté. Le code est exigé (`+`, ancré) :
+        # `GET /api/noel/tirages` sans code — la liste de tous les tirages, réservée aux
+        # membres d'heritage — tombe dans le filet `^/api` plus bas, et rend `401` sans session.
         - { path: ^/api/noel/inscription$, roles: PUBLIC_ACCESS }
         - { path: ^/api/noel/tirages/[A-Za-z0-9]+$, methods: [GET], roles: PUBLIC_ACCESS }
         # La sonde de disponibilité (`Core\Controller\SanteController`), pour une sonde

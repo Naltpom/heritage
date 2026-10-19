@@ -40,7 +40,6 @@ describe('le type', () => {
       'compte_active',
       'media_valide',
       'media_refuse',
-      'tirage_effectue',
       'evenement_invitation',
       'evenement_relance',
       'evenement_annule',
@@ -67,7 +66,7 @@ describe('le type', () => {
     expect(tonDeType('demande_refusee')).toBe('alerte')
     expect(tonDeType('demande_validee')).toBe('ok')
     expect(tonDeType('compte_active')).toBe('ok')
-    expect(tonDeType('tirage_effectue')).toBe('neutre')
+    expect(tonDeType('noel_tirage_effectue')).toBe('neutre')
     expect(tonDeType('evenement_invitation')).toBe('neutre')
     expect(tonDeType('evenement_annule')).toBe('alerte')
     // Un déplacement n'est pas un refus : la réponse tient, on la confirme.

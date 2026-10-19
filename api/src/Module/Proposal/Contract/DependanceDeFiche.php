@@ -28,9 +28,9 @@ namespace App\Module\Proposal\Contract;
  *   module qui l'efface.
  *
  * Ce qui n'est **ni l'un ni l'autre** n'apparaît pas ici, et c'est délibéré : l'historique.
- * Les attributions d'un tirage passé, le suivi d'un événement clos, une invitation close,
- * une autorisation de naissance archivée survivent à leur fiche sous leur libellé
- * dénormalisé — ADR 0009, 0014 et 0016, § 6.4 quater du contrat d'API.
+ * Le suivi d'un événement clos, une invitation close, une autorisation de naissance
+ * archivée survivent à leur fiche sous leur libellé dénormalisé — ADR 0014 et 0016,
+ * § 6.4 quater du contrat d'API.
  * `heritage:verifier-integrite` les relève comme **tolérées**.
  *
  * ## L'ordre des cas est un contrat
@@ -38,6 +38,12 @@ namespace App\Module\Proposal\Contract;
  * C'est celui de `dependances` dans l'inventaire stocké, et l'inventaire se compare en
  * entier à la validation ({@see InventaireDeSuppression::versJson()}). Ajouter un cas se fait
  * à la fin.
+ *
+ * Retirer un cas est possible, et a été fait une fois : `tirage` (`trg_participant`) est
+ * parti le 2026-10-20 avec le module `Tirage` (ADR 0009, remplacé). Un inventaire stocké
+ * qui le nomme encore se relit par `tryFrom()`, qui l'écarte ; la comparaison à la
+ * validation le voit alors changé, et l'administrateur relit l'aperçu — ce qui est juste,
+ * puisque la dépendance a bel et bien disparu.
  */
 enum DependanceDeFiche: string
 {
@@ -46,9 +52,6 @@ enum DependanceDeFiche: string
 
     /** `evt_invitation` — elle est invitée à un événement à venir ou en cours, non annulé (ADR 0014). */
     case EvenementAVenir = 'evenement_a_venir';
-
-    /** `trg_participant` — elle participe à un tirage au sort, ou y sert de référent (ADR 0009). */
-    case Tirage = 'tirage';
 
     /** `mbr_autorisation_naissance` — une autorisation signée active est déposée sur elle (ADR 0016). */
     case AutorisationDeNaissance = 'autorisation_naissance';
@@ -66,7 +69,7 @@ enum DependanceDeFiche: string
      * {@see InventaireDeSuppression::raisonsDuBlocage()}.
      *
      * **Un compte, jamais un nom.** Ces raisons partent sur une route ouverte à tout membre :
-     * le titre d'un tirage fermé, l'intitulé d'une démarche masquée ou le nom d'un événement
+     * l'intitulé d'une démarche masquée ou le nom d'un événement
      * où le lecteur n'est pas invité n'ont pas à en sortir. Le nombre suffit à dire qu'il
      * faut aller voir, et le geste à faire dit où.
      */
@@ -88,12 +91,6 @@ enum DependanceDeFiche: string
                 $nombre,
                 $pluriel ? 's' : '',
             ),
-            self::Tirage => \sprintf(
-                'Cette fiche participe à %d tirage%s au sort : elle y serait tirée sans exister. '
-                .'Retirez-la d\'abord du tirage — son organisateur, son référent ou elle-même le peut.',
-                $nombre,
-                $pluriel ? 's' : '',
-            ),
             self::AutorisationDeNaissance => 'Une autorisation signée de partager sa date de naissance est déposée sur cette fiche : c\'est une preuve de consentement, elle ne part pas en effet de bord. '
                 .'Un administrateur doit d\'abord la retirer — et la déposer sur l\'autre fiche s\'il s\'agit d\'un doublon.',
             self::Question => '',
@@ -108,7 +105,6 @@ enum DependanceDeFiche: string
         return match ($this) {
             self::Demarche => \sprintf('%d démarche%s d\'acte', $nombre, $pluriel ? 's' : ''),
             self::EvenementAVenir => \sprintf('%d invitation%s à un événement à venir', $nombre, $pluriel ? 's' : ''),
-            self::Tirage => \sprintf('%d participation%s à un tirage au sort', $nombre, $pluriel ? 's' : ''),
             self::AutorisationDeNaissance => 'une autorisation de partage de sa date de naissance',
             self::Question => \sprintf('%d question%s posée%s à son sujet', $nombre, $pluriel ? 's' : '', $pluriel ? 's' : ''),
         };

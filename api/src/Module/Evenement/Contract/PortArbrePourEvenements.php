@@ -10,11 +10,10 @@ namespace App\Module\Evenement\Contract;
  * `Tree` l'implémente (`Tree\Service\VueDeLArbrePourEvenements`). Le contrat ne transporte
  * que des identifiants et des chaînes : aucune entité ne franchit la frontière (ADR 0002).
  *
- * C'est le port des tirages (`Tirage\Contract\PortArbrePourTirages`) **moins les couples** :
- * une invitation n'a que faire de qui est marié à qui. On ne branche pas `Evenement` sur le
- * port de `Tirage` pour autant — un module qui en lit un autre par son contrat se lie à des
- * besoins qui ne sont pas les siens, et le jour où les tirages auraient voulu une date de
- * plus, les événements l'auraient reçue sans l'avoir demandée.
+ * Pas de couples : une invitation n'a que faire de qui est marié à qui. Le port a été taillé
+ * pour `Evenement` seul — un module qui en lit un autre par son contrat se lie à des besoins
+ * qui ne sont pas les siens, et le jour où l'autre voudrait une date de plus, celui-ci la
+ * recevrait sans l'avoir demandée.
  *
  * ## Ce qui sort d'ici : des noms **que l'appelant a passés au cercle**
  *

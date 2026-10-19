@@ -15,7 +15,7 @@ namespace App\Module\Proposal\Contract;
  * six clés étrangères — `tree_child.person_id`, `tree_citation.person_id`,
  * `tree_fact.person_id`, `tree_note.person_id` en `ON DELETE CASCADE`,
  * `tree_family.husband_id` et `wife_id` en `ON DELETE SET NULL` — et par une vingtaine
- * de colonnes sans contrainte, dans `med_media`, `prp_*`, `mbr_*`, `dmr_*`, `evt_*`, `trg_*`
+ * de colonnes sans contrainte, dans `med_media`, `prp_*`, `mbr_*`, `dmr_*`, `evt_*`
  * et `qst_*` (la carte complète : `heritage:verifier-integrite`). Un `DELETE` écrit à la
  * main dans un client SQL emporte donc les quatre premières **sans que personne ne sache
  * combien**, et laisse les autres pendantes.
@@ -71,10 +71,9 @@ namespace App\Module\Proposal\Contract;
  *
  * ## Ce que les autres modules y accrochent : `dependances`
  *
- * Quatre modules tiennent un `person_id` **sans clé étrangère** que rien ne consultait —
- * une démarche d'acte, une invitation à un événement, une participation à un tirage, une
- * autorisation de partage de naissance — et un cinquième des questions posées sur la
- * fiche. Chacun mesure désormais les siennes ({@see DependancesDUneFiche}), et
+ * Trois modules tiennent un `person_id` **sans clé étrangère** que rien ne consultait —
+ * une démarche d'acte, une invitation à un événement, une autorisation de partage de
+ * naissance — et un quatrième des questions posées sur la fiche. Chacun mesure désormais les siennes ({@see DependancesDUneFiche}), et
  * {@see DependanceDeFiche} dit, nature par nature, si elle **bloque** ou si elle est
  * **nettoyée** dans la transaction. Elles entrent dans la comparaison comme le reste : une
  * démarche ouverte sur la fiche entre le dépôt et la validation rend la demande caduque.

@@ -43,12 +43,15 @@ final class SqueletteTest extends KernelTestCase
      *
      * **Huit de nouveau depuis le 2026-10-06** : `Gedcom` est supprimé avec l'import
      * GEDCOM (ADR 0018) — dossiers, fichier de routes et fichier de services compris.
+     *
+     * **Sept depuis le 2026-10-20** : `Tirage` est supprimé (ADR 0009 remplacé) — ses
+     * tirages au sort récurrents cèdent la place à ceux de Noël, module `Noel`.
      */
-    public function testLesHuitModulesSontPresents(): void
+    public function testLesSeptModulesSontPresents(): void
     {
         $racine = \dirname(__DIR__);
 
-        foreach (['Core', 'Tree', 'Membership', 'Proposal', 'Media', 'Timeline', 'Question', 'Tirage'] as $module) {
+        foreach (['Core', 'Tree', 'Membership', 'Proposal', 'Media', 'Timeline', 'Question'] as $module) {
             foreach (['Controller', 'Entity', 'Enum', 'Repository', 'Service'] as $couche) {
                 self::assertDirectoryExists(
                     $racine.'/src/Module/'.$module.'/'.$couche,

@@ -110,15 +110,6 @@ final class VerifierIntegriteCommandTest extends KernelTestCase
         'qst_question_demande.demande_id',
         'tml_preference.user_id',
         'tree_note.author_user_id',
-        'trg_attribution.donneur_person_id [éditions passées]',
-        'trg_attribution.donneur_person_id [éditions à venir]',
-        'trg_attribution.receveur_person_id [éditions passées]',
-        'trg_attribution.receveur_person_id [éditions à venir]',
-        'trg_participant.ajoute_par_user_id',
-        'trg_participant.person_id',
-        'trg_participant.referent_person_id',
-        'trg_presence.person_id',
-        'trg_tirage.organisateur_user_id',
     ];
 
     /** Celles dont une valeur pendante est attendue — historique, preuve, caducité prévue. */
@@ -141,9 +132,6 @@ final class VerifierIntegriteCommandTest extends KernelTestCase
         'prp_revision.subject_id [subject_kind = citation]',
         'prp_revision.subject_id [subject_kind = famille]',
         'prp_revision.subject_id [subject_kind = personne]',
-        'trg_attribution.donneur_person_id [éditions passées]',
-        'trg_attribution.receveur_person_id [éditions passées]',
-        'trg_presence.person_id',
     ];
 
     private ?string $baseDOrigine = null;
@@ -271,8 +259,6 @@ final class VerifierIntegriteCommandTest extends KernelTestCase
     {
         yield 'compte rattaché' => ['mbr_member', 'person_id', 'mbr_member.person_id'];
         yield 'démarche d\'acte' => ['dmr_personne', 'person_id', 'dmr_personne.person_id'];
-        yield 'participant d\'un tirage' => ['trg_participant', 'person_id', 'trg_participant.person_id'];
-        yield 'référent d\'un tirage' => ['trg_participant', 'referent_person_id', 'trg_participant.referent_person_id'];
         yield 'question posée' => ['qst_question', 'sujet_id', 'qst_question.sujet_id [sujet_kind = personne]'];
     }
 
@@ -296,14 +282,6 @@ final class VerifierIntegriteCommandTest extends KernelTestCase
         $this->exigerUneSeuleViolation('evt_invitation.person_id [événements à venir ou en cours, non annulés]', 990002);
     }
 
-    public function testUneAttributionDUneEditionAVenirPendanteEstUneViolation(): void
-    {
-        $this->peuplerUneBaseSaine();
-        $this->connexion()->executeStatement('UPDATE trg_attribution SET receveur_person_id = 990003 WHERE edition_id = 1');
-
-        $this->exigerUneSeuleViolation('trg_attribution.receveur_person_id [éditions à venir]', 990003);
-    }
-
     public function testUneAutorisationActivePendanteEstUneViolation(): void
     {
         $this->peuplerUneBaseSaine();
@@ -323,17 +301,16 @@ final class VerifierIntegriteCommandTest extends KernelTestCase
         $connexion->executeStatement('UPDATE evt_invitation SET person_id = 990010 WHERE evenement_id = 2');
         $connexion->executeStatement('UPDATE mbr_autorisation_naissance SET person_id = 990011 WHERE archived_at IS NOT NULL');
         $connexion->executeStatement("UPDATE mbr_invitation SET person_id = 990012 WHERE status <> 'active'");
-        $connexion->executeStatement('UPDATE trg_attribution SET donneur_person_id = 990013 WHERE edition_id = 2');
 
         $rapport = $this->verification()->verifier();
 
         self::assertTrue($rapport->estSain());
-        self::assertCount(4, $rapport->tolerees());
+        self::assertCount(3, $rapport->tolerees());
 
         $testeur = $this->executer();
         self::assertSame(Command::SUCCESS, $testeur->getStatusCode());
         self::assertStringContainsString('tolérée', $testeur->getDisplay());
-        self::assertStringContainsString('(4 tolérée(s))', $this->texte($testeur));
+        self::assertStringContainsString('(3 tolérée(s))', $this->texte($testeur));
         self::assertStringContainsString('jamais supprimée (ADR 0016)', $this->texte($testeur), 'La raison de la tolérance est écrite.');
     }
 
@@ -513,23 +490,6 @@ final class VerifierIntegriteCommandTest extends KernelTestCase
             'evt_invitation' => [
                 ['id' => 1, 'evenement_id' => 1, 'person_id' => 1, 'person_label' => 'Opale Sureau', 'invite_par_user_id' => 1, 'reponse' => 'present', 'reponse_notee_par_user_id' => 1, 'reponse_notee_par_libelle' => 'Admin', 'created_at' => $quand],
                 ['id' => 2, 'evenement_id' => 2, 'person_id' => 2, 'person_label' => 'Cobalt Sureau', 'invite_par_user_id' => 1, 'created_at' => $quand],
-            ],
-            'trg_tirage' => [
-                ['id' => 1, 'nom' => 'Noël', 'jour' => 24, 'mois' => 12, 'organisateur_user_id' => 1, 'organisateur_libelle' => 'Admin', 'created_at' => $quand, 'updated_at' => $quand],
-            ],
-            'trg_participant' => [
-                ['id' => 1, 'tirage_id' => 1, 'person_id' => 1, 'person_label' => 'Opale Sureau', 'referent_person_id' => 2, 'referent_label' => 'Cobalt Sureau', 'ajoute_par_user_id' => 1, 'created_at' => $quand],
-            ],
-            'trg_edition' => [
-                ['id' => 1, 'tirage_id' => 1, 'annee' => 2999, 'date' => self::AVENIR, 'created_at' => $quand],
-                ['id' => 2, 'tirage_id' => 1, 'annee' => 2000, 'date' => self::PASSE, 'created_at' => $quand],
-            ],
-            'trg_attribution' => [
-                ['id' => 1, 'edition_id' => 1, 'donneur_person_id' => 1, 'donneur_label' => 'Opale Sureau', 'receveur_person_id' => 2, 'receveur_label' => 'Cobalt Sureau'],
-                ['id' => 2, 'edition_id' => 2, 'donneur_person_id' => 2, 'donneur_label' => 'Cobalt Sureau', 'receveur_person_id' => 1, 'receveur_label' => 'Opale Sureau'],
-            ],
-            'trg_presence' => [
-                ['id' => 1, 'edition_id' => 1, 'person_id' => 1, 'presence' => 'a_distance', 'updated_at' => $quand],
             ],
             'qst_question' => [
                 ['id' => 1, 'destinataire_user_id' => 1, 'signature' => str_repeat('f', 64), 'nature' => 'date_naissance_inconnue', 'sujet_kind' => 'personne', 'sujet_id' => 1, 'sujet_label' => 'Opale Sureau', 'texte' => 'Quand ?', 'created_at' => $quand, 'updated_at' => $quand],

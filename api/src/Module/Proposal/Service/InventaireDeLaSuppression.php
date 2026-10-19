@@ -39,7 +39,7 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
  * ## Et ce que les autres modules y accrochent
  *
  * Une quatrième source s'y ajoute, par greffe plutôt que par port : `Demarche`,
- * `Evenement`, `Tirage`, `Membership` et `Question` tiennent eux aussi un `person_id` sans
+ * `Evenement`, `Membership` et `Question` tiennent eux aussi un `person_id` sans
  * clé étrangère, et chacun répond pour le sien ({@see DependancesDUneFiche}). Ils sont
  * rassemblés par l'étiquette `proposal.dependances_d_une_fiche` : un module qui en ajoute
  * un n'a rien à modifier ici.

@@ -138,8 +138,13 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * site du tirage de Noël — un tirage entre **comptes**, une seule fois, par un code
      * partagé. Une **décision** : `trg_*` tire entre fiches, chaque année, et un compte en
      * attente n'y a pas de place ; les deux ne se fondent pas l'un dans l'autre.
+     *
+     * **41 depuis le 2026-10-20** : les cinq tables `trg_*` sont supprimées avec le module
+     * `Tirage` (`migrations/Version20261020090000.php`, ADR 0009 remplacé), données
+     * comprises. C'est une **décision** du propriétaire : les tirages de Noël (`noel_*`) les
+     * remplacent, et heritage les montre dans « Mes événements ».
      */
-    private const int NOMBRE_DE_TABLES = 46;
+    private const int NOMBRE_DE_TABLES = 41;
 
     public function testLeMappingEstValide(): void
     {
@@ -176,7 +181,7 @@ final class SchemaSynchroniseTest extends KernelTestCase
      */
     public function testChaqueTablePorteLePrefixeDeSonModule(): void
     {
-        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'qst_', 'trg_', 'evt_', 'dmr_', 'ast_', 'noel_'];
+        $prefixes = ['core_', 'tree_', 'mbr_', 'prp_', 'med_', 'tml_', 'qst_', 'evt_', 'dmr_', 'ast_', 'noel_'];
 
         foreach ($this->tablesDuMapping() as $table) {
             $porteUnPrefixe = array_filter(

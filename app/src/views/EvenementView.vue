@@ -44,6 +44,7 @@ import BoutonsDeReponse from '@/components/evenements-familiaux/BoutonsDeReponse
 import SelecteurDInvites from '@/components/evenements-familiaux/SelecteurDInvites.vue'
 import SuiviDesInvites, { type LienAffiche } from '@/components/evenements-familiaux/SuiviDesInvites.vue'
 import {
+  adresseDuLien,
   compteDInvites,
   confirmationDAnnulation,
   confirmationDeRegeneration,
@@ -59,7 +60,6 @@ import {
   quand,
 } from '@/components/evenements-familiaux/evenements'
 import { chargerLesInvitables, type Invitable } from '@/components/evenements-familiaux/invites'
-import { adresseDuLien } from '@/components/tirages/tirages'
 import { useSession } from '@/composables/useSession'
 
 const route = useRoute()

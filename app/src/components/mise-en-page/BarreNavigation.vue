@@ -4,7 +4,7 @@
  * 30/09/2026 : les lecteurs sont d'abord sur téléphone).
  *
  * **Quatre entrées, pas une de plus** : Accueil · Arbre · Explorer · Moi. Tout
- * le reste a UNE porte d'entrée ailleurs : les demandes, événements (tirages compris), actes,
+ * le reste a UNE porte d'entrée ailleurs : les demandes, événements (Noël compris), actes,
  * questions et l'administration sont dans Moi ; « Proposer » est l'assistant,
  * ouvert depuis l'accueil et la fiche ; les notifications sont à la cloche de
  * l'en-tête. Une icône et un petit libellé par entrée ; l'entrée active est

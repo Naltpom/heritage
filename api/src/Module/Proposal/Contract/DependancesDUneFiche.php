@@ -12,7 +12,7 @@ use Symfony\Component\DependencyInjection\Attribute\AutoconfigureTag;
  *
  * Même mécanisme que {@see ApplicateurDOperation} — une interface déclarée ici, implémentée
  * par chaque module concerné, rassemblée par l'étiquette. `Proposal` ne lit ni `dmr_*`, ni
- * `evt_*`, ni `trg_*`, ni `qst_*` (règle 3 de l'ADR 0002) ; il demande, et chaque module
+ * `evt_*`, ni `qst_*` (règle 3 de l'ADR 0002) ; il demande, et chaque module
  * répond pour ses propres tables. Un module qui ajouterait demain un `person_id` n'a qu'à
  * implémenter cette interface pour que la suppression en tienne compte — et
  * `heritage:verifier-integrite` le rappellera à qui l'oublie.

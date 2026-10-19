@@ -4,8 +4,7 @@
  * copier ou à partager.
  *
  * ────────────────────────────────────────────────────────────────────
- * **C'est le seul moment où ce lien existe en clair**, comme celui d'un
- * participant de tirage (`LienDuParticipant`). Le serveur n'en garde qu'une
+ * **C'est le seul moment où ce lien existe en clair.** Le serveur n'en garde qu'une
  * empreinte : une fois ce panneau fermé, on ne peut plus le relire. Pour le
  * renvoyer, il faut en créer un nouveau — et l'ancien cesse de marcher.
  * ────────────────────────────────────────────────────────────────────

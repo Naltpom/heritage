@@ -156,7 +156,7 @@ export function lignesEmportees(inventaire: InventaireDeSuppression): LigneEmpor
     })
   }
 
-  // Les autres modules : une démarche, un événement, un tirage, une autorisation.
+  // Les autres modules : une démarche, un événement, une autorisation.
   // Le serveur dit lesquelles bloquent ; `raisons` dit quoi faire pour chacune.
   for (const dependance of dependances.filter((d) => d.bloquante)) {
     lignes.push({ libelle: libelleDeDependance(dependance), bloquante: true })
@@ -183,8 +183,6 @@ export function libelleDeDependance(dependance: DependanceDeFiche): string {
       return `${n} démarche${s} d’acte qui la concerne${n > 1 ? 'nt' : ''}`
     case 'evenement_a_venir':
       return `${n} invitation${s} à un événement à venir`
-    case 'tirage':
-      return `${n} participation${s} à un tirage au sort`
     case 'autorisation_naissance':
       return 'une autorisation signée de partager sa date de naissance'
     case 'question':

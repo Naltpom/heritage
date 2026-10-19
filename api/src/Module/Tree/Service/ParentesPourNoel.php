@@ -16,7 +16,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * que sur la fiche : une parenté calculée depuis un rattachement non validé serait une
  * affirmation que personne n'a approuvée.
  *
- * Les conjoints se lisent comme pour `Tirage` ({@see VueDeLArbrePourTirages::couples()}) :
+ * Les conjoints se lisent comme le faisait l'ancien module `Tirage` (retiré, ADR 0009) :
  * une union divorcée ne compte pas.
  */
 final readonly class ParentesPourNoel implements PortParentesPourNoel

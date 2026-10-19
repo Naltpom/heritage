@@ -97,7 +97,7 @@ function surAnnulation(evenement: Event): void {
         <div class="flex min-w-0 flex-col gap-1.5">
           <h2 :id="`${id}-titre`" class="m-0 text-base font-semibold">Activer les notifications</h2>
           <p :id="`${id}-message`" class="m-0 text-sm text-attenue">
-            Soyez prévenu quand une demande est traitée ou qu’un tirage est fait.
+            Soyez prévenu quand une demande est traitée ou qu’un événement vous attend.
           </p>
         </div>
       </div>

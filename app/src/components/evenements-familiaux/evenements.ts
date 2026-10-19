@@ -351,3 +351,17 @@ export function confirmationDeRevocation(libelle: string): Confirmation {
     danger: true,
   }
 }
+
+/* ───────────────── Le lien personnel ───────────────── */
+
+/**
+ * L'adresse complète à envoyer, depuis l'`url` relative rendue par l'API.
+ *
+ * Absolue sur l'origine de l'écran : c'est la même que celle de l'API (proxy
+ * Vite en développement, nginx en production), et c'est celle qu'on colle dans
+ * un message. Une URL déjà absolue est rendue telle quelle.
+ */
+export function adresseDuLien(url: string, origine: string): string {
+  if (/^https?:\/\//.test(url)) return url
+  return `${origine.replace(/\/+$/, '')}${url.startsWith('/') ? url : `/${url}`}`
+}

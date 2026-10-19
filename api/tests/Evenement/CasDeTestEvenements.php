@@ -7,18 +7,15 @@ namespace App\Tests\Evenement;
 use App\Module\Core\Entity\Notification;
 use App\Module\Core\Enum\NotificationKind;
 use App\Module\Evenement\Entity\Invitation;
-use App\Tests\Tirage\CasDeTestTirages;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Le socle des tests du module `Evenement` : **l'arbre et les comptes des tirages**, tels
- * quels, et les outils propres aux événements.
+ * Le socle des tests du module `Evenement` : **l'arbre, les comptes et le cercle** de
+ * {@see CasDeTestDuCercle}, tels quels, et les outils propres aux événements.
  *
- * On hérite de {@see CasDeTestTirages} plutôt que de recopier son ensemencement : il faut
- * exactement ce qu'il sème — des vivants avec et sans compte, un défunt, une voisine
- * confidentielle hors du cercle d'`ego`, et le **vrai** cercle de `Membership` —, et deux
- * copies de deux cents lignes divergeraient au premier ajout. Le rappel, pour lire les
- * tests :
+ * Il faut exactement ce qu'il sème — des vivants avec et sans compte, un défunt, une voisine
+ * confidentielle hors du cercle d'`ego`, et le **vrai** cercle de `Membership`. Le rappel,
+ * pour lire les tests :
  *
  * | personne | compte | rôle ici |
  * |---|---|---|
@@ -34,7 +31,7 @@ use Symfony\Component\HttpFoundation\Response;
  * Les dates sont **l'été de l'an prochain** : l'événement est à venir quelle que soit la date
  * du jour où la suite tourne.
  */
-abstract class CasDeTestEvenements extends CasDeTestTirages
+abstract class CasDeTestEvenements extends CasDeTestDuCercle
 {
     protected int $annee;
 

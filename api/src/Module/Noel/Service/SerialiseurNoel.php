@@ -82,7 +82,14 @@ final readonly class SerialiseurNoel
         ];
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Une ligne de liste — « Mes tirages » sur noel2026, « Mes événements » sur heritage.
+     * Le budget et le lieu y sont parce qu'heritage affiche la carte sans ouvrir le
+     * tirage : ce sont les deux réglages qu'on lit avant de cliquer, et ils n'ont rien
+     * de plus confidentiel que le titre, déjà servi sans session par {@see tirage()}.
+     *
+     * @return array<string, mixed>
+     */
     public function resume(TirageNoel $tirage, User $lecteur): array
     {
         return [
@@ -90,6 +97,8 @@ final readonly class SerialiseurNoel
             'titre' => $tirage->getTitre(),
             'dateTirage' => self::instant($tirage->getDateTirage()),
             'dateEvenement' => self::instant($tirage->getDateEvenement()),
+            'budget' => $tirage->getBudget(),
+            'lieu' => $tirage->getLieu(),
             'statut' => $tirage->getStatut()->value,
             'estCreateur' => $tirage->estCreePar($lecteur),
             'reponse' => $tirage->participationDe($lecteur)?->getReponse()->value,

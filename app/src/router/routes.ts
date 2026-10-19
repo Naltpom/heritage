@@ -66,7 +66,7 @@ export function sectionDe(nom: string, meta: { section?: Section }): Section {
   // Le mode administration se déduit de la route, il n'est pas un état à part :
   // un lien profond ou un favori y entre, le bouton retour en sort.
   if (nom === 'administration' || nom.startsWith('administration.')) return 'administration'
-  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('tirage') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions') return 'moi'
+  if (nom === 'moi' || nom === 'compte' || nom === 'aide' || nom.startsWith('demande') || nom.startsWith('evenement') || nom === 'demarches' || nom === 'questions') return 'moi'
   if (nom === 'arbre' || nom.startsWith('arbre.') || nom.startsWith('personne.') || nom.startsWith('proposition.')) return 'arbre'
   return 'autre'
 }
@@ -295,7 +295,7 @@ export const routes: RouteRecordRaw[] = [
 
   {
     // **Moi** : la quatrième entrée de la barre du bas. Tout ce qui est
-    // personnel ou rare, en une liste : mon compte, mes demandes, événements (et tirages),
+    // personnel ou rare, en une liste : mon compte, mes demandes, événements (et Noël),
     // actes demandés, questions, administration, déconnexion. `attente` : un
     // compte en attente y trouve son inscription, son compte et la
     // déconnexion — rien qui lise l'arbre.
@@ -356,31 +356,17 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Questions' },
   },
   {
-    // **L'ancienne liste des tirages** (ADR 0009). Depuis le 02/10/2026, les
-    // tirages au sort sont des événements comme les autres, côté utilisateur :
-    // une seule liste, « Événements » (ADR 0014, addendum). Le chemin reste —
-    // des liens partagés et d'anciens favoris y mènent — et mène à la liste
-    // commune, filtrée sur les tirages. Le nom reste aussi, pour qu'un lien
-    // nommé oublié quelque part ne tombe pas sur « page introuvable ».
-    path: '/tirages',
-    name: 'tirages',
-    redirect: { name: 'evenements', query: { type: 'tirage' } },
+    // **Les anciennes adresses des tirages au sort** (ADR 0009). Le module
+    // `Tirage` d'heritage a été retiré : les tirages de la famille sont ceux du
+    // site de Noël, montrés dans « Événements ». Des favoris et des liens
+    // partagés mènent encore à `/tirages`, `/tirages/nouveau` ou `/tirages/12` :
+    // ils arrivent sur la liste, filtrée sur Noël, plutôt que sur « page
+    // introuvable ». Sans nom : plus rien ne doit y renvoyer. Les notifications
+    // `tirage_effectue` déjà écrites citaient `tirage.detail` — un nom inconnu
+    // n'est simplement plus un lien (`lienDeNotification`).
+    path: '/tirages/:reste(.*)*',
+    redirect: { name: 'evenements', query: { type: 'noel' } },
     meta: { acces: 'membre', titre: 'Événements' },
-  },
-  {
-    // La création d'un tirage passe par « Créer un événement », type choisi.
-    path: '/tirages/nouveau',
-    redirect: { name: 'evenement.nouveau', query: { type: 'tirage' } },
-    meta: { acces: 'membre', titre: 'Nouvel événement' },
-  },
-  {
-    // Nom cité par les notifications `tirage_effectue` : on ne le renomme pas,
-    // et le chemin reste `/tirages/<id>` — les notifications déjà écrites et
-    // les liens partagés y mènent. Seul son parent change : la liste commune.
-    path: '/tirages/:id(\\d+)',
-    name: 'tirage.detail',
-    component: () => import('@/views/TirageView.vue'),
-    meta: { acces: 'membre', titre: 'Tirage au sort', parent: { nom: 'evenements', libelle: 'Événements' } },
   },
   {
     // Nom cité par les notifications `noel_tirage_*` : le tirage de Noël vit sur
@@ -395,29 +381,10 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'public', titre: 'Tirage de Noël' },
   },
   {
-    // **Le lien personnel d'un participant** (ADR 0009, révision du 30/09/2026) :
-    // une personne sans compte suit SON tirage — sa présence, son cadeau — par
-    // une clé que l'organisateur ou son référent lui a envoyée.
-    //
-    // `public` et non `anonyme` : le lien s'ouvre aussi sur le téléphone d'un
-    // membre connecté, à qui on l'a transféré pour un enfant ; `anonyme` le
-    // renverrait vers l'accueil sans rien montrer. `cadre: false` : ni en-tête
-    // ni barre du bas, rien qui suppose un compte. Chemin court (`/t/`) : il se
-    // recopie dans un SMS.
-    //
-    // La clé n'est pas filtrée ici : une forme invalide doit tomber sur le même
-    // « ce lien n'est plus valable » qu'une clé inconnue, pas sur « page
-    // introuvable ». Passée en prop, pour que la vue reste rendable hors routeur.
-    path: '/t/:cle',
-    name: 'tirage.lien',
-    component: () => import('@/views/TirageLienView.vue'),
-    props: true,
-    meta: { acces: 'public', titre: 'Mon tirage au sort', cadre: false },
-  },
-  {
     // **Les événements** — rassemblements (« Cousinade été 2027 ») et tirages
-    // au sort, dans une seule liste depuis le 02/10/2026 (ADR 0014, addendum).
-    // `?type=rassemblement` ou `?type=tirage` la restreint. `membre` : on y est
+    // de Noël (ceux du site noel2026), dans une seule liste depuis le
+    // 02/10/2026 (ADR 0014, addendum). `?type=rassemblement` ou `?type=noel`
+    // la restreint (l'ancien `?type=tirage` vaut `noel`). `membre` : on y est
     // invité par la personne de l'arbre à laquelle on est rattaché, et l'API
     // refuse tout compte en attente. Ils allument l'onglet « Moi »
     // (`sectionDe`), d'où on y entre.
@@ -429,8 +396,8 @@ export const routes: RouteRecordRaw[] = [
   {
     // Déclarée avant le détail par lisibilité seulement : `:id(\d+)` ne
     // reconnaît pas « nouveau ». Sans `?type=`, l'écran demande d'abord ce
-    // qu'on crée — un rassemblement ou un tirage au sort —, puis montre le bon
-    // formulaire.
+    // qu'on crée — un rassemblement, ou un tirage de Noël (qui se crée sur le
+    // site de Noël) —, puis montre le formulaire.
     path: '/evenements/nouveau',
     name: 'evenement.nouveau',
     component: () => import('@/views/EvenementFormulaireView.vue'),
@@ -453,8 +420,7 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     // **Le lien personnel d'un invité sans compte** : il lit l'annonce et
-    // répond, sans session. Mêmes choix que `tirage.lien`, pour les mêmes
-    // raisons : `public` (le lien s'ouvre aussi sur le téléphone d'un membre
+    // répond, sans session. `public` (le lien s'ouvre aussi sur le téléphone d'un membre
     // connecté), `cadre: false`, chemin court (`/e/`) qui se recopie dans un
     // SMS, clé non filtrée ici — une forme invalide tombe sur « ce lien n'est
     // plus valable », pas sur « page introuvable ».

@@ -65,9 +65,10 @@ export * from './assistant'
 /* « Poser une question » : des conversations suivies avec l'assistant, en
    lecture seule sur l'arbre, gardées côté serveur par compte. */
 export * from './conversations'
-/* Module `Tirage` : les tirages au sort récurrents — « Noël côté papa ». Le
-   serveur ne rend au lecteur que ses propres attributions (ADR 0009). */
-export * from './tirages'
+/* Module `Noel` : les tirages de Noël du site noel2026, qu'heritage montre dans
+   ses événements depuis le retrait de son propre module `Tirage`. On y lit
+   seulement ; répondre et régler se font sur noel2026. */
+export * from './noel'
 /* Module `Evenement` : les événements de famille — « Cousinade été 2027 » —, qui
    vient, et pour l'organisateur qui a vu sans répondre. Le fichier ne s'appelle
    pas `evenements.ts` : ce nom-là est celui de l'Almanach. */

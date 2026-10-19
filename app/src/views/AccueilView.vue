@@ -13,17 +13,19 @@
  *    est un événement en soi ») — **tous** ceux qui m'attendent, le plus
  *    proche d'abord : les rassemblements où je suis invité ou que j'organise,
  *    avec ma réponse ou les deux boutons Présent / Absent
- *    (`CarteEvenementAccueil`) — la carte vue, l'annonce l'est aussi —, et les
- *    tirages dont je suis ou que j'organise, repliés sur une ligne, dépliés
- *    pour régler ma présence, et une fois le tirage fait « Voir à qui je fais
- *    le cadeau » en violet, sans rien déplier (`CarteTirageAccueil`) ;
+ *    (`CarteEvenementAccueil`) — la carte vue, l'annonce l'est aussi —, et mes
+ *    tirages de Noël (ceux du site noel2026, que j'ai créés ou auxquels j'ai
+ *    répondu) : le compte à rebours, ma réponse, et une fois le tirage fait
+ *    « Découvrir à qui j'offre », en violet (`CarteNoelAccueil`) ;
  * 3. **les anniversaires**, en carrousel : on glisse (ou les flèches) pour voir
  *    les jours voisins. Les vivants d'abord, bien lisibles ; les défunts
  *    ensuite, en retrait, sous « En mémoire ».
  *
  * Les anniversaires viennent de `GET /api/anniversaires`, l'année entière en une
- * fois : glisser d'un jour à l'autre ne redemande rien. Les tirages exigent un
- * compte rattaché ; un compte en attente ne les demande donc pas.
+ * fois : glisser d'un jour à l'autre ne redemande rien. Les rassemblements
+ * exigent un compte rattaché ; un compte en attente ne les demande donc pas.
+ * Les tirages de Noël, non : `GET /api/noel/mes-tirages` répond à tout compte
+ * connecté — c'est le public du site de Noël, où l'on s'inscrit sans attendre.
  *
  * **Aucun receveur n'est rendu sans geste**, même au lecteur : l'accueil
  * s'ouvre volontiers devant d'autres. Le nom n'entre dans le DOM qu'au clic.
@@ -32,20 +34,19 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import {
   chargerAnniversaires,
   listerEvenements,
-  listerTirages,
+  listerMesTiragesDeNoel,
   marquerVu,
   repondreAEvenement,
-  type PersonneDuTirage,
   type ReponseAInvitation,
   type ResumeDEvenement,
-  type ResumeDeTirage,
+  type ResumeDuTirageDeNoel,
   type VueAnniversaires,
 } from '@/lib/api'
 import { useSession } from '@/composables/useSession'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import LigneEvenement from '@/components/anniversaires/LigneEvenement.vue'
-import CarteTirageAccueil from '@/components/accueil/CarteTirageAccueil.vue'
+import CarteNoelAccueil from '@/components/accueil/CarteNoelAccueil.vue'
 import CarteEvenementAccueil from '@/components/accueil/CarteEvenementAccueil.vue'
 import { mesEvenements } from '@/components/evenements-familiaux/liste-commune'
 import {
@@ -65,8 +66,7 @@ const prenom = computed(() => nomAffiche.value.split(/\s+/)[0] ?? '')
 
 const anniversaires = shallowRef<VueAnniversaires | null>(null)
 const erreurAnniversaires = ref<unknown>(null)
-const tirages = shallowRef<ResumeDeTirage[]>([])
-const moi = shallowRef<PersonneDuTirage | null>(null)
+const tirages = shallowRef<ResumeDuTirageDeNoel[]>([])
 const evenements = shallowRef<ResumeDEvenement[]>([])
 let avorteur: AbortController | null = null
 
@@ -83,15 +83,12 @@ async function charger(): Promise<void> {
       (vue) => (anniversaires.value = vue),
       (e: unknown) => (erreurAnniversaires.value = e),
     ),
-    rattache.value
-      ? listerTirages(signal).then(
-          (liste) => {
-            tirages.value = liste.tirages
-            moi.value = liste.moi
-          },
-          () => (tirages.value = []),
-        )
-      : Promise.resolve(),
+    // Au mieux : des tirages de Noël en panne ne se signalent pas, la section
+    // montre le reste — et le site de Noël reste là.
+    listerMesTiragesDeNoel(signal).then(
+      (liste) => (tirages.value = liste),
+      () => (tirages.value = []),
+    ),
     rattache.value
       ? listerEvenements(signal).then(
           (liste) => {
@@ -109,7 +106,7 @@ onBeforeUnmount(() => avorteur?.abort())
 
 /* ───────────────── Mes événements ───────────────── */
 
-/** Rassemblements et tirages mêlés, le plus proche d'abord (`mesEvenements`). */
+/** Rassemblements et tirages de Noël mêlés, le plus proche d'abord (`mesEvenements`). */
 const mesProchains = computed(() => mesEvenements(evenements.value, tirages.value, aujourdhui))
 
 /** La réponse qui part, et pour quel rassemblement : une à la fois. */
@@ -144,11 +141,6 @@ async function repondre(id: number, reponse: ReponseAInvitation): Promise<void> 
   } finally {
     reponseEnCours.value = null
   }
-}
-
-/** La réponse d'un réglage de présence remplace le résumé du tirage. */
-function remplacerTirage(maj: ResumeDeTirage): void {
-  tirages.value = tirages.value.map((t) => (t.id === maj.id ? maj : t))
 }
 
 /* ───────────────── Le carrousel des jours ───────────────── */
@@ -256,11 +248,13 @@ function surTouche(e: KeyboardEvent): void {
       </RouterLink>
     </nav>
 
-    <!-- ───────── Mes événements : rassemblements et tirages, le plus proche d'abord ───────── -->
-    <section v-if="rattache && mesProchains.length > 0" aria-labelledby="titre-mes-evenements" class="mb-6">
+    <!-- ───────── Mes événements : rassemblements et Noëls, le plus proche d'abord ─────────
+         Sans condition de rattachement : un compte en attente n'a pas de
+         rassemblements, mais peut avoir ses tirages de Noël. -->
+    <section v-if="mesProchains.length > 0" aria-labelledby="titre-mes-evenements" class="mb-6">
       <div class="mb-2 flex items-baseline justify-between">
         <h2 id="titre-mes-evenements" class="text-sm font-semibold tracking-tight">Mes événements</h2>
-        <RouterLink :to="{ name: 'evenements' }" class="text-xs text-accent underline">Tous les événements</RouterLink>
+        <RouterLink v-if="rattache" :to="{ name: 'evenements' }" class="text-xs text-accent underline">Tous les événements</RouterLink>
       </div>
       <div class="flex flex-col gap-3">
         <template v-for="element in mesProchains" :key="element.cle">
@@ -273,13 +267,7 @@ function surTouche(e: KeyboardEvent): void {
             :desactive="vueEmpruntee !== null || (reponseEnCours !== null && reponseEnCours.id !== element.evenement.id)"
             @repondre="(r) => repondre(element.evenement.id, r)"
           />
-          <CarteTirageAccueil
-            v-else
-            :tirage="element.tirage"
-            :moi="moi"
-            :aujourdhui="aujourdhui"
-            @maj="remplacerTirage"
-          />
+          <CarteNoelAccueil v-else :tirage="element.tirage" :aujourdhui="aujourdhui" />
         </template>
       </div>
     </section>
