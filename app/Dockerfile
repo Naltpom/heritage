@@ -26,7 +26,7 @@ RUN sh empreinte.sh > dist/paquet.txt
 # Étape 2 : nginx sert les fichiers statiques et relaie /api vers l'API.
 # C'est cette étape qui donne au front et à l'API une origine unique — voir les
 # commentaires de nginx.conf, la politique de sécurité en dépend.
-FROM nginx:1.27-alpine
+FROM nginx:1.31-alpine
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
