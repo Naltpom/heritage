@@ -6,7 +6,7 @@
  * La vue ne fait que charger : elle lit la clé, appelle les deux routes
  * publiques et passe un état à `ReponseParLien`, qui rend tout. Route `public`,
  * `cadre: false` : ni en-tête applicatif ni barre du bas — une personne sans
- * compte n'a rien à y trouver. C'est la forme de `TirageLienView`.
+ * compte n'a rien à y trouver.
  *
  * Le client d'API ne redirige pas vers la connexion ici : les deux appels
  * portent `sansRattrapage`. Une `404` — clé inconnue, révoquée ou remplacée,

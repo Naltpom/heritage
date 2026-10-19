@@ -183,8 +183,8 @@ export function relancerLesInvites(id: number): Promise<DetailDEvenement> {
  * ────────────────────────────────────────────────────────────────────
  * **Un invité sans compte répond par un lien : `/e/<clé>`.**
  *
- * L'organisateur le crée depuis la page de l'événement et le lui envoie. Comme
- * le lien d'un tirage, **la clé n'existe en clair qu'au moment où on la crée** :
+ * L'organisateur le crée depuis la page de l'événement et le lui envoie. **La
+ * clé n'existe en clair qu'au moment où on la crée** :
  * le serveur n'en garde qu'une empreinte. « Renvoyer son lien » après coup,
  * c'est en fabriquer un nouveau — et l'ancien cesse de marcher.
  *

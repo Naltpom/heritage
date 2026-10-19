@@ -84,8 +84,9 @@ const {
   avecPropositions?: boolean
   /**
    * `true` ne propose que des personnes vivantes (`?vivants=1`, filtré par le
-   * serveur). **Seuls les tirages au sort le posent** : on ne tire pas au sort
-   * un défunt. Ce composant sert aussi les formulaires de proposition et les
+   * serveur). Le tirage au sort d'heritage, qui le posait (on ne tire pas au
+   * sort un défunt), a été retiré ; l'option reste pour le prochain écran qui
+   * ne veut que des vivants. Ce composant sert aussi les formulaires de proposition et les
    * actes demandés, où désigner un défunt est le cas courant — d'où une option
    * explicite, jamais un défaut.
    */

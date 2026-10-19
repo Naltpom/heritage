@@ -96,8 +96,12 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * **64 depuis le 2026-10-19** : le module `Noel` — `noel_tirage.statut` et
      * `noel_tirage.revelation`, `noel_participation.reponse`, `.presence` et `.vote`
      * (`migrations/Version20261019090000.php`).
+     *
+     * **62 depuis la suppression du module `Tirage`** : `trg_edition.statut` et
+     * `trg_presence.presence` partent avec leurs tables (ADR 0009 remplacé,
+     * `migrations/Version20261020090000.php`).
      */
-    private const int COLONNES_ENUM_ATTENDUES = 64;
+    private const int COLONNES_ENUM_ATTENDUES = 62;
 
     public function testChaqueColonneAccueilleLaPlusLongueValeurDeSonEnumeration(): void
     {

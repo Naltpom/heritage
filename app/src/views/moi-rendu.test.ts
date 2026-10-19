@@ -6,7 +6,7 @@ import MoiView from './MoiView.vue'
 /**
  * « Moi » (`/moi`), rendu côté serveur.
  *
- * C'est désormais la **seule** porte d'entrée de Mes demandes, des événements (tirages au sort compris), des
+ * C'est désormais la **seule** porte d'entrée de Mes demandes, des événements (tirages de Noël compris), des
  * actes demandés, des questions et de l'administration : si une entrée
  * disparaissait d'ici, la capacité entière deviendrait introuvable — l'écran
  * resterait juste, la route continuerait de répondre, et personne ne le

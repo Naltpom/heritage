@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Tirage;
+namespace App\Tests\Evenement;
 
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\Branch;
@@ -19,52 +19,54 @@ use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Le socle des tests du module `Tirage` : l'arbre du harnais, **plus quatre vivants**, et les
- * outils HTTP que tous ces tests partagent.
+ * Un arbre de famille **avec ses vivants, ses comptes et son cercle**, et les outils HTTP qui
+ * vont avec : le socle de {@see CasDeTestEvenements}.
+ *
+ * Il est né pour les tests du module `Tirage` (retiré le 2026-10-20, ADR 0009 remplacé), dont
+ * les événements héritaient déjà plutôt que de recopier deux cents lignes. Il a survécu au
+ * module, sous ce nom neutre : rien de ce qu'il sème ne parle de tirage.
  *
  * ## Pourquoi quatre personnes de plus
  *
  * L'arbre de {@see ArbreWebTestCase} compte trois vivants — `ego`, `conjointe`, `cousin` — et
  * trois personnes que la règle unique déclare **non vivantes** : `aieule` et `aieul`
- * (décès enregistrés) et `sansDate` (repli par génération). Or un tirage n'accepte plus que
- * des vivants (ADR 0009, révision du 2026-10-01), et il en faut cinq pour éprouver le secret
- * avec un participant accompagné. On sème donc, ici seulement :
+ * (décès enregistrés) et `sansDate` (repli par génération). Une invitation n'a de sens que
+ * pour des vivants, avec et sans compte. On sème donc, ici seulement :
  *
  * | | qui | génération | rôle dans les tests |
  * |---|---|---|---|
- * | `oncle` | Basalte Romarin, né 1965 | −1 | participant ordinaire |
- * | `enfant` | Mica Romarin, née 2019 | 1 | **sans compte**, accompagné par `ego` |
- * | `tante` | Ardoise Tilleul, née 1968 | −1 | hors du « Noël côté papa » |
+ * | `oncle` | Basalte Romarin, né 1965 | −1 | vivant **sans compte** |
+ * | `enfant` | Mica Romarin, née 2019 | 1 | **sans compte**, fille d'`ego` |
+ * | `tante` | Ardoise Tilleul, née 1968 | −1 | avec un compte, souvent tenue à l'écart |
  * | `voisine` | Galène Tilleul, née 1970 | −1 | vivante **hors du cercle** d'`ego` |
  *
  * Les trois générations qu'ils occupent n'ont que des vivants : ils ne déplacent aucune
  * médiane dont dépend l'état des six personnes du harnais.
  *
- * ## Le cercle d'`ego`, et pourquoi `tante` en est exclue
+ * ## Le cercle d'`ego`, et qui en est
  *
- * Un tirage n'inscrit que des personnes **du cercle** de qui les désigne (révision du
- * 2026-10-01 de l'ADR 0003 : le nom d'un vivant hors cercle ne sort plus, et un tirage
- * enregistre des noms). **Le cercle est le vrai**, `Membership\Service\CercleDeVisibilite`,
- * qui lit en test l'arbre par `ArbreEnMemoire` — comme les tests des démarches. On y pose
- * une parenté où `cousin` et `oncle` sont les frères d'`ego` (enfants d'`aieul` et
- * d'`aieule`), et `enfant` la fille d'`ego` et de `conjointe` : tous dans le cercle d'`ego`.
- * `tante` est l'épouse d'`oncle`, donc du cercle elle aussi (conjointe d'un collatéral).
- * `voisine` n'est rattachée à personne : vivante **hors** du cercle d'`ego`, c'est le cas que
- * {@see RoutesDesTiragesTest::testUnVivantHorsDuCercleNEntrePasDansUnTirageEtSonNomNeSortPas()}
- * éprouve. Cette parenté n'existe qu'en mémoire : la base, et donc le graphe, n'en savent
- * rien — seuls le cercle et ses refus en dépendent.
+ * Un module qui enregistre des noms n'inscrit que des personnes **du cercle** de qui les
+ * désigne (révision du 2026-10-01 de l'ADR 0003 : le nom d'un vivant hors cercle ne sort
+ * plus). **Le cercle est le vrai**, `Membership\Service\CercleDeVisibilite`, qui lit en test
+ * l'arbre par `ArbreEnMemoire` — comme les tests des démarches. On y pose une parenté où
+ * `cousin` et `oncle` sont les frères d'`ego` (enfants d'`aieul` et d'`aieule`), et
+ * `enfant` la fille d'`ego` et de `conjointe` : tous dans le cercle d'`ego`. `tante` est
+ * l'épouse d'`oncle`, donc du cercle elle aussi (conjointe d'un collatéral). `voisine`
+ * n'est rattachée à personne : vivante **hors** du cercle d'`ego`. Cette parenté n'existe
+ * qu'en mémoire : la base, et donc le graphe, n'en savent rien — seuls le cercle et ses
+ * refus en dépendent.
  *
  * ## Le limiteur
  *
  * Le pool `cache.rate_limiter` est vidé à chaque test : les compteurs des liens publics
  * (et ceux de la connexion) survivraient sinon d'un test à l'autre dans le même processus.
  */
-abstract class CasDeTestTirages extends ArbreWebTestCase
+abstract class CasDeTestDuCercle extends ArbreWebTestCase
 {
     protected const string OPALE = 'opale@example.invalid';   // ego, organisateur
     protected const string JASPE = 'jaspe@example.invalid';   // conjointe
     protected const string ONYX = 'onyx@example.invalid';     // cousin
-    protected const string AMBRE = 'ambre@example.invalid';   // tante, hors du tirage
+    protected const string AMBRE = 'ambre@example.invalid';   // tante
     protected const string GRENAT = 'grenat@example.invalid'; // aieul, décédé — un rattachement impossible en vrai
     protected const string TUF = 'tuf@example.invalid';       // aucun rattachement
 
@@ -93,39 +95,6 @@ abstract class CasDeTestTirages extends ArbreWebTestCase
         ArbreEnMemoire::reinitialiser();
 
         parent::tearDown();
-    }
-
-    /**
-     * « Noël côté papa » : ego, conjointe, cousin et oncle, puis `enfant` — qui n'a pas de
-     * compte — accompagné par ego.
-     */
-    protected function tirageDeNoel(bool $ouvert = false): int
-    {
-        $this->connexionDe(self::OPALE);
-        $this->envoyer('POST', '/api/tirages', ['ouvert' => $ouvert] + $this->regles() + ['participants' => [
-            $this->idDe('ego'),
-            $this->idDe('conjointe'),
-            $this->idDe('cousin'),
-            $this->idDe('oncle'),
-        ]]);
-        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
-
-        $id = $this->charge()['id'];
-        self::assertIsInt($id);
-
-        $this->envoyer('POST', "/api/tirages/{$id}/participants", [
-            'personId' => $this->idDe('enfant'),
-            'referentPersonId' => $this->idDe('ego'),
-        ]);
-        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
-
-        return $id;
-    }
-
-    /** @return array<string, mixed> */
-    protected function regles(): array
-    {
-        return ['nom' => 'Noël côté papa', 'jour' => 24, 'mois' => 12, 'lieu' => 'Chez les grands-parents', 'memoire' => 2, 'exclureConjoints' => true];
     }
 
     /** @param array<string, mixed>|null $corps */

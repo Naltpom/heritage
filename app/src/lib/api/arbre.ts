@@ -547,7 +547,8 @@ export function lireFicheFamille(id: number, signal?: AbortSignal): Promise<Fich
  * ne pas appeler avant.
  *
  * `vivantsSeulement` pose `?vivants=1` : le serveur écarte alors les défunts.
- * Seuls les tirages au sort le demandent — on n'offre pas de cadeau à un aïeul.
+ * Le tirage au sort d'heritage le demandait (on n'offre pas de cadeau à un aïeul) ;
+ * il a été retiré, l'option reste.
  * Les formulaires de proposition et les actes demandés, eux, doivent continuer
  * de désigner des défunts : le filtre n'est jamais un défaut.
  */

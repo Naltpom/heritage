@@ -46,6 +46,26 @@ class TirageNoelRepository extends ServiceEntityRepository
     }
 
     /**
+     * Tous les tirages, le plus proche d'abord — la liste qu'heritage montre à ses
+     * membres dans « Mes événements ». Pas de filtre : le site de Noël n'a pas de
+     * tirage privé, chacun s'ouvre à qui en a le code, et un membre de la famille les
+     * voit tous pour s'y inscrire.
+     *
+     * @return list<TirageNoel>
+     */
+    public function tous(): array
+    {
+        /** @var list<TirageNoel> $tirages */
+        $tirages = $this->createQueryBuilder('t')
+            ->orderBy('t.dateTirage', 'ASC')
+            ->addOrderBy('t.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+
+        return $tirages;
+    }
+
+    /**
      * Les tirages encore ouverts dont la date est passée : la commande d'échéance les tire.
      *
      * @return list<int>

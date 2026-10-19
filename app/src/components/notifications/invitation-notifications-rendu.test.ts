@@ -51,7 +51,7 @@ describe('la fenêtre « Activer »', () => {
 
   it('dit pourquoi, et propose « Plus tard » puis « Activer »', async () => {
     const html = await rendre('activer')
-    expect(html).toContain('Soyez prévenu quand une demande est traitée ou qu’un tirage est fait.')
+    expect(html).toContain('Soyez prévenu quand une demande est traitée ou qu’un événement vous attend.')
     expect(boutons(html)).toEqual(['Plus tard', 'Activer'])
     // L'installation est l'affaire de la fenêtre qui la précède.
     expect(html).not.toContain('écran d’accueil')

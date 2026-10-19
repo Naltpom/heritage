@@ -1,0 +1,224 @@
+<script setup lang="ts">
+/**
+ * Un tirage de Noël sur l'accueil — section « Mes événements ».
+ *
+ * Les tirages sont ceux du **site de Noël** (noel2026) : heritage n'a plus de
+ * tirage à lui. La carte dit où l'on en est et mène là-bas pour tout geste —
+ * répondre, régler, voir les autres participants. Elle reprend la voix du site
+ * de Noël (le tutoiement), puisqu'elle parle de lui.
+ *
+ * Deux moments :
+ *
+ * - **ouvert** : le compte à rebours jusqu'au tirage, ma réponse en pastille
+ *   (« Tu participes », « Tu ne participes pas »), ou « Tu n'as pas encore
+ *   répondu » avec un bouton « Répondre » qui ouvre le site de Noël ;
+ * - **tiré**, et j'y suis : « Découvrir à qui j'offre ». **Le receveur est un
+ *   secret** et l'accueil s'ouvre volontiers devant d'autres : son nom n'est
+ *   demandé au serveur (`mon-attribution`) et n'entre dans le DOM **qu'au
+ *   geste**, et « Cacher » le retire. Une fois découvert : sa photo, son nom,
+ *   son âge, le lien de parenté, et le budget pour rappel.
+ *
+ * Le compte à rebours suit ce qui compte maintenant (`compteARebours`) ; les
+ * deux dates — tirage et remise des cadeaux — sont toujours écrites.
+ * Suite : `carte-noel-accueil-rendu.test.ts`.
+ */
+import { computed, onBeforeUnmount, ref } from 'vue'
+import { estErreurApi, lireMonAttributionDeNoel, type AttributionDeNoel, type ResumeDuTirageDeNoel } from '@/lib/api'
+import IconeCadeau from '@/components/evenements-familiaux/IconeCadeau.vue'
+import MessageErreur from '@/components/base/MessageErreur.vue'
+import {
+  LIBELLES_DE_REPONSE,
+  aUnReceveur,
+  adresseSurLeSiteDeNoel,
+  budgetEnEuros,
+  compteARebours,
+  dateLongue,
+  etatDeMaReponse,
+  lienLisible,
+  lireInstant,
+  participants,
+} from '@/components/evenements-familiaux/noel'
+
+const { tirage, aujourdhui } = defineProps<{
+  tirage: ResumeDuTirageDeNoel
+  aujourdhui: Date
+}>()
+
+const adresse = computed(() => adresseSurLeSiteDeNoel(tirage.code))
+const etat = computed(() => etatDeMaReponse(tirage))
+const dateDuTirage = computed(() => lireInstant(tirage.dateTirage))
+const dateDeRemise = computed(() => lireInstant(tirage.dateEvenement))
+
+/** Les informations pratiques, en une ligne : où, combien, quel budget. */
+const infos = computed(() => {
+  const morceaux: string[] = []
+  if (tirage.lieu) morceaux.push(tirage.lieu)
+  morceaux.push(participants(tirage.nbParticipants))
+  if (tirage.budget !== null) morceaux.push(`budget ${budgetEnEuros(tirage.budget)}`)
+  return morceaux.join(' · ')
+})
+
+const CLASSES_DE_REPONSE = {
+  participe: 'bg-ok-doux text-ok',
+  a_repondre: 'bg-alerte-doux text-alerte',
+  ne_participe_pas: 'border border-ligne text-attenue',
+  hors_tirage: 'border border-ligne text-attenue',
+} as const
+
+/* ───────────────── Découvrir à qui j'offre — au geste seulement ───────────────── */
+
+const attribution = ref<AttributionDeNoel | null>(null)
+const revele = ref(false)
+const enCours = ref(false)
+const erreur = ref<unknown>(null)
+/** `404` : le serveur ne me connaît pas de receveur (retiré du tirage après coup). */
+const sansReceveur = ref(false)
+let avorteur: AbortController | null = null
+
+async function decouvrir(): Promise<void> {
+  if (attribution.value !== null) {
+    revele.value = true
+    return
+  }
+  avorteur?.abort()
+  avorteur = new AbortController()
+  enCours.value = true
+  erreur.value = null
+  sansReceveur.value = false
+  try {
+    attribution.value = await lireMonAttributionDeNoel(tirage.code, avorteur.signal)
+    revele.value = true
+  } catch (e) {
+    if (avorteur.signal.aborted) return
+    if (estErreurApi(e) && e.statut === 404) sansReceveur.value = true
+    else erreur.value = e
+  } finally {
+    enCours.value = false
+  }
+}
+
+/** Cacher retire le nom du DOM : la carte redevient montrable par-dessus l'épaule. */
+function cacher(): void {
+  revele.value = false
+}
+
+const initiales = computed(() => {
+  const a = attribution.value
+  if (a === null) return ''
+  return `${a.prenom.charAt(0)}${a.nom.charAt(0)}`.toUpperCase()
+})
+
+onBeforeUnmount(() => avorteur?.abort())
+</script>
+
+<template>
+  <article
+    class="overflow-hidden rounded-panneau border border-cadeau/40 bg-panneau"
+    :aria-label="`Tirage de Noël : ${tirage.titre}`"
+    data-carte-noel
+  >
+    <!-- ───────── L'en-tête : le paquet, le titre, le compte à rebours ───────── -->
+    <a :href="adresse" class="flex items-start gap-3 bg-cadeau-doux p-4">
+      <span class="flex size-11 flex-none items-center justify-center rounded-champ bg-cadeau text-cadeau-texte" aria-hidden="true">
+        <IconeCadeau :taille="24" />
+      </span>
+      <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span class="text-xs font-semibold text-cadeau">Noël · {{ compteARebours(tirage, aujourdhui) }}</span>
+        <span class="text-base font-semibold text-texte">{{ tirage.titre }}</span>
+        <span class="truncate text-xs text-attenue">{{ infos }}</span>
+      </span>
+      <span v-if="tirage.estCreateur" class="shrink-0 rounded-pastille bg-panneau px-2 py-0.5 text-xs text-texte">Vous organisez</span>
+    </a>
+
+    <div class="flex flex-col gap-3 p-4">
+      <!-- Les deux dates, toujours : celle du tirage, celle des cadeaux. -->
+      <dl class="grid grid-cols-2 gap-2 text-sm">
+        <div class="rounded-champ border border-ligne px-3 py-2">
+          <dt class="text-xs text-attenue">{{ tirage.statut === 'tire' ? 'Tiré le' : 'Tirage le' }}</dt>
+          <dd class="font-semibold text-texte">{{ dateDuTirage ? dateLongue(dateDuTirage) : '—' }}</dd>
+        </div>
+        <div class="rounded-champ border border-ligne px-3 py-2">
+          <dt class="text-xs text-attenue">Remise des cadeaux</dt>
+          <dd class="font-semibold text-texte">{{ dateDeRemise ? dateLongue(dateDeRemise) : '—' }}</dd>
+        </div>
+      </dl>
+
+      <!-- ───────── Tiré, et j'y suis : le secret, au geste ───────── -->
+      <template v-if="aUnReceveur(tirage)">
+        <div
+          v-if="revele && attribution !== null"
+          class="flex items-center gap-3 rounded-panneau border border-cadeau/40 bg-cadeau-doux p-3"
+          data-attribution
+          aria-live="polite"
+        >
+          <img
+            v-if="attribution.photoUrl"
+            :src="attribution.photoUrl"
+            alt=""
+            class="size-14 flex-none rounded-full object-cover ring-2 ring-cadeau"
+          />
+          <span
+            v-else
+            class="flex size-14 flex-none items-center justify-center rounded-full bg-cadeau text-lg font-semibold text-cadeau-texte"
+            aria-hidden="true"
+          >
+            {{ initiales }}
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-xs font-semibold text-cadeau">Tu offres à</span>
+            <span class="block truncate text-base font-semibold text-texte">{{ attribution.prenom }} {{ attribution.nom }}</span>
+            <span class="block text-xs text-attenue">
+              <template v-if="attribution.lien">{{ lienLisible(attribution.lien) }}</template>
+              <template v-if="attribution.lien && attribution.age != null"> · </template>
+              <template v-if="attribution.age != null">{{ attribution.age }} ans</template>
+              <template v-if="tirage.budget !== null"><template v-if="attribution.lien || attribution.age != null"> · </template>budget {{ budgetEnEuros(tirage.budget) }}</template>
+            </span>
+          </span>
+          <button type="button" class="min-h-11 shrink-0 px-2 text-xs text-attenue underline hover:text-texte" @click="cacher">Cacher</button>
+        </div>
+
+        <template v-else>
+          <button
+            type="button"
+            class="inline-flex min-h-11 items-center justify-center gap-2 rounded-champ border border-cadeau bg-cadeau px-4 text-sm font-semibold text-cadeau-texte transition-opacity hover:opacity-90 disabled:opacity-55"
+            :disabled="enCours"
+            :aria-busy="enCours"
+            data-decouvrir
+            @click="decouvrir"
+          >
+            <span v-if="enCours" class="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+            Découvrir à qui j’offre
+          </button>
+          <p class="text-xs text-attenue">C’est un secret : le nom ne s’affiche qu’à ta demande.</p>
+          <p v-if="sansReceveur" class="text-xs text-attenue" role="status">Aucun receveur ne t’est attribué dans ce tirage.</p>
+          <MessageErreur v-if="erreur !== null" :erreur="erreur" titre="Impossible de savoir à qui tu offres" @action="decouvrir" />
+        </template>
+      </template>
+
+      <!-- ───────── Sinon : ma réponse, et le geste qu'elle attend ───────── -->
+      <div v-else class="flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-1 rounded-pastille px-2.5 py-1 text-xs font-semibold" :class="CLASSES_DE_REPONSE[etat]" data-reponse>
+          <svg v-if="etat === 'participe'" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 10.5l4 4 8-9" />
+          </svg>
+          {{ LIBELLES_DE_REPONSE[etat] }}
+        </span>
+        <a
+          v-if="etat === 'a_repondre'"
+          :href="adresse"
+          class="inline-flex min-h-11 items-center justify-center rounded-champ border border-cadeau bg-cadeau px-4 text-sm font-semibold text-cadeau-texte transition-opacity hover:opacity-90"
+          data-repondre
+        >
+          Répondre
+        </a>
+      </div>
+
+      <a :href="adresse" class="inline-flex items-center gap-1 self-start text-xs text-cadeau underline" data-ouvrir-noel>
+        Ouvrir sur le site de Noël
+        <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 4H4v12h12v-4M11 3h6v6M17 3l-8 8" />
+        </svg>
+      </a>
+    </div>
+  </article>
+</template>

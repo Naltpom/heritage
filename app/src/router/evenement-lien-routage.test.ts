@@ -66,10 +66,9 @@ describe('les écrans des événements', () => {
 })
 
 /**
- * Les tirages au sort sont des événements (02/10/2026) : une seule liste,
- * `/evenements`. Mais **les anciennes adresses doivent continuer de marcher** —
- * des notifications (`tirage_effectue` → `tirage.detail`), des liens partagés
- * et des favoris y mènent.
+ * Le tirage au sort d'heritage a été retiré : les tirages sont ceux du site de
+ * Noël, montrés dans `/evenements`. Mais **les anciennes adresses doivent
+ * mener quelque part** — des liens partagés et des favoris y pointent encore.
  */
 describe('les anciennes adresses des tirages', () => {
   /** Où une navigation arriverait, redirections suivies — sans monter d'écran. */
@@ -86,24 +85,18 @@ describe('les anciennes adresses des tirages', () => {
     return cible
   }
 
-  it('`/tirages` mène à la liste commune, filtrée sur les tirages', async () => {
-    expect(await arrivee('/tirages')).toEqual({ name: 'evenements', query: { type: 'tirage' } })
+  it('`/tirages`, `/tirages/nouveau` et `/tirages/12` mènent à la liste, filtrée sur Noël', async () => {
+    for (const chemin of ['/tirages', '/tirages/nouveau', '/tirages/12']) {
+      expect(await arrivee(chemin), chemin).toEqual({ name: 'evenements', query: { type: 'noel' } })
+    }
   })
 
-  it('`/tirages/nouveau` mène à la création d’un événement, type tirage', async () => {
-    expect(await arrivee('/tirages/nouveau')).toEqual({ name: 'evenement.nouveau', query: { type: 'tirage' } })
-  })
-
-  it('le détail d’un tirage garde son adresse et son nom — les notifications y mènent', () => {
+  it('les noms de l’ancien module n’existent plus — une vieille notification n’est plus un lien', () => {
     const r = routeur()
-    expect(r.resolve('/tirages/12').name).toBe('tirage.detail')
-    expect(r.resolve({ name: 'tirage.detail', params: { id: 12 } }).fullPath).toBe('/tirages/12')
-    // Son « retour » mène à la liste commune.
-    const route = routes.find((x) => x.name === 'tirage.detail')
-    expect(route?.meta?.parent).toEqual({ nom: 'evenements', libelle: 'Événements' })
+    for (const nom of ['tirages', 'tirage.detail', 'tirage.lien']) expect(r.hasRoute(nom), nom).toBe(false)
   })
 
-  it('le nom `tirages` se résout encore, pour un lien nommé oublié quelque part', () => {
-    expect(routeur().resolve({ name: 'tirages' }).fullPath).toBe('/tirages')
+  it('le tirage de Noël garde son nom, cité par les notifications `noel_tirage_*`', () => {
+    expect(routeur().resolve({ name: 'noel.tirage', params: { code: 'AB12' } }).fullPath).toBe('/noel/AB12')
   })
 })

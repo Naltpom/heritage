@@ -1467,7 +1467,7 @@ export interface InventaireDeSuppression {
   invitationsActives: number
   /**
    * Ce que les autres modules accrochent à la fiche — démarches d'acte,
-   * événements à venir, tirages, autorisation de naissance, questions.
+   * événements à venir, autorisation de naissance, questions.
    *
    * `bloquante` vient du serveur et ne se redérive pas ici : c'est lui qui sait
    * quelle nature bloque et laquelle part avec la fiche. Le front ne fait que

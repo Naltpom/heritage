@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * « Rassemblement » ou « Tirage au sort » — la pastille qui dit, dans la liste
+ * « Rassemblement » ou « Noël » — la pastille qui dit, dans la liste
  * commune des événements, de quelle sorte est chaque ligne : un pictogramme
  * (des personnes réunies, un paquet cadeau) et le mot. Le mot reste : un
  * pictogramme seul se devine, il ne se lit pas.
@@ -25,9 +25,9 @@ const { type, grand = false } = defineProps<{ type: TypeDEvenement; grand?: bool
     stroke-linecap="round"
     stroke-linejoin="round"
     aria-hidden="true"
-    :class="type === 'tirage' ? 'text-cadeau' : 'text-accent'"
+    :class="type === 'noel' ? 'text-cadeau' : 'text-accent'"
   >
-    <template v-if="type === 'tirage'">
+    <template v-if="type === 'noel'">
       <rect x="3" y="8" width="14" height="9" rx="1" /><path d="M2 5h16v3H2zM10 5v12" />
       <path d="M10 5C8 1 5 2 6.5 4.5 7.2 5.2 10 5 10 5zM10 5c2-4 5-3 3.5-.5C12.8 5.2 10 5 10 5z" />
     </template>
@@ -39,10 +39,10 @@ const { type, grand = false } = defineProps<{ type: TypeDEvenement; grand?: bool
   <span
     v-else
     class="inline-flex items-center gap-1 rounded-pastille px-2 py-0.5 text-xs font-semibold"
-    :class="type === 'tirage' ? 'bg-cadeau-doux text-cadeau' : 'bg-accent-doux text-accent'"
+    :class="type === 'noel' ? 'bg-cadeau-doux text-cadeau' : 'bg-accent-doux text-accent'"
   >
     <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <template v-if="type === 'tirage'">
+      <template v-if="type === 'noel'">
         <rect x="3" y="8" width="14" height="9" rx="1" /><path d="M2 5h16v3H2zM10 5v12" />
       </template>
       <template v-else>

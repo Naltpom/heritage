@@ -6,7 +6,7 @@
  * plus la **cloche** des notifications, et **chaque chose n'a qu'une porte
  * d'entrée**. L'en-tête a donc perdu tout ce qui doublait : le tiroir (burger)
  * du téléphone, « Mes demandes », « Validation », « + Proposer », les sections
- * Contribuer et Administration. Les demandes, événements (tirages compris), actes, questions et
+ * Contribuer et Administration. Les demandes, événements (Noël compris), actes, questions et
  * l'administration vivent dans Moi ; « Proposer » est l'assistant, ouvert depuis
  * l'arbre et la fiche.
  *

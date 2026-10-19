@@ -5,9 +5,10 @@
  *
  * **D'abord, le type** (02/10/2026 — « le tirage au sort c'est un événement en
  * soi ») : sans `?type=`, la page montre deux grandes cartes, « Rassemblement »
- * et « Tirage au sort » (`ChoixDuType`). `?type=tirage` montre le formulaire
- * du tirage (`FormulaireNouveauTirage`, celui de l'ancienne page « Tirages »),
- * qui mène à la page du tirage ; `?type=rassemblement`, celui qui suit.
+ * et « Tirage de Noël » (`ChoixDuType`). `?type=rassemblement` montre le
+ * formulaire qui suit. Un tirage de Noël, lui, se crée sur le site de Noël
+ * (noel2026) : sa carte y mène, et un `?type=noel` (ou l'ancien `?type=tirage`)
+ * ramène simplement au choix — heritage n'a plus de formulaire de tirage.
  *
  * **À la création**, l'annonce puis les invités, sur la même page : le titre,
  * les deux dates (une seule suffit pour un événement d'un jour — la fin prend
@@ -45,7 +46,6 @@ import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import { ecrituresSuspendues, motifSuspension } from '@/components/administration/ecriture'
 import SelecteurDInvites from '@/components/evenements-familiaux/SelecteurDInvites.vue'
 import ChoixDuType from '@/components/evenements-familiaux/ChoixDuType.vue'
-import FormulaireNouveauTirage from '@/components/tirages/FormulaireNouveauTirage.vue'
 import { lireTypeDEvenement } from '@/components/evenements-familiaux/liste-commune'
 import {
   annonceAEnvoyer,
@@ -68,11 +68,13 @@ const id = computed<number | null>(() => (route.params['id'] === undefined ? nul
 const creation = computed(() => id.value === null)
 
 /**
- * Ce qu'on crée : lu dans l'adresse. `null` à la création sans `?type=` — la
- * page demande alors. Une modification est toujours celle d'un rassemblement :
- * un tirage se règle sur sa propre page.
+ * Ce qu'on crée : lu dans l'adresse. `null` à la création sans `?type=` — ou
+ * avec un type qui ne se crée pas ici (Noël) : la page demande alors. Une
+ * modification est toujours celle d'un rassemblement.
  */
-const type = computed(() => (creation.value ? lireTypeDEvenement(route.query['type']) : 'rassemblement'))
+const type = computed<'rassemblement' | null>(() =>
+  !creation.value || lireTypeDEvenement(route.query['type']) === 'rassemblement' ? 'rassemblement' : null,
+)
 
 /** Les dates d'origine, pour dire — avant d'enregistrer — que les invités seront prévenus. */
 const datesDOrigine = ref<{ debut: string; fin: string } | null>(null)
@@ -91,7 +93,7 @@ async function charger(): Promise<void> {
   erreurDeChargement.value = null
   pret.value = false
 
-  // Le choix du type, ou le formulaire du tirage : rien à charger ici.
+  // Le choix du type : rien à charger ici.
   if (type.value !== 'rassemblement') return
 
   try {
@@ -123,14 +125,12 @@ const datesTouchees = computed(() => {
 
 const titreDeLaPage = computed(() => {
   if (!creation.value) return 'Modifier l’annonce'
-  if (type.value === 'tirage') return 'Nouveau tirage au sort'
   if (type.value === 'rassemblement') return 'Nouveau rassemblement'
   return 'Créer un événement'
 })
 
 const sousTitre = computed(() => {
   if (!creation.value) return 'Les invités voient l’annonce telle que vous la laissez.'
-  if (type.value === 'tirage') return 'Chacun tirera au sort à qui offrir un cadeau, et ne verra que le sien.'
   if (type.value === 'rassemblement') return 'Une cousinade, un anniversaire, des retrouvailles : choisissez qui inviter, chacun sera prévenu.'
   return 'Que voulez-vous organiser ?'
 })
@@ -215,9 +215,6 @@ const classeZone =
 
     <!-- ───────── D'abord, le type ───────── -->
     <ChoixDuType v-if="creation && type === null" />
-
-    <!-- ───────── Un tirage au sort : son propre formulaire ───────── -->
-    <FormulaireNouveauTirage v-else-if="type === 'tirage'" :suspendu="suspendu" @abandon="abandonner" />
 
     <MessageErreur
       v-else-if="erreurDeChargement !== null"

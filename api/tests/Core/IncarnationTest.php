@@ -54,20 +54,21 @@ final class IncarnationTest extends ArbreWebTestCase
         self::assertSame('Admin', $this->charge()['incarnation']['par']['displayName']);
         self::assertSame($this->idDe('conjointe'), $this->charge()['membre']['personId']);
 
-        // Il agit comme le membre : il crée un tirage, dont il devient l'organisateur…
-        // Sans participants : un tirage n'inscrit que des personnes du cercle de qui les
-        // désigne (révision du 2026-10-01 de l'ADR 0003), et ce test ne pose pas de cercle
-        // — `cousin` en est d'ailleurs exclu par construction. Ce qui compte ici est la
-        // trace au journal, pas la liste.
-        $this->envoyer('POST', '/api/tirages', [
-            'nom' => 'Noël côté maman', 'jour' => 25, 'mois' => 12,
-            'participants' => [],
+        // Il agit comme le membre : il crée un événement, dont il devient l'organisateur…
+        // Sans invités : un événement n'inscrit que des personnes du cercle de qui les
+        // désigne (révision du 2026-10-01 de l'ADR 0003), et ce test ne pose pas de cercle.
+        // Ce qui compte ici est la trace au journal, pas la liste. (Jusqu'au 2026-10-20, ce
+        // geste était la création d'un tirage, module retiré depuis.)
+        $annee = (int) date('Y') + 1;
+        $this->envoyer('POST', '/api/evenements', [
+            'titre' => 'Cousinade été '.$annee, 'debut' => $annee.'-07-17', 'fin' => $annee.'-07-18',
+            'invites' => [],
         ]);
-        self::assertSame(Response::HTTP_CREATED, $this->statut());
+        self::assertSame(Response::HTTP_CREATED, $this->statut(), (string) $this->client->getResponse()->getContent());
         self::assertTrue($this->charge()['organisateur']['estMoi']);
 
         // … et le journal dit qui tenait le clavier.
-        $creation = $this->em()->getRepository(AuditLog::class)->findOneBy(['action' => AuditAction::Creation, 'subjectType' => 'Tirage\\Tirage']);
+        $creation = $this->em()->getRepository(AuditLog::class)->findOneBy(['action' => AuditAction::Creation, 'subjectType' => 'Evenement\\Evenement']);
         self::assertNotNull($creation);
         self::assertSame($this->idDe_(self::JASPE), $creation->getActorUserId());
         self::assertSame($this->idDe_(self::ADMIN), $creation->getImpersonatorUserId());

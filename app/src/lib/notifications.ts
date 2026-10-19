@@ -108,7 +108,6 @@ const LIBELLES_DE_TYPE: Readonly<Record<string, string>> = {
   compte_active: 'Compte activé',
   media_valide: 'Média accepté',
   media_refuse: 'Média refusé',
-  tirage_effectue: 'Tirage au sort',
   // Module `Evenement` (02/10/2026) : l'invitation, le rappel à qui n'a pas
   // répondu, l'annulation, le changement de dates. Les quatre mènent à
   // `evenement.detail`.

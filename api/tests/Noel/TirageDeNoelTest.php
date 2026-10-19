@@ -173,6 +173,79 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         self::assertSame(Response::HTTP_NOT_FOUND, $this->statut());
     }
 
+    /**
+     * La ligne de liste porte le budget et le lieu : heritage montre la carte d'un tirage
+     * dans « Mes événements » sans l'ouvrir.
+     */
+    public function testLeResumeDUnTiragePorteSonBudgetEtSonLieu(): void
+    {
+        $this->inscrire('papa@example.invalid', 'Martin', 'Paul', '1960-05-12');
+        $code = $this->creerUnTirage();
+
+        $this->requete('/api/noel/mes-tirages');
+        self::assertSame(Response::HTTP_OK, $this->statut(), $this->corps());
+        $liste = array_values($this->charge());
+        self::assertCount(1, $liste);
+        $resume = $liste[0] ?? null;
+        self::assertIsArray($resume);
+        self::assertSame($code, $resume['code']);
+        self::assertSame(30, $resume['budget']);
+        self::assertSame('Chez mamie', $resume['lieu']);
+    }
+
+    /**
+     * `GET /api/noel/tirages` : **tous** les tirages, le plus proche d'abord, pour un membre
+     * actif d'heritage — même un tirage où il n'est ni organisateur ni inscrit. Un compte en
+     * attente, fût-il l'organisateur, reçoit `403 regime_en_attente` ; sans session, `401`.
+     */
+    public function testTousLesTiragesSeListentPourUnMembreActifSeulement(): void
+    {
+        // Le double de l'arbre est statique : un test précédent a pu y laisser la fiche de
+        // Paul Martin, et l'inscription l'activerait d'emblée.
+        ArbreEnMemoire::reinitialiser();
+        $this->inscrire('papa@example.invalid', 'Martin', 'Paul', '1960-05-12');
+        self::assertSame('en_attente', $this->charge()['utilisateur']['status'] ?? null);
+        $lointain = $this->creerUnTirage();
+        $this->envoyer('POST', '/api/noel/tirages', [
+            'titre' => 'Noël des cousins',
+            'dateTirage' => (new \DateTimeImmutable('+5 days'))->format(\DateTimeInterface::ATOM),
+            'dateEvenement' => (new \DateTimeImmutable('+40 days'))->format(\DateTimeInterface::ATOM),
+            'budget' => 20,
+        ]);
+        self::assertSame(Response::HTTP_CREATED, $this->statut(), $this->corps());
+        $proche = $this->charge()['code'];
+
+        // L'organisateur lui-même, compte en attente : refusé, avec la raison.
+        $this->requete('/api/noel/tirages');
+        self::assertSame(Response::HTTP_FORBIDDEN, $this->statut(), $this->corps());
+        self::assertSame('regime_en_attente', $this->codeDErreur());
+
+        $this->deconnexion();
+        $this->requete('/api/noel/tirages');
+        self::assertSame(Response::HTTP_UNAUTHORIZED, $this->statut(), $this->corps());
+
+        $this->creerLecteurHorsCercle('cousine@example.invalid');
+        $this->envoyer('POST', '/api/connexion', ['email' => 'cousine@example.invalid', 'password' => 'motdepasse-de-test']);
+        self::assertSame(Response::HTTP_OK, $this->statut(), $this->corps());
+
+        $this->requete('/api/noel/tirages');
+        self::assertSame(Response::HTTP_OK, $this->statut(), $this->corps());
+        $liste = array_values($this->charge());
+        self::assertSame([$proche, $lointain], array_column($liste, 'code'), 'Le plus proche d\'abord.');
+        $premier = $liste[0] ?? null;
+        self::assertIsArray($premier);
+        self::assertSame([
+            'code' => $proche,
+            'titre' => 'Noël des cousins',
+            'budget' => 20,
+            'lieu' => null,
+            'statut' => 'ouvert',
+            'estCreateur' => false,
+            'reponse' => null,
+            'nbParticipants' => 0,
+        ], array_diff_key($premier, ['dateTirage' => true, 'dateEvenement' => true]));
+    }
+
     public function testLeTirageEstFaitSansSoiNiConjointPuisToutEstVerrouille(): void
     {
         $code = $this->tirageAvecQuatreParticipants();

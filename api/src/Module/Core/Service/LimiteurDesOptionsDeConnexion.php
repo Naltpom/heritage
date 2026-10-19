@@ -33,7 +33,7 @@ use Symfony\Component\RateLimiter\Storage\CacheStorage;
  * secondes.
  *
  * Même stockage et même forme que les autres limiteurs du dépôt (`cache.rate_limiter`,
- * fenêtre glissante) — voir `Tirage\Service\LimiteurDesLiens`.
+ * fenêtre glissante) — voir `Evenement\Service\LimiteurDesLiens`.
  */
 final readonly class LimiteurDesOptionsDeConnexion
 {

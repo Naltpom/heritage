@@ -29,12 +29,6 @@ use App\Module\Proposal\Exception\DonneesInvalides;
 use App\Module\Question\Entity\Question;
 use App\Module\Question\Entity\QuestionDemande;
 use App\Module\Question\Enum\NatureDeLacune;
-use App\Module\Tirage\Entity\Attribution;
-use App\Module\Tirage\Entity\Edition;
-use App\Module\Tirage\Entity\Participant;
-use App\Module\Tirage\Entity\PresenceAnnuelle;
-use App\Module\Tirage\Entity\Tirage;
-use App\Module\Tirage\Enum\Presence;
 use App\Module\Tree\Entity\Citation;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
@@ -44,7 +38,7 @@ use App\Module\Tree\Entity\Source;
  * ═══════════════════════════════════════════════════════════════════════════════
  * CE QUE LES AUTRES MODULES ACCROCHENT À UNE FICHE QU'ON SUPPRIME — sur la vraie base.
  *
- * `Demarche`, `Evenement`, `Tirage`, `Membership` et `Question` tiennent un `person_id`
+ * `Demarche`, `Evenement`, `Membership` et `Question` tiennent un `person_id`
  * **sans clé étrangère**. Avant ce lot, aucun n'était consulté par la suppression : une
  * fiche supprimée y laissait des lignes pendantes, découvertes au mieux par
  * `heritage:verifier-integrite`, au pire par la famille.
@@ -56,8 +50,6 @@ use App\Module\Tree\Entity\Source;
  * | une démarche d'acte | bloque |
  * | une invitation à un événement à venir | bloque |
  * | une invitation à un événement passé ou annulé | reste (historique) |
- * | une participation à un tirage, ou un rôle de référent | bloque |
- * | les attributions et présences d'une édition passée | restent (historique) |
  * | une autorisation de naissance active | bloque |
  * | une autorisation de naissance archivée | reste (preuve) |
  * | une question posée à son sujet | nettoyée, tracée |
@@ -116,62 +108,6 @@ final class DependancesDUneFicheSupprimeeTest extends BaseDeDemandeSurArbreReel
 
         self::assertNull($this->em()->find(Person::class, (int) $personne->getId()));
         self::assertSame(2, $this->compter(InvitationAUnEvenement::class), 'Le suivi des événements clos garde ses lignes.');
-    }
-
-    public function testUneParticipationAUnTirageBloque(): void
-    {
-        $personne = $this->personneNeuve('Cobalt', 'Romarin', Sex::Masculin);
-        $tirage = new Tirage('Noël côté père', 24, 12, self::OPALE, 'Compte contributeur');
-        $tirage->ajouterParticipant(new Participant($tirage, (int) $personne->getId(), 'Cobalt Romarin', self::OPALE));
-        $this->em()->persist($tirage);
-        $this->em()->flush();
-
-        $message = $this->refus((int) $personne->getId());
-
-        self::assertStringContainsString('participe à 1 tirage au sort', $message);
-        self::assertStringNotContainsString('Noël côté père', $message, 'Le nom d\'un tirage fermé ne sort pas.');
-    }
-
-    /** Le référent est un participant du même tirage : il bloque au même titre. */
-    public function testUnReferentDeTirageBloque(): void
-    {
-        $enfant = $this->personneNeuve('Marne', 'Romarin');
-        $referent = $this->personneNeuve('Jargon', 'Romarin', Sex::Masculin);
-
-        $tirage = new Tirage('Noël côté mère', 25, 12, self::OPALE, 'Compte contributeur');
-        $participant = new Participant($tirage, (int) $enfant->getId(), 'Marne Romarin', self::OPALE);
-        $participant->setReferent((int) $referent->getId(), 'Jargon Romarin');
-        $tirage->ajouterParticipant($participant);
-        $this->em()->persist($tirage);
-        $this->em()->flush();
-
-        self::assertStringContainsString('tirage au sort', $this->refus((int) $referent->getId()));
-    }
-
-    /**
-     * Retirée du tirage, la fiche se supprime, et **l'historique des éditions passées
-     * reste** : « les éditions passées gardent leurs attributions » (ADR 0009). Ni la
-     * présence ni l'attribution ne sont effacées, et aucune trace n'a à nommer qui offrait à
-     * qui.
-     */
-    public function testLHistoriqueDUnTiragePasseResteEtNeBloquePas(): void
-    {
-        $personne = $this->personneNeuve('Gentiane', 'Romarin');
-        $autre = $this->personneNeuve('Saule', 'Romarin', Sex::Masculin);
-
-        $tirage = new Tirage('Noël 2025', 24, 12, self::OPALE, 'Compte contributeur');
-        $edition = new Edition($tirage, 2025, new \DateTimeImmutable('2025-12-24'));
-        $edition->definirPresence((int) $personne->getId(), Presence::ADistance);
-        $edition->marquerTiree([new Attribution($edition, (int) $personne->getId(), 'Gentiane Romarin', (int) $autre->getId(), 'Saule Romarin')], 2, new \DateTimeImmutable('2025-12-01'));
-        $tirage->ajouterEdition($edition);
-        $this->em()->persist($tirage);
-        $this->em()->flush();
-
-        $this->validation()->valider($this->deposer((int) $personne->getId()), $this->admin());
-        $this->em()->clear();
-
-        self::assertSame(1, $this->compter(Attribution::class));
-        self::assertSame(1, $this->compter(PresenceAnnuelle::class));
     }
 
     public function testUneAutorisationDeNaissanceActiveBloque(): void
@@ -340,7 +276,7 @@ final class DependancesDUneFicheSupprimeeTest extends BaseDeDemandeSurArbreReel
      * **LE TOUR COMPLET** : une suppression qui laisse de l'historique, puis
      * `heritage:verifier-integrite`.
      *
-     * Ce qui reste — un événement clos, un tirage passé, une autorisation archivée — pend
+     * Ce qui reste — un événement clos, une autorisation archivée — pend
      * vers une fiche qui n'existe plus, et c'est voulu. Le contrôle le relève, le range
      * parmi les tolérés avec sa raison, et ne trouve **aucune violation**. Ce qui devait
      * partir est parti ; ce qui devait bloquer aurait bloqué.
@@ -365,15 +301,8 @@ final class DependancesDUneFicheSupprimeeTest extends BaseDeDemandeSurArbreReel
 
         $personne = $this->personneNeuve('Opale', 'Romarin');
         $personneId = (int) $personne->getId();
-        $autre = $this->personneNeuve('Saule', 'Romarin', Sex::Masculin);
 
         $this->inviter($personne, new \DateTimeImmutable('-60 days'));
-
-        $tirage = new Tirage('Noël 2024', 24, 12, self::OPALE, 'Compte contributeur');
-        $edition = new Edition($tirage, 2024, new \DateTimeImmutable('2024-12-24'));
-        $edition->marquerTiree([new Attribution($edition, (int) $autre->getId(), 'Saule Romarin', $personneId, 'Opale Romarin')], 2, new \DateTimeImmutable('2024-12-01'));
-        $tirage->ajouterEdition($edition);
-        $this->em()->persist($tirage);
 
         $archivee = $this->autorisation($personneId);
         $archivee->archiver(AutorisationDeNaissance::ARCHIVE_REMPLACEE, self::ADMIN);
@@ -401,7 +330,6 @@ final class DependancesDUneFicheSupprimeeTest extends BaseDeDemandeSurArbreReel
             'prp_change_op.subject_id [subject_kind = personne]',
             'prp_change_request.target_id [target_kind = personne]',
             'prp_revision.subject_id [subject_kind = personne]',
-            'trg_attribution.receveur_person_id [éditions passées]',
         ], $tolerees, 'Ce qui reste est l\'historique — et la demande de suppression elle-même, qui vise une fiche désormais absente.');
     }
 

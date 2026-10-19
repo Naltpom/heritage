@@ -1,29 +1,37 @@
 /**
- * **Une seule liste d'événements** — rassemblements et tirages au sort mêlés.
+ * **Une seule liste d'événements** — rassemblements et tirages de Noël mêlés.
  *
  * Demande du commanditaire (02/10/2026) : « le tirage au sort, c'est un
- * événement en soi ». Côté utilisateur, il n'y a donc plus qu'une entrée
+ * événement en soi ». Côté utilisateur, il n'y a donc qu'une entrée
  * « Événements », une liste, un bouton « Créer un événement » qui demande
- * d'abord le type. Côté serveur, rien n'est fusionné : les modules `Evenement`
- * et `Tirage` gardent leurs tables, leurs routes et leurs règles (ADR 0014,
- * addendum). La fusion se fait **ici**, à la lecture : deux appels
- * (`GET /api/evenements`, `GET /api/tirages`), une liste.
+ * d'abord le type.
  *
- * Pourquoi pas un point d'entrée qui agrège côté API : il ne ferait que
- * recopier les deux sérialisations, et chaque module garde la main sur ce que
- * son lecteur voit (le secret des tirages, le suivi des rassemblements). Deux
- * appels parallèles coûtent le temps d'un ; une panne de l'un laisse l'autre
- * s'afficher.
+ * Le tirage au sort propre à heritage (module `Tirage`) a depuis été retiré :
+ * les tirages qu'on montre sont ceux du **site de Noël** (noel2026, module
+ * `Noel` du même serveur). Ils vivent là-bas — on y répond, on y règle — et
+ * heritage ne fait que les montrer à côté des rassemblements. Côté serveur,
+ * rien n'est fusionné : la fusion se fait **ici**, à la lecture, à partir de
+ * deux appels (`GET /api/evenements`, `GET /api/noel/…`).
+ *
+ * Deux appels parallèles coûtent le temps d'un ; une panne de l'un laisse
+ * l'autre s'afficher.
+ *
+ * **La date qui range un tirage de Noël est celle de la remise des cadeaux**
+ * (`dateEvenement`), pas celle du tirage : c'est le jour où la famille se
+ * retrouve, celui qu'on cherche dans une liste d'événements ; la date du
+ * tirage, elle, est dite sur la carte (« Tirage dans 12 jours »). Une fois la
+ * remise passée, le tirage rejoint les passés.
  *
  * Ce fichier ne charge rien : il range. Suite : `liste-commune.test.ts`.
  */
 
-import type { ResumeDEvenement, ResumeDeTirage } from '@/lib/api'
-import { aMidi, ecartEnJours, prochaineOccurrence } from '@/components/accueil/jours'
+import type { ResumeDEvenement, ResumeDuTirageDeNoel } from '@/lib/api'
+import { aMidi } from '@/components/accueil/jours'
 import { etatDeLEvenement, lireDate } from './evenements'
+import { estPasse, lireInstant } from './noel'
 
 /** Les deux sortes d'événements. Le mot « rassemblement » est celui du commanditaire. */
-export type TypeDEvenement = 'rassemblement' | 'tirage'
+export type TypeDEvenement = 'rassemblement' | 'noel'
 
 export const TYPES_D_EVENEMENT: readonly { valeur: TypeDEvenement; libelle: string; description: string }[] = [
   {
@@ -32,53 +40,42 @@ export const TYPES_D_EVENEMENT: readonly { valeur: TypeDEvenement; libelle: stri
     description: 'Une cousinade, un anniversaire, des retrouvailles : on invite, chacun dit s’il vient.',
   },
   {
-    valeur: 'tirage',
-    libelle: 'Tirage au sort',
-    description: 'Chacun tire au sort à qui offrir un cadeau — Noël, une fête. Tous les ans.',
+    valeur: 'noel',
+    libelle: 'Tirage de Noël',
+    description: 'Chacun tire au sort à qui offrir un cadeau. Il se crée et se règle sur le site de Noël.',
   },
 ]
 
 export function libelleDuType(type: TypeDEvenement): string {
-  return type === 'tirage' ? 'Tirage au sort' : 'Rassemblement'
+  return type === 'noel' ? 'Noël' : 'Rassemblement'
 }
 
 /**
- * Un type lu dans l'adresse (`?type=tirage`). Tout le reste — absent, inconnu,
- * répété — vaut `null` : la liste montre tout, la création demande le type.
+ * Un type lu dans l'adresse (`?type=noel`). `tirage` — l'ancien filtre, que
+ * portent des favoris et l'ancienne adresse `/tirages` — vaut `noel`. Tout le
+ * reste — absent, inconnu, répété — vaut `null` : la liste montre tout, la
+ * création demande le type.
  */
 export function lireTypeDEvenement(brut: unknown): TypeDEvenement | null {
-  return brut === 'rassemblement' || brut === 'tirage' ? brut : null
+  if (brut === 'rassemblement' || brut === 'noel') return brut
+  return brut === 'tirage' ? 'noel' : null
 }
 
 /** Un élément de la liste commune : l'un ou l'autre, avec la date qui le range. */
 export type ElementDeLaListe =
   | { type: 'rassemblement'; cle: string; date: Date; evenement: ResumeDEvenement }
-  | { type: 'tirage'; cle: string; date: Date; tirage: ResumeDeTirage }
-
-/**
- * La prochaine date d'un tirage — il revient **tous les ans** : l'édition
- * ouverte quand elle est à venir (sa date peut différer du jour habituel, un
- * Noël fêté le 26), sinon la prochaine occurrence du jour habituel.
- */
-export function dateDuTirage(tirage: Pick<ResumeDeTirage, 'jour' | 'mois' | 'prochaineEdition'>, aujourdhui: Date): Date {
-  const edition = tirage.prochaineEdition
-  if (edition !== null && !edition.passee) {
-    const date = lireDate(edition.date)
-    if (date !== null && ecartEnJours(aujourdhui, date) >= 0) return date
-  }
-  return prochaineOccurrence(tirage, aujourdhui)
-}
+  | { type: 'noel'; cle: string; date: Date; tirage: ResumeDuTirageDeNoel }
 
 function rassemblement(e: ResumeDEvenement): ElementDeLaListe {
   return { type: 'rassemblement', cle: `rassemblement-${e.id}`, date: lireDate(e.debut) ?? aMidi(new Date(0)), evenement: e }
 }
 
-function tirage(t: ResumeDeTirage, aujourdhui: Date): ElementDeLaListe {
-  return { type: 'tirage', cle: `tirage-${t.id}`, date: dateDuTirage(t, aujourdhui), tirage: t }
+function noel(t: ResumeDuTirageDeNoel): ElementDeLaListe {
+  return { type: 'noel', cle: `noel-${t.code}`, date: lireInstant(t.dateEvenement) ?? aMidi(new Date(0)), tirage: t }
 }
 
 export function titreDeLElement(e: ElementDeLaListe): string {
-  return e.type === 'tirage' ? e.tirage.nom : e.evenement.titre
+  return e.type === 'noel' ? e.tirage.titre : e.evenement.titre
 }
 
 /** Le plus proche d'abord ; à date égale, par titre — un ordre qui ne saute pas d'un chargement à l'autre. */
@@ -89,24 +86,22 @@ function parDate(a: ElementDeLaListe, b: ElementDeLaListe): number {
 /**
  * Les deux listes de l'écran « Événements » :
  *
- * - **à venir** — les rassemblements à venir ou en cours, et **tous** les
- *   tirages (ils reviennent chaque année : un tirage n'est jamais « passé »),
- *   le plus proche d'abord ;
- * - **passés et annulés** — les rassemblements seulement, le plus récent
- *   d'abord.
+ * - **à venir** — les rassemblements à venir ou en cours, les tirages de Noël
+ *   dont la remise n'est pas passée, le plus proche d'abord ;
+ * - **passés et annulés** — le reste, le plus récent d'abord.
  *
  * `type` restreint à une sorte (`null` : les deux).
  */
 export function fusionner(
   evenements: readonly ResumeDEvenement[],
-  tirages: readonly ResumeDeTirage[],
+  tirages: readonly ResumeDuTirageDeNoel[],
   aujourdhui: Date,
   type: TypeDEvenement | null = null,
 ): { aVenir: ElementDeLaListe[]; passes: ElementDeLaListe[] } {
   const aVenir: ElementDeLaListe[] = []
   const passes: ElementDeLaListe[] = []
 
-  if (type !== 'tirage') {
+  if (type !== 'noel') {
     for (const e of evenements) {
       const etat = etatDeLEvenement(e, aujourdhui)
       if (etat === 'a_venir' || etat === 'en_cours') aVenir.push(rassemblement(e))
@@ -114,7 +109,7 @@ export function fusionner(
     }
   }
   if (type !== 'rassemblement') {
-    for (const t of tirages) aVenir.push(tirage(t, aujourdhui))
+    for (const t of tirages) (estPasse(t, aujourdhui) ? passes : aVenir).push(noel(t))
   }
 
   aVenir.sort(parDate)
@@ -124,22 +119,22 @@ export function fusionner(
 
 /**
  * **Mes événements**, pour l'accueil : tout ce qui m'attend, rassemblements et
- * tirages, le plus proche d'abord.
+ * tirages de Noël, le plus proche d'abord.
  *
  * - un rassemblement à venir ou en cours, **où je suis invité ou que
  *   j'organise** (ni annulé, ni terminé) ;
- * - un tirage **dont je suis ou que j'organise** — pas un tirage simplement
- *   ouvert à la famille : il se rejoint depuis la liste, l'accueil parle de
- *   ce qui me concerne déjà.
+ * - un tirage de Noël à venir de `GET /api/noel/mes-tirages` — déjà « les
+ *   miens » : créés, ou auxquels j'ai répondu (même « non » : la carte le dit,
+ *   et tant que c'est ouvert on peut changer d'avis sur le site de Noël).
  */
 export function mesEvenements(
   evenements: readonly ResumeDEvenement[],
-  tirages: readonly ResumeDeTirage[],
+  tirages: readonly ResumeDuTirageDeNoel[],
   aujourdhui: Date,
 ): ElementDeLaListe[] {
   return fusionner(
     evenements.filter((e) => e.suisInvite || e.organisateur.estMoi),
-    tirages.filter((t) => t.suisParticipant || t.organisateur.estMoi),
+    tirages,
     aujourdhui,
   ).aVenir
 }

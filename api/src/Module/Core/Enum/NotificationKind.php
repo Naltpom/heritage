@@ -42,8 +42,6 @@ enum NotificationKind: string
     case CompteActive = 'compte_active';
     case MediaValide = 'media_valide';
     case MediaRefuse = 'media_refuse';
-    /** Le tirage au sort d'une année est fait (module `Tirage`). Elle ne nomme personne. */
-    case TirageEffectue = 'tirage_effectue';
     /**
      * Les trois notifications du module `Evenement` (2026-10-02) : l'invitation, la relance
      * de qui n'a pas répondu, et l'annulation. Elles nomment l'organisateur et l'événement,

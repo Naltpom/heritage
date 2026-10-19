@@ -12,13 +12,14 @@ use Doctrine\ORM\EntityManagerInterface;
 /**
  * L'adaptateur de `Tree` pour le module `Evenement` : des noms, et qui est encore en vie.
  *
- * La moitié de {@see VueDeLArbrePourTirages}, et les mêmes avertissements : il ne filtre
+ * Il ne filtre
  * **rien** — c'est `Evenement` qui passe la liste au cercle du lecteur avant d'appeler
  * (`ServiceDesEvenements::dansLeCercle()`) —, et l'état « vivante » passe par
  * {@see EtatVivant}, la règle unique du produit, sans la date qui l'établit.
  *
- * Deux adaptateurs plutôt qu'un qui implémenterait les deux contrats : chacun répond à son
- * module, et le jour où l'un demande une chose de plus, l'autre n'en hérite pas.
+ * Un adaptateur par module consommateur plutôt qu'un seul qui implémenterait tous les
+ * contrats : chacun répond à son module, et le jour où l'un demande une chose de plus,
+ * l'autre n'en hérite pas.
  */
 final readonly class VueDeLArbrePourEvenements implements PortArbrePourEvenements
 {

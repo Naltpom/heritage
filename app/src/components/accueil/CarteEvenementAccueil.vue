@@ -10,7 +10,7 @@
  * marquée devient un bouton « je confirme » (`confirmable`).
  *
  * C'est la carte d'une annonce : le titre, quand, où, et d'emblée le geste
- * qu'elle attend. Pas de dépliement comme pour un tirage (`CarteTirageAccueil`) :
+ * qu'elle attend. Pas de dépliement :
  * il n'y a qu'une chose à faire, répondre, et elle tient sur la carte. Une fois
  * répondu, la carte le dit en une ligne et garde l'autre bouton à portée — on
  * peut changer d'avis jusqu'à la fin de l'événement.

@@ -63,6 +63,17 @@ final class ServiceDesTiragesNoel
         return $this->tirages->duCompte($compte);
     }
 
+    /**
+     * Tous les tirages de Noël, pour « Mes événements » d'heritage (réservé aux membres
+     * par le contrôleur, pas ici).
+     *
+     * @return list<TirageNoel>
+     */
+    public function tous(): array
+    {
+        return $this->tirages->tous();
+    }
+
     public function creer(User $createur, ReglagesDuTirageNoel $reglages, \DateTimeImmutable $maintenant = new \DateTimeImmutable()): TirageNoel
     {
         $champs = [];

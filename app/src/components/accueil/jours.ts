@@ -5,7 +5,7 @@
  * minuit tombe dans le trou d'un changement d'heure, et « demain » devient
  * « aujourd'hui » deux nuits par an.
  */
-import type { EvenementAnniversaire, JourAnniversaire, ResumeDeTirage } from '@/lib/api'
+import type { EvenementAnniversaire, JourAnniversaire } from '@/lib/api'
 import { estBissextile } from '@/components/anniversaires/calendrier'
 import { libelleMois } from '@/components/anniversaires/mois'
 
@@ -69,33 +69,10 @@ export function anniversairesDuJour(jours: readonly JourAnniversaire[], date: Da
     .sort((a, b) => (a.annee ?? Infinity) - (b.annee ?? Infinity) || a.cle.localeCompare(b.cle))
 }
 
-/** Les tirages dont le jour habituel tombe ce jour-là. */
-export function tiragesDuJour(tirages: readonly ResumeDeTirage[], date: Date): ResumeDeTirage[] {
-  return tirages.filter((t) => correspond(t.mois, t.jour, date))
-}
-
-/** La prochaine occurrence du jour habituel d'un tirage, aujourd'hui compris. */
-export function prochaineOccurrence(tirage: Pick<ResumeDeTirage, 'jour' | 'mois'>, aujourdhui: Date): Date {
-  for (const annee of [aujourdhui.getFullYear(), aujourdhui.getFullYear() + 1, aujourdhui.getFullYear() + 2]) {
-    const jour = tirage.mois === 2 && tirage.jour === 29 && !estBissextile(annee) ? 28 : tirage.jour
-    const date = new Date(annee, tirage.mois - 1, jour, 12)
-    if (ecartEnJours(aujourdhui, date) >= 0) return date
-  }
-  return new Date(aujourdhui.getFullYear() + 1, tirage.mois - 1, tirage.jour, 12)
-}
-
 /** « aujourd'hui », « demain », « dans 12 jours ». */
 export function dansCombien(date: Date, aujourdhui: Date): string {
   const ecart = ecartEnJours(aujourdhui, date)
   if (ecart === 0) return 'aujourd’hui'
   if (ecart === 1) return 'demain'
   return `dans ${ecart} jours`
-}
-
-/** Ce qu'on dit d'un tirage sur la carte d'un jour — sans jamais nommer le receveur. */
-export function etatDuTirageCeJour(tirage: ResumeDeTirage, date: Date): string {
-  const edition = tirage.prochaineEdition
-  if (edition === null || edition.annee !== date.getFullYear()) return 'Pas encore d’édition ouverte pour cette année'
-  if (edition.statut === 'tiree') return edition.mesAttributions.length > 0 ? 'Tirage fait — à découvrir' : 'Tirage fait'
-  return 'Tirage à venir'
 }
