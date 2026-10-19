@@ -7,14 +7,13 @@ namespace App\Module\Noel\Service;
 use App\Module\Core\Entity\User;
 use App\Module\Noel\Entity\Participation;
 use App\Module\Noel\Entity\TirageNoel;
-use Symfony\Bundle\SecurityBundle\Security;
 
 /**
  * Le tirage tel que le site de Noël le lit. Sans session : de quoi donner envie de
  * participer (titre, dates, budget, nombre de participants), pas la liste des noms.
  *
- * Un administrateur lit en plus, sur chaque personne, son `lien` de parenté avec lui
- * (« cousine germaine », `null` sans lien établi) ; les autres ne reçoivent pas la clé. Le
+ * Un participant connecté lit en plus, sur chaque personne, son `lien` de parenté avec
+ * lui (« cousine germaine », `null` sans lien établi ou sans rattachement validé). Le
  * conjoint, lui, est celui des réponses au tirage : « conjoint » l'emporte sur l'arbre.
  *
  * Chacun lit `conjointDansLArbre` sur les participants : son propre conjoint selon
@@ -25,7 +24,6 @@ final readonly class SerialiseurNoel
     public function __construct(
         private AnnuaireDuTirage $annuaire,
         private ServiceDesTiragesNoel $service,
-        private Security $securite,
     ) {
     }
 
@@ -59,7 +57,6 @@ final readonly class SerialiseurNoel
         ]);
 
         $mienne = $tirage->participationDe($lecteur);
-        $avecLien = $this->avecLien();
 
         return $charge + [
             'estCreateur' => $tirage->estCreePar($lecteur),
@@ -77,7 +74,7 @@ final readonly class SerialiseurNoel
                 'estMoi' => $p->getUser()->getId() === $lecteur->getId(),
                 'estCreateur' => $tirage->estCreePar($p->getUser()),
                 'conjointDansLArbre' => $this->annuaire->estConjointDansLArbre($lecteur, $p->getUser()),
-                ...($avecLien ? ['lien' => $this->lien($tirage, $lecteur, $p->getUser())] : []),
+                'lien' => $this->lien($tirage, $lecteur, $p->getUser()),
             ], $participants),
             'votes' => $this->service->votes($tirage),
             'revelation' => $tirage->getRevelation()?->value,
@@ -108,7 +105,7 @@ final readonly class SerialiseurNoel
             ...$this->annuaire->nom($compte),
             'photoUrl' => $this->annuaire->photoUrl($compte),
             ...(null !== $ageAu ? ['age' => $this->annuaire->age($compte, $ageAu)] : []),
-            ...($this->avecLien() ? ['lien' => $this->lien($tirage, $lecteur, $compte)] : []),
+            'lien' => $this->lien($tirage, $lecteur, $compte),
         ];
     }
 
@@ -119,12 +116,6 @@ final readonly class SerialiseurNoel
         return null !== $conjoint && $conjoint->getId() === $compte->getId()
             ? 'conjoint'
             : $this->annuaire->lien($lecteur, $compte);
-    }
-
-    /** Sous l'incarnation, le jeton est celui du membre : il n'a pas le rôle, il n'a pas le lien. */
-    private function avecLien(): bool
-    {
-        return $this->securite->isGranted('ROLE_ADMIN');
     }
 
     private static function instant(\DateTimeImmutable $instant): string

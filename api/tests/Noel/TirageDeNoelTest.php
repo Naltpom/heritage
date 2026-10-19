@@ -234,16 +234,15 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         self::assertNull($this->charge()['maParticipation']['conjointUserId']);
     }
 
-    public function testUnAdministrateurLitSonLienDeParenteAvecChaqueParticipant(): void
+    public function testChacunLitSonLienDeParenteAvecChaqueParticipant(): void
     {
         $code = $this->tirageAvecQuatreParticipants();
 
         $attendu = self::getContainer()->get(ParenteDuLecteur::class)->depuis($this->idDe('aieul'), $this->idDe('ego'));
         self::assertNotNull($attendu);
 
-        // Paul est administrateur, rattaché à `aieul` ; Julie, sa conjointe au tirage, l'est
+        // Paul est rattaché à `aieul` ; Julie, sa conjointe au tirage, l'est
         // à `aieule` — son épouse dans l'arbre —, Léa à `ego`, Hugo à rien.
-        $this->compte('papa@example.invalid')->setRoles(['ROLE_ADMIN']);
         foreach (['papa@example.invalid' => 'aieul', 'maman@example.invalid' => 'aieule', 'fille@example.invalid' => 'ego'] as $email => $fiche) {
             $membre = $this->em()->getRepository(Member::class)->findOneBy(['userId' => $this->compte($email)->getId()]);
             self::assertNotNull($membre);
@@ -272,17 +271,17 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         $this->requete("/api/noel/tirages/{$code}/mon-attribution");
         self::assertArrayHasKey('lien', $this->charge());
 
-        // Un participant qui n'est pas administrateur ne reçoit pas la clé.
+        // Léa, sans être administratrice, lit les siens depuis sa fiche (`ego`).
         $this->connexion('fille@example.invalid');
         $this->requete('/api/noel/tirages/'.$code);
         $participants = $this->charge()['participants'];
         self::assertIsArray($participants);
-        foreach ($participants as $participant) {
-            self::assertIsArray($participant);
-            self::assertArrayNotHasKey('lien', $participant);
-        }
-        $this->requete("/api/noel/tirages/{$code}/mon-attribution");
-        self::assertArrayNotHasKey('lien', $this->charge());
+        $liens = array_column($participants, 'lien', 'userId');
+        self::assertSame(
+            self::getContainer()->get(ParenteDuLecteur::class)->depuis($this->idDe('ego'), $this->idDe('aieule')),
+            $liens[$id('maman@example.invalid')],
+        );
+        self::assertNull($liens[$id('fils@example.invalid')]);
     }
 
     public function testMoinsDeTroisParticipantsNeSeTirentPas(): void

@@ -9,8 +9,8 @@ namespace App\Module\Noel\Contract;
  * lecteur** — « cousine germaine », « époux de ta tante » —, le même libellé que le champ
  * `parente` d'une fiche ; et qui, parmi eux, est son conjoint dans l'arbre.
  *
- * `Tree` l'implémente (`Tree\Service\ParentesPourNoel`). Le site de Noël ne sert les liens
- * qu'aux administrateurs ; c'est `Noel` qui le vérifie.
+ * `Tree` l'implémente (`Tree\Service\ParentesPourNoel`). Le site de Noël ne les sert
+ * qu'entre participants d'un même tirage.
  */
 interface PortParentesPourNoel
 {
