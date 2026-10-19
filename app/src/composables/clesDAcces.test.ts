@@ -24,7 +24,7 @@
  *   tourne pas en boucle.
  */
 import { effectScope, nextTick, shallowRef, type EffectScope } from 'vue'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 const api = vi.hoisted(() => ({
   lireOptionsEnregistrementCleDAcces: vi.fn(),
@@ -38,7 +38,7 @@ const session = vi.hoisted(() => ({
   connecte: null as unknown as { value: boolean },
   incarnation: null as unknown as { value: object | null },
   courante: null as unknown as { value: { utilisateur: { id: number } } | null },
-  connecterParCleDAcces: null as unknown as ReturnType<typeof vi.fn>,
+  connecterParCleDAcces: null as unknown as Mock<(...args: unknown[]) => unknown>,
 }))
 vi.mock('@/composables/useSession', async () => {
   const { computed, shallowRef: sr } = await import('vue')
@@ -46,7 +46,7 @@ vi.mock('@/composables/useSession', async () => {
   session.connecte = sr(true)
   session.incarnation = sr<object | null>(null)
   session.courante = sr<{ utilisateur: { id: number } } | null>({ utilisateur: { id: 7 } })
-  session.connecterParCleDAcces = v.fn()
+  session.connecterParCleDAcces = v.fn<(...args: unknown[]) => unknown>()
   return {
     connecterParCleDAcces: (...args: unknown[]) => session.connecterParCleDAcces(...args),
     useSession: () => ({
@@ -746,10 +746,10 @@ describe('la preuve d’identité récente', () => {
 /* ------------------------------------------------------------------ */
 
 function rappels(): RappelsConnexionCleDAcces & {
-  apres: ReturnType<typeof vi.fn>
-  surErreur: ReturnType<typeof vi.fn>
+  apres: Mock<(...args: unknown[]) => void>
+  surErreur: Mock<(...args: unknown[]) => void>
 } {
-  return { apres: vi.fn(), surErreur: vi.fn(), surDebut: vi.fn() }
+  return { apres: vi.fn<(...args: unknown[]) => void>(), surErreur: vi.fn<(...args: unknown[]) => void>(), surDebut: vi.fn() }
 }
 
 describe('piloterConnexionCleDAcces()', () => {
