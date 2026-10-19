@@ -6247,16 +6247,16 @@
         },
         {
             "name": "symfony/security-bundle",
-            "version": "v8.1.8",
+            "version": "v8.1.9",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/security-bundle.git",
-                "reference": "b18be9c45bb6e8dbc91787165516013ffefb72fb"
+                "reference": "31993005911620056ea14e282b9c5cb11223ea6c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/security-bundle/zipball/b18be9c45bb6e8dbc91787165516013ffefb72fb",
-                "reference": "b18be9c45bb6e8dbc91787165516013ffefb72fb",
+                "url": "https://api.github.com/repos/symfony/security-bundle/zipball/31993005911620056ea14e282b9c5cb11223ea6c",
+                "reference": "31993005911620056ea14e282b9c5cb11223ea6c",
                 "shasum": ""
             },
             "require": {
@@ -6272,7 +6272,7 @@
                 "symfony/password-hasher": "^7.4|^8.0",
                 "symfony/security-core": "^7.4|^8.0",
                 "symfony/security-csrf": "^7.4|^8.0",
-                "symfony/security-http": "^8.1",
+                "symfony/security-http": "^8.1.9",
                 "symfony/service-contracts": "^2.5|^3"
             },
             "require-dev": {
@@ -6325,7 +6325,7 @@
             "description": "Provides a tight integration of the Security component into the Symfony full-stack framework",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/security-bundle/tree/v8.1.8"
+                "source": "https://github.com/symfony/security-bundle/tree/v8.1.9"
             },
             "funding": [
                 {
@@ -6345,7 +6345,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-09-24T11:09:32+00:00"
+            "time": "2026-10-13T15:31:40+00:00"
         },
         {
             "name": "symfony/security-core",
@@ -7839,16 +7839,16 @@
     "packages-dev": [
         {
             "name": "brianium/paratest",
-            "version": "v7.26.1",
+            "version": "v7.27.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/paratestphp/paratest.git",
-                "reference": "4660303009de20706b71d2df487bb89fb4d8a4c2"
+                "reference": "739b3b1b5065c52664ef5a77716593ab9d5e263d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/paratestphp/paratest/zipball/4660303009de20706b71d2df487bb89fb4d8a4c2",
-                "reference": "4660303009de20706b71d2df487bb89fb4d8a4c2",
+                "url": "https://api.github.com/repos/paratestphp/paratest/zipball/739b3b1b5065c52664ef5a77716593ab9d5e263d",
+                "reference": "739b3b1b5065c52664ef5a77716593ab9d5e263d",
                 "shasum": ""
             },
             "require": {
@@ -7916,7 +7916,7 @@
             ],
             "support": {
                 "issues": "https://github.com/paratestphp/paratest/issues",
-                "source": "https://github.com/paratestphp/paratest/tree/v7.26.1"
+                "source": "https://github.com/paratestphp/paratest/tree/v7.27.1"
             },
             "funding": [
                 {
@@ -7928,7 +7928,7 @@
                     "type": "paypal"
                 }
             ],
-            "time": "2026-10-10T20:10:31+00:00"
+            "time": "2026-10-14T05:58:28+00:00"
         },
         {
             "name": "clue/ndjson-react",
@@ -9239,16 +9239,16 @@
         },
         {
             "name": "phpunit/phpunit",
-            "version": "13.4.2",
+            "version": "13.4.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sebastianbergmann/phpunit.git",
-                "reference": "7b9ba83328f01ce299ef82161720195bd827a4bb"
+                "reference": "2180c47c4229e5da117ff248753370443c074f10"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/7b9ba83328f01ce299ef82161720195bd827a4bb",
-                "reference": "7b9ba83328f01ce299ef82161720195bd827a4bb",
+                "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/2180c47c4229e5da117ff248753370443c074f10",
+                "reference": "2180c47c4229e5da117ff248753370443c074f10",
                 "shasum": ""
             },
             "require": {
@@ -9319,7 +9319,7 @@
             "support": {
                 "issues": "https://github.com/sebastianbergmann/phpunit/issues",
                 "security": "https://github.com/sebastianbergmann/phpunit/security/policy",
-                "source": "https://github.com/sebastianbergmann/phpunit/tree/13.4.2"
+                "source": "https://github.com/sebastianbergmann/phpunit/tree/13.4.3"
             },
             "funding": [
                 {
@@ -9327,7 +9327,7 @@
                     "type": "other"
                 }
             ],
-            "time": "2026-10-12T15:29:04+00:00"
+            "time": "2026-10-16T05:56:47+00:00"
         },
         {
             "name": "react/cache",
