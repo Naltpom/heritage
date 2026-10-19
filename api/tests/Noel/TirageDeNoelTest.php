@@ -13,6 +13,7 @@ use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Enum\MatchKind;
 use App\Module\Noel\Entity\TirageNoel;
 use App\Module\Noel\Service\ServiceDesTiragesNoel;
+use App\Module\Tree\Serializer\ParenteDuLecteur;
 use App\Tests\Tree\ArbreWebTestCase;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\HttpClient\MockHttpClient;
@@ -202,6 +203,86 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         $this->connexion('papa@example.invalid');
         $this->requete("/api/noel/tirages/{$code}/qui-ma-offert");
         self::assertSame(Response::HTTP_FORBIDDEN, $this->statut());
+    }
+
+    public function testUneSeuleReponseLieLesDeuxConjoints(): void
+    {
+        $code = $this->tirageAvecQuatreParticipants();
+        $papa = $this->compte('papa@example.invalid')->getId();
+        $maman = $this->compte('maman@example.invalid')->getId();
+        $fille = $this->compte('fille@example.invalid')->getId();
+
+        // Julie a désigné Paul : Paul la voit dans sa réponse sans avoir rien fait.
+        $this->connexion('papa@example.invalid');
+        $this->requete('/api/noel/tirages/'.$code);
+        self::assertSame($maman, $this->charge()['maParticipation']['conjointUserId']);
+
+        // Léa désigne Paul : Julie n'est plus liée à personne.
+        $this->connexion('fille@example.invalid');
+        $this->repondre($code, ['reponse' => 'oui', 'presence' => 'absent', 'vote' => 'magie', 'conjointUserId' => $papa]);
+        $this->connexion('maman@example.invalid');
+        $this->requete('/api/noel/tirages/'.$code);
+        self::assertNull($this->charge()['maParticipation']['conjointUserId']);
+        $this->connexion('papa@example.invalid');
+        $this->requete('/api/noel/tirages/'.$code);
+        self::assertSame($fille, $this->charge()['maParticipation']['conjointUserId']);
+
+        // Paul retire son conjoint : Léa n'en a plus non plus.
+        $this->repondre($code, ['reponse' => 'oui', 'presence' => 'present', 'vote' => 'apres_ouverture']);
+        $this->connexion('fille@example.invalid');
+        $this->requete('/api/noel/tirages/'.$code);
+        self::assertNull($this->charge()['maParticipation']['conjointUserId']);
+    }
+
+    public function testUnAdministrateurLitSonLienDeParenteAvecChaqueParticipant(): void
+    {
+        $code = $this->tirageAvecQuatreParticipants();
+
+        $attendu = self::getContainer()->get(ParenteDuLecteur::class)->depuis($this->idDe('aieul'), $this->idDe('ego'));
+        self::assertNotNull($attendu);
+
+        // Paul est administrateur, rattaché à `aieul` ; Julie, sa conjointe au tirage, l'est
+        // à `aieule` — son épouse dans l'arbre —, Léa à `ego`, Hugo à rien.
+        $this->compte('papa@example.invalid')->setRoles(['ROLE_ADMIN']);
+        foreach (['papa@example.invalid' => 'aieul', 'maman@example.invalid' => 'aieule', 'fille@example.invalid' => 'ego'] as $email => $fiche) {
+            $membre = $this->em()->getRepository(Member::class)->findOneBy(['userId' => $this->compte($email)->getId()]);
+            self::assertNotNull($membre);
+            $membre->rattacherA($this->idDe($fiche), $fiche, MatchKind::PreLie)->activer();
+        }
+        $this->em()->flush();
+
+        $this->connexion('papa@example.invalid');
+        $this->requete('/api/noel/tirages/'.$code);
+        self::assertSame(Response::HTTP_OK, $this->statut(), $this->corps());
+        $id = fn (string $email): int => (int) $this->compte($email)->getId();
+        $participants = $this->charge()['participants'];
+        self::assertIsArray($participants);
+        // Le conjoint est celui de la réponse au tirage ; le reste vient de l'arbre.
+        $liens = array_column($participants, 'lien', 'userId');
+        self::assertNull($liens[$id('papa@example.invalid')]);
+        self::assertSame('conjoint', $liens[$id('maman@example.invalid')]);
+        self::assertSame($attendu, $liens[$id('fille@example.invalid')]);
+        self::assertNull($liens[$id('fils@example.invalid')]);
+        $conjoints = array_keys(array_filter(array_column($participants, 'conjointDansLArbre', 'userId')));
+        self::assertSame([$id('maman@example.invalid')], $conjoints);
+
+        // La carte du tirage le porte aussi.
+        $this->envoyer('POST', "/api/noel/tirages/{$code}/lancer");
+        self::assertSame(Response::HTTP_OK, $this->statut(), $this->corps());
+        $this->requete("/api/noel/tirages/{$code}/mon-attribution");
+        self::assertArrayHasKey('lien', $this->charge());
+
+        // Un participant qui n'est pas administrateur ne reçoit pas la clé.
+        $this->connexion('fille@example.invalid');
+        $this->requete('/api/noel/tirages/'.$code);
+        $participants = $this->charge()['participants'];
+        self::assertIsArray($participants);
+        foreach ($participants as $participant) {
+            self::assertIsArray($participant);
+            self::assertArrayNotHasKey('lien', $participant);
+        }
+        $this->requete("/api/noel/tirages/{$code}/mon-attribution");
+        self::assertArrayNotHasKey('lien', $this->charge());
     }
 
     public function testMoinsDeTroisParticipantsNeSeTirentPas(): void

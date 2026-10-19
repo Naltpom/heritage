@@ -14,3 +14,7 @@ services:
     # Les photos : le portrait de la fiche, sinon celui du compte. `Media` l'implémente.
     App\Module\Noel\Contract\PortPhotosPourNoel:
         alias: App\Module\Media\Service\PhotosPourNoel
+
+    # Le lien de parenté avec le lecteur, pour les administrateurs. `Tree` l'implémente.
+    App\Module\Noel\Contract\PortParentesPourNoel:
+        alias: App\Module\Tree\Service\ParentesPourNoel

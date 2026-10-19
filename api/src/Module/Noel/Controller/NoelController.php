@@ -108,7 +108,9 @@ final class NoelController extends AbstractController
         }
 
         return new JsonResponse($this->serialiseur->personne(
+            $tirage,
             $this->service->attributionDe($tirage, $compte),
+            $compte,
             $tirage->getDateEvenement(),
         ));
     }
@@ -116,6 +118,8 @@ final class NoelController extends AbstractController
     #[Route('/tirages/{code}/qui-ma-offert', name: 'noel_qui_ma_offert', methods: ['GET'])]
     public function quiMAOffert(string $code, #[CurrentUser] User $compte): JsonResponse
     {
-        return new JsonResponse($this->serialiseur->personne($this->service->donneurDe($this->service->parCode($code), $compte)));
+        $tirage = $this->service->parCode($code);
+
+        return new JsonResponse($this->serialiseur->personne($tirage, $this->service->donneurDe($tirage, $compte), $compte));
     }
 }
