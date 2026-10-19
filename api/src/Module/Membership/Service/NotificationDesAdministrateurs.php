@@ -113,6 +113,36 @@ final readonly class NotificationDesAdministrateurs
     }
 
     /**
+     * Un compte né sur le site de Noël s'est reconnu **sans ambiguïté** dans une fiche, et
+     * a été rattaché et activé sans administrateur (`ComptesPourNoel`). Même porte de
+     * sortie n° 6 que {@see compteARattacher()} : le courriel, pas l'identité.
+     */
+    public function compteRattacheDOffice(Member $membre): void
+    {
+        foreach ($this->administrateurs() as $administrateur) {
+            $identifiant = $administrateur->getId();
+
+            if (null === $identifiant) {
+                continue;
+            }
+
+            $this->em->persist(new Notification(
+                $identifiant,
+                NotificationKind::CompteEnAttente,
+                'Un compte s\'est rattaché à sa fiche',
+                \sprintf(
+                    '%s s\'est inscrit sur le site de Noël avec le nom et la date de naissance d\'une fiche : il y a été rattaché et activé d\'office. À vérifier.',
+                    $membre->getUserEmail(),
+                ),
+                'administration_membres',
+                ['memberId' => $membre->getId()],
+            ));
+        }
+
+        $this->em->flush();
+    }
+
+    /**
      * Le compte vient d'être activé : « c'est la notification qui le lui apprend, et le
      * front recharge session et graphe à sa lecture » (§ 12.3).
      *

@@ -14,17 +14,23 @@ namespace App\Module\Noel\Contract;
 interface PortComptesPourNoel
 {
     /**
-     * Le compte `userId`, tout juste créé **en attente**, devient un membre « à rattacher »
-     * avec l'identité qu'il a déclarée ; les administrateurs en sont prévenus et le
-     * relient à sa fiche par le parcours habituel. Dans la transaction de l'appelant.
+     * Le compte `userId`, tout juste créé **en attente**, devient un membre avec l'identité
+     * qu'il a déclarée. Si elle désigne **sans ambiguïté** une fiche vivante et libre de
+     * l'arbre — même nom, un prénom en commun, la date de naissance au jour près —, il y
+     * est rattaché et activé d'office ; sinon il est « à rattacher » et les
+     * administrateurs relient sa fiche par le parcours habituel. Les administrateurs sont
+     * prévenus dans les deux cas. Dans la transaction de l'appelant.
+     *
+     * @return bool `true` si le compte a été rattaché et activé : l'appelant passe alors le
+     *              compte `actif`
      */
-    public function declarerUnCompteEnAttente(
+    public function declarerUnCompte(
         int $userId,
         string $email,
         string $nomDeNaissance,
         string $prenom,
         \DateTimeImmutable $naissance,
-    ): void;
+    ): bool;
 
     /**
      * L'identité de chaque compte demandé qui a un membre : la déclaration du compte, ou à
