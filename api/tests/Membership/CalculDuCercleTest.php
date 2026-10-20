@@ -151,6 +151,18 @@ final class CalculDuCercleTest extends TestCase
         self::assertSame([ArbreFamilial::ETRANGER], $cercle);
     }
 
+    /**
+     * L'arbre en mémoire est statique, et il tient lieu de `PortArbre` à **tout**
+     * l'environnement de test : laissé peuplé, il fait le cercle des classes qui suivent
+     * dans le même processus. Sous ParaTest, les tests de `Tree` (`ArbreVuDuLecteurTest`,
+     * `RechercheParPlusieursMotsTest`) tombaient selon le voisinage — le cousin
+     * confidentiel entrait dans le cercle du lecteur.
+     */
+    protected function tearDown(): void
+    {
+        Double\ArbreEnMemoire::reinitialiser();
+    }
+
     /** @return list<int> */
     private function cercle(int $racine, int $generations): array
     {
