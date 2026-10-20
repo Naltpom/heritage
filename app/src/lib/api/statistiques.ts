@@ -79,6 +79,22 @@ export interface BrancheDesStats {
   verifiees: number
 }
 
+/** Les fiches ajoutées un jour donné, et celles devenues vérifiées ce jour-là. */
+export interface AjoutsDuJour {
+  ajoutees: number
+  verifiees: number
+}
+
+/**
+ * Un jour de la série `arbre.parJour` : tous les jours du premier à aujourd'hui (un an
+ * au plus), zéros compris, en date de Paris (`AAAA-MM-JJ`).
+ */
+export interface JourDesStats extends AjoutsDuJour {
+  jour: string
+  /** Le même détail par branche ; une branche sans rien ce jour-là est absente. */
+  branches: Partial<Record<string, AjoutsDuJour>>
+}
+
 /** Ce que les chiffres couvrent : l'arbre du lecteur, ou toute la base (administration). */
 export type PorteeDesStatistiques = PorteeExplorer
 
@@ -99,6 +115,7 @@ export interface Statistiques {
       historique: { mois: string; verifiees: number; total: number }[]
     }
     branches: BrancheDesStats[]
+    parJour: JourDesStats[]
   }
   vie: {
     ageAuDeces: ParSiecleHommesFemmes[]

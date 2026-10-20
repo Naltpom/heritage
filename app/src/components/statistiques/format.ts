@@ -87,6 +87,22 @@ export function moisLisible(cle: string): string {
   return `${MOIS_COURTS[mois - 1]} ${annee}`
 }
 
+const JOURS_COURTS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'] as const
+
+/**
+ * « 2026-10-01 » → « 1er oct. 2026 » ; avec `semaine`, « jeu. 1er oct. 2026 ». Un jour
+ * du calendrier, déjà en date de Paris côté serveur : il se lit sans fuseau (le jour de
+ * la semaine se calcule en UTC, où « 2026-10-01 » ne glisse jamais à la veille).
+ */
+export function jourLisible(cle: string, semaine = false): string {
+  const morceaux = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cle)
+  if (morceaux === null) return cle
+  const [annee, mois, jour] = morceaux.slice(1).map(Number) as [number, number, number]
+  if (mois < 1 || mois > 12 || jour < 1 || jour > 31) return cle
+  const date = `${jour === 1 ? '1er' : String(jour)} ${MOIS_COURTS[mois - 1]} ${annee}`
+  return semaine ? `${JOURS_COURTS[new Date(Date.UTC(annee, mois - 1, jour)).getUTCDay()]} ${date}` : date
+}
+
 /**
  * Une génération du serveur, lue depuis la racine de l'arbre : « Génération −4 »,
  * suivie de l'époque quand on la connaît — « vers 1850 ». Les noms de parenté
