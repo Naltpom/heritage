@@ -4,6 +4,7 @@ import {
   compte,
   enRomain,
   generationEtEpoque,
+  jourLisible,
   moisLisible,
   nomDeBranche,
   part,
@@ -54,6 +55,13 @@ describe('les libellés', () => {
   it('un mois du serveur se lit en français', () => {
     expect(moisLisible('2026-09')).toBe('sept. 2026')
     expect(moisLisible('n’importe quoi')).toBe('n’importe quoi')
+  })
+
+  it('un jour se lit à la française, le 1er en toutes lettres, et sans glisser à la veille', () => {
+    expect(jourLisible('2026-10-14')).toBe('14 oct. 2026')
+    expect(jourLisible('2026-10-01', true)).toBe('jeu. 1er oct. 2026')
+    expect(jourLisible('2026-03-29', true)).toBe('dim. 29 mars 2026')
+    expect(jourLisible('2026-13-01')).toBe('2026-13-01')
   })
 
   it('une génération se situe par son époque, sans nom de parenté', () => {

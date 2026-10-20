@@ -75,6 +75,7 @@ import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
 import Barres from '@/components/statistiques/Barres.vue'
 import CarteRecord from '@/components/statistiques/CarteRecord.vue'
 import Courbe from '@/components/statistiques/Courbe.vue'
+import CourbeDesJours from '@/components/statistiques/CourbeDesJours.vue'
 import Palmares from '@/components/statistiques/Palmares.vue'
 import {
   bornes,
@@ -83,6 +84,7 @@ import {
   couleurDeBranche,
   decimal,
   generationEtEpoque,
+  jourLisible,
   nombre,
   nomDeBranche,
   part,
@@ -101,6 +103,7 @@ import {
   mortaliteParSiecle,
   parentsParSiecle,
 } from '@/components/statistiques/series'
+import { ajoutsDeLaPeriode, PERIODES_DES_JOURS, type PeriodeDesJours } from '@/components/statistiques/parJour'
 import {
   chargerChantier,
   chargerStatistiques,
@@ -173,6 +176,27 @@ const enfants = computed(() => {
   }
 })
 const activite = computed(() => demandesParMois(chantier.value?.activite.demandesParMois ?? []))
+
+// Ajouts et vérifications par jour : la série arrive entière, branche par branche ; le
+// choix de la branche et de la période ne redemande rien au serveur.
+const brancheDesJours = ref<string | null>(null)
+const periodeDesJours = ref<PeriodeDesJours>(30)
+const ajouts = computed(() => {
+  const serie = arbre.value?.parJour ?? []
+  // Une branche choisie qui n'est plus dans l'arbre (la portée a changé) : toutes.
+  const branche = arbre.value?.branches.find((b) => b.branche === brancheDesJours.value) ?? null
+  const periode = ajoutsDeLaPeriode(serie, branche?.branche ?? null, periodeDesJours.value)
+  const depuis = periode.jours[0]?.jour
+  return {
+    ...periode,
+    branche: branche?.branche ?? null,
+    quand:
+      periodeDesJours.value === 'tout'
+        ? depuis === undefined ? '' : `depuis le ${jourLisible(depuis)}`
+        : `sur les ${periodeDesJours.value} derniers jours`,
+    ou: branche === null ? 'toutes branches' : nomDeBranche(branche.branche, branche.nom),
+  }
+})
 
 // Arrondi à l'année sous la colonne : une décimale sur un petit échantillon serait une
 // précision qu'il n'a pas, et elle ne tiendrait pas dans une colonne de téléphone.
@@ -315,6 +339,69 @@ onBeforeUnmount(() => {
                   </div>
                 </li>
               </ul>
+            </PanneauBase>
+
+            <PanneauBase titre="Ajouts et vérifications par jour" class="md:col-span-2">
+              <p v-if="arbre.parJour.length === 0" class="m-0 text-sm text-attenue">Aucune fiche pour l’instant.</p>
+              <template v-else>
+                <div class="mb-3 flex flex-col gap-2">
+                  <div class="flex flex-wrap gap-1.5" role="group" aria-label="Période">
+                    <button
+                      v-for="p in PERIODES_DES_JOURS"
+                      :key="p.valeur"
+                      type="button"
+                      class="cursor-pointer whitespace-nowrap rounded-pastille border px-2.5 py-1 text-xs"
+                      :class="p.valeur === periodeDesJours ? 'border-accent bg-accent-doux font-semibold text-texte' : 'border-ligne bg-fond text-attenue hover:border-accent'"
+                      :aria-pressed="p.valeur === periodeDesJours"
+                      :title="p.titre"
+                      @click="periodeDesJours = p.valeur"
+                    >
+                      {{ p.libelle }}
+                    </button>
+                  </div>
+                  <div class="flex flex-wrap gap-1.5" role="group" aria-label="Branche">
+                    <button
+                      type="button"
+                      class="cursor-pointer whitespace-nowrap rounded-pastille border px-2.5 py-1 text-xs"
+                      :class="ajouts.branche === null ? 'border-accent bg-accent-doux font-semibold text-texte' : 'border-ligne bg-fond text-attenue hover:border-accent'"
+                      :aria-pressed="ajouts.branche === null"
+                      @click="brancheDesJours = null"
+                    >
+                      Toutes les branches
+                    </button>
+                    <button
+                      v-for="b in arbre.branches"
+                      :key="b.branche"
+                      type="button"
+                      class="inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded-pastille border px-2.5 py-1 text-xs"
+                      :class="b.branche === ajouts.branche ? 'border-accent bg-accent-doux font-semibold text-texte' : 'border-ligne bg-fond text-attenue hover:border-accent'"
+                      :aria-pressed="b.branche === ajouts.branche"
+                      :title="b.nom ? coteDeBranche(b.branche) : undefined"
+                      @click="brancheDesJours = b.branche"
+                    >
+                      <span class="inline-block h-2.5 w-2.5 flex-none rounded-full" :style="{ background: couleurDeBranche(b.branche) }" aria-hidden="true" />
+                      <span class="truncate">{{ nomDeBranche(b.branche, b.nom) }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <CourbeDesJours :titre="`Personnes ajoutées et vérifiées par jour, ${ajouts.ou}, ${ajouts.quand}`" :jours="ajouts.jours" />
+
+                <p class="m-0 mt-3 text-sm">
+                  <span class="font-semibold tabular-nums">{{ compte(ajouts.ajoutees, 'personne ajoutée', 'personnes ajoutées') }}</span>,
+                  <span class="font-semibold tabular-nums">{{ nombre(ajouts.verifiees) }} {{ ajouts.verifiees > 1 ? 'vérifiées' : 'vérifiée' }}</span>
+                  {{ ajouts.quand }}.
+                </p>
+                <p class="m-0 mt-0.5 text-xs text-attenue">
+                  <template v-if="ajouts.plusActif">
+                    Jour le plus actif : {{ jourLisible(ajouts.plusActif.jour, true) }} — {{ nombre(ajouts.plusActif.ajoutees) }} {{ ajouts.plusActif.ajoutees > 1 ? 'ajoutées' : 'ajoutée' }}, {{ nombre(ajouts.plusActif.verifiees) }} {{ ajouts.plusActif.verifiees > 1 ? 'vérifiées' : 'vérifiée' }}.
+                  </template>
+                  <template v-else>Ni ajout ni vérification sur la période.</template>
+                </p>
+                <p class="m-0 mt-2 text-[11px] text-attenue">
+                  Une fiche compte vérifiée le jour où sa première citation d’acte ou de registre a été saisie. Comme pour l’évolution mois par mois, ce qui vient de l’import porte la date de l’import, et une fiche ou une source supprimée disparaît aussi du passé.
+                </p>
+              </template>
             </PanneauBase>
           </div>
         </section>

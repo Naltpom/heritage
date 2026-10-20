@@ -111,6 +111,21 @@ fiches : il n'existe pas de journal de « Vérifié ». Ce qu'elle ne voit pas, 
 dit : les suppressions disparaissent du passé, une qualité relevée après coup compte depuis
 la saisie, et tout ce qui vient de l'import porte la date de l'import.
 
+**Jour par jour (2026-10-20).** Le commanditaire veut voir, chaque jour, combien de
+personnes ont été ajoutées ou vérifiées, pour tout l'arbre ou une branche. La charge porte
+`arbre.parJour` : du jour de la première fiche à aujourd'hui, **tous les jours, zéros
+compris**, un an au plus. Une fiche est **ajoutée** le jour de sa création ; elle devient
+**vérifiée** le jour de sa première citation de qualité ≥ 2 — au plus tôt le jour de sa
+création. Les jours sont ceux de `Europe/Paris`, pas de l'UTC du serveur. Chaque jour
+porte le même détail par branche (les branches sans rien ce jour-là omises) : le choix de
+la branche et de la période (30 jours, 90 jours, tout) se fait à l'écran, sans nouvel
+appel — c'est un découpage de chiffres déjà comptés, pas un calcul sur des fiches. Ce sont
+des comptes simples (traitement 1) : pas de seuil de discrétion. Mêmes limites que
+l'évolution par mois, et l'écran les dit de la même façon ; l'import tombe tout entier sur
+un jour, qui écrase l'échelle de « tout » — d'où les périodes courtes, 30 jours par défaut.
+Le graphique est une courbe à deux séries et non des colonnes : 365 paires de colonnes ne
+tiennent pas sur un téléphone.
+
 ### Les branches et les générations
 
 Elles sont lues **depuis la racine de l'arbre** (`tree.personne_racine_id`, colonnes

@@ -13,6 +13,7 @@ import { renderToString } from 'vue/server-renderer'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import Barres from './Barres.vue'
 import CarteRecord from './CarteRecord.vue'
+import CourbeDesJours from './CourbeDesJours.vue'
 import Palmares from './Palmares.vue'
 import { etatDeLEcran, LISTES_DU_CHANTIER } from '@/views/StatsView.vue'
 import { PORTEES, porteeEffective } from '@/composables/usePorteeExplorer'
@@ -64,6 +65,42 @@ describe('un histogramme', () => {
     const html = await rendre(Barres, props)
 
     expect(html).toMatch(/<figcaption[^>]*>[\s\S]*Hommes[\s\S]*Femmes[\s\S]*<\/figcaption>/)
+  })
+})
+
+describe('la courbe des jours', () => {
+  const props = {
+    titre: 'Personnes ajoutées et vérifiées par jour',
+    jours: [
+      { jour: '2026-10-18', ajoutees: 12, verifiees: 0 },
+      { jour: '2026-10-19', ajoutees: 0, verifiees: 0 },
+      { jour: '2026-10-20', ajoutees: 1, verifiees: 3 },
+    ],
+  }
+
+  it('se parcourt au clavier comme un curseur, qui dit le jour et les deux nombres', async () => {
+    const html = await rendre(CourbeDesJours, props)
+
+    expect(html).toContain('role="slider"')
+    expect(html).toContain('tabindex="0"')
+    expect(html).toContain('aria-valuetext="mar. 20 oct. 2026 : 1 personne ajoutée, 3 vérifiées"')
+  })
+
+  it('son tableau ne liste que les jours où quelque chose a bougé, et le dit', async () => {
+    const html = await rendre(CourbeDesJours, props)
+
+    expect(html).toMatch(/<div class="sr-only"><table>/)
+    expect(html).toContain('dim. 18 oct. 2026')
+    expect(html).not.toContain('lun. 19 oct. 2026')
+    expect(html).toContain('les jours sans ajout ni vérification ne sont pas listés')
+  })
+
+  it('a une légende écrite, et son échelle monte à une valeur ronde', async () => {
+    const html = await rendre(CourbeDesJours, props)
+
+    expect(html).toMatch(/<figcaption[^>]*>[\s\S]*Personnes ajoutées[\s\S]*Personnes vérifiées[\s\S]*<\/figcaption>/)
+    expect(html).toContain('>20<')
+    expect(html).toContain('>10<')
   })
 })
 

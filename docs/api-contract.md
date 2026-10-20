@@ -7796,3 +7796,69 @@ disponibilité : elle amorce le noyau Symfony et lance un `SELECT 1` sur la base
 - Joignable de l'extérieur par le front, qui relaie `/api` :
   `https://<domaine>/api/sante`. Mise en place d'une sonde extérieure :
   `docs/deploiement/premiere-mise-en-ligne.md`, § 13.
+
+## 27. Statistiques de l'arbre
+
+Module **`Statistiques`**. L'onglet Explorer › Stats : des chiffres **calculés côté
+serveur**, déjà passés par le cercle de visibilité et par le seuil de discrétion — décision,
+règles de dates et confidentialité en trois traitements : [ADR 0015](adr/0015-statistiques-de-l-arbre.md).
+La forme complète de la charge est le type `Statistiques` de `app/src/lib/api/statistiques.ts`.
+
+| Méthode | Chemin | Accès | Corps | Succès | Erreurs |
+|---|---|---|---|---|---|
+| `GET` | `/api/explorer/stats?portee=arbre\|tout` | `membre` | — | `200` | `401`, `403` `regime_en_attente` |
+| `GET` | `/api/administration/stats/chantier?portee=arbre\|tout` | `ROLE_ADMIN` | — | `200` | `401`, `403` |
+
+`portee` : `arbre` (défaut) ne compte que l'arbre du lecteur ; `tout` n'est accordé qu'à
+l'administration — un membre qui le demande reçoit `arbre`, sans erreur. La charge dit la
+portée retenue (`portee`). Régime de cache **A**.
+
+```json
+{
+  "calculeLe": "2026-10-20T12:00:00+02:00",
+  "portee": "arbre",
+  "seuilDeDiscretion": 5,
+  "arbre": { "personnes": 1234, "familles": 410, "generations": 12, "periode": {}, "verification": {}, "branches": [], "parJour": [] },
+  "vie": {}, "records": {}, "prenomsEtNoms": {}, "lieux": {}
+}
+```
+
+### 27.1 `arbre.parJour` — ajouts et vérifications, jour par jour
+
+Ajouté le 20/10/2026. Pour chaque jour, combien de fiches ont été **ajoutées** (créées ce
+jour-là) et combien sont devenues **vérifiées** (première citation de qualité ≥ 2 saisie ce
+jour-là ; au plus tôt le jour de la création de la fiche).
+
+```json
+"parJour": [
+  {
+    "jour": "2026-10-14",
+    "ajoutees": 12,
+    "verifiees": 3,
+    "branches": {
+      "pp": { "ajoutees": 9, "verifiees": 0 },
+      "mm": { "ajoutees": 3, "verifiees": 3 }
+    }
+  },
+  { "jour": "2026-10-15", "ajoutees": 0, "verifiees": 0, "branches": {} }
+]
+```
+
+- **Tous les jours, zéros compris**, du jour de la première fiche de la population (portée
+  et périmètre appliqués) à aujourd'hui, dans l'ordre ; **un an au plus** (365 jours,
+  aujourd'hui compris). Un arbre sans fiche rend `[]`.
+- `jour` : une date `AAAA-MM-JJ` **à l'heure de Paris** (`Europe/Paris`), pas en UTC : une
+  fiche saisie le 30 septembre à 23 h 30 UTC compte le 1ᵉʳ octobre.
+- `branches` : le même détail par clé de branche (`pp`, `pm`, `mp`, `mm`, `tr`, `cpp`, `cpm`,
+  `cmp`, `cmm`, `hors` — les branches lues depuis la racine, comme `arbre.branches`), dans
+  cet ordre. Une branche sans rien ce jour-là est **absente** ; un jour sans rien porte
+  `{}`, **jamais** `[]`. La somme des branches d'un jour égale ses deux totaux.
+- Des **comptes simples** (traitement 1 de l'ADR 0015) : toutes les fiches comptent, celles
+  que le lecteur ne voit pas comprises, sans seuil de discrétion — aucun nom, aucune date
+  de fiche n'en sort.
+- Les **mêmes limites** que `verification.historique` (reconstruit des dates de saisie, il
+  n'existe pas de journal de « Vérifié ») : une fiche ou une citation supprimée disparaît
+  de son jour, une qualité relevée après coup compte du jour de la saisie, tout l'import
+  tombe le jour de l'import.
+- Le client filtre par branche et coupe la période (30 jours, 90 jours, tout) **sans
+  nouvel appel**.
