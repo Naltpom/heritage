@@ -22,6 +22,7 @@ use Doctrine\ORM\Tools\SchemaTool;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\Clock\Test\ClockSensitiveTrait;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
@@ -49,6 +50,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
  */
 final class StatistiquesTest extends WebTestCase
 {
+    use ClockSensitiveTrait;
+
     private const int LECTEUR = 1;
     private const int HORS_CERCLE = 9;
     private const int JEAN = 10;
@@ -60,6 +63,7 @@ final class StatistiquesTest extends WebTestCase
     private const int JEAN_PETIT_FILS = 17;
     private const int PAUL = 50;
     private const int SANS_LIEN = 60;
+    private const int LISE = 70;
 
     private KernelBrowser $client;
 
@@ -323,6 +327,63 @@ final class StatistiquesTest extends WebTestCase
         self::assertSame(1, end($historique)['verifiees']);
     }
 
+    /**
+     * Demande du 20/10/2026 : « tous les jours, combien de personnes ont été ajoutées ou
+     * vérifiées ». Les dix fiches du petit arbre sont créées le 20 août, l'acte de Jean saisi
+     * le 20 septembre ; Lise, fille de Paul, est saisie le 30 septembre à 23 h 30 UTC — le
+     * 1ᵉʳ octobre à Paris —, avec une citation d'acte saisie avant elle (un import).
+     */
+    public function testLesAjoutsEtLesVerificationsJourParJour(): void
+    {
+        self::mockTime(new \DateTimeImmutable('2026-10-20 12:00:00', new \DateTimeZone('Europe/Paris')));
+        $this->poser(self::LISE, 'Lise', 'Romarin', Sex::Feminin, '2020', vivant: true, branche: Branch::Tr, generation: 1, creeLe: '2026-09-30T23:30:00+00:00');
+        ReleveEnMemoire::ajouterFamille(105, self::PAUL, null, [self::LISE], '', 0);
+        ReleveEnMemoire::ajouterAppui(self::LISE, 2, '2026-09-01');
+
+        $this->connecterUnMembre();
+        $this->requete('GET', '/api/explorer/stats');
+        $jours = array_column($this->charge()['arbre']['parJour'], null, 'jour');
+
+        self::assertCount(62, $jours, 'Du 20 août au 20 octobre, tous les jours.');
+        self::assertSame('2026-08-20', array_key_first($jours), 'La série commence le jour de la première fiche.');
+        self::assertSame('2026-10-20', array_key_last($jours), 'Et s’arrête aujourd’hui.');
+
+        self::assertSame(['jour' => '2026-08-21', 'ajoutees' => 0, 'verifiees' => 0, 'branches' => []], $jours['2026-08-21'], 'Un jour sans rien est un zéro, pas une absence.');
+        self::assertStringContainsString('"branches":{}', (string) $this->client->getResponse()->getContent(), 'Un jour vide porte un objet vide, pas une liste.');
+
+        self::assertSame(10, $jours['2026-08-20']['ajoutees']);
+        self::assertSame(0, $jours['2026-08-20']['verifiees'], 'L’acte de Jean n’était pas encore saisi.');
+        self::assertSame([
+            'pp' => ['ajoutees' => 7, 'verifiees' => 0],
+            'mm' => ['ajoutees' => 1, 'verifiees' => 0],
+            'tr' => ['ajoutees' => 2, 'verifiees' => 0],
+        ], $jours['2026-08-20']['branches'], 'Le détail par branche, dans l’ordre de la légende.');
+
+        self::assertSame(['jour' => '2026-09-20', 'ajoutees' => 0, 'verifiees' => 1, 'branches' => ['pp' => ['ajoutees' => 0, 'verifiees' => 1]]], $jours['2026-09-20'], 'Jean devient vérifié un mois après sa création.');
+        self::assertSame(0, $jours['2026-09-01']['verifiees'], 'Une citation ne vérifie pas une fiche qui n’existe pas encore.');
+        self::assertSame(0, $jours['2026-09-30']['ajoutees'], 'Le 30 septembre à 23 h 30 UTC, il est déjà minuit passé à Paris.');
+        self::assertSame(['tr' => ['ajoutees' => 1, 'verifiees' => 1]], $jours['2026-10-01']['branches'], 'Lise, ajoutée et vérifiée le jour de sa création.');
+        self::assertSame(11, array_sum(array_column($jours, 'ajoutees')));
+        self::assertSame(2, array_sum(array_column($jours, 'verifiees')), 'Marie n’a qu’une citation de qualité 1.');
+    }
+
+    public function testLaSerieParJourSArreteAUnAn(): void
+    {
+        self::mockTime(new \DateTimeImmutable('2026-10-20 12:00:00', new \DateTimeZone('Europe/Paris')));
+        $this->poser(self::LISE, 'Lise', 'Romarin', Sex::Feminin, '2020', vivant: true, branche: Branch::Tr, generation: 1, creeLe: '2024-01-15');
+        ReleveEnMemoire::ajouterFamille(105, self::PAUL, null, [self::LISE], '', 0);
+
+        $this->connecterUnMembre();
+        $this->requete('GET', '/api/explorer/stats');
+        $jours = $this->charge()['arbre']['parJour'];
+
+        self::assertCount(365, $jours, 'Un an, aujourd’hui compris, même pour un arbre commencé avant.');
+        self::assertSame('2025-10-21', $jours[0]['jour']);
+        self::assertSame('2026-10-20', $jours[364]['jour']);
+        self::assertSame(10, array_sum(array_column($jours, 'ajoutees')), 'Lise, ajoutée avant la fenêtre, n’y est comptée nulle part.');
+        self::assertSame(1, $this->charge()['arbre']['verification']['historique'][0]['total'] ?? null, 'L’historique mensuel, lui, garde ses trois ans.');
+    }
+
     public function testLesBranchesPortentLePatronymeDeTete(): void
     {
         $this->connecterUnMembre();
@@ -415,9 +476,10 @@ final class StatistiquesTest extends WebTestCase
         int $citations = 0,
         ?string $lieuNaissance = null,
         ?string $lieuDeces = null,
+        string $creeLe = '2026-08-20',
     ): void {
         // Les fiches sont créées en août, l'acte de Jean saisi en septembre.
-        ReleveEnMemoire::ajouterPersonne($id, $prenoms, $nom, $sexe, $naissance, $deces, $vivant, $branche, $generation, $bestQuay, $citations, $lieuNaissance, $lieuDeces, '2026-08-20');
+        ReleveEnMemoire::ajouterPersonne($id, $prenoms, $nom, $sexe, $naissance, $deces, $vivant, $branche, $generation, $bestQuay, $citations, $lieuNaissance, $lieuDeces, $creeLe);
         ArbreEnMemoire::ajouterPersonne($id, $prenoms, $nom, $vivant, confidentielle: $confidentielle);
     }
 

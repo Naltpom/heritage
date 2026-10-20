@@ -40,6 +40,18 @@ use App\Module\Statistiques\Contract\PorteeDeLAppui;
  *   ce jour-là, même pour des recherches de plusieurs années.
  *
  * C'est donc l'évolution **dans l'application**, pas l'histoire de la recherche.
+ *
+ * ── Jour par jour (demande du 20/10/2026) ────────────────────────────────────────
+ *
+ * « Combien de personnes ont été ajoutées ou vérifiées, tous les jours » : la même
+ * reconstruction, au jour près. Une fiche est **ajoutée** le jour de sa création ; elle
+ * devient **vérifiée** le jour de sa première citation de qualité ≥ 2 — au plus tôt le
+ * jour de sa création, une citation ne précédant sa fiche que par un import. Les **mêmes
+ * limites** que l'évolution par mois : une fiche ou une citation supprimée disparaît de
+ * son jour, une qualité relevée après coup compte du jour de la saisie, l'import tombe
+ * tout entier le jour de l'import. Les jours sont ceux de la famille (`Europe/Paris`),
+ * pas ceux du serveur (UTC) : une fiche saisie à 0 h 30 l'est le jour qui commence. La
+ * série compte tous les jours, même ceux où rien n'a bougé, et s'arrête à un an.
  */
 final class ArbreEnChiffres
 {
@@ -48,6 +60,12 @@ final class ArbreEnChiffres
 
     /** L'historique s'arrête aux trois dernières années : au-delà, la courbe ne se lit plus. */
     private const int MOIS_D_HISTORIQUE = 36;
+
+    /** La série par jour s'arrête à un an, aujourd'hui compris. */
+    private const int JOURS_DE_SERIE = 365;
+
+    /** Le fuseau où se lisent les jours : celui de la famille, pas celui du serveur. */
+    private const string FUSEAU = 'Europe/Paris';
 
     /** @return array<string, mixed> */
     public function calculer(Population $population): array
@@ -59,6 +77,7 @@ final class ArbreEnChiffres
             'periode' => $this->periode($population),
             'verification' => $this->verification($population),
             'branches' => $this->branches($population),
+            'parJour' => $this->parJour($population),
         ];
     }
 
@@ -187,16 +206,7 @@ final class ArbreEnChiffres
             return [];
         }
 
-        // La première date de saisie d'une citation d'acte, par fiche.
-        $premierActe = [];
-        foreach ($population->releve->appuis as $appui) {
-            if (null === $appui->personId || null === $appui->quay || $appui->quay < 2) {
-                continue;
-            }
-
-            $deja = $premierActe[$appui->personId] ?? null;
-            $premierActe[$appui->personId] = null === $deja || $appui->creeLe < $deja ? $appui->creeLe : $deja;
-        }
+        $premierActe = $this->premiersActes($population);
 
         $creations = array_map(static fn (PersonneDuReleve $p): \DateTimeImmutable => $p->creeLe, $population->personnes);
         $premier = min($creations);
@@ -227,6 +237,103 @@ final class ArbreEnChiffres
         }
 
         return $mois;
+    }
+
+    /**
+     * Les fiches ajoutées et devenues vérifiées, jour par jour — voir l'en-tête pour ce que
+     * la reconstruction ne voit pas. Du jour de la première fiche à aujourd'hui, un an au
+     * plus, **tous les jours**, zéros compris : l'écran n'a pas à deviner qu'un jour absent
+     * est un jour vide. Chaque jour porte le même détail par branche (les branches sans
+     * rien ce jour-là omises), pour que l'écran filtre sans redemander.
+     *
+     * Des comptes simples (premier traitement de l'ADR 0015) : ils comptent tout le monde,
+     * sans seuil de discrétion.
+     *
+     * @return list<array{jour: string, ajoutees: int, verifiees: int, branches: object}>
+     */
+    private function parJour(Population $population): array
+    {
+        if ([] === $population->personnes) {
+            return [];
+        }
+
+        $fuseau = new \DateTimeZone(self::FUSEAU);
+        $jourDe = static fn (\DateTimeImmutable $instant): string => $instant->setTimezone($fuseau)->format('Y-m-d');
+        $premierActe = $this->premiersActes($population);
+
+        /** @var array<string, array<string, array{ajoutees: int, verifiees: int}>> $comptes jour → branche → comptes */
+        $comptes = [];
+        $premier = null;
+
+        foreach ($population->personnes as $personne) {
+            $branche = $personne->branch->value ?? 'hors';
+
+            $jour = $jourDe($personne->creeLe);
+            $comptes[$jour][$branche] ??= ['ajoutees' => 0, 'verifiees' => 0];
+            ++$comptes[$jour][$branche]['ajoutees'];
+            $premier = null === $premier || $jour < $premier ? $jour : $premier;
+
+            $acte = $premierActe[$personne->id] ?? null;
+            if (null !== $acte) {
+                $jour = $jourDe(max($acte, $personne->creeLe));
+                $comptes[$jour][$branche] ??= ['ajoutees' => 0, 'verifiees' => 0];
+                ++$comptes[$jour][$branche]['verifiees'];
+            }
+        }
+
+        // Les jours se parcourent en UTC : ce ne sont plus des instants mais des dates du
+        // calendrier, et l'UTC n'a pas de changement d'heure qui sauterait ou doublerait un jour.
+        $utc = new \DateTimeZone('UTC');
+        $aujourdhui = new \DateTimeImmutable($jourDe($population->maintenant), $utc);
+        $debut = max(
+            new \DateTimeImmutable((string) $premier, $utc),
+            $aujourdhui->modify(\sprintf('-%d days', self::JOURS_DE_SERIE - 1)),
+        );
+
+        $jours = [];
+        for ($courant = $debut; $courant <= $aujourdhui; $courant = $courant->modify('+1 day')) {
+            $jour = $courant->format('Y-m-d');
+            $ligne = ['jour' => $jour, 'ajoutees' => 0, 'verifiees' => 0];
+            $branches = [];
+
+            foreach (self::ORDRE as $branche) {
+                $compte = $comptes[$jour][$branche] ?? null;
+
+                if (null !== $compte) {
+                    $ligne['ajoutees'] += $compte['ajoutees'];
+                    $ligne['verifiees'] += $compte['verifiees'];
+                    $branches[$branche] = $compte;
+                }
+            }
+
+            // `(object)` et non un tableau nu : un jour sans rien se sérialiserait en `[]`, et
+            // l'écran attend un objet indexé par branche.
+            $jours[] = [...$ligne, 'branches' => (object) $branches];
+        }
+
+        return $jours;
+    }
+
+    /**
+     * La date de saisie de la première citation de qualité ≥ 2 de chaque fiche : le moment
+     * où, pour ces reconstructions, elle est devenue « Vérifiée ».
+     *
+     * @return array<int, \DateTimeImmutable>
+     */
+    private function premiersActes(Population $population): array
+    {
+        $premierActe = [];
+
+        foreach ($population->releve->appuis as $appui) {
+            if (null === $appui->personId || null === $appui->quay || $appui->quay < 2) {
+                continue;
+            }
+
+            $deja = $premierActe[$appui->personId] ?? null;
+            $premierActe[$appui->personId] = null === $deja || $appui->creeLe < $deja ? $appui->creeLe : $deja;
+        }
+
+        return $premierActe;
     }
 
     /**
