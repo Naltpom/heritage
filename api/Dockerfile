@@ -15,7 +15,14 @@
 # =============================================================================
 #  Socle commun aux deux cibles
 # =============================================================================
-FROM dunglas/frankenphp:1-php8.4 AS base
+# Version épinglée, pas `1-php8.4` : le déploiement construit sans `--pull`, donc
+# avec une étiquette flottante l'image servie dépend de ce que le VPS a tiré en
+# dernier, et rien ne dit laquelle c'est. Le 22/10/2026, la production tournait
+# en PHP 8.4.26 alors que 8.4.27 corrigeait PHP2Shell (CVE-2026-109618 et
+# CVE-2026-109619, exécution de code à distance sans authentification). 1.13.2
+# embarque PHP 8.4.27 et corrige aussi quatre failles de FrankenPHP lui-même.
+# Monter ce numéro à chaque correctif de sécurité de PHP ou de FrankenPHP.
+FROM dunglas/frankenphp:1.13.2-php8.4 AS base
 
 # pdo_pgsql : PostgreSQL.
 # intl      : tri et comparaison des noms français (accents), formats de dates.
