@@ -1090,23 +1090,44 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
      * arbre n'a pas de date d'acte, et les exiger reviendrait à interdire de les
      * enregistrer.
      *
+     * **La nature de l'union** (`married`, ADR 0020) suit la même règle, et une de plus :
+     * un mariage daté ou situé est un mariage. Absente ou `null`, elle vaut « on ne sait
+     * pas » — et devient `true` si le lien porte une date ou un lieu de mariage, parce que
+     * la déduction est certaine et n'ouvre la visibilité de personne (à la différence du
+     * décès, qu'on refuse de cocher à la place de l'auteur). `false` sous une date, c'est
+     * une contradiction qu'on ne tranche pas : `422`.
+     *
      * @param array<string, mixed> $brut
      */
     private function porterLesDatesDUnion(DraftLink $lien, array $brut, string $chemin, LinkKind $nature): void
     {
         $porteUneDate = null !== ($brut['marriage'] ?? null)
             || null !== ($brut['divorce'] ?? null)
-            || true === ($brut['divorced'] ?? null);
+            || true === ($brut['divorced'] ?? null)
+            // `false` aussi : « union libre » dit autant qu'une date que le lien est une union.
+            || null !== ($brut['married'] ?? null);
 
         if (LinkKind::ConjointDe !== $nature) {
             if ($porteUneDate) {
-                throw DonneesInvalides::pourChamp("$chemin.marriage", 'Seule une union porte des dates de mariage ou de rupture.');
+                throw DonneesInvalides::pourChamp("$chemin.marriage", 'Seule une union porte des dates de mariage ou de rupture, ou dit si le couple était marié.');
             }
 
             return;
         }
 
-        $lien->setMarriage($this->date($brut, 'marriage', $chemin));
+        $mariage = $this->date($brut, 'marriage', $chemin);
+        $marie = $this->booleenOuNul($brut, 'married', $chemin);
+
+        if ($mariage->estRenseignee()) {
+            if (false === $marie) {
+                throw DonneesInvalides::pourChamp("$chemin.married", 'Une date ou un lieu de mariage attestent le mariage : choisissez « mariés : oui », ou retirez la date et le lieu du mariage.');
+            }
+
+            $marie = true;
+        }
+
+        $lien->setMarriage($mariage);
+        $lien->setMarried($marie);
         $lien->setDivorced($this->booleen($brut, 'divorced', $chemin));
         $lien->setDivorce($this->date($brut, 'divorce', $chemin));
     }
@@ -1134,6 +1155,23 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
 
         if (!\is_bool($valeur)) {
             throw DonneesInvalides::pourChamp("$chemin.$cle", 'Cette valeur doit être true ou false.');
+        }
+
+        return $valeur;
+    }
+
+    /**
+     * Un booléen **tri-état** : `true`, `false`, ou `null` — absent compris — pour « on ne
+     * sait pas ». La nature d'une union seulement (ADR 0020).
+     *
+     * @param array<string, mixed> $source
+     */
+    private function booleenOuNul(array $source, string $cle, string $chemin): ?bool
+    {
+        $valeur = $source[$cle] ?? null;
+
+        if (null !== $valeur && !\is_bool($valeur)) {
+            throw DonneesInvalides::pourChamp("$chemin.$cle", 'Cette valeur doit être true, false ou null.');
         }
 
         return $valeur;

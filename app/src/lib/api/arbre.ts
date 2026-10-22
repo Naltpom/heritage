@@ -74,6 +74,13 @@ export interface UnionDeFiche {
    *  reste une union, et la fratrie en dépend (§ 5.4). */
   conjoint: ReferencePersonne | null
   marriage: BlocDate | null
+  /**
+   * La nature de l'union (ADR 0020) : `true` mariés — daté ou non —, `false`
+   * union libre, `null` on ne sait pas. Une date ou un lieu de mariage la font
+   * toujours `true`. Voir `components/personne/union.ts`.
+   */
+  married: boolean | null
+  /** Toute rupture : « divorcés » quand `married` est vrai, « séparés » sinon. */
   divorced: boolean
   divorce: BlocDate | null
   /** `version` de la famille — le `baseVersion` d'une `modification_famille`. */
@@ -302,6 +309,8 @@ export interface FicheFamille {
   /** Les dates d'union restent visibles même si un époux est masqué : elles
    *  appartiennent à la famille, pas à la personne (§ 5.4). */
   marriage: BlocDate | null
+  /** La nature de l'union (ADR 0020) — même règle que `UnionDeFiche.married`. */
+  married: boolean | null
   divorced: boolean
   divorce: BlocDate | null
   generation: number
@@ -576,8 +585,10 @@ export interface FamilleDAffiche {
   divorce: BlocDate | null
   /**
    * Le mariage **attesté** même sans date (vrai), l'union libre (faux), l'inconnu (`null`).
-   * Pas encore servi : une colonne en préparation sur `tree_family`. Absent ou `null`,
-   * l'affiche le déduit de la date, du lieu et du divorce.
+   * `tree_family.married` (ADR 0020) : servi par la route, toujours, `null` compris — et
+   * toujours vrai sous une date ou un lieu de mariage. Facultatif ici pour les arbres
+   * fictifs de l'essai, qui ne le portent pas tous. Absent ou `null`, l'affiche le déduit
+   * de la date, du lieu et du divorce.
    */
   married?: boolean | null
   /** Dans l'ordre de l'affiche : naissance, rang dans la fratrie, identifiant. */

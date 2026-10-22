@@ -120,6 +120,23 @@ class UncertainDate
     }
 
     /**
+     * Le bloc dit-il **quelque chose** de l'événement : une date, même illisible, ou un
+     * lieu ?
+     *
+     * Plus large que {@see isKnown()}, qui ne regarde que le qualificatif : une chaîne
+     * GEDCOM qu'aucune forme n'a su lire (`raw` seul) et un lieu sans date (« marié à
+     * Saule ») attestent l'événement tout autant qu'une date. C'est le critère de la
+     * nature d'une union (ADR 0020) — un mariage daté ou situé est un mariage —, recopié
+     * **terme pour terme** de la contrainte `ck_tree_family_mariage_coherent`
+     * (`qualifier = 'inconnue' AND raw IS NULL AND place IS NULL`) : la normalisation de
+     * l'entité doit satisfaire le `CHECK`, ni plus ni moins.
+     */
+    public function estRenseignee(): bool
+    {
+        return $this->isKnown() || null !== $this->raw || null !== $this->place;
+    }
+
+    /**
      * La date désigne-t-elle autre chose qu'un jour unique ?
      *
      * Vrai pour une fourchette (`BET`), pour une borne ouverte (`BEF`, `AFT`, `FROM`)

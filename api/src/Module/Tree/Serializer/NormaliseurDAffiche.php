@@ -332,6 +332,10 @@ final readonly class NormaliseurDAffiche
             'husband' => $servie($famille->getHusband()),
             'wife' => $servie($famille->getWife()),
             'marriage' => $this->dates->pourFiche($famille->getMarriage()),
+            // La nature de l'union (ADR 0020), comme sur la fiche d'une famille : émise même
+            // à `null` — « on ne sait pas » —, et toujours `true` sous une date ou un lieu de
+            // mariage. Elle est à la famille comme ses dates : visible, époux masqué ou non.
+            'married' => $famille->isMarried(),
             'divorced' => $famille->isDivorced(),
             'divorce' => $famille->isDivorced() || $famille->getDivorce()->isKnown()
                 ? $this->dates->pourFiche($famille->getDivorce())

@@ -345,6 +345,10 @@ final readonly class NormaliseurDePersonne
                 // dont un membre est masqué reste une union, sans quoi la fratrie
                 // devient fausse (§ 5.4, ADR 0003).
                 'marriage' => $this->dates->pourFiche($famille->getMarriage()),
+                // La nature de l'union (ADR 0020) : `true` mariés, `false` union libre,
+                // `null` on ne sait pas — émise même nulle. Comme les dates, elle est à la
+                // famille : visible même quand le conjoint est masqué.
+                'married' => $famille->isMarried(),
                 'divorced' => $famille->isDivorced(),
                 'divorce' => $famille->isDivorced() || $famille->getDivorce()->isKnown()
                     ? $this->dates->pourFiche($famille->getDivorce())

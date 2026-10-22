@@ -79,6 +79,10 @@ final readonly class NormaliseurDeFamille
             'husband' => $this->epoux($famille->getHusband(), $cercle, $vivants),
             'wife' => $this->epoux($famille->getWife(), $cercle, $vivants),
             'marriage' => $this->dates->pourFiche($famille->getMarriage()),
+            // La nature de l'union (ADR 0020), émise même à `null` : « on ne sait pas » est
+            // une réponse, et l'écran ne la confond pas avec « union libre ». Elle appartient
+            // à la famille comme ses dates, donc reste visible quand un époux est masqué.
+            'married' => $famille->isMarried(),
             'divorced' => $famille->isDivorced(),
             'divorce' => $famille->isDivorced() || $famille->getDivorce()->isKnown()
                 ? $this->dates->pourFiche($famille->getDivorce())

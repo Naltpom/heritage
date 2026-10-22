@@ -105,6 +105,10 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
             $this->verifierQueLeDecesEstCoherent($construits, $cible);
         }
 
+        if (SubjectKind::Famille === $premier->getSubjectKind()) {
+            $this->tenirLaNatureDesUnions($demande, $construits);
+        }
+
         $demande->setTarget(
             $premier->getSubjectKind(),
             $sujet,
@@ -177,6 +181,115 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         }
 
         throw DonneesInvalides::pourChamp('ops', 'Une date de décès implique le décès : cochez « personne décédée », ou retirez la date. Ce n’est pas un détail d’affichage — une fiche marquée décédée devient visible de tout compte connecté, et on ne bascule pas cela à votre place.');
+    }
+
+    /**
+     * **Un mariage daté ou situé est un mariage** (ADR 0020) — tenu au dépôt, devant
+     * l'auteur.
+     *
+     * ── Pourquoi on déduit ici, alors qu'on refuse pour le décès ───────────────────
+     *
+     * Le décès est refusé plutôt que coché ({@see verifierQueLeDecesEstCoherent()})
+     * parce que `deceased` **ouvre la visibilité** d'une fiche. La nature d'une union
+     * n'ouvre rien, et la déduction est certaine : une date de mariage est la trace d'un
+     * mariage. Quand la demande date une union dont la nature est **inconnue** et ne dit
+     * rien de cette nature, elle reçoit donc l'op `married : null → true`, avec la
+     * `baseVersion` de l'op qui pose la date. Un op et non une écriture silencieuse de
+     * `Tree`, pour trois raisons :
+     *
+     * - l'administrateur le **lit** dans le diff — « Mariés : on ne sait pas → oui » ;
+     * - la révision le **journalise** — l'historique de la fiche dit ce que l'arbre est
+     *   devenu, pas seulement ce que l'auteur a tapé ;
+     * - le **rejeu** le confronte : si une autre demande a dit « union libre » entre le
+     *   dépôt et la validation, son `oldValue` ne correspond plus, et la demande devient
+     *   caduque au lieu de requalifier l'union sans que personne l'ait décidé.
+     *
+     * ── Ce qu'on refuse ─────────────────────────────────────────────────────────────
+     *
+     * Une contradiction **franche**, parce qu'on ne départage pas à la place de l'auteur
+     * une pièce et une déclaration :
+     *
+     * - la demande pose elle-même une nature qui contredit la date (« union libre » ou
+     *   « on ne sait pas » sous une date ou un lieu de mariage) ;
+     * - la demande date une union que la fiche dit **sans mariage** : requalifier en
+     *   silence une union libre enregistrée effacerait ce que quelqu'un a affirmé.
+     *
+     * L'état jugé est celui d'**après** — la fiche, écrasée par les ops —, et seulement
+     * si la demande touche la date ou la nature : comme pour le décès, on juge la
+     * modification, pas la fiche.
+     *
+     * @param list<ChangeRequestOp> $ops
+     */
+    private function tenirLaNatureDesUnions(ChangeRequest $demande, array $ops): void
+    {
+        /** @var array<int, list<ChangeRequestOp>> $parFamille */
+        $parFamille = [];
+        $dernierRang = 0;
+
+        foreach ($ops as $op) {
+            $dernierRang = max($dernierRang, $op->getSeq());
+            $sujet = $op->getSubjectId();
+
+            if (SubjectKind::Famille === $op->getSubjectKind() && null !== $sujet) {
+                $parFamille[$sujet][] = $op;
+            }
+        }
+
+        foreach ($parFamille as $familleId => $opsDeLaFamille) {
+            // Un op sur une famille disparue a déjà levé `Introuvable` à sa construction.
+            $cible = $this->arbre->chargerCible(SubjectKind::Famille, $familleId);
+
+            if (null === $cible) {
+                continue;
+            }
+
+            $mariage = $this->normaliseur->versJson(ValueKind::DateIncertaine, $cible->valeurs['marriage'] ?? null);
+            $marie = $cible->valeurs['married'] ?? null;
+            $opDeDate = null;
+            $opDeNature = null;
+
+            foreach ($opsDeLaFamille as $op) {
+                if ('marriage' === $op->getField()) {
+                    $mariage = $op->getNewValue();
+                    $opDeDate = $op;
+                }
+
+                if ('married' === $op->getField()) {
+                    $marie = $op->getNewValue();
+                    $opDeNature = $op;
+                }
+            }
+
+            if ((null === $opDeDate && null === $opDeNature) || true === $marie || !$this->porteUnMariage($mariage)) {
+                continue;
+            }
+
+            if (null !== $opDeNature) {
+                throw DonneesInvalides::pourChamp('ops', 'Une date ou un lieu de mariage attestent le mariage : choisissez « mariés : oui », ou retirez la date et le lieu du mariage.');
+            }
+
+            if (false === $marie) {
+                throw DonneesInvalides::pourChamp('ops', 'Cette union est enregistrée sans mariage (union libre) : une date ou un lieu de mariage la contredisent. Indiquez « mariés : oui » avec la date, ou laissez la date vide.');
+            }
+
+            // Reste : nature inconnue, et la demande ne la touche pas — l'op implicite.
+            \assert(null !== $opDeDate);
+            $implicite = new ChangeRequestOp($demande, ++$dernierRang, OpKind::Champ, SubjectKind::Famille, ValueKind::Booleen);
+            $implicite->setField('married')
+                ->viserLigneExistante($familleId, $opDeDate->getBaseVersion())
+                ->setValues(null, true);
+            $this->em->persist($implicite);
+        }
+    }
+
+    /**
+     * Le critère de `ck_tree_family_mariage_coherent`, par le même chemin que l'entité :
+     * le bloc reconstruit, puis {@see \App\Module\Core\ValueObject\UncertainDate::estRenseignee()}.
+     * Une seconde écriture du critère, sur le JSON, finirait par en diverger.
+     */
+    private function porteUnMariage(mixed $bloc): bool
+    {
+        return \is_array($bloc) && $this->normaliseur->reconstruire($bloc)->estRenseignee();
     }
 
     /**
@@ -279,15 +392,17 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         // Les deux valeurs passent par le normaliseur : c'est là que les cinq clés d'un
         // bloc date sont exigées, que `texte` est refusé en entrée, et que les deux
         // contraintes `CHECK` sur les qualificatifs sont appliquées **avant** la base.
+        // `married` est un booléen tri-état : `null` y dit « on ne sait pas » (ADR 0020).
+        $nulAdmis = $this->surface->admetNul($subjectKind, $field);
         $ancienne = $aLAveugle
             ? $this->valeurCourante($subjectKind, $subjectId, $field, $valueKind)
             : $this->normaliseur->versJson(
                 $valueKind,
-                $this->normaliseur->versPhp($valueKind, $brut['oldValue'], "$chemin.oldValue"),
+                $this->normaliseur->versPhp($valueKind, $brut['oldValue'], "$chemin.oldValue", $nulAdmis),
             );
         $nouvelle = $this->normaliseur->versJson(
             $valueKind,
-            $this->normaliseur->versPhp($valueKind, $brut['newValue'], "$chemin.newValue"),
+            $this->normaliseur->versPhp($valueKind, $brut['newValue'], "$chemin.newValue", $nulAdmis),
         );
 
         if (SubjectKind::Citation === $subjectKind && 'url' === $field) {

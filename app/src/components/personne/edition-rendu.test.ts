@@ -85,6 +85,7 @@ function fiche(): FichePersonneComplete {
         familyId: 9,
         conjoint: { personId: 52, displayName: 'Cobalt Romarin' },
         marriage: null,
+        married: null,
         divorced: false,
         divorce: null,
         version: 1,
@@ -228,20 +229,46 @@ describe('EditionParente — une croix par lien, aucune sur la fratrie', () => {
   })
 })
 
-describe('EditionParente — date et lieu du mariage, date du divorce', () => {
-  it('chaque union, existante ou ajoutée, porte ses trois cases', async () => {
+describe('EditionParente — la nature, le mariage et la rupture d’une union', () => {
+  it('chaque union, existante ou ajoutée, porte sa nature, son mariage et sa rupture', async () => {
     const html = await rendre(EditionParente, {
       fiche: fiche(),
       retraits: [],
       ajouts: { parents: [], conjoints: [{ personId: 70, libelle: 'Tourmaline Thym' }], enfants: [] },
     })
     expect(html).toContain('data-dates-union="9"')
+    // « Mariés : oui / non (union libre) / on ne sait pas » (ADR 0020).
+    expect(html.match(/data-choix-nature/g)).toHaveLength(2)
+    expect(html.match(/Non \(union libre\)/g)).toHaveLength(2)
     expect(html.match(/Date de mariage/g)).toHaveLength(2)
     expect(html.match(/Lieu de mariage/g)).toHaveLength(2)
-    expect(html.match(/Date de divorce/g)).toHaveLength(2)
-    expect(html).toContain('Vide : toujours unis.')
+    // La rupture a sa case, même sans date ; la date ne s'ouvre qu'une fois cochée.
+    expect(html.match(/data-rupture/g)).toHaveLength(2)
+    expect(html).not.toContain('Date de la séparation')
     // Vide n'est pas une erreur : l'aperçu dit « aucune date ».
     expect(html).toContain('Aucune date.')
+  })
+
+  it('dit « Divorcés » après un mariage, et n’offre pas de date de mariage à une union libre', async () => {
+    const maries: FichePersonneComplete = { ...fiche(), unions: [{ ...fiche().unions[0]!, married: true, divorced: true }] }
+    const html = await rendre(EditionParente, {
+      fiche: maries,
+      retraits: [],
+      ajouts: { parents: [], conjoints: [], enfants: [] },
+      unions: entrerEnEdition(maries).unions,
+    })
+    expect(html).toContain('Divorcés')
+    expect(html).toContain('Date du divorce')
+
+    const libre: FichePersonneComplete = { ...fiche(), unions: [{ ...fiche().unions[0]!, married: false }] }
+    const htmlLibre = await rendre(EditionParente, {
+      fiche: libre,
+      retraits: [],
+      ajouts: { parents: [], conjoints: [], enfants: [] },
+      unions: entrerEnEdition(libre).unions,
+    })
+    expect(htmlLibre).not.toContain('Date de mariage')
+    expect(htmlLibre).toContain('Séparés')
   })
 
   it('un conjoint barré n’a plus de dates à corriger', async () => {

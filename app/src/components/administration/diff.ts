@@ -24,6 +24,7 @@
  * formateur du serveur — en divergeant de lui au premier cas limite.
  */
 
+import { natureEnClair, type NatureDUnion } from '@/components/personne/union'
 import type { OpDemande, ValeurOp } from '@/lib/api'
 
 /**
@@ -60,8 +61,12 @@ const LIBELLES_DE_CHAMP: Record<string, string> = {
   forcePrivacy: 'Fiche forcée en privé',
   privacyNote: 'Note de confidentialité',
   marriage: 'Mariage',
-  divorce: 'Séparation',
-  divorced: 'Séparés',
+  married: 'Mariés',
+  // Neutres quand on ignore la nature de l'union : `divorced` dit **toute** rupture
+  // (ADR 0020). « Séparés » mentait sur un mariage rompu ; quand la nature est
+  // connue, {@link libelleDeChamp} dit « Divorcés » ou « Séparés ».
+  divorce: 'Rupture',
+  divorced: 'Union rompue',
   // La clé des révisions d'un retrait de lien (§ 6.4 quinquies) : `changes.lien`
   // porte la phrase de ce qui a été défait.
   lien: 'Lien',
@@ -70,9 +75,31 @@ const LIBELLES_DE_CHAMP: Record<string, string> = {
   couple: 'Union',
 }
 
-/** Le nom lisible d'un champ, ou le nom technique si on ne le connaît pas. */
-export function libelleDeChamp(field: string): string {
+/**
+ * Le nom lisible d'un champ, ou le nom technique si on ne le connaît pas.
+ *
+ * `nature`, quand on la connaît, est la nature de l'union **après** le changement
+ * (ADR 0020) : la rupture d'un mariage est un divorce, celle d'une autre union — ou
+ * d'une union dont on ignore la nature — une séparation. Inconnue (`undefined`), le
+ * libellé reste neutre.
+ */
+export function libelleDeChamp(field: string, nature?: NatureDUnion): string {
+  if (nature !== undefined && (field === 'divorced' || field === 'divorce')) {
+    const divorce = nature === true
+    if (field === 'divorced') return divorce ? 'Divorcés' : 'Séparés'
+    return divorce ? 'Divorce' : 'Séparation'
+  }
   return LIBELLES_DE_CHAMP[field] ?? field
+}
+
+/**
+ * La nature que des ops donnent à l'union qu'ils visent : celle de l'op `married`
+ * s'il y en a un, `undefined` sinon — la charge ne dit pas celle de la fiche.
+ */
+export function natureDesOps(ops: readonly Pick<OpDemande, 'field' | 'newValue'>[]): NatureDUnion | undefined {
+  const op = ops.find((o) => o.field === 'married')
+  if (op === undefined) return undefined
+  return typeof op.newValue === 'boolean' ? op.newValue : null
 }
 
 /** Ce qu'on affiche à la place d'une valeur vide. */
@@ -286,7 +313,7 @@ export interface LigneDiff {
  * sujet : rien dans cette fonction ne peut dépendre du rôle de celui qui
  * regarde. Ce qui s'affiche dépend de ce que le serveur a envoyé, point.
  */
-export function ligneDeDiff(op: OpDemande): LigneDiff {
+export function ligneDeDiff(op: OpDemande, nature: NatureDUnion | undefined = undefined): LigneDiff {
   // Le libellé du serveur d'abord — il porte le contexte et les valeurs déjà
   // formatées. La table française n'est qu'un repli pour la charge de l'auteur,
   // qui n'en fournit pas.
@@ -296,7 +323,11 @@ export function ligneDeDiff(op: OpDemande): LigneDiff {
       ? op.libelleDiff
       : retrait
         ? 'Lien retiré'
-        : libelleDeChamp(op.field ?? '')
+        : libelleDeChamp(op.field ?? '', nature)
+  // La nature d'une union est le seul booléen tri-état (ADR 0020) : son `null` est
+  // « on ne sait pas », pas « (vide) », et son `false` une union libre.
+  const valeur = (v: ValeurOp | undefined): string =>
+    op.field === 'married' && (v === null || typeof v === 'boolean') ? natureEnClair(v) : formaterValeur(v)
 
   return {
     seq: op.seq,
@@ -304,13 +335,13 @@ export function ligneDeDiff(op: OpDemande): LigneDiff {
     libelle,
     // Absente (et non `null`) : la valeur d'avant est MASQUÉE à l'auteur — une
     // demande de l'assistant sur une personne hors de son cercle (§ 1.3).
-    ancienne: 'oldValue' in op ? formaterValeur(op.oldValue) : '(valeur masquée)',
+    ancienne: 'oldValue' in op ? valeur(op.oldValue) : '(valeur masquée)',
     // Un retrait n'a pas d'« après » : le lien n'est plus. « (vide) » laisserait
     // croire à une valeur effacée.
-    proposee: retrait ? '(retiré)' : formaterValeur(op.newValue),
+    proposee: retrait ? '(retiré)' : valeur(op.newValue),
     // `'valeurCourante' in op` et non `op.valeurCourante !== undefined` : la
     // distinction absent / null porte une règle, ici comme ailleurs (§ 1.3).
-    courante: 'valeurCourante' in op ? formaterValeur(op.valeurCourante) : null,
+    courante: 'valeurCourante' in op ? valeur(op.valeurCourante) : null,
     aBouge: typeof op.aBouge === 'boolean' ? op.aBouge : null,
     mediaId: mediaDeLOp(op.newValue),
   }
@@ -323,8 +354,13 @@ function mediaDeLOp(valeur: ValeurOp | undefined): number | null {
   return typeof id === 'number' ? id : null
 }
 
+/**
+ * Les lignes d'un diff. Une demande qui requalifie une union porte son op `married` :
+ * c'est lui qui fait dire « Divorcés » ou « Séparés » à la rupture voisine (ADR 0020).
+ */
 export function lignesDeDiff(ops: OpDemande[]): LigneDiff[] {
-  return ops.map(ligneDeDiff)
+  const nature = natureDesOps(ops)
+  return ops.map((op) => ligneDeDiff(op, nature))
 }
 
 /**

@@ -17,6 +17,7 @@ import {
   liensAffiches,
   parentsApresEdition,
   recapitulatif,
+  natureSaisie,
   retraitsDemandes,
   type EtatEdition,
 } from './edition'
@@ -64,6 +65,7 @@ function fiche(surcharge: Partial<FichePersonneComplete> = {}): FichePersonneCom
         familyId: 9,
         conjoint: { personId: 52, displayName: 'Cobalt Romarin' },
         marriage: null,
+        married: null,
         divorced: false,
         divorce: null,
         version: 1,
@@ -316,16 +318,29 @@ describe('les dates d’une union — mariage (date, lieu) et divorce (date)', (
             newValue: { raw: '12 JUN 1920', qualifier: 'exacte', min: '1920-06-12', max: '1920-06-12', place: 'Saule' },
             baseVersion: 1,
           },
+          // Un mariage daté est un mariage (ADR 0020) : la nature part avec la date,
+          // et l'auteur la relit dans son récapitulatif.
+          {
+            seq: 2,
+            opKind: 'champ',
+            subjectKind: 'famille',
+            subjectId: 9,
+            field: 'married',
+            valueKind: 'booleen',
+            oldValue: null,
+            newValue: true,
+            baseVersion: 1,
+          },
         ],
       },
     ])
     expect(cleDeDepot(demandes.corps[0]!)).toBe('modification_famille:9')
-    expect(recapitulatif(fiche(), e).map((c) => c.texte)).toContain(
-      'Union avec Cobalt Romarin, mariage : (vide) → 12 juin 1920, Saule',
-    )
+    const recap = recapitulatif(fiche(), e).map((c) => c.texte)
+    expect(recap).toContain('Union avec Cobalt Romarin, mariage : (vide) → 12 juin 1920, Saule')
+    expect(recap).toContain('Union avec Cobalt Romarin, mariés : on ne sait pas → oui')
   })
 
-  it('une date de divorce coche le divorce ; vide, c’est toujours unis', () => {
+  it('une date de rupture coche la rupture ; sans case ni date, c’est toujours unis', () => {
     const e = etat(fiche(), (x) => divorceSaisi(x, cleDUnion(9), '1935'))
     const demandes = demandesDEdition(fiche(), e, '')
     if (!demandes.valide) throw new Error('attendu valide')
@@ -336,24 +351,89 @@ describe('les dates d’une union — mariage (date, lieu) et divorce (date)', (
     ])
   })
 
-  it('effacer la date de divorce, c’est ne plus être divorcés', () => {
+  /**
+   * La rupture a sa case, depuis l'ADR 0020 : effacer la date ne défait plus le
+   * divorce — « divorcés, date inconnue » est une réponse. On le défait en
+   * décochant.
+   */
+  it('effacer la date de rupture garde la rupture ; décocher la case la défait', () => {
     const divorces = fiche({
       unions: [
         {
           ...fiche().unions[0]!,
+          married: true,
           divorced: true,
           divorce: { raw: '1935', qualifier: 'annee', min: '1935-01-01', max: '1935-12-31', place: null, texte: '1935' },
         },
       ],
     })
-    const e = etat(divorces, (x) => divorceSaisi(x, cleDUnion(9), ''))
-    const demandes = demandesDEdition(divorces, e, '')
+    const sansDate = demandesDEdition(divorces, etat(divorces, (x) => divorceSaisi(x, cleDUnion(9), '')), '')
+    if (!sansDate.valide) throw new Error('attendu valide')
+    const opsSansDate = sansDate.corps[0]!.kind === 'modification_famille' ? sansDate.corps[0]!.ops : []
+    expect(opsSansDate.map((o) => [o.field, o.newValue])).toEqual([
+      ['divorce', { raw: null, qualifier: 'inconnue', min: null, max: null, place: null }],
+    ])
+
+    const defait = etat(divorces, (x) => {
+      divorceSaisi(x, cleDUnion(9), '')
+      x.unions[cleDUnion(9)] = { ...x.unions[cleDUnion(9)]!, rompue: false }
+    })
+    const demandes = demandesDEdition(divorces, defait, '')
     if (!demandes.valide) throw new Error('attendu valide')
     const ops = demandes.corps[0]!.kind === 'modification_famille' ? demandes.corps[0]!.ops : []
     expect(ops.map((o) => [o.field, o.newValue])).toEqual([
       ['divorced', false],
       ['divorce', { raw: null, qualifier: 'inconnue', min: null, max: null, place: null }],
     ])
+  })
+
+  /** Le cas qui a déclenché l'ADR 0020 : « mariés, puis divorcés — dates inconnues ». */
+  it('dit « mariés, puis divorcés » sans aucune date', () => {
+    const e = etat(fiche(), (x) => {
+      x.unions[cleDUnion(9)] = { ...x.unions[cleDUnion(9)]!, marie: true, rompue: true }
+    })
+    const demandes = demandesDEdition(fiche(), e, '')
+    if (!demandes.valide) throw new Error('attendu valide')
+    const ops = demandes.corps[0]!.kind === 'modification_famille' ? demandes.corps[0]!.ops : []
+    expect(ops.map((o) => [o.field, o.oldValue, o.newValue])).toEqual([
+      ['married', null, true],
+      ['divorced', false, true],
+    ])
+    expect(recapitulatif(fiche(), e).map((c) => c.texte)).toEqual([
+      'Union avec Cobalt Romarin, mariés : on ne sait pas → oui',
+      'Union avec Cobalt Romarin, divorcés : non → oui',
+    ])
+  })
+
+  it('dit une union libre, et sa séparation', () => {
+    const e = etat(fiche(), (x) => {
+      x.unions[cleDUnion(9)] = { ...x.unions[cleDUnion(9)]!, marie: false, rompue: true }
+    })
+    const demandes = demandesDEdition(fiche(), e, '')
+    if (!demandes.valide) throw new Error('attendu valide')
+    const ops = demandes.corps[0]!.kind === 'modification_famille' ? demandes.corps[0]!.ops : []
+    expect(ops.map((o) => [o.field, o.newValue])).toEqual([
+      ['married', false],
+      ['divorced', true],
+    ])
+    expect(recapitulatif(fiche(), e).map((c) => c.texte)).toContain('Union avec Cobalt Romarin, séparés : non → oui')
+  })
+
+  it('une date de mariage impose « oui », même si l’on avait répondu « union libre »', () => {
+    const libre = fiche({ unions: [{ ...fiche().unions[0]!, married: false }] })
+    const e = etat(libre, (x) => mariageSaisi(x, cleDUnion(9), '1920'))
+    expect(natureSaisie(e.unions[cleDUnion(9)]!)).toBe(true)
+    const demandes = demandesDEdition(libre, e, '')
+    if (!demandes.valide) throw new Error('attendu valide')
+    const ops = demandes.corps[0]!.kind === 'modification_famille' ? demandes.corps[0]!.ops : []
+    expect(ops.map((o) => [o.field, o.oldValue])).toContainEqual(['married', false])
+    expect(ops.find((o) => o.field === 'married')?.newValue).toBe(true)
+  })
+
+  it('« on ne sait pas » ne part pas quand rien n’a changé', () => {
+    expect(demandesDEdition(fiche(), etat(), '')).toEqual({ valide: true, corps: [] })
+    const maries = fiche({ unions: [{ ...fiche().unions[0]!, married: true }] })
+    expect(demandesDEdition(maries, etat(maries), '')).toEqual({ valide: true, corps: [] })
   })
 
   it('divorcés sans date : on ne l’efface pas si on ne touche pas à la case', () => {
@@ -388,6 +468,8 @@ describe('les dates d’une union — mariage (date, lieu) et divorce (date)', (
       x.ajouts.conjoints = [conjoint]
       x.unions[cleDUnionAjoutee(conjoint)] = {
         mariage: { forme: 'connue', debut: '1925', fin: '', lieu: 'Saule', origine: null },
+        marie: null,
+        rompue: false,
         divorce: { forme: 'connue', debut: '1940', fin: '', lieu: '', origine: null },
       }
     })
@@ -399,6 +481,8 @@ describe('les dates d’une union — mariage (date, lieu) et divorce (date)', (
         {
           kind: 'conjoint_de',
           marriage: { raw: '1925', place: 'Saule' },
+          // La date dit le mariage, la date de rupture la rupture (ADR 0020).
+          married: true,
           divorced: true,
           divorce: { raw: '1940' },
         },

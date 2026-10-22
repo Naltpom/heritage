@@ -771,7 +771,8 @@ sans `HUSB`) et n'avoir aucun enfant (7 cas).
 | `husband_id` | `INT` | oui | `NULL` | **FK intra-module** → `tree_person(id)`, `ON DELETE SET NULL`. 100 valeurs sur 103. |
 | `wife_id` | `INT` | oui | `NULL` | **FK intra-module** → `tree_person(id)`, `ON DELETE SET NULL`. 103 valeurs sur 103. |
 | **bloc date `marriage`** | — | — | — | `marriage_raw`, `marriage_qualifier`, `marriage_min`, `marriage_max`, `marriage_place` (§ 0.5). 39 familles sur 103 n'ont pas de date de mariage : **une union sans date reste une union** (§ 6.4 du dossier de mission). |
-| `divorced` | `BOOLEAN` | non | `false` | Le `DIV` du GEDCOM. 2 cas. Même raisonnement que `deceased` : le fait et sa date sont deux choses. |
+| `married` | `BOOLEAN` | oui | `NULL` | **La nature de l'union** ([ADR 0020](adr/0020-nature-de-l-union.md)) : `true` mariage attesté, daté ou non ; `false` union sans mariage (union libre, PACS) ; `NULL` on ne sait pas. Même raisonnement que `deceased` : le fait et sa date sont deux choses. **Un mariage daté ou situé est un mariage** : une date ou un lieu de mariage imposent `true` (`ck_tree_family_mariage_coherent`, et l'entité `Family` qui normalise à l'écriture). Reprise de `Version20261022090000` : `true` là où une date ou un lieu existaient, `NULL` ailleurs. |
+| `divorced` | `BOOLEAN` | non | `false` | Le `DIV` du GEDCOM. 2 cas. Même raisonnement que `deceased` : le fait et sa date sont deux choses. **Toute rupture**, divorce ou séparation : c'est `married` qui dit laquelle — « divorcés » quand `married` est vrai, « séparés » sinon (ADR 0020). |
 | **bloc date `divorce`** | — | — | — | `divorce_raw`, `divorce_qualifier`, `divorce_min`, `divorce_max`, `divorce_place` (§ 0.5). Couvre aussi la « date de rupture » du § 6.4 du dossier — séparation comme divorce. |
 | `generation` | `SMALLINT` | oui | `NULL` | Rang générationnel de la famille, dérivé. |
 | `rank` | `SMALLINT` | oui | `NULL` | Rang vertical du nœud de jonction dans le rendu. Dérivé, et dans les données existantes `rank = 2 × generation + 1` — la famille se pose sur une demi-ligne entre les deux générations. Recalculé et persisté par un **service de `Tree`**, comme `branch` et `generation` (§ 3.1) et pour la même raison : le moteur de placement n'écrit rien en base. La colonne existe pour que le test de non-régression contre `graphe.json` puisse comparer. |
@@ -808,8 +809,22 @@ CONSTRAINT ck_tree_family_divorce_coherent
 
 -- On ne divorce pas avant de se marier.
 CONSTRAINT ck_tree_family_divorce_apres_mariage
-  CHECK (divorce_min IS NULL OR marriage_max IS NULL OR divorce_min >= marriage_min)
+  CHECK (divorce_min IS NULL OR marriage_max IS NULL OR divorce_min >= marriage_min),
+
+-- Un mariage daté ou situé est un mariage (ADR 0020, Version20261022090000).
+-- `IS TRUE` et non `= true` : un CHECK passe quand son expression vaut NULL, et
+-- `married = true OR …` laisserait passer une nature nulle sous une date.
+CONSTRAINT ck_tree_family_mariage_coherent
+  CHECK (married IS TRUE OR (marriage_qualifier = 'inconnue' AND marriage_raw IS NULL AND marriage_place IS NULL))
 ```
+
+**La règle de la nature, et ses trois étages** (ADR 0020). Le `CHECK` ci-dessus est le filet ;
+l'entité `Tree\Family` **normalise** — poser une date ou un lieu de mariage pose
+`married = true`, et la nature ne redescend pas tant qu'ils sont là ; le dépôt d'une demande
+**contrôle** — une date posée sur une union de nature inconnue reçoit l'op implicite
+`married : null → true`, une nature qui contredit la date est refusée en `422`. `divorced`
+n'implique **pas** `married` : une séparation d'union libre est une rupture, et la reprise
+laisse à `NULL` les ruptures sans trace de mariage.
 
 ### 3.3 `tree_child` — 174 lignes après import
 
@@ -1638,6 +1653,7 @@ pas de schéma, parce qu'elle porte sur le nombre de lignes filles.
 | `family_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`Tree\Family`). Renseigné quand le demandeur a désigné **un couple existant** au lieu d'un ou deux parents. Exclusif avec `other_*`. |
 | `family_label` | `VARCHAR(255)` | oui | `NULL` | Libellé dénormalisé du couple. |
 | **bloc date `marriage`** | — | — | — | Les 5 colonnes. Ne concerne que `conjoint_de`. « Toutes facultatives : une union sans date reste une union » (§ 6.4 du dossier). |
+| `married` | `BOOLEAN` | oui | `NULL` | La nature de l'union proposée (ADR 0020) : `true` mariés, `false` union libre, `NULL` on ne sait pas. Ne concerne que `conjoint_de`. Mise en règle **au dépôt** (une date de mariage la fait `true`, `false` sous une date est refusé) ; **pas de `CHECK` de cohérence** ici, parce que la migration ne réécrit pas les liens des demandes déjà déposées — un lien daté resté `NULL` est normalisé à sa validation, par `Tree\Family`. |
 | `divorced` | `BOOLEAN` | non | `false` | — |
 | **bloc date `divorce`** | — | — | — | Les 5 colonnes. C'est la « date de rupture » du § 6.4 du dossier — divorce ou séparation. |
 | `sibling_order` | `SMALLINT` | oui | `NULL` | Rang souhaité dans la fratrie, quand le demandeur le connaît (« c'était l'aîné »). `NULL` = à la fin. |
@@ -1707,11 +1723,12 @@ CONSTRAINT ck_prp_link_second_parent
 CONSTRAINT ck_prp_link_second_parent_unique
   CHECK (num_nonnulls(other2_person_id, other2_draft_ref, other2_draft_person_id) <= 1),
 
--- Les dates d'union ne concernent que les unions.
+-- Les dates d'union — et sa nature (ADR 0020, redéfinie par Version20261022090000) —
+-- ne concernent que les unions.
 CONSTRAINT ck_prp_link_dates_union
   CHECK (kind = 'conjoint_de' OR (marriage_raw IS NULL AND marriage_min IS NULL
                                   AND divorce_raw IS NULL AND divorce_min IS NULL
-                                  AND divorced = false))
+                                  AND divorced = false AND married IS NULL))
 ```
 
 ### 5.5 `prp_revision`
@@ -1774,7 +1791,7 @@ compensation 2). C'est le prix de la frontière, et il est explicitement accept�
 | Valeur | Tables filles peuplées | Sens |
 |---|---|---|
 | `modification_personne` | `prp_change_op` | Un ou plusieurs champs d'une fiche existante. |
-| `modification_famille` | `prp_change_op` | Dates ou lieu d'union, divorce. |
+| `modification_famille` | `prp_change_op` | Dates ou lieu d'union, nature (mariés, union libre, on ne sait pas — ADR 0020), rupture. |
 | `modification_citation` | `prp_change_op` | Page, `QUAY`, transcription. |
 | `creation_personne` | `prp_draft_person` + `prp_draft_link` | Le cas du § 6.4 du dossier et du § 9.5. |
 | `ajout_lien` | `prp_draft_link` | « Ils étaient frère et sœur », « elle s'est remariée avec lui » — sans fiche nouvelle. |
@@ -2873,7 +2890,8 @@ cartefam = {}       // clé de couple -> id réel de tree_family
 5. FILIATIONS ET UNIONS                        [appels à Tree\FamilyService / ChildService]
    Pour chaque lien :
      - conjoint_de -> Tree\FamilyService::porterUnion(familleId, blocs date
-                      marriage/divorce, divorced) ;
+                      marriage/divorce, married, divorced) ; la date avant la nature,
+                      et une date ou un lieu de mariage la font `true` (ADR 0020) ;
      - enfant_de / parent_de -> Tree\ChildService::rattacher(familleId, personneId,
                       sibling_order = valeur fournie sinon max+1, relation) ;
    Écrire draft_link.resolved_family_id = cartefam[clé].

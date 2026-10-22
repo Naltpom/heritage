@@ -48,13 +48,20 @@
  *   — « enfant du même couple » (§ 6.4) — et n'a pas de lien à elle : on retire le
  *   frère depuis sa propre fiche, en retirant ses parents. L'écran le dit.
  *
- * ## Les dates d'une union : mariage (date, lieu) et divorce (date)
+ * ## Une union : sa nature, son mariage, sa rupture (ADR 0020)
  *
- * Chaque union — existante ou ajoutée — porte trois cases : date du mariage,
- * lieu du mariage, date du divorce. **Une date de divorce vide veut dire « pas
- * divorcés »** ; une date saisie coche le divorce. Seule exception, pour ne
- * rien effacer qu'on n'a pas touché : une union déjà marquée divorcée **sans**
- * date le reste tant qu'on ne touche pas à sa case.
+ * Chaque union — existante ou ajoutée — porte :
+ *
+ * - **sa nature** : « Mariés : oui / non (union libre) / on ne sait pas ».
+ *   **Un mariage daté ou situé est un mariage** : tant qu'une date ou un lieu de
+ *   mariage sont saisis, « oui » s'impose et les deux autres s'éteignent — la
+ *   règle du serveur, appliquée avant l'envoi plutôt que découverte en `422` ;
+ * - la date et le lieu du mariage ;
+ * - **la rupture**, même sans date — « divorcés » après un mariage, « séparés »
+ *   sinon —, et sa date. Une date de rupture saisie coche la rupture ; la case se
+ *   décoche à la main, et une union rompue sans date le reste tant qu'on n'y
+ *   touche pas. C'est ce qui manquait pour dire « mariés, puis divorcés — dates
+ *   inconnues ».
  * ────────────────────────────────────────────────────────────────────
  */
 
@@ -83,6 +90,7 @@ import {
   type SaisieDate,
 } from '@/components/proposition/dates'
 import { corpsAjoutLien, liensVides, type SaisieLiens } from '@/components/proposition/liens'
+import { motDeLaRupture, natureEnClair, saisieAtteste, type NatureDUnion } from './union'
 import {
   construireOps,
   corpsModificationPersonne,
@@ -132,9 +140,13 @@ export interface AjoutsDeLiens {
   enfants: EnfantAjoute[]
 }
 
-/** Les trois cases d'une union : le mariage (date et lieu), le divorce (date). */
+/** Les cases d'une union : sa nature, son mariage (date et lieu), sa rupture (fait et date). */
 export interface DatesDUnion {
   mariage: SaisieDate
+  /** Mariés, union libre, on ne sait pas — une date ou un lieu saisis l'emportent ({@link natureSaisie}). */
+  marie: NatureDUnion
+  /** La rupture, même sans date — une date saisie l'emporte ({@link ruptureSaisie}). */
+  rompue: boolean
   divorce: SaisieDate
 }
 
@@ -143,6 +155,7 @@ export interface UnionInitiale {
   familleId: number
   version: number
   marriage: ValeurDate | null
+  married: NatureDUnion
   divorced: boolean
   divorce: ValeurDate | null
 }
@@ -179,11 +192,40 @@ export function saisieDeDateDUnion(bloc: BlocDate | ValeurDate | null): SaisieDa
 }
 
 export function datesDUnionVides(): DatesDUnion {
-  return { mariage: saisieDeDateDUnion(null), divorce: saisieDeDateDUnion(null) }
+  return { mariage: saisieDeDateDUnion(null), marie: null, rompue: false, divorce: saisieDeDateDUnion(null) }
 }
 
 function datesDepuisUnion(union: UnionDeFiche): DatesDUnion {
-  return { mariage: saisieDeDateDUnion(union.marriage), divorce: saisieDeDateDUnion(union.divorce) }
+  return {
+    mariage: saisieDeDateDUnion(union.marriage),
+    marie: union.married ?? null,
+    rompue: union.divorced,
+    divorce: saisieDeDateDUnion(union.divorce),
+  }
+}
+
+/**
+ * Une date ou un lieu de mariage sont-ils saisis ? Une saisie illisible compte : on
+ * est en train d'écrire une date, et « oui » ne doit pas se rallumer à chaque frappe.
+ */
+export function mariageSaisi(dates: DatesDUnion): boolean {
+  return saisieAtteste(dates.mariage)
+}
+
+/** La nature que l'union aura : « oui » dès qu'une date ou un lieu de mariage sont saisis. */
+export function natureSaisie(dates: DatesDUnion): NatureDUnion {
+  return mariageSaisi(dates) ? true : dates.marie
+}
+
+/** Une date de rupture est-elle saisie ? Illisible, elle compte aussi — l'erreur doit remonter. */
+export function dateDeRuptureSaisie(dates: DatesDUnion): boolean {
+  const rupture = valeurDUnion(dates.divorce)
+  return !rupture.valide || (rupture.valeur !== null && designeUneDate(rupture.valeur))
+}
+
+/** La rupture que l'union aura : la case, ou une date saisie. */
+export function ruptureSaisie(dates: DatesDUnion): boolean {
+  return dates.rompue || dateDeRuptureSaisie(dates)
 }
 
 export function entrerEnEdition(fiche: FichePersonneComplete): EtatEdition {
@@ -196,6 +238,7 @@ export function entrerEnEdition(fiche: FichePersonneComplete): EtatEdition {
       familleId: union.familyId,
       version: union.version,
       marriage: union.marriage === null ? null : sansTexte(union.marriage),
+      married: union.married ?? null,
       divorced: union.divorced,
       divorce: union.divorce === null ? null : sansTexte(union.divorce),
     })),
@@ -334,13 +377,13 @@ export function saisieDesAjouts(
     parents: [...ajouts.parents],
     unions: ajouts.conjoints.map((personne) => {
       const dates = unions[cleDUnionAjoutee(personne)] ?? datesDUnionVides()
-      const divorce = valeurDUnion(dates.divorce)
       return {
         personne,
         mariage: videVautAucuneDate(dates.mariage),
-        // Une date de divorce coche le divorce ; une date illisible aussi, pour
+        marie: natureSaisie(dates),
+        // Une date de rupture coche la rupture ; une date illisible aussi, pour
         // que l'erreur remonte au lieu d'être tue.
-        rompue: !divorce.valide || divorce.valeur !== null,
+        rompue: ruptureSaisie(dates),
         rupture: videVautAucuneDate(dates.divorce),
         note: '',
       }
@@ -370,19 +413,21 @@ function libelleDUnion(fiche: FichePersonneComplete, familleId: number): string 
 
 interface DatesConverties {
   marriage: ValeurDate | null
+  married: NatureDUnion
   divorced: boolean
   divorce: ValeurDate | null
 }
 
 /**
- * Convertit les trois cases, ou pousse ce qui ne va pas dans `erreurs`.
+ * Convertit les cases d'une union, ou pousse ce qui ne va pas dans `erreurs`.
  *
- * `avant` est l'union telle qu'elle était lue (`null` pour un conjoint ajouté) :
- * c'est lui qui garde « divorcés, date inconnue » quand on ne touche à rien.
+ * La nature et la rupture sont celles que l'écran **montre** ({@link natureSaisie},
+ * {@link ruptureSaisie}) : une date de mariage dit « mariés », une date de rupture
+ * dit « rompue ». « Divorcés, date inconnue » se garde par la case, que l'entrée en
+ * édition coche d'après la fiche.
  */
 function convertirDates(
   dates: DatesDUnion,
-  avant: UnionInitiale | null,
   libelle: string,
   erreurs: ErreurSaisie[],
   prefixe: string,
@@ -401,11 +446,10 @@ function convertirDates(
     return null
   }
 
-  const avecDate = divorce.valeur !== null && designeUneDate(divorce.valeur)
-  const inchange = avant !== null && memeValeurDate(blocDOp(divorce.valeur), blocDOp(avant.divorce))
   return {
     marriage: mariage.valeur,
-    divorced: avecDate || (inchange && avant.divorced),
+    married: natureSaisie(dates),
+    divorced: ruptureSaisie(dates),
     divorce: divorce.valeur,
   }
 }
@@ -443,6 +487,10 @@ function opsDUnion(avant: UnionInitiale, apres: DatesConverties): OpProposee[] {
     }
   }
   date('marriage', avant.marriage, apres.marriage)
+  // La nature **après** la date, dans l'ordre où le serveur l'applique. Envoyée dès
+  // qu'elle change — y compris quand c'est la date qui la fait « oui » : le serveur
+  // l'ajouterait de lui-même, autant que l'auteur la relise dans son récapitulatif.
+  if (avant.married !== apres.married) op('married', 'booleen', avant.married, apres.married)
   if (avant.divorced !== apres.divorced) op('divorced', 'booleen', avant.divorced, apres.divorced)
   date('divorce', avant.divorce, apres.divorce)
   return ops
@@ -471,7 +519,7 @@ export function unionsModifiees(
     if (unionRetiree(fiche, etat, avant.familleId)) continue
     const dates = etat.unions[cleDUnion(avant.familleId)]
     if (dates === undefined) continue
-    const apres = convertirDates(dates, avant, libelleDUnion(fiche, avant.familleId), erreurs, cleDUnion(avant.familleId))
+    const apres = convertirDates(dates, libelleDUnion(fiche, avant.familleId), erreurs, cleDUnion(avant.familleId))
     if (apres === null) continue
     const ops = opsDUnion(avant, apres)
     if (ops.length > 0) sortie.push({ familleId: avant.familleId, avant, ops })
@@ -484,7 +532,7 @@ function erreursDesAjouts(etat: EtatEdition): ErreurSaisie[] {
   const erreurs: ErreurSaisie[] = []
   for (const conjoint of etat.ajouts.conjoints) {
     const cle = cleDUnionAjoutee(conjoint)
-    convertirDates(etat.unions[cle] ?? datesDUnionVides(), null, `avec ${conjoint.libelle}`, erreurs, cle)
+    convertirDates(etat.unions[cle] ?? datesDUnionVides(), `avec ${conjoint.libelle}`, erreurs, cle)
   }
   return erreurs
 }
@@ -618,9 +666,23 @@ export function recapitulatif(fiche: FichePersonneComplete, etat: EtatEdition): 
     changements.push({ nature: 'ajout', texte: `Lien ajouté : enfant de ${parent.libelle}` })
   }
   for (const union of unionsModifiees(fiche, etat)) {
+    // « Divorcés » ou « séparés » selon la nature que l'union aura (ADR 0020).
+    const nature = union.ops.find((op) => op.field === 'married')?.newValue
+    const marie = typeof nature === 'boolean' ? nature : nature === null ? null : union.avant.married
+    const mot = motDeLaRupture({ married: marie })
     for (const op of union.ops) {
-      const quoi = op.field === 'marriage' ? 'mariage' : op.field === 'divorce' ? 'date du divorce' : 'divorcés'
+      const quoi =
+        op.field === 'marriage'
+          ? 'mariage'
+          : op.field === 'married'
+            ? 'mariés'
+            : op.field === 'divorce'
+              ? mot === 'Divorcés'
+                ? 'date du divorce'
+                : 'date de la séparation'
+              : mot.toLowerCase()
       const lire = (v: unknown) => {
+        if (op.field === 'married') return natureEnClair(typeof v === 'boolean' ? v : null)
         if (typeof v === 'boolean') return v ? 'oui' : 'non'
         const bloc = (v ?? null) as ValeurDate | null
         return designeUneDate(bloc) ? dateLisible(bloc) : '(vide)'
@@ -635,9 +697,16 @@ export function recapitulatif(fiche: FichePersonneComplete, etat: EtatEdition): 
     const dates = etat.unions[cleDUnionAjoutee(conjoint)] ?? datesDUnionVides()
     const mariage = valeurDUnion(dates.mariage)
     const divorce = valeurDUnion(dates.divorce)
+    const nature = natureSaisie(dates)
+    const mot = motDeLaRupture({ married: nature }).toLowerCase()
     const details = [
+      nature === false ? 'union libre' : nature === true && !mariageSaisi(dates) ? 'mariés, date inconnue' : null,
       mariage.valide && mariage.valeur !== null ? `mariage : ${dateLisible(mariage.valeur)}` : null,
-      divorce.valide && divorce.valeur !== null ? `divorce : ${dateLisible(divorce.valeur)}` : null,
+      divorce.valide && divorce.valeur !== null
+        ? `${mot} : ${dateLisible(divorce.valeur)}`
+        : ruptureSaisie(dates)
+          ? `${mot}, date inconnue`
+          : null,
     ].filter((d) => d !== null)
     const suite = details.length > 0 ? ` (${details.join(' ; ')})` : ''
     changements.push({ nature: 'ajout', texte: `Lien ajouté : conjoint de ${conjoint.libelle}${suite}` })

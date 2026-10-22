@@ -59,7 +59,8 @@ final class SurfaceEditable
     ];
 
     /**
-     * La surface d'une union : les dates et le fait du divorce.
+     * La surface d'une union : les dates, la nature (mariés ou non) et le fait de la
+     * rupture.
      *
      * Ni `husband`, ni `wife` : changer la composition d'un couple n'est pas une
      * modification de champ, c'est un lien — donc une demande `ajout_lien`, qui passe
@@ -67,8 +68,25 @@ final class SurfaceEditable
      */
     private const array FAMILLE = [
         'marriage' => ValueKind::DateIncertaine,
+        'married' => ValueKind::Booleen,
         'divorced' => ValueKind::Booleen,
         'divorce' => ValueKind::DateIncertaine,
+    ];
+
+    /**
+     * Les booléens **tri-états** : `null` y est une valeur — « on ne sait pas » —, et non
+     * un oubli.
+     *
+     * `married` est le seul (ADR 0020). Les autres booléens de la surface (`deceased`,
+     * `forcePrivacy`, `divorced`) sont `NOT NULL` en base : y accepter `null` le ferait
+     * écrire `false` par le `(bool)` de `Tree`, c'est-à-dire affirmer « vivant » ou « pas
+     * de rupture » à la place de qui n'a rien dit. La liste est donc fermée, par champ, et
+     * le `ValueKind` reste `booleen` : la forme JSON est la même, seul le domaine s'élargit.
+     *
+     * @var array<string, list<string>>
+     */
+    private const array NUL_ADMIS = [
+        SubjectKind::Famille->value => ['married'],
     ];
 
     /**
@@ -133,7 +151,11 @@ final class SurfaceEditable
         'forcePrivacy' => 'Confidentialité forcée',
         'privacyNote' => 'Motif de confidentialité',
         'marriage' => 'Mariage',
-        'divorced' => 'Divorce prononcé',
+        'married' => 'Mariés',
+        // « Divorce prononcé » mentait sur les unions libres : `divorced` couvre toute
+        // rupture (ADR 0020). Le diff d'administration dit « Divorcés » ou « Séparés »
+        // quand il connaît la nature de l'union ({@see libelleSelonLaNature()}).
+        'divorced' => 'Union rompue',
         'divorce' => 'Rupture',
         'page' => 'Page',
         'quay' => 'Qualité de la source',
@@ -175,9 +197,36 @@ final class SurfaceEditable
         return $this->champs($kind)[$field] ?? null;
     }
 
+    /**
+     * `null` est-il une valeur de ce champ ? Vrai pour les seuls booléens tri-états
+     * ({@see NUL_ADMIS}) — et pour `Texte` et `Entier`, qui l'admettaient déjà par nature.
+     */
+    public function admetNul(SubjectKind $kind, string $field): bool
+    {
+        return \in_array($field, self::NUL_ADMIS[$kind->value] ?? [], true);
+    }
+
     /** Le libellé français d'un champ ; à défaut, le nom de propriété, pour ne jamais rendre une chaîne vide. */
     public function libelle(string $field): string
     {
         return self::LIBELLES[$field] ?? $field;
+    }
+
+    /**
+     * Le libellé d'un champ de rupture **selon la nature de l'union** (ADR 0020) :
+     * « Divorcés » et « Divorce » après un mariage, « Séparés » et « Séparation » sinon —
+     * union libre ou nature inconnue, parce qu'on ne divorce que d'un mariage et qu'on
+     * n'affirme pas un mariage qu'on ignore.
+     *
+     * `$marie` est la nature **après** la demande : celle que la demande pose quand elle
+     * la change, celle de la fiche sinon. Les autres champs gardent leur libellé.
+     */
+    public function libelleSelonLaNature(string $field, ?bool $marie): string
+    {
+        return match ($field) {
+            'divorced' => true === $marie ? 'Divorcés' : 'Séparés',
+            'divorce' => true === $marie ? 'Divorce' : 'Séparation',
+            default => $this->libelle($field),
+        };
     }
 }

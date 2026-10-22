@@ -73,6 +73,15 @@ final class ArbreDEssaiFixturesTest extends KernelTestCase
         $inconnu = $this->em->getRepository(Person::class)->findOneBy(['gedcomXref' => '@I10@']);
         self::assertInstanceOf(Person::class, $inconnu);
         self::assertSame('?', $inconnu->getDisplayName());
+
+        // Les trois natures d'une union (ADR 0020) : une date dit le mariage, F3 est
+        // mariée sans date, F4 est une union libre, F5 ne dit rien.
+        $natures = [];
+        foreach ($this->em->getRepository(Family::class)->findAll() as $famille) {
+            $natures[(string) $famille->getGedcomXref()] = $famille->isMarried();
+        }
+        ksort($natures);
+        self::assertSame(['@F1@' => true, '@F2@' => true, '@F3@' => true, '@F4@' => false, '@F5@' => null], $natures);
     }
 
     public function testIlRefuseUnArbreDejaPeuple(): void

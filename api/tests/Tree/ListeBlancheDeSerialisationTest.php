@@ -312,6 +312,8 @@ final class ListeBlancheDeSerialisationTest extends ArbreWebTestCase
         self::assertSame('Cobalt Romarin', $fiche['wife']['displayName'], 'L’épouse est dans le cercle : son nom sort.');
         self::assertIsArray($fiche['marriage']);
         self::assertSame('1962', $fiche['marriage']['texte'], 'La date d’union appartient à la famille, pas à l’époux masqué.');
+        // La nature de l'union aussi (ADR 0020) — et une date de mariage la dit.
+        self::assertTrue($fiche['married'], 'Un mariage daté est un mariage, époux masqué ou non.');
     }
 
     /**

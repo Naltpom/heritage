@@ -227,6 +227,12 @@ final class ArbreEnMemoire implements PortArbre
             self::$lignes[$cle]['valeurs'][$champ] = $valeur;
         }
 
+        // La règle de `Tree\Family` (ADR 0020) : un mariage daté ou situé est un mariage.
+        $mariage = self::$lignes[$cle]['valeurs']['marriage'] ?? null;
+        if (SubjectKind::Famille === $kind && $mariage instanceof UncertainDate && $mariage->estRenseignee()) {
+            self::$lignes[$cle]['valeurs']['married'] = true;
+        }
+
         self::$lignes[$cle]['version'] = $avant + 1;
 
         return new EcritureAppliquee($avant, $avant + 1, self::$lignes[$cle]['libelle']);
@@ -286,6 +292,7 @@ final class ArbreEnMemoire implements PortArbre
 
         $this->poser(SubjectKind::Famille, $id, $libelle, 1, [
             'marriage' => UncertainDate::inconnue(),
+            'married' => null,
             'divorced' => false,
             'divorce' => UncertainDate::inconnue(),
         ]);
@@ -341,17 +348,22 @@ final class ArbreEnMemoire implements PortArbre
 
         return $this->poser(SubjectKind::Famille, $familleId, $libelle, 1, [
             'marriage' => UncertainDate::inconnue(),
+            'married' => null,
             'divorced' => false,
             'divorce' => UncertainDate::inconnue(),
         ]);
     }
 
-    public function porterUnion(int $familleId, UncertainDate $mariage, bool $divorce, UncertainDate $rupture): void
+    public function porterUnion(int $familleId, UncertainDate $mariage, ?bool $marie, bool $divorce, UncertainDate $rupture): void
     {
         ++self::$ecritures;
 
         $cle = EtatCible::cleDe(SubjectKind::Famille, $familleId);
         self::$lignes[$cle]['valeurs']['marriage'] = $mariage;
+        // La règle de `Tree\Family`, que le double reproduit pour que les tests de
+        // `Proposal` lisent ce que l'arbre porterait : un mariage daté ou situé est un
+        // mariage (ADR 0020).
+        self::$lignes[$cle]['valeurs']['married'] = $mariage->estRenseignee() ? true : $marie;
         self::$lignes[$cle]['valeurs']['divorced'] = $divorce;
         self::$lignes[$cle]['valeurs']['divorce'] = $rupture;
     }

@@ -486,6 +486,13 @@ final class TraducteurDePropositions
                     $construit['marriage'] = $mariage;
                 }
 
+                // La nature de l'union (ADR 0020) : posée seulement quand le modèle la dit.
+                // Absente, elle vaut « on ne sait pas » — et une date de mariage la fera
+                // `true` au dépôt ; un `false` contredit par une date y sera refusé.
+                if (\is_bool($lien['marie'] ?? null)) {
+                    $construit['married'] = $lien['marie'];
+                }
+
                 if (true === ($lien['divorce'] ?? null)) {
                     $construit['divorced'] = true;
                 }

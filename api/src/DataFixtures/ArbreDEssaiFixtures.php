@@ -119,8 +119,12 @@ final class ArbreDEssaiFixtures extends Fixture implements FixtureGroupInterface
         $f1->setDivorced(true)->setDivorce($this->jour('9 NOV 2001', '2001-11-09'));
         $this->famille($manager, '@F2@', $antoine, $marthe, [$julien],
             new UncertainDate('BET 1955 AND 1958', DateQualifier::Entre, $this->d('1955-01-01'), $this->d('1958-12-31')));
-        $this->famille($manager, '@F3@', $onyx, $agate, [$helene]);
-        $this->famille($manager, '@F4@', $gustave, $silice, [$marthe, $agate]);
+        // Les trois natures d'une union (ADR 0020), pour que l'écran les montre et que la
+        // CI éprouve `ck_tree_family_mariage_coherent` en chargeant cet arbre : F1 et F2
+        // sont mariées par leur date, F3 l'est sans date — l'acte manque —, F4 est une
+        // union libre, F5 ne dit rien.
+        $this->famille($manager, '@F3@', $onyx, $agate, [$helene])->setMarried(true);
+        $this->famille($manager, '@F4@', $gustave, $silice, [$marthe, $agate])->setMarried(false);
         $this->famille($manager, '@F5@', $inconnu, null, [$antoine]);
 
         $manager->flush();

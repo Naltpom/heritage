@@ -242,6 +242,8 @@ final readonly class RefaireDemande
 
             if (LinkKind::ConjointDe === $lien->getKind()) {
                 $refait['marriage'] = $this->normaliseur->versJson(ValueKind::DateIncertaine, $lien->getMarriage());
+                // Repris même à `null` — « on ne sait pas » est une réponse (ADR 0020).
+                $refait['married'] = $lien->isMarried();
                 $refait['divorced'] = $lien->isDivorced();
                 $refait['divorce'] = $this->normaliseur->versJson(ValueKind::DateIncertaine, $lien->getDivorce());
             }

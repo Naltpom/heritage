@@ -127,7 +127,9 @@ final class EcritureDeLArbrePourProposalTest extends KernelTestCase
 
         $etatFamille = $this->port()->chargerCible(SubjectKind::Famille, $famille);
         self::assertNotNull($etatFamille);
-        self::assertSame(['marriage', 'divorced', 'divorce'], array_keys($etatFamille->valeurs));
+        self::assertSame(['marriage', 'married', 'divorced', 'divorce'], array_keys($etatFamille->valeurs));
+        // « On ne sait pas » est une valeur, et le verrou n° 2 doit pouvoir la confronter.
+        self::assertNull($etatFamille->valeurs['married']);
         self::assertSame('Julien Persil', $etatFamille->libelle);
 
         $citation = $this->poserUneCitation($this->poserUnePersonne('Onyx', 'Thym'), CitationQuality::ActeOuRegistre);
@@ -399,6 +401,7 @@ final class EcritureDeLArbrePourProposalTest extends KernelTestCase
         $this->port()->porterUnion(
             $famille,
             new UncertainDate('4 JUL 1988', DateQualifier::Exacte, new \DateTimeImmutable('1988-07-04'), new \DateTimeImmutable('1988-07-04')),
+            null,
             true,
             new UncertainDate('1998', DateQualifier::Annee, new \DateTimeImmutable('1998-01-01'), new \DateTimeImmutable('1998-12-31')),
         );
@@ -408,8 +411,106 @@ final class EcritureDeLArbrePourProposalTest extends KernelTestCase
         self::assertInstanceOf(Family::class, $entite);
 
         self::assertSame('4 juillet 1988', $entite->getMarriage()->format());
+        // Un lien déposé avant l'ADR 0020 arrive avec une nature nulle sous sa date : la
+        // date l'emporte, et la ligne satisfait `ck_tree_family_mariage_coherent`.
+        self::assertTrue($entite->isMarried(), 'Un mariage daté est un mariage.');
         self::assertTrue($entite->isDivorced());
         self::assertSame('1998', $entite->getDivorce()->format());
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     *  LA NATURE D'UNE UNION (ADR 0020) : MARIÉS, UNION LIBRE, ON NE SAIT PAS.
+     * ═══════════════════════════════════════════════════════════════════════════.
+     *
+     * « Mariés, date inconnue » et « union libre » se posent sans date ; une date ou un
+     * lieu de mariage tiennent la nature à `true`, sur tous les chemins d'écriture.
+     */
+    public function testUneUnionSansDatePorteSaNature(): void
+    {
+        $mariesSansDate = $this->unCouple('Julien', 'Hélène');
+        $libre = $this->unCouple('Onyx', 'Agate');
+
+        $this->port()->porterUnion($mariesSansDate, UncertainDate::inconnue(), true, true, UncertainDate::inconnue());
+        $this->port()->porterUnion($libre, UncertainDate::inconnue(), false, true, UncertainDate::inconnue());
+
+        $this->em()->clear();
+        self::assertTrue($this->famille($mariesSansDate)->isMarried(), 'Mariés, puis divorcés : date inconnue, mariage attesté.');
+        self::assertFalse($this->famille($libre)->isMarried(), 'Union libre, puis séparés.');
+        self::assertTrue($this->famille($libre)->isDivorced(), '`divorced` reste toute rupture, séparation comprise.');
+    }
+
+    public function testUnLieuDeMariageSeulAtteste(): void
+    {
+        $famille = $this->unCouple('Julien', 'Hélène');
+
+        $this->port()->porterUnion($famille, UncertainDate::inconnue('Saule'), null, false, UncertainDate::inconnue());
+
+        $this->em()->clear();
+        self::assertTrue($this->famille($famille)->isMarried(), 'Marié à Saule, date inconnue : un mariage situé est un mariage.');
+    }
+
+    /**
+     * « Retirer la date et dire union libre » arrive en deux champs, et l'ordre des ops
+     * ne doit pas compter : la date est posée avant la nature, quel que soit l'ordre reçu.
+     */
+    public function testRetirerLaDateEtDireUnionLibreNeDependPasDeLOrdre(): void
+    {
+        $date = new UncertainDate('1962', DateQualifier::Annee, new \DateTimeImmutable('1962-01-01'), new \DateTimeImmutable('1962-12-31'));
+
+        foreach (['la nature d’abord' => ['married', 'marriage'], 'la date d’abord' => ['marriage', 'married']] as $cas => $ordre) {
+            $famille = $this->unCouple('Julien '.$ordre[0], 'Hélène '.$ordre[0]);
+            $this->port()->appliquerChamps(SubjectKind::Famille, $famille, ['marriage' => $date]);
+
+            $valeurs = [];
+            foreach ($ordre as $champ) {
+                $valeurs[$champ] = 'married' === $champ ? false : UncertainDate::inconnue();
+            }
+
+            $this->port()->appliquerChamps(SubjectKind::Famille, $famille, $valeurs);
+
+            $this->em()->clear();
+            $entite = $this->famille($famille);
+            self::assertFalse($entite->getMarriage()->isKnown(), $cas);
+            self::assertFalse($entite->isMarried(), \sprintf('%s : la nature posée doit être celle de l’état d’arrivée.', $cas));
+        }
+    }
+
+    /**
+     * La contradiction franche est refusée au dépôt ; si elle arrive malgré tout jusqu'à
+     * l'écriture (deux demandes croisées), la date l'emporte — c'est ce que la contrainte
+     * de base exige.
+     */
+    public function testUneDateDeMariageLEmporteSurUneNatureContraire(): void
+    {
+        $famille = $this->unCouple('Julien', 'Hélène');
+        $date = new UncertainDate('1962', DateQualifier::Annee, new \DateTimeImmutable('1962-01-01'), new \DateTimeImmutable('1962-12-31'));
+
+        $this->port()->appliquerChamps(SubjectKind::Famille, $famille, ['married' => false]);
+        $this->port()->appliquerChamps(SubjectKind::Famille, $famille, ['marriage' => $date]);
+        $this->em()->clear();
+        self::assertTrue($this->famille($famille)->isMarried());
+
+        $this->port()->appliquerChamps(SubjectKind::Famille, $famille, ['married' => null]);
+        $this->em()->clear();
+        self::assertTrue($this->famille($famille)->isMarried(), 'Tant que la date est là, « on ne sait pas » ne se pose pas.');
+        self::assertTrue($this->port()->chargerCible(SubjectKind::Famille, $famille)?->valeurs['married']);
+    }
+
+    private function unCouple(string $lui, string $elle): int
+    {
+        return $this->port()->trouverOuCreerFamille(
+            $this->poserUnePersonne($lui, 'Persil', Sex::Masculin),
+            $this->poserUnePersonne($elle, 'Thym', Sex::Feminin),
+        )->id;
+    }
+
+    private function famille(int $id): Family
+    {
+        $famille = $this->em()->find(Family::class, $id);
+        self::assertInstanceOf(Family::class, $famille);
+
+        return $famille;
     }
 
     /**

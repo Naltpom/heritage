@@ -16,7 +16,9 @@ import { computed, ref } from 'vue'
 import type { FichePersonneComplete } from '@/lib/api'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
+import { natureDeLaSaisie, saisieAtteste } from '@/components/personne/union'
 import ChampDateIncertaine from './ChampDateIncertaine.vue'
+import ChoixNatureUnion from './ChoixNatureUnion.vue'
 import SelecteurPersonne from './SelecteurPersonne.vue'
 import { cleDuChoix, estFicheProposee, unionVide, type ChoixDePersonne } from './creation'
 import { dejaDesignes, type SaisieLiens } from './liens'
@@ -198,14 +200,17 @@ const classeRang = 'w-16 rounded-champ border border-ligne bg-fond px-2 py-1 fon
             <span class="text-sm font-medium">+ {{ union.personne.libelle }}</span>
             <BoutonBase variante="discret" @click="retirer(saisie.unions, index)">Retirer</BoutonBase>
           </header>
+          <ChoixNatureUnion v-model="union.marie" :impose="saisieAtteste(union.mariage)" />
+          <!-- Pas de date de mariage pour une union libre (ADR 0020). -->
           <ChampDateIncertaine
+            v-if="natureDeLaSaisie(union.marie, union.mariage) !== false"
             v-model="union.mariage"
             etiquette="Mariage"
             :erreur="erreurs[`unions.${index}.mariage`] ?? ''"
           />
           <label class="flex items-center gap-2 text-sm">
             <input v-model="union.rompue" type="checkbox" class="size-4 accent-[var(--color-accent)]" />
-            Divorce ou séparation
+            {{ natureDeLaSaisie(union.marie, union.mariage) === true ? 'Divorcés' : natureDeLaSaisie(union.marie, union.mariage) === false ? 'Séparés' : 'Divorce ou séparation' }}
           </label>
           <ChampDateIncertaine
             v-if="union.rompue"

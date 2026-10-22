@@ -304,7 +304,7 @@ describe('les liens : ceux qui y sont, ceux qu’on ajoute', () => {
     saisie.brouillon = saisieDeBarnabe()
     saisie.filiation.parents = [{ personId: 61, libelle: 'Jargon Muguet' }]
     saisie.unions = [
-      { personne: { personId: 90, libelle: 'Opale Sureau' }, mariage: saisieVide(), rompue: false, rupture: saisieVide(), note: '' },
+      { personne: { personId: 90, libelle: 'Opale Sureau' }, mariage: saisieVide(), marie: null, rompue: false, rupture: saisieVide(), note: '' },
     ]
     saisie.enfants = [
       { personne: { personId: 80, libelle: 'Céleste Muguet' }, rangFratrie: null },
@@ -349,7 +349,7 @@ describe('les liens : ceux qui y sont, ceux qu’on ajoute', () => {
     expect(phraseDuLienPropose(enfantDe!, '#p3')).toBe('Enfant de Jargon Muguet')
     expect(phraseDuLienPropose(parentDe!, '#p3')).toBe('Parent de Céleste Muguet')
     expect(phraseDuLienPropose(conjoint!, '#p3')).toBe(
-      'Tourmaline Muguet (proposée) : conjoint·e de Barnabé Muguet (proposée) (mariés 1912)',
+      'Tourmaline Muguet (proposée) : conjoint·e de Barnabé Muguet (proposée) (mariés en 1912)',
     )
   })
 })

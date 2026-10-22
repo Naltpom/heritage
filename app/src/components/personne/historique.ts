@@ -30,6 +30,7 @@
  */
 import type { CitationDeFiche, FichePersonneComplete, RevisionDeFiche } from '@/lib/api'
 import { libelleDeChamp } from '@/components/administration/diff'
+import type { NatureDUnion } from './union'
 
 export type NatureEntree = 'revision' | 'citation' | 'note' | 'media'
 
@@ -93,11 +94,27 @@ function valeurLisible(valeur: unknown): string | null {
   return null
 }
 
+/**
+ * La nature que la révision donne à l'union (ADR 0020), quand elle la journalise : le
+ * serveur l'écrit en mots (« oui », « non (union libre) », « on ne sait pas »). Elle
+ * fait dire « Divorcés » ou « Séparés » à la rupture de la même révision ; absente,
+ * le libellé reste neutre.
+ */
+function natureDeLaRevision(changes: Record<string, unknown>): NatureDUnion | undefined {
+  const diff = changes['married']
+  if (diff === null || typeof diff !== 'object' || Array.isArray(diff) || !('apres' in diff)) return undefined
+  const apres = (diff as { apres?: unknown }).apres
+  if (apres === true || apres === 'oui') return true
+  if (apres === false || apres === 'non (union libre)') return false
+  return null
+}
+
 /** « Naissance : 1987 → entre 1901 et 1909 », une ligne par champ changé. */
 export function lignesDeRevision(revision: Pick<RevisionDeFiche, 'operation' | 'changes'>): string[] {
   const champs = Object.entries(revision.changes ?? {})
+  const nature = natureDeLaRevision(revision.changes ?? {})
   const lignes = champs.slice(0, CHAMPS_AU_PLUS).map(([champ, diff]) => {
-    const libelle = libelleDeChamp(champ)
+    const libelle = libelleDeChamp(champ, nature)
     if (diff === null || typeof diff !== 'object' || Array.isArray(diff)) {
       const seule = valeurLisible(diff)
       return seule === null ? libelle : `${libelle} : ${seule}`

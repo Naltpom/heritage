@@ -595,7 +595,15 @@ export type Parente = 'famille' | 'conjoint' | 'alliance'
 export interface NoeudFamille extends NoeudCommun {
   type: 'famille'
   familyId: number | null
+  /** Toute rupture, divorce ou séparation — `married` dit laquelle (ADR 0020). */
   divorced: boolean
+  /**
+   * La nature de l'union (ADR 0020) : `true` mariés, `false` union libre, `null`
+   * on ne sait pas — `null` aussi sur un losange provisoire. Le serveur l'émet
+   * toujours ; facultative ici parce que les nœuds bâtis à la main (tests, banc
+   * d'essai de `histoire/`) n'ont rien à en dire. Elle ne change **aucun** tracé.
+   */
+  married?: boolean | null
 }
 
 export type NoeudGraphe = NoeudPersonne | NoeudFamille

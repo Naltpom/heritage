@@ -50,6 +50,7 @@ import type {
   Sexe,
   ValeurDate,
 } from '@/lib/api'
+import { natureEffective, type NatureDUnion } from '@/components/personne/union'
 import { saisieVide, valeurAEnvoyer, type SaisieDate } from './dates'
 import { texteOuNull, type OptionsDepot } from './operations'
 
@@ -170,10 +171,16 @@ export interface SaisieEnfant {
  * `rupture` en porte la date, qui peut manquer. Exiger la date pour enregistrer
  * la rupture l'effacerait — et sur un arbre ancien, la date manque le plus
  * souvent.
+ *
+ * `marie` est la nature de l'union (ADR 0020) — `true` mariés, `false` union
+ * libre, `null` on ne sait pas —, distincte de la date pour la même raison : on
+ * peut savoir qu'ils se sont mariés sans savoir quand. Une date ou un lieu de
+ * mariage la font « oui ».
  */
 export interface SaisieUnion {
   personne: ChoixDePersonne
   mariage: SaisieDate
+  marie: NatureDUnion
   rompue: boolean
   rupture: SaisieDate
   note: string
@@ -229,7 +236,7 @@ export function creationVide(): SaisieCreation {
 }
 
 export function unionVide(personne: ChoixDePersonne): SaisieUnion {
-  return { personne, mariage: saisieVide(), rompue: false, rupture: saisieVide(), note: '' }
+  return { personne, mariage: saisieVide(), marie: null, rompue: false, rupture: saisieVide(), note: '' }
 }
 
 /* ------------------------------------------------------------------ */
@@ -318,6 +325,12 @@ export function construireLiens(saisie: SaisieCreation): {
     } else if (mariage.valeur !== null) {
       lien.marriage = mariage.valeur
     }
+
+    // La nature de l'union (ADR 0020), seulement quand elle dit quelque chose :
+    // absente, c'est « on ne sait pas ». Une date ou un lieu de mariage la font
+    // « oui » — l'écran l'a déjà imposé, le serveur le ferait de toute façon.
+    const nature = natureEffective(union.marie, mariage.valide ? mariage.valeur : null)
+    if (nature !== null) lien.married = nature
 
     const rupture = valeurAEnvoyer(union.rupture)
     if (!rupture.valide) {

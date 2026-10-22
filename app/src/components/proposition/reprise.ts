@@ -362,6 +362,9 @@ export function analyserReprise(brut: unknown): Reprise | null {
       if (nature === 'conjoint_de') {
         const union = unionVide(autre)
         union.mariage = saisieDepuisBloc(blocDeSaisie(bloc['marriage']))
+        // La nature reprise telle quelle (ADR 0020) : absente d'une demande d'avant,
+        // elle vaut « on ne sait pas », et une date de mariage la refera « oui ».
+        union.marie = typeof bloc['married'] === 'boolean' ? bloc['married'] : null
         union.rompue = bloc['divorced'] === true
         union.rupture = saisieDepuisBloc(blocDeSaisie(bloc['divorce']))
         union.note = chaine(bloc['note'])

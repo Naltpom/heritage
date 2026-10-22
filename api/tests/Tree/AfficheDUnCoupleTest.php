@@ -141,6 +141,32 @@ final class AfficheDUnCoupleTest extends ArbreWebTestCase
     }
 
     /**
+     * La nature de l'union (ADR 0020), sous la règle de la fiche d'une famille : émise même
+     * nulle, et toujours vraie sous une date de mariage. Un divorce sans mariage connu reste
+     * de nature inconnue — c'est l'affiche qui en décide (`estMarie()`), pas la charge.
+     */
+    public function testLesUnionsDisentLeurNature(): void
+    {
+        // Basalte ∞ Ambre : mariés, l'acte manque ; Quartz & Opale : union libre.
+        $this->unions['basalte']->setMarried(true);
+        $this->unions['quartz']->setMarried(false);
+        $this->em()->flush();
+
+        $affiche = $this->affiche(CercleDuLecteur::de([]));
+        $nature = function (string $cle) use ($affiche): mixed {
+            $famille = $this->familleServie($affiche, $this->unions[$cle]) ?? self::fail($cle.' n’est pas servie.');
+            self::assertArrayHasKey('married', $famille, $cle);
+
+            return $famille['married'];
+        };
+
+        self::assertTrue($nature('sodaliteRubis'), 'Un mariage daté est un mariage.');
+        self::assertTrue($nature('basalte'), 'Mariés sans date : l’acte manque, pas le mariage.');
+        self::assertFalse($nature('quartz'), 'Une union libre.');
+        self::assertNull($nature('sodaliteAgate'), '`null` est émis : divorcés ou séparés, on ne sait pas s’ils étaient mariés.');
+    }
+
+    /**
      * La liste blanche d'une personne masquée : **cinq clés**, et le nom nulle part. Elle
      * reste à sa place dans la famille, comme son nœud dans le graphe.
      */

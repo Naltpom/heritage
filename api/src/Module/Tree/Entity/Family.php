@@ -62,7 +62,30 @@ class Family
     #[ORM\Embedded(class: UncertainDate::class, columnPrefix: 'marriage_')]
     private UncertainDate $marriage;
 
-    /** Le `DIV` du GEDCOM, 2 cas. Même raisonnement que `deceased` : le fait et sa date sont deux choses. */
+    /**
+     * **La nature de l'union** (ADR 0020) : `true`, un mariage attesté — daté ou non ;
+     * `false`, une union sans mariage (union libre, PACS) ; `null`, on ne sait pas.
+     *
+     * Même raisonnement que `deceased` et `divorced` : le fait et sa date sont deux
+     * choses. Une union sans date reste une union, mais elle n'est pas pour autant un
+     * mariage dont l'acte manque — ni une union libre. Trois valeurs et non un booléen
+     * à défaut : `false` par défaut aurait déclaré « union libre » toutes les unions
+     * dont on n'a pas retrouvé l'acte.
+     *
+     * **Un mariage daté ou situé est un mariage** : {@see setMarriage()} et
+     * {@see setMarried()} tiennent la règle à chaque écriture, et
+     * `ck_tree_family_mariage_coherent` la tient en base.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?bool $married = null;
+
+    /**
+     * Le `DIV` du GEDCOM. Même raisonnement que `deceased` : le fait et sa date sont deux choses.
+     *
+     * **Toute rupture**, divorce ou séparation — et c'est {@see $married} qui dit
+     * laquelle : rompue après un mariage, l'union est « divorcés » ; sans mariage ou
+     * sans qu'on le sache, « séparés » (ADR 0020).
+     */
     #[ORM\Column(options: ['default' => false])]
     private bool $divorced = false;
 
@@ -177,9 +200,60 @@ class Family
         return $this->marriage;
     }
 
+    /**
+     * Pose la date et le lieu du mariage — et, s'ils disent quelque chose, la nature :
+     * un mariage daté ou situé est un mariage.
+     *
+     * Retirer la date ne retire **pas** le mariage : on peut savoir qu'ils se sont
+     * mariés en ignorant quand. Seul {@see setMarried()} redescend la nature.
+     */
     public function setMarriage(UncertainDate $marriage): self
     {
         $this->marriage = $marriage;
+
+        return $this->tenirLaNature();
+    }
+
+    public function isMarried(): ?bool
+    {
+        return $this->married;
+    }
+
+    /**
+     * Pose la nature de l'union : `true` mariés, `false` union libre, `null` on ne sait
+     * pas.
+     *
+     * **Tant qu'une date ou un lieu de mariage sont là, la nature reste `true`**, quoi
+     * qu'on demande. C'est délibérément une normalisation et non une exception :
+     *
+     * - l'ordre des écritures ne doit pas compter. « Retirer la date et dire union
+     *   libre » arrive en deux champs ; une exception levée sur le premier selon l'ordre
+     *   des ops refuserait une demande juste une fois sur deux. Le service d'écriture de
+     *   `Tree` pose donc la date **avant** la nature, et c'est l'état d'arrivée qui
+     *   compte ;
+     * - la contradiction franche — « union libre » avec une date de mariage — est
+     *   refusée **au dépôt**, devant son auteur, par `Proposal`
+     *   (`ConstructeurDeModification`, `ConstructeurDeCreation`). Si elle arrive jusqu'ici
+     *   malgré tout (deux demandes croisées dont la seconde date une union que la
+     *   première venait de dire libre), la date l'emporte : c'est une pièce, l'autre
+     *   une déclaration — et c'est ce que la contrainte de base exige de toute façon.
+     */
+    public function setMarried(?bool $married): self
+    {
+        $this->married = $married;
+
+        return $this->tenirLaNature();
+    }
+
+    /**
+     * La règle de l'ADR 0020, au seul endroit où l'entité la tient. Le critère est celui de
+     * `ck_tree_family_mariage_coherent`, terme pour terme ({@see UncertainDate::estRenseignee()}).
+     */
+    private function tenirLaNature(): self
+    {
+        if ($this->marriage->estRenseignee()) {
+            $this->married = true;
+        }
 
         return $this;
     }

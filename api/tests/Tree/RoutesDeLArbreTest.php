@@ -173,6 +173,32 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
         self::assertSame('restreinte', $fiche['husband']['visibilite']);
         self::assertSame('restreinte', $fiche['wife']['visibilite'], 'Sans cercle branché, les deux époux vivants sont masqués.');
         self::assertSame('1962', $fiche['marriage']['texte']);
+        // La nature de l'union reste à la famille, comme ses dates (ADR 0020).
+        self::assertTrue($fiche['married']);
+    }
+
+    /**
+     * Chaque losange du graphe dit la nature de son union (ADR 0020) — de quoi écrire
+     * « divorcés » ou « séparés » sans ouvrir la fiche. Elle ne change aucun tracé.
+     */
+    public function testLesNoeudsDeFamilleDisentLaNatureDeLUnion(): void
+    {
+        $this->connexionDe('membre@heritage.test');
+        $this->requete('/api/arbre/graphe');
+
+        $familles = array_values(array_filter(
+            $this->charge()['noeuds'],
+            static fn (array $noeud): bool => 'famille' === $noeud['type'],
+        ));
+
+        self::assertNotSame([], $familles);
+        foreach ($familles as $noeud) {
+            self::assertArrayHasKey('married', $noeud, '`null` est émis : « on ne sait pas » est une réponse.');
+        }
+
+        $aieux = array_values(array_filter($familles, fn (array $noeud): bool => $noeud['familyId'] === $this->familles['aieux']->getId()));
+        self::assertCount(1, $aieux);
+        self::assertTrue($aieux[0]['married'], 'Un mariage daté est un mariage.');
     }
 
     public function testUnIdentifiantInconnuRend404(): void

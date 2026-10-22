@@ -79,7 +79,9 @@ describe('la colonne « valeur actuelle » suit la charge utile', () => {
 
   it('ne dépend de rien d’autre que de l’op', () => {
     // La signature n'a pas de paramètre pour le lecteur, et c'est le fond du
-    // sujet : rien ici ne peut dépendre du rôle de celui qui regarde.
+    // sujet : rien ici ne peut dépendre du rôle de celui qui regarde. Le second
+    // paramètre, facultatif, est la nature de l'union que **la même demande**
+    // donne (ADR 0020) — une donnée de la charge, pas du lecteur.
     expect(ligneDeDiff.length).toBe(1)
   })
 
@@ -591,5 +593,48 @@ describe('un lien retiré (`retrait_lien`, § 6.4 quinquies)', () => {
 
   it('laisse la main au libellé du serveur sur la charge d’administration', () => {
     expect(ligneDeDiff({ ...OP_RETRAIT, libelleDiff: 'Lien retiré : …' }).libelle).toBe('Lien retiré : …')
+  })
+})
+
+/**
+ * La nature d'une union (ADR 0020). « Séparés » s'écrivait sous **toute** rupture,
+ * mariage rompu compris : le libellé suit désormais la nature, et reste neutre
+ * quand la charge ne la dit pas.
+ */
+describe('la nature de l’union', () => {
+  const op = (field: string, oldValue: boolean | null, newValue: boolean | null, seq = 1): OpDemande => ({
+    seq,
+    opKind: 'champ',
+    subjectKind: 'famille',
+    subjectId: 28,
+    field,
+    valueKind: 'booleen',
+    oldValue,
+    newValue,
+    baseVersion: 3,
+  })
+
+  it('dit « on ne sait pas » et « union libre », pas « (vide) » et « non »', () => {
+    const ligne = ligneDeDiff(op('married', null, false))
+    expect(ligne.libelle).toBe('Mariés')
+    expect(ligne.ancienne).toBe('on ne sait pas')
+    expect(ligne.proposee).toBe('non (union libre)')
+  })
+
+  it('dit « Divorcés » quand la même demande dit « mariés »', () => {
+    const lignes = lignesDeDiff([op('married', null, true), op('divorced', false, true, 2)])
+    expect(lignes.map((l) => l.libelle)).toEqual(['Mariés', 'Divorcés'])
+  })
+
+  it('dit « Séparés » pour une union libre ou de nature inconnue', () => {
+    expect(lignesDeDiff([op('married', true, false), op('divorced', false, true, 2)])[1]!.libelle).toBe('Séparés')
+    expect(lignesDeDiff([op('married', true, null), op('divorced', false, true, 2)])[1]!.libelle).toBe('Séparés')
+  })
+
+  it('reste neutre quand la charge ne dit pas la nature', () => {
+    expect(lignesDeDiff([op('divorced', false, true)])[0]!.libelle).toBe('Union rompue')
+    expect(libelleDeChamp('divorce')).toBe('Rupture')
+    expect(libelleDeChamp('divorce', true)).toBe('Divorce')
+    expect(libelleDeChamp('divorce', null)).toBe('Séparation')
   })
 })

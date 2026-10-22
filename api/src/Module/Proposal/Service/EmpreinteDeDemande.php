@@ -42,7 +42,9 @@ use App\Module\Proposal\Repository\DraftPersonRepository;
  *   même que celle du contrôle préalable ({@see AnalyseDeDemande}), indépendante de l'ordre
  *   des clés que rend la base. C'est ce qui distingue deux écritures de la même seconde ;
  * - **chaque lien** par son rang et ses extrémités : un lien ajouté change ce qu'une
- *   validation créerait.
+ *   validation créerait. Et, pour une union, par ce qu'elle écrira sur la famille — sa
+ *   nature (`married`, ADR 0020), sa rupture et leurs dates : deux liens « conjoint de X »
+ *   dont l'un dit « mariés » et l'autre « union libre » ne valident pas la même chose.
  *
  * Ni le message, ni les ops : ils ne changent jamais après le dépôt.
  *
@@ -92,6 +94,10 @@ final readonly class EmpreinteDeDemande
                 $lien->getOtherPersonId(), $lien->getOtherDraftRef(), $lien->getOtherDraftPersonId(),
                 $lien->getOther2PersonId(), $lien->getOther2DraftRef(), $lien->getOther2DraftPersonId(),
                 $lien->getFamilyId(),
+                $this->normaliseur->versJson(ValueKind::DateIncertaine, $lien->getMarriage()),
+                $lien->isMarried(),
+                $lien->isDivorced(),
+                $this->normaliseur->versJson(ValueKind::DateIncertaine, $lien->getDivorce()),
             ];
         }
 
