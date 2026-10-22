@@ -451,6 +451,49 @@ describe('les cas durs', () => {
     }
   })
 
+  it('les personnes proposées (en attente) : dans le groupe de qui les rattache, leurs liens en pointillés', () => {
+    const { graphe, id } = arbreDEssai()
+    const propose = (cle: string, sex: Sexe): NoeudPersonne => ({
+      id: `#9/${cle}`,
+      type: 'personne',
+      personId: null,
+      enAttente: true,
+      x: 0,
+      y: 0,
+      w: 140,
+      h: 56,
+      displayName: cle,
+      etiquetteNom: `${cle} Proposé`,
+      sex,
+      generation: 0,
+      branch: null as unknown as Branche,
+      parente: 'famille',
+      vivant: false,
+      visibilite: 'complete',
+    })
+    const epouse = propose('epouse', 'feminin')
+    const fils = propose('fils', 'masculin')
+    const f: NoeudFamille = { id: 'f-propose', type: 'famille', familyId: 9999, x: 0, y: 0, w: 10, h: 10, divorced: false }
+    const avec: Graphe = {
+      ...graphe,
+      noeuds: [...graphe.noeuds, epouse, fils, f],
+      aretes: [
+        ...graphe.aretes,
+        { de: id.grandOncleD!, vers: f.id, genre: 'union' },
+        { de: epouse.id, vers: f.id, genre: 'union', enAttente: true },
+        { de: f.id, vers: fils.id, genre: 'filiation', enAttente: true },
+      ],
+    }
+    const d = disposerEnRevue(parDefaut(avec))
+    for (const n of [epouse, fils]) {
+      const fiche = d.parId.get(n.id)!
+      const rect = d.groupes.find((r) => fiche.x >= r.x && fiche.x + fiche.w <= r.x + r.w && fiche.y >= r.y && fiche.y + fiche.h <= r.y + r.h)
+      expect(rect?.cle, n.id).toBe('pm')
+    }
+    expect(d.traces.attente).not.toBe('')
+    expect(mesurer(d, d.groupes).sousUneCarte).toBe(0)
+  })
+
   it('les personnes sans lien : leur rectangle, au bout de l’arbre', () => {
     const { graphe } = arbreDEssai()
     const d = disposerEnRevue(sansFamillesParAlliance(graphe))
