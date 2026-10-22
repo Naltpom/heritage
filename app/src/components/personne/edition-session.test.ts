@@ -51,7 +51,7 @@ function fiche(id = 17): FichePersonneComplete {
     parents: [{ personId: 30, displayName: 'Galène Bourrache', relation: 'naissance', familyId: 4 }],
     fratrie: [],
     unions: [
-      { familyId: 9, conjoint: { personId: 52, displayName: 'Cobalt Romarin' }, marriage: null, divorced: false, divorce: null, version: 1, enfants: [] },
+      { familyId: 9, conjoint: { personId: 52, displayName: 'Cobalt Romarin' }, marriage: null, married: null, divorced: false, divorce: null, version: 1, enfants: [] },
     ],
     faits: [],
     citations: [],

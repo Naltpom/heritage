@@ -431,6 +431,18 @@ describe('reprendre un ajout refusé qui portait un conjoint', () => {
     return reprise.saisie.unions[0]!
   }
 
+  it('reprend la nature de l’union, et la dit inconnue sous une demande d’avant', () => {
+    // La demande d'avant l'ADR 0020 ne porte pas `married` : « on ne sait pas » —
+    // et sa date de mariage la refera « oui » au dépôt.
+    expect(union().marie).toBeNull()
+
+    const libre = {
+      ...CONJOINT_JAMAIS_ROMPU,
+      liens: [{ ...CONJOINT_JAMAIS_ROMPU.liens![0]!, marriage: null, married: false }],
+    }
+    expect((analyserReprise(libre) as RepriseCreation).saisie.unions[0]!.marie).toBe(false)
+  })
+
   it('n’installe aucune date de rupture — il n’y en a aucune à effacer', () => {
     // `origine` est ce que `valeurAEnvoyer()` fait repartir tel quel. Non nulle,
     // elle transforme « pas de date » en « une date est indiquée ».

@@ -70,6 +70,7 @@ function fiche(surcharge: Partial<FichePersonneComplete> = {}): FichePersonneCom
         familyId: 9,
         conjoint: { personId: 52, displayName: 'Cobalt Romarin' },
         marriage: null,
+        married: null,
         divorced: false,
         divorce: null,
         version: 1,
@@ -340,7 +341,7 @@ describe('liensPourFiche : les liens saisis, vus depuis la fiche', () => {
   it('grise ce qui est déjà présent, avec sa raison', () => {
     const s = avecLiens((c) => {
       c.filiation.parents = [{ personId: 30, libelle: 'Galène Bourrache' }]
-      c.unions = [{ personne: { personId: 52, libelle: 'Cobalt Romarin' }, mariage: saisieVide(), rompue: false, rupture: saisieVide(), note: '' }]
+      c.unions = [{ personne: { personId: 52, libelle: 'Cobalt Romarin' }, mariage: saisieVide(), marie: null, rompue: false, rupture: saisieVide(), note: '' }]
       c.enfants = [{ personne: { personId: 60, libelle: 'Pivoine Romarin' }, rangFratrie: null }]
     })
 
@@ -356,7 +357,7 @@ describe('liensPourFiche : les liens saisis, vus depuis la fiche', () => {
     const s = avecLiens((c) => {
       c.filiation.parents = [{ personId: 80, libelle: 'Inconnu Tiers' }]
       c.enfants = [{ personne: { personId: 30, libelle: 'Galène Bourrache' }, rangFratrie: null }]
-      c.unions = [{ personne: { personId: 17, libelle: 'Marne Sureau' }, mariage: saisieVide(), rompue: false, rupture: saisieVide(), note: '' }]
+      c.unions = [{ personne: { personId: 17, libelle: 'Marne Sureau' }, mariage: saisieVide(), marie: null, rompue: false, rupture: saisieVide(), note: '' }]
     })
     const liens = liensPourFiche(fiche(), s, [])
 

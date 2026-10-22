@@ -173,7 +173,7 @@ describe('cleDeRessemblance et visibles : ce qu’on montre', () => {
     const saisie = creationVide()
     saisie.filiation.parents = [{ personId: 12, libelle: 'Jean Dupont' }]
     saisie.unions = [
-      { personne: { draftPersonId: 34, demandeId: 5, libelle: 'Marie' }, mariage: saisieVide(), rompue: false, rupture: saisieVide(), note: '' },
+      { personne: { draftPersonId: 34, demandeId: 5, libelle: 'Marie' }, mariage: saisieVide(), marie: null, rompue: false, rupture: saisieVide(), note: '' },
     ]
     const designes = designesDansLesLiens(saisie)
     expect(designes).toEqual(['personne:12', 'brouillon:34'])

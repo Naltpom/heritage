@@ -262,4 +262,47 @@ describe('les unions : « avec qui », puis « leurs enfants »', () => {
     expect(html).not.toContain('1re union')
     expect(html).not.toContain('Leurs enfants')
   })
+
+  /**
+   * La nature de l'union (ADR 0020). L'ancien « Mariage : date inconnue » s'écrivait
+   * sous **chaque** union, union libre comprise : la fiche affirmait un mariage que
+   * la base ne portait pas.
+   */
+  describe('la nature de l’union', () => {
+    const ligne = async (surcharge: Record<string, unknown>) => {
+      const html = await rendre(ParenteFiche, {
+        fiche: ficheComplete({ unions: [{ ...union(1, 'Ambre Cerfeuil', []), ...surcharge }] as never }),
+      })
+      return {
+        mariage: /data-nature-union[^>]*>\s*([^<]*?)\s*</.exec(html)?.[1] ?? null,
+        rupture: /data-rupture-union[^>]*>\s*([^<]*?)\s*</.exec(html)?.[1] ?? null,
+      }
+    }
+    const date = { raw: '23 SEP 1927', qualifier: 'exacte', min: '1927-09-23', max: '1927-09-23', place: 'Saule', texte: '23 septembre 1927' }
+
+    it('dit le mariage daté, avec son lieu', async () => {
+      expect((await ligne({ married: true, marriage: date })).mariage).toBe('Mariés le 23 septembre 1927 — Saule')
+    })
+
+    it('dit un mariage sans date — le cas qui manquait', async () => {
+      expect((await ligne({ married: true })).mariage).toBe('Mariés — date inconnue')
+    })
+
+    it('dit l’union libre', async () => {
+      expect((await ligne({ married: false })).mariage).toBe('Union libre')
+    })
+
+    it('ne dit rien quand on ne sait pas', async () => {
+      expect((await ligne({ married: null })).mariage).toBeNull()
+    })
+
+    it('dit « divorcés » après un mariage, « séparés » sinon', async () => {
+      expect((await ligne({ married: true, divorced: true })).rupture).toBe('Divorcés')
+      expect((await ligne({ married: false, divorced: true })).rupture).toBe('Séparés')
+      expect((await ligne({ married: null, divorced: true })).rupture).toBe('Séparés')
+      expect((await ligne({ married: true, divorced: true, divorce: { ...date, raw: '1998', qualifier: 'annee', texte: '1998', place: null } })).rupture).toBe(
+        'Divorcés en 1998',
+      )
+    })
+  })
 })

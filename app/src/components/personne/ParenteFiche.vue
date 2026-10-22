@@ -16,12 +16,13 @@
  * pourquoi `conjoint` est `null`-able et que son absence ne fait pas disparaître
  * le bloc.
  *
- * Les dates passent par `rendreDate()` : `texte` d'abord, `raw` ensuite, jamais
- * une recomposition depuis `min` et `max` (§ 14).
+ * Les dates d'union passent par `union.ts` : `texte` d'abord, `raw` ensuite, jamais
+ * une recomposition depuis `min` et `max` (§ 14) — et la nature de l'union décide de
+ * ce qu'on dit (ADR 0020).
  */
 import type { FichePersonneComplete } from '@/lib/api'
-import { rendreDate } from './champs'
 import ListeDeProches from './ListeDeProches.vue'
+import { phraseDeLaRupture, phraseDuMariage } from './union'
 
 /**
  * `versArbre` : dans le volet de `/arbre`, un proche se choisit dans l'arbre au lieu
@@ -74,17 +75,19 @@ function rangDUnion(rang: number): string {
           <p v-else class="m-0 text-attenue italic">conjoint inconnu</p>
         </div>
 
-        <p v-if="union.marriage !== null" class="m-0 pl-5 text-xs text-attenue">
-          Mariage : {{ rendreDate(union.marriage, 'date inconnue').principal }}
-          <template v-if="union.marriage.place"> — {{ union.marriage.place }}</template>
+        <!-- La nature de l'union (ADR 0020) : « Mariés le … », « Mariés — date
+             inconnue », « Union libre » — et rien quand on ne sait pas, plutôt que
+             l'ancien « Mariage : date inconnue » qui affirmait un mariage sous
+             chaque union, union libre comprise. -->
+        <p v-if="phraseDuMariage(union) !== null" class="m-0 pl-5 text-xs text-attenue" data-nature-union>
+          {{ phraseDuMariage(union) }}
         </p>
 
         <!-- `.ar.divorce` est **conservée** au rendu de l'arbre : « ce n'est pas
-             une distance, c'est une information » (§ 7.3 du dossier). Ici aussi. -->
-        <p v-if="union.divorced" class="m-0 pl-5 text-xs text-alerte">
-          Divorce<template v-if="union.divorce !== null">
-            — {{ rendreDate(union.divorce, 'date inconnue').principal }}</template
-          >
+             une distance, c'est une information » (§ 7.3 du dossier). Ici aussi.
+             « Divorcés » après un mariage, « Séparés » sinon. -->
+        <p v-if="union.divorced" class="m-0 pl-5 text-xs text-alerte" data-rupture-union>
+          {{ phraseDeLaRupture(union) }}
         </p>
 
         <div v-if="union.enfants.length > 0" data-enfants-de-l-union class="mt-2 ml-1.5 border-l-2 border-ligne pl-3">

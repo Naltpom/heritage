@@ -183,6 +183,32 @@ describe('les unions', () => {
     expect(union.marriage?.max).toBe('1929-12-31')
   })
 
+  /**
+   * La nature de l'union (ADR 0020) : « mariés » sans date, « union libre » — et
+   * rien quand on ne sait pas, ce que le serveur lit comme `null`.
+   */
+  it('porte la nature de l’union, et la tait quand on ne sait pas', () => {
+    const conjoint = (marie: boolean | null) => {
+      const saisie = saisieMinimale()
+      saisie.unions[0]!.marie = marie
+      return construireLiens(saisie).liens.find((lien) => lien.kind === 'conjoint_de')!
+    }
+
+    expect(conjoint(true).married).toBe(true)
+    expect(conjoint(false).married).toBe(false)
+    expect('married' in conjoint(null)).toBe(false)
+  })
+
+  it('dit « mariés » dès qu’une date ou un lieu de mariage sont saisis', () => {
+    const saisie = saisieMinimale()
+    saisie.unions[0]!.marie = false
+    saisie.unions[0]!.mariage = date({ forme: 'inconnue', lieu: 'Saule' })
+
+    const union = construireLiens(saisie).liens.find((lien) => lien.kind === 'conjoint_de')!
+
+    expect(union.married).toBe(true)
+  })
+
   it('garde la rupture même sans date', () => {
     // Une rupture sans date reste une rupture : `divorced` et `divorce` sont
     // deux informations distinctes.

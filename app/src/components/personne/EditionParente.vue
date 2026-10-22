@@ -29,18 +29,19 @@
  * connu : c'est le choix que `liens.ts` explique, et la seconde forme ne doit pas
  * être le défaut quand une union existe.
  *
- * ## Les dates d'une union
+ * ## Une union : sa nature, son mariage, sa rupture
  *
- * Sous chaque union — existante ou ajoutée — trois cases : date et lieu du
- * mariage, date du divorce. Laisser le divorce vide, c'est « toujours unis »
- * (`edition.ts`, en-tête).
+ * Sous chaque union — existante ou ajoutée — `EditionDUneUnion` : « Mariés : oui /
+ * non (union libre) / on ne sait pas », la date et le lieu du mariage, la rupture
+ * même sans date — « divorcés » ou « séparés » selon la nature — et sa date
+ * (`edition.ts`, en-tête ; ADR 0020).
  * ────────────────────────────────────────────────────────────────────
  */
 import { computed, ref } from 'vue'
 import type { FichePersonneComplete } from '@/lib/api'
-import ChampDateIncertaine from '@/components/proposition/ChampDateIncertaine.vue'
 import SelecteurPersonne from '@/components/proposition/SelecteurPersonne.vue'
 import { cleDuChoix, type ChoixDePersonne } from '@/components/proposition/creation'
+import EditionDUneUnion from './EditionDUneUnion.vue'
 import {
   basculerRetrait,
   cleDEnfant,
@@ -51,7 +52,6 @@ import {
   datesDUnionVides,
   dejaLies,
   parentsApresEdition,
-  valeurDUnion,
   type AjoutsDeLiens,
   type DatesDUnion,
 } from './edition'
@@ -62,20 +62,12 @@ const retraits = defineModel<string[]>('retraits', { required: true })
 const ajouts = defineModel<AjoutsDeLiens>('ajouts', { required: true })
 const unions = defineModel<Record<string, DatesDUnion>>('unions', { default: () => ({}) })
 
-/** Les dates d'une union ; une clé encore absente se crée vide à la première frappe. */
+/** Les cases d'une union ; une clé encore absente se crée vide à la première frappe. */
 function dates(cle: string): DatesDUnion {
   return unions.value[cle] ?? datesDUnionVides()
 }
-function modifierDate(cle: string, champ: keyof DatesDUnion, valeur: DatesDUnion[keyof DatesDUnion]): void {
-  unions.value = { ...unions.value, [cle]: { ...dates(cle), [champ]: valeur } }
-}
-
-/** « Divorcés, date inconnue » : l'union le reste tant qu'on ne touche pas à la case. */
-function divorceSansDate(familleId: number): boolean {
-  const union = fiche.unions.find((u) => u.familyId === familleId)
-  if (union === undefined || !union.divorced) return false
-  const valeur = valeurDUnion(dates(cleDUnion(familleId)).divorce)
-  return valeur.valide && (valeur.valeur === null || valeur.valeur.min === null)
+function remplacer(cle: string, valeur: DatesDUnion): void {
+  unions.value = { ...unions.value, [cle]: valeur }
 }
 
 /** La recherche ouverte — une seule à la fois, pour ne pas noyer la fiche. */
@@ -170,27 +162,13 @@ function aideParent(nom: string, familleId: number): string {
 
         <div
           v-if="union.conjoint === null || !barre(cleDeConjoint(union.conjoint.personId, union.familyId))"
-          class="mt-2 flex flex-col gap-2"
+          class="mt-2"
           :data-dates-union="union.familyId"
         >
-          <ChampDateIncertaine
-            :model-value="dates(cleDUnion(union.familyId)).mariage"
-            etiquette="Date de mariage"
-            etiquette-lieu="Lieu de mariage"
-            vide-permis
-            @update:model-value="modifierDate(cleDUnion(union.familyId), 'mariage', $event)"
+          <EditionDUneUnion
+            :model-value="dates(cleDUnion(union.familyId))"
+            @update:model-value="remplacer(cleDUnion(union.familyId), $event)"
           />
-          <ChampDateIncertaine
-            :model-value="dates(cleDUnion(union.familyId)).divorce"
-            etiquette="Date de divorce"
-            aide="Vide : toujours unis."
-            sans-lieu
-            vide-permis
-            @update:model-value="modifierDate(cleDUnion(union.familyId), 'divorce', $event)"
-          />
-          <p v-if="divorceSansDate(union.familyId)" class="m-0 text-xs text-attenue">
-            Divorce déjà enregistré, sans date.
-          </p>
         </div>
 
         <ul class="m-0 mt-1 flex list-none flex-col gap-0.5 p-0">
@@ -255,20 +233,9 @@ function aideParent(nom: string, familleId: number): string {
             <span><span class="font-semibold text-edition">+</span> Conjoint : {{ conjoint.libelle }}</span>
             <button type="button" class="min-h-9 rounded-champ border border-ligne px-2 text-xs" :aria-label="`Ne pas ajouter ${conjoint.libelle}`" title="Ne pas ajouter" @click="oublier('conjoints', cleDuChoix(conjoint))">Retirer</button>
           </div>
-          <ChampDateIncertaine
-            :model-value="dates(cleDUnionAjoutee(conjoint)).mariage"
-            etiquette="Date de mariage"
-            etiquette-lieu="Lieu de mariage"
-            vide-permis
-            @update:model-value="modifierDate(cleDUnionAjoutee(conjoint), 'mariage', $event)"
-          />
-          <ChampDateIncertaine
-            :model-value="dates(cleDUnionAjoutee(conjoint)).divorce"
-            etiquette="Date de divorce"
-            aide="Vide : toujours unis."
-            sans-lieu
-            vide-permis
-            @update:model-value="modifierDate(cleDUnionAjoutee(conjoint), 'divorce', $event)"
+          <EditionDUneUnion
+            :model-value="dates(cleDUnionAjoutee(conjoint))"
+            @update:model-value="remplacer(cleDUnionAjoutee(conjoint), $event)"
           />
         </li>
       </ul>

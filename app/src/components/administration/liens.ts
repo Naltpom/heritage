@@ -16,8 +16,13 @@
  *    « Une union sans date reste une union » (§ 6.4 du dossier) — et une rupture
  *    sans date reste une rupture. Exiger la date pour afficher la rupture
  *    l'effacerait de l'écran.
+ * 3. **La nature de l'union dit les mots** (ADR 0020) : « mariés », daté ou non,
+ *    « union libre », ou rien quand on ne sait pas ; et la rupture d'un mariage
+ *    est un divorce, celle d'une autre union une séparation. Une date ou un lieu
+ *    de mariage disent « mariés » même sous un lien d'avant la nature.
  */
 
+import { motDeLaRupture, natureEffective, quandDUnEvenement } from '@/components/personne/union'
 import type { FiliationPrevue, LienDemande, NatureLien } from '@/lib/api'
 
 /**
@@ -53,14 +58,6 @@ const NATURES: Record<NatureLien, string> = {
   conjoint_de: 'Conjoint·e de',
 }
 
-/** La date telle que le serveur l'a écrite, ou `null`. Jamais recomposée. */
-function texteDeDate(bloc: LienDemande['marriage']): string | null {
-  if (bloc === null || bloc === undefined) return null
-  const texte = (bloc as { texte?: unknown }).texte
-  if (typeof texte === 'string' && texte.length > 0) return texte
-  const brut = (bloc as { raw?: unknown }).raw
-  return typeof brut === 'string' && brut.length > 0 ? brut : null
-}
 
 export interface LienLisible {
   seq: number
@@ -81,9 +78,9 @@ export interface LienLisible {
    * lien à un seul parent est le cas courant, pas une donnée manquante.
    */
   secondParent: string | null
-  /** « mariés le 23 septembre 1927 », ou `null`. */
+  /** « mariés le 23 septembre 1927 », « mariés, date inconnue », « union libre », ou `null`. */
   union: string | null
-  /** « séparés en 1943 », « séparés (date inconnue) », ou `null`. */
+  /** « divorcés en 1943 », « séparés, date inconnue », ou `null`. */
   rupture: string | null
   note: string | null
   /**
@@ -155,17 +152,23 @@ export function lienLisible(lien: LienDemande): LienLisible {
     nomOuRien(lien.familyLabel) ??
     'une personne que cette charge ne nomme pas'
 
-  const dateUnion = texteDeDate(lien.marriage)
-  const dateRupture = texteDeDate(lien.divorce)
+  const natureDeLUnion = natureEffective(lien.married, lien.marriage)
+  const dateUnion = quandDUnEvenement(lien.marriage)
+  const dateRupture = quandDUnEvenement(lien.divorce)
+  const mot = motDeLaRupture(lien).toLowerCase()
+
+  let union: string | null = null
+  if (natureDeLUnion === true) union = dateUnion === null ? 'mariés, date inconnue' : `mariés ${dateUnion}`
+  else if (natureDeLUnion === false) union = 'union libre'
 
   let rupture: string | null = null
   if (lien.divorced === true) {
     // La rupture s'affiche même sans date : c'est un fait, la date est un détail.
-    rupture = dateRupture === null ? 'séparés, date inconnue' : `séparés ${dateRupture}`
+    rupture = dateRupture === null ? `${mot}, date inconnue` : `${mot} ${dateRupture}`
   } else if (dateRupture !== null) {
     // Une date de rupture sans `divorced` : on montre ce qu'on a reçu plutôt que
     // de le taire, mais sans affirmer une rupture que la charge ne déclare pas.
-    rupture = `date de séparation indiquée : ${dateRupture}`
+    rupture = `date de ${mot === 'divorcés' ? 'divorce' : 'séparation'} indiquée : ${dateRupture}`
   }
 
   return {
@@ -174,7 +177,7 @@ export function lienLisible(lien: LienDemande): LienLisible {
     nature,
     autre,
     secondParent: nomOuRien(lien.other2Label),
-    union: dateUnion === null ? null : `mariés ${dateUnion}`,
+    union,
     rupture,
     note: nomOuRien(lien.note),
     effet: effetLisible(lien.filiationPrevue),

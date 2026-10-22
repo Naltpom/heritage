@@ -120,7 +120,36 @@ describe('les dates d’union et de rupture', () => {
       marriage: { qualifier: 'entre', min: '1927-01-01', max: '1927-12-31' } as never,
     })
 
-    expect(lien.union).toBeNull()
+    // Une fourchette atteste le mariage (ADR 0020) ; sans `texte`, sa date ne se
+    // dit pas — surtout pas « 1927 », qui l'aplatirait.
+    expect(lien.union).toBe('mariés, date inconnue')
+    expect(lien.union).not.toContain('1927')
+  })
+})
+
+/**
+ * La nature de l'union (ADR 0020) : « mariés » même sans date, « union libre », et
+ * la rupture qui se dit « divorcés » après un mariage, « séparés » sinon.
+ */
+describe('la nature de l’union', () => {
+  it('dit un mariage sans date, et une union libre', () => {
+    expect(lienLisible({ ...BASE, married: true }).union).toBe('mariés, date inconnue')
+    expect(lienLisible({ ...BASE, married: false }).union).toBe('union libre')
+    expect(lienLisible({ ...BASE, married: null }).union).toBeNull()
+  })
+
+  it('lit le mariage dans sa date, même sous un lien d’avant la nature', () => {
+    const lien = lienLisible({ ...BASE, married: null, marriage: { qualifier: 'annee', texte: '1934', raw: '1934' } as never })
+
+    expect(lien.union).toBe('mariés en 1934')
+  })
+
+  it('dit « divorcés » après un mariage, « séparés » sinon', () => {
+    expect(lienLisible({ ...BASE, married: true, divorced: true }).rupture).toBe('divorcés, date inconnue')
+    expect(lienLisible({ ...BASE, married: false, divorced: true }).rupture).toBe('séparés, date inconnue')
+    expect(lienLisible({ ...BASE, married: true, divorced: true, divorce: { qualifier: 'annee', texte: '1942' } as never }).rupture).toBe(
+      'divorcés en 1942',
+    )
   })
 })
 

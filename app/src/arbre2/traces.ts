@@ -129,6 +129,9 @@ export function tracerLesLiens(entree: EntreeTraces): { traits: TracesHistoire; 
     const en = enfantsDe(fam)
       .map((e) => parId.get(e))
       .filter((e): e is FicheHistoire => e !== undefined)
+    // `divorced` dit toute rupture, divorce ou séparation ; la nature de l'union
+    // (`married`, ADR 0020) ne change **aucun** tracé : une union libre se dessine
+    // comme un mariage — pas de pointillés (§ 7.3 du dossier, ADR 0007).
     const style: Trace['style'] = ep.some((e) => enAttente(fam, e.id))
       ? 'attente'
       : noeudFamille.divorced

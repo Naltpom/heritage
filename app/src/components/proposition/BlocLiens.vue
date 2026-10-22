@@ -31,6 +31,10 @@
  * « union rompue » est indépendante de la date de rupture — sur un arbre ancien,
  * on sait souvent qu'il y a eu séparation sans savoir quand.
  *
+ * **Et un mariage sans date reste un mariage** (ADR 0020) : « Mariés : oui / non
+ * (union libre) / on ne sait pas » se répond à part de la date, que « oui »
+ * n'exige pas — mais qu'une date saisie impose.
+ *
  * Au téléphone, chaque lien occupe sa propre carte et chaque champ sa propre
  * ligne : quatre blocs de liens mis côte à côte deviennent illisibles sous
  * 400 px, et rien ici ne force une largeur qui déborderait.
@@ -46,7 +50,9 @@
 import { computed } from 'vue'
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import PanneauBase from '@/components/base/PanneauBase.vue'
+import { aideDeLaRupture, natureDeLaSaisie, saisieAtteste } from '@/components/personne/union'
 import ChampDateIncertaine from './ChampDateIncertaine.vue'
+import ChoixNatureUnion from './ChoixNatureUnion.vue'
 import SelecteurPersonne from './SelecteurPersonne.vue'
 import {
   cleDuChoix,
@@ -195,7 +201,12 @@ function poserRang(index: number, brut: string): void {
             <BoutonBase variante="discret" @click="retirerUnion(index)">Retirer</BoutonBase>
           </header>
 
+          <ChoixNatureUnion v-model="union.marie" :impose="saisieAtteste(union.mariage)" />
+
+          <!-- Pas de date de mariage pour une union libre : il n'y a pas de mariage
+               à dater. Pour en saisir une, on répond d'abord « oui ». -->
           <ChampDateIncertaine
+            v-if="natureDeLaSaisie(union.marie, union.mariage) !== false"
             v-model="union.mariage"
             etiquette="Mariage"
             :erreur="erreurs[`unions.${index}.mariage`] ?? ''"
@@ -211,7 +222,7 @@ function poserRang(index: number, brut: string): void {
             <span class="text-sm">
               Union rompue
               <span class="block text-xs text-attenue">
-                Divorce ou séparation, même sans date.
+                {{ aideDeLaRupture(natureDeLaSaisie(union.marie, union.mariage)) }}
               </span>
             </span>
           </label>

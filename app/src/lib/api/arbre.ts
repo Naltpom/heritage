@@ -74,6 +74,13 @@ export interface UnionDeFiche {
    *  reste une union, et la fratrie en dépend (§ 5.4). */
   conjoint: ReferencePersonne | null
   marriage: BlocDate | null
+  /**
+   * La nature de l'union (ADR 0020) : `true` mariés — daté ou non —, `false`
+   * union libre, `null` on ne sait pas. Une date ou un lieu de mariage la font
+   * toujours `true`. Voir `components/personne/union.ts`.
+   */
+  married: boolean | null
+  /** Toute rupture : « divorcés » quand `married` est vrai, « séparés » sinon. */
   divorced: boolean
   divorce: BlocDate | null
   /** `version` de la famille — le `baseVersion` d'une `modification_famille`. */
@@ -302,6 +309,8 @@ export interface FicheFamille {
   /** Les dates d'union restent visibles même si un époux est masqué : elles
    *  appartiennent à la famille, pas à la personne (§ 5.4). */
   marriage: BlocDate | null
+  /** La nature de l'union (ADR 0020) — même règle que `UnionDeFiche.married`. */
+  married: boolean | null
   divorced: boolean
   divorce: BlocDate | null
   generation: number

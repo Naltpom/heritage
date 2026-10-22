@@ -215,6 +215,8 @@ export interface LienDemande {
    */
   familyLabel?: string | null
   marriage?: BlocDate | null
+  /** La nature de l'union proposée (ADR 0020) : mariés, union libre, ou `null`. */
+  married?: boolean | null
   divorced?: boolean | null
   divorce?: BlocDate | null
   siblingOrder?: number | null
@@ -918,8 +920,8 @@ export interface BrouillonPropose {
  * § 6.3 — un lien proposé.
  *
  * Les exclusions sont des `CHECK` en base, pas des conventions : `familyId` et
- * `other2PersonId` ne valent que sur `enfant_de` ; `marriage`, `divorce` et
- * `divorced` ne valent que sur `conjoint_de` ; et chaque extrémité est **soit**
+ * `other2PersonId` ne valent que sur `enfant_de` ; `marriage`, `married`,
+ * `divorce` et `divorced` ne valent que sur `conjoint_de` ; et chaque extrémité est **soit**
  * un identifiant réel, **soit** une référence de brouillon, jamais les deux.
  * Un corps qui les enfreint rend `422` — le constructeur de
  * `components/proposition/creation.ts` les fait respecter à la source.
@@ -950,6 +952,12 @@ export interface LienPropose {
   /** Un couple existant, sur `enfant_de` seulement. Exclusif avec `other*`. */
   familyId?: number
   marriage?: ValeurDate | null
+  /**
+   * La nature de l'union (ADR 0020) : `true` mariés, `false` union libre, absent
+   * ou `null` on ne sait pas. Une date de mariage la fait `true` au dépôt ;
+   * `false` sous une date est refusé (`422`).
+   */
+  married?: boolean | null
   divorced?: boolean
   divorce?: ValeurDate | null
   /** Rang dans la fratrie quand le demandeur le connaît. Absent = à la fin. */

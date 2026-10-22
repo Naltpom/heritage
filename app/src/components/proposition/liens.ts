@@ -74,6 +74,7 @@
  */
 
 import type { CorpsAjoutLien, LienPropose } from '@/lib/api'
+import { natureEffective } from '@/components/personne/union'
 import { valeurAEnvoyer } from './dates'
 import {
   autreDuChoix,
@@ -241,6 +242,12 @@ export function corpsAjoutLien(saisie: SaisieLiens, options: OptionsDepot): Resu
     } else if (mariage.valeur !== null) {
       lien.marriage = mariage.valeur
     }
+
+    // La nature de l'union (ADR 0020), seulement quand elle dit quelque chose :
+    // absente, c'est « on ne sait pas ». Une date ou un lieu de mariage la font
+    // « oui » — l'écran l'a déjà imposé, le serveur le ferait de toute façon.
+    const nature = natureEffective(union.marie, mariage.valide ? mariage.valeur : null)
+    if (nature !== null) lien.married = nature
 
     const rupture = valeurAEnvoyer(union.rupture)
     if (!rupture.valide) {
