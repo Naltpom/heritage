@@ -107,6 +107,15 @@ async function charger(famille: number): Promise<void> {
   }
 }
 
+// Une autre fiche (navigation de fiche en fiche, modale déjà montée) : un autre couple.
+watch(
+  () => fiche.id,
+  () => {
+    familleId.value = unions.value[0]?.familyId ?? null
+    profondeur.value = null
+  },
+)
+
 watch(
   [() => ouverte, familleId],
   ([o, famille]) => {
