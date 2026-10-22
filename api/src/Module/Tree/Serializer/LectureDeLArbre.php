@@ -176,6 +176,64 @@ final readonly class LectureDeLArbre
         return $parFamille;
     }
 
+    /**
+     * Les filiations de **plusieurs** personnes d'un coup, familles et époux joints.
+     *
+     * L'ascendance d'une affiche se remonte génération par génération : une requête par
+     * génération (une douzaine sur l'arbre réel) plutôt qu'une par ancêtre (plusieurs
+     * centaines). Ordre des lignes : celui des identifiants, que l'appelant ne lit pas —
+     * c'est lui qui choisit la filiation retenue, sur une règle qui ne dépend pas de
+     * l'ordre ({@see NormaliseurDAffiche}).
+     *
+     * @param list<Person> $personnes
+     *
+     * @return list<Child>
+     */
+    public function filiationsDesPersonnes(array $personnes): array
+    {
+        if ([] === $personnes) {
+            return [];
+        }
+
+        /** @var list<Child> $lignes */
+        $lignes = $this->em->createQuery(
+            'SELECT c, f, h, w FROM '.Child::class.' c
+             JOIN c.family f
+             LEFT JOIN f.husband h
+             LEFT JOIN f.wife w
+             WHERE c.person IN (:personnes)
+             ORDER BY c.id ASC',
+        )->setParameter('personnes', $personnes)->getResult();
+
+        return $lignes;
+    }
+
+    /**
+     * Les unions de **plusieurs** personnes d'un coup — le pendant de
+     * {@see self::unionsDe()} pour une génération entière de descendants.
+     *
+     * @param list<Person> $personnes
+     *
+     * @return list<Family>
+     */
+    public function unionsDesPersonnes(array $personnes): array
+    {
+        if ([] === $personnes) {
+            return [];
+        }
+
+        /** @var list<Family> $lignes */
+        $lignes = $this->em->createQuery(
+            'SELECT f, h, w FROM '.Family::class.' f
+             LEFT JOIN f.husband h
+             LEFT JOIN f.wife w
+             WHERE f.husband IN (:personnes) OR f.wife IN (:personnes)
+             ORDER BY f.id ASC',
+        )->setParameter('personnes', $personnes)->getResult();
+
+        return $lignes;
+    }
+
     /** @return list<Fact> */
     public function faitsDe(Person $personne): array
     {

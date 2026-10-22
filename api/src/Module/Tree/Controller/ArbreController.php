@@ -15,6 +15,7 @@ use App\Module\Tree\Serializer\EtatVivant;
 use App\Module\Tree\Serializer\FabriqueDuCercle;
 use App\Module\Tree\Serializer\FabriqueDuLecteur;
 use App\Module\Tree\Serializer\LectureDeLArbre;
+use App\Module\Tree\Serializer\NormaliseurDAffiche;
 use App\Module\Tree\Serializer\NormaliseurDeFamille;
 use App\Module\Tree\Serializer\NormaliseurDeGraphe;
 use App\Module\Tree\Serializer\NormaliseurDePersonne;
@@ -28,17 +29,18 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Les cinq routes de lecture de l'arbre — § 5 du contrat d'API.
+ * Les six routes de lecture de l'arbre — § 5 du contrat d'API.
  *
  * ```
- * GET  /api/arbre/graphe            MEMBRE   200 · 304
- * GET  /api/arbre/personnes/{id}    MEMBRE   200      (réduite, jamais 404, si hors cercle)
- * GET  /api/arbre/familles/{id}     MEMBRE   200
- * GET  /api/arbre/recherche         MEMBRE   200 · 422
- * POST /api/arbre/ressemblances     MEMBRE   200 · 422 (une lecture, malgré le verbe)
+ * GET  /api/arbre/graphe                   MEMBRE   200 · 304
+ * GET  /api/arbre/personnes/{id}           MEMBRE   200      (réduite, jamais 404, si hors cercle)
+ * GET  /api/arbre/familles/{id}            MEMBRE   200
+ * GET  /api/arbre/familles/{id}/affiche    MEMBRE   200      (l'arbre d'une affiche, § 5.4 bis)
+ * GET  /api/arbre/recherche                MEMBRE   200 · 422
+ * POST /api/arbre/ressemblances            MEMBRE   200 · 422 (une lecture, malgré le verbe)
  * ```
  *
- * Compte en attente : `403 regime_en_attente` sur les cinq.
+ * Compte en attente : `403 regime_en_attente` sur les six.
  *
  * ## Ce contrôleur ne filtre rien, et c'est une règle et non un style
  *
@@ -173,6 +175,27 @@ final class ArbreController extends AbstractController
             $cercle,
             $this->vivants,
         ));
+    }
+
+    /**
+     * L'arbre d'une **affiche** : le couple de cette famille, toute son ascendance connue et
+     * sa descendance — § 5.4 bis.
+     *
+     * Même porte que la fiche de famille : hors du périmètre du lecteur, `404`. Le cercle et
+     * la réciprocité s'appliquent dans {@see NormaliseurDAffiche}, personne par personne,
+     * comme sur les fiches — jamais ici.
+     */
+    #[Route('/api/arbre/familles/{id}/affiche', name: 'tree_affiche', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function affiche(int $id, NormaliseurDAffiche $normaliseur): JsonResponse
+    {
+        $famille = $this->lecture->famille($id);
+        $cercle = $this->cercles->pour($this->lecteurs->courant());
+
+        if (null === $famille || !$this->famillePerimetre($famille, $cercle)) {
+            throw new NotFoundException();
+        }
+
+        return new JsonResponse($normaliseur->affiche($famille, $cercle, $this->vivants));
     }
 
     /**
