@@ -353,7 +353,13 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
             <p class="m-0 text-xs text-attenue" data-resume>
               {{ affiche.chiffres.ancetres }} ancêtres · taille naturelle {{ cotesLisibles({ largeur: affiche.scene.largeur, hauteur: affiche.scene.hauteur }) }}<template v-if="formatChoisi && pageSortie"> · page {{ cotesLisibles(pageSortie) }}</template>
             </p>
-            <div ref="apercu" class="w-full rounded-champ border border-ligne bg-white shadow-panneau [&>svg]:block [&>svg]:h-auto [&>svg]:w-full" data-apercu />
+            <!-- Le dessin tient dans le cadre dans les deux sens : un sablier dense est plus
+                 haut que large, un éventail plus large que haut. -->
+            <div
+              ref="apercu"
+              class="w-full [&>svg]:mx-auto [&>svg]:block [&>svg]:h-auto [&>svg]:max-h-[70dvh] [&>svg]:w-auto [&>svg]:max-w-full [&>svg]:rounded-champ [&>svg]:border [&>svg]:border-ligne [&>svg]:shadow-panneau"
+              data-apercu
+            />
           </template>
         </section>
       </div>
