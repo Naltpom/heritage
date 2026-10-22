@@ -38,8 +38,9 @@ filtre rien.
   de PyMuPDF, flottants simple précision compris —, jamais dans le DOM : le placement est
   déterministe, et le même sous vitest et dans tous les navigateurs.
 - Sur un arbre fictif, la sortie TypeScript et la sortie Python coïncident au millième de
-  millimètre élément par élément ; les écarts restants sont nommés (ci-dessous). Les
-  dimensions de l'affiche Python sur cet arbre sont figées dans un test.
+  millimètre élément par élément, pour l'éventail comme pour les deux sabliers ; les écarts
+  restants sont nommés (ci-dessous). Les dimensions des affiches Python sur cet arbre sont
+  figées dans les tests.
 
 ### Les polices sont dans le dépôt
 
@@ -98,8 +99,8 @@ d'origine, qui aurait effacé les dates d'ancêtres du XVIIIᵉ siècle sans act
 ## Conséquences
 
 - Une route de lecture de plus dans `Tree`, avec sa liste blanche testée.
-- Le sablier et le sablier dense de l'affiche d'origine restent à porter sur la même
-  scène ; la modale les annonce.
+- Trois vues, comme l'affiche d'origine : l'éventail, le sablier et le sablier dense,
+  sur la même scène et les mêmes boîtes de descendants.
 - Le test de fidélité tient à l'arbre fictif (`app/src/affiche/essai/arbreFictif.ts`) :
   changer le générateur oblige à refaire la mesure contre le script Python, qui vit hors du
   dépôt.
