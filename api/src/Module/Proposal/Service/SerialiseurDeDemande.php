@@ -703,6 +703,10 @@ final readonly class SerialiseurDeDemande
                     ? $lien->getFamilyLabel()
                     : $this->masques->libelleDeFamille($lien->getFamilyId(), $lien->getFamilyLabel()),
                 'marriage' => $this->normaliseur->dateAvecTexte($lien->getMarriage()),
+                // La nature telle que le lien la porte (ADR 0020), `null` compris : c'est
+                // ce que l'auteur a dit — l'écran lit « mariés » dans une date quand il y
+                // en a une, comme la validation l'écrira.
+                'married' => $lien->isMarried(),
                 'divorced' => $lien->isDivorced(),
                 'divorce' => $lien->getDivorce()->isKnown()
                     ? $this->normaliseur->dateAvecTexte($lien->getDivorce())

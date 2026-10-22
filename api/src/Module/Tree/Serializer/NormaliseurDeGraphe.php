@@ -267,14 +267,14 @@ final readonly class NormaliseurDeGraphe
     }
 
     /**
-     * @param array<string, PersonnePlacable>                                                                                                                   $placables
-     * @param array<string, NoeudProposePlacable>                                                                                                               $proposes
-     * @param array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, bool>} $libelles
-     * @param array<int, array{parente: ParenteDansLArbre, pont: string|null}>                                                                                  $parentes
-     * @param array<string, string>                                                                                                                             $renommage
-     * @param array<int, true>                                                                                                                                  $avecImage
-     * @param array<int, string>                                                                                                                                $vignettes          personne visible → URL de la vignette de son portrait
-     * @param array<int, string>                                                                                                                                $naissancesReduites vivant vu partiellement → sa naissance compacte réduite (ADR 0016)
+     * @param array<string, PersonnePlacable>                                                                                                                                                        $placables
+     * @param array<string, NoeudProposePlacable>                                                                                                                                                    $proposes
+     * @param array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, array{divorced: bool, married: bool|null}>} $libelles
+     * @param array<int, array{parente: ParenteDansLArbre, pont: string|null}>                                                                                                                       $parentes
+     * @param array<string, string>                                                                                                                                                                  $renommage
+     * @param array<int, true>                                                                                                                                                                       $avecImage
+     * @param array<int, string>                                                                                                                                                                     $vignettes          personne visible → URL de la vignette de son portrait
+     * @param array<int, string>                                                                                                                                                                     $naissancesReduites vivant vu partiellement → sa naissance compacte réduite (ADR 0016)
      *
      * @return list<array<string, mixed>>
      */
@@ -328,7 +328,11 @@ final readonly class NormaliseurDeGraphe
                     'h' => $noeud->h,
                     // `.ar.divorce` est **conservée** au rendu (§ 7.3 du dossier) : un
                     // divorce est une information, pas une distance.
-                    'divorced' => $libelles['familles'][$familleId] ?? false,
+                    'divorced' => $libelles['familles'][$familleId]['divorced'] ?? false,
+                    // La nature de l'union (ADR 0020) : de quoi dire « divorcés » ou
+                    // « séparés » sans ouvrir la fiche. Elle ne change **aucun** tracé —
+                    // une union libre se dessine comme un mariage, sans pointillés (§ 7.3).
+                    'married' => $libelles['familles'][$familleId]['married'] ?? null,
                 ];
             }
         }
@@ -583,6 +587,8 @@ final readonly class NormaliseurDeGraphe
             'w' => $noeud->w,
             'h' => $noeud->h,
             'divorced' => false,
+            // Un losange provisoire n'est l'union de personne encore : rien à en dire.
+            'married' => null,
         ];
     }
 
@@ -627,8 +633,8 @@ final readonly class NormaliseurDeGraphe
     }
 
     /**
-     * `display_name` et `branch` des 274 personnes, `divorced` des 103 familles — en
-     * deux requêtes scalaires, pas 377 hydratations d'entité.
+     * `display_name` et `branch` des 274 personnes, `divorced` et `married` des 103
+     * familles — en deux requêtes scalaires, pas 377 hydratations d'entité.
      *
      * Ce sont les **seules** colonnes que le jeu de placement ne porte pas déjà :
      * `sex`, `generation` et l'état vivant viennent de {@see PersonnePlacable}, ce qui
@@ -638,7 +644,7 @@ final readonly class NormaliseurDeGraphe
      *                                         du lecteur, vides quand il regarde depuis la
      *                                         racine — la colonne suffit alors
      *
-     * @return array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, bool>}
+     * @return array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, array{divorced: bool, married: bool|null}>}
      */
     private function libelles(array $branchesVues = []): array
     {
@@ -680,9 +686,15 @@ final readonly class NormaliseurDeGraphe
 
         $familles = [];
 
-        foreach ($this->connexion->fetchAllAssociative('SELECT id, divorced FROM tree_family') as $ligne) {
+        foreach ($this->connexion->fetchAllAssociative('SELECT id, divorced, married FROM tree_family') as $ligne) {
             if (is_numeric($ligne['id'])) {
-                $familles[(int) $ligne['id']] = (bool) $ligne['divorced'];
+                $familles[(int) $ligne['id']] = [
+                    'divorced' => (bool) $ligne['divorced'],
+                    // Le pilote rend le booléen sous une forme propre à chaque moteur, d'où
+                    // le `(bool)` ; mais `null` doit rester `null` — « on ne sait pas », pas
+                    // « union libre », ce que le `(bool)` seul en aurait fait.
+                    'married' => null === $ligne['married'] ? null : (bool) $ligne['married'],
+                ];
             }
         }
 

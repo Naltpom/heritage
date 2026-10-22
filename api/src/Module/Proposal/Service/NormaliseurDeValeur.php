@@ -45,15 +45,19 @@ final class NormaliseurDeValeur
     /**
      * JSON venu d'une requête ou de `JSONB` → valeur PHP prête pour le port.
      *
-     * @param string $chemin le chemin du champ dans le corps, pour que la 422 se pose
-     *                       sur la bonne ligne du formulaire (`ops[0].newValue`)
+     * @param string $chemin   le chemin du champ dans le corps, pour que la 422 se pose
+     *                         sur la bonne ligne du formulaire (`ops[0].newValue`)
+     * @param bool   $nulAdmis `null` est une valeur du champ — un booléen **tri-état**,
+     *                         `married` seul aujourd'hui ({@see SurfaceEditable::admetNul()}).
+     *                         Sans effet hors de `Booleen` : `Texte` et `Entier` l'admettent
+     *                         déjà, les blocs date le refusent toujours
      */
-    public function versPhp(ValueKind $kind, mixed $json, string $chemin): mixed
+    public function versPhp(ValueKind $kind, mixed $json, string $chemin, bool $nulAdmis = false): mixed
     {
         return match ($kind) {
             ValueKind::Texte => $this->texte($json, $chemin),
             ValueKind::Entier => $this->entier($json, $chemin),
-            ValueKind::Booleen => $this->booleen($json, $chemin),
+            ValueKind::Booleen => $nulAdmis && null === $json ? null : $this->booleen($json, $chemin),
             ValueKind::Enum => $this->texte($json, $chemin),
             ValueKind::DateIncertaine => $this->blocDate($json, $chemin),
             // Les cinq formes composées (référence, lien, média, citation, note) ne sont
@@ -127,9 +131,17 @@ final class NormaliseurDeValeur
     /**
      * Le rendu d'une valeur en une ligne de français, pour `libelleDiff` :
      * « Naissance : 1987 → entre 1901 et 1909, à Saule ».
+     *
+     * `$champ` ne sert qu'à la nature d'une union (ADR 0020), le seul booléen tri-état :
+     * son `null` n'est pas « (vide) » mais « on ne sait pas », et son `false` est une
+     * union libre — « Mariés : non » se lirait comme un oubli.
      */
-    public function enUneLigne(ValueKind $kind, mixed $json): string
+    public function enUneLigne(ValueKind $kind, mixed $json, ?string $champ = null): string
     {
+        if ('married' === $champ && (null === $json || \is_bool($json))) {
+            return self::natureEnClair($json);
+        }
+
         if (ValueKind::DateIncertaine === $kind && \is_array($json)) {
             $texte = $this->reconstruire($json)->format();
             $texte = '' === $texte ? '(inconnue)' : $texte;
@@ -146,6 +158,20 @@ final class NormaliseurDeValeur
             false === $json => 'non',
             \is_scalar($json) => (string) $json,
             default => json_encode($json, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE),
+        };
+    }
+
+    /**
+     * La nature d'une union en mots : « oui », « non (union libre) », « on ne sait pas ».
+     * Publique pour la révision d'un lien `conjoint_de`, qui la journalise dans les mêmes
+     * mots que le diff qui l'a fait valider.
+     */
+    public static function natureEnClair(?bool $marie): string
+    {
+        return match ($marie) {
+            true => 'oui',
+            false => 'non (union libre)',
+            null => 'on ne sait pas',
         };
     }
 

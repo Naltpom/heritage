@@ -117,6 +117,7 @@ final readonly class VueDeLArbrePourLAssistant implements ArbrePourLAssistant
                 $union->getMarriage(),
                 $union->isDivorced(),
                 array_map(fn (Child $c): PersonneDeLArbre => $this->seule($c->getPerson()), $enfantsParFamille[$familleId] ?? []),
+                marie: $union->isMarried(),
             );
         }
 

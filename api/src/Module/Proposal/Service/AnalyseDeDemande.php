@@ -361,6 +361,17 @@ final readonly class AnalyseDeDemande
         $uneValeurABouge = false;
         $uneVersionABouge = false;
 
+        // La nature que la demande donne à chaque union qu'elle requalifie (ADR 0020) : c'est
+        // elle, et non celle de la fiche, qui dit si la rupture proposée est un divorce.
+        $naturesProposees = [];
+
+        foreach ($ops as $op) {
+            if (SubjectKind::Famille === $op->getSubjectKind() && 'married' === $op->getField() && null !== $op->getSubjectId()) {
+                $nature = $op->getNewValue();
+                $naturesProposees[$op->getSubjectId()] = \is_bool($nature) ? $nature : null;
+            }
+        }
+
         foreach ($ops as $op) {
             $sujet = $op->getSubjectId();
 
@@ -413,7 +424,11 @@ final readonly class AnalyseDeDemande
 
             $uneValeurABouge = $uneValeurABouge || $aBouge;
 
-            $etats[] = new EtatDOp($op, $valeurCourante, $aBouge, $versionABouge, $this->libelle($op, $valeurCourante));
+            $nature = SubjectKind::Famille === $op->getSubjectKind()
+                ? [\array_key_exists($sujet, $naturesProposees) ? $naturesProposees[$sujet] : self::nature($cible->valeurs['married'] ?? null)]
+                : null;
+
+            $etats[] = new EtatDOp($op, $valeurCourante, $aBouge, $versionABouge, $this->libelle($op, $valeurCourante, $nature));
         }
 
         /** @var array<string, EtatCible> $presentes */
@@ -593,8 +608,23 @@ final readonly class AnalyseDeDemande
         return $stocke;
     }
 
-    /** « Naissance : 1987 → entre 1901 et 1909 » (§ 6.7). */
-    private function libelle(ChangeRequestOp $op, mixed $valeurCourante): string
+    private static function nature(mixed $valeur): ?bool
+    {
+        return \is_bool($valeur) ? $valeur : null;
+    }
+
+    /**
+     * « Naissance : 1987 → entre 1901 et 1909 » (§ 6.7).
+     *
+     * `$nature` porte, quand l'op vise une famille qu'on a pu lire, la nature de l'union
+     * **après** la demande — dans un tableau à un élément, parce que `null` y est une
+     * réponse (« on ne sait pas ») et non l'absence de réponse. Elle fait dire
+     * « Divorcés » ou « Séparés » à la rupture, au lieu de l'« Union rompue » neutre
+     * d'une cible qu'on n'a pas lue (ADR 0020).
+     *
+     * @param array{0: bool|null}|null $nature
+     */
+    private function libelle(ChangeRequestOp $op, mixed $valeurCourante, ?array $nature = null): string
     {
         if (OpKind::SuppressionPersonne === $op->getOpKind()) {
             // La phrase que l'administrateur lit avant de cliquer : « Suppression de la
@@ -630,9 +660,9 @@ final readonly class AnalyseDeDemande
 
         return \sprintf(
             '%s : %s → %s',
-            $this->surface->libelle($champ),
-            $this->normaliseur->enUneLigne($op->getValueKind(), $op->getOldValue()),
-            $this->normaliseur->enUneLigne($op->getValueKind(), $op->getNewValue()),
+            null === $nature ? $this->surface->libelle($champ) : $this->surface->libelleSelonLaNature($champ, $nature[0]),
+            $this->normaliseur->enUneLigne($op->getValueKind(), $op->getOldValue(), $champ),
+            $this->normaliseur->enUneLigne($op->getValueKind(), $op->getNewValue(), $champ),
         );
     }
 }

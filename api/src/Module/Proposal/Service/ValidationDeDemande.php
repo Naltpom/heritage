@@ -102,6 +102,9 @@ final readonly class ValidationDeDemande
         private iterable $applicateurs,
         #[AutowireIterator('app.proposal.applicateur_de_demande')]
         private iterable $applicateursDeDemande = [],
+        // Dernier et facultatif : la table est sans état, et les tests qui montent ce
+        // service à la main n'ont pas à la fournir.
+        private SurfaceEditable $surface = new SurfaceEditable(),
     ) {
     }
 
@@ -523,11 +526,13 @@ final readonly class ValidationDeDemande
                 $op->getValueKind(),
                 $op->getNewValue(),
                 'ops.'.$champ,
+                // « On ne sait pas » est une valeur de la nature d'une union (ADR 0020).
+                $this->surface->admetNul($op->getSubjectKind(), $champ),
             );
 
             $lots[$cle]['changes'][$champ] = [
-                'avant' => $this->normaliseur->enUneLigne($op->getValueKind(), $op->getOldValue()),
-                'apres' => $this->normaliseur->enUneLigne($op->getValueKind(), $op->getNewValue()),
+                'avant' => $this->normaliseur->enUneLigne($op->getValueKind(), $op->getOldValue(), $champ),
+                'apres' => $this->normaliseur->enUneLigne($op->getValueKind(), $op->getNewValue(), $champ),
             ];
         }
 

@@ -278,6 +278,8 @@ final readonly class OutilsDeConsultation
             // Les dates d'union restent, même conjoint masqué : elles sont à la famille
             // (§ 5.4 du contrat), et la fiche les montre au lecteur.
             'mariage' => OutilsDeLAssistant::dateLisible($u->mariage),
+            // Mariés (même sans date), union libre, ou on ne sait pas (ADR 0020).
+            'marie' => $u->marie,
             'divorce' => $u->divorce,
             'enfants' => array_map(fn (PersonneDeLArbre $p): array => $this->personne($p, false), $u->enfants),
         ], $fiche->unions);

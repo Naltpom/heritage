@@ -412,7 +412,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         return $identifiants;
     }
 
-    public function porterUnion(int $familleId, UncertainDate $mariage, bool $divorce, UncertainDate $rupture): void
+    public function porterUnion(int $familleId, UncertainDate $mariage, ?bool $marie, bool $divorce, UncertainDate $rupture): void
     {
         $famille = $this->em->find(Family::class, $familleId);
 
@@ -422,7 +422,9 @@ final class EcritureDeLArbrePourProposal implements PortArbre
 
         // Une union sans date reste une union : on pose ce qu'on reçoit, `inconnue`
         // comprise, parce que le demandeur peut vouloir effacer une date qu'il sait fausse.
-        $famille->setMarriage($mariage)->setDivorced($divorce)->setDivorce($rupture)->toucher();
+        // La date **avant** la nature : c'est l'état d'arrivée qui compte, et une date ou un
+        // lieu de mariage tiennent la nature à `true` (ADR 0020, `Family::setMarried()`).
+        $famille->setMarriage($mariage)->setMarried($marie)->setDivorced($divorce)->setDivorce($rupture)->toucher();
 
         $this->em->flush();
     }
@@ -798,6 +800,9 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         if ($ligne instanceof Family) {
             return [
                 'marriage' => $ligne->getMarriage(),
+                // `null` est une valeur, pas une absence : « on ne sait pas » se confronte
+                // à l'`old_value` d'un op comme « oui » et « non » (ADR 0020).
+                'married' => $ligne->isMarried(),
                 'divorced' => $ligne->isDivorced(),
                 'divorce' => $ligne->getDivorce(),
             ];
@@ -1331,9 +1336,20 @@ final class EcritureDeLArbrePourProposal implements PortArbre
      */
     private function ecrireFamille(Family $famille, array $valeurs): void
     {
+        // **La date du mariage avant sa nature**, quel que soit l'ordre des ops — comme
+        // `forcePrivacy` et `privacyNote`, les deux vont par paire. Une date ou un lieu de
+        // mariage tiennent la nature à `true` (`Family::setMarried()`) : « retirer la date
+        // et dire union libre », appliqué dans l'autre ordre, laisserait « mariés », parce
+        // que la nature aurait été écrite sous une date encore présente.
+        if (\array_key_exists('marriage', $valeurs)) {
+            $famille->setMarriage($this->date($valeurs['marriage'], 'marriage'));
+        }
+
         foreach ($valeurs as $champ => $valeur) {
             match ($champ) {
-                'marriage' => $famille->setMarriage($this->date($valeur, 'marriage')),
+                'marriage' => null,
+                // Tri-état : `null` est « on ne sait pas », jamais `false` (ADR 0020).
+                'married' => $famille->setMarried(null === $valeur ? null : (bool) $valeur),
                 'divorced' => $famille->setDivorced((bool) $valeur),
                 'divorce' => $famille->setDivorce($this->date($valeur, 'divorce')),
                 default => throw new \InvalidArgumentException(\sprintf('Champ « %s » hors de la surface éditable d’une famille.', $champ)),
@@ -1769,6 +1785,11 @@ final class EcritureDeLArbrePourProposal implements PortArbre
      * aucune note, citation ni fait. Une famille qui porte la moindre de ces données ne se
      * supprime jamais — c'est alors elle qui fait preuve, et la fiche « fantôme » ne l'est
      * que vide.
+     *
+     * **La nature de l'union (`married`, ADR 0020) n'y compte pas.** Elle qualifie le
+     * couple et rien d'autre : quand on retire un conjoint parce qu'« ils n'étaient pas
+     * unis », la garder ferait d'une famille d'un seul époux un « marié » sans conjoint.
+     * Un mariage daté, lui, reste protégé par sa date.
      */
     private function seraVideSans(Family $famille, ?Person $enfant): bool
     {

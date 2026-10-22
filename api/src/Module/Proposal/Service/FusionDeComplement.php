@@ -786,6 +786,7 @@ final readonly class FusionDeComplement
 
         if (LinkKind::ConjointDe === $source->getKind()) {
             $lien->setMarriage($source->getMarriage());
+            $lien->setMarried($source->isMarried());
             $lien->setDivorced($source->isDivorced());
             $lien->setDivorce($source->getDivorce());
         }

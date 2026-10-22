@@ -155,7 +155,8 @@ final readonly class OutilsDeLAssistant
                                                 'autre' => ['type' => 'string', 'description' => 'Même forme que sujet.'],
                                                 'autre2' => ['type' => 'string', 'description' => 'enfant_de seulement : le second parent, même forme. Quand les deux parents sont nommés, ils vont dans CE lien (autre + autre2), jamais dans deux liens enfant_de séparés.'],
                                                 'mariage' => $date,
-                                                'divorce' => ['type' => 'boolean', 'description' => 'conjoint_de seulement.'],
+                                                'marie' => ['type' => 'boolean', 'description' => 'conjoint_de seulement : true si le document atteste un mariage, même sans date ; false pour une union sans mariage (union libre, PACS). À omettre si on ne sait pas — une date de mariage suffit à dire true.'],
+                                                'divorce' => ['type' => 'boolean', 'description' => 'conjoint_de seulement : l’union a été rompue (divorce ou séparation).'],
                                                 'note' => ['type' => 'string'],
                                             ],
                                             'required' => ['nature', 'sujet', 'autre'],
@@ -284,6 +285,8 @@ final readonly class OutilsDeLAssistant
             'familyId' => $u->familleId,
             'conjoint' => null === $u->conjoint ? null : $this->personne($u->conjoint, false),
             'mariage' => self::dateLisible($u->mariage),
+            // Mariés (même sans date), union libre, ou on ne sait pas (ADR 0020).
+            'marie' => $u->marie,
             'divorce' => $u->divorce,
             'enfants' => array_map(fn (PersonneDeLArbre $p): array => $this->personne($p, false), $u->enfants),
         ], $fiche->unions);

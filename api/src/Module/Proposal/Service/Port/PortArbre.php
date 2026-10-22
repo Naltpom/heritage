@@ -311,8 +311,12 @@ interface PortArbre
      * **Toutes facultatives : une union sans date reste une union** (§ 6.4 du dossier).
      * Une date inconnue s'exprime par un `UncertainDate::inconnue()`, jamais par
      * l'absence d'appel : le demandeur peut vouloir effacer une date qu'il sait fausse.
+     *
+     * `$marie` est la nature de l'union (ADR 0020) : `true` mariés, `false` union libre,
+     * `null` on ne sait pas. `Tree` la pose **après** la date, et une date ou un lieu de
+     * mariage l'emportent sur elle : un mariage daté ou situé est un mariage.
      */
-    public function porterUnion(int $familleId, UncertainDate $mariage, bool $divorce, UncertainDate $rupture): void;
+    public function porterUnion(int $familleId, UncertainDate $mariage, ?bool $marie, bool $divorce, UncertainDate $rupture): void;
 
     /**
      * Rattache un enfant à une famille — passe 5 du § 9.5.

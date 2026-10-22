@@ -1433,7 +1433,8 @@ famille par alliance, famille, personne proposée, famille provisoire, et l'ego.
       "y": -554,
       "w": 22,
       "h": 14,
-      "divorced": false
+      "divorced": false,
+      "married": true
     },
     {
       "id": "#12/p1",
@@ -1469,7 +1470,8 @@ famille par alliance, famille, personne proposée, famille provisoire, et l'ego.
       "y": -704,
       "w": 22,
       "h": 14,
-      "divorced": false
+      "divorced": false,
+      "married": null
     }
   ],
   "aretes": [
@@ -1638,6 +1640,11 @@ blanche, donc strictement moins d'information.
 - `genre` vaut `"union"` ou `"filiation"`, comme dans `graphe.json`. `divorce` n'existe que
   sur les arêtes d'union et porte `tree_family.divorced` : c'est ce qui allume `.ar.divorce`,
   conservée (ADR 0007).
+- Un nœud de famille porte `divorced` et **`married`**, la nature de l'union
+  ([ADR 0020](adr/0020-nature-de-l-union.md)) : `true`, `false` ou `null` — `null` aussi sur un
+  losange provisoire (`#12/f1`), qui n'est l'union de personne encore. Elle ne change **aucun**
+  tracé : une union libre se dessine comme un mariage, sans pointillés ; elle sert à dire
+  « divorcés » ou « séparés ».
 
 #### L'`ETag` — comment le client s'en sert
 
@@ -1832,6 +1839,7 @@ la référence de forme.
         "place": "Saule, Ombrage, Sylvanie",
         "texte": "23 septembre 1927"
       },
+      "married": true,
       "divorced": false,
       "divorce": null,
       "version": 3,
@@ -2035,6 +2043,7 @@ demande (§ 5.7). Une famille de l'arbre d'un autre compte rend `404` (ADR 0003,
     "place": "Saule, Ombrage, Sylvanie",
     "texte": "23 septembre 1927"
   },
+  "married": true,
   "divorced": false,
   "divorce": null,
   "generation": -4,
@@ -2057,6 +2066,14 @@ Si l'un des époux est vivant hors cercle, son objet est réduit à
 sans contrôle de cercle). **Les dates d'union
 restent visibles** : elles appartiennent à la famille, pas à la personne — et une union dont
 un membre est masqué reste une union, sans quoi la fratrie devient fausse (ADR 0003).
+
+**`married` est la nature de l'union** ([ADR 0020](adr/0020-nature-de-l-union.md)), toujours
+émise, `null` compris : `true` mariés — daté ou non —, `false` union sans mariage (union
+libre, PACS), `null` on ne sait pas. Une date ou un lieu de mariage la font toujours `true`
+(`ck_tree_family_mariage_coherent`). `divorced` reste **toute** rupture : le front dit
+« divorcés » quand `married` est vrai, « séparés » sinon. Les unions d'une fiche de personne
+(§ 5.3, `unions[].married`) portent la même clé, sous la même règle, et elle reste visible
+quand le conjoint est masqué — comme les dates.
 
 ### 5.4 bis L'arbre d'une affiche
 
@@ -2594,6 +2611,21 @@ Règles, toutes vérifiables :
   ni `bestQuay`, ni `citationCount`, ni `displayName`, ni `searchKey`, ni `version`** : ce
   sont des colonnes dérivées, écrites par un service de `Tree` (§ 3.1). Une demande qui les
   vise est un malentendu, pas une contribution.
+- La surface éditable d'une **famille** (`modification_famille`) est exactement : `marriage`,
+  `married`, `divorced`, `divorce`. **`married` est le seul booléen tri-état** de la surface
+  ([ADR 0020](adr/0020-nature-de-l-union.md)) : `valueKind: "booleen"`, et `oldValue` /
+  `newValue` valent `true` (mariés), `false` (union libre) ou `null` (on ne sait pas). `null`
+  reste refusé sur tout autre booléen ⇒ `422`.
+  - **Un mariage daté ou situé est un mariage.** Une demande qui pose une date ou un lieu de
+    mariage sur une union de nature **inconnue**, sans op `married`, reçoit l'op
+    `married : null → true` — au rang suivant, avec la `baseVersion` de l'op de date. Il se
+    lit dans le diff (« Mariés : on ne sait pas → oui »), se journalise dans la révision et se
+    confronte au rejeu : une union dite libre entre-temps rend la demande caduque.
+  - Une nature qui **contredit** la date — « union libre » ou « on ne sait pas » sous une date
+    ou un lieu de mariage —, ou une date posée sur une union enregistrée **libre** sans op
+    `married` qui la requalifie ⇒ `422` `champs.ops`.
+  - Le `libelleDiff` d'une rupture suit la nature de l'union **après** la demande :
+    « Divorcés » / « Divorce » quand elle est mariée, « Séparés » / « Séparation » sinon.
 - `targetKind` / `targetId` sont dénormalisés depuis les ops et servent à filtrer la file
   sans jointure (§ 5.1). Ils doivent être cohérents avec l'op de plus petit `seq`, sinon
   `422`.
@@ -2640,6 +2672,7 @@ référence provisoire `#p1`, unique dans la demande (§ 9.5).
         "min": "1927-09-23", "max": "1927-09-23",
         "place": "Saule, Ombrage, Sylvanie"
       },
+      "married": true,
       "divorced": false,
       "divorce": null,
       "note": "date du livret"
@@ -2674,9 +2707,15 @@ Règles :
 - Une filiation désigne **soit** `familyId` (un couple existant), **soit** `otherPersonId`
   (+ `other2PersonId` pour le second parent). Jamais les deux
   (`ck_prp_link_famille_filiation`).
-- `marriage`, `divorce`, `divorced` ne sont acceptés que sur `conjoint_de`
+- `marriage`, `married`, `divorce`, `divorced` ne sont acceptés que sur `conjoint_de`
   (`ck_prp_link_dates_union`) ⇒ `422` sinon. **Toutes facultatives : une union sans date reste
   une union** (§ 6.4 du dossier).
+- `married` est la nature de l'union ([ADR 0020](adr/0020-nature-de-l-union.md)) : `true`
+  mariés — même sans date —, `false` union libre, absent ou `null` on ne sait pas. **Un mariage
+  daté ou situé est un mariage** : un lien qui porte une date ou un lieu de mariage est
+  enregistré `married: true` ; `married: false` sous une date ⇒ `422` `champs.liens[n].married`.
+  `divorced` reste toute rupture, divorce ou séparation. Les liens rendus par une demande
+  (§ 6.5, § 6.7, § 6.10) portent `married`, `null` compris.
 - **La demande ne décrit aucune famille.** Il n'existe pas de brouillon de famille : « la
   demande décrit l'intention (« conjoint de X »), le service en déduit les familles à créer au
   moment de la validation » (§ 6.4 du dossier, § 9.5). Un front qui enverrait un `familleRef`
@@ -2828,6 +2867,7 @@ demande (§ 6.3 bis) ; jamais un `*DraftRef`, qui n'aurait aucun brouillon à d�
         "min": "1934-03-09", "max": "1934-03-09",
         "place": "Charmille, Ombrage, Sylvanie"
       },
+      "married": true,
       "divorced": true,
       "divorce": {
         "raw": "1942", "qualifier": "annee",
@@ -3506,6 +3546,7 @@ l'arbre d'aujourd'hui, qui est la raison même de la reprise.
       "familyId": null,
       "familyLabel": null,
       "marriage": { "raw": "23 SEP 1927", "qualifier": "exacte", "min": "1927-09-23", "max": "1927-09-23", "place": "Saule, Ombrage, Sylvanie", "texte": "23 septembre 1927" },
+      "married": true,
       "divorced": false,
       "divorce": null,
       "siblingOrder": null,
@@ -4476,6 +4517,7 @@ règle de reprise est plus simple qu'elle n'en a l'air :
       "subjectDraftRef": "#p1",
       "otherPersonId": 55,
       "marriage": { "raw": "23 SEP 1927", "qualifier": "exacte", "min": "1927-09-23", "max": "1927-09-23", "place": "Saule, Ombrage, Sylvanie" },
+      "married": true,
       "divorced": false,
       "divorce": null,
       "note": "date du livret"
@@ -5962,6 +6004,7 @@ exclu »). Deux lecteurs, la même route `GET /api/arbre/personnes/202`, le mêm
         "place": "Sorbière, Fougerie, Florie",
         "texte": "26 mai 1962"
       },
+      "married": true,
       "divorced": false,
       "divorce": null,
       "enfants": [

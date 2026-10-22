@@ -149,6 +149,19 @@ class DraftLink
     #[ORM\Embedded(class: UncertainDate::class, columnPrefix: 'marriage_')]
     private UncertainDate $marriage;
 
+    /**
+     * La nature de l'union proposée (ADR 0020) : `true` mariés, `false` union libre,
+     * `null` on ne sait pas. Ne concerne que `conjoint_de` (`ck_prp_link_dates_union`).
+     *
+     * Pas de normalisation ici, contrairement à `Tree\Family` : le lien est ce que l'auteur
+     * a écrit, et c'est `ConstructeurDeCreation` qui le met en règle au dépôt. Un lien
+     * déposé avant l'ADR porte `null` sous une date — l'entité `Family` le normalisera à la
+     * validation.
+     */
+    #[ORM\Column(nullable: true)]
+    private ?bool $married = null;
+
+    /** Toute rupture, divorce ou séparation — {@see $married} dit laquelle. */
     #[ORM\Column(options: ['default' => false])]
     private bool $divorced = false;
 
@@ -397,6 +410,29 @@ class DraftLink
         $this->marriage = $marriage;
 
         return $this;
+    }
+
+    public function isMarried(): ?bool
+    {
+        return $this->married;
+    }
+
+    public function setMarried(?bool $married): self
+    {
+        $this->married = $married;
+
+        return $this;
+    }
+
+    /**
+     * La nature que la validation écrira : celle du lien, sauf si sa date ou son lieu de
+     * mariage la tranchent — un mariage daté ou situé est un mariage (ADR 0020). C'est
+     * la règle de `Tree\Family`, relue ici pour que la révision dise ce que l'arbre
+     * porte, y compris pour un lien déposé avant que la nature existe.
+     */
+    public function natureEcrite(): ?bool
+    {
+        return $this->marriage->estRenseignee() ? true : $this->married;
     }
 
     public function isDivorced(): bool

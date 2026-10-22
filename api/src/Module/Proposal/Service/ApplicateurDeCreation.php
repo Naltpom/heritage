@@ -427,7 +427,7 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
     private function porterLeLien(DraftLink $lien, array $carte, array $resolus, int $famille): EcritureDeRevision
     {
         if (LinkKind::ConjointDe === $lien->getKind()) {
-            $this->arbre->porterUnion($famille, $lien->getMarriage(), $lien->isDivorced(), $lien->getDivorce());
+            $this->arbre->porterUnion($famille, $lien->getMarriage(), $lien->isMarried(), $lien->isDivorced(), $lien->getDivorce());
 
             return new EcritureDeRevision(
                 SubjectKind::Famille,
@@ -436,6 +436,9 @@ final readonly class ApplicateurDeCreation implements ApplicateurDeDemande
                 RevisionOperation::LienAjoute,
                 [
                     'marriage' => ['avant' => null, 'apres' => $lien->getMarriage()->format()],
+                    // Ce que l'arbre porte désormais, dans les mots du diff : un lien déposé
+                    // avant l'ADR 0020 porte `null` sous une date, et `Tree` l'a écrit `true`.
+                    'married' => ['avant' => null, 'apres' => NormaliseurDeValeur::natureEnClair($lien->natureEcrite())],
                     'divorced' => ['avant' => null, 'apres' => $lien->isDivorced()],
                 ],
             );
