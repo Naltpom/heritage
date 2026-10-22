@@ -274,7 +274,7 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
 
       <div class="grid min-h-0 flex-1 grid-cols-[17.5rem_minmax(0,1fr)] overflow-hidden max-md:grid-cols-1 max-md:overflow-y-auto">
         <!-- Les réglages -->
-        <form class="flex flex-col gap-4 overflow-y-auto border-r border-ligne px-5 py-4 max-md:border-r-0 max-md:border-b max-md:px-4" @submit.prevent>
+        <form class="flex flex-col gap-4 border-r border-ligne px-5 py-4 md:overflow-y-auto max-md:border-r-0 max-md:border-b max-md:px-4" @submit.prevent>
           <p class="m-0 text-[13px] leading-relaxed text-attenue">
             Le couple au centre, ses ascendants au-dessus, tous ses descendants en dessous.
           </p>
@@ -349,7 +349,8 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
         </form>
 
         <!-- L'aperçu -->
-        <section class="flex min-h-[18rem] flex-col gap-2 overflow-auto bg-fond p-4" aria-label="Aperçu de l’affiche">
+        <!-- Sur téléphone, réglages et aperçu défilent ensemble ; sur ordinateur, chacun dans sa colonne. -->
+        <section class="flex min-h-[18rem] flex-col gap-2 bg-fond p-4 md:overflow-auto" aria-label="Aperçu de l’affiche">
           <p v-if="etat.etat === 'lecture'" class="m-auto text-sm text-attenue" role="status">Lecture de l’arbre et des polices…</p>
           <MessageErreur v-else-if="etat.etat === 'erreur'" :erreur="etat.erreur" titre="L’affiche n’a pas pu être préparée." @action="familleId !== null && charger(familleId)" />
           <p v-else-if="etat.etat === 'pret' && epoux === null" class="m-auto text-sm text-attenue">
