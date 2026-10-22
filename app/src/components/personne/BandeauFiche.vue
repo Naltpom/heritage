@@ -29,9 +29,10 @@
  * dans la page, qui pose **les mêmes** icônes dans la barre fixe du téléphone. Sur
  * mobile, le bandeau n'en montre aucune.
  *
- * Avant elles, l'emplacement `partage` : le bouton « Partager »
- * (`PartageFiche`), lui, reste **sur toutes les largeurs** — sur mobile, il est
- * le seul geste du bandeau, réduit à son icône.
+ * Avant elles, l'emplacement `partage` : les boutons « Générer l'affiche »
+ * (`AfficheFiche`) et « Partager » (`PartageFiche`), eux, restent **sur toutes
+ * les largeurs** — sur mobile, ce sont les seuls gestes du bandeau, réduits à
+ * leur icône.
  *
  * ## Le mode édition
  *

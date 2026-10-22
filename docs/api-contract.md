@@ -1241,6 +1241,7 @@ Module `Tree`.
 | `GET` | `/api/arbre/graphe` | `MEMBRE` | — | `200` § 5.2 · **`304`** | `401` · `403` `regime_en_attente` | — |
 | `GET` | `/api/arbre/personnes/{id}` | `MEMBRE` | — | `200` § 5.3 | `401` · `403` `regime_en_attente` · `404` `introuvable` | — |
 | `GET` | `/api/arbre/familles/{id}` | `MEMBRE` | — | `200` § 5.4 | `401` · `403` `regime_en_attente` · `404` | — |
+| `GET` | `/api/arbre/familles/{id}/affiche` | `MEMBRE` | — | `200` § 5.4 bis | `401` · `403` `regime_en_attente` · `404` | — |
 | `GET` | `/api/arbre/recherche` | `MEMBRE` | `?q=&limite=&vivants=` | `200` § 5.5 | `401` · `403` `regime_en_attente` · `422` `donnees_invalides` | — |
 | `POST` | `/api/arbre/ressemblances` | `MEMBRE` | `{fiche, limite}` § 5.5 bis | `200` § 5.5 bis | `401` · `403` `regime_en_attente` · `422` `donnees_invalides` | — |
 
@@ -2056,6 +2057,130 @@ Si l'un des époux est vivant hors cercle, son objet est réduit à
 sans contrôle de cercle). **Les dates d'union
 restent visibles** : elles appartiennent à la famille, pas à la personne — et une union dont
 un membre est masqué reste une union, sans quoi la fratrie devient fausse (ADR 0003).
+
+### 5.4 bis L'arbre d'une affiche
+
+`GET /api/arbre/familles/28/affiche` — le couple de la famille, **toute son ascendance
+connue** (les deux lignées) et **sa descendance sur six générations**, en une fois : c'est ce
+que dessine l'affiche imprimable de la fiche (bouton « Générer l'affiche »,
+`app/src/affiche/`). Même porte que la fiche de famille : hors du périmètre du lecteur, `404`.
+
+**Pourquoi une route de plus.** Le graphe (§ 5.2) ne porte que l'étiquette mesurée (le
+premier prénom) et la ligne de dates compacte : ni les prénoms entiers, ni les dates en
+clair, ni les mariages. Lire une fiche par personne coûterait deux cents requêtes pour une
+affiche. Cette route sert **l'extrait du graphe** dont l'affiche a besoin, avec ce que les
+fiches en diraient, et rien de plus.
+
+```json
+{
+  "famille": 28,
+  "generationsDeDescendance": 6,
+  "personnes": [
+    {
+      "id": 17,
+      "visibilite": "complete",
+      "givenNames": "Marne Dolomite",
+      "surname": "Sureau",
+      "sex": "feminin",
+      "deceased": true,
+      "vivant": false,
+      "birth": {
+        "raw": "BET 1901 AND 1909", "qualifier": "entre",
+        "min": "1901-01-01", "max": "1909-12-31",
+        "place": "Saule, Ombrage, Sylvanie",
+        "texte": "entre 1901 et 1909"
+      },
+      "death": {
+        "raw": "1987", "qualifier": "annee",
+        "min": "1987-01-01", "max": "1987-12-31",
+        "place": "Charmille, Ombrage, Sylvanie",
+        "texte": "1987"
+      }
+    },
+    {
+      "id": 56,
+      "visibilite": "complete",
+      "givenNames": "Émeri",
+      "surname": "Sarriette",
+      "sex": "masculin",
+      "deceased": true,
+      "vivant": false,
+      "birth": {
+        "raw": "1899", "qualifier": "annee",
+        "min": "1899-01-01", "max": "1899-12-31",
+        "place": null,
+        "texte": "1899"
+      },
+      "death": {
+        "raw": "1980", "qualifier": "annee",
+        "min": "1980-01-01", "max": "1980-12-31",
+        "place": null,
+        "texte": "1980"
+      }
+    },
+    {
+      "id": 64,
+      "visibilite": "restreinte",
+      "displayName": "Personne vivante",
+      "sex": "masculin",
+      "vivant": true
+    }
+  ],
+  "familles": [
+    {
+      "id": 28,
+      "husband": 56,
+      "wife": 17,
+      "marriage": {
+        "raw": "23 SEP 1927", "qualifier": "exacte",
+        "min": "1927-09-23", "max": "1927-09-23",
+        "place": "Saule, Ombrage, Sylvanie",
+        "texte": "23 septembre 1927"
+      },
+      "divorced": false,
+      "divorce": null,
+      "enfants": [
+        { "personId": 64, "relation": "naissance" }
+      ]
+    }
+  ]
+}
+```
+
+Lecture, point par point :
+
+- **Ce qui est servi.** Les deux époux ; chacun de leurs ancêtres, génération par
+  génération, **une seule fois** même s'il occupe plusieurs places (implexe) ; les enfants
+  du couple, leurs unions — conjoints compris —, les enfants de ces unions, et ainsi de
+  suite jusqu'à `generationsDeDescendance` (les enfants du couple sont la première ; la
+  dernière n'a plus d'unions). Ni les fiches proposées (le calque), ni les autres unions
+  des ancêtres, ni celles des conjoints des descendants : l'affiche ne les dessine pas.
+- **Une filiation par ancêtre.** Quand une personne en a plusieurs, la remontée retient
+  `naissance` d'abord, puis la famille au plus petit identifiant. Une famille d'ascendance
+  ne liste donc que les enfants par lesquels la remontée est passée.
+- **La charge est close** : `husband`, `wife` et `enfants[].personId` ne désignent que des
+  personnes de `personnes` (`null` pour un époux absent ou hors périmètre).
+- **`enfants` est dans l'ordre de l'affiche** : naissance, puis `siblingOrder`, puis
+  identifiant. Il se calcule au serveur parce que la naissance d'un vivant peut arriver
+  réduite au lecteur, et qu'un enfant sans date passerait en dernier. L'ordre relatif d'une
+  fratrie est déjà lisible dans la topologie du graphe (ADR 0016, « Conséquences ») : il
+  n'apprend rien de plus.
+- **Le cercle s'applique personne par personne, comme sur les fiches.** Une personne d'un
+  autre arbre n'est pas servie du tout, et la remontée s'arrête à elle. Un vivant hors
+  cercle — une fiche confidentielle, pour un membre — figure **à sa place**, comme son nœud
+  dans le graphe, réduit à **cinq clés** (`id`, `visibilite`, `displayName` qui vaut le
+  masque, `sex`, `vivant`) : ni nom, ni date, sous aucune clé.
+- **La naissance d'un vivant visible suit la réciprocité** (ADR 0016) : entière quand tout
+  est partagé ; **réduite** quand l'année l'est (`UncertainDate::reduite()` : `raw` à
+  `null`, bornes élargies à l'année ou au mois, qualificatif gardé — c'est la forme que lisent
+  la chronologie et les statistiques) ; bloc `masquee` de la fiche (§ 5.6) quand l'année ne
+  l'est pas, y compris pour une date inconnue.
+- **Les dates d'union restent visibles**, même quand un époux est masqué (§ 5.4).
+  `divorced` et `divorce` disent comment l'union a fini : l'affiche écrit « div. » sous le
+  signe barré, **jamais la date** du divorce.
+- **« Masquer les dates des vivants »**, l'option de l'affiche, n'est pas un filtre de
+  confidentialité : c'est une mise en page, appliquée au dessin, sur des dates que le
+  lecteur voit déjà sur les fiches. Elle ne change rien à cette charge.
 
 ### 5.5 La recherche
 
