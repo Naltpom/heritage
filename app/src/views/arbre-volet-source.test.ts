@@ -165,3 +165,34 @@ describe('le volet de la fiche sur un nœud en attente', () => {
     expect(debut).toBeLessThan(texte.indexOf('Lecture de la fiche…'))
   })
 })
+
+describe('la bascule « En attente de validation » (demande du 22/10/2026)', () => {
+  it('est allumée par défaut, retenue comme les autres, et dans « Qui apparaît »', async () => {
+    const texte = await source()
+
+    expect(texte).toContain('const avecEnAttente = ref(lirePreference(CLE_EN_ATTENTE, true))')
+    expect(corpsDe(texte, 'basculerEnAttente')).toContain('ecrirePreference(CLE_EN_ATTENTE, avec)')
+    const bascule = baliseAvec(texte, 'data-filtre-en-attente')
+    expect(bascule).toContain('<InterrupteurFiltre')
+    expect(bascule).toContain(':actif="avecEnAttente"')
+    expect(bascule).toContain('@basculer="basculerEnAttente(!avecEnAttente)"')
+    const section = texte.slice(texte.indexOf('aria-labelledby="filtres-qui"'), texte.indexOf('aria-labelledby="filtres-affichage"'))
+    expect(section).toContain('data-filtre-en-attente')
+  })
+
+  it('retire le calque avant tout le reste de la disposition, et nomme la disposition gardée', async () => {
+    const texte = await source()
+    const disposer = corpsDe(texte, 'disposer')
+
+    expect(disposer).toContain('sansDemandesEnAttente(recu)')
+    expect(disposer.indexOf('sansDemandesEnAttente(recu)')).toBeLessThan(disposer.indexOf('sansFamillesParAlliance('))
+    expect(corpsDe(texte, 'cleDeLaDisposition')).toContain('avecEnAttente: avecEnAttente.value')
+  })
+
+  it('se rallume pour montrer une proposition : déposée à l’instant, ou « Voir dans l’arbre »', async () => {
+    const texte = await source()
+
+    expect(corpsDe(texte, 'surDepot')).toContain('basculerEnAttente(true)')
+    expect(corpsDe(texte, 'montrerNoeud')).toContain('basculerEnAttente(true)')
+  })
+})

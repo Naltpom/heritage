@@ -938,7 +938,8 @@ export class CompteEnBus {
  *    rangé au milieu de ses liens, son ordre intérieur gardé ;
  *  - échanger deux blocs voisins ;
  *  - échanger deux frères et sœurs voisins, enfants des mêmes parents et de nul autre ;
- *  - retourner un foyer.
+ *  - retourner un foyer — seul, ou avec les fratries de ses unions échangées sous lui (le
+ *    foyer d'un remarié : ses deux lits changent de côté avec leurs unions).
  *
  * Ce qu'on minimise : les croisements COMME LES TRACE LE ROUTAGE (`compterBande` — des
  * barres de fratrie sur des pistes, des unions qui contournent), puis, à égalité, le compte
@@ -1107,9 +1108,79 @@ export function affiner(s: Structure, c: Couches, o: OptionsDOrdre, tours = 8): 
       if (ecart < 0 || (ecart === 0 && (rapproche < -1e-9 || (Math.abs(rapproche) <= 1e-9 && oblique < 0)))) {
         bus.garder()
         change = true
-      } else bus.annuler(() => (c.retourne[fo] = !c.retourne[fo]))
+        continue
+      }
+      // Retourné seul, le foyer d'un remarié croise : ses unions changent de côté, et les
+      // fratries restent où elles étaient. Retourné AVEC elles — les fratries de ses unions
+      // échangées sous lui —, il peut ne plus rien croiser (relevé sur l'arbre réel : un
+      // arrière-grand-père, ses deux épouses, et sous lui les deux lits, chacun du mauvais
+      // côté, le couple de la génération suivante rejeté au bout de la rangée).
+      const lits = litsSousLeFoyer(fo)
+      if (!lits) {
+        bus.annuler(() => (c.retourne[fo] = !c.retourne[fo]))
+        continue
+      }
+      bus.garder()
+      const avecLits = ecart + bus.varier(lits.bouges, lits.appliquer)
+      if (avecLits < 0) {
+        bus.garder()
+        lits.ranger()
+        change = true
+      } else {
+        bus.annuler(lits.defaire)
+        bus.varier([e], () => (c.retourne[fo] = !c.retourne[fo]))
+        bus.garder()
+      }
     }
     return change
+  }
+
+  /**
+   * Les fratries des unions d'un foyer, dans la rangée du dessous : si chacune est d'un seul
+   * tenant et qu'elles se suivent dans l'ordre de leurs unions, de quoi les ranger dans
+   * l'ordre inverse (les positions, puis l'ordre de la rangée, une fois le mouvement gardé).
+   */
+  function litsSousLeFoyer(fo: number): { bouges: number[]; appliquer: () => void; defaire: () => void; ranger: () => void } | null {
+    const foyer = s.foyers[fo]!
+    if (foyer.familles.length < 2) return null
+    const e = c.elementDuFoyer[fo]!
+    const k = c.rangees.indexOf(elements[e]!.rangee)
+    const dessous = c.ordre[k + 1]
+    if (!dessous) return null
+    const rang = new Map(dessous.map((x, i) => [x, i]))
+    // Les familles du foyer, de gauche à droite comme leurs unions avant le retournement.
+    const unionAvant = (f: number): number => {
+      const ep = s.familles[f]!.epoux
+      return ep.reduce((t, u) => t + (c.retourne[fo] ? foyer.membres.length - 1 - s.rangDansFoyer[u]! : s.rangDansFoyer[u]!), 0) / ep.length
+    }
+    // (Le foyer est déjà retourné quand on arrive ici : « avant », c'est l'autre sens.)
+    const familles = [...foyer.familles].sort((a, b) => unionAvant(b) - unionAvant(a))
+    const runs: number[][] = []
+    for (const f of familles) {
+      const els = new Set<number>()
+      for (const x of s.familles[f]!.enfants) {
+        const el = c.factices.get(`${f}|${x}`)?.[0] ?? c.elementDuFoyer[s.foyerDe[x]!]!
+        if (rang.has(el)) els.add(el)
+      }
+      if (!els.size) continue
+      const l = [...els].sort((a, b) => rang.get(a)! - rang.get(b)!)
+      if (rang.get(l[l.length - 1]!)! - rang.get(l[0]!)! + 1 !== l.length) return null
+      runs.push(l)
+    }
+    if (runs.length < 2) return null
+    for (let i = 1; i < runs.length; i++) if (rang.get(runs[i]![0]!)! !== rang.get(runs[i - 1]![runs[i - 1]!.length - 1]!)! + 1) return null
+    const tous = runs.flat()
+    if (new Set(tous).size !== tous.length) return null
+    if (new Set(tous.map((x) => elements[x]!.partie)).size > 1) return null
+    const debut = rang.get(tous[0]!)!
+    const avant = tous.map((x) => pos[x]!)
+    const inverse = [...runs].reverse().flat()
+    return {
+      bouges: tous,
+      appliquer: () => inverse.forEach((x, j) => (pos[x] = debut + j)),
+      defaire: () => tous.forEach((x, j) => (pos[x] = avant[j]!)),
+      ranger: () => dessous.splice(debut, inverse.length, ...inverse),
+    }
   }
 
   /**

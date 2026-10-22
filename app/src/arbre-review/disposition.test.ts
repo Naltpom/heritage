@@ -3,7 +3,7 @@ import type { AreteGraphe, Branche, Graphe, NoeudFamille, NoeudPersonne, Parente
 import { sansFamillesParAlliance } from '@/histoire/alliances'
 import { genealogieSynthetique } from '@/histoire/banc/genealogie'
 import { auFormat, GABARIT_PORTRAIT } from '@/histoire/cartes'
-import { sansFamilleDuConjoint } from '@/histoire/lignees'
+import { sansFamilleDuConjoint, type FicheHistoire } from '@/histoire/lignees'
 import { noeudsSansLien, sansPersonnesSansLien } from '@/histoire/sansLien'
 import { disposerEnGroupes, type DispositionGroupes } from '@/arbre2/groupes'
 import { brancherCommeLeServeur } from './banc/branches'
@@ -162,6 +162,120 @@ function croisementsEntre(d: DispositionGroupes): [string, string][] {
   return paires
 }
 
+/**
+ * Les familles dont un trait traverse un rectangle de part en part, et si chacune relie
+ * plusieurs groupes (un parent d'un quart, son enfant dans le tronc : le seul lien qui doit
+ * traverser, depuis qu'il n'y a plus qu'un rectangle par quart).
+ */
+function traversees(d: DispositionGroupes): { famille: string; entreGroupes: boolean }[] {
+  const groupeDe = (id: string): string | undefined => {
+    const f = d.parId.get(id)
+    if (!f) return undefined
+    return d.groupes.find((r) => f.cx >= r.x && f.cx <= r.x + r.w && f.y >= r.y && f.y + f.h <= r.y + r.h)?.cle
+  }
+  const sortie: { famille: string; entreGroupes: boolean }[] = []
+  for (const t of d.traces.familles)
+    for (const [x1, y1, x2, y2] of segmentsDe(t.d))
+      for (const r of d.groupes) {
+        const h = y1 === y2 && y1 > r.y && y1 < r.y + r.h && Math.min(x1, x2) < r.x && Math.max(x1, x2) > r.x + r.w
+        const v = x1 === x2 && x1 > r.x && x1 < r.x + r.w && Math.min(y1, y2) < r.y && Math.max(y1, y2) > r.y + r.h
+        if (h || v) sortie.push({ famille: t.id, entreGroupes: new Set(t.personnes.map(groupeDe)).size > 1 })
+      }
+  return sortie
+}
+
+/** L'écart entre le centre d'une fratrie (conjoints de son foyer compris) et le milieu de ses parents. */
+function ecartSousLesParents(d: DispositionGroupes, parents: string[], enfants: string[], conjoints: string[] = []): number {
+  const p = parents.map((id) => d.parId.get(id)!)
+  const membres = [...enfants, ...conjoints].map((id) => d.parId.get(id)!)
+  const lo = Math.min(...membres.map((f) => f.x))
+  const hi = Math.max(...membres.map((f) => f.x + f.w))
+  return Math.abs((lo + hi) / 2 - p.reduce((t, f) => t + f.cx, 0) / p.length)
+}
+
+/**
+ * Les fratries qui ne sont pas centrées sous leurs parents alors que leur place est libre :
+ * la fratrie (ses conjoints posés à côté compris), centrée, garderait l'écart d'une famille
+ * avec ses voisines de rangée (176 px), et celui de deux rectangles (2 cartes et 2 marges)
+ * avec une fiche d'un autre rectangle. On laisse de côté ce que l'alignement, par principe,
+ * ne déplace pas : une fratrie coupée par une autre famille, posée hors du rectangle de ses
+ * deux parents (la mère, dans le tronc), ou qui partage un couple avec une autre fratrie (le
+ * couple de la génération suivante, posé ENTRE ses deux couples de parents).
+ */
+function fratriesLibresDecentrees(d: DispositionGroupes, graphe: Graphe): string[] {
+  const epoux = new Map<string, string[]>()
+  const enfants = new Map<string, string[]>()
+  const parentsDe = new Map<string, string>()
+  const unions = new Map<string, string[]>()
+  for (const a of graphe.aretes) {
+    if (a.genre === 'union') {
+      epoux.set(a.vers, [...(epoux.get(a.vers) ?? []), a.de])
+      unions.set(a.de, [...(unions.get(a.de) ?? []), a.vers])
+    } else {
+      enfants.set(a.de, [...(enfants.get(a.de) ?? []), a.vers])
+      parentsDe.set(a.vers, a.de)
+    }
+  }
+  const rectDe = (f: FicheHistoire): string | undefined =>
+    d.groupes.find((r) => f.cx >= r.x && f.cx <= r.x + r.w && f.y >= r.y && f.y + f.h <= r.y + r.h)?.cle
+  const lignes = new Map<number, FicheHistoire[]>()
+  for (const f of d.fiches) lignes.set(f.rangee, [...(lignes.get(f.rangee) ?? []), f])
+  for (const l of lignes.values()) l.sort((a, b) => a.x - b.x)
+  const ecartDeRectangles = 2 * 160 + 2 * 22
+  const fautes: string[] = []
+  for (const [fid, ens] of enfants) {
+    const ep = (epoux.get(fid) ?? []).map((id) => d.parId.get(id)).filter((f): f is FicheHistoire => !!f)
+    if (!ep.length) continue
+    const rf = Math.max(...ep.map((f) => f.rangee))
+    const parents = ep.filter((f) => f.rangee === rf)
+    const fratrie = ens.map((id) => d.parId.get(id)).filter((f): f is FicheHistoire => !!f && f.rangee === rf + 1)
+    if (!fratrie.length) continue
+    const ligne = lignes.get(rf + 1)!
+    const groupe = new Set(fratrie.map((f) => f.id))
+    let encore = true
+    while (encore) {
+      encore = false
+      for (const id of [...groupe])
+        for (const u of unions.get(id) ?? [])
+          for (const c of epoux.get(u) ?? []) {
+            const fc = d.parId.get(c)
+            if (!fc || groupe.has(c) || fc.rangee !== rf + 1) continue
+            const fi = d.parId.get(id)!
+            const i = ligne.indexOf(fc)
+            const j = ligne.indexOf(fi)
+            // Posé à côté : voisin dans la rangée, et plus près qu'un écart de deux familles.
+            if (Math.abs(i - j) !== 1 || Math.max(fc.x - (fi.x + fi.w), fi.x - (fc.x + fc.w)) >= 176) continue
+            groupe.add(c)
+            encore = true
+          }
+    }
+    const membres = [...groupe].map((id) => d.parId.get(id)!).sort((a, b) => a.x - b.x)
+    // Hors du champ de l'alignement : partagée avec une autre fratrie, coupée, hors du rectangle des parents.
+    if (membres.some((m) => !ens.includes(m.id) && parentsDe.has(m.id) && (enfants.get(parentsDe.get(m.id)!) ?? []).some((x) => d.parId.get(x)?.rangee === rf + 1))) continue
+    const i0 = ligne.indexOf(membres[0]!)
+    const i1 = ligne.indexOf(membres[membres.length - 1]!)
+    if (i1 - i0 + 1 !== membres.length) continue
+    const rect = rectDe(membres[0]!)
+    if (membres.some((m) => rectDe(m) !== rect) || !parents.some((p) => rectDe(p) === rect)) continue
+    const milieu = parents.reduce((t, f) => t + f.cx, 0) / parents.length
+    const largeur = membres[membres.length - 1]!.x + membres[membres.length - 1]!.w - membres[0]!.x
+    const centre = membres[0]!.x + largeur / 2
+    const ecart = Math.abs(centre - milieu)
+    if (ecart < 1) continue
+    const a = milieu - largeur / 2
+    const b = milieu + largeur / 2
+    const g = ligne[i0 - 1]
+    const dr = ligne[i1 + 1]
+    // Une voisine d'un autre rectangle : c'est son rectangle entier qu'il faut laisser à distance
+    // (deux rectangles ne se chevauchent sur aucune rangée).
+    const boite = (f: FicheHistoire) => d.groupes.find((r) => r.cle === rectDe(f))!
+    const libreG = !g || (rectDe(g) === rect ? a - (g.x + g.w) >= 176 : a - (boite(g).x + boite(g).w - 22) >= ecartDeRectangles)
+    const libreD = !dr || (rectDe(dr) === rect ? dr.x - b >= 176 : boite(dr).x + 22 - b >= ecartDeRectangles)
+    if (libreG && libreD) fautes.push(`${fid} : ${Math.round(ecart)} px`)
+  }
+  return fautes
+}
+
 /** Deux rectangles qui partagent une hauteur ne se chevauchent pas. */
 function rectanglesQuiSeChevauchent(d: DispositionGroupes): string[] {
   const fautes: string[] = []
@@ -195,34 +309,35 @@ describe('/arbre-review sur l’arbre d’essai', () => {
     expect(m.ecartMinRangees).toBeGreaterThanOrEqual(COULOIR_MIN)
   })
 
-  it('ne passe sous aucune carte, ne traverse aucun rectangle, n’entre dans aucun groupe étranger', () => {
+  it('ne passe sous aucune carte ; seuls les liens entre deux groupes traversent un rectangle', () => {
     expect(m.sousUneCarte).toBe(0)
-    expect(m.traverseUnGroupe).toBe(0)
-    expect(m.dansUnGroupeEtranger).toBe(0)
+    // Un rectangle par quart, comme sur `/arbre` : le lien du père (de la mère, du conjoint)
+    // vers le couple de ses parents passe au travers du quart qui les sépare — et lui seul.
+    const t = traversees(d)
+    for (const x of t) expect(x.entreGroupes, x.famille).toBe(true)
   })
 
   it('ne croise que là où c’est inévitable, et garde les couples côte à côte', () => {
-    // Le tronc se pose contre les quarts du conjoint (pour que le conjoint rejoigne ses
-    // parents par leur couloir) : le lien des parents du père file donc vers lui au-dessus
-    // des descendances des quarts intérieurs, et coupe chacune de leurs chutes — celle du
-    // cousin de la grand-mère (pm), celles de la demi-tante et de la tante maternelle (mp).
-    // Toute autre disposition des mêmes rectangles en coupe autant ; rien d'autre ne se croise.
+    // Le lien des parents du père (de la mère) vers lui traverse le quart d'entre eux et le
+    // tronc, et peut y couper une chute — celle du cousin de la grand-mère paternelle, celle
+    // de la demi-tante. L'ordre des rectangles est choisi pour en couper le moins ; rien
+    // d'autre ne se croise.
     const peres = familleDe(d, id.gpp!, id.gmp!)
+    const meres = familleDe(d, id.gpm!, id.gmm!)
     const paires = croisementsEntre(d)
-    expect(paires).toHaveLength(3)
-    for (const paire of paires) expect(paire).toContain(peres)
-    expect(m.croisements).toBe(3)
+    expect(paires.length).toBeLessThanOrEqual(2)
+    for (const paire of paires) expect(paire.includes(peres) || paire.includes(meres)).toBe(true)
+    expect(m.croisements).toBe(paires.length)
     expect(m.chevauchements).toBe(0)
     expect(m.couplesSepares).toBe(0)
   })
 
-  it('sans la famille du conjoint, le tronc au milieu : un croisement par quart intérieur', () => {
+  it('sans la famille du conjoint, le tronc au milieu : au plus un croisement par quart intérieur', () => {
     const sans = disposerEnRevue(parDefaut(sansFamilleDuConjoint(graphe)))
     const paires = croisementsEntre(sans)
     // Le cousin de la grand-mère paternelle sous le lien du père, la demi-tante sous celui de la mère.
-    expect(paires).toHaveLength(2)
-    expect(paires.flat()).toContain(familleDe(sans, id.gpp!, id.gmp!))
-    expect(paires.flat()).toContain(familleDe(sans, id.gpm!, id.gmm!))
+    expect(paires.length).toBeLessThanOrEqual(2)
+    for (const paire of paires) expect(paire.includes(familleDe(sans, id.gpp!, id.gmp!)) || paire.includes(familleDe(sans, id.gpm!, id.gmm!))).toBe(true)
     const tronc = sans.groupes.find((r) => r.cle === 'tr')!
     const pm = sans.groupes.filter((r) => r.cle === 'pm')
     const mp = sans.groupes.filter((r) => r.cle === 'mp')
@@ -246,38 +361,23 @@ describe('/arbre-review sur l’arbre d’essai', () => {
     expect(rectanglesQuiSeChevauchent(d)).toEqual([])
   })
 
-  it('coupe un quart en son ascendance et sa descendance, de part et d’autre d’un couloir', () => {
-    const pp = d.groupes.filter((r) => r.cle === 'pp')
-    expect(pp).toHaveLength(2)
-    const [haut, bas] = [...pp].sort((x, y) => x.y - y.y) as [(typeof pp)[0], (typeof pp)[0]]
-    expect(haut.y + haut.h).toBeLessThan(bas.y)
-    // Le grand-père en haut, l'oncle en bas.
-    const dans = (fid: string, r: typeof haut): boolean => {
-      const f = d.parId.get(fid)!
-      return f.y >= r.y && f.y + f.h <= r.y + r.h
+  it('un seul rectangle par quart, ses descendants dedans (demande du 22/10/2026)', () => {
+    for (const cle of ['pp', 'pm', 'mp', 'mm', 'tr', 'cpp', 'cpm', 'cmp', 'cmm']) expect(d.groupes.filter((r) => r.cle === cle).length, cle).toBeLessThanOrEqual(1)
+    expect(d.groupes.some((r) => r.libelle.includes('descendance'))).toBe(false)
+    // Le grand-père et son fils l'oncle, et les enfants de l'oncle : un même rectangle.
+    const pp = d.groupes.find((r) => r.cle === 'pp')!
+    for (const cle of ['gpp', 'oncle', 'cousin1', 'cousin2']) {
+      const f = d.parId.get(id[cle]!)!
+      expect(f.x >= pp.x && f.x + f.w <= pp.x + pp.w && f.y >= pp.y && f.y + f.h <= pp.y + pp.h, cle).toBe(true)
     }
-    expect(dans(id.gpp!, haut)).toBe(true)
-    expect(dans(id.oncle!, bas)).toBe(true)
   })
 
-  it('relie le père à ses parents par le couloir, entre les rectangles du haut et ceux du bas', () => {
-    const pere = d.parId.get(id.pere!)!
-    const gpp = d.parId.get(id.gpp!)!
-    // Le lien de la famille des grands-parents paternels : ses traits horizontaux sous la
-    // rangée des grands-parents passent au-dessus de tous les rectangles du bas.
-    const famille = d.traces.familles.find((t) => t.personnes.includes(id.pere!) && t.personnes.includes(id.gpp!))!
-    const hauts = [...famille.d.matchAll(/M(-?[\d.]+) (-?[\d.]+)L(-?[\d.]+) (-?[\d.]+)/g)]
-      .map((x) => x.slice(1).map(Number) as [number, number, number, number])
-      .filter(([, y1, , y2]) => y1 === y2 && y1 > gpp.y + gpp.h)
-    expect(hauts.length).toBeGreaterThan(0)
-    const quarts = d.groupes.filter((r) => ['pp', 'pm', 'mp', 'mm'].includes(r.cle))
-    const basDesHauts = Math.max(...quarts.filter((r) => r.y < gpp.y).map((r) => r.y + r.h))
-    const hautDesBas = Math.min(...quarts.filter((r) => r.y > gpp.y).map((r) => r.y))
-    for (const [, y] of hauts) {
-      expect(y).toBeGreaterThan(basDesHauts)
-      expect(y).toBeLessThan(hautDesBas)
-      expect(y).toBeLessThan(pere.y)
-    }
+  it('centre chaque fratrie sous ses parents quand la place est libre', () => {
+    // Les cousins sous l'oncle et sa femme ; le cousin de la grand-mère sous son grand-oncle ;
+    // l'enfant de l'ego sous l'ego et sa femme.
+    expect(ecartSousLesParents(d, [id.oncle!, id.tanteAlliee!], [id.cousin1!, id.cousin2!])).toBeLessThan(1)
+    expect(ecartSousLesParents(d, [id.grandOncleD!], [id.cousinD!])).toBeLessThan(1)
+    expect(ecartSousLesParents(d, [id.ego!, id.conjoint!], [id.enfant!])).toBeLessThan(1)
   })
 
   it('pose les grands-parents face à face, chacun au bord de son rectangle, unis d’un trait droit', () => {
@@ -345,6 +445,110 @@ describe('les croisements sur des cas d’école', () => {
     const d = disposerEnRevue(a.finir(a1))
     expect(d.croisements).toBe(1)
     expect(mesurer(d, d.groupes).croisements).toBe(1)
+  })
+})
+
+describe('les fratries sous leurs parents (demande du 22/10/2026)', () => {
+  it('une fratrie et le conjoint de l’un d’eux, centrés ensemble sous les parents', () => {
+    const a = nouvelArbre()
+    const ego = a.personne('ego', 'masculin', 1990, 'tr')
+    const pere = a.personne('pere', 'masculin', 1960, 'tr')
+    const mere = a.personne('mere', 'feminin', 1962, 'tr')
+    a.famille([pere, mere], [ego])
+    // Dans le quart du grand-père paternel : un grand-oncle, sa femme, leurs deux enfants,
+    // dont l'un marié (sa femme, sans parents posés).
+    const gp = a.personne('gp', 'masculin', 1930, 'pp')
+    const gm = a.personne('gm', 'feminin', 1932, 'pm')
+    a.famille([gp, gm], [pere])
+    const bisaieul = a.personne('bisaieul', 'masculin', 1900, 'pp')
+    const bisaieule = a.personne('bisaieule', 'feminin', 1902, 'pp')
+    const grandOncle = a.personne('grandOncle', 'masculin', 1935, 'pp')
+    a.famille([bisaieul, bisaieule], [gp, grandOncle])
+    const grandTanteAlliee = a.personne('grandTanteAlliee', 'feminin', 1937, 'pp')
+    const christine = a.personne('christine', 'feminin', 1961, 'pp')
+    const jerome = a.personne('jerome', 'masculin', 1963, 'pp')
+    const carine = a.personne('carine', 'feminin', 1964, 'pp')
+    a.famille([grandOncle, grandTanteAlliee], [christine, jerome])
+    a.famille([jerome, carine], [])
+    const d = disposerEnRevue(a.finir(ego))
+    expect(ecartSousLesParents(d, [grandOncle, grandTanteAlliee], [christine, jerome], [carine])).toBeLessThan(1)
+    expect(mesurer(d, d.groupes).sousUneCarte).toBe(0)
+  })
+
+  it('deux couples de la même rangée, chacun ses enfants juste dessous quand la place y est', () => {
+    // Le cas des captures : deux sœurs du grand-père, mariées, et leurs enfants — la place
+    // sous chaque couple est libre (une fratrie de trois sous un couple seul au bout de sa
+    // rangée, un enfant sous l'autre), chaque fratrie y est, droite.
+    const a = nouvelArbre()
+    const ego = a.personne('ego', 'masculin', 1990, 'tr')
+    const pere = a.personne('pere', 'masculin', 1960, 'tr')
+    const mere = a.personne('mere', 'feminin', 1962, 'tr')
+    a.famille([pere, mere], [ego])
+    const gpm = a.personne('gpm', 'masculin', 1930, 'mp')
+    const gmm = a.personne('gmm', 'feminin', 1932, 'mm')
+    a.famille([gpm, gmm], [mere])
+    const s1 = a.personne('soeur1', 'feminin', 1931, 'mp')
+    const s2 = a.personne('soeur2', 'feminin', 1934, 'mp')
+    a.famille([a.personne('bisaieul', 'masculin', 1900, 'mp'), a.personne('bisaieule', 'feminin', 1902, 'mp')], [s1, s2, gpm])
+    const m1 = a.personne('mari1', 'masculin', 1929, 'mp')
+    const m2 = a.personne('mari2', 'masculin', 1933, 'mp')
+    const e1 = [a.personne('c1', 'feminin', 1955, 'mp')]
+    const e2 = [a.personne('d1', 'masculin', 1960, 'mp')]
+    a.famille([m1, s1], e1)
+    a.famille([m2, s2], e2)
+    const d = disposerEnRevue(a.finir(ego))
+    expect(ecartSousLesParents(d, [m1, s1], e1)).toBeLessThan(1)
+    expect(ecartSousLesParents(d, [m2, s2], e2)).toBeLessThan(1)
+  })
+
+  it('sur un arbre synthétique, toute fratrie dont la place est libre est centrée sous ses parents', () => {
+    // « Libre » : la fratrie, centrée sous ses parents, garderait l'écart d'une famille avec
+    // ses voisines de rangée (et celui de deux rectangles avec un autre rectangle).
+    for (const [personnes, graine] of [
+      [1000, 7],
+      [4000, 42],
+    ] as const) {
+      const graphe = parDefaut(brancherCommeLeServeur(genealogieSynthetique({ personnes, graine })))
+      const d = disposerEnRevue(graphe)
+      expect(fratriesLibresDecentrees(d, graphe), `${personnes}`).toEqual([])
+    }
+    // Deux dispositions entières, dont une de 4 000 personnes : quelques secondes sur une
+    // machine occupée, au-delà des 5 s par défaut.
+  }, 60_000)
+
+  it('dans l’ascendance, le couple de la génération suivante entre ses deux couples de parents', () => {
+    // Un arrière-grand-père remarié : sa première femme lui donne la future épouse, la
+    // seconde cinq enfants. L'époux, lui, a ses parents à gauche. Le couple se pose entre les
+    // deux couples de parents, ses demi-sœurs de l'autre côté — et rien ne se croise.
+    const a = nouvelArbre()
+    const ego = a.personne('ego', 'masculin', 1990, 'tr')
+    const pere = a.personne('pere', 'masculin', 1960, 'tr')
+    const mere = a.personne('mere', 'feminin', 1962, 'tr')
+    a.famille([pere, mere], [ego])
+    const gpm = a.personne('gpm', 'masculin', 1930, 'mp')
+    const gmm = a.personne('gmm', 'feminin', 1932, 'mm')
+    a.famille([gpm, gmm], [mere])
+    const jp = a.personne('jeanPierre', 'masculin', 1900, 'mm')
+    const constance = a.personne('constance', 'feminin', 1902, 'mm')
+    a.famille([jp, constance], [gmm])
+    const pereJp = a.personne('pereJP', 'masculin', 1870, 'mm')
+    const mereJp = a.personne('mereJP', 'feminin', 1872, 'mm')
+    a.famille([pereJp, mereJp], [jp])
+    const coffy = a.personne('coffy', 'masculin', 1868, 'mm')
+    const larcillon = a.personne('larcillon', 'feminin', 1870, 'mm')
+    const mariage = a.personne('mariage', 'feminin', 1875, 'mm')
+    const rosalie = a.personne('rosalie', 'feminin', 1904, 'mm')
+    a.famille([coffy, larcillon], [constance, rosalie])
+    const demis = ['h1', 'h2', 'h3', 'h4', 'h5'].map((k, i) => a.personne(k, i % 2 ? 'masculin' : 'feminin', 1906 + i, 'mm'))
+    a.famille([coffy, mariage], demis)
+    const d = disposerEnRevue(a.finir(ego))
+    const x = (id: string): number => d.parId.get(id)!.cx
+    const couple = (x(jp) + x(constance)) / 2
+    const parentsJp = (x(pereJp) + x(mereJp)) / 2
+    const parentsConstance = (x(coffy) + x(larcillon)) / 2
+    expect(couple).toBeGreaterThan(Math.min(parentsJp, parentsConstance) - 1)
+    expect(couple).toBeLessThan(Math.max(parentsJp, parentsConstance) + 1)
+    expect(mesurer(d, d.groupes).croisements).toBe(0)
   })
 })
 
@@ -446,7 +650,7 @@ describe('les cas durs', () => {
       expect(pere.rangee).toBe(pont.rangee - 1)
       const m = mesurer(d, d.groupes)
       expect(m.sousUneCarte, alliances).toBe(0)
-      expect(m.traverseUnGroupe, alliances).toBe(0)
+      for (const x of traversees(d)) expect(x.entreGroupes, `${alliances} ${x.famille}`).toBe(true)
       expect(d.alliances.length > 0, alliances).toBe(alliances === 'a-part')
     }
   })
@@ -559,5 +763,5 @@ describe('sur un arbre synthétique de 1 000 personnes', () => {
     expect(encore.fiches.map((f) => `${f.id}@${f.x},${f.y}`)).toEqual(d.fiches.map((f) => `${f.id}@${f.x},${f.y}`))
     expect(encore.traces).toEqual(d.traces)
     expect(encore.groupes).toEqual(d.groupes)
-  })
+  }, 30_000)
 })

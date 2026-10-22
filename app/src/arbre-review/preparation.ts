@@ -5,28 +5,21 @@
  * ce qui est propre à cette page : les PARTIES (les rectangles), les FOYERS (les unités
  * d'une rangée) et les familles qui les relient.
  *
- * ── Les parties : pourquoi un quart se coupe en deux ────────────────────────────
+ * ── Les parties : un rectangle par quart, comme sur `/arbre` ─────────────────────
  *
- * Sur `/arbre`, chaque quart (pp, pm, mp, mm) est UNE bande verticale, de son ancêtre le
- * plus haut jusqu'aux enfants de ses cousins. Le tronc est entre pm et mp. Or le père,
- * dans le tronc, est l'enfant du couple pp–pm, posé à la frontière des deux bandes : le
- * lien qui descend vers lui doit traverser toute la bande pm, à la hauteur des parents
- * (mesuré sur l'arbre réel : un trait de ~40 000 px de long au travers d'un rectangle).
- * Ce n'est pas un défaut de réglage, c'est de la topologie : le couple des grands-parents
- * paternels et celui des maternels sont séparés par la largeur de deux ascendances, et le
- * père et la mère, eux, sont côte à côte.
+ * Chaque groupe (un quart pp, pm, mp, mm, le tronc, un quart du conjoint) est UN
+ * rectangle, de son ancêtre le plus haut jusqu'aux enfants de ses cousins ; les rectangles
+ * se rangent en colonnes, dans l'ordre de `/arbre` (`COLONNES_PAR_DEFAUT`), et ceux qui
+ * partagent une rangée ne se chevauchent jamais.
  *
- * Ici chaque quart se coupe à la rangée de sa tête (les grands-parents) : au-dessus, son
- * ASCENDANCE ; en dessous, sa DESCENDANCE (oncles, cousins, leurs enfants). Entre les deux
- * passe un couloir libre, sur toute la largeur de l'arbre : c'est là que le père rejoint
- * ses parents, la mère les siens, sans entrer dans aucun rectangle. Le tronc s'insère dans
- * la bande du bas. Les quarts du conjoint se coupent de même, une rangée plus bas (ses
- * parents sont dans ses quarts, à lui) ; le tronc se met alors contre eux, pour que le
- * conjoint rejoigne ses parents par leur couloir.
- *
- * Deux parties qui partagent une rangée sont posées l'une à côté de l'autre, dans l'ordre
- * des COLONNES ; deux parties sans rangée commune (l'ascendance et la descendance d'un même
- * quart) peuvent se superposer : la descendance est sous son ascendance.
+ * La première version coupait chaque quart à la rangée des grands-parents (son ascendance
+ * au-dessus d'un couloir libre, sa descendance dessous), pour que le père rejoigne ses
+ * parents sans traverser le rectangle pm. Le commanditaire n'a pas voulu de cette coupure
+ * (le 22/10/2026 : un enfant rangé dans « la descendance », loin de ses parents restés dans
+ * l'ascendance, ne se lisait plus comme leur enfant) : chaque descendant est de nouveau sous
+ * ses parents, dans le rectangle de son quart, et les couloirs entre générations restent à
+ * l'intérieur des rectangles. Le prix, mesuré et assumé : le lien du père (de la mère, du
+ * conjoint) vers le couple de ses parents passe au travers du quart qui les sépare.
  *
  * ── Les familles par alliance ───────────────────────────────────────────────────
  *
@@ -57,18 +50,10 @@ export interface FamilleR {
   enfants: number[]
 }
 
-/** Une partie : un rectangle de la page, d'un groupe et d'une tranche de rangées. */
+/** Une partie : un rectangle de la page — un groupe, de son ancêtre le plus haut à ses derniers descendants. */
 export interface Partie {
   cle: string
   groupe: CleDeGroupe
-  /** `haut` : l'ascendance d'un quart ; `bas` : sa descendance ; `entier` sinon. */
-  tranche: 'haut' | 'bas' | 'entier'
-  /**
-   * La bande où la partie se range, d'après ses rangées et la coupe de son groupe :
-   * au-dessus du couloir des grands-parents (`haut`), en dessous (`bas`), ou des deux
-   * côtés (`pleine` — un quart sans descendance récente, les personnes sans lien).
-   */
-  bande: 'haut' | 'bas' | 'pleine'
   /** L'ordre de gauche à droite parmi les parties qui partagent une rangée. */
   colonne: number
   /** Rangées extrêmes occupées. */
@@ -132,11 +117,17 @@ export interface OptionsDePreparation {
   alliances?: 'a-part' | 'dans-l-arbre' | undefined
   /** L'écart entre deux époux d'un même foyer. */
   ecartCouple: number
+  /** L'ordre des rectangles de gauche à droite (`COLONNES_PAR_DEFAUT`). */
+  colonnes?: readonly CleDeGroupe[] | undefined
 }
 
-const QUARTS_EGO = new Set<string>(['pp', 'pm', 'mp', 'mm'])
-const QUARTS_CONJOINT = new Set<string>(['cpp', 'cpm', 'cmp', 'cmm'])
-const QUARTS = new Set<string>([...QUARTS_EGO, ...QUARTS_CONJOINT])
+/**
+ * L'ordre des rectangles, celui de `/arbre` : le côté du père, le tronc, le côté de la mère,
+ * celui du conjoint, puis les rectangles du bout.
+ */
+export const COLONNES_PAR_DEFAUT: readonly CleDeGroupe[] = ['pp', 'pm', 'tr', 'mp', 'mm', 'cpm', 'cpp', 'cmp', 'cmm', 'alliances', 'sansLien']
+
+const QUARTS = new Set<string>(['pp', 'pm', 'mp', 'mm', 'cpp', 'cpm', 'cmp', 'cmm'])
 
 /* ------------------------------------------------------------------ */
 /* La préparation                                                      */
@@ -387,57 +378,25 @@ export function preparer(graphe: Graphe, options: OptionsDePreparation): Structu
   const largeurs = personnes.map((p) => p.w || 132).sort((x, y) => x - y)
   const largeurDeCarte = largeurs.length ? largeurs[largeurs.length >> 1]! : 132
 
-  /* 4. Les parties. */
-  const rangeeEgo = egoIndex >= 0 ? rangee[egoIndex]! : 0
-  // La tête de chaque quart : le grand-parent (Sosa 4 à 7), ou le grand-parent du conjoint.
-  const coupeEgo = rangeeEgo - 2
-  const conjointPose = [...sosaConjoint.values()][0]
-  const coupeConjoint = (conjointPose !== undefined ? rangee[conjointPose]! : rangeeEgo) - 1
+  /* 4. Les parties : un rectangle par groupe, en colonnes (l'ordre de `/arbre`). */
   const parties: Partie[] = []
   const partieParCle = new Map<string, number>()
-  const avecConjoint = groupeDePose.some((g) => QUARTS_CONJOINT.has(g))
-  // Les colonnes. Sans famille du conjoint, le tronc est au milieu (père et mère à égale
-  // distance de leurs parents) ; avec, il se met contre les quarts du conjoint, pour que
-  // le conjoint rejoigne ses parents par leur couloir.
-  const COLONNES: CleDeGroupe[] = avecConjoint
-    ? ['pp', 'pm', 'mp', 'mm', 'tr', 'cpm', 'cpp', 'cmp', 'cmm', 'alliances', 'sansLien']
-    : ['pp', 'pm', 'tr', 'mp', 'mm', 'alliances', 'sansLien']
+  const COLONNES = options.colonnes ?? COLONNES_PAR_DEFAUT
   const partieDe: number[] = new Array(n).fill(0)
   for (let i = 0; i < n; i++) {
     const g = groupeDePose[i]!
     const r = rangee[i]!
-    const tranche: Partie['tranche'] = QUARTS_EGO.has(g)
-      ? r <= coupeEgo
-        ? 'haut'
-        : 'bas'
-      : QUARTS_CONJOINT.has(g)
-        ? r <= coupeConjoint
-          ? 'haut'
-          : 'bas'
-        : 'entier'
-    const cle = tranche === 'entier' ? g : `${g}-${tranche}`
-    let k = partieParCle.get(cle)
+    let k = partieParCle.get(g)
     if (k === undefined) {
       k = parties.length
-      partieParCle.set(cle, k)
-      parties.push({ cle, groupe: g, tranche, bande: 'pleine', colonne: Math.max(0, COLONNES.indexOf(g)), min: r, max: r, membres: [] })
+      partieParCle.set(g, k)
+      parties.push({ cle: g, groupe: g, colonne: Math.max(0, COLONNES.indexOf(g)), min: r, max: r, membres: [] })
     }
     const p = parties[k]!
     p.min = Math.min(p.min, r)
     p.max = Math.max(p.max, r)
     p.membres.push(i)
     partieDe[i] = k
-  }
-  // La bande de chaque partie, d'après la coupe de son groupe.
-  for (const p of parties) {
-    const coupe = QUARTS_CONJOINT.has(p.groupe) ? coupeConjoint : coupeEgo
-    p.bande = p.max <= coupe ? 'haut' : p.min > coupe ? 'bas' : 'pleine'
-  }
-  // Un quart qui n'a qu'une moitié s'appelle par son nom entier.
-  for (const p of parties) {
-    if (p.tranche === 'entier') continue
-    const autre = parties.find((q) => q !== p && q.groupe === p.groupe)
-    if (!autre) p.tranche = 'entier'
   }
 
   /* 5. Les foyers : une personne et ses conjoints de la même rangée et de la même partie. */

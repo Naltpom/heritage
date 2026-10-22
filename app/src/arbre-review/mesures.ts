@@ -25,7 +25,9 @@
  *  - **les espacements** : le plus petit écart entre deux fiches d'une rangée, et entre
  *    deux rangées ;
  *  - **les couples séparés** : deux époux d'une même rangée entre lesquels une autre
- *    fiche s'intercale.
+ *    fiche s'intercale ;
+ *  - **la fratrie sous ses parents** : l'écart horizontal entre le centre de chaque
+ *    fratrie (conjoints compris) et le centre de ses parents.
  *
  * Pur, sans DOM : `mesures.test.ts` le vérifie sur des dessins faits à la main, et le
  * banc (`revue.banc.ts`) l'applique aux deux moteurs.
@@ -66,6 +68,26 @@ export interface Mesures {
   couplesSepares: number
   /** Les fratries qu'une fiche étrangère (ni frère ou sœur, ni conjoint de l'un d'eux) coupe en deux. */
   fratriesCoupees: number
+  /**
+   * L'écart horizontal entre le centre de chaque fratrie — ses conjoints posés à côté
+   * (`CONJOINT_A_COTE`) compris — et le centre de ses parents (demande du 22/10/2026 :
+   * « des enfants loin de leurs parents alors que la place est libre juste dessous »). En
+   * pixels du monde : la somme, le plus grand, les centiles ; le nombre de familles
+   * mesurées, et celles dont la fratrie est centrée à moins d'un pixel. Les écarts
+   * ÉVITABLES : ceux d'une fratrie dont la place, juste sous ses parents, est libre de toute
+   * autre fiche.
+   */
+  fratrieSousParents: {
+    total: number
+    max: number
+    p50: number
+    p90: number
+    p99: number
+    familles: number
+    centrees: number
+    evitables: number
+    evitablesTotal: number
+  }
   largeur: number
   hauteur: number
   /** Surface du monde, en mégapixels — pour information, pas un objectif. */
@@ -82,6 +104,19 @@ interface Segment {
 }
 
 const EPS = 0.5
+/**
+ * La marge autour de la place d'une fratrie centrée, pour la dire libre : l'écart entre deux
+ * familles de `/arbre-review` (`ECART_FAMILLE`), que l'alignement ne rogne jamais — on voit
+ * où une famille finit et où l'autre commence.
+ */
+const MARGE_LIBRE = 176
+/**
+ * Un conjoint compte dans l'étendue d'une fratrie s'il est posé À CÔTÉ : voisin dans la
+ * rangée, et plus près qu'un écart de deux familles. Un grand-père, au bord de son quart, et
+ * sa femme dans le quart voisin se suivent dans la rangée, à des milliers de pixels l'un de
+ * l'autre : elle n'est pas de sa fratrie.
+ */
+const CONJOINT_A_COTE = 176
 
 /** Les segments d'un chemin `M x y L x y L …` (seules commandes que les traits emploient). */
 export function segmentsDe(d: string): [number, number, number, number][] {
@@ -343,6 +378,9 @@ export function mesurer(d: DispositionHistoire, rectangles: readonly Boite[] = [
   let decalageMax = 0
   let couplesSepares = 0
   let fratriesCoupees = 0
+  const ecartsFratries: number[] = []
+  let evitables = 0
+  let evitablesTotal = 0
   /** Les conjoints de chacun : les époux d'une même famille, sur la rangée la plus haute. */
   const conjoints = new Map<string, string[]>()
   for (const fam of d.traces.familles) {
@@ -379,6 +417,44 @@ export function mesurer(d: DispositionHistoire, rectangles: readonly Boite[] = [
       if (l) l.push(e)
       else parRangeeEnfants.set(e.rangee, [e])
     }
+    // L'écart de la fratrie (ses conjoints posés à côté compris) à ses parents, la rangée
+    // sous la leur seulement (un enfant d'une autre génération, un implexe, n'a pas de place
+    // « sous » ses parents).
+    const fratrie = parRangeeEnfants.get(rangeeEpoux + 1)
+    if (fratrie?.length) {
+      const ligne = lignesTriees.find((l) => l[0]!.rangee === rangeeEpoux + 1)
+      let lo = Infinity
+      let hi = -Infinity
+      const etendre = (f: FicheHistoire): void => {
+        lo = Math.min(lo, f.x)
+        hi = Math.max(hi, f.x + f.w)
+      }
+      const groupe = new Set<string>()
+      for (const e of fratrie) {
+        etendre(e)
+        groupe.add(e.id)
+        const i = indexDans.get(e.id)!
+        for (const c of conjoints.get(e.id) ?? []) {
+          const fc = d.parId.get(c)
+          const aCote = fc && Math.max(fc.x - (e.x + e.w), e.x - (fc.x + fc.w)) < CONJOINT_A_COTE
+          if (fc && aCote && fc.rangee === e.rangee && ligne && Math.abs(indexDans.get(c)! - i) <= 2) {
+            etendre(fc)
+            groupe.add(fc.id)
+          }
+        }
+      }
+      const ecart = Math.abs((lo + hi) / 2 - milieu)
+      ecartsFratries.push(ecart)
+      // Évitable ? La place sous les parents — la même fratrie, centrée — est-elle libre ?
+      if (ecart >= 1 && ligne) {
+        const a = milieu - (hi - lo) / 2 - MARGE_LIBRE
+        const b = milieu + (hi - lo) / 2 + MARGE_LIBRE
+        if (!ligne.some((f) => !groupe.has(f.id) && f.x < b && f.x + f.w > a)) {
+          evitables++
+          evitablesTotal += ecart
+        }
+      }
+    }
     for (const groupe of parRangeeEnfants.values()) {
       if (groupe.length < 2) continue
       const ligne = lignesTriees.find((l) => l[0]!.rangee === groupe[0]!.rangee)
@@ -408,6 +484,8 @@ export function mesurer(d: DispositionHistoire, rectangles: readonly Boite[] = [
     }
   }
   ecarts.sort((a, b) => a - b)
+  ecartsFratries.sort((a, b) => a - b)
+  const centile = (q: number): number => (ecartsFratries.length ? Math.round(ecartsFratries[Math.min(ecartsFratries.length - 1, Math.floor(q * ecartsFratries.length))]!) : 0)
   let ecartMinRangees = Infinity
   for (let i = 1; i < lignesTriees.length; i++) {
     const haut = lignesTriees[i - 1]!
@@ -431,6 +509,17 @@ export function mesurer(d: DispositionHistoire, rectangles: readonly Boite[] = [
     ecartMinRangees: Number.isFinite(ecartMinRangees) ? Math.round(ecartMinRangees) : 0,
     couplesSepares,
     fratriesCoupees,
+    fratrieSousParents: {
+      total: Math.round(ecartsFratries.reduce((t, x) => t + x, 0)),
+      max: ecartsFratries.length ? Math.round(ecartsFratries[ecartsFratries.length - 1]!) : 0,
+      p50: centile(0.5),
+      p90: centile(0.9),
+      p99: centile(0.99),
+      familles: ecartsFratries.length,
+      centrees: ecartsFratries.filter((x) => x < 1).length,
+      evitables,
+      evitablesTotal: Math.round(evitablesTotal),
+    },
     largeur: Math.round(d.largeur),
     hauteur: Math.round(d.hauteur),
     surface: Math.round((d.largeur * d.hauteur) / 1e5) / 10,

@@ -57,6 +57,19 @@ export interface ContexteDeFiche {
 const sexeDe = (n: NoeudPersonne): 'homme' | 'femme' | 'inconnu' =>
   n.sex === 'masculin' ? 'homme' : n.sex === 'feminin' ? 'femme' : 'inconnu'
 
+/*
+ * UNE PROPOSITION EN ATTENTE se voit (demande du 22/10/2026, la bascule « En attente de
+ * validation », allumée par défaut) : en pointillé épais de l'accent, le fond franchement
+ * teinté de l'accent (au niveau Familles, le pointillé ne fait plus qu'un demi-pixel :
+ * c'est la teinte qu'on voit) ; au niveau Ensemble, un rectangle de l'accent relevé du
+ * texte plutôt que de sa branche — en sombre, l'accent EST la teinte de la branche
+ * paternelle du père, et seul il s'y confondrait ; ses liens, en pointillé de l'accent, à
+ * tous les niveaux (`stylesDesTraits`). Le pointillé code un fait — « pas encore
+ * validée » —, jamais une distance (ADR 0007).
+ */
+const COULEUR_EN_ATTENTE = 'var(--h-accent)'
+const ENSEMBLE_EN_ATTENTE = `color-mix(in srgb, ${COULEUR_EN_ATTENTE} 60%, var(--h-texte))`
+
 /**
  * Le style d'une boîte, en coordonnées monde, prêt pour `style.cssText` : la boîte
  * ne se réécrit que si cette chaîne change (`FichesGroupes.vue`).
@@ -71,7 +84,9 @@ export function styleDeFiche(f: FicheHistoire, c: ContexteDeFiche): string {
         ? attenuer('var(--hi-direct-plein)', a)
         : c.place === 'descendant'
           ? attenuer('var(--hi-direct-plein)', 0.55 * a)
-          : attenuer(couleurBranche(c.branche), 0.7 * a)
+          : n.enAttente
+            ? attenuer(ENSEMBLE_EN_ATTENTE, a)
+            : attenuer(couleurBranche(c.branche), 0.7 * a)
     return `${position};background:${fond}`
   }
   const sexe = sexeDe(n)
@@ -82,11 +97,12 @@ export function styleDeFiche(f: FicheHistoire, c: ContexteDeFiche): string {
       : c.place === 'descendant'
         ? `1px dashed ${accent}`
         : n.enAttente
-          ? `1px dashed ${accent}`
+          ? `2px dashed ${accent}`
           : `1px ${n.vivant ? 'dashed' : 'solid'} ${attenuer(`var(--h-${sexe}-bord)`, a)}`
   // Le liseré de branche : à gauche d'une fiche couchée, en haut d'une fiche debout.
   const lisere = `${c.portrait ? 'border-top' : 'border-left'}:4px solid ${attenuer(couleurBranche(c.branche), a)}`
-  return `${position};background:${attenuer(`var(--h-${sexe})`, a)};border:${bordure};${lisere};border-radius:${c.portrait ? 10 : 7}px`
+  const fond = n.enAttente ? `color-mix(in srgb, ${COULEUR_EN_ATTENTE} 30%, var(--h-${sexe}))` : `var(--h-${sexe})`
+  return `${position};background:${attenuer(fond, a)};border:${bordure};${lisere};border-radius:${c.portrait ? 10 : 7}px`
 }
 
 /* ------------------------------------------------------------------ */
@@ -111,7 +127,8 @@ export function stylesDesTraits(niveau: Niveau, surligner: boolean, surlignerTra
   return {
     ordinaires: { stroke: 'var(--hi-arete)', 'stroke-width': '1.2', 'stroke-opacity': String(ordinaire) },
     divorces: { stroke: 'var(--h-alerte)', 'stroke-width': '1.2', 'stroke-opacity': String(fait) },
-    attente: { stroke: 'var(--h-accent)', 'stroke-width': '1.2', 'stroke-opacity': String(fait) },
+    // Les liens à valider se voient à tous les niveaux, Ensemble compris.
+    attente: { stroke: COULEUR_EN_ATTENTE, 'stroke-width': '2', 'stroke-opacity': niveau === 0 ? '0.85' : '0.95' },
     directs: surlignerTraits
       ? { stroke: 'var(--h-accent)', 'stroke-width': niveau === 0 ? '2.5' : '2', 'stroke-opacity': '1' }
       : { stroke: 'var(--hi-arete)', 'stroke-width': '1.2', 'stroke-opacity': String(ordinaire) },

@@ -184,6 +184,7 @@ describe('la clé d’une disposition', () => {
       { format: 'portrait' },
       { alliancesDansLArbre: true },
       { fratriesParNaissance: true },
+      { avecEnAttente: false },
     ]
     const cles = new Set([CLE, ...variantes.map((v) => cleDeDisposition({ ...ENTREES, ...v }, 'v1'))])
     expect(cles.size).toBe(variantes.length + 1)

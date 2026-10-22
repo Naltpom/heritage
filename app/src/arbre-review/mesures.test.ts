@@ -113,3 +113,41 @@ describe('les mesures du dessin', () => {
     expect(m.fratriesCoupees).toBe(1)
   })
 })
+
+describe('la fratrie sous ses parents (demande du 22/10/2026)', () => {
+  // Un couple sur la rangée 0 : son milieu est à x = 120.
+  const pere = fiche('pere', 0, 0, 0)
+  const mere = fiche('mere', 140, 0, 0)
+  const famille = (enfants: string[]) => ({ id: 'f', d: 'M120 25L120 200', personnes: ['pere', 'mere', ...enfants] })
+  const loin = fiche('loin', 600, 200, 1)
+
+  it('mesure l’écart du centre de la fratrie, conjoints compris, à celui des parents', () => {
+    // Le fils (0–100) et sa femme (140–240), posés ensemble : leur centre est à 120.
+    const fils = fiche('fils', 0, 200, 1)
+    const bru = fiche('bru', 140, 200, 1)
+    const union = { id: 'g', d: 'M100 225L140 225', personnes: ['fils', 'bru'] }
+    const m = mesurer(disposition([pere, mere, fils, bru], [famille(['fils']), union]))
+    expect(m.fratrieSousParents).toMatchObject({ familles: 1, centrees: 1, total: 0, max: 0, evitables: 0 })
+  })
+
+  it('dit évitable l’écart d’une fratrie dont la place, sous ses parents, est libre', () => {
+    const m = mesurer(disposition([pere, mere, loin], [famille(['loin'])]))
+    expect(m.fratrieSousParents).toMatchObject({ familles: 1, centrees: 0, total: 530, max: 530, p50: 530, evitables: 1, evitablesTotal: 530 })
+  })
+
+  it('ne le dit pas quand une autre fiche occupe cette place', () => {
+    const autre = fiche('autre', 70, 200, 1)
+    const m = mesurer(disposition([pere, mere, autre, loin], [famille(['loin'])]))
+    expect(m.fratrieSousParents).toMatchObject({ total: 530, evitables: 0, evitablesTotal: 0 })
+  })
+
+  it('ne compte pas un conjoint posé loin, de l’autre côté d’un rectangle', () => {
+    // La fille sous ses parents ; son mari, voisin dans la rangée mais à 2 000 px : il n'est
+    // pas de sa fratrie, et ne la décentre pas.
+    const fille = fiche('fille', 70, 200, 1)
+    const gendre = fiche('gendre', 2170, 200, 1)
+    const union = { id: 'g', d: 'M170 225L2170 225', personnes: ['fille', 'gendre'] }
+    const m = mesurer(disposition([pere, mere, fille, gendre], [famille(['fille']), union]))
+    expect(m.fratrieSousParents).toMatchObject({ familles: 1, centrees: 1, total: 0 })
+  })
+})

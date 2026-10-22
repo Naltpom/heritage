@@ -50,10 +50,10 @@
  *  - un nœud restreint n'a pas de ligne de dates, et on ne la reconstitue pas ;
  *  - la recherche passe par l'API, jamais par un index local ;
  *  - un filtre **estompe**, il ne retire rien : la forme de l'arbre ne bouge pas —
- *    sauf les branches masquées (`histoire/branches.ts`, le tronc reste) et trois
+ *    sauf les branches masquées (`histoire/branches.ts`, le tronc reste) et quatre
  *    bascules, qui RETIRENT avant la disposition pour que l'arbre se resserre :
- *    « Famille du conjoint », « Familles par alliance » et « Personnes sans lien
- *    connu » ;
+ *    « En attente de validation », « Famille du conjoint », « Familles par
+ *    alliance » et « Personnes sans lien connu » ;
  *  - les familles par alliance (l'ascendance du mari d'une tante, vue de la nièce)
  *    sont masquées par défaut ; affichées, chacune a son bloc, à droite des branches
  *    du lecteur (`histoire/alliances.ts`, décision du 2026-10-01) ;
@@ -152,6 +152,7 @@ import type { DemandeDeCompletion } from '@/components/proposition/fusion'
 import type { EnEvidence } from '@/components/proposition/ressemblances'
 import { aDesFamillesParAlliance, classerParente, estParAlliance, sansFamillesParAlliance } from '@/histoire/alliances'
 import { effectifSansLien, estSansLien, noeudsSansLien, sansPersonnesSansLien } from '@/histoire/sansLien'
+import { effectifEnAttente, sansDemandesEnAttente } from '@/histoire/enAttente'
 import { quartsPresents, sansBranches } from '@/histoire/branches'
 import {
   PALIERS,
@@ -208,10 +209,14 @@ const grapheCharge = shallowRef<Graphe | null>(null)
 const quartsMasquables = shallowRef<Set<BrancheDeQuart>>(new Set())
 
 /*
- * Trois bascules RETIRENT des fiches avant la disposition, pour que l'arbre se
+ * Quatre bascules RETIRENT des fiches avant la disposition, pour que l'arbre se
  * recompacte (les autres filtres estompent sans rien déplacer). Ce sont des
  * préférences de ce navigateur seulement.
  *
+ *  - Les demandes EN ATTENTE DE VALIDATION (demande du 22/10/2026) : affichées par
+ *    défaut, en pointillé. Le calque n'est servi qu'à l'auteur des demandes et aux
+ *    administrateurs (§ 13 du contrat d'API) ; masqué, l'arbre ne montre que les
+ *    données validées (`histoire/enAttente.ts`).
  *  - La famille du conjoint (son ascendance, ses collatéraux) : affichée par défaut.
  *  - Les familles PAR ALLIANCE (décision du 2026-10-01) : masquées par défaut. Vue
  *    de la nièce, l'ascendance du mari de sa tante n'a aucun lien de sang avec elle ;
@@ -220,6 +225,7 @@ const quartsMasquables = shallowRef<Set<BrancheDeQuart>>(new Set())
  *    retenues une fois affichées. Aucun chemin ne les relie au lecteur ; affichées,
  *    elles gardent leur zone « sans lien connu », au-delà du bord droit.
  */
+const CLE_EN_ATTENTE = 'heritage.arbre2.enAttenteDeValidation'
 const CLE_CONJOINT = 'heritage.arbre2.familleDuConjoint'
 const CLE_ALLIANCES = 'heritage.arbre2.famillesParAlliance'
 const CLE_SANS_LIEN = 'heritage.arbre2.sansLienConnu'
@@ -248,6 +254,7 @@ function ecrirePreference(cle: string, affichee: boolean): void {
     /* navigation privée : la bascule vaut pour la visite */
   }
 }
+const avecEnAttente = ref(lirePreference(CLE_EN_ATTENTE, true))
 const avecConjoint = ref(lirePreference(CLE_CONJOINT, true))
 const avecAlliances = ref(lirePreference(CLE_ALLIANCES, false))
 const avecSansLien = ref(lirePreference(CLE_SANS_LIEN, false))
@@ -273,19 +280,31 @@ watch(seuilDesNoms, (v) => {
     /* navigation privée : le réglage vaut pour la visite */
   }
 })
-const grapheSansConjoint = computed(() => (grapheCharge.value ? sansFamilleDuConjoint(grapheCharge.value) : null))
-const aUneFamilleDeConjoint = computed(() => grapheSansConjoint.value !== grapheCharge.value)
-const aDesAlliances = computed(() => (grapheCharge.value ? aDesFamillesParAlliance(grapheCharge.value) : false))
+/** Le calque « en attente » que le graphe porte : rien, pas de bascule. */
+const enAttente = computed(() => (grapheCharge.value ? effectifEnAttente(grapheCharge.value) : { personnes: 0, liens: 0 }))
+const aDesDemandesEnAttente = computed(() => enAttente.value.personnes > 0 || enAttente.value.liens > 0)
+/**
+ * Le graphe que l'écran dessine : sans le calque quand il est masqué. Les autres
+ * bascules et leurs compteurs se lisent sur lui — une personne qu'une demande seule
+ * reliait est « sans lien connu » dans l'arbre validé.
+ */
+const grapheVisible = computed(() => {
+  const g = grapheCharge.value
+  return g && !avecEnAttente.value ? sansDemandesEnAttente(g) : g
+})
+const grapheSansConjoint = computed(() => (grapheVisible.value ? sansFamilleDuConjoint(grapheVisible.value) : null))
+const aUneFamilleDeConjoint = computed(() => grapheSansConjoint.value !== grapheVisible.value)
+const aDesAlliances = computed(() => (grapheVisible.value ? aDesFamillesParAlliance(grapheVisible.value) : false))
 /** Le nombre de personnes par alliance, pour le libellé de la bascule. */
 const effectifAlliances = computed(() => {
-  const g = grapheCharge.value
+  const g = grapheVisible.value
   if (!g) return 0
   let n = 0
   for (const c of classerParente(g).values()) if (c.parente === 'alliance') n++
   return n
 })
 /** Le nombre de personnes sans lien connu : 0, pas de bascule. */
-const effectifSansLienConnu = computed(() => (grapheCharge.value ? effectifSansLien(grapheCharge.value) : 0))
+const effectifSansLienConnu = computed(() => (grapheVisible.value ? effectifSansLien(grapheVisible.value) : 0))
 /*
  * Le format des fiches : `compact` (photo à gauche, la boîte du moteur) ou
  * `portrait` (photo en haut, plus grande ; boîte fixe, `histoire/cartes.ts`). Il
@@ -311,6 +330,7 @@ let grapheGarde: { identite: string; etag: string } | null = null
 function cleDeLaDisposition(): string {
   return cleDeDisposition({
     moteur: props.moteur,
+    avecEnAttente: avecEnAttente.value,
     avecAlliances: avecAlliances.value,
     avecConjoint: avecConjoint.value,
     avecSansLien: avecSansLien.value,
@@ -320,8 +340,10 @@ function cleDeLaDisposition(): string {
     fratriesParNaissance: fratriesParNaissance.value,
   })
 }
-function disposer(graphe: Graphe): void {
+function disposer(recu: Graphe): void {
   const mesure = <T>(etape: string, calcul: () => T): T => (chrono ? chrono.mesure(etape, calcul) : calcul())
+  // Le calque « en attente » masqué : tout ce qui suit se lit sur l'arbre validé seul.
+  const graphe = avecEnAttente.value ? recu : sansDemandesEnAttente(recu)
   // Les alliances d'abord, classées sur le graphe ENTIER : c'est lui que le serveur a classé.
   const sansAlliances = avecAlliances.value ? graphe : sansFamillesParAlliance(graphe)
   const sansConjoint = avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
@@ -443,12 +465,22 @@ function basculerSansLien(avec: boolean): void {
   redisposer()
 }
 /**
+ * Et pour le calque « en attente » : une proposition qu'on vient de déposer, ou qu'on
+ * demande à voir depuis le volet, l'allume s'il est masqué.
+ */
+function basculerEnAttente(avec: boolean): void {
+  if (avecEnAttente.value === avec) return
+  avecEnAttente.value = avec
+  ecrirePreference(CLE_EN_ATTENTE, avec)
+  redisposer()
+}
+/**
  * Une personne qu'on cherche alors que sa famille par alliance — ou la zone des
  * personnes sans lien connu — est masquée : la recherche la trouve (l'API ne sait rien
  * de l'affichage) ; la choisir allume la bascule, et la disposition refaite la contient.
  */
 function afficherSonAlliance(personId: number): void {
-  const g = grapheCharge.value
+  const g = grapheVisible.value
   if (!g || disposition.value?.parPersonId.has(personId)) return
   // Hors de la ligne directe affichée seule : l'arbre entier revient, puis on la cherche.
   if (cleLigneSeule.value !== null) {
@@ -1050,6 +1082,8 @@ async function surDepot(depot: PersonneDeposee): Promise<void> {
     return
   }
   placeDuDepot.value = 'recherche'
+  // Le calque masqué : la personne proposée à l'instant ne s'y verrait pas.
+  if (!avecEnAttente.value) garderLeRepere(() => basculerEnAttente(true), 'garder')
   const place = await rafraichir({ noeudId: depot.noeudId, personId: depot.personId })
   if (place !== null) placeDuDepot.value = place
 }
@@ -1078,6 +1112,9 @@ function montrerPersonne(personId: number): boolean {
  * peut-être pas dessiné : `false`, et c'est au volet de le dire.
  */
 function montrerNoeud(noeudId: string): boolean {
+  // Une proposition, le calque « en attente » masqué : il revient.
+  if (!avecEnAttente.value && grapheCharge.value?.noeuds.some((n) => n.id === noeudId && n.enAttente === true))
+    garderLeRepere(() => basculerEnAttente(true), 'garder')
   const f = disposition.value?.parId.get(noeudId)
   if (!f) return false
   selection.value = f.id
@@ -1368,7 +1405,7 @@ const OPTIONS_MODE_LIGNE = [
 
 const ligne = computed<{ ascendants: Set<string>; descendants: Set<string> } | null>(() => {
   const racine = racineDeLaLigne.value
-  const g = grapheCharge.value
+  const g = grapheVisible.value
   if (racine === null || !g) return null
   return ligneDe(g, racine)
 })
@@ -1466,8 +1503,8 @@ const couleurDuGroupe = (cle: string): string =>
   cle === 'alliances' ? 'var(--h-attenue)' : cle === 'sansLien' ? 'var(--h-branche-hors)' : couleurBranche(cle)
 /** Le titre de chaque rectangle, en coordonnées monde : `TitresDesRectangles` le place à chaque image. */
 const titresDesRectangles = computed<TitreDeRectangle[]>(() =>
-  // La clé d'un titre est unique même quand un groupe a deux rectangles (`/arbre-review` :
-  // l'ascendance d'un quart, et sa descendance) ; la couleur, elle, reste celle du groupe.
+  // La clé d'un titre est unique même si un moteur rendait deux rectangles pour un groupe ;
+  // la couleur, elle, reste celle du groupe.
   rectangles.value.map((r, i) => ({
     cle: `${r.cle}:${i}`,
     x: r.x,
@@ -1907,12 +1944,21 @@ onBeforeUnmount(() => {
         </section>
 
         <section
-          v-if="aUneFamilleDeConjoint || aDesAlliances || effectifSansLienConnu > 0"
+          v-if="aDesDemandesEnAttente || aUneFamilleDeConjoint || aDesAlliances || effectifSansLienConnu > 0"
           class="filtres-section"
           aria-labelledby="filtres-qui"
         >
           <h3 id="filtres-qui" class="filtres-titre">Qui apparaît</h3>
           <p class="-mt-1 mb-0 text-xs text-attenue">Masquées, ces personnes quittent l’arbre, qui se resserre.</p>
+          <!-- Le calque des demandes (§ 13 du contrat d'API), servi à leur auteur et aux administrateurs. -->
+          <InterrupteurFiltre
+            v-if="aDesDemandesEnAttente"
+            :libelle="enAttente.personnes > 0 ? `En attente de validation · ${enAttente.personnes}` : 'En attente de validation'"
+            sous="les personnes et les liens proposés, en pointillé"
+            :actif="avecEnAttente"
+            data-filtre-en-attente
+            @basculer="basculerEnAttente(!avecEnAttente)"
+          />
           <InterrupteurFiltre
             v-if="aUneFamilleDeConjoint"
             libelle="Famille du conjoint"
