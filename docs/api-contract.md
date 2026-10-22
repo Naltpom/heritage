@@ -2154,6 +2154,7 @@ fiches en diraient, et rien de plus.
         "place": "Saule, Ombrage, Sylvanie",
         "texte": "23 septembre 1927"
       },
+      "married": true,
       "divorced": false,
       "divorce": null,
       "enfants": [
@@ -2195,6 +2196,11 @@ Lecture, point par point :
 - **Les dates d'union restent visibles**, même quand un époux est masqué (§ 5.4).
   `divorced` et `divorce` disent comment l'union a fini : l'affiche écrit « div. » sous le
   signe barré, **jamais la date** du divorce.
+- **`married` est la nature de l'union** ([ADR 0020](adr/0020-nature-de-l-union.md)), sous la
+  règle de la fiche d'une famille (§ 5.4) : toujours émise, `null` compris ; `true` mariés —
+  daté ou non —, `false` union libre, `null` on ne sait pas ; toujours `true` sous une date ou
+  un lieu de mariage. Elle reste visible quand un époux est masqué, comme les dates. Nulle,
+  l'affiche en décide elle-même (`estMarie()` : date, lieu, puis divorce).
 - **« Masquer les dates des vivants »**, l'option de l'affiche, n'est pas un filtre de
   confidentialité : c'est une mise en page, appliquée au dessin, sur des dates que le
   lecteur voit déjà sur les fiches. Elle ne change rien à cette charge.

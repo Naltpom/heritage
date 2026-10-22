@@ -585,8 +585,10 @@ export interface FamilleDAffiche {
   divorce: BlocDate | null
   /**
    * Le mariage **attesté** même sans date (vrai), l'union libre (faux), l'inconnu (`null`).
-   * Pas encore servi : une colonne en préparation sur `tree_family`. Absent ou `null`,
-   * l'affiche le déduit de la date, du lieu et du divorce.
+   * `tree_family.married` (ADR 0020) : servi par la route, toujours, `null` compris — et
+   * toujours vrai sous une date ou un lieu de mariage. Facultatif ici pour les arbres
+   * fictifs de l'essai, qui ne le portent pas tous. Absent ou `null`, l'affiche le déduit
+   * de la date, du lieu et du divorce.
    */
   married?: boolean | null
   /** Dans l'ordre de l'affiche : naissance, rang dans la fratrie, identifiant. */

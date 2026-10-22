@@ -55,6 +55,7 @@ const union = (conjoint: { personId: number; displayName: string } | null): Fich
   familyId: 9,
   conjoint,
   marriage: null,
+  married: null,
   divorced: false,
   divorce: null,
   version: 1,
