@@ -534,6 +534,68 @@ export function lireFicheFamille(id: number, signal?: AbortSignal): Promise<Fich
   return requeteApi<FicheFamille>(`/arbre/familles/${id}`, options(signal))
 }
 
+/* ------------------------------------------------------------------ */
+/* § 5.4 bis — l'arbre d'une affiche                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Une personne de l'affiche que le cercle montre. `birth` est entière, **réduite** par la
+ * réciprocité (sans `raw`, bornes élargies), ou `masquee` quand l'année n'est pas partagée.
+ */
+export interface PersonneDAfficheComplete {
+  id: number
+  visibilite: 'complete'
+  givenNames: string
+  surname: string
+  sex: Sexe
+  deceased: boolean
+  vivant: boolean
+  birth: BlocDate
+  death: BlocDate
+}
+
+/** Un vivant hors cercle : **cinq clés**, à sa place dans l'arbre, comme son nœud du graphe. */
+export interface PersonneDAfficheRestreinte {
+  id: number
+  visibilite: 'restreinte'
+  /** Le masque {@link NOM_D_UNE_PERSONNE_VIVANTE} — jamais le vrai nom. */
+  displayName: string
+  sex: Sexe
+  vivant: boolean
+}
+
+export type PersonneDAffiche = PersonneDAfficheComplete | PersonneDAfficheRestreinte
+
+export interface FamilleDAffiche {
+  id: number
+  /** Identifiants de `personnes` — `null` pour un époux absent ou hors périmètre. */
+  husband: number | null
+  wife: number | null
+  marriage: BlocDate
+  divorced: boolean
+  divorce: BlocDate | null
+  /**
+   * Le mariage **attesté** même sans date (vrai), l'union libre (faux), l'inconnu (`null`).
+   * Pas encore servi : une colonne en préparation sur `tree_family`. Absent ou `null`,
+   * l'affiche le déduit de la date, du lieu et du divorce.
+   */
+  married?: boolean | null
+  /** Dans l'ordre de l'affiche : naissance, rang dans la fratrie, identifiant. */
+  enfants: { personId: number; relation: string }[]
+}
+
+export interface ArbreDAffiche {
+  famille: number
+  generationsDeDescendance: number
+  personnes: PersonneDAffiche[]
+  familles: FamilleDAffiche[]
+}
+
+/** `GET /api/arbre/familles/{id}/affiche` — le couple, son ascendance, sa descendance. */
+export function lireArbreDAffiche(familleId: number, signal?: AbortSignal): Promise<ArbreDAffiche> {
+  return requeteApi<ArbreDAffiche>(`/arbre/familles/${familleId}/affiche`, options(signal))
+}
+
 /**
  * `GET /api/arbre/recherche?q=&limite=`.
  *

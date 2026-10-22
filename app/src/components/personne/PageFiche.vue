@@ -43,9 +43,10 @@
  * icônes que le bandeau desktop (`ActionsFiche`), et se pose au-dessus de la
  * barre de navigation du bas (`--hauteur-barre-bas`).
  *
- * Le bandeau porte aussi « Partager » (`PartageFiche`), sur toutes les
- * largeurs : partager ne modifie rien, il n'attend donc aucun droit — seulement
- * qu'on ne soit pas en train de corriger.
+ * Le bandeau porte aussi « Générer l'affiche » (`AfficheFiche`) et « Partager »
+ * (`PartageFiche`), sur toutes les largeurs : ni l'un ni l'autre ne modifie rien,
+ * ils n'attendent donc aucun droit — seulement qu'on ne soit pas en train de
+ * corriger.
  *
  * ## Le mode édition (crayon, 02/10/2026)
  *
@@ -74,6 +75,7 @@ import GalerieMedias from '@/components/medias/GalerieMedias.vue'
 import ListeDemarches from '@/components/demarches/ListeDemarches.vue'
 import type { CibleLoupe } from '@/components/medias/medias'
 import ActionsFiche from './ActionsFiche.vue'
+import AfficheFiche from './AfficheFiche.vue'
 import AutorisationNaissance from './AutorisationNaissance.vue'
 import BandeauFiche from './BandeauFiche.vue'
 import { couleurBranche, generationLisible, nomBranche } from './champs'
@@ -184,8 +186,9 @@ function pluriel(n: number, mot: string): string {
       :edition="edition !== null"
       @agrandir="emit('agrandir', $event)"
     >
-      <!-- Partager ne modifie rien : offert à tout lecteur, retiré en édition. -->
+      <!-- Partager et l'affiche ne modifient rien : offerts à tout lecteur, retirés en édition. -->
       <template #partage>
+        <AfficheFiche v-if="edition === null" :fiche="fiche" />
         <PartageFiche v-if="edition === null" :fiche="fiche" />
       </template>
       <template #actions>
