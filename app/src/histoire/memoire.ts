@@ -166,6 +166,12 @@ export interface EntreesDeLaDisposition {
    * donnent des dispositions différentes : sans lui, l'un relirait celle de l'autre.
    */
   moteur?: 'lignees' | 'groupes' | 'revue'
+  /**
+   * Le calque « en attente » dessiné (`true`, le défaut) ou retiré (`false`) : la bascule
+   * « En attente de validation » de `/arbre` (`histoire/enAttente.ts`). `/arbre-2` le
+   * dessine toujours.
+   */
+  avecEnAttente?: boolean
   avecAlliances: boolean
   avecConjoint: boolean
   avecSansLien: boolean
@@ -188,6 +194,7 @@ export function cleDeDisposition(e: EntreesDeLaDisposition, version: string = EM
     e.format,
     e.alliancesDansLArbre,
     e.fratriesParNaissance,
+    e.avecEnAttente ?? true,
   ])
 }
 

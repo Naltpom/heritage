@@ -126,3 +126,34 @@ describe('l’estompage, dans la peinture (règle 2)', () => {
     for (const style of Object.values(t)) expect(Object.keys(style)).not.toContain('opacity')
   })
 })
+
+describe('une proposition en attente se voit (demande du 22/10/2026)', () => {
+  const proposee: FicheHistoire = { ...ego, id: '#12/p1', noeud: { ...ego.noeud, id: '#12/p1', personId: null, enAttente: true } }
+  const contexte = { portrait: false, alpha: 1, place: null, branche: 'pp' } as const
+
+  it('en pointillé épais de l’accent, le fond teinté de l’accent ; au niveau Ensemble, l’accent relevé du texte', () => {
+    const css = styleDeFiche(proposee, { ...contexte, ensemble: false })
+    expect(css).toContain('border:2px dashed var(--h-accent)')
+    expect(css).toMatch(/background:color-mix\(in srgb, var\(--h-accent\) 30%, var\(--h-\w+\)\)/)
+    const loin = styleDeFiche(proposee, { ...contexte, ensemble: true })
+    expect(loin).toContain('background:color-mix(in srgb, var(--h-accent) 60%, var(--h-texte))')
+    // Pas la teinte de sa branche : en sombre, l'accent est celle de la branche paternelle du père.
+    expect(loin).not.toContain('var(--h-branche-pp)')
+    // Une fiche validée garde son trait fin et sa couleur.
+    const validee = styleDeFiche(ego, { ...contexte, ensemble: false })
+    expect(validee).not.toContain('2px dashed')
+    expect(validee).not.toContain('var(--h-accent) 30%')
+    // Estompée par un filtre, elle l'est dans la peinture, comme les autres.
+    expect(styleDeFiche(proposee, { ...contexte, ensemble: false, alpha: ALPHA_HORS_FILTRE })).not.toMatch(/opacity/)
+  })
+
+  it('ses liens, en pointillé de l’accent, se voient à tous les niveaux, Ensemble compris', () => {
+    for (const niveau of [0, 1, 2] as const)
+      for (const surligner of [false, true]) {
+        const attente = stylesDesTraits(niveau, surligner, false).attente
+        expect(attente.stroke).toBe('var(--h-accent)')
+        expect(Number(attente['stroke-opacity'])).toBeGreaterThanOrEqual(0.85)
+        expect(Number(attente['stroke-width'])).toBeGreaterThan(Number(stylesDesTraits(niveau, surligner, false).ordinaires['stroke-width']))
+      }
+  })
+})
