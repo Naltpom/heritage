@@ -911,15 +911,6 @@ export class CompteEnBus {
     return this.ecart
   }
 
-  /** Le mouvement touche-t-il un article libre ou un détour (que le compte oblique ne voit pas) ? */
-  sensible(bouges: readonly number[]): boolean {
-    for (const e of bouges) {
-      if (this.detoursDe[e]!.length) return true
-      for (const id of this.dependances[e]!) if (this.articles[id]!.libre) return true
-    }
-    return false
-  }
-
   garder(): void {
     this.total += this.ecart
     this.ecart = 0
