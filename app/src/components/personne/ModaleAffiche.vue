@@ -16,7 +16,7 @@
  *
  * - **le conjoint**, quand la personne en a eu plusieurs : une affiche est un couple —
  *   une nouvelle lecture (gardée en mémoire le temps de la modale) ;
- * - **la vue** : l'éventail ;
+ * - **la vue** : l'éventail, le sablier, le sablier dense ;
  * - **les générations d'ascendants** (toutes, par défaut), **le masque des vivants** :
  *   un nouveau placement ;
  * - **le format** : rien qu'un nouveau cadrage — le dessin, agrandi pour remplir la page,
@@ -33,8 +33,9 @@ import MessageErreur from '@/components/base/MessageErreur.vue'
 import { chargerLesPolices, type PolicesChargees } from '@/affiche/chargement'
 import { ArbreAffiche } from '@/affiche/donnees'
 import { imprimerPdf, nomDeFichier, svgEnNoeud, telechargerPng, telechargerSvg } from '@/affiche/exports'
-import { afficheEventail, type AfficheProduite } from '@/affiche/fabriquer'
+import { afficheEventail, afficheSablier, type ChiffresDuPied } from '@/affiche/fabriquer'
 import { cotesLisibles, FORMATS, formatOriente, page, pixels, pngPossible, RESOLUTIONS, type CleDeFormat } from '@/affiche/formats'
+import type { Scene } from '@/affiche/scene'
 import { ascendance } from '@/affiche/structure'
 import { versSvg } from '@/affiche/svg'
 
@@ -61,10 +62,10 @@ const apercu = ref<HTMLDivElement | null>(null)
 const unions = computed(() => fiche.unions.filter((u) => u.conjoint !== null))
 const familleId = ref<number | null>(unions.value[0]?.familyId ?? null)
 type Vue = 'eventail' | 'sablier' | 'dense'
-const VUES: { cle: Vue; libelle: string; pret: boolean }[] = [
-  { cle: 'eventail', libelle: 'Éventail', pret: true },
-  { cle: 'sablier', libelle: 'Sablier', pret: false },
-  { cle: 'dense', libelle: 'Sablier dense', pret: false },
+const VUES: { cle: Vue; libelle: string; aide: string }[] = [
+  { cle: 'eventail', libelle: 'Éventail', aide: 'les ascendants en demi-cercle' },
+  { cle: 'sablier', libelle: 'Sablier', aide: 'une rangée par génération' },
+  { cle: 'dense', libelle: 'Sablier dense', aide: 'plus serré, pour les grands arbres' },
 ]
 const vue = ref<Vue>('eventail')
 /** `null` : toutes les générations connues. */
@@ -131,12 +132,14 @@ const generationsConnues = computed(() => {
   return Math.max(...ascendance(A, A.P.get(epoux.value.h)!, A.P.get(epoux.value.f)!).noeuds.map((n) => n.niveau))
 })
 
-const production = computed<{ affiche: AfficheProduite } | { erreur: unknown } | null>(() => {
+const production = computed<{ affiche: { scene: Scene; chiffres: ChiffresDuPied } } | { erreur: unknown } | null>(() => {
   if (etat.value.etat !== 'pret' || epoux.value === null) return null
   try {
     const A = new ArbreAffiche(etat.value.charge)
     if (masque.value) A.masquerVivants()
-    return { affiche: afficheEventail(A, epoux.value.h, epoux.value.f, { profondeur: profondeur.value ?? Infinity }) }
+    const { h, f } = epoux.value
+    const options = { profondeur: profondeur.value ?? Infinity }
+    return { affiche: vue.value === 'eventail' ? afficheEventail(A, h, f, options) : afficheSablier(A, h, f, vue.value === 'dense' ? 'dense' : 'normal', options) }
   } catch (e: unknown) {
     return { erreur: e }
   }
@@ -280,9 +283,9 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
 
           <fieldset class="m-0 flex flex-col gap-1.5 border-0 p-0">
             <legend class="mb-1 p-0 text-xs font-semibold text-attenue">La vue</legend>
-            <label v-for="v in VUES" :key="v.cle" class="flex items-center gap-2 text-sm" :class="v.pret ? '' : 'text-attenue'">
-              <input v-model="vue" type="radio" name="vue" :value="v.cle" :disabled="!v.pret" />
-              {{ v.libelle }}<span v-if="!v.pret" class="text-xs"> — bientôt</span>
+            <label v-for="v in VUES" :key="v.cle" class="flex items-baseline gap-2 text-sm" :data-vue="v.cle">
+              <input v-model="vue" type="radio" name="vue" :value="v.cle" />
+              <span>{{ v.libelle }} <span class="text-xs text-attenue">— {{ v.aide }}</span></span>
             </label>
           </fieldset>
 

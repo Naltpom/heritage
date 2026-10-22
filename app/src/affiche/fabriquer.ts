@@ -19,6 +19,7 @@ import type { ArbreAffiche, Personne } from './donnees'
 import { etendueHaut, Eventail, pointLibre, Reglages } from './eventail'
 import { ENCRE, ENCRE_DOUCE, melange, TEINTES, TRAIT, type Quartier } from './palette'
 import { Style } from './polices'
+import { ReglagesSablier, Sablier, type ModeDeSablier } from './sablier'
 import { Scene } from './scene'
 import { ascendance, compter, descendance, type Desc } from './structure'
 
@@ -318,4 +319,88 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
     pied(scene, W - marge, yBas + 30 * kl, chiffres, mention, date, 'end', kl)
   }
   return { scene, eventail: E, echelleDescendants: echelle, echelleLegende: kl, chiffres }
+}
+
+export interface SablierProduit {
+  scene: Scene
+  sablier: Sablier
+  echelleDescendants: number
+  chiffres: ChiffresDuPied
+}
+
+/** L'affiche « sablier » du couple — `affiche_sablier()`, modes `normal` et `dense`. */
+export function afficheSablier(A: ArbreAffiche, hId: number, fId: number, mode: ModeDeSablier = 'normal', options: OptionsDAffiche = {}): SablierProduit {
+  const H = A.P.get(hId)
+  const F = A.P.get(fId)
+  if (!H || !F) throw new Error('Les deux époux doivent être dans l’arbre de l’affiche.')
+  const mention = options.mention ?? MENTION_PAR_DEFAUT
+  const date = options.date ?? new Date()
+
+  const { racineH, racineF, noeuds } = ascendance(A, H, F, options.profondeur ?? Infinity)
+  const S = new Sablier(racineH, racineF, noeuds, new ReglagesSablier(mode)).calculer()
+  const { fam, enfants } = descendance(A, H, F, options.niveauxDescendance ?? 6)
+  const largeurArbre = S.droite - S.gauche
+
+  let echelle = 1.0
+  const base = mode === 'normal' ? [13, 11, 9.5, 9] : [11, 9.5, 8.5, 8]
+  const reglesPour = (e: number): ReglesDesc =>
+    new ReglesDesc(
+      base.map((c) => c * e),
+      mode === 'normal' ? 'long' : 'abr',
+      3 * e,
+      10 * e,
+      5.5 * e,
+      30 * e,
+    )
+  let regles = reglesPour(echelle)
+  let [largDesc, hauteurs] = mesurerDesc(enfants, regles)
+  if (largDesc > 0) {
+    for (let i = 0; i < 12; i++) {
+      regles = reglesPour(echelle)
+      ;[largDesc, hauteurs] = mesurerDesc(enfants, regles)
+      const k = Math.min((0.55 * largeurArbre) / largDesc, 18 / base[0]!)
+      if (Math.abs(k - echelle) < 0.01) break
+      echelle = k
+    }
+  }
+
+  const marge = 35.0
+  const W = Math.max(largeurArbre, largDesc) + 2 * marge
+  const basTitre = entete(new Scene(10, 10), W / 2, marge, H, F)
+  const ox = marge - S.gauche + (W - 2 * marge - largeurArbre) / 2
+  const oy = basTitre + 14 - S.haut
+  const h0 = S.hauteurRang.get(0)!
+  const yDesc = oy + 16
+  const basDesc = placerDesc(enfants, ox - largDesc / 2, yDesc, hauteurs, regles)
+  const kl = Math.max(1.0, Math.min(1.6, W / 1100))
+  const hauteur = basDesc + 24 + 52 * kl + marge
+
+  const scene = new Scene(W, hauteur)
+  entete(scene, W / 2, marge, H, F)
+  S.dessiner(scene, ox, oy)
+  // Le lien du couple, et la date du mariage.
+  const [dateMariage, lieu] = fam !== null ? A.mariage(fam) : [null, null]
+  const stInf = new Style('SS', 16, TRAIT, 0, 'Reg')
+  scene.texte(ox, oy - h0 / 2 + stInf.mm * 0.3, '∞', stInf)
+  if (dateMariage?.connue) {
+    const stM = new Style('SS', 9.5, ENCRE_DOUCE, 0, 'Ital')
+    scene.texte(ox, oy + 6.5, dateMariage.texte('long') + (lieu ? ` — ${lieu.split(',')[0]}` : ''), stM)
+  }
+  dessinerDesc(scene, enfants, [ox, oy + 9], regles)
+  // Les repères d'années, au bord gauche de chaque rangée.
+  const st = new Style('SS', 8.5, ENCRE_DOUCE, 0, 'Ital')
+  for (const [g, a] of S.anneesParRang()) {
+    if (g === 0 || !a) continue
+    const y = oy + S.basRang.get(g)! - S.hauteurRang.get(g)! / 2
+    scene.texte(marge * 0.45, y, `vers ${g > 1 ? arrondiDizaine(a) : a}`, st, 'middle', `rotate(-90 ${(marge * 0.45).toFixed(2)} ${y.toFixed(2)})`)
+  }
+  const yBas = basDesc + 24
+  const chiffres: ChiffresDuPied = {
+    ancetres: new Set(noeuds.map((n) => n.p.id)).size - 2,
+    generations: S.nbNiveaux + 1,
+    implexes: new Set(noeuds.map((n) => n.implexe).filter((i) => i)).size,
+  }
+  legende(scene, marge, yBas, H, F, A, kl)
+  pied(scene, W - marge, yBas + 30 * kl, chiffres, mention, date, 'end', kl)
+  return { scene, sablier: S, echelleDescendants: echelle, chiffres }
 }
