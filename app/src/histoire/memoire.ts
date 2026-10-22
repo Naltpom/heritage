@@ -160,12 +160,12 @@ export function identiteDuLecteur(session: ChargeDeSession | null): string | nul
 /** Tout ce qui entre dans `disposer()` (`HistoireView.vue`, `ArbreGroupesView.vue`), hors le graphe lui-même. */
 export interface EntreesDeLaDisposition {
   /**
-   * Le moteur de placement : `lignees` (`/arbre-2`, par défaut) ou `groupes` (`/arbre`,
-   * les rectangles de familles). Les deux écrans partagent le graphe gardé, et les mêmes
-   * bascules donnent deux dispositions différentes : sans lui, l'un relirait celle de
-   * l'autre.
+   * Le moteur de placement : `lignees` (`/arbre-2`, par défaut), `groupes` (`/arbre`,
+   * les rectangles de familles) ou `revue` (`/arbre-review`, les mêmes rectangles
+   * redessinés en couches). Les écrans partagent le graphe gardé, et les mêmes bascules
+   * donnent des dispositions différentes : sans lui, l'un relirait celle de l'autre.
    */
-  moteur?: 'lignees' | 'groupes'
+  moteur?: 'lignees' | 'groupes' | 'revue'
   avecAlliances: boolean
   avecConjoint: boolean
   avecSansLien: boolean

@@ -214,6 +214,17 @@ export const routes: RouteRecordRaw[] = [
     meta: { acces: 'membre', titre: 'Arbre', rechercheLocale: true },
   },
   {
+    // **`/arbre-review` : le même écran que `/arbre`, redessiné** (demande du 22/10/2026) —
+    // mêmes données, mêmes cartes, mêmes interactions ; seules changent la disposition des
+    // cartes et les lignes (`arbre-review/disposition.ts`). Une page d'essai, à comparer
+    // avec `/arbre` : aucune entrée de menu, les mêmes gardes. Le nom commence par `arbre.`,
+    // l'en-tête allume donc « Arbre ».
+    path: '/arbre-review',
+    name: 'arbre.review',
+    component: () => import('@/arbre-review/ArbreReviewView.vue'),
+    meta: { acces: 'membre', titre: 'Arbre', rechercheLocale: true },
+  },
+  {
     // **`/arbre-2` garde l'arbre à niveaux de détail d'avant** (`HistoireView`, moteur
     // `histoire/lignees.ts`) : tout l'arbre d'un coup, sans rectangles. Aucun menu n'y
     // mène, on y va par l'adresse. Nom neuf : `arbre.blocs` était celui d'une maquette

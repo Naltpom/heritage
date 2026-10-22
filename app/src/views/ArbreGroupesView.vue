@@ -133,7 +133,7 @@ import {
 } from '@/histoire/lignees'
 import { apresLaPeinture, creerChronometre, premierChargement, publier, reseauDe, type Chronometre } from '@/histoire/chronometre'
 import { cleDeDisposition, identiteDuLecteur, memoireDeLArbre } from '@/histoire/memoire'
-import { disposerEnGroupes, type DispositionGroupes, type RectangleDeGroupe } from '@/arbre2/groupes'
+import { disposerEnGroupes, type DispositionGroupes, type OptionsGroupes, type RectangleDeGroupe } from '@/arbre2/groupes'
 import { auFormat } from '@/histoire/cartes'
 import { useFormatDesCartes } from '@/composables/formatDesCartes'
 import ReglageFormatDesCartes from '@/components/arbre/ReglageFormatDesCartes.vue'
@@ -178,6 +178,22 @@ import FaitsFiche from '@/components/personne/FaitsFiche.vue'
 import { useSession } from '@/composables/useSession'
 import LecteurVideo from '@/components/video/LecteurVideo.vue'
 import { videoParId } from '@/lib/videos'
+
+/*
+ * LE MOTEUR, seul réglage de l'écran. `/arbre` prend les rectangles de `arbre2/groupes.ts`
+ * (le défaut) ; `/arbre-review` (`arbre-review/ArbreReviewView.vue`, demande du
+ * 22/10/2026) passe le sien — même forme de disposition, même écran autour, seules
+ * changent les places et les lignes. `moteur` nomme ses dispositions dans la mémoire de
+ * l'arbre : les deux pages partagent le graphe gardé, jamais une disposition. Le moteur est
+ * PASSÉ plutôt qu'importé ici : le code de `/arbre-review` n'alourdit pas `/arbre`.
+ */
+const props = withDefaults(
+  defineProps<{
+    moteur?: 'groupes' | 'revue'
+    disposerLesGroupes?: (graphe: Graphe, options: OptionsGroupes) => DispositionGroupes
+  }>(),
+  { moteur: 'groupes', disposerLesGroupes: disposerEnGroupes },
+)
 
 const estMobile = useEstMobile()
 const { fermerTiroirs, unTiroirEstOuvert, ouvert: ouvertTiroir } = useTiroirs()
@@ -294,7 +310,7 @@ let grapheGarde: { identite: string; etag: string } | null = null
  */
 function cleDeLaDisposition(): string {
   return cleDeDisposition({
-    moteur: 'groupes',
+    moteur: props.moteur,
     avecAlliances: avecAlliances.value,
     avecConjoint: avecConjoint.value,
     avecSansLien: avecSansLien.value,
@@ -336,7 +352,7 @@ function disposer(graphe: Graphe): void {
   }
   // Les rectangles de familles (`arbre2/groupes.ts`).
   const calculee = mesure('dont placement', () =>
-    disposerEnGroupes(auFormat(leFiltre(), formatDesCartes.value), {
+    props.disposerLesGroupes(auFormat(leFiltre(), formatDesCartes.value), {
       alliances: alliancesDansLArbre.value ? 'dans-l-arbre' : 'a-part',
       fratriesParNaissance: fratriesParNaissance.value,
     }),
@@ -1230,8 +1246,10 @@ function seuilAuZoomActuel(): void {
   seuilDesNoms.value = bornerSeuilDesNoms(Math.floor(echelle() * 20) / 20)
 }
 
+// `/arbre-review` pose chaque famille par alliance auprès de qui la relie ; « à part » n'y
+// change que la teinte (le gris des fiches hors branche).
 const OPTIONS_ALLIANCES = [
-  { dans: false, libelle: 'À part', sous: 'chacune son bloc, à droite' },
+  { dans: false, libelle: 'À part', sous: props.moteur === 'revue' ? 'en gris, auprès de qui les relie' : 'chacune son bloc, à droite' },
   { dans: true, libelle: 'Dans mon arbre', sous: 'dans la branche qui les relie' },
 ] as const
 
@@ -1448,8 +1466,10 @@ const couleurDuGroupe = (cle: string): string =>
   cle === 'alliances' ? 'var(--h-attenue)' : cle === 'sansLien' ? 'var(--h-branche-hors)' : couleurBranche(cle)
 /** Le titre de chaque rectangle, en coordonnées monde : `TitresDesRectangles` le place à chaque image. */
 const titresDesRectangles = computed<TitreDeRectangle[]>(() =>
-  rectangles.value.map((r) => ({
-    cle: r.cle,
+  // La clé d'un titre est unique même quand un groupe a deux rectangles (`/arbre-review` :
+  // l'ascendance d'un quart, et sa descendance) ; la couleur, elle, reste celle du groupe.
+  rectangles.value.map((r, i) => ({
+    cle: `${r.cle}:${i}`,
     x: r.x,
     y: r.y,
     w: r.w,
