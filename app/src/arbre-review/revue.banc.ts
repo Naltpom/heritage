@@ -25,7 +25,7 @@ import { sansBranches } from '@/histoire/branches'
 import { auFormat } from '@/histoire/cartes'
 import { sansFamilleDuConjoint, type DispositionHistoire } from '@/histoire/lignees'
 import { noeudsSansLien, sansPersonnesSansLien } from '@/histoire/sansLien'
-import { disposerEnGroupes, type DispositionGroupes } from '@/arbre2/groupes'
+import { disposerEnGroupes, type CleDeGroupe, type DispositionGroupes } from '@/arbre2/groupes'
 import { disposerEnRevue, type ReglagesDuMoteur } from './disposition'
 import type { VarianteDeSablier } from './ordre'
 import { mesurer, type Mesures } from './mesures'
@@ -64,37 +64,55 @@ function mesurerMoteur(moteur: Moteur, g: Graphe, b: Bascules): Mesures & { temp
   return { ...mesurer(d, d.groupes ?? []), temps: Math.round(temps) }
 }
 
-const COLONNES: [keyof Mesures | 'temps', string][] = [
-  ['personnes', 'pers.'],
-  ['croisements', 'crois.'],
-  ['chevauchements', 'chev.'],
-  ['contacts', 'cont.'],
-  ['sousUneCarte', 'sous carte'],
-  ['traverseUnGroupe', 'trav. gr.'],
-  ['dansUnGroupeEtranger', 'gr. étr.'],
-  ['decalageTotal', 'décal. tot.'],
-  ['decalageMax', 'décal. max'],
-  ['longueurTracee', 'long. tracée'],
-  ['ecartMinFiches', 'écart min'],
-  ['ecartMedianFiches', 'écart méd.'],
-  ['ecartMinRangees', 'interl. min'],
-  ['couplesSepares', 'couples sép.'],
-  ['fratriesCoupees', 'fratr. coup.'],
-  ['surface', 'surface Mpx²'],
-  ['temps', 'ms'],
+type Ligne = Mesures & { temps: number }
+const COLONNES: [(m: Ligne) => number, string][] = [
+  [(m) => m.personnes, 'pers.'],
+  [(m) => m.croisements, 'crois.'],
+  [(m) => m.chevauchements, 'chev.'],
+  [(m) => m.contacts, 'cont.'],
+  [(m) => m.sousUneCarte, 'sous carte'],
+  [(m) => m.traverseUnGroupe, 'trav. gr.'],
+  [(m) => m.dansUnGroupeEtranger, 'gr. étr.'],
+  [(m) => m.decalageTotal, 'décal. tot.'],
+  [(m) => m.decalageMax, 'décal. max'],
+  [(m) => m.fratrieSousParents.total, 'fratr. Σ'],
+  [(m) => m.fratrieSousParents.p50, 'fratr. p50'],
+  [(m) => m.fratrieSousParents.p90, 'fratr. p90'],
+  [(m) => m.fratrieSousParents.p99, 'fratr. p99'],
+  [(m) => m.fratrieSousParents.max, 'fratr. max'],
+  [(m) => Math.round((100 * m.fratrieSousParents.centrees) / Math.max(1, m.fratrieSousParents.familles)), 'centrées %'],
+  [(m) => m.fratrieSousParents.evitables, 'évitables'],
+  [(m) => m.fratrieSousParents.evitablesTotal, 'évitables Σ'],
+  [(m) => m.longueurTracee, 'long. tracée'],
+  [(m) => m.ecartMinFiches, 'écart min'],
+  [(m) => m.ecartMinRangees, 'interl. min'],
+  [(m) => m.couplesSepares, 'couples sép.'],
+  [(m) => m.fratriesCoupees, 'fratr. coup.'],
+  [(m) => m.surface, 'surface Mpx²'],
+  [(m) => m.temps, 'ms'],
 ]
 
-function ligne(nom: string, m: Mesures & { temps: number }): string {
-  return [nom.padEnd(26), ...COLONNES.map(([k]) => String(m[k as keyof typeof m]).padStart(12))].join('')
+function ligne(nom: string, m: Ligne): string {
+  return [nom.padEnd(26), ...COLONNES.map(([valeur]) => String(valeur(m)).padStart(12))].join('')
 }
 
-/** `BANC_MOTEURS=arbre,review:sablier,review` : les variantes à comparer (mise au point). */
+/**
+ * `BANC_MOTEURS=arbre,review:sablier,review` : les variantes à comparer (mise au point).
+ * `avant` : un autre état du moteur, chargé depuis le module que nomme `BANC_AVANT` (une
+ * copie hors suivi de `disposition.ts` et des siens, pour mesurer avant/après un changement).
+ */
+const avant = process.env['BANC_AVANT'] ? ((await import(/* @vite-ignore */ process.env['BANC_AVANT'])) as typeof import('./disposition')) : null
 const moteurs: [string, Moteur][] = (process.env['BANC_MOTEURS'] ?? 'arbre,review').split(',').map((nom) => {
   if (nom === 'arbre') return [nom, disposerEnGroupes]
-  // `review:sablier` : sans affinage ; `review::servi+naissance` : les départs essayés.
+  if (nom === 'avant' && avant) return [nom, (g, o) => avant.disposerEnRevue(g, o)]
+  // `review:sablier` : sans affinage ; `review:brut` : sans l'alignement final des fratries ;
+  // `review::servi+naissance` : les départs essayés.
   const [, variante, departs] = nom.split(':')
   const reglages: ReglagesDuMoteur = {
     ...(variante === 'sablier' ? { affiner: false } : {}),
+    ...(variante === 'brut' ? { aligner: false } : {}),
+    // `review:colonnes=pm+pp+tr+mm+mp` : un autre ordre des rectangles.
+    ...(variante?.startsWith('colonnes=') ? { colonnes: variante.slice(9).split('+') as CleDeGroupe[] } : {}),
     ...(departs ? { departs: departs.split('+') as VarianteDeSablier[] } : {}),
   }
   return [nom, (g, o) => disposerEnRevue(g, o, reglages)]

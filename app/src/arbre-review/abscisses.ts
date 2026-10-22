@@ -5,11 +5,11 @@
  * Un problème d'optimisation sous contraintes d'espacement :
  *
  *  - **les ressorts** — chaque enfant voudrait être à sa place idéale sous le point
- *    d'union de ses parents (la fratrie centrée sous le couple, serrée à l'écart des
- *    fratries) ; deux époux de foyers différents (un couple à cheval sur deux rectangles)
- *    voudraient être côte à côte ; la chaîne des factices d'un lien qui saute une
- *    génération voudrait être droite. On minimise Σ poids × (écart à la place idéale)².
- *    Une fratrie d'un seul enfant pèse double : son lien doit tomber droit.
+ *    d'union de ses parents (la fratrie, ses conjoints compris, serrée à l'écart des
+ *    fratries et centrée sous le couple) ; deux époux de foyers différents (un couple à
+ *    cheval sur deux rectangles) voudraient être côte à côte ; la chaîne des factices d'un
+ *    lien qui saute une génération voudrait être droite. On minimise Σ poids × (écart à la
+ *    place idéale)². Une fratrie d'un seul enfant pèse double : son lien doit tomber droit.
  *  - **les contraintes** — sur une rangée, deux éléments voisins gardent leur écart :
  *    celui d'une fratrie, celui de deux familles (plus grand : on voit où une famille
  *    finit), celui de deux rectangles (le plus grand). Et deux rectangles qui partagent une
@@ -22,6 +22,10 @@
  * les contraintes d'une rangée ne touchant qu'elle). Puis les rectangles, rigides, se
  * placent les uns par rapport aux autres : chacun là où ses ressorts vers les autres le
  * tirent, sans en chevaucher aucun. On recommence quelques tours.
+ *
+ * Enfin l'ALIGNEMENT, de haut en bas : les moindres carrés laissent presque chaque fratrie un
+ * peu de travers (tirée par ses propres enfants, par la famille d'un conjoint) ; chacune glisse
+ * alors sous ses parents, aussi loin que la place libre le permet (`aligner`).
  *
  * Pur, sans DOM.
  */
@@ -38,6 +42,8 @@ export interface OptionsDAbscisses {
   ecartParties: number
   tours: number
   passes: number
+  /** L'alignement final des fratries sous leurs parents, de haut en bas (`aligner`). */
+  aligner: boolean
 }
 
 export interface Abscisses {
@@ -69,6 +75,18 @@ const POIDS_UNION_EXTERNE = 0.3
  * entier se place, lui, entre ceux qui le tirent.
  */
 const POIDS_ENTRE_GROUPES = 0.25
+
+/*
+ * Essayés pour recentrer les fratries, et écartés après mesure sur l'arbre réel (22/10/2026) :
+ * la somme des écarts plutôt que celle de leurs carrés (l'arbre plus large, les fratries plus
+ * loin de leurs parents : la descente par blocs s'y arrête en chemin) ; des parents qui ne
+ * suivent pas leurs enfants (l'ascendance redressée, mais l'ensemble des fratries éloigné de
+ * 10 %) ; un même poids par famille, partagé entre ses enfants (plus de croisements, sans
+ * mieux centrer). L'alignement final (`aligner`) fait mieux, sans ces défauts.
+ */
+
+/** De combien l'alignement final peut élargir un rectangle sur l'écart qui le sépare de son voisin. */
+const DEBORD = 60
 
 interface Ressort {
   a: number
@@ -115,6 +133,8 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
 
   /* Les ressorts. */
   const ressorts: Ressort[] = []
+  /** Chaque fratrie : sa famille, et ses éléments de la rangée sous les parents (pour l'alignement final). */
+  const fratries: { famille: number; elements: number[] }[] = []
   /** Le point d'union d'une famille dont les époux sont dans un même élément. */
   const unionDans = (f: number): { e: number; o: number } | null => {
     const ep = s.familles[f]!.epoux
@@ -156,6 +176,14 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
       const ey = c.factices.get(`${f}|${y}`)?.[0] ?? elementDe(y)
       return rangDe[ex]! - rangDe[ey]! || dec(x) - dec(y)
     })
+    {
+      const els: number[] = []
+      for (const x of tri) {
+        const e = c.factices.get(`${f}|${x}`)?.[0] ?? elementDe(x)
+        if (ligneDe[e] === ligneDe[elementDe(fam.epoux.find((u) => s.rangee[u] === rf)!)]! + 1 && !els.includes(e)) els.push(e)
+      }
+      if (els.length) fratries.push({ famille: f, elements: els })
+    }
     const centres: number[] = []
     let p = 0
     let precedent = -1
@@ -168,7 +196,9 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
       }
       centres.push(p + (chaine ? elements[e]!.largeur / 2 : dec(x)))
     }
-    const milieu = (centres[0]! + centres[centres.length - 1]!) / 2
+    // Le milieu de la fratrie AVEC ses conjoints : de bord à bord de ses foyers (demande du
+    // 22/10/2026 — Jérôme et sa femme, centrés ensemble sous les parents de Jérôme).
+    const milieu = (p + (precedent >= 0 ? elements[precedent]!.largeur : 0)) / 2
     const poidsDeLaFratrie = tri.length === 1 ? 2 : 1
     const union = unionDans(f)
     const groupesDesParents = new Set(fam.epoux.map((u) => s.parties[s.partieDe[u]!]!.groupe))
@@ -314,31 +344,22 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
 
   /* Les ressorts entre deux parties : ce qui place les parties les unes par rapport aux autres. */
   const ressortsExternes = ressorts.filter((r) => elements[r.a]!.partie !== elements[r.b]!.partie)
-  const parColonne = (l: number[]): number[] => l.sort((a, b) => s.parties[a]!.colonne - s.parties[b]!.colonne || s.parties[a]!.min - s.parties[b]!.min || a - b)
-  const hautes = parColonne(s.parties.map((_, p) => p).filter((p) => s.parties[p]!.bande === 'haut'))
-  const autres = parColonne(s.parties.map((_, p) => p).filter((p) => s.parties[p]!.bande !== 'haut'))
+  const autres = s.parties
+    .map((_, p) => p)
+    .sort((a, b) => s.parties[a]!.colonne - s.parties[b]!.colonne || s.parties[a]!.min - s.parties[b]!.min || a - b)
   const partagent = (p: number, q: number): boolean => !(s.parties[p]!.max < s.parties[q]!.min || s.parties[q]!.max < s.parties[p]!.min)
 
   /**
    * Les parties, rigides, les unes par rapport aux autres :
-   *  1. les ASCENDANCES (le haut des quarts) se serrent de gauche à droite : un écart de
-   *     plus ne ferait qu'allonger l'union des têtes de deux quarts voisins ;
-   *  2. les autres (les descendances, le tronc) se posent sous leurs parents — là où leurs
-   *     ressorts les tirent —, de gauche à droite sans se chevaucher : une régression
-   *     isotone sur les parties, exacte ;
-   *  3. un dernier passage, strict, écarte toute paire qui partage une rangée et se
+   *  1. chacune se pose là où ses ressorts vers les autres la tirent, de gauche à droite
+   *     sans se chevaucher : une régression isotone sur les parties, exacte ;
+   *  2. un dernier passage, strict, écarte toute paire qui partage une rangée et se
    *     chevaucherait encore.
    */
   const placerLesParties = (): void => {
     const boites = s.parties.map((_, p) => boiteComplete(p))
-    // 1. Les ascendances, serrées (la première ne bouge pas : pas de dérive d'un tour à l'autre).
-    for (let i = 1; i < hautes.length; i++) {
-      const p = hautes[i - 1]!
-      const q = hautes[i]!
-      X[q] = X[p]! + boites[p]![1] + o.ecartParties - boites[q]![0]
-    }
     for (let tour = 0; tour < 3; tour++) {
-      // 2. Les autres, sous leurs parents.
+      // 1. Toutes, là où leurs liens les tirent.
       if (autres.length) {
         const cibles: number[] = []
         const poids: number[] = []
@@ -357,8 +378,9 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
             const pa = elements[r.a]!.partie
             const pb = elements[r.b]!.partie
             if (pa !== p && pb !== p) continue
-            if (pa === p) tv += r.w * (X[pb]! + xi[r.b]! + r.ob - r.delta - r.oa - xi[r.a]!)
-            else tv += r.w * (X[pa]! + xi[r.a]! + r.oa + r.delta - r.ob - xi[r.b]!)
+            // La position voulue de la partie, d'après ce ressort.
+            const v = pa === p ? X[pb]! + xi[r.b]! + r.ob - r.delta - r.oa - xi[r.a]! : X[pa]! + xi[r.a]! + r.oa + r.delta - r.ob - xi[r.b]!
+            tv += r.w * v
             tw += r.w
           }
           // La cible du bord gauche de la partie.
@@ -369,7 +391,7 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
         const y = isotone(cibles, poids)
         autres.forEach((p, i) => (X[p] = y[i]! + S[i]! - boites[p]![0]))
       }
-      // 3. Strict : aucune paire qui partage une rangée ne se chevauche.
+      // 2. Strict : aucune paire qui partage une rangée ne se chevauche.
       for (let k = 0; k < 3; k++)
         for (const [p, q] of paires) {
           const besoin = X[p]! + boites[p]![1] + o.ecartParties - (X[q]! + boites[q]![0])
@@ -386,6 +408,149 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
       for (const segs of lignes) for (const k of segs) resoudre(segments[k]!)
     }
     placerLesParties()
+  }
+  // Deux fois : le passage strict de la fin peut écarter des rectangles, et libérer ainsi de la
+  // place qu'une fratrie déjà traitée n'avait pas.
+  if (o.aligner) for (let fois = 0; fois < 2; fois++) aligner()
+
+  /**
+   * L'ALIGNEMENT DES FRATRIES, de haut en bas (demande du 22/10/2026 : « pourquoi les lignes
+   * sont si grandes alors que dessous des parents il y a la place juste dessous pour les
+   * enfants et même conjoint »). Les moindres carrés partagent chaque conflit entre tous les
+   * liens qui y prennent part : une fratrie un peu tirée par ses propres enfants, un couple
+   * tiré par ceux de son conjoint, et presque plus aucune fratrie n'est droite sous ses
+   * parents (5 % sur l'arbre réel). Ici, rangée après rangée, chaque fratrie — conjoints
+   * compris, d'un bloc — glisse sous ses parents, aussi loin que la place libre le permet
+   * (ses voisines ne bougent pas). Une fratrie qui partage un foyer avec une autre (un couple
+   * dont chaque époux a ses parents posés : le couple de la génération suivante, dans
+   * l'ascendance) glisse avec elle, d'un même bloc, vers le milieu de leurs deux couples de
+   * parents : le couple se pose ENTRE eux. Leurs enfants suivent, à la rangée d'après.
+   */
+  function aligner(): void {
+    const parLigne = new Map<number, typeof fratries>()
+    for (const fr of fratries) {
+      const k = ligneDe[fr.elements[0]!]!
+      const l = parLigne.get(k)
+      if (l) l.push(fr)
+      else parLigne.set(k, [fr])
+    }
+    const largeur = (e: number): number => elements[e]!.largeur
+    // Les cadres des rectangles (en interne), tenus à jour, et leurs voisins de rangée.
+    const cadres = s.parties.map((_, p) => boiteComplete(p))
+    const voisinsGauche: number[][] = s.parties.map(() => [])
+    const voisinsDroite: number[][] = s.parties.map(() => [])
+    for (const [p, q] of paires) {
+      voisinsDroite[p]!.push(q)
+      voisinsGauche[q]!.push(p)
+    }
+    for (let k = 0; k < c.ordre.length; k++) {
+      const liste = parLigne.get(k)
+      if (!liste?.length) continue
+      const ligne = c.ordre[k]!
+      // Les blocs : des fratries qui partagent un élément glissent ensemble.
+      const chef = liste.map((_, i) => i)
+      const trouver = (i: number): number => (chef[i] === i ? i : (chef[i] = trouver(chef[i]!)))
+      const proprietaire = new Map<number, number>()
+      liste.forEach((fr, i) => {
+        for (const e of fr.elements) {
+          const j = proprietaire.get(e)
+          if (j === undefined) proprietaire.set(e, i)
+          else chef[trouver(i)] = trouver(j)
+        }
+      })
+      const blocs = new Map<number, number[]>()
+      liste.forEach((_, i) => {
+        const r = trouver(i)
+        const b = blocs.get(r)
+        if (b) b.push(i)
+        else blocs.set(r, [i])
+      })
+      // Chaque bloc glisse entre ses voisines telles qu'elles sont ; trois balayages, dans un
+      // sens puis dans l'autre, pour qu'un bloc profite de la place qu'une voisine libère.
+      const ordonnes = [...blocs.values()].map((membres) => {
+        const els = [...new Set(membres.flatMap((i) => liste[i]!.elements))].sort((a, b) => rangDe[a]! - rangDe[b]!)
+        return { membres, els }
+      })
+      ordonnes.sort((p, q) => rangDe[p.els[0]!]! - rangDe[q.els[0]!]!)
+      for (let balayage = 0; balayage < 3; balayage++) {
+        for (const { membres, els } of balayage % 2 ? [...ordonnes].reverse() : ordonnes) {
+          const premier = rangDe[els[0]!]!
+          const dernier = rangDe[els[els.length - 1]!]!
+          // D'un seul tenant, et d'un seul rectangle — celui d'un des parents au moins : un enfant
+          // posé dans un autre rectangle que ses deux parents (la mère, dans le tronc, et ses
+          // parents dans mp et mm) suit la place des rectangles, pas la sienne. Sinon, on n'y
+          // touche pas.
+          if (dernier - premier + 1 !== els.length) continue
+          const partie = elements[els[0]!]!.partie
+          if (els.some((e) => elements[e]!.partie !== partie)) continue
+          if (membres.some((i) => !s.familles[liste[i]!.famille]!.epoux.some((u) => s.partieDe[u] === partie))) continue
+          // Le milieu des parents de chaque fratrie du bloc.
+          const unions = membres.map((i) => {
+            const ep = s.familles[liste[i]!.famille]!.epoux
+            const rf = Math.max(...ep.map((u) => s.rangee[u]!))
+            const duRang = ep.filter((u) => s.rangee[u] === rf)
+            return duRang.reduce((t, u) => t + gx(elementDe(u)) + dec(u), 0) / duRang.length
+          })
+          // La place libre, entre les voisines (et leurs écarts) — et, au bord du rectangle,
+          // jusqu'aux rectangles voisins (et leur écart), avec un débord de quelques dizaines de
+          // pixels : le passage strict, à la fin, écartera d'autant les rectangles de droite (un
+          // rectangle serré contre son voisin ne laissait pas une fratrie se recentrer de 8 px).
+          const p = partie
+          const g = premier > 0 ? ligne[premier - 1]! : -1
+          const d = dernier + 1 < ligne.length ? ligne[dernier + 1]! : -1
+          let gauche = -Infinity
+          let droite = Infinity
+          // (Au bord, le cadre EXACT du rectangle voisin : l'alignement a pu le resserrer.)
+          if (g >= 0 && elements[g]!.partie === p) gauche = gx(g) + largeur(g) + ecartEntre(elements[g]!, elements[els[0]!]!)
+          else for (const q of voisinsGauche[p]!) gauche = Math.max(gauche, X[q]! + (cadres[q] = boiteComplete(q))[1] + o.ecartParties - DEBORD)
+          if (d >= 0 && elements[d]!.partie === p) droite = gx(d) - ecartEntre(elements[els[els.length - 1]!]!, elements[d]!)
+          else for (const q of voisinsDroite[p]!) droite = Math.min(droite, X[q]! + (cadres[q] = boiteComplete(q))[0] - o.ecartParties + DEBORD)
+          // Les nouvelles positions (bords gauches) des éléments du bloc.
+          let nouvelles: number[]
+          if (membres.length === 1) {
+            // Une fratrie seule : SERRÉE (ses écarts au plus court) et centrée sous ses parents,
+            // conjoints compris — les moindres carrés l'avaient parfois étirée, chaque enfant
+            // tiré vers sa propre famille.
+            const decalages: number[] = []
+            let t = 0
+            els.forEach((e, j) => {
+              if (j) t += ecartEntre(elements[els[j - 1]!]!, elements[e]!)
+              decalages.push(t)
+              t += largeur(e)
+            })
+            const voulu = unions[0]! - t / 2
+            const bord = droite - t < gauche ? gx(els[0]!) : Math.min(droite - t, Math.max(gauche, voulu))
+            nouvelles = decalages.map((dx) => bord + dx)
+          } else {
+            // Des fratries qui partagent un couple : d'un bloc, vers la moyenne de ce que chacune
+            // voudrait — le couple ENTRE ses deux couples de parents.
+            let voulu = 0
+            membres.forEach((i, j) => {
+              const tri = [...liste[i]!.elements].sort((a, b) => rangDe[a]! - rangDe[b]!)
+              voulu += unions[j]! - (gx(tri[0]!) + gx(tri[tri.length - 1]!) + largeur(tri[tri.length - 1]!)) / 2
+            })
+            voulu /= membres.length
+            const min = gauche - gx(els[0]!)
+            const max = droite - (gx(els[els.length - 1]!) + largeur(els[els.length - 1]!))
+            const glisse = min > max ? 0 : Math.min(max, Math.max(min, voulu))
+            nouvelles = els.map((e) => gx(e) + glisse)
+          }
+          if (els.every((e, j) => Math.abs(nouvelles[j]! - gx(e)) < 0.5)) continue
+          els.forEach((e, j) => {
+            xi[e] = nouvelles[j]! - X[p]!
+            cadres[p]![0] = Math.min(cadres[p]![0], xi[e]!)
+            cadres[p]![1] = Math.max(cadres[p]![1], xi[e]! + largeur(e))
+          })
+        }
+      }
+    }
+    // Un rectangle élargi ne doit chevaucher aucun voisin : le passage strict.
+    const boites = s.parties.map((_, p) => boiteComplete(p))
+    for (let k = 0; k < 3; k++)
+      for (const [p, q] of paires) {
+        const besoin = X[p]! + boites[p]![1] + o.ecartParties - (X[q]! + boites[q]![0])
+        if (besoin > 0) X[q] = X[q]! + besoin
+      }
   }
 
   const x = new Float64Array(nE)

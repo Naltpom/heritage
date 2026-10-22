@@ -9,8 +9,8 @@
  * Le moteur, étape par étape :
  *
  *  1. `preparation.ts` — les groupes, les rangées, la lignée directe (les règles de
- *     `/arbre`), puis les PARTIES : chaque quart coupé à la rangée de sa tête, son
- *     ascendance au-dessus d'un couloir libre, sa descendance dessous ; et les FOYERS.
+ *     `/arbre`), puis les PARTIES — un rectangle par quart, comme sur `/arbre` — et les
+ *     FOYERS.
  *  2. `ordre.ts` — l'ordre de chaque rangée : un départ en sablier (la forme d'un arbre
  *     généalogique), puis barycentres, transpositions et retournements de foyers, en
  *     gardant le meilleur — le moins de croisements (comptés comme le routage les trace :
@@ -19,7 +19,7 @@
  *     sous ses parents), sous des écarts généreux, et des rectangles qui ne se
  *     chevauchent jamais.
  *  4. `routage.ts` — les traits, orthogonaux, dans des couloirs dont la hauteur suit le
- *     nombre de pistes : aucun sous une carte, ni dans un rectangle étranger.
+ *     nombre de pistes : aucun sous une carte.
  *
  * La surface n'est pas un objectif (précision du commanditaire) : l'arbre est plus grand
  * que `/arbre`, et c'est voulu. Le zoom, le cadrage et la mini-carte suivent la taille du
@@ -82,11 +82,42 @@ export interface ReglagesDuMoteur {
   departs?: VarianteDeSablier[]
   /** `false` : le sablier seul, sans affinage (pour mesurer ce que l'affinage apporte). */
   affiner?: boolean
+  /** `false` : sans l'alignement final des fratries (pour mesurer ce qu'il apporte). */
+  aligner?: boolean
+  /** L'ordre des rectangles (`COLONNES_PAR_DEFAUT` sinon). */
+  colonnes?: readonly CleDeGroupe[]
+}
+
+/** Jusqu'à combien de personnes on essaie les ordres de rectangles (au-delà, celui de `/arbre`). */
+const PERSONNES_POUR_ESSAYER_LES_COLONNES = 6000
+
+/** Les ordres de rectangles possibles : chaque paire de quarts dans les deux sens, le conjoint avant ou après la mère. */
+function ordresDesColonnes(s: ReturnType<typeof preparer>): CleDeGroupe[][] {
+  const presents = new Set(s.parties.map((p) => p.groupe))
+  const sens = (paire: CleDeGroupe[]): CleDeGroupe[][] => {
+    const l = paire.filter((g) => presents.has(g))
+    return l.length > 1 ? [l, [...l].reverse()] : [l]
+  }
+  const conjoint = (['cpm', 'cpp', 'cmp', 'cmm'] as CleDeGroupe[]).filter((g) => presents.has(g))
+  const fin = (['alliances', 'sansLien'] as CleDeGroupe[]).filter((g) => presents.has(g))
+  const tronc: CleDeGroupe[] = presents.has('tr') ? ['tr'] : []
+  const ordres: CleDeGroupe[][] = []
+  for (const paternel of sens(['pp', 'pm']))
+    for (const maternel of sens(['mp', 'mm'])) {
+      ordres.push([...paternel, ...tronc, ...maternel, ...conjoint, ...fin])
+      if (maternel.length && conjoint.length) ordres.push([...paternel, ...tronc, ...conjoint, ...maternel, ...fin])
+    }
+  return ordres
+}
+
+/** Pose l'ordre des rectangles : la colonne de chaque partie. */
+function poserLesColonnes(s: ReturnType<typeof preparer>, ordre: readonly CleDeGroupe[]): void {
+  for (const p of s.parties) p.colonne = Math.max(0, ordre.indexOf(p.groupe))
 }
 
 export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, reglages: ReglagesDuMoteur = {}): DispositionGroupes {
   /* 1. La structure. */
-  const s = preparer(graphe, { alliances: options.alliances, ecartCouple: ECART_COUPLE })
+  const s = preparer(graphe, { alliances: options.alliances, ecartCouple: ECART_COUPLE, colonnes: reglages.colonnes })
   const ecartParties = CARTES_ENTRE_RECTANGLES * s.largeurDeCarte + 2 * MARGE_RECTANGLE
 
   /* 2. L'ordre. */
@@ -95,6 +126,25 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
   // moins. Avec les fratries par ordre de naissance, un seul : celui des naissances.
   const variantes: VarianteDeSablier[] = fratriesParNaissance ? ['naissance'] : (reglages.departs ?? ['servi', 'inverse'])
   const optionsDOrdre = { fratriesParNaissance, largeurFactice: LARGEUR_FACTICE }
+  /*
+   * L'ordre des rectangles, comme `/arbre` (`groupes.ts`, étape 5) : le côté du père reste à
+   * gauche du tronc, celui de la mère et celui du conjoint à droite, mais le sens de chaque
+   * paire de quarts n'est pas neutre — le lien du père vers le couple de ses parents traverse
+   * le quart qui est entre eux et le tronc, plein ou vide à cette hauteur. Chaque ordre
+   * possible s'estime par un tour d'affinage (mesuré : il classe les ordres comme l'affinage
+   * entier ; de 1 264 à 1 083 croisements sur l'arbre synthétique de 4 000 personnes) ; le
+   * meilleur est gardé. Au-delà de quelques milliers de personnes, l'ordre de `/arbre` seul.
+   */
+  if (!reglages.colonnes && s.personnes.length <= PERSONNES_POUR_ESSAYER_LES_COLONNES) {
+    let meilleur: { ordre: readonly CleDeGroupe[]; n: number } | null = null
+    for (const ordre of ordresDesColonnes(s)) {
+      poserLesColonnes(s, ordre)
+      const essai = construireCouches(s, ordreEnSablier(s, variantes[0]!), optionsDOrdre)
+      affiner(s, essai, optionsDOrdre, 1)
+      if (!meilleur || essai.croisements < meilleur.n) meilleur = { ordre, n: essai.croisements }
+    }
+    if (meilleur) poserLesColonnes(s, meilleur.ordre)
+  }
   let couches = construireCouches(s, ordreEnSablier(s, variantes[0]!), optionsDOrdre)
   variantes.forEach((variante, k) => {
     const essai = k === 0 ? couches : construireCouches(s, ordreEnSablier(s, variante), optionsDOrdre)
@@ -112,6 +162,7 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
     ecartParties,
     tours: 3,
     passes: 24,
+    aligner: reglages.aligner ?? true,
   })
 
   /* 4. Les traits. */
@@ -120,8 +171,6 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
     couloirMin: COULOIR_MIN,
     piste: 14,
     margePiste: 22,
-    coupeHaut: MARGE_RECTANGLE + 12,
-    coupeBas: MARGE_RECTANGLE + BANDEAU_RECTANGLE + 12,
     haut,
     ecartVertical: 9,
     retraitChute: 16,
@@ -205,10 +254,9 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
       y1 = Math.max(y1, f.y + f.h)
     }
     const y = y0 - MARGE_RECTANGLE - BANDEAU_RECTANGLE
-    const libelle = partie.tranche === 'bas' ? `${LIBELLES_GROUPE[partie.groupe]} · descendance` : LIBELLES_GROUPE[partie.groupe]
     groupes.push({
       cle: partie.groupe,
-      libelle,
+      libelle: LIBELLES_GROUPE[partie.groupe],
       nom: nomDuQuart(partie.groupe),
       effectif: partie.membres.length,
       x: x0 - MARGE_RECTANGLE,
@@ -218,7 +266,7 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
     })
   }
 
-  /* Les quarts (bandeau, mini-carte, filtres) : l'étendue de leurs deux parties. */
+  /* Les quarts (bandeau, mini-carte, filtres) : l'étendue de leur rectangle. */
   const quarts: Quart[] = []
   for (const cle of ['pp', 'pm', 'mp', 'mm', 'cpp', 'cpm', 'cmp', 'cmm'] as const) {
     const rects = groupes.filter((g) => g.cle === cle)

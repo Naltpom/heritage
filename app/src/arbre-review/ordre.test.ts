@@ -191,5 +191,7 @@ describe('le compte en bus', () => {
       expect(bus.total, `après le mouvement ${n}`).toBe(compterBus(s, c))
     }
     expect(essais).toBeGreaterThan(500)
-  })
+    // Un compte entier après chacun des 1 500 mouvements : au-delà des 5 s par défaut sur une
+    // machine occupée.
+  }, 30_000)
 })

@@ -44,14 +44,6 @@ export interface OptionsDeRoutage {
   piste: number
   /** La marge entre une rangée et la première (ou la dernière) piste. */
   margePiste: number
-  /**
-   * Un couloir de coupe (entre l'ascendance et la descendance des quarts) passe entre les
-   * rectangles : il ajoute la marge du bas des rectangles du dessus (`coupeHaut`) et celle du
-   * haut — titre compris — des rectangles du dessous (`coupeBas`), et ses pistes restent dans
-   * la bande libre entre les deux.
-   */
-  coupeHaut: number
-  coupeBas: number
   /** Le haut de la première rangée. */
   haut: number
   /** L'écart minimal entre deux traits verticaux d'un couloir. */
@@ -516,15 +508,9 @@ export function router(s: Structure, c: Couches, a: Abscisses, o: OptionsDeRouta
   }
 
   /* 4. La hauteur des couloirs, puis le haut de chaque rangée. */
-  const coupe: boolean[] = c.rangees.map(() => false)
-  for (const p of s.parties) {
-    if (p.tranche !== 'haut') continue
-    const k = indiceDe.get(p.max)
-    if (k !== undefined) coupe[k] = true
-  }
   const hauteurCouloir = (k: number): number => {
     const besoin = 2 * o.margePiste + Math.max(0, pistes[k]! - 1) * o.piste
-    return Math.max(o.couloirMin, besoin) + (coupe[k] ? o.coupeHaut + o.coupeBas : 0)
+    return Math.max(o.couloirMin, besoin)
   }
   const hautRangee: number[] = []
   let y = o.haut
@@ -535,14 +521,10 @@ export function router(s: Structure, c: Couches, a: Abscisses, o: OptionsDeRouta
   // Sous la dernière rangée, un couloir seulement s'il porte quelque chose (un détour d'union).
   const dernier = nR ? hautRangee[nR - 1]! + hauteurRangee[nR - 1]! : o.haut
   const bas = nR && pistes[nR - 1]! > 0 ? dernier + hauteurCouloir(nR - 1) : dernier
-  /** L'ordonnée d'une piste : centrées dans le couloir (dans la bande libre d'un couloir de coupe). */
+  /** L'ordonnée d'une piste : les pistes d'un couloir, centrées entre ses deux rangées. */
   const yPiste = (k: number, piste: number): number => {
-    let debut = hautRangee[k]! + hauteurRangee[k]!
-    let fin = k + 1 < nR ? hautRangee[k + 1]! : debut + hauteurCouloir(k)
-    if (coupe[k]) {
-      debut += o.coupeHaut
-      fin -= o.coupeBas
-    }
+    const debut = hautRangee[k]! + hauteurRangee[k]!
+    const fin = k + 1 < nR ? hautRangee[k + 1]! : debut + hauteurCouloir(k)
     const n = Math.max(1, pistes[k]!)
     const milieu = (debut + fin) / 2
     return milieu - ((n - 1) * o.piste) / 2 + piste * o.piste
