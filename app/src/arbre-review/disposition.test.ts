@@ -552,6 +552,29 @@ describe('les fratries sous leurs parents (demande du 22/10/2026)', () => {
   })
 })
 
+describe('la proximité avant les croisements (retours du 23/10/2026)', () => {
+  it('un couple à cheval sur deux rectangles : la fratrie de chaque rectangle sous le parent de ce rectangle', () => {
+    // Le grand-père dans pp, la grand-mère dans pm : la tante et l'oncle (pp) sous leur père,
+    // pas à mi-chemin de leur mère posée de l'autre côté de la frontière.
+    const { graphe, id } = arbreDEssai()
+    const d = disposerEnRevue(parDefaut(graphe))
+    expect(ecartSousLesParents(d, [id.gpp!], [id.tante!, id.oncle!], [id.tanteAlliee!])).toBeLessThan(1)
+  })
+
+  it('sur un arbre synthétique, les familles par alliance affichées et les fratries par ordre de naissance : rien sous une carte, rien qui se chevauche', () => {
+    const brut = brancherCommeLeServeur(genealogieSynthetique({ personnes: 1000, graine: 7 }))
+    const graphe = sansPersonnesSansLien(brut, noeudsSansLien(brut))
+    const d = disposerEnRevue(graphe, { alliances: 'dans-l-arbre', fratriesParNaissance: true })
+    const m = mesurer(d, d.groupes)
+    expect(m.sousUneCarte).toBe(0)
+    expect(chevauchements(d)).toEqual([])
+    expect(rectanglesQuiSeChevauchent(d)).toEqual([])
+    // Le rapprochement rapproche : sans lui, les fratries sont plus loin de leurs parents.
+    const sans = disposerEnRevue(graphe, { alliances: 'dans-l-arbre', fratriesParNaissance: true }, { rapprocher: false })
+    expect(m.fratrieSousParents.total).toBeLessThan(mesurer(sans, sans.groupes).fratrieSousParents.total)
+  }, 60_000)
+})
+
 describe('les cas durs', () => {
   it('un remariage : chaque lit sous son union, sans croisement ni carte touchée', () => {
     const a = nouvelArbre()

@@ -141,6 +141,52 @@ describe('la fratrie sous ses parents (demande du 22/10/2026)', () => {
     expect(m.fratrieSousParents).toMatchObject({ total: 530, evitables: 0, evitablesTotal: 0 })
   })
 
+  it('un couple à cheval sur deux rectangles : chaque fratrie se mesure sous le parent de son rectangle', () => {
+    // Le père dans le rectangle de gauche, la mère dans celui de droite ; un enfant sous chacun.
+    const gauche = { x: -50, y: -30, w: 300, h: 300 }
+    const droite = { x: 350, y: -30, w: 300, h: 300 }
+    const lui = fiche('lui', 0, 0, 0)
+    const elle = fiche('elle', 400, 0, 0)
+    const sousLui = fiche('sousLui', 0, 200, 1)
+    const sousElle = fiche('sousElle', 400, 200, 1)
+    const f = { id: 'f', d: 'M100 25L400 25', personnes: ['lui', 'elle', 'sousLui', 'sousElle'] }
+    const m = mesurer(disposition([lui, elle, sousLui, sousElle], [f]), [gauche, droite])
+    expect(m.fratrieSousParents).toMatchObject({ familles: 2, centrees: 2, total: 0 })
+    // Sans rectangles, une seule fratrie, sous le milieu du couple : centrée elle aussi.
+    expect(mesurer(disposition([lui, elle, sousLui, sousElle], [f])).fratrieSousParents).toMatchObject({ familles: 1, total: 0 })
+  })
+
+  it('ne dit pas « seule » une fratrie dont le conjoint a ses parents posés : le couple va à mi-chemin', () => {
+    // La fille de pere et mere, mariée au fils d'un autre couple posé à droite : la place sous
+    // ses parents est libre, mais le couple est entre ses deux couples de parents, c'est voulu.
+    const autre = fiche('autre', 900, 0, 0)
+    const fille = fiche('fille', 400, 200, 1)
+    const gendre = fiche('gendre', 540, 200, 1)
+    const union = { id: 'g', d: 'M500 225L540 225', personnes: ['fille', 'gendre'] }
+    const sesParents = { id: 'h', d: 'M950 25L590 200', personnes: ['autre', 'gendre'] }
+    const m = mesurer(disposition([pere, mere, autre, fille, gendre], [famille(['fille']), union, sesParents]))
+    expect(m.fratrieSousParents.evitables).toBeGreaterThan(0)
+    expect(m.fratrieSousParents.evitablesSeules).toBe(0)
+  })
+
+  it('mesure l’étalement d’une fratrie éclatée, même centrée sous ses parents', () => {
+    // Deux frères serrés : rien. Les mêmes, écartés de part et d'autre d'une fiche étrangère :
+    // centrés tout autant, mais leur barre s'étire de tout ce qui dépasse un écart de familles.
+    const aine = fiche('aine', -10, 200, 1)
+    const cadet = fiche('cadet', 150, 200, 1)
+    expect(mesurer(disposition([pere, mere, aine, cadet], [famille(['aine', 'cadet'])])).fratrieSousParents).toMatchObject({
+      centrees: 1,
+      etalementTotal: 0,
+      etalees: 0,
+    })
+    const loinAGauche = fiche('loinAGauche', -1000, 200, 1)
+    const loinADroite = fiche('loinADroite', 1140, 200, 1)
+    const etranger = fiche('etranger', 70, 200, 1)
+    const m = mesurer(disposition([pere, mere, loinAGauche, etranger, loinADroite], [famille(['loinAGauche', 'loinADroite'])]))
+    // 2 040 px entre les deux frères, moins l'écart de familles toléré (176).
+    expect(m.fratrieSousParents).toMatchObject({ centrees: 1, etalementTotal: 2040 - 176, etalees: 1 })
+  })
+
   it('ne compte pas un conjoint posé loin, de l’autre côté d’un rectangle', () => {
     // La fille sous ses parents ; son mari, voisin dans la rangée mais à 2 000 px : il n'est
     // pas de sa fratrie, et ne la décentre pas.

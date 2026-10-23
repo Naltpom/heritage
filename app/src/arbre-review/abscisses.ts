@@ -6,10 +6,12 @@
  *
  *  - **les ressorts** — chaque enfant voudrait être à sa place idéale sous le point
  *    d'union de ses parents (la fratrie, ses conjoints compris, serrée à l'écart des
- *    fratries et centrée sous le couple) ; deux époux de foyers différents (un couple à
- *    cheval sur deux rectangles) voudraient être côte à côte ; la chaîne des factices d'un
- *    lien qui saute une génération voudrait être droite. On minimise Σ poids × (écart à la
- *    place idéale)². Une fratrie d'un seul enfant pèse double : son lien doit tomber droit.
+ *    fratries et centrée sous le couple ; pour un couple à cheval sur deux rectangles,
+ *    chaque fratrie sous le parent de son rectangle) ; deux époux de foyers différents (un
+ *    couple à cheval sur deux rectangles) voudraient être côte à côte ; la chaîne des
+ *    factices d'un lien qui saute une génération voudrait être droite. On minimise Σ poids ×
+ *    (écart à la place idéale)². Une fratrie d'un seul enfant pèse double : son lien doit
+ *    tomber droit.
  *  - **les contraintes** — sur une rangée, deux éléments voisins gardent leur écart :
  *    celui d'une fratrie, celui de deux familles (plus grand : on voit où une famille
  *    finit), celui de deux rectangles (le plus grand). Et deux rectangles qui partagent une
@@ -152,6 +154,8 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
    * (mesuré sur un arbre synthétique de 10 000 personnes : un tronc étiré sur 100 000 px).
    */
   const partieDeLElement = (e: number): number => elements[e]!.partie
+  /** L'élément d'un enfant vu de sa famille : le premier factice de son lien, sinon le sien. */
+  const elementDeLEnfant = (f: number, x: number): number => c.factices.get(`${f}|${x}`)?.[0] ?? elementDe(x)
   s.familles.forEach((fam, f) => {
     if (!fam.epoux.length) return
     const rf = Math.max(...fam.epoux.map((e) => s.rangee[e]!))
@@ -170,69 +174,94 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
       }
     }
     if (!enfants.length) return
-    // La place idéale de chaque enfant : la fratrie serrée, centrée sous l'union.
-    const tri = [...enfants].sort((x, y) => {
-      const ex = c.factices.get(`${f}|${x}`)?.[0] ?? elementDe(x)
-      const ey = c.factices.get(`${f}|${y}`)?.[0] ?? elementDe(y)
-      return rangDe[ex]! - rangDe[ey]! || dec(x) - dec(y)
-    })
-    {
-      const els: number[] = []
-      for (const x of tri) {
-        const e = c.factices.get(`${f}|${x}`)?.[0] ?? elementDe(x)
-        if (ligneDe[e] === ligneDe[elementDe(fam.epoux.find((u) => s.rangee[u] === rf)!)]! + 1 && !els.includes(e)) els.push(e)
-      }
-      if (els.length) fratries.push({ famille: f, elements: els })
-    }
-    const centres: number[] = []
-    let p = 0
-    let precedent = -1
-    for (const x of tri) {
-      const chaine = c.factices.get(`${f}|${x}`)
-      const e = chaine ? chaine[0]! : elementDe(x)
-      if (e !== precedent) {
-        if (precedent >= 0) p += elements[precedent]!.largeur + o.ecartFratrie
-        precedent = e
-      }
-      centres.push(p + (chaine ? elements[e]!.largeur / 2 : dec(x)))
-    }
-    // Le milieu de la fratrie AVEC ses conjoints : de bord à bord de ses foyers (demande du
-    // 22/10/2026 — Jérôme et sa femme, centrés ensemble sous les parents de Jérôme).
-    const milieu = (p + (precedent >= 0 ? elements[precedent]!.largeur : 0)) / 2
-    const poidsDeLaFratrie = tri.length === 1 ? 2 : 1
+    const ligneDesParents = ligneDe[elementDe(fam.epoux.find((u) => s.rangee[u] === rf)!)]!
     const union = unionDans(f)
     const groupesDesParents = new Set(fam.epoux.map((u) => s.parties[s.partieDe[u]!]!.groupe))
-    tri.forEach((x, j) => {
-      const ideal = centres[j]! - milieu
-      const chaine = c.factices.get(`${f}|${x}`)
-      const cible = chaine ? { e: chaine[0]!, o: elements[chaine[0]!]!.largeur / 2 } : { e: elementDe(x), o: dec(x) }
-      const poids = groupesDesParents.has(s.parties[s.partieDe[x]!]!.groupe) ? poidsDeLaFratrie : poidsDeLaFratrie * POIDS_ENTRE_GROUPES
-      if (union) ressorts.push({ a: union.e, oa: union.o, b: cible.e, ob: cible.o, delta: ideal, w: poids })
-      else if (!voisines) {
-        // Un implexe : l'enfant suit le parent de sa partie (ou de la plus proche).
-        const pc = partieDeLElement(cible.e)
-        const parent = [...fam.epoux].sort(
-          (u, v) =>
-            Math.abs(s.parties[partieDeLElement(elementDe(u))]!.colonne - s.parties[pc]!.colonne) -
-              Math.abs(s.parties[partieDeLElement(elementDe(v))]!.colonne - s.parties[pc]!.colonne) || u - v,
-        )[0]!
-        ressorts.push({ a: elementDe(parent), oa: dec(parent), b: cible.e, ob: cible.o, delta: ideal, w: poids })
-      } else {
-        // Union entre deux éléments : chaque époux tire l'enfant, chacun pour sa moitié.
-        const ep = [...fam.epoux].sort((u, v) => rangDe[elementDe(u)]! - rangDe[elementDe(v)]!)
-        const demi = ep.length > 1 ? (s.personnes[ep[0]!]!.w / 2 + o.ecartCouple / 2) : 0
-        ep.forEach((u, k) => {
-          const decale = ep.length > 1 ? (k === 0 ? demi : -(s.personnes[ep[ep.length - 1]!]!.w / 2 + o.ecartCouple / 2)) : 0
-          ressorts.push({ a: elementDe(u), oa: dec(u), b: cible.e, ob: cible.o, delta: ideal + decale, w: poids / ep.length })
-        })
+    /*
+     * Un couple À CHEVAL sur deux rectangles (le grand-père dans pp, la grand-mère dans pm) :
+     * les enfants posés dans le rectangle de l'un des deux forment leur propre fratrie, centrée
+     * sous CE parent-là (retours du 23/10/2026 : l'oncle et la tante du lecteur, à 1 700 px de
+     * leur père, tirés vers sa femme posée de l'autre côté de la frontière). Un enfant posé
+     * ailleurs (le père, dans le tronc) reste tiré par les deux, chacun pour moitié.
+     */
+    const partiesDesEpoux = new Set(fam.epoux.map((u) => partieDeLElement(elementDe(u))))
+    const aCheval = !union && voisines && partiesDesEpoux.size > 1
+    const groupes: number[][] = []
+    if (aCheval) {
+      const parPartie = new Map<number, number[]>()
+      for (const x of enfants) {
+        const p = partieDeLElement(elementDeLEnfant(f, x))
+        const l = parPartie.get(p)
+        if (l) l.push(x)
+        else parPartie.set(p, [x])
       }
-      if (chaine) {
-        for (let i = 0; i + 1 < chaine.length; i++)
-          ressorts.push({ a: chaine[i]!, oa: elements[chaine[i]!]!.largeur / 2, b: chaine[i + 1]!, ob: elements[chaine[i + 1]!]!.largeur / 2, delta: 0, w: 2 })
-        const der = chaine[chaine.length - 1]!
-        ressorts.push({ a: der, oa: elements[der]!.largeur / 2, b: elementDe(x), ob: dec(x), delta: 0, w: 2 })
+      groupes.push(...parPartie.values())
+    } else groupes.push(enfants)
+    for (const groupe of groupes) {
+      // La place idéale de chaque enfant : la fratrie serrée, centrée sous l'union.
+      const tri = [...groupe].sort((x, y) => rangDe[elementDeLEnfant(f, x)]! - rangDe[elementDeLEnfant(f, y)]! || dec(x) - dec(y))
+      {
+        const els: number[] = []
+        for (const x of tri) {
+          const e = elementDeLEnfant(f, x)
+          if (ligneDe[e] === ligneDesParents + 1 && !els.includes(e)) els.push(e)
+        }
+        if (els.length) fratries.push({ famille: f, elements: els })
       }
-    })
+      const centres: number[] = []
+      let p = 0
+      let precedent = -1
+      for (const x of tri) {
+        const chaine = c.factices.get(`${f}|${x}`)
+        const e = chaine ? chaine[0]! : elementDe(x)
+        if (e !== precedent) {
+          if (precedent >= 0) p += elements[precedent]!.largeur + o.ecartFratrie
+          precedent = e
+        }
+        centres.push(p + (chaine ? elements[e]!.largeur / 2 : dec(x)))
+      }
+      // Le milieu de la fratrie AVEC ses conjoints : de bord à bord de ses foyers (demande du
+      // 22/10/2026 — Jérôme et sa femme, centrés ensemble sous les parents de Jérôme).
+      const milieu = (p + (precedent >= 0 ? elements[precedent]!.largeur : 0)) / 2
+      const poidsDeLaFratrie = tri.length === 1 ? 2 : 1
+      // Le parent du rectangle de cette fratrie, pour un couple à cheval.
+      const partieDuGroupe = partieDeLElement(elementDeLEnfant(f, tri[0]!))
+      const sousQui = aCheval ? fam.epoux.filter((u) => partieDeLElement(elementDe(u)) === partieDuGroupe) : []
+      tri.forEach((x, j) => {
+        const ideal = centres[j]! - milieu
+        const chaine = c.factices.get(`${f}|${x}`)
+        const cible = chaine ? { e: chaine[0]!, o: elements[chaine[0]!]!.largeur / 2 } : { e: elementDe(x), o: dec(x) }
+        const poids = groupesDesParents.has(s.parties[s.partieDe[x]!]!.groupe) ? poidsDeLaFratrie : poidsDeLaFratrie * POIDS_ENTRE_GROUPES
+        if (union) ressorts.push({ a: union.e, oa: union.o, b: cible.e, ob: cible.o, delta: ideal, w: poids })
+        else if (sousQui.length) {
+          // Sous le parent de son rectangle.
+          for (const u of sousQui) ressorts.push({ a: elementDe(u), oa: dec(u), b: cible.e, ob: cible.o, delta: ideal, w: poids / sousQui.length })
+        } else if (!voisines) {
+          // Un implexe : l'enfant suit le parent de sa partie (ou de la plus proche).
+          const pc = partieDeLElement(cible.e)
+          const parent = [...fam.epoux].sort(
+            (u, v) =>
+              Math.abs(s.parties[partieDeLElement(elementDe(u))]!.colonne - s.parties[pc]!.colonne) -
+                Math.abs(s.parties[partieDeLElement(elementDe(v))]!.colonne - s.parties[pc]!.colonne) || u - v,
+          )[0]!
+          ressorts.push({ a: elementDe(parent), oa: dec(parent), b: cible.e, ob: cible.o, delta: ideal, w: poids })
+        } else {
+          // Union entre deux éléments : chaque époux tire l'enfant, chacun pour sa moitié.
+          const ep = [...fam.epoux].sort((u, v) => rangDe[elementDe(u)]! - rangDe[elementDe(v)]!)
+          const demi = ep.length > 1 ? (s.personnes[ep[0]!]!.w / 2 + o.ecartCouple / 2) : 0
+          ep.forEach((u, k) => {
+            const decale = ep.length > 1 ? (k === 0 ? demi : -(s.personnes[ep[ep.length - 1]!]!.w / 2 + o.ecartCouple / 2)) : 0
+            ressorts.push({ a: elementDe(u), oa: dec(u), b: cible.e, ob: cible.o, delta: ideal + decale, w: poids / ep.length })
+          })
+        }
+        if (chaine) {
+          for (let i = 0; i + 1 < chaine.length; i++)
+            ressorts.push({ a: chaine[i]!, oa: elements[chaine[i]!]!.largeur / 2, b: chaine[i + 1]!, ob: elements[chaine[i + 1]!]!.largeur / 2, delta: 0, w: 2 })
+          const der = chaine[chaine.length - 1]!
+          ressorts.push({ a: der, oa: elements[der]!.largeur / 2, b: elementDe(x), ob: dec(x), delta: 0, w: 2 })
+        }
+      })
+    }
   })
 
   /* Les ressorts de chaque élément, dans les deux sens. */
@@ -413,6 +442,30 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
   // place qu'une fratrie déjà traitée n'avait pas.
   if (o.aligner) for (let fois = 0; fois < 2; fois++) aligner()
 
+  /** Le milieu des parents d'une famille (sa rangée la plus basse), ceux de la partie `p` s'il y en a. */
+  function milieuDesParents(f: number, p: number): number {
+    const ep = s.familles[f]!.epoux
+    const rf = Math.max(...ep.map((u) => s.rangee[u]!))
+    const duRang = ep.filter((u) => s.rangee[u] === rf)
+    const ici = duRang.filter((u) => s.partieDe[u] === p)
+    const qui = ici.length ? ici : duRang
+    return qui.reduce((t, u) => t + gx(elementDe(u)) + dec(u), 0) / qui.length
+  }
+
+  /**
+   * Le parent d'une famille qui n'a PERSONNE AU-DESSUS de lui (aucun parent posé) et rien
+   * d'autre que cette famille-là — le père d'une belle-fille : son élément, s'il est seul de la
+   * partie `p` à porter la famille ; −1 sinon. Rien ne le retient ailleurs : c'est lui qui va
+   * au-dessus de ses enfants, et non ses enfants qui vont sous lui.
+   */
+  function parentSansPersonneAuDessus(f: number, p: number): number {
+    const ep = s.familles[f]!.epoux
+    const e = elementDe(ep[0]!)
+    if (elements[e]!.partie !== p || ep.some((u) => elementDe(u) !== e)) return -1
+    const membres = s.foyers[elements[e]!.foyer]!.membres
+    return membres.every((m) => s.enfantDans[m]!.length === 0 && s.epouxDans[m]!.length === 1) ? e : -1
+  }
+
   /**
    * L'ALIGNEMENT DES FRATRIES, de haut en bas (demande du 22/10/2026 : « pourquoi les lignes
    * sont si grandes alors que dessous des parents il y a la place juste dessous pour les
@@ -484,13 +537,9 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
           const partie = elements[els[0]!]!.partie
           if (els.some((e) => elements[e]!.partie !== partie)) continue
           if (membres.some((i) => !s.familles[liste[i]!.famille]!.epoux.some((u) => s.partieDe[u] === partie))) continue
-          // Le milieu des parents de chaque fratrie du bloc.
-          const unions = membres.map((i) => {
-            const ep = s.familles[liste[i]!.famille]!.epoux
-            const rf = Math.max(...ep.map((u) => s.rangee[u]!))
-            const duRang = ep.filter((u) => s.rangee[u] === rf)
-            return duRang.reduce((t, u) => t + gx(elementDe(u)) + dec(u), 0) / duRang.length
-          })
+          // Le milieu des parents de chaque fratrie du bloc — ceux de son rectangle, pour un
+          // couple à cheval sur deux (le grand-père dans pp : sa fratrie de pp sous lui).
+          const unions = membres.map((i) => milieuDesParents(liste[i]!.famille, partie))
           // La place libre, entre les voisines (et leurs écarts) — et, au bord du rectangle,
           // jusqu'aux rectangles voisins (et leur écart), avec un débord de quelques dizaines de
           // pixels : le passage strict, à la fin, écartera d'autant les rectangles de droite (un
@@ -523,13 +572,20 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
             nouvelles = decalages.map((dx) => bord + dx)
           } else {
             // Des fratries qui partagent un couple : d'un bloc, vers la moyenne de ce que chacune
-            // voudrait — le couple ENTRE ses deux couples de parents.
+            // voudrait — le couple ENTRE ses deux couples de parents. (Essayé le 23/10/2026 : étirer
+            // le bloc, chaque fratrie vers ses parents et le couple seul à mi-chemin ; chaque
+            // fratrie s'étire alors autant qu'elle se rapproche — l'écart aux parents grandit de
+            // 6 % sur l'arbre réel.)
+            // Une fratrie dont le parent n'a personne au-dessus ne tire pas le bloc : c'est ce
+            // parent qui viendra au-dessus d'elle (plus bas, après la rangée).
+            const tirent = membres.filter((i) => parentSansPersonneAuDessus(liste[i]!.famille, partie) < 0)
+            const qui = tirent.length ? tirent : membres
             let voulu = 0
-            membres.forEach((i, j) => {
+            for (const i of qui) {
               const tri = [...liste[i]!.elements].sort((a, b) => rangDe[a]! - rangDe[b]!)
-              voulu += unions[j]! - (gx(tri[0]!) + gx(tri[tri.length - 1]!) + largeur(tri[tri.length - 1]!)) / 2
-            })
-            voulu /= membres.length
+              voulu += unions[membres.indexOf(i)]! - (gx(tri[0]!) + gx(tri[tri.length - 1]!) + largeur(tri[tri.length - 1]!)) / 2
+            }
+            voulu /= qui.length
             const min = gauche - gx(els[0]!)
             const max = droite - (gx(els[els.length - 1]!) + largeur(els[els.length - 1]!))
             const glisse = min > max ? 0 : Math.min(max, Math.max(min, voulu))
@@ -542,6 +598,38 @@ export function placer(s: Structure, c: Couches, o: OptionsDAbscisses): Abscisse
             cadres[p]![1] = Math.max(cadres[p]![1], xi[e]! + largeur(e))
           })
         }
+      }
+      // Les parents sans personne au-dessus : au-dessus de leurs enfants, aussi loin que la
+      // place libre de leur rangée le permet (retours du 23/10/2026).
+      for (const fr of liste) {
+        const p = elements[fr.elements[0]!]!.partie
+        const e = parentSansPersonneAuDessus(fr.famille, p)
+        if (e < 0 || fr.elements.some((x) => elements[x]!.partie !== p)) continue
+        const rangee = c.ordre[ligneDe[e]!]!
+        const g = rangDe[e]! > 0 ? rangee[rangDe[e]! - 1]! : -1
+        const d = rangDe[e]! + 1 < rangee.length ? rangee[rangDe[e]! + 1]! : -1
+        let gauche = -Infinity
+        let droite = Infinity
+        if (g >= 0 && elements[g]!.partie === p) gauche = gx(g) + largeur(g) + ecartEntre(elements[g]!, elements[e]!)
+        else for (const q of voisinsGauche[p]!) gauche = Math.max(gauche, X[q]! + (cadres[q] = boiteComplete(q))[1] + o.ecartParties)
+        if (d >= 0 && elements[d]!.partie === p) droite = gx(d) - ecartEntre(elements[e]!, elements[d]!)
+        else for (const q of voisinsDroite[p]!) droite = Math.min(droite, X[q]! + (cadres[q] = boiteComplete(q))[0] - o.ecartParties)
+        let lo = Infinity
+        let hi = -Infinity
+        for (const x of fr.elements) {
+          lo = Math.min(lo, gx(x))
+          hi = Math.max(hi, gx(x) + largeur(x))
+        }
+        const w = largeur(e)
+        if (droite - w < gauche) continue
+        // Le point d'union (le milieu des époux, pas celui de la boîte : deux fiches de largeurs
+        // différentes) au-dessus du milieu de la fratrie.
+        const ep = s.familles[fr.famille]!.epoux
+        const union = ep.reduce((t, u) => t + dec(u), 0) / ep.length
+        const bord = Math.min(droite - w, Math.max(gauche, (lo + hi) / 2 - union))
+        xi[e] = bord - X[p]!
+        cadres[p]![0] = Math.min(cadres[p]![0], xi[e]!)
+        cadres[p]![1] = Math.max(cadres[p]![1], xi[e]! + w)
       }
     }
     // Un rectangle élargi ne doit chevaucher aucun voisin : le passage strict.
