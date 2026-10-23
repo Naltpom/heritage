@@ -18,7 +18,11 @@
  *  3. `abscisses.ts` — les abscisses : des liens courts et droits (chaque fratrie centrée
  *     sous ses parents), sous des écarts généreux, et des rectangles qui ne se
  *     chevauchent jamais.
- *  4. `routage.ts` — les traits, orthogonaux, dans des couloirs dont la hauteur suit le
+ *  4. `rapprochement.ts` — la PROXIMITÉ d'abord (retours du 23/10/2026) : une fratrie que
+ *     l'ordre a laissée loin de ses parents change de rang pour aller sous eux, un parent
+ *     sans personne au-dessus va au-dessus de ses enfants, chaque croisement ajouté devant
+ *     rapprocher d'au moins `PRIX_D_UN_CROISEMENT` pixels ; puis les abscisses, refaites.
+ *  5. `routage.ts` — les traits, orthogonaux, dans des couloirs dont la hauteur suit le
  *     nombre de pistes : aucun sous une carte.
  *
  * La surface n'est pas un objectif (précision du commanditaire) : l'arbre est plus grand
@@ -49,6 +53,7 @@ import {
 import { preparer } from './preparation'
 import { affiner, compterBus, construireCouches, ordreEnSablier, type VarianteDeSablier } from './ordre'
 import { placer } from './abscisses'
+import { ecartTotal, rapprocher } from './rapprochement'
 import { router } from './routage'
 
 /* ------------------------------------------------------------------ */
@@ -84,12 +89,36 @@ export interface ReglagesDuMoteur {
   affiner?: boolean
   /** `false` : sans l'alignement final des fratries (pour mesurer ce qu'il apporte). */
   aligner?: boolean
+  /** `false` : sans le rapprochement des fratries sous leurs parents (pour mesurer ce qu'il apporte). */
+  rapprocher?: boolean
   /** L'ordre des rectangles (`COLONNES_PAR_DEFAUT` sinon). */
   colonnes?: readonly CleDeGroupe[]
 }
 
 /** Jusqu'à combien de personnes on essaie les ordres de rectangles (au-delà, celui de `/arbre`). */
 const PERSONNES_POUR_ESSAYER_LES_COLONNES = 6000
+
+/**
+ * Ce que doit rapporter chaque croisement ajouté par le rapprochement, en pixels de liens
+ * parents–enfants raccourcis (retours du 23/10/2026 : un enfant juste sous ses parents dont
+ * le lien coupe « un ou deux » traits vaut mieux qu'un enfant rejeté à 1 700 px).
+ */
+export const PRIX_D_UN_CROISEMENT = 600
+/**
+ * Ce que doit rapporter, en plus, chaque fratrie qu'une fiche étrangère coupe en deux : la fiche
+ * passe pour un frère (le trait qui la relie aux siens est déjà un croisement compté). Une
+ * fratrie dont un membre a ses propres enfants ne se coupe jamais (`rapprochement.ts`), et un
+ * bloc s'essaie d'abord à côté d'elle : mesuré le 23/10/2026, le double ne retire plus qu'une
+ * fratrie coupée sur 40 à 200, à écart égal.
+ */
+export const PRIX_D_UNE_FRATRIE_COUPEE = PRIX_D_UN_CROISEMENT
+/**
+ * Les passages du rapprochement : chacun prend la place que le précédent a libérée. Au-delà de
+ * quelques milliers de personnes, un seul (chaque passage coûte plus d'une seconde sur un arbre
+ * synthétique de 10 000 personnes ; le premier y retire déjà 20 % des écarts).
+ */
+const PASSAGES_DE_RAPPROCHEMENT = 3
+const PERSONNES_POUR_TOUS_LES_PASSAGES = 6000
 
 /** Les ordres de rectangles possibles : chaque paire de quarts dans les deux sens, le conjoint avant ou après la mère. */
 function ordresDesColonnes(s: ReturnType<typeof preparer>): CleDeGroupe[][] {
@@ -154,7 +183,7 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
   })
 
   /* 3. Les abscisses. */
-  const abscisses = placer(s, couches, {
+  const optionsDAbscisses = {
     ecartCouple: ECART_COUPLE,
     ecartFratrie: ECART_FRATRIE,
     ecartFamille: ECART_FAMILLE,
@@ -163,7 +192,40 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
     tours: 3,
     passes: 24,
     aligner: reglages.aligner ?? true,
-  })
+  }
+  let abscisses = placer(s, couches, optionsDAbscisses)
+  /*
+   * Puis le RAPPROCHEMENT (retours du 23/10/2026) : une fratrie que l'ordre a laissée loin de
+   * ses parents change de rang pour aller sous eux (un parent sans personne au-dessus, au-dessus
+   * de ses enfants), chaque croisement ajouté devant la rapprocher d'au moins
+   * `PRIX_D_UN_CROISEMENT` pixels ; les abscisses se refont sur l'ordre nouveau, et un passage
+   * de plus prend la place que le précédent a libérée.
+   */
+  if (reglages.rapprocher !== false)
+    for (let fois = 0; fois < (s.personnes.length <= PERSONNES_POUR_TOUS_LES_PASSAGES ? PASSAGES_DE_RAPPROCHEMENT : 1); fois++) {
+      const ordreAvant = couches.ordre.map((l) => [...l])
+      const ecartAvant = ecartTotal(s, couches, abscisses, ECART_FRATRIE)
+      const deplaces = rapprocher(s, couches, abscisses, {
+        ecartFamille: ECART_FAMILLE,
+        ecartFratrie: ECART_FRATRIE,
+        ecartFactice: optionsDAbscisses.ecartFactice,
+        ecartParties,
+        prixDUnCroisement: PRIX_D_UN_CROISEMENT,
+        prixDUneFratrieCoupee: PRIX_D_UNE_FRATRIE_COUPEE,
+        gainMinimal: s.largeurDeCarte,
+        elementsMax: 400,
+      })
+      if (!deplaces) break
+      // Les abscisses refaites sur l'ordre nouveau ; un passage qui n'a pas réellement rapproché
+      // les fratries de leurs parents (l'estimation du rapprochement est locale) est défait.
+      const refaites = placer(s, couches, optionsDAbscisses)
+      if (ecartTotal(s, couches, refaites, ECART_FRATRIE) >= ecartAvant) {
+        couches.ordre = ordreAvant
+        break
+      }
+      abscisses = refaites
+      couches.croisements = compterBus(s, couches)
+    }
 
   /* 4. Les traits. */
   const haut = MARGE_Y + BANDEAU_RECTANGLE + MARGE_RECTANGLE

@@ -38,6 +38,8 @@ interface Bascules {
   sansLien: boolean
   dansLArbre: boolean
   format: 'compact' | 'portrait'
+  /** Les fratries dans l'ordre des naissances (la bascule « Fratries par ordre de naissance »). */
+  naissance?: boolean
 }
 
 /** Le chemin de l'écran (`ArbreGroupesView.vue › disposer`) : alliances, conjoint, sans lien, puis le format. */
@@ -48,7 +50,7 @@ function filtrer(graphe: Graphe, b: Bascules): Graphe {
   return auFormat(sansBranches(s, [], graphe), b.format)
 }
 
-type Moteur = (g: Graphe, o: { alliances: 'a-part' | 'dans-l-arbre' }) => DispositionHistoire & Partial<DispositionGroupes>
+type Moteur = (g: Graphe, o: { alliances: 'a-part' | 'dans-l-arbre'; fratriesParNaissance: boolean }) => DispositionHistoire & Partial<DispositionGroupes>
 
 function chrono<T>(f: () => T): [T, number] {
   const t = performance.now()
@@ -57,7 +59,7 @@ function chrono<T>(f: () => T): [T, number] {
 }
 
 function mesurerMoteur(moteur: Moteur, g: Graphe, b: Bascules): Mesures & { temps: number } {
-  const options = { alliances: b.dansLArbre ? ('dans-l-arbre' as const) : ('a-part' as const) }
+  const options = { alliances: b.dansLArbre ? ('dans-l-arbre' as const) : ('a-part' as const), fratriesParNaissance: b.naissance === true }
   // Un premier passage à vide : le JIT, pour un temps qui dise l'algorithme et pas le démarrage.
   moteur(g, options)
   const [d, temps] = chrono(() => moteur(g, options))
@@ -83,6 +85,9 @@ const COLONNES: [(m: Ligne) => number, string][] = [
   [(m) => Math.round((100 * m.fratrieSousParents.centrees) / Math.max(1, m.fratrieSousParents.familles)), 'centrées %'],
   [(m) => m.fratrieSousParents.evitables, 'évitables'],
   [(m) => m.fratrieSousParents.evitablesTotal, 'évitables Σ'],
+  [(m) => m.fratrieSousParents.evitablesSeules, 'évit. seules'],
+  [(m) => m.fratrieSousParents.etalementTotal, 'étalement Σ'],
+  [(m) => m.fratrieSousParents.etalees, 'étalées'],
   [(m) => m.longueurTracee, 'long. tracée'],
   [(m) => m.ecartMinFiches, 'écart min'],
   [(m) => m.ecartMinRangees, 'interl. min'],
@@ -130,6 +135,10 @@ if (reel && existsSync(reel)) arbres.push(['réel', lireStructure(readFileSync(r
 
 const BASCULES: [string, Bascules][] = [
   ['défaut', { alliances: false, conjoint: true, sansLien: false, dansLArbre: false, format: 'compact' }],
+  // Les familles par alliance affichées, et les fratries par ordre de naissance : l'écran du
+  // commanditaire (retours du 23/10/2026).
+  ['alliances', { alliances: true, conjoint: true, sansLien: false, dansLArbre: true, format: 'compact' }],
+  ['naissances', { alliances: true, conjoint: true, sansLien: false, dansLArbre: true, format: 'compact', naissance: true }],
   ['tout, à part', { alliances: true, conjoint: true, sansLien: true, dansLArbre: false, format: 'compact' }],
   ['portrait', { alliances: false, conjoint: true, sansLien: false, dansLArbre: false, format: 'portrait' }],
 ]

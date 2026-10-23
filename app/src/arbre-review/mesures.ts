@@ -75,7 +75,13 @@ export interface Mesures {
    * pixels du monde : la somme, le plus grand, les centiles ; le nombre de familles
    * mesurées, et celles dont la fratrie est centrée à moins d'un pixel. Les écarts
    * ÉVITABLES : ceux d'une fratrie dont la place, juste sous ses parents, est libre de toute
-   * autre fiche.
+   * autre fiche ; « seules », celles qui ne partagent aucun couple avec une autre fratrie (un
+   * couple dont les deux époux ont leurs parents posés va à mi-chemin, et c'est voulu). Un
+   * couple à cheval sur deux rectangles a une fratrie par rectangle, mesurée sous le parent
+   * de ce rectangle (retours du 23/10/2026). L'ÉTALEMENT : ce qu'une fratrie s'étire au-delà
+   * de sa largeur serrée (entre deux fiches voisines de la fratrie, conjoints compris, tout
+   * écart de plus de `CONJOINT_A_COTE`) — une fratrie éclatée a une barre immense, même si son
+   * milieu reste sous ses parents ; la somme, et le nombre de fratries étalées.
    */
   fratrieSousParents: {
     total: number
@@ -87,6 +93,10 @@ export interface Mesures {
     centrees: number
     evitables: number
     evitablesTotal: number
+    evitablesSeules: number
+    evitablesSeulesTotal: number
+    etalementTotal: number
+    etalees: number
   }
   largeur: number
   hauteur: number
@@ -381,6 +391,10 @@ export function mesurer(d: DispositionHistoire, rectangles: readonly Boite[] = [
   const ecartsFratries: number[] = []
   let evitables = 0
   let evitablesTotal = 0
+  let evitablesSeules = 0
+  let evitablesSeulesTotal = 0
+  let etalementTotal = 0
+  let etalees = 0
   /** Les conjoints de chacun : les époux d'une même famille, sur la rangée la plus haute. */
   const conjoints = new Map<string, string[]>()
   for (const fam of d.traces.familles) {
@@ -392,6 +406,17 @@ export function mesurer(d: DispositionHistoire, rectangles: readonly Boite[] = [
   }
   const indexDans = new Map<string, number>()
   for (const ligne of lignesTriees) ligne.forEach((f, i) => indexDans.set(f.id, i))
+  /** Le rectangle d'une fiche (−1 hors de tout rectangle, ou sans rectangles). */
+  const rectangleDe = (f: FicheHistoire): number =>
+    rectangles.findIndex((r) => f.cx >= r.x && f.cx <= r.x + r.w && f.y >= r.y && f.y + f.h <= r.y + r.h)
+  /** Les familles dont chaque personne est un enfant posé une rangée sous ses parents. */
+  const enfantDe = new Map<string, string>()
+  for (const fam of d.traces.familles) {
+    const membres = fam.personnes.map((id) => d.parId.get(id)).filter((f): f is FicheHistoire => !!f)
+    if (!membres.length) continue
+    const haut = Math.min(...membres.map((f) => f.rangee))
+    for (const f of membres) if (f.rangee === haut + 1) enfantDe.set(f.id, fam.id)
+  }
   for (const fam of d.traces.familles) {
     const membres = fam.personnes.map((id) => d.parId.get(id)).filter((f): f is FicheHistoire => !!f)
     // `personnes` : les époux d'abord, puis les enfants (une rangée plus bas).
@@ -419,9 +444,20 @@ export function mesurer(d: DispositionHistoire, rectangles: readonly Boite[] = [
     }
     // L'écart de la fratrie (ses conjoints posés à côté compris) à ses parents, la rangée
     // sous la leur seulement (un enfant d'une autre génération, un implexe, n'a pas de place
-    // « sous » ses parents).
-    const fratrie = parRangeeEnfants.get(rangeeEpoux + 1)
-    if (fratrie?.length) {
+    // « sous » ses parents). Un couple à cheval sur deux rectangles (le grand-père dans pp, la
+    // grand-mère dans pm) : chaque rectangle a sa fratrie, mesurée sous le parent de ce
+    // rectangle — un enfant posé dans un troisième (le père, dans le tronc) l'est sous les deux.
+    const parRectangle = new Map<number, FicheHistoire[]>()
+    for (const e of parRangeeEnfants.get(rangeeEpoux + 1) ?? []) {
+      const r = rectangleDe(e)
+      const l = parRectangle.get(r)
+      if (l) l.push(e)
+      else parRectangle.set(r, [e])
+    }
+    for (const [r, fratrie] of parRectangle) {
+      const ici = r >= 0 ? epoux.filter((p) => rectangleDe(p) === r) : []
+      const sousQui = ici.length ? ici : epoux
+      const centreDesParents = sousQui.reduce((s, f) => s + f.cx, 0) / sousQui.length
       const ligne = lignesTriees.find((l) => l[0]!.rangee === rangeeEpoux + 1)
       let lo = Infinity
       let hi = -Infinity
@@ -430,6 +466,7 @@ export function mesurer(d: DispositionHistoire, rectangles: readonly Boite[] = [
         hi = Math.max(hi, f.x + f.w)
       }
       const groupe = new Set<string>()
+      let partagee = false
       for (const e of fratrie) {
         etendre(e)
         groupe.add(e.id)
@@ -440,18 +477,32 @@ export function mesurer(d: DispositionHistoire, rectangles: readonly Boite[] = [
           if (fc && aCote && fc.rangee === e.rangee && ligne && Math.abs(indexDans.get(c)! - i) <= 2) {
             etendre(fc)
             groupe.add(fc.id)
+            // Un conjoint qui a, lui aussi, ses parents posés : le couple va à mi-chemin.
+            if (enfantDe.has(c) && enfantDe.get(c) !== fam.id) partagee = true
           }
         }
       }
-      const ecart = Math.abs((lo + hi) / 2 - milieu)
+      const ecart = Math.abs((lo + hi) / 2 - centreDesParents)
       ecartsFratries.push(ecart)
+      // L'étalement : les trous de plus d'un écart de familles entre deux fiches de la fratrie.
+      const cartes = [...groupe].map((id) => d.parId.get(id)!).sort((u, v) => u.x - v.x)
+      let etalement = 0
+      for (let i = 1; i < cartes.length; i++) etalement += Math.max(0, cartes[i]!.x - (cartes[i - 1]!.x + cartes[i - 1]!.w) - CONJOINT_A_COTE)
+      if (etalement > 0) {
+        etalementTotal += etalement
+        etalees++
+      }
       // Évitable ? La place sous les parents — la même fratrie, centrée — est-elle libre ?
       if (ecart >= 1 && ligne) {
-        const a = milieu - (hi - lo) / 2 - MARGE_LIBRE
-        const b = milieu + (hi - lo) / 2 + MARGE_LIBRE
+        const a = centreDesParents - (hi - lo) / 2 - MARGE_LIBRE
+        const b = centreDesParents + (hi - lo) / 2 + MARGE_LIBRE
         if (!ligne.some((f) => !groupe.has(f.id) && f.x < b && f.x + f.w > a)) {
           evitables++
           evitablesTotal += ecart
+          if (!partagee) {
+            evitablesSeules++
+            evitablesSeulesTotal += ecart
+          }
         }
       }
     }
@@ -519,6 +570,10 @@ export function mesurer(d: DispositionHistoire, rectangles: readonly Boite[] = [
       centrees: ecartsFratries.filter((x) => x < 1).length,
       evitables,
       evitablesTotal: Math.round(evitablesTotal),
+      evitablesSeules,
+      evitablesSeulesTotal: Math.round(evitablesSeulesTotal),
+      etalementTotal: Math.round(etalementTotal),
+      etalees,
     },
     largeur: Math.round(d.largeur),
     hauteur: Math.round(d.hauteur),

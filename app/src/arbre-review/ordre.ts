@@ -605,6 +605,12 @@ export function compterBus(s: Structure, c: Couches): number {
   return n
 }
 
+/** Les mêmes croisements, bande par bande, sur quelques bandes seulement (celles qu'un déplacement touche). */
+export function compterLesBandes(s: Structure, c: Couches, bandes: readonly number[]): number[] {
+  const pos = positions(c)
+  return bandes.map((k) => (k >= 0 && k < c.liens.length ? compterBande(s, c, pos, k) : 0))
+}
+
 export function compterTout(s: Structure, c: Couches): number {
   const pos = positions(c)
   let n = 0
