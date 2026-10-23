@@ -33,6 +33,7 @@ function table() {
 // les écrans visités ici sont chargés une fois, avant, avec le temps qu'il leur faut.
 beforeAll(async () => {
   await Promise.all([
+    import('@/arbre-review/ArbreReviewView.vue'),
     import('@/views/ArbreGroupesView.vue'),
     import('@/views/HistoireView.vue'),
     import('@/views/AccueilView.vue'),
@@ -51,12 +52,22 @@ describe('la route de l’arbre', () => {
     expect(routeur.currentRoute.value.meta['disposition']).toBeUndefined()
   })
 
-  it('sert les rectangles de familles sur `/arbre`, l’arbre d’avant sur `/arbre-2`', () => {
+  it('sert les rectangles redessinés sur `/arbre`, ceux d’avant sur `/arbre-precedent`, l’arbre à niveaux sur `/arbre-2`', () => {
     // Inversées le 09/10/2026 à la demande du commanditaire : la page en rectangles
     // (`ArbreGroupesView`) est devenue l'arbre, celle d'avant (`HistoireView`) reste à côté.
+    // Puis le 23/10/2026 : les rectangles redessinés (`ArbreReviewView`) remplacent les
+    // premiers, qui restent sur `/arbre-precedent`.
     const composant = (chemin: string): string => String(routes.find((r) => r.path === chemin)?.component)
-    expect(composant('/arbre')).toContain('ArbreGroupesView')
+    expect(composant('/arbre')).toContain('ArbreReviewView')
+    expect(composant('/arbre-precedent')).toContain('ArbreGroupesView')
     expect(composant('/arbre-2')).toContain('HistoireView')
+  })
+
+  it('renvoie `/arbre-review`, l’adresse d’essai, vers `/arbre`', async () => {
+    const routeur = table()
+    await routeur.push('/arbre-review')
+
+    expect(routeur.currentRoute.value.name).toBe('arbre')
   })
 
   it('a retiré `/tree` et `/arbre/ancien` : un seul arbre', async () => {

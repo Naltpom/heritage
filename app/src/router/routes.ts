@@ -203,25 +203,31 @@ export const routes: RouteRecordRaw[] = [
    * de se perdre. Ils tombent désormais sur l'attrape-tout.
    */
   {
-    // **`/arbre` sert l'arbre en rectangles de familles** (`ArbreGroupesView`, moteur
-    // `arbre2/groupes.ts`) : chaque famille dans son rectangle, deux cartes entre deux
-    // rectangles. Né sur `/arbre-2` le 09/10/2026, passé sur `/arbre` le même jour à la
-    // demande du commanditaire. Le NOM `arbre` ne change pas — `routeParDefaut()`, le
-    // menu et les notifications y renvoient.
+    // **`/arbre` sert l'arbre en rectangles redessiné en couches** (`ArbreReviewView` :
+    // l'écran `ArbreGroupesView`, moteur `arbre-review/disposition.ts`) — chaque fratrie
+    // sous ses parents, des couloirs entre les générations. Né sur `/arbre-review` le
+    // 22/10/2026, passé sur `/arbre` le 23/10/2026 à la demande du commanditaire. Le NOM
+    // `arbre` ne change pas — `routeParDefaut()`, le menu et les notifications y renvoient.
     path: '/arbre',
     name: 'arbre',
-    component: () => import('@/views/ArbreGroupesView.vue'),
+    component: () => import('@/arbre-review/ArbreReviewView.vue'),
     meta: { acces: 'membre', titre: 'Arbre', rechercheLocale: true },
   },
   {
-    // **`/arbre-review` : le même écran que `/arbre`, redessiné** (demande du 22/10/2026) —
-    // mêmes données, mêmes cartes, mêmes interactions ; seules changent la disposition des
-    // cartes et les lignes (`arbre-review/disposition.ts`). Une page d'essai, à comparer
-    // avec `/arbre` : aucune entrée de menu, les mêmes gardes. Le nom commence par `arbre.`,
-    // l'en-tête allume donc « Arbre ».
+    // L'adresse d'essai de l'arbre redessiné, devenu `/arbre` : les liens déjà partagés
+    // continuent de marcher.
     path: '/arbre-review',
     name: 'arbre.review',
-    component: () => import('@/arbre-review/ArbreReviewView.vue'),
+    redirect: { name: 'arbre' },
+    meta: { acces: 'membre', titre: 'Arbre' },
+  },
+  {
+    // **`/arbre-precedent` garde les rectangles de familles d'avant** (`ArbreGroupesView`,
+    // moteur `arbre2/groupes.ts`), qui servaient `/arbre` du 09/10 au 23/10/2026 : à
+    // comparer, ou à reprendre. Aucun menu n'y mène, on y va par l'adresse.
+    path: '/arbre-precedent',
+    name: 'arbre.precedent',
+    component: () => import('@/views/ArbreGroupesView.vue'),
     meta: { acces: 'membre', titre: 'Arbre', rechercheLocale: true },
   },
   {
