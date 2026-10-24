@@ -10,8 +10,10 @@ use App\Module\Media\Security\ResolutionDuSujetInterface;
 use App\Module\Membership\Service\Port\PortArbre;
 use App\Module\Question\Contract\FicheEtudiee;
 use App\Module\Tree\Entity\Citation;
+use App\Module\Tree\Entity\Fact;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Enum\FactType;
 use App\Module\Tree\Service\ChronometreDuGraphe;
 use App\Module\Tree\Service\ReglagesDeLArbreParSettings;
 use App\Module\Tree\Service\ReglePersonneVivante;
@@ -85,7 +87,7 @@ final class AdaptateursPourLesAutresModulesTest extends ArbreWebTestCase
         );
     }
 
-        private function resolution(): ResolutionDuSujetInterface
+    private function resolution(): ResolutionDuSujetInterface
     {
         $port = self::getContainer()->get(ResolutionDuSujetInterface::class);
         \assert($port instanceof ResolutionDuSujetInterface);
@@ -136,7 +138,7 @@ final class AdaptateursPourLesAutresModulesTest extends ArbreWebTestCase
         }
     }
 
-        public function testLaVueRendLArbreCompletSansAucunFiltre(): void
+    public function testLaVueRendLArbreCompletSansAucunFiltre(): void
     {
         $vue = $this->portMembership()->vue();
 
@@ -306,6 +308,67 @@ final class AdaptateursPourLesAutresModulesTest extends ArbreWebTestCase
 
         self::assertNotNull($resolu, 'La ligne existe : on la décrit.');
         self::assertSame([], $resolu->personIds, 'Elle n’engage personne — l’appelant lit cela comme « masqué ».');
+    }
+
+    /**
+     * **La question groupée répond exactement comme la question unitaire**, cas par cas :
+     * c'est elle que le graphe pose, et une personne qu'elle oublierait publierait un
+     * média que la fiche refuse.
+     *
+     * Une citation de chaque sorte — sur une personne, sur le fait d'une personne, sur une
+     * famille, sur le fait d'une famille, orpheline —, une famille avec et sans époux, et
+     * un identifiant qui n'existe pas.
+     */
+    public function testLaQuestionGroupeeRepondCommeLaQuestionUnitaire(): void
+    {
+        $em = $this->em();
+        $source = $em->createQuery('SELECT c FROM '.Citation::class.' c WHERE c.person = :p')
+            ->setParameter('p', $this->personnes['cousin'])
+            ->getSingleResult()
+            ->getSource();
+
+        $sansEpoux = new Family();
+        $faitDePersonne = new Fact(FactType::Residence, $this->personnes['aieule']);
+        $faitDeFamille = new Fact(FactType::Residence, null, $this->familles['aieux']);
+        $citations = [
+            (new Citation($source))->setPerson($this->personnes['cousin']),
+            (new Citation($source))->setFact($faitDePersonne),
+            (new Citation($source))->setFamily($this->familles['aieux']),
+            (new Citation($source))->setFact($faitDeFamille),
+            (new Citation($source))->setFamily($sansEpoux),
+            new Citation($source),
+        ];
+
+        foreach ([$sansEpoux, $faitDePersonne, $faitDeFamille, ...$citations] as $entite) {
+            $em->persist($entite);
+        }
+        $em->flush();
+
+        $sujets = [
+            [MediaSubject::Personne, [$this->idDe('aieule'), $this->idDe('cousin'), 999999]],
+            [MediaSubject::Famille, [(int) $this->familles['aieux']->getId(), (int) $sansEpoux->getId(), 999999]],
+            [MediaSubject::Citation, [...array_map(static fn (Citation $c): int => (int) $c->getId(), $citations), 999999]],
+        ];
+
+        foreach ($sujets as [$kind, $ids]) {
+            $attendu = [];
+
+            foreach ($ids as $id) {
+                $resolu = $this->resolution()->resoudre($kind, $id);
+
+                if (null !== $resolu) {
+                    $attendu[$id] = $resolu->personIds;
+                }
+            }
+
+            $obtenu = $this->resolution()->personnesEngagees($kind, $ids);
+            ksort($obtenu);
+            ksort($attendu);
+
+            self::assertSame($attendu, $obtenu, $kind->value);
+        }
+
+        self::assertSame([], $this->resolution()->personnesEngagees(MediaSubject::Personne, []));
     }
 
     // ── Question ─────────────────────────────────────────────────────────────────

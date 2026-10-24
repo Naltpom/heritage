@@ -113,14 +113,35 @@ export function enTexte(r: ReleveDuChargement): string {
 
 let premier = true
 /**
- * Vrai au premier chargement de l'arbre depuis l'ouverture de la page, une seule fois :
- * après un F5 sur l'arbre, `performance.now()` est alors le temps entier qu'a vu
- * l'utilisateur, le téléchargement du code compris.
+ * Vrai au premier chargement de l'arbre depuis l'ouverture de la page, une seule fois, et
+ * seulement si la page a été ouverte **sur l'arbre** : après un F5 sur l'arbre,
+ * `performance.now()` est alors le temps entier qu'a vu l'utilisateur, le téléchargement
+ * du code compris. Ouverte ailleurs (connexion, accueil, puis clic sur l'arbre), elle
+ * compterait le temps passé sur ces pages : relevé du 24/10/2026, « 16 491 ms depuis le
+ * F5 » dont 9 s avant d'avoir cliqué.
  */
 export function premierChargement(): boolean {
-  const oui = premier
+  const oui = premier && ouvertIci(adresseDOuverture(), globalThis.location?.pathname)
   premier = false
   return oui
+}
+
+/** La page a-t-elle été ouverte à ce chemin ? Sans relevé de navigation, on ne sait pas : oui. */
+export function ouvertIci(adresse: string | null, chemin: string | undefined): boolean {
+  if (adresse === null || chemin === undefined) return true
+  try {
+    return new URL(adresse).pathname === chemin
+  } catch {
+    return true
+  }
+}
+
+function adresseDOuverture(): string | null {
+  try {
+    return (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.name ?? null
+  } catch {
+    return null
+  }
 }
 
 /** Écrit le relevé dans la console et le garde sous `window.__chargementArbre`. */

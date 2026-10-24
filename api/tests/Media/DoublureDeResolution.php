@@ -37,4 +37,19 @@ final class DoublureDeResolution implements ResolutionDuSujetInterface
     {
         return $this->sujets[$kind->value.':'.$id] ?? null;
     }
+
+    public function personnesEngagees(MediaSubject $kind, array $ids): array
+    {
+        $sortie = [];
+
+        foreach ($ids as $id) {
+            $resolu = $this->resoudre($kind, $id);
+
+            if (null !== $resolu) {
+                $sortie[$id] = $resolu->personIds;
+            }
+        }
+
+        return $sortie;
+    }
 }

@@ -46,4 +46,14 @@ final class SujetNonResolu implements ResolutionDuSujetInterface
 
         return null;
     }
+
+    public function personnesEngagees(MediaSubject $kind, array $ids): array
+    {
+        // Même réponse que `resoudre()`, avertissement compris : rien n'existe.
+        if ([] !== $ids) {
+            $this->resoudre($kind, $ids[0]);
+        }
+
+        return [];
+    }
 }
