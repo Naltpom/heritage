@@ -90,13 +90,19 @@ const CENTRES: { cle: CentreDuSoleil; libelle: string; aide: string }[] = [
   { cle: 'parents', libelle: 'Ses quatre parents', aide: 'le couple, ses frères et sœurs et leurs descendants au centre' },
 ]
 const centre = ref<CentreDuSoleil>('couple')
-const ORIENTATIONS = [
-  { angle: 0, libelle: '0°', aide: 'lui à gauche' },
-  { angle: 90, libelle: '90°', aide: 'lui en haut' },
-  { angle: 180, libelle: '180°', aide: 'lui à droite' },
-  { angle: 270, libelle: '270°', aide: 'lui en bas' },
-] as const
+/**
+ * La rotation appliquée à l'affiche, et celle que montre la barre pendant qu'on la fait glisser :
+ * l'affiche ne se recalcule qu'au lâcher (`change`), pas à chaque cran.
+ */
 const rotation = ref<number>(0)
+const rotationSaisie = ref<number>(0)
+watch(rotation, (r) => (rotationSaisie.value = r))
+/** Où tombe le mari, pour la rotation affichée : sa moitié est centrée sur 180° − rotation. */
+const placeDuMari = computed(() => {
+  const a = (((180 - rotationSaisie.value) % 360) + 360) % 360
+  const noms = ['à droite', 'en haut à droite', 'en haut', 'en haut à gauche', 'à gauche', 'en bas à gauche', 'en bas', 'en bas à droite']
+  return `lui ${noms[Math.round(a / 45) % 8]}`
+})
 /** `null` : toutes les générations connues. */
 const profondeur = ref<number | null>(null)
 const format = ref<CleDeFormat>('naturelle')
@@ -394,15 +400,21 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
             <span v-if="famillesDesParents === null && etat.etat === 'pret'" class="text-xs text-attenue">Les parents de l’un des époux ne sont pas dans l’arbre.</span>
           </fieldset>
 
-          <fieldset v-if="vue === 'soleil'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
-            <legend class="mb-1 p-0 text-xs font-semibold text-attenue">L’orientation</legend>
-            <div class="flex flex-wrap gap-x-4 gap-y-1">
-              <label v-for="o in ORIENTATIONS" :key="o.angle" class="flex items-baseline gap-1.5 text-sm" :data-orientation="o.angle" :title="o.aide">
-                <input v-model="rotation" type="radio" name="orientation" :value="o.angle" />
-                <span>{{ o.libelle }} <span class="text-xs text-attenue">{{ o.aide }}</span></span>
-              </label>
-            </div>
-          </fieldset>
+          <label v-if="vue === 'soleil'" class="flex flex-col gap-1">
+            <span class="text-xs font-semibold text-attenue">L’orientation</span>
+            <input
+              v-model.number="rotationSaisie"
+              type="range"
+              min="0"
+              max="359"
+              step="1"
+              class="w-full accent-[var(--color-accent)]"
+              data-reglage="rotation"
+              :aria-valuetext="`${rotationSaisie} degrés, ${placeDuMari}`"
+              @change="rotation = rotationSaisie"
+            />
+            <span class="text-xs text-attenue">{{ rotationSaisie }}° — {{ placeDuMari }}</span>
+          </label>
 
           <fieldset v-if="vue === 'eventail' || vue === 'soleil'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
             <legend class="mb-1 p-0 text-xs font-semibold text-attenue">Les cases</legend>
