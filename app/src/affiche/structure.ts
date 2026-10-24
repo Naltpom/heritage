@@ -189,7 +189,11 @@ export function statutUnion(p: Personne, u: Union, suivantes: Union[]): StatutDU
 /** Les enfants du couple, puis leurs unions et leurs enfants, sur `niveaux` générations. */
 export function descendance(arbre: ArbreAffiche, h: Personne, f: Personne, niveaux = 6): { fam: number | null; enfants: Desc[] } {
   const fam = arbre.familleDuCouple(h.id, f.id)
+  return { fam, enfants: fam !== null ? descendanceDeFamille(arbre, fam, niveaux) : [] }
+}
 
+/** Les enfants de la famille `fam` et leur descendance — les frères et sœurs d'un époux, pour le soleil des quatre parents. */
+export function descendanceDeFamille(arbre: ArbreAffiche, fam: number, niveaux = 6): Desc[] {
   const construire = (p: Personne, niveau: number): Desc => {
     const d = new Desc(p, niveau)
     if (niveau >= niveaux) return d
@@ -209,7 +213,7 @@ export function descendance(arbre: ArbreAffiche, h: Personne, f: Personne, nivea
     return d
   }
 
-  return { fam, enfants: fam !== null ? arbre.enfants(fam).map((e) => construire(e, 1)) : [] }
+  return arbre.enfants(fam).map((e) => construire(e, 1))
 }
 
 /** Le nombre de descendants par génération (1 = enfants). */

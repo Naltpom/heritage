@@ -142,6 +142,12 @@ export function polaire(cx: number, cy: number, r: number, a: number): [number, 
 
 /** Le chemin d'un secteur d'anneau entre `r1 < r2` et `a1 < a2` (degrés, sens trigonométrique). */
 export function secteur(cx: number, cy: number, r1: number, r2: number, a1: number, a2: number): string {
+  // Un tour entier (le disque du soleil) : deux demi-cercles, un arc seul ayant ses deux bouts confondus.
+  if (a2 - a1 >= 360 - 1e-9) {
+    const cercle = (r: number, sens: 0 | 1): string =>
+      `M${f3(cx - r)},${f3(cy)} A${f3(r)},${f3(r)} 0 1 ${sens} ${f3(cx + r)},${f3(cy)} A${f3(r)},${f3(r)} 0 1 ${sens} ${f3(cx - r)},${f3(cy)} Z`
+    return r1 <= 0.01 ? cercle(r2, 1) : `${cercle(r2, 1)} ${cercle(r1, 0)}`
+  }
   const grand = a2 - a1 > 180 ? 1 : 0
   const p1 = polaire(cx, cy, r2, a2)
   const p2 = polaire(cx, cy, r2, a1)
