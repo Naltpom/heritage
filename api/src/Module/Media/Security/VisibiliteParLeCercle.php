@@ -80,21 +80,27 @@ final class VisibiliteParLeCercle implements VisibiliteDesSujetsInterface
     public function filtrerVisibles(MediaSubject $kind, array $ids): array
     {
         $uniques = array_values(array_unique($ids));
+        // **Une seule résolution** pour tous les sujets : une par sujet coûtait 2,5 s au
+        // graphe, qui pose la question pour 2 515 personnes (24/10/2026).
+        $engagees = $this->resolution->personnesEngagees($kind, $uniques);
         $parSujet = [];
         $toutes = [];
 
         foreach ($uniques as $id) {
-            $resolu = $this->resolution->resoudre($kind, $id);
+            $personIds = $engagees[$id] ?? [];
 
             // Un sujet inconnu, ou qui n'engage personne, n'est pas visible — même
             // raison que dans {@see autorise()} : « rien à protéger » ne vaut pas
             // « ouvert ».
-            if (null === $resolu || [] === $resolu->personIds) {
+            if ([] === $personIds) {
                 continue;
             }
 
-            $parSujet[$id] = $resolu->personIds;
-            $toutes = [...$toutes, ...$resolu->personIds];
+            $parSujet[$id] = $personIds;
+
+            foreach ($personIds as $personId) {
+                $toutes[$personId] = $personId;
+            }
         }
 
         if ([] === $toutes) {
@@ -102,7 +108,7 @@ final class VisibiliteParLeCercle implements VisibiliteDesSujetsInterface
         }
 
         // **Un seul appel au cercle**, pour l'union de toutes les personnes engagées.
-        $visibles = array_flip($this->cercle->filtrerPersonnes(array_values(array_unique($toutes))));
+        $visibles = array_flip($this->cercle->filtrerPersonnes(array_values($toutes)));
 
         $retenus = [];
 

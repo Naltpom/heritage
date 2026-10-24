@@ -50,4 +50,23 @@ interface ResolutionDuSujetInterface
      * c'est {@see VisibiliteDesSujetsInterface} qui tranche, et lui seul.
      */
     public function resoudre(MediaSubject $kind, int $id): ?SujetResolu;
+
+    /**
+     * La troisième question de {@see resoudre()}, pour plusieurs sujets d'un coup, et en
+     * **une** lecture de la base au lieu d'une par sujet.
+     *
+     * Elle existe pour une raison mesurée : le filtre « Avec image » du graphe pose la
+     * question pour toutes les personnes qui portent un média — 2 515 le 24/10/2026 —, et
+     * une boucle sur {@see resoudre()} coûtait 2,5 s à chaque chargement de l'arbre.
+     *
+     * Les personnes rendues sont **exactement** celles de {@see resoudre()}, dans le même
+     * ordre : deux chemins qui ne répondraient pas pareil à la même question, c'est le jour
+     * où la liste laisse passer ce que le détail refuse.
+     *
+     * @param list<int> $ids
+     *
+     * @return array<int, list<int>> sujet → personnes engagées ; un sujet qui n'existe pas
+     *                               est absent, un sujet qui n'engage personne est présent à `[]`
+     */
+    public function personnesEngagees(MediaSubject $kind, array $ids): array;
 }

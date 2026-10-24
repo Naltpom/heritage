@@ -69,6 +69,130 @@ final class ResolutionDesSujetsMedia implements ResolutionDuSujetInterface
         };
     }
 
+    /**
+     * Les mêmes règles que {@see resoudre()}, en une requête par nature de sujet et non
+     * une par sujet. Les identifiants des époux et des personnes sont lus par
+     * `IDENTITY()` : aucune entité n'est hydratée, il n'y a pas de libellé à rendre.
+     */
+    public function personnesEngagees(MediaSubject $kind, array $ids): array
+    {
+        if ([] === $ids) {
+            return [];
+        }
+
+        return match ($kind) {
+            MediaSubject::Personne => $this->personnesExistantes($ids),
+            MediaSubject::Famille => $this->epouxDesFamilles($ids),
+            MediaSubject::Citation => $this->personnesDesCitations($ids),
+        };
+    }
+
+    /**
+     * @param list<int> $ids
+     *
+     * @return array<int, list<int>>
+     */
+    private function personnesExistantes(array $ids): array
+    {
+        /** @var list<array{id: int}> $lignes */
+        $lignes = $this->personnes->createQueryBuilder('p')
+            ->select('p.id AS id')
+            ->andWhere('p.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->getArrayResult();
+
+        $sortie = [];
+
+        foreach ($lignes as $ligne) {
+            $sortie[(int) $ligne['id']] = [(int) $ligne['id']];
+        }
+
+        return $sortie;
+    }
+
+    /**
+     * Le mari puis la femme, comme {@see depuisUneFamille()} ; `[]` pour une famille
+     * sans époux, qui existe mais n'engage personne.
+     *
+     * @param list<int> $ids
+     *
+     * @return array<int, list<int>>
+     */
+    private function epouxDesFamilles(array $ids): array
+    {
+        /** @var list<array{id: int, mari: int|null, femme: int|null}> $lignes */
+        $lignes = $this->familles->createQueryBuilder('f')
+            ->select('f.id AS id', 'IDENTITY(f.husband) AS mari', 'IDENTITY(f.wife) AS femme')
+            ->andWhere('f.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->getArrayResult();
+
+        $sortie = [];
+
+        foreach ($lignes as $ligne) {
+            $sortie[(int) $ligne['id']] = array_values(array_map(
+                intval(...),
+                array_filter([$ligne['mari'], $ligne['femme']], static fn (mixed $id): bool => null !== $id),
+            ));
+        }
+
+        return $sortie;
+    }
+
+    /**
+     * La précédence de {@see Citation()} : la personne étayée, sinon celle du fait, sinon
+     * les époux de la famille étayée, sinon ceux de la famille du fait, sinon personne.
+     *
+     * @param list<int> $ids
+     *
+     * @return array<int, list<int>>
+     */
+    private function personnesDesCitations(array $ids): array
+    {
+        /** @var list<array{id: int, personne: int|null, personneDuFait: int|null, famille: int|null, familleDuFait: int|null}> $lignes */
+        $lignes = $this->citations->createQueryBuilder('c')
+            ->select(
+                'c.id AS id',
+                'IDENTITY(c.person) AS personne',
+                'IDENTITY(fait.person) AS personneDuFait',
+                'IDENTITY(c.family) AS famille',
+                'IDENTITY(fait.family) AS familleDuFait',
+            )
+            ->leftJoin('c.fact', 'fait')
+            ->andWhere('c.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->getArrayResult();
+
+        $familleDe = [];
+
+        foreach ($lignes as $ligne) {
+            $famille = $ligne['famille'] ?? $ligne['familleDuFait'];
+
+            if (null === ($ligne['personne'] ?? $ligne['personneDuFait']) && null !== $famille) {
+                $familleDe[(int) $ligne['id']] = (int) $famille;
+            }
+        }
+
+        $epoux = [] === $familleDe ? [] : $this->epouxDesFamilles(array_values(array_unique($familleDe)));
+        $sortie = [];
+
+        foreach ($lignes as $ligne) {
+            $id = (int) $ligne['id'];
+            $personne = $ligne['personne'] ?? $ligne['personneDuFait'];
+
+            $sortie[$id] = match (true) {
+                null !== $personne => [(int) $personne],
+                isset($familleDe[$id]) => $epoux[$familleDe[$id]] ?? [],
+                default => [],
+            };
+        }
+
+        return $sortie;
+    }
+
     private function personne(int $id): ?SujetResolu
     {
         $personne = $this->personnes->find($id);

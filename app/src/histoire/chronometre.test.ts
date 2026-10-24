@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { creerChronometre, enTexte, premierChargement } from './chronometre'
+import { creerChronometre, enTexte, ouvertIci, premierChargement } from './chronometre'
 
 describe('le chronomètre du chargement', () => {
   it('mesure chaque étape et cumule une étape répétée', async () => {
@@ -31,6 +31,15 @@ describe('le chronomètre du chargement', () => {
   it('ne dit « premier chargement » qu’une fois', () => {
     expect(premierChargement()).toBe(true)
     expect(premierChargement()).toBe(false)
+  })
+
+  it('ne compte depuis l’ouverture que si la page a été ouverte sur l’arbre', () => {
+    expect(ouvertIci('https://heritage.test/arbre', '/arbre')).toBe(true)
+    // Ouverte sur la connexion, puis l'accueil, puis un clic sur l'arbre.
+    expect(ouvertIci('https://heritage.test/', '/arbre')).toBe(false)
+    expect(ouvertIci('https://heritage.test/home', '/arbre')).toBe(false)
+    expect(ouvertIci('https://heritage.test/arbre?personne=12', '/arbre')).toBe(true)
+    expect(ouvertIci(null, '/arbre')).toBe(true)
   })
 
   it('écrit un relevé lisible, réseau et serveur compris', () => {
