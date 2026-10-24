@@ -97,6 +97,12 @@ export class Reglages {
   remplirJusqua = 1.6
   /** Le disque central ne descend pas sous cette part du rayon de l'éventail : il porte le titre. */
   disqueMin = 0.2
+  /**
+   * Le sens de l'éventail : `'haut'`, les ancêtres au-dessus du couple (l'original) ; `'bas'`,
+   * en dessous, les descendants passant au-dessus. Le calcul est le même : seul le dessin se
+   * retourne, et les textes restent à l'endroit (lui à gauche, elle à droite, toujours).
+   */
+  sens: 'haut' | 'bas' = 'haut'
 
   constructor(reglages: Partial<Reglages> = {}) {
     Object.assign(this, reglages)
@@ -288,15 +294,32 @@ export class Eventail {
     return degres(meilleur ?? 0)
   }
 
-  /** Les rayons des lignes de base, de l'extérieur vers l'intérieur, bloc centré dans l'anneau. */
+  /**
+   * Les rayons des lignes de base, bloc centré dans l'anneau : de l'extérieur vers l'intérieur
+   * quand l'éventail monte (le haut des lettres regarde au loin), de l'intérieur vers
+   * l'extérieur quand il descend (le haut des lettres regarde le centre).
+   */
   private bases(b: Bloc, r1: number, r2: number): number[] {
-    let haut = (r1 + r2) / 2 + b.hauteurTexte / 2
     const sortie: number[] = []
+    if (this.R.sens === 'bas') {
+      let bord = (r1 + r2) / 2 - b.hauteurTexte / 2
+      for (const [, s] of b.lignes) {
+        sortie.push(bord + s.interligne * 0.8)
+        bord += s.interligne
+      }
+      return sortie
+    }
+    let haut = (r1 + r2) / 2 + b.hauteurTexte / 2
     for (const [, s] of b.lignes) {
       sortie.push(haut - s.interligne * 0.8)
       haut -= s.interligne
     }
     return sortie
+  }
+
+  /** Les angles dessinés d'une place : ceux du calcul, ou leur reflet sous le centre. */
+  private dessines(a1: number, a2: number): [number, number] {
+    return this.R.sens === 'bas' ? [-a2, -a1] : [a1, a2]
   }
 
   private minimums(n: Anc): number {
@@ -510,10 +533,10 @@ export class Eventail {
   dessiner(scene: Scene, cx: number, cy: number): void {
     const R = this.R
     // Le disque central.
-    scene.chemin(secteur(cx, cy, 0, this.rC, 90 - R.angle / 2, 90 + R.angle / 2), melange([222, 205, 168], 1), PAPIER, 0.6)
+    scene.chemin(secteur(cx, cy, 0, this.rC, ...this.dessines(90 - R.angle / 2, 90 + R.angle / 2)), melange([222, 205, 168], 1), PAPIER, 0.6)
     for (const n of [...this.noeuds].sort((a, b) => a.niveau - b.niveau)) {
       const { r1, r2 } = this.anneaux[n.niveau]!
-      scene.chemin(secteur(cx, cy, r1, r2, n.a1, n.a2), this.fond(n), PAPIER, n.niveau < 4 ? 0.7 : 0.45)
+      scene.chemin(secteur(cx, cy, r1, r2, ...this.dessines(n.a1, n.a2)), this.fond(n), PAPIER, n.niveau < 4 ? 0.7 : 0.45)
     }
     for (const n of this.noeuds) {
       const { r1, r2, orientation, coupe } = this.anneaux[n.niveau]!
@@ -542,16 +565,19 @@ export class Eventail {
       const dispo = A * rb - 2 * R.margeTan
       let [st, comp] = ajuster(t, s, dispo)
       if (comp) st = st.echelle((comp / st.largeur(t)) * 1.02)
-      scene.texteSurArc(cx, cy, rb, n.a1, n.a2, t, st)
+      scene.texteSurArc(cx, cy, rb, ...this.dessines(n.a1, n.a2), t, st)
     })
   }
 
   private texteRad(scene: Scene, cx: number, cy: number, n: Anc, r1: number, r2: number): void {
     const R = this.R
-    const am = (n.a1 + n.a2) / 2
+    const [d1, d2] = this.dessines(n.a1, n.a2)
+    const am = (d1 + d2) / 2
     const rm = (r1 + r2) / 2
     const dispo = r2 - r1 - 2 * R.margeRad
-    const [rot, x] = am <= 90 ? [-am, rm] : [180 - am, -rm]
+    // À droite du centre, le texte se lit vers l'extérieur ; à gauche, vers le centre.
+    const adroite = R.sens === 'bas' ? am >= -90 : am <= 90
+    const [rot, x] = adroite ? [-am, rm] : [180 - am, -rm]
     const tr = `translate(${f3(cx)},${f3(cy)}) rotate(${rot.toFixed(4)})`
     const b = n.bloc!
     if (b instanceof BlocEnLigne) return this.ligneRad(scene, b, x, dispo, tr)
@@ -606,7 +632,10 @@ function sinMax(a1: number, a2: number): number {
   return Math.max(Math.sin(radians(a1)), Math.sin(radians(a2)))
 }
 
-/** La hauteur réellement dessinée au-dessus du centre (les anneaux lointains sont creux au sommet). */
+/**
+ * La hauteur réellement dessinée au-dessus du centre — en dessous, quand l'éventail descend
+ * (les anneaux lointains sont creux au sommet).
+ */
 export function etendueHaut(E: Eventail): number {
   let h = E.rC
   for (const n of E.noeuds) h = Math.max(h, E.anneaux[n.niveau]!.r2 * sinMax(n.a1, n.a2))
@@ -616,7 +645,9 @@ export function etendueHaut(E: Eventail): number {
 /** Vrai si (x, y) ne tombe dans aucune case de l'éventail, élargie de `marge` mm. */
 export function pointLibre(E: Eventail, cx: number, cy: number, x: number, y: number, marge = 6.0): boolean {
   const dx = x - cx
-  const dy = cy - y
+  // Le calcul est celui d'un éventail qui monte : un point sous un éventail qui descend se
+  // lit comme son reflet au-dessus.
+  const dy = E.R.sens === 'bas' ? y - cy : cy - y
   const r = Math.hypot(dx, dy)
   if (dy < -marge) return true
   const a = degres(Math.atan2(dy, dx))

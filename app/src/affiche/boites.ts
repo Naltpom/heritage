@@ -233,8 +233,27 @@ export function placerDesc(enfants: Desc[], x0: number, y0: number, hauteurs: Ma
   return bas
 }
 
-/** `depart` = (x, y) du point d'où descend le trait vers les enfants du couple. */
-export function dessinerDesc(scene: Scene, enfants: Desc[], depart: readonly [number, number], regles: ReglesDesc): void {
+/**
+ * Retourne le bloc posé par `placerDesc()` autour de l'axe horizontal `somme / 2` : les enfants
+ * passent en bas, contre le couple, et les petits-enfants au-dessus — pour l'éventail qui
+ * descend. Chaque boîte garde sa taille ; les rangées s'alignent alors par le bas.
+ */
+export function inverserDesc(enfants: Desc[], somme: number): void {
+  const inverser = (d: Desc): void => {
+    d.y = somme - (d.y + d.h)
+    for (const [c, , enf] of d.unions) {
+      if (c) c.y = somme - (c.y + c.h)
+      enf.forEach(inverser)
+    }
+  }
+  enfants.forEach(inverser)
+}
+
+/**
+ * `depart` = (x, y) du point d'où descend le trait vers les enfants du couple — d'où il monte,
+ * quand le bloc a été retourné (`inverse`, voir {@link inverserDesc}).
+ */
+export function dessinerDesc(scene: Scene, enfants: Desc[], depart: readonly [number, number], regles: ReglesDesc, inverse = false): void {
   const boite = (d: Desc, fond: string): void => {
     scene.rectangle(d.x, d.y, d.w, d.h, fond, TRAIT, 0.25)
     d.bloc!.dessiner(scene, d.x + d.w / 2, d.y + d.h / 2, d.w - 2 * d.bloc!.mx)
@@ -243,14 +262,16 @@ export function dessinerDesc(scene: Scene, enfants: Desc[], depart: readonly [nu
   const peigne = (origine: readonly [number, number], enf: Desc[]): void => {
     if (enf.length === 0) return
     const [ox, oy] = origine
-    const yBarre = enf[0]!.y - regles.ecartY * 0.45
+    // Retournées, les boîtes d'une rangée s'alignent par le bas : le trait les prend par là.
+    const bord = (e: Desc): number => (inverse ? e.y + e.h : e.y)
+    const yBarre = inverse ? bord(enf[0]!) + regles.ecartY * 0.45 : bord(enf[0]!) - regles.ecartY * 0.45
     for (const e of enf) {
       const ex = e.x + e.w / 2
       scene.liaison([
         [ox, oy],
         [ox, yBarre],
         [ex, yBarre],
-        [ex, e.y],
+        [ex, bord(e)],
       ])
     }
   }
@@ -271,10 +292,12 @@ export function dessinerDesc(scene: Scene, enfants: Desc[], depart: readonly [nu
           scene.ligneDroite(gx - l / 2, ym + st.mm * 0.22, gx + l / 2, ym - st.mm * 0.22, TRAIT, 0.45)
         }
         if (info.total > 1) scene.texte(gx + st.largeur(signe) / 2 + 0.4, ym + st.mm * 0.02, String(info.rang), stR, 'start')
-        if (info.statut) scene.texte(gx, ym - st.mm * 0.36, ISSUES[info.statut], stI)
-        origine = [gx, ym + st.mm * 0.6]
+        // L'issue se lit du côté opposé au trait des enfants : au-dessus du signe, ou en dessous
+        // quand le trait monte.
+        if (info.statut) scene.texte(gx, inverse ? ym + st.mm * 0.6 + stI.mm * 0.8 : ym - st.mm * 0.36, ISSUES[info.statut], stI)
+        origine = inverse ? [gx, ym - st.mm * 0.6] : [gx, ym + st.mm * 0.6]
       } else {
-        origine = [d.x + d.w / 2, d.y + d.h]
+        origine = [d.x + d.w / 2, inverse ? d.y : d.y + d.h]
       }
       peigne(origine, enf)
       for (const e of enf) dessiner(e)

@@ -125,6 +125,11 @@ d'origine, qui aurait effacé les dates d'ancêtres du XVIIIᵉ siècle sans act
   donc une option de la modale (« Les cases : régulières »), qui donne au disque une marge
   de 20 % du rayon et la consacre à égaliser, du centre vers l'extérieur. Le partage de la
   place libre entre père et mère passe à parts égales (`gamma` 0 au lieu de 0,6).
+  Le même jour, l'option **« Le sens »** : vers le bas, l'éventail passe sous le couple et
+  les descendants au-dessus, retournés (les enfants contre le couple). Le calcul ne change
+  pas, seul le dessin se retourne : les angles se reflètent sous le centre, les lignes
+  tangentielles se lisent du centre vers l'extérieur, le haut des lettres tourné vers le
+  centre, et lui reste à gauche, elle à droite.
   La fidélité reste vérifiable : `Reglages.ORIGINE` rend la mise en page de l'original, et
   les tests de fidélité la demandent. Un arbre fictif « touffu » (`arbreTouffu()`), complet
   sur sept générations puis clairsemé, a la forme de l'affiche réelle et garde la nouvelle.

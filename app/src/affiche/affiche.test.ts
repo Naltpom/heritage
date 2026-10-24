@@ -61,6 +61,7 @@ describe.each([
   ['d’origine', arbreFictif, Reglages.ORIGINE],
   ['d’un grand arbre', arbreTouffu, {}],
   ['d’un grand arbre, cases égalisées', arbreTouffu, { egaliser: 0.2 }],
+  ['d’un grand arbre, vers le bas', arbreTouffu, { sens: 'bas' }],
 ] as const)('la géométrie de l’éventail %s', (_, arbre, reglages) => {
   const { eventail: E, scene } = produire(arbre(), { reglages })
 
@@ -209,6 +210,57 @@ describe('les grands arbres', () => {
     expect(egal.h.a2 - egal.h.a1).toBeCloseTo(egal.f.a2 - egal.f.a1, 6)
     for (const g of [1, 2, 3, 4]) expect(ecart(egal, g), `génération ${g}`).toBeLessThan(ecart(touffu.eventail, g))
     expect(egal.rC).toBeGreaterThan(touffu.eventail.rC)
+  })
+})
+
+describe('l’éventail qui descend', () => {
+  const haut = produire(arbreFictif())
+  const bas = produire(arbreFictif(), { reglages: { sens: 'bas' } })
+  const boites = (a: AfficheProduite) => a.scene.elements.filter((e) => e.type === 'rect' && e.rayon === 1.2)
+  const arcs = (a: AfficheProduite) => a.scene.textes.filter((t) => t.type === 'texteSurArc')
+
+  it('pose l’éventail sous le couple, et les descendants au-dessus', () => {
+    const cy = bas.centre[1]
+    for (const t of arcs(bas)) if (t.type === 'texteSurArc') expect(t.a2, t.texte).toBeLessThanOrEqual(0)
+    for (const t of arcs(haut)) if (t.type === 'texteSurArc') expect(t.a1, t.texte).toBeGreaterThanOrEqual(0)
+    expect(boites(bas).length).toBeGreaterThan(5)
+    for (const b of boites(bas)) if (b.type === 'rect') expect(b.y + b.h).toBeLessThan(cy)
+    for (const b of boites(haut)) if (b.type === 'rect') expect(b.y).toBeGreaterThan(haut.centre[1])
+  })
+
+  it('garde lui à gauche, elle à droite', () => {
+    const milieu = (a: AfficheProduite, prenoms: string): number => {
+      const t = arcs(a).find((x) => x.type === 'texteSurArc' && x.texte.startsWith(prenoms))
+      return t?.type === 'texteSurArc' ? (t.a1 + t.a2) / 2 : NaN
+    }
+    expect(milieu(haut, 'Natron')).toBeGreaterThan(90)
+    expect(milieu(bas, 'Natron')).toBeLessThan(-90)
+    expect(milieu(haut, 'Marne')).toBeLessThan(90)
+    expect(milieu(bas, 'Marne')).toBeGreaterThan(-90)
+  })
+
+  it('écrit les lignes tangentielles du centre vers l’extérieur, le haut des lettres vers le centre', () => {
+    const rayons = (a: AfficheProduite): number[] =>
+      arcs(a)
+        .filter((t) => t.type === 'texteSurArc' && (t.a1 + t.a2) / 2 === (a === bas ? -(a.eventail.h.a1 + a.eventail.h.a2) / 2 : (a.eventail.h.a1 + a.eventail.h.a2) / 2))
+        .map((t) => (t.type === 'texteSurArc' ? t.r : 0))
+    // Le mari : prénoms, NOM, dates — du dehors vers le centre quand il monte, l'inverse quand il descend.
+    const enHaut = rayons(haut)
+    const enBas = rayons(bas)
+    expect(enHaut.length).toBeGreaterThanOrEqual(3)
+    expect(enHaut).toEqual([...enHaut].sort((x, y) => y - x))
+    expect(enBas).toEqual([...enBas].sort((x, y) => x - y))
+    // Par le bas, l'arc va de gauche à droite dans le sens trigonométrique.
+    expect(versSvg(bas.scene)).toMatch(/<path id="arc1" d="M[\d.]+,[\d.]+ A[\d.]+,[\d.]+ 0 [01] 0 /)
+    expect(versSvg(haut.scene)).toMatch(/<path id="arc1" d="M[\d.]+,[\d.]+ A[\d.]+,[\d.]+ 0 [01] 1 /)
+  })
+
+  it('pose la légende et le pied sous le centre, et rien d’illisible', () => {
+    const legende = bas.scene.textes.find((t) => t.texte === 'LES QUATRE LIGNÉES')
+    expect(legende?.type === 'texte' && legende.y).toBeGreaterThan(bas.centre[1])
+    expect(versSvg(bas.scene)).not.toMatch(/NaN|Infinity/)
+    // Les lignes tangentielles changent d'ordre, donc un peu de rayon : quelques pour cent.
+    expect(Math.abs(bas.scene.largeur - haut.scene.largeur) / haut.scene.largeur).toBeLessThan(0.05)
   })
 })
 

@@ -76,6 +76,12 @@ const CASES: { cle: Cases; libelle: string; aide: string; egaliser: number }[] =
   { cle: 'regulieres', libelle: 'Régulières', aide: 'égales dans une génération autant que possible, texte plus petit', egaliser: 0.2 },
 ]
 const cases = ref<Cases>('ajustees')
+/** Le sens de l'éventail : les ancêtres au-dessus du couple, ou en dessous (`Reglages.sens`). */
+const SENS: { cle: 'haut' | 'bas'; libelle: string; aide: string }[] = [
+  { cle: 'haut', libelle: 'Vers le haut', aide: 'les ancêtres au-dessus du couple' },
+  { cle: 'bas', libelle: 'Vers le bas', aide: 'les ancêtres en dessous, les descendants au-dessus' },
+]
+const sens = ref<'haut' | 'bas'>('haut')
 /** `null` : toutes les générations connues. */
 const profondeur = ref<number | null>(null)
 const format = ref<CleDeFormat>('naturelle')
@@ -158,7 +164,7 @@ const production = computed<{ affiche: { scene: Scene; chiffres: ChiffresDuPied 
     const options = { profondeur: profondeur.value ?? Infinity }
     if (vue.value === 'eventail') {
       const egaliser = CASES.find((c) => c.cle === cases.value)?.egaliser ?? 0
-      return { affiche: afficheEventail(A, h, f, { ...options, reglages: new Reglages({ egaliser }) }) }
+      return { affiche: afficheEventail(A, h, f, { ...options, reglages: new Reglages({ egaliser, sens: sens.value }) }) }
     }
     return { affiche: afficheSablier(A, h, f, vue.value === 'dense' ? 'dense' : 'normal', options) }
   } catch (e: unknown) {
@@ -307,6 +313,14 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
             <label v-for="v in VUES" :key="v.cle" class="flex items-baseline gap-2 text-sm" :data-vue="v.cle">
               <input v-model="vue" type="radio" name="vue" :value="v.cle" />
               <span>{{ v.libelle }} <span class="text-xs text-attenue">— {{ v.aide }}</span></span>
+            </label>
+          </fieldset>
+
+          <fieldset v-if="vue === 'eventail'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
+            <legend class="mb-1 p-0 text-xs font-semibold text-attenue">Le sens</legend>
+            <label v-for="o in SENS" :key="o.cle" class="flex items-baseline gap-2 text-sm" :data-sens="o.cle">
+              <input v-model="sens" type="radio" name="sens" :value="o.cle" />
+              <span>{{ o.libelle }} <span class="text-xs text-attenue">— {{ o.aide }}</span></span>
             </label>
           </fieldset>
 
