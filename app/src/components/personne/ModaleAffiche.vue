@@ -34,7 +34,7 @@ import { chargerLesPolices, type PolicesChargees } from '@/affiche/chargement'
 import { ArbreAffiche, fusionnerCharges } from '@/affiche/donnees'
 import { imprimerPdf, nomDeFichier, svgEnNoeud, telechargerPng, telechargerSvg } from '@/affiche/exports'
 import { Reglages } from '@/affiche/eventail'
-import { afficheEventail, afficheSablier, type ChiffresDuPied } from '@/affiche/fabriquer'
+import { afficheEventail, afficheSablier, type ChiffresDuPied, type FormeDesDescendants } from '@/affiche/fabriquer'
 import { cotesLisibles, FORMATS, formatOriente, page, pixels, pngPossible, RESOLUTIONS, type CleDeFormat } from '@/affiche/formats'
 import type { Scene } from '@/affiche/scene'
 import { afficheSoleil, type CentreDuSoleil } from '@/affiche/soleil'
@@ -78,6 +78,13 @@ const CASES: { cle: Cases; libelle: string; aide: string; egaliser: number }[] =
   { cle: 'regulieres', libelle: 'Régulières', aide: 'égales dans une génération autant que possible, texte plus petit', egaliser: 0.2 },
 ]
 const cases = ref<Cases>('ajustees')
+/** La forme des descendants, pour l'éventail et le soleil : l'arbre de boîtes, ou les deux pistes de la maquette « Options centre ». */
+const FORMES: { cle: FormeDesDescendants; libelle: string; aide: string }[] = [
+  { cle: 'soleil', libelle: 'Soleil intérieur', aide: 'la descendance en anneaux, une famille par secteur' },
+  { cle: 'medaillons', libelle: 'Médaillons', aide: 'une famille par médaillon' },
+  { cle: 'arbre', libelle: 'Arbre', aide: 'des boîtes reliées' },
+]
+const descendants = ref<FormeDesDescendants>('soleil')
 /** Le sens de l'éventail : les ancêtres au-dessus du couple, ou en dessous (`Reglages.sens`). */
 const SENS: { cle: 'haut' | 'bas'; libelle: string; aide: string }[] = [
   { cle: 'haut', libelle: 'Vers le haut', aide: 'les ancêtres au-dessus du couple' },
@@ -221,17 +228,17 @@ const production = computed<{ affiche: { scene: Scene; chiffres: ChiffresDuPied 
     if (vue.value === 'soleil') {
       const egaliser = CASES.find((c) => c.cle === cases.value)?.egaliser ?? 0
       const reglages = new Reglages({ egaliser, rotation: rotation.value })
-      if (centre.value !== 'parents' || famillesDesParents.value === null) return { affiche: afficheSoleil(A, h, f, { ...options, reglages }) }
+      if (centre.value !== 'parents' || famillesDesParents.value === null) return { affiche: afficheSoleil(A, h, f, { ...options, descendants: descendants.value, reglages }) }
       const lecture = lectureDesParents.value
       if (lecture?.etat === 'erreur') return { erreur: lecture.erreur }
       if (lecture?.etat !== 'pret') return null
       const AP = new ArbreAffiche(lecture.charge)
       if (masque.value) AP.masquerVivants()
-      return { affiche: afficheSoleil(AP, h, f, { ...options, centre: 'parents', reglages }) }
+      return { affiche: afficheSoleil(AP, h, f, { ...options, centre: 'parents', descendants: descendants.value, reglages }) }
     }
     if (vue.value === 'eventail') {
       const egaliser = CASES.find((c) => c.cle === cases.value)?.egaliser ?? 0
-      return { affiche: afficheEventail(A, h, f, { ...options, reglages: new Reglages({ egaliser, sens: sens.value }) }) }
+      return { affiche: afficheEventail(A, h, f, { ...options, descendants: descendants.value, reglages: new Reglages({ egaliser, sens: sens.value }) }) }
     }
     return { affiche: afficheSablier(A, h, f, vue.value === 'dense' ? 'dense' : 'normal', options) }
   } catch (e: unknown) {
@@ -415,6 +422,14 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
             />
             <span class="text-xs text-attenue">{{ rotationSaisie }}° — {{ placeDuMari }}</span>
           </label>
+
+          <fieldset v-if="vue === 'eventail' || vue === 'soleil'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
+            <legend class="mb-1 p-0 text-xs font-semibold text-attenue">Les descendants</legend>
+            <label v-for="d in FORMES" :key="d.cle" class="flex items-baseline gap-2 text-sm" :data-descendants="d.cle">
+              <input v-model="descendants" type="radio" name="descendants" :value="d.cle" />
+              <span>{{ d.libelle }} <span class="text-xs text-attenue">— {{ d.aide }}</span></span>
+            </label>
+          </fieldset>
 
           <fieldset v-if="vue === 'eventail' || vue === 'soleil'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
             <legend class="mb-1 p-0 text-xs font-semibold text-attenue">Les cases</legend>

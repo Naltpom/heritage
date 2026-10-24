@@ -84,7 +84,8 @@ function primitive(e: Primitive, defs: string[], nouvelId: () => string): string
     case 'chemin': {
       const trait = e.trait ? ` stroke="${e.trait}" stroke-width="${e.epaisseur ?? 1}"` : ''
       const bouts = e.arrondi ? ' stroke-linejoin="round" stroke-linecap="round"' : ''
-      return `<path d="${e.d}" fill="${e.fond}"${trait}${bouts}/>`
+      const tirets = e.tirets ? ` stroke-dasharray="${e.tirets}"` : ''
+      return `<path d="${e.d}" fill="${e.fond}"${trait}${bouts}${tirets}/>`
     }
     case 'rect': {
       const trait = e.trait ? ` stroke="${e.trait}" stroke-width="${e.epaisseur}"` : ''
@@ -107,7 +108,7 @@ function primitive(e: Primitive, defs: string[], nouvelId: () => string): string
       // Toujours de gauche à droite : par le haut (de a2 à a1, sens horaire à l'écran) au-dessus
       // du centre ; par le bas (de a1 à a2, sens trigonométrique) en dessous, le haut des
       // lettres tourné vers le centre.
-      const dessous = Math.sin(((e.a1 + e.a2) / 2) * (Math.PI / 180)) < 0
+      const dessous = e.dessous ?? Math.sin(((e.a1 + e.a2) / 2) * (Math.PI / 180)) < 0
       const [x1, y1] = polaire(e.cx, e.cy, e.r, dessous ? e.a1 : e.a2)
       const [x2, y2] = polaire(e.cx, e.cy, e.r, dessous ? e.a2 : e.a1)
       const grand = e.a2 - e.a1 > 180 ? 1 : 0

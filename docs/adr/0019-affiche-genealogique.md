@@ -141,6 +141,16 @@ d'origine, qui aurait effacé les dates d'ancêtres du XVIIIᵉ siècle sans act
   affiches des deux familles des parents (la même route, aucune donnée de plus que ce que le
   lecteur voit déjà) et les fusionne (`fusionnerCharges`) : dans l'ascendance, la route ne sert
   que l'enfant de la lignée, la fusion garde tous les enfants. Chacun n'y figure qu'une fois.
+  Pour l'éventail comme pour le soleil, les descendants prennent au choix trois formes
+  (« Les descendants » dans la modale ; `centres.ts`), les deux nouvelles venant de la maquette
+  « Options centre » du commanditaire : le **soleil intérieur** — la descendance en anneaux, une
+  famille par secteur, la tête au premier anneau, ses enfants puis ses petits-enfants, vert-bleu
+  côté mari, terre cuite côté femme — et la **rosace de médaillons** — une famille par médaillon
+  autour du couple. Dans le soleil, ils occupent le disque central ; sous l'éventail, un
+  demi-cercle qui referme celui des ancêtres. Leur texte ne descend pas sous 10 pt (le nom d'une
+  tête de famille ; une case étroite rapetisse le sien jusqu'aux trois quarts) : c'est la
+  famille vivante, celle qui regarde l'affiche, et c'est le cercle qui grandit pour elle.
+  L'arbre de boîtes reste proposé.
   La fidélité reste vérifiable : `Reglages.ORIGINE` rend la mise en page de l'original, et
   les tests de fidélité la demandent. Un arbre fictif « touffu » (`arbreTouffu()`), complet
   sur sept générations puis clairsemé, a la forme de l'affiche réelle et garde la nouvelle.
