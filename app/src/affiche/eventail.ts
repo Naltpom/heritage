@@ -1,17 +1,36 @@
 /**
- * L'éventail de l'ascendance d'un couple — portage de `eventail.py`.
+ * L'éventail de l'ascendance d'un couple — portage de `eventail.py`, redessiné le 24/10/2026
+ * (ADR 0019, révision).
  *
  * Le couple occupe le premier anneau (lui à gauche, elle à droite) ; chaque anneau suivant
  * est une génération. Les angles ne sont pas fixés par le numéro sosa (1/2ⁿ) : chaque place
- * reçoit au moins l'angle qu'il faut à son texte, et le reste est réparti en gardant
- * l'éventail aussi régulier que possible. Sans cela, au-delà de huit générations, un texte
- * lisible demanderait des mètres de rayon pour des cases restées vides.
+ * reçoit au moins l'angle qu'il faut à son texte et à ceux de ses ancêtres, et le reste est
+ * partagé entre le père et la mère. Sans cela, au-delà de huit générations, un texte lisible
+ * demanderait des mètres de rayon pour des cases restées vides.
  *
  * Les quatre premiers anneaux écrivent **le long de l'arc** (tangentiels) ; au-delà, le
- * texte **rayonne** du centre. Le corps des anneaux tangentiels est fixe : quand les textes
- * ne tiennent pas dans le demi-cercle, c'est le disque central qui grandit
- * (`calculer()`, par dichotomie sur le facteur `k`), ce qui écarte tous les anneaux et
- * élargit d'autant les cases des générations lointaines.
+ * texte **rayonne** du centre. Les corps sont fixes : quand les textes ne tiennent pas dans
+ * le demi-cercle, c'est le disque central qui grandit (`calculer()`, par dichotomie sur le
+ * facteur `k`), ce qui écarte tous les anneaux et élargit d'autant les cases lointaines.
+ *
+ * ## Ce qui fixe la taille de l'affiche
+ *
+ * L'anneau le plus peuplé. Dans un anneau rayonnant, la hauteur du texte se prend sur l'arc,
+ * et toutes ses cases — plus l'ombre des branches arrêtées plus bas — doivent tenir sur le
+ * demi-cercle. Sur onze générations d'ascendants (246 places à la neuvième), l'original écrivait
+ * chaque nom sur deux lignes : le disque central montait à 58 % du rayon, l'éventail à 2,25 m
+ * de large, et sur un A0 le texte tombait à 3,8 pt. Écrire nom et dates **sur une ligne** dans
+ * les anneaux serrés divise par deux l'angle de chaque case : le disque redescend au tiers du
+ * rayon, et sur la même feuille tout le texte grandit d'un tiers. `uneLigneDes: 'auto'` choisit
+ * le premier anneau écrit ainsi — celui qui donne le plus petit éventail.
+ *
+ * ## L'égalisation
+ *
+ * `egaliser` rend égales les cases d'une même génération, autant que la place le permet. Elle a
+ * un prix : une branche qui monte à la onzième génération réclame plus d'angle que ses voisines
+ * arrêtées à la septième, et leur donner à toutes la même part demanderait, sur l'arbre mesuré,
+ * un disque de plus de deux mètres. On accorde donc au disque une marge, une part du rayon, et
+ * cette marge égalise génération par génération, du centre vers l'extérieur.
  */
 import { ajuster, Bloc, type Ligne } from './boites'
 import { ligneVie, type StyleDeDate } from './dates'
@@ -21,17 +40,27 @@ import { f3, secteur, type Scene } from './scene'
 import type { Anc } from './structure'
 
 export class Reglages {
+  /** Les réglages de l'affiche d'origine (`eventail.py`) : les tests de fidélité s'y comparent. */
+  static readonly ORIGINE: Partial<Reglages> = { gamma: 0.6, tangentiels: 4, uneLigneDes: null, egaliser: 0, remplirJusqua: 1 }
+
   /** Ouverture de l'éventail (degrés). */
   angle = 180.0
   /** Rayon du disque central (mm). */
   rCentre = 36.0
   /** Corps (pt) des anneaux tangentiels 0 à 3. */
   corpsTan = [21.0, 12.5, 10.0, 8.8]
+  /**
+   * Le nombre d'anneaux écrits le long de l'arc, au plus `corpsTan.length` ; `'auto'` : 4, 3
+   * ou 2, celui qui donne le plus petit éventail. Un nom tangentiel réclame toute sa longueur
+   * sur l'arc : seize arrière-grands-parents écrits ainsi fixaient seuls le rayon du disque
+   * sur une affiche réelle (36 % du rayon ; 23 % quand leur anneau rayonne).
+   */
+  tangentiels: number | 'auto' = 'auto'
   datesTan: StyleDeDate[] = ['long', 'long', 'abr', 'abr']
   /** Corps des anneaux rayonnants… */
   corpsRad = 7.2
-  /** … sauf exceptions. */
-  corpsRadNiveau: Record<number, number> = { 4: 8.2, 5: 7.6 }
+  /** … sauf exceptions (les anneaux 2 et 3, quand ils rayonnent). */
+  corpsRadNiveau: Record<number, number> = { 2: 10.5, 3: 9.4, 4: 8.2, 5: 7.6 }
   datesRad: StyleDeDate = 'abr'
   /** Marge le long du rayon (mm). */
   margeRad = 1.6
@@ -39,21 +68,38 @@ export class Reglages {
   margePerp = 0.55
   /** Marge aux extrémités des lignes tangentielles (mm). */
   margeTan = 2.0
-  /** 0 : partage égal, 1 : proportionnel à la place requise. */
-  gamma = 0.6
+  /** Le partage de la place libre entre père et mère — 0 : à parts égales, 1 : selon la place requise. */
+  gamma = 0
   /** Facteur appliqué aux corps des anneaux tangentiels. */
   croissanceMax = 1.3
   /** Épaisseur d'anneau rayonnant : ce quantile des longueurs de texte. */
   percentile = 0.96
   /** 2 : « Prénoms NOM » / dates ; 3 : prénoms / NOM / dates. */
   lignesRad: 2 | 3 = 2
+  /**
+   * Le premier anneau rayonnant écrit **sur une ligne** (« Prénoms NOM  ° … † … »), et tous
+   * ceux d'au-delà ; `null` : aucun ; `'auto'` : celui qui donne le plus petit éventail.
+   */
+  uneLigneDes: number | 'auto' | null = 'auto'
+  /**
+   * La marge, en part du rayon de l'éventail, donnée au disque central pour **égaliser les
+   * cases** d'une même génération ; 0 : chaque case prend ce que réclament son texte et ceux de
+   * ses ancêtres. La place gagnée sert génération par génération, du centre vers l'extérieur :
+   * chaque case y reçoit au moins un angle commun, le plus grand qui tienne, sans dépasser sa
+   * place sosa. Seules les branches plus denses que ce partage restent plus larges.
+   */
+  egaliser = 0
+  /**
+   * Le plus grand facteur appliqué aux corps des anneaux qui ont de la place, ceux d'avant le
+   * premier anneau serré : ils grossissent tant que l'éventail ne grandit pas, et le disque
+   * central rapetisse d'autant. 1 : jamais (l'original).
+   */
+  remplirJusqua = 1.6
+  /** Le disque central ne descend pas sous cette part du rayon de l'éventail : il porte le titre. */
+  disqueMin = 0.2
 
   constructor(reglages: Partial<Reglages> = {}) {
     Object.assign(this, reglages)
-  }
-
-  get niveauxTan(): number {
-    return this.corpsTan.length
   }
 }
 
@@ -61,10 +107,11 @@ function styles(corps: number): [Style, Style, Style] {
   return [new Style('SS', corps, ENCRE, 0, 'Reg'), new Style('SS', corps, ENCRE, 0.045, 'Semi'), new Style('SS', corps * 0.86, ENCRE_DOUCE, 0, 'Ital')]
 }
 
-function lignes(n: Anc, st: [Style, Style, Style], dates: StyleDeDate, nb: 2 | 3 = 3): Ligne[] {
+/** Les lignes d'une place. Sur une ligne (`nb = 1`), ce sont celles de deux, mises bout à bout. */
+function lignes(n: Anc, st: [Style, Style, Style], dates: StyleDeDate, nb: 1 | 2 | 3 = 3): Ligne[] {
   const p = n.p
   const nom = p.nom + (n.implexe ? ` ◆${n.implexe}` : '') + (p.probable ? ' ?' : '')
-  if (nb === 2) {
+  if (nb !== 3) {
     return [
       [`${p.prenoms} ${nom}`.trim(), new Style('SS', st[0].taille, ENCRE, 0, 'Semi')],
       [ligneVie(p, dates), st[2]],
@@ -95,6 +142,32 @@ export interface Anneau {
   coupe: boolean
 }
 
+/** Ce qu'un anneau doit à ses seuls textes, quel que soit le disque : son épaisseur. */
+interface Forme {
+  orientation: 'tan' | 'rad'
+  coupe: boolean
+  /** Tangentiel : l'épaisseur ; rayonnant : la longueur de texte retenue, sans les marges. */
+  epaisseur: number
+}
+
+/**
+ * Les lignes d'un bloc **bout à bout**, sur une seule ligne : « Prénoms NOM  ° 1750  † 1810 ».
+ * Dans un anneau rayonnant, la hauteur du texte se prend sur l'arc : une ligne au lieu de deux
+ * divise par deux l'angle qu'une case réclame.
+ */
+export class BlocEnLigne extends Bloc {
+  /** L'écart entre deux morceaux (mm). */
+  static readonly ECART = 1.8
+
+  override get largeurTexte(): number {
+    return this.lignes.reduce((w, [t, s]) => w + s.largeur(t), 0) + BlocEnLigne.ECART * Math.max(0, this.lignes.length - 1)
+  }
+
+  override get hauteurTexte(): number {
+    return this.lignes.reduce((h, [, s]) => Math.max(h, s.interligne), 0)
+  }
+}
+
 /** La variante coupée d'un bloc — `null` si le bloc n'a pas de première ligne à couper. */
 function variantes(b: Bloc, coupe: boolean): Bloc[] {
   const sortie = [b]
@@ -113,6 +186,21 @@ export class Eventail {
   rC = 0
   rExt = 0
   anneaux: Anneau[] = []
+  /** Le nombre d'anneaux tangentiels retenu (`Reglages.tangentiels`). */
+  tangentiels = 4
+  /** Le premier anneau écrit sur une ligne ; `Infinity` : aucun. */
+  uneLigneDes = Infinity
+  /** Le facteur des corps des `anneauxLibres` premiers anneaux (`Reglages.remplirJusqua`). */
+  croissanceLibre = 1
+  anneauxLibres = 0
+
+  private formes: Forme[] = []
+  /** Les variantes de chaque place tangentielle — prénoms entiers, puis coupés. */
+  private variantesDe = new Map<Anc, Bloc[]>()
+  /** Par génération, l'angle commun que chaque case reçoit au moins (`Reglages.egaliser`). */
+  private planchers = new Map<number, number>()
+  /** Le besoin de chaque place, pour les rayons du dernier `preparer()`. */
+  private besoins = new Map<Anc, number>()
 
   constructor(
     readonly h: Anc,
@@ -127,47 +215,69 @@ export class Eventail {
 
   /* ---------------------------------------------------------------- géométrie */
 
-  /** Blocs de texte et rayons pour un facteur de croissance `k` du disque central. */
-  private preparer(k: number): void {
+  /**
+   * Les blocs de texte et l'épaisseur de chaque anneau, pour ce premier anneau sur une ligne,
+   * les `libres` premiers anneaux grossis de `croissance`.
+   */
+  private textes(uneLigneDes: number, croissance = 1, libres = 0): void {
     const R = this.R
-    this.k = k
-    // Le corps des anneaux tangentiels est fixe ; seul le disque central grandit.
-    const croissance = R.croissanceMax
-    this.rC = R.rCentre + (k - 1.0) * 120
-    this.anneaux = []
-    let r = this.rC
+    this.uneLigneDes = uneLigneDes
+    this.croissanceLibre = croissance
+    this.anneauxLibres = libres
+    this.formes = []
+    this.variantesDe.clear()
     for (let g = 0; g < this.nbNiveaux; g++) {
       const ns = this.parNiveau.get(g) ?? []
-      if (g < R.niveauxTan) {
-        const st = styles(R.corpsTan[g]! * croissance)
-        for (const n of ns) n.bloc = new Bloc(lignes(n, st, R.datesTan[g]!), 0, 0)
+      const facteur = g < libres ? croissance : 1
+      if (g < this.tangentiels) {
+        // `facteur` vaut 1 sans remplissage : le produit reste celui de l'original, au bit près.
+        const st = styles(facteur === 1 ? R.corpsTan[g]! * R.croissanceMax : R.corpsTan[g]! * R.croissanceMax * facteur)
         const coupe = g >= 2
+        for (const n of ns) {
+          n.bloc = new Bloc(lignes(n, st, R.datesTan[g]!), 0, 0)
+          this.variantesDe.set(n, variantes(n.bloc, coupe))
+        }
         const nb = coupe ? 4 : 3
         const epaisseur = st[0].interligne * (nb - 2) + st[1].interligne + st[2].interligne + 2.4 * (1 + g * 0.1)
-        this.anneaux.push({ r1: r, r2: r + epaisseur, orientation: 'tan', coupe })
+        this.formes.push({ orientation: 'tan', coupe, epaisseur })
       } else {
-        const st = styles(R.corpsRadNiveau[g] ?? R.corpsRad)
+        const st = styles((R.corpsRadNiveau[g] ?? R.corpsRad) * facteur)
+        const nb = g >= uneLigneDes ? 1 : R.lignesRad
         const longueurs: number[] = []
         for (const n of ns) {
-          n.bloc = new Bloc(lignes(n, st, R.datesRad, R.lignesRad), 0, 0)
+          const ls = lignes(n, st, R.datesRad, nb)
+          n.bloc = nb === 1 ? new BlocEnLigne(ls, 0, 0) : new Bloc(ls, 0, 0)
           longueurs.push(n.bloc.largeurTexte)
         }
         longueurs.sort((a, b) => a - b)
         const q = longueurs[Math.min(longueurs.length - 1, Math.floor(R.percentile * longueurs.length))] ?? 0
-        this.anneaux.push({ r1: r, r2: r + q + 2 * R.margeRad, orientation: 'rad', coupe: false })
+        this.formes.push({ orientation: 'rad', coupe: false, epaisseur: q })
       }
-      r = this.anneaux[this.anneaux.length - 1]!.r2
+    }
+  }
+
+  /** Les rayons pour un facteur de croissance `k` du disque central. */
+  private preparer(k: number): void {
+    const R = this.R
+    this.k = k
+    this.rC = R.rCentre + (k - 1.0) * 120
+    this.anneaux = []
+    let r = this.rC
+    for (const { orientation, coupe, epaisseur } of this.formes) {
+      const r2 = orientation === 'tan' ? r + epaisseur : r + epaisseur + 2 * R.margeRad
+      this.anneaux.push({ r1: r, r2, orientation, coupe })
+      r = r2
     }
     this.rExt = r
   }
 
   /** L'angle minimal (degrés) que réclame le texte de la place `n`. */
   private besoin(n: Anc): number {
-    const { r1, r2, orientation, coupe } = this.anneaux[n.niveau]!
+    const { r1, r2, orientation } = this.anneaux[n.niveau]!
     const R = this.R
     if (orientation === 'rad') return degres((n.bloc!.hauteurTexte + 2 * R.margePerp) / r1)
     let meilleur: number | null = null
-    for (const b of variantes(n.bloc!, coupe)) {
+    for (const b of this.variantesDe.get(n) ?? [n.bloc!]) {
       let besoin = 0
       const bases = this.bases(b, r1, r2)
       b.lignes.forEach(([t, s], i) => {
@@ -191,34 +301,166 @@ export class Eventail {
 
   private minimums(n: Anc): number {
     const ps = n.parents.map((p) => this.minimums(p))
-    n.minimum = Math.max(this.besoin(n), ps.reduce((a, b) => a + b, 0))
+    let besoin = this.besoins.get(n)
+    if (besoin === undefined) this.besoins.set(n, (besoin = this.besoin(n)))
+    n.minimum = Math.max(besoin, this.planchers.get(n.niveau) ?? 0, ps.reduce((a, b) => a + b, 0))
     return n.minimum
   }
 
   private total(k: number): number {
     this.preparer(k)
+    this.besoins.clear()
     return this.minimums(this.h) + this.minimums(this.f)
+  }
+
+  /** Le plus petit facteur de croissance pour lequel tous les textes tiennent. */
+  private facteur(ouverture: number): number {
+    let lo = 1.0
+    if (this.total(lo) <= ouverture) return 1.0
+    let hi = 2.0
+    // Garde-fou : le disque grandit sans borne dans le script d'origine. Soixante
+    // multiplications par 1,6 dépassent de très loin tout arbre réel.
+    for (let i = 0; i < 60 && this.total(hi) > ouverture; i++) hi *= 1.6
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2
+      if (this.total(mid) > ouverture) lo = mid
+      else hi = mid
+    }
+    return hi
+  }
+
+  /**
+   * Les textes de chaque anneau, et leur facteur `k`. Avec `uneLigneDes: 'auto'`, chaque anneau
+   * rayonnant est essayé comme premier anneau sur une ligne, et aucun : on garde le plus petit
+   * éventail — et, à 2 % près, celui qui laisse le plus d'anneaux sur deux lignes, plus aérés.
+   * Un petit arbre, que rien ne serre, reste ainsi sur deux lignes partout.
+   */
+  private choisirLesLignes(ouverture: number): number {
+    const choix = this.R.uneLigneDes
+    const candidats: number[] = [Infinity]
+    if (choix === 'auto') for (let g = this.nbNiveaux - 1; g >= this.tangentiels; g--) candidats.push(g)
+    else if (choix !== null) candidats[0] = choix
+    const essais = candidats.map((premier) => {
+      this.textes(premier)
+      const k = this.facteur(ouverture)
+      this.preparer(k)
+      return { premier, k, rExt: this.rExt }
+    })
+    const plusPetit = Math.min(...essais.map((e) => e.rExt))
+    const retenu = essais.find((e) => e.rExt <= plusPetit * 1.02)!
+    this.textes(retenu.premier)
+    return retenu.k
+  }
+
+  /**
+   * Le nombre d'anneaux tangentiels, puis les textes et leur facteur `k` (`choisirLesLignes`).
+   * Avec `tangentiels: 'auto'`, on essaie quatre, trois puis deux anneaux le long de l'arc, et
+   * l'on garde le plus petit éventail — à 2 % près, celui qui en garde le plus.
+   */
+  private choisirLaForme(ouverture: number): number {
+    const choix = this.R.tangentiels
+    const max = this.R.corpsTan.length
+    const candidats = choix === 'auto' ? [max, max - 1, max - 2].filter((t) => t >= 1) : [Math.min(choix, max)]
+    const essais = candidats.map((tangentiels) => {
+      this.tangentiels = tangentiels
+      const k = this.choisirLesLignes(ouverture)
+      this.preparer(k)
+      return { tangentiels, premier: this.uneLigneDes, k, rExt: this.rExt }
+    })
+    const plusPetit = Math.min(...essais.map((e) => e.rExt))
+    const retenu = essais.find((e) => e.rExt <= plusPetit * 1.02)!
+    this.tangentiels = retenu.tangentiels
+    this.textes(retenu.premier)
+    return retenu.k
+  }
+
+  /**
+   * Les anneaux qui ont de la place grossissent tant que l'éventail ne grandit pas : le disque
+   * central, qui n'est que du remplissage quand un anneau lointain fixe le rayon, rapetisse
+   * d'autant. Sont « libres » les anneaux d'avant le premier anneau rayonnant serré — celui
+   * où la case médiane n'a pas le double de la place que réclame son texte. Rend le facteur
+   * `k` des textes retenus.
+   */
+  private remplir(ouverture: number, k: number): number {
+    const R = this.R
+    if (R.remplirJusqua <= 1 || k <= 1) return k
+    const premier = this.uneLigneDes
+    this.total(k)
+    const rExt = this.rExt
+    const debut = 90 - R.angle / 2
+    const fin = 90 + R.angle / 2
+    const ah = this.part(R.angle, this.h.minimum, this.f.minimum)
+    this.repartir(this.h, fin - ah, fin)
+    this.repartir(this.f, debut, fin - ah)
+    let libres = this.nbNiveaux
+    for (let g = this.tangentiels; g < this.nbNiveaux; g++) {
+      const { r1 } = this.anneaux[g]!
+      const aises = (this.parNiveau.get(g) ?? [])
+        .map((n) => (radians(n.a2 - n.a1) * r1) / (n.bloc!.hauteurTexte + 2 * R.margePerp))
+        .sort((a, b) => a - b)
+      if ((aises[aises.length >> 1] ?? Infinity) < 2) {
+        libres = g
+        break
+      }
+    }
+    const tient = (c: number): number | null => {
+      this.textes(premier, c, libres)
+      const kc = this.facteur(ouverture)
+      this.preparer(kc)
+      return this.rExt <= rExt * 1.005 && this.rC >= R.disqueMin * rExt ? kc : null
+    }
+    let lo = 1
+    let kLo = k
+    let hi = R.remplirJusqua
+    const kHi = tient(hi)
+    if (kHi !== null) {
+      lo = hi
+      kLo = kHi
+    } else {
+      for (let i = 0; i < 12; i++) {
+        const mid = (lo + hi) / 2
+        const km = tient(mid)
+        if (km !== null) [lo, kLo] = [mid, km]
+        else hi = mid
+      }
+    }
+    this.textes(premier, lo, lo > 1 ? libres : 0)
+    return lo > 1 ? kLo : k
+  }
+
+  /**
+   * Les angles communs, génération par génération, pour le disque de `k` : du centre vers
+   * l'extérieur, le plus grand angle que toutes les cases de la génération peuvent recevoir
+   * sans que l'ensemble dépasse l'ouverture — jamais plus que leur place sosa.
+   */
+  private egaliserLesCases(k: number, ouverture: number): void {
+    this.total(k)
+    const somme = (): number => this.minimums(this.h) + this.minimums(this.f)
+    for (let g = 0; g < this.nbNiveaux; g++) {
+      let lo = 0
+      let hi = ouverture / 2 ** (g + 1)
+      this.planchers.set(g, hi)
+      if (somme() <= ouverture) continue
+      for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2
+        this.planchers.set(g, mid)
+        if (somme() <= ouverture) lo = mid
+        else hi = mid
+      }
+      this.planchers.set(g, lo)
+    }
   }
 
   /** Le plus petit facteur de croissance pour lequel tous les textes tiennent, puis les angles. */
   calculer(): this {
     const ouverture = this.R.angle * 0.985
-    let lo = 1.0
-    let hi = 1.0
-    let k: number
-    if (this.total(lo) > ouverture) {
-      hi = 2.0
-      // Garde-fou : le disque grandit sans borne dans le script d'origine. Soixante
-      // multiplications par 1,6 dépassent de très loin tout arbre réel.
-      for (let i = 0; i < 60 && this.total(hi) > ouverture; i++) hi *= 1.6
-      for (let i = 0; i < 30; i++) {
-        const mid = (lo + hi) / 2
-        if (this.total(mid) > ouverture) lo = mid
-        else hi = mid
-      }
-      k = hi
-    } else {
-      k = 1.0
+    this.planchers.clear()
+    let k = this.remplir(ouverture, this.choisirLaForme(ouverture))
+    if (this.R.egaliser > 0) {
+      // Le disque grandit de `egaliser` fois le rayon de l'éventail, et cette marge égalise.
+      this.preparer(k)
+      k += (this.R.egaliser * this.rExt) / 120
+      this.egaliserLesCases(k, ouverture)
     }
     this.total(k)
     const debut = 90 - this.R.angle / 2
@@ -312,6 +554,7 @@ export class Eventail {
     const [rot, x] = am <= 90 ? [-am, rm] : [180 - am, -rm]
     const tr = `translate(${f3(cx)},${f3(cy)}) rotate(${rot.toFixed(4)})`
     const b = n.bloc!
+    if (b instanceof BlocEnLigne) return this.ligneRad(scene, b, x, dispo, tr)
     // Si la place est plus large que le strict nécessaire, on aère un peu les lignes.
     const largeurPerp = radians(n.a2 - n.a1) * r1 - 2 * R.margePerp
     const h = b.hauteurTexte
@@ -322,6 +565,23 @@ export class Eventail {
       const base = y + s.interligne * aeration * 0.5 + st.mm * 0.34
       scene.texte(x, base, t, st, 'middle', tr, comp)
       y += s.interligne * aeration
+    }
+  }
+
+  /** Les morceaux bout à bout, centrés sur le milieu de l'anneau, resserrés ensemble s'il le faut. */
+  private ligneRad(scene: Scene, b: BlocEnLigne, x: number, dispo: number, tr: string): void {
+    const w = b.largeurTexte
+    // Comme `ajuster()` : on réduit le corps jusqu'à 84 %, puis on comprime la chasse.
+    const k = w > dispo && dispo > 0 ? dispo / w : 1
+    const corps = Math.max(k, 0.84)
+    const chasse = k < 0.84 ? k / 0.84 : 1
+    let pos = x - (w * corps * chasse) / 2
+    const haut = b.lignes[0]![1].echelle(corps)
+    for (const [t, s] of b.lignes) {
+      const st = s.echelle(corps)
+      const largeur = st.largeur(t) * chasse
+      scene.texte(pos, haut.mm * 0.34, t, st, 'start', tr, chasse < 1 ? largeur : null)
+      pos += largeur + BlocEnLigne.ECART * corps * chasse
     }
   }
 

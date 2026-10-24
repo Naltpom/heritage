@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ArbreAffiche } from './donnees'
-import { arbreFictif, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
+import { arbreFictif, arbreTouffu, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
-import { radians } from './eventail'
+import { radians, Reglages } from './eventail'
 import { afficheEventail, arrondiDizaine, type AfficheProduite } from './fabriquer'
 import { formatOriente, page, pixels, pngPossible } from './formats'
 import { versSvg } from './svg'
@@ -12,11 +12,18 @@ installerLesPolicesDuDisque()
 
 const DATE = new Date(2026, 9, 22) // le pied est daté : octobre 2026
 
-function produire(essai: ArbreDEssai, options: { masque?: boolean; profondeur?: number } = {}): AfficheProduite {
+function produire(essai: ArbreDEssai, options: { masque?: boolean; profondeur?: number; reglages?: Partial<Reglages> } = {}): AfficheProduite {
   const A = new ArbreAffiche(essai.charge)
   if (options.masque) A.masquerVivants()
-  return afficheEventail(A, essai.mari, essai.femme, { date: DATE, ...(options.profondeur !== undefined ? { profondeur: options.profondeur } : {}) })
+  return afficheEventail(A, essai.mari, essai.femme, {
+    date: DATE,
+    reglages: new Reglages(options.reglages),
+    ...(options.profondeur !== undefined ? { profondeur: options.profondeur } : {}),
+  })
 }
+
+/** La mise en page de l'affiche d'origine, celle que mesurent les tests de fidélité. */
+const ORIGINE = { reglages: Reglages.ORIGINE }
 
 const textes = (a: AfficheProduite): string[] => a.scene.textes.map((t) => t.texte)
 
@@ -27,10 +34,12 @@ describe('fidélité à l’affiche d’origine', () => {
    * 22/10/2026 : 960 des 964 éléments des deux SVG coïncident au millième de millimètre ; les
    * quatre autres sont les écarts voulus (une égalité tranchée au dernier bit, voir
    * `Eventail.texteTan`, et la naissance « 27 novembre » que l'original ne savait pas écrire).
-   * Changer le générateur de l'arbre fictif oblige à refaire la mesure.
+   * Changer le générateur de l'arbre fictif oblige à refaire la mesure. Depuis le 24/10/2026,
+   * la mise en page par défaut n'est plus celle-là (ADR 0019, révision) : ces cas la demandent
+   * par `Reglages.ORIGINE`.
    */
   it('retrouve les dimensions, le rayon et le disque central de l’original', () => {
-    const { scene, eventail } = produire(arbreFictif())
+    const { scene, eventail } = produire(arbreFictif(), ORIGINE)
     expect(scene.largeur).toBeCloseTo(1325.0306549706954, 6)
     expect(scene.hauteur).toBeCloseTo(849.2500387877003, 6)
     expect(eventail.k).toBeCloseTo(1.966908035799861, 9)
@@ -40,7 +49,7 @@ describe('fidélité à l’affiche d’origine', () => {
   })
 
   it('retrouve la hauteur de l’original quand les dates des vivants sont masquées', () => {
-    expect(produire(arbreFictif(), { masque: true }).scene.hauteur).toBeCloseTo(839.5096197499453, 6)
+    expect(produire(arbreFictif(), { ...ORIGINE, masque: true }).scene.hauteur).toBeCloseTo(839.5096197499453, 6)
   })
 
   it('arrondit les repères d’années à la dizaine comme Python (au pair)', () => {
@@ -48,8 +57,12 @@ describe('fidélité à l’affiche d’origine', () => {
   })
 })
 
-describe('la géométrie de l’éventail', () => {
-  const { eventail: E, scene } = produire(arbreFictif())
+describe.each([
+  ['d’origine', arbreFictif, Reglages.ORIGINE],
+  ['d’un grand arbre', arbreTouffu, {}],
+  ['d’un grand arbre, cases égalisées', arbreTouffu, { egaliser: 0.2 }],
+] as const)('la géométrie de l’éventail %s', (_, arbre, reglages) => {
+  const { eventail: E, scene } = produire(arbre(), { reglages })
 
   it('ouvre le couple sur un demi-cercle, lui à gauche, elle à droite', () => {
     expect(E.h.a2).toBeCloseTo(180, 9)
@@ -76,7 +89,7 @@ describe('la géométrie de l’éventail', () => {
 
   it('écrit chaque texte tangentiel dans la longueur de son arc, marges comprises', () => {
     const arcs = scene.textes.filter((t) => t.type === 'texteSurArc')
-    expect(arcs.length).toBeGreaterThan(50)
+    expect(arcs.length).toBeGreaterThan(40)
     for (const t of arcs) {
       if (t.type !== 'texteSurArc') continue
       const dispo = radians(t.a2 - t.a1) * t.r - 2 * E.R.margeTan
@@ -104,7 +117,7 @@ describe('l’ajustement des corps', () => {
    * puis se serrer.
    */
   it('réduit le corps, puis serre les lettres d’un nom trop long pour son anneau, sans jamais déborder', () => {
-    const { scene, eventail: E } = produire(arbreFictif())
+    const { scene, eventail: E } = produire(arbreFictif(), ORIGINE)
     const rayonnants = scene.textes.filter((t) => t.type === 'texte' && t.transform?.includes(' rotate('))
     const serres = rayonnants.filter((t) => t.type === 'texte' && t.compression)
     expect(serres.length, 'des noms serrés').toBeGreaterThan(0)
@@ -116,6 +129,86 @@ describe('l’ajustement des corps', () => {
     }
     const reduits = scene.textes.filter((t) => t.type === 'texteSurArc' && ![12.5, 10, 8.8].some((c) => Math.abs(t.style.taille - c * E.R.croissanceMax) < 1e-9 || Math.abs(t.style.taille - c * E.R.croissanceMax * 0.86) < 1e-9))
     expect(reduits.length, 'des textes tangentiels réduits pour tenir dans leur arc').toBeGreaterThan(0)
+  })
+})
+
+describe('les grands arbres', () => {
+  /*
+   * L'anneau le plus peuplé fixe le rayon : chaque case y réclame sur l'arc la hauteur de son
+   * texte. Mesuré le 24/10/2026 sur une affiche réelle de onze générations : avec deux lignes
+   * partout, le disque central prenait 58 % du rayon et l'éventail 2,25 m. L'arbre touffu a la
+   * même forme (complet sur sept générations, puis des branches qui se ferment).
+   */
+  const origine = produire(arbreTouffu(), ORIGINE)
+  const touffu = produire(arbreTouffu())
+
+  it('écrit les anneaux serrés sur une ligne : l’éventail rapetisse, et le disque central d’abord', () => {
+    const E = touffu.eventail
+    expect(E.uneLigneDes).toBe(7)
+    expect(origine.eventail.rC / origine.eventail.rExt).toBeGreaterThan(0.55)
+    expect(E.rC / E.rExt).toBeLessThan(0.4)
+    // Sur une même feuille, tout le texte grandit d'autant.
+    expect(E.rExt).toBeLessThan(origine.eventail.rExt * 0.8)
+    expect(touffu.scene.largeur).toBeLessThan(origine.scene.largeur * 0.8)
+  })
+
+  it('met nom et dates bout à bout dans l’épaisseur de l’anneau, sans chevauchement', () => {
+    const E = touffu.eventail
+    const parTransform = new Map<string, { x: number; largeur: number }[]>()
+    for (const t of touffu.scene.textes) {
+      if (t.type !== 'texte' || t.ancre !== 'start' || !t.transform?.includes(' rotate(')) continue
+      parTransform.set(t.transform, [...(parTransform.get(t.transform) ?? []), { x: t.x, largeur: t.compression ?? t.style.largeur(t.texte) }])
+    }
+    expect(parTransform.size, 'une ligne par place des anneaux serrés').toBeGreaterThan(300)
+    for (const morceaux of parTransform.values()) {
+      const debut = morceaux[0]!.x
+      const fin = morceaux[morceaux.length - 1]!.x + morceaux[morceaux.length - 1]!.largeur
+      for (let i = 1; i < morceaux.length; i++) expect(morceaux[i]!.x).toBeGreaterThanOrEqual(morceaux[i - 1]!.x + morceaux[i - 1]!.largeur - 1e-9)
+      // La ligne est centrée sur le milieu de son anneau.
+      const milieu = Math.abs((debut + fin) / 2)
+      const anneau = E.anneaux.find((a) => Math.abs((a.r1 + a.r2) / 2 - milieu) < 1e-6)
+      expect(anneau, 'centrée sur le milieu d’un anneau').toBeDefined()
+      expect(E.anneaux.indexOf(anneau!)).toBeGreaterThanOrEqual(E.uneLigneDes)
+      expect(fin - debut).toBeLessThanOrEqual(anneau!.r2 - anneau!.r1 - 2 * E.R.margeRad + 1e-6)
+    }
+  })
+
+  it('garde deux lignes partout quand rien ne serre, sans jamais agrandir l’affiche', () => {
+    const { scene, eventail } = produire(arbreFictif())
+    expect(eventail.uneLigneDes).toBe(Infinity)
+    expect(scene.largeur).toBeLessThanOrEqual(produire(arbreFictif(), ORIGINE).scene.largeur)
+  })
+
+  it('fait rayonner le quatrième anneau quand ses noms, écrits le long de l’arc, fixeraient le disque', () => {
+    const quatre = produire(arbreFictif(), { reglages: { tangentiels: 4 } }).eventail
+    const auto = produire(arbreFictif()).eventail
+    expect(auto.tangentiels).toBeLessThan(4)
+    expect(auto.anneaux[auto.tangentiels - 1]!.orientation).toBe('tan')
+    expect(auto.anneaux[auto.tangentiels]!.orientation).toBe('rad')
+    expect(auto.rC / auto.rExt).toBeLessThan(quatre.rC / quatre.rExt)
+    expect(auto.rExt).toBeLessThanOrEqual(quatre.rExt * 1.02)
+  })
+
+  it('grossit les anneaux qui ont de la place sans agrandir l’éventail : le disque rapetisse', () => {
+    const sans = produire(arbreTouffu(), { reglages: { remplirJusqua: 1 } }).eventail
+    const E = touffu.eventail
+    expect(E.croissanceLibre).toBeGreaterThan(1)
+    expect(E.anneauxLibres).toBeGreaterThan(0)
+    expect(E.rExt).toBeLessThanOrEqual(sans.rExt * 1.005)
+    expect(E.rC).toBeLessThan(sans.rC)
+    expect(E.rC).toBeGreaterThanOrEqual(E.R.disqueMin * sans.rExt - 1e-9)
+  })
+
+  it('égalise les cases d’une génération au prix d’un disque plus grand', () => {
+    const egal = produire(arbreTouffu(), { reglages: { egaliser: 0.2 } }).eventail
+    const ecart = (E: typeof egal, g: number): number => {
+      const angles = E.parNiveau.get(g)!.map((n) => n.a2 - n.a1)
+      return Math.max(...angles) / Math.min(...angles)
+    }
+    // Le couple partagé en deux moitiés égales, puis des grands-parents égaux.
+    expect(egal.h.a2 - egal.h.a1).toBeCloseTo(egal.f.a2 - egal.f.a1, 6)
+    for (const g of [1, 2, 3, 4]) expect(ecart(egal, g), `génération ${g}`).toBeLessThan(ecart(touffu.eventail, g))
+    expect(egal.rC).toBeGreaterThan(touffu.eventail.rC)
   })
 })
 

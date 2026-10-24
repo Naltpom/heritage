@@ -106,3 +106,25 @@ d'origine, qui aurait effacé les dates d'ancêtres du XVIIIᵉ siècle sans act
   dépôt.
 - Le jour où `tree_family.married` existera (mariage attesté sans date, union libre), le
   front le lit déjà ; il restera à le servir dans `NormaliseurDAffiche`.
+- **Révision du 2026-10-24 — l'éventail n'est plus celui de l'original par défaut.** Le
+  commanditaire a demandé un centre plus petit, des générations lointaines plus grandes, et
+  des cases égales dans une génération. Sur son affiche de onze générations (870 ancêtres),
+  le disque central prenait 58 % du rayon, l'éventail 2,26 m de large, et le texte des
+  anneaux rayonnants tombait à 3,8 pt sur un A0. Le disque n'est que du remplissage : il
+  grandit jusqu'à ce que l'anneau le plus contraint tienne sur le demi-cercle. Trois leviers,
+  tous choisis par le moteur pour donner le plus petit éventail (`app/src/affiche/eventail.ts`) :
+  - **une ligne** — dans les anneaux serrés, « Prénoms NOM  ° … † … » bout à bout : la
+    hauteur du texte se prend sur l'arc, l'angle de chaque case est divisé par deux ;
+  - **moins d'anneaux tangentiels** — quatre, trois ou deux : seize arrière-grands-parents
+    écrits le long de l'arc fixaient seuls le disque d'une affiche plus petite ;
+  - **les anneaux qui ont de la place grossissent** tant que l'éventail ne grandit pas.
+  Résultat sur les deux affiches réelles mesurées : disque à 31 % et 23 % du rayon, texte
+  plus grand d'un tiers et de 7 % sur la même feuille. L'**égalisation** complète est
+  impossible : une branche qui monte à la onzième génération réclame plus d'angle que ses
+  voisines, et leur donner la même part demandait un disque de plus de deux mètres. Elle est
+  donc une option de la modale (« Les cases : régulières »), qui donne au disque une marge
+  de 20 % du rayon et la consacre à égaliser, du centre vers l'extérieur. Le partage de la
+  place libre entre père et mère passe à parts égales (`gamma` 0 au lieu de 0,6).
+  La fidélité reste vérifiable : `Reglages.ORIGINE` rend la mise en page de l'original, et
+  les tests de fidélité la demandent. Un arbre fictif « touffu » (`arbreTouffu()`), complet
+  sur sept générations puis clairsemé, a la forme de l'affiche réelle et garde la nouvelle.

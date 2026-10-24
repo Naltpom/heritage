@@ -161,6 +161,22 @@ export class FabriqueDArbre {
     if (mere !== null) this.ascendance(mere, profondeur - 1, niveau + 1)
   }
 
+  /**
+   * Une ascendance **complète** sur `plein` générations, puis qui se ferme vite jusqu'à
+   * `profondeur` : la forme des grands arbres réels, où l'anneau le plus peuplé est loin du
+   * centre et quelques branches seulement montent jusqu'au bout.
+   */
+  ascendanceTouffue(id: number, plein: number, profondeur: number, niveau = 1): void {
+    if (niveau > profondeur || this.hasard() >= 0.5 ** Math.max(0, niveau - plein)) return
+    const p = this.personnes.get(id)!
+    const ecart = 24 + Math.floor(this.hasard() * 12)
+    const pere = this.personne('masculin', p.sexe === 'masculin' || this.hasard() < 0.5 ? p.nom : this.choisir(NOMS), p.naissance - ecart)
+    const mere = this.personne('feminin', this.choisir(NOMS), p.naissance - ecart + 2 - Math.floor(this.hasard() * 6))
+    this.enfant(this.famille(pere, mere), id)
+    this.ascendanceTouffue(pere, plein, profondeur, niveau + 1)
+    this.ascendanceTouffue(mere, plein, profondeur, niveau + 1)
+  }
+
   /** La charge de `GET /api/arbre/familles/{id}/affiche`, enfants dans l'ordre du serveur. */
   charge(couple: number): ArbreDAffiche {
     const tri = (id: number): string => {
@@ -306,6 +322,21 @@ export function arbreFictif(graine = 1789): ArbreDEssai {
 
   Object.assign(reperes, { couple, aine, cadette, benjamin, sansDate, premiere, seconde, ex, compagnon, masquee, petit1, petit5, petit6, u1, u2, ud, ul, ub })
   return { charge: a.charge(couple), mari, femme, reperes }
+}
+
+/**
+ * Un grand arbre : sept générations d'ascendance complètes au-dessus du couple, puis des
+ * branches qui se ferment jusqu'à la onzième — de l'ordre de 250 places aux deux anneaux les
+ * plus peuplés, comme l'affiche réelle mesurée le 24/10/2026. Sans descendance.
+ */
+export function arbreTouffu(graine = 1848): ArbreDEssai {
+  const a = new FabriqueDArbre(graine)
+  const mari = a.personne('masculin', 'Romarin', 1950, { prenoms: 'Natron Basalte', deces: null })
+  const femme = a.personne('feminin', 'Sureau', 1952, { prenoms: 'Marne', deces: null })
+  const couple = a.famille(mari, femme, annee(1975))
+  a.ascendanceTouffue(mari, 7, 11)
+  a.ascendanceTouffue(femme, 7, 11)
+  return { charge: a.charge(couple), mari, femme, reperes: { couple } }
 }
 
 /** Un couple sans aucune ascendance connue, et sans enfant. */
