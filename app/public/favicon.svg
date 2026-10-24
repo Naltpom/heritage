@@ -2,7 +2,9 @@
      Un SVG servi en favicon peut porter sa propre feuille de style, et Chrome
      honore `prefers-color-scheme` dedans : l'icône suit donc le thème du
      navigateur, comme le reste de l'interface. Les deux teintes sont celles de
-     `--acc` dans `arbre.html` — brun en clair, sable en sombre. -->
+     la variable d'accent d'`arbre.html` — brun en clair, sable en sombre.
+     Pas de double tiret dans ce commentaire : XML l'interdit, et le fichier
+     cesserait d'être une image (onglet et manifeste). -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke-width="2" stroke-linecap="round">
   <style>
     :root { --e: #8a5a2b }
