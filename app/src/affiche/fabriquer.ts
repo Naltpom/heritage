@@ -6,9 +6,9 @@
  * descendance en chiffres), les repères d'années sous la base, les descendants en dessous,
  * la légende des quatre lignées et le pied. Avec les quatre parents au premier anneau
  * (`OptionsDAffiche.centre`), les descendants sont les leurs : le couple au milieu, les frères
- * et sœurs de chacun de son côté, dans le demi-cercle sous la base. Tout est en millimètres ; la taille de l'affiche
- * **découle** de l'arbre (taille naturelle), la mise au format est l'affaire du rendu
- * (`svg.ts`).
+ * et sœurs de chacun de son côté, dans le demi-cercle sous la base. Tout est en millimètres ;
+ * la taille de l'affiche **découle** de l'arbre (taille naturelle), la mise au format est
+ * l'affaire du rendu (`svg.ts`).
  *
  * Un seul écart de fond avec l'original : le pied ne nomme personne. « Arbre établi par… »
  * portait le nom de l'auteur de l'affiche d'origine ; ici, la mention est un paramètre, et

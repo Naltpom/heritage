@@ -99,9 +99,9 @@ const CENTRES: { cle: CentreDeLAffiche; libelle: string; aide: string }[] = [
   { cle: 'parents', libelle: 'Ses quatre parents', aide: 'et le couple, ses frères et sœurs, leurs descendants' },
 ]
 const centre = ref<CentreDeLAffiche>('couple')
-/** Le soleil : son orientation (`Reglages.rotation`). */
 /**
- * La rotation appliquée à l'affiche, et celle que montre la barre pendant qu'on la fait glisser :
+ * Le soleil : la rotation appliquée à l'affiche (`Reglages.rotation`), et celle que montre la
+ * barre pendant qu'on la fait glisser :
  * l'affiche ne se recalcule qu'au lâcher (`change`), pas à chaque cran.
  */
 const rotation = ref<number>(0)
