@@ -16,7 +16,9 @@
  *
  * - **le conjoint**, quand la personne en a eu plusieurs : une affiche est un couple —
  *   une nouvelle lecture (gardée en mémoire le temps de la modale) ;
- * - **la vue** : l'éventail, le sablier, le sablier dense ;
+ * - **la vue** : l'éventail, le soleil, le sablier, le sablier dense ;
+ * - **au premier anneau** (éventail et soleil) : le couple, ou ses quatre parents — il faut
+ *   alors lire aussi l'affiche des familles d'origine des époux, pour les frères et sœurs ;
  * - **les générations d'ascendants** (toutes, par défaut), **le masque des vivants** :
  *   un nouveau placement ;
  * - **le format** : rien qu'un nouveau cadrage — le dessin, agrandi pour remplir la page,
@@ -34,10 +36,10 @@ import { chargerLesPolices, type PolicesChargees } from '@/affiche/chargement'
 import { ArbreAffiche, fusionnerCharges } from '@/affiche/donnees'
 import { imprimerPdf, nomDeFichier, svgEnNoeud, telechargerPng, telechargerSvg } from '@/affiche/exports'
 import { Reglages } from '@/affiche/eventail'
-import { afficheEventail, afficheSablier, type ChiffresDuPied, type FormeDesDescendants } from '@/affiche/fabriquer'
+import { afficheEventail, afficheSablier, type CentreDeLAffiche, type ChiffresDuPied, type FormeDesDescendants } from '@/affiche/fabriquer'
 import { cotesLisibles, FORMATS, formatOriente, page, pixels, pngPossible, RESOLUTIONS, type CleDeFormat } from '@/affiche/formats'
 import type { Scene } from '@/affiche/scene'
-import { afficheSoleil, type CentreDuSoleil } from '@/affiche/soleil'
+import { afficheSoleil } from '@/affiche/soleil'
 import { ascendance } from '@/affiche/structure'
 import { versSvg } from '@/affiche/svg'
 
@@ -91,12 +93,13 @@ const SENS: { cle: 'haut' | 'bas'; libelle: string; aide: string }[] = [
   { cle: 'bas', libelle: 'Vers le bas', aide: 'les ancêtres en dessous, les descendants au-dessus' },
 ]
 const sens = ref<'haut' | 'bas'>('haut')
-/** Le soleil : ce que porte le premier anneau, et son orientation (`Reglages.rotation`). */
-const CENTRES: { cle: CentreDuSoleil; libelle: string; aide: string }[] = [
-  { cle: 'couple', libelle: 'Le couple', aide: 'ses descendants au centre' },
-  { cle: 'parents', libelle: 'Ses quatre parents', aide: 'le couple, ses frères et sœurs et leurs descendants au centre' },
+/** L'éventail et le soleil : ce que porte le premier anneau, et donc les descendants montrés. */
+const CENTRES: { cle: CentreDeLAffiche; libelle: string; aide: string }[] = [
+  { cle: 'couple', libelle: 'Le couple', aide: 'et ses descendants' },
+  { cle: 'parents', libelle: 'Ses quatre parents', aide: 'et le couple, ses frères et sœurs, leurs descendants' },
 ]
-const centre = ref<CentreDuSoleil>('couple')
+const centre = ref<CentreDeLAffiche>('couple')
+/** Le soleil : son orientation (`Reglages.rotation`). */
 /**
  * La rotation appliquée à l'affiche, et celle que montre la barre pendant qu'on la fait glisser :
  * l'affiche ne se recalcule qu'au lâcher (`change`), pas à chaque cran.
@@ -177,8 +180,9 @@ const epoux = computed<{ h: number; f: number } | null>(() => {
 })
 
 /**
- * Les familles d'origine des deux époux — le soleil des quatre parents lit aussi leur affiche,
- * pour avoir les frères et sœurs du couple et leur descendance. `null` s'il en manque une.
+ * Les familles d'origine des deux époux — l'éventail et le soleil des quatre parents lisent aussi
+ * leur affiche, pour avoir les frères et sœurs du couple et leur descendance. `null` s'il en
+ * manque une.
  */
 const famillesDesParents = computed<[number, number] | null>(() => {
   if (etat.value.etat !== 'pret' || epoux.value === null) return null
@@ -194,7 +198,7 @@ const lectureDesParents = shallowRef<LectureDesParents | null>(null)
 watch(
   [vue, centre, famillesDesParents],
   async ([v, c, familles]) => {
-    if (v !== 'soleil' || c !== 'parents' || familles === null || etat.value.etat !== 'pret') return
+    if ((v !== 'soleil' && v !== 'eventail') || c !== 'parents' || familles === null || etat.value.etat !== 'pret') return
     const base = etat.value.charge
     const cle = `${base.famille}:${familles.join('-')}`
     if (lectureDesParents.value?.cle === cle && lectureDesParents.value.etat !== 'erreur') return
@@ -225,20 +229,16 @@ const production = computed<{ affiche: { scene: Scene; chiffres: ChiffresDuPied 
     if (masque.value) A.masquerVivants()
     const { h, f } = epoux.value
     const options = { profondeur: profondeur.value ?? Infinity }
-    if (vue.value === 'soleil') {
+    if (vue.value === 'soleil' || vue.value === 'eventail') {
       const egaliser = CASES.find((c) => c.cle === cases.value)?.egaliser ?? 0
-      const reglages = new Reglages({ egaliser, rotation: rotation.value })
-      if (centre.value !== 'parents' || famillesDesParents.value === null) return { affiche: afficheSoleil(A, h, f, { ...options, descendants: descendants.value, reglages }) }
+      const [fabriquer, reglages] = vue.value === 'soleil' ? [afficheSoleil, new Reglages({ egaliser, rotation: rotation.value })] : [afficheEventail, new Reglages({ egaliser, sens: sens.value })]
+      if (centre.value !== 'parents' || famillesDesParents.value === null) return { affiche: fabriquer(A, h, f, { ...options, descendants: descendants.value, reglages }) }
       const lecture = lectureDesParents.value
       if (lecture?.etat === 'erreur') return { erreur: lecture.erreur }
       if (lecture?.etat !== 'pret') return null
       const AP = new ArbreAffiche(lecture.charge)
       if (masque.value) AP.masquerVivants()
-      return { affiche: afficheSoleil(AP, h, f, { ...options, centre: 'parents', descendants: descendants.value, reglages }) }
-    }
-    if (vue.value === 'eventail') {
-      const egaliser = CASES.find((c) => c.cle === cases.value)?.egaliser ?? 0
-      return { affiche: afficheEventail(A, h, f, { ...options, descendants: descendants.value, reglages: new Reglages({ egaliser, sens: sens.value }) }) }
+      return { affiche: fabriquer(AP, h, f, { ...options, centre: 'parents', descendants: descendants.value, reglages }) }
     }
     return { affiche: afficheSablier(A, h, f, vue.value === 'dense' ? 'dense' : 'normal', options) }
   } catch (e: unknown) {
@@ -398,7 +398,7 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
             </label>
           </fieldset>
 
-          <fieldset v-if="vue === 'soleil'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
+          <fieldset v-if="vue === 'eventail' || vue === 'soleil'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
             <legend class="mb-1 p-0 text-xs font-semibold text-attenue">Au premier anneau</legend>
             <label v-for="c in CENTRES" :key="c.cle" class="flex items-baseline gap-2 text-sm" :data-centre="c.cle">
               <input v-model="centre" type="radio" name="centre" :value="c.cle" :disabled="c.cle === 'parents' && famillesDesParents === null" />
@@ -497,7 +497,7 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
           <p v-else-if="etat.etat === 'pret' && epoux === null" class="m-auto text-sm text-attenue">
             Une affiche a besoin des deux conjoints : l’un d’eux n’est pas dans l’arbre que vous voyez.
           </p>
-          <p v-else-if="vue === 'soleil' && centre === 'parents' && lectureDesParents?.etat === 'lecture'" class="m-auto text-sm text-attenue" role="status">
+          <p v-else-if="(vue === 'eventail' || vue === 'soleil') && centre === 'parents' && famillesDesParents !== null && lectureDesParents?.etat === 'lecture'" class="m-auto text-sm text-attenue" role="status">
             Lecture des familles des parents…
           </p>
           <p v-else-if="production && 'erreur' in production" class="m-auto text-sm text-alerte" role="alert">

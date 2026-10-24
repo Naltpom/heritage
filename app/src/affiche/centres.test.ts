@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { CORPS_MIN } from './centres'
 import { ArbreAffiche } from './donnees'
-import { arbreDeCousins, arbreFictif, type ArbreDEssai } from './essai/arbreFictif'
+import { arbreDeCousins, arbreFictif, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { Reglages } from './eventail'
-import { afficheEventail, type AfficheProduite, type FormeDesDescendants } from './fabriquer'
+import { afficheEventail, type AfficheProduite, type CentreDeLAffiche, type FormeDesDescendants } from './fabriquer'
 import { afficheSoleil } from './soleil'
 import { versSvg } from './svg'
 
@@ -12,12 +12,12 @@ installerLesPolicesDuDisque()
 
 const DATE = new Date(2026, 9, 24)
 
-function soleil(essai: ArbreDEssai, descendants: FormeDesDescendants, centre: 'couple' | 'parents' = 'couple'): AfficheProduite {
+function soleil(essai: ArbreDEssai, descendants: FormeDesDescendants, centre: CentreDeLAffiche = 'couple'): AfficheProduite {
   return afficheSoleil(new ArbreAffiche(essai.charge), essai.mari, essai.femme, { date: DATE, centre, descendants })
 }
 
-function eventail(essai: ArbreDEssai, descendants: FormeDesDescendants, sens: 'haut' | 'bas' = 'haut'): AfficheProduite {
-  return afficheEventail(new ArbreAffiche(essai.charge), essai.mari, essai.femme, { date: DATE, descendants, reglages: new Reglages({ sens }) })
+function eventail(essai: ArbreDEssai, descendants: FormeDesDescendants, sens: 'haut' | 'bas' = 'haut', centre: CentreDeLAffiche = 'couple'): AfficheProduite {
+  return afficheEventail(new ArbreAffiche(essai.charge), essai.mari, essai.femme, { date: DATE, descendants, centre, reglages: new Reglages({ sens }) })
 }
 
 /** Tous les textes de la scène, quel que soit leur mode de pose. */
@@ -60,6 +60,17 @@ describe('le soleil intérieur', () => {
     expect(auCentre('Opale')![0]).toBeGreaterThan(cx)
     expect(auCentre('Jade')![0]).toBeGreaterThan(cx)
     expect(auCentre('Gypse')![0]).toBeLessThan(cx)
+  })
+
+  it('partage tout le secteur du couple entre ses enfants, sans trou entre eux', () => {
+    // Le couple est centré en haut (90°) : ses deux enfants, qui s'y partagent tout son angle,
+    // sont de part et d'autre, à égale distance.
+    const [cx, cy] = s.centre
+    const angle = (prenoms: string): number => {
+      const [x, y] = auCentre(prenoms)!
+      return (Math.atan2(cy - y, x - cx) * 180) / Math.PI
+    }
+    expect((angle('Silex') + angle('Topaze')) / 2).toBeCloseTo(90, -0.5)
   })
 
   it('écrit le titre au cœur, et ne descend pas sous le corps minimal', () => {
@@ -112,5 +123,39 @@ describe('l’éventail et ses descendants en demi-cercle', () => {
   it('garde l’arbre de boîtes au choix', () => {
     const a = eventail(arbreFictif(), 'arbre')
     expect(a.scene.elements.filter((e) => e.type === 'rect' && e.rayon === 1.2).length).toBeGreaterThan(5)
+  })
+})
+
+describe('l’éventail des quatre parents', () => {
+  /** Les textes de ces prénoms côté descendants : sous la base quand l'éventail monte, au-dessus quand il descend. */
+  const descendants = (a: AfficheProduite, prenoms: string[], sens: 'haut' | 'bas') =>
+    a.scene.textes.filter((t) => {
+      const y = position(t)[1]
+      return prenoms.includes(t.texte.trim()) && (sens === 'haut' ? y > a.centre[1] : y < a.centre[1])
+    })
+
+  it.each(['soleil', 'medaillons', 'arbre'] as const)('met les quatre parents au premier anneau, et leurs descendants en %s', (forme) => {
+    for (const sens of ['haut', 'bas'] as const) {
+      const a = eventail(arbreDeCousins(), forme, sens, 'parents')
+      const [cx] = a.centre
+      expect(a.eventail.R.premierAnneauMasque, `${forme} ${sens}`).toBe(true)
+      // Le couple et ses enfants, les fratries et la cousine.
+      for (const p of ['Natron', 'Silex', 'Topaze', 'Gypse', 'Opale', 'Jade', 'Craie']) expect(descendants(a, [p], sens), `${forme} ${sens} ${p}`).not.toHaveLength(0)
+      // La femme une seule fois : avec le mari, plus dans sa fratrie.
+      expect(descendants(a, ['Marne', '∞ Marne'], sens), `${forme} ${sens}`).toHaveLength(1)
+      // Le frère du mari à gauche, les sœurs de la femme à droite.
+      for (const t of descendants(a, ['Gypse'], sens)) expect(position(t)[0], `${forme} ${sens}`).toBeLessThan(cx)
+      for (const t of descendants(a, ['Opale', 'Jade'], sens)) expect(position(t)[0], `${forme} ${sens}`).toBeGreaterThan(cx)
+      // Le titre ne date pas le mariage du couple : ses chiffres sont ceux des quatre parents.
+      expect(textes(a).filter((t) => t.startsWith('mariés')), `${forme} ${sens}`).toHaveLength(0)
+      expect(textes(eventail(arbreDeCousins(), forme, sens)).filter((t) => t.startsWith('mariés'))).toHaveLength(1)
+      expect(versSvg(a.scene)).not.toMatch(/NaN|Infinity/)
+    }
+  })
+
+  it('retombe sur le couple quand les parents d’un époux manquent', () => {
+    const a = eventail(coupleSeul(), 'soleil', 'haut', 'parents')
+    expect(a.eventail.R.premierAnneauMasque).toBe(false)
+    expect(contient(a, 'Onyx')).toBe(true)
   })
 })
