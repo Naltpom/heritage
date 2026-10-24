@@ -13,7 +13,7 @@
  * vaut par défaut « Arbre établi avec Heritage » — le dépôt ne porte aucun nom réel
  * (ADR 0006).
  */
-import { dessinerDesc, mesurerDesc, placerDesc, ReglesDesc } from './boites'
+import { dessinerDesc, inverserDesc, mesurerDesc, placerDesc, ReglesDesc } from './boites'
 import { titre } from './dates'
 import type { ArbreAffiche, Personne } from './donnees'
 import { etendueHaut, Eventail, pointLibre, Reglages } from './eventail'
@@ -84,7 +84,31 @@ export function centreCouple(scene: Scene, E: Eventail, cx: number, cy: number, 
     [`${nomDeTitre(H)} · ${nomDeTitre(F)}`, new Style('CG', 46 * u, ENCRE, 0.01, 'Bold'), 1.0],
   ]
 
+  // L'éventail qui descend : le disque est sous le centre, et le bloc s'y pose par le haut.
+  const poserDessous = (u: number, dessiner = false): boolean => {
+    const ls = lignes(u).filter(([t]) => Boolean(t))
+    // Les lignes de base, du bas vers le haut, avec les mêmes écarts que dessus.
+    const ys = [0]
+    for (let i = 0; i + 1 < ls.length; i++) {
+      const [, st, apres] = ls[i]!
+      ys.push(ys[i]! - (st.mm * 0.74 + st.mm * 0.32 * apres + ls[i + 1]![1].mm * 0.26))
+    }
+    const dernier = ls.length - 1
+    const decalage = cy + r * 0.1 - (ys[dernier]! - ls[dernier]![1].mm * 0.8)
+    for (let i = 0; i < ls.length; i++) {
+      const [t, st] = ls[i]!
+      const y = decalage + ys[i]!
+      const loin = y + st.mm * 0.25 - cy
+      if (loin > r * 0.93) return false
+      const corde = 2 * Math.sqrt(r * r - loin * loin) * 0.88
+      if (st.largeur(t) > corde) return false
+      if (dessiner) scene.texte(cx, y, t, st)
+    }
+    return true
+  }
+
   const poser = (u: number, dessiner = false): boolean => {
+    if (E.R.sens === 'bas') return poserDessous(u, dessiner)
     let y = cy - r * 0.1
     const ls = lignes(u).filter(([t]) => Boolean(t))
     for (let i = 0; i < ls.length; i++) {
@@ -112,7 +136,7 @@ export function centreCouple(scene: Scene, E: Eventail, cx: number, cy: number, 
   poser(lo, true)
 }
 
-/** Sous la base de l'éventail, l'année de naissance médiane de chaque génération. */
+/** Sous la base de l'éventail (au-dessus, quand il descend), l'année de naissance médiane de chaque génération. */
 export function reperesAnnees(scene: Scene, E: Eventail, cx: number, cy: number): void {
   const st = new Style('SS', 8.5, ENCRE_DOUCE, 0, 'Ital')
   const annees = E.anneesParAnneau()
@@ -124,7 +148,7 @@ export function reperesAnnees(scene: Scene, E: Eventail, cx: number, cy: number)
     if (g === 0 || !a) continue
     for (const sx of [-1, 1]) {
       const t = `nés vers ${g > 1 ? arrondiDizaine(a) : a}`
-      scene.texte(cx + sx * rm, cy + 6, t, st.echelle(Math.min(1, (r2 - r1 - 2) / st.largeur(t))))
+      scene.texte(cx + sx * rm, E.R.sens === 'bas' ? cy - 3 : cy + 6, t, st.echelle(Math.min(1, (r2 - r1 - 2) / st.largeur(t))))
     }
   }
 }
@@ -225,6 +249,8 @@ export interface AfficheProduite {
   echelleDescendants: number
   echelleLegende: number
   chiffres: ChiffresDuPied
+  /** Le centre de l'éventail (mm). */
+  centre: readonly [number, number]
 }
 
 /** L'affiche « éventail » du couple (`hId`, `fId`) — `affiche_eventail()`. */
@@ -258,9 +284,20 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
 
   const marge = 35.0
   const W = Math.max(2 * R, largDesc) + 2 * marge
-  const cy = marge + etendueHaut(E) + 4
-  const yDesc = cy + 26
-  const basDesc = placerDesc(enfants, W / 2 - largDesc / 2, yDesc, hauteurs, regles)
+  // Qui monte : l'éventail en haut, les descendants en dessous. Qui descend : les descendants
+  // en haut, retournés (les enfants contre le couple), l'éventail en dessous.
+  const dessous = E.R.sens === 'bas'
+  let cy: number
+  let basDesc: number
+  if (dessous) {
+    const basBloc = placerDesc(enfants, W / 2 - largDesc / 2, marge, hauteurs, regles)
+    inverserDesc(enfants, marge + basBloc)
+    cy = basBloc + 26
+    basDesc = cy + etendueHaut(E) + 4
+  } else {
+    cy = marge + etendueHaut(E) + 4
+    basDesc = placerDesc(enfants, W / 2 - largDesc / 2, cy + 26, hauteurs, regles)
+  }
   const chiffres: ChiffresDuPied = {
     ancetres: new Set(noeuds.map((n) => n.p.id)).size - 2,
     generations: E.nbNiveaux + 1,
@@ -268,7 +305,8 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
   }
 
   // La légende va dans le coin haut gauche et le pied dans le coin haut droit, hors du
-  // demi-cercle de l'éventail : on prend le plus grand corps qui y tient.
+  // demi-cercle de l'éventail — dans les coins du bas quand il descend : on prend le plus grand
+  // corps qui y tient. `basDesc` est alors le bas de l'éventail.
   const encombrement = (k: number): [[number, number], [number, number]] => [
     legende(new Scene(1, 1), 0, 0, H, F, A, k),
     pied(new Scene(1, 1), 0, 0, chiffres, mention, date, 'end', k),
@@ -279,12 +317,19 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
       [marge, wl, hl],
       [W - marge - wp, wp, hp],
     ] as const) {
-      const bas = marge + h + 9 * k * 0.3528
-      if ((x0 < W / 2 && W / 2 < x0 + w) || bas >= cy) return false
       const pas = 4.0
       const pts: [number, number][] = []
-      for (let i = 0; i < Math.floor(w / pas) + 1; i++) pts.push([x0 + i * pas, bas])
-      for (const j of [0, w]) for (let i = 0; i < Math.floor((bas - marge) / pas) + 1; i++) pts.push([x0 + j, marge + i * pas])
+      if (dessous) {
+        const haut = basDesc - (h + 9 * k * 0.3528)
+        if ((x0 < W / 2 && W / 2 < x0 + w) || haut <= cy) return false
+        for (let i = 0; i < Math.floor(w / pas) + 1; i++) pts.push([x0 + i * pas, haut])
+        for (const j of [0, w]) for (let i = 0; i < Math.floor((basDesc - haut) / pas) + 1; i++) pts.push([x0 + j, haut + i * pas])
+      } else {
+        const bas = marge + h + 9 * k * 0.3528
+        if ((x0 < W / 2 && W / 2 < x0 + w) || bas >= cy) return false
+        for (let i = 0; i < Math.floor(w / pas) + 1; i++) pts.push([x0 + i * pas, bas])
+        for (const j of [0, w]) for (let i = 0; i < Math.floor((bas - marge) / pas) + 1; i++) pts.push([x0 + j, marge + i * pas])
+      }
       if (!pts.every(([x, y]) => pointLibre(E, W / 2, cy, x, y, 8.0))) return false
     }
     return true
@@ -307,8 +352,13 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
   E.dessiner(scene, W / 2, cy)
   centreCouple(scene, E, W / 2, cy, A, fam, enfants, H, F)
   reperesAnnees(scene, E, W / 2, cy)
-  dessinerDesc(scene, enfants, [W / 2, cy], regles)
-  if (kl !== null) {
+  dessinerDesc(scene, enfants, [W / 2, cy], regles, dessous)
+  if (kl !== null && dessous) {
+    // Chaque bloc finit sur le bas de l'éventail.
+    const [[hl], [hp]] = encombrement(kl)
+    legende(scene, marge, basDesc - hl, H, F, A, kl)
+    pied(scene, W - marge, basDesc - hp, chiffres, mention, date, 'end', kl)
+  } else if (kl !== null) {
     const y0 = marge + 9 * kl * 0.3528
     legende(scene, marge, y0, H, F, A, kl)
     pied(scene, W - marge, y0, chiffres, mention, date, 'end', kl)
@@ -318,7 +368,7 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
     legende(scene, marge, yBas, H, F, A, kl)
     pied(scene, W - marge, yBas + 30 * kl, chiffres, mention, date, 'end', kl)
   }
-  return { scene, eventail: E, echelleDescendants: echelle, echelleLegende: kl, chiffres }
+  return { scene, eventail: E, echelleDescendants: echelle, echelleLegende: kl, chiffres, centre: [W / 2, cy] }
 }
 
 export interface SablierProduit {

@@ -104,10 +104,14 @@ function primitive(e: Primitive, defs: string[], nouvelId: () => string): string
     case 'texteSurArc': {
       const st = e.style
       const id = nouvelId()
-      const [x1, y1] = polaire(e.cx, e.cy, e.r, e.a2)
-      const [x2, y2] = polaire(e.cx, e.cy, e.r, e.a1)
+      // Toujours de gauche à droite : par le haut (de a2 à a1, sens horaire à l'écran) au-dessus
+      // du centre ; par le bas (de a1 à a2, sens trigonométrique) en dessous, le haut des
+      // lettres tourné vers le centre.
+      const dessous = Math.sin(((e.a1 + e.a2) / 2) * (Math.PI / 180)) < 0
+      const [x1, y1] = polaire(e.cx, e.cy, e.r, dessous ? e.a1 : e.a2)
+      const [x2, y2] = polaire(e.cx, e.cy, e.r, dessous ? e.a2 : e.a1)
       const grand = e.a2 - e.a1 > 180 ? 1 : 0
-      defs.push(`<path id="${id}" d="M${f3(x1)},${f3(y1)} A${f3(e.r)},${f3(e.r)} 0 ${grand} 1 ${f3(x2)},${f3(y2)}"/>`)
+      defs.push(`<path id="${id}" d="M${f3(x1)},${f3(y1)} A${f3(e.r)},${f3(e.r)} 0 ${grand} ${dessous ? 0 : 1} ${f3(x2)},${f3(y2)}"/>`)
       const esp = st.espacement ? ` letter-spacing="${f3(st.espacement * st.mm)}"` : ''
       return (
         `<text font-family="${st.cle}" font-size="${f3(st.mm)}" fill="${st.couleur}"${esp}>` +

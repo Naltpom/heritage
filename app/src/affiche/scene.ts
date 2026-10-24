@@ -66,7 +66,10 @@ export class Scene {
     })
   }
 
-  /** Un texte centré sur un arc de rayon `r`, de l'angle `a2` (gauche) à `a1` (droite), en degrés. */
+  /**
+   * Un texte centré sur un arc de rayon `r`, en degrés : de `a2` (gauche) à `a1` (droite) au-dessus
+   * du centre, de `a1` (gauche) à `a2` (droite) en dessous.
+   */
   texteSurArc(cx: number, cy: number, r: number, a1: number, a2: number, t: string, style: Style): void {
     if (!t) return
     this.elements.push({ type: 'texteSurArc', cx, cy, r, a1, a2, texte: t, style })
