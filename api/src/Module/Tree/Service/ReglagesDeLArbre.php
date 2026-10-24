@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace App\Module\Tree\Service;
 
 /**
- * Les deux réglages d'administration dont le calcul de l'arbre a besoin.
+ * Les réglages d'administration dont l'arbre a besoin : deux pour son calcul, un pour ses
+ * affiches.
  *
  * Interface plutôt qu'un appel direct à `Core\Service\SettingService`, pour la même
  * raison que `Core\Contract\SessionPayloadContributorInterface` existe : `Tree` déclare
@@ -13,8 +14,8 @@ namespace App\Module\Tree\Service;
  * placement reste ainsi **testable sans base de réglages**, ce qui compte parce que le
  * test de non-régression doit pouvoir tourner sur un jeu d'entités minimal.
  *
- * Aucun de ces deux réglages n'entre dans l'empreinte de l'arbre (§ 2.3) — ni l'un ni
- * l'autre n'est une donnée structurante :
+ * Aucun de ces réglages n'entre dans l'empreinte de l'arbre (§ 2.3) — aucun n'est une
+ * donnée structurante :
  *
  * - changer le **seuil** ne déplace aucun nœud… sauf à travers la largeur des fiches, et
  *   c'est le seul point où il faut être attentif : une personne qui cesse d'être vivante
@@ -42,4 +43,11 @@ interface ReglagesDeLArbre
      * pas un état de service acceptable, c'est un état de démarrage.
      */
     public function personneRacineId(): ?int;
+
+    /**
+     * `tree.signature_affiches` — le nom écrit au pied des affiches (« Arbre établi par … »),
+     * `null` quand il n'est pas réglé. Un réglage, parce que le dépôt ne porte aucun nom réel
+     * (ADR 0006).
+     */
+    public function signatureDesAffiches(): ?string;
 }

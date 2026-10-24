@@ -598,6 +598,11 @@ export interface FamilleDAffiche {
 export interface ArbreDAffiche {
   famille: number
   generationsDeDescendance: number
+  /**
+   * Le nom qui signe les affiches (`tree.signature_affiches`), `null` s'il n'est pas réglé.
+   * Facultatif ici pour les arbres fictifs de l'essai.
+   */
+  signature?: string | null
   personnes: PersonneDAffiche[]
   familles: FamilleDAffiche[]
 }

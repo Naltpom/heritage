@@ -160,6 +160,19 @@ d'origine, qui aurait effacé les dates d'ancêtres du XVIIIᵉ siècle sans act
   le rangement du soleil). Le titre ne date plus le mariage : ses chiffres sont ceux des quatre
   parents. Au passage, les enfants du couple remplissent désormais tout son secteur : il est
   plus large que la somme des leurs, et chacun n'y prenait que sa mesure, un trou derrière lui.
+  Puis, à la demande du commanditaire, le soleil intérieur et la rosace **entrent dans
+  l'éventail** : ils occupent son demi-disque central, comme le disque du soleil, le titre en
+  leur cœur (un demi-disque sur la base), et c'est le disque qui grandit pour leur texte —
+  l'affiche perd le demi-cercle qu'elle avait sous la base. Les médaillons s'y partagent le
+  demi-tour à pas égal, le couple des quatre parents et ses enfants au cœur. L'arbre de boîtes
+  reste sous la base.
+  Le **soleil est carré** — l'impression sur mesure se commande à l'échelle 1:1 —, la légende
+  dans le coin bas gauche et le pied dans le coin bas droit. Le pied est **signé** par le
+  réglage `tree.signature_affiches` (« Arbre établi par … avec Heritage ») : un nom réel n'a
+  rien à faire dans le dépôt (ADR 0006), l'administration le règle. Le format **sur mesure**
+  prend en centimètres la page imprimée et la taille du dessin, centré dessus : un dessin plus
+  grand que la page est rogné, un plus petit entouré de papier. Le JPG (qualité maximale)
+  rejoint le PNG, pour les imprimeurs qui ne prennent que lui et le PDF.
   La fidélité reste vérifiable : `Reglages.ORIGINE` rend la mise en page de l'original, et
   les tests de fidélité la demandent. Un arbre fictif « touffu » (`arbreTouffu()`), complet
   sur sept générations puis clairsemé, a la forme de l'affiche réelle et garde la nouvelle.

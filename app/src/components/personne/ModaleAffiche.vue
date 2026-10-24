@@ -22,7 +22,9 @@
  * - **les générations d'ascendants** (toutes, par défaut), **le masque des vivants** :
  *   un nouveau placement ;
  * - **le format** : rien qu'un nouveau cadrage — le dessin, agrandi pour remplir la page,
- *   est centré dessus ; la taille naturelle est celle qui découle de l'arbre.
+ *   est centré dessus ; la taille naturelle est celle qui découle de l'arbre. **Sur mesure**,
+ *   on donne en centimètres la page imprimée et la taille du dessin, centré dessus : ce qui
+ *   dépasse est rogné, ce qui manque est du papier — le fichier à l'échelle 1:1 des imprimeurs.
  *
  * Le `<dialog>` natif, ouvert en modal, piège le focus et se ferme à Échap, comme
  * `ModaleCorrection`.
@@ -34,14 +36,14 @@ import BoutonBase from '@/components/base/BoutonBase.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import { chargerLesPolices, type PolicesChargees } from '@/affiche/chargement'
 import { ArbreAffiche, fusionnerCharges } from '@/affiche/donnees'
-import { imprimerPdf, nomDeFichier, svgEnNoeud, telechargerPng, telechargerSvg } from '@/affiche/exports'
+import { imprimerPdf, nomDeFichier, svgEnNoeud, telechargerImage, telechargerSvg } from '@/affiche/exports'
 import { Reglages } from '@/affiche/eventail'
-import { afficheEventail, afficheSablier, type CentreDeLAffiche, type ChiffresDuPied, type FormeDesDescendants } from '@/affiche/fabriquer'
-import { cotesLisibles, FORMATS, formatOriente, page, pixels, pngPossible, RESOLUTIONS, type CleDeFormat } from '@/affiche/formats'
+import { afficheEventail, afficheSablier, mentionDuPied, type CentreDeLAffiche, type ChiffresDuPied, type FormeDesDescendants } from '@/affiche/fabriquer'
+import { cotesLisibles, FORMATS, formatOriente, formatSurMesure, pixels, pngPossible, RESOLUTIONS, type CleDeFormat } from '@/affiche/formats'
 import type { Scene } from '@/affiche/scene'
 import { afficheSoleil } from '@/affiche/soleil'
 import { ascendance } from '@/affiche/structure'
-import { versSvg } from '@/affiche/svg'
+import { mettreAuFormat, versSvg } from '@/affiche/svg'
 
 const {
   fiche,
@@ -116,6 +118,13 @@ const placeDuMari = computed(() => {
 /** `null` : toutes les générations connues. */
 const profondeur = ref<number | null>(null)
 const format = ref<CleDeFormat>('naturelle')
+/** Sur mesure, en centimètres : la page imprimée et la taille du dessin, posées à la première sélection. */
+const impression = ref<{ largeur: number | null; hauteur: number | null }>({ largeur: null, hauteur: null })
+const dessin = ref<{ largeur: number | null; hauteur: number | null }>({ largeur: null, hauteur: null })
+const MESURES = [
+  { cle: 'impression', libelle: 'Impression', valeur: impression },
+  { cle: 'dessin', libelle: 'Dessin', valeur: dessin },
+] as const
 const masque = ref(true)
 const dpi = ref<number>(150)
 
@@ -228,7 +237,7 @@ const production = computed<{ affiche: { scene: Scene; chiffres: ChiffresDuPied 
     const A = new ArbreAffiche(etat.value.charge)
     if (masque.value) A.masquerVivants()
     const { h, f } = epoux.value
-    const options = { profondeur: profondeur.value ?? Infinity }
+    const options = { profondeur: profondeur.value ?? Infinity, mention: mentionDuPied(etat.value.charge.signature) }
     if (vue.value === 'soleil' || vue.value === 'eventail') {
       const egaliser = CASES.find((c) => c.cle === cases.value)?.egaliser ?? 0
       const [fabriquer, reglages] = vue.value === 'soleil' ? [afficheSoleil, new Reglages({ egaliser, rotation: rotation.value })] : [afficheEventail, new Reglages({ egaliser, sens: sens.value })]
@@ -247,8 +256,31 @@ const production = computed<{ affiche: { scene: Scene; chiffres: ChiffresDuPied 
 })
 
 const affiche = computed(() => (production.value && 'affiche' in production.value ? production.value.affiche : null))
-const formatChoisi = computed(() => (affiche.value ? formatOriente(format.value, affiche.value.scene.largeur, affiche.value.scene.hauteur) : null))
-const pageSortie = computed(() => (affiche.value ? page(format.value, affiche.value.scene.largeur, affiche.value.scene.hauteur) : null))
+const positif = (v: number | null): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0
+const formatChoisi = computed(() => {
+  if (!affiche.value) return null
+  if (format.value !== 'mesure') return formatOriente(format.value, affiche.value.scene.largeur, affiche.value.scene.hauteur)
+  const { largeur: li, hauteur: hi } = impression.value
+  const { largeur: ld, hauteur: hd } = dessin.value
+  return positif(li) && positif(hi) && positif(ld) && positif(hd) ? formatSurMesure([li, hi], [ld, hd]) : null
+})
+const pageSortie = computed(() => (affiche.value ? (formatChoisi.value ?? { largeur: affiche.value.scene.largeur, hauteur: affiche.value.scene.hauteur }) : null))
+/** Sur mesure : le dessin tel qu'il sera posé (il garde ses proportions dans sa boîte), et ce que la page en rogne. */
+const dessinPose = computed(() => {
+  const f = formatChoisi.value
+  if (!affiche.value || !f?.dessin) return null
+  const { largeur: l, hauteur: h } = affiche.value.scene
+  const { k } = mettreAuFormat(l, h, f)
+  return { largeur: l * k, hauteur: h * k, rogne: l * k > f.largeur + 0.05 || h * k > f.hauteur + 0.05 }
+})
+// Sur mesure, à la première sélection : la taille naturelle, au centimètre supérieur, pour la page et pour le dessin.
+watch(format, (f) => {
+  if (f !== 'mesure' || !affiche.value || positif(impression.value.largeur)) return
+  const cm = (mm: number): number => Math.ceil(mm / 10)
+  const [l, h] = [cm(affiche.value.scene.largeur), cm(affiche.value.scene.hauteur)]
+  impression.value = { largeur: l, hauteur: h }
+  dessin.value = { largeur: l, hauteur: h }
+})
 
 watch(
   [affiche, formatChoisi, apercu],
@@ -276,10 +308,10 @@ const nomBase = computed(() => {
   return nomDeFichier('affiche', nom(epoux.value.h), nom(epoux.value.f), vue.value) || 'affiche'
 })
 
-const occupe = ref<'svg' | 'png' | 'pdf' | null>(null)
+const occupe = ref<'svg' | 'png' | 'jpg' | 'pdf' | null>(null)
 const erreurExport = ref<string | null>(null)
 
-async function exporter(type: 'svg' | 'png' | 'pdf'): Promise<void> {
+async function exporter(type: 'svg' | 'png' | 'jpg' | 'pdf'): Promise<void> {
   if (etat.value.etat !== 'pret' || !affiche.value || !pageSortie.value || occupe.value) return
   const { polices } = etat.value
   const { scene } = affiche.value
@@ -290,7 +322,7 @@ async function exporter(type: 'svg' | 'png' | 'pdf'): Promise<void> {
   await new Promise((r) => setTimeout(r, 30))
   try {
     if (type === 'svg') telechargerSvg(scene, formatChoisi.value, polices, nomBase.value)
-    else if (type === 'png') await telechargerPng(scene, pageSortie.value, formatChoisi.value, dpi.value, polices, nomBase.value)
+    else if (type === 'png' || type === 'jpg') await telechargerImage(scene, pageSortie.value, formatChoisi.value, dpi.value, polices, nomBase.value, type)
     else await imprimerPdf(scene, pageSortie.value, formatChoisi.value, polices, nomBase.value)
   } catch (e: unknown) {
     erreurExport.value = e instanceof Error ? e.message : 'Le fichier n’a pas pu être produit.'
@@ -452,11 +484,44 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
             <select v-model="format" :class="classeChamp" data-reglage="format">
               <option v-for="f in FORMATS" :key="f.cle" :value="f.cle">{{ f.libelle }}</option>
             </select>
-            <span v-if="affiche && pageSortie" class="text-xs text-attenue">
+            <span v-if="affiche && pageSortie && format !== 'mesure'" class="text-xs text-attenue">
               <template v-if="formatChoisi">Page {{ cotesLisibles(pageSortie) }}, dessin agrandi et centré</template>
               <template v-else>{{ cotesLisibles(pageSortie) }}, la taille que donne l’arbre</template>
             </span>
           </label>
+
+          <fieldset v-if="format === 'mesure'" class="m-0 -mt-2 flex flex-col gap-1.5 border-0 p-0" data-reglage="sur-mesure">
+            <legend class="sr-only">Le format sur mesure, en centimètres</legend>
+            <div v-for="m in MESURES" :key="m.cle" class="flex items-center gap-1.5 text-xs">
+              <span class="w-[4.5rem] font-semibold text-attenue">{{ m.libelle }}</span>
+              <input
+                v-model.number="m.valeur.value.largeur"
+                type="number"
+                min="1"
+                step="0.1"
+                inputmode="decimal"
+                :class="[classeChamp, 'min-w-0 !px-1.5']"
+                :aria-label="`${m.libelle} : largeur en centimètres`"
+                :data-mesure="`${m.cle}-largeur`"
+              />
+              <span aria-hidden="true">×</span>
+              <input
+                v-model.number="m.valeur.value.hauteur"
+                type="number"
+                min="1"
+                step="0.1"
+                inputmode="decimal"
+                :class="[classeChamp, 'min-w-0 !px-1.5']"
+                :aria-label="`${m.libelle} : hauteur en centimètres`"
+                :data-mesure="`${m.cle}-hauteur`"
+              />
+              <span class="text-attenue">cm</span>
+            </div>
+            <span v-if="dessinPose && pageSortie" class="text-xs text-attenue">
+              Page {{ cotesLisibles(pageSortie) }}, dessin {{ cotesLisibles(dessinPose) }} centré{{ dessinPose.rogne ? ' : ce qui dépasse est rogné' : '' }}.
+            </span>
+            <span v-else class="text-xs text-alerte">Quatre tailles positives, en centimètres.</span>
+          </fieldset>
 
           <label class="flex items-start gap-2 text-sm">
             <input v-model="masque" type="checkbox" class="mt-0.5" data-reglage="masque" />
@@ -472,18 +537,21 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
               SVG <span class="font-normal text-attenue">— vectoriel</span>
             </BoutonBase>
             <div class="flex flex-col gap-1">
-              <select v-model="dpi" :class="classeChamp" :disabled="!affiche" aria-label="Résolution du PNG" data-reglage="resolution">
+              <select v-model="dpi" :class="classeChamp" :disabled="!affiche" aria-label="Résolution de l’image" data-reglage="resolution">
                 <option v-for="r in resolutions" :key="r.dpi" :value="r.dpi" :disabled="!r.possible">{{ r.libelle }}{{ r.possible ? '' : ' (trop grand)' }}</option>
               </select>
               <BoutonBase variante="secondaire" :desactive="!affiche || occupe !== null" :chargement="occupe === 'png'" data-export="png" @click="exporter('png')">
                 PNG <span class="font-normal text-attenue">— image</span>
+              </BoutonBase>
+              <BoutonBase variante="secondaire" :desactive="!affiche || occupe !== null" :chargement="occupe === 'jpg'" data-export="jpg" @click="exporter('jpg')">
+                JPG <span class="font-normal text-attenue">— image, qualité maximale</span>
               </BoutonBase>
             </div>
             <BoutonBase variante="secondaire" :desactive="!affiche || occupe !== null" :chargement="occupe === 'pdf'" data-export="pdf" @click="exporter('pdf')">
               PDF <span class="font-normal text-attenue">— impression</span>
             </BoutonBase>
             <p class="m-0 text-xs leading-relaxed text-attenue">
-              Le SVG embarque ses polices. Le PDF passe par la fenêtre d’impression du navigateur : choisissez « Enregistrer au format PDF » ; la page a déjà la taille de l’affiche.
+              Le SVG embarque ses polices. Le PDF passe par la fenêtre d’impression du navigateur : choisissez « Enregistrer au format PDF » ; la page a déjà la taille de l’affiche, à l’échelle 1:1. Pour un imprimeur qui demande 300 ppp, le PDF reste net à toute taille.
             </p>
             <p v-if="erreurExport" class="m-0 text-xs text-alerte" role="alert">{{ erreurExport }}</p>
           </div>

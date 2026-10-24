@@ -17,6 +17,7 @@ final class ReglagesDeLArbreParSettings implements ReglagesDeLArbre
 {
     public const string CLE_SEUIL_VIVANT = 'tree.seuil_vivant_annees';
     public const string CLE_PERSONNE_RACINE = 'tree.personne_racine_id';
+    public const string CLE_SIGNATURE_AFFICHES = 'tree.signature_affiches';
 
     public function __construct(private readonly SettingService $reglages)
     {
@@ -33,5 +34,12 @@ final class ReglagesDeLArbreParSettings implements ReglagesDeLArbre
         $racine = $this->reglages->entier(self::CLE_PERSONNE_RACINE, 0);
 
         return $racine > 0 ? $racine : null;
+    }
+
+    public function signatureDesAffiches(): ?string
+    {
+        $signature = trim($this->reglages->texte(self::CLE_SIGNATURE_AFFICHES, ''));
+
+        return '' === $signature ? null : $signature;
     }
 }

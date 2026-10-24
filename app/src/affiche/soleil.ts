@@ -111,51 +111,55 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
 
   const marge = 35.0
   const ext = etendues(E)
-  const W = ext.gauche + ext.droite + 2 * marge
-  const cx = marge + ext.gauche
-  const cy = marge + ext.haut
   const chiffres: ChiffresDuPied = {
     ancetres: new Set(noeuds.map((n) => n.p.id)).size - 2,
     generations: E.nbNiveaux + 1,
     implexes: new Set(noeuds.map((n) => n.implexe).filter((i) => i)).size,
   }
 
-  // La légende dans le coin haut gauche, le pied dans le coin haut droit, hors du cercle ;
-  // sinon, sous le soleil.
+  // Une affiche carrée : le soleil est rond, et l'impression sur mesure se commande à l'échelle
+  // 1:1. La légende dans le coin bas gauche, le pied dans le coin bas droit, hors du cercle ;
+  // sinon, sous le soleil, et la page s'élargit pour rester carrée.
+  const cote = Math.max(ext.gauche + ext.droite, ext.haut + ext.bas) + 2 * marge
+  const cy = marge + ext.haut + (cote - 2 * marge - ext.haut - ext.bas) / 2
   const encombrement = (k: number): [[number, number], [number, number]] => [
     legende(new Scene(1, 1), 0, 0, H, F, A, k),
     pied(new Scene(1, 1), 0, 0, chiffres, mention, date, 'end', k),
   ]
   const tient = (k: number): boolean => {
+    const cx = marge + ext.gauche + (cote - 2 * marge - ext.gauche - ext.droite) / 2
     const [[hl, wl], [hp, wp]] = encombrement(k)
     for (const [x0, w, h] of [
       [marge, wl, hl],
-      [W - marge - wp, wp, hp],
+      [cote - marge - wp, wp, hp],
     ] as const) {
-      const bas = marge + h + 9 * k * 0.3528
-      if ((x0 < cx && cx < x0 + w) || bas >= cy) return false
+      const haut = cote - marge - (h + 9 * k * 0.3528)
+      if ((x0 < cx && cx < x0 + w) || haut <= cy) return false
       const pas = 4.0
       const pts: [number, number][] = []
-      for (let i = 0; i < Math.floor(w / pas) + 1; i++) pts.push([x0 + i * pas, bas])
-      for (const j of [0, w]) for (let i = 0; i < Math.floor((bas - marge) / pas) + 1; i++) pts.push([x0 + j, marge + i * pas])
+      for (let i = 0; i < Math.floor(w / pas) + 1; i++) pts.push([x0 + i * pas, haut])
+      for (const j of [0, w]) for (let i = 0; i < Math.floor((cote - marge - haut) / pas) + 1; i++) pts.push([x0 + j, haut + i * pas])
       if (!pts.every(([x, y]) => pointLibre(E, cx, cy, x, y, 8.0))) return false
     }
     return true
   }
   let kl: number | null = tient(1.0) ? Math.min(plusGrand(1.0, 3.0, tient), 1.15) : null
   const basSoleil = cy + ext.bas
-  const hauteur = kl !== null ? basSoleil + marge : basSoleil + 22 + 52 * Math.max(1.0, W / 1100) + marge
+  const hauteur = kl !== null ? cote : basSoleil + 22 + 52 * Math.max(1.0, cote / 1100) + marge
+  const W = Math.max(cote, hauteur)
+  const cx = marge + ext.gauche + (W - 2 * marge - ext.gauche - ext.droite) / 2
 
   const scene = new Scene(W, hauteur)
   E.dessiner(scene, cx, cy)
   if (autre) autre.dessiner(scene, cx, cy)
   else if (centre) dessinerLesBandes(scene, centre, cx, cy)
   if (kl !== null) {
-    const y0 = marge + 9 * kl * 0.3528
-    legende(scene, marge, y0, H, F, A, kl)
-    pied(scene, W - marge, y0, chiffres, mention, date, 'end', kl)
+    // Chaque bloc finit sur le bas de la page.
+    const [[hl], [hp]] = encombrement(kl)
+    legende(scene, marge, hauteur - marge - hl, H, F, A, kl)
+    pied(scene, W - marge, hauteur - marge - hp, chiffres, mention, date, 'end', kl)
   } else {
-    kl = Math.max(1.0, W / 1100)
+    kl = Math.max(1.0, cote / 1100)
     legende(scene, marge, basSoleil + 22, H, F, A, kl)
     pied(scene, W - marge, basSoleil + 22 + 30 * kl, chiffres, mention, date, 'end', kl)
   }
