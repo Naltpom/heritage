@@ -277,23 +277,36 @@ export class SoleilInterieur {
     const unite = pose.ouverture / total
     const posees: CasePosee[] = []
     const limites: number[] = []
-    const descendre = (c: CaseDuSoleil, anneau: number, a: number): void => {
-      const b = a + pose.sens * c.poids * unite
+    const descendre = (c: CaseDuSoleil, anneau: number, a: number, b: number): void => {
       posees.push({ c, anneau, a1: Math.min(a, b), a2: Math.max(a, b) })
-      // Les enfants se partagent l'angle du parent au prorata de leur poids.
+      // Les enfants se partagent tout l'angle du parent, au prorata de leur poids — celui du
+      // couple compris, plus large que leur somme : chaque enfant y prenait sa seule mesure, et
+      // laissait un trou derrière lui (relevé du 24/10/2026).
       const somme = c.enfants.reduce((s, e) => s + e.poids, 0)
       let x = a
       for (const e of c.enfants) {
-        descendre(e, anneau + 1, x)
-        x += ((b - a) * e.poids) / (somme || 1)
+        const y = x + ((b - a) * e.poids) / (somme || 1)
+        descendre(e, anneau + 1, x, y)
+        x = y
       }
     }
-    let a = pose.depart
-    for (const c of cases) {
-      limites.push(a)
-      descendre(c, 1, a)
-      a += pose.sens * c.poids * unite
+    // Le demi-cercle des quatre parents : le couple au milieu, sous le titre, et chaque fratrie
+    // se partage la moitié qui reste de son côté, si nombreuse que soit l'autre.
+    const unites = cases.map(() => unite)
+    const i = cases.findIndex((c) => c.couple)
+    if (!this.plein && i > 0 && i < cases.length - 1) {
+      const moitie = (pose.ouverture - cases[i]!.poids * unite) / 2
+      const somme = (cs: CaseDuSoleil[]): number => cs.reduce((s, c) => s + c.poids, 0)
+      const [g, d] = [somme(cases.slice(0, i)), somme(cases.slice(i + 1))]
+      cases.forEach((_, k) => (unites[k] = k < i ? moitie / g : k > i ? moitie / d : unite))
     }
+    let a = pose.depart
+    cases.forEach((c, k) => {
+      limites.push(a)
+      const b = a + pose.sens * c.poids * unites[k]!
+      descendre(c, 1, a, b)
+      a = b
+    })
     limites.push(a)
     return { posees, limites }
   }
@@ -475,8 +488,12 @@ export class Rosace {
   /** Les lignes d'un médaillon au corps `b` (le nom de la tête) ; `null` : l'ornement. */
   private lignes(f: FamilleDuCentre, b: number, largeurMax: number): (Ligne | null)[] {
     const d = f.tete
-    const lignes: (Ligne | null)[] = [nomComplet(d.p, b), ...conjoints(d).map((p, i) => nomComplet(p, b * 0.79, ENCRE_DOUCE, signe(i), true))]
-    const fils = enfants(d)
+    // Le couple de l'affiche (éventail des quatre parents) : lui, elle, et leurs seuls enfants
+    // communs, comme au soleil intérieur.
+    const lignes: (Ligne | null)[] = f.couple
+      ? [nomComplet(f.couple[0], b), nomComplet(f.couple[1], b, ENCRE, '∞ ')]
+      : [nomComplet(d.p, b), ...conjoints(d).map((p, i) => nomComplet(p, b * 0.79, ENCRE_DOUCE, signe(i), true))]
+    const fils = f.couple ? (d.unions.find(([c]) => c?.p.id === f.couple![1].id)?.[2] ?? []) : enfants(d)
     if (fils.length > 0) lignes.push(null)
     for (const e of fils) {
       const moi = nomComplet(e.p, b * 0.76)
@@ -515,15 +532,29 @@ export class Rosace {
     return { m, rho, c: Math.max(0.12, Math.min(0.33, rho - m - 0.03)) }
   }
 
+  /**
+   * Les angles des médaillons sur le demi-cercle, depuis son début (degrés), à pas égal ; pour
+   * les quatre parents, le couple au milieu, et les fratries de part et d'autre au pas de la plus
+   * nombreuse — la plus courte reste serrée contre lui.
+   */
+  private anglesDuDemi(): number[] {
+    const n = Math.max(1, this.familles.length)
+    const i = this.familles.findIndex((f) => f.couple)
+    if (i <= 0 || i >= this.familles.length - 1) return this.familles.map((_, k) => (180 / n) * (k + 0.5))
+    const pas = 90 / (Math.max(i, this.familles.length - 1 - i) + 0.5)
+    return this.familles.map((_, k) => 90 + pas * (k - i))
+  }
+
   /** Le demi-cercle : rayon des médaillons et de leur arc pour le corps `b` (mm). */
   private demi(b: number): { m: number; rho: number } {
-    const n = Math.max(1, this.familles.length)
     const m = Math.max(...this.familles.map((f) => {
       let lo = 5
       while (!this.tient(f, b, lo) && lo < 2000) lo *= 1.15
       return lo
     }), 5)
-    const pas = Math.PI / n
+    // Le pas le plus serré décide du rayon de l'arc : deux voisins ne se touchent pas.
+    const angles = this.anglesDuDemi()
+    const pas = Math.min(180 / Math.max(1, angles.length), ...angles.slice(1).map((a, k) => a - angles[k]!)) * (Math.PI / 180)
     const rho = Math.max(m * 1.15, (m * 1.06) / Math.sin(pas / 2))
     return { m, rho }
   }
@@ -579,8 +610,7 @@ export class Rosace {
       }
     } else {
       ;({ m, rho } = this.demi(b))
-      const pas = 180 / Math.max(1, n)
-      angles = this.familles.map((_, i) => (versLeHaut ? 180 - pas * (i + 0.5) : 180 + pas * (i + 0.5)))
+      angles = this.anglesDuDemi().map((a) => (versLeHaut ? 180 - a : 180 + a))
     }
     this.familles.forEach((f, i) => {
       const [x, y] = polaire(cx, cy, rho, angles[i]!)

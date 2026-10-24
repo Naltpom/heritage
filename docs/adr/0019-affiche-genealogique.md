@@ -151,6 +151,15 @@ d'origine, qui aurait effacé les dates d'ancêtres du XVIIIᵉ siècle sans act
   tête de famille ; une case étroite rapetisse le sien jusqu'aux trois quarts) : c'est la
   famille vivante, celle qui regarde l'affiche, et c'est le cercle qui grandit pour elle.
   L'arbre de boîtes reste proposé.
+  L'éventail reçoit à son tour le choix **« Au premier anneau »** : avec les quatre parents,
+  l'anneau du couple est masqué et le demi-cercle sous la base reçoit leurs descendants
+  (`quatreParents()`, commun aux deux vues) — le couple au milieu, sous le titre, la fratrie du
+  mari à gauche, celle de la femme à droite. Au soleil intérieur, chaque fratrie se partage la
+  moitié qui reste de son côté ; dans la rosace, elles prennent le pas de la plus nombreuse ;
+  l'arbre de boîtes se range en bandes dans le demi-disque, du rayon de l'éventail (`bandes.ts`,
+  le rangement du soleil). Le titre ne date plus le mariage : ses chiffres sont ceux des quatre
+  parents. Au passage, les enfants du couple remplissent désormais tout son secteur : il est
+  plus large que la somme des leurs, et chacun n'y prenait que sa mesure, un trou derrière lui.
   La fidélité reste vérifiable : `Reglages.ORIGINE` rend la mise en page de l'original, et
   les tests de fidélité la demandent. Un arbre fictif « touffu » (`arbreTouffu()`), complet
   sur sept générations puis clairsemé, a la forme de l'affiche réelle et garde la nouvelle.

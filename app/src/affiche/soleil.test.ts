@@ -3,13 +3,13 @@ import { ArbreAffiche, fusionnerCharges } from './donnees'
 import { arbreDeCousins, arbreFictif, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { radians, Reglages } from './eventail'
-import type { AfficheProduite } from './fabriquer'
-import { afficheSoleil, type CentreDuSoleil } from './soleil'
+import type { AfficheProduite, CentreDeLAffiche } from './fabriquer'
+import { afficheSoleil } from './soleil'
 import { versSvg } from './svg'
 
 installerLesPolicesDuDisque()
 
-function soleil(essai: ArbreDEssai, options: { rotation?: number; centre?: CentreDuSoleil } = {}): AfficheProduite {
+function soleil(essai: ArbreDEssai, options: { rotation?: number; centre?: CentreDeLAffiche } = {}): AfficheProduite {
   return afficheSoleil(new ArbreAffiche(essai.charge), essai.mari, essai.femme, {
     date: new Date(2026, 9, 24),
     centre: options.centre ?? 'couple',

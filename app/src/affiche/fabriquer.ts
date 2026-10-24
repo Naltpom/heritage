@@ -4,15 +4,18 @@
  *
  * L'éventail de l'ascendance en haut, le disque central (le couple, son mariage, sa
  * descendance en chiffres), les repères d'années sous la base, les descendants en dessous,
- * la légende des quatre lignées et le pied. Tout est en millimètres ; la taille de l'affiche
- * **découle** de l'arbre (taille naturelle), la mise au format est l'affaire du rendu
- * (`svg.ts`).
+ * la légende des quatre lignées et le pied. Avec les quatre parents au premier anneau
+ * (`OptionsDAffiche.centre`), les descendants sont les leurs : le couple au milieu, les frères
+ * et sœurs de chacun de son côté, dans le demi-cercle sous la base. Tout est en millimètres ;
+ * la taille de l'affiche **découle** de l'arbre (taille naturelle), la mise au format est
+ * l'affaire du rendu (`svg.ts`).
  *
  * Un seul écart de fond avec l'original : le pied ne nomme personne. « Arbre établi par… »
  * portait le nom de l'auteur de l'affiche d'origine ; ici, la mention est un paramètre, et
  * vaut par défaut « Arbre établi avec Heritage » — le dépôt ne porte aucun nom réel
  * (ADR 0006).
  */
+import { agencer, dessinerLesBandes, plusGrand, rayonPour, type Agencement } from './bandes'
 import { dessinerDesc, inverserDesc, mesurerDesc, placerDesc, ReglesDesc } from './boites'
 import { CORPS_MAX, CORPS_MIN, Rosace, SoleilInterieur, type FamilleDuCentre } from './centres'
 import { titre } from './dates'
@@ -22,7 +25,7 @@ import { ENCRE, ENCRE_DOUCE, melange, TEINTES, TRAIT, type Quartier } from './pa
 import { Style } from './polices'
 import { ReglagesSablier, Sablier, type ModeDeSablier } from './sablier'
 import { Scene } from './scene'
-import { ascendance, compter, descendance, type Desc } from './structure'
+import { ascendance, compter, compterQuatreParents, descendance, quatreParents, type QuatreParents } from './structure'
 
 export const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
 
@@ -61,14 +64,17 @@ const NOMS_DE_GENERATION: Record<number, [string, string]> = {
   4: ['arrière-arrière-petit-enfant', 'arrière-arrière-petits-enfants'],
 }
 
+/** Les lignes d'un titre, du bas vers le haut : (texte, style, interligne après), au corps `u`. */
+export type LignesDuTitre = (u: number) => [string, Style, number][]
+
 /**
  * Les lignes du titre du centre, du bas vers le haut : (texte, style, interligne après) — la
- * descendance en chiffres, le mariage, ∞, le sous-titre, les deux noms. Au corps `u` (1 : 46 pt
- * pour les noms).
+ * descendance en chiffres (`parNiveau`, voir `compter()`), le mariage, ∞, le sous-titre, les deux
+ * noms. Au corps `u` (1 : 46 pt pour les noms).
  */
-export function lignesDuCouple(A: ArbreAffiche, fam: number | null, enfants: Desc[], H: Personne, F: Personne): (u: number) => [string, Style, number][] {
+export function lignesDuCouple(A: ArbreAffiche, fam: number | null, parNiveau: Map<number, number>, H: Personne, F: Personne): LignesDuTitre {
   const [date, lieu] = fam !== null ? A.mariage(fam) : [null, null]
-  const chiffres = chiffresDeDescendance(compter(enfants)).join(' · ')
+  const chiffres = chiffresDeDescendance(parNiveau).join(' · ')
   let mariage = ''
   if (date?.connue) {
     mariage = date.qual === 'exacte' ? `mariés le ${date.texte('long')}` : `mariés ${date.texte('long')}`
@@ -91,10 +97,18 @@ export function chiffresDeDescendance(parNiveau: Map<number, number>): string[] 
     .map((n) => pluriel(parNiveau.get(n)!, ...NOMS_DE_GENERATION[n]!))
 }
 
-/** Le disque central : le titre, le mariage et la descendance en chiffres, au plus grand corps qui tient. */
-export function centreCouple(scene: Scene, E: Eventail, cx: number, cy: number, A: ArbreAffiche, fam: number | null, enfants: Desc[], H: Personne, F: Personne): void {
+/**
+ * Le titre des quatre parents : les deux noms et la descendance des quatre parents en chiffres,
+ * sans le mariage du couple — ces chiffres ne sont pas les siens.
+ */
+export function lignesDesQuatreParents(A: ArbreAffiche, q: QuatreParents, H: Personne, F: Personne): LignesDuTitre {
+  const lignes = lignesDuCouple(A, null, compterQuatreParents(q), H, F)
+  return (u) => lignes(u).filter(([t]) => t !== '∞')
+}
+
+/** Le disque central : les lignes du titre (`lignesDuCouple()`), au plus grand corps qui tient. */
+export function centreCouple(scene: Scene, E: Eventail, cx: number, cy: number, lignes: LignesDuTitre): void {
   const r = E.rC
-  const lignes = lignesDuCouple(A, fam, enfants, H, F)
 
   // L'éventail qui descend : le disque est sous le centre, et le bloc s'y pose par le haut.
   const poserDessous = (u: number, dessiner = false): boolean => {
@@ -257,9 +271,20 @@ export interface OptionsDAffiche {
    * anneaux) ou la **rosace de médaillons** (une famille par médaillon) — `centres.ts`.
    */
   descendants?: FormeDesDescendants
+  /**
+   * Ce que porte le premier anneau de l'éventail ou du soleil, et dont on montre la descendance :
+   * le couple, ou ses quatre parents (`quatreParents()`) — le couple, ses frères et sœurs, et leurs
+   * descendants. Sans la famille d'origine de l'un des époux, on retombe sur le couple.
+   */
+  centre?: CentreDeLAffiche
 }
 
 export type FormeDesDescendants = 'arbre' | 'soleil' | 'medaillons'
+export type CentreDeLAffiche = 'couple' | 'parents'
+
+/** Les bornes du corps des descendants rangés en bandes, en part de leur corps de base (13 pt pour les enfants). */
+const ECHELLE_MIN = 0.55
+const ECHELLE_MAX = 1.4
 
 export interface AfficheProduite {
   scene: Scene
@@ -280,9 +305,15 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
   const mention = options.mention ?? MENTION_PAR_DEFAUT
   const date = options.date ?? new Date()
 
+  const niveaux = options.niveauxDescendance ?? 6
+  // Les quatre parents au premier anneau : celui du couple est masqué (comme dans le soleil).
+  const quatre = options.centre === 'parents' ? quatreParents(A, H, F, niveaux) : null
+
   const { racineH, racineF, noeuds } = ascendance(A, H, F, options.profondeur ?? Infinity)
-  const E = new Eventail(racineH, racineF, noeuds, options.reglages).calculer()
-  const { fam, enfants } = descendance(A, H, F, options.niveauxDescendance ?? 6)
+  const reglages = quatre ? new Reglages({ ...(options.reglages ?? new Reglages()), premierAnneauMasque: true }) : options.reglages
+  const E = new Eventail(racineH, racineF, noeuds, reglages).calculer()
+  const { fam, enfants } = descendance(A, H, F, niveaux)
+  const lignes = quatre ? lignesDesQuatreParents(A, quatre, H, F) : lignesDuCouple(A, fam, compter(enfants), H, F)
   const R = E.rExt
 
   // Les descendants prennent jusqu'à 70 % de la largeur de l'éventail, sans dépasser 20 pt.
@@ -311,8 +342,16 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
   // Au plus le rayon de l'éventail, tant que le texte y tient à son plancher.
   let demi: { rayon: number; demiLargeur: number; corps: number; dessiner: (scene: Scene, cx: number, cy: number) => void } | null = null
   const forme = options.descendants ?? 'arbre'
-  if (forme !== 'arbre' && enfants.length > 0) {
-    const familles: FamilleDuCentre[] = enfants.map((d) => ({ cote: 'n', couple: null, tete: d }))
+  // Les quatre parents : de gauche à droite, la fratrie du mari, le couple, celle de la femme —
+  // l'aîné de chaque côté au plus près du couple, comme dans le soleil.
+  const familles: FamilleDuCentre[] = quatre
+    ? [
+        ...[...quatre.gauche].reverse().map((d): FamilleDuCentre => ({ cote: 'p', couple: null, tete: d })),
+        { cote: 'n', couple: [H, F], tete: quatre.couple },
+        ...quatre.droite.map((d): FamilleDuCentre => ({ cote: 'v', couple: null, tete: d })),
+      ]
+    : enfants.map((d) => ({ cote: 'n', couple: null, tete: d }))
+  if (forme !== 'arbre' && familles.length > 0) {
     if (forme === 'soleil') {
       const s = new SoleilInterieur(familles, null, false)
       const pose = s.poseParDefaut(0, dessous)
@@ -341,11 +380,28 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
   /** Entre la base de l'éventail et le demi-cercle des descendants : la place des repères d'années. */
   const ECART_DU_DEMI = 14
 
+  // L'arbre de boîtes des quatre parents : rangé en bandes dans le demi-disque sous la base, du
+  // rayon de l'éventail (`bandes.ts`) ; les descendants rapetissent pour y tenir, puis il grandit.
+  let bandes: Agencement | null = null
+  if (forme === 'arbre' && quatre) {
+    const rayon = rayonPour(quatre, null, ECHELLE_MIN, R)
+    const e = plusGrand(ECHELLE_MIN, ECHELLE_MAX, (x) => agencer(quatre, null, x, rayon) !== null)
+    bandes = agencer(quatre, null, e, rayon)!
+    // Le bloc, centré sous l'éventail, en déborde peut-être d'un côté : la page s'élargit des deux.
+    largDesc = 2 * rayon
+  }
+
   const W = Math.max(2 * R, demi ? 2 * demi.demiLargeur : largDesc) + 2 * marge
   let cy: number
   let basDesc: number
   let cyDemi = 0
-  if (demi && dessous) {
+  if (bandes && dessous) {
+    cy = marge + bandes.bas
+    basDesc = cy + etendueHaut(E) + 4
+  } else if (bandes) {
+    cy = marge + etendueHaut(E) + 4
+    basDesc = cy + bandes.bas
+  } else if (demi && dessous) {
     cyDemi = marge + demi.rayon
     cy = cyDemi + ECART_DU_DEMI
     basDesc = cy + etendueHaut(E) + 4
@@ -414,9 +470,10 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
 
   const scene = new Scene(W, hauteur)
   E.dessiner(scene, W / 2, cy)
-  centreCouple(scene, E, W / 2, cy, A, fam, enfants, H, F)
+  centreCouple(scene, E, W / 2, cy, lignes)
   reperesAnnees(scene, E, W / 2, cy)
-  if (demi) demi.dessiner(scene, W / 2, cyDemi)
+  if (bandes) dessinerLesBandes(scene, bandes, W / 2, cy, dessous)
+  else if (demi) demi.dessiner(scene, W / 2, cyDemi)
   else dessinerDesc(scene, enfants, [W / 2, cy], regles, dessous)
   if (kl !== null && dessous) {
     // Chaque bloc finit sur le bas de l'éventail.
@@ -433,7 +490,7 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
     legende(scene, marge, yBas, H, F, A, kl)
     pied(scene, W - marge, yBas + 30 * kl, chiffres, mention, date, 'end', kl)
   }
-  return { scene, eventail: E, echelleDescendants: demi ? demi.corps / 13 : echelle, echelleLegende: kl, chiffres, centre: [W / 2, cy] }
+  return { scene, eventail: E, echelleDescendants: bandes ? bandes.e : demi ? demi.corps / 13 : echelle, echelleLegende: kl, chiffres, centre: [W / 2, cy] }
 }
 
 export interface SablierProduit {

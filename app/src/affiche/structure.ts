@@ -216,6 +216,43 @@ export function descendanceDeFamille(arbre: ArbreAffiche, fam: number, niveaux =
   return arbre.enfants(fam).map((e) => construire(e, 1))
 }
 
+/**
+ * Les descendants des quatre parents du couple, pour le soleil et l'éventail des quatre parents :
+ * le couple (le mari, sa femme parmi ses conjoints, leurs enfants), les frères et sœurs du mari
+ * à gauche, ceux de la femme à droite. La femme quitte sa fratrie, où elle figurerait une seconde
+ * fois.
+ */
+export interface QuatreParents {
+  couple: Desc
+  /** La femme, parmi les conjoints du mari. */
+  epouse: Desc | null
+  gauche: Desc[]
+  droite: Desc[]
+}
+
+/** Les descendants des quatre parents ; `null` quand la famille d'origine de l'un des époux manque. */
+export function quatreParents(arbre: ArbreAffiche, h: Personne, f: Personne, niveaux = 6): QuatreParents | null {
+  const familleH = arbre.familleDOrigine(h.id)
+  const familleF = arbre.familleDOrigine(f.id)
+  if (familleH === null || familleF === null) return null
+  const fratrieH = descendanceDeFamille(arbre, familleH, niveaux)
+  const couple = fratrieH.find((d) => d.p.id === h.id)
+  if (!couple) return null
+  return {
+    couple,
+    epouse: couple.unions.find(([c]) => c?.p.id === f.id)?.[0] ?? null,
+    gauche: fratrieH.filter((d) => d !== couple),
+    droite: descendanceDeFamille(arbre, familleF, niveaux).filter((d) => d.p.id !== f.id),
+  }
+}
+
+/** Le nombre de descendants des quatre parents par génération — la femme comprise, posée en conjointe du mari. */
+export function compterQuatreParents(q: QuatreParents): Map<number, number> {
+  const parNiveau = compter([q.couple, ...q.gauche, ...q.droite])
+  parNiveau.set(1, (parNiveau.get(1) ?? 0) + 1)
+  return parNiveau
+}
+
 /** Le nombre de descendants par génération (1 = enfants). */
 export function compter(enfants: Desc[]): Map<number, number> {
   const parNiveau = new Map<number, number>()
