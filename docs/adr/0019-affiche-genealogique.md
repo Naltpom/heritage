@@ -131,16 +131,16 @@ d'origine, qui aurait effacé les dates d'ancêtres du XVIIIᵉ siècle sans act
   tangentielles se lisent du centre vers l'extérieur, le haut des lettres tourné vers le
   centre, et lui reste à gauche, elle à droite.
   Puis une quatrième vue, **le soleil** (`app/src/affiche/soleil.ts`) : l'éventail à 360°,
-  tourné de 0, 90, 180 ou 270°, et la descendance dans le disque central, sous le titre, rangée
+  tourné d'un angle quelconque (une barre de 0 à 360° dans la modale), et la descendance dans le disque central, sous le titre, rangée
   en bandes qui suivent le cercle le long d'un tronc. Le disque garde sa taille tant que les
   descendants y tiennent à 55 % de leur corps ; au-delà seulement, il grandit. Au premier
   anneau, au choix, le couple ou **ses quatre parents** : le premier anneau est alors masqué, et
-  le disque reçoit le couple, ses frères et sœurs et leurs descendants — famille du mari à
-  gauche, de la femme à droite, chacune avec son tronc. La modale lit pour cela, en plus, les
+  le disque reçoit le couple au milieu, ses enfants en dessous, les frères et sœurs du mari à
+  gauche et ceux de la femme à droite, chaque famille pendue à son tronc, qui prend aussi le
+  mari ou la femme. La modale lit pour cela, en plus, les
   affiches des deux familles des parents (la même route, aucune donnée de plus que ce que le
   lecteur voit déjà) et les fusionne (`fusionnerCharges`) : dans l'ascendance, la route ne sert
-  que l'enfant de la lignée, la fusion garde tous les enfants. Le couple et ses enfants n'y
-  figurent qu'une fois, sous le mari ; la femme figure aussi, seule, parmi ses sœurs.
+  que l'enfant de la lignée, la fusion garde tous les enfants. Chacun n'y figure qu'une fois.
   La fidélité reste vérifiable : `Reglages.ORIGINE` rend la mise en page de l'original, et
   les tests de fidélité la demandent. Un arbre fictif « touffu » (`arbreTouffu()`), complet
   sur sept générations puis clairsemé, a la forme de l'affiche réelle et garde la nouvelle.

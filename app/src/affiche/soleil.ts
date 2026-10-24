@@ -6,9 +6,9 @@
  *
  * - **le couple** de la fiche : il occupe le premier anneau, et ses descendants le disque ;
  * - **ses quatre parents** : ils occupent le premier anneau (celui du couple est masqué), et le
- *   disque reçoit leurs descendants — le couple, ses frères et sœurs, leurs enfants. La famille
- *   du mari à gauche, celle de la femme à droite ; le couple et ses enfants une seule fois, sous
- *   le mari (la femme figure aussi, seule, parmi ses frères et sœurs).
+ *   disque reçoit leurs descendants. Le couple au milieu, ses enfants en dessous ; les frères et
+ *   sœurs du mari à gauche, ceux de la femme à droite, chaque famille pendue à son tronc, qui
+ *   prend aussi le mari ou la femme. Chacun n'y figure qu'une fois.
  *
  * Le centre porte le titre, puis les sous-arbres des enfants **rangés en bandes qui suivent le
  * cercle** : chaque bande est aussi large que le disque le permet à sa hauteur, le long d'un tronc
@@ -20,7 +20,7 @@
  * Le disque garde sa taille tant que les descendants y tiennent à 55 % de leur corps ; ils
  * grossissent s'il y a de la place (jusqu'à 140 %). Au-delà, c'est le disque qui grandit.
  */
-import { dessinerDesc, mesurerDesc, placerDesc, ReglesDesc } from './boites'
+import { dessinerDesc, mesurerDesc, peigne, placerDesc, ReglesDesc } from './boites'
 import type { ArbreAffiche } from './donnees'
 import { etendues, Eventail, pointLibre, Reglages } from './eventail'
 import { legende, lignesDuCouple, MENTION_PAR_DEFAUT, pied, type AfficheProduite, type ChiffresDuPied, type OptionsDAffiche } from './fabriquer'
@@ -84,12 +84,20 @@ interface Agencement {
   titre: ReturnType<typeof titreEmpile>
   /** Le haut du bloc, par rapport au centre du disque. */
   haut: number
-  /** Les bandes de chaque tronc, avec l'abscisse du tronc par rapport au centre. */
-  troncs: { x: number; bandes: Bande[] }[]
+  /** Le couple au milieu (quatre parents), avec ses descendants. */
+  couple: { desc: Desc; y: number; largeur: number; hauteurs: Map<number, number> } | null
+  /**
+   * Les bandes de chaque tronc, avec l'abscisse du tronc par rapport au centre — et, pour les
+   * quatre parents, l'époux que ce tronc prend aussi, dans le couple du milieu.
+   */
+  troncs: { x: number; bandes: Bande[]; avec: Desc | null }[]
 }
 
-/** Les familles du centre : une seule (le couple), ou deux, de part et d'autre (les quatre parents). */
-type Familles = { seule: Desc[] } | { gauche: Desc[]; droite: Desc[] }
+/**
+ * Les familles du centre : une seule (les enfants du couple), ou, pour les quatre parents, le
+ * couple (le mari, sa femme parmi ses conjoints) et les fratries de part et d'autre.
+ */
+type Familles = { seule: Desc[] } | { couple: Desc; epouse: Desc | null; gauche: Desc[]; droite: Desc[] }
 
 /**
  * Le centre à l'échelle `e` dans un disque de rayon `r` (coordonnées relatives à son centre), ou
@@ -98,7 +106,7 @@ type Familles = { seule: Desc[] } | { gauche: Desc[]; droite: Desc[] }
  */
 function agencer(familles: Familles, lignes: (u: number) => [string, Style, number][], e: number, r: number): Agencement | null {
   const regles = reglesPour(e)
-  const listes = 'seule' in familles ? [familles.seule] : [familles.gauche, familles.droite]
+  const listes = 'seule' in familles ? [familles.seule] : [familles.gauche, familles.droite, [familles.couple]]
   const hauteursGlobales = new Map<number, number>()
   for (const l of listes) for (const [n, h] of mesurerDesc(l, regles)[1]) hauteursGlobales.set(n, Math.max(hauteursGlobales.get(n) ?? 0, h))
   const titre = titreEmpile(lignes(Math.max(e, 0.75)))
@@ -135,7 +143,7 @@ function agencer(familles: Familles, lignes: (u: number) => [string, Style, numb
    * dernière bande se centre sous lui ; un enfant seul aussi, mais il arrête le tronc : il ne peut
    * donc être que dans la dernière.
    */
-  const bandesDuTronc = (liste: Desc[], cote: -1 | 0 | 1, y0: number): { bandes: Bande[]; bas: number } | null => {
+  const bandesDuTronc = (liste: Desc[], cote: -1 | 0 | 1, y0: number, decalage = couloir / 2): { bandes: Bande[]; bas: number } | null => {
     const bandes: Bande[] = []
     let y = y0
     let i = 0
@@ -148,7 +156,7 @@ function agencer(familles: Familles, lignes: (u: number) => [string, Style, numb
         let coupure = -1
         let besoin: number
         if (cote !== 0) {
-          besoin = couloir / 2 + regles.ecartX + largeurDe(ds)
+          besoin = decalage + regles.ecartX + largeurDe(ds)
         } else if (derniere || ds.length === 1) {
           besoin = largeurDe(ds) / 2
         } else {
@@ -167,22 +175,36 @@ function agencer(familles: Familles, lignes: (u: number) => [string, Style, numb
     return { bandes, bas: bandes.length > 0 ? y - ecartBandes : y0 }
   }
 
-  const essayer = (haut: number): { troncs: Agencement['troncs']; bas: number } | null => {
+  const essayer = (haut: number): Omit<Agencement, 'e' | 'regles' | 'titre' | 'haut'> & { bas: number } | null => {
     for (const [i, [t, st]] of titre.lignes.entries()) {
       const base = haut + titre.bases[i]!
       if (st.largeur(t) / 2 > demiCorde(base - st.mm * 0.8, base + st.mm * 0.25)) return null
     }
     const y0 = haut + titre.hauteur + (aucun ? 0 : 18 * e)
-    const plan: [Desc[], -1 | 0 | 1, number][] = 'seule' in familles ? [[familles.seule, 0, 0]] : [[familles.gauche, -1, -couloir / 2], [familles.droite, 1, couloir / 2]]
-    const troncs: Agencement['troncs'] = []
-    let bas = haut + titre.hauteur
-    for (const [liste, cote, x] of plan) {
-      const b = bandesDuTronc(liste, cote, y0)
-      if (!b) return null
-      troncs.push({ x, bandes: b.bandes })
-      bas = Math.max(bas, b.bas)
+    if ('seule' in familles) {
+      const b = bandesDuTronc(familles.seule, 0, y0)
+      return b ? { couple: null, troncs: [{ x: 0, bandes: b.bandes, avec: null }], bas: Math.max(haut + titre.hauteur, b.bas) } : null
     }
-    return { troncs, bas }
+    // Le couple au milieu, ses descendants en dessous ; les fratries de part et d'autre, à côté
+    // de lui ou, si elles n'y tiennent pas, sous sa rangée — toujours en dehors de ses colonnes.
+    const { couple, epouse } = familles
+    const largeur = couple.largeurSousArbre
+    const pCouple = profondeur(couple)
+    const hCouple = hauteurDe(pCouple)
+    if (largeur / 2 > demiCorde(y0, y0 + hCouple)) return null
+    const decalage = largeur / 2 + regles.ecartX
+    const sousLeCouple = y0 + hauteurDe(1) + ecartBandes
+    const g = bandesDuTronc(familles.gauche, -1, y0, decalage) ?? bandesDuTronc(familles.gauche, -1, sousLeCouple, decalage)
+    const d = bandesDuTronc(familles.droite, 1, y0, decalage) ?? bandesDuTronc(familles.droite, 1, sousLeCouple, decalage)
+    if (!g || !d) return null
+    return {
+      couple: { desc: couple, y: y0, largeur, hauteurs: new Map([...hauteursGlobales].filter(([n]) => n <= pCouple)) },
+      troncs: [
+        { x: -decalage, bandes: g.bandes, avec: couple },
+        { x: decalage, bandes: d.bandes, avec: epouse },
+      ],
+      bas: Math.max(y0 + hCouple, g.bas, d.bas),
+    }
   }
 
   let meilleur: Agencement | null = null
@@ -192,7 +214,7 @@ function agencer(familles: Familles, lignes: (u: number) => [string, Style, numb
     const essai = essayer(haut)
     if (!essai) continue
     const decentrage = Math.abs(haut + essai.bas)
-    if (decentrage < ecart) [meilleur, ecart] = [{ e, regles, titre, haut, troncs: essai.troncs }, decentrage]
+    if (decentrage < ecart) [meilleur, ecart] = [{ e, regles, titre, haut, couple: essai.couple, troncs: essai.troncs }, decentrage]
   }
   return meilleur
 }
@@ -203,9 +225,10 @@ function dessinerLeCentre(scene: Scene, a: Agencement, cx: number, cy: number): 
   a.titre.lignes.forEach(([t, st], i) => scene.texte(cx, haut + a.titre.bases[i]!, t, st))
   const couloir = 8 * a.e
   const largeurDe = (ds: Desc[]): number => ds.reduce((s, d) => s + d.largeurSousArbre, 0) + a.regles.ecartX * 2 * Math.max(ds.length - 1, 0)
+  // D'abord tout poser : les traits des troncs vont chercher les époux dans le couple du milieu.
+  if (a.couple) placerDesc([a.couple.desc], cx - a.couple.largeur / 2, cy + a.couple.y, a.couple.hauteurs, a.regles)
   for (const tronc of a.troncs) {
     const xt = cx + tronc.x
-    let depart: [number, number] = [xt, haut + a.titre.hauteur + 3 * a.e]
     for (const b of tronc.bandes) {
       const y = cy + b.y
       if (b.cote === -1) {
@@ -219,9 +242,20 @@ function dessinerLeCentre(scene: Scene, a: Agencement, cx: number, cy: number): 
         placerDesc(gauche, xt - couloir / 2 - largeurDe(gauche), y, b.hauteurs, a.regles)
         placerDesc(b.enfants.slice(b.coupure), xt + couloir / 2, y, b.hauteurs, a.regles)
       }
-      dessinerDesc(scene, b.enfants, depart, a.regles)
+    }
+  }
+  if (a.couple) dessinerDesc(scene, [a.couple.desc], null, a.regles)
+  for (const tronc of a.troncs) {
+    const xt = cx + tronc.x
+    let depart: [number, number] = [xt, haut + a.titre.hauteur + 3 * a.e]
+    // L'époux du couple d'abord : sa barre est celle de la première bande, quand elle est à côté.
+    const barre = tronc.avec ? peigne(scene, depart, [tronc.avec], a.regles) : null
+    if (barre !== null) depart = [xt, barre]
+    for (const b of tronc.bandes) {
+      const y = peigne(scene, depart, b.enfants, a.regles)
+      dessinerDesc(scene, b.enfants, null, a.regles)
       // Le tronc repart de la barre de cette bande.
-      depart = [xt, b.enfants[0]!.y - a.regles.ecartY * 0.45]
+      if (y !== null) depart = [xt, y]
     }
   }
 }
@@ -257,13 +291,15 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
 
   let familles: Familles
   let lignes: (u: number) => [string, Style, number][]
-  if (parents) {
-    const gauche = descendanceDeFamille(A, familleH, niveaux)
-    const droite = descendanceDeFamille(A, familleF, niveaux)
-    // Le couple et ses enfants une seule fois : sous le mari.
-    for (const d of droite) if (d.p.id === F.id) d.unions = d.unions.filter(([c]) => c?.p.id !== H.id)
-    familles = { gauche, droite }
-    const titre = lignesDuCouple(A, null, [...gauche, ...droite], H, F)
+  const fratrieH = parents ? descendanceDeFamille(A, familleH, niveaux) : []
+  const couple = fratrieH.find((d) => d.p.id === H.id)
+  if (parents && couple) {
+    const fratrieF = descendanceDeFamille(A, familleF, niveaux)
+    // Le couple au milieu : le mari, avec sa femme parmi ses conjoints et leurs enfants. Elle
+    // quitte donc sa fratrie, où elle figurerait une seconde fois.
+    const epouse = couple.unions.find(([c]) => c?.p.id === F.id)?.[0] ?? null
+    familles = { couple, epouse, gauche: fratrieH.filter((d) => d !== couple), droite: fratrieF.filter((d) => d.p.id !== F.id) }
+    const titre = lignesDuCouple(A, null, [...fratrieH, ...fratrieF.filter((d) => d.p.id !== F.id)], H, F)
     lignes = (u) => titre(u).filter(([t]) => t !== '∞')
   } else {
     const { fam, enfants } = descendance(A, H, F, niveaux)

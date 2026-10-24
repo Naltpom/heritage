@@ -62,6 +62,8 @@ describe('le soleil', () => {
     [90, (_: number, si: number) => si > 0.5, 'en haut'],
     [180, (c: number) => c > 0.5, 'à droite'],
     [270, (_: number, si: number) => si < -0.5, 'en bas'],
+    [45, (c: number, si: number) => c < -0.3 && si > 0.3, 'en haut à gauche'],
+    [200, (c: number, si: number) => c > 0.5 && si < 0.5, 'à droite, un peu dessous'],
   ] as const)('tourné de %i°, met le mari %s', (rotation, attendu, _cote) => {
     const a = soleil(arbreFictif(), { rotation })
     const nom = a.scene.textes.find((t) => t.type === 'texteSurArc' && t.texte.startsWith('Natron'))
@@ -75,6 +77,12 @@ describe('le soleil', () => {
 describe('le soleil des quatre parents', () => {
   const essai = arbreDeCousins()
   const s = soleil(essai, { centre: 'parents' })
+  /** L'abscisse du centre de la boîte qui porte ces prénoms. */
+  const xDe = (prenoms: string): number => {
+    const texte = s.scene.textes.find((t) => dansUneBoite(t) && t.texte === prenoms)
+    const m = texte?.type === 'texte' ? /translate\(([\d.]+),/.exec(texte.transform ?? '') : null
+    return m ? Number(m[1]) : NaN
+  }
 
   it('met les quatre parents au premier anneau, et plus le couple', () => {
     const arcs = s.scene.textes.filter((t) => t.type === 'texteSurArc').map((t) => t.texte)
@@ -88,22 +96,22 @@ describe('le soleil des quatre parents', () => {
     for (const b of boites(s)) if (b.type === 'rect') expect(dansLeDisque(s, b.x, b.y, b.l, b.h)).toBe(true)
   })
 
-  it('montre les enfants du couple une seule fois, sous le mari', () => {
+  it('montre chacun une seule fois, la femme comprise', () => {
     const t = textesDesBoites(s)
-    expect(t.filter((x) => x === 'Silex')).toHaveLength(1)
-    expect(t.filter((x) => x === 'Topaze')).toHaveLength(1)
+    for (const prenoms of ['Natron', 'Marne', 'Silex', 'Topaze', 'Opale']) expect(t.filter((x) => x === prenoms), prenoms).toHaveLength(1)
   })
 
-  it('sépare les deux familles : celle du mari à gauche, celle de la femme à droite', () => {
-    const x = (prenoms: string): number => {
-      const texte = s.scene.textes.find((t) => dansUneBoite(t) && t.texte === prenoms)
-      const m = texte?.type === 'texte' ? /translate\(([\d.]+),/.exec(texte.transform ?? '') : null
-      return m ? Number(m[1]) : NaN
-    }
-    expect(x('Gypse')).toBeLessThan(s.centre[0])
-    expect(x('Opale')).toBeGreaterThan(s.centre[0])
-    expect(x('Jade')).toBeGreaterThan(s.centre[0])
+  it('met le couple au milieu, ses enfants dessous, et les fratries de part et d’autre', () => {
+    const [cx] = s.centre
+    expect(xDe('Natron')).toBeLessThan(cx)
+    expect(xDe('Marne')).toBeGreaterThan(cx)
+    // Les enfants sous le couple, autour du milieu ; les fratries au-delà des époux.
+    for (const p of ['Silex', 'Topaze']) expect(Math.abs(xDe(p) - cx)).toBeLessThan(Math.abs(xDe('Gypse') - cx))
+    expect(xDe('Gypse')).toBeLessThan(xDe('Natron'))
+    expect(xDe('Opale')).toBeGreaterThan(xDe('Marne'))
+    expect(xDe('Jade')).toBeGreaterThan(xDe('Marne'))
   })
+
 
   it('retombe sur le couple quand les parents d’un époux manquent', () => {
     const a = soleil(coupleSeul(), { centre: 'parents' })

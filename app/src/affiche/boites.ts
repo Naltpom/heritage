@@ -250,30 +250,37 @@ export function inverserDesc(enfants: Desc[], somme: number): void {
 }
 
 /**
- * `depart` = (x, y) du point d'où descend le trait vers les enfants du couple — d'où il monte,
- * quand le bloc a été retourné (`inverse`, voir {@link inverserDesc}).
+ * Le peigne d'une fratrie : de `origine`, un trait jusqu'à la barre, puis une dent jusqu'au
+ * haut de chaque boîte (au bas, quand le bloc a été retourné). Les boîtes d'une rangée ont le
+ * même haut. Rend l'ordonnée de la barre.
  */
-export function dessinerDesc(scene: Scene, enfants: Desc[], depart: readonly [number, number], regles: ReglesDesc, inverse = false): void {
+export function peigne(scene: Scene, origine: readonly [number, number], enf: Desc[], regles: ReglesDesc, inverse = false): number | null {
+  if (enf.length === 0) return null
+  const [ox, oy] = origine
+  // Retournées, les boîtes d'une rangée s'alignent par le bas : le trait les prend par là.
+  const bord = (e: Desc): number => (inverse ? e.y + e.h : e.y)
+  const yBarre = inverse ? bord(enf[0]!) + regles.ecartY * 0.45 : bord(enf[0]!) - regles.ecartY * 0.45
+  for (const e of enf) {
+    const ex = e.x + e.w / 2
+    scene.liaison([
+      [ox, oy],
+      [ox, yBarre],
+      [ex, yBarre],
+      [ex, bord(e)],
+    ])
+  }
+  return yBarre
+}
+
+/**
+ * `depart` = (x, y) du point d'où descend le trait vers les enfants du couple — d'où il monte,
+ * quand le bloc a été retourné (`inverse`, voir {@link inverserDesc}) ; `null` : pas de trait,
+ * l'appelant tire les siens.
+ */
+export function dessinerDesc(scene: Scene, enfants: Desc[], depart: readonly [number, number] | null, regles: ReglesDesc, inverse = false): void {
   const boite = (d: Desc, fond: string): void => {
     scene.rectangle(d.x, d.y, d.w, d.h, fond, TRAIT, 0.25)
     d.bloc!.dessiner(scene, d.x + d.w / 2, d.y + d.h / 2, d.w - 2 * d.bloc!.mx)
-  }
-
-  const peigne = (origine: readonly [number, number], enf: Desc[]): void => {
-    if (enf.length === 0) return
-    const [ox, oy] = origine
-    // Retournées, les boîtes d'une rangée s'alignent par le bas : le trait les prend par là.
-    const bord = (e: Desc): number => (inverse ? e.y + e.h : e.y)
-    const yBarre = inverse ? bord(enf[0]!) + regles.ecartY * 0.45 : bord(enf[0]!) - regles.ecartY * 0.45
-    for (const e of enf) {
-      const ex = e.x + e.w / 2
-      scene.liaison([
-        [ox, oy],
-        [ox, yBarre],
-        [ex, yBarre],
-        [ex, bord(e)],
-      ])
-    }
   }
 
   const dessiner = (d: Desc): void => {
@@ -299,11 +306,11 @@ export function dessinerDesc(scene: Scene, enfants: Desc[], depart: readonly [nu
       } else {
         origine = [d.x + d.w / 2, inverse ? d.y : d.y + d.h]
       }
-      peigne(origine, enf)
+      peigne(scene, origine, enf, regles, inverse)
       for (const e of enf) dessiner(e)
     }
   }
 
-  peigne(depart, enfants)
+  if (depart) peigne(scene, depart, enfants, regles, inverse)
   for (const e of enfants) dessiner(e)
 }
