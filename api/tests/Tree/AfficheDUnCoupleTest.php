@@ -115,6 +115,8 @@ final class AfficheDUnCoupleTest extends ArbreWebTestCase
         $ids = array_column($affiche['personnes'], 'id');
 
         self::assertSame(6, $affiche['generationsDeDescendance']);
+        // Le nom du pied vient du réglage : le dépôt n'en porte aucun (ADR 0006).
+        self::assertSame('Auteur Fictif', $affiche['signature']);
         // Sodalite est à la 1re génération, Jaspe à la 2e ; la chaîne descend de là.
         self::assertContains($this->id('chaine6'), $ids, 'La sixième génération est servie…');
         self::assertNotContains($this->id('conjoint6'), $ids, '… sans ses unions…');
@@ -291,7 +293,7 @@ final class AfficheDUnCoupleTest extends ArbreWebTestCase
 
     // ─────────────────────────────────────────────────────────────────────────────────
 
-    /** @return array{famille: int|null, generationsDeDescendance: int, personnes: list<array<string, mixed>>, familles: list<array<string, mixed>>} */
+    /** @return array{famille: int|null, generationsDeDescendance: int, signature: string|null, personnes: list<array<string, mixed>>, familles: list<array<string, mixed>>} */
     private function affiche(CercleDuLecteur $cercle): array
     {
         $lecture = self::getContainer()->get(LectureDeLArbre::class);
@@ -306,7 +308,7 @@ final class AfficheDUnCoupleTest extends ArbreWebTestCase
         $couple = $lecture->famille((int) $this->familles['aieux']->getId());
         self::assertNotNull($couple);
 
-        return (new NormaliseurDAffiche(new NormaliseurDeDate(), $lecture))->affiche($couple, $cercle, $vivants);
+        return (new NormaliseurDAffiche(new NormaliseurDeDate(), $lecture, new ReglagesFixes(110, null, 'Auteur Fictif')))->affiche($couple, $cercle, $vivants);
     }
 
     /**

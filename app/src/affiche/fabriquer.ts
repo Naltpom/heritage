@@ -17,7 +17,7 @@
  */
 import { agencer, dessinerLesBandes, plusGrand, rayonPour, type Agencement } from './bandes'
 import { dessinerDesc, inverserDesc, mesurerDesc, placerDesc, ReglesDesc } from './boites'
-import { CORPS_MAX, CORPS_MIN, Rosace, SoleilInterieur, type FamilleDuCentre } from './centres'
+import { CORPS_MAX, CORPS_MIN, Rosace, SoleilInterieur, type Coeur, type Cote, type FamilleDuCentre } from './centres'
 import { titre } from './dates'
 import type { ArbreAffiche, Personne } from './donnees'
 import { etendueHaut, Eventail, pointLibre, Reglages } from './eventail'
@@ -25,12 +25,22 @@ import { ENCRE, ENCRE_DOUCE, melange, TEINTES, TRAIT, type Quartier } from './pa
 import { Style } from './polices'
 import { ReglagesSablier, Sablier, type ModeDeSablier } from './sablier'
 import { Scene } from './scene'
-import { ascendance, compter, compterQuatreParents, descendance, quatreParents, type QuatreParents } from './structure'
+import { ascendance, compter, compterQuatreParents, descendance, quatreParents, type Desc, type QuatreParents } from './structure'
 
 export const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
 
 /** La mention du pied, par défaut. */
 export const MENTION_PAR_DEFAUT = 'Arbre établi avec Heritage'
+
+/**
+ * La mention du pied : « Arbre établi par … avec Heritage » quand l'administration a réglé la
+ * signature des affiches (`tree.signature_affiches`, servie avec l'arbre de l'affiche) — le
+ * dépôt ne porte aucun nom (ADR 0006) ; la mention par défaut sinon.
+ */
+export function mentionDuPied(signature: string | null | undefined): string {
+  const nom = signature?.trim()
+  return nom ? `Arbre établi par ${nom} avec Heritage` : MENTION_PAR_DEFAUT
+}
 
 export function pluriel(n: number, mot: string, mots?: string): string {
   return `${n} ${n === 1 ? mot : (mots ?? `${mot}s`)}`
@@ -285,6 +295,8 @@ export type CentreDeLAffiche = 'couple' | 'parents'
 /** Les bornes du corps des descendants rangés en bandes, en part de leur corps de base (13 pt pour les enfants). */
 const ECHELLE_MIN = 0.55
 const ECHELLE_MAX = 1.4
+/** Le soleil intérieur et la rosace occupent le disque central jusqu'à cette part de son rayon. */
+export const CENTRE_DANS_LE_DISQUE = 0.97
 
 export interface AfficheProduite {
   scene: Scene
@@ -311,9 +323,44 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
 
   const { racineH, racineF, noeuds } = ascendance(A, H, F, options.profondeur ?? Infinity)
   const reglages = quatre ? new Reglages({ ...(options.reglages ?? new Reglages()), premierAnneauMasque: true }) : options.reglages
-  const E = new Eventail(racineH, racineF, noeuds, reglages).calculer()
+  let E = new Eventail(racineH, racineF, noeuds, reglages).calculer()
   const { fam, enfants } = descendance(A, H, F, niveaux)
   const lignes = quatre ? lignesDesQuatreParents(A, quatre, H, F) : lignesDuCouple(A, fam, compter(enfants), H, F)
+  // Qui monte : l'éventail en haut, les descendants en dessous. Qui descend : les descendants
+  // en haut, retournés (les enfants contre le couple), l'éventail en dessous.
+  const dessous = E.R.sens === 'bas'
+
+  // Le soleil intérieur ou la rosace (`centres.ts`) : dans le demi-disque central, comme au
+  // soleil dans son disque, le titre en leur cœur. Le disque grandit pour que leur texte tienne.
+  const forme = options.descendants ?? 'arbre'
+  let dedans: { corps: number; dessiner: (scene: Scene, cx: number, cy: number) => void } | null = null
+  const cote = (c: Cote) => (d: Desc): FamilleDuCentre => ({ cote: c, couple: null, tete: d })
+  // Les quatre parents : de gauche à droite, la fratrie du mari, puis celle de la femme — l'aîné
+  // de chaque côté au plus près du couple, comme dans le soleil.
+  const fratries = quatre ? [...[...quatre.gauche].reverse().map(cote('p')), ...quatre.droite.map(cote('v'))] : []
+  if (forme !== 'arbre' && (quatre || enfants.length > 0)) {
+    const chiffresTexte = chiffresDeDescendance(quatre ? compterQuatreParents(quatre) : compter(enfants))
+    const coeur: Coeur = { noms: [H.nom, F.nom], couple: null, enfants: [], chiffres: chiffresTexte.length > 2 ? [chiffresTexte.slice(0, 2).join(' · '), chiffresTexte.slice(2).join(' · ')] : [chiffresTexte.join(' · ')] }
+    const r0 = E.rC * CENTRE_DANS_LE_DISQUE
+    let besoin: number
+    if (forme === 'soleil') {
+      // Le couple des quatre parents est un secteur, au milieu, sous le titre.
+      const familles = quatre ? [...fratries.slice(0, quatre.gauche.length), { cote: 'n' as const, couple: [H, F] as [Personne, Personne], tete: quatre.couple }, ...fratries.slice(quatre.gauche.length)] : enfants.map(cote('n'))
+      const s = new SoleilInterieur(familles, coeur, false)
+      const pose = s.poseParDefaut(0, !dessous)
+      besoin = Math.max(r0, s.rayonRequis(Array.from({ length: s.anneaux }, () => CORPS_MIN), pose))
+      const corps = s.corpsPour(besoin, pose, CORPS_MIN, CORPS_MAX)
+      dedans = { corps: corps[0]!, dessiner: (scene, cx, cy) => s.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, corps, pose) }
+    } else {
+      // Le couple des quatre parents et ses enfants au cœur, les fratries en médaillons autour.
+      const enfantsDuCouple = quatre ? (quatre.couple.unions.find(([c]) => c?.p.id === F.id)?.[2] ?? []).map((d) => d.p) : []
+      const rosace = new Rosace(quatre ? fratries : enfants.map(cote('n')), quatre ? { ...coeur, couple: [H, F], enfants: enfantsDuCouple } : coeur, false, !dessous)
+      const b = rosace.corpsPour(r0, CORPS_MIN, CORPS_MAX)
+      besoin = Math.max(r0, rosace.rayonRequis(b))
+      dedans = { corps: b, dessiner: (scene, cx, cy) => rosace.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, b) }
+    }
+    if (besoin > r0 * 1.0001) E = new Eventail(racineH, racineF, noeuds, new Reglages({ ...(reglages ?? new Reglages()), rayonCentralMin: besoin / CENTRE_DANS_LE_DISQUE })).calculer()
+  }
   const R = E.rExt
 
   // Les descendants prennent jusqu'à 70 % de la largeur de l'éventail, sans dépasser 20 pt.
@@ -333,52 +380,6 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
   }
 
   const marge = 35.0
-  // Qui monte : l'éventail en haut, les descendants en dessous. Qui descend : les descendants
-  // en haut, retournés (les enfants contre le couple), l'éventail en dessous.
-  const dessous = E.R.sens === 'bas'
-
-  // Le soleil intérieur ou la rosace (`centres.ts`) : un demi-cercle sous la base de l'éventail —
-  // au-dessus quand il descend —, qui referme le cercle des ancêtres par celui des descendants.
-  // Au plus le rayon de l'éventail, tant que le texte y tient à son plancher.
-  let demi: { rayon: number; demiLargeur: number; corps: number; dessiner: (scene: Scene, cx: number, cy: number) => void } | null = null
-  const forme = options.descendants ?? 'arbre'
-  // Les quatre parents : de gauche à droite, la fratrie du mari, le couple, celle de la femme —
-  // l'aîné de chaque côté au plus près du couple, comme dans le soleil.
-  const familles: FamilleDuCentre[] = quatre
-    ? [
-        ...[...quatre.gauche].reverse().map((d): FamilleDuCentre => ({ cote: 'p', couple: null, tete: d })),
-        { cote: 'n', couple: [H, F], tete: quatre.couple },
-        ...quatre.droite.map((d): FamilleDuCentre => ({ cote: 'v', couple: null, tete: d })),
-      ]
-    : enfants.map((d) => ({ cote: 'n', couple: null, tete: d }))
-  if (forme !== 'arbre' && familles.length > 0) {
-    if (forme === 'soleil') {
-      const s = new SoleilInterieur(familles, null, false)
-      const pose = s.poseParDefaut(0, dessous)
-      const partout = (b: number): number[] => Array.from({ length: s.anneaux }, () => b)
-      // Au moins un peu plus de la moitié de l'éventail, pour que les deux demi-cercles se répondent.
-      const rayon = Math.max(s.rayonRequis(partout(CORPS_MIN), pose), Math.min(R, Math.max(s.rayonRequis(partout(CORPS_MIN * 1.25), pose), 0.55 * R)))
-      const corps = s.corpsPour(rayon, pose, CORPS_MIN, CORPS_MAX)
-      demi = { rayon, demiLargeur: rayon, corps: corps[0]!, dessiner: (scene, x, y) => s.dessiner(scene, x, y, rayon, corps, pose) }
-    } else {
-      const rosace = new Rosace(familles, null, false)
-      const dans = (b: number): boolean => rosace.encombrementDemi(b).demiLargeur <= R
-      let b = CORPS_MIN
-      if (dans(b)) {
-        let hi = CORPS_MAX
-        for (let i = 0; i < 16; i++) {
-          const mid = (b + hi) / 2
-          if (dans(mid)) b = mid
-          else hi = mid
-        }
-      }
-      const { demiLargeur, profondeur } = rosace.encombrementDemi(b)
-      const corps = b
-      demi = { rayon: profondeur, demiLargeur, corps, dessiner: (scene, x, y) => rosace.dessiner(scene, x, y, 0, corps, 0, dessous) }
-    }
-  }
-  /** Entre la base de l'éventail et le demi-cercle des descendants : la place des repères d'années. */
-  const ECART_DU_DEMI = 14
 
   // L'arbre de boîtes des quatre parents : rangé en bandes dans le demi-disque sous la base, du
   // rayon de l'éventail (`bandes.ts`) ; les descendants rapetissent pour y tenir, puis il grandit.
@@ -391,24 +392,22 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
     largDesc = 2 * rayon
   }
 
-  const W = Math.max(2 * R, demi ? 2 * demi.demiLargeur : largDesc) + 2 * marge
+  const W = Math.max(2 * R, dedans ? 0 : largDesc) + 2 * marge
   let cy: number
   let basDesc: number
-  let cyDemi = 0
   if (bandes && dessous) {
     cy = marge + bandes.bas
     basDesc = cy + etendueHaut(E) + 4
   } else if (bandes) {
     cy = marge + etendueHaut(E) + 4
     basDesc = cy + bandes.bas
-  } else if (demi && dessous) {
-    cyDemi = marge + demi.rayon
-    cy = cyDemi + ECART_DU_DEMI
+  } else if (dedans && dessous) {
+    // Rien au-dessus de la base que les repères d'années.
+    cy = marge + 12
     basDesc = cy + etendueHaut(E) + 4
-  } else if (demi) {
+  } else if (dedans) {
     cy = marge + etendueHaut(E) + 4
-    cyDemi = cy + ECART_DU_DEMI
-    basDesc = cyDemi + demi.rayon
+    basDesc = cy + 12
   } else if (dessous) {
     const basBloc = placerDesc(enfants, W / 2 - largDesc / 2, marge, hauteurs, regles)
     inverserDesc(enfants, marge + basBloc)
@@ -470,11 +469,11 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
 
   const scene = new Scene(W, hauteur)
   E.dessiner(scene, W / 2, cy)
-  centreCouple(scene, E, W / 2, cy, lignes)
   reperesAnnees(scene, E, W / 2, cy)
+  if (dedans) dedans.dessiner(scene, W / 2, cy)
+  else centreCouple(scene, E, W / 2, cy, lignes)
   if (bandes) dessinerLesBandes(scene, bandes, W / 2, cy, dessous)
-  else if (demi) demi.dessiner(scene, W / 2, cyDemi)
-  else dessinerDesc(scene, enfants, [W / 2, cy], regles, dessous)
+  else if (!dedans) dessinerDesc(scene, enfants, [W / 2, cy], regles, dessous)
   if (kl !== null && dessous) {
     // Chaque bloc finit sur le bas de l'éventail.
     const [[hl], [hp]] = encombrement(kl)
@@ -490,7 +489,7 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
     legende(scene, marge, yBas, H, F, A, kl)
     pied(scene, W - marge, yBas + 30 * kl, chiffres, mention, date, 'end', kl)
   }
-  return { scene, eventail: E, echelleDescendants: bandes ? bandes.e : demi ? demi.corps / 13 : echelle, echelleLegende: kl, chiffres, centre: [W / 2, cy] }
+  return { scene, eventail: E, echelleDescendants: bandes ? bandes.e : dedans ? dedans.corps / 13 : echelle, echelleLegende: kl, chiffres, centre: [W / 2, cy] }
 }
 
 export interface SablierProduit {

@@ -7,17 +7,18 @@
  */
 import type { Format } from './svg'
 
-export type CleDeFormat = 'naturelle' | 'A3' | 'A2' | 'A1' | 'A0' | '220x127'
+export type CleDeFormat = 'naturelle' | 'mesure' | 'A3' | 'A2' | 'A1' | 'A0' | '220x127'
 
 export interface FormatPropose {
   cle: CleDeFormat
   libelle: string
-  /** Côtés en mm, sans orientation (le petit d'abord) ; `null` : la taille naturelle. */
+  /** Côtés en mm, sans orientation (le petit d'abord) ; `null` : la taille naturelle, ou sur mesure. */
   cotes: readonly [number, number] | null
 }
 
 export const FORMATS: readonly FormatPropose[] = [
   { cle: 'naturelle', libelle: 'Taille naturelle', cotes: null },
+  { cle: 'mesure', libelle: 'Sur mesure (cm)', cotes: null },
   { cle: 'A3', libelle: 'A3 (29,7 × 42 cm)', cotes: [297, 420] },
   { cle: 'A2', libelle: 'A2 (42 × 59,4 cm)', cotes: [420, 594] },
   { cle: 'A1', libelle: 'A1 (59,4 × 84,1 cm)', cotes: [594, 841] },
@@ -31,6 +32,16 @@ export function formatOriente(cle: CleDeFormat, largeur: number, hauteur: number
   if (!f?.cotes) return null
   const [petit, grand] = f.cotes
   return largeur >= hauteur ? { largeur: grand, hauteur: petit } : { largeur: petit, hauteur: grand }
+}
+
+/**
+ * Le format sur mesure, en centimètres : la page imprimée, et la boîte du dessin centrée dessus.
+ * Un dessin de 120 cm sur une page de 100 perd 10 cm de chaque côté ; un dessin de 100 sur une
+ * page de 120 en gagne 10 de papier. C'est le fichier « à l'échelle 1:1 » que demandent les
+ * imprimeurs d'affiches sur mesure.
+ */
+export function formatSurMesure(impression: readonly [number, number], dessin: readonly [number, number]): Format {
+  return { largeur: impression[0] * 10, hauteur: impression[1] * 10, dessin: { largeur: dessin[0] * 10, hauteur: dessin[1] * 10 } }
 }
 
 /** La page qui sortira : le format choisi, ou le dessin lui-même. */

@@ -19,6 +19,11 @@ import { f3, polaire, type Primitive, type Scene } from './scene'
 export interface Format {
   largeur: number
   hauteur: number
+  /**
+   * La boîte du dessin, centrée sur la page (le format sur mesure) : le dessin la remplit, et ce
+   * qui dépasse de la page est rogné — ce qui manque est du papier. Absente : la page elle-même.
+   */
+  dessin?: { largeur: number; hauteur: number } | null
 }
 
 export interface OptionsDeRendu {
@@ -35,9 +40,10 @@ export function echapper(t: string): string {
   return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;')
 }
 
-/** L'agrandissement et le décalage qui posent un dessin `l × h` au centre d'un format. */
+/** L'agrandissement et le décalage qui posent un dessin `l × h` au centre d'un format (dans sa boîte, s'il en a une). */
 export function mettreAuFormat(l: number, h: number, format: Format): { k: number; dx: number; dy: number } {
-  const k = Math.min(format.largeur / l, format.hauteur / h)
+  const boite = format.dessin ?? format
+  const k = Math.min(boite.largeur / l, boite.hauteur / h)
   return { k, dx: (format.largeur - l * k) / 2, dy: (format.hauteur - h * k) / 2 }
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ArbreAffiche, fusionnerCharges } from './donnees'
-import { arbreDeCousins, arbreFictif, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
+import { arbreDeCousins, arbreFictif, arbreTouffu, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { radians, Reglages } from './eventail'
 import type { AfficheProduite, CentreDeLAffiche } from './fabriquer'
@@ -71,6 +71,21 @@ describe('le soleil', () => {
     if (nom?.type !== 'texteSurArc') return
     const milieu = radians((nom.a1 + nom.a2) / 2)
     expect(attendu(Math.cos(milieu), Math.sin(milieu))).toBe(true)
+  })
+})
+
+describe('la page du soleil', () => {
+  it.each([
+    ['fictif', arbreFictif],
+    ['touffu', arbreTouffu],
+  ] as const)('est carrée, la légende et le pied en bas (%s)', (_, arbre) => {
+    const s = soleil(arbre())
+    expect(s.scene.largeur).toBeCloseTo(s.scene.hauteur, 6)
+    const [, cy] = s.centre
+    for (const debut of ['LES QUATRE LIGNÉES', 'Arbre établi']) {
+      const t = s.scene.textes.find((x) => x.type === 'texte' && x.texte.startsWith(debut))
+      expect(t?.type === 'texte' ? t.y : -Infinity, debut).toBeGreaterThan(cy)
+    }
   })
 })
 

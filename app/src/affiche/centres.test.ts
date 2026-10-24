@@ -103,35 +103,51 @@ describe('la rosace de médaillons', () => {
   })
 })
 
-describe('l’éventail et ses descendants en demi-cercle', () => {
-  it.each(['soleil', 'medaillons'] as const)('pose le %s sous la base quand l’éventail monte, au-dessus quand il descend', (forme) => {
+describe('l’éventail et ses descendants dans son demi-disque', () => {
+  /** Vrai si le texte tombe dans le demi-disque central : au-dessus de la base quand l'éventail monte, en dessous sinon. */
+  const dansLeDemiDisque = (a: AfficheProduite, t: AfficheProduite['scene']['textes'][number], sens: 'haut' | 'bas'): boolean => {
+    const [x, y] = position(t)
+    const [cx, cy] = a.centre
+    return Math.hypot(x - cx, y - cy) < a.eventail.rC && (sens === 'haut' ? y < cy : y > cy)
+  }
+
+  it.each(['soleil', 'medaillons'] as const)('pose le %s dans le demi-disque central, le titre en son cœur', (forme) => {
     for (const sens of ['haut', 'bas'] as const) {
       const a = eventail(arbreFictif(), forme, sens)
-      const [, cy] = a.centre
       // Deux des enfants du couple fictif (les ancêtres ne portent pas ces prénoms-là).
       const enfants = [...morceaux(a, 'Cobalt Pyroxène'), ...morceaux(a, 'Lapis Grenat Quartz Zircon Onyx')]
       expect(enfants.length, `${forme} ${sens}`).toBeGreaterThan(0)
-      for (const t of enfants) {
-        const [, y] = position(t)
-        if (sens === 'haut') expect(y, t.texte).toBeGreaterThan(cy)
-        else expect(y, t.texte).toBeLessThan(cy)
-      }
+      for (const t of enfants) expect(dansLeDemiDisque(a, t, sens), `${forme} ${sens} ${t.texte}`).toBe(true)
+      // Le titre du cœur remplace celui du disque.
+      const titre = a.scene.textes.filter((t) => t.texte === 'DESCENDANCE')
+      expect(titre, `${forme} ${sens}`).toHaveLength(1)
+      expect(dansLeDemiDisque(a, titre[0]!, sens), `${forme} ${sens}`).toBe(true)
+      expect(textes(a)).not.toContain('Ascendance et descendance')
+      expect(a.echelleDescendants * 13).toBeGreaterThanOrEqual(CORPS_MIN - 1e-9)
       expect(versSvg(a.scene)).not.toMatch(/NaN|Infinity/)
     }
   })
 
-  it('garde l’arbre de boîtes au choix', () => {
+  it('garde l’arbre de boîtes au choix, sous la base', () => {
     const a = eventail(arbreFictif(), 'arbre')
     expect(a.scene.elements.filter((e) => e.type === 'rect' && e.rayon === 1.2).length).toBeGreaterThan(5)
+    expect(textes(a)).toContain('Ascendance et descendance')
   })
 })
 
 describe('l’éventail des quatre parents', () => {
-  /** Les textes de ces prénoms côté descendants : sous la base quand l'éventail monte, au-dessus quand il descend. */
-  const descendants = (a: AfficheProduite, prenoms: string[], sens: 'haut' | 'bas') =>
+  /**
+   * Les textes de ces prénoms côté descendants : dans le demi-disque central pour le soleil
+   * intérieur et la rosace ; sous la base (au-dessus quand l'éventail descend) pour l'arbre.
+   */
+  const descendants = (a: AfficheProduite, forme: FormeDesDescendants, prenoms: string[], sens: 'haut' | 'bas') =>
     a.scene.textes.filter((t) => {
-      const y = position(t)[1]
-      return prenoms.includes(t.texte.trim()) && (sens === 'haut' ? y > a.centre[1] : y < a.centre[1])
+      const [x, y] = position(t)
+      const [cx, cy] = a.centre
+      if (!prenoms.includes(t.texte.trim())) return false
+      const auDessus = y < cy
+      if (forme === 'arbre') return sens === 'haut' ? !auDessus : auDessus
+      return Math.hypot(x - cx, y - cy) < a.eventail.rC && (sens === 'haut' ? auDessus : !auDessus)
     })
 
   it.each(['soleil', 'medaillons', 'arbre'] as const)('met les quatre parents au premier anneau, et leurs descendants en %s', (forme) => {
@@ -139,18 +155,23 @@ describe('l’éventail des quatre parents', () => {
       const a = eventail(arbreDeCousins(), forme, sens, 'parents')
       const [cx] = a.centre
       expect(a.eventail.R.premierAnneauMasque, `${forme} ${sens}`).toBe(true)
-      // Le couple et ses enfants, les fratries et la cousine.
-      for (const p of ['Natron', 'Silex', 'Topaze', 'Gypse', 'Opale', 'Jade', 'Craie']) expect(descendants(a, [p], sens), `${forme} ${sens} ${p}`).not.toHaveLength(0)
+      // Le couple et ses enfants (au cœur de la rosace, sur une ligne), les fratries et la cousine.
+      const enfantsDuCouple = forme === 'medaillons' ? ['Silex et Topaze'] : ['Silex', 'Topaze']
+      for (const p of ['Natron', ...enfantsDuCouple, 'Gypse', 'Opale', 'Jade', 'Craie']) expect(descendants(a, forme, [p], sens), `${forme} ${sens} ${p}`).not.toHaveLength(0)
       // La femme une seule fois : avec le mari, plus dans sa fratrie.
-      expect(descendants(a, ['Marne', '∞ Marne'], sens), `${forme} ${sens}`).toHaveLength(1)
-      // Le frère du mari à gauche, les sœurs de la femme à droite.
-      for (const t of descendants(a, ['Gypse'], sens)) expect(position(t)[0], `${forme} ${sens}`).toBeLessThan(cx)
-      for (const t of descendants(a, ['Opale', 'Jade'], sens)) expect(position(t)[0], `${forme} ${sens}`).toBeGreaterThan(cx)
+      expect(descendants(a, forme, ['Marne', '∞ Marne'], sens), `${forme} ${sens}`).toHaveLength(1)
+      // Le frère du mari à gauche, les sœurs de la femme à droite — dans la rosace, à pas égal,
+      // celle du milieu peut tomber sur l'axe.
+      const x = (p: string): number => position(descendants(a, forme, [p], sens)[0]!)[0]
+      expect(x('Gypse'), `${forme} ${sens}`).toBeLessThan(cx)
+      expect(x('Jade'), `${forme} ${sens}`).toBeGreaterThan(cx)
+      expect(x('Gypse'), `${forme} ${sens}`).toBeLessThan(x('Opale'))
+      expect(x('Opale'), `${forme} ${sens}`).toBeLessThan(x('Jade'))
       // Le titre ne date pas le mariage du couple : ses chiffres sont ceux des quatre parents.
       expect(textes(a).filter((t) => t.startsWith('mariés')), `${forme} ${sens}`).toHaveLength(0)
-      expect(textes(eventail(arbreDeCousins(), forme, sens)).filter((t) => t.startsWith('mariés'))).toHaveLength(1)
       expect(versSvg(a.scene)).not.toMatch(/NaN|Infinity/)
     }
+    expect(textes(eventail(arbreDeCousins(), 'arbre')).filter((t) => t.startsWith('mariés'))).toHaveLength(1)
   })
 
   it('retombe sur le couple quand les parents d’un époux manquent', () => {

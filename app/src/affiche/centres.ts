@@ -10,8 +10,8 @@
  *   la tête et son conjoint, un ornement, ses enfants (et leur conjoint), ses petits-enfants en
  *   italique.
  *
- * Les deux servent le soleil (le cercle entier, dans le disque central) et l'éventail (le
- * demi-cercle sous sa base). Vert-bleu du côté du mari, terre cuite du côté de la femme, sable pour
+ * Les deux servent le soleil (le cercle entier, dans son disque central) et l'éventail (le
+ * demi-cercle, dans son demi-disque central) ; le titre est en leur cœur. Vert-bleu du côté du mari, terre cuite du côté de la femme, sable pour
  * le couple. Le texte se règle sur la place : il rapetisse jusqu'à un plancher, et c'est ensuite
  * seulement le cercle qui grandit — l'appelant en décide, à partir de `rayonRequis()`.
  */
@@ -171,20 +171,43 @@ function lignesDuTitre(coeur: Coeur, u: number, empiles: boolean): (Ligne | null
   return lignes
 }
 
-/** Le titre posé au plus grand corps qui tient dans le cercle (cx, cy, r). */
-function poserLeTitre(scene: Scene, coeur: Coeur, cx: number, cy: number, r: number, empiles: boolean): void {
-  const ornementH = (u: number): number => 9 * u * 0.3528
-  const ok = (u: number): boolean => {
-    const ls = lignesDuTitre(coeur, u, empiles)
-    return tientDansLeCercle(ls, empiler(ls, ornementH(u)).bases, r)
-  }
-  const u = plusGrand(0.05, 6, ok)
-  const ls = lignesDuTitre(coeur, u, empiles)
-  const { bases } = empiler(ls, ornementH(u))
+/** Le demi-disque de l'éventail : au-dessus de sa base (`'haut'`) ou en dessous (`'bas'`) ; `null` : le cercle entier. */
+export type Demi = 'haut' | 'bas' | null
+
+/**
+ * Les lignes du titre au corps `u` et leurs lignes de base, relatives au centre du cercle de
+ * rayon `r`. Dans un demi-disque, le bloc s'appuie sur la base, un jour entre les deux.
+ */
+function titreAuCorps(coeur: Coeur, u: number, r: number, empiles: boolean, demi: Demi): { lignes: (Ligne | null)[]; bases: number[] } {
+  const lignes = lignesDuTitre(coeur, u, empiles)
+  const { bases, hauteur } = empiler(lignes, 9 * u * 0.3528)
+  const decalage = demi === null ? 0 : (demi === 'haut' ? -1 : 1) * (hauteur / 2 + r * 0.06)
+  return { lignes, bases: bases.map((b) => b + decalage) }
+}
+
+/** Vrai si le titre tient au corps `u` dans le cercle (ou le demi-disque) de rayon `r`. */
+function titreTient(coeur: Coeur, u: number, r: number, empiles: boolean, demi: Demi): boolean {
+  const { lignes, bases } = titreAuCorps(coeur, u, r, empiles, demi)
+  return tientDansLeCercle(lignes, bases, r)
+}
+
+/** Le titre posé au plus grand corps qui tient dans le cercle (cx, cy, r), ou dans sa moitié `demi`. */
+function poserLeTitre(scene: Scene, coeur: Coeur, cx: number, cy: number, r: number, empiles: boolean, demi: Demi = null): void {
+  const u = plusGrand(0.05, 6, (x) => titreTient(coeur, x, r, empiles, demi))
+  const { lignes: ls, bases } = titreAuCorps(coeur, u, r, empiles, demi)
   ls.forEach((l, i) => {
     if (l) poserLigne(scene, l, cx, cy + bases[i]!)
     else ornement(scene, cx, cy + bases[i]!, 30 * u * 0.3528 * 1.6)
   })
+}
+
+/** Les angles (degrés) du cercle entier, ou de la moitié `demi`. */
+const moitie = (demi: Demi): [number, number] => (demi === null ? [0, 360] : demi === 'haut' ? [0, 180] : [180, 360])
+
+/** Le chemin d'un cercle, ou de son demi-cercle `demi` (sans le diamètre). */
+function arc(cx: number, cy: number, r: number, demi: Demi): string {
+  if (demi === null) return `M${f3(cx - r)},${f3(cy)} A${f3(r)},${f3(r)} 0 1 1 ${f3(cx + r)},${f3(cy)} A${f3(r)},${f3(r)} 0 1 1 ${f3(cx - r)},${f3(cy)}`
+  return `M${f3(cx - r)},${f3(cy)} A${f3(r)},${f3(r)} 0 0 ${demi === 'haut' ? 1 : 0} ${f3(cx + r)},${f3(cy)}`
 }
 
 /* ------------------------------------------------------------------ */
@@ -419,8 +442,10 @@ export class SoleilInterieur {
       this.texte(scene, cx, cy, r, k === 1 ? p : { ...p, c: { ...p.c, lignes: p.c.lignes.map((l) => echelle(l, k)), coupees: p.c.coupees.map((l) => echelle(l, k)) } }, bornes)
     }
     if (this.coeur) {
-      scene.chemin(secteur(cx, cy, 0, bornes[0]! * r, 0, 360), '#F3ECDF', PAPIER, r * 0.003)
-      poserLeTitre(scene, this.coeur, cx, cy, bornes[0]! * r * 0.9, true)
+      // Au demi-cercle, le cœur est un demi-disque sur la base, et les noms tiennent sur une ligne.
+      const demi: Demi = this.plein ? null : pose.sens < 0 ? 'haut' : 'bas'
+      scene.chemin(secteur(cx, cy, 0, bornes[0]! * r, ...moitie(demi)), '#F3ECDF', PAPIER, r * 0.003)
+      poserLeTitre(scene, this.coeur, cx, cy, bornes[0]! * r * 0.9, this.plein, demi)
     }
   }
 
@@ -479,11 +504,17 @@ export class SoleilInterieur {
 /* ------------------------------------------------------------------ */
 
 export class Rosace {
+  /** Le demi-disque de l'éventail (`null` : le cercle entier du soleil). */
+  readonly demi: Demi
+
   constructor(
     readonly familles: FamilleDuCentre[],
     readonly coeur: Coeur | null,
     readonly plein: boolean,
-  ) {}
+    versLeHaut = true,
+  ) {
+    this.demi = plein ? null : versLeHaut ? 'haut' : 'bas'
+  }
 
   /** Les lignes d'un médaillon au corps `b` (le nom de la tête) ; `null` : l'ornement. */
   private lignes(f: FamilleDuCentre, b: number, largeurMax: number): (Ligne | null)[] {
@@ -522,50 +553,28 @@ export class Rosace {
     return tientDansLeCercle(ls, empiler(ls, b * 0.3528 * 0.9).bases, r)
   }
 
-  /** La géométrie du cercle entier : rayon des médaillons, de leur couronne, du cœur — en part du rayon. */
+  /**
+   * La géométrie : rayon des médaillons, de leur couronne, du cœur — en part du rayon. Les
+   * médaillons se partagent le tour entier, ou le demi-tour de l'éventail, à pas égal : deux
+   * voisins ne se touchent pas, et au demi-cercle les deux du bout restent au-dessus de la base.
+   */
   private geometrie(): { m: number; rho: number; c: number } {
     const n = this.familles.length
     if (n === 0) return { m: 0, rho: 0, c: 0.6 }
-    const s = n === 1 ? 1 : 0.94 * Math.sin(Math.PI / n)
+    // Au demi-cercle, un peu moins : les deux du bout gardent un jour au-dessus de la base.
+    const s = this.plein && n === 1 ? 1 : (this.plein ? 0.94 : 0.86) * Math.sin(Math.PI / (this.plein ? n : 2 * n))
     const m = Math.min(0.3, s / (1 + s))
     const rho = 1 - m
     return { m, rho, c: Math.max(0.12, Math.min(0.33, rho - m - 0.03)) }
   }
 
-  /**
-   * Les angles des médaillons sur le demi-cercle, depuis son début (degrés), à pas égal ; pour
-   * les quatre parents, le couple au milieu, et les fratries de part et d'autre au pas de la plus
-   * nombreuse — la plus courte reste serrée contre lui.
-   */
-  private anglesDuDemi(): number[] {
-    const n = Math.max(1, this.familles.length)
-    const i = this.familles.findIndex((f) => f.couple)
-    if (i <= 0 || i >= this.familles.length - 1) return this.familles.map((_, k) => (180 / n) * (k + 0.5))
-    const pas = 90 / (Math.max(i, this.familles.length - 1 - i) + 0.5)
-    return this.familles.map((_, k) => 90 + pas * (k - i))
-  }
-
-  /** Le demi-cercle : rayon des médaillons et de leur arc pour le corps `b` (mm). */
-  private demi(b: number): { m: number; rho: number } {
-    const m = Math.max(...this.familles.map((f) => {
-      let lo = 5
-      while (!this.tient(f, b, lo) && lo < 2000) lo *= 1.15
-      return lo
-    }), 5)
-    // Le pas le plus serré décide du rayon de l'arc : deux voisins ne se touchent pas.
-    const angles = this.anglesDuDemi()
-    const pas = Math.min(180 / Math.max(1, angles.length), ...angles.slice(1).map((a, k) => a - angles[k]!)) * (Math.PI / 180)
-    const rho = Math.max(m * 1.15, (m * 1.06) / Math.sin(pas / 2))
-    return { m, rho }
-  }
-
-  /** Le plus grand corps de [min, max] qui tient dans le cercle de rayon `r` (cercle entier). */
+  /** Le plus grand corps de [min, max] qui tient dans le cercle de rayon `r`. */
   corpsPour(r: number, min: number, max: number): number {
     const ok = (b: number): boolean => this.tientTout(b, r)
     return ok(min) ? plusGrand(min, max, ok) : min
   }
 
-  /** Le rayon qu'il faut (cercle entier) au corps `b`. */
+  /** Le rayon qu'il faut au corps `b`. */
   rayonRequis(b: number): number {
     let r = 20
     while (!this.tientTout(b, r) && r < 20000) r *= 1.08
@@ -576,41 +585,29 @@ export class Rosace {
     const { m, c } = this.geometrie()
     if (!this.familles.every((f) => this.tient(f, b, m * r))) return false
     if (!this.coeur) return true
-    const rc = c * r * 0.86
-    const ok = (u: number): boolean => {
-      const ls = lignesDuTitre(this.coeur!, u, false)
-      return tientDansLeCercle(ls, empiler(ls, 9 * u * 0.3528).bases, rc)
-    }
     // Le cœur au moins au corps des médaillons.
-    return ok(b / 14.5)
+    return titreTient(this.coeur, b / 14.5, c * r * 0.86, false, this.demi)
   }
 
-  /** L'encombrement du demi-cercle au corps `b` : demi-largeur et profondeur sous le centre (mm). */
-  encombrementDemi(b: number): { demiLargeur: number; profondeur: number } {
-    const { m, rho } = this.demi(b)
-    return { demiLargeur: rho + m, profondeur: rho + m }
-  }
-
-  /** Dessine la rosace : cercle entier de rayon `r` centré sur (cx, cy), ou demi-cercle sous (cx, cy). */
-  dessiner(scene: Scene, cx: number, cy: number, r: number, b: number, rotation = 0, versLeHaut = false): void {
+  /**
+   * Dessine la rosace de rayon `r` centrée sur (cx, cy) : le cercle entier, tourné de `rotation`,
+   * ou le demi-disque de l'éventail.
+   */
+  dessiner(scene: Scene, cx: number, cy: number, r: number, b: number, rotation = 0): void {
     const n = this.familles.length
-    let m: number
-    let rho: number
-    let angles: number[]
-    if (this.plein) {
-      const g = this.geometrie()
-      ;[m, rho] = [g.m * r, g.rho * r]
-      angles = this.familles.map((_, i) => 90 - (i * 360) / n - rotation)
-      scene.chemin(secteur(cx, cy, 0, rho, 0, 360), 'none', 'rgba(142,124,108,.7)', r * 0.0022, false, `${f3(r * 0.012)},${f3(r * 0.009)}`)
-      if (this.coeur) {
-        const c = g.c * r
-        scene.chemin(secteur(cx, cy, 0, c, 0, 360), PAPIER, TRAIT, c * 0.0067)
-        scene.chemin(secteur(cx, cy, 0, c * 0.98, 0, 360), 'none', '#F1E8D8', c * 0.04)
-        poserLeTitre(scene, this.coeur, cx, cy, c * 0.86, false)
-      }
-    } else {
-      ;({ m, rho } = this.demi(b))
-      angles = this.anglesDuDemi().map((a) => (versLeHaut ? 180 - a : 180 + a))
+    const demi = this.demi
+    const versLeHaut = demi === 'haut'
+    const g = this.geometrie()
+    const [m, rho] = [g.m * r, g.rho * r]
+    const angles = this.plein
+      ? this.familles.map((_, i) => 90 - (i * 360) / n - rotation)
+      : this.familles.map((_, i) => (versLeHaut ? 180 - (180 / n) * (i + 0.5) : 180 + (180 / n) * (i + 0.5)))
+    if (n > 0) scene.chemin(arc(cx, cy, rho, demi), 'none', 'rgba(142,124,108,.7)', r * 0.0022, false, `${f3(r * 0.012)},${f3(r * 0.009)}`)
+    if (this.coeur) {
+      const c = g.c * r
+      scene.chemin(secteur(cx, cy, 0, c, ...moitie(demi)), PAPIER, TRAIT, c * 0.0067)
+      scene.chemin(arc(cx, cy, c * 0.98, demi), 'none', '#F1E8D8', c * 0.04)
+      poserLeTitre(scene, this.coeur, cx, cy, c * 0.86, false, demi)
     }
     this.familles.forEach((f, i) => {
       const [x, y] = polaire(cx, cy, rho, angles[i]!)

@@ -73,7 +73,11 @@ export function telechargerSvg(scene: Scene, format: Format | null, polices: Pol
   telecharger(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), `${nom}.svg`)
 }
 
-export async function telechargerPng(scene: Scene, page: Format, format: Format | null, dpi: number, polices: PolicesChargees, nom: string): Promise<void> {
+/**
+ * L'image de l'affiche, en PNG ou en JPG — le JPG à la qualité maximale, pour les imprimeurs qui
+ * ne prennent que lui (avec le PDF). L'affiche n'a pas de transparence : rien ne se perd.
+ */
+export async function telechargerImage(scene: Scene, page: Format, format: Format | null, dpi: number, polices: PolicesChargees, nom: string, type: 'png' | 'jpg' = 'png'): Promise<void> {
   const [l, h] = pixels(page, dpi)
   const svg = versSvg(scene, { format, polices: polices.base64(), pixels: [l, h] })
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }))
@@ -90,9 +94,9 @@ export async function telechargerPng(scene: Scene, page: Format, format: Format 
     const contexte = canevas.getContext('2d')
     if (!contexte) throw new Error('Le navigateur n’a pas pu préparer une image de cette taille.')
     contexte.drawImage(image, 0, 0, l, h)
-    const blob = await new Promise<Blob | null>((r) => canevas.toBlob(r, 'image/png'))
+    const blob = await new Promise<Blob | null>((r) => canevas.toBlob(r, type === 'png' ? 'image/png' : 'image/jpeg', 1))
     if (!blob) throw new Error('Le navigateur n’a pas pu produire une image de cette taille ; essayez une résolution plus basse, ou le PDF.')
-    telecharger(blob, `${nom}.png`)
+    telecharger(blob, `${nom}.${type}`)
     // Libérer tout de suite les centaines de mégaoctets d'un grand canevas.
     canevas.width = 0
     canevas.height = 0

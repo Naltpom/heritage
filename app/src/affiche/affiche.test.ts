@@ -3,9 +3,9 @@ import { ArbreAffiche } from './donnees'
 import { arbreFictif, arbreTouffu, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { radians, Reglages } from './eventail'
-import { afficheEventail, arrondiDizaine, type AfficheProduite } from './fabriquer'
-import { formatOriente, page, pixels, pngPossible } from './formats'
-import { versSvg } from './svg'
+import { afficheEventail, arrondiDizaine, mentionDuPied, type AfficheProduite } from './fabriquer'
+import { formatOriente, formatSurMesure, page, pixels, pngPossible } from './formats'
+import { mettreAuFormat, versSvg } from './svg'
 
 // Dès le chargement : des `describe` produisent leur affiche à la collecte des cas.
 installerLesPolicesDuDisque()
@@ -329,6 +329,14 @@ describe('le pied', () => {
     expect(t.some((x) => x.startsWith('Arbre établi par'))).toBe(false)
   })
 
+  it('signe du nom que règle l’administration, et de rien sans lui', () => {
+    const essai = arbreFictif()
+    const a = afficheEventail(new ArbreAffiche(essai.charge), essai.mari, essai.femme, { date: new Date(2026, 9, 24), mention: mentionDuPied('Auteur FICTIF') })
+    expect(textes(a)).toContain('Arbre établi par Auteur FICTIF avec Heritage — octobre 2026')
+    expect(mentionDuPied(null)).toBe('Arbre établi avec Heritage')
+    expect(mentionDuPied('  ')).toBe('Arbre établi avec Heritage')
+  })
+
   it('compte les ancêtres, les générations et l’implexe', () => {
     const a = produire(arbreFictif())
     expect(a.chiffres.implexes).toBe(1)
@@ -363,6 +371,22 @@ describe('le rendu SVG et les formats', () => {
     const svg = versSvg(scene, { format })
     expect(svg).toContain('width="1189.00mm" height="841.00mm"')
     expect(svg).toMatch(/<g transform="translate\([\d.]+,[\d.]+\) scale\(0\.\d{6}\)">/)
+  })
+
+  it('pose sur mesure le dessin centré sur la page : rogné quand il est plus grand, entouré de papier sinon', () => {
+    // Un dessin carré de 1 m : 120 cm de dessin sur une page de 100, puis l'inverse.
+    const rogne = mettreAuFormat(1000, 1000, formatSurMesure([100, 100], [120, 120]))
+    expect(rogne.k).toBeCloseTo(1.2, 9)
+    expect(rogne.dx).toBeCloseTo(-100, 9)
+    expect(rogne.dy).toBeCloseTo(-100, 9)
+    const entoure = mettreAuFormat(1000, 1000, formatSurMesure([120, 120], [100, 100]))
+    expect(entoure.k).toBeCloseTo(1, 9)
+    expect(entoure.dx).toBeCloseTo(100, 9)
+    // La page imprimée est celle du SVG, fond compris.
+    const svg = versSvg(scene, { format: formatSurMesure([100, 70], [110, 80]) })
+    expect(svg).toContain('width="1000.00mm" height="700.00mm"')
+    expect(svg).toContain('<rect width="1000.000" height="700.000"')
+    expect(page('mesure', 100, 50)).toEqual({ largeur: 100, hauteur: 50 })
   })
 
   it('embarque seulement les polices dont la scène se sert', () => {

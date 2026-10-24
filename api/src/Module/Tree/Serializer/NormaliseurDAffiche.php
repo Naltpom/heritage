@@ -11,6 +11,7 @@ use App\Module\Tree\Entity\Child;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
 use App\Module\Tree\Enum\ChildRelation;
+use App\Module\Tree\Service\ReglagesDeLArbre;
 
 /**
  * L'arbre d'une **affiche** : un couple, toute son ascendance connue, et sa descendance sur
@@ -71,11 +72,14 @@ final readonly class NormaliseurDAffiche
     public function __construct(
         private NormaliseurDeDate $dates,
         private LectureDeLArbre $lecture,
+        private ReglagesDeLArbre $reglages,
     ) {
     }
 
     /**
-     * @return array{famille: int|null, generationsDeDescendance: int, personnes: list<array<string, mixed>>, familles: list<array<string, mixed>>}
+     * `signature` : le nom écrit au pied (`tree.signature_affiches`), `null` s'il n'est pas réglé.
+     *
+     * @return array{famille: int|null, generationsDeDescendance: int, signature: string|null, personnes: list<array<string, mixed>>, familles: list<array<string, mixed>>}
      */
     public function affiche(Family $couple, CercleDuLecteur $cercle, EtatVivant $vivants): array
     {
@@ -197,6 +201,7 @@ final readonly class NormaliseurDAffiche
         return [
             'famille' => $coupleId,
             'generationsDeDescendance' => self::GENERATIONS_DE_DESCENDANCE,
+            'signature' => $this->reglages->signatureDesAffiches(),
             'personnes' => $sortiePersonnes,
             'familles' => $sortieFamilles,
         ];
