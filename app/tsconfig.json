@@ -29,9 +29,9 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "jsx": "preserve",
-    "baseUrl": ".",
+    /* Sans `baseUrl`, retiré par TypeScript 7 : les chemins partent de ce fichier. */
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.vue", "src/**/*.d.ts", "vite.config.ts", "vitest.environnement-client.ts"]
