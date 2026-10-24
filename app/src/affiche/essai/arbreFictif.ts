@@ -339,6 +339,42 @@ export function arbreTouffu(graine = 1848): ArbreDEssai {
   return { charge: a.charge(couple), mari, femme, reperes: { couple } }
 }
 
+/**
+ * Un couple et ses deux fratries, pour le soleil des quatre parents : les parents de chacun, un
+ * frère du mari et deux sœurs de la femme (l'une mariée, avec un enfant), les enfants du couple,
+ * et quelques générations d'ascendance au-dessus des parents.
+ */
+export function arbreDeCousins(): ArbreDEssai {
+  const a = new FabriqueDArbre(1966)
+  const pereH = a.personne('masculin', 'Romarin', 1920, { prenoms: 'Basalte', deces: 1990 })
+  const mereH = a.personne('feminin', 'Thym', 1922, { prenoms: 'Agate', deces: 1995 })
+  const pereF = a.personne('masculin', 'Sureau', 1921, { prenoms: 'Quartz', deces: 1988 })
+  const mereF = a.personne('feminin', 'Persil', 1924, { prenoms: 'Ambre', deces: 2001 })
+  const fH = a.famille(pereH, mereH, annee(1946))
+  const fF = a.famille(pereF, mereF, annee(1947))
+  const mari = a.personne('masculin', 'Romarin', 1948, { prenoms: 'Natron', deces: null })
+  const frere = a.personne('masculin', 'Romarin', 1951, { prenoms: 'Gypse', deces: null })
+  const femme = a.personne('feminin', 'Sureau', 1950, { prenoms: 'Marne', deces: null })
+  const soeur1 = a.personne('feminin', 'Sureau', 1949, { prenoms: 'Opale', deces: null })
+  const soeur2 = a.personne('feminin', 'Sureau', 1953, { prenoms: 'Jade', deces: null })
+  a.enfant(fH, mari)
+  a.enfant(fH, frere)
+  a.enfant(fF, soeur1)
+  a.enfant(fF, femme)
+  a.enfant(fF, soeur2)
+  const beauFrere = a.personne('masculin', 'Cerfeuil', 1947, { prenoms: 'Galène', deces: null })
+  const uS = a.famille(beauFrere, soeur1, annee(1970))
+  const cousine = a.personne('feminin', 'Cerfeuil', 1972, { prenoms: 'Craie', deces: null })
+  a.enfant(uS, cousine)
+  const couple = a.famille(mari, femme, annee(1974))
+  const enfant1 = a.personne('masculin', 'Romarin', 1976, { prenoms: 'Silex', deces: null })
+  const enfant2 = a.personne('feminin', 'Romarin', 1979, { prenoms: 'Topaze', deces: null })
+  a.enfant(couple, enfant1)
+  a.enfant(couple, enfant2)
+  for (const p of [pereH, mereH, pereF, mereF]) a.ascendance(p, 4)
+  return { charge: a.charge(couple), mari, femme, reperes: { couple, fH, fF, frere, soeur1, soeur2, cousine, enfant1, enfant2 } }
+}
+
 /** Un couple sans aucune ascendance connue, et sans enfant. */
 export function coupleSeul(): ArbreDEssai {
   const a = new FabriqueDArbre(7)

@@ -60,9 +60,12 @@ const NOMS_DE_GENERATION: Record<number, [string, string]> = {
   4: ['arrière-arrière-petit-enfant', 'arrière-arrière-petits-enfants'],
 }
 
-/** Le disque central : le titre, le mariage et la descendance en chiffres, au plus grand corps qui tient. */
-export function centreCouple(scene: Scene, E: Eventail, cx: number, cy: number, A: ArbreAffiche, fam: number | null, enfants: Desc[], H: Personne, F: Personne): void {
-  const r = E.rC
+/**
+ * Les lignes du titre du centre, du bas vers le haut : (texte, style, interligne après) — la
+ * descendance en chiffres, le mariage, ∞, le sous-titre, les deux noms. Au corps `u` (1 : 46 pt
+ * pour les noms).
+ */
+export function lignesDuCouple(A: ArbreAffiche, fam: number | null, enfants: Desc[], H: Personne, F: Personne): (u: number) => [string, Style, number][] {
   const [date, lieu] = fam !== null ? A.mariage(fam) : [null, null]
   const c = compter(enfants)
   const chiffres = [...c.keys()]
@@ -75,14 +78,19 @@ export function centreCouple(scene: Scene, E: Eventail, cx: number, cy: number, 
     mariage = date.qual === 'exacte' ? `mariés le ${date.texte('long')}` : `mariés ${date.texte('long')}`
     if (lieu) mariage += ` à ${lieu.split(',')[0]}`
   }
-  // Du bas vers le haut : (texte, style, interligne après).
-  const lignes = (u: number): [string, Style, number][] => [
+  return (u) => [
     [chiffres, new Style('SS', 11 * u, ENCRE_DOUCE, 0, 'Reg'), 1.0],
     [mariage, new Style('SS', 13 * u, ENCRE, 0, 'Ital'), 1.6],
     ['∞', new Style('SS', 24 * u, TRAIT, 0, 'Reg'), 0.9],
     ['Ascendance et descendance', new Style('SS', 12 * u, ENCRE_DOUCE, 0.02, 'Ital'), 1.15],
     [`${nomDeTitre(H)} · ${nomDeTitre(F)}`, new Style('CG', 46 * u, ENCRE, 0.01, 'Bold'), 1.0],
   ]
+}
+
+/** Le disque central : le titre, le mariage et la descendance en chiffres, au plus grand corps qui tient. */
+export function centreCouple(scene: Scene, E: Eventail, cx: number, cy: number, A: ArbreAffiche, fam: number | null, enfants: Desc[], H: Personne, F: Personne): void {
+  const r = E.rC
+  const lignes = lignesDuCouple(A, fam, enfants, H, F)
 
   // L'éventail qui descend : le disque est sous le centre, et le bloc s'y pose par le haut.
   const poserDessous = (u: number, dessiner = false): boolean => {

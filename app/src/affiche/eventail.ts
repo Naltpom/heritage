@@ -103,6 +103,19 @@ export class Reglages {
    * retourne, et les textes restent à l'endroit (lui à gauche, elle à droite, toujours).
    */
   sens: 'haut' | 'bas' = 'haut'
+  /**
+   * Le dessin tourné de ce nombre de degrés, dans le sens des aiguilles d'une montre — pour le
+   * soleil (`angle` 360) : 0, lui à gauche et elle à droite ; 90, lui en haut ; 180, lui à
+   * droite ; 270, lui en bas.
+   */
+  rotation = 0
+  /** Le disque central fait au moins ce rayon (mm) : le soleil y pose les descendants. */
+  rayonCentralMin = 0
+  /**
+   * Le premier anneau (le couple) n'est ni dessiné ni écrit, et ne prend aucune place : le
+   * soleil des quatre parents met les parents au premier anneau et le couple au centre.
+   */
+  premierAnneauMasque = false
 
   constructor(reglages: Partial<Reglages> = {}) {
     Object.assign(this, reglages)
@@ -235,7 +248,13 @@ export class Eventail {
     for (let g = 0; g < this.nbNiveaux; g++) {
       const ns = this.parNiveau.get(g) ?? []
       const facteur = g < libres ? croissance : 1
-      if (g < this.tangentiels) {
+      if (g === 0 && R.premierAnneauMasque) {
+        for (const n of ns) {
+          n.bloc = new Bloc([], 0, 0)
+          this.variantesDe.set(n, [n.bloc])
+        }
+        this.formes.push({ orientation: 'tan', coupe: false, epaisseur: 0 })
+      } else if (g < this.tangentiels) {
         // `facteur` vaut 1 sans remplissage : le produit reste celui de l'original, au bit près.
         const st = styles(facteur === 1 ? R.corpsTan[g]! * R.croissanceMax : R.corpsTan[g]! * R.croissanceMax * facteur)
         const coupe = g >= 2
@@ -282,26 +301,33 @@ export class Eventail {
     const { r1, r2, orientation } = this.anneaux[n.niveau]!
     const R = this.R
     if (orientation === 'rad') return degres((n.bloc!.hauteurTexte + 2 * R.margePerp) / r1)
-    let meilleur: number | null = null
-    for (const b of this.variantesDe.get(n) ?? [n.bloc!]) {
-      let besoin = 0
-      const bases = this.bases(b, r1, r2)
-      b.lignes.forEach(([t, s], i) => {
-        besoin = Math.max(besoin, (s.largeur(t) + 2 * R.margeTan) / bases[i]!)
-      })
-      meilleur = meilleur === null ? besoin : Math.min(meilleur, besoin)
+    // L'ordre des lignes dépend du côté du cercle où la place tombera, que le calcul ne sait
+    // pas encore : sur un cercle entier ou tourné, on réserve pour le pire des deux.
+    const ordres = R.angle <= 180 && R.rotation % 360 === 0 ? [R.sens === 'bas'] : [false, true]
+    let pire = 0
+    for (const versLeCentre of ordres) {
+      let meilleur: number | null = null
+      for (const b of this.variantesDe.get(n) ?? [n.bloc!]) {
+        let besoin = 0
+        const bases = this.bases(b, r1, r2, versLeCentre)
+        b.lignes.forEach(([t, s], i) => {
+          besoin = Math.max(besoin, (s.largeur(t) + 2 * R.margeTan) / bases[i]!)
+        })
+        meilleur = meilleur === null ? besoin : Math.min(meilleur, besoin)
+      }
+      pire = Math.max(pire, meilleur ?? 0)
     }
-    return degres(meilleur ?? 0)
+    return degres(pire)
   }
 
   /**
    * Les rayons des lignes de base, bloc centré dans l'anneau : de l'extérieur vers l'intérieur
-   * quand l'éventail monte (le haut des lettres regarde au loin), de l'intérieur vers
-   * l'extérieur quand il descend (le haut des lettres regarde le centre).
+   * au-dessus du centre (le haut des lettres regarde au loin), de l'intérieur vers l'extérieur
+   * en dessous (`versLeCentre` : le haut des lettres regarde le centre).
    */
-  private bases(b: Bloc, r1: number, r2: number): number[] {
+  private bases(b: Bloc, r1: number, r2: number, versLeCentre: boolean): number[] {
     const sortie: number[] = []
-    if (this.R.sens === 'bas') {
+    if (versLeCentre) {
       let bord = (r1 + r2) / 2 - b.hauteurTexte / 2
       for (const [, s] of b.lignes) {
         sortie.push(bord + s.interligne * 0.8)
@@ -317,9 +343,10 @@ export class Eventail {
     return sortie
   }
 
-  /** Les angles dessinés d'une place : ceux du calcul, ou leur reflet sous le centre. */
-  private dessines(a1: number, a2: number): [number, number] {
-    return this.R.sens === 'bas' ? [-a2, -a1] : [a1, a2]
+  /** Les angles dessinés d'une place : ceux du calcul, reflétés sous le centre (`sens`), puis tournés (`rotation`). */
+  dessines(a1: number, a2: number): [number, number] {
+    const [d1, d2] = this.R.sens === 'bas' ? [-a2, -a1] : [a1, a2]
+    return this.R.rotation ? [d1 - this.R.rotation, d2 - this.R.rotation] : [d1, d2]
   }
 
   private minimums(n: Anc): number {
@@ -478,7 +505,14 @@ export class Eventail {
   calculer(): this {
     const ouverture = this.R.angle * 0.985
     this.planchers.clear()
-    let k = this.remplir(ouverture, this.choisirLaForme(ouverture))
+    let k = this.choisirLaForme(ouverture)
+    this.preparer(k)
+    if (this.rC < this.R.rayonCentralMin) {
+      // Un disque imposé, plus grand que le nécessaire : rien à remplir, la place est là.
+      k = 1 + (this.R.rayonCentralMin - this.R.rCentre) / 120
+    } else {
+      k = this.remplir(ouverture, k)
+    }
     if (this.R.egaliser > 0) {
       // Le disque grandit de `egaliser` fois le rayon de l'éventail, et cette marge égalise.
       this.preparer(k)
@@ -534,11 +568,12 @@ export class Eventail {
     const R = this.R
     // Le disque central.
     scene.chemin(secteur(cx, cy, 0, this.rC, ...this.dessines(90 - R.angle / 2, 90 + R.angle / 2)), melange([222, 205, 168], 1), PAPIER, 0.6)
-    for (const n of [...this.noeuds].sort((a, b) => a.niveau - b.niveau)) {
+    const dessines = this.noeuds.filter((n) => n.niveau > 0 || !R.premierAnneauMasque)
+    for (const n of [...dessines].sort((a, b) => a.niveau - b.niveau)) {
       const { r1, r2 } = this.anneaux[n.niveau]!
       scene.chemin(secteur(cx, cy, r1, r2, ...this.dessines(n.a1, n.a2)), this.fond(n), PAPIER, n.niveau < 4 ? 0.7 : 0.45)
     }
-    for (const n of this.noeuds) {
+    for (const n of dessines) {
       const { r1, r2, orientation, coupe } = this.anneaux[n.niveau]!
       if (orientation === 'tan') this.texteTan(scene, cx, cy, n, r1, r2, coupe)
       else this.texteRad(scene, cx, cy, n, r1, r2)
@@ -549,23 +584,25 @@ export class Eventail {
     const R = this.R
     const A = radians(n.a2 - n.a1)
     const vs = variantes(n.bloc!, coupe)
+    const [d1, d2] = this.dessines(n.a1, n.a2)
+    const versLeCentre = Math.sin(radians((d1 + d2) / 2)) < 0
     // Une place reçoit souvent **exactement** l'angle que réclame sa variante la plus sobre :
     // la comparaison tombe alors sur l'égalité, et l'original la tranchait au dernier bit
     // près — parfois contre lui-même, en coupant des prénoms qui tenaient, puis en serrant la
     // ligne des dates. Un millionième de millimètre de tolérance rend la décision voulue, et
     // la même dans tous les navigateurs.
     const tient = (bb: Bloc): boolean => {
-      const bases = this.bases(bb, r1, r2)
+      const bases = this.bases(bb, r1, r2, versLeCentre)
       return bb.lignes.every(([t, s], i) => s.largeur(t) + 2 * R.margeTan <= A * bases[i]! + 1e-6)
     }
     const choisi = vs.find(tient) ?? vs[vs.length - 1]!
-    const bases = this.bases(choisi, r1, r2)
+    const bases = this.bases(choisi, r1, r2, versLeCentre)
     choisi.lignes.forEach(([t, s], i) => {
       const rb = bases[i]!
       const dispo = A * rb - 2 * R.margeTan
       let [st, comp] = ajuster(t, s, dispo)
       if (comp) st = st.echelle((comp / st.largeur(t)) * 1.02)
-      scene.texteSurArc(cx, cy, rb, ...this.dessines(n.a1, n.a2), t, st)
+      scene.texteSurArc(cx, cy, rb, d1, d2, t, st)
     })
   }
 
@@ -576,7 +613,7 @@ export class Eventail {
     const rm = (r1 + r2) / 2
     const dispo = r2 - r1 - 2 * R.margeRad
     // À droite du centre, le texte se lit vers l'extérieur ; à gauche, vers le centre.
-    const adroite = R.sens === 'bas' ? am >= -90 : am <= 90
+    const adroite = Math.cos(radians(am)) >= 0
     const [rot, x] = adroite ? [-am, rm] : [180 - am, -rm]
     const tr = `translate(${f3(cx)},${f3(cy)}) rotate(${rot.toFixed(4)})`
     const b = n.bloc!
@@ -644,6 +681,7 @@ export function etendueHaut(E: Eventail): number {
 
 /** Vrai si (x, y) ne tombe dans aucune case de l'éventail, élargie de `marge` mm. */
 export function pointLibre(E: Eventail, cx: number, cy: number, x: number, y: number, marge = 6.0): boolean {
+  if (E.R.angle > 180 || E.R.rotation % 360 !== 0) return pointLibreAutour(E, cx, cy, x, y, marge)
   const dx = x - cx
   // Le calcul est celui d'un éventail qui monte : un point sous un éventail qui descend se
   // lit comme son reflet au-dessus.
@@ -662,3 +700,39 @@ export function pointLibre(E: Eventail, cx: number, cy: number, x: number, y: nu
   return true
 }
 
+/** `pointLibre()` pour un dessin qui n'est pas un demi-cercle montant : le soleil, tourné ou non. */
+function pointLibreAutour(E: Eventail, cx: number, cy: number, x: number, y: number, marge: number): boolean {
+  const dx = x - cx
+  const dy = cy - y
+  const r = Math.hypot(dx, dy)
+  const a = degres(Math.atan2(dy, dx))
+  const dans = ([d1, d2]: [number, number], r1: number, r2: number): boolean => {
+    if (r < r1 - marge || r > r2 + marge) return false
+    const da = degres(marge / Math.max(r, 1))
+    return (((a - d1 + da) % 360) + 360) % 360 <= d2 - d1 + 2 * da
+  }
+  if (dans(E.dessines(90 - E.R.angle / 2, 90 + E.R.angle / 2), 0, E.rC)) return false
+  return !E.noeuds.some((n) => dans(E.dessines(n.a1, n.a2), E.anneaux[n.niveau]!.r1, E.anneaux[n.niveau]!.r2))
+}
+
+/** Jusqu'où va le dessin depuis le centre, dans les quatre directions (mm). */
+export function etendues(E: Eventail): { haut: number; bas: number; gauche: number; droite: number } {
+  const plein = E.R.angle >= 360
+  const sortie = { haut: E.rC, bas: plein ? E.rC : 0, gauche: E.rC, droite: E.rC }
+  const pousser = (r: number, a: number): void => {
+    const [c, s] = [Math.cos(radians(a)), Math.sin(radians(a))]
+    sortie.droite = Math.max(sortie.droite, r * c)
+    sortie.gauche = Math.max(sortie.gauche, -r * c)
+    sortie.haut = Math.max(sortie.haut, r * s)
+    sortie.bas = Math.max(sortie.bas, -r * s)
+  }
+  for (const n of E.noeuds) {
+    const r = E.anneaux[n.niveau]!.r2
+    const [d1, d2] = E.dessines(n.a1, n.a2)
+    pousser(r, d1)
+    pousser(r, d2)
+    // Les axes que la place traverse.
+    for (let axe = Math.ceil(d1 / 90) * 90; axe < d2; axe += 90) pousser(r, axe)
+  }
+  return sortie
+}

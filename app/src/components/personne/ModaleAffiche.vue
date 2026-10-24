@@ -31,12 +31,13 @@ import { lireArbreDAffiche, type ArbreDAffiche, type FichePersonneComplete } fro
 import BoutonBase from '@/components/base/BoutonBase.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import { chargerLesPolices, type PolicesChargees } from '@/affiche/chargement'
-import { ArbreAffiche } from '@/affiche/donnees'
+import { ArbreAffiche, fusionnerCharges } from '@/affiche/donnees'
 import { imprimerPdf, nomDeFichier, svgEnNoeud, telechargerPng, telechargerSvg } from '@/affiche/exports'
 import { Reglages } from '@/affiche/eventail'
 import { afficheEventail, afficheSablier, type ChiffresDuPied } from '@/affiche/fabriquer'
 import { cotesLisibles, FORMATS, formatOriente, page, pixels, pngPossible, RESOLUTIONS, type CleDeFormat } from '@/affiche/formats'
 import type { Scene } from '@/affiche/scene'
+import { afficheSoleil, type CentreDuSoleil } from '@/affiche/soleil'
 import { ascendance } from '@/affiche/structure'
 import { versSvg } from '@/affiche/svg'
 
@@ -62,9 +63,10 @@ const apercu = ref<HTMLDivElement | null>(null)
 
 const unions = computed(() => fiche.unions.filter((u) => u.conjoint !== null))
 const familleId = ref<number | null>(unions.value[0]?.familyId ?? null)
-type Vue = 'eventail' | 'sablier' | 'dense'
+type Vue = 'eventail' | 'soleil' | 'sablier' | 'dense'
 const VUES: { cle: Vue; libelle: string; aide: string }[] = [
   { cle: 'eventail', libelle: 'Éventail', aide: 'les ascendants en demi-cercle' },
+  { cle: 'soleil', libelle: 'Soleil', aide: 'les ascendants tout autour, les descendants au centre' },
   { cle: 'sablier', libelle: 'Sablier', aide: 'une rangée par génération' },
   { cle: 'dense', libelle: 'Sablier dense', aide: 'plus serré, pour les grands arbres' },
 ]
@@ -82,6 +84,19 @@ const SENS: { cle: 'haut' | 'bas'; libelle: string; aide: string }[] = [
   { cle: 'bas', libelle: 'Vers le bas', aide: 'les ancêtres en dessous, les descendants au-dessus' },
 ]
 const sens = ref<'haut' | 'bas'>('haut')
+/** Le soleil : ce que porte le premier anneau, et son orientation (`Reglages.rotation`). */
+const CENTRES: { cle: CentreDuSoleil; libelle: string; aide: string }[] = [
+  { cle: 'couple', libelle: 'Le couple', aide: 'ses descendants au centre' },
+  { cle: 'parents', libelle: 'Ses quatre parents', aide: 'le couple, ses frères et sœurs et leurs descendants au centre' },
+]
+const centre = ref<CentreDuSoleil>('couple')
+const ORIENTATIONS = [
+  { angle: 0, libelle: '0°', aide: 'lui à gauche' },
+  { angle: 90, libelle: '90°', aide: 'lui en haut' },
+  { angle: 180, libelle: '180°', aide: 'lui à droite' },
+  { angle: 270, libelle: '270°', aide: 'lui en bas' },
+] as const
+const rotation = ref<number>(0)
 /** `null` : toutes les générations connues. */
 const profondeur = ref<number | null>(null)
 const format = ref<CleDeFormat>('naturelle')
@@ -148,6 +163,41 @@ const epoux = computed<{ h: number; f: number } | null>(() => {
   return couple && couple.husband !== null && couple.wife !== null ? { h: couple.husband, f: couple.wife } : null
 })
 
+/**
+ * Les familles d'origine des deux époux — le soleil des quatre parents lit aussi leur affiche,
+ * pour avoir les frères et sœurs du couple et leur descendance. `null` s'il en manque une.
+ */
+const famillesDesParents = computed<[number, number] | null>(() => {
+  if (etat.value.etat !== 'pret' || epoux.value === null) return null
+  const A = new ArbreAffiche(etat.value.charge)
+  const fh = A.familleDOrigine(epoux.value.h)
+  const ff = A.familleDOrigine(epoux.value.f)
+  return fh !== null && ff !== null ? [fh, ff] : null
+})
+
+type LectureDesParents = { etat: 'lecture'; cle: string } | { etat: 'pret'; cle: string; charge: ArbreDAffiche } | { etat: 'erreur'; cle: string; erreur: unknown }
+const lectureDesParents = shallowRef<LectureDesParents | null>(null)
+
+watch(
+  [vue, centre, famillesDesParents],
+  async ([v, c, familles]) => {
+    if (v !== 'soleil' || c !== 'parents' || familles === null || etat.value.etat !== 'pret') return
+    const base = etat.value.charge
+    const cle = `${base.famille}:${familles.join('-')}`
+    if (lectureDesParents.value?.cle === cle && lectureDesParents.value.etat !== 'erreur') return
+    lectureDesParents.value = { etat: 'lecture', cle }
+    try {
+      const charges = await Promise.all(familles.map((id) => lues.get(id) ?? lire(id)))
+      familles.forEach((id, i) => lues.set(id, charges[i]!))
+      if (lectureDesParents.value?.cle !== cle) return
+      lectureDesParents.value = { etat: 'pret', cle, charge: fusionnerCharges(base, ...charges) }
+    } catch (e: unknown) {
+      if (lectureDesParents.value?.cle === cle) lectureDesParents.value = { etat: 'erreur', cle, erreur: e }
+    }
+  },
+  { immediate: true },
+)
+
 /** Le nombre de générations d'ascendants que l'arbre connaît. */
 const generationsConnues = computed(() => {
   if (etat.value.etat !== 'pret' || epoux.value === null) return 0
@@ -162,6 +212,17 @@ const production = computed<{ affiche: { scene: Scene; chiffres: ChiffresDuPied 
     if (masque.value) A.masquerVivants()
     const { h, f } = epoux.value
     const options = { profondeur: profondeur.value ?? Infinity }
+    if (vue.value === 'soleil') {
+      const egaliser = CASES.find((c) => c.cle === cases.value)?.egaliser ?? 0
+      const reglages = new Reglages({ egaliser, rotation: rotation.value })
+      if (centre.value !== 'parents' || famillesDesParents.value === null) return { affiche: afficheSoleil(A, h, f, { ...options, reglages }) }
+      const lecture = lectureDesParents.value
+      if (lecture?.etat === 'erreur') return { erreur: lecture.erreur }
+      if (lecture?.etat !== 'pret') return null
+      const AP = new ArbreAffiche(lecture.charge)
+      if (masque.value) AP.masquerVivants()
+      return { affiche: afficheSoleil(AP, h, f, { ...options, centre: 'parents', reglages }) }
+    }
     if (vue.value === 'eventail') {
       const egaliser = CASES.find((c) => c.cle === cases.value)?.egaliser ?? 0
       return { affiche: afficheEventail(A, h, f, { ...options, reglages: new Reglages({ egaliser, sens: sens.value }) }) }
@@ -324,7 +385,26 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
             </label>
           </fieldset>
 
-          <fieldset v-if="vue === 'eventail'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
+          <fieldset v-if="vue === 'soleil'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
+            <legend class="mb-1 p-0 text-xs font-semibold text-attenue">Au premier anneau</legend>
+            <label v-for="c in CENTRES" :key="c.cle" class="flex items-baseline gap-2 text-sm" :data-centre="c.cle">
+              <input v-model="centre" type="radio" name="centre" :value="c.cle" :disabled="c.cle === 'parents' && famillesDesParents === null" />
+              <span>{{ c.libelle }} <span class="text-xs text-attenue">— {{ c.aide }}</span></span>
+            </label>
+            <span v-if="famillesDesParents === null && etat.etat === 'pret'" class="text-xs text-attenue">Les parents de l’un des époux ne sont pas dans l’arbre.</span>
+          </fieldset>
+
+          <fieldset v-if="vue === 'soleil'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
+            <legend class="mb-1 p-0 text-xs font-semibold text-attenue">L’orientation</legend>
+            <div class="flex flex-wrap gap-x-4 gap-y-1">
+              <label v-for="o in ORIENTATIONS" :key="o.angle" class="flex items-baseline gap-1.5 text-sm" :data-orientation="o.angle" :title="o.aide">
+                <input v-model="rotation" type="radio" name="orientation" :value="o.angle" />
+                <span>{{ o.libelle }} <span class="text-xs text-attenue">{{ o.aide }}</span></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset v-if="vue === 'eventail' || vue === 'soleil'" class="m-0 flex flex-col gap-1.5 border-0 p-0">
             <legend class="mb-1 p-0 text-xs font-semibold text-attenue">Les cases</legend>
             <label v-for="c in CASES" :key="c.cle" class="flex items-baseline gap-2 text-sm" :data-cases="c.cle">
               <input v-model="cases" type="radio" name="cases" :value="c.cle" />
@@ -389,6 +469,9 @@ const classeChamp = 'w-full rounded-champ border border-ligne bg-fond px-2.5 py-
           <MessageErreur v-else-if="etat.etat === 'erreur'" :erreur="etat.erreur" titre="L’affiche n’a pas pu être préparée." @action="familleId !== null && charger(familleId)" />
           <p v-else-if="etat.etat === 'pret' && epoux === null" class="m-auto text-sm text-attenue">
             Une affiche a besoin des deux conjoints : l’un d’eux n’est pas dans l’arbre que vous voyez.
+          </p>
+          <p v-else-if="vue === 'soleil' && centre === 'parents' && lectureDesParents?.etat === 'lecture'" class="m-auto text-sm text-attenue" role="status">
+            Lecture des familles des parents…
           </p>
           <p v-else-if="production && 'erreur' in production" class="m-auto text-sm text-alerte" role="alert">
             L’affiche n’a pas pu être dessinée : {{ production.erreur instanceof Error ? production.erreur.message : 'erreur inattendue' }}

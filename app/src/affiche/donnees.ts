@@ -175,6 +175,11 @@ export class ArbreAffiche {
     return id === null ? null : (this.P.get(id) ?? null)
   }
 
+  /** La famille d'origine retenue d'une personne (celle de `parents()`), ou `null`. */
+  familleDOrigine(pid: number): number | null {
+    return this.familleParents.get(pid) ?? null
+  }
+
   parents(pid: number): [Personne | null, Personne | null] {
     const fam = this.familleParents.get(pid)
     if (fam === undefined) return [null, null]
@@ -240,6 +245,32 @@ export class ArbreAffiche {
     }
     return vivants
   }
+}
+
+/**
+ * Plusieurs lectures de la route d'affiche en une — le soleil des quatre parents lit celle du
+ * couple et celles des deux familles des parents. Le couple est celui de la première. Une
+ * famille lue deux fois garde **tous** ses enfants : dans l'ascendance d'une lecture, la route
+ * ne sert que l'enfant de la lignée ; là où la famille est le couple de l'affiche, elle les sert
+ * tous.
+ */
+export function fusionnerCharges(premiere: ArbreDAffiche, ...autres: ArbreDAffiche[]): ArbreDAffiche {
+  const personnes = new Map(premiere.personnes.map((p) => [p.id, p]))
+  const familles = new Map(premiere.familles.map((f) => [f.id, f]))
+  for (const charge of autres) {
+    for (const p of charge.personnes) if (!personnes.has(p.id)) personnes.set(p.id, p)
+    for (const f of charge.familles) {
+      const deja = familles.get(f.id)
+      if (!deja) {
+        familles.set(f.id, f)
+        continue
+      }
+      const [longue, courte] = f.enfants.length > deja.enfants.length ? [f, deja] : [deja, f]
+      const vus = new Set(longue.enfants.map((e) => e.personId))
+      familles.set(f.id, { ...longue, enfants: [...longue.enfants, ...courte.enfants.filter((e) => !vus.has(e.personId))] })
+    }
+  }
+  return { ...premiere, personnes: [...personnes.values()], familles: [...familles.values()] }
 }
 
 function cmp(a: string, b: string): number {
