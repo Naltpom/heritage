@@ -121,7 +121,8 @@ export function optionsDeCreation(brut: PublicKeyCredentialCreationOptionsJSON):
   }
   const { challenge, user, excludeCredentials, ...reste } = json
   return {
-    ...(reste as Omit<PublicKeyCredentialCreationOptions, 'challenge' | 'user' | 'excludeCredentials'>),
+    // Le reste passe tel quel (TypeScript 6 type les extensions binaires : `unknown` d'abord).
+    ...(reste as unknown as Omit<PublicKeyCredentialCreationOptions, 'challenge' | 'user' | 'excludeCredentials'>),
     challenge: base64urlVersOctets(challenge),
     user: { ...user, id: base64urlVersOctets(user.id) },
     ...(excludeCredentials !== undefined ? { excludeCredentials: excludeCredentials.map(descripteur) } : {}),
@@ -141,7 +142,7 @@ export function optionsDeRequete(brut: PublicKeyCredentialRequestOptionsJSON): P
   }
   const { challenge, allowCredentials, ...reste } = json
   return {
-    ...(reste as Omit<PublicKeyCredentialRequestOptions, 'challenge' | 'allowCredentials'>),
+    ...(reste as unknown as Omit<PublicKeyCredentialRequestOptions, 'challenge' | 'allowCredentials'>),
     challenge: base64urlVersOctets(challenge),
     ...(allowCredentials !== undefined ? { allowCredentials: allowCredentials.map(descripteur) } : {}),
   }

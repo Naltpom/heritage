@@ -62,6 +62,12 @@ updates:
     groups:
       mineures-et-correctives:
         update-types: [minor, patch]
+    # TypeScript 7 (le compilateur réécrit en Go) n'expose plus l'API JavaScript dont
+    # vue-tsc se sert (`typescript/lib/tsc`) : `npm run typecheck` ne démarre plus
+    # (#201, 24/10/2026). On reste sur la 6, jusqu'à un vue-tsc qui sache lire la 7.
+    ignore:
+      - dependency-name: typescript
+        versions: [">=7"]
 
   - package-ecosystem: github-actions
     directory: /
