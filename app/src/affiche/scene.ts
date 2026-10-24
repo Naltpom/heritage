@@ -26,6 +26,8 @@ export type Primitive =
       epaisseur?: number
       /** Un trait de liaison : bouts et angles arrondis. */
       arrondi?: boolean
+      /** Un trait en tirets (`stroke-dasharray`, en mm). */
+      tirets?: string
     }
   | { type: 'rect'; x: number; y: number; l: number; h: number; rayon: number; fond: string; trait?: string; epaisseur?: number }
   | { type: 'ligne'; x1: number; y1: number; x2: number; y2: number; trait: string; epaisseur: number }
@@ -40,7 +42,18 @@ export type Primitive =
       /** Longueur imposée (mm) : le texte est serré pour y tenir — avec parcimonie. */
       compression?: number
     }
-  | { type: 'texteSurArc'; cx: number; cy: number; r: number; a1: number; a2: number; texte: string; style: Style }
+  | {
+      type: 'texteSurArc'
+      cx: number
+      cy: number
+      r: number
+      a1: number
+      a2: number
+      texte: string
+      style: Style
+      /** Lu par le bas (le haut des lettres vers le centre) ; absent : selon le côté où tombe l'arc. */
+      dessous?: boolean
+    }
 
 export class Scene {
   readonly elements: Primitive[] = []
@@ -70,12 +83,12 @@ export class Scene {
    * Un texte centré sur un arc de rayon `r`, en degrés : de `a2` (gauche) à `a1` (droite) au-dessus
    * du centre, de `a1` (gauche) à `a2` (droite) en dessous.
    */
-  texteSurArc(cx: number, cy: number, r: number, a1: number, a2: number, t: string, style: Style): void {
+  texteSurArc(cx: number, cy: number, r: number, a1: number, a2: number, t: string, style: Style, dessous?: boolean): void {
     if (!t) return
-    this.elements.push({ type: 'texteSurArc', cx, cy, r, a1, a2, texte: t, style })
+    this.elements.push({ type: 'texteSurArc', cx, cy, r, a1, a2, texte: t, style, ...(dessous !== undefined ? { dessous } : {}) })
   }
 
-  chemin(d: string, fond: string, trait?: string, epaisseur?: number, arrondi = false): void {
+  chemin(d: string, fond: string, trait?: string, epaisseur?: number, arrondi = false, tirets?: string): void {
     this.elements.push({
       type: 'chemin',
       d,
@@ -83,6 +96,7 @@ export class Scene {
       ...(trait !== undefined ? { trait } : {}),
       ...(epaisseur !== undefined ? { epaisseur } : {}),
       ...(arrondi ? { arrondi } : {}),
+      ...(tirets ? { tirets } : {}),
     })
   }
 

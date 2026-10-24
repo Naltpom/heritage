@@ -21,12 +21,13 @@
  * grossissent s'il y a de la place (jusqu'à 140 %). Au-delà, c'est le disque qui grandit.
  */
 import { dessinerDesc, mesurerDesc, peigne, placerDesc, ReglesDesc } from './boites'
+import { CORPS_MAX, CORPS_MIN, Rosace, SoleilInterieur, type Coeur, type FamilleDuCentre } from './centres'
 import type { ArbreAffiche } from './donnees'
 import { etendues, Eventail, pointLibre, Reglages } from './eventail'
-import { legende, lignesDuCouple, MENTION_PAR_DEFAUT, pied, type AfficheProduite, type ChiffresDuPied, type OptionsDAffiche } from './fabriquer'
+import { chiffresDeDescendance, legende, lignesDuCouple, MENTION_PAR_DEFAUT, pied, type AfficheProduite, type ChiffresDuPied, type OptionsDAffiche } from './fabriquer'
 import type { Style } from './polices'
 import { Scene } from './scene'
-import { ascendance, descendance, descendanceDeFamille, type Desc } from './structure'
+import { ascendance, compter, descendance, descendanceDeFamille, type Desc } from './structure'
 
 export type CentreDuSoleil = 'couple' | 'parents'
 
@@ -40,6 +41,9 @@ const ECHELLE_MIN = 0.55
 const ECHELLE_MAX = 1.4
 /** La part du rayon où le texte peut aller : un peu de marge avant les anneaux. */
 const DANS_LE_DISQUE = 0.93
+/** Le soleil intérieur et la rosace occupent le disque jusqu'à cette part de son rayon. */
+const CENTRE_DANS_LE_DISQUE = 0.97
+
 
 const reglesPour = (e: number): ReglesDesc => new ReglesDesc([13, 11, 9.5, 9].map((c) => c * e), 'long', 3 * e, 11 * e, 5.5 * e, 34 * e)
 
@@ -307,25 +311,66 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
     lignes = lignesDuCouple(A, fam, enfants, H, F)
   }
 
-  // D'abord rapetisser les descendants pour qu'ils tiennent dans le disque ; ensuite seulement,
-  // agrandir le disque.
-  const r0 = E.rC
-  let centre = agencer(familles, lignes, ECHELLE_MIN, r0)
-  if (centre) {
-    const e = plusGrand(ECHELLE_MIN, ECHELLE_MAX, (x) => agencer(familles, lignes, x, r0) !== null)
-    centre = agencer(familles, lignes, e, r0)!
-  } else {
-    let rayon = r0
-    while (!agencer(familles, lignes, ECHELLE_MIN, rayon)) rayon *= 1.03
-    // Le plus petit rayon qui suffit, entre le dernier essai raté et le premier réussi.
-    let lo = rayon / 1.03
-    for (let i = 0; i < 12; i++) {
-      const mid = (lo + rayon) / 2
-      if (agencer(familles, lignes, ECHELLE_MIN, mid)) rayon = mid
-      else lo = mid
+  // Le soleil intérieur ou la rosace, à la place de l'arbre de boîtes.
+  const forme = options.descendants ?? 'arbre'
+  let autre: { dessiner: (scene: Scene, cx: number, cy: number) => void; echelle: number } | null = null
+  if (forme !== 'arbre') {
+    const v = (d: Desc): FamilleDuCentre => ({ cote: 'v', couple: null, tete: d })
+    const p = (d: Desc): FamilleDuCentre => ({ cote: 'p', couple: null, tete: d })
+    // Dans le sens des aiguilles d'une montre depuis le haut : la fratrie de la femme à droite,
+    // puis celle du mari, qui revient par la gauche — l'aîné toujours au plus près du couple.
+    const autour: FamilleDuCentre[] = 'seule' in familles ? familles.seule.map((d) => ({ cote: 'n', couple: null, tete: d })) : [...familles.droite.map(v), ...[...familles.gauche].reverse().map(p)]
+    const parNiveau = compter('seule' in familles ? familles.seule : [familles.couple, ...familles.gauche, ...familles.droite])
+    // La femme compte parmi les enfants des quatre parents, même posée en conjointe du mari.
+    if (!('seule' in familles)) parNiveau.set(1, (parNiveau.get(1) ?? 0) + 1)
+    const chiffresTexte = chiffresDeDescendance(parNiveau)
+    const chiffres2 = chiffresTexte.length > 2 ? [chiffresTexte.slice(0, 2).join(' · '), chiffresTexte.slice(2).join(' · ')] : [chiffresTexte.join(' · ')]
+    const coeur: Coeur = { noms: [H.nom, F.nom], couple: null, enfants: [], chiffres: chiffres2.filter(Boolean) }
+    const rotation = reglages.rotation
+    const r0 = E.rC * CENTRE_DANS_LE_DISQUE
+    let b: number
+    let besoin: number
+    if (forme === 'soleil') {
+      const familleCouple: FamilleDuCentre[] = 'seule' in familles ? [] : [{ cote: 'n', couple: [H, F], tete: familles.couple }]
+      const soleil = new SoleilInterieur([...familleCouple, ...autour], coeur, true)
+      const pose = soleil.poseParDefaut(rotation)
+      // Le rayon d'abord, au corps le plus petit ; puis chaque anneau au plus grand qui y tient.
+      besoin = Math.max(r0, soleil.rayonRequis(Array.from({ length: soleil.anneaux }, () => CORPS_MIN), pose))
+      const corps = soleil.corpsPour(besoin, pose, CORPS_MIN, CORPS_MAX)
+      b = corps[0]!
+      autre = { dessiner: (scene, cx, cy) => soleil.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, corps, soleil.poseParDefaut(rotation)), echelle: b / 13 }
+    } else {
+      const enfantsDuCouple = 'seule' in familles ? [] : (familles.couple.unions.find(([c]) => c?.p.id === F.id)?.[2] ?? []).map((d) => d.p)
+      const rosace = new Rosace(autour, 'seule' in familles ? coeur : { ...coeur, couple: [H, F], enfants: enfantsDuCouple }, true)
+      b = rosace.corpsPour(r0, CORPS_MIN, CORPS_MAX)
+      besoin = rosace.rayonRequis(b)
+      autre = { dessiner: (scene, cx, cy) => rosace.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, b, rotation), echelle: b / 13 }
     }
-    centre = agencer(familles, lignes, ECHELLE_MIN, rayon)!
-    E = new Eventail(racineH, racineF, noeuds, new Reglages({ ...reglages, rayonCentralMin: rayon })).calculer()
+    if (besoin > r0 * 1.0001) E = new Eventail(racineH, racineF, noeuds, new Reglages({ ...reglages, rayonCentralMin: besoin / CENTRE_DANS_LE_DISQUE })).calculer()
+  }
+
+  // L'arbre de boîtes : d'abord rapetisser les descendants pour qu'ils tiennent dans le disque ;
+  // ensuite seulement, agrandir le disque.
+  let centre: Agencement | null = null
+  if (!autre) {
+    const r0 = E.rC
+    centre = agencer(familles, lignes, ECHELLE_MIN, r0)
+    if (centre) {
+      const e = plusGrand(ECHELLE_MIN, ECHELLE_MAX, (x) => agencer(familles, lignes, x, r0) !== null)
+      centre = agencer(familles, lignes, e, r0)!
+    } else {
+      let rayon = r0
+      while (!agencer(familles, lignes, ECHELLE_MIN, rayon)) rayon *= 1.03
+      // Le plus petit rayon qui suffit, entre le dernier essai raté et le premier réussi.
+      let lo = rayon / 1.03
+      for (let i = 0; i < 12; i++) {
+        const mid = (lo + rayon) / 2
+        if (agencer(familles, lignes, ECHELLE_MIN, mid)) rayon = mid
+        else lo = mid
+      }
+      centre = agencer(familles, lignes, ECHELLE_MIN, rayon)!
+      E = new Eventail(racineH, racineF, noeuds, new Reglages({ ...reglages, rayonCentralMin: rayon })).calculer()
+    }
   }
 
   const marge = 35.0
@@ -367,7 +412,8 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
 
   const scene = new Scene(W, hauteur)
   E.dessiner(scene, cx, cy)
-  dessinerLeCentre(scene, centre, cx, cy)
+  if (autre) autre.dessiner(scene, cx, cy)
+  else if (centre) dessinerLeCentre(scene, centre, cx, cy)
   if (kl !== null) {
     const y0 = marge + 9 * kl * 0.3528
     legende(scene, marge, y0, H, F, A, kl)
@@ -377,5 +423,5 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
     legende(scene, marge, basSoleil + 22, H, F, A, kl)
     pied(scene, W - marge, basSoleil + 22 + 30 * kl, chiffres, mention, date, 'end', kl)
   }
-  return { scene, eventail: E, echelleDescendants: centre.e, echelleLegende: kl, chiffres, centre: [cx, cy] }
+  return { scene, eventail: E, echelleDescendants: autre ? autre.echelle : centre!.e, echelleLegende: kl, chiffres, centre: [cx, cy] }
 }
