@@ -33,7 +33,8 @@ final class AuthentificationTest extends CoreWebTestCase
         self::assertNull($charge['membre']);
         self::assertArrayHasKey('cercle', $charge);
 
-        // Le cookie de session est le seul porteur : aucun jeton dans la charge utile.
+        // Le cookie de session est le seul porteur du front — le jeton d'API de l'ADR 0021
+        // ne sert que hors navigateur (`JetonsDApiEnHttpTest`) : aucun jeton dans la charge utile.
         $json = json_encode($charge, \JSON_THROW_ON_ERROR);
         self::assertStringNotContainsStringIgnoringCase('token', $json);
         self::assertStringNotContainsStringIgnoringCase('password', $json);

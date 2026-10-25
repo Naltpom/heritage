@@ -36,6 +36,36 @@ security:
             pattern: ^/(_profiler|_wdt|assets|build)/
             security: false
 
+        # Le JETON D'API (ADR 0021, § 1.6 du contrat) : `Authorization: Bearer hrt_…`, hors
+        # navigateur. Avant `main`, parce que le premier pare-feu qui correspond prend toute
+        # la requête : `Core\Security\RequeteParJetonDApi` ne lui donne que les requêtes
+        # `/api` qui portent un en-tête au schéma `Bearer` (pas un `Basic` posé par un
+        # intermédiaire, pas une requête à cookie). Une requête qui porte les deux est jugée
+        # sur son Bearer seul, sans session (`Core\EventSubscriber\JetonSansSessionSubscriber`).
+        #
+        # Sans état : rien n'est gardé d'une requête à l'autre, chaque appel présente son
+        # jeton. Pas `lazy` : un jeton présenté est toujours jugé, y compris sur une route
+        # publique — un jeton faux n'y passe pas pour anonyme.
+        #
+        # Le même fournisseur, le même `user_checker` (un compte suspendu n'obtient pas plus
+        # de jeton que de session) et le même point d'entrée que `main` ; `access_control`
+        # plus bas vaut pour les deux pare-feu. Ni `json_login`, ni `logout`, ni
+        # `switch_user` : un jeton ne se connecte pas, ne se déconnecte pas, n'incarne pas.
+        api_jetons:
+            request_matcher: App\Module\Core\Security\RequeteParJetonDApi
+            stateless: true
+            provider: entity_utilisateurs
+            user_checker: App\Module\Core\Security\UserChecker
+            entry_point: App\Module\Core\Security\JsonAuthenticationEntryPoint
+            access_token:
+                # Mal formé, inconnu, expiré, révoqué : un seul refus (voir la classe).
+                token_handler: App\Module\Core\Security\JetonDApiHandler
+                # L'en-tête `Authorization: Bearer`, et lui seul : ni paramètre d'URL (il
+                # finirait dans les journaux d'accès), ni corps de formulaire.
+                token_extractors: header
+                # Le `401` du point d'entrée, au caractère près — compte suspendu compris.
+                failure_handler: App\Module\Core\Security\RefusDuJetonDApi
+
         main:
             lazy: true
             provider: entity_utilisateurs
@@ -109,7 +139,8 @@ security:
         # d'audit, les réglages, la bascule « voir comme un membre » et la gestion des
         # comptes vivent tous derrière.
         - { path: ^/api/administration, roles: ROLE_ADMIN }
-        # Le filet : toute route `/api` non nommée ci-dessus exige une session.
+        # Le filet : toute route `/api` non nommée ci-dessus exige une session — ou un jeton
+        # d'API, qui passe par ces mêmes règles (ADR 0021).
         - { path: ^/api, roles: ROLE_USER }
 
 when@test:
