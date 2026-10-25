@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Core\EventSubscriber;
 
+use App\Module\Core\Security\JetonDApiAuthentifie;
 use App\Module\Core\Service\PreuveDIdentiteRecente;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\Security\Http\Event\LoginSuccessEvent;
@@ -32,6 +33,14 @@ final readonly class PreuveDIdentiteSubscriber implements EventSubscriberInterfa
 
     public function surConnexion(LoginSuccessEvent $event): void
     {
+        // Un jeton d'API ne prouve jamais une identité récente, et une requête par jeton
+        // n'ouvre aucune session (ADR 0021 § 4). Or `access_token` émet ce succès à chaque
+        // requête : la marque ferait passer le jeton pour une preuve fraîche, et poserait
+        // une session et son cookie.
+        if (null !== JetonDApiAuthentifie::depuisLeJetonDeSecurite($event->getAuthenticatedToken())) {
+            return;
+        }
+
         $requete = $event->getRequest();
 
         // Un pare-feu sans état n'a pas de session où écrire — il n'y en a pas ici, mais
