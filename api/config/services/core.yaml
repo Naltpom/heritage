@@ -120,6 +120,10 @@ services:
         alias: App\Module\Core\Service\QuotasDUsage
 
 parameters:
+    # Le plafond de requêtes par heure et par jeton d'API (ADR 0021, § 1.9 du contrat) ;
+    # voir `Core\Service\LimiteursDesJetonsDApi`.
+    app.core.jeton_api.requetes_par_heure: 2000
+
     # L'expéditeur des courriels que Core envoie lui-même — aujourd'hui le seul : le lien
     # de confirmation d'un changement de courriel (§ 2.5). Même variable d'environnement
     # que Membership, et le même repli : Core ne peut pas lire un paramètre de Membership
@@ -154,6 +158,8 @@ when@test:
         App\Module\Core\Service\DiffusionPush: ~
 
     parameters:
+        # Abaissé pour que les tests atteignent le plafond sans 2 000 requêtes.
+        app.core.jeton_api.requetes_par_heure: 12
         # Un DSN qui n'est pas `null:` : la fonctionnalité existe en test. Le transport
         # effectif est toujours celui de `framework.mailer.dsn`, donc rien ne part.
         app.core.mailer_dsn: 'smtp://tests-collecte-sans-envoi'

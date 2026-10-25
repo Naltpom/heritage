@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Core\Security;
 
+use App\Module\Core\Service\LimiteursDesJetonsDApi;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
@@ -37,15 +38,25 @@ use Symfony\Component\Security\Http\Authentication\AuthenticationFailureHandlerI
  * Un jeton se vole et se rejoue sans lui ; son porteur n'apprend donc pas que le compte
  * existe et qu'il est suspendu. Le commanditaire, lui, le sait par
  * `heritage:jeton-api:lister`.
+ *
+ * ## Chaque refus compte un échec
+ *
+ * Ce gestionnaire est le lieu unique où un jeton présenté est refusé : il compte l'échec de
+ * l'adresse ({@see LimiteursDesJetonsDApi}, 10 sur 15 minutes). Le contrôle, lui, se fait
+ * avant le pare-feu, par `LimitesDesJetonsDApiSubscriber`.
  */
 final readonly class RefusDuJetonDApi implements AuthenticationFailureHandlerInterface
 {
-    public function __construct(private JsonAuthenticationEntryPoint $pointDEntree)
-    {
+    public function __construct(
+        private JsonAuthenticationEntryPoint $pointDEntree,
+        private LimiteursDesJetonsDApi $limiteurs,
+    ) {
     }
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): Response
     {
+        $this->limiteurs->compterUnEchec($request);
+
         return $this->pointDEntree->start($request, $exception);
     }
 }
