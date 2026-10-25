@@ -1668,6 +1668,10 @@ const branchesBandeau = computed<BrancheMonde[]>(() => {
 
 /** Une rangée trop basse n'a la place que pour une ligne (d'après l'instantané). */
 const gouttiereCompacte = computed(() => (disposition.value?.pasRangee ?? 0) * syDe(rendu.value.s, canevas.value) < 38)
+/** « Votre génération » n'est pas la vôtre sur l'arbre d'un autre (`depuis`) : « Sa génération », comme au pedigree. */
+function libelleDeLaRangee(rangee: number, libelle: string): string {
+  return rangee === 0 && pointDeVue.value ? 'Sa génération' : libelle
+}
 /** Les libellés de la gouttière, en coordonnées monde : `GouttiereGenerations` les place à chaque image. */
 const etiquettesGouttiere = computed<EtiquetteDeGeneration[]>(() => {
   const d = disposition.value
@@ -1684,8 +1688,8 @@ const etiquettesGouttiere = computed<EtiquetteDeGeneration[]>(() => {
           ? d.parId.has(egoDuLecteur.value ?? '') ? (prenomDuPointDeVue.value ?? 'Vous') : 'Racine'
           : `${g.rangee > 0 ? '+' : ''}${g.rangee}`
         : compact && annee
-          ? `${g.libelle} · ${annee}`
-          : g.libelle,
+          ? `${libelleDeLaRangee(g.rangee, g.libelle)} · ${annee}`
+          : libelleDeLaRangee(g.rangee, g.libelle),
       // Une rangée trop basse n'a la place que pour une ligne.
       annee: compact ? '' : mobile ? annee : (g.annees ?? ''),
     }
@@ -2044,7 +2048,7 @@ onBeforeUnmount(() => {
           <InterrupteurFiltre
             v-if="aDesAlliances"
             :libelle="`Familles par alliance · ${effectifAlliances}`"
-            sous="les familles des conjoints de vos proches"
+            :sous="pointDeVue ? 'les familles des conjoints de ses proches' : 'les familles des conjoints de vos proches'"
             :actif="avecAlliances"
             @basculer="basculerAlliances(!avecAlliances)"
           />
@@ -2066,7 +2070,7 @@ onBeforeUnmount(() => {
           <InterrupteurFiltre
             v-if="effectifSansLienConnu > 0"
             :libelle="`Sans lien connu · ${effectifSansLienConnu}`"
-            sous="aucun lien ne les relie encore à vous"
+            :sous="pointDeVue ? 'aucun lien ne les relie encore à cette personne' : 'aucun lien ne les relie encore à vous'"
             :actif="avecSansLien"
             @basculer="basculerSansLien(!avecSansLien)"
           />
@@ -2372,7 +2376,7 @@ onBeforeUnmount(() => {
             <span
               v-if="ficheChoisie.parente === 'alliance'"
               class="rounded-pastille border border-dashed border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]"
-              title="Sa famille est liée à la vôtre par un mariage."
+              :title="pointDeVue ? 'Sa famille est liée à celle de cette personne par un mariage.' : 'Sa famille est liée à la vôtre par un mariage.'"
             >famille par alliance</span>
             <span v-else class="rounded-pastille border border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]">{{
               libelleBranche(ficheChoisie.noeud.branch)
@@ -2380,7 +2384,7 @@ onBeforeUnmount(() => {
             <span
               v-if="ficheChoisie.detache"
               class="rounded-pastille border border-dashed border-ligne px-2.5 py-px text-xs text-attenue"
-              title="Sans lien connu avec vous : génération estimée d’après les dates."
+              :title="`Sans lien connu avec ${pointDeVue ? 'cette personne' : 'vous'} : génération estimée d’après les dates.`"
             >sans lien connu · position estimée</span>
             <span v-if="ficheChoisie.noeud.enAttente" class="rounded-pastille border border-accent px-2.5 py-px text-xs text-accent">en attente</span>
           </div>
@@ -2475,7 +2479,7 @@ onBeforeUnmount(() => {
           <span
             v-if="ficheChoisie.parente === 'alliance'"
             class="rounded-pastille border border-dashed border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]"
-            title="Sa famille est liée à la vôtre par un mariage."
+            :title="pointDeVue ? 'Sa famille est liée à celle de cette personne par un mariage.' : 'Sa famille est liée à la vôtre par un mariage.'"
           >famille par alliance</span>
           <span v-else class="rounded-pastille border border-ligne px-2.5 py-px text-xs text-[var(--hi-gouttiere-texte)]">{{
             libelleBranche(ficheChoisie.branche)
@@ -2483,7 +2487,7 @@ onBeforeUnmount(() => {
           <span
             v-if="ficheChoisie.detache"
             class="rounded-pastille border border-dashed border-ligne px-2.5 py-px text-xs text-attenue"
-            title="Sans lien connu avec vous : génération estimée d’après les dates."
+            :title="`Sans lien connu avec ${pointDeVue ? 'cette personne' : 'vous'} : génération estimée d’après les dates.`"
           >sans lien connu</span>
           <span v-if="ficheChoisie.noeud.enAttente" class="rounded-pastille border border-accent px-2.5 py-px text-xs text-accent">en attente</span>
         </div>

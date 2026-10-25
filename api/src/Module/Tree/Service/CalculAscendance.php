@@ -298,10 +298,15 @@ final class CalculAscendance
      *    conjoint entre, sa famille à lui non. C'est la forme du cercle de l'ADR 0003 (« les
      *    conjoints sont ajoutés en une seule passe, en dernier, et ne propagent rien »),
      *    sans sa borne de `N` générations ;
-     * 3. **la famille du conjoint du lecteur** — tout ce qu'on atteint depuis ses
-     *    conjoints, par n'importe quel lien, **sans repasser par la famille** : leurs
-     *    parents et leur ascendance, leur fratrie, les enfants d'une autre union. C'est ce
-     *    que le filtre « Famille du conjoint » couvrait déjà côté client, conservé tel quel ;
+     * 3. **la famille du conjoint du lecteur** — la même forme que 1 et 2, depuis chacun
+     *    de ses conjoints : **son sang** (son ascendance, puis toute la descendance de
+     *    chacun : sa fratrie, ses neveux, les enfants d'une autre union), puis les
+     *    conjoints de ce sang **en une seule passe** (l'autre parent de ces enfants, le
+     *    mari de sa sœur), hors famille du lecteur. Jusqu'au 25/10/2026, c'était « tout ce
+     *    qu'on atteint depuis ses conjoints, par n'importe quel lien » : vu de l'oncle par
+     *    alliance du commanditaire, le parcours passait par la sœur de sa femme, puis par
+     *    son mari, et rangeait toute l'ascendance de ce mari — sans aucun lien avec le
+     *    lecteur — dans la famille de sa femme (3 267 fiches dans un seul quart) ;
      * 4. **le reste est alliance**, et chacun y reçoit son **pont** : la personne
      *    non-alliance la plus proche par les liens, celle par laquelle son groupe se
      *    rattache — le mari de la tante, pour toute l'ascendance du mari de la tante. Le
@@ -365,28 +370,41 @@ final class CalculAscendance
             }
         }
 
-        // 3. La famille du conjoint du lecteur : depuis chacun de ses conjoints, sans
-        //    jamais repasser par la famille. Le conjoint lui-même est « famille » (2.).
-        $cote = [];
-        $pile = [];
+        // 3. La famille du conjoint du lecteur : SON sang (comme 1.), puis les conjoints de
+        //    ce sang en une seule passe (comme 2.), hors famille. Le conjoint lui-même est
+        //    « famille » (2.). Jamais « tout ce qu'on atteint » : on remonterait par le mari
+        //    de sa sœur jusqu'à des ascendances sans lien avec le lecteur.
+        $sangDuConjoint = [];
 
         foreach ($adjacence['conjoints'][$ego] ?? [] as $conjoint) {
-            foreach ($voisins($conjoint) as $voisin) {
-                $pile[] = $voisin;
+            $pile = $this->remonte($adjacence['parents'], $conjoint);
+
+            while ([] !== $pile) {
+                $courant = array_pop($pile);
+
+                if (isset($sangDuConjoint[$courant])) {
+                    continue;
+                }
+
+                $sangDuConjoint[$courant] = true;
+
+                foreach ($adjacence['enfants'][$courant] ?? [] as $enfant) {
+                    $pile[] = $enfant;
+                }
             }
         }
 
-        while ([] !== $pile) {
-            $courant = array_pop($pile);
+        $cote = [];
 
-            if (isset($famille[$courant]) || isset($cote[$courant])) {
-                continue;
+        foreach (array_keys($sangDuConjoint) as $personne) {
+            if (!isset($famille[$personne])) {
+                $cote[$personne] = true;
             }
 
-            $cote[$courant] = true;
-
-            foreach ($voisins($courant) as $voisin) {
-                $pile[] = $voisin;
+            foreach ($adjacence['conjoints'][$personne] ?? [] as $conjoint) {
+                if (!isset($famille[$conjoint])) {
+                    $cote[$conjoint] = true;
+                }
             }
         }
 

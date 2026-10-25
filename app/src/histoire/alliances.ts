@@ -177,23 +177,48 @@ function classerSurLiens(graphe: Graphe, l: Liens): Map<string, ClasseDeParente>
       }
 
   /*
-   * La famille du conjoint DU LECTEUR, telle que le serveur la calcule (§ 5.2) : tout ce
-   * qu'on atteint depuis ses conjoints, par n'importe quel lien, sans repasser par la
-   * famille — ses parents, sa fratrie, mais aussi les enfants d'une autre union et leur
-   * autre parent. (Le filtre « Famille du conjoint », lui, garde sa propre règle,
-   * `familleDesConjoints()`, inchangée : ce classement ne sert qu'à ne pas prendre ces
-   * personnes pour une famille par alliance.)
+   * La famille du conjoint DU LECTEUR, telle que le serveur la calcule (§ 5.2) : SON sang
+   * — son ascendance, puis toute leur descendance (sa fratrie, ses neveux, les enfants
+   * d'une autre union) —, puis les conjoints de ce sang en une seule passe (l'autre parent
+   * de ces enfants, le mari de sa sœur), hors famille. Jusqu'au 25/10/2026, c'était tout
+   * ce qu'on atteint depuis lui, par n'importe quel lien : par le mari de sa sœur, on
+   * remontait des ascendances sans lien avec le lecteur. (Le filtre « Famille du
+   * conjoint », lui, garde sa propre règle, `familleDesConjoints()`, inchangée : ce
+   * classement ne sert qu'à ne pas prendre ces personnes pour une famille par alliance.)
    */
   const conjoint = new Set<string>()
   {
-    const file: string[] = []
-    for (const f of l.epouxDans.get(ego) ?? [])
-      for (const c of l.epoux.get(f) ?? []) if (c !== ego) file.push(...voisins(l, c))
-    while (file.length) {
+    const departs: string[] = []
+    for (const f of l.epouxDans.get(ego) ?? []) for (const c of l.epoux.get(f) ?? []) if (c !== ego) departs.push(c)
+    const ascendance = new Set(departs)
+    for (const file = [...departs]; file.length; ) {
       const p = file.shift()!
-      if (famille.has(p) || conjoint.has(p)) continue
-      conjoint.add(p)
-      file.push(...voisins(l, p))
+      for (const f of l.enfantDans.get(p) ?? [])
+        for (const parent of l.epoux.get(f) ?? []) {
+          if (ascendance.has(parent)) continue
+          ascendance.add(parent)
+          file.push(parent)
+        }
+    }
+    const sangDuConjoint = new Set(ascendance)
+    for (const file = [...ascendance]; file.length; ) {
+      const p = file.shift()!
+      for (const f of l.epouxDans.get(p) ?? [])
+        for (const e of l.enfants.get(f) ?? []) {
+          if (sangDuConjoint.has(e)) continue
+          sangDuConjoint.add(e)
+          file.push(e)
+        }
+    }
+    for (const p of sangDuConjoint) {
+      if (!famille.has(p)) conjoint.add(p)
+      for (const f of l.epouxDans.get(p) ?? [])
+        for (const c of l.epoux.get(f) ?? []) {
+          if (famille.has(c) || sangDuConjoint.has(c) || conjoint.has(c)) continue
+          conjoint.add(c)
+          // Le mari de sa sœur : un pont, comme les conjoints purs de la famille.
+          ponts.push(c)
+        }
     }
   }
 
@@ -201,8 +226,8 @@ function classerSurLiens(graphe: Graphe, l: Liens): Map<string, ClasseDeParente>
    * Les ALLIANCES, groupe par groupe : un parcours en largeur parti de tous les ponts à
    * la fois, qui ne traverse ni la famille ni celle du conjoint du lecteur. Chaque
    * allié prend le pont le plus proche ; à égalité, le premier dans l'ordre des nœuds.
-   * Un voisin d'une personne du SANG est toujours de la famille (ses parents, ses
-   * enfants, ses conjoints le sont) : une alliance ne s'atteint que par un conjoint pur.
+   * Un voisin d'une personne du SANG — du lecteur ou de son conjoint — est toujours de la
+   * famille ou de celle du conjoint : une alliance ne s'atteint que par un conjoint pur.
    */
   const pontDe = new Map<string, string>()
   const ordre = new Map(l.personnes.map((p, i) => [p, i]))

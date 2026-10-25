@@ -65,9 +65,15 @@ function arbre(): { graphe: Graphe; id: Record<string, string> } {
   // Le conjoint de l'ego et ses parents : « Famille du conjoint ».
   const conjoint = p('conjoint')
   f([ego, conjoint], [p('enfant')])
-  f([p('beauPere'), p('belleMere')], [conjoint])
+  f([p('beauPere'), p('belleMere')], [conjoint, p('belleSoeur', 'feminin')])
   // Le conjoint de l'ego a un fils d'une autre union : « conjoint » aussi, comme au serveur.
   f([conjoint, p('exDuConjoint')], [p('beauFils')])
+  // La sœur du conjoint a épousé un homme qui a son père et un frère (vu de l'oncle par
+  // alliance du commanditaire, 25/10/2026) : lui et leurs enfants sont du côté du conjoint,
+  // sa famille à lui est par alliance.
+  const mariDeLaBelleSoeur = p('mariDeLaBelleSoeur', 'masculin')
+  f([mariDeLaBelleSoeur, id['belleSoeur']!], [p('neveuDuConjoint')])
+  f([p('pereDuMariDeLaBelleSoeur', 'masculin')], [mariDeLaBelleSoeur, p('frereDuMariDeLaBelleSoeur')])
   // Le conjoint de l'enfant, et ses parents : par alliance (conjoint d'un descendant).
   const gendre = p('gendre')
   f([id['enfant']!, gendre], [])
@@ -106,10 +112,17 @@ describe('classerParente — sur les liens', () => {
   })
 
   it('range comme le serveur les enfants d’une autre union du conjoint : « conjoint », pas alliance', () => {
-    // § 5.2 : tout ce qu'on atteint depuis le conjoint du lecteur sans repasser par la
-    // famille. Le repli local ne doit pas masquer ce que le serveur aurait montré.
+    // § 5.2 : le sang du conjoint du lecteur, et les conjoints de ce sang. Le repli local
+    // ne doit pas masquer ce que le serveur aurait montré.
     expect(de('beauFils')).toEqual({ parente: 'conjoint', pont: null })
     expect(de('exDuConjoint')).toEqual({ parente: 'conjoint', pont: null })
+  })
+
+  it('arrête la famille du conjoint à son sang et aux conjoints de ce sang', () => {
+    for (const cle of ['belleSoeur', 'neveuDuConjoint', 'mariDeLaBelleSoeur']) expect(de(cle), cle).toEqual({ parente: 'conjoint', pont: null })
+    // Le père et le frère du mari de sa sœur : aucun lien avec le lecteur.
+    for (const cle of ['pereDuMariDeLaBelleSoeur', 'frereDuMariDeLaBelleSoeur'])
+      expect(de(cle), cle).toEqual({ parente: 'alliance', pont: id['mariDeLaBelleSoeur'] })
   })
 
   it('range tout le reste par alliance, chacun derrière son pont', () => {
@@ -127,15 +140,17 @@ describe('classerParente — sur les liens', () => {
 
   it('groupe les alliances par pont', () => {
     const g = groupesParAlliance(graphe)
-    expect(new Set(g.keys())).toEqual(new Set([id['mari'], id['beauFrere'], id['gendre']]))
+    expect(new Set(g.keys())).toEqual(new Set([id['mari'], id['beauFrere'], id['gendre'], id['mariDeLaBelleSoeur']]))
     expect(g.get(id['mari']!)!.sort()).toEqual(['mariPere', 'mariMere', 'mariFrere', 'exFemme', 'demiCousin'].map((k) => id[k]!).sort())
   })
 
   it('les retire du graphe, pont compris dans ce qui reste', () => {
     const sans = sansFamillesParAlliance(graphe)
     const restants = new Set(sans.noeuds.map((x) => x.id))
-    for (const cle of ['mariPere', 'exFemme', 'demiCousin', 'beauFrereMere', 'gendrePere']) expect(restants.has(id[cle]!)).toBe(false)
-    for (const cle of ['mari', 'beauFrere', 'gendre', 'beauPere', 'ilot']) expect(restants.has(id[cle]!)).toBe(true)
+    for (const cle of ['mariPere', 'exFemme', 'demiCousin', 'beauFrereMere', 'gendrePere', 'pereDuMariDeLaBelleSoeur', 'frereDuMariDeLaBelleSoeur'])
+      expect(restants.has(id[cle]!), cle).toBe(false)
+    for (const cle of ['mari', 'beauFrere', 'gendre', 'beauPere', 'ilot', 'belleSoeur', 'mariDeLaBelleSoeur', 'neveuDuConjoint'])
+      expect(restants.has(id[cle]!), cle).toBe(true)
     expect(sans.aretes.every((a) => restants.has(a.de) && restants.has(a.vers))).toBe(true)
     expect(aDesFamillesParAlliance(graphe)).toBe(true)
     expect(aDesFamillesParAlliance(sans)).toBe(false)
@@ -152,7 +167,10 @@ describe('classerParente — sur les liens', () => {
   })
 
   it('reconnaît la famille du conjoint comme avant', () => {
-    expect(familleDesConjoints(graphe)).toEqual(new Set([id['beauPere'], id['belleMere']]))
+    // Ses parents, et tout ce qui s'y rattache sans repasser par le lecteur : la sœur du
+    // conjoint, son ménage, et la famille de son mari — décocher le filtre les retire.
+    const attendus = ['beauPere', 'belleMere', 'belleSoeur', 'mariDeLaBelleSoeur', 'neveuDuConjoint', 'pereDuMariDeLaBelleSoeur', 'frereDuMariDeLaBelleSoeur']
+    expect(familleDesConjoints(graphe)).toEqual(new Set(attendus.map((cle) => id[cle])))
   })
 })
 

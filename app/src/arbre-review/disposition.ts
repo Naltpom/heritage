@@ -120,22 +120,33 @@ export const PRIX_D_UNE_FRATRIE_COUPEE = PRIX_D_UN_CROISEMENT
 const PASSAGES_DE_RAPPROCHEMENT = 3
 const PERSONNES_POUR_TOUS_LES_PASSAGES = 6000
 
-/** Les ordres de rectangles possibles : chaque paire de quarts dans les deux sens, le conjoint avant ou après la mère. */
+/**
+ * Les ordres de rectangles possibles : chaque paire de quarts dans les deux sens — celles du
+ * conjoint comprises —, le conjoint avant ou après la mère.
+ *
+ * Les paires du conjoint ont été figées (`cpm, cpp, cmp, cmm`) jusqu'au 25/10/2026 : sans
+ * conséquence sur l'arbre du commanditaire, qui n'a pas de conjoint, elles éloignaient sur
+ * celui de son oncle par alliance (`/arbre?depuis=`) le tronc — où est sa femme — des
+ * parents de celle-ci, rangés en `cpp` : 328 000 px de large au lieu de 148 000, 172
+ * croisements au lieu de 132.
+ */
 function ordresDesColonnes(s: ReturnType<typeof preparer>): CleDeGroupe[][] {
   const presents = new Set(s.parties.map((p) => p.groupe))
   const sens = (paire: CleDeGroupe[]): CleDeGroupe[][] => {
     const l = paire.filter((g) => presents.has(g))
     return l.length > 1 ? [l, [...l].reverse()] : [l]
   }
-  const conjoint = (['cpm', 'cpp', 'cmp', 'cmm'] as CleDeGroupe[]).filter((g) => presents.has(g))
+  const conjoints: CleDeGroupe[][] = []
+  for (const pere of sens(['cpm', 'cpp'])) for (const mere of sens(['cmp', 'cmm'])) conjoints.push([...pere, ...mere])
   const fin = (['alliances', 'sansLien'] as CleDeGroupe[]).filter((g) => presents.has(g))
   const tronc: CleDeGroupe[] = presents.has('tr') ? ['tr'] : []
   const ordres: CleDeGroupe[][] = []
   for (const paternel of sens(['pp', 'pm']))
-    for (const maternel of sens(['mp', 'mm'])) {
-      ordres.push([...paternel, ...tronc, ...maternel, ...conjoint, ...fin])
-      if (maternel.length && conjoint.length) ordres.push([...paternel, ...tronc, ...conjoint, ...maternel, ...fin])
-    }
+    for (const maternel of sens(['mp', 'mm']))
+      for (const conjoint of conjoints) {
+        ordres.push([...paternel, ...tronc, ...maternel, ...conjoint, ...fin])
+        if (maternel.length && conjoint.length) ordres.push([...paternel, ...tronc, ...conjoint, ...maternel, ...fin])
+      }
   return ordres
 }
 
