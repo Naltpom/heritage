@@ -94,6 +94,7 @@ import {
   NOM_D_UNE_PERSONNE_VIVANTE,
   analyserErreur,
   chargerGraphe,
+  lireFichePersonne,
   oublierEtag,
   retenirEtag,
   type Graphe,
@@ -177,6 +178,7 @@ import IdentiteFiche from '@/components/personne/IdentiteFiche.vue'
 import ParenteFiche from '@/components/personne/ParenteFiche.vue'
 import FaitsFiche from '@/components/personne/FaitsFiche.vue'
 import { useSession } from '@/composables/useSession'
+import { useGestesFiche } from '@/components/personne/gestes'
 import LecteurVideo from '@/components/video/LecteurVideo.vue'
 import { videoParId } from '@/lib/videos'
 
@@ -550,7 +552,8 @@ interface GrapheObtenu {
  * poser `grapheGarde`, s'il est toujours le dernier à avoir demandé.
  */
 async function obtenirLeGraphe(c: Chronometre, signal: AbortSignal): Promise<GrapheObtenu> {
-  const identite = identiteDuLecteur(session.value)
+  if (depuis.value !== null) return obtenirSansMemoire(c, signal, depuis.value)
+  const identite = identiteDeLaVue()
   const etag = identite ? await c.mesureAsync('mémoire locale : ETag', () => memoireDeLArbre.etagGarde(identite)) : null
   if (etag !== null) retenirEtag(CLE_ETAG_GRAPHE, etag)
   else oublierEtag(CLE_ETAG_GRAPHE)
@@ -568,6 +571,32 @@ async function obtenirLeGraphe(c: Chronometre, signal: AbortSignal): Promise<Gra
   const garde = identite && recu !== null && !recu.startsWith('W/') ? { identite, etag: recu } : null
   if (garde) void memoireDeLArbre.garderLeGraphe(garde.identite, garde.etag, donnees)
   return { graphe: donnees, inchange: false, garde }
+}
+
+/** Le dernier arbre « depuis » reçu, gardé en main seulement : de quoi revalider au retour sur l'onglet. */
+let depuisEnMain: { identite: string; etag: string; graphe: Graphe } | null = null
+
+/**
+ * L'arbre d'une autre personne (`depuis`) ne se garde PAS d'un F5 à l'autre : la mémoire de
+ * l'arbre n'a qu'un lecteur à la fois, et l'y ranger effacerait celui de l'administrateur
+ * (et ses dispositions). Il se revalide quand même, contre le dernier reçu en main : un
+ * retour sur l'onglet ne redessine rien s'il n'a pas changé.
+ */
+async function obtenirSansMemoire(c: Chronometre, signal: AbortSignal, personId: number): Promise<GrapheObtenu> {
+  const identite = identiteDeLaVue()
+  const enMain = depuisEnMain !== null && depuisEnMain.identite === identite ? depuisEnMain : null
+  if (enMain) retenirEtag(CLE_ETAG_GRAPHE, enMain.etag)
+  else oublierEtag(CLE_ETAG_GRAPHE)
+  let reponse = await c.mesureAsync('requête + lecture JSON', () => chargerGraphe(signal, personId))
+  if (reponse.statut === 'inchange') {
+    if (enMain) return { graphe: enMain.graphe, inchange: true, garde: null }
+    oublierEtag(CLE_ETAG_GRAPHE)
+    reponse = await c.mesureAsync('requête + lecture JSON', () => chargerGraphe(signal, personId))
+    if (reponse.statut === 'inchange') throw new Error("L'arbre n'a pas pu être chargé.")
+  }
+  const { donnees, etag } = reponse
+  depuisEnMain = identite && etag !== null && !etag.startsWith('W/') ? { identite, etag, graphe: donnees } : null
+  return { graphe: donnees, inchange: false, garde: null }
 }
 
 /** Le dernier chargement lancé : un chargement abandonné (autre lecteur, démontage) n'écrit rien. */
@@ -822,15 +851,36 @@ watch(
 /** La jauge de zoom, pour l'administration seulement : un repère chiffré sur
  *  les captures d'écran (« à 30 % les noms se chevauchent »), pas un réglage. */
 const { administrateur, session, rattache, vueEmpruntee } = useSession()
+const { peutVoirSonArbre: peutChoisirLePointDeVue } = useGestesFiche()
+const route = useRoute()
+const routeur = useRouter()
+/*
+ * L'ARBRE D'UNE AUTRE PERSONNE (`/arbre?depuis=<personId>`, demande du 25/10/2026) :
+ * l'administrateur regarde l'arbre depuis quelqu'un — typiquement sans compte, que
+ * « voir comme » ne sait pas emprunter. Le serveur dessine le graphe depuis elle (ego,
+ * rangées, quarts, parentés) ; le cercle reste celui de l'administrateur. Pour un membre,
+ * ou sous la bascule, le paramètre est ignoré : le serveur le refuserait.
+ */
+const depuis = computed<number | null>(() => {
+  if (!peutChoisirLePointDeVue.value) return null
+  const id = Number(route.query['depuis'])
+  return Number.isInteger(id) && id > 0 ? id : null
+})
+/** Un autre point de vue est un autre lecteur : l'arbre se relit (`relecture`), rien ne se mélange. */
+const identiteDeLaVue = (): string | null => identiteDuLecteur(session.value, depuis.value)
 const jauge = computed(() => (administrateur.value && disposition.value ? jaugeDuZoom(rendu.value.s, canevas.value, seuilDesNoms.value) : null))
 const ensemble = computed(() => niveau.value === 0)
+/** « Son arbre » : l'administrateur, hors bascule, sur une personne validée qui n'est pas déjà l'ego. */
+function peutVoirSonArbre(f: FicheHistoire): boolean {
+  return peutChoisirLePointDeVue.value && f.noeud.personId !== null && f.id !== disposition.value?.ego
+}
 
 /*
  * Le graphe relu quand le lecteur change, et au retour sur l'onglet ; les requêtes en
  * vol abandonnées au démontage (`arbre2/relecture.ts`).
  */
 const relecture = useRelectureDeLArbre({
-  identite: () => identiteDuLecteur(session.value),
+  identite: identiteDeLaVue,
   nouveauLecteur: changerDeLecteur,
   revalider: () => void revaliderEnSilence(),
 })
@@ -855,8 +905,6 @@ function mesurer(): void {
 
 let vueAReprendre: VueMemorisee | null = null
 let personneDemandee: number | null = null
-const route = useRoute()
-const routeur = useRouter()
 
 /** Le premier cadrage : la vue reprise au retour d'une fiche, sinon ajusté à la largeur. */
 function ajuster(): void {
@@ -874,9 +922,11 @@ function ajuster(): void {
   if (cible) {
     selection.value = cible.id
     voler(1, cible.cx, cible.y + cible.h / 2)
-    // La requête a servi : on la retire, pour qu'un rechargement reparte de l'arbre entier.
-    // Le routeur republie alors la page et vide le résumé : on le remet.
-    void routeur.replace({ path: route.path }).then(() => definirResume(compteur.value))
+    // La requête a servi : on la retire, pour qu'un rechargement reparte de l'arbre entier
+    // — vu de la même personne : `depuis` reste. Le routeur republie alors la page et vide
+    // le résumé : on le remet.
+    const query = depuis.value !== null ? { depuis: String(depuis.value) } : {}
+    void routeur.replace({ path: route.path, query }).then(() => definirResume(compteur.value))
   }
 }
 
@@ -938,7 +988,11 @@ const ficheChoisie = computed(() => (selection.value ? disposition.value?.parId.
  * La fiche entière de la personne choisie, pour le volet (PC) et la parenté du panneau
  * (téléphone) : chaque issue a son état, l'échec compris (`arbre2/lectureFiche.ts`).
  */
-const lectureDeLaFiche = useLectureDeLaFiche(() => ficheChoisie.value?.noeud.personId ?? null)
+const lectureDeLaFiche = useLectureDeLaFiche(
+  () => ficheChoisie.value?.noeud.personId ?? null,
+  // Vue de la même personne que l'arbre : sa parenté, pas celle de l'administrateur.
+  (id, signal) => lireFichePersonne(id, signal, depuis.value),
+)
 const etatDeLaFiche = lectureDeLaFiche.etat
 const ficheLue = computed(() => (etatDeLaFiche.value.etat === 'complete' ? etatDeLaFiche.value.fiche : null))
 // La parenté est calculée par le serveur, relativement au lecteur : on ne la recalcule pas.
@@ -1212,6 +1266,15 @@ const filtres = reactive({
    */
   qualite: null as IdFiltre | null,
 })
+/*
+ * Un autre point de vue (`depuis`) : les quarts sont ceux de l'ego — « pp » masqué chez l'un
+ * cacherait en silence une autre branche chez l'autre. On les rend tous ; la relecture
+ * (`changerDeLecteur`) redispose ensuite.
+ */
+watch(depuis, () => {
+  filtres.masquees = []
+  racineFigee.value = null
+})
 /** Le nombre de filtres actifs, pour « Filtres · n » et le bouton de l'en-tête. */
 const nombreFiltresActifs = computed(
   () => filtres.masquees.length + (filtres.ligneDirecte ? 1 : 0) + (filtres.qualite ? 1 : 0),
@@ -1339,6 +1402,18 @@ const passent = computed<ReadonlySet<string>>(() => {
 const racineFigee = ref<string | null>(null)
 /** L'ego du lecteur, tel que le serveur l'a donné — pas celui d'une disposition réduite. */
 const egoDuLecteur = computed(() => grapheCharge.value?.ego ?? disposition.value?.ego ?? null)
+/** La personne depuis laquelle l'arbre est dessiné quand l'administrateur l'a choisie (`depuis`), sinon `null`. */
+const pointDeVue = computed<NoeudPersonne | null>(() => {
+  const g = grapheCharge.value
+  if (depuis.value === null || !g) return null
+  const n = g.noeuds.find((x) => x.id === g.ego)
+  return n?.type === 'personne' ? n : null
+})
+/** Son prénom d'usage, là où l'écran dirait « Vous » : le premier mot de l'étiquette dessinée. */
+const prenomDuPointDeVue = computed(() => {
+  const n = pointDeVue.value
+  return n ? (n.etiquetteNom ?? n.displayName).split(' ')[0] || n.displayName : null
+})
 const racineDeLaLigne = computed<string | null>(() => {
   if (!filtres.ligneDirecte) return null
   if (ligneSeule.value) return racineFigee.value ?? egoDuLecteur.value
@@ -1422,7 +1497,7 @@ const surlignerTraits = computed(() => surligner.value && racineDeLaLigne.value 
 const libelleLigne = computed(() => {
   const racine = filtres.ligneDirecte ? racineDeLaLigne.value : (ficheChoisie.value?.id ?? null)
   const f = racine !== null ? disposition.value?.parId.get(racine) : undefined
-  if (!f || f.id === egoDuLecteur.value) return 'Ma ligne directe'
+  if (!f || f.id === egoDuLecteur.value) return pointDeVue.value ? `Ligne directe de ${pointDeVue.value.displayName}` : 'Ma ligne directe'
   const nom = f.noeud.visibilite === 'restreinte' ? 'cette personne' : f.noeud.displayName
   return `Ligne directe de ${nom}`
 })
@@ -1606,7 +1681,7 @@ const etiquettesGouttiere = computed<EtiquetteDeGeneration[]>(() => {
       y: g.y,
       libelle: mobile
         ? g.rangee === 0
-          ? d.parId.has(egoDuLecteur.value ?? '') ? 'Vous' : 'Racine'
+          ? d.parId.has(egoDuLecteur.value ?? '') ? (prenomDuPointDeVue.value ?? 'Vous') : 'Racine'
           : `${g.rangee > 0 ? '+' : ''}${g.rangee}`
         : compact && annee
           ? `${g.libelle} · ${annee}`
@@ -2098,10 +2173,30 @@ onBeforeUnmount(() => {
           Ajouter une personne
         </button>
         <button type="button" class="h-8 rounded-champ bg-accent px-3 text-[13px] font-semibold whitespace-nowrap text-fond" @click="meTrouver">
-          Me trouver
+          {{ prenomDuPointDeVue ? `Trouver ${prenomDuPointDeVue}` : 'Me trouver' }}
         </button>
       </template>
     </BarreEcran>
+
+    <!-- L'arbre d'une autre personne (administrateur, `?depuis=`) : on le dit, et on en sort d'un geste. -->
+    <div
+      v-if="depuis !== null"
+      class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-accent bg-accent-doux px-4 py-2 text-sm text-accent"
+      role="status"
+      data-arbre-depuis
+    >
+      <span>
+        Arbre vu depuis
+        <span class="font-semibold">{{ pointDeVue?.displayName ?? '…' }}</span> : générations, branches et parentés sont les siennes.
+      </span>
+      <RouterLink :to="{ name: 'personne.detail', params: { id: depuis } }" class="font-semibold underline">Sa fiche</RouterLink>
+      <RouterLink
+        :to="{ path: route.path }"
+        class="rounded-champ border border-accent px-2.5 py-0.5 font-semibold transition-colors hover:bg-accent hover:text-fond"
+      >
+        Revenir à mon arbre
+      </RouterLink>
+    </div>
 
     <div class="flex min-h-0 flex-1">
     <!-- Le volet « Ajouter une personne » (PC, dès `lg`) : AVANT le canevas, qu'il
@@ -2272,7 +2367,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <div class="flex flex-wrap gap-1.5">
-            <span v-if="ficheChoisie.id === disposition.ego" class="rounded-pastille bg-accent-doux px-2.5 py-0.5 text-xs font-semibold text-accent">vous</span>
+            <span v-if="ficheChoisie.id === disposition.ego" class="rounded-pastille bg-accent-doux px-2.5 py-0.5 text-xs font-semibold text-accent">{{ pointDeVue ? 'point de vue' : 'vous' }}</span>
             <span v-else-if="parente" class="rounded-pastille bg-accent-doux px-2.5 py-0.5 text-xs font-semibold text-accent">{{ parente }}</span>
             <span
               v-if="ficheChoisie.parente === 'alliance'"
@@ -2326,6 +2421,15 @@ onBeforeUnmount(() => {
             >
               Demande
             </RouterLink>
+            <RouterLink
+              v-if="peutVoirSonArbre(ficheChoisie)"
+              :to="{ path: route.path, query: { depuis: ficheChoisie.noeud.personId } }"
+              class="flex h-9 flex-1 items-center justify-center rounded-champ border border-ligne font-semibold hover:bg-accent-doux"
+              title="L’arbre dessiné depuis cette personne (administration)"
+              data-voir-son-arbre
+            >
+              Son arbre
+            </RouterLink>
           </div>
         </section>
       </template>
@@ -2366,7 +2470,7 @@ onBeforeUnmount(() => {
           </button>
         </div>
         <div class="flex flex-wrap gap-1.5">
-          <span v-if="ficheChoisie.id === disposition.ego" class="rounded-pastille bg-accent-doux px-2.5 py-0.5 text-xs font-semibold text-accent">vous</span>
+          <span v-if="ficheChoisie.id === disposition.ego" class="rounded-pastille bg-accent-doux px-2.5 py-0.5 text-xs font-semibold text-accent">{{ pointDeVue ? 'point de vue' : 'vous' }}</span>
           <span v-else-if="parente" class="rounded-pastille bg-accent-doux px-2.5 py-0.5 text-xs font-semibold text-accent">{{ parente }}</span>
           <span
             v-if="ficheChoisie.parente === 'alliance'"
@@ -2406,6 +2510,15 @@ onBeforeUnmount(() => {
             @click="memoriserLaVue"
           >
             Demande
+          </RouterLink>
+          <RouterLink
+            v-if="peutVoirSonArbre(ficheChoisie)"
+            :to="{ path: route.path, query: { depuis: ficheChoisie.noeud.personId } }"
+            class="flex h-9 flex-1 items-center justify-center rounded-champ border border-ligne font-semibold hover:bg-accent-doux"
+            title="L’arbre dessiné depuis cette personne (administration)"
+            data-voir-son-arbre
+          >
+            Son arbre
           </RouterLink>
         </div>
         <button
@@ -2522,6 +2635,7 @@ onBeforeUnmount(() => {
       :message="rechercheMobile.message.value"
       :curseur="curseur"
       :ouverte="listeOuverte"
+      :libelle-moi="prenomDuPointDeVue"
       @touche="surToucheRecherche"
       @choisir="allerA"
       @reessayer="rechercheMobile.reessayer()"

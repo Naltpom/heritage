@@ -25,6 +25,8 @@ const props = defineProps<{
   message: string
   curseur: number
   ouverte: boolean
+  /** Le bouton qui ramène à l'ego : « Moi », ou le prénom de la personne dont c'est l'arbre (`/arbre?depuis=`). */
+  libelleMoi?: string | null
 }>()
 
 const texte = defineModel<string>('texte', { required: true })
@@ -109,6 +111,6 @@ defineExpose({
         </ul>
       </div>
     </div>
-    <button type="button" class="h-11 rounded-pastille bg-accent px-3.5 font-semibold text-fond" @click="emit('moi')">Moi</button>
+    <button type="button" class="h-11 rounded-pastille bg-accent px-3.5 font-semibold text-fond" @click="emit('moi')">{{ libelleMoi ?? 'Moi' }}</button>
   </div>
 </template>

@@ -150,11 +150,18 @@ export function coffreEnMemoire(): Coffre & { contenu: Map<string, unknown> } {
  * Qui lit : le compte, le membre emprunté sous « voir comme », l'administrateur qui
  * incarne. Trois lecteurs différents, trois mémoires différentes. `null` sans session :
  * rien n'est gardé pour un visiteur.
+ *
+ * `depuis` : la personne depuis laquelle l'administrateur regarde l'arbre (`/arbre?depuis=`).
+ * Un autre point de vue est un autre lecteur : l'arbre se relit, rien ne se mélange. Absent,
+ * l'identité reste celle d'avant — les graphes déjà gardés restent valables. (`/arbre` ne
+ * range pas l'arbre « depuis » dans cette mémoire, qui n'a qu'un lecteur à la fois : il
+ * effacerait celui de l'administrateur.)
  */
-export function identiteDuLecteur(session: ChargeDeSession | null): string | null {
+export function identiteDuLecteur(session: ChargeDeSession | null, depuis: number | null = null): string | null {
   if (!session) return null
   const { utilisateur, voirComme, incarnation } = session
-  return `compte:${utilisateur.id}|voirComme:${voirComme?.memberId ?? ''}|par:${incarnation?.par.id ?? ''}`
+  const base = `compte:${utilisateur.id}|voirComme:${voirComme?.memberId ?? ''}|par:${incarnation?.par.id ?? ''}`
+  return depuis !== null ? `${base}|depuis:${depuis}` : base
 }
 
 /** Tout ce qui entre dans `disposer()` (`HistoireView.vue`, `ArbreGroupesView.vue`), hors le graphe lui-même. */

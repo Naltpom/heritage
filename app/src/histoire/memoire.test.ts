@@ -216,6 +216,18 @@ describe('l’identité du lecteur', () => {
     expect(ids.size).toBe(4)
     expect(identiteDuLecteur(null)).toBeNull()
   })
+
+  it('distingue le point de vue choisi (`/arbre?depuis=`), sans changer l’identité de toujours', () => {
+    // Sans `depuis`, l'identité d'avant : les graphes déjà gardés restent valables.
+    expect(identiteDuLecteur(session(1, null, null), null)).toBe(identiteDuLecteur(session(1, null, null)))
+    const ids = new Set([
+      identiteDuLecteur(session(1, null, null)),
+      identiteDuLecteur(session(1, null, null), 42),
+      identiteDuLecteur(session(1, null, null), 43),
+    ])
+    expect(ids.size).toBe(3)
+    expect(identiteDuLecteur(null, 42)).toBeNull()
+  })
 })
 
 describe('la clé d’une disposition', () => {

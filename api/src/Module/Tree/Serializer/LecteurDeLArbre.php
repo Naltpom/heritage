@@ -50,6 +50,19 @@ use App\Module\Core\Enum\Regime;
  * `Membership`. Tant qu'il n'est pas fourni, {@see self::identiteEffective()} rend `null`
  * sous la bascule — c'est-à-dire **aucun calque**, plutôt que celui de l'administrateur,
  * qui serait exactement ce que la règle 3 du § 10.4 interdit.
+ *
+ * ## Le point de vue choisi — `?depuis=<personId>` (demande du 25/10/2026)
+ *
+ * **`pointDeVueChoisi`** est la personne depuis laquelle un administrateur regarde l'arbre
+ * — typiquement quelqu'un **sans compte**, que la bascule ne sait pas emprunter faute de
+ * membre. Ce n'est **pas** une bascule : le cercle reste celui de l'administrateur, le
+ * calque aussi, et rien n'est refusé en écriture. Seul change l'ego — la rangée zéro, les
+ * quarts, la parenté de chaque fiche —, que {@see PersonneDuLecteur} rend à la place de la
+ * fiche du compte. L'`ETag` en hérite par conséquence : il hache déjà le point de vue.
+ *
+ * Le constructeur le refuse à qui n'est pas administrateur hors bascule : un point de vue
+ * choisi **sous** la bascule montrerait l'arbre d'une troisième personne avec le cercle
+ * d'un membre emprunté — un écran que personne ne verra jamais.
  */
 final readonly class LecteurDeLArbre
 {
@@ -63,6 +76,8 @@ final readonly class LecteurDeLArbre
      * @param int|null $membreEmprunteId     le `mbr_member.id` emprunté par la bascule, `null` hors bascule
      * @param int|null $membreEmprunteUserId le `core_user.id` du même membre, quand un appelant sait le
      *                                       résoudre — `null` sinon, et le calque se referme
+     * @param int|null $pointDeVueChoisi     le `tree_person.id` depuis lequel l'administrateur regarde
+     *                                       l'arbre (`?depuis=`), `null` : depuis sa propre fiche
      */
     public function __construct(
         public int $userId,
@@ -71,7 +86,25 @@ final readonly class LecteurDeLArbre
         public Regime $regime = Regime::Aucun,
         public ?int $membreEmprunteId = null,
         public ?int $membreEmprunteUserId = null,
+        public ?int $pointDeVueChoisi = null,
     ) {
+        if (null !== $pointDeVueChoisi && (!$administrateur || null !== $membreEmprunteId)) {
+            throw new \LogicException('Seul un administrateur hors bascule choisit le point de vue de l’arbre.');
+        }
+    }
+
+    /** Le même lecteur, qui regarde l'arbre depuis cette personne. */
+    public function vuDepuis(int $personneId): self
+    {
+        return new self(
+            $this->userId,
+            $this->libelle,
+            $this->administrateur,
+            $this->regime,
+            $this->membreEmprunteId,
+            $this->membreEmprunteUserId,
+            $personneId,
+        );
     }
 
     /**
@@ -128,7 +161,7 @@ final readonly class LecteurDeLArbre
      */
     public function cle(): string
     {
-        return $this->userId.':'.($this->membreEmprunteId ?? '');
+        return $this->userId.':'.($this->membreEmprunteId ?? '').':'.($this->pointDeVueChoisi ?? '');
     }
 
     /**

@@ -156,8 +156,13 @@ export const CLE_ETAG_GRAPHE = 'arbre.graphe'
  *
  * `signal` abandonne la requête : l'écran qui se démonte, ou dont le lecteur change.
  */
-export function chargerGraphe(signal?: AbortSignal): Promise<ResultatRevalide<Graphe>> {
-  return requeteRevalidee<Graphe>(CLE_ETAG_GRAPHE, '/arbre/graphe', signal ? { signal } : {})
+export function chargerGraphe(signal?: AbortSignal, depuis: number | null = null): Promise<ResultatRevalide<Graphe>> {
+  // `depuis` : l'arbre dessiné depuis cette personne (administrateur, § 5.2). L'`ETag`
+  // porte le point de vue : celui d'un autre arbre ne rend jamais `304` ici.
+  return requeteRevalidee<Graphe>(CLE_ETAG_GRAPHE, '/arbre/graphe', {
+    ...(signal ? { signal } : {}),
+    ...(depuis !== null ? { requete: { depuis } } : {}),
+  })
 }
 
 /**

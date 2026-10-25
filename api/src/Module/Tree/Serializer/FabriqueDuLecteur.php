@@ -6,6 +6,8 @@ namespace App\Module\Tree\Serializer;
 
 use App\Module\Core\Contract\AnnuaireDesMembresInterface;
 use App\Module\Core\Entity\User;
+use App\Module\Core\Exception\ConflictException;
+use App\Module\Core\Exception\ForbiddenException;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Security\RegimeVoter;
 use App\Module\Core\Service\BasculeVoirComme;
@@ -90,5 +92,30 @@ final readonly class FabriqueDuLecteur
             // qui ment dans le sens rassurant, comme l'`ETag` qui rendait `304`.
             null === $membreEmprunte ? null : $this->annuaire->userIdDuMembre($membreEmprunte),
         );
+    }
+
+    /**
+     * Le lecteur de la requête, **regardant l'arbre depuis cette personne** — `?depuis=`,
+     * réservé à l'administrateur (demande du 25/10/2026 : voir l'arbre de quelqu'un qui
+     * n'a pas de compte, donc pas de membre à emprunter).
+     *
+     * @throws ConflictException  `409 vue_comme_membre_active` sous la bascule : le point de
+     *                            vue d'une troisième personne avec le cercle d'un membre
+     *                            emprunté ne montrerait l'écran de personne
+     * @throws ForbiddenException `403 acces_refuse` pour qui n'est pas administrateur
+     */
+    public function vuDepuis(int $personneId): LecteurDeLArbre
+    {
+        $lecteur = $this->courant();
+
+        if ($lecteur->sousBascule()) {
+            throw new ConflictException('vue_comme_membre_active', 'Quittez la vue « voir comme un membre » pour regarder l’arbre depuis une autre personne.');
+        }
+
+        if (!$lecteur->administrateur) {
+            throw new ForbiddenException('acces_refuse', 'Seul un administrateur peut regarder l’arbre depuis une autre personne.');
+        }
+
+        return $lecteur->vuDepuis($personneId);
     }
 }

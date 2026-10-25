@@ -49,5 +49,8 @@ export function useGestesFiche() {
     /** ADR 0016 — l'autorisation signée d'un vivant sans compte : administrateur,
      *  hors vue empruntée (le serveur y refuse toute écriture). */
     peutGererAutorisationNaissance: computed(() => administrateur.value && vueEmpruntee.value === null),
+    /** « Voir son arbre » (`/arbre?depuis=`) — l'arbre dessiné depuis cette personne, compte ou
+     *  non : administrateur, hors vue empruntée (le serveur y refuse le point de vue choisi). */
+    peutVoirSonArbre: computed(() => administrateur.value && vueEmpruntee.value === null),
   }
 }
