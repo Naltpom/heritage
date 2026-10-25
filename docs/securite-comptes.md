@@ -599,6 +599,11 @@ Le compte d'amorçage du commanditaire est décrit par l'environnement et repos�
 pour vérifier un écran sont à supprimer avant toute mise en ligne** : un administrateur
 actif dont personne ne se souvient est le pire des comptes partagés.
 
+**Les agents n'ont pas de compte : ils ont un jeton.** Un jeton d'API (ADR 0021) est rattaché
+à l'utilisateur du commanditaire et **nomme** son porteur dans `core_audit_log`
+(`api_token_label`) : l'audit sait *qui* a agi sans qu'il existe un compte de plus. C'est la
+raison pour laquelle on ne crée pas de compte de service.
+
 ### L'adresse publique est configurée, jamais déduite de la requête
 
 `HERITAGE_URL_PUBLIQUE`, lue par `Core\Service\UrlPublique`. C'est sur elle que sont

@@ -235,8 +235,28 @@ Chaque entrée porte `{code, message}`, plus les clés propres au code — `medi
 ### 1.6 Authentification, rôles et régimes
 
 Session `json_login`, cookie `HttpOnly` + `SameSite=Lax` + `Secure` en production (déjà posé
-dans `api/config/packages/framework.yaml`). **Aucun jeton dans un en-tête, aucun jeton en
-`localStorage`** : le cookie est le seul porteur de session.
+dans `api/config/packages/framework.yaml`). **Pour le front : aucun jeton dans un en-tête,
+aucun jeton en `localStorage`** — le cookie est le seul porteur de session d'un navigateur.
+
+> **Amendé par l'[ADR 0021](adr/0021-jetons-d-api.md) (2026-10-25).** L'API admet, **hors
+> navigateur**, un second porteur : `Authorization: Bearer hrt_…`, un **jeton d'API** rattaché
+> à l'utilisateur 1 (jamais un compte de service), créé en ligne de commande
+> (`heritage:jeton-api:creer`) et affiché une seule fois. La règle ci-dessus reste celle du
+> front, qui n'envoie aucun en-tête d'autorisation.
+>
+> - **Portées** ordonnées : `lecture` < `contribution` < `validation`. Les routes de chacune
+>   sont tenues par `Core\Security\PorteeDuJetonSubscriber`, **source de vérité** — liste
+>   blanche, fermée par défaut (une route non nommée rend `403` `acces_refuse`). Utilisateurs,
+>   réglages, incarnation, voir-comme et jetons sont exclus pour toutes.
+> - **Même contrôle d'accès** : le pare-feu `api_jetons` (sans état, avant `main`) partage
+>   fournisseur, `user_checker` et point d'entrée JSON ; `access_control` ci-dessous vaut
+>   pour les deux porteurs. Un compte `suspendu` n'est pas plus authentifié par jeton que par
+>   cookie.
+> - **Un jeton ne prouve jamais une identité récente** : les routes qui exigent une preuve
+>   récente (mot de passe, passkey) le refusent.
+> - **Décider sur une demande** (valider, refuser) exige, avec un jeton, d'en être l'auteur.
+> - Un jeton **inconnu, expiré, révoqué ou mal formé** rend le même `401`
+>   `authentification_requise` ; une réponse à jeton ne pose pas de `Set-Cookie`.
 
 `access_control` :
 
@@ -296,6 +316,7 @@ public, pas un domaine. Le troisième segment tranche, sans ambiguïté possible
 | Chemin | Module |
 |---|---|
 | `/api/administration/utilisateurs`, `/reglages`, `/voir-comme`, `/journal` | `Core` |
+| `/api/administration/jetons` — **réservé, aucune route aujourd'hui** (ADR 0021 : les jetons se gèrent en ligne de commande) | `Core` |
 | `/api/administration/invitations`, `/membres` | `Membership` |
 | `/api/administration/demandes` | `Proposal` |
 | `/api/administration/sources` | `Tree` (ADR 0012) |
@@ -314,6 +335,10 @@ public, pas un domaine. Le troisième segment tranche, sans ambiguïté possible
 |---|---|---|
 | `Retry-After` | toute `429` **sauf** `POST /api/inscription/rattachement` (§ 4.2) | secondes |
 | `Content-Disposition` | `GET /api/medias/{id}/fichier` | `inline; filename="<original_name assaini>"` |
+
+> **Depuis l'[ADR 0021](adr/0021-jetons-d-api.md), la colonne `Vary` vaut `Cookie, Authorization`
+> dans les trois régimes** : une réponse peut désormais varier selon l'un ou l'autre porteur
+> (§ 1.6), et un cache partagé doit le savoir. Le reste des régimes est inchangé.
 
 > **Corrigé le 17/09/2026 : le régime A porte `private, no-store` et `Vary: Cookie`.**
 > Cette table disait `no-store` seul et « `Vary` : aucun » ; le code écrit
@@ -369,6 +394,8 @@ composant `RateLimiter` stockant ses compteurs dans le cache (§ 0.6 — pas de 
 | `POST /api/inscription/rattachement` | IP | 30 / heure | `429` `trop_de_tentatives` |
 | `POST /api/medias` | compte (administrateur exempté) | 20 / heure **par défaut**, réglable par compte (§ 10.1) | `429` `trop_de_tentatives` |
 | `POST /api/demandes` | compte | 30 / heure | `429` `trop_de_tentatives` |
+| toute route, **échec d'authentification par jeton** (ADR 0021) | IP | 10 échecs / 15 min | `429` `trop_de_tentatives`, `Retry-After` |
+| toute route, **jeton valide** (ADR 0021) | jeton | environ 2 000 / heure | `429` `trop_de_tentatives`, `Retry-After` |
 
 Le plafond par jeton est le garde-fou du § 6.1 du dossier ; le plafond par IP est là pour le
 balayage distribué sur plusieurs jetons, que le premier ne voit pas. Les deux coexistent et
@@ -6801,10 +6828,10 @@ agent recopiera la référence :
 
 | Code | HTTP | Où | `details` |
 |---|---|---|---|
-| `authentification_requise` | 401 | partout | — |
+| `authentification_requise` | 401 | partout — **y compris** un jeton d'API inconnu, expiré, révoqué ou mal formé, indistinguables entre eux (§ 1.6, ADR 0021) | — |
 | `identifiants_invalides` | 401 | `POST /api/connexion` | — |
 | `compte_suspendu` | 401 | `POST /api/connexion` | — |
-| `acces_refuse` | 403 | voters — demande d'autrui, média d'autrui ; compléter le brouillon d'un autre (§ 6.6 ter) ; fusionner sans être administrateur | — |
+| `acces_refuse` | 403 | voters — demande d'autrui, média d'autrui ; **jeton d'API** dont la portée ne couvre pas la route, ou qui décide sur une demande dont il n'est pas l'auteur (§ 1.6, ADR 0021) ; compléter le brouillon d'un autre (§ 6.6 ter) ; fusionner sans être administrateur | — |
 | `regime_en_attente` | 403 | `POST /api/demandes`, `POST /api/medias` ; depuis le 2026-10-01, **toute lecture de l'arbre** par un compte en attente (§ 12.1) | — |
 | `introuvable` | 404 | partout, **et sur tout ce que le lecteur n'a pas le droit de voir** | — |
 | `methode_non_autorisee` | 405 | routeur | `{"autorisees": ["GET"]}` |
@@ -6834,7 +6861,7 @@ agent recopiera la référence :
 | `donnees_invalides` | 422 | partout | `champs` rempli |
 | `valeur_hors_bornes` | 422 | `PATCH` réglage | `{minValue, maxValue}` |
 | `demande_sans_lien` | 422 | soumettre une `creation_personne` | — |
-| `trop_de_tentatives` | 429 | § 1.9, **sauf la recherche de rattachement** | `{retryAfter}` |
+| `trop_de_tentatives` | 429 | § 1.9 (jetons d'API compris), **sauf la recherche de rattachement** | `{retryAfter}` |
 | `erreur_interne` | 500 | souscripteur d'exception | — |
 | `service_indisponible` | 503 | `GET /api/sante` — la base ne répond pas (§ 26) | — |
 
