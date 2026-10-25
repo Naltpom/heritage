@@ -14,6 +14,7 @@ use App\Module\Tree\Serializer\EtagDuGraphe;
 use App\Module\Tree\Serializer\EtatVivant;
 use App\Module\Tree\Serializer\FabriqueDuCercle;
 use App\Module\Tree\Serializer\FabriqueDuLecteur;
+use App\Module\Tree\Serializer\LecteurDeLArbre;
 use App\Module\Tree\Serializer\LectureDeLArbre;
 use App\Module\Tree\Serializer\NormaliseurDAffiche;
 use App\Module\Tree\Serializer\NormaliseurDeFamille;
@@ -101,6 +102,10 @@ final class ArbreController extends AbstractController
      *
      * Le `304` porte les mêmes en-têtes : un `304` sans `ETag` fait repartir le client de
      * zéro au rechargement suivant.
+     *
+     * `?depuis=<personId>` (administrateur hors bascule) : le même graphe, **dessiné depuis
+     * cette personne** — `ego`, rangées, quarts et parentés sont les siens. Le point de vue
+     * est la quatrième composante de l'`ETag` : deux points de vue ne partagent jamais un `304`.
      */
     #[Route('/api/arbre/graphe', name: 'tree_graphe', methods: ['GET'])]
     public function graphe(
@@ -110,7 +115,7 @@ final class ArbreController extends AbstractController
         ChronometreDuGraphe $chrono,
     ): JsonResponse {
         $debut = hrtime(true);
-        $lecteur = $this->lecteurs->courant();
+        $lecteur = $this->lecteur($requete);
         $etag = $chrono->mesure('etag', static fn (): string => $etags->pour($lecteur));
 
         if ($etags->correspond($requete->headers->get('If-None-Match'), $etag)) {
@@ -135,10 +140,12 @@ final class ArbreController extends AbstractController
      * et une impasse claire, pas une erreur qui ressemble à une panne.
      */
     #[Route('/api/arbre/personnes/{id}', name: 'tree_personne', requirements: ['id' => '\d+'], methods: ['GET'])]
-    public function personne(int $id, NormaliseurDePersonne $normaliseur): JsonResponse
+    public function personne(int $id, Request $requete, NormaliseurDePersonne $normaliseur): JsonResponse
     {
         $personne = $this->lecture->personne($id);
-        $lecteur = $this->lecteurs->courant();
+        // `?depuis=` aussi : la parenté de la fiche (« grand-mère ») doit être celle de
+        // l'arbre affiché à côté, pas celle de l'administrateur.
+        $lecteur = $this->lecteur($requete);
         $cercle = $this->cercles->pour($lecteur);
 
         // L'arbre d'une autre famille : `404`, comme une fiche qui n'existe pas — pas la
@@ -272,6 +279,34 @@ final class ArbreController extends AbstractController
         $reponse->headers->set('Cache-Control', 'no-store');
 
         return $reponse;
+    }
+
+    /**
+     * Le lecteur de la requête — **vu depuis une autre personne** quand l'administrateur
+     * le demande par `?depuis=<personId>` (§ 5.2). Le droit se vérifie avant l'existence de
+     * la fiche : un refus ne dit pas si elle existe.
+     */
+    private function lecteur(Request $requete): LecteurDeLArbre
+    {
+        if (!$requete->query->has('depuis')) {
+            return $this->lecteurs->courant();
+        }
+
+        // Lu brut : `getString()` lèverait une `400` sur `depuis[]=…`, hors du contrat. Au plus
+        // dix chiffres et dans un entier SQL : au-delà, PostgreSQL répondrait par une `500`.
+        $depuis = $requete->query->all()['depuis'] ?? null;
+
+        if (!\is_string($depuis) || !ctype_digit($depuis) || \strlen($depuis) > 10 || (int) $depuis < 1 || (int) $depuis > 2147483647) {
+            throw new ValidationException(['depuis' => 'Un identifiant de personne est attendu.']);
+        }
+
+        $lecteur = $this->lecteurs->vuDepuis((int) $depuis);
+
+        if (null === $this->lecture->personne((int) $depuis)) {
+            throw new NotFoundException('Cette personne n’existe pas.');
+        }
+
+        return $lecteur;
     }
 
     /**

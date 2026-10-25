@@ -133,7 +133,7 @@ function surToucheFin(e: TouchEvent): void {
   if (cible) void routeur.replace({ name: 'personne.detail', params: { id: fiche.id }, query: requeteDOnglet(cible) })
 }
 
-const { peutProposer, peutDeposer, peutDemanderSuppression, peutGererAutorisationNaissance } = useGestesFiche()
+const { peutProposer, peutDeposer, peutDemanderSuppression, peutGererAutorisationNaissance, peutVoirSonArbre } = useGestesFiche()
 
 /** La barre du bas se remplit par ce qui est permis ; vide, elle n'existe pas. */
 const barreAction = computed(
@@ -245,6 +245,17 @@ function pluriel(n: number, mot: string): string {
             <b>{{ pluriel(demandes.length, 'demande') }}</b> en attente sur cette fiche
           </span>
           <span class="font-semibold text-accent">Voir</span>
+        </RouterLink>
+
+        <!-- Mobile, administrateur : « Voir son arbre » (le bloc « Dans l'arbre » est réservé au grand écran). -->
+        <RouterLink
+          v-if="peutVoirSonArbre && edition === null"
+          :to="{ name: 'arbre', query: { depuis: fiche.id } }"
+          class="flex items-center justify-between gap-3 rounded-panneau border border-ligne bg-panneau px-3.5 py-2.5 text-[13px] md:hidden"
+          data-voir-son-arbre
+        >
+          <span>L’arbre dessiné depuis cette personne</span>
+          <span class="font-semibold text-accent">Voir son arbre</span>
         </RouterLink>
 
         <ContenuGlissant :ordre="ordre" :actif="edition !== null ? 'identite' : onglet">
@@ -359,6 +370,15 @@ function pluriel(n: number, mot: string): string {
             class="flex h-[34px] items-center justify-center rounded-champ border border-ligne text-[13px] font-semibold transition-colors hover:border-accent"
           >
             Voir dans l’arbre
+          </RouterLink>
+          <RouterLink
+            v-if="peutVoirSonArbre"
+            :to="{ name: 'arbre', query: { depuis: fiche.id } }"
+            class="flex h-[34px] items-center justify-center rounded-champ border border-ligne text-[13px] font-semibold transition-colors hover:border-accent"
+            title="L’arbre dessiné depuis cette personne : ses générations, ses branches, ses parentés (administration)"
+            data-voir-son-arbre
+          >
+            Voir son arbre
           </RouterLink>
         </section>
 

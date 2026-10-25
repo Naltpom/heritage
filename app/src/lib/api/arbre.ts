@@ -534,8 +534,9 @@ function options(signal?: AbortSignal): OptionsRequete {
  * Rend `200` même pour une personne vivante hors cercle — une fiche réduite,
  * pas une `404` (§ 5.1). Discriminer sur `visibilite` avant de lire un champ.
  */
-export function lireFichePersonne(id: number, signal?: AbortSignal): Promise<FichePersonne> {
-  return requeteApi<FichePersonne>(`/arbre/personnes/${id}`, options(signal))
+export function lireFichePersonne(id: number, signal?: AbortSignal, depuis: number | null = null): Promise<FichePersonne> {
+  // `depuis` : la parenté de la fiche vue depuis cette personne (administrateur, § 5.2).
+  return requeteApi<FichePersonne>(`/arbre/personnes/${id}`, depuis !== null ? { ...options(signal), requete: { depuis } } : options(signal))
 }
 
 /** `GET /api/arbre/familles/{id}`. */

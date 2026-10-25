@@ -1283,6 +1283,29 @@ comptes ne sortent pas du tout — ni nœuds, même masqués, ni familles, ni ar
 reçoit les arbres sans lien comme des îlots détachés de l'ego, et les masque par défaut
 (case « Personnes sans lien connu », `app/src/histoire/sansLien.ts`).
 
+#### `?depuis=<personId>` — l'arbre vu depuis une autre personne (ajouté le 25/10/2026)
+
+**Administrateur hors bascule seulement.** Le graphe est dessiné depuis cette personne —
+typiquement quelqu'un **sans compte**, que la bascule « voir comme un membre » (§ 10.4) ne
+sait pas emprunter faute de membre : `ego`, rangée zéro, quarts, `parente` et `pont` sont les
+siens. Ce n'est **pas** une bascule : le cercle et le calque restent ceux de l'administrateur,
+rien n'est retenu en session, rien n'est refusé en écriture. Le point de vue étant la
+quatrième composante de l'`ETag`, deux points de vue ne partagent jamais un `304`.
+
+`GET /api/arbre/personnes/{id}?depuis=<personId>` accepte le même paramètre : la `parente` de
+la fiche (§ 5.3) est alors celle de l'arbre affiché à côté.
+
+| Cas | Réponse |
+|---|---|
+| `depuis` n'est pas un entier ≥ 1 | `422`, `champs.depuis` |
+| lecteur non administrateur | `403 acces_refuse` |
+| sous la bascule « voir comme un membre » | `409 vue_comme_membre_active` |
+| personne inconnue | `404` — retomber sur la racine afficherait un arbre sous un autre nom |
+
+Le front le porte dans l'URL (`/arbre?depuis=<personId>`), avec un bandeau et « Revenir à
+mon arbre » ; `identiteDuLecteur()` y ajoute le point de vue, si bien qu'en changer relit
+l'arbre comme un changement de lecteur.
+
 #### Identifiants de nœuds
 
 Le graphe mélange 274 personnes et 103 familles dans une même liste. Les identifiants sont

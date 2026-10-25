@@ -31,6 +31,9 @@ use App\Module\Core\Contract\AnnuaireDesMembresInterface;
  * Sous la bascule **résolue**, en revanche, on répond : le point de vue servi est celui du
  * membre emprunté, et c'est précisément ce que la bascule existe pour montrer.
  *
+ * Un administrateur hors bascule peut enfin **choisir** la personne (`?depuis=`, voir
+ * {@see LecteurDeLArbre::$pointDeVueChoisi}) : c'est alors elle, avant tout rattachement.
+ *
  * `null` veut dire « on retombe sur la racine de l'arbre », pas « interdit ».
  *
  * ── Ce qu'on ne demande jamais ──────────────────────────────────────────────────
@@ -53,6 +56,10 @@ final class PersonneDuLecteur
     {
         if ($lecteur->enRegimeDAttente()) {
             return null;
+        }
+
+        if (null !== $lecteur->pointDeVueChoisi) {
+            return $lecteur->pointDeVueChoisi;
         }
 
         $compte = $lecteur->identiteEffective();

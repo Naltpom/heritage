@@ -130,9 +130,13 @@ describe('/arbre respecte l’ADR 0007', () => {
 describe('le chargement de /arbre', () => {
   it('se relit quand le lecteur change, au retour sur l’onglet, et abandonne ses requêtes au démontage', () => {
     expect(VUE).toContain('useRelectureDeLArbre({')
-    expect(VUE).toContain('identite: () => identiteDuLecteur(session.value)')
+    // Le point de vue choisi (`/arbre?depuis=`) fait partie du lecteur : en changer relit l'arbre.
+    expect(VUE).toContain('identite: identiteDeLaVue')
+    expect(VUE).toContain('identiteDuLecteur(session.value, depuis.value)')
     expect(VUE).toContain('nouveauLecteur: changerDeLecteur')
     expect(VUE).toContain('chargerGraphe(signal)')
+    // L'arbre « depuis » se charge à part, sans toucher la mémoire de l'administrateur.
+    expect(VUE).toContain('chargerGraphe(signal, personId)')
   })
 
   it('garde ses dispositions sous la clé de son moteur, pas sous celles de `/arbre-2`', () => {
