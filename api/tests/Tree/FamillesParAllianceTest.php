@@ -207,6 +207,48 @@ final class FamillesParAllianceTest extends TestCase
         self::assertSame('pFemmeDuCousin', $vue->ponts['pSonGrandPere']);
     }
 
+    /**
+     * **La belle-famille de la sœur du conjoint est une famille par alliance** — vu de
+     * l'oncle par alliance du commanditaire (`/arbre?depuis=`, 25/10/2026).
+     *
+     * Le lecteur O a épousé N ; la sœur S de N a épousé P ; leurs enfants U et U2. Pour O,
+     * S, U, U2 sont du sang de sa femme, P est le conjoint de ce sang : tous restent du côté
+     * du conjoint. Mais les parents de P et son frère n'ont aucun lien avec O : c'est une
+     * famille par alliance, rattachée par P. La règle d'avant — tout ce qu'on atteint
+     * depuis le conjoint — les rangeait chez N, et toute l'ascendance de P avec eux.
+     */
+    public function testLaBelleFamilleDeLaSoeurDuConjointEstUneFamilleParAlliance(): void
+    {
+        $ids = [
+            'pO', 'pN', 'pGpN', 'pGmN', 'pS', 'pP', 'pU', 'pU2',
+            'pPereDeP', 'pMereDeP', 'pFrereDeP', 'pGrandPereDeP',
+        ];
+        $familles = [
+            new FamillePlacable('f1', ['pO', 'pN'], [], false),
+            new FamillePlacable('f2', ['pGpN', 'pGmN'], ['pN', 'pS'], false),
+            new FamillePlacable('f3', ['pP', 'pS'], ['pU', 'pU2'], false),
+            new FamillePlacable('f4', ['pPereDeP', 'pMereDeP'], ['pP', 'pFrereDeP'], false),
+            new FamillePlacable('f5', ['pGrandPereDeP'], ['pPereDeP'], false),
+        ];
+
+        foreach ([$ids, array_reverse($ids)] as $ordre) {
+            $vue = (new CalculAscendance())->vuDuLecteur($this->jeu($ordre, $familles, 'pO'));
+
+            self::assertSame(ParenteDansLArbre::Famille, $vue->parentes['pN']);
+
+            foreach (['pGpN', 'pGmN', 'pS', 'pU', 'pU2', 'pP'] as $id) {
+                self::assertSame(ParenteDansLArbre::Conjoint, $vue->parentes[$id], $id.' : du sang de sa femme, ou conjoint de ce sang.');
+                self::assertArrayHasKey($id, $vue->branches, $id);
+            }
+
+            foreach (['pPereDeP', 'pMereDeP', 'pFrereDeP', 'pGrandPereDeP'] as $id) {
+                self::assertSame(ParenteDansLArbre::Alliance, $vue->parentes[$id], $id.' : aucun lien avec le lecteur.');
+                self::assertSame('pP', $vue->ponts[$id], $id);
+                self::assertArrayNotHasKey($id, $vue->branches, $id.' : une alliance ne reçoit aucune branche.');
+            }
+        }
+    }
+
     /** Sans lecteur, personne n'est rangé : « famille de qui ? » n'a pas de réponse. */
     public function testSansLecteurAucuneParenteNEstCalculee(): void
     {
