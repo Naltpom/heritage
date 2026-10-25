@@ -363,7 +363,7 @@ final class CarteTest extends CasDeTestAlmanach
         $cacheControl = (string) $reponse->headers->get('Cache-Control');
         self::assertStringContainsString('private', $cacheControl, 'La charge dépend du lecteur.');
         self::assertStringContainsString('no-store', $cacheControl, 'Un cache partagé ne doit pas la garder.');
-        self::assertSame('Cookie', $reponse->headers->get('Vary'));
+        self::assertSame('Cookie, Authorization', $reponse->headers->get('Vary'));
     }
 
     /** Sans session, la route est fermée — elle exige un compte. */
