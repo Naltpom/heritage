@@ -97,9 +97,10 @@ final class AuditDoctrineSubscriber
      *
      * `lastUsedAt` et `signCount` sont ceux d'une clé d'accès (`Core\Passkey`) : chaque
      * connexion par clé les avance. Sans eux ici, chaque connexion laisserait une ligne
-     * `modification` à côté de sa ligne `connexion`.
+     * `modification` à côté de sa ligne `connexion`. `lastUsedAt` et `lastUsedIp` sont aussi
+     * ceux d'un jeton d'API (`Core\JetonDApi`, ADR 0021) : chaque appel les avance.
      */
-    private const array CHAMPS_TECHNIQUES = ['updatedAt', 'lastLoginAt', 'lastUsedAt', 'signCount'];
+    private const array CHAMPS_TECHNIQUES = ['updatedAt', 'lastLoginAt', 'lastUsedAt', 'lastUsedIp', 'signCount'];
 
     /** @var list<AuditLog> */
     private array $enAttente = [];

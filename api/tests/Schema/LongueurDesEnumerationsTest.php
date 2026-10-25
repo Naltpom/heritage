@@ -100,8 +100,10 @@ final class LongueurDesEnumerationsTest extends KernelTestCase
      * **62 depuis la suppression du module `Tirage`** : `trg_edition.statut` et
      * `trg_presence.presence` partent avec leurs tables (ADR 0009 remplacé,
      * `migrations/Version20261020090000.php`).
+     *
+     * **63 depuis le 2026-10-25** : `core_api_token.scope` (`PorteeDeJeton`, ADR 0021).
      */
-    private const int COLONNES_ENUM_ATTENDUES = 62;
+    private const int COLONNES_ENUM_ATTENDUES = 63;
 
     public function testChaqueColonneAccueilleLaPlusLongueValeurDeSonEnumeration(): void
     {
