@@ -8,10 +8,11 @@ use App\Module\Core\Entity\AuditLog;
 use App\Module\Core\Entity\JetonDApi;
 use App\Module\Core\Enum\AuditAction;
 use App\Module\Core\Enum\PorteeDeJeton;
+use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Enum\UserStatus;
 use App\Module\Core\Repository\JetonDApiRepository;
-use App\Module\Core\Service\ClesVapid;
 use App\Module\Core\Service\GenerateurDeJetonDApi;
+use App\Tests\Proposal\Double\ArbreEnMemoire;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -136,20 +137,27 @@ final class JetonsDApiEnHttpTest extends CoreWebTestCase
 
     /**
      * ADR 0021 § 7 : l'auteur reste le compte du jeton, et chaque ligne écrite sous un
-     * jeton le nomme. `PUT /api/push/abonnement` est la plus simple des écritures du
-     * module : quand la liste blanche des portées la fermera aux jetons, ce test passera
-     * par une route qu'elle ouvre.
+     * jeton le nomme. `POST /api/demandes` est l'écriture même des agents, et la plus
+     * simple que la portée `contribution` ouvre (`PorteeDuJetonSubscriber`).
      */
     public function testUneEcritureParJetonNommeLeJetonAuJournalSansChangerDAuteur(): void
     {
-        $cobalt = $this->creerUtilisateur('cobalt@example.net');
+        // La fiche que la demande modifie, dans l'arbre des tests de `Proposal`
+        // (`when@test`) : son état est statique, on le pose et on le retire ici.
+        ArbreEnMemoire::oublierTout();
+        $arbre = self::getContainer()->get(ArbreEnMemoire::class);
+        \assert($arbre instanceof ArbreEnMemoire);
+        $arbre->poser(SubjectKind::Personne, 17, 'Marne Dolomite Sureau', 7, ['surname' => 'Sureau', 'nickname' => null]);
+
+        // Administrateur : il a le cercle complet sans fiche rattachée, donc il dépose.
+        $cobalt = $this->creerUtilisateur('cobalt@example.net', roles: ['ROLE_ADMIN']);
         $jeton = $this->creerJetonDApi($cobalt, PorteeDeJeton::Contribution, 'Claude — agents');
         $idDuJeton = $this->jetonEnBase($jeton)->getId();
 
-        $this->requete('PUT', '/api/push/abonnement', $this->abonnement('https://fcm.googleapis.com/fcm/send/agent'), $this->bearer($jeton));
-        self::assertResponseStatusCodeSame(Response::HTTP_NO_CONTENT);
+        $this->requete('POST', '/api/demandes', $this->demande('surname', 'Sureau', 'SUREAU'), $this->bearer($jeton));
+        self::assertResponseStatusCodeSame(Response::HTTP_CREATED);
 
-        $creations = $this->creationsDAbonnement();
+        $creations = $this->creationsDeDemande();
         self::assertCount(1, $creations);
         self::assertSame($cobalt->getId(), $creations[0]->getActorUserId(), 'L’auteur reste le compte du jeton.');
         self::assertSame('cobalt@example.net', $creations[0]->getActorEmail());
@@ -159,14 +167,16 @@ final class JetonsDApiEnHttpTest extends CoreWebTestCase
 
         // Le même geste par cookie ne nomme aucun jeton.
         $this->connexion('cobalt@example.net');
-        $this->requete('PUT', '/api/push/abonnement', $this->abonnement('https://fcm.googleapis.com/fcm/send/navigateur'));
-        self::assertResponseStatusCodeSame(Response::HTTP_NO_CONTENT);
+        $this->requete('POST', '/api/demandes', $this->demande('nickname', null, 'Marnette'));
+        self::assertResponseStatusCodeSame(Response::HTTP_CREATED);
 
-        $creations = $this->creationsDAbonnement();
+        $creations = $this->creationsDeDemande();
         self::assertCount(2, $creations);
         self::assertSame($cobalt->getId(), $creations[1]->getActorUserId());
         self::assertNull($creations[1]->getApiTokenId());
         self::assertNull($creations[1]->getApiTokenLabel());
+
+        ArbreEnMemoire::oublierTout();
     }
 
     /**
@@ -332,23 +342,38 @@ final class JetonsDApiEnHttpTest extends CoreWebTestCase
     }
 
     /** @return list<AuditLog> */
-    private function creationsDAbonnement(): array
+    private function creationsDeDemande(): array
     {
         return array_values(array_filter(
             $this->journal(),
-            static fn (AuditLog $ligne): bool => AuditAction::Creation === $ligne->getAction() && 'Core\\PushSubscription' === $ligne->getSubjectType(),
+            static fn (AuditLog $ligne): bool => AuditAction::Creation === $ligne->getAction() && 'Proposal\\ChangeRequest' === $ligne->getSubjectType(),
         ));
     }
 
-    /** @return array{endpoint: string, keys: array{p256dh: string, auth: string}} */
-    private function abonnement(string $endpoint): array
+    /**
+     * Une demande de modification d'un champ texte de la fiche n° 17, soumise.
+     *
+     * @return array<string, mixed>
+     */
+    private function demande(string $champ, ?string $ancienne, string $nouvelle): array
     {
         return [
-            'endpoint' => $endpoint,
-            'keys' => [
-                'p256dh' => ClesVapid::base64Url("\x04".random_bytes(64)),
-                'auth' => ClesVapid::base64Url(random_bytes(16)),
-            ],
+            'kind' => 'modification_personne',
+            'message' => null,
+            'soumettre' => true,
+            'targetKind' => 'personne',
+            'targetId' => 17,
+            'ops' => [[
+                'seq' => 1,
+                'opKind' => 'champ',
+                'subjectKind' => 'personne',
+                'subjectId' => 17,
+                'field' => $champ,
+                'valueKind' => 'texte',
+                'oldValue' => $ancienne,
+                'newValue' => $nouvelle,
+                'baseVersion' => 7,
+            ]],
         ];
     }
 }
