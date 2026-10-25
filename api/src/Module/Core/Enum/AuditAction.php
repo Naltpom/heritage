@@ -99,4 +99,16 @@ enum AuditAction: string
      * jamais la clé.
      */
     case AppelModeleDeLangage = 'appel_modele_langage';
+
+    /**
+     * Un jeton d'API personnel est créé en console (ADR 0021 « Jetons d'API »).
+     *
+     * `changes` : propriétaire, portée, expiration. **Jamais le jeton ni son empreinte.**
+     * Écrite à la main par la commande : le souscripteur Doctrine ne journalise pas hors
+     * requête HTTP.
+     */
+    case JetonApiCree = 'jeton_api_cree';
+
+    /** Un jeton d'API est révoqué en console. Écrite une seule fois : la révocation est idempotente. */
+    case JetonApiRevoque = 'jeton_api_revoque';
 }
