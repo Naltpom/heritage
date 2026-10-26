@@ -9,6 +9,9 @@ use App\Module\Core\Entity\AuditLog;
 use App\Module\Core\Entity\JetonDApi;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\AuditAction;
+use App\Module\Core\Enum\DateQualifier;
+use App\Module\Core\Enum\PorteeDeJeton;
+use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Enum\UserStatus;
 use App\Module\Core\EventSubscriber\JetonSansSessionSubscriber;
 use App\Module\Core\Exception\ForbiddenException;
@@ -18,9 +21,11 @@ use App\Module\Core\Security\SessionRefuseeAuJetonDApi;
 use App\Module\Core\Service\AuditService;
 use App\Module\Core\Service\BasculeVoirComme;
 use App\Module\Core\Service\GenerateurDeJetonDApi;
+use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Membership\Entity\Member;
 use App\Module\Membership\Enum\MatchKind;
 use App\Module\Membership\Enum\MemberStatus;
+use App\Tests\Proposal\Double\ArbreEnMemoire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
@@ -339,6 +344,112 @@ final class JetonsDApiSansEtatTest extends CoreWebTestCase
         $this->requete('POST', '/api/connexion/cle-d-acces/options');
         self::assertResponseIsSuccessful();
         self::assertNotSame([], $this->client->getResponse()->headers->getCookies());
+    }
+
+    // ─── Aucun cookie, quel que soit le statut ───────────────────────────────────
+
+    /**
+     * Aucune réponse à une requête par jeton ne pose de cookie — succès, refus du jeton,
+     * refus d'`access_control`, route inconnue, méthode refusée, refus de la session —, que
+     * le client ait ou non, à côté, le cookie d'une session ouverte.
+     */
+    public function testAucuneReponseAUneRequeteParJetonNePoseDeCookie(): void
+    {
+        $cobalt = $this->creerUtilisateur('cobalt@example.net');
+        $jeton = $this->creerJetonDApi($cobalt);
+        $inconnu = $this->generateur()->generer()['jeton'];
+
+        $cas = [
+            '200' => [Response::HTTP_OK, 'GET', '/api/session', 'Bearer '.$jeton],
+            '401 jeton inconnu' => [Response::HTTP_UNAUTHORIZED, 'GET', '/api/session', 'Bearer '.$inconnu],
+            '401 jeton inconnu sur une route publique' => [Response::HTTP_UNAUTHORIZED, 'GET', '/api/sante', 'Bearer '.$inconnu],
+            '401 Bearer illisible' => [Response::HTTP_UNAUTHORIZED, 'GET', '/api/session', 'Bearer'],
+            '403 access_control (compte non administrateur)' => [Response::HTTP_FORBIDDEN, 'GET', '/api/administration/journal', 'Bearer '.$jeton],
+            '403 la session refuse' => [Response::HTTP_FORBIDDEN, 'POST', '/api/connexion/cle-d-acces/options', 'Bearer '.$jeton],
+            '404 route inconnue' => [Response::HTTP_NOT_FOUND, 'GET', '/api/nulle-part', 'Bearer '.$jeton],
+            '405 méthode refusée' => [Response::HTTP_METHOD_NOT_ALLOWED, 'DELETE', '/api/session', 'Bearer '.$jeton],
+        ];
+
+        foreach (['sans cookie' => false, 'avec le cookie d’une session ouverte' => true] as $contexte => $avecCookie) {
+            if ($avecCookie) {
+                $this->connexion('cobalt@example.net');
+                self::assertResponseIsSuccessful();
+                self::assertNotSame([], $this->client->getCookieJar()->all());
+            }
+
+            foreach ($cas as $motif => [$statut, $methode, $chemin, $autorisation]) {
+                $this->requete($methode, $chemin, entetes: ['Authorization' => $autorisation]);
+                $reponse = $this->client->getResponse();
+                $libelle = \sprintf('%s, %s', $motif, $contexte);
+
+                self::assertSame($statut, $reponse->getStatusCode(), $libelle);
+                self::assertSame([], $reponse->headers->getCookies(), $libelle.' : aucun cookie.');
+                self::assertArrayNotHasKey('set-cookie', $reponse->headers->all(), $libelle);
+            }
+        }
+    }
+
+    /**
+     * Ce que les portées ouvriront aux jetons marche avec la session qui refuse, et sans
+     * cookie : la charge de session, une lecture de l'arbre, un dépôt de demande. Aucun
+     * écouteur global ne lit la session sur chaque requête — sinon ces trois routes
+     * tomberaient en `403` ici.
+     */
+    public function testCeQueLesPorteesOuvrentPasseSansCookie(): void
+    {
+        $natron = $this->creerUtilisateur('natron@example.net', roles: ['ROLE_ADMIN'], nomAffiche: 'Administration');
+        $jeton = $this->creerJetonDApi($natron, PorteeDeJeton::Validation, 'Claude — session principale');
+
+        ArbreEnMemoire::oublierTout();
+        $arbre = self::getContainer()->get(ArbreEnMemoire::class);
+        \assert($arbre instanceof ArbreEnMemoire);
+        $arbre->poser(SubjectKind::Personne, 17, 'Marne Dolomite Sureau', 7, [
+            'givenNames' => 'Marne Dolomite',
+            'surname' => 'Sureau',
+            'marriedName' => null,
+            'nickname' => null,
+            'sex' => 'feminin',
+            'deceased' => true,
+            'birth' => new UncertainDate('1987', DateQualifier::Annee, new \DateTimeImmutable('1987-01-01'), new \DateTimeImmutable('1987-12-31')),
+            'death' => UncertainDate::inconnue(),
+            'forcePrivacy' => false,
+            'privacyNote' => null,
+        ]);
+
+        try {
+            $this->requete('GET', '/api/session', entetes: $this->bearer($jeton));
+            self::assertResponseIsSuccessful();
+            self::assertSame('natron@example.net', $this->charge()['utilisateur']['email']);
+            self::assertSame([], $this->client->getResponse()->headers->getCookies());
+
+            $this->requete('GET', '/api/arbre/graphe', entetes: $this->bearer($jeton));
+            self::assertResponseIsSuccessful();
+            self::assertSame([], $this->client->getResponse()->headers->getCookies());
+
+            $this->requete('POST', '/api/demandes', [
+                'kind' => 'modification_personne',
+                'message' => 'Acte de naissance lu.',
+                'soumettre' => true,
+                'targetKind' => 'personne',
+                'targetId' => 17,
+                'ops' => [[
+                    'seq' => 1,
+                    'opKind' => 'champ',
+                    'subjectKind' => 'personne',
+                    'subjectId' => 17,
+                    'field' => 'nickname',
+                    'valueKind' => 'texte',
+                    'oldValue' => null,
+                    'newValue' => 'Mimi',
+                    'baseVersion' => 7,
+                ]],
+            ], $this->bearer($jeton));
+            self::assertResponseStatusCodeSame(Response::HTTP_CREATED);
+            self::assertSame([], $this->client->getResponse()->headers->getCookies());
+        } finally {
+            // L'état du double est statique : il ne doit pas survivre au test.
+            ArbreEnMemoire::oublierTout();
+        }
     }
 
     // ─── Outils ──────────────────────────────────────────────────────────────────
