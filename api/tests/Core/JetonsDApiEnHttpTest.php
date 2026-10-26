@@ -10,15 +10,26 @@ use App\Module\Core\Enum\AuditAction;
 use App\Module\Core\Enum\PorteeDeJeton;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Enum\UserStatus;
+use App\Module\Core\Exception\ForbiddenException;
 use App\Module\Core\Repository\JetonDApiRepository;
+use App\Module\Core\Security\JetonDApiAuthentifie;
+use App\Module\Core\Service\ClesVapid;
 use App\Module\Core\Service\GenerateurDeJetonDApi;
+use App\Module\Core\Service\PreuveDIdentiteRecente;
 use App\Tests\Proposal\Double\ArbreEnMemoire;
+use Psr\Clock\ClockInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\Session\Session;
+use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
+use Symfony\Component\Security\Http\Authenticator\Token\PostAuthenticationToken;
 
 /**
  * Le pare-feu `api_jetons` en HTTP (ADR 0021, § 1.6 du contrat) : un jeton d'API passe
- * sans cookie et n'en pose aucun, tout refus est le même `401`, l'audit nomme le jeton, et
- * le cookie marche comme avant.
+ * sans cookie et n'en pose aucun, tout refus est le même `401`, l'audit nomme le jeton, un
+ * jeton ne prouve jamais une identité récente, et le cookie marche comme avant.
  *
  * Les portées, la liste blanche des routes, les limites de débit et la règle de l'auteur
  * ont leurs propres tests.
@@ -279,6 +290,96 @@ final class JetonsDApiEnHttpTest extends CoreWebTestCase
 
         self::assertResponseIsSuccessful();
         self::assertSame('cobalt@example.net', $this->charge()['utilisateur']['email']);
+    }
+
+    /**
+     * ADR 0021 § 4 : **un jeton ne prouve jamais une identité récente.** Le défi
+     * d'enregistrement d'une clé d'accès, la route qui exige cette preuve
+     * (`PreuveDIdentiteRecente::exiger`), refuse un jeton — sans corps, avec le bon mot de
+     * passe, et même porté avec le cookie d'une connexion qui vient d'avoir lieu. Par ce
+     * cookie seul, la même route passe : le refus est celui du jeton, pas de la route.
+     */
+    public function testUnJetonNeProuveJamaisUneIdentiteRecente(): void
+    {
+        $cobalt = $this->creerUtilisateur('cobalt@example.net');
+        $jeton = $this->creerJetonDApi($cobalt);
+
+        foreach (['sans corps' => null, 'avec le bon mot de passe' => ['motDePasseActuel' => 'motdepasse-de-test']] as $motif => $corps) {
+            $this->requete('POST', '/api/cles-d-acces/options-d-enregistrement', $corps, $this->bearer($jeton));
+            self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN, $motif);
+            self::assertSame('acces_refuse', $this->charge()['erreur']['code'], $motif);
+            self::assertSame([], $this->client->getResponse()->headers->getCookies(), $motif);
+        }
+
+        // La connexion par mot de passe vaut preuve fraîche — pour le cookie, pas pour un
+        // jeton qui voyagerait avec lui.
+        $this->connexion('cobalt@example.net');
+        $this->requete('POST', '/api/cles-d-acces/options-d-enregistrement', entetes: $this->bearer($jeton));
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        self::assertSame([], $this->client->getResponse()->headers->getCookies());
+
+        $this->requete('POST', '/api/cles-d-acces/options-d-enregistrement');
+        self::assertResponseIsSuccessful();
+    }
+
+    /**
+     * Le même refus au niveau du service, sur une session qui porte une preuve fraîche :
+     * l'en-tête `Bearer` suffit, les attributs du jeton de sécurité aussi (fermé quand
+     * c'est douteux). Et sous un jeton, `marquer()` n'écrit rien.
+     */
+    public function testLaPreuveDIdentiteRecenteRefuseUnJetonQuelQueSoitLEtatDeLaSession(): void
+    {
+        $cobalt = $this->creerUtilisateur('cobalt@example.net');
+        $conteneur = self::getContainer();
+        $preuve = $conteneur->get(PreuveDIdentiteRecente::class);
+        $pile = $conteneur->get(RequestStack::class);
+        $jetons = $conteneur->get(TokenStorageInterface::class);
+        $horloge = $conteneur->get(ClockInterface::class);
+        \assert($preuve instanceof PreuveDIdentiteRecente && $pile instanceof RequestStack && $jetons instanceof TokenStorageInterface && $horloge instanceof ClockInterface);
+
+        $parJeton = new PostAuthenticationToken($cobalt, 'api_jetons', $cobalt->getRoles());
+        foreach ((new JetonDApiAuthentifie(7, 'Claude — agents', PorteeDeJeton::Contribution))->attributs() as $nom => $valeur) {
+            $parJeton->setAttribute($nom, $valeur);
+        }
+        $parCookie = new PostAuthenticationToken($cobalt, 'main', $cobalt->getRoles());
+
+        $cas = [
+            'en-tête Bearer seul' => ['Bearer '.$this->jetonInconnu(), $parCookie],
+            'attributs du jeton seuls' => [null, $parJeton],
+            'les deux' => ['Bearer '.$this->jetonInconnu(), $parJeton],
+            'ni l’un ni l’autre' => [null, $parCookie],
+        ];
+
+        foreach ($cas as $motif => [$autorisation, $jetonDeSecurite]) {
+            $session = new Session(new MockArraySessionStorage());
+            $session->set(PreuveDIdentiteRecente::CLE_DE_SESSION, $horloge->now()->getTimestamp());
+            $requete = Request::create('/api/cles-d-acces/options-d-enregistrement', 'POST');
+            if (null !== $autorisation) {
+                $requete->headers->set('Authorization', $autorisation);
+            }
+            $requete->setSession($session);
+            $pile->push($requete);
+            $jetons->setToken($jetonDeSecurite);
+
+            $refuse = false;
+            try {
+                $preuve->exiger($cobalt, 'motdepasse-de-test');
+            } catch (ForbiddenException $refus) {
+                $refuse = 'acces_refuse' === $refus->codeErreur();
+            }
+
+            $session->remove(PreuveDIdentiteRecente::CLE_DE_SESSION);
+            $preuve->marquer();
+            $marque = $session->has(PreuveDIdentiteRecente::CLE_DE_SESSION);
+
+            $pile->pop();
+            $jetons->setToken(null);
+
+            // Le témoin : sans jeton, la preuve fraîche passe et la marque s'écrit.
+            $parUnJeton = 'ni l’un ni l’autre' !== $motif;
+            self::assertSame($parUnJeton, $refuse, \sprintf('« %s » : la preuve fraîche %s.', $motif, $parUnJeton ? 'ne vaut rien sous un jeton' : 'passe'));
+            self::assertSame(!$parUnJeton, $marque, \sprintf('« %s » : marquer() %s.', $motif, $parUnJeton ? 'n’écrit rien sous un jeton' : 'écrit'));
+        }
     }
 
     // ─── Outils ──────────────────────────────────────────────────────────────────

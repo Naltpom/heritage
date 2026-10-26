@@ -255,8 +255,11 @@ final class VoirCommeTest extends CoreWebTestCase
             }
         };
 
-        $requete = new Request();
-        $requete->setSession(new Session(new MockArraySessionStorage()));
+        // Une session apportée par la requête, comme celle d'un navigateur : son cookie. La
+        // bascule ne lit que celle-là (ADR 0021 § 4 ; `JetonsDApiSansEtatTest`).
+        $session = new Session(new MockArraySessionStorage());
+        $requete = new Request(cookies: [$session->getName() => 'session-du-test']);
+        $requete->setSession($session);
 
         $pile = new RequestStack();
         $pile->push($requete);

@@ -168,7 +168,9 @@ final class BasculeVoirCommeTest extends BaseDeDemandes
 
     private function bascule(Session $session): BasculeVoirComme
     {
-        $requete = new Request();
+        // Une session apportée par la requête, comme celle d'un navigateur : son cookie. La
+        // bascule ne lit que celle-là (ADR 0021 § 4).
+        $requete = new Request(cookies: [$session->getName() => 'session-du-test']);
         $requete->setSession($session);
 
         $pile = new RequestStack();
