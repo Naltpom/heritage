@@ -26,7 +26,7 @@
  */
 
 import { requeteApi, type OptionsRequete } from './client'
-import type { BlocDate, BlocDateOp, Branche, Calque, Sexe, Visibilite } from './types'
+import type { BlocDate, BlocDateOp, Branche, Calque, PorteeExplorer, Sexe, Visibilite } from './types'
 
 /* ------------------------------------------------------------------ */
 /* § 5.3 — la fiche d'une personne                                     */
@@ -611,6 +611,67 @@ export interface ArbreDAffiche {
 /** `GET /api/arbre/familles/{id}/affiche` — le couple, son ascendance, sa descendance. */
 export function lireArbreDAffiche(familleId: number, signal?: AbortSignal): Promise<ArbreDAffiche> {
   return requeteApi<ArbreDAffiche>(`/arbre/familles/${familleId}/affiche`, options(signal))
+}
+
+/** Un proche cité dans une ligne du tableau — `displayName` vaut « Personne vivante » hors cercle. */
+export interface ProcheDuTableau {
+  personId: number
+  displayName: string
+}
+
+/**
+ * Une ligne du tableau des personnes (§ 5.5 ter) — une fiche que le lecteur a le droit de
+ * lire en entier. Il n'y a pas de forme réduite : un vivant hors cercle n'a pas de ligne.
+ */
+export interface LigneDuTableau {
+  personId: number
+  gedcomXref: string | null
+  displayName: string
+  surname: string
+  givenNames: string
+  marriedName: string | null
+  nickname: string | null
+  sex: Sexe
+  vivant: boolean
+  generation: number | null
+  branch: Branche | null
+  /** La phrase de la fiche (« grand-mère »), relative au lecteur ; `null` sans point de vue. */
+  parente: string | null
+  /** Forme compacte du § 14.4 (« 1901-1909 », « 26.9.2012 ») ; `null` si inconnue. */
+  naissance: string | null
+  /** `AAAA-MM-JJ`, borne basse de la naissance **telle que le lecteur la voit** : pour trier. */
+  naissanceTri: string | null
+  lieuNaissance: string | null
+  deces: string | null
+  decesTri: string | null
+  lieuDeces: string | null
+  professions: string[]
+  parents: ProcheDuTableau[]
+  conjoints: ProcheDuTableau[]
+  enfants: number
+  citationCount: number
+  /** Meilleur `QUAY` des citations ; `>= 2` ⇒ appuyé sur un acte. */
+  bestQuay: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TableauDesPersonnes {
+  portee: PorteeExplorer
+  elements: LigneDuTableau[]
+  total: number
+}
+
+/**
+ * `GET /api/arbre/tableau?portee=` — toutes les fiches lisibles, une ligne chacune, pour
+ * Explorer › Tableau. Filtres, tri et export CSV se font ici, sur cette charge : la route
+ * n'en prend aucun. `tout` n'est accordé qu'à l'administration (le serveur répond `arbre`
+ * à un membre).
+ */
+export function chargerTableau(portee: PorteeExplorer = 'arbre', signal?: AbortSignal): Promise<TableauDesPersonnes> {
+  const o = options(signal)
+  o.requete = { portee }
+  return requeteApi<TableauDesPersonnes>('/arbre/tableau', o)
 }
 
 /**

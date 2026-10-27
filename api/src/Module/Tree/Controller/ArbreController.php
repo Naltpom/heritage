@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Controller;
 
+use App\Module\Core\Contract\ArbreDuLecteurInterface;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Security\ReserveAuxMembres;
@@ -23,6 +24,7 @@ use App\Module\Tree\Serializer\NormaliseurDePersonne;
 use App\Module\Tree\Serializer\NormaliseurDeRecherche;
 use App\Module\Tree\Serializer\NormaliseurDeRequete;
 use App\Module\Tree\Serializer\NormaliseurDeRessemblance;
+use App\Module\Tree\Serializer\NormaliseurDuTableau;
 use App\Module\Tree\Service\ChronometreDuGraphe;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,7 +32,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Les six routes de lecture de l'arbre — § 5 du contrat d'API.
+ * Les sept routes de lecture de l'arbre — § 5 du contrat d'API.
  *
  * ```
  * GET  /api/arbre/graphe                   MEMBRE   200 · 304
@@ -38,10 +40,11 @@ use Symfony\Component\Routing\Attribute\Route;
  * GET  /api/arbre/familles/{id}            MEMBRE   200
  * GET  /api/arbre/familles/{id}/affiche    MEMBRE   200      (l'arbre d'une affiche, § 5.4 bis)
  * GET  /api/arbre/recherche                MEMBRE   200 · 422
+ * GET  /api/arbre/tableau                  MEMBRE   200      (toutes les fiches lisibles, § 5.5 ter)
  * POST /api/arbre/ressemblances            MEMBRE   200 · 422 (une lecture, malgré le verbe)
  * ```
  *
- * Compte en attente : `403 regime_en_attente` sur les six.
+ * Compte en attente : `403 regime_en_attente` sur les sept.
  *
  * ## Ce contrôleur ne filtre rien, et c'est une règle et non un style
  *
@@ -239,6 +242,55 @@ final class ArbreController extends AbstractController
             $this->vivants,
             '1' === $requete->query->get('vivants'),
         ));
+    }
+
+    /**
+     * Le tableau des personnes — § 5.5 ter : une ligne par fiche lisible, pour l'écran
+     * Explorer › Tableau, qui filtre, trie et exporte en CSV **côté client**.
+     *
+     * Le cercle s'applique dans {@see NormaliseurDuTableau}, avec la règle de la
+     * recherche : un vivant hors cercle est absent, pas réduit. `?portee=tout` est la
+     * bascule « Toute la base » d'Explorer, accordée à l'administration seule comme sur
+     * la chronologie et les statistiques. Ce n'est pas un filtre de confidentialité :
+     * seulement le choix de l'arbre montré (`arbre`, le défaut : la famille reliée à la
+     * fiche du lecteur).
+     *
+     * `private, no-store` et `Vary: Cookie` : la charge dépend du lecteur, et elle porte
+     * des vivants — aucun cache n'a à la garder.
+     */
+    #[Route('/api/arbre/tableau', name: 'tree_tableau', methods: ['GET'])]
+    public function tableau(
+        Request $requete,
+        NormaliseurDuTableau $normaliseur,
+        ArbreDuLecteurInterface $arbreDuLecteur,
+    ): JsonResponse {
+        $toutLaBase = 'tout' === $requete->query->get('portee') && $this->isGranted('ROLE_ADMIN');
+        $lecteur = $this->lecteurs->courant();
+        $personnes = $this->lecture->personnesDuTableau();
+
+        $dansLaPortee = null;
+        if (!$toutLaBase) {
+            $ids = [];
+            foreach ($personnes as $personne) {
+                if (null !== $personne->getId()) {
+                    $ids[] = $personne->getId();
+                }
+            }
+            $dansLaPortee = array_fill_keys($arbreDuLecteur->filtrer($ids), true);
+        }
+
+        $reponse = new JsonResponse(['portee' => $toutLaBase ? 'tout' : 'arbre'] + $normaliseur->tableau(
+            $personnes,
+            $this->lecture->liensDuTableau(),
+            $lecteur,
+            $this->cercles->pour($lecteur),
+            $this->vivants,
+            $dansLaPortee,
+        ));
+        $reponse->headers->set('Cache-Control', 'private, no-store');
+        $reponse->headers->set('Vary', 'Cookie');
+
+        return $reponse;
     }
 
     /**

@@ -303,6 +303,15 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/views/StatsView.vue'),
         meta: { acces: 'membre', titre: 'Statistiques' },
       },
+      {
+        // Le cinquième onglet (28/10/2026) : les personnes en un grand tableau
+        // filtrable et exportable en CSV. `membre` comme les autres : il lit des
+        // dates et des lieux, déjà passés par le cercle (`/api/arbre/tableau`).
+        path: 'tableau',
+        name: 'tableau',
+        component: () => import('@/views/TableauView.vue'),
+        meta: { acces: 'membre', titre: 'Tableau' },
+      },
     ],
   },
   // Les adresses d'avant Explorer : favoris et liens déjà partagés.
