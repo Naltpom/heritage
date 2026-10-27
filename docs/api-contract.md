@@ -787,7 +787,7 @@ pas, et `publicKey` / `credentialId` sont masqués s'ils devaient apparaître da
 `changes.methode = "jeton_api"` et `changes.prefixe` (les 12 premiers caractères, seulement
 si la chaîne présentée commence comme un jeton d'Heritage ; jamais le jeton ni son
 empreinte) ; pour un compte suspendu, la ligne nomme aussi le jeton. Chaque ligne écrite
-pendant une requête par jeton porte `api_token_id` et `api_token_label` (libellé recopié ; colonnes de `core_audit_log`). Les
+pendant une requête par jeton porte `api_token_id` et `api_token_label` (libellé recopié ; colonnes de `core_audit_log`), qu'elle vienne du souscripteur Doctrine ou d'une décision consignée par `AuditService::enregistrer()`. `GET /api/administration/journal` les expose en `jetonApi: {id, libelle}`, `null` hors jeton. Les
 commandes `heritage:jeton-api:creer` et `:revoquer` écrivent `jeton_api_cree` /
 `jeton_api_revoque` sans acteur (console), le propriétaire dans `changes.utilisateur_id`. Le
 dernier usage (`last_used_at`, `last_used_ip`) s'écrit au plus toutes les 300 s, sans ligne.

@@ -13,6 +13,7 @@ use App\Module\Core\Enum\UserStatus;
 use App\Module\Core\Exception\ForbiddenException;
 use App\Module\Core\Repository\JetonDApiRepository;
 use App\Module\Core\Security\JetonDApiAuthentifie;
+use App\Module\Core\Service\AuditService;
 use App\Module\Core\Service\ClesVapid;
 use App\Module\Core\Service\GenerateurDeJetonDApi;
 use App\Module\Core\Service\PreuveDIdentiteRecente;
@@ -188,6 +189,52 @@ final class JetonsDApiEnHttpTest extends CoreWebTestCase
         self::assertNull($creations[1]->getApiTokenLabel());
 
         ArbreEnMemoire::oublierTout();
+    }
+
+    /**
+     * ADR 0021 § 7, la voie des **décisions** : une ligne écrite par `AuditService::enregistrer()`
+     * pendant une requête par jeton nomme le jeton, comme celles du souscripteur Doctrine.
+     * Par cookie, hors requête, ou sous un jeton de sécurité sans jeton d'API, les colonnes
+     * restent vides. Le journal à l'écran (`normaliser()`) expose `jetonApi`.
+     */
+    public function testUneDecisionConsigneeParLeServiceNommeLeJeton(): void
+    {
+        $cobalt = $this->creerUtilisateur('cobalt@example.net');
+        $conteneur = self::getContainer();
+        $audit = $conteneur->get(AuditService::class);
+        $pile = $conteneur->get(RequestStack::class);
+        $jetons = $conteneur->get(TokenStorageInterface::class);
+        \assert($audit instanceof AuditService && $pile instanceof RequestStack && $jetons instanceof TokenStorageInterface);
+
+        $parJeton = new PostAuthenticationToken($cobalt, 'api_jetons', $cobalt->getRoles());
+        foreach ((new JetonDApiAuthentifie(7, 'Claude — agents', PorteeDeJeton::Validation))->attributs() as $nom => $valeur) {
+            $parJeton->setAttribute($nom, $valeur);
+        }
+        $parCookie = new PostAuthenticationToken($cobalt, 'main', $cobalt->getRoles());
+
+        $pile->push(Request::create('/api/administration/demandes/1/valider', 'POST'));
+        try {
+            $jetons->setToken($parJeton);
+            $sousJeton = $audit->enregistrer(AuditAction::Suppression, 'Tree\Person', '17', 'Marne Dolomite Sureau');
+            $jetons->setToken($parCookie);
+            $sousCookie = $audit->enregistrer(AuditAction::Suppression, 'Tree\Person', '18', 'Autre Fiche');
+        } finally {
+            $pile->pop();
+            $jetons->setToken(null);
+        }
+        // Hors requête : la console n'a ni requête ni jeton d'API.
+        $horsRequete = $audit->enregistrer(AuditAction::Suppression, 'Tree\Person', '19', 'Troisième Fiche');
+
+        self::assertSame(7, $sousJeton->getApiTokenId());
+        self::assertSame('Claude — agents', $sousJeton->getApiTokenLabel());
+        self::assertSame($cobalt->getId(), $sousJeton->getActorUserId(), 'L’auteur reste le compte du jeton.');
+        self::assertNull($sousCookie->getApiTokenId());
+        self::assertNull($sousCookie->getApiTokenLabel());
+        self::assertNull($horsRequete->getApiTokenId());
+        self::assertNull($horsRequete->getApiTokenLabel());
+
+        self::assertSame(['id' => 7, 'libelle' => 'Claude — agents'], $audit->normaliser($sousJeton)['jetonApi']);
+        self::assertNull($audit->normaliser($sousCookie)['jetonApi']);
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Module\Core\Entity\AuditLog;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\AuditAction;
 use App\Module\Core\Repository\AuditLogRepository;
+use App\Module\Core\Security\JetonDApiAuthentifie;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -69,6 +70,10 @@ final class AuditService
         $incarnant = null === $acteur ? $this->incarnant() : null;
         $acteur ??= $this->utilisateurCourant();
         $requete = $this->requestStack->getCurrentRequest();
+        // Sous un jeton d'API, la décision nomme le jeton comme le fait la voie mécanique :
+        // une seule source, `JetonDApiAuthentifie` (ADR 0021 § 7). Hors requête, pas de jeton
+        // de sécurité, donc rien (console, commandes `heritage:jeton-api:*`).
+        $jetonDApi = null === $requete ? null : JetonDApiAuthentifie::depuisLeJetonDeSecurite($this->security->getToken());
 
         $journal = new AuditLog(
             $action,
@@ -84,6 +89,8 @@ final class AuditService
             $this->tronquer($requete?->headers->get('User-Agent')),
             $incarnant?->getId(),
             $incarnant?->getEmail(),
+            $jetonDApi?->id,
+            $jetonDApi?->libelle,
         );
 
         $this->em->persist($journal);
@@ -157,6 +164,12 @@ final class AuditService
             // L'administrateur qui incarnait l'acteur, ou `null` (ADR 0010).
             'impersonatorUserId' => $ligne->getImpersonatorUserId(),
             'impersonatorEmail' => $ligne->getImpersonatorEmail(),
+            // Le jeton d'API qui a écrit la ligne, ou `null` (ADR 0021 § 7). Le libellé est
+            // celui recopié à l'écriture : il survit à la révocation du jeton.
+            'jetonApi' => null === $ligne->getApiTokenId() ? null : [
+                'id' => $ligne->getApiTokenId(),
+                'libelle' => $ligne->getApiTokenLabel(),
+            ],
         ];
     }
 
