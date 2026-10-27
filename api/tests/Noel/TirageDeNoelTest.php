@@ -284,11 +284,31 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         self::assertCount(4, $notifications);
         self::assertSame(['code' => $code], $notifications[0]->getLinkParams());
 
+        // L'organisateur suit qui a ouvert sa carte : personne encore.
+        $this->requete("/api/noel/tirages/{$code}");
+        $suivi = $this->charge()['suivi'];
+        self::assertIsArray($suivi);
+        self::assertCount(4, $suivi['cartesVues']);
+        self::assertSame([null, null, null, null], array_column($suivi['cartesVues'], 'vueLe'));
+        self::assertArrayNotHasKey('receveur', $suivi['cartesVues'][0]);
+
         // Ma carte : à qui j'offre, avec son âge au jour de la remise.
         $this->requete("/api/noel/tirages/{$code}/mon-attribution");
         self::assertSame(Response::HTTP_OK, $this->statut(), $this->corps());
         self::assertSame($attributions[$papa], $this->charge()['userId']);
         self::assertIsInt($this->charge()['age']);
+
+        $this->requete("/api/noel/tirages/{$code}");
+        $vues = $this->charge()['suivi']['cartesVues'];
+        $vuesParCompte = array_column($vues, 'vueLe', 'userId');
+        self::assertIsString($vuesParCompte[$papa]);
+        self::assertNull($vuesParCompte[$maman]);
+
+        // Un participant ne lit pas le suivi.
+        $this->connexion('fille@example.invalid');
+        $this->requete("/api/noel/tirages/{$code}");
+        self::assertArrayNotHasKey('suivi', $this->charge());
+        $this->connexion('papa@example.invalid');
 
         // Plus personne ne rejoint, ne part, ne règle — et rien n'annule.
         $this->envoyer('PUT', "/api/noel/tirages/{$code}/participation", ['reponse' => 'non']);
@@ -410,7 +430,15 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         self::assertSame(3, $this->charge()['nbParticipants']);
         self::assertSame('non', $this->charge()['maParticipation']['reponse']);
         self::assertNull($this->charge()['maParticipation']['presence']);
+        self::assertArrayNotHasKey('suivi', $this->charge());
 
+        // L'organisateur voit qui a vu le lien et dit non.
+        $this->connexion('papa@example.invalid');
+        $this->requete("/api/noel/tirages/{$code}");
+        self::assertSame(['Hugo'], array_column($this->charge()['suivi']['refus'], 'prenom'));
+        self::assertSame([], $this->charge()['suivi']['cartesVues']);
+
+        $this->connexion('fils@example.invalid');
         $this->repondre($code, ['reponse' => 'oui', 'presence' => 'ne_sait_pas', 'vote' => 'magie']);
         self::assertSame(4, $this->charge()['nbParticipants']);
 

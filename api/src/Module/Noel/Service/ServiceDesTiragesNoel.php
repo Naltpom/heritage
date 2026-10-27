@@ -11,6 +11,7 @@ use App\Module\Core\Exception\ForbiddenException;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Core\Exception\ValidationException;
 use App\Module\Core\Service\NotificationService;
+use App\Module\Noel\Entity\AttributionNoel;
 use App\Module\Noel\Entity\Participation;
 use App\Module\Noel\Entity\TirageNoel;
 use App\Module\Noel\Enum\Revelation;
@@ -245,9 +246,26 @@ final class ServiceDesTiragesNoel
     /** À qui le compte offre-t-il ? */
     public function attributionDe(TirageNoel $tirage, User $compte): User
     {
+        return $this->attributionDuDonneur($tirage, $compte)->getReceveur();
+    }
+
+    /** Le donneur ouvre sa carte : la première fois est notée pour l'organisateur. */
+    public function consulterMonAttribution(TirageNoel $tirage, User $compte, \DateTimeImmutable $maintenant = new \DateTimeImmutable()): User
+    {
+        $attribution = $this->attributionDuDonneur($tirage, $compte);
+        if (null === $attribution->getVueLe()) {
+            $attribution->marquerVue($maintenant);
+            $this->em->flush();
+        }
+
+        return $attribution->getReceveur();
+    }
+
+    private function attributionDuDonneur(TirageNoel $tirage, User $compte): AttributionNoel
+    {
         foreach ($tirage->getAttributions() as $attribution) {
             if ($attribution->getDonneur()->getId() === $compte->getId()) {
-                return $attribution->getReceveur();
+                return $attribution;
             }
         }
 
