@@ -46,6 +46,7 @@ function routeur() {
           { path: 'carte', name: 'carte', component: bouchon('carte') },
           { path: 'calendrier', name: 'anniversaires', component: bouchon('calendrier') },
           { path: 'stats', name: 'stats', component: bouchon('stats') },
+          { path: 'tableau', name: 'tableau', component: bouchon('tableau') },
         ],
       },
     ],
@@ -72,10 +73,10 @@ function onglets(html: string): { libelle: string; courant: boolean; href: strin
 }
 
 describe('la rangée d’Explorer', () => {
-  it('porte quatre onglets, dans l’ordre : Chronologie, Carte, Calendrier, Stats', async () => {
+  it('porte cinq onglets, dans l’ordre : Chronologie, Carte, Calendrier, Stats, Tableau', async () => {
     const html = await rendre('/explorer/chronologie')
 
-    expect(onglets(html).map((o) => o.libelle)).toEqual(['Chronologie', 'Carte', 'Calendrier', 'Stats'])
+    expect(onglets(html).map((o) => o.libelle)).toEqual(['Chronologie', 'Carte', 'Calendrier', 'Stats', 'Tableau'])
   })
 
   it('chaque onglet est un lien vers sa route, pour qu’il se partage et se recharge', async () => {
@@ -86,6 +87,7 @@ describe('la rangée d’Explorer', () => {
       '/explorer/carte',
       '/explorer/calendrier',
       '/explorer/stats',
+      '/explorer/tableau',
     ])
   })
 
@@ -94,6 +96,7 @@ describe('la rangée d’Explorer', () => {
     ['/explorer/carte', 'Carte', 'écran carte'],
     ['/explorer/calendrier', 'Calendrier', 'écran calendrier'],
     ['/explorer/stats', 'Stats', 'écran stats'],
+    ['/explorer/tableau', 'Tableau', 'écran tableau'],
   ])('sur %s, « %s » est l’onglet courant, et lui seul', async (chemin, libelle, ecran) => {
     const html = await rendre(chemin)
     const courants = onglets(html).filter((o) => o.courant)
@@ -132,7 +135,7 @@ describe('ongletDe', () => {
   })
 
   it('les clés des onglets sont les noms de route, qui sont un contrat', () => {
-    expect(ONGLETS_EXPLORER.map((o) => o.cle)).toEqual(['chronologie', 'carte', 'anniversaires', 'stats'])
-    expect(ONGLETS_EXPLORER.map((o) => o.vers.name)).toEqual(['chronologie', 'carte', 'anniversaires', 'stats'])
+    expect(ONGLETS_EXPLORER.map((o) => o.cle)).toEqual(['chronologie', 'carte', 'anniversaires', 'stats', 'tableau'])
+    expect(ONGLETS_EXPLORER.map((o) => o.vers.name)).toEqual(['chronologie', 'carte', 'anniversaires', 'stats', 'tableau'])
   })
 })

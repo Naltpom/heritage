@@ -1261,6 +1261,7 @@ troisième (§ 11, révision du 2026-10-01).
 | `/api/arbre/personnes/{id}` | fiche complète | fiche complète | **`200`, fiche réduite** — pas `404` |
 | `/api/arbre/recherche` | présente | présente | **absente** |
 | `/api/arbre/ressemblances` | présente | présente — naissance comparée **réduite** (§ 5.5 bis) | **absente** |
+| `/api/arbre/tableau` | ligne présente | ligne présente — naissance **réduite** (§ 5.5 ter) | **absente** |
 | `/api/chronologie` | barre présente | barre présente | **absente** (§ 9.1) |
 
 La quatrième colonne est toute la règle de l'ADR 0003 : **le graphe montre, il n'énumère
@@ -2422,6 +2423,73 @@ raisons citent la fiche :
 - `ligneDates` est celle de la recherche (§ 5.5), réciprocité comprise ; `lieuNaissance` est le
   `place` de la naissance tel que la fiche l'écrit, ou `null`.
 - **Pas de `total`**, et `tronque` se calcule sur le jeu **déjà filtré et trié** (§ 5.5).
+
+---
+
+### 5.5 ter Le tableau des personnes
+
+`GET /api/arbre/tableau?portee=arbre` — `MEMBRE` (`403 regime_en_attente` pour un compte en
+attente), ajoutée le 2026-10-28 pour l'écran Explorer › Tableau.
+
+Toutes les fiches que le lecteur a le droit de lire, **une ligne chacune**, triées par
+`search_key` (« patronyme, prénoms »). Le filtrage par colonne, le tri et l'export CSV se
+font **côté client**, sur cette charge : la route ne prend aucun filtre.
+
+- `portee` : `arbre` (défaut) — la famille reliée à la fiche du lecteur, comme la
+  chronologie et les statistiques ; `tout` — toute la base, **administration seulement**. Un
+  `tout` venu d'un membre est servi `arbre`, et la charge dit la portée retenue.
+- `Cache-Control: private, no-store` et `Vary: Cookie`.
+
+```json
+{
+  "portee": "arbre",
+  "elements": [
+    {
+      "personId": 44,
+      "gedcomXref": "@I500044@",
+      "displayName": "Ambre Bourrache",
+      "surname": "Bourrache",
+      "givenNames": "Ambre",
+      "marriedName": null,
+      "nickname": null,
+      "sex": "masculin",
+      "vivant": false,
+      "generation": -4,
+      "branch": "pp",
+      "parente": "arrière-grand-père",
+      "naissance": "1912",
+      "naissanceTri": "1912-01-01",
+      "lieuNaissance": "Saule, Ombrage, Sylvanie",
+      "deces": "1989",
+      "decesTri": "1989-01-01",
+      "lieuDeces": null,
+      "professions": ["Tonnelier"],
+      "parents": [{ "personId": 12, "displayName": "Émeri Bourrache" }],
+      "conjoints": [{ "personId": 45, "displayName": "Marne Sureau" }],
+      "enfants": 3,
+      "citationCount": 2,
+      "bestQuay": 3,
+      "createdAt": "2026-09-15T21:03:00+02:00",
+      "updatedAt": "2026-10-02T08:12:44+02:00"
+    }
+  ],
+  "total": 1
+}
+```
+
+> **Un tableau est une énumération : il suit la règle de la recherche** (§ 5.1). Une
+> personne vivante hors cercle n'a **aucune** ligne, ni réduite ni masquée ; une personne
+> d'un autre arbre non plus, défunte comprise. `total` se compte **après** ce filtre.
+
+- `naissance` et `deces` sont la forme **compacte** d'une date seule (§ 14.4), `null`
+  quand elle n'est pas connue. La naissance d'un vivant passe par la réciprocité (§ 5.6) :
+  elle ne porte que les composantes permises, et `naissanceTri` — la borne basse
+  `AAAA-MM-JJ` qui sert au tri — est calculée **sur la date réduite**, jamais sur la vraie.
+  Le lieu reste, comme dans le bloc masqué de la fiche.
+- `parents` et `conjoints` sont des références : un vivant hors cercle y garde sa place sous
+  `displayName: "Personne vivante"` ; un proche d'un autre arbre n'y figure pas.
+- `parente` est la phrase de la fiche (« grand-mère »), relative au lecteur, `null` sans
+  point de vue (§ 5.3).
 
 ---
 

@@ -10,6 +10,7 @@ use App\Module\Tree\Entity\Fact;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Note;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Enum\FactType;
 use App\Module\Tree\Repository\CitationRepository;
 use App\Module\Tree\Repository\FactRepository;
 use App\Module\Tree\Repository\FamilyRepository;
@@ -465,5 +466,93 @@ final readonly class LectureDeLArbre
         $lignes = $constructeur->andWhere($ou)->getQuery()->getResult();
 
         return $lignes;
+    }
+
+    /**
+     * Toutes les fiches de l'arbre, pour le tableau (§ 5.5 ter) — triées par la clé de
+     * recherche, c'est-à-dire « patronyme, prénoms », l'ordre d'un registre.
+     *
+     * `EtatVivant` a déjà chargé la même population pour ses médianes : dans la même
+     * requête HTTP, Doctrine rend les entités de sa carte d'identité, et seule la lecture
+     * SQL se répète.
+     *
+     * @return list<Person>
+     */
+    public function personnesDuTableau(): array
+    {
+        /** @var list<Person> $lignes */
+        $lignes = $this->personnes->createQueryBuilder('p')
+            ->orderBy('p.searchKey', 'ASC')->addOrderBy('p.id', 'ASC')
+            ->getQuery()->getResult();
+
+        return $lignes;
+    }
+
+    /**
+     * Les liens de toutes les fiches d'un coup, **en identifiants seulement** : parents,
+     * conjoints, enfants et professions. Trois lectures SQL, quel que soit le nombre de
+     * fiches — une par personne en ferait six mille.
+     *
+     * Aucun filtre ici non plus : c'est {@see NormaliseurDuTableau} qui décide, avec le
+     * cercle, du nom qu'il sert pour chaque identifiant et des enfants qu'il compte.
+     *
+     * @return array{
+     *     parents: array<int, list<int>>,
+     *     conjoints: array<int, list<int>>,
+     *     enfants: array<int, list<int>>,
+     *     professions: array<int, list<string>>,
+     * }
+     */
+    public function liensDuTableau(): array
+    {
+        $connexion = $this->em->getConnection();
+        $table = fn (string $entite): string => $this->em->getClassMetadata($entite)->getTableName();
+
+        $familles = [];
+        foreach ($connexion->fetchAllAssociative(\sprintf('SELECT id, husband_id, wife_id FROM %s ORDER BY id', $table(Family::class))) as $ligne) {
+            $familles[(int) $ligne['id']] = array_values(array_filter(
+                [$ligne['husband_id'], $ligne['wife_id']],
+                static fn (mixed $id): bool => is_numeric($id),
+            ));
+        }
+
+        $conjoints = [];
+        foreach ($familles as $epoux) {
+            foreach ($epoux as $un) {
+                foreach ($epoux as $autre) {
+                    if ($un !== $autre) {
+                        $conjoints[(int) $un][] = (int) $autre;
+                    }
+                }
+            }
+        }
+
+        $parents = [];
+        $enfants = [];
+        foreach ($connexion->fetchAllAssociative(\sprintf('SELECT family_id, person_id FROM %s ORDER BY id', $table(Child::class))) as $ligne) {
+            foreach ($familles[(int) $ligne['family_id']] ?? [] as $parent) {
+                $parents[(int) $ligne['person_id']][] = (int) $parent;
+                $enfants[(int) $parent][] = (int) $ligne['person_id'];
+            }
+        }
+
+        $professions = [];
+        $requete = \sprintf(
+            'SELECT person_id, label FROM %s WHERE type = ? AND person_id IS NOT NULL ORDER BY sort_order, id',
+            $table(Fact::class),
+        );
+        foreach ($connexion->fetchAllAssociative($requete, [FactType::Profession->value]) as $ligne) {
+            $libelle = trim((string) $ligne['label']);
+            if ('' !== $libelle) {
+                $professions[(int) $ligne['person_id']][] = $libelle;
+            }
+        }
+
+        return [
+            'parents' => array_map(static fn (array $ids): array => array_values(array_unique($ids)), $parents),
+            'conjoints' => array_map(static fn (array $ids): array => array_values(array_unique($ids)), $conjoints),
+            'enfants' => array_map(static fn (array $ids): array => array_values(array_unique($ids)), $enfants),
+            'professions' => $professions,
+        ];
     }
 }

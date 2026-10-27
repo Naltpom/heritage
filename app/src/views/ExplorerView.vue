@@ -1,6 +1,7 @@
 <script lang="ts">
 /**
- * Les quatre onglets d'Explorer, dans leur ordre (Stats ajouté le 02/10/2026).
+ * Les onglets d'Explorer, dans leur ordre (Stats ajouté le 02/10/2026, Tableau le
+ * 28/10/2026).
  *
  * Dans un bloc `<script>` ordinaire, et non dans le `<script setup>`, pour la
  * raison qu'explique `AnniversairesView` : ce qui est dans une fermeture de
@@ -21,6 +22,7 @@ export const ONGLETS_EXPLORER = [
   { cle: 'carte', libelle: 'Carte', vers: { name: 'carte' } },
   { cle: 'anniversaires', libelle: 'Calendrier', vers: { name: 'anniversaires' } },
   { cle: 'stats', libelle: 'Stats', vers: { name: 'stats' } },
+  { cle: 'tableau', libelle: 'Tableau', vers: { name: 'tableau' } },
 ] as const
 
 export type OngletExplorer = (typeof ONGLETS_EXPLORER)[number]['cle']

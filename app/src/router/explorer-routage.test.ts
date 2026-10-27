@@ -48,6 +48,7 @@ describe('Explorer ouvre un onglet, jamais une page vide', () => {
     ['/explorer/carte', 'carte'],
     ['/explorer/calendrier', 'anniversaires'],
     ['/explorer/stats', 'stats'],
+    ['/explorer/tableau', 'tableau'],
   ])('%s résout la route « %s »', (chemin, nom) => {
     expect(routeur().resolve(chemin).name).toBe(nom)
   })
@@ -56,8 +57,8 @@ describe('Explorer ouvre un onglet, jamais une page vide', () => {
     expect(routeur().resolve({ name: 'anniversaires' }).path).toBe('/explorer/calendrier')
   })
 
-  it('les quatre onglets vivent sous la route parente d’Explorer', () => {
-    for (const nom of ['chronologie', 'carte', 'anniversaires', 'stats']) {
+  it('les cinq onglets vivent sous la route parente d’Explorer', () => {
+    for (const nom of ['chronologie', 'carte', 'anniversaires', 'stats', 'tableau']) {
       const resolue = routeur().resolve({ name: nom })
       expect(resolue.matched.map((m) => m.name)).toEqual(['explorer', nom])
     }
