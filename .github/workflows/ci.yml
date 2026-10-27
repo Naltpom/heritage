@@ -543,11 +543,22 @@ jobs:
       - name: Aucun jeton d'API hrt_ n'est commité
         run: |
           set -euo pipefail
-          if git grep -nE 'hrt_[A-Za-z0-9_-]{43}'; then
-            echo "::error::Un jeton d'API hrt_ figure dans le dépôt (lignes ci-dessus). Révoquez-le avec heritage:jeton-api:revoquer, puis retirez-le de l'historique."
-            exit 1
-          fi
-          echo "Aucun jeton hrt_ dans l'arborescence suivie."
+          # git grep rend 0 s'il trouve, 1 s'il ne trouve rien, 2 ou plus sur erreur.
+          rc=0
+          git grep -nE 'hrt_[A-Za-z0-9_-]{43}' || rc=$?
+          case "$rc" in
+            0)
+              echo "::error::Un jeton d'API hrt_ figure dans le dépôt (lignes ci-dessus). Révoquez-le avec heritage:jeton-api:revoquer, puis retirez-le de l'historique."
+              exit 1
+              ;;
+            1)
+              echo "Aucun jeton hrt_ dans l'arborescence suivie."
+              ;;
+            *)
+              echo "::error::git grep a échoué (code $rc) : la recherche de jetons hrt_ n'a pas pu s'exécuter."
+              exit 1
+              ;;
+          esac
 
   # ---------------------------------------------------------------------------
   # L'empreinte de ce qui a été testé
