@@ -34,6 +34,11 @@ namespace App\Module\Media\Security;
  * La suppression administrative est encore autre chose : une permission d'**action**,
  * qui rend `403` et non `404`, parce que l'existence de la ressource n'est pas un secret
  * pour qui vient de la lire.
+ *
+ * Au téléversement, il décide aussi du dépôt direct (`actif`, portrait basculé, pas de
+ * quota). C'est pourquoi le **déposant** est fabriqué à part, par
+ * {@see FabriqueDeLecteur::deposant()} : sous un jeton d'API qui ne décide pas, il n'est
+ * pas administrateur (ADR 0021).
  */
 final readonly class LecteurMedia
 {

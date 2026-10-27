@@ -96,6 +96,10 @@ final readonly class PorteeDuJetonSubscriber implements EventSubscriberInterface
             // décidé. B2 ajoutera ici `POST /api/demandes/verifier` (le dépôt à blanc).
             'proposal_demande_creer' => 'POST',
             // `televerser` : la preuve d'un acte, jointe à une fiche ou à une fiche proposée.
+            // En membre, même sous un compte administrateur : `en_attente`, portrait
+            // inchangé, quota compté (`Media\Security\FabriqueDeLecteur::deposant()`).
+            // Elle n'est publiée qu'à la validation de la demande `ajout_media` qui la
+            // désigne.
             'media_televerser' => 'POST',
             // `demarche_*` : une demande d'acte envoyée…
             'demarche_creer' => 'POST',

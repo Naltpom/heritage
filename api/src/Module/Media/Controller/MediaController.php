@@ -132,7 +132,9 @@ final class MediaController extends AbstractController
     {
         $this->bascule->refuserSiActive();
 
-        $lecteur = $this->lecteur();
+        // Le déposant, et non le lecteur : sous un jeton d'API qui ne décide pas, un
+        // administrateur dépose comme un membre — quota compris (ADR 0021).
+        $lecteur = $this->deposant();
         $this->limiter($lecteur);
 
         $fichier = $requete->files->get('fichier');
@@ -491,6 +493,17 @@ final class MediaController extends AbstractController
         return null !== $membre && 'en_attente' === ($membre['status'] ?? null);
     }
 
+    private function lecteur(): LecteurMedia
+    {
+        return $this->lecteurs->depuisUtilisateur($this->utilisateur());
+    }
+
+    /** Le lecteur qui téléverse, réduit par la portée d'un jeton d'API : {@see FabriqueDeLecteur::deposant()}. */
+    private function deposant(): LecteurMedia
+    {
+        return $this->lecteurs->deposant($this->utilisateur());
+    }
+
     /**
      * `access_control` ferme déjà `^/api` derrière `ROLE_USER` et
      * `JsonAuthenticationEntryPoint` rend le `401` du § 15.1. Cette garde reste parce
@@ -503,7 +516,7 @@ final class MediaController extends AbstractController
      * noyau la traduit déjà en `authentification_requise`, avec la même enveloppe que
      * le point d'entrée.
      */
-    private function lecteur(): LecteurMedia
+    private function utilisateur(): User
     {
         $utilisateur = $this->getUser();
 
@@ -511,7 +524,7 @@ final class MediaController extends AbstractController
             throw new UnauthorizedHttpException('cookie', 'Authentification requise.');
         }
 
-        return $this->lecteurs->depuisUtilisateur($utilisateur);
+        return $utilisateur;
     }
 
     /**
@@ -533,6 +546,11 @@ final class MediaController extends AbstractController
      * avant, et c'est lui que le § 1.9 protège — ce sont les membres de la famille qui
      * useront de l'application au quotidien, et eux dont un compte volé remplirait le
      * disque. Élargir cette condition, c'est supprimer le plafond.
+     *
+     * Et elle ne suit pas l'administrateur sous un jeton d'API qui ne décide pas (portée
+     * `contribution`, celle des agents) : il y dépose comme un membre, plafond compris
+     * ({@see FabriqueDeLecteur::deposant()}, ADR 0021). Un jeton qui boucle ne remplit pas
+     * le disque au nom du commanditaire.
      *
      * ## Ce qui borne encore un administrateur, et ce qui ne le borne plus
      *
@@ -557,7 +575,8 @@ final class MediaController extends AbstractController
      * ## D'où vient le rôle
      *
      * De `LecteurMedia::$administrateur`, que {@see FabriqueDeLecteur} tient de
-     * `Core\Entity\User::getRoles()` — la source de vérité du projet. Ne pas redemander
+     * `Core\Entity\User::getRoles()` — la source de vérité du projet —, et que la portée
+     * d'un jeton peut seulement retirer. Ne pas redemander
      * `isGranted('ROLE_ADMIN')` ici : ce serait une seconde lecture du rôle à côté de
      * celle qui décide déjà de la file de validation et des champs privilégiés du § 7.2,
      * et c'est exactement la divergence que {@see FabriqueDeLecteur} raconte avoir payée
