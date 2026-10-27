@@ -35,7 +35,7 @@ Deux jetons sont prévus, parce que couper l'un ne doit pas couper l'autre :
 
 | Libellé | Portée | Usage |
 |---|---|---|
-| « Claude — agents » | `contribution` | les agents déposent, complètent, téléversent |
+| « Claude — agents » | `contribution` | les agents déposent, téléversent, demandent des actes |
 | « Claude — session principale » | `validation` | la session principale tranche les demandes |
 
 ### 2. Trois portées, ordonnées
@@ -48,7 +48,12 @@ Deux jetons sont prévus, parce que couper l'un ne doit pas couper l'autre :
   parmi les demandes en attente (la saisie reste hors de l'URL).
 - `contribution` : déposer une demande (sans la valider) ; téléverser un média ; créer une
   démarche, y ajouter un courrier, en poser le statut. Compléter, soumettre ou retirer une
-  demande **ne sont pas ouverts** : aucun outil des agents ne les appelle.
+  demande **ne sont pas ouverts** : aucun outil des agents ne les appelle. Sous un jeton de
+  portée inférieure à `validation`, un administrateur téléverse comme un membre : le média
+  naît `en_attente`, le portrait ne change qu'à la validation de la demande `ajout_media` qui
+  le désigne, le plafond de 20 dépôts par heure s'applique au compte, et une pièce ne se joint
+  qu'à ses propres propositions (`Media\Security\FabriqueDeLecteur::deposant()`). Par cookie ou
+  sous un jeton `validation`, le dépôt direct d'administrateur ne change pas.
 - `validation` : relire le diff d'une demande, la valider ou la refuser ; créer une source.
 
 La liste des routes de chaque portée n'est **pas** dans ce document : elle est dans
@@ -132,8 +137,18 @@ qui ferait du jeton un administrateur universel.
   bloquée ne peut plus tester même un bon jeton : le balayage d'un jeton se règle sur l'IP,
   pas sur le jeton qu'on ne connaît pas. Et `jeton_api_requetes`, **2 000 requêtes par heure
   et par jeton** (paramètre `app.core.jeton_api.requetes_par_heure`), pour qu'un agent qui
-  boucle ne bloque pas les autres. Un `Bearer` illisible (`Bearer` seul, caractère interdit)
-  rend le `401` du point d'entrée et n'est pas compté.
+  boucle ne bloque pas les autres. Un `Bearer` illisible (`Bearer` seul, caractère interdit,
+  schéma en minuscules) n'est compté nulle part. Sur une route protégée, il rend le `401` du
+  point d'entrée. Sur une route publique (`GET /api/sante`, `POST /api/connexion`), aucun
+  authentificateur ne le prend, mais le pare-feu `api_jetons` l'a gardé : il n'y a pas de jeton
+  de sécurité, et `PorteeDuJetonSubscriber` refuse toute requête Bearer sans attributs de
+  jeton, soit `403 acces_refuse`.
+- **Plafonds sans verrou** : `LimiteursDesJetonsDApi` contrôle l'IP par `consume(0)`, puis
+  compte l'échec après coup. Une rafale parallèle peut donc dépasser les 10 échecs de
+  quelques unités. Le risque est théorique : le jeton a 256 bits d'entropie.
+- **Débit partagé** : un seul jeton « Claude — agents » sert tous les agents, donc les
+  2 000 requêtes par heure sont à partager entre eux. À mesurer en B3 ; relever
+  `app.core.jeton_api.requetes_par_heure` si besoin.
 - **`Vary: Cookie, Authorization`** sur **toutes** les réponses `/api`, celles à `ETag`
   comprises (`SecurityHeadersSubscriber`) : une réponse qui varie selon l'un ou l'autre le
   déclare.
@@ -151,9 +166,12 @@ qui ferait du jeton un administrateur universel.
   dans les lignes qu'il écrit. Les **échecs** le sont (`methode: jeton_api`), avec `prefixe` :
   les 12 premiers caractères (`hrt_` et 8), **seulement** si la chaîne présentée commence
   comme un jeton d'Heritage — jamais un jeton, même faux, ni son empreinte. Pour un compte
-  suspendu, la ligne nomme aussi le jeton.
+  suspendu, la ligne nomme aussi le jeton, comme toute ligne écrite par
+  `AuditService::enregistrer()` sous un jeton. `GET /api/administration/journal` expose le
+  jeton en `jetonApi: {id, libelle}` (`null` hors jeton).
 - Le **dernier usage** (`last_used_at`, `last_used_ip`) s'écrit au plus toutes les 300 s,
-  sans ligne d'audit.
+  sans ligne d'audit. **Limite connue** : `JetonDApiHandler` le note avant le `user_checker` ;
+  un essai refusé sur un compte suspendu apparaît donc comme « dernier usage » du jeton.
 
 ## Conséquences
 
@@ -165,7 +183,11 @@ qui ferait du jeton un administrateur universel.
   second porteur, un code `429` et un en-tête `Vary`.
 - Une migration : table `core_api_token` et deux colonnes de `core_audit_log`.
 - La CI refuse un jeton `hrt_` commité (étape « Aucun jeton d'API hrt_ n'est commité » du job
-  `deploiement`) : le dépôt est public.
+  `deploiement`) : le dépôt est public. L'étape distingue « trouvé » (code 0, échec), « rien »
+  (1) et « `git grep` a échoué » (2 ou plus, échec). Elle détecte **après** le push : un jeton
+  poussé est déjà public, il faut le révoquer. On recommande en plus la protection au push de
+  GitHub (« push protection ») avec le motif personnalisé `hrt_[A-Za-z0-9_-]{43}` — un réglage
+  du dépôt, hors code.
 - Le commentaire de `app/src/lib/api/client.ts` est corrigé : le front n'envoie toujours aucun
   en-tête d'autorisation, mais il ne dit plus que l'API n'en admet aucun.
 - **Ce qui n'est pas fait, et pourrait l'être** : un écran d'administration des jetons ; des

@@ -407,14 +407,17 @@ composant `RateLimiter` stockant ses compteurs dans le cache (§ 0.6 — pas de 
 | `POST /api/inscription/verifier` | IP | 20 / heure | `429` `trop_de_tentatives` |
 | `POST /api/inscription/rattachement` | **jeton** | `invitation.tentatives_par_heure`, défaut **5** | **`200` indistinguable d'une recherche infructueuse** — voir § 4.2 |
 | `POST /api/inscription/rattachement` | IP | 30 / heure | `429` `trop_de_tentatives` |
-| `POST /api/medias` | compte (administrateur exempté) | 20 / heure **par défaut**, réglable par compte (§ 10.1) | `429` `trop_de_tentatives` |
+| `POST /api/medias` | compte (administrateur exempté, **sauf sous un jeton de portée inférieure à `validation`** : il dépose alors comme un membre, § 7.1) | 20 / heure **par défaut**, réglable par compte (§ 10.1) | `429` `trop_de_tentatives` |
 | `POST /api/demandes` | compte | 30 / heure | `429` `trop_de_tentatives` |
 | toute route, **échec d'authentification par jeton** (ADR 0021, `jeton_api_echecs_ip`) | IP | 10 échecs / 15 min, fenêtre glissante | `429` `trop_de_tentatives`, `Retry-After` |
 | toute route, **jeton valide** (ADR 0021, `jeton_api_requetes`) | jeton | **2 000** / heure (`app.core.jeton_api.requetes_par_heure`) | `429` `trop_de_tentatives`, `Retry-After` |
 
 Le plafond par IP est contrôlé **avant** la recherche du jeton : une IP bloquée ne peut plus
-tester même un bon jeton. Un `Bearer` illisible (`Bearer` seul, caractère interdit) rend le
-`401` du point d'entrée et n'est compté dans aucun des deux.
+tester même un bon jeton. Un `Bearer` illisible (`Bearer` seul, caractère interdit, schéma en
+minuscules) n'est compté dans aucun des deux. Sur une route protégée, il rend le `401` du point
+d'entrée ; sur une route publique (`GET /api/sante`, `POST /api/connexion`), il rend
+`403` `acces_refuse` : aucun jeton de sécurité n'est posé, et la portée refuse toute requête
+Bearer sans jeton d'API.
 
 Le plafond par jeton est le garde-fou du § 6.1 du dossier ; le plafond par IP est là pour le
 balayage distribué sur plusieurs jetons, que le premier ne voit pas. Les deux coexistent et
@@ -4843,6 +4846,13 @@ l'inexistant et un `403` sur l'existant feraient de la route un oracle d'énumé
 | `demandeId` + `brouillonRef` | entier + texte | Quand le média est joint à une personne **pas encore créée** : `12` + `"p1"` — **sans le dièse**, voir l'encadré de nommage ci-dessous. Réservé à l'auteur de la demande et à l'administrateur qui l'instruit : voir « Joindre une pièce à une personne proposée », plus bas. |
 | `caption` | texte | Légende, 255 caractères. |
 | `taken` | texte (JSON) | Bloc date à 5 clés (§ 14), sérialisé. Facultatif. |
+
+> **Sous un jeton d'API** (ADR 0021) de portée inférieure à `validation`, un administrateur
+> téléverse comme un membre : le média naît `en_attente`, le portrait ne change qu'à la
+> validation de la demande `ajout_media` qui le désigne, le plafond de 20 dépôts par heure
+> s'applique au compte, et une pièce ne se joint qu'à ses propres propositions
+> (`Media\Security\FabriqueDeLecteur::deposant()`). Par cookie ou sous un jeton `validation`,
+> le dépôt direct d'administrateur ne change pas.
 
 > **`subjectKind` accompagne toujours le couple `demandeId` + `brouillonRef`, et il vaut
 > `"personne"`.** Il n'est jamais omis, et il n'existe **pas** de quatrième valeur

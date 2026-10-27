@@ -19,9 +19,11 @@ use Symfony\Component\Security\Http\Authentication\AuthenticationFailureHandlerI
  *
  * Une requête dont l'en-tête n'a même pas la syntaxe d'un Bearer (`Bearer !!`) n'atteint
  * pas l'authentificateur : l'extracteur la laisse passer sans jeton, et c'est le point
- * d'entrée qui répond. Toutes les autres passent ici. Rendre la réponse du point d'entrée
- * fait des deux chemins **un seul corps par construction** — pas deux textes à tenir
- * identiques à la main.
+ * d'entrée qui répond — sur une route protégée. Sur une route publique, personne ne
+ * répond d'un `401` : la requête arrive à `PorteeDuJetonSubscriber`, qui refuse tout
+ * Bearer sans jeton d'API en `403 acces_refuse`. Toutes les autres passent ici. Rendre la
+ * réponse du point d'entrée fait des deux chemins **un seul corps par construction** — pas
+ * deux textes à tenir identiques à la main.
  *
  * Sans ce gestionnaire, l'`AccessTokenAuthenticator` de Symfony rend un `401` vide avec
  * `WWW-Authenticate: Bearer error="invalid_token", error_description="…"`, où la
