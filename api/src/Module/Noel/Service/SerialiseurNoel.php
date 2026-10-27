@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Noel\Service;
 
 use App\Module\Core\Entity\User;
+use App\Module\Noel\Entity\AttributionNoel;
 use App\Module\Noel\Entity\Participation;
 use App\Module\Noel\Entity\TirageNoel;
 
@@ -53,7 +54,7 @@ final readonly class SerialiseurNoel
 
         $this->annuaire->precharger([
             $tirage->getCreateur(),
-            ...array_map(static fn (Participation $p): User => $p->getUser(), $participants),
+            ...array_map(static fn (Participation $p): User => $p->getUser(), $tirage->getParticipations()->toArray()),
         ]);
 
         $mienne = $tirage->participationDe($lecteur);
@@ -79,6 +80,38 @@ final readonly class SerialiseurNoel
             'votes' => $this->service->votes($tirage),
             'revelation' => $tirage->getRevelation()?->value,
             'revelationOuverte' => $tirage->revelationOuverte($maintenant),
+        ] + ($tirage->estCreePar($lecteur) ? ['suivi' => $this->suivi($tirage)] : []);
+    }
+
+    /**
+     * Ce que seul l'organisateur lit : qui a répondu non (il a vu le lien), et après le
+     * tirage, qui a ouvert sa carte — sans jamais dire qui offre à qui.
+     *
+     * @return array<string, mixed>
+     */
+    private function suivi(TirageNoel $tirage): array
+    {
+        $refus = array_values(array_filter(
+            $tirage->getParticipations()->toArray(),
+            static fn (Participation $p): bool => !$p->participe(),
+        ));
+
+        return [
+            'refus' => array_map(fn (Participation $p): array => $this->identite($p->getUser()), $refus),
+            'cartesVues' => array_map(fn (AttributionNoel $a): array => [
+                ...$this->identite($a->getDonneur()),
+                'vueLe' => null !== $a->getVueLe() ? self::instant($a->getVueLe()) : null,
+            ], array_values($tirage->getAttributions()->toArray())),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function identite(User $compte): array
+    {
+        return [
+            'userId' => $compte->getId(),
+            ...$this->annuaire->nom($compte),
+            'photoUrl' => $this->annuaire->photoUrl($compte),
         ];
     }
 

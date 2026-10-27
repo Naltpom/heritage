@@ -130,7 +130,7 @@ final class NoelController extends AbstractController
 
         return new JsonResponse($this->serialiseur->personne(
             $tirage,
-            $this->service->attributionDe($tirage, $compte),
+            $this->service->consulterMonAttribution($tirage, $compte),
             $compte,
             $tirage->getDateEvenement(),
         ));
