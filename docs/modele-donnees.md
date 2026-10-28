@@ -1496,8 +1496,9 @@ CONSTRAINT ck_prp_request_motif_refus
 CONSTRAINT ck_prp_request_decision
   CHECK (status NOT IN ('validee','refusee') OR (decided_at IS NOT NULL AND decided_by_user_id IS NOT NULL)),
 
+-- Un brouillon retiré passe à `annulee` sans avoir été soumis (Version20261028183417).
 CONSTRAINT ck_prp_request_soumission
-  CHECK (status = 'brouillon' OR submitted_at IS NOT NULL),
+  CHECK (status IN ('brouillon','annulee') OR submitted_at IS NOT NULL),
 
 CONSTRAINT ck_prp_request_cible
   CHECK ((target_kind IS NULL) = (target_id IS NULL)),
@@ -1818,7 +1819,7 @@ compensation 2). C'est le prix de la frontière, et il est explicitement accept�
 | `en_attente` | Soumise. Dans la file de l'administrateur, et **appliquée au calque du seul auteur** (§ 6.3 du dossier). |
 | `validee` | Appliquée. Les ops portent leur `applied_at`, les révisions existent. |
 | `refusee` | Refusée, avec motif obligatoire. Reste consultable par son auteur. |
-| `annulee` | Retirée par son auteur avant décision. |
+| `annulee` | Retirée par son auteur avant décision. Un brouillon retiré garde `submitted_at` nul : il n'a jamais été soumis. |
 | `caduque` | Le monde a bougé sous la demande : à la validation, l'`old_value` d'un de ses ops ne correspondait plus à la base, ou la personne visée a été supprimée ou fusionnée, ou — cas propre à la création — l'identifiant provisoire référençait une personne disparue entre-temps. **Rien n'a été appliqué.** Statut **distinct de `refusee`** : personne ne l'a refusée. L'auteur est notifié avec le diff de ce qui a changé et dispose de « refaire cette demande », pré-remplie sur les valeurs courantes (§ 9.6). La caducité est constatée **à la validation**, jamais par une tâche de fond : à ce volume, un balayage périodique serait de la mécanique pour rien. |
 
 **`OpKind`** — `champ`, `ajout_lien`, `retrait_lien`, `ajout_media`, `retrait_media`,

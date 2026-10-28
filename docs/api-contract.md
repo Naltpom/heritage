@@ -2657,7 +2657,7 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `GET` | `/api/demandes` | `MEMBRE` | `?status=&page=&parPage=` | `200` liste paginée | `403` | — |
 | `GET` | `/api/demandes/{id}` | `MEMBRE` | — | `200` § 6.5 | `403` `acces_refuse` · `404` | — |
 | `POST` | `/api/demandes/{id}/soumettre` | `MEMBRE` | *(vide)* | `200` demande | `409` `demande_deja_soumise` · `422` `demande_sans_lien` | — |
-| `POST` | `/api/demandes/{id}/retirer` | `MEMBRE` | *(vide)* | `200` demande (`annulee`) | `409` `demande_deja_decidee` · `403` · `404` | — |
+| `POST` | `/api/demandes/{id}/retirer` | `MEMBRE` | *(vide)* | `200` demande (`annulee` ; un brouillon retiré garde `submittedAt` nul) | `409` `demande_deja_decidee` · `403` · `404` | — |
 | `GET` | `/api/demandes/{id}/refaire` | `MEMBRE` | — | `200` corps pré-rempli | `403` · `404` · `409` `demande_non_refaisable` | — |
 | `GET` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | — | `200` § 6.6 | `403` · `404` | — |
 | `PUT` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | `{fiche, liens, empreinte}` § 6.6 ter | `200` § 6.5 | `403` `acces_refuse` · `403` `regime_en_attente` · `404` · `409` `demande_deja_decidee` · `409` `demande_modifiee_entre_temps` · `409` `vue_comme_membre_active` · `422` | — |
@@ -6625,8 +6625,8 @@ trois ajouts que la mise à l'épreuve a rendus nécessaires :
 
   **`depuis` n'est jamais `null`**, et la raison est structurelle plutôt que défensive : le
   calque ne contient **que des demandes `en_attente`** (§ 13.3), et
-  `ck_prp_request_soumission` garantit `submitted_at IS NOT NULL` dès que le statut n'est plus
-  `brouillon` (§ 5.1). Un brouillon n'entre jamais dans `enAttente` — il est « visible de son
+  `ck_prp_request_soumission` garantit `submitted_at IS NOT NULL` dès que le statut n'est ni
+  `brouillon` ni `annulee` (§ 5.1). Un brouillon n'entre jamais dans `enAttente` — il est « visible de son
   seul auteur, pas dans la file » (§ 5.7), et il n'a rien à appliquer puisqu'il n'a pas été
   soumis. Côté serveur, un `?->` sur `getSubmittedAt()` **masque donc un cas qui ne doit pas
   exister** : si cette valeur est nulle, c'est qu'un brouillon s'est glissé dans le calque, et

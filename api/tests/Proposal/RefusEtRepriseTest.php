@@ -191,6 +191,26 @@ final class RefusEtRepriseTest extends BaseDeDemandes
         );
     }
 
+    /**
+     * Retirer son brouillon : il n'a jamais été soumis, et le retrait ne lui invente pas de
+     * date de soumission. `RetraitDUnBrouillonPostgresTest` vérifie que la base l'accepte.
+     */
+    public function testRetirerSonBrouillonLAnnuleSansDateDeSoumission(): void
+    {
+        $corps = $this->corpsDeModification([$this->opTexte('surname', 'Sureau', 'SUREAU')]);
+        $corps['soumettre'] = false;
+        $brouillon = $this->depot->deposer($corps, $this->lecteur(self::OPALE));
+        self::assertSame(RequestStatus::Brouillon, $brouillon->getStatus());
+
+        $this->depot->retirer($brouillon, $this->lecteur(self::OPALE));
+
+        $this->em->clear();
+        $relue = $this->demandes->find((int) $brouillon->getId());
+        self::assertNotNull($relue, 'Une demande n\'est jamais supprimée.');
+        self::assertSame(RequestStatus::Annulee, $relue->getStatus());
+        self::assertNull($relue->getSubmittedAt());
+    }
+
     private function deposer(int $auteur = self::OPALE): ChangeRequest
     {
         return $this->depot->deposer(

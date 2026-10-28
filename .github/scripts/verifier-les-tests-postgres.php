@@ -30,13 +30,22 @@ declare(strict_types=1);
  * les fera tourner sur un dépôt public, et ce script ne les réclame pas — il nommerait
  * sinon une exigence qu'on ne peut pas satisfaire. (`PlacementBaseImporteeTest`, qui
  * était dans ce cas, est parti avec l'import GEDCOM — ADR 0018.)
+ *
+ * ── Une classe de plus par contrainte que SQLite ignore ─────────────────────
+ *
+ * Les tests tournent sur SQLite, qui ne lit ni les `CHECK` ni les index partiels. Quand une
+ * règle tient dans une contrainte de ce genre, un test la vérifie sur la base migrée, et il
+ * entre ici : sinon il se sauterait en silence, comme les trois premiers.
  */
 
 const RAPPORT = __DIR__.'/../../api/var/log/phpunit.xml';
 
-/** La classe surveillée, et le nombre de cas qu'elle doit exécuter. */
-const CLASSE = 'App\Tests\Tree\EmpreinteEntreMoteursTest';
-const CAS_ATTENDUS = 3;
+/** Les classes surveillées, et le nombre de cas que chacune doit exécuter. */
+const CLASSES = [
+    'App\Tests\Tree\EmpreinteEntreMoteursTest' => 3,
+    'App\Tests\Proposal\IndexDIdempotencePostgresTest' => 3,
+    'App\Tests\Proposal\RetraitDUnBrouillonPostgresTest' => 2,
+];
 
 function echouer(string $message): never
 {
@@ -57,55 +66,61 @@ if (false === $xml) {
     echouer('Rapport JUnit illisible : '.RAPPORT);
 }
 
-$suites = $xml->xpath(sprintf('//testsuite[@name=%s]', escaperXpath(CLASSE)));
+$total = 0;
 
-if (!\is_array($suites) || [] === $suites) {
-    echouer(sprintf(
-        '%s n\'apparaît pas dans le rapport JUnit. La classe a été renommée, exclue, '
-        .'ou la suite ne l\'a pas collectée — dans les trois cas elle ne garde plus rien.',
-        CLASSE,
-    ));
-}
+foreach (CLASSES as $classe => $attendus) {
+    $suites = $xml->xpath(sprintf('//testsuite[@name=%s]', escaperXpath($classe)));
 
-$suite = $suites[0];
-$executes = (int) $suite['tests'];
+    if (!\is_array($suites) || [] === $suites) {
+        echouer(sprintf(
+            '%s n\'apparaît pas dans le rapport JUnit. La classe a été renommée, exclue, '
+            .'ou la suite ne l\'a pas collectée — dans les trois cas elle ne garde plus rien.',
+            $classe,
+        ));
+    }
 
-/* Les sauts se comptent sur les éléments, pas sur l'attribut : selon la version de
-   PHPUnit l'attribut `skipped` est absent du rapport, et un attribut absent lu comme
-   un entier vaut zéro — soit exactement la réponse rassurante qu'on ne veut pas. */
-$sautes = \count((array) $suite->xpath('.//skipped'));
-$echecs = \count((array) $suite->xpath('.//failure'));
-$erreurs = \count((array) $suite->xpath('.//error'));
+    $suite = $suites[0];
+    $executes = (int) $suite['tests'];
 
-printf(
-    "%s : %d cas exécutés, %d sautés, %d échecs, %d erreurs.\n",
-    CLASSE,
-    $executes,
-    $sautes,
-    $echecs,
-    $erreurs,
-);
+    /* Les sauts se comptent sur les éléments, pas sur l'attribut : selon la version de
+       PHPUnit l'attribut `skipped` est absent du rapport, et un attribut absent lu comme
+       un entier vaut zéro — soit exactement la réponse rassurante qu'on ne veut pas. */
+    $sautes = \count((array) $suite->xpath('.//skipped'));
+    $echecs = \count((array) $suite->xpath('.//failure'));
+    $erreurs = \count((array) $suite->xpath('.//error'));
 
-if ($sautes > 0) {
-    echouer(sprintf(
-        '%d cas de %s se sont SAUTÉS. Le service PostgreSQL est monté mais ces tests ne '
-        .'le touchent pas : DSN faux, extension pdo_pgsql absente, ou ensemencement vide. '
-        .'Un saut ici est un vert qui ne mesure rien.',
-        $sautes,
-        CLASSE,
-    ));
-}
-
-if ($executes < CAS_ATTENDUS) {
-    echouer(sprintf(
-        '%s n\'a exécuté que %d cas sur %d attendus.',
-        CLASSE,
+    printf(
+        "%s : %d cas exécutés, %d sautés, %d échecs, %d erreurs.\n",
+        $classe,
         $executes,
-        CAS_ATTENDUS,
-    ));
+        $sautes,
+        $echecs,
+        $erreurs,
+    );
+
+    if ($sautes > 0) {
+        echouer(sprintf(
+            '%d cas de %s se sont SAUTÉS. Le service PostgreSQL est monté mais ces tests ne '
+            .'le touchent pas : DSN faux, extension pdo_pgsql absente, ou ensemencement vide. '
+            .'Un saut ici est un vert qui ne mesure rien.',
+            $sautes,
+            $classe,
+        ));
+    }
+
+    if ($executes < $attendus) {
+        echouer(sprintf(
+            '%s n\'a exécuté que %d cas sur %d attendus.',
+            $classe,
+            $executes,
+            $attendus,
+        ));
+    }
+
+    $total += $executes;
 }
 
-printf("Les %d cas sur PostgreSQL ont bien tourné.\n", $executes);
+printf("Les %d cas sur PostgreSQL ont bien tourné.\n", $total);
 
 /** Un littéral XPath sûr, y compris si le nom porte une apostrophe. */
 function escaperXpath(string $valeur): string
