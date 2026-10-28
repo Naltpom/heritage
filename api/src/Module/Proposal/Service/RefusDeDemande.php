@@ -51,7 +51,9 @@ final readonly class RefusDeDemande
             throw Conflit::vueCommeMembreActive($lecteur->membreEmprunteUserId);
         }
 
-        if ($demande->getStatus()->estDefinitif()) {
+        // `en_attente` seulement, comme la validation : un brouillon n'a pas été soumis, et
+        // `ck_prp_request_soumission` refuse une demande `refusee` sans date de soumission.
+        if (RequestStatus::EnAttente !== $demande->getStatus()) {
             throw Conflit::dejaDecidee($demande->getStatus());
         }
 

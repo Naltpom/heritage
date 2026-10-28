@@ -17,8 +17,8 @@ use Doctrine\Migrations\AbstractMigration;
  * compris (§ 6 du contrat d'API). Mais la contrainte posée par `Version20260915170602`
  * exigeait une date de soumission dès que le statut n'est plus `brouillon` : un brouillon
  * jamais soumis passait à `annulee` avec `submitted_at` nul, et PostgreSQL refusait l'écriture
- * (incident e2e50cf19cabf322, 28/10/2026, sur la demande 7932). Les tests tournent sur
- * SQLite, qui ignore les `CHECK` : rien ne l'avait montré.
+ * (incident e2e50cf19cabf322, 28/10/2026, sur la demande 7932). Le schéma des tests est
+ * construit depuis le mapping Doctrine, qui ne porte pas les `CHECK` : rien ne l'avait montré.
  *
  * ## Pourquoi assouplir la contrainte, et non le retrait
  *

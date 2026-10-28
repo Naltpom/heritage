@@ -31,11 +31,12 @@ declare(strict_types=1);
  * sinon une exigence qu'on ne peut pas satisfaire. (`PlacementBaseImporteeTest`, qui
  * était dans ce cas, est parti avec l'import GEDCOM — ADR 0018.)
  *
- * ── Une classe de plus par contrainte que SQLite ignore ─────────────────────
+ * ── Une classe de plus par contrainte absente du schéma des tests ───────────
  *
- * Les tests tournent sur SQLite, qui ne lit ni les `CHECK` ni les index partiels. Quand une
- * règle tient dans une contrainte de ce genre, un test la vérifie sur la base migrée, et il
- * entre ici : sinon il se sauterait en silence, comme les trois premiers.
+ * Le schéma des tests est construit depuis le mapping Doctrine, qui ne porte pas les `CHECK`
+ * (`ContraintesDuModeleTest`). Quand une règle tient dans une contrainte de ce genre, ou dans
+ * ce que seul PostgreSQL montre (la définition d'un index partiel), un test la vérifie sur la
+ * base migrée, et il entre ici : sinon il se sauterait en silence, comme les trois premiers.
  */
 
 const RAPPORT = __DIR__.'/../../api/var/log/phpunit.xml';

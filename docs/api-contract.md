@@ -2669,7 +2669,7 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `GET` | `/api/administration/demandes/auteurs` | `ADMIN` | — | `200` `{elements}` | — | — |
 | `GET` | `/api/administration/demandes/{id}` | `ADMIN` | — | `200` § 6.7 | `404` | — |
 | `POST` | `/api/administration/demandes/{id}/valider` | `ADMIN` | *(vide)*, ou `{empreinte}` | `200` § 6.8 | **`409` × 9 (§ 6.8)** · `404` · `409` `vue_comme_membre_active` | — |
-| `POST` | `/api/administration/demandes/{id}/refuser` | `ADMIN` | `{message, doublonDeId?}` | `200` demande (`refusee`) | `422` `donnees_invalides` · `409` `demande_deja_decidee` · `409` `vue_comme_membre_active` | — |
+| `POST` | `/api/administration/demandes/{id}/refuser` | `ADMIN` | `{message, doublonDeId?}` | `200` demande (`refusee`) | `422` `donnees_invalides` · `409` `demande_deja_decidee` (toute demande qui n'est pas `en_attente`, brouillon compris) · `409` `vue_comme_membre_active` | — |
 | `GET` | `/api/administration/demandes/{id}/fusionner/{complementId}` | `ADMIN` | — | `200` aperçu § 6.7 bis | `403` · `404` · `409` `demande_deja_decidee` · `422` | — |
 | `POST` | `/api/administration/demandes/{id}/fusionner/{complementId}` | `ADMIN` | `{retenir, empreinte, empreinteComplement}` § 6.7 bis | `200` § 6.7 bis | `403` · `404` · `409` `demande_deja_decidee` · `409` `demande_modifiee_entre_temps` · `409` `vue_comme_membre_active` · `422` | — |
 

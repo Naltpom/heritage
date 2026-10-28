@@ -129,6 +129,27 @@ final class RefusEtRepriseTest extends BaseDeDemandes
     }
 
     /**
+     * Un brouillon ne se refuse pas : il n'a pas été soumis. Le service l'aurait passé à
+     * `refusee` sans date de soumission, et PostgreSQL aurait rendu une `500`.
+     */
+    public function testUnBrouillonNeSeRefusePas(): void
+    {
+        $corps = $this->corpsDeModification([$this->opTexte('surname', 'Sureau', 'SUREAU')]);
+        $corps['soumettre'] = false;
+        $brouillon = $this->depot->deposer($corps, $this->lecteur(self::OPALE));
+
+        try {
+            $this->refus->refuser($brouillon, $this->admin(), 'Motif.', null);
+            self::fail('Un brouillon ne se refuse pas.');
+        } catch (Conflit $conflit) {
+            self::assertSame('demande_deja_decidee', $conflit->codeErreur());
+            self::assertSame(['statut' => 'brouillon'], $conflit->details());
+        }
+
+        self::assertSame(RequestStatus::Brouillon, $brouillon->getStatus());
+    }
+
+    /**
      * « Refaire cette demande » — **lecture seule**, pré-remplie sur les **valeurs
      * courantes** : `oldValue` et `baseVersion` sont rafraîchis, `newValue` conservé.
      */

@@ -13,7 +13,8 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Ce que SQLite ne pouvait pas montrer du retrait d'un brouillon : `ck_prp_request_soumission`
+ * Ce que le schéma des tests ne pouvait pas montrer du retrait d'un brouillon (il est construit
+ * depuis le mapping, qui ne porte pas les `CHECK`) : `ck_prp_request_soumission`
  * refusait qu'un brouillon jamais soumis passe à `annulee`, et le retrait rendait une `500`
  * en production (`Version20261028183417`). `RefusEtRepriseTest` couvre le service.
  *
@@ -102,6 +103,7 @@ final class RetraitDUnBrouillonPostgresTest extends TestCase
             } catch (DriverException $e) {
                 // 23514 : check_violation.
                 self::assertSame('23514', $e->getSQLState(), $statut);
+                self::assertStringContainsString('ck_prp_request_soumission', $e->getMessage(), $statut);
             } finally {
                 $this->connexion->rollBack();
             }

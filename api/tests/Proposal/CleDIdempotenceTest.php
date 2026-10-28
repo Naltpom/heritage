@@ -105,6 +105,11 @@ final class CleDIdempotenceTest extends TestCase
 
         self::assertNotSame($liste, CleDIdempotence::empreinteDuCorps(['ops' => [1 => 'b', 0 => 'a']]));
         self::assertNotSame($liste, CleDIdempotence::empreinteDuCorps(['ops' => ['0' => 'a', 'x' => 'b']]));
+        self::assertNotSame(
+            CleDIdempotence::empreinteDuCorps(['ops' => ["\0a" => 'a', 'b' => 'b']]),
+            CleDIdempotence::empreinteDuCorps(['ops' => ['b' => 'b']]),
+            'Une clé qui commence par NUL compte : json_encode la perdrait sur un objet.',
+        );
         self::assertSame(
             hash('sha256', '{"kind":"ajout_note","ops":[{"a":1,"b":2}]}'),
             CleDIdempotence::empreinteDuCorps(['ops' => [['b' => 2, 'a' => 1]], 'kind' => 'ajout_note']),
