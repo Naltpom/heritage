@@ -121,4 +121,5 @@ toujours la première : rien ne change pour lui.
   constructeurs, qui dépendent les uns des autres. Le dépôt et le dépôt à blanc finiraient
   par diverger.
 - **Ouvrir `retirer` aux jetons** pour qu'un agent nettoie ses essais : aucun outil des
-  agents ne retire (ADR 0021 § 2).
+  agents ne retire (ADR 0021 § 2). *Levé le 28/10/2026 pour les brouillons* : la portée
+  `contribution` retire un brouillon, jamais une demande en attente (ADR 0021 § 2).

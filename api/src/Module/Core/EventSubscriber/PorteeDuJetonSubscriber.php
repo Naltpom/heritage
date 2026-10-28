@@ -100,6 +100,10 @@ final readonly class PorteeDuJetonSubscriber implements EventSubscriberInterface
             // n'écrit rien mais prédit une écriture : il n'a de sens que pour qui peut déposer,
             // d'où cette portée et non `lecture`.
             'proposal_demande_verifier' => 'POST',
+            // `retirer` (outil de B3, à venir) : le brouillon (`soumettre: false`) qu'un agent
+            // a déposé par erreur. Jamais une demande en attente, sous un jeton
+            // (`DemandeVoter::RETIRER`) : celle du commanditaire comprise, elle attend un humain.
+            'proposal_demande_retirer' => 'POST',
             // `televerser` : la preuve d'un acte, jointe à une fiche ou à une fiche proposée.
             // En membre, même sous un compte administrateur : `en_attente`, portrait
             // inchangé, quota compté (`Media\Security\FabriqueDeLecteur::deposant()`).

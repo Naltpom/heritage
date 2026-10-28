@@ -211,6 +211,11 @@ final class DemandeController extends AbstractController
         $demande = $this->trouver($id);
         $this->exiger(DemandeVoter::MODIFIER, $demande);
 
+        // L'auteur, mais sous un jeton d'API et sur une demande en attente : un refus qui le dit.
+        if (!$this->isGranted(DemandeVoter::RETIRER, $demande)) {
+            throw AccesRefuse::retraitSousJeton();
+        }
+
         return $this->charge($this->serialiseur->pourAuteur(
             $depot->retirer($demande, $this->lecteurs->courant()),
         ));

@@ -168,6 +168,11 @@ final class PorteeDuJetonTest extends KernelTestCase
         self::assertTrue(PorteeDuJetonSubscriber::permet($contribution, 'proposal_demande_verifier', 'POST'));
         self::assertTrue(PorteeDuJetonSubscriber::permet($validation, 'proposal_demande_verifier', 'POST'));
 
+        // Retirer : la portée du dépôt ; le voter borne le jeton au brouillon.
+        self::assertFalse(PorteeDuJetonSubscriber::permet($lecture, 'proposal_demande_retirer', 'POST'));
+        self::assertTrue(PorteeDuJetonSubscriber::permet($contribution, 'proposal_demande_retirer', 'POST'));
+        self::assertTrue(PorteeDuJetonSubscriber::permet($validation, 'proposal_demande_retirer', 'POST'));
+
         // Décider : validation seulement.
         foreach (['proposal_admin_demande_valider', 'proposal_admin_demande_refuser'] as $decider) {
             self::assertFalse(PorteeDuJetonSubscriber::permet($lecture, $decider, 'POST'));
