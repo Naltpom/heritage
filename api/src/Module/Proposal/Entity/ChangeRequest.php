@@ -49,6 +49,16 @@ use Doctrine\ORM\Mapping as ORM;
 // plutôt que laissé à l'index que Doctrine pose de lui-même sur une colonne de jointure :
 // un `IDX_` haché ne dit rien à qui lit un plan d'exécution.
 #[ORM\Index(name: 'idx_prp_request_complement', columns: ['complement_de_id'])]
+// **Le rejeu d'un dépôt** (ADR 0022) : un compte ne dépose qu'une demande par clé
+// `Idempotency-Key`. Partiel, parce que la plupart des demandes n'ont pas de clé. Le
+// prédicat est écrit sans transtypage `::` pour rester valable sur les deux moteurs.
+// SQLite, qui ne pose pas d'index partiel, en fait un index unique complet, où les `NULL`
+// restent distincts : même effet.
+#[ORM\UniqueConstraint(
+    name: 'uniq_prp_request_idempotence',
+    columns: ['author_user_id', 'idempotency_key'],
+    options: ['where' => '(idempotency_key IS NOT NULL)'],
+)]
 class ChangeRequest
 {
     #[ORM\Id]
@@ -216,6 +226,28 @@ class ChangeRequest
      */
     #[ORM\Column(length: 160, nullable: true)]
     private ?string $dedupKey = null;
+
+    /**
+     * La clé `Idempotency-Key` sous laquelle la demande a été déposée (ADR 0022), choisie par
+     * le client : 16 à 128 caractères `[A-Za-z0-9_-]`. `null` pour un dépôt sans l'en-tête,
+     * ce que fait le front.
+     *
+     * **À ne pas confondre avec `dedupKey`.** Celle-ci rapproche deux propositions
+     * *semblables*, souvent de deux auteurs, pour que l'administrateur tranche. La clé
+     * d'idempotence reconnaît *la même requête* rejouée par son auteur, et c'est le serveur
+     * qui tranche. Posée à la création, jamais modifiée.
+     */
+    #[ORM\Column(length: 128, nullable: true)]
+    private ?string $idempotencyKey = null;
+
+    /**
+     * L'empreinte sha256 (hexadécimal) du corps déposé sous cette clé. Elle permet de refuser
+     * un rejeu au corps différent (`422 idempotence_corps_different`) au lieu de le confondre
+     * avec le premier. Présente si et seulement si la clé l'est
+     * (`ck_prp_request_idempotence`, en migration).
+     */
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $idempotencyFingerprint = null;
 
     #[ORM\Column(type: Types::DATETIMETZ_IMMUTABLE)]
     private \DateTimeImmutable $createdAt;
@@ -417,6 +449,32 @@ class ChangeRequest
     public function setDedupKey(?string $dedupKey): self
     {
         $this->dedupKey = $dedupKey;
+
+        return $this;
+    }
+
+    public function getIdempotencyKey(): ?string
+    {
+        return $this->idempotencyKey;
+    }
+
+    public function getIdempotencyFingerprint(): ?string
+    {
+        return $this->idempotencyFingerprint;
+    }
+
+    /**
+     * Une seule fois, avant le premier `flush()` : une clé qui changerait après coup
+     * rendrait au rejeu une autre demande que celle déposée.
+     */
+    public function poserLaCleDIdempotence(string $cle, string $empreinte): self
+    {
+        if (null !== $this->idempotencyKey) {
+            throw new \LogicException('La clé d\'idempotence d\'une demande ne se pose qu\'une fois.');
+        }
+
+        $this->idempotencyKey = $cle;
+        $this->idempotencyFingerprint = $empreinte;
 
         return $this;
     }
