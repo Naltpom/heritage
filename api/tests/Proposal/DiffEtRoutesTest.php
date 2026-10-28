@@ -177,6 +177,8 @@ final class DiffEtRoutesTest extends BaseDeDemandes
 
         $attendues = [
             'proposal_demande_creer' => ['/api/demandes', 'POST'],
+            // Le dépôt à blanc (§ 6.1 ter) : un `POST` qui n'écrit rien.
+            'proposal_demande_verifier' => ['/api/demandes/verifier', 'POST'],
             'proposal_demande_lister' => ['/api/demandes', 'GET'],
             'proposal_demande_voir' => ['/api/demandes/{id}', 'GET'],
             'proposal_demande_soumettre' => ['/api/demandes/{id}/soumettre', 'POST'],

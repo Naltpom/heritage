@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Contract\Lecteur;
+use App\Module\Proposal\Contract\RecueilDErreurs;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Enum\RequestKind;
 use Symfony\Component\DependencyInjection\Attribute\AutoconfigureTag;
@@ -68,9 +69,16 @@ interface ConstructeurDeDemande
      * {@see \App\Module\Proposal\Exception\DonneesInvalides} dont les clés de `champs`
      * suivent le chemin du corps : `ops[0].field`, `liens[2].kind`.
      *
+     * `$recueil` vaut `null` au dépôt : la première erreur part telle quelle. Au dépôt à blanc,
+     * c'est un recueil. Chaque élément d'une liste du corps (op, fiche, lien, retrait) y note sa
+     * première erreur, et la boucle passe à l'élément suivant. **À la fin de la boucle, si un
+     * élément a échoué, `$recueil->leverSiNonVide()` arrête le constructeur** : ce qui suit (la
+     * cible tirée du premier op, les liens qui désignent les fiches, la cohérence du décès)
+     * dépend de tous les éléments. Un contrôle hors boucle reste immédiat.
+     *
      * @param array<string, mixed> $corps
      */
-    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur): void;
+    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur, ?RecueilDErreurs $recueil = null): void;
 
     /**
      * Le contrôle de complétude, appliqué **à la soumission** et non à la création :

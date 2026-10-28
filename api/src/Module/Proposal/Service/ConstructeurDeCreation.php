@@ -7,7 +7,9 @@ namespace App\Module\Proposal\Service;
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Exception\DomainException;
 use App\Module\Core\ValueObject\UncertainDate;
+use App\Module\Proposal\Contract\RecueilDErreurs;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\DraftLink;
 use App\Module\Proposal\Entity\DraftPerson;
@@ -138,13 +140,13 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         return [RequestKind::CreationPersonne, RequestKind::AjoutLien];
     }
 
-    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur): void
+    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur, ?RecueilDErreurs $recueil = null): void
     {
         $creation = RequestKind::CreationPersonne === $demande->getKind();
 
-        $brouillons = $this->construireLesBrouillons($demande, $corps, $creation);
+        $brouillons = $this->construireLesBrouillons($demande, $corps, $creation, $recueil);
         $this->rattacherALaProposition($demande, $corps, $brouillons);
-        $this->construireLesLiens($demande, $corps, $brouillons, $creation, $lecteur);
+        $this->construireLesLiens($demande, $corps, $brouillons, $creation, $lecteur, $recueil);
     }
 
     /**
@@ -332,7 +334,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
      *                                    rapportent, et ils ont besoin du nom autant que
      *                                    de la référence
      */
-    private function construireLesBrouillons(ChangeRequest $demande, array $corps, bool $creation): array
+    private function construireLesBrouillons(ChangeRequest $demande, array $corps, bool $creation, ?RecueilDErreurs $recueil = null): array
     {
         $brut = $corps['brouillons'] ?? [];
 
@@ -357,16 +359,24 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         $brouillons = [];
 
         foreach (array_values($brut) as $index => $fiche) {
-            if (!\is_array($fiche)) {
-                throw DonneesInvalides::pourChamp("brouillons[$index]", 'Chaque brouillon est un objet.');
+            try {
+                if (!\is_array($fiche)) {
+                    throw DonneesInvalides::pourChamp("brouillons[$index]", 'Chaque brouillon est un objet.');
+                }
+
+                $reference = $this->reference($fiche, $index, array_keys($brouillons));
+                $construit = $this->brouillon($demande, $reference, $fiche, $index);
+
+                $brouillons[$reference] = $construit;
+                $this->em->persist($construit);
+            } catch (DomainException $e) {
+                RecueilDErreurs::recueillir($recueil, $e);
             }
-
-            $reference = $this->reference($fiche, $index, array_keys($brouillons));
-            $construit = $this->brouillon($demande, $reference, $fiche, $index);
-
-            $brouillons[$reference] = $construit;
-            $this->em->persist($construit);
         }
+
+        // Ce qui suit dépend de tous les éléments : on ne le juge que s'ils sont tous justes.
+        // Le complément et les liens désignent les fiches par leur référence.
+        $recueil?->leverSiNonVide();
 
         return $brouillons;
     }
@@ -592,6 +602,7 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         array $brouillons,
         bool $creation,
         Lecteur $lecteur,
+        ?RecueilDErreurs $recueil = null,
     ): void {
         $brut = $corps['liens'] ?? [];
 
@@ -607,26 +618,33 @@ final readonly class ConstructeurDeCreation implements ConstructeurDeDemande
         $premierSujetReel = null;
 
         foreach (array_values($brut) as $index => $lien) {
-            if (!\is_array($lien)) {
-                throw DonneesInvalides::pourChamp("liens[$index]", 'Chaque lien est un objet.');
+            try {
+                if (!\is_array($lien)) {
+                    throw DonneesInvalides::pourChamp("liens[$index]", 'Chaque lien est un objet.');
+                }
+
+                $seq = $lien['seq'] ?? null;
+                if (!\is_int($seq) || $seq < 1) {
+                    throw DonneesInvalides::pourChamp("liens[$index].seq", 'Le rang d\'un lien est un entier positif.');
+                }
+
+                $construit = $this->lien($demande, $lien, $index, $seq, $brouillons, $creation, $lecteur);
+
+                if (\in_array($construit->getSeq(), $rangs, true)) {
+                    throw DonneesInvalides::pourChamp("liens[$index].seq", 'Deux liens ne peuvent pas porter le même rang.');
+                }
+
+                $rangs[] = $construit->getSeq();
+                $premierSujetReel ??= $construit->getSubjectPersonId();
+
+                $this->em->persist($construit);
+            } catch (DomainException $e) {
+                RecueilDErreurs::recueillir($recueil, $e);
             }
-
-            $seq = $lien['seq'] ?? null;
-            if (!\is_int($seq) || $seq < 1) {
-                throw DonneesInvalides::pourChamp("liens[$index].seq", 'Le rang d\'un lien est un entier positif.');
-            }
-
-            $construit = $this->lien($demande, $lien, $index, $seq, $brouillons, $creation, $lecteur);
-
-            if (\in_array($construit->getSeq(), $rangs, true)) {
-                throw DonneesInvalides::pourChamp("liens[$index].seq", 'Deux liens ne peuvent pas porter le même rang.');
-            }
-
-            $rangs[] = $construit->getSeq();
-            $premierSujetReel ??= $construit->getSubjectPersonId();
-
-            $this->em->persist($construit);
         }
+
+        // Ce qui suit dépend de tous les éléments : on ne le juge que s'ils sont tous justes.
+        $recueil?->leverSiNonVide();
 
         // Une création ne vise rien d'existant : `targetKind` et `targetId` restent
         // `null`, et c'est légal — `ck_prp_request_cible` n'exige que leur cohérence

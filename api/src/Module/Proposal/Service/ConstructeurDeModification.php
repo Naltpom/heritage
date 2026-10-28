@@ -6,6 +6,8 @@ namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Exception\DomainException;
+use App\Module\Proposal\Contract\RecueilDErreurs;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
 use App\Module\Proposal\Enum\OpKind;
@@ -58,7 +60,7 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         ];
     }
 
-    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur): void
+    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur, ?RecueilDErreurs $recueil = null): void
     {
         $ops = $corps['ops'] ?? null;
 
@@ -70,20 +72,27 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         $seqVus = [];
 
         foreach (array_values($ops) as $index => $brut) {
-            if (!\is_array($brut)) {
-                throw DonneesInvalides::pourChamp("ops[$index]", 'Chaque op est un objet.');
+            try {
+                if (!\is_array($brut)) {
+                    throw DonneesInvalides::pourChamp("ops[$index]", 'Chaque op est un objet.');
+                }
+
+                $op = $this->construireOp($demande, $brut, $index);
+
+                if (\in_array($op->getSeq(), $seqVus, true)) {
+                    throw DonneesInvalides::pourChamp("ops[$index].seq", 'Deux ops ne peuvent pas porter le même rang.');
+                }
+
+                $seqVus[] = $op->getSeq();
+                $construits[] = $op;
+                $this->em->persist($op);
+            } catch (DomainException $e) {
+                RecueilDErreurs::recueillir($recueil, $e);
             }
-
-            $op = $this->construireOp($demande, $brut, $index);
-
-            if (\in_array($op->getSeq(), $seqVus, true)) {
-                throw DonneesInvalides::pourChamp("ops[$index].seq", 'Deux ops ne peuvent pas porter le même rang.');
-            }
-
-            $seqVus[] = $op->getSeq();
-            $construits[] = $op;
-            $this->em->persist($op);
         }
+
+        // Ce qui suit dépend de tous les éléments : on ne le juge que s'ils sont tous justes.
+        $recueil?->leverSiNonVide();
 
         // La cible dénormalisée sert à filtrer et grouper la file **sans jointure**
         // (§ 5.1), et à détecter les demandes concurrentes sur la même fiche. Elle est

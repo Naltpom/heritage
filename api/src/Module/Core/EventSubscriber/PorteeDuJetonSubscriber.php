@@ -93,8 +93,13 @@ final readonly class PorteeDuJetonSubscriber implements EventSubscriberInterface
         ],
         PorteeDeJeton::Contribution->value => [
             // `deposer()` (sans `valider`) : une demande entre dans la file, rien n'est
-            // décidé. B2 ajoutera ici `POST /api/demandes/verifier` (le dépôt à blanc).
+            // décidé. Avec `Idempotency-Key`, un plan rejoué retrouve la demande déjà déposée
+            // au lieu d'en créer une seconde (ADR 0022).
             'proposal_demande_creer' => 'POST',
+            // `verifier()`, avant `deposer()` : le dépôt à blanc (ADR 0022). Un `POST` qui
+            // n'écrit rien mais prédit une écriture : il n'a de sens que pour qui peut déposer,
+            // d'où cette portée et non `lecture`.
+            'proposal_demande_verifier' => 'POST',
             // `televerser` : la preuve d'un acte, jointe à une fiche ou à une fiche proposée.
             // En membre, même sous un compte administrateur : `en_attente`, portrait
             // inchangé, quota compté (`Media\Security\FabriqueDeLecteur::deposant()`).

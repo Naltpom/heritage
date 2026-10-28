@@ -163,6 +163,11 @@ final class PorteeDuJetonTest extends KernelTestCase
         self::assertTrue(PorteeDuJetonSubscriber::permet($contribution, 'proposal_demande_creer', 'POST'));
         self::assertTrue(PorteeDuJetonSubscriber::permet($validation, 'proposal_demande_creer', 'POST'));
 
+        // Le dépôt à blanc (ADR 0022) : la portée du dépôt, puisqu'il le prédit.
+        self::assertFalse(PorteeDuJetonSubscriber::permet($lecture, 'proposal_demande_verifier', 'POST'));
+        self::assertTrue(PorteeDuJetonSubscriber::permet($contribution, 'proposal_demande_verifier', 'POST'));
+        self::assertTrue(PorteeDuJetonSubscriber::permet($validation, 'proposal_demande_verifier', 'POST'));
+
         // Décider : validation seulement.
         foreach (['proposal_admin_demande_valider', 'proposal_admin_demande_refuser'] as $decider) {
             self::assertFalse(PorteeDuJetonSubscriber::permet($lecture, $decider, 'POST'));

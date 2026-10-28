@@ -6,6 +6,8 @@ namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Exception\DomainException;
+use App\Module\Proposal\Contract\RecueilDErreurs;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
 use App\Module\Proposal\Enum\OpKind;
@@ -76,7 +78,7 @@ final readonly class ConstructeurDAjoutDeNote implements ConstructeurDeDemande
         return [RequestKind::AjoutNote];
     }
 
-    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur): void
+    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur, ?RecueilDErreurs $recueil = null): void
     {
         $brut = $corps['ops'] ?? null;
 
@@ -89,29 +91,36 @@ final readonly class ConstructeurDAjoutDeNote implements ConstructeurDeDemande
         $corpsVus = [];
 
         foreach (array_values($brut) as $index => $donnees) {
-            if (!\is_array($donnees)) {
-                throw DonneesInvalides::pourChamp("ops[$index]", 'Chaque op est un objet.');
+            try {
+                if (!\is_array($donnees)) {
+                    throw DonneesInvalides::pourChamp("ops[$index]", 'Chaque op est un objet.');
+                }
+
+                $chemin = "ops[$index]";
+                [$op, $empreinte] = $this->construireOp($demande, $donnees, $index, $chemin);
+
+                if (\in_array($op->getSeq(), $seqVus, true)) {
+                    throw DonneesInvalides::pourChamp("$chemin.seq", 'Deux ops ne peuvent pas porter le même rang.');
+                }
+
+                // Deux notes au texte identique sur la même fiche, dans une seule demande :
+                // le formulaire a été validé deux fois. Deux notes **différentes** restent
+                // légitimes — ce sont deux remarques.
+                if (\in_array($empreinte, $corpsVus, true)) {
+                    throw DonneesInvalides::pourChamp("$chemin.newValue.body", 'Cette demande porte déjà cette note, mot pour mot, sur cette fiche.');
+                }
+
+                $seqVus[] = $op->getSeq();
+                $corpsVus[] = $empreinte;
+                $construits[] = $op;
+                $this->em->persist($op);
+            } catch (DomainException $e) {
+                RecueilDErreurs::recueillir($recueil, $e);
             }
-
-            $chemin = "ops[$index]";
-            [$op, $empreinte] = $this->construireOp($demande, $donnees, $index, $chemin);
-
-            if (\in_array($op->getSeq(), $seqVus, true)) {
-                throw DonneesInvalides::pourChamp("$chemin.seq", 'Deux ops ne peuvent pas porter le même rang.');
-            }
-
-            // Deux notes au texte identique sur la même fiche, dans une seule demande :
-            // le formulaire a été validé deux fois. Deux notes **différentes** restent
-            // légitimes — ce sont deux remarques.
-            if (\in_array($empreinte, $corpsVus, true)) {
-                throw DonneesInvalides::pourChamp("$chemin.newValue.body", 'Cette demande porte déjà cette note, mot pour mot, sur cette fiche.');
-            }
-
-            $seqVus[] = $op->getSeq();
-            $corpsVus[] = $empreinte;
-            $construits[] = $op;
-            $this->em->persist($op);
         }
+
+        // Ce qui suit dépend de tous les éléments : on ne le juge que s'ils sont tous justes.
+        $recueil?->leverSiNonVide();
 
         usort($construits, static fn (ChangeRequestOp $a, ChangeRequestOp $b): int => $a->getSeq() <=> $b->getSeq());
         $sujet = $construits[0]->getSubjectId();

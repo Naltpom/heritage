@@ -7,6 +7,7 @@ namespace App\Module\Proposal\Service;
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
+use App\Module\Proposal\Contract\RecueilDErreurs;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
 use App\Module\Proposal\Enum\OpKind;
@@ -93,7 +94,11 @@ final readonly class ConstructeurDeSuppressionDePersonne implements Constructeur
         return [RequestKind::SuppressionPersonne];
     }
 
-    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur): void
+    /**
+     * Une seule cible : rien à recueillir. `$recueil` n'est lu par aucun contrôle, et le
+     * dépôt à blanc reçoit la première erreur, comme le dépôt.
+     */
+    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur, ?RecueilDErreurs $recueil = null): void
     {
         $this->exigerUnMotif($demande, $corps);
 
