@@ -333,6 +333,9 @@ services:
       # suffit — et c'est sa place, la production étant le seul cas où elle doit
       # être renseignée.
       HERITAGE_HOTES_AUTORISES: ${HERITAGE_HOTES_AUTORISES:-}
+      # Le domaine du cookie de session, partagé avec noel2026 (voir framework.yaml).
+      # Vide : le cookie reste attaché à l'hôte, comme avant.
+      HERITAGE_DOMAINE_COOKIE: ${HERITAGE_DOMAINE_COOKIE:-}
 
       # LES DEUX LIGNES QUI SUIVENT SONT LA CORRECTION D'UNE PANNE SILENCIEUSE.
       #
