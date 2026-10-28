@@ -129,6 +129,27 @@ final class RefusEtRepriseTest extends BaseDeDemandes
     }
 
     /**
+     * Un brouillon ne se refuse pas : il n'a pas été soumis. Le service l'aurait passé à
+     * `refusee` sans date de soumission, et PostgreSQL aurait rendu une `500`.
+     */
+    public function testUnBrouillonNeSeRefusePas(): void
+    {
+        $corps = $this->corpsDeModification([$this->opTexte('surname', 'Sureau', 'SUREAU')]);
+        $corps['soumettre'] = false;
+        $brouillon = $this->depot->deposer($corps, $this->lecteur(self::OPALE));
+
+        try {
+            $this->refus->refuser($brouillon, $this->admin(), 'Motif.', null);
+            self::fail('Un brouillon ne se refuse pas.');
+        } catch (Conflit $conflit) {
+            self::assertSame('demande_deja_decidee', $conflit->codeErreur());
+            self::assertSame(['statut' => 'brouillon'], $conflit->details());
+        }
+
+        self::assertSame(RequestStatus::Brouillon, $brouillon->getStatus());
+    }
+
+    /**
      * « Refaire cette demande » — **lecture seule**, pré-remplie sur les **valeurs
      * courantes** : `oldValue` et `baseVersion` sont rafraîchis, `newValue` conservé.
      */
@@ -189,6 +210,26 @@ final class RefusEtRepriseTest extends BaseDeDemandes
             [],
             $this->calque->pour(SubjectKind::Personne, self::PERSONNE, $this->lecteur(self::OPALE)),
         );
+    }
+
+    /**
+     * Retirer son brouillon : il n'a jamais été soumis, et le retrait ne lui invente pas de
+     * date de soumission. `RetraitDUnBrouillonPostgresTest` vérifie que la base l'accepte.
+     */
+    public function testRetirerSonBrouillonLAnnuleSansDateDeSoumission(): void
+    {
+        $corps = $this->corpsDeModification([$this->opTexte('surname', 'Sureau', 'SUREAU')]);
+        $corps['soumettre'] = false;
+        $brouillon = $this->depot->deposer($corps, $this->lecteur(self::OPALE));
+        self::assertSame(RequestStatus::Brouillon, $brouillon->getStatus());
+
+        $this->depot->retirer($brouillon, $this->lecteur(self::OPALE));
+
+        $this->em->clear();
+        $relue = $this->demandes->find((int) $brouillon->getId());
+        self::assertNotNull($relue, 'Une demande n\'est jamais supprimée.');
+        self::assertSame(RequestStatus::Annulee, $relue->getStatus());
+        self::assertNull($relue->getSubmittedAt());
     }
 
     private function deposer(int $auteur = self::OPALE): ChangeRequest

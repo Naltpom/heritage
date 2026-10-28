@@ -306,6 +306,9 @@ final readonly class DepotDeDemande
      * `annulee` est un statut définitif : la demande reste consultable, comme les
      * refusées et les caduques. **Une demande n'est jamais supprimée** — elle est
      * l'historique de la discussion familiale autour d'une fiche (ADR 0004).
+     *
+     * Un brouillon se retire aussi, et garde `submittedAt` nul : il n'a jamais été soumis.
+     * `ck_prp_request_soumission` l'admet depuis `Version20261028183417`.
      */
     public function retirer(ChangeRequest $demande, Lecteur $lecteur): ChangeRequest
     {

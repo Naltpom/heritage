@@ -95,6 +95,28 @@ final class CleDIdempotenceTest extends TestCase
         );
     }
 
+    /**
+     * Un constructeur lit un objet à la place d'une liste dans son ordre : `{"1": b, "0": a}`
+     * dépose `[b, a]`. Trié en `[a, b]`, il aurait rejoué la demande `[a, b]`.
+     */
+    public function testUnObjetNePrendPasLEmpreinteDUneListe(): void
+    {
+        $liste = CleDIdempotence::empreinteDuCorps(['ops' => ['a', 'b']]);
+
+        self::assertNotSame($liste, CleDIdempotence::empreinteDuCorps(['ops' => [1 => 'b', 0 => 'a']]));
+        self::assertNotSame($liste, CleDIdempotence::empreinteDuCorps(['ops' => ['0' => 'a', 'x' => 'b']]));
+        self::assertNotSame(
+            CleDIdempotence::empreinteDuCorps(['ops' => ["\0a" => 'a', 'b' => 'b']]),
+            CleDIdempotence::empreinteDuCorps(['ops' => ['b' => 'b']]),
+            'Une clé qui commence par NUL compte : json_encode la perdrait sur un objet.',
+        );
+        self::assertSame(
+            hash('sha256', '{"kind":"ajout_note","ops":[{"a":1,"b":2}]}'),
+            CleDIdempotence::empreinteDuCorps(['ops' => [['b' => 2, 'a' => 1]], 'kind' => 'ajout_note']),
+            'Un corps ordinaire garde l’empreinte d’avant : les clés déjà posées en base restent valables.',
+        );
+    }
+
     /** `soumettre` absent vaut `true` au dépôt, mais le serveur ne le devine pas pour l'empreinte. */
     public function testUneValeurParDefautExpliciteChangeLEmpreinte(): void
     {

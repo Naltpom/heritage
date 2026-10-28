@@ -58,6 +58,13 @@ final readonly class CleDIdempotence
      * absente et la même clé à sa valeur par défaut font deux corps différents : le
      * serveur ne devine pas.
      *
+     * Un objet reste un objet, même quand ses clés triées valent 0, 1, 2… Les constructeurs
+     * lisent un objet à la place d'une liste dans **son** ordre (`array_values`) : sans cela,
+     * `{"1": b, "0": a}` aurait l'empreinte de `[a, b]` et rejouerait une demande aux
+     * éléments dans l'autre ordre. Reste un cas, que le tri confond : deux objets mis à la
+     * place d'une liste, qui ne diffèrent que par l'ordre de leurs clés (`{"2": c, "0": a,
+     * "1": b}` et `{"1": b, "2": c, "0": a}`). Le front et le serveur MCP envoient des listes.
+     *
      * @param array<mixed> $corps
      */
     public static function empreinteDuCorps(array $corps): string
@@ -76,10 +83,14 @@ final readonly class CleDIdempotence
 
         $valeur = array_map(self::canonique(...), $valeur);
 
-        if (!array_is_list($valeur)) {
-            ksort($valeur, \SORT_STRING);
+        if (array_is_list($valeur)) {
+            return $valeur;
         }
 
-        return $valeur;
+        ksort($valeur, \SORT_STRING);
+
+        // Objet forcé là seulement où le tableau trié s'encoderait en liste : json_encode
+        // d'un objet perd en silence les clés qui commencent par NUL, pas celui d'un tableau.
+        return array_is_list($valeur) ? (object) $valeur : $valeur;
     }
 }
