@@ -48,8 +48,12 @@ Deux jetons sont prévus, parce que couper l'un ne doit pas couper l'autre :
   parmi les demandes en attente (la saisie reste hors de l'URL).
 - `contribution` : déposer une demande (sans la valider), et la vérifier sans l'écrire (le dépôt à blanc,
   [ADR 0022](0022-idempotence-et-depot-a-blanc.md)) ; téléverser un média ; créer une
-  démarche, y ajouter un courrier, en poser le statut. Compléter, soumettre ou retirer une
-  demande **ne sont pas ouverts** : aucun outil des agents ne les appelle. Sous un jeton de
+  démarche, y ajouter un courrier, en poser le statut ; retirer un **brouillon** (amendement
+  du 28/10/2026 : un agent se défait du brouillon qu'il a déposé par erreur). Le jeton est sur
+  le compte du commanditaire : une demande **envoyée**, la sienne comprise, ne se retire pas
+  sous un jeton (`403 acces_refuse`, `DemandeVoter::RETIRER`), et un retrait est définitif.
+  Compléter et soumettre une demande **ne sont pas ouverts** : aucun outil des agents ne les
+  appelle. Sous un jeton de
   portée inférieure à `validation`, un administrateur téléverse comme un membre : le média
   naît `en_attente`, le portrait ne change qu'à la validation de la demande `ajout_media` qui
   le désigne, le plafond de 20 dépôts par heure s'applique au compte, et une pièce ne se joint

@@ -112,6 +112,42 @@ final class PorteesDesJetonsEnHttpTest extends CoreWebTestCase
         self::assertSame('Sureau', $this->arbre()->valeur(SubjectKind::Personne, self::PERSONNE, 'surname'));
     }
 
+    /**
+     * ADR 0021 § 2 : un agent retire le brouillon qu'il a déposé par erreur, jamais une demande
+     * envoyée — celle du commanditaire comprise, puisque le jeton est sur son compte. Par son
+     * cookie, le commanditaire la retire comme avant.
+     */
+    public function testUnJetonDeContributionRetireSonBrouillonMaisPasUneDemandeEnvoyee(): void
+    {
+        $jeton = $this->creerJetonDApi($this->administration(), PorteeDeJeton::Contribution);
+
+        $corps = $this->demande('surname', 'Sureau', 'SUREAU');
+        $corps['soumettre'] = false;
+        $this->requete('POST', '/api/demandes', $corps, $this->bearer($jeton));
+        self::assertResponseStatusCodeSame(Response::HTTP_CREATED);
+        $brouillon = $this->charge()['id'];
+        self::assertIsInt($brouillon);
+
+        $this->requete('POST', '/api/demandes/'.$brouillon.'/retirer', [], $this->bearer($jeton));
+        self::assertResponseIsSuccessful();
+        self::assertSame('annulee', $this->charge()['status']);
+        self::assertNull($this->charge()['submittedAt']);
+
+        $envoyee = $this->deposerParJeton($jeton, 'nickname', null, 'Marnette');
+        $this->requete('POST', '/api/demandes/'.$envoyee.'/retirer', [], $this->bearer($jeton));
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        self::assertSame(
+            ['code' => 'acces_refuse', 'message' => 'Sous un jeton d\'API, seul un brouillon se retire : une demande envoyée attend un humain.', 'champs' => null, 'details' => null],
+            $this->charge()['erreur'],
+        );
+        self::assertSame('en_attente', $this->statut($envoyee, $jeton));
+
+        $this->connexion('administration@example.net');
+        $this->requete('POST', '/api/demandes/'.$envoyee.'/retirer');
+        self::assertResponseIsSuccessful();
+        self::assertSame('annulee', $this->charge()['status']);
+    }
+
     public function testUnJetonDeValidationDecideLesDemandesDeSonCompte(): void
     {
         $jeton = $this->creerJetonDApi($this->administration(), PorteeDeJeton::Validation, 'Claude — session principale');

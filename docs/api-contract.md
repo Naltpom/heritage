@@ -254,7 +254,8 @@ aucun jeton en `localStorage`** — le cookie est le seul porteur de session d'u
 >   (une route non nommée rend `403` `acces_refuse`, `HEAD` compris). La portée `lecture`
 >   ouvre aussi deux `POST` de recherche qui n'écrivent rien (ressemblances dans l'arbre et
 >   parmi les demandes) ; la portée `contribution` ouvre, avec le dépôt, le dépôt à blanc (`POST /api/demandes/verifier`,
->   [ADR 0022](adr/0022-idempotence-et-depot-a-blanc.md)) ; compléter, soumettre et retirer une demande ne sont ouverts à
+>   [ADR 0022](adr/0022-idempotence-et-depot-a-blanc.md)), et le retrait d'un **brouillon** (une demande envoyée ne se retire
+>   pas sous un jeton : `403` `acces_refuse`) ; compléter et soumettre une demande ne sont ouverts à
 >   aucune portée. Dix-sept motifs de nom de route sont exclus pour toutes, jugés avant la
 >   liste : utilisateurs, réglages, incarnation, voir-comme, jetons, connexion, clés d'accès,
 >   mot de passe, courriel, inscription, invitations, membres, RGPD, journal d'audit.
@@ -2657,7 +2658,7 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `GET` | `/api/demandes` | `MEMBRE` | `?status=&page=&parPage=` | `200` liste paginée | `403` | — |
 | `GET` | `/api/demandes/{id}` | `MEMBRE` | — | `200` § 6.5 | `403` `acces_refuse` · `404` | — |
 | `POST` | `/api/demandes/{id}/soumettre` | `MEMBRE` | *(vide)* | `200` demande | `409` `demande_deja_soumise` · `422` `demande_sans_lien` | — |
-| `POST` | `/api/demandes/{id}/retirer` | `MEMBRE` | *(vide)* | `200` demande (`annulee` ; un brouillon retiré garde `submittedAt` nul) | `409` `demande_deja_decidee` · `403` · `404` | — |
+| `POST` | `/api/demandes/{id}/retirer` | `MEMBRE` | *(vide)* | `200` demande (`annulee` ; un brouillon retiré garde `submittedAt` nul) | `409` `demande_deja_decidee` · `403` (sous un jeton d'API : une demande qui n'est pas un brouillon) · `404` | — |
 | `GET` | `/api/demandes/{id}/refaire` | `MEMBRE` | — | `200` corps pré-rempli | `403` · `404` · `409` `demande_non_refaisable` | — |
 | `GET` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | — | `200` § 6.6 | `403` · `404` | — |
 | `PUT` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | `{fiche, liens, empreinte}` § 6.6 ter | `200` § 6.5 | `403` `acces_refuse` · `403` `regime_en_attente` · `404` · `409` `demande_deja_decidee` · `409` `demande_modifiee_entre_temps` · `409` `vue_comme_membre_active` · `422` | — |

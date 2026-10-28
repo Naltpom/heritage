@@ -7,6 +7,7 @@ namespace App\Module\Proposal\Security;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Security\JetonDApiAuthentifie;
 use App\Module\Proposal\Entity\ChangeRequest;
+use App\Module\Proposal\Enum\RequestStatus;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Vote;
@@ -35,6 +36,13 @@ final class DemandeVoter extends Voter
     /** Soumettre ou retirer : **son auteur seulement**, administrateur compris. */
     public const string MODIFIER = 'prp_modifier_demande';
 
+    /**
+     * Retirer : son auteur, comme {@see self::MODIFIER} — et, sous un jeton d'API, **un
+     * brouillon seulement** (ADR 0021 § 2). Le jeton est celui du compte du commanditaire :
+     * sans cette borne, un agent retirerait toute demande de ce compte, celles que le
+     * commanditaire a envoyées lui-même comprises, et un retrait est définitif.
+     */
+    public const string RETIRER = 'prp_retirer_demande';
     /** Valider ou refuser : administrateur — et, sous un jeton d'API, auteur de la demande. */
     public const string DECIDER = 'prp_decider_demande';
 
@@ -56,7 +64,7 @@ final class DemandeVoter extends Voter
 
     protected function supports(string $attribute, mixed $subject): bool
     {
-        return \in_array($attribute, [self::VOIR, self::MODIFIER, self::DECIDER, self::COMPLETER], true)
+        return \in_array($attribute, [self::VOIR, self::MODIFIER, self::RETIRER, self::DECIDER, self::COMPLETER], true)
             && $subject instanceof ChangeRequest;
     }
 
@@ -77,6 +85,8 @@ final class DemandeVoter extends Voter
             // décider à sa place **sans laisser de trace de décision**. Pour trancher, il
             // a `valider` et `refuser`, qui en laissent une.
             self::MODIFIER => $estAuteur,
+            self::RETIRER => $estAuteur
+                && (null === JetonDApiAuthentifie::depuisLeJetonDeSecurite($token) || RequestStatus::Brouillon === $subject->getStatus()),
             // Sous un jeton d'API, décider exige en plus d'être l'auteur (ADR 0021 § 5) : la
             // session principale tranche les demandes que ses agents ont déposées sous le
             // même compte, jamais celle d'un membre, qui reste à un humain. Sans jeton,
