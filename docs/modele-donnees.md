@@ -1419,6 +1419,8 @@ L'en-tête de la demande. Une ligne = une décision de l'administrateur.
 | `reprise_de_id` | `INT` | oui | `NULL` | **FK intra-module** → `prp_change_request(id)`, `ON DELETE SET NULL`. Seconde auto-référence. La demande dont celle-ci est la **reprise**, après un refus ou une caducité — le bouton « refaire cette demande » du § 9.6. Sans elle, la demande d'origine affiche un dossier **amputé de ses pièces sans explication** (voir l'encadré). |
 | `complement_de_id` | `INT` | oui | `NULL` | **FK intra-module** → `prp_draft_person(id)`, `ON DELETE SET NULL`. Le troisième pointeur, et le seul qui vise une **fiche** plutôt qu'une demande : la fiche proposée par un **autre membre** que cette `creation_personne` **complète** (ADR 0017). L'administrateur fusionne le complément dans l'origine ; jusque-là, ni l'un ni l'autre ne se valide. Une fiche et non une demande, parce qu'une création peut en porter plusieurs. Réservée aux `creation_personne` (`ck_prp_request_complement`). Voir l'encadré ci-dessous. |
 | `dedup_key` | `VARCHAR(160)` | oui | `NULL` | Clé de rapprochement des doublons probables : `nom|premier prénom|année de naissance` de la **première fiche nommée** de la demande — noms repliés par `Core\Service\CleDeRecherche::replier()` puis mis en minuscules, année = borne basse de la naissance, `?` si inconnue (par exemple `genevrolle|marne|1904`). **Pas** la `search_key` de `tree_person`, ni une fourchette : c'est ce que cette ligne disait jusqu'au 10/10/2026, et ce n'a jamais été le calcul (`Proposal\Service\CleDeDoublon`). Posée **à la soumission** pour les créations (un brouillon n'en a pas), **recalculée** à chaque complétion sur place d'une demande en attente et à chaque fusion d'un complément ; les clés anciennes se reprennent par `heritage:recalculer-les-cles-de-doublon`. Voir l'index ci-dessous. |
+| `idempotency_key` | `VARCHAR(128)` | oui | `NULL` | La clé `Idempotency-Key` sous laquelle la demande a été déposée ([ADR 0022](adr/0022-idempotence-et-depot-a-blanc.md)) : 16 à 128 caractères `[A-Za-z0-9_-]`, choisis par le client. `NULL` pour un dépôt sans l'en-tête, ce que fait le front. Unique **par auteur** (`uniq_prp_request_idempotence`) : un second dépôt du même compte sous la même clé rend la demande existante au lieu d'en créer une (`422 idempotence_corps_different` si le corps diffère). Posée à la création, jamais modifiée. **À ne pas confondre avec `dedup_key`** : celle-ci rapproche deux propositions *semblables*, souvent de deux auteurs, pour que l'administrateur tranche ; la clé d'idempotence reconnaît *la même requête* rejouée par son auteur, et c'est le serveur qui tranche. |
+| `idempotency_fingerprint` | `VARCHAR(64)` | oui | `NULL` | L'empreinte sha256 (hexadécimal) du corps déposé sous cette clé, clés d'objet triées. Un rejeu au corps différent est refusé (`422 idempotence_corps_different`) au lieu d'être confondu avec le premier. Présente si et seulement si `idempotency_key` l'est (`ck_prp_request_idempotence`). |
 | `created_at` | `TIMESTAMPTZ` | non | `now()` | — |
 | `updated_at` | `TIMESTAMPTZ` | non | `now()` | — |
 
@@ -1432,6 +1434,7 @@ L'en-tête de la demande. Une ligne = une décision de l'administrateur.
 | `idx_prp_request_cible` | `(target_kind, target_id, status)` | Deux usages, tous deux chauds : le **calque « en attente »** d'une fiche (l'API cherche, à chaque affichage de personne, s'il existe des demandes en cours sur elle), et la détection de demandes concurrentes avant validation. |
 | `idx_prp_request_dedup` | `(dedup_key)` partiel `WHERE dedup_key IS NOT NULL AND status = 'en_attente'` | Rapprochement des doublons du § 6.4 du dossier : à l'ouverture d'une demande de création, l'administrateur voit les autres demandes en attente portant la même clé — **hors** le couple formé par un complément et son origine, qui portent presque toujours la même. |
 | `idx_prp_request_complement` | `(complement_de_id)` | « Quels compléments attendent sur cette proposition ? » — la vue d'administration de l'origine, et le contrôle préalable qui en bloque la validation (`complements_en_attente`). Nommé dans le mapping, ce qui dispense Doctrine de poser son propre `IDX_…` sur la colonne de jointure. |
+| `uniq_prp_request_idempotence` | `UNIQUE (author_user_id, idempotency_key)` partiel `WHERE idempotency_key IS NOT NULL` | Le rejeu d'un dépôt (ADR 0022) : « ce compte a-t-il déjà déposé sous cette clé ? ». Il garantit aussi que, de deux requêtes simultanées, une seule l'emporte. Partiel, parce que la plupart des demandes n'ont pas de clé. Sur le SQLite des tests, l'index est complet : les `NULL` y restent distincts, ce qui produit le même effet. |
 
 > **Deux auto-références, deux sens : `duplicate_of_id` et `reprise_de_id`**
 >
@@ -1509,7 +1512,13 @@ CONSTRAINT ck_prp_request_auto_validation
 -- saurait pas quoi en verser. Le service le refuse en 422 avant la base ; la contrainte est
 -- là pour la console et les correctifs à chaud (Version20261010143715).
 CONSTRAINT ck_prp_request_complement
-  CHECK (complement_de_id IS NULL OR kind = 'creation_personne')
+  CHECK (complement_de_id IS NULL OR kind = 'creation_personne'),
+
+-- Une clé d'idempotence ne va jamais sans l'empreinte du corps qu'elle protège (ADR 0022) :
+-- sans elle, un rejeu au corps différent ne pourrait plus être reconnu
+-- (Version20261028151742).
+CONSTRAINT ck_prp_request_idempotence
+  CHECK ((idempotency_key IS NULL) = (idempotency_fingerprint IS NULL))
 ```
 
 ### 5.2 `prp_change_op`

@@ -6,12 +6,14 @@ namespace App\Module\Media\Service\Proposition;
 
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Exception\DomainException;
 use App\Module\Core\Exception\NotFoundException;
 use App\Module\Media\Entity\Media;
 use App\Module\Media\Enum\MediaStatus;
 use App\Module\Media\Enum\MediaSubject;
 use App\Module\Media\Security\LecteurMedia;
 use App\Module\Media\Service\CatalogueMedia;
+use App\Module\Proposal\Contract\RecueilDErreurs;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
 use App\Module\Proposal\Enum\OpKind;
@@ -78,7 +80,7 @@ final readonly class ConstructeurDAjoutDeMedia implements ConstructeurDeDemande
         return [RequestKind::AjoutMedia];
     }
 
-    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur): void
+    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur, ?RecueilDErreurs $recueil = null): void
     {
         $brut = $corps['ops'] ?? [];
 
@@ -92,23 +94,30 @@ final readonly class ConstructeurDAjoutDeMedia implements ConstructeurDeDemande
         $designes = [];
 
         foreach (array_values($brut) as $index => $donnees) {
-            if (!\is_array($donnees)) {
-                throw DonneesInvalides::pourChamp("ops[$index]", 'Chaque op est un objet.');
+            try {
+                if (!\is_array($donnees)) {
+                    throw DonneesInvalides::pourChamp("ops[$index]", 'Chaque op est un objet.');
+                }
+
+                $chemin = "ops[$index]";
+                $media = $this->mediaDesigne($donnees, $chemin, $lecteurMedia, $lecteur);
+
+                if (\in_array($media, $designes, true)) {
+                    // Deux ops sur le même média produiraient deux révisions pour un seul
+                    // fichier, et la seconde basculerait un portrait déjà basculé.
+                    throw DonneesInvalides::pourChamp("$chemin.newValue.mediaId", 'Ce média est déjà désigné par cette demande.');
+                }
+
+                $designes[] = $media;
+
+                $this->em->persist($this->op($demande, $donnees, $index, $media, $chemin));
+            } catch (DomainException $e) {
+                RecueilDErreurs::recueillir($recueil, $e);
             }
-
-            $chemin = "ops[$index]";
-            $media = $this->mediaDesigne($donnees, $chemin, $lecteurMedia, $lecteur);
-
-            if (\in_array($media, $designes, true)) {
-                // Deux ops sur le même média produiraient deux révisions pour un seul
-                // fichier, et la seconde basculerait un portrait déjà basculé.
-                throw DonneesInvalides::pourChamp("$chemin.newValue.mediaId", 'Ce média est déjà désigné par cette demande.');
-            }
-
-            $designes[] = $media;
-
-            $this->em->persist($this->op($demande, $donnees, $index, $media, $chemin));
         }
+
+        // Ce qui suit dépend de tous les éléments : on ne le juge que s'ils sont tous justes.
+        $recueil?->leverSiNonVide();
 
         $this->poserLaCible($demande, $corps, $designes[0]);
     }

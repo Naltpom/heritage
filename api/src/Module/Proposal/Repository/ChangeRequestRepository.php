@@ -398,6 +398,31 @@ class ChangeRequestRepository extends ServiceEntityRepository
     }
 
     /**
+     * La demande que cet auteur a déposée sous cette clé, s'il y en a une (ADR 0022).
+     *
+     * Index : `uniq_prp_request_idempotence` (`author_user_id`, `idempotency_key`).
+     */
+    public function parCleDIdempotence(int $auteurUserId, string $cle): ?ChangeRequest
+    {
+        return $this->findOneBy(['authorUserId' => $auteurUserId, 'idempotencyKey' => $cle]);
+    }
+
+    /**
+     * La même question **sans l'ORM**. Elle se pose après l'échec d'un `flush()` sur
+     * `uniq_prp_request_idempotence`, quand l'EntityManager est fermé et que seule la
+     * connexion répond encore. SQL portable : il tourne aussi sur le SQLite des tests.
+     */
+    public function idParCleDIdempotence(int $auteurUserId, string $cle): ?int
+    {
+        $id = $this->getEntityManager()->getConnection()->fetchOne(
+            'SELECT id FROM prp_change_request WHERE author_user_id = ? AND idempotency_key = ?',
+            [$auteurUserId, $cle],
+        );
+
+        return false === $id ? null : (int) $id;
+    }
+
+    /**
      * @return array{elements: list<ChangeRequest>, total: int}
      */
     private function paginer(QueryBuilder $qb, int $page, int $parPage): array

@@ -19,6 +19,7 @@ use App\Module\Proposal\Repository\ChangeRequestRepository;
 use App\Module\Proposal\Repository\DraftPersonRepository;
 use App\Module\Proposal\Repository\RevisionRepository;
 use App\Module\Proposal\Security\DemandeVoter;
+use App\Module\Proposal\Service\CleDIdempotence;
 use App\Module\Proposal\Service\CompletionDeProposition;
 use App\Module\Proposal\Service\DepotDeDemande;
 use App\Module\Proposal\Service\FabriqueDeLecteur;
@@ -31,6 +32,7 @@ use App\Module\Proposal\Service\ValeursMasquees;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -43,15 +45,17 @@ use Symfony\Component\Routing\Attribute\Route;
  * que d'interroger la session. C'est ce qui rend la règle la plus sensible du module —
  * « le calque est invisible d'un autre membre » — testable sans monter un pare-feu.
  *
- * **Aucune route ne rend `204`** : « une action qui réussit rend toujours l'état
- * résultant ; le front n'a jamais à refaire un `GET` pour savoir ce qu'il vient de
- * faire » (§ 1.1).
+ * **Une seule route rend `204`** : `POST /api/demandes/verifier`, le dépôt à blanc. Elle
+ * n'écrit rien et n'a donc pas d'état résultant à rendre. Toutes les autres suivent la règle
+ * du § 1.1 : « une action qui réussit rend toujours l'état résultant ; le front n'a jamais à
+ * refaire un `GET` pour savoir ce qu'il vient de faire ».
  *
  * ── Lesquelles écrivent — la revue, route par route ─────────────────────────────
  *
  * | Route | Écrit | `refuserSiActive()` |
  * |---|:-:|:-:|
  * | `POST /api/demandes` | oui | **oui** |
+ * | `POST /api/demandes/verifier` | **non** | **oui** |
  * | `GET /api/demandes` | non | — |
  * | `GET /api/demandes/{id}` | non | — |
  * | `POST /api/demandes/{id}/soumettre` | oui | **oui** |
@@ -75,6 +79,12 @@ use Symfony\Component\Routing\Attribute\Route;
  * rien**. Le verbe garde la saisie — un nom et une naissance, souvent d'un vivant — hors
  * de l'URL et des journaux ; il ne dit pas une écriture, et le garde-fou n'a donc rien à
  * y garder.
+ *
+ * `verifier` mérite aussi sa ligne, à l'opposé de `ressemblances` : c'est un **`POST` qui
+ * n'écrit rien et qui porte pourtant le garde-fou**. Il ne lit pas pour montrer : il
+ * **prédit une écriture**, et sous la bascule le dépôt répondrait
+ * `409 vue_comme_membre_active`. Un dépôt à blanc qui répondrait autre chose que le dépôt
+ * mentirait.
  *
  * Le `PUT` du 10/10/2026 (ADR 0017) est la **première route qui réécrit une demande déjà
  * enregistrée** : jusque-là, une demande naissait au `POST` et ne changeait plus que de
@@ -105,15 +115,47 @@ final class DemandeController extends AbstractController
     /**
      * Déposer une demande. **La table de l'objet visé n'est pas touchée** : seules
      * `prp_change_request` et `prp_change_op` sont écrites.
+     *
+     * **`Idempotency-Key`** (§ 6.1 bis, ADR 0022) : facultatif. Même clé et même corps :
+     * `200`, la demande à son état courant, et `Idempotency-Replayed: true`. Rien n'est
+     * écrit, rien n'est notifié. Autre corps : `422`. Course perdue : `409` rejouable.
      */
     #[Route('', name: 'proposal_demande_creer', methods: ['POST'])]
     public function creer(Request $requete, DepotDeDemande $depot): JsonResponse
     {
         $this->bascule->refuserSiActive();
 
-        $demande = $depot->deposer($this->corps($requete), $this->lecteurs->courant());
+        $corps = $this->corps($requete);
+        $lecteur = $this->lecteurs->courant();
+        $cle = CleDIdempotence::depuisLEnTete($requete->headers->get('Idempotency-Key'), $corps);
 
-        return $this->charge($this->serialiseur->pourAuteur($demande), 201);
+        if (null !== $cle && null !== ($deja = $depot->demandeDejaDeposee($cle, $lecteur))) {
+            $reponse = $this->charge($this->serialiseur->pourAuteur($deja));
+            $reponse->headers->set('Idempotency-Replayed', 'true');
+
+            return $reponse;
+        }
+
+        return $this->charge($this->serialiseur->pourAuteur($depot->deposer($corps, $lecteur, $cle)), 201);
+    }
+
+    /**
+     * **Le dépôt à blanc** (§ 6.1 ter, ADR 0022) : les contrôles de `POST /api/demandes`,
+     * sans rien écrire. `204`, ou le statut que rendrait le dépôt ; sur une `422`, toutes
+     * les erreurs d'une passe. `Idempotency-Key` est ignoré : rien n'est écrit, il n'y a
+     * rien à rejouer.
+     */
+    #[Route('/verifier', name: 'proposal_demande_verifier', methods: ['POST'])]
+    public function verifier(Request $requete, DepotDeDemande $depot): Response
+    {
+        $this->bascule->refuserSiActive();
+
+        $depot->verifierSansEcrire($this->corps($requete), $this->lecteurs->courant(), lireSoumettre: true);
+
+        $reponse = new Response(null, Response::HTTP_NO_CONTENT);
+        $reponse->headers->set('Cache-Control', 'no-store');
+
+        return $reponse;
     }
 
     /** « Mes demandes » — refusées et caduques comprises, elles restent consultables. */

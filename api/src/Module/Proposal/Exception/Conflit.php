@@ -280,6 +280,25 @@ final class Conflit extends ErreurDeDemande
         );
     }
 
+    /**
+     * **Une `409` qui n'écrit rien** (ADR 0022) : deux dépôts de même
+     * `Idempotency-Key` sont arrivés au même instant, et celui-ci a perdu la course sur
+     * `uniq_prp_request_idempotence`. Sa transaction est annulée : aucune demande, aucune
+     * notification. `demandeId` désigne celle du gagnant, qui est à ce même auteur.
+     *
+     * `rejouable: true`, et c'est littéral : renvoyer **la même requête** trouve la demande
+     * du gagnant et rend son `200`. On ne le rend pas ici, parce que l'EntityManager est
+     * fermé et qu'on ne peut plus la relire avec.
+     */
+    public static function depotConcurrent(int $demandeId): self
+    {
+        return new self(
+            'depot_concurrent',
+            'Une requête de même clé d\'idempotence vient de déposer cette demande : renvoyez la requête pour la relire (même corps ; sinon `422 idempotence_corps_different`).',
+            ['demandeId' => $demandeId, 'rejouable' => true],
+        );
+    }
+
     /** On ne valide pas deux fois : un double clic ne doit pas produire deux révisions. */
     public static function dejaDecidee(RequestStatus $statut): self
     {

@@ -6,6 +6,8 @@ namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Exception\DomainException;
+use App\Module\Proposal\Contract\RecueilDErreurs;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
@@ -97,7 +99,7 @@ final readonly class ConstructeurDAjoutDeCitation implements ConstructeurDeDeman
         return [RequestKind::AjoutCitation];
     }
 
-    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur): void
+    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur, ?RecueilDErreurs $recueil = null): void
     {
         $brut = $corps['ops'] ?? null;
 
@@ -110,31 +112,38 @@ final readonly class ConstructeurDAjoutDeCitation implements ConstructeurDeDeman
         $empreintes = [];
 
         foreach (array_values($brut) as $index => $donnees) {
-            if (!\is_array($donnees)) {
-                throw DonneesInvalides::pourChamp("ops[$index]", 'Chaque op est un objet.');
+            try {
+                if (!\is_array($donnees)) {
+                    throw DonneesInvalides::pourChamp("ops[$index]", 'Chaque op est un objet.');
+                }
+
+                $chemin = "ops[$index]";
+                [$op, $empreinte] = $this->construireOp($demande, $donnees, $index, $chemin);
+
+                if (\in_array($op->getSeq(), $seqVus, true)) {
+                    throw DonneesInvalides::pourChamp("$chemin.seq", 'Deux ops ne peuvent pas porter le même rang.');
+                }
+
+                // Deux fois la même page de la même source sur la même fiche, dans **une
+                // seule** demande, est une double saisie et non deux lectures : le
+                // formulaire a été validé deux fois. Deux demandes distinctes qui le font
+                // restent légitimes — deux personnes ont lu la pièce chacune de son côté —,
+                // et c'est pourquoi le contrôle s'arrête au bord de la demande.
+                if (\in_array($empreinte, $empreintes, true)) {
+                    throw DonneesInvalides::pourChamp("$chemin.newValue", 'Cette demande cite déjà la même page de la même source sur cette fiche.');
+                }
+
+                $seqVus[] = $op->getSeq();
+                $empreintes[] = $empreinte;
+                $construits[] = $op;
+                $this->em->persist($op);
+            } catch (DomainException $e) {
+                RecueilDErreurs::recueillir($recueil, $e);
             }
-
-            $chemin = "ops[$index]";
-            [$op, $empreinte] = $this->construireOp($demande, $donnees, $index, $chemin);
-
-            if (\in_array($op->getSeq(), $seqVus, true)) {
-                throw DonneesInvalides::pourChamp("$chemin.seq", 'Deux ops ne peuvent pas porter le même rang.');
-            }
-
-            // Deux fois la même page de la même source sur la même fiche, dans **une
-            // seule** demande, est une double saisie et non deux lectures : le
-            // formulaire a été validé deux fois. Deux demandes distinctes qui le font
-            // restent légitimes — deux personnes ont lu la pièce chacune de son côté —,
-            // et c'est pourquoi le contrôle s'arrête au bord de la demande.
-            if (\in_array($empreinte, $empreintes, true)) {
-                throw DonneesInvalides::pourChamp("$chemin.newValue", 'Cette demande cite déjà la même page de la même source sur cette fiche.');
-            }
-
-            $seqVus[] = $op->getSeq();
-            $empreintes[] = $empreinte;
-            $construits[] = $op;
-            $this->em->persist($op);
         }
+
+        // Ce qui suit dépend de tous les éléments : on ne le juge que s'ils sont tous justes.
+        $recueil?->leverSiNonVide();
 
         // La cible dénormalisée est tirée de l'op de plus petit `seq` — comme pour une
         // modification —, parce que c'est elle qui filtre et groupe la file

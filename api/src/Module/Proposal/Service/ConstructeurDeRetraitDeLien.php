@@ -6,7 +6,9 @@ namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Exception\DomainException;
 use App\Module\Proposal\Contract\LienARetirer;
+use App\Module\Proposal\Contract\RecueilDErreurs;
 use App\Module\Proposal\Contract\RetraitDeLien;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
@@ -79,7 +81,7 @@ final readonly class ConstructeurDeRetraitDeLien implements ConstructeurDeDemand
         return [RequestKind::RetraitLien];
     }
 
-    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur): void
+    public function construire(ChangeRequest $demande, array $corps, Lecteur $lecteur, ?RecueilDErreurs $recueil = null): void
     {
         $retraits = $corps['retraits'] ?? [];
 
@@ -92,41 +94,48 @@ final readonly class ConstructeurDeRetraitDeLien implements ConstructeurDeDemand
         $seq = 0;
 
         foreach ($retraits as $index => $brut) {
-            $chemin = "retraits[$index]";
-            $lien = $this->lienDepuis($brut, $chemin);
-            $cle = implode(':', [$lien->nature->value, $lien->personneId, $lien->familleId, (string) $lien->parentId]);
+            try {
+                $chemin = "retraits[$index]";
+                $lien = $this->lienDepuis($brut, $chemin);
+                $cle = implode(':', [$lien->nature->value, $lien->personneId, $lien->familleId, (string) $lien->parentId]);
 
-            if (isset($vus[$cle])) {
-                throw DonneesInvalides::pourChamp($chemin, 'Ce lien est déjà retiré par cette demande.');
-            }
+                if (isset($vus[$cle])) {
+                    throw DonneesInvalides::pourChamp($chemin, 'Ce lien est déjà retiré par cette demande.');
+                }
 
-            $vus[$cle] = true;
-            $mesure = $this->mesurer($lien, $chemin);
+                $vus[$cle] = true;
+                $mesure = $this->mesurer($lien, $chemin);
 
-            $cible = $this->arbre->chargerCible(SubjectKind::Famille, $lien->familleId);
+                $cible = $this->arbre->chargerCible(SubjectKind::Famille, $lien->familleId);
 
-            $op = new ChangeRequestOp($demande, ++$seq, OpKind::RetraitLien, SubjectKind::Famille, ValueKind::Lien);
-            // `base_version` posée : défaire un lien est une écriture sur cette famille.
-            // Une correction validée entre-temps la fait rejouer sur la version courante,
-            // et la mesure — comparée, elle — dit si le retrait veut encore dire la même
-            // chose.
-            $op->viserLigneExistante($lien->familleId, $cible?->version);
-            // `newValue` à `null` : après un retrait, le lien n'est plus. L'« avant » n'est
-            // pas une valeur de champ mais la mesure de ce que le retrait fera.
-            $op->setValues($mesure->versJson(), null);
+                $op = new ChangeRequestOp($demande, ++$seq, OpKind::RetraitLien, SubjectKind::Famille, ValueKind::Lien);
+                // `base_version` posée : défaire un lien est une écriture sur cette famille.
+                // Une correction validée entre-temps la fait rejouer sur la version courante,
+                // et la mesure — comparée, elle — dit si le retrait veut encore dire la même
+                // chose.
+                $op->viserLigneExistante($lien->familleId, $cible?->version);
+                // `newValue` à `null` : après un retrait, le lien n'est plus. L'« avant » n'est
+                // pas une valeur de champ mais la mesure de ce que le retrait fera.
+                $op->setValues($mesure->versJson(), null);
 
-            $this->em->persist($op);
+                $this->em->persist($op);
 
-            $touchees[] = $lien->personneId;
+                $touchees[] = $lien->personneId;
 
-            if (null !== $lien->parentId) {
-                $touchees[] = $lien->parentId;
-            }
+                if (null !== $lien->parentId) {
+                    $touchees[] = $lien->parentId;
+                }
 
-            foreach ($this->arbre->epouxDeFamille($lien->familleId) as $epoux) {
-                $touchees[] = $epoux;
+                foreach ($this->arbre->epouxDeFamille($lien->familleId) as $epoux) {
+                    $touchees[] = $epoux;
+                }
+            } catch (DomainException $e) {
+                RecueilDErreurs::recueillir($recueil, $e);
             }
         }
+
+        // Ce qui suit dépend de tous les éléments : on ne le juge que s'ils sont tous justes.
+        $recueil?->leverSiNonVide();
 
         $this->poserLaCible($demande, $corps, array_values(array_unique($touchees)));
     }

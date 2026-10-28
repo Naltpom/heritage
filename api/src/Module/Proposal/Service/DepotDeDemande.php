@@ -6,7 +6,9 @@ namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\Exception\DomainException;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
+use App\Module\Proposal\Contract\RecueilDErreurs;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Enum\RequestKind;
 use App\Module\Proposal\Enum\RequestStatus;
@@ -15,8 +17,10 @@ use App\Module\Proposal\Exception\Conflit;
 use App\Module\Proposal\Exception\DonneesInvalides;
 use App\Module\Proposal\Exception\ErreurDeDemande;
 use App\Module\Proposal\Exception\Introuvable;
+use App\Module\Proposal\Repository\ChangeRequestRepository;
 use App\Module\Proposal\Service\Port\NotificateurDeDemandes;
 use App\Module\Proposal\Service\Port\PortArbre;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 
@@ -49,13 +53,18 @@ final readonly class DepotDeDemande
         private NotificateurDeDemandes $notificateur,
         private CercleDeVisibiliteInterface $cercle,
         private PortArbre $arbre,
+        private ChangeRequestRepository $demandes,
     ) {
     }
 
     /**
+     * Avec `$cle`, la clé et l'empreinte sont posées sur la demande, et une course perdue sur
+     * `uniq_prp_request_idempotence` rend `409 depot_concurrent`. **Ce service ne cherche pas
+     * de rejeu** : c'est {@see demandeDejaDeposee()}, que le contrôleur appelle avant.
+     *
      * @param array<string, mixed> $corps
      */
-    public function deposer(array $corps, Lecteur $lecteur): ChangeRequest
+    public function deposer(array $corps, Lecteur $lecteur, ?CleDIdempotence $cle = null): ChangeRequest
     {
         self::verifierQuIlPeutEcrire($lecteur);
 
@@ -66,31 +75,67 @@ final readonly class DepotDeDemande
         $demande = new ChangeRequest($kind, $lecteur->userId, $lecteur->libelle);
         $demande->setMessage($this->message($corps));
 
+        if (null !== $cle) {
+            $demande->poserLaCleDIdempotence($cle->valeur, $cle->empreinte);
+        }
+
         $this->em->persist($demande);
         $constructeur->construire($demande, $corps, $lecteur);
         $this->verifierDansLePerimetre($demande);
 
-        // Défaut `true` : le cas courant est de proposer, pas d'enregistrer un brouillon.
-        // Un défaut inverse ferait que les premières contributions d'un membre restent
-        // invisibles de l'administrateur sans que personne ne comprenne pourquoi.
-        $soumettre = $corps['soumettre'] ?? true;
-
-        if (!\is_bool($soumettre)) {
-            throw DonneesInvalides::pourChamp('soumettre', 'Cette valeur doit être true ou false.');
-        }
+        $soumettre = self::soumettreDuCorps($corps);
 
         if ($soumettre) {
             $constructeur->verifierAvantSoumission($demande);
             $demande->soumettre();
         }
 
-        $this->em->flush();
+        try {
+            $this->em->flush();
+        } catch (UniqueConstraintViolationException $e) {
+            // Deux dépôts de même clé au même instant : PostgreSQL a laissé passer le premier
+            // et refuse le second, dont la transaction est annulée. Rien n'est écrit, et la
+            // notification, qui suit, ne part pas. L'EntityManager est fermé : on ne demande
+            // à la base que l'identifiant du gagnant, par la connexion seule. Sans clé, ou
+            // sans gagnant, c'est une autre contrainte qui a parlé : la panne repart telle quelle.
+            $gagnante = null !== $cle ? $this->demandes->idParCleDIdempotence($lecteur->userId, $cle->valeur) : null;
+
+            if (null === $gagnante) {
+                throw $e;
+            }
+
+            throw Conflit::depotConcurrent($gagnante);
+        }
 
         if ($soumettre) {
             $this->notificateur->demandeSoumise($demande);
         }
 
         return $demande;
+    }
+
+    /**
+     * Le rejeu (ADR 0022) : la demande que ce lecteur a déjà déposée sous cette clé, ou
+     * `null`. Les garde-fous d'écriture passent d'abord : un rejeu est une écriture différée.
+     * La clé d'un autre compte n'est pas trouvée, puisque la recherche porte sur le lecteur.
+     *
+     * @throws DonneesInvalides `idempotence_corps_different` si la clé a servi pour un autre corps
+     */
+    public function demandeDejaDeposee(CleDIdempotence $cle, Lecteur $lecteur): ?ChangeRequest
+    {
+        self::verifierQuIlPeutEcrire($lecteur);
+
+        $deja = $this->demandes->parCleDIdempotence($lecteur->userId, $cle->valeur);
+
+        if (null === $deja) {
+            return null;
+        }
+
+        if ($deja->getIdempotencyFingerprint() !== $cle->empreinte) {
+            throw DonneesInvalides::cleDIdempotenceDejaEmployee((int) $deja->getId());
+        }
+
+        return $deja;
     }
 
     /**
@@ -116,38 +161,116 @@ final readonly class DepotDeDemande
      *
      * La demande elle-même n'est jamais persistée : elle ne sert que de porteur.
      *
+     * ── Le statut est celui du dépôt ────────────────────────────────────────────────
+     *
+     * Les contrôles se jouent dans l'ordre de `deposer()`. Une `422` est notée et la
+     * vérification continue. Une autre erreur arrête tout. La première rencontrée décide
+     * donc du statut, comme au dépôt.
+     *
+     * **Une `422` les porte toutes** : une par champ de l'enveloppe, une par élément des
+     * listes (voir {@see RecueilDErreurs}). Une seule erreur sort intacte : l'assistant lit
+     * la même première clé qu'avant.
+     *
+     * **`$lireSoumettre`** vaut `false` par défaut, pour l'assistant : on contrôle comme si
+     * `soumettre` valait `true`, et la clé est ignorée. La route `POST /api/demandes/verifier`
+     * passe `true` : `soumettre` est lu comme au dépôt, et `false` dispense du contrôle de
+     * complétude.
+     *
      * @param array<string, mixed> $corps
      *
-     * @throws ErreurDeDemande exactement celles que le dépôt lèverait
+     * @throws ErreurDeDemande la première que le dépôt lèverait ; si c'est une 422, avec toutes celles qu'une passe établit
      */
-    public function verifierSansEcrire(array $corps, Lecteur $lecteur): void
+    public function verifierSansEcrire(array $corps, Lecteur $lecteur, bool $lireSoumettre = false): void
     {
         self::verifierQuIlPeutEcrire($lecteur);
 
-        $kind = $this->nature($corps);
-        self::refuserUnComplementHorsCreation($kind, $corps);
-        $constructeur = $this->constructeurPour($kind);
+        $recueil = new RecueilDErreurs();
+        $kind = null;
+        $constructeur = null;
+        $message = null;
 
-        $demande = new ChangeRequest($kind, $lecteur->userId, $lecteur->libelle);
-        $demande->setMessage($this->message($corps));
+        try {
+            $kind = $this->nature($corps);
+        } catch (DomainException $e) {
+            RecueilDErreurs::recueillir($recueil, $e);
+        }
 
-        $unite = $this->em->getUnitOfWork();
-        $deja = [];
-        foreach ($unite->getScheduledEntityInsertions() as $entite) {
-            $deja[spl_object_id($entite)] = true;
+        if (null !== $kind) {
+            try {
+                self::refuserUnComplementHorsCreation($kind, $corps);
+            } catch (DomainException $e) {
+                RecueilDErreurs::recueillir($recueil, $e);
+            }
+
+            try {
+                $constructeur = $this->constructeurPour($kind);
+            } catch (DomainException $e) {
+                RecueilDErreurs::recueillir($recueil, $e);
+            }
         }
 
         try {
-            $constructeur->construire($demande, $corps, $lecteur);
-            $this->verifierDansLePerimetre($demande);
-            $constructeur->verifierAvantSoumission($demande);
-        } finally {
+            $message = $this->message($corps);
+        } catch (DomainException $e) {
+            RecueilDErreurs::recueillir($recueil, $e);
+        }
+
+        if (null !== $kind && null !== $constructeur) {
+            $demande = new ChangeRequest($kind, $lecteur->userId, $lecteur->libelle);
+            $demande->setMessage($message);
+
+            $unite = $this->em->getUnitOfWork();
+            $deja = [];
             foreach ($unite->getScheduledEntityInsertions() as $entite) {
-                if (!isset($deja[spl_object_id($entite)])) {
-                    $this->em->detach($entite);
+                $deja[spl_object_id($entite)] = true;
+            }
+
+            try {
+                $construite = false;
+
+                try {
+                    $constructeur->construire($demande, $corps, $lecteur, new RecueilDErreurs());
+                    $this->verifierDansLePerimetre($demande);
+                    $construite = true;
+                } catch (DomainException $e) {
+                    RecueilDErreurs::recueillir($recueil, $e);
+                }
+
+                // Lu après la construction, comme au dépôt : une 404 de cible passe avant.
+                $soumettre = true;
+
+                if ($lireSoumettre) {
+                    try {
+                        $soumettre = self::soumettreDuCorps($corps);
+                    } catch (DomainException $e) {
+                        RecueilDErreurs::recueillir($recueil, $e);
+                        $soumettre = false;
+                    }
+                }
+
+                if ($construite && $soumettre) {
+                    try {
+                        $constructeur->verifierAvantSoumission($demande);
+                    } catch (DomainException $e) {
+                        RecueilDErreurs::recueillir($recueil, $e);
+                    }
+                }
+            } finally {
+                foreach ($unite->getScheduledEntityInsertions() as $entite) {
+                    if (!isset($deja[spl_object_id($entite)])) {
+                        $this->em->detach($entite);
+                    }
                 }
             }
+        } elseif ($lireSoumettre) {
+            try {
+                self::soumettreDuCorps($corps);
+            } catch (DomainException $e) {
+                RecueilDErreurs::recueillir($recueil, $e);
+            }
         }
+
+        $recueil->leverSiNonVide();
     }
 
     /**
@@ -314,6 +437,27 @@ final readonly class DepotDeDemande
         $message = null === $message ? null : trim($message);
 
         return '' === $message ? null : $message;
+    }
+
+    /**
+     * Défaut `true` : le cas courant est de proposer, pas d'enregistrer un brouillon.
+     * Un défaut inverse ferait que les premières contributions d'un membre restent
+     * invisibles de l'administrateur sans que personne ne comprenne pourquoi.
+     *
+     * `soumettreDuCorps()` et non `soumettre()` : le nom est pris par la méthode publique qui
+     * soumet un brouillon, et PHP ne surcharge pas.
+     *
+     * @param array<string, mixed> $corps
+     */
+    private static function soumettreDuCorps(array $corps): bool
+    {
+        $soumettre = $corps['soumettre'] ?? true;
+
+        if (!\is_bool($soumettre)) {
+            throw DonneesInvalides::pourChamp('soumettre', 'Cette valeur doit être true ou false.');
+        }
+
+        return $soumettre;
     }
 
     private function constructeurPour(RequestKind $kind): ConstructeurDeDemande
