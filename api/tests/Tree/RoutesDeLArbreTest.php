@@ -280,7 +280,7 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
         self::assertStringContainsString('private', $cacheControl);
         self::assertStringContainsString('no-cache', $cacheControl);
         self::assertStringNotContainsString('no-store', $cacheControl);
-        self::assertSame('Cookie', $reponse->headers->get('Vary'));
+        self::assertSame('Cookie, Authorization', $reponse->headers->get('Vary'));
 
         $etag = (string) $reponse->headers->get('ETag');
         $charge = $this->charge();

@@ -536,6 +536,30 @@ jobs:
           docker compose -f compose.yaml -f compose.prod.yaml config --quiet
           echo "compose.yaml + compose.prod.yaml : rendu sans substitution manquante."
 
+      # ADR 0021 Jetons d'API : un jeton `hrt_` bien formé (43 caractères
+      # base64url) ne doit jamais figurer dans l'arborescence suivie. Le dépôt est
+      # public. L'expression ci-dessous ne se reconnaît pas elle-même (le `[` n'est
+      # pas dans la classe) ; les exemples des docs, `hrt_XXXX…`, sont trop courts.
+      - name: Aucun jeton d'API hrt_ n'est commité
+        run: |
+          set -euo pipefail
+          # git grep rend 0 s'il trouve, 1 s'il ne trouve rien, 2 ou plus sur erreur.
+          rc=0
+          git grep -nE 'hrt_[A-Za-z0-9_-]{43}' || rc=$?
+          case "$rc" in
+            0)
+              echo "::error::Un jeton d'API hrt_ figure dans le dépôt (lignes ci-dessus). Révoquez-le avec heritage:jeton-api:revoquer, puis retirez-le de l'historique."
+              exit 1
+              ;;
+            1)
+              echo "Aucun jeton hrt_ dans l'arborescence suivie."
+              ;;
+            *)
+              echo "::error::git grep a échoué (code $rc) : la recherche de jetons hrt_ n'a pas pu s'exécuter."
+              exit 1
+              ;;
+          esac
+
   # ---------------------------------------------------------------------------
   # L'empreinte de ce qui a été testé
   # ---------------------------------------------------------------------------

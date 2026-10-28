@@ -57,7 +57,9 @@ use Doctrine\ORM\EntityManagerInterface;
  * portrait ne devient actif qu'à la validation, sans quoi un membre remplacerait le
  * portrait d'une fiche sans que personne l'ait approuvé — c'est-à-dire qu'il écrirait
  * dans l'arbre, ce que l'ADR 0004 lui interdit. Un dépôt d'administrateur, lui, naît
- * `actif` (§ 7.1 du contrat) et bascule le portrait immédiatement.
+ * `actif` (§ 7.1 du contrat) et bascule le portrait immédiatement — sauf sous un jeton
+ * d'API qui ne décide pas, où il arrive ici en membre
+ * ({@see \App\Module\Media\Security\FabriqueDeLecteur::deposant()}, ADR 0021).
  */
 final class TeleversementMedia
 {
@@ -523,7 +525,8 @@ final class TeleversementMedia
         }
 
         // § 7.1 du contrat : « Un dépôt direct d'administrateur naît `actif` ». Le dépôt
-        // d'un membre naît `en_attente` et attend sa demande.
+        // d'un membre naît `en_attente` et attend sa demande — celui d'un administrateur
+        // sous un jeton `contribution` aussi : son `$deposant` n'est pas administrateur.
         if ($deposant->administrateur) {
             $media->setStatus(MediaStatus::Actif);
         }

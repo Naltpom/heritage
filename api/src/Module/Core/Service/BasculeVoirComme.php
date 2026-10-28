@@ -9,6 +9,7 @@ use App\Module\Core\Contract\SessionPayloadContributorInterface;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\AuditAction;
 use App\Module\Core\Exception\ConflictException;
+use App\Module\Core\Exception\ForbiddenException;
 use App\Module\Core\Exception\NotFoundException;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
@@ -26,6 +27,12 @@ use Symfony\Component\HttpFoundation\Session\SessionInterface;
  * Une bascule par requête est une bascule qu'on oublie de rejouer sur un appel, et un
  * appel qui l'oublie ne vérifie plus rien. Elle doit en outre survivre à la navigation,
  * sinon l'administrateur n'explore pas réellement l'arbre sous cette identité.
+ *
+ * Elle ne se lit donc que dans la session **apportée par la requête** — son cookie
+ * (`hasPreviousSession()`), jamais dans la session que Symfony attache à toute requête
+ * (`hasSession()`) et qu'une première lecture ouvrirait. Une requête par jeton d'API, que
+ * le pare-feu `api_jetons` juge sans état et dépouille de ses cookies (ADR 0021 § 4), n'a
+ * pas de bascule, n'en ouvre pas, et n'y gagne aucun cookie.
  *
  * ## Piège n° 1 — l'`ETag` du graphe
  *
@@ -84,15 +91,20 @@ final class BasculeVoirComme implements SessionPayloadContributorInterface
      * Active la bascule sur un membre, et la **journalise une fois** — « c'est une
      * lecture de données masquées, elle se journalise » (§ 10.4).
      *
-     * @throws NotFoundException si le membre n'existe pas, ou si `Membership` n'est pas
-     *                           branché : dans les deux cas l'emprunt n'a pas de sens
+     * @throws NotFoundException  si le membre n'existe pas, ou si `Membership` n'est pas
+     *                            branché : dans les deux cas l'emprunt n'a pas de sens
+     * @throws ForbiddenException `403 acces_refuse` sans session apportée par la requête
+     *                            — un jeton d'API : la bascule ne lui survivrait pas
      */
     public function activer(int $memberId): void
     {
+        // La session d'abord : sans elle, ni `404` ni `200` — un jeton n'apprend pas quels
+        // membres existent.
+        $session = $this->sessionApportee() ?? throw new ForbiddenException();
+
         $libelle = $this->annuaire->libelleDuMembre($memberId)
             ?? throw new NotFoundException('Ce membre n’existe pas.');
 
-        $session = $this->session();
         $session->set(self::CLE_MEMBRE, $memberId);
         // Résolu **ici**, une fois, et rangé : sans lui, chaque appelant qui raisonne en
         // compte — le calque « en attente » notamment — n'aurait d'autre choix que de
@@ -113,7 +125,14 @@ final class BasculeVoirComme implements SessionPayloadContributorInterface
 
     public function desactiver(): void
     {
-        $session = $this->session();
+        // Sans session apportée, aucune bascule n'est active : rien à quitter, et rien à
+        // ouvrir pour le dire.
+        $session = $this->sessionApportee();
+
+        if (null === $session) {
+            return;
+        }
+
         $session->remove(self::CLE_MEMBRE);
         $session->remove(self::CLE_COMPTE);
         $session->remove(self::CLE_DEPUIS);
@@ -137,13 +156,7 @@ final class BasculeVoirComme implements SessionPayloadContributorInterface
      */
     public function userIdEmprunte(): ?int
     {
-        $requete = $this->requestStack->getCurrentRequest();
-
-        if (null === $requete || !$requete->hasSession()) {
-            return null;
-        }
-
-        $valeur = $requete->getSession()->get(self::CLE_COMPTE);
+        $valeur = $this->sessionApportee()?->get(self::CLE_COMPTE);
 
         return \is_int($valeur) ? $valeur : null;
     }
@@ -157,13 +170,7 @@ final class BasculeVoirComme implements SessionPayloadContributorInterface
      */
     public function memberEmprunte(): ?int
     {
-        $requete = $this->requestStack->getCurrentRequest();
-
-        if (null === $requete || !$requete->hasSession()) {
-            return null;
-        }
-
-        $valeur = $requete->getSession()->get(self::CLE_MEMBRE);
+        $valeur = $this->sessionApportee()?->get(self::CLE_MEMBRE);
 
         return \is_int($valeur) ? $valeur : null;
     }
@@ -186,7 +193,7 @@ final class BasculeVoirComme implements SessionPayloadContributorInterface
             return null;
         }
 
-        $depuis = $this->session()->get(self::CLE_DEPUIS);
+        $depuis = $this->sessionApportee()?->get(self::CLE_DEPUIS);
 
         return [
             'memberId' => $memberId,
@@ -208,9 +215,7 @@ final class BasculeVoirComme implements SessionPayloadContributorInterface
      */
     public function contribuer(User $utilisateur): array
     {
-        $requete = $this->requestStack->getCurrentRequest();
-
-        if (null === $requete || !$requete->hasSession()) {
+        if (null === $this->sessionApportee()) {
             return [];
         }
 
@@ -237,12 +242,22 @@ final class BasculeVoirComme implements SessionPayloadContributorInterface
         throw new ConflictException('vue_comme_membre_active', $motif, $details);
     }
 
-    private function session(): SessionInterface
+    /**
+     * La session **apportée par la requête**, ou `null` : hors requête (console), ou sans
+     * cookie de session — une requête par jeton d'API (voir l'en-tête de la classe).
+     *
+     * `hasPreviousSession()` et non `hasSession()` : la seconde répond oui à toute requête
+     * principale, celle d'un jeton comprise, parce que Symfony y attache une fabrique de
+     * session ; la première lecture ouvrirait alors une session neuve, et la réponse sans
+     * état repartirait avec un cookie (ADR 0021 § 4). Sans session apportée, aucune
+     * bascule ne peut être active : elle ne vit que d'une requête à l'autre.
+     */
+    private function sessionApportee(): ?SessionInterface
     {
         $requete = $this->requestStack->getCurrentRequest();
 
-        if (null === $requete || !$requete->hasSession()) {
-            throw new \LogicException('La bascule « voir comme un membre » exige une session.');
+        if (null === $requete || !$requete->hasPreviousSession()) {
+            return null;
         }
 
         return $requete->getSession();

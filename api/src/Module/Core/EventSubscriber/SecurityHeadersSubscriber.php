@@ -90,6 +90,13 @@ final class SecurityHeadersSubscriber implements EventSubscriberInterface
             $reponse->headers->set($nom, $valeur);
         }
 
+        // La charge dépend du lecteur, identifié par son cookie de session **ou** par un
+        // `Authorization: Bearer hrt_…` hors navigateur (ADR 0021 Jetons d'API) : un cache
+        // partagé doit distinguer les deux. On ajoute aux `Vary` déjà posés par les routes,
+        // en une seule ligne (un tableau donnerait une ligne
+        // `Vary` par nom), graphe à `ETag` compris.
+        $reponse->headers->set('Vary', implode(', ', array_unique([...$reponse->getVary(), 'Cookie', 'Authorization'])));
+
         $this->poserLaPolitiqueDeCache($reponse);
     }
 
@@ -102,8 +109,5 @@ final class SecurityHeadersSubscriber implements EventSubscriberInterface
         }
 
         $reponse->headers->set('Cache-Control', 'no-store');
-        // La charge dépend du lecteur : un cache partagé ne doit jamais la réutiliser,
-        // même s'il décidait d'ignorer `no-store`.
-        $reponse->headers->set('Vary', 'Cookie');
     }
 }

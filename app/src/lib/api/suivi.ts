@@ -74,6 +74,8 @@ export interface LigneDuJournal {
   userAgent: string | null
   impersonatorUserId: number | null
   impersonatorEmail: string | null
+  /** Le jeton d'API qui a écrit la ligne (ADR 0021), `null` hors jeton. */
+  jetonApi?: { id: number; libelle: string | null } | null
 }
 
 export interface FiltresDuJournal {

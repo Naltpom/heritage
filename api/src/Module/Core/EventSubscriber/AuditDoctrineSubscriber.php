@@ -7,6 +7,7 @@ namespace App\Module\Core\EventSubscriber;
 use App\Module\Core\Entity\AuditLog;
 use App\Module\Core\Entity\User;
 use App\Module\Core\Enum\AuditAction;
+use App\Module\Core\Security\JetonDApiAuthentifie;
 use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Event\PostFlushEventArgs;
@@ -97,9 +98,10 @@ final class AuditDoctrineSubscriber
      *
      * `lastUsedAt` et `signCount` sont ceux d'une clé d'accès (`Core\Passkey`) : chaque
      * connexion par clé les avance. Sans eux ici, chaque connexion laisserait une ligne
-     * `modification` à côté de sa ligne `connexion`.
+     * `modification` à côté de sa ligne `connexion`. `lastUsedAt` et `lastUsedIp` sont aussi
+     * ceux d'un jeton d'API (`Core\JetonDApi`, ADR 0021) : chaque appel les avance.
      */
-    private const array CHAMPS_TECHNIQUES = ['updatedAt', 'lastLoginAt', 'lastUsedAt', 'signCount'];
+    private const array CHAMPS_TECHNIQUES = ['updatedAt', 'lastLoginAt', 'lastUsedAt', 'lastUsedIp', 'signCount'];
 
     /** @var list<AuditLog> */
     private array $enAttente = [];
@@ -235,6 +237,9 @@ final class AuditDoctrineSubscriber
         // le clavier est écrit à côté, sur chaque ligne (ADR 0010).
         $jeton = $this->security->getToken();
         $incarnant = $jeton instanceof SwitchUserToken ? $jeton->getOriginalToken()->getUser() : null;
+        // Sous un jeton d'API, l'acteur reste le compte du jeton ; le jeton est écrit à côté,
+        // son libellé recopié pour survivre à la ligne qu'il cite (ADR 0021 § 7).
+        $jetonDApi = JetonDApiAuthentifie::depuisLeJetonDeSecurite($jeton);
 
         return new AuditLog(
             $action,
@@ -248,6 +253,8 @@ final class AuditDoctrineSubscriber
             $this->tronquer($requete?->headers->get('User-Agent')),
             $incarnant instanceof User ? $incarnant->getId() : null,
             $incarnant?->getUserIdentifier(),
+            $jetonDApi?->id,
+            $jetonDApi?->libelle,
         );
     }
 

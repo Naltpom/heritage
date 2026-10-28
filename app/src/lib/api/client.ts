@@ -9,8 +9,10 @@
  *    `localStorage`, ni en mémoire. `credentials: 'same-origin'` suffit, parce
  *    que le front et l'API partagent la même origine : le proxy Vite en
  *    développement, nginx en production. Il n'y a donc **aucun en-tête
- *    d'autorisation à poser nulle part**, et si vous en cherchez un, c'est que
- *    l'architecture a changé.
+ *    d'autorisation à poser nulle part**. L'API admet bien un
+ *    `Authorization: Bearer hrt_…`, mais seulement hors navigateur (jeton
+ *    d'API, ADR 0021) : ce n'est pas l'affaire du front, et si vous en
+ *    cherchez un ici, c'est que vous vous trompez de client.
  * 2. **L'enveloppe d'erreur du § 15.1** est décodée une fois, ici, et rendue aux
  *    écrans sous forme d'`ErreurApi`. Voir `erreurs.ts` pour l'interprétation.
  * 3. **Le rattrapage 401** : une session perdue renvoie à la connexion, une fois,

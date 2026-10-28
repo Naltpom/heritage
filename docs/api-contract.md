@@ -235,8 +235,40 @@ Chaque entrée porte `{code, message}`, plus les clés propres au code — `medi
 ### 1.6 Authentification, rôles et régimes
 
 Session `json_login`, cookie `HttpOnly` + `SameSite=Lax` + `Secure` en production (déjà posé
-dans `api/config/packages/framework.yaml`). **Aucun jeton dans un en-tête, aucun jeton en
-`localStorage`** : le cookie est le seul porteur de session.
+dans `api/config/packages/framework.yaml`). **Pour le front : aucun jeton dans un en-tête,
+aucun jeton en `localStorage`** — le cookie est le seul porteur de session d'un navigateur.
+
+> **Amendé par l'[ADR 0021](adr/0021-jetons-d-api.md) (2026-10-25).** L'API admet, **hors
+> navigateur**, un second porteur : `Authorization: Bearer hrt_…`, un **jeton d'API** rattaché
+> à l'utilisateur 1 (jamais un compte de service), créé en ligne de commande
+> (`heritage:jeton-api:creer`) et affiché une seule fois. La règle ci-dessus reste celle du
+> front, qui n'envoie aucun en-tête d'autorisation.
+>
+> - **Portées** ordonnées et cumulatives : `lecture` < `contribution` < `validation`. Les
+>   routes de chacune sont tenues par `Core\EventSubscriber\PorteeDuJetonSubscriber`,
+>   **source de vérité** — liste blanche par **nom de route et méthode**, fermée par défaut
+>   (une route non nommée rend `403` `acces_refuse`, `HEAD` compris). La portée `lecture`
+>   ouvre aussi deux `POST` de recherche qui n'écrivent rien (ressemblances dans l'arbre et
+>   parmi les demandes) ; compléter, soumettre et retirer une demande ne sont ouverts à
+>   aucune portée. Dix-sept motifs de nom de route sont exclus pour toutes, jugés avant la
+>   liste : utilisateurs, réglages, incarnation, voir-comme, jetons, connexion, clés d'accès,
+>   mot de passe, courriel, inscription, invitations, membres, RGPD, journal d'audit.
+> - **Même contrôle d'accès** : le pare-feu `api_jetons` (sans état, avant `main`, non
+>   `lazy`) partage fournisseur, `user_checker` et point d'entrée JSON ; `access_control`
+>   ci-dessous vaut pour les deux porteurs. Il prend les requêtes `/api` dont `Authorization`
+>   est au schéma `Bearer` (casse ignorée) : un jeton faux est refusé même sur une route
+>   publique. Un compte `suspendu` n'est pas plus authentifié par jeton que par cookie.
+> - **Cookie et Bearer ensemble** : le Bearer fait foi, les cookies de la requête sont
+>   retirés. Sous un jeton, la session se dit absente et rend `403` à toute lecture ou
+>   écriture ; **aucune réponse par jeton ne pose de `Set-Cookie`**.
+> - **Un jeton ne prouve jamais une identité récente** : sous un jeton, toute route qui exige
+>   une preuve récente (mot de passe, passkey) rend `403` `acces_refuse`, même avec le bon
+>   mot de passe dans le corps. Activer « voir comme » sous un jeton rend `403`.
+> - **Décider sur une demande** (valider, refuser, mais aussi la vue administrateur, l'aperçu
+>   de fusion et la fusion) exige l'administrateur et, avec un jeton, d'en être l'auteur.
+> - Un jeton **inconnu, expiré, révoqué ou mal formé**, ou dont le compte est suspendu, rend
+>   le même `401` `authentification_requise`, au même corps.
+> - Limites : § 1.9. Journal : § 2.4.
 
 `access_control` :
 
@@ -300,6 +332,9 @@ public, pas un domaine. Le troisième segment tranche, sans ambiguïté possible
 | `/api/administration/demandes` | `Proposal` |
 | `/api/administration/sources` | `Tree` (ADR 0012) |
 
+Les jetons d'API n'ont **aucune route** : ils se gèrent en ligne de commande (ADR 0021) ;
+un écran d'administration est prévu plus tard.
+
 ### 1.8 En-têtes
 
 **Trois régimes de cache, et trois seulement.** La chaîne exacte, à recopier :
@@ -314,6 +349,11 @@ public, pas un domaine. Le troisième segment tranche, sans ambiguïté possible
 |---|---|---|
 | `Retry-After` | toute `429` **sauf** `POST /api/inscription/rattachement` (§ 4.2) | secondes |
 | `Content-Disposition` | `GET /api/medias/{id}/fichier` | `inline; filename="<original_name assaini>"` |
+
+> **Depuis l'[ADR 0021](adr/0021-jetons-d-api.md), la colonne `Vary` vaut `Cookie, Authorization`
+> dans les trois régimes, et sur toute réponse `/api`, celles à `ETag` comprises** : une
+> réponse peut désormais varier selon l'un ou l'autre porteur (§ 1.6), et un cache partagé
+> doit le savoir. Le reste des régimes est inchangé.
 
 > **Corrigé le 17/09/2026 : le régime A porte `private, no-store` et `Vary: Cookie`.**
 > Cette table disait `no-store` seul et « `Vary` : aucun » ; le code écrit
@@ -367,8 +407,17 @@ composant `RateLimiter` stockant ses compteurs dans le cache (§ 0.6 — pas de 
 | `POST /api/inscription/verifier` | IP | 20 / heure | `429` `trop_de_tentatives` |
 | `POST /api/inscription/rattachement` | **jeton** | `invitation.tentatives_par_heure`, défaut **5** | **`200` indistinguable d'une recherche infructueuse** — voir § 4.2 |
 | `POST /api/inscription/rattachement` | IP | 30 / heure | `429` `trop_de_tentatives` |
-| `POST /api/medias` | compte (administrateur exempté) | 20 / heure **par défaut**, réglable par compte (§ 10.1) | `429` `trop_de_tentatives` |
+| `POST /api/medias` | compte (administrateur exempté, **sauf sous un jeton de portée inférieure à `validation`** : il dépose alors comme un membre, § 7.1) | 20 / heure **par défaut**, réglable par compte (§ 10.1) | `429` `trop_de_tentatives` |
 | `POST /api/demandes` | compte | 30 / heure | `429` `trop_de_tentatives` |
+| toute route, **échec d'authentification par jeton** (ADR 0021, `jeton_api_echecs_ip`) | IP | 10 échecs / 15 min, fenêtre glissante | `429` `trop_de_tentatives`, `Retry-After` |
+| toute route, **jeton valide** (ADR 0021, `jeton_api_requetes`) | jeton | **2 000** / heure (`app.core.jeton_api.requetes_par_heure`) | `429` `trop_de_tentatives`, `Retry-After` |
+
+Le plafond par IP est contrôlé **avant** la recherche du jeton : une IP bloquée ne peut plus
+tester même un bon jeton. Un `Bearer` illisible (`Bearer` seul, caractère interdit, schéma en
+minuscules) n'est compté dans aucun des deux. Sur une route protégée, il rend le `401` du point
+d'entrée ; sur une route publique (`GET /api/sante`, `POST /api/connexion`), il rend
+`403` `acces_refuse` : aucun jeton de sécurité n'est posé, et la portée refuse toute requête
+Bearer sans jeton d'API.
 
 Le plafond par jeton est le garde-fou du § 6.1 du dossier ; le plafond par IP est là pour le
 balayage distribué sur plusieurs jetons, que le premier ne voit pas. Les deux coexistent et
@@ -735,6 +784,16 @@ mot de passe. Un échec par clé inconnue porte `actorEmail = "cle_d_acces_incon
 Enregistrement et suppression d'une clé : lignes `creation` / `suppression` sur
 `Core\Passkey`, par le souscripteur Doctrine ; le compteur et la date d'usage n'en laissent
 pas, et `publicKey` / `credentialId` sont masqués s'ils devaient apparaître dans un diff.
+
+**Journal d'un jeton d'API** (ADR 0021) : les authentifications réussies par jeton n'écrivent
+**aucune** ligne de connexion. Un échec écrit `connexion_echouee` avec
+`changes.methode = "jeton_api"` et `changes.prefixe` (les 12 premiers caractères, seulement
+si la chaîne présentée commence comme un jeton d'Heritage ; jamais le jeton ni son
+empreinte) ; pour un compte suspendu, la ligne nomme aussi le jeton. Chaque ligne écrite
+pendant une requête par jeton porte `api_token_id` et `api_token_label` (libellé recopié ; colonnes de `core_audit_log`), qu'elle vienne du souscripteur Doctrine ou d'une décision consignée par `AuditService::enregistrer()`. `GET /api/administration/journal` les expose en `jetonApi: {id, libelle}`, `null` hors jeton. Les
+commandes `heritage:jeton-api:creer` et `:revoquer` écrivent `jeton_api_cree` /
+`jeton_api_revoque` sans acteur (console), le propriétaire dans `changes.utilisateur_id`. Le
+dernier usage (`last_used_at`, `last_used_ip`) s'écrit au plus toutes les 300 s, sans ligne.
 
 ## 3. Invitations
 
@@ -4788,6 +4847,13 @@ l'inexistant et un `403` sur l'existant feraient de la route un oracle d'énumé
 | `caption` | texte | Légende, 255 caractères. |
 | `taken` | texte (JSON) | Bloc date à 5 clés (§ 14), sérialisé. Facultatif. |
 
+> **Sous un jeton d'API** (ADR 0021) de portée inférieure à `validation`, un administrateur
+> téléverse comme un membre : le média naît `en_attente`, le portrait ne change qu'à la
+> validation de la demande `ajout_media` qui le désigne, le plafond de 20 dépôts par heure
+> s'applique au compte, et une pièce ne se joint qu'à ses propres propositions
+> (`Media\Security\FabriqueDeLecteur::deposant()`). Par cookie ou sous un jeton `validation`,
+> le dépôt direct d'administrateur ne change pas.
+
 > **`subjectKind` accompagne toujours le couple `demandeId` + `brouillonRef`, et il vaut
 > `"personne"`.** Il n'est jamais omis, et il n'existe **pas** de quatrième valeur
 > `"brouillon"`.
@@ -6801,10 +6867,10 @@ agent recopiera la référence :
 
 | Code | HTTP | Où | `details` |
 |---|---|---|---|
-| `authentification_requise` | 401 | partout | — |
+| `authentification_requise` | 401 | partout — **y compris** un jeton d'API inconnu, expiré, révoqué ou mal formé, ou d'un compte suspendu, indistinguables entre eux (§ 1.6, ADR 0021) | — |
 | `identifiants_invalides` | 401 | `POST /api/connexion` | — |
 | `compte_suspendu` | 401 | `POST /api/connexion` | — |
-| `acces_refuse` | 403 | voters — demande d'autrui, média d'autrui ; compléter le brouillon d'un autre (§ 6.6 ter) ; fusionner sans être administrateur | — |
+| `acces_refuse` | 403 | voters — demande d'autrui, média d'autrui ; **jeton d'API** dont la portée ne couvre pas la route, ou qui décide sur une demande dont il n'est pas l'auteur (§ 1.6, ADR 0021) ; compléter le brouillon d'un autre (§ 6.6 ter) ; fusionner sans être administrateur | — |
 | `regime_en_attente` | 403 | `POST /api/demandes`, `POST /api/medias` ; depuis le 2026-10-01, **toute lecture de l'arbre** par un compte en attente (§ 12.1) | — |
 | `introuvable` | 404 | partout, **et sur tout ce que le lecteur n'a pas le droit de voir** | — |
 | `methode_non_autorisee` | 405 | routeur | `{"autorisees": ["GET"]}` |
@@ -6834,7 +6900,7 @@ agent recopiera la référence :
 | `donnees_invalides` | 422 | partout | `champs` rempli |
 | `valeur_hors_bornes` | 422 | `PATCH` réglage | `{minValue, maxValue}` |
 | `demande_sans_lien` | 422 | soumettre une `creation_personne` | — |
-| `trop_de_tentatives` | 429 | § 1.9, **sauf la recherche de rattachement** | `{retryAfter}` |
+| `trop_de_tentatives` | 429 | § 1.9 (jetons d'API compris), **sauf la recherche de rattachement** | `{retryAfter}` |
 | `erreur_interne` | 500 | souscripteur d'exception | — |
 | `service_indisponible` | 503 | `GET /api/sante` — la base ne répond pas (§ 26) | — |
 

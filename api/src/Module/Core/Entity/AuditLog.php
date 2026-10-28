@@ -101,6 +101,17 @@ class AuditLog
     #[ORM\Column(length: 180, nullable: true)]
     private ?string $impersonatorEmail = null;
 
+    /**
+     * Le jeton d'API qui a porté la requête, ou `null` (session, console). Sans clé
+     * étrangère, comme `actor_user_id` : le journal survit aux lignes qu'il cite (ADR 0021).
+     */
+    #[ORM\Column(nullable: true)]
+    private ?int $apiTokenId = null;
+
+    /** Libellé du jeton au moment des faits : reste lisible même si le jeton disparaît. */
+    #[ORM\Column(length: 80, nullable: true)]
+    private ?string $apiTokenLabel = null;
+
     /** @param array<string, mixed>|null $changes */
     public function __construct(
         AuditAction $action,
@@ -114,6 +125,8 @@ class AuditLog
         ?string $userAgent = null,
         ?int $impersonatorUserId = null,
         ?string $impersonatorEmail = null,
+        ?int $apiTokenId = null,
+        ?string $apiTokenLabel = null,
     ) {
         $this->occurredAt = new \DateTimeImmutable();
         $this->action = $action;
@@ -127,6 +140,8 @@ class AuditLog
         $this->userAgent = $userAgent;
         $this->impersonatorUserId = $impersonatorUserId;
         $this->impersonatorEmail = $impersonatorEmail;
+        $this->apiTokenId = $apiTokenId;
+        $this->apiTokenLabel = $apiTokenLabel;
     }
 
     public function getId(): ?int
@@ -193,5 +208,15 @@ class AuditLog
     public function getImpersonatorEmail(): ?string
     {
         return $this->impersonatorEmail;
+    }
+
+    public function getApiTokenId(): ?int
+    {
+        return $this->apiTokenId;
+    }
+
+    public function getApiTokenLabel(): ?string
+    {
+        return $this->apiTokenLabel;
     }
 }

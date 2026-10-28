@@ -50,7 +50,7 @@ final class EnTetesDeSecuriteTest extends CoreWebTestCase
         self::assertTrue($entetes->hasCacheControlDirective('no-store'));
         self::assertFalse($entetes->hasCacheControlDirective('public'));
         self::assertFalse($entetes->hasCacheControlDirective('max-age'));
-        self::assertSame('Cookie', $entetes->get('Vary'));
+        self::assertSame('Cookie, Authorization', $entetes->get('Vary'));
     }
 
     public function testLesEnTetesSontPosesAussiSurLesReponsesDErreur(): void

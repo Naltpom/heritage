@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\Core;
 
 use App\Module\Core\Entity\AuditLog;
+use App\Module\Core\Entity\JetonDApi;
 use App\Module\Core\Entity\Setting;
 use App\Module\Core\Entity\User;
+use App\Module\Core\Enum\PorteeDeJeton;
 use App\Module\Core\Enum\SettingType;
 use App\Module\Core\Enum\UserStatus;
 use App\Module\Core\Repository\AuditLogRepository;
+use App\Module\Core\Service\GenerateurDeJetonDApi;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
 use Psr\Cache\CacheItemPoolInterface;
@@ -127,6 +130,8 @@ abstract class CoreWebTestCase extends WebTestCase
 
     /**
      * @param array<string, mixed>|null $corps
+     * @param array<string, string>     $entetes en-têtes en plus, par leur nom HTTP
+     *                                           (`['Authorization' => 'Bearer …']`)
      *
      * **Chaque test parle depuis sa propre adresse IP.** `login_throttling` compte par
      * couple identifiant+IP et double la mesure d'un compteur par IP seule. Vider le pool
@@ -135,18 +140,50 @@ abstract class CoreWebTestCase extends WebTestCase
      * pool. Une IP tirée au hasard par test donne à chacun sa propre fenêtre, quoi qu'il
      * arrive au pool.
      */
-    protected function requete(string $methode, string $chemin, ?array $corps = null): void
+    protected function requete(string $methode, string $chemin, ?array $corps = null, array $entetes = []): void
     {
+        $serveur = [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT' => 'application/json',
+            'REMOTE_ADDR' => $this->ipDuTest,
+        ];
+        foreach ($entetes as $nom => $valeur) {
+            $serveur['HTTP_'.strtoupper(str_replace('-', '_', $nom))] = $valeur;
+        }
+
         $this->client->request(
             $methode,
             $chemin,
-            server: [
-                'CONTENT_TYPE' => 'application/json',
-                'HTTP_ACCEPT' => 'application/json',
-                'REMOTE_ADDR' => $this->ipDuTest,
-            ],
+            server: $serveur,
             content: null !== $corps ? json_encode($corps, \JSON_THROW_ON_ERROR) : null,
         );
+    }
+
+    /**
+     * Un jeton d'API enregistré pour `$compte` (ADR 0021) ; rend le jeton **en clair**, à
+     * présenter en `Authorization: Bearer`.
+     *
+     * Fabriqué par le générateur, jamais écrit en littéral : un `hrt_` suivi de 43
+     * caractères dans un fichier du dépôt fait échouer la CI.
+     */
+    protected function creerJetonDApi(
+        User $compte,
+        PorteeDeJeton $portee = PorteeDeJeton::Contribution,
+        string $libelle = 'Claude — agents',
+        ?\DateTimeImmutable $expireLe = null,
+    ): string {
+        $generateur = self::getContainer()->get(GenerateurDeJetonDApi::class);
+        \assert($generateur instanceof GenerateurDeJetonDApi);
+        ['jeton' => $jeton, 'empreinte' => $empreinte, 'prefixe' => $prefixe] = $generateur->generer();
+
+        $em = $this->em();
+        $utilisateur = $em->find(User::class, $compte->getId());
+        \assert($utilisateur instanceof User);
+
+        $em->persist(new JetonDApi($utilisateur, $libelle, $empreinte, $prefixe, $portee, $expireLe));
+        $em->flush();
+
+        return $jeton;
     }
 
     /** @return array<string, mixed> */
