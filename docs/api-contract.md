@@ -254,7 +254,7 @@ aucun jeton en `localStorage`** — le cookie est le seul porteur de session d'u
 >   (une route non nommée rend `403` `acces_refuse`, `HEAD` compris). La portée `lecture`
 >   ouvre aussi deux `POST` de recherche qui n'écrivent rien (ressemblances dans l'arbre et
 >   parmi les demandes) ; la portée `contribution` ouvre, avec le dépôt, le dépôt à blanc (`POST /api/demandes/verifier`,
->   [ADR 0022](adr/0022-idempotence-et-depot-a-blanc.md)), et le retrait d'un **brouillon** (une demande envoyée ne se retire
+>   [ADR 0022](adr/0022-idempotence-et-depot-a-blanc.md)), et le retrait d'un **brouillon** (une demande en attente ne se retire
 >   pas sous un jeton : `403` `acces_refuse`) ; compléter et soumettre une demande ne sont ouverts à
 >   aucune portée. Dix-sept motifs de nom de route sont exclus pour toutes, jugés avant la
 >   liste : utilisateurs, réglages, incarnation, voir-comme, jetons, connexion, clés d'accès,
@@ -2658,7 +2658,7 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 | `GET` | `/api/demandes` | `MEMBRE` | `?status=&page=&parPage=` | `200` liste paginée | `403` | — |
 | `GET` | `/api/demandes/{id}` | `MEMBRE` | — | `200` § 6.5 | `403` `acces_refuse` · `404` | — |
 | `POST` | `/api/demandes/{id}/soumettre` | `MEMBRE` | *(vide)* | `200` demande | `409` `demande_deja_soumise` · `422` `demande_sans_lien` | — |
-| `POST` | `/api/demandes/{id}/retirer` | `MEMBRE` | *(vide)* | `200` demande (`annulee` ; un brouillon retiré garde `submittedAt` nul) | `409` `demande_deja_decidee` · `403` (sous un jeton d'API : une demande qui n'est pas un brouillon) · `404` | — |
+| `POST` | `/api/demandes/{id}/retirer` | `MEMBRE` | *(vide)* | `200` demande (`annulee` ; un brouillon retiré garde `submittedAt` nul) | `409` `demande_deja_decidee` · `403` (sous un jeton d'API : une demande en attente) · `404` | — |
 | `GET` | `/api/demandes/{id}/refaire` | `MEMBRE` | — | `200` corps pré-rempli | `403` · `404` · `409` `demande_non_refaisable` | — |
 | `GET` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | — | `200` § 6.6 | `403` · `404` | — |
 | `PUT` | `/api/demandes/{id}/brouillons/{ref}` | `MEMBRE` | `{fiche, liens, empreinte}` § 6.6 ter | `200` § 6.5 | `403` `acces_refuse` · `403` `regime_en_attente` · `404` · `409` `demande_deja_decidee` · `409` `demande_modifiee_entre_temps` · `409` `vue_comme_membre_active` · `422` | — |
@@ -6971,7 +6971,7 @@ agent recopiera la référence :
 | `authentification_requise` | 401 | partout — **y compris** un jeton d'API inconnu, expiré, révoqué ou mal formé, ou d'un compte suspendu, indistinguables entre eux (§ 1.6, ADR 0021) | — |
 | `identifiants_invalides` | 401 | `POST /api/connexion` | — |
 | `compte_suspendu` | 401 | `POST /api/connexion` | — |
-| `acces_refuse` | 403 | voters — demande d'autrui, média d'autrui ; **jeton d'API** dont la portée ne couvre pas la route, ou qui décide sur une demande dont il n'est pas l'auteur (§ 1.6, ADR 0021) ; compléter le brouillon d'un autre (§ 6.6 ter) ; fusionner sans être administrateur | — |
+| `acces_refuse` | 403 | voters — demande d'autrui, média d'autrui ; **jeton d'API** dont la portée ne couvre pas la route, ou qui décide sur une demande dont il n'est pas l'auteur, ou qui retire une demande en attente (§ 1.6, ADR 0021) ; compléter le brouillon d'un autre (§ 6.6 ter) ; fusionner sans être administrateur | — |
 | `regime_en_attente` | 403 | `POST /api/demandes`, `POST /api/medias` ; depuis le 2026-10-01, **toute lecture de l'arbre** par un compte en attente (§ 12.1) | — |
 | `introuvable` | 404 | partout, **et sur tout ce que le lecteur n'a pas le droit de voir** | — |
 | `methode_non_autorisee` | 405 | routeur | `{"autorisees": ["GET"]}` |

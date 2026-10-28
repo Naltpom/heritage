@@ -37,12 +37,18 @@ final class DemandeVoter extends Voter
     public const string MODIFIER = 'prp_modifier_demande';
 
     /**
-     * Retirer : son auteur, comme {@see self::MODIFIER} — et, sous un jeton d'API, **un
-     * brouillon seulement** (ADR 0021 § 2). Le jeton est celui du compte du commanditaire :
-     * sans cette borne, un agent retirerait toute demande de ce compte, celles que le
-     * commanditaire a envoyées lui-même comprises, et un retrait est définitif.
+     * Retirer : son auteur, comme {@see self::MODIFIER} — et, sous un jeton d'API, **jamais
+     * une demande en attente** (ADR 0021 § 2). Le jeton est celui du compte du commanditaire :
+     * sans cette borne, un agent retirerait de la file toute demande de ce compte, celles que
+     * le commanditaire a envoyées lui-même comprises, et un retrait est définitif.
+     *
+     * Le brouillon passe, **tout brouillon du compte** : celui que le commanditaire a saisi
+     * dans le formulaire comme celui d'un agent, rien ne les distingue. Une demande tranchée
+     * passe aussi, pour que le service réponde `409 demande_deja_decidee` : un agent qui
+     * rejoue un retrait dont il a perdu la réponse doit l'apprendre.
      */
     public const string RETIRER = 'prp_retirer_demande';
+
     /** Valider ou refuser : administrateur — et, sous un jeton d'API, auteur de la demande. */
     public const string DECIDER = 'prp_decider_demande';
 
@@ -86,7 +92,9 @@ final class DemandeVoter extends Voter
             // a `valider` et `refuser`, qui en laissent une.
             self::MODIFIER => $estAuteur,
             self::RETIRER => $estAuteur
-                && (null === JetonDApiAuthentifie::depuisLeJetonDeSecurite($token) || RequestStatus::Brouillon === $subject->getStatus()),
+                && (null === JetonDApiAuthentifie::depuisLeJetonDeSecurite($token)
+                    || RequestStatus::Brouillon === $subject->getStatus()
+                    || $subject->getStatus()->estDefinitif()),
             // Sous un jeton d'API, décider exige en plus d'être l'auteur (ADR 0021 § 5) : la
             // session principale tranche les demandes que ses agents ont déposées sous le
             // même compte, jamais celle d'un membre, qui reste à un humain. Sans jeton,

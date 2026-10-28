@@ -27,7 +27,8 @@ use Symfony\Component\HttpFoundation\Response;
  * |---|---|
  * | la liste blanche (`PorteeDuJetonSubscriber`) | « Ce jeton d’API n’ouvre pas cette route. » |
  * | `access_control` | « Accès refusé. » |
- * | `DemandeVoter::DECIDER` | « Cette demande ne vous appartient pas. » |
+ * | `DemandeVoter::DECIDER`, `MODIFIER` | « Cette demande ne vous appartient pas. » |
+ * | `DemandeVoter::RETIRER` | « Sous un jeton d'API, une demande en attente ne se retire pas : elle attend un humain. » |
  *
  * La liste elle-même, route par route, est éprouvée contre le routeur par
  * {@see PorteeDuJetonTest}. Aucun jeton n'est écrit en littéral
@@ -114,7 +115,7 @@ final class PorteesDesJetonsEnHttpTest extends CoreWebTestCase
 
     /**
      * ADR 0021 § 2 : un agent retire le brouillon qu'il a déposé par erreur, jamais une demande
-     * envoyée — celle du commanditaire comprise, puisque le jeton est sur son compte. Par son
+     * en attente — celle du commanditaire comprise, puisque le jeton est sur son compte. Par son
      * cookie, le commanditaire la retire comme avant.
      */
     public function testUnJetonDeContributionRetireSonBrouillonMaisPasUneDemandeEnvoyee(): void
@@ -136,16 +137,58 @@ final class PorteesDesJetonsEnHttpTest extends CoreWebTestCase
         $envoyee = $this->deposerParJeton($jeton, 'nickname', null, 'Marnette');
         $this->requete('POST', '/api/demandes/'.$envoyee.'/retirer', [], $this->bearer($jeton));
         self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
-        self::assertSame(
-            ['code' => 'acces_refuse', 'message' => 'Sous un jeton d\'API, seul un brouillon se retire : une demande envoyée attend un humain.', 'champs' => null, 'details' => null],
-            $this->charge()['erreur'],
-        );
+        $this->assertRefusDuRetraitSousJeton();
         self::assertSame('en_attente', $this->statut($envoyee, $jeton));
 
         $this->connexion('administration@example.net');
         $this->requete('POST', '/api/demandes/'.$envoyee.'/retirer');
         self::assertResponseIsSuccessful();
         self::assertSame('annulee', $this->charge()['status']);
+    }
+
+    /**
+     * Les bords de la règle : un retrait rejoué (la réponse perdue) apprend que la demande est
+     * tranchée ; le jeton `validation` n'en sait pas plus que `contribution` ; le brouillon d'un
+     * membre reste au membre ; par cookie, une demande tranchée rend toujours `409`.
+     */
+    public function testLeRetraitSousJetonAuxBordsDeLaRegle(): void
+    {
+        $administration = $this->administration();
+        $contribution = $this->creerJetonDApi($administration, PorteeDeJeton::Contribution);
+        $validation = $this->creerJetonDApi($administration, PorteeDeJeton::Validation, 'Claude — session principale');
+
+        $corps = $this->demande('surname', 'Sureau', 'SUREAU');
+        $corps['soumettre'] = false;
+        $this->requete('POST', '/api/demandes', $corps, $this->bearer($contribution));
+        $brouillon = $this->charge()['id'];
+        self::assertIsInt($brouillon);
+        $this->requete('POST', '/api/demandes/'.$brouillon.'/retirer', [], $this->bearer($contribution));
+        self::assertResponseIsSuccessful();
+
+        $this->requete('POST', '/api/demandes/'.$brouillon.'/retirer', [], $this->bearer($contribution));
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT, 'Le rejeu d’un retrait');
+        self::assertSame('demande_deja_decidee', $this->charge()['erreur']['code']);
+
+        $envoyee = $this->deposerParJeton($validation, 'nickname', null, 'Marnette');
+        $this->requete('POST', '/api/demandes/'.$envoyee.'/retirer', [], $this->bearer($validation));
+        $this->assertRefusDuRetraitSousJeton('jeton validation');
+
+        $this->opale();
+        $this->connexion('opale@example.net');
+        $this->requete('POST', '/api/demandes', $corps);
+        self::assertResponseStatusCodeSame(Response::HTTP_CREATED);
+        $deMembre = $this->charge()['id'];
+        self::assertIsInt($deMembre);
+        $this->requete('POST', '/api/demandes/'.$deMembre.'/retirer', [], $this->bearer($contribution));
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN);
+        self::assertSame('Cette demande ne vous appartient pas.', $this->charge()['erreur']['message']);
+
+        $this->connexion('administration@example.net');
+        $this->requete('POST', '/api/administration/demandes/'.$envoyee.'/valider');
+        self::assertResponseIsSuccessful();
+        $this->requete('POST', '/api/demandes/'.$envoyee.'/retirer');
+        self::assertResponseStatusCodeSame(Response::HTTP_CONFLICT, 'Par cookie, une demande tranchée');
+        self::assertSame('demande_deja_decidee', $this->charge()['erreur']['code']);
     }
 
     public function testUnJetonDeValidationDecideLesDemandesDeSonCompte(): void
@@ -277,6 +320,16 @@ final class PorteesDesJetonsEnHttpTest extends CoreWebTestCase
     }
 
     // ─── Outils ──────────────────────────────────────────────────────────────────
+
+    private function assertRefusDuRetraitSousJeton(string $contexte = ''): void
+    {
+        self::assertResponseStatusCodeSame(Response::HTTP_FORBIDDEN, $contexte);
+        self::assertSame(
+            ['code' => 'acces_refuse', 'message' => 'Sous un jeton d\'API, une demande en attente ne se retire pas : elle attend un humain.', 'champs' => null, 'details' => null],
+            $this->charge()['erreur'],
+            $contexte,
+        );
+    }
 
     private function assertRefusHorsPortee(string $contexte = ''): void
     {

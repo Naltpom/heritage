@@ -40,12 +40,12 @@ final class AccesRefuse extends ErreurDeDemande
     }
 
     /**
-     * Sous un jeton d'API, seul un brouillon se retire (ADR 0021 § 2) : une demande envoyée
-     * est dans la file, et c'est à un humain d'en décider.
+     * Sous un jeton d'API, une demande en attente ne se retire pas (ADR 0021 § 2) : elle est
+     * dans la file, et c'est à un humain d'en décider.
      */
     public static function retraitSousJeton(): self
     {
-        return new self('acces_refuse', 'Sous un jeton d\'API, seul un brouillon se retire : une demande envoyée attend un humain.');
+        return new self('acces_refuse', 'Sous un jeton d\'API, une demande en attente ne se retire pas : elle attend un humain.');
     }
 
     /**
