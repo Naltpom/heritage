@@ -84,6 +84,10 @@
   toujours l'état résultant : le front n'a jamais à refaire un `GET` pour savoir ce qu'il
   vient de faire.
 
+> **Exception du 28/10/2026 : `POST /api/demandes/verifier` rend `204`** (§ 6.1 ter,
+> [ADR 0022](adr/0022-idempotence-et-depot-a-blanc.md)). Le dépôt à blanc n'écrit rien : il
+> n'a pas d'état résultant à rendre, et un corps vide est sa seule réponse vraie.
+
 ### 1.2 Langue des clés — la règle mécanique
 
 Le projet est en français, mais les entités sont en anglais au singulier (§ 0.1), et le
@@ -249,7 +253,8 @@ aucun jeton en `localStorage`** — le cookie est le seul porteur de session d'u
 >   **source de vérité** — liste blanche par **nom de route et méthode**, fermée par défaut
 >   (une route non nommée rend `403` `acces_refuse`, `HEAD` compris). La portée `lecture`
 >   ouvre aussi deux `POST` de recherche qui n'écrivent rien (ressemblances dans l'arbre et
->   parmi les demandes) ; compléter, soumettre et retirer une demande ne sont ouverts à
+>   parmi les demandes) ; la portée `contribution` ouvre, avec le dépôt, le dépôt à blanc (`POST /api/demandes/verifier`,
+>   [ADR 0022](adr/0022-idempotence-et-depot-a-blanc.md)) ; compléter, soumettre et retirer une demande ne sont ouverts à
 >   aucune portée. Dix-sept motifs de nom de route sont exclus pour toutes, jugés avant la
 >   liste : utilisateurs, réglages, incarnation, voir-comme, jetons, connexion, clés d'accès,
 >   mot de passe, courriel, inscription, invitations, membres, RGPD, journal d'audit.
@@ -349,6 +354,8 @@ un écran d'administration est prévu plus tard.
 |---|---|---|
 | `Retry-After` | toute `429` **sauf** `POST /api/inscription/rattachement` (§ 4.2) | secondes |
 | `Content-Disposition` | `GET /api/medias/{id}/fichier` | `inline; filename="<original_name assaini>"` |
+| `Idempotency-Key` (requête) | `POST /api/demandes`, facultatif | 16 à 128 caractères `[A-Za-z0-9_-]` — § 6.1 bis |
+| `Idempotency-Replayed` (réponse) | le `200` d'un dépôt rejoué (§ 6.1 bis) | `true` — absent ailleurs, `201` compris |
 
 > **Depuis l'[ADR 0021](adr/0021-jetons-d-api.md), la colonne `Vary` vaut `Cookie, Authorization`
 > dans les trois régimes, et sur toute réponse `/api`, celles à `ETag` comprises** : une
@@ -2645,7 +2652,8 @@ obligatoire au refus (§ 6.4 du dossier, ADR 0004).
 
 | Méthode | Chemin | Accès | Corps | Succès | Erreurs | Débit |
 |---|---|---|---|---|---|---|
-| `POST` | `/api/demandes` | `MEMBRE` | § 6.1 à 6.4 (`complementDe` : § 6.3 ter) | `201` demande | `422` · `403` `regime_en_attente` · `404` `introuvable` (cible, fiche complétée) · `409` `proposition_plus_en_attente` · `409` `vue_comme_membre_active` · `429` | 30 / h |
+| `POST` | `/api/demandes` | `MEMBRE` | § 6.1 à 6.4 (`complementDe` : § 6.3 ter) ; en-tête `Idempotency-Key` facultatif (§ 6.1 bis) | `201` demande · `200` demande déjà déposée (`Idempotency-Replayed: true`) | `422` · `422` `idempotence_corps_different` · `403` `regime_en_attente` · `404` `introuvable` (cible, fiche complétée) · `409` `proposition_plus_en_attente` · `409` `depot_concurrent` · `409` `vue_comme_membre_active` · `429` | 30 / h |
+| `POST` | `/api/demandes/verifier` | `MEMBRE` | comme `POST /api/demandes` (§ 6.1 ter) | `204` | `422` (toutes les erreurs d'une passe) · sinon le statut et le code du dépôt (`403`, `404`, `409`) · `409` `vue_comme_membre_active` | — |
 | `GET` | `/api/demandes` | `MEMBRE` | `?status=&page=&parPage=` | `200` liste paginée | `403` | — |
 | `GET` | `/api/demandes/{id}` | `MEMBRE` | — | `200` § 6.5 | `403` `acces_refuse` · `404` | — |
 | `POST` | `/api/demandes/{id}/soumettre` | `MEMBRE` | *(vide)* | `200` demande | `409` `demande_deja_soumise` · `422` `demande_sans_lien` | — |
@@ -2697,6 +2705,98 @@ La réponse est la demande sérialisée (§ 6.5), en `201`.
 **Une demande déposée par un administrateur n'est pas auto-validée.** Elle entre dans la file
 comme les autres. L'auto-validation est un acte distinct : valider sa propre demande, ou
 éditer directement — et les deux posent `autoValidated: true` (§ 6.8).
+
+### 6.1 bis Déposer une seule fois : `Idempotency-Key`
+
+Un client hors navigateur (ADR 0021) qui perd la réponse d'un dépôt (délai dépassé, coupure,
+processus relancé) ne sait pas si la demande est entrée dans la file. L'en-tête
+**facultatif** `Idempotency-Key` lui permet de renvoyer la même requête sans risque : le
+serveur reconnaît la clé et rend la demande déjà déposée au lieu d'en créer une seconde
+([ADR 0022](adr/0022-idempotence-et-depot-a-blanc.md)). Sans l'en-tête, rien ne change. Le
+front ne l'envoie pas.
+
+```http
+POST /api/demandes
+Idempotency-Key: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+```
+
+| Cas | Réponse |
+|---|---|
+| Clé jamais vue pour ce compte | Dépôt ordinaire : `201`, la demande (§ 6.5). La clé est enregistrée avec elle. |
+| Même clé, même corps | **`200`**, la même demande, à son état **courant** (validée, refusée ou retirée comprises), avec l'en-tête **`Idempotency-Replayed: true`**. Rien n'est écrit, rien n'est notifié. |
+| Même clé, autre corps | `422` `idempotence_corps_different`, `details: {demandeId}`. La clé a déjà servi pour autre chose. Rien n'est écrit. |
+| Deux requêtes de même clé au même instant | L'une dépose (`201`). L'autre reçoit `409` `depot_concurrent`, `details: {demandeId, rejouable: true}` ; renvoyée, elle reçoit le `200` (même corps ; sinon `422 idempotence_corps_different`). |
+| Clé mal formée | `422` `donnees_invalides`, `champs: {"Idempotency-Key": "…"}`. Rien n'est écrit. |
+
+- **Forme** : 16 à 128 caractères parmi `A-Z`, `a-z`, `0-9`, `-` et `_`, sensible à la casse.
+  Une empreinte sha256 en hexadécimal ou un UUID conviennent. Une valeur entre guillemets (la
+  forme *sf-string* du brouillon IETF) est refusée plutôt que lue de deux façons.
+- **Portée** : la clé appartient au **compte auteur**, pas au porteur. Le cookie et chaque
+  jeton d'API d'un même compte partagent les mêmes clés. La clé d'un autre compte n'est
+  jamais trouvée, et rien ne dit qu'elle existe.
+- **Le même corps** : le JSON reçu, à l'ordre des clés et aux espaces près. Une clé absente
+  et la même clé à sa valeur par défaut (`soumettre` absent ou `true`) font deux corps
+  différents.
+- **Durée** : celle de la demande, c'est-à-dire pour toujours, puisqu'une demande n'est jamais
+  supprimée. Une clé ne se réutilise pas : refaire une demande refusée demande une nouvelle
+  clé. Un dépôt **refusé** (`4xx`) ne consomme pas la clé.
+- **Ordre des contrôles** : portée du jeton, bascule « voir comme » (`409`
+  `vue_comme_membre_active`), corps JSON, forme de la clé, régime du compte (`403`
+  `regime_en_attente`), puis le rejeu ou le dépôt. Un rejeu n'échappe à aucun d'eux.
+
+### 6.1 ter Le dépôt à blanc : `POST /api/demandes/verifier`
+
+Le même corps que `POST /api/demandes`, jugé par **les mêmes contrôles** (constructeurs,
+périmètre, complétude à la soumission), **sans rien écrire** : ni demande, ni ligne de
+journal, ni notification. C'est le contrôle que l'assistant de proposition applique déjà à
+ce qu'il présente au membre, exposé aux clients de l'API
+([ADR 0022](adr/0022-idempotence-et-depot-a-blanc.md)).
+
+| Réponse | Quand |
+|---|---|
+| **`204`**, sans corps | le dépôt passerait |
+| `422` | le dépôt échouerait sur une donnée : **toutes** les erreurs qu'une passe établit, dans `champs` |
+| `403`, `404`, `409` | le dépôt échouerait autrement : même statut et même code que lui (`regime_en_attente`, `introuvable`, `conflit`, `proposition_plus_en_attente`, `vue_comme_membre_active`…) |
+
+**Le statut est toujours celui que rendrait le dépôt.** Les contrôles se jouent dans son
+ordre. Une `422` est notée et la vérification continue ; toute autre erreur l'arrête. La
+première erreur rencontrée, celle sur laquelle le dépôt se serait arrêté, décide donc du
+statut.
+
+**Ce que « toutes » veut dire.** Une erreur par champ de l'enveloppe (`kind`, `complementDe`,
+`message`, `soumettre`), et **une par élément** de chaque liste (`ops[n]`, `brouillons[n]`,
+`liens[n]`, `retraits[n]`), la première de l'élément : à l'intérieur d'un élément, les
+contrôles dépendent les uns des autres. Ce qui dépend de tous les éléments (la cible tirée
+des ops, les liens qui désignent les fiches, la complétude) n'est jugé que si tous sont
+justes. Après correction, une nouvelle vérification peut donc révéler une erreur de plus,
+jamais une erreur qui n'existait pas.
+
+```json
+{
+  "erreur": {
+    "code": "donnees_invalides",
+    "message": "La demande porte plusieurs erreurs : chacune est nommée dans « champs ».",
+    "champs": {
+      "message": "Le mot du demandeur est une chaîne.",
+      "ops[0].opKind": "« zzz » n'est pas une valeur admise.",
+      "ops[1].subjectKind": "« zzz » n'est pas une valeur admise.",
+      "soumettre": "Cette valeur doit être true ou false."
+    },
+    "details": null
+  }
+}
+```
+
+Une erreur seule garde son code et son message (par exemple `422` `demande_sans_lien`).
+Plusieurs prennent leur code commun, ou `donnees_invalides`.
+
+- `soumettre` est lu comme au dépôt : `false` dispense du contrôle de complétude, puisque le
+  dépôt d'un brouillon ne le fait pas.
+- `Idempotency-Key` est accepté et ignoré : le dépôt à blanc n'écrit rien, il est idempotent
+  par nature.
+- Jetons d'API : portée `contribution` (ADR 0021). Vérifier n'a de sens que pour qui peut
+  déposer.
+- Sous la bascule « voir comme un membre » : `409` `vue_comme_membre_active`, comme le dépôt.
 
 ### 6.2 `kind = modification_personne` / `modification_famille` / `modification_citation`
 
@@ -6883,6 +6983,7 @@ agent recopiera la référence :
 | `complement_a_fusionner` | 409 | validation d'un complément dont l'origine vit (§ 6.8, issue 10) | `{demandeId, statut: "en_attente", rejouable: false, origineDemandeId, origineStatut}` |
 | `demande_modifiee_entre_temps` | 409 | compléter (§ 6.6 ter), fusionner (§ 6.7 bis), valider (§ 6.8, issue 11) avec une `empreinte` périmée | `{demandeId, empreinte, rejouable: true}` |
 | `proposition_plus_en_attente` | 409 | déposer ou soumettre un complément dont la proposition a été tranchée (§ 6.3 ter) | `null` — l'issue n'est pas dite |
+| `depot_concurrent` | 409 | `POST /api/demandes` : une requête de même `Idempotency-Key` vient de déposer (§ 6.1 bis) | `{demandeId, rejouable: true}` |
 | `verrou_concurrent` | 409 | validation | `{demandeId, statut, rejouable: true}` |
 | `demande_deja_decidee` | 409 | valider, refuser, retirer, compléter, fusionner ; `POST /api/medias` sur une personne proposée de **sa** demande tranchée (§ 7.1) | `{statut}` — `null` au téléversement : `Media` ne connaît que le verdict |
 | `demande_deja_soumise` | 409 | soumettre | `{statut}` |
@@ -6891,15 +6992,16 @@ agent recopiera la référence :
 | `invitation_en_cours` | 409 | création d'invitation | `{invitationId}` |
 | `invitation_deja_consommee` | 409 | révocation | — |
 | `courriel_deja_pris` | 409 | `POST /api/inscription/compte` | — |
-| `vue_comme_membre_active` | 409 | **toute écriture** pendant la bascule | `{memberId, memberLabel}` |
+| `vue_comme_membre_active` | 409 | **toute écriture** pendant la bascule, et le dépôt à blanc (§ 6.1 ter) | `{memberId, memberLabel}` |
 | `dernier_administrateur` | 409 | `PATCH` utilisateur | — |
 | `rattachement_non_etabli` | 409 | `PATCH` utilisateur (`status: actif`) | `{memberId}` |
 | `media_reference` | 409 | `DELETE` média | `{citationIds}` |
 | `fichier_trop_volumineux` | 413 | téléversement | `{maxOctets}` |
 | `type_de_fichier_refuse` | 415 | téléversement | `{mimesAutorises}` |
-| `donnees_invalides` | 422 | partout | `champs` rempli |
+| `donnees_invalides` | 422 | partout | `champs` rempli ; au dépôt à blanc, toutes les erreurs d'une passe (§ 6.1 ter) |
 | `valeur_hors_bornes` | 422 | `PATCH` réglage | `{minValue, maxValue}` |
 | `demande_sans_lien` | 422 | soumettre une `creation_personne` | — |
+| `idempotence_corps_different` | 422 | `POST /api/demandes` : `Idempotency-Key` déjà employée par ce compte pour un autre corps (§ 6.1 bis) | `{demandeId}` ; `champs: {"Idempotency-Key": …}` |
 | `trop_de_tentatives` | 429 | § 1.9 (jetons d'API compris), **sauf la recherche de rattachement** | `{retryAfter}` |
 | `erreur_interne` | 500 | souscripteur d'exception | — |
 | `service_indisponible` | 503 | `GET /api/sante` — la base ne répond pas (§ 26) | — |

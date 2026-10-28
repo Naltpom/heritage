@@ -46,7 +46,8 @@ Deux jetons sont prévus, parce que couper l'un ne doit pas couper l'autre :
   familles, les demandes et leur brouillon, les sources, les médias et les démarches déjà
   là), plus deux `POST` de recherche qui n'écrivent rien : les ressemblances dans l'arbre et
   parmi les demandes en attente (la saisie reste hors de l'URL).
-- `contribution` : déposer une demande (sans la valider) ; téléverser un média ; créer une
+- `contribution` : déposer une demande (sans la valider), et la vérifier sans l'écrire (le dépôt à blanc,
+  [ADR 0022](0022-idempotence-et-depot-a-blanc.md)) ; téléverser un média ; créer une
   démarche, y ajouter un courrier, en poser le statut. Compléter, soumettre ou retirer une
   demande **ne sont pas ouverts** : aucun outil des agents ne les appelle. Sous un jeton de
   portée inférieure à `validation`, un administrateur téléverse comme un membre : le média
