@@ -35,7 +35,7 @@ final class FinDeRecherchePostgresTest extends TestCase
         SQL;
 
     private const string OP = <<<'SQL'
-        INSERT INTO prp_change_request_op (request_id, seq, op_kind, subject_kind, subject_id, field, value_kind, old_value, new_value, base_version)
+        INSERT INTO prp_change_op (request_id, seq, op_kind, subject_kind, subject_id, field, value_kind, old_value, new_value, base_version)
         VALUES (?, 1, 'champ', 'personne', 999003, 'finDeRechercheMere', 'fin_de_recherche', ?::jsonb, ?::jsonb, 7)
         SQL;
 
@@ -76,7 +76,7 @@ final class FinDeRecherchePostgresTest extends TestCase
 
         try {
             $this->connexion = DriverManager::getConnection((new DsnParser(['postgresql' => 'pdo_pgsql']))->parse(self::dsn()));
-            $this->connexion->fetchOne('SELECT count(*) FROM prp_change_request_op');
+            $this->connexion->fetchOne('SELECT count(*) FROM prp_change_op');
         } catch (\Throwable $e) {
             self::absente(\sprintf('Base réelle injoignable (%s) : %s', self::dsn(), $e->getMessage()));
         }
@@ -96,7 +96,7 @@ final class FinDeRecherchePostgresTest extends TestCase
             $demande = $this->connexion->fetchOne(self::DEMANDE);
             $this->connexion->executeStatement(self::OP, [$demande, json_encode($avant->versJson(), \JSON_THROW_ON_ERROR), null]);
 
-            $lue = $this->connexion->fetchOne('SELECT old_value FROM prp_change_request_op WHERE request_id = ?', [$demande]);
+            $lue = $this->connexion->fetchOne('SELECT old_value FROM prp_change_op WHERE request_id = ?', [$demande]);
             self::assertIsString($lue);
             $tableau = json_decode($lue, true, flags: \JSON_THROW_ON_ERROR);
             self::assertIsArray($tableau);
@@ -127,7 +127,7 @@ final class FinDeRecherchePostgresTest extends TestCase
             $demande = $this->connexion->fetchOne(self::DEMANDE);
             $this->connexion->executeStatement(self::OP, [$demande, json_encode($avant->versJson(), \JSON_THROW_ON_ERROR), null]);
 
-            self::assertNull($this->connexion->fetchOne('SELECT new_value FROM prp_change_request_op WHERE request_id = ?', [$demande]));
+            self::assertNull($this->connexion->fetchOne('SELECT new_value FROM prp_change_op WHERE request_id = ?', [$demande]));
         } finally {
             $this->connexion->rollBack();
         }
