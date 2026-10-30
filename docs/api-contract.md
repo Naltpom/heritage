@@ -1475,7 +1475,8 @@ famille par alliance, famille, personne proposée, famille provisoire, et l'ego.
       "bestQuay": 2,
       "citationCount": 6,
       "avecImage": true,
-      "etiquetteDates": "1901-1909 – 1987"
+      "etiquetteDates": "1901-1909 – 1987",
+      "finDeRechercheMere": { "reason": "registres_inexistants", "beforeYear": 1668 }
     },
     {
       "id": "p202",
@@ -1666,6 +1667,15 @@ Lecture, point par point :
   point de vue est calculé, `branch` ne retombe **jamais** sur la colonne `tree_person.branch`
   (la vue de la racine) : absente de la vue, elle vaut `null`. La colonne persistée garde
   l'ancienne règle (la chronologie en fait ses colonnes).
+- **`finDeRecherchePere` et `finDeRechercheMere`** — *ajoutés le 2026-10-30,
+  [ADR 0023](adr/0023-fin-de-recherche.md)* — le **résumé** d'une fin de recherche du côté
+  du père ou de la mère : `{reason, beforeYear}` (§ 6.2 bis). **Absents** quand le côté n'est
+  pas clos, et **toujours absents d'un nœud `"restreinte"`** : ils suivent la règle des notes,
+  servis avec la fiche complète et jamais avec la fiche réduite. Le texte et l'auteur se
+  lisent sur la fiche (§ 5.3). Le canevas ne tient un côté pour **clos** que si aucun parent
+  n'y est lié par les arêtes — la place se lit comme `Tree` la donne : l'époux d'une famille
+  est le père, l'épouse la mère, un parent de sexe inconnu prend la place libre, celle du père
+  d'abord. **Un parent connu l'emporte** sur une fin de recherche restée enregistrée.
 - **`bestQuay`, `citationCount` et `avecImage`** servent les filtres du visualiseur —
   « Non vérifiés » (`bestQuay` à 0 ou `null`), « Sans source » (`citationCount` à 0),
   « Avec portrait ». Ils sont sur le **nœud** et non chargés fiche par fiche : un filtre
@@ -1915,7 +1925,7 @@ la référence de forme.
     "caption": "Portrait, vers 1931"
   },
   "parents": [
-    { "personId": 42, "displayName": "Jade Bérylite Sureau", "relation": "naissance", "familyId": 19 }
+    { "personId": 42, "displayName": "Jade Bérylite Sureau", "relation": "naissance", "familyId": 19, "cote": "pere" }
   ],
   "fratrie": [
     { "personId": 43, "displayName": "Lave Sureau", "siblingOrder": 1 }
@@ -2000,12 +2010,35 @@ la référence de forme.
       "createdAt": "2026-09-14T10:22:00+02:00"
     }
   ],
+  "finDeRecherchePere": null,
+  "finDeRechercheMere": {
+    "reason": "registres_inexistants",
+    "beforeYear": 1668,
+    "body": "Les registres paroissiaux de Saint-Martin commencent en 1668 (AD, 4 E 341/1).",
+    "authorLabel": "Natron Romarin",
+    "closedAt": "2026-10-30T10:12:00+01:00"
+  },
   "enAttente": {},
   "demandesEnAttente": []
 }
 ```
 
 Notes de forme :
+
+- **`finDeRecherchePere` et `finDeRechercheMere`** — *ajoutés le 2026-10-30,
+  [ADR 0023](adr/0023-fin-de-recherche.md)* — sont **toujours présents** sur une fiche
+  complète : `null` quand la recherche n'est pas close de ce côté, sinon
+  `{reason, beforeYear, body, authorLabel, closedAt}`. Ce sont des **champs de la surface
+  éditable** (§ 6.2 bis) : leur clé est celle de leur entrée dans `enAttente`, et leur valeur,
+  **privée de `authorLabel` et `closedAt`**, est l'`oldValue` d'un op qui les modifie ou les
+  lève. `authorLabel` est le **déposant** de la dernière demande qui l'a écrite (jamais
+  l'administrateur qui l'a validée), `closedAt` la date de son **dépôt**. Comme les notes, ils
+  n'existent pas sur la fiche réduite (§ 11.1). Une fin de recherche reste servie quand un
+  parent a été lié depuis du même côté : c'est l'écran qui fait l'emporter le parent.
+- **`parents[].cote`** — *ajouté le 2026-10-30* — vaut `"pere"` quand le parent est l'époux de
+  sa famille (`husband_id`), `"mere"` quand il en est l'épouse (`wife_id`) : la place que
+  `Tree` lui a donnée, et non une déduction depuis le sexe. C'est elle qui dit si un parent est
+  connu du côté d'une fin de recherche.
 
 - **`vivant` est calculé, `deceased` est stocké.** Les deux sont présents et ne disent pas la
   même chose : `deceased` est le `DEAT` du GEDCOM, `vivant` est le résultat de la règle du
@@ -2224,7 +2257,9 @@ fiches en diraient, et rien de plus.
         "min": "1980-01-01", "max": "1980-12-31",
         "place": null,
         "texte": "1980"
-      }
+      },
+      "finDeRecherchePere": { "reason": "pere_inconnu", "beforeYear": null },
+      "finDeRechercheMere": { "reason": "registres_inexistants", "beforeYear": 1668 }
     },
     {
       "id": 64,
@@ -2295,6 +2330,14 @@ Lecture, point par point :
 - **« Masquer les dates des vivants »**, l'option de l'affiche, n'est pas un filtre de
   confidentialité : c'est une mise en page, appliquée au dessin, sur des dates que le
   lecteur voit déjà sur les fiches. Elle ne change rien à cette charge.
+- **`finDeRecherchePere` et `finDeRechercheMere`** — *ajoutés le 2026-10-30,
+  [ADR 0023](adr/0023-fin-de-recherche.md)* — le résumé `{reason, beforeYear}` d'une fin de
+  recherche, comme sur le nœud du graphe (§ 5.2) : **absents** quand le côté n'est pas clos, et
+  jamais sur une personne restreinte (règle des notes). L'affiche dessine le mur sur la case
+  d'une personne dont un côté est clos **et** dont la famille retenue ne sert aucun parent de
+  ce côté (`husband` pour le père, `wife` pour la mère) — un parent servi l'emporte — et
+  n'ajoute la ligne de légende « recherche close faute d'archives » que si elle en dessine au
+  moins un.
 
 ### 5.5 La recherche
 
@@ -2864,7 +2907,9 @@ Règles, toutes vérifiables :
   (`field → callable`, § 9.4), jamais résolu par réflexion. Un `field` absent de la table
   ⇒ `422` `champs.ops[n].field`, et la demande n'est pas créée. La surface éditable d'une
   personne est exactement : `givenNames`, `surname`, `marriedName`, `nickname`, `sex`,
-  `deceased`, `birth`, `death`, `forcePrivacy`, `privacyNote`. **Ni `branch`, ni `generation`,
+  `deceased`, `birth`, `death`, `forcePrivacy`, `privacyNote`, `finDeRecherchePere`,
+  `finDeRechercheMere` (ces deux derniers depuis l'[ADR 0023](adr/0023-fin-de-recherche.md),
+  nature `fin_de_recherche` — § 6.2 bis). **Ni `branch`, ni `generation`,
   ni `bestQuay`, ni `citationCount`, ni `displayName`, ni `searchKey`, ni `version`** : ce
   sont des colonnes dérivées, écrites par un service de `Tree` (§ 3.1). Une demande qui les
   vise est un malentendu, pas une contribution.
@@ -2886,6 +2931,115 @@ Règles, toutes vérifiables :
 - `targetKind` / `targetId` sont dénormalisés depuis les ops et servent à filtrer la file
   sans jointure (§ 5.1). Ils doivent être cohérents avec l'op de plus petit `seq`, sinon
   `422`.
+
+### 6.2 bis La fin de recherche — `finDeRecherchePere` / `finDeRechercheMere`
+
+*Ajouté le 2026-10-30, [ADR 0023](adr/0023-fin-de-recherche.md).* « On a cherché, les
+archives s'arrêtent là » : clore la recherche des parents d'une personne, **un côté à la
+fois**. Ce n'est pas une nature de demande : c'est une `modification_personne` ordinaire,
+dont les ops visent deux champs de la surface, de nature **`fin_de_recherche`**.
+
+```json
+{
+  "kind": "modification_personne",
+  "message": "Dépouillé aux AD : rien avant 1668, et le père n'est pas nommé.",
+  "soumettre": true,
+  "targetKind": "personne",
+  "targetId": 56,
+  "ops": [
+    {
+      "seq": 1,
+      "opKind": "champ",
+      "subjectKind": "personne",
+      "subjectId": 56,
+      "field": "finDeRecherchePere",
+      "valueKind": "fin_de_recherche",
+      "oldValue": null,
+      "newValue": { "reason": "pere_inconnu", "beforeYear": null, "body": null },
+      "baseVersion": 5
+    },
+    {
+      "seq": 2,
+      "opKind": "champ",
+      "subjectKind": "personne",
+      "subjectId": 56,
+      "field": "finDeRechercheMere",
+      "valueKind": "fin_de_recherche",
+      "oldValue": null,
+      "newValue": {
+        "reason": "registres_inexistants",
+        "beforeYear": 1668,
+        "body": "Les registres paroissiaux de Saint-Martin commencent en 1668 (AD, 4 E 341/1)."
+      },
+      "baseVersion": 5
+    }
+  ]
+}
+```
+
+**Les trois gestes**, un op par côté :
+
+| Geste | `oldValue` | `newValue` |
+|---|---|---|
+| poser | `null` | `{reason, beforeYear, body}` |
+| modifier | la valeur courante | la nouvelle |
+| lever — rouvrir la recherche, un parent a été retrouvé | la valeur courante | `null` |
+
+« Les deux côtés » n'est pas une valeur : ce sont **deux ops dans la même demande**, validée ou
+refusée d'un bloc. L'`oldValue` est la valeur de la fiche (§ 5.3) **privée de `authorLabel` et
+`closedAt`**.
+
+**La valeur** : un objet à **trois clés, toujours les trois** — une clé absente ou en plus rend
+`422` sur `ops[n].newValue` (ou `oldValue`) —, ou `null`, « pas de fin de recherche ».
+
+| Clé | Type | Règle |
+|---|---|---|
+| `reason` | chaîne | un des huit motifs ci-dessous, sinon `422` `…newValue.reason` |
+| `beforeYear` | entier \| `null` | entier de 1000 à l'année en cours pour `registres_inexistants`, `null` pour tout autre motif — sinon `422` `…newValue.beforeYear` |
+| `body` | chaîne \| `null` | rogné ; vide, il vaut `null` ; au plus 4 000 caractères ; **obligatoire** pour `autre` — sinon `422` `…newValue.body` |
+
+| `reason` | Libellé | Côté |
+|---|---|---|
+| `registres_inexistants` | Registres inexistants avant {beforeYear} | les deux |
+| `registres_detruits` | Registres détruits | les deux |
+| `lacune` | Lacune dans les registres | les deux |
+| `pere_inconnu` | Père inconnu | `finDeRecherchePere` seulement, sinon `422` `…newValue.reason` |
+| `enfant_trouve` | Enfant trouvé ou abandonné | les deux |
+| `origine_inconnue` | Lieu d’origine inconnu | les deux |
+| `homonymie` | Homonymie impossible à trancher | les deux |
+| `autre` | Autre motif | les deux |
+
+**Les refus propres à ce champ**, en `422 donnees_invalides`, dans le recueil du dépôt à blanc
+(§ 6.1 ter) comme les autres :
+
+- **une pose ou une modification d'un côté dont un parent est déjà lié** — la recherche n'y est
+  pas close : `champs.ops[n].newValue`, « Un parent est déjà lié du côté du père : la recherche
+  n'y est pas close. » La **levée** reste toujours possible ;
+- `oldValue` égal à `newValue` après normalisation (`body` rogné), comme pour tout champ.
+
+**Le reste est la règle des champs**, sans exception : `baseVersion` obligatoire, `oldValue`
+confronté à la valeur courante au dépôt (`409 conflit` sinon), calque `enAttente` sous les clés
+`finDeRecherchePere` / `finDeRechercheMere` (§ 13, `propose` et `actuel` à trois clés),
+**caducité** à la validation si la valeur courante a changé depuis le dépôt (deux poses
+concurrentes du même côté : la seconde est caduque), **rejeu** si seul un autre champ a bougé,
+« refaire » (§ 6.10), `Idempotency-Key` (§ 6.1 bis).
+
+**Ce que la validation écrit** : la ligne de `tree_research_closure` du côté (créée, réécrite,
+ou supprimée par la levée), **signée du déposant et datée du dépôt** (`authorLabel`,
+`closedAt`) — jamais de l'administrateur qui valide, comme une note (§ 6.4 ter). La personne
+est touchée : sa `version` monte. La révision et `libelleDiff` disent « Fin de recherche côté
+mère : (aucune) → Registres inexistants avant 1668 — Les registres paroissiaux de
+Saint-Martin commencent en 1668 (AD, 4 E 341/1). »
+
+**Un parent lié ensuite du côté clos ne rend pas la demande caduque** et n'efface rien : la fin
+de recherche reste enregistrée, et c'est l'affichage qui fait l'emporter le parent (§ 5.2).
+Seule sa levée l'efface.
+
+**Jetons d'API.** La portée `contribution` dépose ces demandes par `POST /api/demandes` (et
+`/verifier`), sans route nouvelle (ADR 0021). Elle **retire un brouillon, jamais une demande en
+attente** (`DemandeVoter::RETIRER`, PR #232). **Lever n'est pas retirer** : le retrait annule une
+demande que personne n'a tranchée ; la levée est une demande, qui efface une fin de recherche
+validée et se valide comme telle.
 
 ### 6.3 `kind = creation_personne` — une fiche et ses liens
 
@@ -3518,6 +3672,7 @@ l'exact miroir d'une création, où `avant` vaut `null` partout.
   "descendants": [],
   "descendanceTotale": 0,
   "medias": 0,
+  "finsDeRecherche": 1,
   "membreId": null,
   "invitationsActives": 0,
   "dependances": [
@@ -3528,6 +3683,11 @@ l'exact miroir d'une création, où `avant` vaut `null` partout.
 
 **L'ordre des clés est un contrat**, au même titre que celui d'un bloc date (§ 14.1) : la
 comparaison porte sur le tableau entier, et `JSONB` ne préserve pas l'ordre d'écriture.
+
+`finsDeRecherche` — *ajouté le 2026-10-30, [ADR 0023](adr/0023-fin-de-recherche.md)* —
+compte les fins de recherche de la fiche (0 à 2, une par côté) : elles partent avec elle, et
+rien ne part en silence. Elles ne bloquent pas. Un inventaire déposé avant elles la relit à
+`0` : une fin de recherche posée depuis rend donc la suppression caduque, comme une note.
 
 À la lecture d'administration (§ 6.7), l'op porte en plus `valeurCourante` — l'inventaire
 **d'aujourd'hui** — et `libelleDiff`, la phrase prête à afficher :
@@ -6312,6 +6472,8 @@ exclu »). Deux lecteurs, la même route `GET /api/arbre/personnes/202`, le mêm
   "medias": [
     { "mediaId": 91, "kind": "portrait", "caption": "Photo de famille, 1979", "url": "/api/medias/91/fichier", "vignetteUrl": "/api/medias/91/vignette" }
   ],
+  "finDeRecherchePere": null,
+  "finDeRechercheMere": null,
   "enAttente": {},
   "demandesEnAttente": []
 }
@@ -6344,7 +6506,8 @@ Ce qui a disparu, nommément, et qu'aucune implémentation ne doit réintroduire
 `givenNames`, `surname`, `marriedName`, `nickname`, `deceased`, `birth`, `death`,
 `ligneDates`, `bestQuay`, `citationCount`, `forcePrivacy`, `privacyNote`, `version`,
 `parente`, `portrait`, `parents`, `fratrie`, `unions`, `faits`, `citations`, `notes`,
-`medias`, `enAttente`, `demandesEnAttente`.
+`medias`, `finDeRecherchePere`, `finDeRechercheMere` (ADR 0023 : la règle des notes),
+`enAttente`, `demandesEnAttente`.
 
 Noter en particulier :
 
@@ -6379,6 +6542,9 @@ liées, et enfreindre la première casse la seconde.
 Dans le nœud, **quatre clés tombent** — `etiquetteDates`, `bestQuay`, `citationCount` et
 `avecImage` — et les autres restent : `x`, `y`, `w`, `h`, `displayName`, `etiquetteNom`,
 `sex`, `generation`, `branch`, `vivant`, `parente` (et `pont` sur une famille par alliance).
+`finDeRecherchePere` et `finDeRechercheMere` (ADR 0023), facultatives sur un nœud complet,
+ne sont **jamais** posées sur un nœud restreint : elles sont ajoutées après la branche qui
+le referme, comme la règle des notes le veut.
 
 **`displayName` et `etiquetteNom` valent `"Personne vivante"`** — révision du 2026-10-01 de
 l'ADR 0003. Elles restaient jusque-là avec le vrai nom, au motif que la seconde n'est qu'une
@@ -6453,7 +6619,8 @@ Ce document donne les listes exactes, pour que le test soit une recopie :
 |---|---|---|
 | 1 — fiche | `GET /api/arbre/personnes/{id}` | `id`, `displayName`, `sex`, `generation`, `branch`, `vivant`, `visibilite` — **`displayName` vaut `"Personne vivante"`** ; et dans la fiche **visible** d'un proche, ses références (`parents`, `fratrie`, `unions[].conjoint`, `unions[].enfants`) portent le même masque |
 | 1 bis — famille | `GET /api/arbre/familles/{id}` | époux : `personId`, `displayName`, `visibilite` ; enfant : `personId`, `displayName`, `siblingOrder`, `relation` — **`displayName` vaut `"Personne vivante"`** |
-| 2 — graphe | `GET /api/arbre/graphe` (nœud) | `id`, `type`, `personId`, `x`, `y`, `w`, `h`, `displayName`, `etiquetteNom`, `sex`, `generation`, `branch`, `vivant`, `parente`, `pont` (si `parente` vaut `"alliance"`), `visibilite` — **`displayName` et `etiquetteNom` valent `"Personne vivante"`, `w` vaut 215** ; **`etiquetteDates`, `bestQuay`, `citationCount` et `avecImage` absents** |
+| 2 — graphe | `GET /api/arbre/graphe` (nœud) | `id`, `type`, `personId`, `x`, `y`, `w`, `h`, `displayName`, `etiquetteNom`, `sex`, `generation`, `branch`, `vivant`, `parente`, `pont` (si `parente` vaut `"alliance"`), `visibilite` — **`displayName` et `etiquetteNom` valent `"Personne vivante"`, `w` vaut 215** ; **`etiquetteDates`, `bestQuay`, `citationCount`, `avecImage`, `finDeRecherchePere` et `finDeRechercheMere` absents** |
+| 2 bis — affiche | `GET /api/arbre/familles/{id}/affiche` (personne) | `id`, `visibilite`, `displayName`, `sex`, `vivant` — **`displayName` vaut `"Personne vivante"`** ; ni date, ni `finDeRecherchePere`, ni `finDeRechercheMere` |
 | 3 — recherche | `GET /api/arbre/recherche` | **aucune entrée** — la personne est absente |
 | 4 — chronologie | `GET /api/chronologie` | **aucune barre** — la personne est absente |
 | 5 — média | `GET /api/medias`, `/api/medias/{id}` | **aucun élément** ; le fichier rend `404` |
@@ -6639,6 +6806,13 @@ trois ajouts que la mise à l'épreuve a rendus nécessaires :
   `autresDemandes` liste les identifiants des autres. Un tableau plutôt qu'un objet aurait
   changé l'arité documentée au § 9.4 et cassé tout front écrit contre elle. *Point signalé au
   § 18.*
+
+**Une fin de recherche en attente** ([ADR 0023](adr/0023-fin-de-recherche.md), § 6.2 bis) a
+son entrée sous la clé du champ, `finDeRecherchePere` ou `finDeRechercheMere`, comme tout
+champ. `propose` et `actuel` y portent la **valeur d'op à trois clés** —
+`{"reason": "lacune", "beforeYear": null, "body": null}` — ou `null` : `propose: null` est une
+**levée** en attente, `actuel: null` une pose. Ni `authorLabel` ni `closedAt` : `auteur` et
+`depuis` de l'entrée disent déjà qui propose, et depuis quand.
 
 ### 13.2 Comment le front distingue une valeur validée d'une valeur en attente
 

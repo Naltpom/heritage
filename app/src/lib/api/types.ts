@@ -420,6 +420,78 @@ export interface EtatInscription {
 }
 
 /* ------------------------------------------------------------------ */
+/* § 6.2 bis — la fin de recherche (ADR 0023)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Le côté d'une fin de recherche : le **père** ou la **mère** de la personne.
+ *
+ * « Les deux » n'est **pas** une valeur : c'est un raccourci de saisie, qui dépose
+ * deux ops dans la même demande (ADR 0023 § 2). L'arbre a besoin de l'état de
+ * chaque côté, et un parent retrouvé d'un côté ne rouvre que ce côté-là.
+ */
+export type CoteDeRecherche = 'pere' | 'mere'
+
+/**
+ * Pourquoi la recherche s'arrête — `Core\Enum\MotifDeFinDeRecherche`, valeurs du
+ * modèle, jamais traduites (§ 1.2). Les libellés français sont dans
+ * `@/lib/finDeRecherche` (`MOTIFS_DE_FIN_DE_RECHERCHE`), recopiés du serveur.
+ *
+ * - `registres_inexistants` porte son année (`beforeYear`), et elle seule ;
+ * - `pere_inconnu` ne vaut que du côté du père ;
+ * - `autre` exige un texte (`body`).
+ */
+export type MotifDeFinDeRecherche =
+  | 'registres_inexistants'
+  | 'registres_detruits'
+  | 'lacune'
+  | 'pere_inconnu'
+  | 'enfant_trouve'
+  | 'origine_inconnue'
+  | 'homonymie'
+  | 'autre'
+
+/**
+ * Une fin de recherche **telle qu'elle voyage dans un op** (`valueKind:
+ * "fin_de_recherche"`, § 6.2 bis) : trois clés, **toujours les trois**, comme les
+ * cinq d'un bloc date. Une clé absente ou une clé en plus rend `422`.
+ *
+ * Les noms sont ceux des propriétés Doctrine de `Tree\ResearchClosure` (§ 1.2) :
+ * - `reason` : le motif ;
+ * - `beforeYear` : l'année avant laquelle les registres n'existent pas — entier
+ *   pour `registres_inexistants`, `null` pour tout autre motif ;
+ * - `body` : le texte libre, `null` quand il n'y en a pas (une chaîne vide est
+ *   ramenée à `null` par le serveur).
+ */
+export interface ValeurFinDeRecherche {
+  reason: MotifDeFinDeRecherche
+  beforeYear: number | null
+  body: string | null
+}
+
+/**
+ * Une fin de recherche **telle qu'une fiche complète la sert** : la valeur, plus
+ * son auteur et sa date — en lecture seule, jamais dans un op.
+ *
+ * - `authorLabel` : le **déposant** de la demande qui l'a posée ou modifiée en
+ *   dernier (comme l'auteur d'une note, § 6.4 ter), jamais l'administrateur qui
+ *   l'a validée. `null` pour une ligne écrite hors du circuit des demandes.
+ * - `closedAt` : ATOM — la date du **dépôt** de cette demande (`submittedAt`),
+ *   pas celle de sa validation (ADR 0023 § 5).
+ */
+export interface FinDeRecherche extends ValeurFinDeRecherche {
+  authorLabel: string | null
+  closedAt: string
+}
+
+/**
+ * Ce que le nœud du graphe (§ 5.2) et la personne d'une affiche (§ 5.4 bis)
+ * portent d'une fin de recherche : le motif et son année, de quoi dessiner le
+ * mur et dire le motif au survol. Le texte et l'auteur se lisent sur la fiche.
+ */
+export type ResumeFinDeRecherche = Pick<ValeurFinDeRecherche, 'reason' | 'beforeYear'>
+
+/* ------------------------------------------------------------------ */
 /* § 5.2 — le graphe                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -587,6 +659,18 @@ export interface NoeudPersonne extends NoeudCommun {
    * famille par alliance est mise en page à part, comme sa propre généalogie.
    */
   pont?: IdentifiantNoeud
+  /**
+   * La fin de recherche du côté du père (ADR 0023) : le motif et son année.
+   *
+   * **Absente** — jamais `null` — quand il n'y en a pas, et **toujours absente
+   * sur un nœud `restreinte`** : elle suit la règle des notes, servie avec la
+   * fiche complète et jamais avec la fiche réduite (§ 11.2). L'arbre la tient
+   * pour « recherche close » seulement si aucun parent n'est lié de ce côté
+   * (`etatDuSommet()`, `@/lib/finDeRecherche`) : un parent connu l'emporte.
+   */
+  finDeRecherchePere?: ResumeFinDeRecherche
+  /** Le pendant, du côté de la mère. Mêmes règles. */
+  finDeRechercheMere?: ResumeFinDeRecherche
 }
 
 /** Voir `NoeudPersonne.parente`. */

@@ -614,6 +614,16 @@ Or ces quatre-là sont utilisés par trois modules en plus de `Tree` :
 | `Sex` | `Core\Enum` | `Proposal` (`prp_draft_person.sex`) |
 | `Branch` | `Core\Enum` | `Timeline` (`tml_preference.branches`) |
 
+**Depuis l'[ADR 0023](adr/0023-fin-de-recherche.md), trois de plus**, pour la même raison —
+`Tree` les mappe sur `tree_research_closure` (§ 3.5 bis), `Proposal` les valide au dépôt
+d'une fin de recherche :
+
+| Type | Emplacement | Ce qu'il porte |
+|---|---|---|
+| `CoteDeRecherche` | `Core\Enum` | `pere`, `mere` — et `champ()` : `finDeRecherchePere`, `finDeRechercheMere` |
+| `MotifDeFinDeRecherche` | `Core\Enum` | les huit motifs (§ 3.5 bis), leur `label()`, `avecAnnee()`, `admisDuCote()` |
+| `FinDeRecherche` (objet valeur) | `Core\ValueObject` | `reason`, `beforeYear`, `body` : la valeur d'une fin de recherche telle qu'elle traverse `Proposal\Service\Port\PortArbre` — l'équivalent, pour la nature `fin_de_recherche`, d'`UncertainDate` pour `date_incertaine` |
+
 Laisser ces classes dans `Tree` en ferait un second noyau **sans que personne ne l'ait
 décidé** — et c'est la frontière la plus facile à franchir sans s'en apercevoir, parce
 qu'elle se franchit par un `use` et non par une relation Doctrine. Le contrôle en CI prévu
@@ -940,6 +950,82 @@ ici : elles vont dans `tree_source.note` (§ 3.6).
 CONSTRAINT ck_tree_note_sujet_unique CHECK (num_nonnulls(person_id, family_id, fact_id) = 1)
 ```
 
+### 3.5 bis `tree_research_closure` — la fin de recherche ([ADR 0023](adr/0023-fin-de-recherche.md))
+
+**Entité `ResearchClosure`, table `tree_research_closure`.** Une ligne par **côté clos** d'une
+personne : « on a cherché ses parents de ce côté, et les archives s'arrêtent là ». Pas de
+ligne : la recherche n'est pas close de ce côté — pas encore cherchée, ou rouverte par une
+levée. Elle naît vide (aucune reprise).
+
+Elle ne s'écrit que par une demande validée (`modification_personne`, champs
+`finDeRecherchePere` / `finDeRechercheMere`, § 9.4), par `PortArbre::appliquerChamps()`, qui
+**touche la personne** : sa `version` monte, donc l'empreinte de l'arbre et l'`ETag` du graphe
+changent, sans que la table entre dans l'empreinte (§ 2.3, ADR 0005).
+
+| Colonne | Type | Null | Défaut | Rôle |
+|---|---|:-:|---|---|
+| `id` | `INT` | non | identité | PK |
+| `person_id` | `INT` | non | — | **FK intra-module** → `tree_person(id)`, `ON DELETE CASCADE`. Une suppression de fiche l'emporte — et l'annonce (`InventaireDeSuppression::$finsDeRecherche`). |
+| `side` | `VARCHAR(4)` | non | — | Énum `CoteDeRecherche` (§ 2.8) : `pere` ou `mere`. « Les deux » n'est pas une valeur : deux lignes. |
+| `reason` | `VARCHAR(24)` | non | — | Énum `MotifDeFinDeRecherche` (§ 2.8), ci-dessous. |
+| `before_year` | `SMALLINT` | oui | `NULL` | L'année avant laquelle les registres n'existent pas — pour `registres_inexistants`, et pour lui seul. |
+| `body` | `TEXT` | oui | `NULL` | Le texte libre, rogné ; au plus 4 000 caractères ; obligatoire pour `autre`. |
+| `author_user_id` | `INT` | oui | `NULL` | **⇢ inter-module** (`core_user`) : le **déposant** de la dernière demande qui a écrit la ligne, jamais l'administrateur qui l'a validée. |
+| `author_label` | `VARCHAR(120)` | oui | `NULL` | Libellé dénormalisé de l'auteur, comme `tree_note.author_label`. |
+| `closed_at` | `TIMESTAMPTZ` | non | — | La date du **dépôt** de cette demande (`prp_change_request.submitted_at`), pas de sa validation. |
+| `created_at` | `TIMESTAMPTZ` | non | `now()` | — |
+| `updated_at` | `TIMESTAMPTZ` | non | `now()` | — |
+
+**Clés et index**
+
+| Objet | Définition | Requête servie |
+|---|---|---|
+| PK | `(id)` | — |
+| `uniq_tree_research_closure_side` | `UNIQUE (person_id, side)` | **La règle « un côté, une fin de recherche »**, et la lecture de la fiche. Sert aussi les lectures en lot du graphe et de l'affiche (préfixe `person_id`). |
+
+**Contraintes** — des filets : les mêmes règles sont tenues au dépôt, en `422` devant l'auteur
+(§ 6.2 bis du contrat).
+
+```sql
+CONSTRAINT ck_tree_research_closure_side
+  CHECK (side IN ('pere', 'mere')),
+CONSTRAINT ck_tree_research_closure_reason
+  CHECK (reason IN ('registres_inexistants', 'registres_detruits', 'lacune', 'pere_inconnu',
+                    'enfant_trouve', 'origine_inconnue', 'homonymie', 'autre')),
+-- L'année est le paramètre d'un seul motif, et ce motif n'existe pas sans elle. La borne
+-- haute du dépôt est l'année en cours ; un CHECK ne peut pas lire l'horloge.
+CONSTRAINT ck_tree_research_closure_annee
+  CHECK ((reason = 'registres_inexistants') = (before_year IS NOT NULL)
+         AND (before_year IS NULL OR before_year BETWEEN 1000 AND 2999)),
+CONSTRAINT ck_tree_research_closure_pere_inconnu
+  CHECK (reason <> 'pere_inconnu' OR side = 'pere'),
+CONSTRAINT ck_tree_research_closure_texte
+  CHECK ((body IS NULL OR (char_length(body) BETWEEN 1 AND 4000))
+         AND (reason <> 'autre' OR body IS NOT NULL))
+```
+
+**`MotifDeFinDeRecherche`**
+
+| Valeur | Libellé (`label()`) | Côté | Paramètre |
+|---|---|---|---|
+| `registres_inexistants` | Registres inexistants avant une année — en clair « Registres inexistants avant 1668 » | les deux | `before_year` obligatoire |
+| `registres_detruits` | Registres détruits | les deux | — |
+| `lacune` | Lacune dans les registres | les deux | — |
+| `pere_inconnu` | Père inconnu | `pere` seulement | — |
+| `enfant_trouve` | Enfant trouvé ou abandonné | les deux | — |
+| `origine_inconnue` | Lieu d’origine inconnu | les deux | — |
+| `homonymie` | Homonymie impossible à trancher | les deux | — |
+| `autre` | Autre motif | les deux | `body` obligatoire |
+
+**Ce que la ligne ne dit pas.** Elle ne dit pas qu'aucun parent n'est lié : un parent lié
+**après** la fin de recherche, du même côté, l'emporte à l'affichage (fiche, `/arbre`,
+affiche), et la ligne reste jusqu'à sa levée. « Un parent lié de ce côté » se lit à la place
+qu'il occupe dans une famille dont la personne est l'enfant : `husband_id` est le père,
+`wife_id` la mère (§ 3.2). Une pose sur un côté déjà pourvu est refusée au dépôt.
+
+**Visibilité** : celle des notes — servie avec la fiche complète, le nœud complet du graphe et
+la personne complète d'une affiche, jamais avec leurs formes réduites (§ 9.3).
+
 ### 3.6 `tree_source` — 28 lignes après import
 
 **La source**, au sens GEDCOM `SOUR` de niveau 0 : un corpus, un fonds, un site,
@@ -1025,6 +1111,7 @@ CONSTRAINT ck_tree_citation_quay CHECK (quay IS NULL OR quay BETWEEN 0 AND 3)
 | Table | Colonnes | Cible | Libellé dénormalisé |
 |---|---|---|---|
 | `tree_note` | `author_user_id` | `Core\User` | `author_label` |
+| `tree_research_closure` | `author_user_id` | `Core\User` | `author_label` |
 
 C'est tout. `Tree` est volontairement presque étanche : il ne sait rien des comptes, rien
 des demandes, rien des médias. Ce sont `Media` et `Proposal` qui pointent vers lui.
@@ -1585,6 +1672,7 @@ entre le formulaire, l'affichage du diff et le service de rejeu.
 | `reference` | objet `{kind, id, draftRef, label}` — un des deux parmi `id`/`draftRef` | `{"kind":"personne","id":42,"draftRef":null,"label":"Marne Dolomite Sureau"}` |
 | `lien` | objet décrivant un lien familial, même forme que `prp_draft_link` sérialisée | voir § 5.4 |
 | `media` | objet `{mediaId, kind, caption, sha256}` | `{"mediaId":88,"kind":"preuve","caption":"Acte n°3, Épinaille 1910","sha256":"…"}` |
+| `fin_de_recherche` | objet à 3 clés, **toujours les 3** — `{reason, beforeYear, body}` —, ou `null` (« pas de fin de recherche » : `old_value` d'une pose, `new_value` d'une levée). Ni `authorLabel` ni `closedAt`, en lecture seule. ADR 0023 | `{"reason":"registres_inexistants","beforeYear":1668,"body":"Saint-Martin commence en 1668."}` |
 
 Le point qui compte : **une date incertaine est un seul op, pas cinq.** Découper
 `birth_raw`, `birth_qualifier`, `birth_min`, `birth_max`, `birth_place` en cinq ops
@@ -1835,9 +1923,13 @@ valeurs sont ouvertes à `prp_change_op.subject_kind` et à `prp_revision.subjec
 touchés *par* une demande qui vise la personne ou la famille qui les porte.
 
 **`ValueKind`** — `texte`, `entier`, `booleen`, `enum`, `date_incertaine`, `reference`,
-`lien`, `media`, `citation`, `note`, `suppression`. `suppression` — et `lien` quand il porte
+`lien`, `media`, `citation`, `note`, `suppression`, `fin_de_recherche`. `suppression` — et `lien` quand il porte
 la mesure d'un `retrait_lien` — vivent dans `old_value` **sans jumeau** dans `new_value` : une suppression n'a pas d'« après », et son
 « avant » n'est pas la valeur d'un champ mais le décompte de ce qui disparaîtra.
+`fin_de_recherche` ([ADR 0023](adr/0023-fin-de-recherche.md)) est la nature des deux champs
+`finDeRecherchePere` et `finDeRechercheMere` d'une `modification_personne` — un op `champ`
+ordinaire, dont la valeur est composite (§ 5.2). Seize caractères : elle remplit exactement
+`prp_change_op.value_kind`, un `VARCHAR(16)`. Une nature plus longue demanderait une migration.
 
 **`LinkKind`** — `enfant_de`, `parent_de`, `conjoint_de`.
 
@@ -2780,6 +2872,18 @@ calque est à côté. Un client qui ignore `enAttente` affiche l'arbre validé, 
 comportement correct par défaut — et c'est pourquoi le calque est un champ ajouté, et non
 une substitution dans les champs existants.
 
+**La liste fermée des champs d'une personne** (`Proposal\Service\SurfaceEditable::PERSONNE`,
+§ 6.2 du contrat) : `givenNames`, `surname`, `marriedName`, `nickname`, `sex`, `deceased`,
+`birth`, `death`, `forcePrivacy`, `privacyNote` — et, depuis
+l'[ADR 0023](adr/0023-fin-de-recherche.md), **`finDeRecherchePere`** et
+**`finDeRechercheMere`**, de nature `fin_de_recherche`. Ces deux-là ne sont pas des colonnes
+de `tree_person` : le service de `Tree` les applique en écrivant, réécrivant ou supprimant la
+ligne de `tree_research_closure` du côté (§ 3.5 bis), signée de l'auteur et de la date de
+dépôt de la demande, puis il **touche la personne** — sa `version` monte comme pour tout autre
+champ, et c'est ce qui donne à une fin de recherche le verrou optimiste, le rejeu et la
+caducité des champs sans rien leur ajouter. La valeur courante qu'il rend au contrôle
+préalable est la fin de recherche du côté (`Core\ValueObject\FinDeRecherche`), ou `null`.
+
 ### 9.5 Les propositions de création — résoudre un identifiant qui n'existe pas encore
 
 C'est le point dur, et il a trois faces : référencer la personne proposée depuis ses liens,
@@ -3395,6 +3499,7 @@ erDiagram
     tree_person ||--o{ tree_citation : "est etayee par"
     tree_family ||--o{ tree_citation : "est etayee par"
     tree_fact ||--o{ tree_citation : "est etaye par"
+    tree_person ||--o{ tree_research_closure : "recherche close par cote"
 
     tree_person {
         int id PK
@@ -3482,12 +3587,25 @@ erDiagram
         varchar even_context
         int version
     }
+    tree_research_closure {
+        int id PK
+        int person_id FK
+        varchar side "pere ou mere, UK avec person_id"
+        varchar reason "motif"
+        smallint before_year "registres_inexistants seulement"
+        text body
+        int author_user_id "deposant, inter-module"
+        timestamptz closed_at "date du depot"
+    }
 ```
 
 Les trois clés étrangères nullables de `tree_note` et de `tree_citation`, comme les deux
 de `tree_fact`, sont mutuellement exclusives : la contrainte `num_nonnulls(...) = 1` de
 chaque table le garantit. Mermaid ne sait pas dessiner une exclusion ; elle est dans le
 SQL.
+
+`tree_research_closure` (ADR 0023) a **au plus deux lignes par personne**, une par côté :
+`uniq_tree_research_closure_side (person_id, side)`.
 
 ### 10.3 `Membership`
 
@@ -3734,7 +3852,8 @@ flowchart LR
 Lecture de cette carte :
 
 - **`Core` et `Tree` ne pointent vers personne** (à l'exception de
-  `tree_note.author_user_id` vers `Core\User`, omise du diagramme pour ne pas l'alourdir).
+  `tree_note.author_user_id` et `tree_research_closure.author_user_id` vers `Core\User`,
+  omises du diagramme pour ne pas l'alourdir).
   Ce sont les deux socles. On peut les développer et les tester sans aucun des autres.
 - **`Proposal` est le module le plus dépendant** : c'est logique, son métier est de décrire
   des changements sur les autres. C'est aussi celui dont les tests fonctionnels doivent
@@ -3753,8 +3872,8 @@ Lecture de cette carte :
 Le diagramme date de la fondation ; les modules venus depuis — `Demarche`, `Evenement`,
 `Tirage`, `Question`, `Assistant` — y ajoutent leurs flèches, et la commande les parcourt
 toutes. **La liste ci-dessous est celle du code**, et le test
-`api/tests/Integrite/VerifierIntegriteCommandTest.php` la fige : 63 contrôles, dont 21
-tolérés.
+`api/tests/Integrite/VerifierIntegriteCommandTest.php` la fige : 64 contrôles, dont 21
+tolérés (le 64ᵉ, `tree_research_closure.author_user_id`, est celui de l'ADR 0023).
 
 **Comment.** Aucune jointure ne franchit une frontière. Chaque module déclare les
 références qu'il porte, relevées dans ses propres tables
@@ -3775,6 +3894,7 @@ jamais relevées. Une même colonne peut être déclarée sous deux portées.
 | Module | Référence (portée) | Cible | Sort d'une valeur pendante |
 |---|---|---|---|
 | `Tree` | `tree_note.author_user_id` | `core_user` | stricte |
+| `Tree` | `tree_research_closure.author_user_id` (ADR 0023) | `core_user` | stricte |
 | `Membership` | `mbr_member.user_id`, `mbr_member.activated_by_user_id` | `core_user` | stricte |
 | `Membership` | `mbr_member.person_id` | `tree_person` | stricte |
 | `Membership` | `mbr_invitation.person_id` (invitations actives) | `tree_person` | stricte |
@@ -3865,6 +3985,7 @@ le même ordre pour ne pas violer de contrainte.
 | ~~23~~ | ~~`ged_issue`~~ | `ged_run` | supprimée ([ADR 0018](adr/0018-suppression-de-l-import-gedcom.md)) |
 | 24 | `tree_place` | — | variable (une ligne par graphie de lieu résolue, § 0.6) |
 | 25 | `core_email_change` | — | 0 (transitoire : une demande vit 24 h) |
+| 26 | `tree_research_closure` | `tree_person` | 0 à la création (ADR 0023) ; au plus deux par personne |
 
 **Quatre points de vigilance sur cet ordre.**
 
