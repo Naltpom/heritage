@@ -133,7 +133,7 @@ final class FinDeRechercheTest extends BaseDeDemandes
     // --------------------------------------------------------------------- les 422
 
     /**
-     * @param array<string, mixed> $valeur
+     * @param array<array-key, mixed> $valeur
      */
     #[DataProvider('lesValeursRefusees')]
     public function testLesValeursFautivesSontRefuseesAvecLeurChemin(string $champ, array $valeur, string $chemin): void
@@ -147,7 +147,7 @@ final class FinDeRechercheTest extends BaseDeDemandes
         }
     }
 
-    /** @return iterable<string, array{string, array<string, mixed>, string}> */
+    /** @return iterable<string, array{string, array<array-key, mixed>, string}> */
     public static function lesValeursRefusees(): iterable
     {
         yield 'clé manquante' => [self::MERE, ['reason' => 'lacune', 'beforeYear' => null], 'ops[0].newValue'];
@@ -472,8 +472,8 @@ final class FinDeRechercheTest extends BaseDeDemandes
     }
 
     /**
-     * @param array<string, mixed>|null $ancienne
-     * @param array<string, mixed>|null $nouvelle
+     * @param array<array-key, mixed>|null $ancienne
+     * @param array<array-key, mixed>|null $nouvelle
      *
      * @return array<string, mixed>
      */
