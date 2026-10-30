@@ -89,9 +89,16 @@ final readonly class ValeursMasquees
      * Une personne : {@see self::masquee()}. Une famille : un époux masqué suffit
      * ({@see self::sujetFerme()}). Une citation appartient à une personne : c'est elle qui
      * décide. (Un fait, une note ou un média n'ont aucun champ modifiable par un op.)
+     *
+     * **Le seul prédicat** qui décide de taire une valeur à l'auteur : le dépôt (qui propose
+     * alors à l'aveugle), la vue auteur d'une demande, ses révisions et la reprise.
      */
-    public function cibleFermee(SubjectKind $kind, int $id): bool
+    public function cibleFermee(SubjectKind $kind, ?int $id): bool
     {
+        if (null === $id) {
+            return false;
+        }
+
         if (SubjectKind::Citation === $kind) {
             $proprietaire = $this->arbre->chargerCible($kind, $id)?->personneId;
 

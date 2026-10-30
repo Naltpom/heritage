@@ -91,7 +91,7 @@ final readonly class RefaireDemande
             // l'assistant sur un vivant hors de son cercle — ne se pré-remplit pas : la
             // reprise la lui servirait fraîchement relue. L'op est omis, comme celui d'une
             // cible disparue ; le reste de la demande se refait normalement.
-            if ($this->masques->masquee($op->getSubjectKind(), $sujet)) {
+            if ($this->masques->cibleFermee($op->getSubjectKind(), $sujet)) {
                 continue;
             }
 

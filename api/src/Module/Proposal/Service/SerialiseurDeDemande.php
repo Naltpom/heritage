@@ -455,7 +455,7 @@ final readonly class SerialiseurDeDemande
         // demande de l'assistant (l'historique d'une telle fiche est un `404`, § 6.11). Son
         // nom y vaut le masque, et chaque valeur `avant` en est retirée — c'est l'`oldValue`
         // que {@see self::opsSimples()} omet déjà, et qu'une révision recopie.
-        if ($this->masques->masquee($kind, $revision->getSubjectId())) {
+        if ($this->masques->cibleFermee($kind, $revision->getSubjectId())) {
             $changes = self::sansValeursDAvant($changes);
         }
 
@@ -528,7 +528,7 @@ final readonly class SerialiseurDeDemande
             // **omises**, jamais mises à `null` — `null` est une valeur de champ, et
             // l'écran la lirait « vide » (§ 1.3). La vue d'administration, qui remplace
             // ces ops par `opAvecEtat()`, n'est pas concernée : l'administrateur voit tout.
-            if ($this->masques->masquee($op->getSubjectKind(), $op->getSubjectId())) {
+            if ($this->masques->cibleFermee($op->getSubjectKind(), $op->getSubjectId())) {
                 unset($rendu['oldValue'], $rendu['baseVersion']);
             }
 
