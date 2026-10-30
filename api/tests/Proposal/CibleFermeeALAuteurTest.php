@@ -28,6 +28,10 @@ final class CibleFermeeALAuteurTest extends BaseDeDemandes
     {
         yield 'une famille dont un époux est masqué' => ['famille'];
         yield 'une citation d’une personne masquée' => ['citation'];
+        yield 'une citation d’une famille dont un époux est masqué' => ['citation_famille'];
+        // Le port rend le propriétaire d'un fait (sa personne ou sa famille) : pour le double, c'est la même ligne.
+        // `EcritureDeLArbrePourProposalTest::testLaCitationRendSonProprietaire()` montre le chemin réel.
+        yield 'une citation du fait d’une personne masquée' => ['citation_fait'];
     }
 
     #[DataProvider('lesCibles')]
@@ -116,7 +120,14 @@ final class CibleFermeeALAuteurTest extends BaseDeDemandes
             ], $this->lecteur(self::OPALE));
         }
 
-        $this->arbre->poser(SubjectKind::Citation, self::CITATION, 'Registre', 3, ['page' => 'p. 12', 'quay' => 2, 'dataText' => null, 'url' => null], self::PERSONNE);
+        $champs = ['page' => 'p. 12', 'quay' => 2, 'dataText' => null, 'url' => null];
+
+        if ('citation_famille' === $cible) {
+            $this->arbre->poserCouple(self::FAMILLE, 'Marne Dolomite Sureau × Jargon', self::PERSONNE, 61);
+            $this->arbre->poser(SubjectKind::Citation, self::CITATION, 'Registre', 3, $champs, null, self::FAMILLE);
+        } else {
+            $this->arbre->poser(SubjectKind::Citation, self::CITATION, 'Registre', 3, $champs, self::PERSONNE);
+        }
 
         return $this->depot->deposer([
             'kind' => 'modification_citation',

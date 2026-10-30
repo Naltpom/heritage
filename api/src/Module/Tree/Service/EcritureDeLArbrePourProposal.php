@@ -104,7 +104,32 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             return null;
         }
 
-        return new EtatCible($kind, $id, $this->libelle($ligne), $this->version($ligne), $this->valeurs($ligne), $ligne instanceof Citation ? $ligne->getPerson()?->getId() : null);
+        return new EtatCible($kind, $id, $this->libelle($ligne), $this->version($ligne), $this->valeurs($ligne), ...$this->proprietaire($ligne));
+    }
+
+    /**
+     * Le propriétaire d'une citation : sa personne, sinon sa famille, sinon la personne ou
+     * la famille de son fait (`ck_tree_citation_sujet_unique` : une seule des trois lignes).
+     * Les autres lignes n'en ont pas, ou le sont elles-mêmes.
+     *
+     * @return array{0: SubjectKind|null, 1: int|null}
+     */
+    private function proprietaire(object $ligne): array
+    {
+        if (!$ligne instanceof Citation) {
+            return [null, null];
+        }
+
+        $fait = $ligne->getFact();
+        $personne = $ligne->getPerson() ?? $fait?->getPerson();
+
+        if (null !== $personne) {
+            return [SubjectKind::Personne, $personne->getId()];
+        }
+
+        $famille = $ligne->getFamily() ?? $fait?->getFamily();
+
+        return null === $famille ? [null, null] : [SubjectKind::Famille, $famille->getId()];
     }
 
     public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs, ?SignatureDeDemande $signature = null): EcritureAppliquee

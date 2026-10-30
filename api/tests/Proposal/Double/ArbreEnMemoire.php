@@ -171,13 +171,14 @@ final class ArbreEnMemoire implements PortArbre
     /**
      * @param array<string, mixed> $valeurs
      */
-    public function poser(SubjectKind $kind, int $id, string $libelle, int $version, array $valeurs, ?int $personneId = null): self
+    public function poser(SubjectKind $kind, int $id, string $libelle, int $version, array $valeurs, ?int $personneId = null, ?int $familleId = null): self
     {
         self::$lignes[EtatCible::cleDe($kind, $id)] = [
             'libelle' => $libelle,
             'version' => $version,
             'valeurs' => $valeurs,
             'personneId' => $personneId,
+            'familleId' => $familleId,
         ];
 
         return $this;
@@ -223,7 +224,11 @@ final class ArbreEnMemoire implements PortArbre
             return null;
         }
 
-        return new EtatCible($kind, $id, $ligne['libelle'], $ligne['version'], $ligne['valeurs'], $ligne['personneId'] ?? null);
+        return new EtatCible($kind, $id, $ligne['libelle'], $ligne['version'], $ligne['valeurs'], ...match (true) {
+            isset($ligne['personneId']) => [SubjectKind::Personne, $ligne['personneId']],
+            isset($ligne['familleId']) => [SubjectKind::Famille, $ligne['familleId']],
+            default => [null, null],
+        });
     }
 
     public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs, ?SignatureDeDemande $signature = null): EcritureAppliquee
