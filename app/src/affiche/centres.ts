@@ -17,6 +17,7 @@
  */
 import { titre } from './dates'
 import type { Personne } from './donnees'
+import { murDansUnSecteur } from './murs'
 import { ENCRE, ENCRE_DOUCE, melange, PAPIER, TRAIT, type Rgb } from './palette'
 import { Style } from './polices'
 import { f3, polaire, secteur, type Scene } from './scene'
@@ -225,14 +226,22 @@ function titreTient(coeur: Coeur, u: number, r: number, empiles: boolean, demi: 
   return tientDansLeCercle(lignes, bases, r)
 }
 
-/** Le titre posé au plus grand corps qui tient dans le cercle (cx, cy, r), ou dans sa moitié `demi`. */
-function poserLeTitre(scene: Scene, coeur: Coeur, cx: number, cy: number, r: number, empiles: boolean, demi: Demi = null): void {
+/**
+ * Le titre posé au plus grand corps qui tient dans le cercle (cx, cy, r), ou dans sa moitié `demi`.
+ * Rend le rayon où s'arrête le texte : le coin le plus lointain de ses lignes, comme `tientDansLeCercle()`.
+ */
+function poserLeTitre(scene: Scene, coeur: Coeur, cx: number, cy: number, r: number, empiles: boolean, demi: Demi = null): number {
   const u = plusGrand(0.05, 6, (x) => titreTient(coeur, x, r, empiles, demi))
   const { lignes: ls, bases } = titreAuCorps(coeur, u, r, empiles, demi)
+  let rTexte = 0
   ls.forEach((l, i) => {
-    if (l) poserLigne(scene, l, cx, cy + bases[i]!)
-    else ornement(scene, cx, cy + bases[i]!, 30 * u * 0.3528 * 1.6)
+    if (l) {
+      poserLigne(scene, l, cx, cy + bases[i]!)
+      const h = hauteur(l)
+      rTexte = Math.max(rTexte, Math.hypot(largeur(l) / 2, Math.max(Math.abs(bases[i]! - h * 0.78), Math.abs(bases[i]! + h * 0.22))))
+    } else ornement(scene, cx, cy + bases[i]!, 30 * u * 0.3528 * 1.6)
   })
+  return rTexte
 }
 
 /** Les angles (degrés) du cercle entier, ou de la moitié `demi`. */
@@ -254,6 +263,8 @@ interface CaseDuSoleil {
   coupees: Ligne[]
   /** Le couple, dont les noms suivent l'arc de préférence. */
   couple: boolean
+  /** Le couple porte un mur : l'un des deux époux, une seule icône pour la case. */
+  mur: boolean
   enfants: CaseDuSoleil[]
   poids: number
   cote: Cote
@@ -301,8 +312,12 @@ export class SoleilInterieur {
     return sortie
   }
 
-  /** Les cases, chaque anneau à son corps `corps[anneau − 1]` (pour le premier, le nom d'une tête de famille, en points). */
-  private cases(corps: number[]): CaseDuSoleil[] {
+  /**
+   * Les cases, chaque anneau à son corps `corps[anneau − 1]` (pour le premier, le nom d'une tête de famille, en points).
+   * `murs` : dit si une personne porte un mur ; seule la case du couple en pose (les autres
+   * familles sont celles des frères et sœurs, dont l'affiche ne sert pas les parents).
+   */
+  private cases(corps: number[], murs?: (p: Personne) => boolean): CaseDuSoleil[] {
     const construire = (d: Desc, anneau: number, cote: Cote, couple: [Personne, Personne] | null): CaseDuSoleil => {
       const dernier = anneau === this.anneaux
       const b = corps[anneau - 1]!
@@ -324,7 +339,7 @@ export class SoleilInterieur {
       const sous = dernier ? [] : couple ? (d.unions.find(([cj]) => cj?.p.id === couple[1].id)?.[2] ?? []) : enfants(d)
       const fils = sous.map((e) => construire(e, anneau + 1, cote, null))
       const poids = fils.length > 0 ? Math.max(1, fils.reduce((s, f) => s + f.poids, 0)) : 1
-      return { lignes, coupees, couple: couple !== null, enfants: fils, poids: couple ? poids * 1.4 : poids, cote }
+      return { lignes, coupees, couple: couple !== null, mur: couple !== null && couple.some((p) => murs?.(p) === true), enfants: fils, poids: couple ? poids * 1.4 : poids, cote }
     }
     return this.familles.map((f) => construire(f.tete, 1, f.cote, f.couple))
   }
@@ -453,10 +468,13 @@ export class SoleilInterieur {
     return corps
   }
 
-  /** Dessine le soleil intérieur centré sur (cx, cy), de rayon `r`, chaque anneau à son corps. */
-  dessiner(scene: Scene, cx: number, cy: number, r: number, corps: number[], pose: PoseDuSoleil): void {
+  /**
+   * Dessine le soleil intérieur centré sur (cx, cy), de rayon `r`, chaque anneau à son corps.
+   * `murs` : qui porte un mur ; sans lui, aucune icône (la scène est celle d'avant).
+   */
+  dessiner(scene: Scene, cx: number, cy: number, r: number, corps: number[], pose: PoseDuSoleil, murs?: (p: Personne) => boolean): void {
     const bornes = this.bornes()
-    const cases = this.cases(corps)
+    const cases = this.cases(corps, murs)
     const { posees, limites } = this.poser(cases, pose)
     const trait = r * 0.0016
     for (const p of posees) {
@@ -474,7 +492,9 @@ export class SoleilInterieur {
     }
     for (const p of posees) {
       const k = this.part(p, bornes, r)
-      this.texte(scene, cx, cy, r, k === 1 ? p : { ...p, c: { ...p.c, lignes: p.c.lignes.map((l) => echelle(l, k)), coupees: p.c.coupees.map((l) => echelle(l, k)) } }, bornes)
+      const rTexte = this.texte(scene, cx, cy, r, k === 1 ? p : { ...p, c: { ...p.c, lignes: p.c.lignes.map((l) => echelle(l, k)), coupees: p.c.coupees.map((l) => echelle(l, k)) } }, bornes)
+      // Après le texte, sur l'arc extérieur de la case, sans rien déplacer.
+      if (p.c.mur) murDansUnSecteur(scene, cx, cy, bornes[p.anneau]! * r, (p.a1 + p.a2) / 2, 1, { rTexte, ouverture: ((p.a2 - p.a1) * Math.PI) / 180 })
     }
     if (this.coeur) {
       // Au demi-cercle, le cœur est un demi-disque sur la base, et les noms tiennent sur une ligne.
@@ -484,7 +504,8 @@ export class SoleilInterieur {
     }
   }
 
-  private texte(scene: Scene, cx: number, cy: number, r: number, p: CasePosee, bornes: number[]): void {
+  /** Écrit la case ; rend le rayon où s'arrête son texte (pour que le mur ne le recouvre pas). */
+  private texte(scene: Scene, cx: number, cy: number, r: number, p: CasePosee, bornes: number[]): number {
     // (La forme se décide comme pour le rayon requis : la moins gourmande.)
     const { forme } = this.exigence(p, bornes)
     const r1 = bornes[p.anneau - 1]! * r
@@ -536,7 +557,7 @@ export class SoleilInterieur {
           x += lw
         }
       }
-      return
+      return rm + h / 2
     }
     // En rayonnant : à droite du centre, on lit vers l'extérieur ; à gauche, vers le centre.
     const rm = (r1 + r2) / 2
@@ -551,6 +572,8 @@ export class SoleilInterieur {
       poserLigne(scene, l, x, y + lh * 0.78, tr, dispo)
       y += lh
     }
+    // Le texte rayonne depuis le milieu de l'anneau : il s'arrête à la moitié de sa plus longue ligne.
+    return Math.min(r2, rm + Math.min(dispo, Math.max(...ls.map(largeur))) / 2)
   }
 }
 
@@ -646,9 +669,10 @@ export class Rosace {
 
   /**
    * Dessine la rosace de rayon `r` centrée sur (cx, cy) : le cercle entier, tourné de `rotation`,
-   * ou le demi-disque de l'éventail.
+   * ou le demi-disque de l'éventail. `murs` : qui porte un mur ; seul le couple du cœur en pose
+   * (une icône, à son bord), après le titre.
    */
-  dessiner(scene: Scene, cx: number, cy: number, r: number, b: number, rotation = 0): void {
+  dessiner(scene: Scene, cx: number, cy: number, r: number, b: number, rotation = 0, murs?: (p: Personne) => boolean): void {
     const n = this.familles.length
     const demi = this.demi
     const versLeHaut = demi === 'haut'
@@ -662,7 +686,8 @@ export class Rosace {
       const c = g.c * r
       scene.chemin(secteur(cx, cy, 0, c, ...moitie(demi)), PAPIER, TRAIT, c * 0.0067)
       scene.chemin(arc(cx, cy, c * 0.98, demi), 'none', '#F1E8D8', c * 0.04)
-      poserLeTitre(scene, this.coeur, cx, cy, c * 0.86, false, demi)
+      const rTexte = poserLeTitre(scene, this.coeur, cx, cy, c * 0.86, false, demi)
+      if (this.coeur.couple?.some((p) => murs?.(p) === true)) murDansUnSecteur(scene, cx, cy, c, demi === 'bas' ? 315 : 45, 1, { rTexte })
     }
     this.familles.forEach((f, i) => {
       const [x, y] = polaire(cx, cy, rho, angles[i]!)

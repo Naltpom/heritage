@@ -26,7 +26,7 @@ import { ENCRE, ENCRE_DOUCE, melange, TEINTES, TRAIT, type Quartier } from './pa
 import { Style } from './polices'
 import { ReglagesSablier, Sablier, type ModeDeSablier } from './sablier'
 import { Scene } from './scene'
-import { desMurs, aUnMur, TAILLE_DU_MUR } from './murs'
+import { desMurs, aUnMur, murDuCouple, TAILLE_DU_MUR } from './murs'
 import { ascendance, compter, compterQuatreParents, descendance, lienDUnion, quatreParents, type Desc, type LienDUnion, type QuatreParents } from './structure'
 
 export const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
@@ -83,11 +83,6 @@ export type LignesDuTitre = (u: number) => LigneDuTitre[]
 export type LigneDuTitre = [string, Style, number, string?]
 
 /**
- * Les lignes du titre du centre, du bas vers le haut : (texte, style, interligne après) — la
- * descendance en chiffres (`parNiveau`, voir `compter()`), le mariage, ∞, le sous-titre, les deux
- * noms. Au corps `u` (1 : 46 pt pour les noms).
- */
-/**
  * Le signe de l'union de la famille `fam` (même règle que les boîtes, voir `lienDUnion()`) ;
  * sans famille connue, ∞. Le couple de l'affiche n'a pas de rang : on n'en montre qu'un.
  */
@@ -97,6 +92,11 @@ export function lienDeFamille(A: ArbreAffiche, fam: number | null): LienDUnion {
   return lienDUnion({ marie, statut: divorce ? 'div' : null, rang: 1, total: 1 })
 }
 
+/**
+ * Les lignes du titre du centre, du bas vers le haut : (texte, style, interligne après) — la
+ * descendance en chiffres (`parNiveau`, voir `compter()`), le mariage, ∞, le sous-titre, les deux
+ * noms. Au corps `u` (1 : 46 pt pour les noms).
+ */
 export function lignesDuCouple(A: ArbreAffiche, fam: number | null, parNiveau: Map<number, number>, H: Personne, F: Personne): LignesDuTitre {
   const [date, lieu] = fam !== null ? A.mariage(fam) : [null, null]
   const chiffres = chiffresDeDescendance(parNiveau).join(' · ')
@@ -356,7 +356,9 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
 
   const { racineH, racineF, noeuds } = ascendance(A, H, F, options.profondeur ?? Infinity)
   // Y a-t-il un mur à dessiner ? Décidé avant tout, pour que la légende mesurée soit la légende dessinée.
-  const murs = desMurs(A, noeuds, quatre !== null)
+  const murs = desMurs(A, noeuds)
+  // Les quatre parents au centre : le couple n'est plus au premier anneau, c'est le centre qui pose son mur.
+  const murCentre = murDuCouple(A, H, F)
   const reglages = quatre ? new Reglages({ ...(options.reglages ?? new Reglages()), premierAnneauMasque: true }) : options.reglages
   let E = new Eventail(racineH, racineF, noeuds, reglages).calculer()
   const { fam, enfants } = descendance(A, H, F, niveaux)
@@ -385,14 +387,14 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
       const pose = s.poseParDefaut(0, !dessous)
       besoin = Math.max(r0, s.rayonRequis(Array.from({ length: s.anneaux }, () => CORPS_MIN), pose))
       const corps = s.corpsPour(besoin, pose, CORPS_MIN, CORPS_MAX)
-      dedans = { corps: corps[0]!, dessiner: (scene, cx, cy) => s.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, corps, pose) }
+      dedans = { corps: corps[0]!, dessiner: (scene, cx, cy) => s.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, corps, pose, murCentre) }
     } else {
       // Le couple des quatre parents et ses enfants au cœur, les fratries en médaillons autour.
       const enfantsDuCouple = quatre ? (quatre.couple.unions.find(([c]) => c?.p.id === F.id)?.[2] ?? []).map((d) => d.p) : []
       const rosace = new Rosace(quatre ? fratries : enfants.map(cote('n')), quatre ? { ...coeur, couple: [H, F], lien: lienDuCouple(quatre.couple, F), enfants: enfantsDuCouple } : coeur, false, !dessous)
       const b = rosace.corpsPour(r0, CORPS_MIN, CORPS_MAX)
       besoin = Math.max(r0, rosace.rayonRequis(b))
-      dedans = { corps: b, dessiner: (scene, cx, cy) => rosace.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, b) }
+      dedans = { corps: b, dessiner: (scene, cx, cy) => rosace.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, b, 0, murCentre) }
     }
     if (besoin > r0 * 1.0001) E = new Eventail(racineH, racineF, noeuds, new Reglages({ ...(reglages ?? new Reglages()), rayonCentralMin: besoin / CENTRE_DANS_LE_DISQUE })).calculer()
   }
@@ -500,14 +502,15 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
     }
     kl = Math.min(lo, 1.15) // pas plus grand qu'il ne faut : le corps imprimé reste confortable
   }
-  const hauteur = kl !== null ? basDesc + marge : basDesc + 22 + 52 * Math.max(1.0, W / 1100) + marge
+  // Sous le dessin, la légende réserve 52·kl, et 5,4·kl de plus quand elle porte la ligne du mur.
+  const hauteur = kl !== null ? basDesc + marge : basDesc + 22 + (52 + (murs ? 5.4 : 0)) * Math.max(1.0, W / 1100) + marge
 
   const scene = new Scene(W, hauteur)
   E.dessiner(scene, W / 2, cy, (p) => aUnMur(A, p))
   reperesAnnees(scene, E, W / 2, cy)
   if (dedans) dedans.dessiner(scene, W / 2, cy)
   else centreCouple(scene, E, W / 2, cy, lignes)
-  if (bandes) dessinerLesBandes(scene, bandes, W / 2, cy, dessous)
+  if (bandes) dessinerLesBandes(scene, bandes, W / 2, cy, dessous, murCentre)
   else if (!dedans) dessinerDesc(scene, enfants, [W / 2, cy], regles, dessous)
   if (kl !== null && dessous) {
     // Chaque bloc finit sur le bas de l'éventail.
@@ -580,7 +583,8 @@ export function afficheSablier(A: ArbreAffiche, hId: number, fId: number, mode: 
   const yDesc = oy + 16
   const basDesc = placerDesc(enfants, ox - largDesc / 2, yDesc, hauteurs, regles)
   const kl = Math.max(1.0, Math.min(1.6, W / 1100))
-  const hauteur = basDesc + 24 + 52 * kl + marge
+  // La légende réserve 52·kl, et 5,4·kl de plus quand elle porte la ligne du mur.
+  const hauteur = basDesc + 24 + (52 + (murs ? 5.4 : 0)) * kl + marge
 
   const scene = new Scene(W, hauteur)
   entete(scene, W / 2, marge, H, F)

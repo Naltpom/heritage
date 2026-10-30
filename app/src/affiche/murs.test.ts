@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { BRIQUE, epaisseurDuMur } from '@/lib/finDeRecherche'
 import { ArbreAffiche } from './donnees'
-import { arbreDeCousins, arbreFictif, avecFinsDeRecherche, mursDeLaScene } from './essai/arbreFictif'
-import { aUnMur, desMurs, murDansUneCase, murDansUnSecteur, TAILLE_DU_MUR, TAILLE_MIN } from './murs'
+import { arbreDeCousins, arbreFictif, avecFinsDeRecherche, avecLeCoupleEnFinDeRecherche, mursDeLaScene } from './essai/arbreFictif'
+import { aUnMur, desMurs, murDansUneCase, murDansUnSecteur, murDuCouple, TAILLE_DU_MUR, TAILLE_MIN } from './murs'
 import { Scene } from './scene'
 import { ascendance } from './structure'
 
@@ -67,12 +67,32 @@ describe('qui porte un mur', () => {
     for (const n of tous.filter((x) => x.tronque)) expect(aUnMur(A, n.p)).toBe(false)
   })
 
-  it('desMurs() ignore le couple masqué (les quatre parents au centre)', () => {
+  it('desMurs() compte le couple, même quand son premier anneau est masqué (les quatre parents au centre)', () => {
     const cousins = avecFinsDeRecherche(arbreDeCousins()).essai
     const C = new ArbreAffiche(cousins.charge)
     const { noeuds } = ascendance(C, C.P.get(cousins.mari)!, C.P.get(cousins.femme)!, Infinity)
     expect(desMurs(C, noeuds)).toBe(true)
     expect(desMurs(new ArbreAffiche(arbreFictif().charge), noeuds.slice(0, 3))).toBe(false)
+
+    // Le couple seul porte un mur : il suffit à la légende.
+    const couple = avecLeCoupleEnFinDeRecherche(arbreDeCousins())
+    const A = new ArbreAffiche(couple.charge)
+    const sansAncetres = ascendance(A, A.P.get(couple.mari)!, A.P.get(couple.femme)!, Infinity).noeuds
+    expect(sansAncetres.filter((n) => aUnMur(A, n.p)).map((n) => n.niveau)).toEqual([0])
+    expect(desMurs(A, sansAncetres)).toBe(true)
+  })
+
+  it('murDuCouple() ne désigne que les deux époux', () => {
+    const couple = avecLeCoupleEnFinDeRecherche(arbreDeCousins())
+    const A = new ArbreAffiche(couple.charge)
+    const H = A.P.get(couple.mari)!
+    const F = A.P.get(couple.femme)!
+    const mur = murDuCouple(A, H, F)
+
+    expect(mur(F)).toBe(true)
+    expect(mur(H)).toBe(false)
+    // Un frère, un enfant : jamais, même avec une fin de recherche.
+    for (const p of A.P.values()) if (p.id !== F.id) expect(mur(p)).toBe(false)
   })
 })
 

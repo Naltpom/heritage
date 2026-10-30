@@ -9,6 +9,7 @@ import { ligneVie, type StyleDeDate } from './dates'
 import type { Personne } from './donnees'
 import { couleur, ENCRE, ENCRE_DOUCE, FOND_CONJOINT, FOND_DESC, TRAIT } from './palette'
 import { Style } from './polices'
+import { murDansUneCase } from './murs'
 import { f3, type Scene } from './scene'
 import { lienDUnion, type Desc, type InfoUnion, type StatutDUnion } from './structure'
 
@@ -276,11 +277,16 @@ export function peigne(scene: Scene, origine: readonly [number, number], enf: De
  * `depart` = (x, y) du point d'où descend le trait vers les enfants du couple — d'où il monte,
  * quand le bloc a été retourné (`inverse`, voir {@link inverserDesc}) ; `null` : pas de trait,
  * l'appelant tire les siens.
+ *
+ * `murs` : dit si une personne porte un mur (`aUnMur()`) ; sans lui, aucune icône. Les
+ * descendants n'en ont jamais : l'appelant ne le passe que pour le couple des quatre parents.
  */
-export function dessinerDesc(scene: Scene, enfants: Desc[], depart: readonly [number, number] | null, regles: ReglesDesc, inverse = false): void {
+export function dessinerDesc(scene: Scene, enfants: Desc[], depart: readonly [number, number] | null, regles: ReglesDesc, inverse = false, murs?: (p: Personne) => boolean): void {
   const boite = (d: Desc, fond: string): void => {
     scene.rectangle(d.x, d.y, d.w, d.h, fond, TRAIT, 0.25)
-    d.bloc!.dessiner(scene, d.x + d.w / 2, d.y + d.h / 2, d.w - 2 * d.bloc!.mx)
+    const b = d.bloc!
+    b.dessiner(scene, d.x + d.w / 2, d.y + d.h / 2, d.w - 2 * b.mx)
+    if (murs?.(d.p)) murDansUneCase(scene, d.x, d.y, d.w, d.h, 1, [Math.min(b.largeurTexte, d.w - 2 * b.mx), b.hauteurTexte])
   }
 
   const dessiner = (d: Desc): void => {

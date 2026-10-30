@@ -96,6 +96,9 @@ describe.each(['normal', 'dense'] as const)('le mur du sablier (%s)', (mode) => 
     const attendus = mursAttendus(avec)
     expect(attendus).toBeGreaterThanOrEqual(sommets.length)
     expect(mursDeLaScene(close.scene)).toHaveLength(attendus + 1)
+    // Le nombre, en dur : les trois sommets clos par `avecFinsDeRecherche()`, plus la légende.
+    expect(attendus).toBe(3)
+    expect(mursDeLaScene(close.scene)).toHaveLength(3 + 1)
     expect(legendeDuMurPresente(close.scene)).toBe(true)
     expect(versSvg(close.scene)).not.toMatch(/NaN|Infinity/)
   })
@@ -104,6 +107,13 @@ describe.each(['normal', 'dense'] as const)('le mur du sablier (%s)', (mode) => 
     const sans = produire(arbreFictif(), mode)
     expect(mursDeLaScene(sans.scene)).toHaveLength(0)
     expect(legendeDuMurPresente(sans.scene)).toBe(false)
+  })
+
+  it('réserve la ligne du mur sous le dessin : 5,4·kl de plus que sans mur', () => {
+    const sans = produire(arbreFictif(), mode)
+    // La légende du sablier est toujours sous le dessin, à l'échelle `kl` de la page.
+    const kl = Math.max(1, Math.min(1.6, close.scene.largeur / 1100))
+    expect(close.scene.hauteur - sans.scene.hauteur).toBeCloseTo(5.4 * kl, 9)
   })
 
   it('ne déplace aucune case : même largeur d’arbre et de page', () => {

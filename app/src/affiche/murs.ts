@@ -43,12 +43,23 @@ export function aUnMur(A: ArbreAffiche, p: Personne): boolean {
 }
 
 /**
- * L'affiche dessine-t-elle au moins un mur ? Sur les ancêtres **effectivement dessinés** :
- * quand le premier anneau est masqué (les quatre parents au centre), le couple ne l'est pas.
+ * L'affiche dessine-t-elle au moins un mur ? Sur tous les ancêtres, **le couple compris** :
+ * quand le premier anneau de l'éventail est masqué (les quatre parents au centre), le couple
+ * n'y est plus, mais il est dessiné au centre — qui pose son mur (`centres.ts`, `boites.ts`).
  * C'est elle qui décide de la ligne de légende, mesurée comme dessinée.
+ *
+ * Les conjoints des descendants n'ont jamais de mur : l'affiche ne sert pas leurs parents.
  */
-export function desMurs(A: ArbreAffiche, noeuds: readonly Anc[], premierAnneauMasque = false): boolean {
-  return noeuds.some((n) => (n.niveau > 0 || !premierAnneauMasque) && aUnMur(A, n.p))
+export function desMurs(A: ArbreAffiche, noeuds: readonly Anc[]): boolean {
+  return noeuds.some((n) => aUnMur(A, n.p))
+}
+
+/**
+ * Qui porte un mur **au centre** (les quatre parents) : le couple, et lui seul — ses frères et
+ * sœurs et leurs descendants n'ont pas leurs parents servis par l'affiche.
+ */
+export function murDuCouple(A: ArbreAffiche, H: Personne, F: Personne): (p: Personne) => boolean {
+  return (p) => (p.id === H.id || p.id === F.id) && aUnMur(A, p)
 }
 
 /** Un mur de côté `taille` dont le coin haut gauche est en (x, y). */

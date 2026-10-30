@@ -12,6 +12,7 @@ import { barreDuSigne } from './centres'
 import { dessinerDesc, inverserDesc, mesurerDesc, peigne, placerDesc, ReglesDesc } from './boites'
 import type { Style } from './polices'
 import type { LigneDuTitre, LignesDuTitre } from './fabriquer'
+import type { Personne } from './donnees'
 import type { Scene } from './scene'
 import type { Desc, QuatreParents } from './structure'
 
@@ -204,8 +205,9 @@ export function agencer(familles: Familles, lignes: LignesDuTitre | null, e: num
 /**
  * Pose le bloc agencé sur le centre (cx, cy). `inverse` : retourné autour de la base de
  * l'éventail qui descend — les bandes au-dessus, les troncs qui montent (sans titre).
+ * `murs` : qui porte un mur (le couple du milieu seul, voir `murDuCouple()`) ; sans lui, aucune icône.
  */
-export function dessinerLesBandes(scene: Scene, a: Agencement, cx: number, cy: number, inverse = false): void {
+export function dessinerLesBandes(scene: Scene, a: Agencement, cx: number, cy: number, inverse = false, murs?: (p: Personne) => boolean): void {
   const haut = cy + a.haut
   a.titre.lignes.forEach(([t, st, barre], i) => {
     const y = haut + a.titre.bases[i]!
@@ -234,7 +236,7 @@ export function dessinerLesBandes(scene: Scene, a: Agencement, cx: number, cy: n
     }
   }
   if (inverse) inverserDesc([...(a.couple ? [a.couple.desc] : []), ...a.troncs.flatMap((t) => t.bandes.flatMap((b) => b.enfants))], 2 * cy)
-  if (a.couple) dessinerDesc(scene, [a.couple.desc], null, a.regles, inverse)
+  if (a.couple) dessinerDesc(scene, [a.couple.desc], null, a.regles, inverse, murs)
   for (const tronc of a.troncs) {
     const xt = cx + tronc.x
     let depart: [number, number] = [xt, inverse ? cy - a.depart : cy + a.depart]
