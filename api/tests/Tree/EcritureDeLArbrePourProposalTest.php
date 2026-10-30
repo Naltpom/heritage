@@ -101,9 +101,13 @@ final class EcritureDeLArbrePourProposalTest extends KernelTestCase
         // Tous les champs, jamais un sous-ensemble : le verrou n° 2 compare ces valeurs
         // aux `old_value` des ops, et ce qu'il ne voit pas, il ne peut pas refuser.
         self::assertSame(
-            ['givenNames', 'surname', 'marriedName', 'nickname', 'sex', 'deceased', 'birth', 'death', 'forcePrivacy', 'privacyNote'],
+            ['givenNames', 'surname', 'marriedName', 'nickname', 'sex', 'deceased', 'birth', 'death', 'forcePrivacy', 'privacyNote', 'finDeRecherchePere', 'finDeRechercheMere'],
             array_keys($etat->valeurs),
         );
+        // Sans elles la caducité d'une fin de recherche serait indétectable (ADR 0023) ; `null`
+        // est leur valeur « pas de fin de recherche », et reste une clé du tableau.
+        self::assertNull($etat->valeurs['finDeRecherchePere']);
+        self::assertNull($etat->valeurs['finDeRechercheMere']);
         // Les énumérations traversent le port en **chaîne** : `Proposal` ne peut pas
         // nommer `Tree\Enum\…` sans enfreindre la règle 3 de l'ADR 0002.
         self::assertSame('feminin', $etat->valeurs['sex']);

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Serializer;
 
+use App\Module\Core\Enum\CoteDeRecherche;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\ValueObject\ComposantesDeDate;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Tree\Entity\Child;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Entity\ResearchClosure;
 use App\Module\Tree\Enum\ChildRelation;
 use App\Module\Tree\Service\ReglagesDeLArbre;
 
@@ -188,9 +190,12 @@ final readonly class NormaliseurDAffiche
         ksort($personnes);
         ksort($familles);
 
+        // Les fins de recherche de toute l'affiche, en une requête (ADR 0023).
+        $fins = $this->lecture->finsDeRechercheDes(array_keys($personnes));
+
         $sortiePersonnes = [];
         foreach ($personnes as $personne) {
-            $sortiePersonnes[] = $this->personne($personne, $cercle, $vivants);
+            $sortiePersonnes[] = $this->personne($personne, $cercle, $vivants, $fins[(int) $personne->getId()] ?? []);
         }
 
         $sortieFamilles = [];
@@ -245,9 +250,11 @@ final readonly class NormaliseurDAffiche
      * montre pas — liste blanche littérale, écrite à part, jamais une forme complète dont on
      * retirerait des clés (même règle que {@see NormaliseurDePersonne}).
      *
+     * @param array{pere?: ResearchClosure, mere?: ResearchClosure} $fins les fins de recherche de la personne, lues en lot
+     *
      * @return array<string, mixed>
      */
-    private function personne(Person $personne, CercleDuLecteur $cercle, EtatVivant $vivants): array
+    private function personne(Person $personne, CercleDuLecteur $cercle, EtatVivant $vivants, array $fins = []): array
     {
         $id = $personne->getId();
         $vivante = $vivants->estVivante($personne);
@@ -263,7 +270,7 @@ final readonly class NormaliseurDAffiche
             ];
         }
 
-        return [
+        $complete = [
             'id' => $id,
             'visibilite' => NiveauDeVisibilite::Complete->value,
             'givenNames' => $personne->getGivenNames(),
@@ -276,6 +283,18 @@ final readonly class NormaliseurDAffiche
             'birth' => $this->naissance($personne->getBirth(), $cercle->naissance($id, $vivante)),
             'death' => $this->dates->pourFiche($personne->getDeath()),
         ];
+
+        // Le résumé `{reason, beforeYear}`, **absent** quand le côté n'est pas clos, et
+        // jamais sur une personne restreinte — la règle des notes (ADR 0023).
+        foreach (CoteDeRecherche::cases() as $cote) {
+            $ligne = $fins[$cote->value] ?? null;
+
+            if (null !== $ligne) {
+                $complete[$cote->champ()] = ['reason' => $ligne->getReason()->value, 'beforeYear' => $ligne->getBeforeYear()];
+            }
+        }
+
+        return $complete;
     }
 
     /**

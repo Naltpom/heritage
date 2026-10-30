@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\ValueObject\FinDeRecherche;
 use App\Module\Proposal\Contract\InventaireDeSuppression;
 use App\Module\Proposal\Contract\LienARetirer;
 use App\Module\Proposal\Contract\RetraitDeLien;
@@ -14,6 +15,7 @@ use App\Module\Proposal\Entity\DraftLink;
 use App\Module\Proposal\Enum\OpKind;
 use App\Module\Proposal\Enum\RequestKind;
 use App\Module\Proposal\Enum\RequestStatus;
+use App\Module\Proposal\Enum\ValueKind;
 use App\Module\Proposal\Repository\ChangeRequestOpRepository;
 use App\Module\Proposal\Repository\ChangeRequestRepository;
 use App\Module\Proposal\Repository\DraftLinkRepository;
@@ -598,14 +600,21 @@ final readonly class AnalyseDeDemande
     {
         $stocke = $op->getOldValue();
 
-        if (\is_array($stocke)) {
-            return $this->normaliseur->versJson(
-                $op->getValueKind(),
-                $this->normaliseur->reconstruire($stocke),
-            );
+        if (!\is_array($stocke)) {
+            return $stocke;
         }
 
-        return $stocke;
+        // Tout `old_value` objet n'est pas un bloc date : une fin de recherche (ADR 0023)
+        // se relit par son propre constructeur, sinon toute modification ou levée serait
+        // caduque d'office. Les autres natures sont comparées telles quelles.
+        return match ($op->getValueKind()) {
+            ValueKind::DateIncertaine => $this->normaliseur->versJson(
+                $op->getValueKind(),
+                $this->normaliseur->reconstruire($stocke),
+            ),
+            ValueKind::FinDeRecherche => FinDeRecherche::depuisJson($stocke)?->versJson(),
+            default => $stocke,
+        };
     }
 
     private static function nature(mixed $valeur): ?bool

@@ -15,6 +15,7 @@ use App\Module\Proposal\Contract\LienARetirer;
 use App\Module\Proposal\Contract\LienRetire;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\RetraitDeLien;
+use App\Module\Proposal\Contract\SignatureDeDemande;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 
@@ -64,6 +65,7 @@ use App\Module\Proposal\Contract\VocabulaireDAnnotation;
  * | `booleen`         | `bool`                                                    |
  * | `enum`            | **`string` \| `null`** — la *valeur* de l'énumération      |
  * | `date_incertaine` | `Core\ValueObject\UncertainDate`, jamais `null`           |
+ * | `fin_de_recherche`| `Core\ValueObject\FinDeRecherche` \| `null`               |
  *
  * **`enum` traverse en chaîne et non en objet, délibérément** : `CitationQuality` est
  * une énumération de `Tree`, que `Proposal` ne peut pas nommer sans enfreindre la
@@ -108,10 +110,16 @@ interface PortArbre
      *                                      `Proposal\Service\SurfaceEditable` : jamais
      *                                      une colonne dérivée, jamais `version`.
      *
+     * @param SignatureDeDemande|null $signature le déposant et la date de dépôt de la demande
+     *                                           (ADR 0023, § 5). Le validateur la passe **toujours** ;
+     *                                           `Tree` en signe une fin de recherche, et **lève** si
+     *                                           un tel champ arrive sans elle plutôt que de
+     *                                           l'écrire sans auteur
+     *
      * @throws \Doctrine\ORM\OptimisticLockException si une transaction concurrente a
      *                                               touché la ligne — à laisser remonter telle quelle
      */
-    public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs): EcritureAppliquee;
+    public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs, ?SignatureDeDemande $signature = null): EcritureAppliquee;
 
     /**
      * Insère une personne proposée, et rend son identifiant réel.
@@ -137,6 +145,18 @@ interface PortArbre
      * cas que le contrat nomme.
      */
     public function chargerSource(int $id): ?SourceCitable;
+
+    /**
+     * De quels côtés la personne a-t-elle un parent lié ? — **aucune écriture**, appelée au
+     * dépôt (ADR 0023, § 4).
+     *
+     * Vrai pour `pere` (resp. `mere`) si **une** famille dont la personne est l'enfant
+     * (`tree_child`, toute relation) a un époux (resp. une épouse). C'est ce qui refuse de
+     * poser une fin de recherche là où la recherche n'est pas close.
+     *
+     * @return array{pere: bool, mere: bool}
+     */
+    public function cotesConnus(int $personneId): array;
 
     /**
      * Les deux vocabulaires fermés d'une citation — **aucune écriture**, appelée au dépôt.

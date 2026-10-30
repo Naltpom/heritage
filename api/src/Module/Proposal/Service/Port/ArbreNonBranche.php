@@ -14,6 +14,7 @@ use App\Module\Proposal\Contract\LienARetirer;
 use App\Module\Proposal\Contract\LienRetire;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\RetraitDeLien;
+use App\Module\Proposal\Contract\SignatureDeDemande;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 
@@ -42,7 +43,12 @@ final readonly class ArbreNonBranche implements PortArbre
         throw new \LogicException(self::MESSAGE);
     }
 
-    public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs): EcritureAppliquee
+    public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs, ?SignatureDeDemande $signature = null): EcritureAppliquee
+    {
+        throw new \LogicException(self::MESSAGE);
+    }
+
+    public function cotesConnus(int $personneId): array
     {
         throw new \LogicException(self::MESSAGE);
     }

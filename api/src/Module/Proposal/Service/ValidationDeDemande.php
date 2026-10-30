@@ -11,6 +11,7 @@ use App\Module\Proposal\Contract\ApplicateurDOperation;
 use App\Module\Proposal\Contract\DemandeEnCours;
 use App\Module\Proposal\Contract\EcritureDeRevision;
 use App\Module\Proposal\Contract\OpEnAttente;
+use App\Module\Proposal\Contract\SignatureDeDemande;
 use App\Module\Proposal\Entity\ChangeRequest;
 use App\Module\Proposal\Entity\ChangeRequestOp;
 use App\Module\Proposal\Entity\Revision;
@@ -254,7 +255,7 @@ final readonly class ValidationDeDemande
         // quarantaine de fois et dépassait les 30 s de PHP (demande 4178, 04/10/2026).
         /** @var list<EcritureDeRevision> $ecritures */
         $ecritures = $this->arbre->enUnLot(fn (): array => [
-            ...$this->appliquerLesChamps($plan, $demande),
+            ...$this->appliquerLesChamps($plan, $demande, $maintenant),
             ...$this->appliquerLesAutresOps($plan, $demande, $lecteur),
             ...$this->appliquerLaNature($plan, $demande, $lecteur),
         ]);
@@ -308,12 +309,14 @@ final readonly class ValidationDeDemande
      *
      * @return list<EcritureDeRevision>
      */
-    private function appliquerLesChamps(PlanDeValidation $plan, ChangeRequest $demande): array
+    private function appliquerLesChamps(PlanDeValidation $plan, ChangeRequest $demande, \DateTimeImmutable $maintenant): array
     {
         $ecritures = [];
+        // Le déposant et la date du **dépôt**, jamais le validateur (ADR 0023, § 5).
+        $signature = new SignatureDeDemande($demande->getAuthorUserId(), $demande->getAuthorLabel(), $demande->getSubmittedAt() ?? $maintenant);
 
         foreach ($this->regrouperParLigne($plan) as $lot) {
-            $applique = $this->arbre->appliquerChamps($lot['kind'], $lot['id'], $lot['valeurs']);
+            $applique = $this->arbre->appliquerChamps($lot['kind'], $lot['id'], $lot['valeurs'], $signature);
 
             $ecritures[] = new EcritureDeRevision(
                 $lot['kind'],

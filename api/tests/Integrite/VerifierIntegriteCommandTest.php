@@ -110,6 +110,7 @@ final class VerifierIntegriteCommandTest extends KernelTestCase
         'qst_question_demande.demande_id',
         'tml_preference.user_id',
         'tree_note.author_user_id',
+        'tree_research_closure.author_user_id',
     ];
 
     /** Celles dont une valeur pendante est attendue — historique, preuve, caducité prévue. */
@@ -178,6 +179,8 @@ final class VerifierIntegriteCommandTest extends KernelTestCase
         $libelles = array_map(static fn (ControleDIntegrite $c): string => $c->reference->libelle(), $rapport->controles);
         sort($libelles);
 
+        self::assertCount(64, $libelles, 'Le § 10.8 de docs/modele-donnees.md annonce 64 contrôles (ADR 0023 : tree_research_closure.author_user_id).');
+        self::assertContains('tree_research_closure.author_user_id', $libelles);
         self::assertSame(self::RECENSEMENT, $libelles, 'Une référence a été ajoutée ou retirée : mettez à jour ce recensement ET le § 10.8 de docs/modele-donnees.md.');
 
         foreach ($rapport->controles as $controle) {
@@ -433,6 +436,9 @@ final class VerifierIntegriteCommandTest extends KernelTestCase
             ],
             'tree_note' => [
                 ['id' => 1, 'body' => 'Note', 'author_user_id' => 1, 'person_id' => 1, 'created_at' => $quand, 'updated_at' => $quand],
+            ],
+            'tree_research_closure' => [
+                ['id' => 1, 'person_id' => 1, 'side' => 'pere', 'reason' => 'registres_detruits', 'author_user_id' => 1, 'closed_at' => $quand, 'created_at' => $quand, 'updated_at' => $quand],
             ],
             'mbr_invitation' => [
                 ['id' => 1, 'token_hash' => str_repeat('a', 64), 'token_prefix' => 'aaaaaaaa', 'person_id' => 1, 'person_label' => 'Opale Sureau', 'status' => 'active', 'created_by_user_id' => 1, 'created_by_email' => 'admin@example.invalid', 'created_at' => $quand],

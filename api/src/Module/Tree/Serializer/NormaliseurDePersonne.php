@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Tree\Serializer;
 
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
+use App\Module\Core\Enum\CoteDeRecherche;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Tree\Entity\Child;
@@ -13,6 +14,7 @@ use App\Module\Tree\Entity\Fact;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Note;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Entity\ResearchClosure;
 use App\Module\Tree\Service\AdressesDArbresEnLigne;
 
 /**
@@ -199,6 +201,10 @@ final readonly class NormaliseurDePersonne
             'citations' => $this->citations($citations, $lecteur),
             'notes' => $this->notes($this->lecture->notesDePersonne($personne)),
             'medias' => null !== $id ? $this->medias->mediasDePersonne($id, $lecteur) : [],
+            // Les fins de recherche suivent la règle des notes (ADR 0023) : servies ici, avec
+            // la fiche complète, jamais avec la réduite. Toujours présentes, `null` compris —
+            // ce sont des champs de la surface, et leur clé est celle du calque.
+            ...$this->finsDeRecherche($this->lecture->finsDeRechercheDe($personne)),
             // Le calque et le cercle sont deux filtres **composés**, jamais substitués
             // (ADR 0004). On n'arrive ici que si le cercle a déjà dit oui ; une personne
             // vivante hors cercle n'a pas de clé `enAttente` **du tout**, pas un calque
@@ -264,7 +270,7 @@ final readonly class NormaliseurDePersonne
     /**
      * @param list<Child> $filiations
      *
-     * @return list<array{personId: int|null, displayName: string, relation: string, familyId: int|null}>
+     * @return list<array{personId: int|null, displayName: string, relation: string, familyId: int|null, cote: string}>
      */
     private function parents(array $filiations, Person $personne, CercleDuLecteur $cercle, EtatVivant $vivants): array
     {
@@ -286,6 +292,9 @@ final readonly class NormaliseurDePersonne
                     // même quand un époux est masqué.
                     'relation' => $filiation->getRelation()->value,
                     'familyId' => $famille->getId(),
+                    // La place que `Tree` lui a donnée dans sa famille, pas une déduction du
+                    // sexe : c'est elle qui dit de quel côté un parent est connu (ADR 0023).
+                    'cote' => $parent === $famille->getHusband() ? 'pere' : 'mere',
                 ] + $this->datesVisibles($parent, $cercle, $vivants);
             }
         }
@@ -450,6 +459,30 @@ final readonly class NormaliseurDePersonne
                 // a été ajouté. C'est la date de la **ligne**, pas celle de l'acte : une
                 // citation venue de l'import GEDCOM initial porte la date de cet import.
                 'createdAt' => $citation->getCreatedAt()->format(\DateTimeInterface::ATOM),
+            ];
+        }
+
+        return $sortie;
+    }
+
+    /**
+     * @param array{pere?: ResearchClosure, mere?: ResearchClosure} $fins
+     *
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function finsDeRecherche(array $fins): array
+    {
+        $sortie = [];
+
+        foreach (CoteDeRecherche::cases() as $cote) {
+            $ligne = $fins[$cote->value] ?? null;
+
+            $sortie[$cote->champ()] = null === $ligne ? null : [
+                'reason' => $ligne->getReason()->value,
+                'beforeYear' => $ligne->getBeforeYear(),
+                'body' => $ligne->getBody(),
+                'authorLabel' => $ligne->getAuthorLabel(),
+                'closedAt' => $ligne->getClosedAt()->format(\DateTimeInterface::ATOM),
             ];
         }
 

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Enum\DateQualifier;
+use App\Module\Core\Enum\MotifDeFinDeRecherche;
+use App\Module\Core\ValueObject\FinDeRecherche;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Enum\ValueKind;
 use App\Module\Proposal\Exception\DonneesInvalides;
@@ -42,6 +44,15 @@ final class NormaliseurDeValeur
     /** Les cinq clés d'une valeur `date_incertaine`, toujours les cinq. */
     private const array CLES_DATE = ['raw', 'qualifier', 'min', 'max', 'place'];
 
+    /** Les trois clés d'une valeur `fin_de_recherche`, toujours les trois (ADR 0023). */
+    private const array CLES_FIN_DE_RECHERCHE = ['reason', 'beforeYear', 'body'];
+
+    /** La longueur maximale du texte d'une fin de recherche, en caractères. */
+    public const int LONGUEUR_MAX_FIN_DE_RECHERCHE = 4000;
+
+    /** La première année admise pour `registres_inexistants`. */
+    public const int PREMIERE_ANNEE_FIN_DE_RECHERCHE = 1000;
+
     /**
      * JSON venu d'une requête ou de `JSONB` → valeur PHP prête pour le port.
      *
@@ -60,6 +71,7 @@ final class NormaliseurDeValeur
             ValueKind::Booleen => $nulAdmis && null === $json ? null : $this->booleen($json, $chemin),
             ValueKind::Enum => $this->texte($json, $chemin),
             ValueKind::DateIncertaine => $this->blocDate($json, $chemin),
+            ValueKind::FinDeRecherche => $this->finDeRecherche($json, $chemin),
             // Les cinq formes composées (référence, lien, média, citation, note) ne sont
             // pas appliquées par un op de champ : elles passent par leur applicateur
             // dédié, qui connaît leur forme. Voir ApplicateurDOperation.
@@ -89,6 +101,10 @@ final class NormaliseurDeValeur
             return $valeurPhp instanceof UncertainDate
                 ? $this->dateVersJson($valeurPhp)
                 : $this->dateVersJson(UncertainDate::inconnue());
+        }
+
+        if (ValueKind::FinDeRecherche === $kind) {
+            return $valeurPhp instanceof FinDeRecherche ? $valeurPhp->versJson() : null;
         }
 
         if ($valeurPhp instanceof \BackedEnum) {
@@ -121,6 +137,11 @@ final class NormaliseurDeValeur
      */
     public function pourAffichage(ValueKind $kind, mixed $json): mixed
     {
+        if (ValueKind::FinDeRecherche === $kind) {
+            // La forme canonique à trois clés, aucune clé d'affichage ajoutée (§ 13.1).
+            return \is_array($json) ? FinDeRecherche::depuisJson($json)?->versJson() : null;
+        }
+
         if (ValueKind::DateIncertaine !== $kind || !\is_array($json)) {
             return $json;
         }
@@ -140,6 +161,10 @@ final class NormaliseurDeValeur
     {
         if ('married' === $champ && (null === $json || \is_bool($json))) {
             return self::natureEnClair($json);
+        }
+
+        if (ValueKind::FinDeRecherche === $kind) {
+            return \is_array($json) && null !== ($fin = FinDeRecherche::depuisJson($json)) ? $fin->enClair() : '(aucune)';
         }
 
         if (ValueKind::DateIncertaine === $kind && \is_array($json)) {
@@ -284,6 +309,63 @@ final class NormaliseurDeValeur
             $max,
             \is_string($json['place']) ? $json['place'] : null,
         );
+    }
+
+    /**
+     * Une fin de recherche : `null`, ou un objet à trois clés exactement (ADR 0023, § 6.2 bis).
+     */
+    private function finDeRecherche(mixed $json, string $chemin): ?FinDeRecherche
+    {
+        if (null === $json) {
+            return null;
+        }
+
+        if (!\is_array($json) || array_is_list($json)) {
+            throw DonneesInvalides::pourChamp($chemin, 'Une fin de recherche est un objet à trois clés, ou null.');
+        }
+
+        foreach (self::CLES_FIN_DE_RECHERCHE as $cle) {
+            if (!\array_key_exists($cle, $json)) {
+                throw DonneesInvalides::pourChamp($chemin, \sprintf('La clé « %s » manque : une fin de recherche en porte toujours trois.', $cle));
+            }
+        }
+
+        $surplus = array_diff(array_keys($json), self::CLES_FIN_DE_RECHERCHE);
+        if ([] !== $surplus) {
+            throw DonneesInvalides::pourChamp($chemin, \sprintf('Clé inattendue dans la fin de recherche : %s. « authorLabel » et « closedAt » sont en lecture seule et doivent être retirés avant envoi.', implode(', ', array_map(strval(...), $surplus))));
+        }
+
+        $motif = \is_string($json['reason']) ? MotifDeFinDeRecherche::tryFrom($json['reason']) : null;
+        if (null === $motif) {
+            throw DonneesInvalides::pourChamp($chemin.'.reason', 'Motif de fin de recherche inconnu.');
+        }
+
+        $annee = null;
+        if ($motif->avecAnnee()) {
+            $maximum = (int) (new \DateTimeImmutable())->format('Y');
+            if (!\is_int($json['beforeYear']) || $json['beforeYear'] < self::PREMIERE_ANNEE_FIN_DE_RECHERCHE || $json['beforeYear'] > $maximum) {
+                throw DonneesInvalides::pourChamp($chemin.'.beforeYear', \sprintf('L\'année est obligatoire pour ce motif, entre %d et %d.', self::PREMIERE_ANNEE_FIN_DE_RECHERCHE, $maximum));
+            }
+            $annee = $json['beforeYear'];
+        } elseif (null !== $json['beforeYear']) {
+            throw DonneesInvalides::pourChamp($chemin.'.beforeYear', 'L\'année ne vaut que pour « Registres inexistants avant une année ».');
+        }
+
+        if (null !== $json['body'] && !\is_string($json['body'])) {
+            throw DonneesInvalides::pourChamp($chemin.'.body', 'Le texte doit être une chaîne ou null.');
+        }
+        $texte = null === $json['body'] ? null : trim($json['body']);
+        $texte = '' === $texte ? null : $texte;
+
+        if (null !== $texte && mb_strlen($texte) > self::LONGUEUR_MAX_FIN_DE_RECHERCHE) {
+            throw DonneesInvalides::pourChamp($chemin.'.body', \sprintf('Le texte fait au plus %d caractères.', self::LONGUEUR_MAX_FIN_DE_RECHERCHE));
+        }
+
+        if (null === $texte && $motif->texteObligatoire()) {
+            throw DonneesInvalides::pourChamp($chemin.'.body', 'Le texte est obligatoire pour « Autre motif ».');
+        }
+
+        return new FinDeRecherche($motif, $annee, $texte);
     }
 
     private function borne(mixed $valeur, string $chemin): ?\DateTimeImmutable

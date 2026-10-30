@@ -56,6 +56,10 @@ final class SurfaceEditable
         'death' => ValueKind::DateIncertaine,
         'forcePrivacy' => ValueKind::Booleen,
         'privacyNote' => ValueKind::Texte,
+        // Un côté clos : `{reason, beforeYear, body}` ou `null` (ADR 0023). `null` est la valeur
+        // « pas de fin de recherche » par nature : aucune entrée dans NUL_ADMIS.
+        'finDeRecherchePere' => ValueKind::FinDeRecherche,
+        'finDeRechercheMere' => ValueKind::FinDeRecherche,
     ];
 
     /**
@@ -150,6 +154,8 @@ final class SurfaceEditable
         'death' => 'Décès',
         'forcePrivacy' => 'Confidentialité forcée',
         'privacyNote' => 'Motif de confidentialité',
+        'finDeRecherchePere' => 'Fin de recherche côté père',
+        'finDeRechercheMere' => 'Fin de recherche côté mère',
         'marriage' => 'Mariage',
         'married' => 'Mariés',
         // « Divorce prononcé » mentait sur les unions libres : `divorced` couvre toute

@@ -22,6 +22,9 @@ namespace App\Module\Proposal\Enum;
  * - `Media` : `{mediaId, kind, caption, sha256}` ;
  * - `Citation` : `{sourceId, sourceTitle, page, quay, dataText, scope}` ;
  * - `Note` : `{body, scope}` ;
+ * - `FinDeRecherche` : objet à 3 clés, **toujours les 3**, ou `null` —
+ *   `{"reason":…, "beforeYear":…, "body":…}`. Un côté clos d'une personne (ADR 0023) ;
+ *   `null` est sa valeur « pas de fin de recherche » : pose `null → {…}`, levée `{…} → null` ;
  * - `Suppression` : l'inventaire de ce qu'une suppression emporte —
  *   `{personneId, displayName, notes, citations, faits, filiations, unions, descendants,
  *   medias}`, dans cet ordre exact. Voir
@@ -54,6 +57,11 @@ enum ValueKind: string
     case Media = 'media';
     case Citation = 'citation';
     case Note = 'note';
+    /**
+     * La fin de recherche d'un côté d'une personne (ADR 0023) : `{reason, beforeYear, body}`
+     * ou `null`. Seize caractères : tient pile dans `prp_change_op.value_kind VARCHAR(16)`.
+     */
+    case FinDeRecherche = 'fin_de_recherche';
     /**
      * L'inventaire de ce qu'une suppression emporte.
      *

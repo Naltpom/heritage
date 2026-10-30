@@ -26,6 +26,8 @@ final readonly class ReferencesSortantesDeLArbre implements ReferencesInterModul
     {
         return [
             new ReferenceInterModules('tree_note.author_user_id', CibleDeReference::Compte, $this->releveur->occurrences('tree_note', 'author_user_id')),
+            // La fin de recherche (ADR 0023) a le même auteur qu'une note : le déposant.
+            new ReferenceInterModules('tree_research_closure.author_user_id', CibleDeReference::Compte, $this->releveur->occurrences('tree_research_closure', 'author_user_id')),
         ];
     }
 }

@@ -6,10 +6,13 @@ namespace App\Tests\DataFixtures;
 
 use App\DataFixtures\ArbreDEssaiFixtures;
 use App\Module\Core\Entity\Setting;
+use App\Module\Core\Enum\CoteDeRecherche;
+use App\Module\Core\Enum\MotifDeFinDeRecherche;
 use App\Module\Core\Enum\SettingType;
 use App\Module\Tree\Entity\Child;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Entity\ResearchClosure;
 use App\Module\Tree\Service\ReglagesDeLArbreParSettings;
 use App\Tests\ReinitialisationDuSchema;
 use Doctrine\ORM\EntityManagerInterface;
@@ -82,6 +85,39 @@ final class ArbreDEssaiFixturesTest extends KernelTestCase
         }
         ksort($natures);
         self::assertSame(['@F1@' => true, '@F2@' => true, '@F3@' => true, '@F4@' => false, '@F5@' => null], $natures);
+    }
+
+    /** ADR 0023 : deux sommets de branche portent une fin de recherche, côté sans parent. */
+    public function testIlPoseDeuxFinsDeRechercheSurDeuxSommetsDeBranche(): void
+    {
+        $this->charger();
+
+        $fins = $this->em->getRepository(ResearchClosure::class)->findAll();
+        self::assertCount(2, $fins);
+
+        $parXref = [];
+        foreach ($fins as $fin) {
+            $parXref[(string) $fin->getPerson()->getGedcomXref()] = $fin;
+        }
+        ksort($parXref);
+
+        self::assertSame(['@I8@', '@I9@'], array_keys($parXref));
+
+        self::assertSame(CoteDeRecherche::Pere, $parXref['@I8@']->getSide());
+        self::assertSame(MotifDeFinDeRecherche::PereInconnu, $parXref['@I8@']->getReason());
+        self::assertNull($parXref['@I8@']->getBeforeYear());
+
+        self::assertSame(CoteDeRecherche::Mere, $parXref['@I9@']->getSide());
+        self::assertSame(MotifDeFinDeRecherche::RegistresInexistants, $parXref['@I9@']->getReason());
+        self::assertSame(1668, $parXref['@I9@']->getBeforeYear());
+
+        foreach ($fins as $fin) {
+            self::assertNotNull($fin->getAuthorLabel(), 'Une fin de recherche est signée.');
+            // Aucun compte dans le groupe `essai` : pas d'identifiant à contrôler.
+            self::assertNull($fin->getAuthorUserId());
+            // Un sommet de branche : aucune famille dont ils sont l'enfant.
+            self::assertSame(0, $this->em->getRepository(Child::class)->count(['person' => $fin->getPerson()]));
+        }
     }
 
     public function testIlRefuseUnArbreDejaPeuple(): void
