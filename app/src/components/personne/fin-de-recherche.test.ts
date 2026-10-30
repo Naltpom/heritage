@@ -137,6 +137,12 @@ describe('les gestes offerts', () => {
     })
   })
 
+  it('close, puis un parent lié depuis : rouvrir seulement (modifier serait refusé en 422)', () => {
+    const etat = etatDeCote(fiche({ finDeRecherchePere: FIN, parents: [{ id: 3, cote: 'pere' }] as never }), 'pere')
+    expect(etat.etat).toBe('connus')
+    expect(gestesDuCote(etat, true)).toEqual({ clore: false, modifier: false, rouvrir: true, bloque: false })
+  })
+
   it('parent connu sans fin de recherche : aucun geste', () => {
     const g = gestesDuCote(etatDeCote(fiche({ parents: [{ id: 3, cote: 'mere' }] as never }), 'mere'), true)
     expect(g).toMatchObject({ clore: false, modifier: false, rouvrir: false, bloque: false })

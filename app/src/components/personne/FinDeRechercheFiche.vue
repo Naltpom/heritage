@@ -247,7 +247,7 @@ async function confirmerLevee(): Promise<void> {
           <span class="font-semibold" :style="{ color: BRIQUE }">{{ libelleDuMotif(etat.fin.reason, etat.fin.beforeYear) }}</span>
           <span v-if="etat.fin.body" class="whitespace-pre-line break-words">{{ etat.fin.body }}</span>
           <span class="text-xs text-attenue">
-            Close le {{ dateLisible(etat.fin.closedAt) }} par {{ etat.fin.authorLabel }}
+            Close le {{ dateLisible(etat.fin.closedAt) }}<template v-if="etat.fin.authorLabel"> par {{ etat.fin.authorLabel }}</template>
           </span>
           <span v-if="etat.parentConnu" class="mt-1 text-xs" data-parent-lie>
             Un parent est désormais lié de ce côté : l’arbre ne montre plus cette fin de recherche.
@@ -291,22 +291,19 @@ async function confirmerLevee(): Promise<void> {
       <!-- ---------------------------------------------------------- -->
       <!-- Les gestes de ce côté.                                       -->
       <!-- ---------------------------------------------------------- -->
-      <div v-if="gestesDuCote(etat, peutProposer).modifier" class="flex flex-wrap items-center gap-2">
+      <div v-if="gestesDuCote(etat, peutProposer).rouvrir" class="flex flex-wrap items-center gap-2">
         <BoutonBase
-          v-if="etat.parentConnu"
-          variante="principal"
+          v-if="gestesDuCote(etat, peutProposer).modifier"
+          variante="secondaire"
           :desactive="envoi"
-          data-geste="rouvrir"
-          @click="levee = etat"
+          data-geste="modifier"
+          @click="ouvrirModifier(etat)"
         >
-          Rouvrir la recherche
-        </BoutonBase>
-        <BoutonBase variante="secondaire" :desactive="envoi" data-geste="modifier" @click="ouvrirModifier(etat)">
           Modifier
         </BoutonBase>
+        <!-- Un parent lié depuis : « Modifier » serait refusé (422), la levée est le seul geste, et le premier. -->
         <BoutonBase
-          v-if="!etat.parentConnu"
-          variante="secondaire"
+          :variante="gestesDuCote(etat, peutProposer).modifier ? 'secondaire' : 'principal'"
           :desactive="envoi"
           data-geste="rouvrir"
           @click="levee = etat"
@@ -420,7 +417,11 @@ async function confirmerLevee(): Promise<void> {
       </div>
     </form>
 
-    <!-- Hors du formulaire : la levée se confirme sans lui. -->
+    <!-- Hors du formulaire : la levée se confirme sans lui. Son refus (`422`) se dit ici, le
+         formulaire étant fermé : `erreurs` n'y serait lue par personne. -->
+    <p v-if="formulaire === null && erreurs.general" class="m-0 text-xs text-alerte" role="alert" data-erreur-levee>
+      {{ erreurs.general }}
+    </p>
     <p v-if="conflit" class="m-0 text-xs text-alerte" role="alert" data-conflit>
       La fiche a changé depuis son affichage : rechargez la page, puis recommencez.
     </p>

@@ -107,15 +107,29 @@ describe('la lecture', () => {
     expect(cote(html, 'mere')).not.toContain('Pas encore cherché')
   })
 
-  it('un parent connu avec une fin de recherche restée : la mention, et la levée mise en avant', async () => {
+  it('un parent connu avec une fin de recherche restée : la mention, et la levée seule', async () => {
     const html = await rendre(fiche({ finDeRecherchePere: FIN, parents: [{ id: 3, cote: 'pere' }] as never }))
     const pere = cote(html, 'pere')
 
     expect(pere).toContain('Un parent est désormais lié de ce côté : l’arbre ne montre plus cette fin de recherche.')
     expect(pere).toContain('Registres inexistants avant 1668')
     expect(pere).toContain('data-geste="rouvrir"')
-    // Mise en avant : avant « Modifier ».
-    expect(pere.indexOf('data-geste="rouvrir"')).toBeLessThan(pere.indexOf('data-geste="modifier"'))
+    // Seule : le serveur refuserait « Modifier » (422 « Un parent est déjà lié »).
+    expect(pere).not.toContain('data-geste="modifier"')
+  })
+
+  it('un côté clos sans parent : Modifier, puis Rouvrir', async () => {
+    const pere = cote(await rendre(fiche({ finDeRecherchePere: FIN })), 'pere')
+
+    expect(pere).toContain('data-geste="modifier"')
+    expect(pere.indexOf('data-geste="modifier"')).toBeLessThan(pere.indexOf('data-geste="rouvrir"'))
+  })
+
+  it('une fin de recherche sans auteur connu : « Close le … » ne finit pas sur « par »', async () => {
+    const pere = cote(await rendre(fiche({ finDeRecherchePere: { ...FIN, authorLabel: null } })), 'pere')
+
+    expect(pere).toContain('Close le 12 octobre 2026')
+    expect(pere).not.toMatch(/Close le [^<]*par/)
   })
 })
 

@@ -107,12 +107,14 @@ export const AUCUN_GESTE: Readonly<GestesDeCote> = { clore: false, modifier: fal
 /**
  * Ce qu'on peut faire d'un côté. Rien sans `peutProposer` (la condition des autres gestes
  * de la fiche) ; rien tant qu'une demande attend la validation de ce côté ; on ne clôt pas
- * un côté où un parent est lié ; on ne modifie ni ne lève que ce qui est enregistré.
+ * un côté où un parent est lié ; on ne modifie ni ne lève que ce qui est enregistré. Quand
+ * un parent est lié depuis, la fin de recherche reste enregistrée mais ne se **modifie**
+ * plus (le serveur répond `422` « Un parent est déjà lié ») : seule la levée est offerte.
  */
 export function gestesDuCote(etat: EtatDeCote, peutProposer: boolean): GestesDeCote {
   if (!peutProposer) return AUCUN_GESTE
   if (etat.enAttente !== null) return { ...AUCUN_GESTE, bloque: true }
-  if (etat.fin !== null) return { clore: false, modifier: true, rouvrir: true, bloque: false }
+  if (etat.fin !== null) return { clore: false, modifier: etat.etat === 'close', rouvrir: true, bloque: false }
   return { ...AUCUN_GESTE, clore: etat.etat === 'a-chercher' }
 }
 
