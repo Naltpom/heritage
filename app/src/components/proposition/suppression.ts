@@ -96,6 +96,8 @@ export function lignesEmportees(inventaire: InventaireDeSuppression): LigneEmpor
   compte(inventaire.citations, 'source citée', 'sources citées')
   compte(inventaire.faits, 'fait (profession, résidence…)', 'faits (professions, résidences…)')
   compte(inventaire.filiations, 'rattachement à ses parents', 'rattachements à ses parents')
+  // ADR 0023 : une par côté (0, 1 ou 2), non bloquante. Absente d'un inventaire plus ancien.
+  compte(inventaire.finsDeRecherche ?? 0, 'fin de recherche', 'fins de recherche')
 
   for (const union of inventaire.unions) {
     lignes.push({

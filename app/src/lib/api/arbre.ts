@@ -26,7 +26,18 @@
  */
 
 import { requeteApi, type OptionsRequete } from './client'
-import type { BlocDate, BlocDateOp, Branche, Calque, PorteeExplorer, Sexe, Visibilite } from './types'
+import type {
+  BlocDate,
+  BlocDateOp,
+  Branche,
+  Calque,
+  CoteDeRecherche,
+  FinDeRecherche,
+  PorteeExplorer,
+  ResumeFinDeRecherche,
+  Sexe,
+  Visibilite,
+} from './types'
 
 /* ------------------------------------------------------------------ */
 /* § 5.3 — la fiche d'une personne                                     */
@@ -39,6 +50,14 @@ export interface ParentDeFiche {
   displayName: string
   relation: string
   familyId: number
+  /**
+   * La place du parent dans sa famille (ADR 0023) : `pere` s'il en est l'époux
+   * (`husband_id`), `mere` s'il en est l'épouse (`wife_id`). C'est la règle de
+   * `Tree`, qui range un parent de sexe inconnu à la place libre : le front ne
+   * la redevine pas depuis le sexe. Sert à dire si un parent est connu du côté
+   * d'une fin de recherche. Facultative pour les charges d'essai écrites avant elle.
+   */
+  cote?: CoteDeRecherche
   /** Date de naissance compacte (« 1816 », « 5.10.1816 ») — **absente** hors cercle,
    *  `null` quand elle n'est pas connue. */
   naissance?: string | null
@@ -277,6 +296,21 @@ export interface FichePersonneComplete {
   citations: CitationDeFiche[]
   notes: NoteDeFiche[]
   medias: MediaDeFiche[]
+  /**
+   * La fin de recherche du côté du père (ADR 0023, § 6.2 bis du contrat) : `null`
+   * quand la recherche n'est pas close de ce côté. **Champ de la surface
+   * éditable** : c'est aussi la clé de son entrée dans `enAttente`
+   * (`EntreeCalque<ValeurFinDeRecherche | null>`), et sa valeur, privée de
+   * `authorLabel` et `closedAt`, est l'`oldValue` d'un op qui la modifie ou la lève
+   * (`valeurDeFinDeRecherche()`, `@/lib/finDeRecherche`).
+   *
+   * Comme les notes, elle n'est servie qu'avec la fiche **complète** : une fiche
+   * réduite ne la porte jamais (§ 11.1). Le serveur l'émet toujours ici, `null`
+   * compris ; facultative au type pour les charges d'essai écrites avant elle.
+   */
+  finDeRecherchePere?: FinDeRecherche | null
+  /** Le pendant, du côté de la mère. Mêmes règles. */
+  finDeRechercheMere?: FinDeRecherche | null
   /** Toujours présent, `{}` quand il n'y a rien (§ 13.1). */
   enAttente: Calque
   demandesEnAttente: number[]
@@ -562,6 +596,15 @@ export interface PersonneDAfficheComplete {
   vivant: boolean
   birth: BlocDate
   death: BlocDate
+  /**
+   * La fin de recherche du côté du père (ADR 0023) : le motif et son année.
+   * **Absente** quand il n'y en a pas — comme sur le nœud du graphe —, et jamais
+   * servie pour une personne restreinte. L'affiche dessine le mur seulement si
+   * aucun parent n'est servi de ce côté (`etatDuSommet()`, `@/lib/finDeRecherche`).
+   */
+  finDeRecherchePere?: ResumeFinDeRecherche
+  /** Le pendant, du côté de la mère. Mêmes règles. */
+  finDeRechercheMere?: ResumeFinDeRecherche
 }
 
 /** Un vivant hors cercle : **cinq clés**, à sa place dans l'arbre, comme son nœud du graphe. */

@@ -144,10 +144,12 @@ final class SchemaSynchroniseTest extends KernelTestCase
      * comprises. C'est une **décision** du propriétaire : les tirages de Noël (`noel_*`) les
      * remplacent, et heritage les montre dans « Mes événements ».
      *
+     * **43 depuis le 2026-10-30** : `tree_research_closure` (module `Tree`, ADR 0023).
+     *
      * **42 depuis le 2026-10-25** : `core_api_token` (module `Core`,
      * `migrations/Version20261025230000.php`, ADR 0021) — les jetons d'API personnels.
      */
-    private const int NOMBRE_DE_TABLES = 42;
+    private const int NOMBRE_DE_TABLES = 43;
 
     public function testLeMappingEstValide(): void
     {

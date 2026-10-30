@@ -15,8 +15,9 @@
  * une silhouette, `fill-opacity` — c'est de la peinture, pas une couche de
  * composition par fiche (c'était `opacity: 0.3` et `0.35`, une couche chacune).
  */
+import { TRACE_DU_MUR } from '@/lib/finDeRecherche'
 import { attenuer } from './apparence'
-import type { Libelle, LibelleFoyer } from './libelles'
+import { ECART_DU_MUR, TAILLE_DU_MUR, type Libelle, type LibelleFoyer } from './libelles'
 
 defineProps<{
   libelles: Libelle[]
@@ -108,6 +109,28 @@ const cadrePhoto = (t: Libelle): Record<string, string> => ({
         :style="{ color: couleurAttenue(t) }"
       >{{ ligne }}</span>
     </div>
+    <!-- Recherche close (ADR 0023) : le mur, 14 px, dans le coin haut droit de la carte. Le motif se lit au survol de la boîte (`title`) et au clic (volet). -->
+    <svg
+      v-if="t.mur && t.coin"
+      data-mur
+      class="pointer-events-none absolute"
+      viewBox="0 0 24 24"
+      :width="TAILLE_DU_MUR"
+      :height="TAILLE_DU_MUR"
+      fill="none"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      :style="{
+        left: `${t.coin.x - ECART_DU_MUR - TAILLE_DU_MUR}px`,
+        top: `${t.coin.y + ECART_DU_MUR}px`,
+        stroke: 'var(--h-fin-de-recherche)',
+        'stroke-opacity': t.estompe ? ALPHA_TEXTE : 1,
+      }"
+    >
+      <path :d="TRACE_DU_MUR" />
+    </svg>
   </template>
 
   <div

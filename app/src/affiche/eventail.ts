@@ -34,6 +34,8 @@
  */
 import { ajuster, Bloc, type Ligne } from './boites'
 import { ligneVie, type StyleDeDate } from './dates'
+import type { Personne } from './donnees'
+import { murDansUnSecteur } from './murs'
 import { ENCRE, ENCRE_DOUCE, melange, PAPIER, TEINTES } from './palette'
 import { Style } from './polices'
 import { f3, secteur, type Scene } from './scene'
@@ -564,7 +566,11 @@ export class Eventail {
     return melange(rgb, k)
   }
 
-  dessiner(scene: Scene, cx: number, cy: number): void {
+  /**
+   * `murs` : dit si une personne porte un mur (`aUnMur()`). Sans lui, aucune icône : la scène est
+   * celle d'avant. Le mur se pose **après** le texte de la place, sans rien déplacer.
+   */
+  dessiner(scene: Scene, cx: number, cy: number, murs?: (p: Personne) => boolean): void {
     const R = this.R
     // Le disque central.
     scene.chemin(secteur(cx, cy, 0, this.rC, ...this.dessines(90 - R.angle / 2, 90 + R.angle / 2)), melange([222, 205, 168], 1), PAPIER, 0.6)
@@ -575,12 +581,29 @@ export class Eventail {
     }
     for (const n of dessines) {
       const { r1, r2, orientation, coupe } = this.anneaux[n.niveau]!
-      if (orientation === 'tan') this.texteTan(scene, cx, cy, n, r1, r2, coupe)
-      else this.texteRad(scene, cx, cy, n, r1, r2)
+      const rTexte = orientation === 'tan' ? this.texteTan(scene, cx, cy, n, r1, r2, coupe) : this.texteRad(scene, cx, cy, n, r1, r2)
+      if (murs?.(n.p)) this.mur(scene, cx, cy, n, r2, rTexte)
     }
   }
 
-  private texteTan(scene: Scene, cx: number, cy: number, n: Anc, r1: number, r2: number, coupe: boolean): void {
+  /**
+   * Le mur d'une place : sur l'arc extérieur, à l'angle médian dessiné, au-dessus du texte
+   * (`rTexte`). S'il n'y tient pas, il passe au-delà de l'arc ; une place qui n'a qu'un parent
+   * dessiné y laisse libre la moitié de l'autre côté, où le mur se pose alors.
+   */
+  private mur(scene: Scene, cx: number, cy: number, n: Anc, r2: number, rTexte: number): void {
+    const [d1, d2] = this.dessines(n.a1, n.a2)
+    const libre: [number, number] | null = n.pere && !n.mere ? [n.a1, n.pere.a1] : n.mere && !n.pere ? [n.mere.a2, n.a2] : null
+    const [l1, l2] = libre ? this.dessines(...libre) : [d1, d2]
+    murDansUnSecteur(scene, cx, cy, r2, (d1 + d2) / 2, this.k, {
+      rTexte,
+      ouverture: radians(n.a2 - n.a1),
+      aExterieur: (l1 + l2) / 2,
+    })
+  }
+
+  /** Rend le rayon où s'arrête le texte (le haut du bloc, centré dans l'anneau). */
+  private texteTan(scene: Scene, cx: number, cy: number, n: Anc, r1: number, r2: number, coupe: boolean): number {
     const R = this.R
     const A = radians(n.a2 - n.a1)
     const vs = variantes(n.bloc!, coupe)
@@ -604,9 +627,11 @@ export class Eventail {
       if (comp) st = st.echelle((comp / st.largeur(t)) * 1.02)
       scene.texteSurArc(cx, cy, rb, d1, d2, t, st)
     })
+    return (r1 + r2) / 2 + choisi.hauteurTexte / 2
   }
 
-  private texteRad(scene: Scene, cx: number, cy: number, n: Anc, r1: number, r2: number): void {
+  /** Rend le rayon où s'arrête le texte (le bout de sa ligne la plus longue, centrée sur le milieu de l'anneau). */
+  private texteRad(scene: Scene, cx: number, cy: number, n: Anc, r1: number, r2: number): number {
     const R = this.R
     const [d1, d2] = this.dessines(n.a1, n.a2)
     const am = (d1 + d2) / 2
@@ -617,22 +642,25 @@ export class Eventail {
     const [rot, x] = adroite ? [-am, rm] : [180 - am, -rm]
     const tr = `translate(${f3(cx)},${f3(cy)}) rotate(${rot.toFixed(4)})`
     const b = n.bloc!
-    if (b instanceof BlocEnLigne) return this.ligneRad(scene, b, x, dispo, tr)
+    if (b instanceof BlocEnLigne) return rm + this.ligneRad(scene, b, x, dispo, tr) / 2
     // Si la place est plus large que le strict nécessaire, on aère un peu les lignes.
     const largeurPerp = radians(n.a2 - n.a1) * r1 - 2 * R.margePerp
     const h = b.hauteurTexte
     const aeration = h ? Math.min(1.25, Math.max(1.0, largeurPerp / h)) : 1
     let y = (-h * aeration) / 2
+    let longueur = 0
     for (const [t, s] of b.lignes) {
       const [st, comp] = ajuster(t, s, dispo)
+      longueur = Math.max(longueur, comp ?? st.largeur(t))
       const base = y + s.interligne * aeration * 0.5 + st.mm * 0.34
       scene.texte(x, base, t, st, 'middle', tr, comp)
       y += s.interligne * aeration
     }
+    return rm + longueur / 2
   }
 
   /** Les morceaux bout à bout, centrés sur le milieu de l'anneau, resserrés ensemble s'il le faut. */
-  private ligneRad(scene: Scene, b: BlocEnLigne, x: number, dispo: number, tr: string): void {
+  private ligneRad(scene: Scene, b: BlocEnLigne, x: number, dispo: number, tr: string): number {
     const w = b.largeurTexte
     // Comme `ajuster()` : on réduit le corps jusqu'à 84 %, puis on comprime la chasse.
     const k = w > dispo && dispo > 0 ? dispo / w : 1
@@ -646,6 +674,7 @@ export class Eventail {
       scene.texte(pos, haut.mm * 0.34, t, st, 'start', tr, chasse < 1 ? largeur : null)
       pos += largeur + BlocEnLigne.ECART * corps * chasse
     }
+    return w * corps * chasse
   }
 
   /* ---------------------------------------------------------------- repères */

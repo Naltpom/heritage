@@ -14,11 +14,13 @@ use App\Module\Proposal\Service\Port\PersonneAcreer;
 use App\Module\Proposal\Service\Port\PortArbre;
 use App\Module\Tree\Entity\Child;
 use App\Module\Tree\Entity\Citation;
+use App\Module\Tree\Entity\Fact;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Note;
 use App\Module\Tree\Entity\Person;
 use App\Module\Tree\Entity\Source;
 use App\Module\Tree\Enum\CitationQuality;
+use App\Module\Tree\Enum\FactType;
 use App\Module\Tree\Service\EcritureDeLArbrePourProposal;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
@@ -101,9 +103,13 @@ final class EcritureDeLArbrePourProposalTest extends KernelTestCase
         // Tous les champs, jamais un sous-ensemble : le verrou n° 2 compare ces valeurs
         // aux `old_value` des ops, et ce qu'il ne voit pas, il ne peut pas refuser.
         self::assertSame(
-            ['givenNames', 'surname', 'marriedName', 'nickname', 'sex', 'deceased', 'birth', 'death', 'forcePrivacy', 'privacyNote'],
+            ['givenNames', 'surname', 'marriedName', 'nickname', 'sex', 'deceased', 'birth', 'death', 'forcePrivacy', 'privacyNote', 'finDeRecherchePere', 'finDeRechercheMere'],
             array_keys($etat->valeurs),
         );
+        // Sans elles la caducité d'une fin de recherche serait indétectable (ADR 0023) ; `null`
+        // est leur valeur « pas de fin de recherche », et reste une clé du tableau.
+        self::assertNull($etat->valeurs['finDeRecherchePere']);
+        self::assertNull($etat->valeurs['finDeRechercheMere']);
         // Les énumérations traversent le port en **chaîne** : `Proposal` ne peut pas
         // nommer `Tree\Enum\…` sans enfreindre la règle 3 de l'ADR 0002.
         self::assertSame('feminin', $etat->valeurs['sex']);
@@ -140,6 +146,39 @@ final class EcritureDeLArbrePourProposalTest extends KernelTestCase
         // `quay` traverse en chaîne comme toute énumération au bord du port, bien qu'il
         // soit adossé à `int` — l'exception assumée du § 2.7 du modèle.
         self::assertSame(2, $etatCitation->valeurs['quay']);
+    }
+
+    /**
+     * Une citation est rattachée à une personne, à une famille ou à un fait (et un fait à une
+     * personne ou à une famille) : `chargerCible()` en rend le **propriétaire**, celui qui dit
+     * si la ligne est fermée au déposant. Une personne n'en a pas : elle est elle-même la ligne.
+     */
+    public function testLaCitationRendSonProprietaire(): void
+    {
+        $personne = $this->poserUnePersonne('Onyx', 'Thym');
+        $famille = $this->port()->trouverOuCreerFamille($personne, null)->id;
+
+        $parPersonne = $this->poserUneCitation($personne, CitationQuality::ActeOuRegistre);
+        $parFamille = $this->poserUneCitationDe(famille: $famille);
+        $parFaitDePersonne = $this->poserUneCitationDe(fait: new Fact(FactType::Profession, $this->personne($personne)));
+        $parFaitDeFamille = $this->poserUneCitationDe(fait: new Fact(FactType::Autre, null, $this->em()->find(Family::class, $famille)));
+
+        foreach ([
+            [$parPersonne, SubjectKind::Personne, $personne],
+            [$parFamille, SubjectKind::Famille, $famille],
+            [$parFaitDePersonne, SubjectKind::Personne, $personne],
+            [$parFaitDeFamille, SubjectKind::Famille, $famille],
+        ] as [$citation, $nature, $identifiant]) {
+            $etat = $this->port()->chargerCible(SubjectKind::Citation, $citation);
+            self::assertNotNull($etat);
+            self::assertSame($nature, $etat->proprietaireKind);
+            self::assertSame($identifiant, $etat->proprietaireId);
+        }
+
+        $etatPersonne = $this->port()->chargerCible(SubjectKind::Personne, $personne);
+        self::assertNotNull($etatPersonne);
+        self::assertNull($etatPersonne->proprietaireKind);
+        self::assertNull($etatPersonne->proprietaireId);
     }
 
     /** Les cibles que ce port ne sert pas se signalent franchement, plutôt que de rendre `null`. */
@@ -691,6 +730,32 @@ final class EcritureDeLArbrePourProposalTest extends KernelTestCase
         $this->em()->persist($citation);
 
         $this->personne($personneId)->setBestQuay($quay?->value)->setCitationCount(1);
+        $this->em()->flush();
+
+        $id = $citation->getId();
+        \assert(null !== $id);
+
+        return $id;
+    }
+
+    /** Une citation posée sur une famille, ou sur un fait (que l'on persiste ici). */
+    private function poserUneCitationDe(?int $famille = null, ?Fact $fait = null): int
+    {
+        $source = new Source('Registres d’état civil');
+        $this->em()->persist($source);
+
+        $citation = new Citation($source);
+
+        if (null !== $fait) {
+            $this->em()->persist($fait);
+            $citation->setFact($fait);
+        }
+
+        if (null !== $famille) {
+            $citation->setFamily($this->em()->find(Family::class, $famille));
+        }
+
+        $this->em()->persist($citation);
         $this->em()->flush();
 
         $id = $citation->getId();

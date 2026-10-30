@@ -110,6 +110,8 @@ final readonly class InventaireDeSuppression
      *                                                                                                        compter les preuves qui les visent, et `medias` porte déjà
      *                                                                                                        ce compte. Un inventaire relu depuis la base n'en a plus
      *                                                                                                        besoin.
+     * @param int                                                                         $finsDeRecherche    `tree_research_closure` rattachées à la personne (ADR 0023).
+     *                                                                                                        Une fin de recherche part avec la fiche, et **ne bloque pas** la suppression.
      */
     public function __construct(
         public int $personneId,
@@ -126,6 +128,7 @@ final readonly class InventaireDeSuppression
         public int $invitationsActives = 0,
         public array $dependances = [],
         public array $citationsEmportees = [],
+        public int $finsDeRecherche = 0,
     ) {
     }
 
@@ -173,6 +176,7 @@ final readonly class InventaireDeSuppression
             $this->invitationsActives,
             $this->dependances,
             $this->citationsEmportees,
+            $this->finsDeRecherche,
         );
     }
 
@@ -201,6 +205,7 @@ final readonly class InventaireDeSuppression
             $invitationsActives,
             $this->dependances,
             $this->citationsEmportees,
+            $this->finsDeRecherche,
         );
     }
 
@@ -232,6 +237,7 @@ final readonly class InventaireDeSuppression
             $this->invitationsActives,
             self::ordonner($dependances),
             $this->citationsEmportees,
+            $this->finsDeRecherche,
         );
     }
 
@@ -341,6 +347,7 @@ final readonly class InventaireDeSuppression
             [$this->notes, 'note', 'notes'],
             [$this->citations, 'citation', 'citations'],
             [$this->faits, 'fait', 'faits'],
+            [$this->finsDeRecherche, 'fin de recherche', 'fins de recherche'],
             [\count($this->unions), 'union', 'unions'],
             [$this->filiations, 'rattachement à ses parents', 'rattachements à ses parents'],
         ] as [$nombre, $singulier, $pluriel]) {
@@ -402,6 +409,7 @@ final readonly class InventaireDeSuppression
             ),
             'descendanceTotale' => $this->descendanceTotale,
             'medias' => $this->medias,
+            'finsDeRecherche' => $this->finsDeRecherche,
             'membreId' => $this->membreId,
             'invitationsActives' => $this->invitationsActives,
             // `bloquante` est recopiée de l'énumération : elle sert le front, qui l'affiche
@@ -446,6 +454,8 @@ final readonly class InventaireDeSuppression
             // Absente d'un inventaire déposé avant elle : aucune dépendance. C'est le sens
             // sûr — une dépendance apparue depuis fera diverger la comparaison.
             self::ordonner(self::dependances($json['dependances'] ?? null)),
+            [],
+            self::entier($json['finsDeRecherche'] ?? null),
         );
     }
 

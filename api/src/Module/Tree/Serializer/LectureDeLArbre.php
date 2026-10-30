@@ -10,12 +10,14 @@ use App\Module\Tree\Entity\Fact;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Note;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Entity\ResearchClosure;
 use App\Module\Tree\Enum\FactType;
 use App\Module\Tree\Repository\CitationRepository;
 use App\Module\Tree\Repository\FactRepository;
 use App\Module\Tree\Repository\FamilyRepository;
 use App\Module\Tree\Repository\NoteRepository;
 use App\Module\Tree\Repository\PersonRepository;
+use App\Module\Tree\Repository\ResearchClosureRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -51,6 +53,7 @@ final readonly class LectureDeLArbre
         private FactRepository $faits,
         private CitationRepository $citations,
         private NoteRepository $notes,
+        private ResearchClosureRepository $finsDeRecherche,
     ) {
     }
 
@@ -279,6 +282,35 @@ final readonly class LectureDeLArbre
             ->getQuery()->getResult();
 
         return $lignes;
+    }
+
+    /**
+     * Les fins de recherche d'une personne, par côté (ADR 0023) — servies avec la fiche
+     * complète, comme ses notes.
+     *
+     * @return array{pere?: ResearchClosure, mere?: ResearchClosure}
+     */
+    public function finsDeRechercheDe(Person $personne): array
+    {
+        $parCote = [];
+
+        foreach ($this->finsDeRecherche->dePersonne($personne) as $ligne) {
+            $parCote[$ligne->getSide()->value] = $ligne;
+        }
+
+        return $parCote;
+    }
+
+    /**
+     * Les fins de recherche de plusieurs personnes, en **une** requête — l'affiche.
+     *
+     * @param list<int> $personneIds
+     *
+     * @return array<int, array{pere?: ResearchClosure, mere?: ResearchClosure}>
+     */
+    public function finsDeRechercheDes(array $personneIds): array
+    {
+        return $this->finsDeRecherche->desPersonnes($personneIds);
     }
 
     /** @return list<Note> */

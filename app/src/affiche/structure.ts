@@ -145,6 +145,25 @@ export interface InfoUnion {
   total: number
 }
 
+/**
+ * Le signe d'une union, pour tous les modèles d'affiche (règle du commanditaire, 22/10/2026) :
+ * ∞ pour un mariage connu, & pour une union sans mariage connu ; barré si le couple a divorcé ;
+ * suivi du rang de l'union (∞2, &2…) quand la personne en a plusieurs.
+ */
+export interface LienDUnion {
+  signe: '∞' | '&'
+  barre: boolean
+  /** Le rang, seulement quand la personne a plusieurs unions. */
+  rang: number | null
+}
+
+export function lienDUnion(info: Pick<InfoUnion, 'marie' | 'statut' | 'rang' | 'total'>): LienDUnion {
+  return { signe: info.marie ? '∞' : '&', barre: info.statut === 'div', rang: info.total > 1 ? info.rang : null }
+}
+
+/** Le signe écrit d'un trait, sans le barré : « ∞ », « & », « ∞2 ». */
+export const texteDeLien = (l: LienDUnion): string => `${l.signe}${l.rang ?? ''}`
+
 export class Desc {
   unions: [Desc | null, InfoUnion, Desc[]][] = []
   // Le placement, posé par `mesurerDesc` et `placerDesc`.

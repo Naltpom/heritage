@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Module\Proposal\Service;
 
 use App\Module\Core\Contract\Lecteur;
+use App\Module\Core\Enum\CoteDeRecherche;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\ValueObject\FinDeRecherche;
 use App\Module\Core\Exception\DomainException;
 use App\Module\Proposal\Contract\RecueilDErreurs;
 use App\Module\Proposal\Entity\ChangeRequest;
@@ -392,7 +394,14 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         // complète), ni refus d'une demande « qui ne modifie rien » (il dirait que la
         // date proposée est la bonne). L'auteur ne relit jamais cette valeur d'avant
         // ({@see SerialiseurDeDemande}) ; l'administrateur, qui voit tout, tranche.
-        $aLAveugle = 'birth' === $field && $this->masques->naissanceMasquee($subjectKind, $subjectId);
+        //
+        // **Le même traitement vaut pour toute cible fermée au déposant** (une personne vivante
+        // hors de son cercle, une famille dont un époux l'est, une citation qui lui appartient) :
+        // le `409` d'une `oldValue` fausse, comme le refus « ne modifie rien » d'une
+        // `newValue` identique, dirait à celui qui devine si sa valeur est la bonne — un
+        // oracle d'égalité, même sans aucune valeur dans la réponse.
+        $aLAveugle = ('birth' === $field && $this->masques->naissanceMasquee($subjectKind, $subjectId))
+            || $this->masques->cibleFermee($subjectKind, $subjectId);
 
         if (!\array_key_exists('newValue', $brut) || (!$aLAveugle && !\array_key_exists('oldValue', $brut))) {
             throw DonneesInvalides::pourChamp($chemin, 'Un op porte toujours son ancienne et sa nouvelle valeur.');
@@ -409,10 +418,12 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
                 $valueKind,
                 $this->normaliseur->versPhp($valueKind, $brut['oldValue'], "$chemin.oldValue", $nulAdmis),
             );
-        $nouvelle = $this->normaliseur->versJson(
-            $valueKind,
-            $this->normaliseur->versPhp($valueKind, $brut['newValue'], "$chemin.newValue", $nulAdmis),
-        );
+        $nouvellePhp = $this->normaliseur->versPhp($valueKind, $brut['newValue'], "$chemin.newValue", $nulAdmis);
+        $nouvelle = $this->normaliseur->versJson($valueKind, $nouvellePhp);
+
+        if (ValueKind::FinDeRecherche === $valueKind) {
+            $this->tenirLaFinDeRecherche($field, $subjectId, $nouvellePhp, $chemin);
+        }
 
         if (SubjectKind::Citation === $subjectKind && 'url' === $field) {
             // Le lien finit en `href` sur la fiche : seuls http et https passent.
@@ -432,7 +443,37 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
             ->viserLigneExistante($subjectId, $baseVersion)
             ->setValues($ancienne, $nouvelle);
 
+        // Toujours écrit, égal ou non : `201` dans les deux cas, rien à deviner. Le `CHECK`
+        // d'une valeur inchangée est levé par cette colonne (`ck_prp_op_changement`).
+        if ($aLAveugle) {
+            $op->proposerALAveugle();
+        }
+
         return $op;
+    }
+
+    /**
+     * Les deux refus propres à la fin de recherche (ADR 0023, § 6.2 bis du contrat), après la
+     * forme : « père inconnu » ne vaut que du côté du père, et la recherche n'est pas close
+     * d'un côté où un parent est déjà lié. **La levée** (`null`) passe toujours.
+     */
+    private function tenirLaFinDeRecherche(string $field, int $subjectId, mixed $nouvelle, string $chemin): void
+    {
+        $cote = CoteDeRecherche::depuisChamp($field);
+
+        if (!$nouvelle instanceof FinDeRecherche || null === $cote) {
+            return;
+        }
+
+        if (!$nouvelle->reason->admisDuCote($cote)) {
+            throw DonneesInvalides::pourChamp("$chemin.newValue.reason", '« Père inconnu » ne vaut que du côté du père.');
+        }
+
+        $connus = $this->arbre->cotesConnus($subjectId);
+
+        if (CoteDeRecherche::Pere === $cote ? $connus['pere'] : $connus['mere']) {
+            throw DonneesInvalides::pourChamp("$chemin.newValue", \sprintf('Un parent est déjà lié du côté %s : la recherche n\'y est pas close.', CoteDeRecherche::Pere === $cote ? 'du père' : 'de la mère'));
+        }
     }
 
     /** La valeur courante d'un champ, telle qu'un op la stocke. */
@@ -473,6 +514,13 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         $courante = $this->normaliseur->versJson($valueKind, $cible->valeurs[$field]);
 
         if ($courante !== $ancienne) {
+            // Filet : une cible fermée au déposant ne passe plus ici (elle se propose à
+            // l'aveugle, voir {@see self::construireOp()}), mais si elle y venait, le `409` ne
+            // rendrait ni la valeur courante ni la sienne — ce que la fiche réduite lui cache.
+            if ($this->masques->cibleFermee($kind, $id)) {
+                throw Conflit::valeurDejaChangee(['field' => $field, 'version' => $cible->version]);
+            }
+
             throw Conflit::valeurDejaChangee(['field' => $field, 'valeurCourante' => $this->normaliseur->pourAffichage($valueKind, $courante), 'valeurAnnoncee' => $this->normaliseur->pourAffichage($valueKind, $ancienne), 'version' => $cible->version]);
         }
     }

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Service;
 
+use App\Module\Core\Enum\CoteDeRecherche;
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\ValueObject\FinDeRecherche;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\CitationAcreer;
 use App\Module\Proposal\Contract\FiliationEtablie;
@@ -17,6 +19,7 @@ use App\Module\Proposal\Contract\LienRetire;
 use App\Module\Proposal\Contract\MotifDeRattachement;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\RetraitDeLien;
+use App\Module\Proposal\Contract\SignatureDeDemande;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 use App\Module\Proposal\Service\Port\EcritureAppliquee;
@@ -30,6 +33,7 @@ use App\Module\Tree\Entity\Fact;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Note;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Entity\ResearchClosure;
 use App\Module\Tree\Entity\Source;
 use App\Module\Tree\Enum\ChildRelation;
 use App\Module\Tree\Enum\CitationQuality;
@@ -100,10 +104,35 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             return null;
         }
 
-        return new EtatCible($kind, $id, $this->libelle($ligne), $this->version($ligne), $this->valeurs($ligne));
+        return new EtatCible($kind, $id, $this->libelle($ligne), $this->version($ligne), $this->valeurs($ligne), ...$this->proprietaire($ligne));
     }
 
-    public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs): EcritureAppliquee
+    /**
+     * Le propriétaire d'une citation : sa personne, sinon sa famille, sinon la personne ou
+     * la famille de son fait (`ck_tree_citation_sujet_unique` : une seule des trois lignes).
+     * Les autres lignes n'en ont pas, ou le sont elles-mêmes.
+     *
+     * @return array{0: SubjectKind|null, 1: int|null}
+     */
+    private function proprietaire(object $ligne): array
+    {
+        if (!$ligne instanceof Citation) {
+            return [null, null];
+        }
+
+        $fait = $ligne->getFact();
+        $personne = $ligne->getPerson() ?? $fait?->getPerson();
+
+        if (null !== $personne) {
+            return [SubjectKind::Personne, $personne->getId()];
+        }
+
+        $famille = $ligne->getFamily() ?? $fait?->getFamily();
+
+        return null === $famille ? [null, null] : [SubjectKind::Famille, $famille->getId()];
+    }
+
+    public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs, ?SignatureDeDemande $signature = null): EcritureAppliquee
     {
         $ligne = $this->ligne($kind, $id);
 
@@ -117,7 +146,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         $versionAvant = $this->version($ligne);
 
         match (true) {
-            $ligne instanceof Person => $this->ecrirePersonne($ligne, $valeurs),
+            $ligne instanceof Person => $this->ecrirePersonne($ligne, $valeurs, $signature),
             $ligne instanceof Family => $this->ecrireFamille($ligne, $valeurs),
             default => $this->ecrireCitation($ligne, $valeurs),
         };
@@ -184,6 +213,24 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         $this->recalculerLesColonnesDerivees();
 
         return new LigneCreee($id, $personne->getDisplayName());
+    }
+
+    public function cotesConnus(int $personneId): array
+    {
+        /** @var list<array{pere: int|string|null, mere: int|string|null}> $familles */
+        $familles = $this->em->createQuery(\sprintf(
+            'SELECT IDENTITY(f.husband) AS pere, IDENTITY(f.wife) AS mere FROM %s c JOIN c.family f WHERE IDENTITY(c.person) = :personne',
+            Child::class,
+        ))->setParameter('personne', $personneId)->getArrayResult();
+
+        $connus = ['pere' => false, 'mere' => false];
+
+        foreach ($familles as $famille) {
+            $connus['pere'] = $connus['pere'] || null !== $famille['pere'];
+            $connus['mere'] = $connus['mere'] || null !== $famille['mere'];
+        }
+
+        return $connus;
     }
 
     public function chargerSource(int $id): ?SourceCitable
@@ -333,6 +380,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         $this->effacerLesAnnexes(Citation::class, $personneId, $faits, $famillesEffacees);
         $this->effacerLesFaits($personneId, $famillesEffacees);
         $this->effacerLesFiliations($personneId, $famillesEffacees);
+        $this->effacerLesFinsDeRecherche($personneId);
         $this->reglerLesUnions($personne, $famillesEffacees);
 
         $this->em->remove($personne);
@@ -794,6 +842,9 @@ final class EcritureDeLArbrePourProposal implements PortArbre
                 'death' => $ligne->getDeath(),
                 'forcePrivacy' => $ligne->isForcePrivacy(),
                 'privacyNote' => $ligne->getPrivacyNote(),
+                // Sans elles, la caducité d'une fin de recherche est indétectable : deux poses
+                // concurrentes du même côté s'écraseraient (ADR 0023).
+                ...$this->finsDeRecherche($ligne),
             ];
         }
 
@@ -814,6 +865,65 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             'dataText' => $ligne->getDataText(),
             'url' => $ligne->getUrl(),
         ];
+    }
+
+    /**
+     * Les deux fins de recherche d'une personne, sous les clés de la surface éditable.
+     *
+     * @return array{finDeRecherchePere: FinDeRecherche|null, finDeRechercheMere: FinDeRecherche|null}
+     */
+    private function finsDeRecherche(Person $personne): array
+    {
+        $lignes = ['finDeRecherchePere' => null, 'finDeRechercheMere' => null];
+
+        if (null === $personne->getId()) {
+            return $lignes;
+        }
+
+        foreach ($this->em->getRepository(ResearchClosure::class)->findBy(['person' => $personne]) as $ligne) {
+            $lignes[$ligne->getSide()->champ()] = $ligne->valeur();
+        }
+
+        return $lignes;
+    }
+
+    /**
+     * Écrit, réécrit (et re-signe) ou supprime la fin de recherche d'un côté (ADR 0023).
+     *
+     * Sans signature, **on lève** : une fin de recherche ne s'écrit pas sans auteur.
+     */
+    private function ecrireUneFinDeRecherche(Person $personne, string $champ, mixed $valeur, ?SignatureDeDemande $signature): void
+    {
+        $cote = CoteDeRecherche::depuisChamp($champ);
+        \assert(null !== $cote);
+
+        if (null === $signature) {
+            throw new \InvalidArgumentException('Une fin de recherche s\'écrit signée : le déposant et la date du dépôt sont obligatoires.');
+        }
+
+        if (null !== $valeur && !$valeur instanceof FinDeRecherche) {
+            throw new \InvalidArgumentException(\sprintf('Le champ « %s » attend une fin de recherche ou null.', $champ));
+        }
+
+        $existante = $this->em->getRepository(ResearchClosure::class)->findOneBy(['person' => $personne, 'side' => $cote]);
+
+        if (null === $valeur) {
+            // Lever la recherche supprime la ligne ; l'historique en reste dans `prp_revision`.
+            if (null !== $existante) {
+                $this->em->remove($existante);
+            }
+
+            return;
+        }
+
+        if (null === $existante) {
+            $this->em->persist((new ResearchClosure($personne, $cote, $valeur, $signature->deposeeLe))
+                ->signer($signature->auteurUserId, $signature->auteurLabel));
+
+            return;
+        }
+
+        $existante->reecrire($valeur, $signature->auteurUserId, $signature->auteurLabel, $signature->deposeeLe);
     }
 
     // ------------------------------------------------- inventaire d'une suppression
@@ -891,6 +1001,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             // ci-dessus, par la même requête — un nombre et une liste qui divergeraient
             // annonceraient une chose et en bloqueraient une autre.
             citationsEmportees: $this->identifiantsDesAnnexes(Citation::class, $id, $faits, $famillesEffacees),
+            finsDeRecherche: $this->compterLesFinsDeRecherche($id),
         );
     }
 
@@ -1158,6 +1269,15 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         ))->setParameter('familles', $famillesEffacees)->getSingleScalarResult();
     }
 
+    /** Les `tree_research_closure` de la personne : ses fins de recherche (ADR 0023). */
+    private function compterLesFinsDeRecherche(int $personneId): int
+    {
+        return (int) $this->em->createQuery(\sprintf(
+            'SELECT COUNT(r.id) FROM %s r WHERE IDENTITY(r.person) = :personne',
+            ResearchClosure::class,
+        ))->setParameter('personne', $personneId)->getSingleScalarResult();
+    }
+
     /** Les `tree_child` où la personne est **l'enfant** : sa propre filiation. */
     private function compterLesFiliations(int $personneId): int
     {
@@ -1214,6 +1334,19 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         }
     }
 
+    /** Les fins de recherche de la fiche (ADR 0023) : annoncées par l'inventaire, effacées avec elle. */
+    private function effacerLesFinsDeRecherche(int $personneId): void
+    {
+        /** @var list<ResearchClosure> $lignes */
+        $lignes = $this->em->createQuery(\sprintf('SELECT r FROM %s r WHERE IDENTITY(r.person) = :personne', ResearchClosure::class))
+            ->setParameter('personne', $personneId)
+            ->getResult();
+
+        foreach ($lignes as $ligne) {
+            $this->em->remove($ligne);
+        }
+    }
+
     /**
      * Les unions : effacées quand elles ne survivraient pas, vidées de leur époux sinon.
      *
@@ -1252,7 +1385,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
     /**
      * @param array<string, mixed> $valeurs
      */
-    private function ecrirePersonne(Person $personne, array $valeurs): void
+    private function ecrirePersonne(Person $personne, array $valeurs, ?SignatureDeDemande $signature = null): void
     {
         foreach ($valeurs as $champ => $valeur) {
             match ($champ) {
@@ -1266,6 +1399,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
                 'death' => $personne->setDeath($this->date($valeur, 'death')),
                 // Traités ensemble plus bas : ils vont par paire.
                 'forcePrivacy', 'privacyNote' => null,
+                'finDeRecherchePere', 'finDeRechercheMere' => $this->ecrireUneFinDeRecherche($personne, $champ, $valeur, $signature),
                 default => throw new \InvalidArgumentException(\sprintf('Champ « %s » hors de la surface éditable d’une personne.', $champ)),
             };
         }

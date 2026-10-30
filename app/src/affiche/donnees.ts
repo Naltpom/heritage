@@ -31,6 +31,7 @@
  * ────────────────────────────────────────────────────────────────────
  */
 import type { ArbreDAffiche, BlocDate, FamilleDAffiche, PersonneDAffiche } from '@/lib/api'
+import type { FinsDeRecherche } from '@/lib/finDeRecherche'
 import { DateAffiche, normNom, normPrenoms } from './dates'
 
 /** Ce que l'affiche écrit à la place du nom d'un vivant hors cercle. */
@@ -69,6 +70,8 @@ export class Personne {
     readonly masquee: boolean,
     naissance: DateAffiche,
     deces: DateAffiche,
+    /** Les côtés clos faute d'archives (ADR 0023) ; `{}` pour une restreinte. Le mur n'est dessiné que sans parent servi (`aUnMur()`). */
+    readonly finsDeRecherche: FinsDeRecherche = {},
   ) {
     this.naissance = naissance
     this.deces = deces
@@ -89,6 +92,10 @@ export class Personne {
       false,
       dateDepuisBloc(p.birth),
       dateDepuisBloc(p.death),
+      {
+        ...(p.finDeRecherchePere ? { finDeRecherchePere: p.finDeRecherchePere } : {}),
+        ...(p.finDeRechercheMere ? { finDeRechercheMere: p.finDeRechercheMere } : {}),
+      },
     )
   }
 
@@ -197,6 +204,12 @@ export class ArbreAffiche {
   mariage(fam: number): [DateAffiche, string | null] {
     const f = this.F.get(fam)!
     return [f.mariage, f.lieu]
+  }
+
+  /** Le mariage connu et le divorce de la famille `fam`, de quoi choisir le signe de son union. */
+  etatDeUnion(fam: number): { marie: boolean; divorce: boolean } {
+    const f = this.F.get(fam)
+    return { marie: f?.marie ?? true, divorce: f?.divorce ?? false }
   }
 
   unions(pid: number): Union[] {

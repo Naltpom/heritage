@@ -24,13 +24,22 @@
 
 import { corpsDeFicheAComparer, LIMITE_DES_RESSEMBLANCES, type CritereDeRessemblance, type FicheAComparer } from './arbre'
 import { requeteApi, type OptionsRequete } from './client'
-import type { BlocDate, BlocDateOp, ListePaginee, Sexe } from './types'
+import type { BlocDate, BlocDateOp, ListePaginee, Sexe, ValeurFinDeRecherche } from './types'
 
 /* ------------------------------------------------------------------ */
 /* Les types du § 6                                                    */
 /* ------------------------------------------------------------------ */
 
-/** § 5.7 — les dix natures de `RequestKind`. Valeurs du modèle, non traduites. */
+/**
+ * § 5.7 — les dix natures de `RequestKind`. Valeurs du modèle, non traduites.
+ *
+ * **La fin de recherche n'est pas une nature** (ADR 0023 § 3) : poser, modifier ou
+ * lever une fin de recherche est une `modification_personne`, dont les ops visent les
+ * champs `finDeRecherchePere` et `finDeRechercheMere` (`valueKind:
+ * "fin_de_recherche"`). Elle hérite ainsi du calque, de la caducité, du rejeu, du
+ * retrait et de la portée `contribution` des jetons sans rien d'autre à brancher —
+ * voir `CorpsFinDeRecherche`.
+ */
 export type NatureDemande =
   | 'modification_personne'
   | 'modification_famille'
@@ -103,8 +112,11 @@ export type NatureSujet = 'personne' | 'famille' | 'citation' | 'media' | 'lien'
  *
  * Le calque `enAttente`, lui, porte le bloc **entier avec `texte`** (§ 13.1) :
  * il est rendu pour l'affichage, pas pour être reposté.
+ *
+ * Une fin de recherche (`valueKind: "fin_de_recherche"`, ADR 0023) voyage sous ses
+ * trois clés `{reason, beforeYear, body}`, jamais avec `authorLabel` ni `closedAt`.
  */
-export type ValeurOp = string | number | boolean | null | ValeurDate | unknown[]
+export type ValeurOp = string | number | boolean | null | ValeurDate | ValeurFinDeRecherche | unknown[]
 
 /**
  * Un op de modification (§ 6.2), vu par l'administration (§ 6.7).
@@ -865,8 +877,9 @@ export function lireRepriseDemande(id: number): Promise<Record<string, unknown>>
 export type ValeurDate = BlocDateOp
 
 /** Ce qu'un op de champ peut transporter. Un bloc date en fait partie : il est
- *  **un seul op**, jamais cinq (§ 6.2). */
-export type ValeurProposee = string | number | boolean | null | ValeurDate
+ *  **un seul op**, jamais cinq (§ 6.2). Une fin de recherche aussi : un op par
+ *  côté, ses trois clés solidaires (§ 6.2 bis, ADR 0023). */
+export type ValeurProposee = string | number | boolean | null | ValeurDate | ValeurFinDeRecherche
 
 /** § 5.7 du modèle — `LinkKind`, « les trois natures du § 6.4 du dossier, ni
  *  plus ni moins ». Elles se lisent **du sujet vers l'autre** : `parent_de`
@@ -994,6 +1007,44 @@ export interface CorpsModificationPersonne extends CorpsCommun {
   targetKind: 'personne'
   targetId: number
   ops: OpProposee[]
+}
+
+/** Les deux champs d'une fin de recherche, un par côté (§ 6.2 bis, ADR 0023). */
+export type ChampDeFinDeRecherche = 'finDeRecherchePere' | 'finDeRechercheMere'
+
+/**
+ * § 6.2 bis — un op de fin de recherche : un `champ` de la personne, de nature
+ * `fin_de_recherche`.
+ *
+ * | Geste | `oldValue` | `newValue` |
+ * |---|---|---|
+ * | poser | `null` | `{reason, beforeYear, body}` |
+ * | modifier | la valeur courante | la nouvelle |
+ * | lever (rouvrir la recherche) | la valeur courante | `null` |
+ *
+ * `oldValue` est la valeur de la fiche **privée de `authorLabel` et `closedAt`** :
+ * une clé en plus rend `422`, comme le `texte` d'un bloc date. Le constructeur
+ * `opsDeFinDeRecherche()` (`@/lib/finDeRecherche`) le fait, et lui seul.
+ */
+export interface OpFinDeRecherche extends OpProposee {
+  subjectKind: 'personne'
+  field: ChampDeFinDeRecherche
+  valueKind: 'fin_de_recherche'
+  oldValue: ValeurFinDeRecherche | null
+  newValue: ValeurFinDeRecherche | null
+}
+
+/**
+ * § 6.2 bis — poser, modifier ou lever une fin de recherche : une
+ * `modification_personne` **ordinaire**, dont les ops sont des
+ * `OpFinDeRecherche`. « Les deux côtés » : deux ops dans la même demande.
+ *
+ * Elle peut porter d'autres ops de champ de la même personne ; l'écran de la fiche
+ * la dépose seule. Déposable par un jeton de portée `contribution`, comme toute
+ * demande (ADR 0021).
+ */
+export interface CorpsFinDeRecherche extends CorpsModificationPersonne {
+  ops: OpFinDeRecherche[]
 }
 
 /** § 6.2 — modifier une union existante : date et lieu du mariage, divorce. */
@@ -1183,6 +1234,8 @@ export interface CorpsAjoutMedia extends CorpsCommun {
 export type CorpsDemande =
   | CorpsAjoutMedia
   | CorpsModificationPersonne
+  /* Un cas particulier du précédent, nommé pour que le dépôt d'une fin de recherche se lise. */
+  | CorpsFinDeRecherche
   | CorpsModificationFamille
   | CorpsCreationPersonne
   | CorpsAjoutLien
@@ -1463,6 +1516,12 @@ export interface InventaireDeSuppression {
    */
   descendanceTotale: number
   medias: number
+  /**
+   * Les fins de recherche de la fiche (0, 1 ou 2 — une par côté, ADR 0023), qui
+   * partent avec elle : rien ne part en silence. Non bloquantes. Absente d'un
+   * inventaire mesuré avant elle, où elle vaut 0.
+   */
+  finsDeRecherche?: number
   /**
    * Le rattachement `mbr_member` dont cette fiche est la **racine**, s'il existe.
    *

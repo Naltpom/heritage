@@ -77,6 +77,7 @@ import type { CibleLoupe } from '@/components/medias/medias'
 import ActionsFiche from './ActionsFiche.vue'
 import AfficheFiche from './AfficheFiche.vue'
 import AutorisationNaissance from './AutorisationNaissance.vue'
+import FinDeRechercheFiche from './FinDeRechercheFiche.vue'
 import BandeauFiche from './BandeauFiche.vue'
 import { couleurBranche, generationLisible, nomBranche } from './champs'
 import { LIBELLES_DEPOT } from './edition'
@@ -84,6 +85,7 @@ import EditionIdentite from './EditionIdentite.vue'
 import EditionParente from './EditionParente.vue'
 import FaitsFiche from './FaitsFiche.vue'
 import HistoriqueFiche from './HistoriqueFiche.vue'
+import { encartDisponible } from './fin-de-recherche'
 import { useGestesFiche } from './gestes'
 import IdentiteFiche from './IdentiteFiche.vue'
 import ModaleCorrection from './ModaleCorrection.vue'
@@ -292,6 +294,14 @@ function pluriel(n: number, mot: string): string {
               </SectionFiche>
               <SectionFiche titre="Famille" data-panneau="famille">
                 <ParenteFiche :fiche="fiche" />
+              </SectionFiche>
+              <!-- ADR 0023 : où en est la recherche des parents, côté par côté. Absent d'une charge sans les clés. -->
+              <SectionFiche
+                v-if="encartDisponible(fiche)"
+                titre="Fin de recherche"
+                data-panneau="fin-de-recherche"
+              >
+                <FinDeRechercheFiche :fiche="fiche" @recharger="emit('recharger')" />
               </SectionFiche>
             </template>
 

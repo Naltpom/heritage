@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ArbreAffiche } from './donnees'
-import { arbreFictif, arbreTouffu, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
+import { arbreDeCousins, arbreFictif, arbreTouffu, avecFinsDeRecherche, avecLeCoupleEnFinDeRecherche, coupleSeul, legendeDuMurPresente, mursAttendus, mursDeLaScene, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { radians, Reglages } from './eventail'
 import { afficheEventail, arrondiDizaine, mentionDuPied, type AfficheProduite } from './fabriquer'
@@ -408,5 +408,81 @@ describe('le rendu SVG et les formats', () => {
     expect(pngPossible(p, 100)).toBe(true)
     expect(pngPossible(p, 300)).toBe(false)
     expect(page('naturelle', 100, 50)).toEqual({ largeur: 100, hauteur: 50 })
+  })
+})
+
+describe.each([
+  ['des boîtes « Arbre »', 'arbre'],
+  ['du soleil intérieur', 'soleil'],
+  ['des médaillons', 'medaillons'],
+] as const)('le mur de l’éventail, descendants %s', (_, forme) => {
+  const fabrique = (essai: ArbreDEssai): AfficheProduite => afficheEventail(new ArbreAffiche(essai.charge), essai.mari, essai.femme, { date: DATE, descendants: forme })
+  const { essai: avec, sommets } = avecFinsDeRecherche(arbreFictif())
+  const close = fabrique(avec)
+
+  it('dessine un mur par sommet clos, et sa ligne de légende', () => {
+    const attendus = mursAttendus(avec)
+    expect(attendus).toBeGreaterThanOrEqual(sommets.length)
+    // Les murs des places, plus celui de la légende.
+    expect(mursDeLaScene(close.scene)).toHaveLength(attendus + 1)
+    // Le nombre, en dur : les trois sommets clos par `avecFinsDeRecherche()`, plus la légende.
+    expect(attendus).toBe(3)
+    expect(mursDeLaScene(close.scene)).toHaveLength(3 + 1)
+    expect(legendeDuMurPresente(close.scene)).toBe(true)
+    expect(versSvg(close.scene)).not.toMatch(/NaN|Infinity/)
+  })
+
+  it('ne dessine aucun mur ni légende sans fin de recherche', () => {
+    const sans = fabrique(arbreFictif())
+    expect(mursDeLaScene(sans.scene)).toHaveLength(0)
+    expect(legendeDuMurPresente(sans.scene)).toBe(false)
+  })
+
+  it('ne déplace aucune place : mêmes anneaux, mêmes textes sur arc', () => {
+    const sans = fabrique(arbreFictif())
+    expect(close.eventail.rExt).toBeCloseTo(sans.eventail.rExt, 9)
+    const arcs = (a: AfficheProduite): string[] => a.scene.textes.flatMap((t) => (t.type === 'texteSurArc' ? [`${t.texte}|${t.r.toFixed(3)}|${t.a1.toFixed(3)}`] : []))
+    expect(arcs(close)).toEqual(arcs(sans))
+  })
+
+  describe('les quatre parents au centre', () => {
+    const quatre = (essai: ArbreDEssai): AfficheProduite => afficheEventail(new ArbreAffiche(essai.charge), essai.mari, essai.femme, { date: DATE, descendants: forme, centre: 'parents' })
+    // La femme a une mère liée et un père clos : le couple, dessiné au centre, porte le mur.
+    const couple = avecLeCoupleEnFinDeRecherche(arbreDeCousins())
+
+    it('le couple au centre porte son mur, et la légende le dit', () => {
+      const a = quatre(couple)
+      expect(mursAttendus(couple)).toBe(1)
+      expect(mursDeLaScene(a.scene)).toHaveLength(1 + 1)
+      expect(legendeDuMurPresente(a.scene)).toBe(true)
+      expect(versSvg(a.scene)).not.toMatch(/NaN|Infinity/)
+    })
+
+    it('c’est le même résultat qu’en mode couple : un mur et la légende', () => {
+      const enCouple = afficheEventail(new ArbreAffiche(couple.charge), couple.mari, couple.femme, { date: DATE, descendants: forme })
+      expect(mursDeLaScene(enCouple.scene)).toHaveLength(1 + 1)
+    })
+
+    it('les ancêtres clos gardent leurs murs, en plus de celui du couple', () => {
+      const tous = avecLeCoupleEnFinDeRecherche(avecFinsDeRecherche(arbreDeCousins()).essai)
+      expect(mursDeLaScene(quatre(tous).scene)).toHaveLength(3 + 1 + 1)
+    })
+
+    it('aucun mur ni légende sans fin de recherche', () => {
+      const sans = quatre(arbreDeCousins())
+      expect(mursDeLaScene(sans.scene)).toHaveLength(0)
+      expect(legendeDuMurPresente(sans.scene)).toBe(false)
+    })
+  })
+})
+
+describe('la hauteur de la page avec un mur', () => {
+  it('réserve la ligne du mur sous le dessin : 5,4·kl de plus que sans mur', () => {
+    const fabrique = (essai: ArbreDEssai): AfficheProduite => afficheEventail(new ArbreAffiche(essai.charge), essai.mari, essai.femme, { date: DATE })
+    const avec = fabrique(avecFinsDeRecherche(arbreDeCousins()).essai)
+    const sans = fabrique(arbreDeCousins())
+    // Les cousins : la légende ne tient pas dans un coin, elle passe sous le dessin.
+    expect(avec.echelleLegende).toBe(1)
+    expect(avec.scene.hauteur - sans.scene.hauteur).toBeCloseTo(5.4 * avec.echelleLegende, 9)
   })
 })

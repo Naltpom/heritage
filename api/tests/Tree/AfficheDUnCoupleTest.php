@@ -200,6 +200,9 @@ final class AfficheDUnCoupleTest extends ArbreWebTestCase
             ['id', 'visibilite', 'givenNames', 'surname', 'sex', 'deceased', 'vivant', 'birth', 'death'],
             array_keys($aieule),
         );
+        // ADR 0023 : sans fin de recherche, ni l'une ni l'autre clé (le résumé n'est jamais `null`).
+        self::assertArrayNotHasKey('finDeRecherchePere', $aieule);
+        self::assertArrayNotHasKey('finDeRechercheMere', $aieule);
         self::assertSame('Marne Dolomite', $aieule['givenNames']);
         self::assertSame('Sureau', $aieule['surname']);
         self::assertSame('BET 1901 AND 1909', $aieule['birth']['raw']);

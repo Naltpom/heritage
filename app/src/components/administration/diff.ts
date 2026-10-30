@@ -26,6 +26,7 @@
 
 import { natureEnClair, type NatureDUnion } from '@/components/personne/union'
 import type { OpDemande, ValeurOp } from '@/lib/api'
+import { estValeurDeFinDeRecherche, phraseDeFinDeRecherche } from '@/lib/finDeRecherche'
 
 /**
  * Les champs modifiables d'une personne, en français.
@@ -53,6 +54,9 @@ const LIBELLES_DE_CHAMP: Record<string, string> = {
   // table-ci sert la relecture de sa propre demande par l'auteur (§ 6.5) : c'est
   // le même champ, sous le même nom, d'un bout à l'autre de l'écran.
   marriedName: 'Nom d’usage',
+  // ADR 0023 : une fin de recherche par côté, déposée comme n'importe quel champ de la fiche.
+  finDeRecherchePere: 'Fin de recherche côté père',
+  finDeRechercheMere: 'Fin de recherche côté mère',
   nickname: 'Surnom',
   sex: 'Sexe',
   deceased: 'Décédé·e',
@@ -181,6 +185,11 @@ export function formaterValeur(valeur: ValeurOp | undefined): string {
       const lieu = chaineNonVide(valeur['place'])
       return lieu === null ? date : `${date}, à ${lieu}`
     }
+
+    // ── Une fin de recherche (ADR 0023) : `{reason, beforeYear, body}` ─────
+    // **Avant** la branche des notes, qui reconnaîtrait son `body` et l'afficherait
+    // seul, sans le motif. La phrase est celle du serveur (`libelleDiff`).
+    if (estValeurDeFinDeRecherche(valeur)) return phraseDeFinDeRecherche(valeur)
 
     // ── Une note (`ajout_note`) : `{body, scope}` ──────────────────────────
     // Le corps s'affiche **entier**. C'est ce que l'administrateur doit lire

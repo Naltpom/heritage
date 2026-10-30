@@ -8,8 +8,11 @@
  * laissait le disque vide au-dessus et en dessous (relevé du 24/10/2026 : trente et un
  * descendants à mi-taille dans un disque grossi de moitié).
  */
+import { barreDuSigne } from './centres'
 import { dessinerDesc, inverserDesc, mesurerDesc, peigne, placerDesc, ReglesDesc } from './boites'
 import type { Style } from './polices'
+import type { LigneDuTitre, LignesDuTitre } from './fabriquer'
+import type { Personne } from './donnees'
 import type { Scene } from './scene'
 import type { Desc, QuatreParents } from './structure'
 
@@ -22,7 +25,7 @@ const SOUS_LA_BASE = 8
 export const reglesPour = (e: number): ReglesDesc => new ReglesDesc([13, 11, 9.5, 9].map((c) => c * e), 'long', 3 * e, 11 * e, 5.5 * e, 34 * e)
 
 /** Les lignes du titre posées de haut en bas depuis 0 (le haut des noms) : lignes de base et hauteur du bloc. */
-function titreEmpile(ls: [string, Style, number][]): { lignes: [string, Style][]; bases: number[]; hauteur: number } {
+function titreEmpile(ls: LigneDuTitre[]): { lignes: [string, Style, string?][]; bases: number[]; hauteur: number } {
   const vivantes = ls.filter(([t]) => Boolean(t))
   // Les écarts de `centreCouple()`, du bas vers le haut.
   const ys = [0]
@@ -32,7 +35,7 @@ function titreEmpile(ls: [string, Style, number][]): { lignes: [string, Style][]
   }
   const dernier = vivantes.length - 1
   const haut = ys[dernier]! - vivantes[dernier]![1].mm * 0.8
-  return { lignes: vivantes.map(([t, st]) => [t, st]), bases: ys.map((y) => y - haut), hauteur: vivantes[0]![1].mm * 0.25 - haut }
+  return { lignes: vivantes.map(([t, st, , barre]) => (barre === undefined ? [t, st] : [t, st, barre])), bases: ys.map((y) => y - haut), hauteur: vivantes[0]![1].mm * 0.25 - haut }
 }
 
 /** Le nombre de rangées d'un sous-arbre (1 : l'enfant seul). */
@@ -83,7 +86,7 @@ export type Familles = { seule: Desc[] } | QuatreParents
  * du bloc et l'on garde celle qui le centre le mieux. Sans titre (`lignes` nul), le bloc part du
  * centre et descend : c'est le demi-disque sous la base de l'éventail.
  */
-export function agencer(familles: Familles, lignes: ((u: number) => [string, Style, number][]) | null, e: number, r: number): Agencement | null {
+export function agencer(familles: Familles, lignes: LignesDuTitre | null, e: number, r: number): Agencement | null {
   const regles = reglesPour(e)
   const listes = 'seule' in familles ? [familles.seule] : [familles.gauche, familles.droite, [familles.couple]]
   const hauteursGlobales = new Map<number, number>()
@@ -202,10 +205,15 @@ export function agencer(familles: Familles, lignes: ((u: number) => [string, Sty
 /**
  * Pose le bloc agencé sur le centre (cx, cy). `inverse` : retourné autour de la base de
  * l'éventail qui descend — les bandes au-dessus, les troncs qui montent (sans titre).
+ * `murs` : qui porte un mur (le couple du milieu seul, voir `murDuCouple()`) ; sans lui, aucune icône.
  */
-export function dessinerLesBandes(scene: Scene, a: Agencement, cx: number, cy: number, inverse = false): void {
+export function dessinerLesBandes(scene: Scene, a: Agencement, cx: number, cy: number, inverse = false, murs?: (p: Personne) => boolean): void {
   const haut = cy + a.haut
-  a.titre.lignes.forEach(([t, st], i) => scene.texte(cx, haut + a.titre.bases[i]!, t, st))
+  a.titre.lignes.forEach(([t, st, barre], i) => {
+    const y = haut + a.titre.bases[i]!
+    scene.texte(cx, y, t, st)
+    if (barre !== undefined) barreDuSigne(scene, st, cx - st.largeur(barre) / 2, st.largeur(barre), y)
+  })
   const couloir = 8 * a.e
   const largeurDe = (ds: Desc[]): number => ds.reduce((s, d) => s + d.largeurSousArbre, 0) + a.regles.ecartX * 2 * Math.max(ds.length - 1, 0)
   // D'abord tout poser : les traits des troncs vont chercher les époux dans le couple du milieu.
@@ -228,7 +236,7 @@ export function dessinerLesBandes(scene: Scene, a: Agencement, cx: number, cy: n
     }
   }
   if (inverse) inverserDesc([...(a.couple ? [a.couple.desc] : []), ...a.troncs.flatMap((t) => t.bandes.flatMap((b) => b.enfants))], 2 * cy)
-  if (a.couple) dessinerDesc(scene, [a.couple.desc], null, a.regles, inverse)
+  if (a.couple) dessinerDesc(scene, [a.couple.desc], null, a.regles, inverse, murs)
   for (const tronc of a.troncs) {
     const xt = cx + tronc.x
     let depart: [number, number] = [xt, inverse ? cy - a.depart : cy + a.depart]
@@ -259,7 +267,7 @@ export function plusGrand(lo: number, hi: number, ok: (x: number) => boolean): n
  * Le plus petit rayon, à partir de `r0`, où les familles tiennent à l'échelle `e` — le cercle
  * grandit quand les descendants, au plus petit, n'y tiennent pas.
  */
-export function rayonPour(familles: Familles, lignes: ((u: number) => [string, Style, number][]) | null, e: number, r0: number): number {
+export function rayonPour(familles: Familles, lignes: LignesDuTitre | null, e: number, r0: number): number {
   let rayon = r0
   while (!agencer(familles, lignes, e, rayon)) rayon *= 1.03
   if (rayon === r0) return r0

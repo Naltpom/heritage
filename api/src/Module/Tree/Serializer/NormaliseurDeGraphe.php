@@ -7,6 +7,7 @@ namespace App\Module\Tree\Serializer;
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
 use App\Module\Core\Contract\ProjectionEnAttente;
 use App\Module\Core\Enum\Branch;
+use App\Module\Core\Enum\CoteDeRecherche;
 use App\Module\Core\Enum\DateQualifier;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\ValueObject\UncertainDate;
@@ -201,7 +202,7 @@ final readonly class NormaliseurDeGraphe
                 'nonPlaces' => $nonPlaces,
             ],
         ] + $this->chrono->mesure('noeuds', fn () => GrapheDuPerimetre::retirer(
-            $this->noeuds($placement, $placables, $proposesParId, $libelles, $parentes, $renommage, $cercle, $avecImage, $vignettes, $this->naissancesReduites($placables, $cercle)),
+            $this->noeuds($placement, $placables, $proposesParId, $libelles, $parentes, $renommage, $cercle, $avecImage, $vignettes, $this->naissancesReduites($placables, $cercle), $this->finsDeRecherche()),
             $this->aretes($placement, $renommage),
             $cercle,
         ));
@@ -275,6 +276,7 @@ final readonly class NormaliseurDeGraphe
      * @param array<int, true>                                                                                                                                                                       $avecImage
      * @param array<int, string>                                                                                                                                                                     $vignettes          personne visible → URL de la vignette de son portrait
      * @param array<int, string>                                                                                                                                                                     $naissancesReduites vivant vu partiellement → sa naissance compacte réduite (ADR 0016)
+     * @param array<int, array<string, array{reason: string, beforeYear: int|null}>>                                                                                                                 $fins               personne → côté (`finDeRecherchePere`…) → résumé (ADR 0023)
      *
      * @return list<array<string, mixed>>
      */
@@ -289,6 +291,7 @@ final readonly class NormaliseurDeGraphe
         array $avecImage,
         array $vignettes,
         array $naissancesReduites = [],
+        array $fins = [],
     ): array {
         $sortie = [];
 
@@ -310,7 +313,7 @@ final readonly class NormaliseurDeGraphe
             $base = IdentifiantDeNoeud::identifiantBase($noeud->id);
 
             if (IdentifiantDeNoeud::estPersonne($noeud->id) && null !== $base) {
-                $sortie[] = $this->noeudDePersonne($noeud, $base, $placables[$noeud->id] ?? null, $libelles['personnes'][$base] ?? null, $parentes[$base] ?? null, $cercle, $avecImage, $vignettes, $naissancesReduites[$base] ?? null);
+                $sortie[] = $this->noeudDePersonne($noeud, $base, $placables[$noeud->id] ?? null, $libelles['personnes'][$base] ?? null, $parentes[$base] ?? null, $cercle, $avecImage, $vignettes, $naissancesReduites[$base] ?? null, $fins[$base] ?? []);
 
                 continue;
             }
@@ -345,6 +348,7 @@ final readonly class NormaliseurDeGraphe
      * @param array{parente: ParenteDansLArbre, pont: string|null}|null                                    $parente   `null` sans point de vue calculé : la personne est alors servie `famille`
      * @param array<int, true>                                                                             $avecImage
      * @param array<int, string>                                                                           $vignettes personne visible → URL de la vignette de son portrait
+     * @param array<string, array{reason: string, beforeYear: int|null}>                                   $finsDeRecherche champ (`finDeRecherchePere`…) → résumé de la personne
      *
      * @return array<string, mixed>
      */
@@ -358,6 +362,7 @@ final readonly class NormaliseurDeGraphe
         array $avecImage,
         array $vignettes,
         ?string $naissanceReduite = null,
+        array $finsDeRecherche = [],
     ): array {
         // **L'état vivant est celui du jeu de placement**, pas un second calcul. C'est
         // celui sur lequel `w` a été mesurée ; en recalculer un ici ouvrirait la porte à
@@ -469,7 +474,42 @@ final readonly class NormaliseurDeGraphe
             $charge['portrait'] = $vignettes[$personneId];
         }
 
+        // Le résumé d'une fin de recherche, **seulement si la ligne existe** (clé absente
+        // sinon) et **après** la branche `if (!$visible)` : un nœud restreint n'en porte
+        // jamais, comme il ne porte pas de note (ADR 0023). Le texte et l'auteur se lisent
+        // sur la fiche.
+        foreach ($finsDeRecherche as $champ => $resume) {
+            $charge[$champ] = $resume;
+        }
+
         return $charge;
+    }
+
+    /**
+     * Les fins de recherche de tout l'arbre, **en une requête** : personne → clé du champ →
+     * `{reason, beforeYear}` (ADR 0023). Lue à chaque réponse, jamais mise en cache — elle
+     * appartient à l'étage 2 du graphe, avec les libellés et les médias.
+     *
+     * @return array<int, array<string, array{reason: string, beforeYear: int|null}>>
+     */
+    private function finsDeRecherche(): array
+    {
+        $fins = [];
+
+        foreach ($this->connexion->fetchAllAssociative('SELECT person_id, side, reason, before_year FROM tree_research_closure ORDER BY person_id, side') as $ligne) {
+            $cote = \is_string($ligne['side']) ? CoteDeRecherche::tryFrom($ligne['side']) : null;
+
+            if (null === $cote || !is_numeric($ligne['person_id']) || !\is_string($ligne['reason'])) {
+                continue;
+            }
+
+            $fins[(int) $ligne['person_id']][$cote->champ()] = [
+                'reason' => $ligne['reason'],
+                'beforeYear' => is_numeric($ligne['before_year']) ? (int) $ligne['before_year'] : null,
+            ];
+        }
+
+        return $fins;
     }
 
     /**

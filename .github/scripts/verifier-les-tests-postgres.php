@@ -46,6 +46,8 @@ const CLASSES = [
     'App\Tests\Tree\EmpreinteEntreMoteursTest' => 3,
     'App\Tests\Proposal\IndexDIdempotencePostgresTest' => 3,
     'App\Tests\Proposal\RetraitDUnBrouillonPostgresTest' => 2,
+    'App\Tests\Proposal\FinDeRecherchePostgresTest' => 2,
+    'App\Tests\Proposal\OpALAveuglePostgresTest' => 2,
 ];
 
 function echouer(string $message): never

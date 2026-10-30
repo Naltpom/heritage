@@ -16,6 +16,11 @@
  *   **divorce**, une **union sans mariage** et des **vivants**.
  */
 import type { ArbreDAffiche, BlocDate, FamilleDAffiche, PersonneDAffiche, Sexe } from '@/lib/api'
+import { BRIQUE, LEGENDE_DU_MUR } from '@/lib/finDeRecherche'
+import { ArbreAffiche } from '../donnees'
+import { aUnMur } from '../murs'
+import type { Scene } from '../scene'
+import { ascendance } from '../structure'
 
 /** Un générateur pseudo-aléatoire à graine fixe (mulberry32) : le même arbre à chaque appel. */
 function generateur(graine: number): () => number {
@@ -382,4 +387,71 @@ export function coupleSeul(): ArbreDEssai {
   const femme = a.personne('feminin', 'Armoise', 1885, { prenoms: 'Craie', deces: 1960 })
   const couple = a.famille(mari, femme, annee(1905))
   return { charge: a.charge(couple), mari, femme, reperes: { couple } }
+}
+
+/**
+ * Un arbre d'essai dont quelques ancêtres sont **en fin de recherche** (ADR 0023) : trois
+ * sommets de branche (sans parent) clos, de générations différentes — un mur attendu chacun —,
+ * et un ancêtre **avec** ses parents dont les deux côtés sont clos aussi : le parent servi
+ * l'emporte, pas de mur. Le couple lui-même n'est jamais touché ; l'arbre d'origine reste intact.
+ */
+export function avecFinsDeRecherche(essai: ArbreDEssai): { essai: ArbreDEssai; sommets: number[]; parentServi: number } {
+  const A = new ArbreAffiche(essai.charge)
+  const H = A.P.get(essai.mari)!
+  const F = A.P.get(essai.femme)!
+  const { noeuds } = ascendance(A, H, F, Infinity)
+  const feuilles = [...new Set(noeuds.filter((n) => n.niveau > 0 && A.parents(n.p.id).every((p) => p === null)).map((n) => n.p.id))]
+  const niveauDe = (id: number): number => Math.min(...noeuds.filter((n) => n.p.id === id).map((n) => n.niveau))
+  feuilles.sort((a, b) => niveauDe(a) - niveauDe(b) || a - b)
+  const sommets = [feuilles[0]!, feuilles[Math.floor(feuilles.length / 2)]!, feuilles[feuilles.length - 1]!]
+  const parentServi = noeuds.find((n) => n.niveau > 0 && !sommets.includes(n.p.id) && A.parents(n.p.id).some((p) => p !== null))!.p.id
+  const charge: ArbreDAffiche = {
+    ...essai.charge,
+    personnes: essai.charge.personnes.map((p): PersonneDAffiche => {
+      if (p.visibilite === 'restreinte') return p
+      if (p.id === sommets[0]) return { ...p, finDeRecherchePere: { reason: 'pere_inconnu', beforeYear: null } }
+      if (p.id === sommets[1]) return { ...p, finDeRechercheMere: { reason: 'registres_inexistants', beforeYear: 1668 } }
+      if (p.id === sommets[2]) return { ...p, finDeRecherchePere: { reason: 'lacune', beforeYear: null }, finDeRechercheMere: { reason: 'lacune', beforeYear: null } }
+      if (p.id === parentServi) return { ...p, finDeRecherchePere: { reason: 'registres_detruits', beforeYear: null }, finDeRechercheMere: { reason: 'registres_detruits', beforeYear: null } }
+      return p
+    }),
+  }
+  return { essai: { ...essai, charge }, sommets, parentServi }
+}
+
+/**
+ * Les cousins (`arbreDeCousins()`) dont **la femme** a une mère liée et un père clos : la
+ * famille de ses parents ne garde que la mère, et son côté père est « père inconnu » (ADR 0023).
+ * C'est le couple lui-même qui porte un mur — au premier anneau de l'éventail, et au centre
+ * quand les quatre parents y sont dessinés. Les ancêtres, eux, ne sont pas touchés.
+ */
+export function avecLeCoupleEnFinDeRecherche(essai: ArbreDEssai): ArbreDEssai {
+  const famille = essai.reperes['fF']!
+  const charge: ArbreDAffiche = {
+    ...essai.charge,
+    familles: essai.charge.familles.map((f): FamilleDAffiche => (f.id === famille ? { ...f, husband: null } : f)),
+    personnes: essai.charge.personnes.map((p): PersonneDAffiche => (p.visibilite !== 'restreinte' && p.id === essai.femme ? { ...p, finDeRecherchePere: { reason: 'pere_inconnu', beforeYear: null } } : p)),
+  }
+  return { ...essai, charge }
+}
+
+/** Les murs d'une scène : les chemins sans fond, en `BRIQUE` — celui de la légende compris. */
+export function mursDeLaScene(scene: Scene): Extract<Scene['elements'][number], { type: 'chemin' }>[] {
+  return scene.elements.filter((e): e is Extract<typeof e, { type: 'chemin' }> => e.type === 'chemin' && e.fond === 'none' && e.trait === BRIQUE)
+}
+
+/** La ligne de légende du mur est-elle écrite dans la scène ? */
+export function legendeDuMurPresente(scene: Scene): boolean {
+  return scene.textes.some((t) => t.type === 'texte' && t.texte.includes(LEGENDE_DU_MUR))
+}
+
+/**
+ * Le nombre de murs que l'ascendance du couple doit dessiner (sans celui de la légende), compté
+ * sur `aUnMur()` : une **borne** qui suit la fonction testée. Les tests qui la serrent figent
+ * aussi un nombre en dur, pour qu'une dérive de `aUnMur()` ne les suive pas.
+ */
+export function mursAttendus(essai: ArbreDEssai): number {
+  const A = new ArbreAffiche(essai.charge)
+  const { noeuds } = ascendance(A, A.P.get(essai.mari)!, A.P.get(essai.femme)!, Infinity)
+  return noeuds.filter((n) => aUnMur(A, n.p)).length
 }

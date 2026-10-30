@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Proposal\Double;
 
 use App\Module\Core\Enum\SubjectKind;
+use App\Module\Core\ValueObject\FinDeRecherche;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Contract\CitationAcreer;
 use App\Module\Proposal\Contract\FiliationEtablie;
@@ -15,6 +16,7 @@ use App\Module\Proposal\Contract\LienRetire;
 use App\Module\Proposal\Contract\MotifDeRattachement;
 use App\Module\Proposal\Contract\NoteAcreer;
 use App\Module\Proposal\Contract\RetraitDeLien;
+use App\Module\Proposal\Contract\SignatureDeDemande;
 use App\Module\Proposal\Contract\SourceCitable;
 use App\Module\Proposal\Contract\VocabulaireDAnnotation;
 use App\Module\Proposal\Enum\LinkKind;
@@ -42,6 +44,17 @@ final class ArbreEnMemoire implements PortArbre
 {
     /** @var array<string, array{libelle: string, version: int, valeurs: array<string, mixed>}> */
     private static array $lignes = [];
+
+    /**
+     * Les signatures reçues par `appliquerChamps()`, dans l'ordre — de quoi affirmer que le
+     * validateur passe le déposant et la date du dépôt (ADR 0023).
+     *
+     * @var list<SignatureDeDemande>
+     */
+    private static array $signatures = [];
+
+    /** @var array<int, array{pere: bool, mere: bool}> les côtés où le test a posé un parent lié */
+    private static array $cotes = [];
 
     /** Nombre d'appels à `appliquerChamps` — doit rester à zéro tant que rien n'est validé. */
     private static int $ecritures = 0;
@@ -146,6 +159,8 @@ final class ArbreEnMemoire implements PortArbre
         self::$famillesCreees = [];
         self::$ecritures = 0;
         self::$verrouConcurrent = false;
+        self::$signatures = [];
+        self::$cotes = [];
         self::$sources = [];
         self::$citationsCreees = [];
         self::$notesCreees = [];
@@ -156,12 +171,14 @@ final class ArbreEnMemoire implements PortArbre
     /**
      * @param array<string, mixed> $valeurs
      */
-    public function poser(SubjectKind $kind, int $id, string $libelle, int $version, array $valeurs): self
+    public function poser(SubjectKind $kind, int $id, string $libelle, int $version, array $valeurs, ?int $personneId = null, ?int $familleId = null): self
     {
         self::$lignes[EtatCible::cleDe($kind, $id)] = [
             'libelle' => $libelle,
             'version' => $version,
             'valeurs' => $valeurs,
+            'personneId' => $personneId,
+            'familleId' => $familleId,
         ];
 
         return $this;
@@ -207,12 +224,20 @@ final class ArbreEnMemoire implements PortArbre
             return null;
         }
 
-        return new EtatCible($kind, $id, $ligne['libelle'], $ligne['version'], $ligne['valeurs']);
+        return new EtatCible($kind, $id, $ligne['libelle'], $ligne['version'], $ligne['valeurs'], ...match (true) {
+            isset($ligne['personneId']) => [SubjectKind::Personne, $ligne['personneId']],
+            isset($ligne['familleId']) => [SubjectKind::Famille, $ligne['familleId']],
+            default => [null, null],
+        });
     }
 
-    public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs): EcritureAppliquee
+    public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs, ?SignatureDeDemande $signature = null): EcritureAppliquee
     {
         ++self::$ecritures;
+
+        if (null !== $signature) {
+            self::$signatures[] = $signature;
+        }
 
         if (self::$verrouConcurrent) {
             // Le port doit laisser remonter cette exception telle quelle : c'est elle,
@@ -339,6 +364,28 @@ final class ArbreEnMemoire implements PortArbre
      * qui rend la famille reconnaissable par {@see epouxDeFamille()} et retrouvable par
      * {@see trouverOuCreerFamille()} — le décor d'un test qui désigne un couple existant.
      */
+    /**
+     * Dit de quels côtés une personne a un parent lié (ADR 0023). Le double ne range pas
+     * `(husband, wife)` : le test pose la réponse que `cotesConnus()` rendra.
+     */
+    public function poserCotesConnus(int $personneId, bool $pere, bool $mere): self
+    {
+        self::$cotes[$personneId] = ['pere' => $pere, 'mere' => $mere];
+
+        return $this;
+    }
+
+    public function cotesConnus(int $personneId): array
+    {
+        return self::$cotes[$personneId] ?? ['pere' => false, 'mere' => false];
+    }
+
+    /** @return list<SignatureDeDemande> */
+    public static function signaturesRecues(): array
+    {
+        return self::$signatures;
+    }
+
     public function poserCouple(int $familleId, string $libelle, int ...$epoux): self
     {
         $membres = array_values($epoux);
@@ -621,6 +668,10 @@ final class ArbreEnMemoire implements PortArbre
             $unions,
             $descendants,
             [] === $descendants ? 0 : $this->compterLaDescendance($personneId),
+            finsDeRecherche: \count(array_filter(
+                [$ligne['valeurs']['finDeRecherchePere'] ?? null, $ligne['valeurs']['finDeRechercheMere'] ?? null],
+                static fn (mixed $fin): bool => $fin instanceof FinDeRecherche,
+            )),
         );
     }
 

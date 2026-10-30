@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace App\DataFixtures;
 
+use App\Module\Core\Enum\CoteDeRecherche;
 use App\Module\Core\Enum\DateQualifier;
+use App\Module\Core\Enum\MotifDeFinDeRecherche;
 use App\Module\Core\Enum\Sex;
 use App\Module\Core\Service\SettingService;
+use App\Module\Core\ValueObject\FinDeRecherche;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Tree\Entity\Child;
 use App\Module\Tree\Entity\Family;
 use App\Module\Tree\Entity\Person;
+use App\Module\Tree\Entity\ResearchClosure;
 use App\Module\Tree\Repository\PersonRepository;
 use App\Module\Tree\Service\NormalisateurNom;
 use App\Module\Tree\Service\RecalculDesColonnesDerivees;
@@ -20,7 +24,8 @@ use Doctrine\Bundle\FixturesBundle\FixtureGroupInterface;
 use Doctrine\Persistence\ObjectManager;
 
 /**
- * L'arbre d'essai : onze personnes **inventées**, cinq familles, trois générations.
+ * L'arbre d'essai : onze personnes **inventées**, cinq familles, trois générations, et deux
+ * fins de recherche (ADR 0023) sur deux sommets de branche.
  *
  * C'est le point de départ d'une installation neuve (poste de développement, pile de
  * démonstration, base PostgreSQL de l'intégration continue). Les vraies données ne sont
@@ -127,6 +132,17 @@ final class ArbreDEssaiFixtures extends Fixture implements FixtureGroupInterface
         $this->famille($manager, '@F4@', $gustave, $silice, [$marthe, $agate])->setMarried(false);
         $this->famille($manager, '@F5@', $inconnu, null, [$antoine]);
 
+        // Deux sommets de branche **sans parent du côté visé** (ADR 0023) : Gustave n'a ni
+        // père ni mère liés, Silice non plus. Le groupe `essai` ne sème aucun compte : la
+        // signature porte un libellé, sans identifiant (comme une note importée) — un
+        // identifiant inventé ferait échouer le contrôle d'intégrité de la CI.
+        $this->finDeRecherche($manager, $gustave, CoteDeRecherche::Pere, new FinDeRecherche(MotifDeFinDeRecherche::PereInconnu, null, null));
+        $this->finDeRecherche($manager, $silice, CoteDeRecherche::Mere, new FinDeRecherche(
+            MotifDeFinDeRecherche::RegistresInexistants,
+            1668,
+            'Les registres paroissiaux de Saint-Martin commencent en 1668 (exemple inventé).',
+        ));
+
         $manager->flush();
 
         echo '  [essai] '.$this->poserLaRacine($manager, $camille)."\n";
@@ -152,7 +168,7 @@ final class ArbreDEssaiFixtures extends Fixture implements FixtureGroupInterface
         $this->recalcul->recalculer();
         $manager->flush();
 
-        return \sprintf('Arbre d’essai écrit : 11 personnes, 5 familles, racine %s (#%d).', self::XREF_EGO, (int) $ego->getId());
+        return \sprintf('Arbre d’essai écrit : 11 personnes, 5 familles, racine %s (#%d), 2 fins de recherche.', self::XREF_EGO, (int) $ego->getId());
     }
 
     private function personne(
@@ -205,6 +221,13 @@ final class ArbreDEssaiFixtures extends Fixture implements FixtureGroupInterface
         }
 
         return $famille;
+    }
+
+    private function finDeRecherche(ObjectManager $manager, Person $personne, CoteDeRecherche $cote, FinDeRecherche $valeur): void
+    {
+        $manager->persist(
+            (new ResearchClosure($personne, $cote, $valeur, $this->d('2026-10-30')))->signer(null, 'Compte d’essai'),
+        );
     }
 
     private function jour(string $brut, string $date, ?string $lieu = null): UncertainDate

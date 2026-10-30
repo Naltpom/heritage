@@ -92,6 +92,8 @@ final class ListeBlancheDeSerialisationTest extends ArbreWebTestCase
             'bestQuay', 'citationCount', 'forcePrivacy', 'privacyNote', 'parente',
             'enAttente', 'demandesEnAttente', 'givenNames', 'surname', 'marriedName',
             'nickname', 'deceased',
+            // ADR 0023 : la fin de recherche suit la règle des notes.
+            'finDeRecherchePere', 'finDeRechercheMere',
         ] as $interdit) {
             self::assertArrayNotHasKey($interdit, $fiche, \sprintf('`%s` ne doit pas sortir pour une personne vivante hors cercle.', $interdit));
         }

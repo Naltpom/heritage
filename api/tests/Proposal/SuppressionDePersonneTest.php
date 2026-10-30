@@ -540,6 +540,35 @@ final class SuppressionDePersonneTest extends BaseDeDemandes
         );
     }
 
+    /**
+     * ADR 0023 : les fins de recherche sont comptées, placées juste après `medias` dans
+     * `versJson()` (§ 6.4 quater), ne bloquent pas, et se relisent à `0` quand elles manquent
+     * (un inventaire déposé avant elles).
+     */
+    public function testLesFinsDeRechercheSontComptees(): void
+    {
+        $inventaire = new InventaireDeSuppression(17, 'Marne Dolomite Sureau', 0, 0, 0, 0, [], [], finsDeRecherche: 2);
+
+        $cles = array_keys($inventaire->versJson());
+        self::assertSame('medias', $cles[array_search('finsDeRecherche', $cles, true) - 1]);
+        self::assertSame('membreId', $cles[array_search('finsDeRecherche', $cles, true) + 1]);
+        self::assertSame(2, $inventaire->versJson()['finsDeRecherche']);
+        self::assertFalse($inventaire->estBloquee(), 'Une fin de recherche part avec la fiche : elle ne bloque pas.');
+        self::assertStringContainsString('2 fins de recherche', $inventaire->enUneLigne());
+        self::assertStringContainsString('emporte 1 fin de recherche', (new InventaireDeSuppression(17, 'Marne', 0, 0, 0, 0, [], [], finsDeRecherche: 1))->enUneLigne());
+
+        // Les trois `avec…` la conservent.
+        self::assertSame(2, $inventaire->avecMedias(0)->finsDeRecherche);
+        self::assertSame(2, $inventaire->avecComptes(null, 0)->finsDeRecherche);
+        self::assertSame(2, $inventaire->avecDependances([])->finsDeRecherche);
+
+        // Aller-retour par JSONB, et inventaire ancien (clé absente) = 0.
+        self::assertSame($inventaire->versJson(), InventaireDeSuppression::depuisJson(array_reverse($inventaire->versJson(), preserve_keys: true))->versJson());
+        $ancien = $inventaire->versJson();
+        unset($ancien['finsDeRecherche']);
+        self::assertSame(0, InventaireDeSuppression::depuisJson($ancien)->finsDeRecherche);
+    }
+
     /** Une fiche qui ne porte rien le dit, plutôt que de rendre une phrase vide. */
     public function testUnInventaireVideSeLitQuandMeme(): void
     {

@@ -638,3 +638,54 @@ describe('la nature de l’union', () => {
     expect(libelleDeChamp('divorce', null)).toBe('Séparation')
   })
 })
+
+describe('une fin de recherche se lit en une phrase (ADR 0023)', () => {
+  const op = (surcharge: Partial<OpDemande>): OpDemande => ({
+    seq: 1,
+    opKind: 'champ',
+    subjectKind: 'personne',
+    subjectId: 17,
+    field: 'finDeRecherchePere',
+    valueKind: 'fin_de_recherche',
+    oldValue: null,
+    newValue: null,
+    baseVersion: 8,
+    ...surcharge,
+  })
+
+  it('dit les deux champs en clair', () => {
+    expect(libelleDeChamp('finDeRecherchePere')).toBe('Fin de recherche côté père')
+    expect(libelleDeChamp('finDeRechercheMere')).toBe('Fin de recherche côté mère')
+  })
+
+  it('pose : « (vide) » devient le motif, l’année et le texte', () => {
+    const ligne = ligneDeDiff(
+      op({ newValue: { reason: 'registres_inexistants', beforeYear: 1668, body: 'Les registres commencent en 1668' } }),
+    )
+    expect(ligne.libelle).toBe('Fin de recherche côté père')
+    expect(ligne.ancienne).toBe('(vide)')
+    expect(ligne.proposee).toBe('Registres inexistants avant 1668 — Les registres commencent en 1668')
+  })
+
+  it('modification : les deux phrases', () => {
+    const ligne = ligneDeDiff(
+      op({
+        field: 'finDeRechercheMere',
+        oldValue: { reason: 'lacune', beforeYear: null, body: null },
+        newValue: { reason: 'registres_detruits', beforeYear: null, body: 'Incendie de 1871' },
+      }),
+    )
+    expect(ligne.ancienne).toBe('Lacune dans les registres')
+    expect(ligne.proposee).toBe('Registres détruits — Incendie de 1871')
+  })
+
+  it('levée : la valeur proposée est « (vide) »', () => {
+    const ligne = ligneDeDiff(op({ oldValue: { reason: 'lacune', beforeYear: null, body: null }, newValue: null }))
+    expect(ligne.ancienne).toBe('Lacune dans les registres')
+    expect(ligne.proposee).toBe('(vide)')
+  })
+
+  it('une note reste rendue comme une note', () => {
+    expect(formaterValeur({ body: 'Acte retrouvé.', scope: 'generale' } as never)).toBe('Acte retrouvé.')
+  })
+})

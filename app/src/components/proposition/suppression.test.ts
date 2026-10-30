@@ -230,3 +230,22 @@ describe('le corps déposé', () => {
     expect(corps).not.toHaveProperty('ops')
   })
 })
+
+describe('les fins de recherche (ADR 0023)', () => {
+  const libelles = (n: number | undefined): string[] =>
+    lignesEmportees(inventaire(n === undefined ? {} : { finsDeRecherche: n })).map((l) => l.libelle)
+
+  it('une seule, au singulier, non bloquante', () => {
+    const lignes = lignesEmportees(inventaire({ finsDeRecherche: 1 }))
+    expect(lignes).toEqual([{ libelle: '1 fin de recherche', bloquante: false }])
+  })
+
+  it('deux, au pluriel', () => {
+    expect(libelles(2)).toEqual(['2 fins de recherche'])
+  })
+
+  it('aucune, ou un inventaire plus ancien : pas de ligne', () => {
+    expect(libelles(0)).toEqual([])
+    expect(libelles(undefined)).toEqual([])
+  })
+})

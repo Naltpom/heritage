@@ -29,6 +29,12 @@ export const MARGE = 0.3
 const LARGEUR_PHOTO = 40
 const ESPACE_PHOTO = 8
 
+/** L'icône « mur » : 14 px, à 4 px des bords (calée par `CalqueLibelles`), si la carte à l'écran fait au moins 36 × 22 px. */
+export const TAILLE_DU_MUR = 14
+export const ECART_DU_MUR = 4
+const LARGEUR_MIN_DU_MUR = 36
+const HAUTEUR_MIN_DU_MUR = 22
+
 interface LibelleCommun {
   id: string
   /** `src` : le portrait s'il y en a un (clé absente sur une fiche restreinte), la silhouette sinon. */
@@ -39,6 +45,10 @@ interface LibelleCommun {
   h: number
   directe: boolean
   estompe: boolean
+  /** Recherche close au sommet de la fiche : l'icône « mur » (ADR 0023). Absent sinon. */
+  mur?: boolean
+  /** Avec `mur` : le coin haut droit de la carte, en coordonnées écran (l'icône s'y cale). */
+  coin?: { x: number; y: number }
   /** Le texte est posé à la taille qu'il aurait à 80 % (`w`, `h` en
    *  coordonnées de ce zoom-là) puis réduit de ce facteur (`reductionDuTexte`). */
   reduction: number
@@ -89,6 +99,8 @@ export interface ParametresDesLibelles {
   portrait: boolean
   directe: (f: FicheHistoire) => boolean
   estompe: (f: FicheHistoire) => boolean
+  /** La fiche est en fin de recherche (`arbre2/sommets.ts`) : elle porte le mur. */
+  mur?: (f: FicheHistoire) => boolean
   marge?: number
 }
 
@@ -116,6 +128,11 @@ export function libellesDesFiches(p: ParametresDesLibelles, memoire: MemoireDesT
     id: f.id,
     directe: p.directe(f),
     estompe: p.estompe(f),
+    // Les clés n'existent que sur une fiche close : les autres gardent la forme d'avant.
+    // Pas de mur sur une carte trop petite pour le porter : le bord brique reste.
+    ...(p.mur?.(f) && f.w * s >= LARGEUR_MIN_DU_MUR && f.h * sy >= HAUTEUR_MIN_DU_MUR
+      ? { mur: true, coin: { x: X(f.x + f.w), y: Y(f.y) } }
+      : {}),
     reduction: r,
   })
   const src = (f: FicheHistoire): string | null => (typeof f.noeud.portrait === 'string' ? f.noeud.portrait : null)

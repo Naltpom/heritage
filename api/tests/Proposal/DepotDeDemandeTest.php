@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Proposal;
 
+use App\Module\Core\Contract\Lecteur;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Proposal\Enum\RequestKind;
@@ -96,7 +97,25 @@ final class DepotDeDemandeTest extends BaseDeDemandes
 
         $demande = $this->depot->deposer($this->corpsDeModification([$op]), $this->lecteur(self::OPALE));
 
-        self::assertCount(1, self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($demande));
+        // L'op est écrit à l'aveugle (`blind`) : `old_value` égale `new_value`, ce que
+        // `ck_prp_op_changement` n'admet qu'ainsi — sous PostgreSQL, c'était une `500`.
+        $ops = self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($demande);
+        self::assertCount(1, $ops);
+        self::assertTrue($ops[0]->estALAveugle());
+        self::assertSame($ops[0]->getOldValue(), $ops[0]->getNewValue());
+
+        // La vue d'auteur ne dit rien de plus qu'avec une date différente.
+        $vue = $this->serialiseur->pourAuteur($this->recharger($demande));
+        self::assertSame(RequestStatus::EnAttente->value, $vue['status']);
+        self::assertArrayNotHasKey('oldValue', $vue['ops'][0]);
+        self::assertArrayNotHasKey('aLAveugle', $vue['ops'][0]);
+
+        // Valider « 1987 → 1987 » réécrit la même date.
+        $admin = new Lecteur(self::ADMIN, 'Natron Romarin', administrateur: true);
+        self::assertSame('validee', $this->validation->valider($this->recharger($demande), $admin)->resultat);
+        $naissance = $this->arbre->valeur(SubjectKind::Personne, self::PERSONNE, 'birth');
+        self::assertInstanceOf(UncertainDate::class, $naissance);
+        self::assertSame('1987', $naissance->getRaw());
     }
 
     private function poserUnVivantNeEn1987(): void

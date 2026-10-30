@@ -17,10 +17,11 @@
  */
 import { titre } from './dates'
 import type { Personne } from './donnees'
+import { murDansUnSecteur } from './murs'
 import { ENCRE, ENCRE_DOUCE, melange, PAPIER, TRAIT, type Rgb } from './palette'
 import { Style } from './polices'
 import { f3, polaire, secteur, type Scene } from './scene'
-import type { Desc } from './structure'
+import { lienDUnion, texteDeLien, type Desc, type LienDUnion } from './structure'
 
 export type Cote = 'n' | 'p' | 'v'
 
@@ -56,6 +57,8 @@ export interface FamilleDuCentre {
 export interface Coeur {
   noms: [string, string]
   couple: [Personne, Personne] | null
+  /** Le signe de l'union du couple (∞ par défaut). */
+  lien?: LienDUnion
   enfants: Personne[]
   chiffres: string[]
 }
@@ -64,34 +67,64 @@ export interface Coeur {
 /* Les lignes : des morceaux de styles différents, bout à bout          */
 /* ------------------------------------------------------------------ */
 
-type Morceau = readonly [string, Style]
+/** Un morceau de texte ; le troisième terme, s'il existe, est le signe d'union à barrer dans ce texte (divorce). */
+type Morceau = readonly [string, Style, string?]
 type Ligne = Morceau[]
 
 const largeur = (l: Ligne): number => l.reduce((w, [t, s]) => w + s.largeur(t), 0)
 const hauteur = (l: Ligne): number => l.reduce((h, [, s]) => Math.max(h, s.interligne), 0)
-const echelle = (l: Ligne, k: number): Ligne => l.map(([t, s]) => [t, s.echelle(k)] as const)
+const echelle = (l: Ligne, k: number): Ligne => l.map(([t, s, b]) => (b === undefined ? ([t, s.echelle(k)] as const) : ([t, s.echelle(k), b] as const)))
+
+/** Le trait oblique d'un signe barré, comme `dessinerDesc` : sur les 80 % du signe, un peu au-dessus de la ligne de base. */
+export function barreDuSigne(scene: Scene, st: Style, xDebut: number, largeurSigne: number, yBase: number, transform?: string): void {
+  const l = largeurSigne * 0.8
+  const x = xDebut + largeurSigne / 2
+  scene.ligneDroite(x - l / 2, yBase - st.mm * 0.11, x + l / 2, yBase - st.mm * 0.55, TRAIT, st.mm * 0.12, transform)
+}
+
+/** Les morceaux « ∞2 » devant un nom : le signe (barré au besoin), le rang, puis une espace. */
+function texteDuLien(lien: LienDUnion | undefined, avant = ''): { texte: string; barre?: string } {
+  if (!lien) return { texte: avant }
+  return { texte: `${avant}${texteDeLien(lien)} `, ...(lien.barre ? { barre: lien.signe } : {}) }
+}
 
 /** « Prénoms NOM » : le prénom au corps `c`, le nom en capitales grasses un peu plus petites. */
-function nomComplet(p: Personne, c: number, couleur = ENCRE, prefixe = '', italique = false): Ligne {
+function nomComplet(p: Personne, c: number, couleur = ENCRE, lien?: LienDUnion, italique = false, avant = ''): Ligne {
   const l: Ligne = []
-  const prenoms = `${prefixe}${p.prenoms}`.trim()
-  if (prenoms) l.push([p.nom ? `${prenoms} ` : prenoms, new Style('SS', c, couleur, 0, italique ? 'Ital' : 'Reg')])
+  const { texte, barre } = texteDuLien(lien, avant)
+  const prenoms = `${texte}${p.prenoms}`.trim()
+  const st = new Style('SS', c, couleur, 0, italique ? 'Ital' : 'Reg')
+  if (prenoms) l.push(barre === undefined ? [p.nom ? `${prenoms} ` : prenoms, st] : [p.nom ? `${prenoms} ` : prenoms, st, barre])
   if (p.nom) l.push([p.nom, new Style('SS', c * 0.84, couleur, 0.05, 'Semi')])
   return l
 }
 
 /** Le même sur deux lignes : les prénoms, puis le NOM. */
-function nomCoupe(p: Personne, c: number, couleur = ENCRE, prefixe = '', italique = false): Ligne[] {
+function nomCoupe(p: Personne, c: number, couleur = ENCRE, lien?: LienDUnion, italique = false): Ligne[] {
   const lignes: Ligne[] = []
-  const prenoms = `${prefixe}${p.prenoms}`.trim()
-  if (prenoms) lignes.push([[prenoms, new Style('SS', c, couleur, 0, italique ? 'Ital' : 'Reg')]])
+  const { texte, barre } = texteDuLien(lien)
+  const prenoms = `${texte}${p.prenoms}`.trim()
+  const st = new Style('SS', c, couleur, 0, italique ? 'Ital' : 'Reg')
+  if (prenoms) lignes.push([barre === undefined ? [prenoms, st] : [prenoms, st, barre]])
   if (p.nom) lignes.push([[p.nom, new Style('SS', c * 0.84, couleur, 0.05, 'Semi')]])
   return lignes
 }
 
-const conjoints = (d: Desc): Personne[] => d.unions.map(([c]) => c?.p).filter((p): p is Personne => p !== undefined)
+/** Un signe d'union seul, sur sa ligne (le couple du centre). */
+const ligneDuLien = (lien: LienDUnion, corps: number): Ligne => [
+  lien.barre ? [texteDeLien(lien), new Style('SS', corps, TRAIT, 0, 'Reg'), lien.signe] : [texteDeLien(lien), new Style('SS', corps, TRAIT, 0, 'Reg')],
+]
+
+/** Les conjoints d'une tête de famille, chacun avec le signe de son union (∞, &, ∞2, signe barré…). */
+const conjointsLies = (d: Desc): [Personne, LienDUnion][] =>
+  d.unions.flatMap(([c, info]) => (c ? [[c.p, lienDUnion(info)] as [Personne, LienDUnion]] : []))
 const enfants = (d: Desc): Desc[] => d.unions.flatMap(([, , e]) => e)
-const signe = (i: number): string => ['∞ ', '∞² ', '∞³ '][i] ?? `∞${i + 1} `
+const LIEN_PAR_DEFAUT: LienDUnion = { signe: '∞', barre: false, rang: null }
+/** Le signe de l'union de `tete` avec `conjoint`. */
+export const lienDuCouple = (tete: Desc, conjoint: Personne): LienDUnion => {
+  const u = tete.unions.find(([c]) => c?.p.id === conjoint.id)
+  return u ? lienDUnion(u[1]) : LIEN_PAR_DEFAUT
+}
 
 /** « A, B et C » */
 function enumerer(mots: string[]): string {
@@ -106,10 +139,12 @@ function poserLigne(scene: Scene, l: Ligne, x: number, y: number, transform?: st
   const corps = Math.max(k, 0.84)
   const chasse = k < 0.84 ? k / 0.84 : 1
   let pos = x - (w * corps * chasse) / 2
-  for (const [t, s] of l) {
+  for (const [t, s, barre] of l) {
     const st = s.echelle(corps)
     const lw = st.largeur(t) * chasse
     scene.texte(pos, y, t, st, 'start', transform, chasse < 1 ? lw : null)
+    const i = barre === undefined ? -1 : t.indexOf(barre)
+    if (barre !== undefined && i >= 0) barreDuSigne(scene, st, pos + st.largeur(t.slice(0, i)) * chasse, st.largeur(barre) * chasse, y, transform)
     pos += lw
   }
 }
@@ -163,7 +198,7 @@ function lignesDuTitre(coeur: Coeur, u: number, empiles: boolean): (Ligne | null
   if (empiles) lignes.push(nom(coeur.noms[0]), null, nom(coeur.noms[1]))
   else lignes.push([[`${titre(coeur.noms[0])} · ${titre(coeur.noms[1])}`, new Style('CG', 22 * u, ENCRE, 0.01, 'Bold')]], null)
   if (coeur.couple) {
-    lignes.push(nomComplet(coeur.couple[0], 11.5 * u), [['∞', new Style('SS', 13 * u, TRAIT, 0, 'Reg')]], nomComplet(coeur.couple[1], 11.5 * u))
+    lignes.push(nomComplet(coeur.couple[0], 11.5 * u), ligneDuLien(coeur.lien ?? LIEN_PAR_DEFAUT, 13 * u), nomComplet(coeur.couple[1], 11.5 * u))
     if (coeur.enfants.length > 0) lignes.push([[enumerer(coeur.enfants.map((p) => p.prenoms.split(' ')[0]!)), new Style('SS', 10 * u, ENCRE_DOUCE, 0, 'Ital')]])
   } else {
     for (const c of coeur.chiffres) lignes.push([[c, new Style('SS', 8 * u, ENCRE_DOUCE, 0, 'Reg')]])
@@ -191,14 +226,22 @@ function titreTient(coeur: Coeur, u: number, r: number, empiles: boolean, demi: 
   return tientDansLeCercle(lignes, bases, r)
 }
 
-/** Le titre posé au plus grand corps qui tient dans le cercle (cx, cy, r), ou dans sa moitié `demi`. */
-function poserLeTitre(scene: Scene, coeur: Coeur, cx: number, cy: number, r: number, empiles: boolean, demi: Demi = null): void {
+/**
+ * Le titre posé au plus grand corps qui tient dans le cercle (cx, cy, r), ou dans sa moitié `demi`.
+ * Rend le rayon où s'arrête le texte : le coin le plus lointain de ses lignes, comme `tientDansLeCercle()`.
+ */
+function poserLeTitre(scene: Scene, coeur: Coeur, cx: number, cy: number, r: number, empiles: boolean, demi: Demi = null): number {
   const u = plusGrand(0.05, 6, (x) => titreTient(coeur, x, r, empiles, demi))
   const { lignes: ls, bases } = titreAuCorps(coeur, u, r, empiles, demi)
+  let rTexte = 0
   ls.forEach((l, i) => {
-    if (l) poserLigne(scene, l, cx, cy + bases[i]!)
-    else ornement(scene, cx, cy + bases[i]!, 30 * u * 0.3528 * 1.6)
+    if (l) {
+      poserLigne(scene, l, cx, cy + bases[i]!)
+      const h = hauteur(l)
+      rTexte = Math.max(rTexte, Math.hypot(largeur(l) / 2, Math.max(Math.abs(bases[i]! - h * 0.78), Math.abs(bases[i]! + h * 0.22))))
+    } else ornement(scene, cx, cy + bases[i]!, 30 * u * 0.3528 * 1.6)
   })
+  return rTexte
 }
 
 /** Les angles (degrés) du cercle entier, ou de la moitié `demi`. */
@@ -220,6 +263,8 @@ interface CaseDuSoleil {
   coupees: Ligne[]
   /** Le couple, dont les noms suivent l'arc de préférence. */
   couple: boolean
+  /** Le couple porte un mur : l'un des deux époux, une seule icône pour la case. */
+  mur: boolean
   enfants: CaseDuSoleil[]
   poids: number
   cote: Cote
@@ -267,8 +312,12 @@ export class SoleilInterieur {
     return sortie
   }
 
-  /** Les cases, chaque anneau à son corps `corps[anneau − 1]` (pour le premier, le nom d'une tête de famille, en points). */
-  private cases(corps: number[]): CaseDuSoleil[] {
+  /**
+   * Les cases, chaque anneau à son corps `corps[anneau − 1]` (pour le premier, le nom d'une tête de famille, en points).
+   * `murs` : dit si une personne porte un mur ; seule la case du couple en pose (les autres
+   * familles sont celles des frères et sœurs, dont l'affiche ne sert pas les parents).
+   */
+  private cases(corps: number[], murs?: (p: Personne) => boolean): CaseDuSoleil[] {
     const construire = (d: Desc, anneau: number, cote: Cote, couple: [Personne, Personne] | null): CaseDuSoleil => {
       const dernier = anneau === this.anneaux
       const b = corps[anneau - 1]!
@@ -277,19 +326,20 @@ export class SoleilInterieur {
       let lignes: Ligne[]
       let coupees: Ligne[]
       if (couple) {
-        lignes = [nomComplet(couple[0], b * 0.93), [['∞', new Style('SS', b * 0.93, TRAIT, 0, 'Reg')]], nomComplet(couple[1], b * 0.93)]
-        coupees = [...nomCoupe(couple[0], b * 0.85), [['∞', new Style('SS', b * 0.85, TRAIT, 0, 'Reg')]], ...nomCoupe(couple[1], b * 0.85)]
+        const lien = lienDuCouple(d, couple[1])
+        lignes = [nomComplet(couple[0], b * 0.93), ligneDuLien(lien, b * 0.93), nomComplet(couple[1], b * 0.93)]
+        coupees = [...nomCoupe(couple[0], b * 0.85), ligneDuLien(lien, b * 0.85), ...nomCoupe(couple[1], b * 0.85)]
       } else {
-        const epoux = conjoints(d)
-        lignes = [nomComplet(d.p, c), ...epoux.map((p, i) => nomComplet(p, cc, ENCRE_DOUCE, signe(i), true))]
-        coupees = [...nomCoupe(d.p, c), ...epoux.flatMap((p, i) => nomCoupe(p, cc * 0.95, ENCRE_DOUCE, signe(i), true))]
+        const epoux = conjointsLies(d)
+        lignes = [nomComplet(d.p, c), ...epoux.map(([p, lien]) => nomComplet(p, cc, ENCRE_DOUCE, lien, true))]
+        coupees = [...nomCoupe(d.p, c), ...epoux.flatMap(([p, lien]) => nomCoupe(p, cc * 0.95, ENCRE_DOUCE, lien, true))]
         if (dernier) lignes = coupees
       }
       // Pour le couple, seuls ses enfants communs : les autres unions du mari sont sa fratrie à lui.
       const sous = dernier ? [] : couple ? (d.unions.find(([cj]) => cj?.p.id === couple[1].id)?.[2] ?? []) : enfants(d)
       const fils = sous.map((e) => construire(e, anneau + 1, cote, null))
       const poids = fils.length > 0 ? Math.max(1, fils.reduce((s, f) => s + f.poids, 0)) : 1
-      return { lignes, coupees, couple: couple !== null, enfants: fils, poids: couple ? poids * 1.4 : poids, cote }
+      return { lignes, coupees, couple: couple !== null, mur: couple !== null && couple.some((p) => murs?.(p) === true), enfants: fils, poids: couple ? poids * 1.4 : poids, cote }
     }
     return this.familles.map((f) => construire(f.tete, 1, f.cote, f.couple))
   }
@@ -418,10 +468,13 @@ export class SoleilInterieur {
     return corps
   }
 
-  /** Dessine le soleil intérieur centré sur (cx, cy), de rayon `r`, chaque anneau à son corps. */
-  dessiner(scene: Scene, cx: number, cy: number, r: number, corps: number[], pose: PoseDuSoleil): void {
+  /**
+   * Dessine le soleil intérieur centré sur (cx, cy), de rayon `r`, chaque anneau à son corps.
+   * `murs` : qui porte un mur ; sans lui, aucune icône (la scène est celle d'avant).
+   */
+  dessiner(scene: Scene, cx: number, cy: number, r: number, corps: number[], pose: PoseDuSoleil, murs?: (p: Personne) => boolean): void {
     const bornes = this.bornes()
-    const cases = this.cases(corps)
+    const cases = this.cases(corps, murs)
     const { posees, limites } = this.poser(cases, pose)
     const trait = r * 0.0016
     for (const p of posees) {
@@ -439,7 +492,9 @@ export class SoleilInterieur {
     }
     for (const p of posees) {
       const k = this.part(p, bornes, r)
-      this.texte(scene, cx, cy, r, k === 1 ? p : { ...p, c: { ...p.c, lignes: p.c.lignes.map((l) => echelle(l, k)), coupees: p.c.coupees.map((l) => echelle(l, k)) } }, bornes)
+      const rTexte = this.texte(scene, cx, cy, r, k === 1 ? p : { ...p, c: { ...p.c, lignes: p.c.lignes.map((l) => echelle(l, k)), coupees: p.c.coupees.map((l) => echelle(l, k)) } }, bornes)
+      // Après le texte, sur l'arc extérieur de la case, sans rien déplacer.
+      if (p.c.mur) murDansUnSecteur(scene, cx, cy, bornes[p.anneau]! * r, (p.a1 + p.a2) / 2, 1, { rTexte, ouverture: ((p.a2 - p.a1) * Math.PI) / 180 })
     }
     if (this.coeur) {
       // Au demi-cercle, le cœur est un demi-disque sur la base, et les noms tiennent sur une ligne.
@@ -449,7 +504,8 @@ export class SoleilInterieur {
     }
   }
 
-  private texte(scene: Scene, cx: number, cy: number, r: number, p: CasePosee, bornes: number[]): void {
+  /** Écrit la case ; rend le rayon où s'arrête son texte (pour que le mur ne le recouvre pas). */
+  private texte(scene: Scene, cx: number, cy: number, r: number, p: CasePosee, bornes: number[]): number {
     // (La forme se décide comme pour le rayon requis : la moins gourmande.)
     const { forme } = this.exigence(p, bornes)
     const r1 = bornes[p.anneau - 1]! * r
@@ -472,16 +528,36 @@ export class SoleilInterieur {
         const ll = w > dispo ? echelle(l, Math.max(0.6, dispo / w)) : l
         const total = largeur(ll)
         let x = -total / 2
-        for (const [t, s] of ll) {
+        for (const [t, s, barre] of ll) {
           const lw = s.largeur(t)
           const milieu = ((x + lw / 2) / base) * (180 / Math.PI)
           const centre = dessous ? am + milieu : am - milieu
           const demi = (lw / 2 / base) * (180 / Math.PI) * 1.02
           scene.texteSurArc(cx, cy, base, centre - demi, centre + demi, t, s, dessous)
+          const i = barre === undefined ? -1 : t.indexOf(barre)
+          if (barre !== undefined && i >= 0) {
+            // Le trait se pose au pied du signe, dans le repère de l'arc : le long de la lecture, et « en haut » du glyphe.
+            const lecture = x + s.largeur(t.slice(0, i)) + s.largeur(barre) / 2
+            const angleDuSigne = (lecture / base) * (180 / Math.PI)
+            const a = dessous ? am + angleDuSigne : am - angleDuSigne
+            const rad = (a * Math.PI) / 180
+            const [px, py] = polaire(cx, cy, base, a)
+            const lect: [number, number] = dessous ? [-Math.sin(rad), -Math.cos(rad)] : [Math.sin(rad), Math.cos(rad)]
+            const haut: [number, number] = dessous ? [-Math.cos(rad), Math.sin(rad)] : [Math.cos(rad), -Math.sin(rad)]
+            const m = s.largeur(barre) * 0.4
+            scene.ligneDroite(
+              px - lect[0] * m + haut[0] * s.mm * 0.11,
+              py - lect[1] * m + haut[1] * s.mm * 0.11,
+              px + lect[0] * m + haut[0] * s.mm * 0.55,
+              py + lect[1] * m + haut[1] * s.mm * 0.55,
+              TRAIT,
+              s.mm * 0.12,
+            )
+          }
           x += lw
         }
       }
-      return
+      return rm + h / 2
     }
     // En rayonnant : à droite du centre, on lit vers l'extérieur ; à gauche, vers le centre.
     const rm = (r1 + r2) / 2
@@ -496,6 +572,8 @@ export class SoleilInterieur {
       poserLigne(scene, l, x, y + lh * 0.78, tr, dispo)
       y += lh
     }
+    // Le texte rayonne depuis le milieu de l'anneau : il s'arrête à la moitié de sa plus longue ligne.
+    return Math.min(r2, rm + Math.min(dispo, Math.max(...ls.map(largeur))) / 2)
   }
 }
 
@@ -522,16 +600,16 @@ export class Rosace {
     // Le couple de l'affiche (éventail des quatre parents) : lui, elle, et leurs seuls enfants
     // communs, comme au soleil intérieur.
     const lignes: (Ligne | null)[] = f.couple
-      ? [nomComplet(f.couple[0], b), nomComplet(f.couple[1], b, ENCRE, '∞ ')]
-      : [nomComplet(d.p, b), ...conjoints(d).map((p, i) => nomComplet(p, b * 0.79, ENCRE_DOUCE, signe(i), true))]
+      ? [nomComplet(f.couple[0], b), nomComplet(f.couple[1], b, ENCRE, lienDuCouple(d, f.couple[1]))]
+      : [nomComplet(d.p, b), ...conjointsLies(d).map(([p, lien]) => nomComplet(p, b * 0.79, ENCRE_DOUCE, lien, true))]
     const fils = f.couple ? (d.unions.find(([c]) => c?.p.id === f.couple![1].id)?.[2] ?? []) : enfants(d)
     if (fils.length > 0) lignes.push(null)
     for (const e of fils) {
       const moi = nomComplet(e.p, b * 0.76)
-      const leurs = conjoints(e)
-      const avec = leurs.length > 0 ? [...moi, ...nomComplet(leurs[0]!, b * 0.76, ENCRE_DOUCE, ' ∞ ', true)] : moi
+      const leurs = conjointsLies(e)
+      const avec = leurs.length > 0 ? [...moi, ...nomComplet(leurs[0]![0], b * 0.76, ENCRE_DOUCE, leurs[0]![1], true, ' ')] : moi
       if (largeur(avec) <= largeurMax) lignes.push(avec)
-      else lignes.push(moi, ...leurs.slice(0, 1).map((p) => nomComplet(p, b * 0.72, ENCRE_DOUCE, '∞ ', true)))
+      else lignes.push(moi, ...leurs.slice(0, 1).map(([p, lien]) => nomComplet(p, b * 0.72, ENCRE_DOUCE, lien, true)))
       // Les petits-enfants : « Louison et Pablo GABRIEL », par nom de famille.
       const petits = enfants(e)
       if (petits.length > 0) {
@@ -591,9 +669,10 @@ export class Rosace {
 
   /**
    * Dessine la rosace de rayon `r` centrée sur (cx, cy) : le cercle entier, tourné de `rotation`,
-   * ou le demi-disque de l'éventail.
+   * ou le demi-disque de l'éventail. `murs` : qui porte un mur ; seul le couple du cœur en pose
+   * (une icône, à son bord), après le titre.
    */
-  dessiner(scene: Scene, cx: number, cy: number, r: number, b: number, rotation = 0): void {
+  dessiner(scene: Scene, cx: number, cy: number, r: number, b: number, rotation = 0, murs?: (p: Personne) => boolean): void {
     const n = this.familles.length
     const demi = this.demi
     const versLeHaut = demi === 'haut'
@@ -607,7 +686,8 @@ export class Rosace {
       const c = g.c * r
       scene.chemin(secteur(cx, cy, 0, c, ...moitie(demi)), PAPIER, TRAIT, c * 0.0067)
       scene.chemin(arc(cx, cy, c * 0.98, demi), 'none', '#F1E8D8', c * 0.04)
-      poserLeTitre(scene, this.coeur, cx, cy, c * 0.86, false, demi)
+      const rTexte = poserLeTitre(scene, this.coeur, cx, cy, c * 0.86, false, demi)
+      if (this.coeur.couple?.some((p) => murs?.(p) === true)) murDansUnSecteur(scene, cx, cy, c, demi === 'bas' ? 315 : 45, 1, { rTexte })
     }
     this.familles.forEach((f, i) => {
       const [x, y] = polaire(cx, cy, rho, angles[i]!)

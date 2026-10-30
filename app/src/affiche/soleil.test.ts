@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { ArbreAffiche, fusionnerCharges } from './donnees'
-import { arbreDeCousins, arbreFictif, arbreTouffu, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
+import { arbreDeCousins, arbreFictif, arbreTouffu, avecFinsDeRecherche, avecLeCoupleEnFinDeRecherche, coupleSeul, legendeDuMurPresente, mursAttendus, mursDeLaScene, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { radians, Reglages } from './eventail'
-import type { AfficheProduite, CentreDeLAffiche } from './fabriquer'
+import type { AfficheProduite, CentreDeLAffiche, FormeDesDescendants } from './fabriquer'
 import { afficheSoleil } from './soleil'
 import { versSvg } from './svg'
 
 installerLesPolicesDuDisque()
 
-function soleil(essai: ArbreDEssai, options: { rotation?: number; centre?: CentreDeLAffiche } = {}): AfficheProduite {
+function soleil(essai: ArbreDEssai, options: { rotation?: number; centre?: CentreDeLAffiche; descendants?: FormeDesDescendants } = {}): AfficheProduite {
   return afficheSoleil(new ArbreAffiche(essai.charge), essai.mari, essai.femme, {
     date: new Date(2026, 9, 24),
     centre: options.centre ?? 'couple',
+    ...(options.descendants ? { descendants: options.descendants } : {}),
     reglages: new Reglages({ rotation: options.rotation ?? 0 }),
   })
 }
@@ -142,5 +143,71 @@ describe('la fusion des lectures', () => {
     for (const f of charge.familles) expect(fusion.familles.find((x) => x.id === f.id)!.enfants.map((e) => e.personId)).toEqual(f.enfants.map((e) => e.personId))
     expect(fusion.personnes).toHaveLength(charge.personnes.length)
     expect(fusion.famille).toBe(seule.famille)
+  })
+})
+
+describe.each([
+  ['le soleil du couple', 'couple', arbreFictif],
+  ['le soleil des quatre parents', 'parents', arbreDeCousins],
+] as const)('le mur de %s', (_, centre, arbre) => {
+  const { essai: avec } = avecFinsDeRecherche(arbre())
+  const close = soleil(avec, { centre })
+
+  it('dessine un mur par sommet clos, et sa ligne de légende', () => {
+    const attendus = mursAttendus(avec)
+    expect(attendus).toBeGreaterThan(0)
+    expect(mursDeLaScene(close.scene)).toHaveLength(attendus + 1)
+    // Le nombre, en dur : les trois sommets clos par `avecFinsDeRecherche()`, plus la ligne de légende.
+    expect(attendus).toBe(3)
+    expect(mursDeLaScene(close.scene)).toHaveLength(3 + 1)
+    expect(legendeDuMurPresente(close.scene)).toBe(true)
+    expect(versSvg(close.scene)).not.toMatch(/NaN|Infinity/)
+  })
+
+  it('ne dessine aucun mur ni légende sans fin de recherche', () => {
+    const sans = soleil(arbre(), { centre })
+    expect(mursDeLaScene(sans.scene)).toHaveLength(0)
+    expect(legendeDuMurPresente(sans.scene)).toBe(false)
+  })
+
+  it('ne change ni les anneaux ni le disque central', () => {
+    const sans = soleil(arbre(), { centre })
+    expect(close.eventail.rExt).toBeCloseTo(sans.eventail.rExt, 9)
+    expect(close.eventail.rC).toBeCloseTo(sans.eventail.rC, 9)
+  })
+})
+
+describe.each(['arbre', 'soleil', 'medaillons'] as const)('le mur du couple, descendants %s', (descendants) => {
+  // La femme a une mère liée et un père clos : un seul mur, celui du couple.
+  const couple = avecLeCoupleEnFinDeRecherche(arbreDeCousins())
+
+  it.each(['couple', 'parents'] as const)('le couple porte son mur, centre %s, et la légende le dit', (centre) => {
+    const a = soleil(couple, { centre, descendants })
+    expect(mursAttendus(couple)).toBe(1)
+    // Le mur du couple, plus la ligne de légende — au premier anneau ou au centre.
+    expect(mursDeLaScene(a.scene)).toHaveLength(1 + 1)
+    expect(legendeDuMurPresente(a.scene)).toBe(true)
+    expect(versSvg(a.scene)).not.toMatch(/NaN|Infinity/)
+  })
+
+  it('les quatre parents au centre gardent le mur du couple en plus de ceux des ancêtres', () => {
+    const tous = avecLeCoupleEnFinDeRecherche(avecFinsDeRecherche(arbreDeCousins()).essai)
+    expect(mursDeLaScene(soleil(tous, { centre: 'parents', descendants }).scene)).toHaveLength(3 + 1 + 1)
+  })
+
+  it('ne pose aucun mur sans fin de recherche', () => {
+    const sans = soleil(arbreDeCousins(), { centre: 'parents', descendants })
+    expect(mursDeLaScene(sans.scene)).toHaveLength(0)
+    expect(legendeDuMurPresente(sans.scene)).toBe(false)
+  })
+})
+
+describe('la hauteur de la page avec un mur', () => {
+  it('réserve la ligne du mur sous le dessin : 5,4·kl de plus que sans mur', () => {
+    const avec = soleil(avecFinsDeRecherche(arbreDeCousins()).essai)
+    const sans = soleil(arbreDeCousins())
+    // Les cousins : la légende ne tient pas dans un coin, elle passe sous le dessin.
+    expect(avec.echelleLegende).toBe(1)
+    expect(avec.scene.hauteur - sans.scene.hauteur).toBeCloseTo(5.4 * avec.echelleLegende, 9)
   })
 })
