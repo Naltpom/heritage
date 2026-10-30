@@ -59,6 +59,8 @@ final class Version20261030094517 extends AbstractMigration
                            AND (reason <> 'autre' OR body IS NOT NULL))
             )
             SQL);
+        // L'index de la clé étrangère, tel que Doctrine le déduit du mapping (le test de schéma le compare).
+        $this->addSql('CREATE INDEX IDX_998C91B2217BBB47 ON tree_research_closure (person_id)');
         $this->addSql('CREATE UNIQUE INDEX uniq_tree_research_closure_side ON tree_research_closure (person_id, side)');
     }
 
