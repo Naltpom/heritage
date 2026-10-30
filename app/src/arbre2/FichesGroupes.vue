@@ -29,6 +29,12 @@ const props = defineProps<{
   fiches: FicheHistoire[]
   /** Le `cssText` de chaque boîte, dans l'ordre des fiches (`styleDeFiche`). */
   styles: string[]
+  /**
+   * Le motif d'une recherche close, une phrase par côté clos (`arbre2/sommets.ts`), dans
+   * l'ordre des fiches — `null` pour les autres. Dit au survol (`title`) et à un lecteur
+   * d'écran (`aria-label`).
+   */
+  infobulles?: (string | null)[]
   /** L'apparition au premier affichage : un seul fondu, pour tout le calque. */
   revelation: boolean
 }>()
@@ -51,7 +57,7 @@ function construire(): void {
     b.className = 'fiche-groupe'
     b.setAttribute('role', 'button')
     b.tabIndex = 0
-    b.setAttribute('aria-label', f.noeud.displayName)
+    nommer(b, f.noeud.displayName, props.infobulles?.[i] ?? null)
     b.dataset['index'] = String(i)
     b.dataset['id'] = f.id
     fragment.append(b)
@@ -61,6 +67,18 @@ function construire(): void {
   racine.replaceChildren(fragment)
   peindre()
   if (idFocalisee !== undefined) boites.find((b) => b.dataset['id'] === idFocalisee)?.focus({ preventScroll: true })
+}
+
+/** Le nom de la boîte, suivi du motif d'une recherche close : `title` (survol) et `aria-label` (clavier, lecteur d'écran). */
+function nommer(b: HTMLElement, nom: string, motif: string | null): void {
+  b.setAttribute('aria-label', motif === null ? nom : `${nom}. ${motif.replace(/\n/g, '. ')}`)
+  if (motif === null) b.removeAttribute('title')
+  else b.title = `${nom}\n${motif}`
+}
+
+/** Un motif qui change (graphe relu, parent lié depuis) : les noms se réécrivent, pas les boîtes. */
+function nommerTout(): void {
+  for (let i = 0; i < boites.length; i++) nommer(boites[i]!, props.fiches[i]!.noeud.displayName, props.infobulles?.[i] ?? null)
 }
 
 function peindre(): void {
@@ -94,6 +112,7 @@ function surTouche(e: KeyboardEvent): void {
 
 watch(() => props.fiches, construire)
 watch(() => props.styles, peindre)
+watch(() => props.infobulles, nommerTout)
 onMounted(construire)
 
 defineExpose({

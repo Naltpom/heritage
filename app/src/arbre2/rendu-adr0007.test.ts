@@ -151,3 +151,36 @@ describe('le chargement de /arbre', () => {
     expect(VUE).toContain("return jeton === jetonRafraichir ? 'echec' : null")
   })
 })
+
+describe('la fin de recherche (ADR 0023) respecte les mêmes règles', () => {
+  const VOLET = sansCommentaires(
+    Object.values(import.meta.glob<string>('./FinsDeRechercheDuVolet.vue', { query: '?raw', import: 'default', eager: true }))[0]!,
+  )
+
+  it('le mur du calque : tracé du module, couleur du jeton, estompé par `stroke-opacity`, jamais `opacity`', () => {
+    const calque = SOURCES['./CalqueLibelles.vue']!
+    const mur = calque.slice(calque.indexOf('data-mur'), calque.indexOf('</svg>', calque.indexOf('data-mur')))
+    expect(mur).toContain('viewBox="0 0 24 24"')
+    expect(mur).toContain('aria-hidden="true"')
+    expect(mur).toContain('<path :d="TRACE_DU_MUR" />')
+    expect(mur).toContain("stroke: 'var(--h-fin-de-recherche)'")
+    expect(mur).toContain("'stroke-opacity'")
+    expect(mur).not.toMatch(/(?<![-\w])opacity/)
+    expect(calque).toContain("import { TRACE_DU_MUR } from '@/lib/finDeRecherche'")
+  })
+
+  it('le motif se dit au survol : `title` posé avec le nom, à la construction des boîtes', () => {
+    const fiches = SOURCES['./FichesGroupes.vue']!
+    expect(fiches).toContain('b.title =')
+    expect(fiches).toContain('nommer(b, f.noeud.displayName')
+    expect(fiches).toContain("setAttribute('aria-label'")
+  })
+
+  it('le canevas de l’écran ne dessine toujours aucun `<svg>`, et le volet porte le bloc de la fin', () => {
+    expect(SOURCES['canevas de la vue']).not.toContain('<svg')
+    expect(CANEVAS).toContain('<FinsDeRechercheDuVolet')
+    expect(VOLET).toContain('data-fin-de-recherche')
+    expect(VOLET).toContain('TRACE_DU_MUR')
+    expect(VOLET).not.toMatch(/(?<![-\w])opacity/)
+  })
+})

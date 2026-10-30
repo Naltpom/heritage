@@ -196,3 +196,24 @@ describe('la bascule « En attente de validation » (demande du 22/10/2026)', ()
     expect(corpsDe(texte, 'montrerNoeud')).toContain('basculerEnAttente(true)')
   })
 })
+
+describe('la fin de recherche (ADR 0023)', () => {
+  it('lit le sommet de chaque fiche sur tout le graphe reçu, une fois par graphe', async () => {
+    const texte = await source()
+
+    expect(texte).toContain('sommetsDuGraphe(g.noeuds, g.aretes)')
+    expect(texte).toContain('const g = grapheCharge.value')
+    expect(texte).toContain('fin: sommets.value.get(f.id)?.close === true')
+    expect(texte).toContain('mur: (f) => sommets.value.get(f.id)?.close === true')
+    expect(texte).toContain(':infobulles="infobullesFiches"')
+  })
+
+  it('montre le motif au clic, dans le volet (PC) et dans le panneau du téléphone', async () => {
+    const texte = await source()
+
+    expect(texte).toContain('const finsDeLaChoisie = computed')
+    // Une fois dans le panneau du bas (téléphone), une fois dans le volet de droite.
+    expect(texte.match(/<FinsDeRechercheDuVolet :fins="finsDeLaChoisie" \/>/g)).toHaveLength(2)
+    expect(texte.indexOf('<FinsDeRechercheDuVolet')).toBeLessThan(texte.indexOf('aria-label="Fiche de la personne choisie"'))
+  })
+})

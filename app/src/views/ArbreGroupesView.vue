@@ -122,6 +122,9 @@ import { useCadrage } from '@/arbre2/useCadrage'
 import { dansLaFenetre, transformationMonde, transformationRelative, viewBoxDe } from '@/arbre2/cadrage'
 import { alphaDeFiche, couleurBranche, styleDeFiche } from '@/arbre2/apparence'
 import { MARGE, anneauDe, creerMemoireDesTextes, libellesDesFiches, libellesDesFoyers, type Anneau } from '@/arbre2/libelles'
+import { AUCUN_SOMMET, sommetsDuGraphe } from '@/arbre2/sommets'
+import FinsDeRechercheDuVolet from '@/arbre2/FinsDeRechercheDuVolet.vue'
+import { COTES_DE_RECHERCHE, finDuCote, libelleDuCote, libelleDuMotif } from '@/lib/finDeRecherche'
 import { useLectureDeLaFiche } from '@/arbre2/lectureFiche'
 import { useRelectureDeLArbre } from '@/arbre2/relecture'
 import {
@@ -1541,6 +1544,53 @@ const LIBELLES_BRANCHE: Record<string, string> = { ...LIBELLES_QUART, tr: 'Tronc
 const libelleBranche = (b: string): string => LIBELLES_BRANCHE[b] ?? 'Hors branche'
 
 /**
+ * Le sommet de chaque fiche — parents connus, recherche close, pas encore cherché
+ * (`arbre2/sommets.ts`, ADR 0023) —, calculé UNE fois par graphe reçu, sur toutes ses
+ * arêtes : un ancêtre que les filtres cachent reste un parent connu.
+ */
+const sommets = computed(() => {
+  const g = grapheCharge.value
+  return g ? sommetsDuGraphe(g.noeuds, g.aretes) : AUCUN_SOMMET
+})
+
+/** Le motif de chaque boîte (survol et lecteur d'écran), dans l'ordre des fiches. */
+const infobullesFiches = computed<(string | null)[]>(() => {
+  const d = disposition.value
+  return d ? d.fiches.map((f) => sommets.value.get(f.id)?.infobulle ?? null) : []
+})
+
+/**
+ * Les côtés CLOS de la personne choisie, pour le volet et le panneau du téléphone : même
+ * règle que la carte (un parent lié l'emporte). Le motif vient du nœud ; le texte, l'auteur
+ * et la date, de la fiche lue, quand elle l'est.
+ */
+const finsDeLaChoisie = computed(() => {
+  const f = ficheChoisie.value
+  const sommet = f ? sommets.value.get(f.id) : undefined
+  if (!f || !sommet?.close) return []
+  const lue = ficheLue.value && ficheLue.value.id === f.noeud.personId ? ficheLue.value : null
+  return COTES_DE_RECHERCHE.flatMap((cote) => {
+    const resume = finDuCote(f.noeud, cote)
+    if (sommet.etats[cote] !== 'close' || resume === null) return []
+    const plus = (cote === 'pere' ? lue?.finDeRecherchePere : lue?.finDeRechercheMere) ?? null
+    const date = plus ? new Date(plus.closedAt) : null
+    return [
+      {
+        cote,
+        titre: `Recherche close ${libelleDuCote(cote)}`,
+        motif: libelleDuMotif(resume.reason, resume.beforeYear),
+        texte: plus?.body ?? null,
+        par: plus?.authorLabel ?? null,
+        le:
+          date && !Number.isNaN(date.getTime())
+            ? date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+            : null,
+      },
+    ]
+  })
+})
+
+/**
  * Les styles des boîtes (`arbre2/apparence.ts`), un `cssText` par fiche. Ils ne
  * dépendent que du niveau Ensemble, des filtres et de la recherche : déplacer la vue ne
  * les recalcule pas. Une fiche estompée l'est dans la couleur de sa peinture, jamais
@@ -1561,6 +1611,7 @@ const stylesFiches = computed<string[]>(() => {
       alpha: alphaDeFiche(ids.has(f.id), ciblees, f.id),
       place: direct ? enLigne(f) : null,
       branche: brancheDe(f),
+      fin: sommets.value.get(f.id)?.close === true,
     }),
   )
 })
@@ -1611,6 +1662,7 @@ const libelles = computed(() => {
       portrait: enPortrait.value,
       directe: (f) => direct && enLigne(f) !== null,
       estompe: (f) => ciblees.size > 0 && !ciblees.has(f.id),
+      mur: (f) => sommets.value.get(f.id)?.close === true,
     },
     memoireDesTextes,
   )
@@ -2250,7 +2302,7 @@ onBeforeUnmount(() => {
         />
 
         <!-- Les boîtes, en coordonnées monde : un seul conteneur transformé, sans Vue à chaque image. -->
-        <FichesGroupes ref="boites" :fiches="disposition.fiches" :styles="stylesFiches" :revelation="revelation" @choisir="choisir" />
+        <FichesGroupes ref="boites" :fiches="disposition.fiches" :styles="stylesFiches" :infobulles="infobullesFiches" :revelation="revelation" @choisir="choisir" />
 
         <!-- Le titre de chaque rectangle de famille. -->
         <TitresDesRectangles ref="titres" :titres="titresDesRectangles" :gouttiere="gouttiere" />
@@ -2388,6 +2440,7 @@ onBeforeUnmount(() => {
             >sans lien connu · position estimée</span>
             <span v-if="ficheChoisie.noeud.enAttente" class="rounded-pastille border border-accent px-2.5 py-px text-xs text-accent">en attente</span>
           </div>
+          <FinsDeRechercheDuVolet :fins="finsDeLaChoisie" />
           <button
             type="button"
             role="checkbox"
@@ -2556,6 +2609,7 @@ onBeforeUnmount(() => {
           />
           <IdentiteFiche :fiche="ficheLue" :seulement="['birth', 'death']" />
           <ParenteFiche :fiche="ficheLue" vers-arbre @choisir="choisirProche" />
+          <FinsDeRechercheDuVolet :fins="finsDeLaChoisie" />
           <section v-if="ficheLue.faits.length">
             <h3 class="mb-2 text-[11px] tracking-wider text-attenue uppercase">Faits</h3>
             <FaitsFiche :fiche="ficheLue" />

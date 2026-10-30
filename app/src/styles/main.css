@@ -59,6 +59,10 @@
      `--h-ok` aux fiches appuyées sur un acte (QUAY ≥ 2). */
   --h-alerte: #a8501e;
   --h-ok: #3f6b4a;
+  /* La fin de recherche (ADR 0023) : le bord et le mur d'une carte dont la recherche est
+     close. Un rouge brique, distinct de l'orange brûlé d'`--h-alerte` — un mur ne se lit
+     pas comme une alerte. Même valeur que `BRIQUE` (`lib/finDeRecherche.ts`). */
+  --h-fin-de-recherche: #9b3426;
 
   /* Teintes de fiche par sexe — `h` homme, `f` femme, `x` inconnu dans
      `arbre.html`. Les bords (`-bord`) sont les `stroke`. */
@@ -133,6 +137,8 @@
   --h-alerte-bord: color-mix(in srgb, var(--h-alerte) 35%, transparent);
   --h-ok-doux: color-mix(in srgb, var(--h-ok) 13%, transparent);
   --h-ok-bord: color-mix(in srgb, var(--h-ok) 35%, transparent);
+  --h-fin-de-recherche-doux: color-mix(in srgb, var(--h-fin-de-recherche) 13%, transparent);
+  --h-fin-de-recherche-bord: color-mix(in srgb, var(--h-fin-de-recherche) 35%, transparent);
 
   /* Le violet du cadeau : celui des tirages de Noël (pastille « Noël », cartes
      de l'accueil et de la liste, « Découvrir à qui j'offre »), qu'on doit
@@ -168,6 +174,7 @@
 
     --h-alerte: #e08a5a;
     --h-ok: #7db38c;
+    --h-fin-de-recherche: #ea6f5d;
 
     --h-cadeau: #b78cf0;
     --h-cadeau-texte: #1a1024;
@@ -206,6 +213,9 @@
   --color-alerte: var(--h-alerte);
   --color-alerte-doux: var(--h-alerte-doux);
   --color-alerte-bord: var(--h-alerte-bord);
+  --color-fin-de-recherche: var(--h-fin-de-recherche);
+  --color-fin-de-recherche-doux: var(--h-fin-de-recherche-doux);
+  --color-fin-de-recherche-bord: var(--h-fin-de-recherche-bord);
   --color-ok: var(--h-ok);
   --color-ok-doux: var(--h-ok-doux);
   --color-ok-bord: var(--h-ok-bord);
