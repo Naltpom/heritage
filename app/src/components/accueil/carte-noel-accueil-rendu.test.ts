@@ -1,14 +1,14 @@
 /**
  * Un tirage de Noël sur l'accueil, rendu côté serveur (donc sans geste).
  *
- * 1. **Ouvert, pas encore répondu** : le compte à rebours du tirage, les deux
- *    dates, « Répondre » qui mène au site de Noël ;
+ * 1. **Ouvert, pas encore répondu** : le compte à rebours du tirage en gros
+ *    chiffres, les deux dates, « Répondre » qui mène au site de Noël ;
  * 2. **Ouvert, répondu** : « Tu participes » ou « Tu ne participes pas », sans
  *    bouton « Répondre » ;
  * 3. **Tiré, et j'y suis** : « Découvrir à qui j'offre », et **aucun nom de
  *    receveur dans le HTML** — le secret n'entre dans le DOM qu'au geste
  *    (`carte-noel-accueil.client.test.ts`) ;
- * 4. « Vous organisez » pour le créateur, et toujours le lien vers le site.
+ * 4. « vous organisez » pour le créateur, et toujours le lien vers le site.
  */
 import { describe, expect, it } from 'vitest'
 import { createSSRApp, h } from 'vue'
@@ -43,22 +43,21 @@ describe('CarteNoelAccueil', () => {
     const html = await rendre(tirage())
 
     expect(html).toContain('Noël des Romarin')
-    expect(html).toContain('Tirage dans 43 jours')
-    expect(html).toContain('1er décembre 2026')
-    expect(html).toContain('Remise des cadeaux')
-    expect(html).toContain('24 décembre 2026')
+    expect(html).toContain('43 j')
+    expect(html).toContain('avant le tirage')
+    expect(html).toContain('Tirage 1er déc. · cadeaux 24 déc.')
     expect(html).toContain('Fleurance · 6 participants · budget 30 €')
     expect(html).toContain('Tu n’as pas encore répondu')
     expect(html).toMatch(/<a[^>]*href="https:\/\/noel2026\.naltpom\.fr\/t\/ROMA26"[^>]*data-repondre/)
-    expect(html).toContain('Ouvrir sur le site de Noël')
     expect(html).not.toContain('Découvrir')
-    expect(html).not.toContain('Vous organisez')
+    expect(html).not.toContain('vous organisez')
   })
 
   it('ouvert, répondu : la pastille dit ma réponse, plus de « Répondre »', async () => {
     const oui = await rendre(tirage({ reponse: 'oui' }))
     expect(oui).toContain('Tu participes')
     expect(oui).not.toContain('data-repondre')
+    expect(oui).toContain('Site de Noël')
 
     const non = await rendre(tirage({ reponse: 'non' }))
     expect(non).toContain('Tu ne participes pas')
@@ -69,8 +68,10 @@ describe('CarteNoelAccueil', () => {
     const html = await rendre(tirage({ statut: 'tire', reponse: 'oui' }))
 
     expect(html).toContain('Découvrir à qui j’offre')
-    expect(html).toContain('Tiré le')
-    expect(html).toContain('Tirage fait · cadeaux dans 66 jours')
+    expect(html).toContain('Noël · tirage fait')
+    expect(html).toContain('66 j')
+    expect(html).toContain('avant le 24 déc.')
+    expect(html).toContain('Le nom ne s’affiche qu’à ta demande.')
     expect(html).not.toContain('Tu offres à')
     expect(html).not.toContain('data-attribution')
   })
@@ -82,7 +83,14 @@ describe('CarteNoelAccueil', () => {
     expect(html).not.toContain('Découvrir')
   })
 
-  it('le créateur voit « Vous organisez »', async () => {
-    expect(await rendre(tirage({ estCreateur: true, reponse: 'oui' }))).toContain('Vous organisez')
+  it('le créateur voit « vous organisez »', async () => {
+    expect(await rendre(tirage({ estCreateur: true, reponse: 'oui' }))).toContain('Noël · vous organisez')
+    expect(await rendre(tirage({ estCreateur: true, statut: 'tire', reponse: 'oui' }))).toContain('Noël · tirage fait · vous organisez')
+  })
+
+  it('cadeaux remis : plus de compteur, la phrase le dit', async () => {
+    const html = await rendre(tirage({ statut: 'tire', reponse: 'oui', dateEvenement: '2026-10-01T00:00:00+02:00' }))
+    expect(html).not.toContain('data-compteur')
+    expect(html).toContain('Cadeaux remis')
   })
 })

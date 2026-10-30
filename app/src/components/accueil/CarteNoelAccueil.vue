@@ -18,13 +18,13 @@
  *   geste**, et « Cacher » le retire. Une fois découvert : sa photo, son nom,
  *   son âge, le lien de parenté, et le budget pour rappel.
  *
- * Le compte à rebours suit ce qui compte maintenant (`compteARebours`) ; les
- * deux dates — tirage et remise des cadeaux — sont toujours écrites.
- * Suite : `carte-noel-accueil-rendu.test.ts`.
+ * Le compte à rebours suit ce qui compte maintenant, en gros chiffres à droite
+ * (`compteurDeLaCarte`, refonte du 30/10/2026) : le tirage tant qu'il est
+ * ouvert, la remise des cadeaux ensuite. Les deux dates restent écrites sous
+ * la carte tant que le tirage est ouvert. Suite : `carte-noel-accueil-rendu.test.ts`.
  */
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { estErreurApi, lireMonAttributionDeNoel, type AttributionDeNoel, type ResumeDuTirageDeNoel } from '@/lib/api'
-import IconeCadeau from '@/components/evenements-familiaux/IconeCadeau.vue'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import {
   LIBELLES_DE_REPONSE,
@@ -32,7 +32,8 @@ import {
   adresseSurLeSiteDeNoel,
   budgetEnEuros,
   compteARebours,
-  dateLongue,
+  compteurDeLaCarte,
+  dateCourte,
   etatDeMaReponse,
   lienLisible,
   lireInstant,
@@ -48,6 +49,21 @@ const adresse = computed(() => adresseSurLeSiteDeNoel(tirage.code))
 const etat = computed(() => etatDeMaReponse(tirage))
 const dateDuTirage = computed(() => lireInstant(tirage.dateTirage))
 const dateDeRemise = computed(() => lireInstant(tirage.dateEvenement))
+const compteur = computed(() => compteurDeLaCarte(tirage, aujourdhui))
+const tire = computed(() => tirage.statut === 'tire')
+
+/** « Noël · tirage fait · vous organisez ». */
+const nature = computed(() =>
+  ['Noël', tire.value ? 'tirage fait' : null, tirage.estCreateur ? 'vous organisez' : null].filter(Boolean).join(' · '),
+)
+
+/** « Tirage 4 nov. · cadeaux 25 déc. » */
+const deuxDates = computed(() => {
+  const morceaux: string[] = []
+  if (dateDuTirage.value) morceaux.push(`${tire.value ? 'Tiré le' : 'Tirage'} ${dateCourte(dateDuTirage.value)}`)
+  if (dateDeRemise.value) morceaux.push(`cadeaux ${dateCourte(dateDeRemise.value)}`)
+  return morceaux.join(' · ')
+})
 
 /** Les informations pratiques, en une ligne : où, combien, quel budget. */
 const infos = computed(() => {
@@ -113,112 +129,101 @@ onBeforeUnmount(() => avorteur?.abort())
 
 <template>
   <article
-    class="overflow-hidden rounded-panneau border border-cadeau/40 bg-panneau"
+    class="flex flex-col gap-3.5 rounded-panneau border bg-panneau p-4 lg:gap-4 lg:p-5"
+    :class="tire ? 'border-cadeau/40' : 'border-ligne'"
     :aria-label="`Tirage de Noël : ${tirage.titre}`"
     data-carte-noel
   >
-    <!-- ───────── L'en-tête : le paquet, le titre, le compte à rebours ───────── -->
-    <a :href="adresse" class="flex items-start gap-3 bg-cadeau-doux p-4">
-      <span class="flex size-11 flex-none items-center justify-center rounded-champ bg-cadeau text-cadeau-texte" aria-hidden="true">
-        <IconeCadeau :taille="24" />
-      </span>
-      <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span class="text-xs font-semibold text-cadeau">Noël · {{ compteARebours(tirage, aujourdhui) }}</span>
-        <span class="text-base font-semibold text-texte">{{ tirage.titre }}</span>
+    <!-- ───────── L'en-tête : la nature, le titre, le compte à rebours ───────── -->
+    <div class="flex items-start gap-3">
+      <a :href="adresse" class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span class="text-[11px] font-semibold text-cadeau lg:text-xs">{{ nature }}</span>
+        <span class="text-[15px] font-semibold text-texte lg:text-base">{{ tirage.titre }}</span>
         <span class="truncate text-xs text-attenue">{{ infos }}</span>
-      </span>
-      <span v-if="tirage.estCreateur" class="shrink-0 rounded-pastille bg-panneau px-2 py-0.5 text-xs text-texte">Vous organisez</span>
-    </a>
+      </a>
+      <div v-if="compteur !== null" class="flex flex-none flex-col text-right" data-compteur>
+        <span class="tnum text-[22px] leading-none font-semibold lg:text-[26px]" :class="tire ? 'text-cadeau' : 'text-texte'">{{ compteur.nombre }}</span>
+        <span class="mt-0.5 text-[11px] text-attenue">{{ compteur.sous }}</span>
+      </div>
+      <span v-else class="flex-none text-xs text-attenue">{{ compteARebours(tirage, aujourdhui) }}</span>
+    </div>
 
-    <div class="flex flex-col gap-3 p-4">
-      <!-- Les deux dates, toujours : celle du tirage, celle des cadeaux. -->
-      <dl class="grid grid-cols-2 gap-2 text-sm">
-        <div class="rounded-champ border border-ligne px-3 py-2">
-          <dt class="text-xs text-attenue">{{ tirage.statut === 'tire' ? 'Tiré le' : 'Tirage le' }}</dt>
-          <dd class="font-semibold text-texte">{{ dateDuTirage ? dateLongue(dateDuTirage) : '—' }}</dd>
-        </div>
-        <div class="rounded-champ border border-ligne px-3 py-2">
-          <dt class="text-xs text-attenue">Remise des cadeaux</dt>
-          <dd class="font-semibold text-texte">{{ dateDeRemise ? dateLongue(dateDeRemise) : '—' }}</dd>
-        </div>
-      </dl>
-
-      <!-- ───────── Tiré, et j'y suis : le secret, au geste ───────── -->
-      <template v-if="aUnReceveur(tirage)">
-        <div
-          v-if="revele && attribution !== null"
-          class="flex items-center gap-3 rounded-panneau border border-cadeau/40 bg-cadeau-doux p-3"
-          data-attribution
-          aria-live="polite"
+    <!-- ───────── Tiré, et j'y suis : le secret, au geste ───────── -->
+    <template v-if="aUnReceveur(tirage)">
+      <div
+        v-if="revele && attribution !== null"
+        class="flex items-center gap-3 rounded-champ bg-cadeau-doux px-3 py-2.5 lg:p-3"
+        data-attribution
+        aria-live="polite"
+      >
+        <img
+          v-if="attribution.photoUrl"
+          :src="attribution.photoUrl"
+          alt=""
+          class="size-9 flex-none rounded-full object-cover lg:size-10"
+        />
+        <span
+          v-else
+          class="flex size-9 flex-none items-center justify-center rounded-full bg-cadeau text-[13px] font-semibold text-cadeau-texte lg:size-10 lg:text-sm"
+          aria-hidden="true"
         >
-          <img
-            v-if="attribution.photoUrl"
-            :src="attribution.photoUrl"
-            alt=""
-            class="size-14 flex-none rounded-full object-cover ring-2 ring-cadeau"
-          />
-          <span
-            v-else
-            class="flex size-14 flex-none items-center justify-center rounded-full bg-cadeau text-lg font-semibold text-cadeau-texte"
-            aria-hidden="true"
-          >
-            {{ initiales }}
+          {{ initiales }}
+        </span>
+        <span class="flex min-w-0 flex-1 flex-col">
+          <span class="text-[11px] font-semibold text-cadeau">Tu offres à</span>
+          <span class="truncate font-semibold text-texte">{{ attribution.prenom }} {{ attribution.nom }}</span>
+          <span class="text-xs text-attenue">
+            <template v-if="attribution.lien">{{ lienLisible(attribution.lien) }}</template>
+            <template v-if="attribution.lien && attribution.age != null"> · </template>
+            <template v-if="attribution.age != null">{{ attribution.age }} ans</template>
+            <template v-if="tirage.budget !== null"><template v-if="attribution.lien || attribution.age != null"> · </template>budget {{ budgetEnEuros(tirage.budget) }}</template>
           </span>
-          <span class="min-w-0 flex-1">
-            <span class="block text-xs font-semibold text-cadeau">Tu offres à</span>
-            <span class="block truncate text-base font-semibold text-texte">{{ attribution.prenom }} {{ attribution.nom }}</span>
-            <span class="block text-xs text-attenue">
-              <template v-if="attribution.lien">{{ lienLisible(attribution.lien) }}</template>
-              <template v-if="attribution.lien && attribution.age != null"> · </template>
-              <template v-if="attribution.age != null">{{ attribution.age }} ans</template>
-              <template v-if="tirage.budget !== null"><template v-if="attribution.lien || attribution.age != null"> · </template>budget {{ budgetEnEuros(tirage.budget) }}</template>
-            </span>
-          </span>
-          <button type="button" class="min-h-11 shrink-0 px-2 text-xs text-attenue underline hover:text-texte" @click="cacher">Cacher</button>
-        </div>
+        </span>
+        <button type="button" class="min-h-11 shrink-0 px-2 text-xs text-attenue underline hover:text-texte" @click="cacher">Cacher</button>
+      </div>
 
-        <template v-else>
-          <button
-            type="button"
-            class="inline-flex min-h-11 items-center justify-center gap-2 rounded-champ border border-cadeau bg-cadeau px-4 text-sm font-semibold text-cadeau-texte transition-opacity hover:opacity-90 disabled:opacity-55"
-            :disabled="enCours"
-            :aria-busy="enCours"
-            data-decouvrir
-            @click="decouvrir"
-          >
-            <span v-if="enCours" class="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
-            Découvrir à qui j’offre
-          </button>
-          <p class="text-xs text-attenue">C’est un secret : le nom ne s’affiche qu’à ta demande.</p>
-          <p v-if="sansReceveur" class="text-xs text-attenue" role="status">Aucun receveur ne t’est attribué dans ce tirage.</p>
-          <MessageErreur v-if="erreur !== null" :erreur="erreur" titre="Impossible de savoir à qui tu offres" @action="decouvrir" />
-        </template>
-      </template>
+      <button
+        v-else
+        type="button"
+        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-champ bg-cadeau px-4 text-sm font-semibold text-cadeau-texte transition-opacity hover:opacity-90 disabled:opacity-55"
+        :disabled="enCours"
+        :aria-busy="enCours"
+        data-decouvrir
+        @click="decouvrir"
+      >
+        <span v-if="enCours" class="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+        Découvrir à qui j’offre
+      </button>
+      <p v-if="sansReceveur" class="text-xs text-attenue" role="status">Aucun receveur ne t’est attribué dans ce tirage.</p>
+      <MessageErreur v-if="erreur !== null" :erreur="erreur" titre="Impossible de savoir à qui tu offres" @action="decouvrir" />
 
-      <!-- ───────── Sinon : ma réponse, et le geste qu'elle attend ───────── -->
-      <div v-else class="flex flex-wrap items-center gap-2">
-        <span class="inline-flex items-center gap-1 rounded-pastille px-2.5 py-1 text-xs font-semibold" :class="CLASSES_DE_REPONSE[etat]" data-reponse>
+      <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-attenue">
+        <span>Le nom ne s’affiche qu’à ta demande.</span>
+        <a :href="adresse" class="text-cadeau hover:underline" data-ouvrir-noel>Site de Noël ↗</a>
+      </div>
+    </template>
+
+    <!-- ───────── Sinon : ma réponse, et le geste qu'elle attend ───────── -->
+    <template v-else>
+      <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <span class="inline-flex items-center gap-1.5 rounded-pastille px-2.5 py-[3px] text-xs font-semibold" :class="CLASSES_DE_REPONSE[etat]" data-reponse>
           <svg v-if="etat === 'participe'" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 10.5l4 4 8-9" />
           </svg>
           {{ LIBELLES_DE_REPONSE[etat] }}
         </span>
-        <a
-          v-if="etat === 'a_repondre'"
-          :href="adresse"
-          class="inline-flex min-h-11 items-center justify-center rounded-champ border border-cadeau bg-cadeau px-4 text-sm font-semibold text-cadeau-texte transition-opacity hover:opacity-90"
-          data-repondre
-        >
-          Répondre
-        </a>
+        <span class="text-attenue" data-dates>{{ deuxDates }}</span>
       </div>
-
-      <a :href="adresse" class="inline-flex items-center gap-1 self-start text-xs text-cadeau underline" data-ouvrir-noel>
-        Ouvrir sur le site de Noël
-        <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M8 4H4v12h12v-4M11 3h6v6M17 3l-8 8" />
-        </svg>
+      <a
+        v-if="etat === 'a_repondre'"
+        :href="adresse"
+        class="inline-flex min-h-11 items-center justify-center rounded-champ bg-cadeau px-4 text-sm font-semibold text-cadeau-texte transition-opacity hover:opacity-90"
+        data-repondre
+      >
+        Répondre
       </a>
-    </div>
+      <!-- Sur téléphone, le titre y mène déjà : la ligne de plus ne servirait qu'au bureau. -->
+      <a v-else :href="adresse" class="hidden self-end text-xs text-cadeau hover:underline lg:block" data-ouvrir-noel>Site de Noël ↗</a>
+    </template>
   </article>
 </template>
