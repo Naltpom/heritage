@@ -443,6 +443,12 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
             ->viserLigneExistante($subjectId, $baseVersion)
             ->setValues($ancienne, $nouvelle);
 
+        // Toujours écrit, égal ou non : `201` dans les deux cas, rien à deviner. Le `CHECK`
+        // d'une valeur inchangée est levé par cette colonne (`ck_prp_op_changement`).
+        if ($aLAveugle) {
+            $op->proposerALAveugle();
+        }
+
         return $op;
     }
 

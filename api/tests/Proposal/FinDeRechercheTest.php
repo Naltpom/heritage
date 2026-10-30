@@ -288,16 +288,54 @@ final class FinDeRechercheTest extends BaseDeDemandes
         self::assertSame($reelle->versJson(), $ops[0]->getOldValue(), 'La valeur d’avant est celle du serveur, jamais celle du client.');
     }
 
-    /** Même chose pour une `newValue` identique à la courante : « ne modifie rien » ne se dit pas. */
+    /**
+     * Même chose pour une `newValue` identique à la courante : « ne modifie rien » ne se dit pas.
+     * L'op est écrit **à l'aveugle** (`blind`), que `ck_prp_op_changement` laisse égal à sa valeur
+     * d'avant, et rien dans la réponse ne distingue une valeur devinée juste d'une fausse : sous
+     * PostgreSQL, l'INSERT d'une valeur juste rendait sinon une `500`.
+     */
     public function testProposerALAveugleLaValeurCouranteNeLaRevelePas(): void
     {
         $this->poserUneFicheVivante();
         $reelle = new FinDeRecherche(MotifDeFinDeRecherche::Lacune, null, null);
         $this->poserUneFin(self::MERE, $reelle);
 
-        $demande = $this->deposer([$this->op(self::MERE, null, $reelle->versJson(), base: 8)]);
+        $egale = $this->deposer([$this->op(self::MERE, null, $reelle->versJson(), base: 8)]);
+        $autre = $this->deposer([$this->op(self::MERE, null, ['reason' => 'registres_detruits', 'beforeYear' => null, 'body' => null], base: 8)]);
 
-        self::assertCount(1, self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($demande));
+        $ops = self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($egale);
+        self::assertCount(1, $ops);
+        self::assertTrue($ops[0]->estALAveugle());
+        self::assertSame($reelle->versJson(), $ops[0]->getOldValue());
+        self::assertSame($ops[0]->getOldValue(), $ops[0]->getNewValue(), 'Le cas que le CHECK refusait sans la colonne.');
+
+        // Le statut et les clés de la vue d'auteur : les mêmes qu'avec une valeur différente.
+        $vueEgale = $this->serialiseur->pourAuteur($this->recharger($egale));
+        $vueAutre = $this->serialiseur->pourAuteur($this->recharger($autre));
+        self::assertSame($vueAutre['status'], $vueEgale['status']);
+        self::assertSame(array_keys($vueAutre['ops'][0]), array_keys($vueEgale['ops'][0]));
+        self::assertArrayNotHasKey('oldValue', $vueEgale['ops'][0]);
+        self::assertArrayNotHasKey('aLAveugle', $vueEgale['ops'][0]);
+
+        // Valider « X → X » réécrit la même valeur : sans effet.
+        self::assertSame('validee', $this->validation->valider($this->recharger($egale), $this->admin())->resultat);
+        $ecrite = $this->arbre->valeur(SubjectKind::Personne, self::PERSONNE, self::MERE);
+        self::assertInstanceOf(FinDeRecherche::class, $ecrite);
+        self::assertSame($reelle->versJson(), $ecrite->versJson());
+    }
+
+    /** Hors dépôt à l'aveugle (fiche visible), le refus « ne modifie rien » reste. */
+    public function testUneValeurIdentiqueSurUneFicheVisibleRestePeuRefusee(): void
+    {
+        $reelle = new FinDeRecherche(MotifDeFinDeRecherche::Lacune, null, null);
+        $this->poserUneFin(self::MERE, $reelle);
+
+        try {
+            $this->deposer([$this->op(self::MERE, $reelle->versJson(), $reelle->versJson(), base: 8)]);
+            self::fail('Une modification qui ne modifie rien est refusée sur une fiche visible.');
+        } catch (DonneesInvalides $erreur) {
+            self::assertSame(['ops[0].newValue'], array_keys($erreur->champs() ?? []));
+        }
     }
 
     /** Le même chemin que `privacyNote` : un champ existant, même traitement. */

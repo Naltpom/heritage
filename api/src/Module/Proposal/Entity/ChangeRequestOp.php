@@ -96,6 +96,17 @@ class ChangeRequestOp
     private mixed $newValue = null;
 
     /**
+     * **Proposé à l'aveugle** : l'auteur ne voit pas la valeur courante (naissance d'un vivant
+     * hors de son cercle, cible fermée au déposant), le serveur a donc posé lui-même `old_value`.
+     * Elle peut alors égaler `new_value` — l'auteur a deviné juste — et `ck_prp_op_changement`
+     * ne l'exige distincte que hors de ce cas : refuser l'égalité serait un oracle
+     * (`201` ou `500` selon que la valeur devinée est la bonne). La demande vue de l'auteur
+     * n'en dit rien ({@see \App\Module\Proposal\Service\SerialiseurDeDemande}).
+     */
+    #[ORM\Column(options: ['default' => false])]
+    private bool $blind = false;
+
+    /**
      * Verrou optimiste n° 2 : la `version` de la ligne visée au moment de la soumission.
      *
      * **C'est le verrou inter-requêtes** (§ 9.6), et il est indispensable : un
@@ -226,7 +237,8 @@ class ChangeRequestOp
     /**
      * `ck_prp_op_changement` refuse en base un op de champ dont l'ancienne et la nouvelle
      * valeur sont identiques : une modification qui ne modifie rien n'a rien à faire dans
-     * une demande.
+     * une demande. **Sauf à l'aveugle** ({@see proposerALAveugle()}), où `old_value` est celle
+     * que le serveur a lue et où l'égalité est permise.
      */
     public function setValues(mixed $oldValue, mixed $newValue): self
     {
@@ -234,6 +246,19 @@ class ChangeRequestOp
         $this->newValue = $newValue;
 
         return $this;
+    }
+
+    /** Marque l'op comme proposé à l'aveugle : `ck_prp_op_changement` n'y exige plus `old_value` distincte. */
+    public function proposerALAveugle(): self
+    {
+        $this->blind = true;
+
+        return $this;
+    }
+
+    public function estALAveugle(): bool
+    {
+        return $this->blind;
     }
 
     public function getBaseVersion(): ?int
