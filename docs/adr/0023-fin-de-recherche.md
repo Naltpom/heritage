@@ -151,7 +151,9 @@ le recueil du dépôt à blanc comme les autres :
   écriture). **Ce refus n'a lieu qu'au dépôt** : un parent lié entre le dépôt et la validation
   ne rend pas la demande caduque, l'écriture a lieu (le contrat le dit), et l'affichage fait
   alors primer « parents connus » (§ 4) ;
-- `oldValue` égal à `newValue` est refusé, comme pour tout champ.
+- `oldValue` égal à `newValue` est refusé, comme pour tout champ — **hors dépôt à l'aveugle** :
+  sur une fiche fermée au déposant, l'`oldValue` est ignorée et une valeur égale à la courante
+  passe, l'op étant marqué `blind` (`ck_prp_op_changement`).
 
 **À la validation**, `Tree` écrit la ligne (insertion, mise à jour ou suppression) dans
 `appliquerChamps()` et **touche la personne** : sa `version` monte, l'empreinte de l'arbre

@@ -1655,10 +1655,17 @@ CONSTRAINT ck_prp_op_sujet_unique
 CONSTRAINT ck_prp_op_champ
   CHECK ((op_kind = 'champ') = (field IS NOT NULL)),
 
--- Une modification qui ne modifie rien n'a rien à faire dans une demande.
+-- Une modification qui ne modifie rien n'a rien à faire dans une demande — sauf à
+-- l'aveugle (`blind`) : la cible est fermée au déposant, le serveur pose lui-même
+-- `old_value` (la valeur courante), et refuser l'égalité dirait à l'auteur que sa
+-- valeur est la bonne.
 CONSTRAINT ck_prp_op_changement
-  CHECK (op_kind <> 'champ' OR old_value IS DISTINCT FROM new_value)
+  CHECK (op_kind <> 'champ' OR blind OR old_value IS DISTINCT FROM new_value)
 ```
+
+`prp_change_op.blind BOOLEAN NOT NULL DEFAULT false` : vrai quand l'op a été proposé à
+l'aveugle (naissance masquée en partie d'un vivant, ou toute cible fermée au déposant).
+Jamais rendue dans la vue de l'auteur ; ajoutée par `Version20261030131846`.
 
 **Forme du JSON, par `value_kind`.** À respecter au caractère près : c'est le contrat
 entre le formulaire, l'affichage du diff et le service de rejeu.

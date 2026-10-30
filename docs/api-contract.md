@@ -2618,8 +2618,12 @@ les routes qui servent l'une ou l'autre l'appliquent au serveur ; rien de retenu
 `masquee` n'existe que dans l'API (jamais en entrée). Le bloc est émis même pour une date
 inconnue. La fiche porte `naissanceModifiable` (`false` dès qu'une composante manque) ; une
 demande qui touche `birth` sur un tel vivant se dépose **à l'aveugle** (révision du
-2026-10-07) : l'`oldValue` du client est ignoré, le serveur pose la valeur courante, sans
-`409` ni refus d'une valeur identique, et la vue auteur ne la rend jamais. `ligneDates`, la
+2026-10-07). Le dépôt à l'aveugle vaut aussi, depuis, pour **toute cible fermée au déposant**
+(une personne vivante hors de son cercle, une famille dont un époux l'est, une citation
+rattachée à l'une d'elles, directement ou par son fait) : l'`oldValue` du client est ignoré,
+le serveur pose la valeur courante, jamais de `409`, jamais de refus « ne modifie rien », et
+la vue auteur ne la rend jamais. L'op est écrit dans tous les cas (`blind`), valeur devinée
+juste ou fausse : les deux réponses sont indiscernables. `ligneDates`, la
 `naissance` des proches, l'`etiquetteDates` du graphe (« n. 3/1985 · vivant·e »), la
 recherche, la chronologie, la carte et les statistiques ne portent que la date réduite.
 
@@ -2896,7 +2900,11 @@ Règles, toutes vérifiables :
   (§ 9.6). Si elle ne correspond pas déjà à la soumission ⇒ `409 conflit`, avec la valeur
   courante dans `erreur.details` : la fiche a changé pendant que le formulaire était ouvert,
   il faut la rouvrir.
-- `oldValue === newValue` ⇒ `422` (`ck_prp_op_changement` le refuserait de toute façon).
+- `oldValue === newValue` ⇒ `422` (`ck_prp_op_changement` le refuserait de toute façon),
+  **hors dépôt à l'aveugle** : sur une cible fermée au déposant, l'`oldValue` est ignorée et
+  un `newValue` égal à la valeur courante est accepté comme tout autre (`201`), sans quoi
+  le refus dirait à celui qui devine que sa valeur est la bonne. L'op est alors marqué
+  `blind` et valider « X → X » réécrit la même valeur, sans effet.
 - **Un bloc date est un seul op, jamais cinq.** Cinq ops permettraient à l'administrateur
   d'en valider trois et de fabriquer une date incohérente — « exactement l'aplatissement que
   le § 9.1 interdit » (§ 5.2). Le `field` d'un bloc date est donc le **nom du bloc** :
