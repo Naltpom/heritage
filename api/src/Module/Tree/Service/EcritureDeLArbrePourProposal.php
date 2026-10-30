@@ -1244,7 +1244,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         ))->setParameter('familles', $famillesEffacees)->getSingleScalarResult();
     }
 
-    /** Les `tree_child` où la personne est **l'enfant** : sa propre filiation. */
+    /** Les `tree_research_closure` de la personne : ses fins de recherche (ADR 0023). */
     private function compterLesFinsDeRecherche(int $personneId): int
     {
         return (int) $this->em->createQuery(\sprintf(
@@ -1253,6 +1253,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
         ))->setParameter('personne', $personneId)->getSingleScalarResult();
     }
 
+    /** Les `tree_child` où la personne est **l'enfant** : sa propre filiation. */
     private function compterLesFiliations(int $personneId): int
     {
         return (int) $this->em->createQuery(\sprintf(

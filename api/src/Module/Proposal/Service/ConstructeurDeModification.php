@@ -501,6 +501,14 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         $courante = $this->normaliseur->versJson($valueKind, $cible->valeurs[$field]);
 
         if ($courante !== $ancienne) {
+            // Une cible masquée au déposant ne rend ni la valeur courante ni la sienne : le
+            // `409` dirait, mot pour mot, ce que la fiche réduite lui cache (motif, année et
+            // texte libre d'une fin de recherche, note de confidentialité). Comme
+            // {@see SerialiseurDeDemande} et {@see RefaireDemande}, on ne garde que le champ.
+            if ($this->masques->masquee($kind, $id)) {
+                throw Conflit::valeurDejaChangee(['field' => $field, 'version' => $cible->version]);
+            }
+
             throw Conflit::valeurDejaChangee(['field' => $field, 'valeurCourante' => $this->normaliseur->pourAffichage($valueKind, $courante), 'valeurAnnoncee' => $this->normaliseur->pourAffichage($valueKind, $ancienne), 'version' => $cible->version]);
         }
     }

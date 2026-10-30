@@ -259,6 +259,45 @@ final class FinDeRechercheTest extends BaseDeDemandes
         $this->deposer([$this->op(self::MERE, null, $this->brique(), base: 8)]);
     }
 
+    /**
+     * Le `409` ne doit pas rendre ce que la fiche réduite cache : sur un vivant hors du
+     * cercle du déposant, ni la valeur courante ni la valeur annoncée (motif, année et
+     * texte libre d'une fin de recherche) ne figurent dans `details`.
+     */
+    public function testLeConflitSurUneFicheMasqueeNeRendNiValeurCouranteNiAnnoncee(): void
+    {
+        $this->arbre->poser(SubjectKind::Personne, self::PERSONNE, 'Marne Dolomite Sureau', 7, ['deceased' => false] + $this->champs());
+        $this->poserUneFin(self::MERE, new FinDeRecherche(MotifDeFinDeRecherche::RegistresInexistants, 1700, 'Texte réservé à la fiche entière.'));
+
+        try {
+            $this->deposer([$this->op(self::MERE, null, $this->brique(), base: 8)]);
+            self::fail('Le côté est déjà clos : le dépôt doit être en conflit.');
+        } catch (Conflit $conflit) {
+            self::assertSame('conflit', $conflit->codeErreur());
+            $details = (array) $conflit->details();
+            self::assertSame(self::MERE, $details['field']);
+            self::assertArrayNotHasKey('valeurCourante', $details);
+            self::assertArrayNotHasKey('valeurAnnoncee', $details);
+            self::assertStringNotContainsString('réservé', (string) json_encode($details));
+        }
+    }
+
+    /** Même chemin pour `privacyNote` : le `409` d'une fiche masquée ne la divulgue pas. */
+    public function testLeConflitSurLaNoteDeConfidentialiteDUneFicheMasqueeNeLaDivulguePas(): void
+    {
+        $this->arbre->poser(SubjectKind::Personne, self::PERSONNE, 'Marne Dolomite Sureau', 7, ['deceased' => false, 'privacyNote' => 'Note secrète'] + $this->champs());
+
+        try {
+            $this->depot->deposer($this->corpsDeModification([$this->opTexte('privacyNote', 'Autre chose', 'Nouvelle note', baseVersion: 7)]), $this->lecteur(self::OPALE));
+            self::fail('L\'ancienne valeur est fausse : le dépôt doit être en conflit.');
+        } catch (Conflit $conflit) {
+            $details = (array) $conflit->details();
+            self::assertArrayNotHasKey('valeurCourante', $details);
+            self::assertArrayNotHasKey('valeurAnnoncee', $details);
+            self::assertStringNotContainsString('secrète', (string) json_encode($details));
+        }
+    }
+
     public function testLeDepotABlancRendToutesLesErreursEnUnePasse(): void
     {
         $this->arbre->poserCotesConnus(self::PERSONNE, pere: true, mere: false);

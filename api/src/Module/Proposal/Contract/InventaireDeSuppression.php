@@ -111,7 +111,7 @@ final readonly class InventaireDeSuppression
      *                                                                                                        ce compte. Un inventaire relu depuis la base n'en a plus
      *                                                                                                        besoin.
      * @param int                                                                         $finsDeRecherche    `tree_research_closure` rattachées à la personne (ADR 0023).
-     *                                                                                                        Une fin de recherche part avec la fiche, et **ne bloque pas**
+     *                                                                                                        Une fin de recherche part avec la fiche, et **ne bloque pas** la suppression.
      */
     public function __construct(
         public int $personneId,
