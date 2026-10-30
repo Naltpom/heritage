@@ -56,7 +56,7 @@ const FICHE = {
 const LienFactice = defineComponent({
   name: 'RouterLink',
   props: { to: { type: [String, Object], default: '' } },
-  setup: (props, { slots }) => () => h('a', { href: '#' }, slots['default']?.()),
+  setup: (_props, { slots }) => () => h('a', { href: '#' }, slots['default']?.()),
 })
 
 async function monter(): Promise<Noeud> {
