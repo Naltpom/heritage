@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ArbreAffiche } from './donnees'
-import { arbreFictif, arbreTouffu, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
+import { arbreFictif, arbreTouffu, avecFinsDeRecherche, coupleSeul, legendeDuMurPresente, mursAttendus, mursDeLaScene, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { radians, Reglages } from './eventail'
 import { afficheEventail, arrondiDizaine, mentionDuPied, type AfficheProduite } from './fabriquer'
@@ -408,5 +408,37 @@ describe('le rendu SVG et les formats', () => {
     expect(pngPossible(p, 100)).toBe(true)
     expect(pngPossible(p, 300)).toBe(false)
     expect(page('naturelle', 100, 50)).toEqual({ largeur: 100, hauteur: 50 })
+  })
+})
+
+describe.each([
+  ['des boîtes « Arbre »', 'arbre'],
+  ['du soleil intérieur', 'soleil'],
+  ['des médaillons', 'medaillons'],
+] as const)('le mur de l’éventail, descendants %s', (_, forme) => {
+  const fabrique = (essai: ArbreDEssai): AfficheProduite => afficheEventail(new ArbreAffiche(essai.charge), essai.mari, essai.femme, { date: DATE, descendants: forme })
+  const { essai: avec, sommets } = avecFinsDeRecherche(arbreFictif())
+  const close = fabrique(avec)
+
+  it('dessine un mur par sommet clos, et sa ligne de légende', () => {
+    const attendus = mursAttendus(avec)
+    expect(attendus).toBeGreaterThanOrEqual(sommets.length)
+    // Les murs des places, plus celui de la légende.
+    expect(mursDeLaScene(close.scene)).toHaveLength(attendus + 1)
+    expect(legendeDuMurPresente(close.scene)).toBe(true)
+    expect(versSvg(close.scene)).not.toMatch(/NaN|Infinity/)
+  })
+
+  it('ne dessine aucun mur ni légende sans fin de recherche', () => {
+    const sans = fabrique(arbreFictif())
+    expect(mursDeLaScene(sans.scene)).toHaveLength(0)
+    expect(legendeDuMurPresente(sans.scene)).toBe(false)
+  })
+
+  it('ne déplace aucune place : mêmes anneaux, mêmes textes sur arc', () => {
+    const sans = fabrique(arbreFictif())
+    expect(close.eventail.rExt).toBeCloseTo(sans.eventail.rExt, 9)
+    const arcs = (a: AfficheProduite): string[] => a.scene.textes.flatMap((t) => (t.type === 'texteSurArc' ? [`${t.texte}|${t.r.toFixed(3)}|${t.a1.toFixed(3)}`] : []))
+    expect(arcs(close)).toEqual(arcs(sans))
   })
 })

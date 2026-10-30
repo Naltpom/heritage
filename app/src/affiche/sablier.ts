@@ -12,6 +12,8 @@
  */
 import { Bloc, type Ligne } from './boites'
 import { ligneVie, type StyleDeDate } from './dates'
+import type { Personne } from './donnees'
+import { murDansUneCase } from './murs'
 import { ENCRE, ENCRE_DOUCE, melange, TEINTES, TRAIT } from './palette'
 import { Style } from './polices'
 import type { Scene } from './scene'
@@ -255,8 +257,12 @@ export class Sablier {
     return [melange(rgb, k), trait]
   }
 
-  /** `ox`, `oy` : le milieu du couple (bas de ses cases). */
-  dessiner(scene: Scene, ox: number, oy: number): void {
+  /**
+   * `ox`, `oy` : le milieu du couple (bas de ses cases). `murs` : dit si une personne porte un
+   * mur (`aUnMur()`) ; sans lui, aucune icône. Le mur se pose dans le coin haut droit de la case,
+   * côté des parents, après son texte, sans rien déplacer.
+   */
+  dessiner(scene: Scene, ox: number, oy: number, murs?: (p: Personne) => boolean): void {
     const R = this.R
     // Les traits d'abord, les cases par-dessus.
     for (const n of this.noeuds) {
@@ -297,6 +303,12 @@ export class Sablier {
       scene.rectangle(x0, y0, n.w, n.h, fond, null, 0, this.debout(n.niveau) ? 0.9 : 1.4)
       if (this.debout(n.niveau)) n.bloc!.dessiner(scene, x0 + n.w / 2, y0 + n.h / 2, n.h - 2 * n.bloc!.mx, -90)
       else n.bloc!.dessiner(scene, x0 + n.w / 2, y0 + n.h / 2, n.w - 2 * n.bloc!.mx)
+      if (murs?.(n.p)) {
+        // Le nom tel qu'il est dessiné : tourné d'un quart de tour dans une case debout.
+        const b = n.bloc!
+        const texte: [number, number] = this.debout(n.niveau) ? [b.hauteurTexte, Math.min(b.largeurTexte, n.h - 2 * b.mx)] : [Math.min(b.largeurTexte, n.w - 2 * b.mx), b.hauteurTexte]
+        murDansUneCase(scene, x0, y0, n.w, n.h, 1, texte)
+      }
     }
   }
 

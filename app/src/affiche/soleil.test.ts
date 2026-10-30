@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ArbreAffiche, fusionnerCharges } from './donnees'
-import { arbreDeCousins, arbreFictif, arbreTouffu, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
+import { arbreDeCousins, arbreFictif, arbreTouffu, avecFinsDeRecherche, coupleSeul, legendeDuMurPresente, mursAttendus, mursDeLaScene, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { radians, Reglages } from './eventail'
 import type { AfficheProduite, CentreDeLAffiche } from './fabriquer'
@@ -142,5 +142,33 @@ describe('la fusion des lectures', () => {
     for (const f of charge.familles) expect(fusion.familles.find((x) => x.id === f.id)!.enfants.map((e) => e.personId)).toEqual(f.enfants.map((e) => e.personId))
     expect(fusion.personnes).toHaveLength(charge.personnes.length)
     expect(fusion.famille).toBe(seule.famille)
+  })
+})
+
+describe.each([
+  ['le soleil du couple', 'couple', arbreFictif],
+  ['le soleil des quatre parents', 'parents', arbreDeCousins],
+] as const)('le mur de %s', (_, centre, arbre) => {
+  const { essai: avec } = avecFinsDeRecherche(arbre())
+  const close = soleil(avec, { centre })
+
+  it('dessine un mur par sommet clos, et sa ligne de légende', () => {
+    const attendus = mursAttendus(avec, centre === 'parents')
+    expect(attendus).toBeGreaterThan(0)
+    expect(mursDeLaScene(close.scene)).toHaveLength(attendus + 1)
+    expect(legendeDuMurPresente(close.scene)).toBe(true)
+    expect(versSvg(close.scene)).not.toMatch(/NaN|Infinity/)
+  })
+
+  it('ne dessine aucun mur ni légende sans fin de recherche', () => {
+    const sans = soleil(arbre(), { centre })
+    expect(mursDeLaScene(sans.scene)).toHaveLength(0)
+    expect(legendeDuMurPresente(sans.scene)).toBe(false)
+  })
+
+  it('ne change ni les anneaux ni le disque central', () => {
+    const sans = soleil(arbre(), { centre })
+    expect(close.eventail.rExt).toBeCloseTo(sans.eventail.rExt, 9)
+    expect(close.eventail.rC).toBeCloseTo(sans.eventail.rC, 9)
   })
 })

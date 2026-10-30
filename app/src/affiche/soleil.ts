@@ -21,6 +21,7 @@ import { CORPS_MAX, CORPS_MIN, lienDuCouple, Rosace, SoleilInterieur, type Coeur
 import type { ArbreAffiche } from './donnees'
 import { etendues, Eventail, pointLibre, Reglages } from './eventail'
 import { chiffresDeDescendance, legende, lignesDesQuatreParents, lignesDuCouple, MENTION_PAR_DEFAUT, pied, type AfficheProduite, type ChiffresDuPied, type LignesDuTitre, type OptionsDAffiche } from './fabriquer'
+import { desMurs, aUnMur } from './murs'
 import { Scene } from './scene'
 import { ascendance, compter, compterQuatreParents, descendance, quatreParents, type Desc } from './structure'
 
@@ -43,6 +44,7 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
   const quatre = options.centre === 'parents' ? quatreParents(A, H, F, niveaux) : null
 
   const { racineH, racineF, noeuds } = ascendance(A, H, F, options.profondeur ?? Infinity)
+  const murs = desMurs(A, noeuds, quatre !== null)
   const reglages = new Reglages({ ...(options.reglages ?? new Reglages()), angle: 360, sens: 'haut', premierAnneauMasque: quatre !== null })
   let E = new Eventail(racineH, racineF, noeuds, reglages).calculer()
 
@@ -122,7 +124,7 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
   const cote = Math.max(ext.gauche + ext.droite, ext.haut + ext.bas) + 2 * marge
   const cy = marge + ext.haut + (cote - 2 * marge - ext.haut - ext.bas) / 2
   const encombrement = (k: number): [[number, number], [number, number]] => [
-    legende(new Scene(1, 1), 0, 0, H, F, A, k),
+    legende(new Scene(1, 1), 0, 0, H, F, A, k, murs),
     pied(new Scene(1, 1), 0, 0, chiffres, mention, date, 'end', k),
   ]
   const tient = (k: number): boolean => {
@@ -149,17 +151,17 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
   const cx = marge + ext.gauche + (W - 2 * marge - ext.gauche - ext.droite) / 2
 
   const scene = new Scene(W, hauteur)
-  E.dessiner(scene, cx, cy)
+  E.dessiner(scene, cx, cy, (p) => aUnMur(A, p))
   if (autre) autre.dessiner(scene, cx, cy)
   else if (centre) dessinerLesBandes(scene, centre, cx, cy)
   if (kl !== null) {
     // Chaque bloc finit sur le bas de la page.
     const [[hl], [hp]] = encombrement(kl)
-    legende(scene, marge, hauteur - marge - hl, H, F, A, kl)
+    legende(scene, marge, hauteur - marge - hl, H, F, A, kl, murs)
     pied(scene, W - marge, hauteur - marge - hp, chiffres, mention, date, 'end', kl)
   } else {
     kl = Math.max(1.0, cote / 1100)
-    legende(scene, marge, basSoleil + 22, H, F, A, kl)
+    legende(scene, marge, basSoleil + 22, H, F, A, kl, murs)
     pied(scene, W - marge, basSoleil + 22 + 30 * kl, chiffres, mention, date, 'end', kl)
   }
   return { scene, eventail: E, echelleDescendants: autre ? autre.echelle : centre!.e, echelleLegende: kl, chiffres, centre: [cx, cy] }

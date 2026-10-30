@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ArbreAffiche } from './donnees'
-import { arbreFictif, coupleSeul, type ArbreDEssai } from './essai/arbreFictif'
+import { arbreFictif, avecFinsDeRecherche, coupleSeul, legendeDuMurPresente, mursAttendus, mursDeLaScene, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { afficheSablier, type SablierProduit } from './fabriquer'
 import type { ModeDeSablier } from './sablier'
@@ -85,5 +85,30 @@ describe('le sablier, cas limites et vivants', () => {
     expect(textes).toContain('veuf')
     expect(textes).toContain('div.')
     expect(textes).toContain('Arbre établi avec Heritage — octobre 2026')
+  })
+})
+
+describe.each(['normal', 'dense'] as const)('le mur du sablier (%s)', (mode) => {
+  const { essai: avec, sommets } = avecFinsDeRecherche(arbreFictif())
+  const close = produire(avec, mode)
+
+  it('dessine un mur par sommet clos, et sa ligne de légende', () => {
+    const attendus = mursAttendus(avec)
+    expect(attendus).toBeGreaterThanOrEqual(sommets.length)
+    expect(mursDeLaScene(close.scene)).toHaveLength(attendus + 1)
+    expect(legendeDuMurPresente(close.scene)).toBe(true)
+    expect(versSvg(close.scene)).not.toMatch(/NaN|Infinity/)
+  })
+
+  it('ne dessine aucun mur ni légende sans fin de recherche', () => {
+    const sans = produire(arbreFictif(), mode)
+    expect(mursDeLaScene(sans.scene)).toHaveLength(0)
+    expect(legendeDuMurPresente(sans.scene)).toBe(false)
+  })
+
+  it('ne déplace aucune case : même largeur d’arbre et de page', () => {
+    const sans = produire(arbreFictif(), mode)
+    expect(close.scene.largeur).toBeCloseTo(sans.scene.largeur, 9)
+    expect(close.sablier.droite - close.sablier.gauche).toBeCloseTo(sans.sablier.droite - sans.sablier.gauche, 9)
   })
 })
