@@ -3872,8 +3872,10 @@ Lecture de cette carte :
 Le diagramme date de la fondation ; les modules venus depuis — `Demarche`, `Evenement`,
 `Tirage`, `Question`, `Assistant` — y ajoutent leurs flèches, et la commande les parcourt
 toutes. **La liste ci-dessous est celle du code**, et le test
-`api/tests/Integrite/VerifierIntegriteCommandTest.php` la fige : 64 contrôles, dont 21
-tolérés (le 64ᵉ, `tree_research_closure.author_user_id`, est celui de l'ADR 0023).
+`api/tests/Integrite/VerifierIntegriteCommandTest.php` la fige : 55 contrôles, dont 18
+tolérés (`tree_research_closure.author_user_id`, de l'ADR 0023, en est un, strict). Le chiffre
+est celui du test, en unités « une colonne, une portée » ; il ne reprend pas les tables du
+tableau ci-dessous que le schéma ne porte plus.
 
 **Comment.** Aucune jointure ne franchit une frontière. Chaque module déclare les
 références qu'il porte, relevées dans ses propres tables

@@ -179,7 +179,9 @@ final class VerifierIntegriteCommandTest extends KernelTestCase
         $libelles = array_map(static fn (ControleDIntegrite $c): string => $c->reference->libelle(), $rapport->controles);
         sort($libelles);
 
-        self::assertCount(64, $libelles, 'Le § 10.8 de docs/modele-donnees.md annonce 64 contrôles (ADR 0023 : tree_research_closure.author_user_id).');
+        // Pas de nombre magique : il diverge du § 10.8, qui compte aussi des références de
+        // tables que ce schéma ne porte plus. La liste figée ci-dessus fait foi.
+        self::assertCount(\count(self::RECENSEMENT), $libelles);
         self::assertContains('tree_research_closure.author_user_id', $libelles);
         self::assertSame(self::RECENSEMENT, $libelles, 'Une référence a été ajoutée ou retirée : mettez à jour ce recensement ET le § 10.8 de docs/modele-donnees.md.');
 
