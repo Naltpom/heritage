@@ -81,6 +81,26 @@ final readonly class ValeursMasquees
         return null !== $cible && true !== (bool) ($cible->valeurs['deceased'] ?? false);
     }
 
+    /**
+     * La ligne qu'une demande vise est-elle fermée au lecteur ? C'est la question du dépôt :
+     * une valeur de cette ligne, dite dans un `409`, serait lue par qui n'a pas le droit de
+     * la lire.
+     *
+     * Une personne : {@see self::masquee()}. Une famille : un époux masqué suffit
+     * ({@see self::sujetFerme()}). Une citation appartient à une personne : c'est elle qui
+     * décide. (Un fait, une note ou un média n'ont aucun champ modifiable par un op.)
+     */
+    public function cibleFermee(SubjectKind $kind, int $id): bool
+    {
+        if (SubjectKind::Citation === $kind) {
+            $proprietaire = $this->arbre->chargerCible($kind, $id)?->personneId;
+
+            return null !== $proprietaire && $this->masquee(SubjectKind::Personne, $proprietaire);
+        }
+
+        return $this->sujetFerme($kind, $id);
+    }
+
     public function masquee(SubjectKind $kind, ?int $id): bool
     {
         if (SubjectKind::Personne !== $kind || null === $id) {

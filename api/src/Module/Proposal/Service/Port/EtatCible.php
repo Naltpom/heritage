@@ -26,6 +26,9 @@ final readonly class EtatCible
      *                                      rendrait moins de champs que la surface éditable rend
      *                                      indétectable une caducité sur les champs manquants :
      *                                      les rendre tous est une obligation, pas une commodité
+     * @param int|null             $personneId la personne à laquelle la ligne appartient, quand ce n'est
+     *                                         pas elle-même : celle d'une citation. Elle dit si la ligne est
+     *                                         fermée au déposant ({@see \App\Module\Proposal\Service\ValeursMasquees::cibleFermee()})
      */
     public function __construct(
         public SubjectKind $kind,
@@ -33,6 +36,7 @@ final readonly class EtatCible
         public string $libelle,
         public int $version,
         public array $valeurs,
+        public ?int $personneId = null,
     ) {
     }
 

@@ -104,7 +104,7 @@ final class EcritureDeLArbrePourProposal implements PortArbre
             return null;
         }
 
-        return new EtatCible($kind, $id, $this->libelle($ligne), $this->version($ligne), $this->valeurs($ligne));
+        return new EtatCible($kind, $id, $this->libelle($ligne), $this->version($ligne), $this->valeurs($ligne), $ligne instanceof Citation ? $ligne->getPerson()?->getId() : null);
     }
 
     public function appliquerChamps(SubjectKind $kind, int $id, array $valeurs, ?SignatureDeDemande $signature = null): EcritureAppliquee

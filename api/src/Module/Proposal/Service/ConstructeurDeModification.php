@@ -394,7 +394,14 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         // complète), ni refus d'une demande « qui ne modifie rien » (il dirait que la
         // date proposée est la bonne). L'auteur ne relit jamais cette valeur d'avant
         // ({@see SerialiseurDeDemande}) ; l'administrateur, qui voit tout, tranche.
-        $aLAveugle = 'birth' === $field && $this->masques->naissanceMasquee($subjectKind, $subjectId);
+        //
+        // **Le même traitement vaut pour toute cible fermée au déposant** (une personne vivante
+        // hors de son cercle, une famille dont un époux l'est, une citation qui lui appartient) :
+        // le `409` d'une `oldValue` fausse, comme le refus « ne modifie rien » d'une
+        // `newValue` identique, dirait à celui qui devine si sa valeur est la bonne — un
+        // oracle d'égalité, même sans aucune valeur dans la réponse.
+        $aLAveugle = ('birth' === $field && $this->masques->naissanceMasquee($subjectKind, $subjectId))
+            || $this->masques->cibleFermee($subjectKind, $subjectId);
 
         if (!\array_key_exists('newValue', $brut) || (!$aLAveugle && !\array_key_exists('oldValue', $brut))) {
             throw DonneesInvalides::pourChamp($chemin, 'Un op porte toujours son ancienne et sa nouvelle valeur.');
@@ -501,11 +508,10 @@ final readonly class ConstructeurDeModification implements ConstructeurDeDemande
         $courante = $this->normaliseur->versJson($valueKind, $cible->valeurs[$field]);
 
         if ($courante !== $ancienne) {
-            // Une cible masquée au déposant ne rend ni la valeur courante ni la sienne : le
-            // `409` dirait, mot pour mot, ce que la fiche réduite lui cache (motif, année et
-            // texte libre d'une fin de recherche, note de confidentialité). Comme
-            // {@see SerialiseurDeDemande} et {@see RefaireDemande}, on ne garde que le champ.
-            if ($this->masques->masquee($kind, $id)) {
+            // Filet : une cible fermée au déposant ne passe plus ici (elle se propose à
+            // l'aveugle, voir {@see self::construireOp()}), mais si elle y venait, le `409` ne
+            // rendrait ni la valeur courante ni la sienne — ce que la fiche réduite lui cache.
+            if ($this->masques->cibleFermee($kind, $id)) {
                 throw Conflit::valeurDejaChangee(['field' => $field, 'version' => $cible->version]);
             }
 

@@ -260,41 +260,137 @@ final class FinDeRechercheTest extends BaseDeDemandes
     }
 
     /**
-     * Le `409` ne doit pas rendre ce que la fiche réduite cache : sur un vivant hors du
-     * cercle du déposant, ni la valeur courante ni la valeur annoncée (motif, année et
-     * texte libre d'une fin de recherche) ne figurent dans `details`.
+     * Une fiche masquée au déposant (un vivant hors de son cercle) se propose **à l'aveugle** :
+     * l'`oldValue` du client est ignorée, la valeur courante est lue côté serveur. Une
+     * `oldValue` juste et une fausse donnent donc la même réponse (un dépôt accepté), et ce
+     * qui est stocké est la valeur du serveur : ni `409` qui dirait si l'on a deviné, ni
+     * valeur rendue.
+     *
+     * @return iterable<string, array{bool}>
      */
-    public function testLeConflitSurUneFicheMasqueeNeRendNiValeurCouranteNiAnnoncee(): void
+    public static function devinettes(): iterable
     {
-        $this->arbre->poser(SubjectKind::Personne, self::PERSONNE, 'Marne Dolomite Sureau', 7, ['deceased' => false] + $this->champs());
-        $this->poserUneFin(self::MERE, new FinDeRecherche(MotifDeFinDeRecherche::RegistresInexistants, 1700, 'Texte réservé à la fiche entière.'));
+        yield 'oldValue juste' => [true];
+        yield 'oldValue fausse' => [false];
+    }
+
+    #[DataProvider('devinettes')]
+    public function testUneFinDeRechercheSurUneFicheMasqueeSeProposeALAveugle(bool $juste): void
+    {
+        $this->poserUneFicheVivante();
+        $reelle = new FinDeRecherche(MotifDeFinDeRecherche::RegistresInexistants, 1700, 'Texte réservé à la fiche entière.');
+        $this->poserUneFin(self::MERE, $reelle);
+
+        $devinee = $juste ? $reelle->versJson() : null;
+        $demande = $this->deposer([$this->op(self::MERE, $devinee, ['reason' => 'lacune', 'beforeYear' => null, 'body' => null], base: 8)]);
+
+        $ops = self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($demande);
+        self::assertSame($reelle->versJson(), $ops[0]->getOldValue(), 'La valeur d’avant est celle du serveur, jamais celle du client.');
+    }
+
+    /** Même chose pour une `newValue` identique à la courante : « ne modifie rien » ne se dit pas. */
+    public function testProposerALAveugleLaValeurCouranteNeLaRevelePas(): void
+    {
+        $this->poserUneFicheVivante();
+        $reelle = new FinDeRecherche(MotifDeFinDeRecherche::Lacune, null, null);
+        $this->poserUneFin(self::MERE, $reelle);
+
+        $demande = $this->deposer([$this->op(self::MERE, null, $reelle->versJson(), base: 8)]);
+
+        self::assertCount(1, self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($demande));
+    }
+
+    /** Le même chemin que `privacyNote` : un champ existant, même traitement. */
+    #[DataProvider('devinettes')]
+    public function testLaNoteDeConfidentialiteDUneFicheMasqueeSeProposeALAveugle(bool $juste): void
+    {
+        $this->arbre->poser(SubjectKind::Personne, self::PERSONNE, 'Marne Dolomite Sureau', 7, ['deceased' => false, 'privacyNote' => 'Note secrète'] + $this->champs());
+
+        $demande = $this->depot->deposer($this->corpsDeModification([$this->opTexte('privacyNote', $juste ? 'Note secrète' : 'Autre chose', 'Nouvelle note')]), $this->lecteur(self::OPALE));
+
+        $ops = self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($demande);
+        self::assertSame('Note secrète', $ops[0]->getOldValue());
+    }
+
+    /** Une famille dont un époux est masqué se propose à l'aveugle elle aussi. */
+    #[DataProvider('devinettes')]
+    public function testUneFamilleDontUnEpouxEstMasqueSeProposeALAveugle(bool $juste): void
+    {
+        $this->poserUneFicheVivante();
+        $this->arbre->poserCouple(60, 'Marne Dolomite Sureau × Jargon', self::PERSONNE, 61);
+        $this->arbre->poser(SubjectKind::Famille, 60, 'Marne Dolomite Sureau × Jargon', 4, [
+            'marriage' => UncertainDate::inconnue(),
+            'married' => true,
+            'divorced' => false,
+            'divorce' => UncertainDate::inconnue(),
+        ]);
+
+        $demande = $this->depot->deposer([
+            'kind' => 'modification_famille',
+            'soumettre' => true,
+            'targetKind' => 'famille',
+            'targetId' => 60,
+            'ops' => [[
+                'seq' => 1,
+                'opKind' => 'champ',
+                'subjectKind' => 'famille',
+                'subjectId' => 60,
+                'field' => 'married',
+                'valueKind' => 'booleen',
+                'oldValue' => $juste,
+                'newValue' => null,
+                'baseVersion' => 4,
+            ]],
+        ], $this->lecteur(self::OPALE));
+
+        $ops = self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($demande);
+        self::assertTrue($ops[0]->getOldValue(), 'La valeur d’avant est celle du serveur.');
+    }
+
+    /** Une citation appartient à une personne : si elle est masquée, la citation l'est aussi. */
+    #[DataProvider('devinettes')]
+    public function testUneCitationDUnePersonneMasqueeSeProposeALAveugle(bool $juste): void
+    {
+        $this->poserUneFicheVivante();
+        $this->arbre->poser(SubjectKind::Citation, 70, 'Registre', 3, ['page' => 'p. 12', 'quay' => 2, 'dataText' => null, 'url' => null], self::PERSONNE);
+
+        $demande = $this->depot->deposer([
+            'kind' => 'modification_citation',
+            'soumettre' => true,
+            'targetKind' => 'citation',
+            'targetId' => 70,
+            'ops' => [[
+                'seq' => 1,
+                'opKind' => 'champ',
+                'subjectKind' => 'citation',
+                'subjectId' => 70,
+                'field' => 'page',
+                'valueKind' => 'texte',
+                'oldValue' => $juste ? 'p. 12' : 'p. 99',
+                'newValue' => 'p. 13',
+                'baseVersion' => 3,
+            ]],
+        ], $this->lecteur(self::OPALE));
+
+        $ops = self::getContainer()->get(ChangeRequestOpRepository::class)->pourDemande($demande);
+        self::assertSame('p. 12', $ops[0]->getOldValue());
+    }
+
+    /**
+     * Sur une fiche **visible** (ici une défunte), rien ne change : le `409` garde la valeur
+     * courante et la valeur annoncée.
+     */
+    public function testLeConflitSurUneFicheVisibleGardeSesValeurs(): void
+    {
+        $this->poserUneFin(self::MERE, new FinDeRecherche(MotifDeFinDeRecherche::RegistresDetruits, null, null));
 
         try {
             $this->deposer([$this->op(self::MERE, null, $this->brique(), base: 8)]);
             self::fail('Le côté est déjà clos : le dépôt doit être en conflit.');
         } catch (Conflit $conflit) {
-            self::assertSame('conflit', $conflit->codeErreur());
             $details = (array) $conflit->details();
-            self::assertSame(self::MERE, $details['field']);
-            self::assertArrayNotHasKey('valeurCourante', $details);
-            self::assertArrayNotHasKey('valeurAnnoncee', $details);
-            self::assertStringNotContainsString('réservé', (string) json_encode($details));
-        }
-    }
-
-    /** Même chemin pour `privacyNote` : le `409` d'une fiche masquée ne la divulgue pas. */
-    public function testLeConflitSurLaNoteDeConfidentialiteDUneFicheMasqueeNeLaDivulguePas(): void
-    {
-        $this->arbre->poser(SubjectKind::Personne, self::PERSONNE, 'Marne Dolomite Sureau', 7, ['deceased' => false, 'privacyNote' => 'Note secrète'] + $this->champs());
-
-        try {
-            $this->depot->deposer($this->corpsDeModification([$this->opTexte('privacyNote', 'Autre chose', 'Nouvelle note', baseVersion: 7)]), $this->lecteur(self::OPALE));
-            self::fail('L\'ancienne valeur est fausse : le dépôt doit être en conflit.');
-        } catch (Conflit $conflit) {
-            $details = (array) $conflit->details();
-            self::assertArrayNotHasKey('valeurCourante', $details);
-            self::assertArrayNotHasKey('valeurAnnoncee', $details);
-            self::assertStringNotContainsString('secrète', (string) json_encode($details));
+            self::assertSame(['reason' => 'registres_detruits', 'beforeYear' => null, 'body' => null], $details['valeurCourante']);
+            self::assertArrayHasKey('valeurAnnoncee', $details);
         }
     }
 
@@ -469,6 +565,12 @@ final class FinDeRechercheTest extends BaseDeDemandes
     }
 
     // ------------------------------------------------------------------------ outils
+
+    /** Une vivante : hors du cercle du déposant, sa fiche est réduite. */
+    private function poserUneFicheVivante(): void
+    {
+        $this->arbre->poser(SubjectKind::Personne, self::PERSONNE, 'Marne Dolomite Sureau', 7, ['deceased' => false] + $this->champs());
+    }
 
     private function poserLaFiche(): void
     {
