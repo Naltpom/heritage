@@ -10,6 +10,8 @@ import {
   adresseSurLeSiteDeNoel,
   budgetEnEuros,
   compteARebours,
+  compteurDeLaCarte,
+  dateCourte,
   estPasse,
   etatDeMaReponse,
   lienLisible,
@@ -70,5 +72,28 @@ describe('les mots de la carte', () => {
     expect(participants(1)).toBe('1 participant')
     expect(participants(7)).toBe('7 participants')
     expect(lienLisible('cousine germaine')).toBe('Cousine germaine')
+  })
+})
+
+describe('le compteur de la carte de l’accueil', () => {
+  const AUJ = new Date(2026, 9, 30, 12)
+  const base = { dateTirage: '2026-11-04T00:00:00+01:00', dateEvenement: '2026-12-24T00:00:00+01:00' }
+
+  it('ouvert : les jours avant le tirage', () => {
+    expect(compteurDeLaCarte({ ...base, statut: 'ouvert' }, AUJ)).toEqual({ nombre: '5 j', sous: 'avant le tirage' })
+  })
+
+  it('tiré : les jours avant la remise, sa date en court', () => {
+    expect(compteurDeLaCarte({ ...base, statut: 'tire' }, AUJ)).toEqual({ nombre: '55 j', sous: 'avant le 24 déc.' })
+  })
+
+  it('le jour même, puis plus rien', () => {
+    expect(compteurDeLaCarte({ ...base, statut: 'tire' }, new Date(2026, 11, 24, 12))?.nombre).toBe('Auj.')
+    expect(compteurDeLaCarte({ ...base, statut: 'tire' }, new Date(2026, 11, 25, 12))).toBeNull()
+  })
+
+  it('les dates courtes', () => {
+    expect(dateCourte(new Date(2026, 10, 4))).toBe('4 nov.')
+    expect(dateCourte(new Date(2026, 11, 1))).toBe('1er déc.')
   })
 })

@@ -2,14 +2,18 @@
 /**
  * L'accueil — la page où tout lecteur connecté atterrit (`/home`).
  *
- * Trois choses, dans l'ordre où on les cherche en ouvrant l'application
- * (refonte du 30/09/2026, pensée pour le téléphone) :
+ * Refonte du 30/10/2026 (maquette Claude Design « 1a », et « 2a » pour le
+ * téléphone) : **aujourd'hui d'abord**. Sur bureau, deux colonnes — la fête du
+ * jour et les jours qui viennent à gauche, mes événements à droite ; sur
+ * téléphone, une seule colonne, dans cet ordre : la fête du jour, mes
+ * événements, les jours qui viennent. Plus de « Bonjour, … » : la date suffit.
  *
- * 1. **deux boutons sur une ligne** — « Arbre » et « Ajouter une personne », qui
- *    ouvre le formulaire d'ajout (05/10/2026 : un formulaire, avec l'identité et
- *    les liens vers les autres personnes, y compris celles qu'on a proposées et
- *    qui ne sont pas encore validées) ;
- * 2. **mes événements** (02/10/2026 : une seule section, « le tirage au sort
+ * 1. **les accès rapides** — « Poser une question sur l'arbre » en barre sur
+ *    toute la largeur, « Ouvrir l'arbre » et « Ajouter une personne » (en haut à
+ *    droite sur bureau, sous la barre sur téléphone) ;
+ * 2. **à fêter aujourd'hui** — une carte par fête des vivants, puis les
+ *    défunts en une ligne en retrait, sous « En mémoire » ;
+ * 3. **mes événements** (02/10/2026 : une seule section, « le tirage au sort
  *    est un événement en soi ») — **tous** ceux qui m'attendent, le plus
  *    proche d'abord : les rassemblements où je suis invité ou que j'organise,
  *    avec ma réponse ou les deux boutons Présent / Absent
@@ -17,9 +21,8 @@
  *    tirages de Noël (ceux du site noel2026, que j'ai créés ou auxquels j'ai
  *    répondu) : le compte à rebours, ma réponse, et une fois le tirage fait
  *    « Découvrir à qui j'offre », en violet (`CarteNoelAccueil`) ;
- * 3. **les anniversaires**, en carrousel : on glisse (ou les flèches) pour voir
- *    les jours voisins. Les vivants d'abord, bien lisibles ; les défunts
- *    ensuite, en retrait, sous « En mémoire ».
+ * 4. **les jours qui viennent** — les sept jours suivants, une ligne par fête.
+ *    Le calendrier complet reste dans Explorer.
  *
  * Les anniversaires viennent de `GET /api/anniversaires`, l'année entière en une
  * fois : glisser d'un jour à l'autre ne redemande rien. Les rassemblements
@@ -45,22 +48,29 @@ import {
 import { useSession } from '@/composables/useSession'
 import MessageErreur from '@/components/base/MessageErreur.vue'
 import SqueletteChargement from '@/components/base/SqueletteChargement.vue'
-import LigneEvenement from '@/components/anniversaires/LigneEvenement.vue'
 import CarteNoelAccueil from '@/components/accueil/CarteNoelAccueil.vue'
 import CarteEvenementAccueil from '@/components/accueil/CarteEvenementAccueil.vue'
 import { mesEvenements } from '@/components/evenements-familiaux/liste-commune'
 import {
   anniversairesDuJour,
   decaler,
-  jourCourt,
-  libelleDate,
-  libelleRelatif,
+  detailCourt,
+  detailDeLaFete,
+  estDesVivants,
+  initiales,
+  jourEnToutesLettres,
+  joursQuiViennent,
+  libelleJourAVenir,
+  natureDeLaFete,
+  nomsDesSujets,
+  teinte,
+  titreDeLaFete,
 } from '@/components/accueil/jours'
 
-const { rattache, nomAffiche, vueEmpruntee } = useSession()
+const { rattache, vueEmpruntee } = useSession()
 
 const aujourdhui = decaler(new Date(), 0)
-const prenom = computed(() => nomAffiche.value.split(/\s+/)[0] ?? '')
+const annee = aujourdhui.getFullYear()
 
 /* ───────────────── Chargement ───────────────── */
 
@@ -143,120 +153,221 @@ async function repondre(id: number, reponse: ReponseAInvitation): Promise<void> 
   }
 }
 
-/* ───────────────── Le carrousel des jours ───────────────── */
+/* ───────────────── Aujourd'hui, et les jours qui viennent ───────────────── */
 
-/** L'écart au jour d'aujourd'hui : 0 aujourd'hui, 1 demain, −1 hier. */
-const ecart = ref(0)
-/** Le sens de la dernière glissade, pour que la carte parte du bon côté. */
-const sens = ref<'suivant' | 'precedent'>('suivant')
+const jours = computed(() => anniversaires.value?.jours ?? [])
+const fetesDuJour = computed(() => anniversairesDuJour(jours.value, aujourdhui))
+const fetesDesVivants = computed(() => fetesDuJour.value.filter(estDesVivants))
+const fetesEnMemoire = computed(() => fetesDuJour.value.filter((f) => !estDesVivants(f)))
 
-const jourAffiche = computed(() => decaler(aujourdhui, ecart.value))
+/** Au-delà, la liste deviendrait le calendrier : il a sa page. */
+const LIGNES_A_VENIR = 8
+const aVenir = computed(() => joursQuiViennent(jours.value, aujourdhui))
 
-function aller(delta: number): void {
-  if (delta === 0) return
-  sens.value = delta > 0 ? 'suivant' : 'precedent'
-  ecart.value += delta
-}
-
-/** Sept jours, celui qui est affiché au milieu. */
-const bandeau = computed(() =>
-  [-3, -2, -1, 0, 1, 2, 3].map((d) => {
-    const date = decaler(aujourdhui, ecart.value + d)
-    const nombre = anniversairesDuJour(anniversaires.value?.jours ?? [], date).length
-    return { delta: d, date, nombre, estAujourdhui: ecart.value + d === 0 }
-  }),
-)
-
-const evenementsDuJour = computed(() => anniversairesDuJour(anniversaires.value?.jours ?? [], jourAffiche.value))
-
-/** Un événement est « des vivants » dès qu'un de ses sujets l'est : un mariage
- *  dont un époux vit encore se fête encore. */
-const evenementsVivants = computed(() => evenementsDuJour.value.filter((e) => e.sujets.some((s) => s.vivant)))
-const evenementsEnMemoire = computed(() => evenementsDuJour.value.filter((e) => !e.sujets.some((s) => s.vivant)))
-
-/**
- * Glisser du doigt. `touch-action: pan-y` sur la zone laisse le défilement
- * vertical au navigateur ; seul un geste franchement horizontal change de jour.
- */
-let depart: { x: number; y: number } | null = null
-
-function surPression(e: PointerEvent): void {
-  depart = { x: e.clientX, y: e.clientY }
-}
-
-function surRelache(e: PointerEvent): void {
-  if (depart === null) return
-  const dx = e.clientX - depart.x
-  const dy = e.clientY - depart.y
-  depart = null
-  if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return
-  aller(dx < 0 ? 1 : -1)
-}
-
-function surTouche(e: KeyboardEvent): void {
-  if (e.key === 'ArrowRight') aller(1)
-  else if (e.key === 'ArrowLeft') aller(-1)
-  else return
-  e.preventDefault()
-}
+/** Les teintes des fiches de l'arbre, écrites en entier pour que Tailwind les voie. */
+const CLASSES_DE_TEINTE = {
+  homme: 'bg-homme border-homme-bord',
+  femme: 'bg-femme border-femme-bord',
+  inconnu: 'bg-inconnu border-inconnu-bord',
+} as const
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-4 py-6">
-    <header class="mb-5">
-      <h1 class="text-xl font-semibold text-texte">Bonjour{{ prenom ? `, ${prenom}` : '' }}</h1>
-      <p class="mt-1 text-sm text-attenue">{{ libelleRelatif(aujourdhui, aujourdhui) }}, {{ libelleDate(aujourdhui) }}</p>
-    </header>
+  <div class="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pt-5 pb-6 lg:gap-8 lg:px-14 lg:pt-10 lg:pb-12">
+    <h1 class="sr-only">Accueil</h1>
 
-    <!-- ───────── Accès rapides : deux boutons, puis la question à l'IA ───────── -->
-    <nav aria-label="Accès rapides" class="mb-6 grid grid-cols-2 gap-3">
-      <RouterLink
-        :to="{ name: 'arbre' }"
-        class="flex items-center justify-center gap-2 rounded-panneau bg-accent px-3 py-3.5 text-sm font-semibold text-fond transition-opacity hover:opacity-90"
-      >
-        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-          <circle cx="10" cy="4" r="2" /><circle cx="4" cy="15" r="2" /><circle cx="16" cy="15" r="2" />
-          <path d="M10 6v4M10 10H4v3M10 10h6v3" />
-        </svg>
-        Arbre
-      </RouterLink>
-      <RouterLink
-        v-if="rattache && vueEmpruntee === null"
-        :to="{ name: 'proposition.creation', query: { mode: 'formulaire' } }"
-        class="flex items-center justify-center gap-2 rounded-panneau border border-accent bg-panneau px-3 py-3.5 text-sm font-semibold text-accent transition-colors hover:bg-accent-doux"
-      >
-        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="8" cy="6.5" r="3" /><path d="M2.5 17c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><path d="M16 5v6M13 8h6" />
-        </svg>
-        Ajouter une personne
-      </RouterLink>
-      <p v-else-if="!rattache" class="flex items-center rounded-panneau border border-dashed border-ligne p-3 text-xs text-attenue">
-        Vous pourrez ajouter des personnes une fois votre rattachement validé.
+    <!-- ───────── La date ; sur bureau, les deux boutons à sa droite ───────── -->
+    <div class="flex items-end justify-between gap-6">
+      <p class="font-mono text-[11px] tracking-[.04em] text-attenue uppercase lg:text-xs" data-date>
+        {{ jourEnToutesLettres(aujourdhui) }}<span class="ms-[1ch] hidden lg:inline">{{ annee }}</span>
       </p>
-      <!-- L'assistant en mode question : interroger l'arbre en conversation.
-           Sur toute la largeur, sous les deux autres. -->
+      <nav aria-label="Accès rapides" class="hidden gap-2.5 lg:flex">
+        <RouterLink
+          v-if="rattache && vueEmpruntee === null"
+          :to="{ name: 'proposition.creation', query: { mode: 'formulaire' } }"
+          class="flex h-10 items-center gap-2 rounded-champ border border-ligne px-4 text-[13px] font-semibold text-texte transition-colors hover:border-accent hover:text-accent"
+        >
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="8" cy="6.5" r="3" /><path d="M2.5 17c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /><path d="M16 5v6M13 8h6" />
+          </svg>
+          Ajouter une personne
+        </RouterLink>
+        <RouterLink
+          :to="{ name: 'arbre' }"
+          class="flex h-10 items-center gap-2 rounded-champ bg-accent px-[18px] text-[13px] font-semibold text-fond transition-opacity hover:opacity-90"
+        >
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+            <circle cx="10" cy="4" r="2" /><circle cx="4" cy="15" r="2" /><circle cx="16" cy="15" r="2" />
+            <path d="M10 6v4M10 10H4v3M10 10h6v3" />
+          </svg>
+          Ouvrir l’arbre
+        </RouterLink>
+      </nav>
+    </div>
+
+    <!-- ───────── La question à l'IA, puis (téléphone) les deux boutons ───────── -->
+    <div class="flex flex-col gap-2">
       <RouterLink
         v-if="rattache && vueEmpruntee === null"
         :to="{ name: 'proposition.creation', query: { mode: 'question' } }"
-        class="col-span-2 flex items-center justify-center gap-2 rounded-panneau border border-ligne bg-panneau px-3 py-3.5 text-sm font-semibold text-texte transition-colors hover:border-accent hover:text-accent"
+        class="group flex h-12 items-center gap-2.5 rounded-panneau border border-ligne bg-panneau px-3.5 transition-colors hover:border-accent lg:h-[52px] lg:gap-3 lg:pr-2 lg:pl-4"
+        data-question
       >
-        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg class="flex-none" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--color-accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 4h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H9l-4 3v-3H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
-          <path d="M8 8a2 2 0 1 1 2.5 1.9c-.3.1-.5.4-.5.7V11" /><path d="M10 12.8v.2" />
         </svg>
-        Poser une question sur l’arbre
+        <span class="min-w-0 flex-1 truncate text-sm text-attenue">
+          Poser une question sur l’arbre…<span class="hidden lg:inline"> « Qui est né à Limoges avant 1900 ? »</span>
+        </span>
+        <span class="hidden h-9 items-center rounded-champ bg-accent-doux px-3.5 text-[13px] font-semibold text-accent lg:flex" aria-hidden="true">Demander</span>
       </RouterLink>
-    </nav>
 
-    <!-- ───────── Mes événements : rassemblements et Noëls, le plus proche d'abord ─────────
-         Sans condition de rattachement : un compte en attente n'a pas de
-         rassemblements, mais peut avoir ses tirages de Noël. -->
-    <section v-if="mesProchains.length > 0" aria-labelledby="titre-mes-evenements" class="mb-6">
-      <div class="mb-2 flex items-baseline justify-between">
-        <h2 id="titre-mes-evenements" class="text-sm font-semibold tracking-tight">Mes événements</h2>
-        <RouterLink v-if="rattache" :to="{ name: 'evenements' }" class="text-xs text-accent underline">Tous les événements</RouterLink>
+      <nav aria-label="Accès rapides" class="grid grid-cols-2 gap-2 lg:hidden">
+        <RouterLink
+          :to="{ name: 'arbre' }"
+          class="flex h-11 items-center justify-center gap-2 rounded-champ bg-accent px-3 text-[13px] font-semibold text-fond transition-opacity hover:opacity-90"
+        >
+          Ouvrir l’arbre
+        </RouterLink>
+        <RouterLink
+          v-if="rattache && vueEmpruntee === null"
+          :to="{ name: 'proposition.creation', query: { mode: 'formulaire' } }"
+          class="flex h-11 items-center justify-center gap-2 rounded-champ border border-ligne px-3 text-[13px] font-semibold text-texte transition-colors hover:border-accent hover:text-accent"
+        >
+          Ajouter une personne
+        </RouterLink>
+      </nav>
+
+      <p v-if="!rattache" class="rounded-panneau border border-dashed border-ligne p-3 text-xs text-attenue">
+        Vous pourrez ajouter des personnes une fois votre rattachement validé.
+      </p>
+    </div>
+
+    <!-- ───────── Deux colonnes sur bureau, une sur téléphone ─────────
+         Sur téléphone, la colonne de gauche s'efface (`contents`) : ses deux
+         sections encadrent alors « Mes événements » grâce à `order`. -->
+    <div class="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start lg:gap-8">
+      <div class="contents lg:flex lg:flex-col lg:gap-7">
+        <!-- ───────── À fêter aujourd'hui ───────── -->
+        <section aria-labelledby="titre-aujourdhui" class="order-1 flex flex-col gap-2.5 lg:order-none lg:gap-3.5">
+          <div class="flex items-baseline justify-between">
+            <h2 id="titre-aujourdhui" class="text-sm font-semibold lg:text-[15px]">À fêter aujourd’hui</h2>
+            <RouterLink v-if="rattache" :to="{ name: 'anniversaires' }" class="hidden text-xs text-accent hover:underline lg:inline">
+              Calendrier complet
+            </RouterLink>
+          </div>
+
+          <SqueletteChargement v-if="anniversaires === null && erreurAnniversaires === null" :lignes="3" />
+          <MessageErreur
+            v-else-if="anniversaires === null"
+            :erreur="erreurAnniversaires"
+            titre="Les anniversaires n’ont pas pu être chargés"
+            @action="charger"
+          />
+          <template v-else>
+            <article
+              v-for="f in fetesDesVivants"
+              :key="f.cle"
+              class="flex items-center gap-3.5 rounded-panneau border border-ligne bg-panneau p-4 lg:gap-5 lg:p-6"
+              data-fete
+            >
+              <span
+                class="flex size-14 flex-none items-center justify-center rounded-full border-2 text-lg font-semibold text-texte lg:size-[72px] lg:text-[22px]"
+                :class="CLASSES_DE_TEINTE[teinte(f)]"
+                aria-hidden="true"
+              >
+                {{ initiales(f) }}
+              </span>
+              <div class="flex min-w-0 flex-1 flex-col lg:gap-0.5">
+                <span class="text-[11px] font-semibold text-accent lg:text-xs">{{ natureDeLaFete(f) }}</span>
+                <RouterLink
+                  v-if="f.sujets[0]"
+                  :to="{ name: 'personne.detail', params: { id: f.sujets[0].personId } }"
+                  class="text-[17px] leading-snug font-semibold tracking-[-0.01em] text-texte hover:underline lg:text-xl"
+                >
+                  {{ titreDeLaFete(f, annee) }}
+                </RouterLink>
+                <span class="tnum text-xs text-attenue lg:text-[13px]">{{ detailDeLaFete(f, annee) }}</span>
+              </div>
+              <RouterLink
+                v-if="f.sujets[0]"
+                :to="{ name: 'personne.detail', params: { id: f.sujets[0].personId } }"
+                class="hidden h-9 flex-none items-center rounded-champ border border-ligne px-3.5 text-[13px] font-semibold text-texte transition-colors hover:border-accent hover:text-accent lg:flex"
+              >
+                Voir la fiche
+              </RouterLink>
+            </article>
+
+            <p v-if="fetesDesVivants.length === 0" class="rounded-panneau border border-dashed border-ligne p-4 text-sm text-attenue">
+              Rien à fêter aujourd’hui.
+            </p>
+
+            <!-- Les défunts en retrait : lisibles, mais après les vivants et d'un ton plus bas. -->
+            <ul v-if="fetesEnMemoire.length > 0" class="en-memoire flex flex-col gap-1 px-1 lg:px-6 lg:py-1" aria-label="En mémoire">
+              <li v-for="(f, i) in fetesEnMemoire" :key="f.cle" class="flex items-center gap-2.5 text-[13px] lg:gap-3.5">
+                <span
+                  class="flex-none text-[10px] font-semibold tracking-[.06em] text-attenue uppercase lg:w-[92px] lg:text-[11px]"
+                  :class="i > 0 ? 'invisible' : ''"
+                  :aria-hidden="i > 0 ? 'true' : undefined"
+                >En mémoire</span>
+                <RouterLink
+                  v-if="f.sujets[0]"
+                  :to="{ name: 'personne.detail', params: { id: f.sujets[0].personId } }"
+                  class="min-w-0 truncate text-texte hover:underline"
+                >
+                  {{ nomsDesSujets(f) }}
+                </RouterLink>
+                <span class="flex-none font-mono text-[11px] text-attenue lg:text-xs">{{ detailCourt(f, annee) }}</span>
+              </li>
+            </ul>
+          </template>
+        </section>
+
+        <!-- ───────── Les jours qui viennent ───────── -->
+        <section v-if="anniversaires !== null" aria-labelledby="titre-a-venir" class="order-3 flex flex-col lg:order-none">
+          <h2 id="titre-a-venir" class="mb-1 text-sm font-semibold lg:mb-1.5 lg:text-[13px] lg:text-attenue">Les jours qui viennent</h2>
+          <ul class="flex flex-col">
+            <li
+              v-for="j in aVenir.slice(0, LIGNES_A_VENIR)"
+              :key="j.cle"
+              class="grid min-h-11 grid-cols-[68px_minmax(0,1fr)_auto] items-center gap-2.5 border-t border-ligne lg:grid-cols-[92px_minmax(0,1fr)_auto] lg:gap-3.5 lg:py-3"
+              data-a-venir
+            >
+              <span class="font-mono text-[11px] text-attenue lg:text-xs">{{ libelleJourAVenir(j.date, aujourdhui) }}</span>
+              <span class="truncate text-[13px] lg:text-sm" :class="estDesVivants(j.evenement) ? '' : 'opacity-60'">
+                <template v-if="!estDesVivants(j.evenement)">† </template>
+                <RouterLink
+                  v-if="j.evenement.sujets[0]"
+                  :to="{ name: 'personne.detail', params: { id: j.evenement.sujets[0].personId } }"
+                  class="text-texte hover:underline"
+                >
+                  {{ nomsDesSujets(j.evenement) }}
+                </RouterLink>
+              </span>
+              <span class="text-xs text-attenue">{{ detailCourt(j.evenement, annee) }}</span>
+            </li>
+            <li v-if="aVenir.length === 0" class="border-t border-ligne py-3 text-[13px] text-attenue">
+              Rien à fêter dans les sept prochains jours.
+            </li>
+            <li v-else-if="aVenir.length > LIGNES_A_VENIR && rattache" class="border-t border-ligne py-3 text-xs">
+              <RouterLink :to="{ name: 'anniversaires' }" class="text-accent hover:underline">
+                Et {{ aVenir.length - LIGNES_A_VENIR }} de plus · le calendrier complet
+              </RouterLink>
+            </li>
+          </ul>
+        </section>
       </div>
-      <div class="flex flex-col gap-3">
+
+      <!-- ───────── Mes événements : rassemblements et Noëls, le plus proche d'abord ─────────
+           Sans condition de rattachement : un compte en attente n'a pas de
+           rassemblements, mais peut avoir ses tirages de Noël. -->
+      <section aria-labelledby="titre-mes-evenements" class="order-2 flex flex-col gap-2.5 lg:order-none lg:gap-3.5">
+        <div class="flex items-baseline justify-between">
+          <h2 id="titre-mes-evenements" class="text-sm font-semibold lg:text-[15px]">Mes événements</h2>
+          <RouterLink v-if="rattache" :to="{ name: 'evenements' }" class="text-xs text-accent hover:underline">
+            Tous<span class="hidden lg:inline"> les événements</span>
+          </RouterLink>
+        </div>
         <template v-for="element in mesProchains" :key="element.cle">
           <CarteEvenementAccueil
             v-if="element.type === 'rassemblement'"
@@ -269,144 +380,21 @@ function surTouche(e: KeyboardEvent): void {
           />
           <CarteNoelAccueil v-else :tirage="element.tirage" :aujourdhui="aujourdhui" />
         </template>
-      </div>
-    </section>
-
-    <!-- ───────── Les anniversaires, en carrousel ───────── -->
-    <section
-      class="rounded-panneau border border-ligne bg-panneau"
-      aria-roledescription="carrousel"
-      aria-label="Anniversaires du jour"
-      tabindex="0"
-      @keydown="surTouche"
-    >
-      <div class="flex items-center gap-2 border-b border-ligne px-2 py-2">
-        <button
-          type="button"
-          class="flex h-9 w-9 items-center justify-center rounded-champ text-lg text-attenue hover:bg-accent-doux hover:text-texte"
-          aria-label="Jour précédent"
-          @click="aller(-1)"
-        >
-          ‹
-        </button>
-        <div class="min-w-0 flex-1 text-center" aria-live="polite">
-          <p class="truncate text-sm font-semibold text-texte">Anniversaires · {{ libelleRelatif(jourAffiche, aujourdhui) }}</p>
-          <p class="truncate text-xs text-attenue">{{ libelleDate(jourAffiche) }}</p>
-        </div>
-        <button
-          type="button"
-          class="flex h-9 w-9 items-center justify-center rounded-champ text-lg text-attenue hover:bg-accent-doux hover:text-texte"
-          aria-label="Jour suivant"
-          @click="aller(1)"
-        >
-          ›
-        </button>
-      </div>
-
-      <!-- Les sept jours autour : un point dit qu'il s'y passe quelque chose. -->
-      <div class="grid grid-cols-7 gap-1 border-b border-ligne px-2 py-2">
-        <button
-          v-for="j in bandeau"
-          :key="j.delta"
-          type="button"
-          class="flex flex-col items-center rounded-champ py-1.5 text-xs transition-colors"
-          :class="j.delta === 0 ? 'bg-accent text-fond' : 'text-attenue hover:bg-accent-doux hover:text-texte'"
-          :aria-label="`${libelleRelatif(j.date, aujourdhui)} ${libelleDate(j.date)}, ${j.nombre} événement${j.nombre > 1 ? 's' : ''}`"
-          :aria-current="j.delta === 0 ? 'date' : undefined"
-          @click="aller(j.delta)"
-        >
-          <span class="capitalize">{{ jourCourt(j.date).replace('.', '') }}</span>
-          <span class="tnum text-sm font-semibold" :class="j.estAujourdhui && j.delta !== 0 ? 'text-accent' : ''">{{ j.date.getDate() }}</span>
-          <span
-            class="mt-0.5 h-1.5 w-1.5 rounded-pastille"
-            :class="j.nombre > 0 ? (j.delta === 0 ? 'bg-fond' : 'bg-accent') : 'bg-transparent'"
-            aria-hidden="true"
-          />
-        </button>
-      </div>
-
-      <div class="zone-glisser min-h-40 overflow-hidden px-4 py-4" @pointerdown="surPression" @pointerup="surRelache" @pointercancel="depart = null">
-        <SqueletteChargement v-if="anniversaires === null && erreurAnniversaires === null" :lignes="3" />
-        <MessageErreur
-          v-else-if="anniversaires === null"
-          :erreur="erreurAnniversaires"
-          titre="Les anniversaires n’ont pas pu être chargés"
-          @action="charger"
-        />
-        <Transition v-else :name="`glisse-${sens}`" mode="out-in">
-          <div :key="ecart" class="flex flex-col gap-5">
-            <ul v-if="evenementsVivants.length > 0" class="flex flex-col gap-3">
-              <li v-for="e in evenementsVivants" :key="e.cle">
-                <LigneEvenement :evenement="e" :annee-affichee="jourAffiche.getFullYear()" />
-              </li>
-            </ul>
-
-            <div v-if="evenementsEnMemoire.length > 0" class="en-memoire">
-              <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-attenue">En mémoire</p>
-              <ul class="flex flex-col gap-3">
-                <li v-for="e in evenementsEnMemoire" :key="e.cle">
-                  <LigneEvenement :evenement="e" :annee-affichee="jourAffiche.getFullYear()" />
-                </li>
-              </ul>
-            </div>
-
-            <p v-if="evenementsDuJour.length === 0" class="py-6 text-center text-sm text-attenue">
-              Rien à fêter ce jour-là. Glissez pour voir les jours voisins.
-            </p>
-          </div>
-        </Transition>
-      </div>
-
-      <div v-if="ecart !== 0" class="border-t border-ligne px-4 py-2 text-xs">
-        <button type="button" class="font-semibold text-accent underline" @click="aller(-ecart)">
-          Revenir à aujourd’hui
-        </button>
-      </div>
-    </section>
+        <p v-if="mesProchains.length === 0" class="rounded-panneau border border-dashed border-ligne p-4 text-sm text-attenue">
+          Aucun événement à venir.
+        </p>
+      </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.zone-glisser {
-  touch-action: pan-y;
-}
-
-/* Les défunts en retrait : lisibles, mais après les vivants et d'un ton plus bas. */
+/* Les défunts en retrait : lisibles, mais d'un ton plus bas que les vivants. */
 .en-memoire {
-  opacity: 0.62;
+  opacity: 0.7;
 }
 .en-memoire:hover,
 .en-memoire:focus-within {
   opacity: 1;
-}
-
-.glisse-suivant-enter-active,
-.glisse-suivant-leave-active,
-.glisse-precedent-enter-active,
-.glisse-precedent-leave-active {
-  transition:
-    transform 160ms ease,
-    opacity 160ms ease;
-}
-
-.glisse-suivant-enter-from,
-.glisse-precedent-leave-to {
-  transform: translateX(24px);
-  opacity: 0;
-}
-
-.glisse-suivant-leave-to,
-.glisse-precedent-enter-from {
-  transform: translateX(-24px);
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .glisse-suivant-enter-active,
-  .glisse-suivant-leave-active,
-  .glisse-precedent-enter-active,
-  .glisse-precedent-leave-active {
-    transition: none;
-  }
 }
 </style>

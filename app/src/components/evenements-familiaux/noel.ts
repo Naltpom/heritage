@@ -44,6 +44,34 @@ export function dateLongue(date: Date): string {
   return `${libelleDate(date)} ${date.getFullYear()}`
 }
 
+/** « 4 nov. », « 1er déc. » : les dates d'une ligne serrée. */
+export function dateCourte(date: Date): string {
+  const jour = date.getDate()
+  const mois = date.toLocaleDateString('fr-FR', { month: 'short' })
+  return `${jour === 1 ? '1er' : String(jour)} ${mois}`
+}
+
+/**
+ * Le compte à rebours en gros chiffres de la carte de l'accueil : « 55 j »,
+ * et dessous ce qu'il attend — « avant le tirage » tant qu'il est ouvert,
+ * « avant le 24 déc. » une fois tiré. `null` quand il n'y a plus rien à
+ * attendre (date illisible, cadeaux remis) : la carte le dit en toutes lettres.
+ */
+export function compteurDeLaCarte(
+  tirage: Pick<ResumeDuTirageDeNoel, 'statut' | 'dateTirage' | 'dateEvenement'>,
+  aujourdhui: Date,
+): { nombre: string; sous: string } | null {
+  const ouvert = tirage.statut === 'ouvert'
+  const date = lireInstant(ouvert ? tirage.dateTirage : tirage.dateEvenement)
+  if (date === null) return null
+  const ecart = ecartEnJours(aujourdhui, date)
+  if (ecart < 0) return null
+  return {
+    nombre: ecart === 0 ? 'Auj.' : `${ecart} j`,
+    sous: ouvert ? (ecart === 0 ? 'jour du tirage' : 'avant le tirage') : ecart === 0 ? 'remise des cadeaux' : `avant le ${dateCourte(date)}`,
+  }
+}
+
 /** La remise des cadeaux est passée : le tirage va dans « Passés ». */
 export function estPasse(tirage: Pick<ResumeDuTirageDeNoel, 'dateEvenement'>, aujourdhui: Date): boolean {
   const remise = lireInstant(tirage.dateEvenement)

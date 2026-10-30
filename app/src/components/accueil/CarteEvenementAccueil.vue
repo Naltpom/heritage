@@ -50,7 +50,7 @@ const nature = computed(() => (evenement.suisInvite ? 'Invitation' : 'Vous organ
 </script>
 
 <template>
-  <article class="flex flex-col gap-3 rounded-panneau border border-accent bg-panneau p-4" :aria-label="`${nature} : ${evenement.titre}`">
+  <article class="flex flex-col gap-3 rounded-panneau border border-accent bg-panneau p-4 lg:p-5" :aria-label="`${nature} : ${evenement.titre}`">
     <RouterLink :to="{ name: 'evenement.detail', params: { id: evenement.id } }" class="flex flex-col gap-0.5">
       <span class="text-xs font-semibold text-accent">Rassemblement · {{ nature }} · {{ quand(evenement, aujourdhui) }}</span>
       <span class="text-base font-semibold text-texte">{{ evenement.titre }}</span>
