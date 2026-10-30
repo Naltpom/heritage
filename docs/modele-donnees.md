@@ -982,6 +982,7 @@ changent, sans que la table entre dans l'empreinte (§ 2.3, ADR 0005).
 |---|---|---|
 | PK | `(id)` | — |
 | `uniq_tree_research_closure_side` | `UNIQUE (person_id, side)` | **La règle « un côté, une fin de recherche »**, et la lecture de la fiche. Sert aussi les lectures en lot du graphe et de l'affiche (préfixe `person_id`). |
+| `IDX_998C91B2217BBB47` | `(person_id)` | L'index de la clé étrangère, **imposé par Doctrine** (le test de schéma le compare au mapping). Il double l'unique ci-dessus en PostgreSQL, qui sert déjà le préfixe `person_id` : aucune requête ne s'y appuie. |
 
 **Contraintes** — des filets : les mêmes règles sont tenues au dépôt, en `422` devant l'auteur
 (§ 6.2 bis du contrat).
@@ -3873,7 +3874,7 @@ Le diagramme date de la fondation ; les modules venus depuis — `Demarche`, `Ev
 `Tirage`, `Question`, `Assistant` — y ajoutent leurs flèches, et la commande les parcourt
 toutes. **La liste ci-dessous est celle du code**, et le test
 `api/tests/Integrite/VerifierIntegriteCommandTest.php` la fige : 55 contrôles, dont 18
-tolérés (`tree_research_closure.author_user_id`, de l'ADR 0023, en est un, strict). Le chiffre
+tolérés ; `tree_research_closure.author_user_id` (ADR 0023) est stricte. Le chiffre
 est celui du test, en unités « une colonne, une portée » ; il ne reprend pas les tables du
 tableau ci-dessous que le schéma ne porte plus.
 

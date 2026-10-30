@@ -145,9 +145,12 @@ le recueil du dépôt à blanc comme les autres :
 - l'objet porte les trois clés, et elles seules — `authorLabel` et `closedAt` sont en
   lecture seule, comme le `texte` d'un bloc date ;
 - les règles de forme du § 2 ; `body` est rogné, et vide il vaut `null` ;
-- **une pose ou une modification sur un côté dont un parent est déjà lié est refusée** :
-  la recherche n'y est pas close. La levée reste toujours possible. Le constructeur le
-  demande à l'arbre par `PortArbre::cotesConnus()` (lecture, aucune écriture) ;
+- **une pose ou une modification sur un côté dont un parent est déjà lié est refusée
+  au dépôt** : la recherche n'y est pas close. La levée reste toujours possible. Le
+  constructeur le demande à l'arbre par `PortArbre::cotesConnus()` (lecture, aucune
+  écriture). **Ce refus n'a lieu qu'au dépôt** : un parent lié entre le dépôt et la validation
+  ne rend pas la demande caduque, l'écriture a lieu (le contrat le dit), et l'affichage fait
+  alors primer « parents connus » (§ 4) ;
 - `oldValue` égal à `newValue` est refusé, comme pour tout champ.
 
 **À la validation**, `Tree` écrit la ligne (insertion, mise à jour ou suppression) dans
@@ -238,6 +241,9 @@ n'apprend rien de plus.
   une icône **mur** ; le motif se lit au survol (`title`) et au clic (volet).
 - **L'affiche** : le mur, imprimé en brique, sur la case de l'ancêtre clos, et la ligne de
   légende « recherche close faute d'archives » — seulement si l'affiche en dessine au moins un.
+  Le couple porte son mur au premier anneau, ou au centre quand les quatre parents y sont
+  dessinés. **Les conjoints des descendants n'en ont pas** : l'affiche ne sert pas leurs
+  parents, il n'y a donc rien à clore sous leur case.
 
 ## Conséquences
 
