@@ -180,3 +180,22 @@ describe('l’éventail des quatre parents', () => {
     expect(contient(a, 'Onyx')).toBe(true)
   })
 })
+
+describe('le signe des unions dans le soleil, les médaillons et l’éventail', () => {
+  /** Les traits obliques : ceux du divorce (les autres traits de l'affiche sont droits). */
+  const traits = (a: AfficheProduite): number => a.scene.elements.filter((e) => e.type === 'ligne' && e.x1 !== e.x2 && e.y1 !== e.y2).length
+
+  it.each(['soleil', 'medaillons'] as const)('écrit & pour une union sans mariage, ∞ pour un mariage, et barre le divorce (%s)', (forme) => {
+    for (const a of [soleil(arbreFictif(), forme), eventail(arbreFictif(), forme)]) {
+      const t = textes(a)
+      expect(t.some((x) => x.includes('&')), `${forme} &`).toBe(true)
+      expect(t.some((x) => x.includes('∞')), `${forme} ∞`).toBe(true)
+      expect(traits(a), `${forme} : le trait oblique du divorce`).toBeGreaterThan(0)
+      expect(versSvg(a.scene)).not.toMatch(/NaN|Infinity/)
+    }
+  })
+
+  it('ne trace aucun trait pour un couple marié sans divorce', () => {
+    expect(traits(soleil(coupleSeul(), 'soleil'))).toBe(0)
+  })
+})

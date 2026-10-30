@@ -30,7 +30,7 @@ export type Primitive =
       tirets?: string
     }
   | { type: 'rect'; x: number; y: number; l: number; h: number; rayon: number; fond: string; trait?: string; epaisseur?: number }
-  | { type: 'ligne'; x1: number; y1: number; x2: number; y2: number; trait: string; epaisseur: number }
+  | { type: 'ligne'; x1: number; y1: number; x2: number; y2: number; trait: string; epaisseur: number; transform?: string }
   | {
       type: 'texte'
       x: number
@@ -105,8 +105,8 @@ export class Scene {
     this.elements.push({ type: 'rect', x, y, l, h, rayon, fond, ...(trait ? { trait, epaisseur } : {}) })
   }
 
-  ligneDroite(x1: number, y1: number, x2: number, y2: number, trait: string, epaisseur: number): void {
-    this.elements.push({ type: 'ligne', x1, y1, x2, y2, trait, epaisseur })
+  ligneDroite(x1: number, y1: number, x2: number, y2: number, trait: string, epaisseur: number, transform?: string): void {
+    this.elements.push({ type: 'ligne', x1, y1, x2, y2, trait, epaisseur, ...(transform ? { transform } : {}) })
   }
 
   /** `ligne()` de `boites.py` : un trait orthogonal à coins arrondis. */

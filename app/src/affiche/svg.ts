@@ -98,7 +98,7 @@ function primitive(e: Primitive, defs: string[], nouvelId: () => string): string
       return `<rect x="${f3(e.x)}" y="${f3(e.y)}" width="${f3(e.l)}" height="${f3(e.h)}" rx="${e.rayon}" fill="${e.fond}"${trait}/>`
     }
     case 'ligne':
-      return `<line x1="${f3(e.x1)}" y1="${f3(e.y1)}" x2="${f3(e.x2)}" y2="${f3(e.y2)}" stroke="${e.trait}" stroke-width="${e.epaisseur}" stroke-linecap="round"/>`
+      return `<line x1="${f3(e.x1)}" y1="${f3(e.y1)}" x2="${f3(e.x2)}" y2="${f3(e.y2)}" stroke="${e.trait}" stroke-width="${e.epaisseur}" stroke-linecap="round"${e.transform ? ` transform="${e.transform}"` : ''}/>`
     case 'texte': {
       const st = e.style
       const attrs = [`x="${f3(e.x)}"`, `y="${f3(e.y)}"`, `font-family="${st.cle}"`, `font-size="${f3(st.mm)}"`, `fill="${st.couleur}"`]

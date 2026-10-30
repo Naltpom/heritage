@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ArbreDAffiche } from '@/lib/api'
 import { ArbreAffiche, estMarie } from './donnees'
 import { annee, DATE_INCONNUE, FabriqueDArbre, jour } from './essai/arbreFictif'
-import { ascendance, compter, descendance, statutUnion } from './structure'
+import { ascendance, compter, descendance, lienDUnion, statutUnion, texteDeLien } from './structure'
 
 /**
  * Un petit arbre écrit à la main, dont on connaît chaque place :
@@ -222,5 +222,27 @@ describe('la descendance, et ce que dit chaque trait d’union', () => {
     const f = a.personne('feminin', 'Armoise', 1885, { prenoms: 'Craie', deces: 1960 })
     const A = new ArbreAffiche(a.charge(a.famille(h, f)))
     expect(descendance(A, A.P.get(h)!, A.P.get(f)!).enfants).toEqual([])
+  })
+})
+
+describe('le signe d’une union (partagé par les boîtes, le soleil, les médaillons et l’éventail)', () => {
+  const lien = (marie: boolean, statut: 'div' | 'veuf' | 'veuve' | null, rang = 1, total = 1) => lienDUnion({ marie, statut, rang, total })
+
+  it('∞ pour un mariage connu, & pour une union sans mariage', () => {
+    expect(lien(true, null)).toEqual({ signe: '∞', barre: false, rang: null })
+    expect(lien(false, null)).toEqual({ signe: '&', barre: false, rang: null })
+  })
+
+  it('barre le signe d’un divorce, pas celui d’un veuvage', () => {
+    expect(lien(true, 'div').barre).toBe(true)
+    expect(lien(true, 'veuf').barre).toBe(false)
+    expect(lien(true, 'veuve').barre).toBe(false)
+  })
+
+  it('n’écrit le rang que si la personne a plusieurs unions', () => {
+    expect(texteDeLien(lien(true, null, 1, 1))).toBe('∞')
+    expect(texteDeLien(lien(true, null, 2, 2))).toBe('∞2')
+    expect(texteDeLien(lien(false, null, 2, 3))).toBe('&2')
+    expect(texteDeLien(lien(true, 'div', 1, 2))).toBe('∞1')
   })
 })

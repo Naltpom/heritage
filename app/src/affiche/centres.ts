@@ -20,7 +20,7 @@ import type { Personne } from './donnees'
 import { ENCRE, ENCRE_DOUCE, melange, PAPIER, TRAIT, type Rgb } from './palette'
 import { Style } from './polices'
 import { f3, polaire, secteur, type Scene } from './scene'
-import type { Desc } from './structure'
+import { lienDUnion, texteDeLien, type Desc, type LienDUnion } from './structure'
 
 export type Cote = 'n' | 'p' | 'v'
 
@@ -56,6 +56,8 @@ export interface FamilleDuCentre {
 export interface Coeur {
   noms: [string, string]
   couple: [Personne, Personne] | null
+  /** Le signe de l'union du couple (∞ par défaut). */
+  lien?: LienDUnion
   enfants: Personne[]
   chiffres: string[]
 }
@@ -64,34 +66,64 @@ export interface Coeur {
 /* Les lignes : des morceaux de styles différents, bout à bout          */
 /* ------------------------------------------------------------------ */
 
-type Morceau = readonly [string, Style]
+/** Un morceau de texte ; le troisième terme, s'il existe, est le signe d'union à barrer dans ce texte (divorce). */
+type Morceau = readonly [string, Style, string?]
 type Ligne = Morceau[]
 
 const largeur = (l: Ligne): number => l.reduce((w, [t, s]) => w + s.largeur(t), 0)
 const hauteur = (l: Ligne): number => l.reduce((h, [, s]) => Math.max(h, s.interligne), 0)
-const echelle = (l: Ligne, k: number): Ligne => l.map(([t, s]) => [t, s.echelle(k)] as const)
+const echelle = (l: Ligne, k: number): Ligne => l.map(([t, s, b]) => (b === undefined ? ([t, s.echelle(k)] as const) : ([t, s.echelle(k), b] as const)))
+
+/** Le trait oblique d'un signe barré, comme `dessinerDesc` : sur les 80 % du signe, un peu au-dessus de la ligne de base. */
+export function barreDuSigne(scene: Scene, st: Style, xDebut: number, largeurSigne: number, yBase: number, transform?: string): void {
+  const l = largeurSigne * 0.8
+  const x = xDebut + largeurSigne / 2
+  scene.ligneDroite(x - l / 2, yBase - st.mm * 0.11, x + l / 2, yBase - st.mm * 0.55, TRAIT, st.mm * 0.12, transform)
+}
+
+/** Les morceaux « ∞2 » devant un nom : le signe (barré au besoin), le rang, puis une espace. */
+function texteDuLien(lien: LienDUnion | undefined, avant = ''): { texte: string; barre?: string } {
+  if (!lien) return { texte: avant }
+  return { texte: `${avant}${texteDeLien(lien)} `, ...(lien.barre ? { barre: lien.signe } : {}) }
+}
 
 /** « Prénoms NOM » : le prénom au corps `c`, le nom en capitales grasses un peu plus petites. */
-function nomComplet(p: Personne, c: number, couleur = ENCRE, prefixe = '', italique = false): Ligne {
+function nomComplet(p: Personne, c: number, couleur = ENCRE, lien?: LienDUnion, italique = false, avant = ''): Ligne {
   const l: Ligne = []
-  const prenoms = `${prefixe}${p.prenoms}`.trim()
-  if (prenoms) l.push([p.nom ? `${prenoms} ` : prenoms, new Style('SS', c, couleur, 0, italique ? 'Ital' : 'Reg')])
+  const { texte, barre } = texteDuLien(lien, avant)
+  const prenoms = `${texte}${p.prenoms}`.trim()
+  const st = new Style('SS', c, couleur, 0, italique ? 'Ital' : 'Reg')
+  if (prenoms) l.push(barre === undefined ? [p.nom ? `${prenoms} ` : prenoms, st] : [p.nom ? `${prenoms} ` : prenoms, st, barre])
   if (p.nom) l.push([p.nom, new Style('SS', c * 0.84, couleur, 0.05, 'Semi')])
   return l
 }
 
 /** Le même sur deux lignes : les prénoms, puis le NOM. */
-function nomCoupe(p: Personne, c: number, couleur = ENCRE, prefixe = '', italique = false): Ligne[] {
+function nomCoupe(p: Personne, c: number, couleur = ENCRE, lien?: LienDUnion, italique = false): Ligne[] {
   const lignes: Ligne[] = []
-  const prenoms = `${prefixe}${p.prenoms}`.trim()
-  if (prenoms) lignes.push([[prenoms, new Style('SS', c, couleur, 0, italique ? 'Ital' : 'Reg')]])
+  const { texte, barre } = texteDuLien(lien)
+  const prenoms = `${texte}${p.prenoms}`.trim()
+  const st = new Style('SS', c, couleur, 0, italique ? 'Ital' : 'Reg')
+  if (prenoms) lignes.push([barre === undefined ? [prenoms, st] : [prenoms, st, barre]])
   if (p.nom) lignes.push([[p.nom, new Style('SS', c * 0.84, couleur, 0.05, 'Semi')]])
   return lignes
 }
 
-const conjoints = (d: Desc): Personne[] => d.unions.map(([c]) => c?.p).filter((p): p is Personne => p !== undefined)
+/** Un signe d'union seul, sur sa ligne (le couple du centre). */
+const ligneDuLien = (lien: LienDUnion, corps: number): Ligne => [
+  lien.barre ? [texteDeLien(lien), new Style('SS', corps, TRAIT, 0, 'Reg'), lien.signe] : [texteDeLien(lien), new Style('SS', corps, TRAIT, 0, 'Reg')],
+]
+
+/** Les conjoints d'une tête de famille, chacun avec le signe de son union (∞, &, ∞2, signe barré…). */
+const conjointsLies = (d: Desc): [Personne, LienDUnion][] =>
+  d.unions.flatMap(([c, info]) => (c ? [[c.p, lienDUnion(info)] as [Personne, LienDUnion]] : []))
 const enfants = (d: Desc): Desc[] => d.unions.flatMap(([, , e]) => e)
-const signe = (i: number): string => ['∞ ', '∞² ', '∞³ '][i] ?? `∞${i + 1} `
+const LIEN_PAR_DEFAUT: LienDUnion = { signe: '∞', barre: false, rang: null }
+/** Le signe de l'union de `tete` avec `conjoint`. */
+export const lienDuCouple = (tete: Desc, conjoint: Personne): LienDUnion => {
+  const u = tete.unions.find(([c]) => c?.p.id === conjoint.id)
+  return u ? lienDUnion(u[1]) : LIEN_PAR_DEFAUT
+}
 
 /** « A, B et C » */
 function enumerer(mots: string[]): string {
@@ -106,10 +138,12 @@ function poserLigne(scene: Scene, l: Ligne, x: number, y: number, transform?: st
   const corps = Math.max(k, 0.84)
   const chasse = k < 0.84 ? k / 0.84 : 1
   let pos = x - (w * corps * chasse) / 2
-  for (const [t, s] of l) {
+  for (const [t, s, barre] of l) {
     const st = s.echelle(corps)
     const lw = st.largeur(t) * chasse
     scene.texte(pos, y, t, st, 'start', transform, chasse < 1 ? lw : null)
+    const i = barre === undefined ? -1 : t.indexOf(barre)
+    if (barre !== undefined && i >= 0) barreDuSigne(scene, st, pos + st.largeur(t.slice(0, i)) * chasse, st.largeur(barre) * chasse, y, transform)
     pos += lw
   }
 }
@@ -163,7 +197,7 @@ function lignesDuTitre(coeur: Coeur, u: number, empiles: boolean): (Ligne | null
   if (empiles) lignes.push(nom(coeur.noms[0]), null, nom(coeur.noms[1]))
   else lignes.push([[`${titre(coeur.noms[0])} · ${titre(coeur.noms[1])}`, new Style('CG', 22 * u, ENCRE, 0.01, 'Bold')]], null)
   if (coeur.couple) {
-    lignes.push(nomComplet(coeur.couple[0], 11.5 * u), [['∞', new Style('SS', 13 * u, TRAIT, 0, 'Reg')]], nomComplet(coeur.couple[1], 11.5 * u))
+    lignes.push(nomComplet(coeur.couple[0], 11.5 * u), ligneDuLien(coeur.lien ?? LIEN_PAR_DEFAUT, 13 * u), nomComplet(coeur.couple[1], 11.5 * u))
     if (coeur.enfants.length > 0) lignes.push([[enumerer(coeur.enfants.map((p) => p.prenoms.split(' ')[0]!)), new Style('SS', 10 * u, ENCRE_DOUCE, 0, 'Ital')]])
   } else {
     for (const c of coeur.chiffres) lignes.push([[c, new Style('SS', 8 * u, ENCRE_DOUCE, 0, 'Reg')]])
@@ -277,12 +311,13 @@ export class SoleilInterieur {
       let lignes: Ligne[]
       let coupees: Ligne[]
       if (couple) {
-        lignes = [nomComplet(couple[0], b * 0.93), [['∞', new Style('SS', b * 0.93, TRAIT, 0, 'Reg')]], nomComplet(couple[1], b * 0.93)]
-        coupees = [...nomCoupe(couple[0], b * 0.85), [['∞', new Style('SS', b * 0.85, TRAIT, 0, 'Reg')]], ...nomCoupe(couple[1], b * 0.85)]
+        const lien = lienDuCouple(d, couple[1])
+        lignes = [nomComplet(couple[0], b * 0.93), ligneDuLien(lien, b * 0.93), nomComplet(couple[1], b * 0.93)]
+        coupees = [...nomCoupe(couple[0], b * 0.85), ligneDuLien(lien, b * 0.85), ...nomCoupe(couple[1], b * 0.85)]
       } else {
-        const epoux = conjoints(d)
-        lignes = [nomComplet(d.p, c), ...epoux.map((p, i) => nomComplet(p, cc, ENCRE_DOUCE, signe(i), true))]
-        coupees = [...nomCoupe(d.p, c), ...epoux.flatMap((p, i) => nomCoupe(p, cc * 0.95, ENCRE_DOUCE, signe(i), true))]
+        const epoux = conjointsLies(d)
+        lignes = [nomComplet(d.p, c), ...epoux.map(([p, lien]) => nomComplet(p, cc, ENCRE_DOUCE, lien, true))]
+        coupees = [...nomCoupe(d.p, c), ...epoux.flatMap(([p, lien]) => nomCoupe(p, cc * 0.95, ENCRE_DOUCE, lien, true))]
         if (dernier) lignes = coupees
       }
       // Pour le couple, seuls ses enfants communs : les autres unions du mari sont sa fratrie à lui.
@@ -472,12 +507,32 @@ export class SoleilInterieur {
         const ll = w > dispo ? echelle(l, Math.max(0.6, dispo / w)) : l
         const total = largeur(ll)
         let x = -total / 2
-        for (const [t, s] of ll) {
+        for (const [t, s, barre] of ll) {
           const lw = s.largeur(t)
           const milieu = ((x + lw / 2) / base) * (180 / Math.PI)
           const centre = dessous ? am + milieu : am - milieu
           const demi = (lw / 2 / base) * (180 / Math.PI) * 1.02
           scene.texteSurArc(cx, cy, base, centre - demi, centre + demi, t, s, dessous)
+          const i = barre === undefined ? -1 : t.indexOf(barre)
+          if (barre !== undefined && i >= 0) {
+            // Le trait se pose au pied du signe, dans le repère de l'arc : le long de la lecture, et « en haut » du glyphe.
+            const lecture = x + s.largeur(t.slice(0, i)) + s.largeur(barre) / 2
+            const angleDuSigne = (lecture / base) * (180 / Math.PI)
+            const a = dessous ? am + angleDuSigne : am - angleDuSigne
+            const rad = (a * Math.PI) / 180
+            const [px, py] = polaire(cx, cy, base, a)
+            const lect: [number, number] = dessous ? [-Math.sin(rad), -Math.cos(rad)] : [Math.sin(rad), Math.cos(rad)]
+            const haut: [number, number] = dessous ? [-Math.cos(rad), Math.sin(rad)] : [Math.cos(rad), -Math.sin(rad)]
+            const m = s.largeur(barre) * 0.4
+            scene.ligneDroite(
+              px - lect[0] * m + haut[0] * s.mm * 0.11,
+              py - lect[1] * m + haut[1] * s.mm * 0.11,
+              px + lect[0] * m + haut[0] * s.mm * 0.55,
+              py + lect[1] * m + haut[1] * s.mm * 0.55,
+              TRAIT,
+              s.mm * 0.12,
+            )
+          }
           x += lw
         }
       }
@@ -522,16 +577,16 @@ export class Rosace {
     // Le couple de l'affiche (éventail des quatre parents) : lui, elle, et leurs seuls enfants
     // communs, comme au soleil intérieur.
     const lignes: (Ligne | null)[] = f.couple
-      ? [nomComplet(f.couple[0], b), nomComplet(f.couple[1], b, ENCRE, '∞ ')]
-      : [nomComplet(d.p, b), ...conjoints(d).map((p, i) => nomComplet(p, b * 0.79, ENCRE_DOUCE, signe(i), true))]
+      ? [nomComplet(f.couple[0], b), nomComplet(f.couple[1], b, ENCRE, lienDuCouple(d, f.couple[1]))]
+      : [nomComplet(d.p, b), ...conjointsLies(d).map(([p, lien]) => nomComplet(p, b * 0.79, ENCRE_DOUCE, lien, true))]
     const fils = f.couple ? (d.unions.find(([c]) => c?.p.id === f.couple![1].id)?.[2] ?? []) : enfants(d)
     if (fils.length > 0) lignes.push(null)
     for (const e of fils) {
       const moi = nomComplet(e.p, b * 0.76)
-      const leurs = conjoints(e)
-      const avec = leurs.length > 0 ? [...moi, ...nomComplet(leurs[0]!, b * 0.76, ENCRE_DOUCE, ' ∞ ', true)] : moi
+      const leurs = conjointsLies(e)
+      const avec = leurs.length > 0 ? [...moi, ...nomComplet(leurs[0]![0], b * 0.76, ENCRE_DOUCE, leurs[0]![1], true, ' ')] : moi
       if (largeur(avec) <= largeurMax) lignes.push(avec)
-      else lignes.push(moi, ...leurs.slice(0, 1).map((p) => nomComplet(p, b * 0.72, ENCRE_DOUCE, '∞ ', true)))
+      else lignes.push(moi, ...leurs.slice(0, 1).map(([p, lien]) => nomComplet(p, b * 0.72, ENCRE_DOUCE, lien, true)))
       // Les petits-enfants : « Louison et Pablo GABRIEL », par nom de famille.
       const petits = enfants(e)
       if (petits.length > 0) {

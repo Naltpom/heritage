@@ -10,7 +10,7 @@ import type { Personne } from './donnees'
 import { couleur, ENCRE, ENCRE_DOUCE, FOND_CONJOINT, FOND_DESC, TRAIT } from './palette'
 import { Style } from './polices'
 import { f3, type Scene } from './scene'
-import type { Desc, InfoUnion, StatutDUnion } from './structure'
+import { lienDUnion, type Desc, type InfoUnion, type StatutDUnion } from './structure'
 
 export type Ligne = readonly [string, Style]
 
@@ -292,13 +292,14 @@ export function dessinerDesc(scene: Scene, enfants: Desc[], depart: readonly [nu
         const gx = c.x - ecartUnion(d, info, regles) / 2
         const ym = d.y + d.h / 2
         const [st, stI, stR] = stylesUnion(d, regles)
-        const signe = info.marie ? '∞' : '&'
+        const lien = lienDUnion(info)
+        const signe = lien.signe
         scene.texte(gx, ym + st.mm * 0.33, signe, st)
-        if (info.statut === 'div') {
+        if (lien.barre) {
           const l = st.largeur(signe) * 0.8
           scene.ligneDroite(gx - l / 2, ym + st.mm * 0.22, gx + l / 2, ym - st.mm * 0.22, TRAIT, 0.45)
         }
-        if (info.total > 1) scene.texte(gx + st.largeur(signe) / 2 + 0.4, ym + st.mm * 0.02, String(info.rang), stR, 'start')
+        if (lien.rang !== null) scene.texte(gx + st.largeur(signe) / 2 + 0.4, ym + st.mm * 0.02, String(lien.rang), stR, 'start')
         // L'issue se lit du côté opposé au trait des enfants : au-dessus du signe, ou en dessous
         // quand le trait monte.
         if (info.statut) scene.texte(gx, inverse ? ym + st.mm * 0.6 + stI.mm * 0.8 : ym - st.mm * 0.36, ISSUES[info.statut], stI)

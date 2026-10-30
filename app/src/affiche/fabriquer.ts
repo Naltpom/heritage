@@ -17,7 +17,7 @@
  */
 import { agencer, dessinerLesBandes, plusGrand, rayonPour, type Agencement } from './bandes'
 import { dessinerDesc, inverserDesc, mesurerDesc, placerDesc, ReglesDesc } from './boites'
-import { CORPS_MAX, CORPS_MIN, Rosace, SoleilInterieur, type Coeur, type Cote, type FamilleDuCentre } from './centres'
+import { barreDuSigne, CORPS_MAX, CORPS_MIN, lienDuCouple, Rosace, SoleilInterieur, type Coeur, type Cote, type FamilleDuCentre } from './centres'
 import { titre } from './dates'
 import type { ArbreAffiche, Personne } from './donnees'
 import { etendueHaut, Eventail, pointLibre, Reglages } from './eventail'
@@ -25,7 +25,7 @@ import { ENCRE, ENCRE_DOUCE, melange, TEINTES, TRAIT, type Quartier } from './pa
 import { Style } from './polices'
 import { ReglagesSablier, Sablier, type ModeDeSablier } from './sablier'
 import { Scene } from './scene'
-import { ascendance, compter, compterQuatreParents, descendance, quatreParents, type Desc, type QuatreParents } from './structure'
+import { ascendance, compter, compterQuatreParents, descendance, lienDUnion, quatreParents, type Desc, type LienDUnion, type QuatreParents } from './structure'
 
 export const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
 
@@ -75,13 +75,26 @@ const NOMS_DE_GENERATION: Record<number, [string, string]> = {
 }
 
 /** Les lignes d'un titre, du bas vers le haut : (texte, style, interligne après), au corps `u`. */
-export type LignesDuTitre = (u: number) => [string, Style, number][]
+export type LignesDuTitre = (u: number) => LigneDuTitre[]
+
+/** (texte, style, interligne après) ; en quatrième terme, le signe d'union à barrer (divorce). */
+export type LigneDuTitre = [string, Style, number, string?]
 
 /**
  * Les lignes du titre du centre, du bas vers le haut : (texte, style, interligne après) — la
  * descendance en chiffres (`parNiveau`, voir `compter()`), le mariage, ∞, le sous-titre, les deux
  * noms. Au corps `u` (1 : 46 pt pour les noms).
  */
+/**
+ * Le signe de l'union de la famille `fam` (même règle que les boîtes, voir `lienDUnion()`) ;
+ * sans famille connue, ∞. Le couple de l'affiche n'a pas de rang : on n'en montre qu'un.
+ */
+export function lienDeFamille(A: ArbreAffiche, fam: number | null): LienDUnion {
+  if (fam === null) return { signe: '∞', barre: false, rang: null }
+  const { marie, divorce } = A.etatDeUnion(fam)
+  return lienDUnion({ marie, statut: divorce ? 'div' : null, rang: 1, total: 1 })
+}
+
 export function lignesDuCouple(A: ArbreAffiche, fam: number | null, parNiveau: Map<number, number>, H: Personne, F: Personne): LignesDuTitre {
   const [date, lieu] = fam !== null ? A.mariage(fam) : [null, null]
   const chiffres = chiffresDeDescendance(parNiveau).join(' · ')
@@ -90,10 +103,11 @@ export function lignesDuCouple(A: ArbreAffiche, fam: number | null, parNiveau: M
     mariage = date.qual === 'exacte' ? `mariés le ${date.texte('long')}` : `mariés ${date.texte('long')}`
     if (lieu) mariage += ` à ${lieu.split(',')[0]}`
   }
+  const lien = lienDeFamille(A, fam)
   return (u) => [
     [chiffres, new Style('SS', 11 * u, ENCRE_DOUCE, 0, 'Reg'), 1.0],
     [mariage, new Style('SS', 13 * u, ENCRE, 0, 'Ital'), 1.6],
-    ['∞', new Style('SS', 24 * u, TRAIT, 0, 'Reg'), 0.9],
+    lien.barre ? [lien.signe, new Style('SS', 24 * u, TRAIT, 0, 'Reg'), 0.9, lien.signe] : [lien.signe, new Style('SS', 24 * u, TRAIT, 0, 'Reg'), 0.9],
     ['Ascendance et descendance', new Style('SS', 12 * u, ENCRE_DOUCE, 0.02, 'Ital'), 1.15],
     [`${nomDeTitre(H)} · ${nomDeTitre(F)}`, new Style('CG', 46 * u, ENCRE, 0.01, 'Bold'), 1.0],
   ]
@@ -113,7 +127,14 @@ export function chiffresDeDescendance(parNiveau: Map<number, number>): string[] 
  */
 export function lignesDesQuatreParents(A: ArbreAffiche, q: QuatreParents, H: Personne, F: Personne): LignesDuTitre {
   const lignes = lignesDuCouple(A, null, compterQuatreParents(q), H, F)
-  return (u) => lignes(u).filter(([t]) => t !== '∞')
+  const lien = lienDeFamille(A, null)
+  return (u) => lignes(u).filter(([t]) => t !== lien.signe)
+}
+
+/** Une ligne du titre au centre de l'éventail, avec le trait du divorce s'il y en a un. */
+function poserLigneDuTitre(scene: Scene, cx: number, y: number, [t, st, , barre]: LigneDuTitre): void {
+  scene.texte(cx, y, t, st)
+  if (barre !== undefined) barreDuSigne(scene, st, cx - st.largeur(barre) / 2, st.largeur(barre), y)
 }
 
 /** Le disque central : les lignes du titre (`lignesDuCouple()`), au plus grand corps qui tient. */
@@ -138,7 +159,7 @@ export function centreCouple(scene: Scene, E: Eventail, cx: number, cy: number, 
       if (loin > r * 0.93) return false
       const corde = 2 * Math.sqrt(r * r - loin * loin) * 0.88
       if (st.largeur(t) > corde) return false
-      if (dessiner) scene.texte(cx, y, t, st)
+      if (dessiner) poserLigneDuTitre(scene, cx, y, ls[i]!)
     }
     return true
   }
@@ -153,7 +174,7 @@ export function centreCouple(scene: Scene, E: Eventail, cx: number, cy: number, 
       if (haut > r * 0.93) return false
       const corde = 2 * Math.sqrt(r * r - haut * haut) * 0.88
       if (st.largeur(t) > corde) return false
-      if (dessiner) scene.texte(cx, y, t, st)
+      if (dessiner) poserLigneDuTitre(scene, cx, y, ls[i]!)
       if (i + 1 < ls.length) {
         const suivant = ls[i + 1]![1]
         y -= st.mm * 0.74 + st.mm * 0.32 * apres + suivant.mm * 0.26
@@ -354,7 +375,7 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
     } else {
       // Le couple des quatre parents et ses enfants au cœur, les fratries en médaillons autour.
       const enfantsDuCouple = quatre ? (quatre.couple.unions.find(([c]) => c?.p.id === F.id)?.[2] ?? []).map((d) => d.p) : []
-      const rosace = new Rosace(quatre ? fratries : enfants.map(cote('n')), quatre ? { ...coeur, couple: [H, F], enfants: enfantsDuCouple } : coeur, false, !dessous)
+      const rosace = new Rosace(quatre ? fratries : enfants.map(cote('n')), quatre ? { ...coeur, couple: [H, F], lien: lienDuCouple(quatre.couple, F), enfants: enfantsDuCouple } : coeur, false, !dessous)
       const b = rosace.corpsPour(r0, CORPS_MIN, CORPS_MAX)
       besoin = Math.max(r0, rosace.rayonRequis(b))
       dedans = { corps: b, dessiner: (scene, cx, cy) => rosace.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, b) }
@@ -552,7 +573,9 @@ export function afficheSablier(A: ArbreAffiche, hId: number, fId: number, mode: 
   // Le lien du couple, et la date du mariage.
   const [dateMariage, lieu] = fam !== null ? A.mariage(fam) : [null, null]
   const stInf = new Style('SS', 16, TRAIT, 0, 'Reg')
-  scene.texte(ox, oy - h0 / 2 + stInf.mm * 0.3, '∞', stInf)
+  const lien = lienDeFamille(A, fam)
+  scene.texte(ox, oy - h0 / 2 + stInf.mm * 0.3, lien.signe, stInf)
+  if (lien.barre) barreDuSigne(scene, stInf, ox - stInf.largeur(lien.signe) / 2, stInf.largeur(lien.signe), oy - h0 / 2 + stInf.mm * 0.3)
   if (dateMariage?.connue) {
     const stM = new Style('SS', 9.5, ENCRE_DOUCE, 0, 'Ital')
     scene.texte(ox, oy + 6.5, dateMariage.texte('long') + (lieu ? ` — ${lieu.split(',')[0]}` : ''), stM)

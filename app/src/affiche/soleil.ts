@@ -17,11 +17,10 @@
  * grossissent s'il y a de la place (jusqu'à 140 %). Au-delà, c'est le disque qui grandit.
  */
 import { agencer, dessinerLesBandes, plusGrand, rayonPour, type Agencement, type Familles } from './bandes'
-import { CORPS_MAX, CORPS_MIN, Rosace, SoleilInterieur, type Coeur, type FamilleDuCentre } from './centres'
+import { CORPS_MAX, CORPS_MIN, lienDuCouple, Rosace, SoleilInterieur, type Coeur, type FamilleDuCentre } from './centres'
 import type { ArbreAffiche } from './donnees'
 import { etendues, Eventail, pointLibre, Reglages } from './eventail'
-import { chiffresDeDescendance, legende, lignesDesQuatreParents, lignesDuCouple, MENTION_PAR_DEFAUT, pied, type AfficheProduite, type ChiffresDuPied, type OptionsDAffiche } from './fabriquer'
-import type { Style } from './polices'
+import { chiffresDeDescendance, legende, lignesDesQuatreParents, lignesDuCouple, MENTION_PAR_DEFAUT, pied, type AfficheProduite, type ChiffresDuPied, type LignesDuTitre, type OptionsDAffiche } from './fabriquer'
 import { Scene } from './scene'
 import { ascendance, compter, compterQuatreParents, descendance, quatreParents, type Desc } from './structure'
 
@@ -48,7 +47,7 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
   let E = new Eventail(racineH, racineF, noeuds, reglages).calculer()
 
   let familles: Familles
-  let lignes: (u: number) => [string, Style, number][]
+  let lignes: LignesDuTitre
   if (quatre) {
     familles = quatre
     lignes = lignesDesQuatreParents(A, quatre, H, F)
@@ -85,7 +84,7 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
       autre = { dessiner: (scene, cx, cy) => soleil.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, corps, soleil.poseParDefaut(rotation)), echelle: b / 13 }
     } else {
       const enfantsDuCouple = 'seule' in familles ? [] : (familles.couple.unions.find(([c]) => c?.p.id === F.id)?.[2] ?? []).map((d) => d.p)
-      const rosace = new Rosace(autour, 'seule' in familles ? coeur : { ...coeur, couple: [H, F], enfants: enfantsDuCouple }, true)
+      const rosace = new Rosace(autour, 'seule' in familles ? coeur : { ...coeur, couple: [H, F], lien: lienDuCouple(familles.couple, F), enfants: enfantsDuCouple }, true)
       b = rosace.corpsPour(r0, CORPS_MIN, CORPS_MAX)
       besoin = rosace.rayonRequis(b)
       autre = { dessiner: (scene, cx, cy) => rosace.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, b, rotation), echelle: b / 13 }

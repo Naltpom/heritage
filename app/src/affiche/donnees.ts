@@ -199,6 +199,12 @@ export class ArbreAffiche {
     return [f.mariage, f.lieu]
   }
 
+  /** Le mariage connu et le divorce de la famille `fam`, de quoi choisir le signe de son union. */
+  etatDeUnion(fam: number): { marie: boolean; divorce: boolean } {
+    const f = this.F.get(fam)
+    return { marie: f?.marie ?? true, divorce: f?.divorce ?? false }
+  }
+
   unions(pid: number): Union[] {
     const sortie: Union[] = []
     for (const fam of this.unionsDe.get(pid) ?? []) {
