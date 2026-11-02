@@ -22,7 +22,7 @@
 # CVE-2026-109619, exécution de code à distance sans authentification). 1.13.2
 # embarque PHP 8.4.27 et corrige aussi quatre failles de FrankenPHP lui-même.
 # Monter ce numéro à chaque correctif de sécurité de PHP ou de FrankenPHP.
-FROM dunglas/frankenphp:1.13.2-php8.4 AS base
+FROM dunglas/frankenphp:1.13.3-php8.4 AS base
 
 # pdo_pgsql : PostgreSQL.
 # intl      : tri et comparaison des noms français (accents), formats de dates.
