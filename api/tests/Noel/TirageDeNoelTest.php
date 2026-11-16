@@ -290,7 +290,15 @@ final class TirageDeNoelTest extends ArbreWebTestCase
         self::assertIsArray($suivi);
         self::assertCount(4, $suivi['cartesVues']);
         self::assertSame([null, null, null, null], array_column($suivi['cartesVues'], 'vueLe'));
-        self::assertArrayNotHasKey('receveur', $suivi['cartesVues'][0]);
+        // … et peut vérifier le tirage : qui offre à qui.
+        $receveurs = array_combine(
+            array_column($suivi['cartesVues'], 'userId'),
+            array_map(static fn (array $c): int => $c['receveur']['userId'], $suivi['cartesVues']),
+        );
+        ksort($receveurs);
+        $attendu = $attributions;
+        ksort($attendu);
+        self::assertSame($attendu, $receveurs);
 
         // Ma carte : à qui j'offre, avec son âge au jour de la remise.
         $this->requete("/api/noel/tirages/{$code}/mon-attribution");

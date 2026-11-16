@@ -85,7 +85,8 @@ final readonly class SerialiseurNoel
 
     /**
      * Ce que seul l'organisateur lit : qui a répondu non (il a vu le lien), et après le
-     * tirage, qui a ouvert sa carte — sans jamais dire qui offre à qui.
+     * tirage, qui a ouvert sa carte et à qui chacun offre — pour qu'il puisse vérifier le
+     * tirage (le front le garde masqué tant qu'il ne demande pas à le voir).
      *
      * @return array<string, mixed>
      */
@@ -101,6 +102,7 @@ final readonly class SerialiseurNoel
             'cartesVues' => array_map(fn (AttributionNoel $a): array => [
                 ...$this->identite($a->getDonneur()),
                 'vueLe' => null !== $a->getVueLe() ? self::instant($a->getVueLe()) : null,
+                'receveur' => $this->identite($a->getReceveur()),
             ], array_values($tirage->getAttributions()->toArray())),
         ];
     }
