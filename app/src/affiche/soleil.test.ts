@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ArbreAffiche, fusionnerCharges } from './donnees'
-import { arbreDeCousins, arbreFictif, arbreTouffu, avecFinsDeRecherche, avecLeCoupleEnFinDeRecherche, coupleSeul, legendeDuMurPresente, mursAttendus, mursDeLaScene, type ArbreDEssai } from './essai/arbreFictif'
+import { arbreDeCousins, arbreFictif, arbreTouffu, avecFinsDeRecherche, avecLeCoupleEnFinDeRecherche, coupleSeul, placesAttendues, placesClosesDeLaScene, texteDeLaScene, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { radians, Reglages } from './eventail'
 import type { AfficheProduite, CentreDeLAffiche, FormeDesDescendants } from './fabriquer'
@@ -149,65 +149,49 @@ describe('la fusion des lectures', () => {
 describe.each([
   ['le soleil du couple', 'couple', arbreFictif],
   ['le soleil des quatre parents', 'parents', arbreDeCousins],
-] as const)('le mur de %s', (_, centre, arbre) => {
+] as const)('les places closes de %s', (_, centre, arbre) => {
   const { essai: avec } = avecFinsDeRecherche(arbre())
   const close = soleil(avec, { centre })
+  const sans = soleil(arbre(), { centre })
 
-  it('dessine un mur par sommet clos, et sa ligne de légende', () => {
-    const attendus = mursAttendus(avec)
-    expect(attendus).toBeGreaterThan(0)
-    expect(mursDeLaScene(close.scene)).toHaveLength(attendus + 1)
-    // Le nombre, en dur : les trois sommets clos par `avecFinsDeRecherche()`, plus la ligne de légende.
-    expect(attendus).toBe(3)
-    expect(mursDeLaScene(close.scene)).toHaveLength(3 + 1)
-    expect(legendeDuMurPresente(close.scene)).toBe(true)
+  it('dessine une case « Recherche close » par côté clos, à la place du parent', () => {
+    const attendues = placesAttendues(avec)
+    expect(attendues).toBeGreaterThan(0)
+    expect(placesClosesDeLaScene(close.scene)).toHaveLength(attendues)
+    // Le nombre, en dur : côté père, côté mère, puis les deux côtés d'un troisième sommet.
+    expect(attendues).toBe(4)
+    expect(texteDeLaScene(close.scene)).toContain('Père inconnu')
+    expect(texteDeLaScene(close.scene)).not.toContain('faute d’archives')
     expect(versSvg(close.scene)).not.toMatch(/NaN|Infinity/)
   })
 
-  it('ne dessine aucun mur ni légende sans fin de recherche', () => {
-    const sans = soleil(arbre(), { centre })
-    expect(mursDeLaScene(sans.scene)).toHaveLength(0)
-    expect(legendeDuMurPresente(sans.scene)).toBe(false)
+  it('ne dessine aucune case close sans fin de recherche', () => {
+    expect(placesClosesDeLaScene(sans.scene)).toHaveLength(0)
   })
 
-  it('ne change ni les anneaux ni le disque central', () => {
-    const sans = soleil(arbre(), { centre })
-    expect(close.eventail.rExt).toBeCloseTo(sans.eventail.rExt, 9)
-    expect(close.eventail.rC).toBeCloseTo(sans.eventail.rC, 9)
+  it('ne compte les places closes ni parmi les ancêtres ni dans les générations', () => {
+    expect(close.chiffres).toEqual(sans.chiffres)
   })
 })
 
-describe.each(['arbre', 'soleil', 'medaillons'] as const)('le mur du couple, descendants %s', (descendants) => {
-  // La femme a une mère liée et un père clos : un seul mur, celui du couple.
+describe.each(['arbre', 'soleil', 'medaillons'] as const)('la place close du père de la femme, descendants %s', (descendants) => {
+  // La femme a une mère liée et un père clos : une seule place close, celle de son père.
   const couple = avecLeCoupleEnFinDeRecherche(arbreDeCousins())
 
-  it.each(['couple', 'parents'] as const)('le couple porte son mur, centre %s, et la légende le dit', (centre) => {
+  it.each(['couple', 'parents'] as const)('une case au premier anneau, centre %s', (centre) => {
     const a = soleil(couple, { centre, descendants })
-    expect(mursAttendus(couple)).toBe(1)
-    // Le mur du couple, plus la ligne de légende — au premier anneau ou au centre.
-    expect(mursDeLaScene(a.scene)).toHaveLength(1 + 1)
-    expect(legendeDuMurPresente(a.scene)).toBe(true)
+    expect(placesAttendues(couple)).toBe(1)
+    expect(placesClosesDeLaScene(a.scene)).toHaveLength(1)
+    expect(texteDeLaScene(a.scene)).toContain('Père inconnu')
     expect(versSvg(a.scene)).not.toMatch(/NaN|Infinity/)
   })
 
-  it('les quatre parents au centre gardent le mur du couple en plus de ceux des ancêtres', () => {
+  it('les places closes des ancêtres s’y ajoutent, les quatre parents au centre', () => {
     const tous = avecLeCoupleEnFinDeRecherche(avecFinsDeRecherche(arbreDeCousins()).essai)
-    expect(mursDeLaScene(soleil(tous, { centre: 'parents', descendants }).scene)).toHaveLength(3 + 1 + 1)
+    expect(placesClosesDeLaScene(soleil(tous, { centre: 'parents', descendants }).scene)).toHaveLength(4 + 1)
   })
 
-  it('ne pose aucun mur sans fin de recherche', () => {
-    const sans = soleil(arbreDeCousins(), { centre: 'parents', descendants })
-    expect(mursDeLaScene(sans.scene)).toHaveLength(0)
-    expect(legendeDuMurPresente(sans.scene)).toBe(false)
-  })
-})
-
-describe('la hauteur de la page avec un mur', () => {
-  it('réserve la ligne du mur sous le dessin : 5,4·kl de plus que sans mur', () => {
-    const avec = soleil(avecFinsDeRecherche(arbreDeCousins()).essai)
-    const sans = soleil(arbreDeCousins())
-    // Les cousins : la légende ne tient pas dans un coin, elle passe sous le dessin.
-    expect(avec.echelleLegende).toBe(1)
-    expect(avec.scene.hauteur - sans.scene.hauteur).toBeCloseTo(5.4 * avec.echelleLegende, 9)
+  it('aucune case close sans fin de recherche', () => {
+    expect(placesClosesDeLaScene(soleil(arbreDeCousins(), { centre: 'parents', descendants }).scene)).toHaveLength(0)
   })
 })

@@ -15,7 +15,6 @@
  * vaut par défaut « Arbre établi avec Heritage » — le dépôt ne porte aucun nom réel
  * (ADR 0006).
  */
-import { BRIQUE, cheminDuMur, epaisseurDuMur, LEGENDE_DU_MUR } from '@/lib/finDeRecherche'
 import { agencer, dessinerLesBandes, plusGrand, rayonPour, type Agencement } from './bandes'
 import { dessinerDesc, inverserDesc, mesurerDesc, placerDesc, ReglesDesc } from './boites'
 import { barreDuSigne, CORPS_MAX, CORPS_MIN, lienDuCouple, Rosace, SoleilInterieur, type Coeur, type Cote, type FamilleDuCentre } from './centres'
@@ -26,8 +25,7 @@ import { ENCRE, ENCRE_DOUCE, melange, TEINTES, TRAIT, type Quartier } from './pa
 import { Style } from './polices'
 import { ReglagesSablier, Sablier, type ModeDeSablier } from './sablier'
 import { Scene } from './scene'
-import { desMurs, aUnMur, murDuCouple, TAILLE_DU_MUR } from './murs'
-import { ascendance, compter, compterQuatreParents, descendance, lienDUnion, quatreParents, type Desc, type LienDUnion, type QuatreParents } from './structure'
+import { ascendance, chiffresDeLAscendance, compter, compterQuatreParents, descendance, lienDUnion, quatreParents, type Desc, type LienDUnion, type QuatreParents } from './structure'
 
 export const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
 
@@ -222,7 +220,7 @@ export const SIGNES = [
 ]
 
 /** Les quatre lignées en couleur, et les signes. `k` : facteur de taille. Rend (bas, largeur). */
-export function legende(scene: Scene, x: number, y: number, H: Personne, F: Personne, A: ArbreAffiche, k = 1.0, murs = false): [number, number] {
+export function legende(scene: Scene, x: number, y: number, H: Personne, F: Personne, A: ArbreAffiche, k = 1.0): [number, number] {
   const [pereH, mereH] = A.parents(H.id)
   const [pereF, mereF] = A.parents(F.id)
   const st = new Style('SS', 10 * k, ENCRE, 0, 'Reg')
@@ -253,16 +251,6 @@ export function legende(scene: Scene, x: number, y: number, H: Personne, F: Pers
   for (const t of SIGNES) {
     scene.texte(x, y, t, stS, 'start')
     largeur = Math.max(largeur, stS.largeur(t))
-    y += 5.4 * k
-  }
-  if (murs) {
-    // Le mur en tête de ligne, puis deux espaces et la phrase : une ligne de plus, jamais dans
-    // `SIGNES` — elle ne doit pas apparaître sans mur. Mesurée comme dessinée (`murs` identique).
-    const t = TAILLE_DU_MUR * k
-    scene.chemin(cheminDuMur(x, y - 0.8 * t, t), 'none', BRIQUE, epaisseurDuMur(t), true)
-    const texte = `  ${LEGENDE_DU_MUR}`
-    scene.texte(x + t, y, texte, stS, 'start')
-    largeur = Math.max(largeur, t + stS.largeur(texte))
     y += 5.4 * k
   }
   return [y, largeur]
@@ -354,11 +342,8 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
   // Les quatre parents au premier anneau : celui du couple est masqué (comme dans le soleil).
   const quatre = options.centre === 'parents' ? quatreParents(A, H, F, niveaux) : null
 
+  // Les places closes (`Anc.fin`) y sont : l'éventail les pose comme des ancêtres.
   const { racineH, racineF, noeuds } = ascendance(A, H, F, options.profondeur ?? Infinity)
-  // Y a-t-il un mur à dessiner ? Décidé avant tout, pour que la légende mesurée soit la légende dessinée.
-  const murs = desMurs(A, noeuds)
-  // Les quatre parents au centre : le couple n'est plus au premier anneau, c'est le centre qui pose son mur.
-  const murCentre = murDuCouple(A, H, F)
   const reglages = quatre ? new Reglages({ ...(options.reglages ?? new Reglages()), premierAnneauMasque: true }) : options.reglages
   let E = new Eventail(racineH, racineF, noeuds, reglages).calculer()
   const { fam, enfants } = descendance(A, H, F, niveaux)
@@ -387,14 +372,14 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
       const pose = s.poseParDefaut(0, !dessous)
       besoin = Math.max(r0, s.rayonRequis(Array.from({ length: s.anneaux }, () => CORPS_MIN), pose))
       const corps = s.corpsPour(besoin, pose, CORPS_MIN, CORPS_MAX)
-      dedans = { corps: corps[0]!, dessiner: (scene, cx, cy) => s.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, corps, pose, murCentre) }
+      dedans = { corps: corps[0]!, dessiner: (scene, cx, cy) => s.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, corps, pose) }
     } else {
       // Le couple des quatre parents et ses enfants au cœur, les fratries en médaillons autour.
       const enfantsDuCouple = quatre ? (quatre.couple.unions.find(([c]) => c?.p.id === F.id)?.[2] ?? []).map((d) => d.p) : []
       const rosace = new Rosace(quatre ? fratries : enfants.map(cote('n')), quatre ? { ...coeur, couple: [H, F], lien: lienDuCouple(quatre.couple, F), enfants: enfantsDuCouple } : coeur, false, !dessous)
       const b = rosace.corpsPour(r0, CORPS_MIN, CORPS_MAX)
       besoin = Math.max(r0, rosace.rayonRequis(b))
-      dedans = { corps: b, dessiner: (scene, cx, cy) => rosace.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, b, 0, murCentre) }
+      dedans = { corps: b, dessiner: (scene, cx, cy) => rosace.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, b, 0) }
     }
     if (besoin > r0 * 1.0001) E = new Eventail(racineH, racineF, noeuds, new Reglages({ ...(reglages ?? new Reglages()), rayonCentralMin: besoin / CENTRE_DANS_LE_DISQUE })).calculer()
   }
@@ -454,17 +439,13 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
     cy = marge + etendueHaut(E) + 4
     basDesc = placerDesc(enfants, W / 2 - largDesc / 2, cy + 26, hauteurs, regles)
   }
-  const chiffres: ChiffresDuPied = {
-    ancetres: new Set(noeuds.map((n) => n.p.id)).size - 2,
-    generations: E.nbNiveaux + 1,
-    implexes: new Set(noeuds.map((n) => n.implexe).filter((i) => i)).size,
-  }
+  const chiffres: ChiffresDuPied = chiffresDeLAscendance(noeuds)
 
   // La légende va dans le coin haut gauche et le pied dans le coin haut droit, hors du
   // demi-cercle de l'éventail — dans les coins du bas quand il descend : on prend le plus grand
   // corps qui y tient. `basDesc` est alors le bas de l'éventail.
   const encombrement = (k: number): [[number, number], [number, number]] => [
-    legende(new Scene(1, 1), 0, 0, H, F, A, k, murs),
+    legende(new Scene(1, 1), 0, 0, H, F, A, k),
     pied(new Scene(1, 1), 0, 0, chiffres, mention, date, 'end', k),
   ]
   const tient = (k: number): boolean => {
@@ -502,29 +483,29 @@ export function afficheEventail(A: ArbreAffiche, hId: number, fId: number, optio
     }
     kl = Math.min(lo, 1.15) // pas plus grand qu'il ne faut : le corps imprimé reste confortable
   }
-  // Sous le dessin, la légende réserve 52·kl, et 5,4·kl de plus quand elle porte la ligne du mur.
-  const hauteur = kl !== null ? basDesc + marge : basDesc + 22 + (52 + (murs ? 5.4 : 0)) * Math.max(1.0, W / 1100) + marge
+  // Sous le dessin, la légende réserve 52·kl.
+  const hauteur = kl !== null ? basDesc + marge : basDesc + 22 + 52 * Math.max(1.0, W / 1100) + marge
 
   const scene = new Scene(W, hauteur)
-  E.dessiner(scene, W / 2, cy, (p) => aUnMur(A, p))
+  E.dessiner(scene, W / 2, cy)
   reperesAnnees(scene, E, W / 2, cy)
   if (dedans) dedans.dessiner(scene, W / 2, cy)
   else centreCouple(scene, E, W / 2, cy, lignes)
-  if (bandes) dessinerLesBandes(scene, bandes, W / 2, cy, dessous, murCentre)
+  if (bandes) dessinerLesBandes(scene, bandes, W / 2, cy, dessous)
   else if (!dedans) dessinerDesc(scene, enfants, [W / 2, cy], regles, dessous)
   if (kl !== null && dessous) {
     // Chaque bloc finit sur le bas de l'éventail.
     const [[hl], [hp]] = encombrement(kl)
-    legende(scene, marge, basDesc - hl, H, F, A, kl, murs)
+    legende(scene, marge, basDesc - hl, H, F, A, kl)
     pied(scene, W - marge, basDesc - hp, chiffres, mention, date, 'end', kl)
   } else if (kl !== null) {
     const y0 = marge + 9 * kl * 0.3528
-    legende(scene, marge, y0, H, F, A, kl, murs)
+    legende(scene, marge, y0, H, F, A, kl)
     pied(scene, W - marge, y0, chiffres, mention, date, 'end', kl)
   } else {
     const yBas = basDesc + 22
     kl = Math.max(1.0, W / 1100)
-    legende(scene, marge, yBas, H, F, A, kl, murs)
+    legende(scene, marge, yBas, H, F, A, kl)
     pied(scene, W - marge, yBas + 30 * kl, chiffres, mention, date, 'end', kl)
   }
   return { scene, eventail: E, echelleDescendants: bandes ? bandes.e : dedans ? dedans.corps / 13 : echelle, echelleLegende: kl, chiffres, centre: [W / 2, cy] }
@@ -546,7 +527,6 @@ export function afficheSablier(A: ArbreAffiche, hId: number, fId: number, mode: 
   const date = options.date ?? new Date()
 
   const { racineH, racineF, noeuds } = ascendance(A, H, F, options.profondeur ?? Infinity)
-  const murs = desMurs(A, noeuds)
   const S = new Sablier(racineH, racineF, noeuds, new ReglagesSablier(mode)).calculer()
   const { fam, enfants } = descendance(A, H, F, options.niveauxDescendance ?? 6)
   const largeurArbre = S.droite - S.gauche
@@ -583,12 +563,12 @@ export function afficheSablier(A: ArbreAffiche, hId: number, fId: number, mode: 
   const yDesc = oy + 16
   const basDesc = placerDesc(enfants, ox - largDesc / 2, yDesc, hauteurs, regles)
   const kl = Math.max(1.0, Math.min(1.6, W / 1100))
-  // La légende réserve 52·kl, et 5,4·kl de plus quand elle porte la ligne du mur.
-  const hauteur = basDesc + 24 + (52 + (murs ? 5.4 : 0)) * kl + marge
+  // La légende réserve 52·kl.
+  const hauteur = basDesc + 24 + 52 * kl + marge
 
   const scene = new Scene(W, hauteur)
   entete(scene, W / 2, marge, H, F)
-  S.dessiner(scene, ox, oy, (p) => aUnMur(A, p))
+  S.dessiner(scene, ox, oy)
   // Le lien du couple, et la date du mariage.
   const [dateMariage, lieu] = fam !== null ? A.mariage(fam) : [null, null]
   const stInf = new Style('SS', 16, TRAIT, 0, 'Reg')
@@ -608,12 +588,8 @@ export function afficheSablier(A: ArbreAffiche, hId: number, fId: number, mode: 
     scene.texte(marge * 0.45, y, `vers ${g > 1 ? arrondiDizaine(a) : a}`, st, 'middle', `rotate(-90 ${(marge * 0.45).toFixed(2)} ${y.toFixed(2)})`)
   }
   const yBas = basDesc + 24
-  const chiffres: ChiffresDuPied = {
-    ancetres: new Set(noeuds.map((n) => n.p.id)).size - 2,
-    generations: S.nbNiveaux + 1,
-    implexes: new Set(noeuds.map((n) => n.implexe).filter((i) => i)).size,
-  }
-  legende(scene, marge, yBas, H, F, A, kl, murs)
+  const chiffres: ChiffresDuPied = chiffresDeLAscendance(noeuds)
+  legende(scene, marge, yBas, H, F, A, kl)
   pied(scene, W - marge, yBas + 30 * kl, chiffres, mention, date, 'end', kl)
   return { scene, sablier: S, echelleDescendants: echelle, chiffres }
 }

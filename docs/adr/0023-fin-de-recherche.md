@@ -1,6 +1,6 @@
 # ADR 0023 — La fin de recherche : clore un côté, faute d'archives
 
-Date : 2026-10-30 · Statut : acceptée
+Date : 2026-10-30 · Statut : acceptée · révisée le 2026-11-18 (une carte à la place du parent)
 
 ## Contexte
 
@@ -286,3 +286,50 @@ n'apprend rien de plus.
 - **Une levée automatique** quand un parent est lié du côté clos : voir le § 4.
 - **`tree_research_closure` dans l'empreinte de l'arbre** : elle ne déplace aucun nœud, et
   l'écriture touche déjà la personne (ADR 0005).
+- **« elle ne déplace aucun nœud »** (le refus précédent) reste vrai du serveur ; depuis la
+  révision du 18/11/2026, c'est le **client** qui ajoute une carte au graphe avant de le disposer.
+
+## Révision du 18/11/2026 — une carte à la place du parent, plus d'icône
+
+**Ce qui ne marchait pas.** Le mur du § 8 — une icône de 14 px dans le coin haut droit de la
+carte de l'enfant, un bord brique de 2 px, et sur l'affiche un pictogramme de 2 à 3,2 mm plus
+une ligne de légende — ne se voyait pas : trop petit à l'écran, illisible imprimé, et muet sur ce
+qu'il voulait dire tant qu'on n'avait pas lu la légende. Le commanditaire, le 18/11/2026 :
+*« je voudrais que ça soit une card à part, sur l'emplacement du parent qu'on ne peut pas
+trouver directement, et pas une icône qu'on ne voit pas »*.
+
+**Ce qui se voit désormais** (le § 8 est remplacé pour `/arbre` et l'affiche ; la fiche et le
+volet gardent leur encart et leur icône, lus à côté du texte) :
+
+- **`/arbre`** : un côté `close` reçoit une **carte « Recherche close »** à la place du parent
+  introuvable — le titre en brique, le motif dessous (« Registres inexistants avant 1668 »,
+  « Père inconnu »), un fond teinté de brique, un bord brique plein, ni photo ni liseré de
+  branche. La carte de l'enfant redevient ordinaire (plus de bord brique, plus de mur). Un
+  survol dit de qui la carte tient la place ; un clic choisit l'enfant, dont le volet donne le
+  texte, l'auteur et la date (§ 5).
+- **L'affiche** (éventail, soleil, sablier) : une **place close** au sosa du parent introuvable
+  (2n pour le père, 2n + 1 pour la mère), dans le quartier de l'enfant, écrite « Recherche
+  close » et son motif sur un fond à peine teinté de brique — cerclée de brique dans le sablier.
+  Plus de mur ni de ligne de légende : la case se lit seule. Le couple n'a plus de mur au centre
+  (quatre parents) : la place close de son parent est au premier anneau, comme les autres.
+
+**Comment** : la carte est **un nœud de plus**, ajouté par le client **avant** la disposition
+(`app/src/arbre2/cartesDeFin.ts` pour `/arbre`, `ascendance()` de `app/src/affiche/structure.ts`
+pour l'affiche). Les moteurs ne la connaissent pas : ils la posent exactement où ils poseraient
+le parent. Les règles :
+
+- **une carte par côté clos**, selon le § 4 : une fin de recherche **et** aucun parent lié de ce
+  côté ; un parent connu l'emporte toujours, et un nœud restreint n'en a jamais (§ 6) ;
+- dans `/arbre`, elle **rejoint la famille des parents qui existe** (la mère connue reçoit pour
+  époux la carte du père), sinon une famille virtuelle, partagée par les deux côtés d'un enfant ;
+  elle prend **la branche qu'aurait le parent** (`pp`/`pm` pour les parents du père de l'ego,
+  `mp`/`mm` pour ceux de la mère, `cpp`, `cpm`, `cmp`, `cmm` du côté du conjoint) ;
+- sur l'affiche, **seulement dans la profondeur dessinée**, et jamais sur la place secondaire
+  d'un implexe ;
+- **ce n'est pas une personne** : `personId` à `null` dans `/arbre` (le champ client
+  `NoeudPersonne.carteDeFin` la désigne — jamais servi par l'API), un identifiant négatif sur
+  l'affiche ; ni nom, ni date. Elle ne compte dans **aucun effectif** — compteur de fiches,
+  rectangles, quarts, générations, chiffres du pied (ancêtres, générations, implexes).
+
+**Rien ne change au serveur** : ni la table, ni le contrat, ni le graphe servi. La mémoire des
+dispositions se renouvelle seule (sa clé porte l'empreinte du front).

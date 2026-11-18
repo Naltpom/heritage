@@ -21,9 +21,8 @@ import { CORPS_MAX, CORPS_MIN, lienDuCouple, Rosace, SoleilInterieur, type Coeur
 import type { ArbreAffiche } from './donnees'
 import { etendues, Eventail, pointLibre, Reglages } from './eventail'
 import { chiffresDeDescendance, legende, lignesDesQuatreParents, lignesDuCouple, MENTION_PAR_DEFAUT, pied, type AfficheProduite, type ChiffresDuPied, type LignesDuTitre, type OptionsDAffiche } from './fabriquer'
-import { desMurs, aUnMur, murDuCouple } from './murs'
 import { Scene } from './scene'
-import { ascendance, compter, compterQuatreParents, descendance, quatreParents, type Desc } from './structure'
+import { ascendance, chiffresDeLAscendance, compter, compterQuatreParents, descendance, quatreParents, type Desc } from './structure'
 
 /** Les bornes du corps des descendants, en part de leur corps de base (13 pt pour les enfants). */
 const ECHELLE_MIN = 0.55
@@ -43,10 +42,8 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
   // Les quatre parents au centre : il faut connaître la famille d'origine de chacun des époux.
   const quatre = options.centre === 'parents' ? quatreParents(A, H, F, niveaux) : null
 
+  // Les places closes (`Anc.fin`) y sont : le soleil les pose comme des ancêtres.
   const { racineH, racineF, noeuds } = ascendance(A, H, F, options.profondeur ?? Infinity)
-  const murs = desMurs(A, noeuds)
-  // Les quatre parents au centre : le couple n'est plus au premier anneau, c'est le centre qui pose son mur.
-  const murCentre = murDuCouple(A, H, F)
   const reglages = new Reglages({ ...(options.reglages ?? new Reglages()), angle: 360, sens: 'haut', premierAnneauMasque: quatre !== null })
   let E = new Eventail(racineH, racineF, noeuds, reglages).calculer()
 
@@ -85,13 +82,13 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
       besoin = Math.max(r0, soleil.rayonRequis(Array.from({ length: soleil.anneaux }, () => CORPS_MIN), pose))
       const corps = soleil.corpsPour(besoin, pose, CORPS_MIN, CORPS_MAX)
       b = corps[0]!
-      autre = { dessiner: (scene, cx, cy) => soleil.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, corps, soleil.poseParDefaut(rotation), murCentre), echelle: b / 13 }
+      autre = { dessiner: (scene, cx, cy) => soleil.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, corps, soleil.poseParDefaut(rotation)), echelle: b / 13 }
     } else {
       const enfantsDuCouple = 'seule' in familles ? [] : (familles.couple.unions.find(([c]) => c?.p.id === F.id)?.[2] ?? []).map((d) => d.p)
       const rosace = new Rosace(autour, 'seule' in familles ? coeur : { ...coeur, couple: [H, F], lien: lienDuCouple(familles.couple, F), enfants: enfantsDuCouple }, true)
       b = rosace.corpsPour(r0, CORPS_MIN, CORPS_MAX)
       besoin = rosace.rayonRequis(b)
-      autre = { dessiner: (scene, cx, cy) => rosace.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, b, rotation, murCentre), echelle: b / 13 }
+      autre = { dessiner: (scene, cx, cy) => rosace.dessiner(scene, cx, cy, E.rC * CENTRE_DANS_LE_DISQUE, b, rotation), echelle: b / 13 }
     }
     if (besoin > r0 * 1.0001) E = new Eventail(racineH, racineF, noeuds, new Reglages({ ...reglages, rayonCentralMin: besoin / CENTRE_DANS_LE_DISQUE })).calculer()
   }
@@ -114,11 +111,7 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
 
   const marge = 35.0
   const ext = etendues(E)
-  const chiffres: ChiffresDuPied = {
-    ancetres: new Set(noeuds.map((n) => n.p.id)).size - 2,
-    generations: E.nbNiveaux + 1,
-    implexes: new Set(noeuds.map((n) => n.implexe).filter((i) => i)).size,
-  }
+  const chiffres: ChiffresDuPied = chiffresDeLAscendance(noeuds)
 
   // Une affiche carrée : le soleil est rond, et l'impression sur mesure se commande à l'échelle
   // 1:1. La légende dans le coin bas gauche, le pied dans le coin bas droit, hors du cercle ;
@@ -126,7 +119,7 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
   const cote = Math.max(ext.gauche + ext.droite, ext.haut + ext.bas) + 2 * marge
   const cy = marge + ext.haut + (cote - 2 * marge - ext.haut - ext.bas) / 2
   const encombrement = (k: number): [[number, number], [number, number]] => [
-    legende(new Scene(1, 1), 0, 0, H, F, A, k, murs),
+    legende(new Scene(1, 1), 0, 0, H, F, A, k),
     pied(new Scene(1, 1), 0, 0, chiffres, mention, date, 'end', k),
   ]
   const tient = (k: number): boolean => {
@@ -148,23 +141,23 @@ export function afficheSoleil(A: ArbreAffiche, hId: number, fId: number, options
   }
   let kl: number | null = tient(1.0) ? Math.min(plusGrand(1.0, 3.0, tient), 1.15) : null
   const basSoleil = cy + ext.bas
-  // Sous le soleil, la légende réserve 52·kl, et 5,4·kl de plus quand elle porte la ligne du mur.
-  const hauteur = kl !== null ? cote : basSoleil + 22 + (52 + (murs ? 5.4 : 0)) * Math.max(1.0, cote / 1100) + marge
+  // Sous le soleil, la légende réserve 52·kl.
+  const hauteur = kl !== null ? cote : basSoleil + 22 + 52 * Math.max(1.0, cote / 1100) + marge
   const W = Math.max(cote, hauteur)
   const cx = marge + ext.gauche + (W - 2 * marge - ext.gauche - ext.droite) / 2
 
   const scene = new Scene(W, hauteur)
-  E.dessiner(scene, cx, cy, (p) => aUnMur(A, p))
+  E.dessiner(scene, cx, cy)
   if (autre) autre.dessiner(scene, cx, cy)
-  else if (centre) dessinerLesBandes(scene, centre, cx, cy, false, murCentre)
+  else if (centre) dessinerLesBandes(scene, centre, cx, cy, false)
   if (kl !== null) {
     // Chaque bloc finit sur le bas de la page.
     const [[hl], [hp]] = encombrement(kl)
-    legende(scene, marge, hauteur - marge - hl, H, F, A, kl, murs)
+    legende(scene, marge, hauteur - marge - hl, H, F, A, kl)
     pied(scene, W - marge, hauteur - marge - hp, chiffres, mention, date, 'end', kl)
   } else {
     kl = Math.max(1.0, cote / 1100)
-    legende(scene, marge, basSoleil + 22, H, F, A, kl, murs)
+    legende(scene, marge, basSoleil + 22, H, F, A, kl)
     pied(scene, W - marge, basSoleil + 22 + 30 * kl, chiffres, mention, date, 'end', kl)
   }
   return { scene, eventail: E, echelleDescendants: autre ? autre.echelle : centre!.e, echelleLegende: kl, chiffres, centre: [cx, cy] }

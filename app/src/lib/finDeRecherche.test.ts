@@ -21,7 +21,6 @@ import {
   etatDuSommet,
   etatsDuSommet,
   infobulleDuSommet,
-  LEGENDE_DU_MUR,
   libelleDuCote,
   libelleDuMotif,
   LONGUEUR_MAX_DU_TEXTE,
@@ -93,10 +92,9 @@ describe('les motifs — la liste du commanditaire, et les libellés du serveur'
     expect(phraseDeFinDeRecherche({ reason: 'autre', beforeYear: null, body: '   ' })).toBe('Autre motif')
   })
 
-  it('nomme les côtés et la ligne de légende de l’affiche', () => {
+  it('nomme les côtés', () => {
     expect(libelleDuCote('pere')).toBe('côté père')
     expect(libelleDuCote('mere')).toBe('côté mère')
-    expect(LEGENDE_DU_MUR).toBe('recherche close faute d’archives')
     expect(CHAMP_DU_COTE).toEqual({ pere: 'finDeRecherchePere', mere: 'finDeRechercheMere' })
     expect(cotesDuChoix('les-deux')).toEqual(['pere', 'mere'])
     expect(cotesDuChoix('mere')).toEqual(['mere'])

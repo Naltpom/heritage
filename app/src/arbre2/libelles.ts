@@ -21,6 +21,7 @@ import { poserEtiquettes } from '@/histoire/etiquettes'
 import { nomEcrit, prenomDe, type EtiquetteFoyer, type FicheHistoire } from '@/histoire/lignees'
 import { reductionDuTexte, syDe, texteDeFiche, type Cadrage, type Canevas, type Niveau } from '@/histoire/vue'
 import { dansLaFenetre } from './cadrage'
+import { motifDeLaCarte, TITRE_DE_LA_CARTE } from './cartesDeFin'
 
 /** Les textes sont posés jusqu'à 30 % de la fenêtre au-delà de chaque bord. */
 export const MARGE = 0.3
@@ -29,11 +30,8 @@ export const MARGE = 0.3
 const LARGEUR_PHOTO = 40
 const ESPACE_PHOTO = 8
 
-/** L'icône « mur » : 14 px, à 4 px des bords (calée par `CalqueLibelles`), si la carte à l'écran fait au moins 36 × 22 px. */
-export const TAILLE_DU_MUR = 14
-export const ECART_DU_MUR = 4
-const LARGEUR_MIN_DU_MUR = 36
-const HAUTEUR_MIN_DU_MUR = 22
+/** La marge intérieure d'une carte « Recherche close », qui n'a pas de photo (unités du monde). */
+const MARGE_CARTE_DE_FIN = 8
 
 interface LibelleCommun {
   id: string
@@ -45,10 +43,6 @@ interface LibelleCommun {
   h: number
   directe: boolean
   estompe: boolean
-  /** Recherche close au sommet de la fiche : l'icône « mur » (ADR 0023). Absent sinon. */
-  mur?: boolean
-  /** Avec `mur` : le coin haut droit de la carte, en coordonnées écran (l'icône s'y cale). */
-  coin?: { x: number; y: number }
   /** Le texte est posé à la taille qu'il aurait à 80 % (`w`, `h` en
    *  coordonnées de ce zoom-là) puis réduit de ce facteur (`reductionDuTexte`). */
   reduction: number
@@ -69,7 +63,19 @@ export interface LibellePortrait extends LibelleCommun {
   /** « Personne vivante » : ni capitales, ni rien d'autre. */
   restreinte: boolean
 }
-export type Libelle = LibelleCompact | LibellePortrait
+/**
+ * Une carte « Recherche close » (`arbre2/cartesDeFin.ts`) : ni photo (`photo.d` vaut 0), ni
+ * nom ; le titre, puis le motif sur deux lignes au plus. Le même dans les deux formats.
+ */
+export interface LibelleFin extends LibelleCommun {
+  forme: 'fin'
+  /** `''` quand le niveau n'écrit pas encore de texte (Photos). */
+  titre: string
+  motif: string
+  /** Format Portrait : le texte est centré. */
+  centre: boolean
+}
+export type Libelle = LibelleCompact | LibellePortrait | LibelleFin
 
 type TexteCompact = Pick<LibelleCompact, 't1' | 't2' | 'taille'>
 type TextePortrait = Pick<LibellePortrait, 'nom' | 'prenom' | 'dates'>
@@ -99,8 +105,6 @@ export interface ParametresDesLibelles {
   portrait: boolean
   directe: (f: FicheHistoire) => boolean
   estompe: (f: FicheHistoire) => boolean
-  /** La fiche est en fin de recherche (`arbre2/sommets.ts`) : elle porte le mur. */
-  mur?: (f: FicheHistoire) => boolean
   marge?: number
 }
 
@@ -128,17 +132,32 @@ export function libellesDesFiches(p: ParametresDesLibelles, memoire: MemoireDesT
     id: f.id,
     directe: p.directe(f),
     estompe: p.estompe(f),
-    // Les clés n'existent que sur une fiche close : les autres gardent la forme d'avant.
-    // Pas de mur sur une carte trop petite pour le porter : le bord brique reste.
-    ...(p.mur?.(f) && f.w * s >= LARGEUR_MIN_DU_MUR && f.h * sy >= HAUTEUR_MIN_DU_MUR
-      ? { mur: true, coin: { x: X(f.x + f.w), y: Y(f.y) } }
-      : {}),
     reduction: r,
   })
   const src = (f: FicheHistoire): string | null => (typeof f.noeud.portrait === 'string' ? f.noeud.portrait : null)
+  /** La carte « Recherche close » : tout le cadre au texte, moins sa marge. */
+  const carteDeFin = (f: FicheHistoire): LibelleFin | null => {
+    const carte = f.noeud.carteDeFin
+    if (!carte) return null
+    const m = MARGE_CARTE_DE_FIN * s
+    return {
+      ...commun(f),
+      forme: 'fin',
+      titre: avecTexte ? TITRE_DE_LA_CARTE : '',
+      motif: avecTexte ? motifDeLaCarte(carte) : '',
+      centre: p.portrait,
+      photo: { x: X(f.x), y: Y(f.y), d: 0, src: null },
+      x: X(f.x) + m,
+      y: Y(f.y),
+      w: Math.max(0, f.w * s - 2 * m) / r,
+      h: (f.h * sy) / r,
+    }
+  }
 
   if (p.portrait) {
-    return visibles.map((f): LibellePortrait => {
+    return visibles.map((f): LibellePortrait | LibelleFin => {
+      const fin = carteDeFin(f)
+      if (fin) return fin
       const g = geometriePortrait(X(f.x), Y(f.y), s, sy)
       const entree = entreePortrait(f.noeud)
       const w = g.texte.w / r
@@ -163,7 +182,9 @@ export function libellesDesFiches(p: ParametresDesLibelles, memoire: MemoireDesT
 
   const d0 = LARGEUR_PHOTO * Math.min(s, sy)
   const decalage = (ESPACE_PHOTO * 2 + LARGEUR_PHOTO) * s
-  return visibles.map((f): LibelleCompact => {
+  return visibles.map((f): LibelleCompact | LibelleFin => {
+    const fin = carteDeFin(f)
+    if (fin) return fin
     const w = Math.max(0, f.w * s - decalage - 4) / r
     const h = (f.h * sy) / r
     let texte = memoire.textes.get(f.id) as TexteCompact | undefined

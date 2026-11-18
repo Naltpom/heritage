@@ -123,6 +123,7 @@ import { dansLaFenetre, transformationMonde, transformationRelative, viewBoxDe }
 import { alphaDeFiche, couleurBranche, styleDeFiche } from '@/arbre2/apparence'
 import { MARGE, anneauDe, creerMemoireDesTextes, libellesDesFiches, libellesDesFoyers, type Anneau } from '@/arbre2/libelles'
 import { AUCUN_SOMMET, sommetsDuGraphe } from '@/arbre2/sommets'
+import { avecCartesDeFinDeRecherche, estCarteDeFin } from '@/arbre2/cartesDeFin'
 import FinsDeRechercheDuVolet from '@/arbre2/FinsDeRechercheDuVolet.vue'
 import { COTES_DE_RECHERCHE, finDuCote, libelleDuCote, libelleDuMotif } from '@/lib/finDeRecherche'
 import { useLectureDeLaFiche } from '@/arbre2/lectureFiche'
@@ -348,7 +349,10 @@ function cleDeLaDisposition(): string {
 function disposer(recu: Graphe): void {
   const mesure = <T>(etape: string, calcul: () => T): T => (chrono ? chrono.mesure(etape, calcul) : calcul())
   // Le calque « en attente » masqué : tout ce qui suit se lit sur l'arbre validé seul.
-  const graphe = avecEnAttente.value ? recu : sansDemandesEnAttente(recu)
+  // Puis une carte « Recherche close » à la place de chaque parent introuvable (ADR 0023,
+  // révision du 18/11/2026) : posée AVANT tout filtre, elle suit son enfant — même parenté,
+  // même branche que le parent qu'elle remplace —, et le moteur la place comme lui.
+  const graphe = avecCartesDeFinDeRecherche(avecEnAttente.value ? recu : sansDemandesEnAttente(recu))
   // Les alliances d'abord, classées sur le graphe ENTIER : c'est lui que le serveur a classé.
   const sansAlliances = avecAlliances.value ? graphe : sansFamillesParAlliance(graphe)
   const sansConjoint = avecConjoint.value ? sansAlliances : sansFamilleDuConjoint(sansAlliances)
@@ -1209,6 +1213,11 @@ function voirFiche(f: FicheHistoire): void {
 
 function choisir(f: FicheHistoire): void {
   if (cadrage.vientDeGlisser()) return
+  // Une carte « Recherche close » n'est pas une personne : elle ouvre son enfant, dont le
+  // volet dit le motif, le texte, l'auteur et la date de la fin de recherche.
+  const carte = f.noeud.carteDeFin
+  if (carte) f = disposition.value?.parId.get(carte.enfant) ?? f
+  if (f.noeud.carteDeFin) return
   selection.value = f.id
   if (echelle() < seuilDesNoms.value) voler(Math.max(1, seuilDesNoms.value), f.cx, f.y + f.h / 2)
 }
@@ -1383,12 +1392,21 @@ const passent = computed<ReadonlySet<string>>(() => {
   const def = filtres.qualite ? FILTRES.find((x) => x.id === filtres.qualite) : undefined
   const ids = new Set<string>()
   for (const f of d.fiches) {
+    if (f.noeud.carteDeFin) continue
     if (direct && enLigne(f) === null) continue
     if (def && !def.test(f.noeud as NoeudPersonneEtendu)) continue
     ids.add(f.id)
   }
+  // Une carte « Recherche close » passe avec son enfant : elle n'a rien à elle à filtrer.
+  for (const f of d.fiches) if (f.noeud.carteDeFin && ids.has(f.noeud.carteDeFin.enfant)) ids.add(f.id)
   return ids
 })
+/** Les cartes « Recherche close » ne sont pas des fiches : le compteur ne les compte pas. */
+const cartesDeFinPassantes = computed(() => {
+  const d = disposition.value
+  return d ? d.fiches.filter((f) => f.noeud.carteDeFin && passent.value.has(f.id)).length : 0
+})
+const fichesDeLaDisposition = computed(() => disposition.value?.fiches.filter((f) => !estCarteDeFin(f.noeud)).length ?? 0)
 
 /*
  * LA LIGNE DIRECTE suit la personne choisie : ses ancêtres et ses descendants (les
@@ -1534,7 +1552,7 @@ const cibles = computed<FicheHistoire[]>(() => {
 })
 const idsCibles = computed(() => new Set(cibles.value.map((f) => f.id)))
 
-const effectifAffiche = computed(() => passent.value.size)
+const effectifAffiche = computed(() => passent.value.size - cartesDeFinPassantes.value)
 
 /* ------------------------------------------------------------------ */
 /* Rendu : boîtes (monde), textes (écran)                               */
@@ -1553,10 +1571,19 @@ const sommets = computed(() => {
   return g ? sommetsDuGraphe(g.noeuds, g.aretes) : AUCUN_SOMMET
 })
 
-/** Le motif de chaque boîte (survol et lecteur d'écran), dans l'ordre des fiches. */
+/**
+ * Le motif de chaque boîte (survol et lecteur d'écran), dans l'ordre des fiches. Une carte
+ * « Recherche close » dit de qui elle tient la place : son nom porte déjà le motif.
+ */
 const infobullesFiches = computed<(string | null)[]>(() => {
   const d = disposition.value
-  return d ? d.fiches.map((f) => sommets.value.get(f.id)?.infobulle ?? null) : []
+  if (!d) return []
+  return d.fiches.map((f) => {
+    const carte = f.noeud.carteDeFin
+    if (!carte) return sommets.value.get(f.id)?.infobulle ?? null
+    const enfant = d.parId.get(carte.enfant)
+    return enfant ? `${carte.cote === 'pere' ? 'Le père' : 'La mère'} de ${enfant.noeud.displayName}, introuvable dans les archives` : null
+  })
 })
 
 /**
@@ -1608,10 +1635,9 @@ const stylesFiches = computed<string[]>(() => {
     styleDeFiche(f, {
       ensemble: loin,
       portrait,
-      alpha: alphaDeFiche(ids.has(f.id), ciblees, f.id),
+      alpha: alphaDeFiche(ids.has(f.id), ciblees, f.noeud.carteDeFin?.enfant ?? f.id),
       place: direct ? enLigne(f) : null,
       branche: brancheDe(f),
-      fin: sommets.value.get(f.id)?.close === true,
     }),
   )
 })
@@ -1660,9 +1686,9 @@ const libelles = computed(() => {
       canevas: canevas.value,
       niveau: niveau.value,
       portrait: enPortrait.value,
-      directe: (f) => direct && enLigne(f) !== null,
-      estompe: (f) => ciblees.size > 0 && !ciblees.has(f.id),
-      mur: (f) => sommets.value.get(f.id)?.close === true,
+      // Une carte « Recherche close » n'est pas un ancêtre : son texte ne se dore pas.
+      directe: (f) => direct && !f.noeud.carteDeFin && enLigne(f) !== null,
+      estompe: (f) => ciblees.size > 0 && !ciblees.has(f.noeud.carteDeFin?.enfant ?? f.id),
     },
     memoireDesTextes,
   )
@@ -2014,7 +2040,7 @@ onBeforeUnmount(() => {
           @basculer="basculerQualite(f.id)"
         />
       </template>
-      <template #compteur>{{ effectifAffiche }} fiches sur {{ disposition?.fiches.length ?? 0 }}</template>
+      <template #compteur>{{ effectifAffiche }} fiches sur {{ fichesDeLaDisposition }}</template>
       <template v-if="disposition" #filtres>
         <!--
           Les filtres en quatre sections, toujours dans le même ordre (refonte du 05/10/2026) :

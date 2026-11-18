@@ -12,9 +12,9 @@
  */
 import { Bloc, type Ligne } from './boites'
 import { ligneVie, type StyleDeDate } from './dates'
-import type { Personne } from './donnees'
-import { murDansUneCase } from './murs'
-import { ENCRE, ENCRE_DOUCE, melange, TEINTES, TRAIT } from './palette'
+import { lignesDeLaPlaceClose } from './eventail'
+import { BRIQUE } from '@/lib/finDeRecherche'
+import { ENCRE, ENCRE_DOUCE, FOND_PLACE_CLOSE, melange, TEINTES, TRAIT } from './palette'
 import { Style } from './polices'
 import type { Scene } from './scene'
 import type { Anc } from './structure'
@@ -118,8 +118,10 @@ export class Sablier {
         const p = n.p
         const nom = p.nom + (n.implexe ? ` ◆${n.implexe}` : '') + (p.probable ? ' ?' : '')
         const vie = ligneVie(p, R.datesDe(g))
-        const lignes: Ligne[] =
-          this.debout(g) && R.lignesDebout === 2
+        // Une place close (`Anc.fin`) : « Recherche close » et son motif, à la place des noms.
+        const lignes: Ligne[] = n.fin
+          ? lignesDeLaPlaceClose(n.fin, st)
+          : this.debout(g) && R.lignesDebout === 2
             ? [
                 [`${p.prenoms} ${nom}`.trim(), new Style('SS', st[0].taille, ENCRE, 0, 'Semi')],
                 [vie, st[2]],
@@ -250,6 +252,7 @@ export class Sablier {
   /* ---------------------------------------------------------------- dessin */
 
   fond(n: Anc): [string, string] {
+    if (n.fin) return [FOND_PLACE_CLOSE, BRIQUE]
     const [trait, rgb] = TEINTES[n.quartier ?? (n.sosa === 2 ? 'H' : 'F')]
     if (n.niveau === 0) return [melange(rgb, 1.0), trait]
     let k = 0.95 - (0.5 * (n.niveau - 1)) / Math.max(this.nbNiveaux - 2, 1)
@@ -258,11 +261,10 @@ export class Sablier {
   }
 
   /**
-   * `ox`, `oy` : le milieu du couple (bas de ses cases). `murs` : dit si une personne porte un
-   * mur (`aUnMur()`) ; sans lui, aucune icône. Le mur se pose dans le coin haut droit de la case,
-   * côté des parents, après son texte, sans rien déplacer.
+   * `ox`, `oy` : le milieu du couple (bas de ses cases). Une place close (`Anc.fin`) est une case
+   * comme les autres, au fond teinté de brique et cerclée de brique.
    */
-  dessiner(scene: Scene, ox: number, oy: number, murs?: (p: Personne) => boolean): void {
+  dessiner(scene: Scene, ox: number, oy: number): void {
     const R = this.R
     // Les traits d'abord, les cases par-dessus.
     for (const n of this.noeuds) {
@@ -297,18 +299,12 @@ export class Sablier {
       }
     }
     for (const n of this.noeuds) {
-      const [fond] = this.fond(n)
+      const [fond, trait] = this.fond(n)
       const x0 = ox + n.x - n.w / 2
       const y0 = oy + n.y
-      scene.rectangle(x0, y0, n.w, n.h, fond, null, 0, this.debout(n.niveau) ? 0.9 : 1.4)
+      scene.rectangle(x0, y0, n.w, n.h, fond, n.fin ? trait : null, n.fin ? 0.35 : 0, this.debout(n.niveau) ? 0.9 : 1.4)
       if (this.debout(n.niveau)) n.bloc!.dessiner(scene, x0 + n.w / 2, y0 + n.h / 2, n.h - 2 * n.bloc!.mx, -90)
       else n.bloc!.dessiner(scene, x0 + n.w / 2, y0 + n.h / 2, n.w - 2 * n.bloc!.mx)
-      if (murs?.(n.p)) {
-        // Le nom tel qu'il est dessiné : tourné d'un quart de tour dans une case debout.
-        const b = n.bloc!
-        const texte: [number, number] = this.debout(n.niveau) ? [b.hauteurTexte, Math.min(b.largeurTexte, n.h - 2 * b.mx)] : [Math.min(b.largeurTexte, n.w - 2 * b.mx), b.hauteurTexte]
-        murDansUneCase(scene, x0, y0, n.w, n.h, 1, texte)
-      }
     }
   }
 

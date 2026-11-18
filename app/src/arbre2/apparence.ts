@@ -52,11 +52,6 @@ export interface ContexteDeFiche {
   place: 'ascendant' | 'descendant' | null
   /** La branche qui teinte la fiche (`hors` pour une famille par alliance à part). */
   branche: string
-  /**
-   * Recherche close au sommet de la fiche (ADR 0023, `arbre2/sommets.ts`) : bord brique.
-   * Facultatif : absent, la fiche n'est pas en fin de recherche.
-   */
-  fin?: boolean
 }
 
 const sexeDe = (n: NoeudPersonne): 'homme' | 'femme' | 'inconnu' =>
@@ -76,13 +71,23 @@ const COULEUR_EN_ATTENTE = 'var(--h-accent)'
 const ENSEMBLE_EN_ATTENTE = `color-mix(in srgb, ${COULEUR_EN_ATTENTE} 60%, var(--h-texte))`
 
 /*
- * UNE RECHERCHE CLOSE (ADR 0023) : un bord brique plein de 2 px — et, avec l'icône « mur »
- * du calque des libellés, une forme qui se lit sans la couleur. Priorités de la bordure :
- * en attente > ligne directe surlignée > fin de recherche > ordinaire. Une carte de la
- * ligne directe garde son liseré d'accent ; le mur, lui, reste (icône, survol, volet).
- * Au niveau Ensemble, où la fiche n'est qu'un rectangle, un filet intérieur brique.
+ * UNE RECHERCHE CLOSE (ADR 0023, révisée le 18/11/2026) : une CARTE à part, à la place du
+ * parent introuvable (`arbre2/cartesDeFin.ts`) — elle remplace le bord brique et l'icône
+ * « mur » de 14 px que portait la carte de l'enfant, et qu'on ne voyait pas. Un fond teinté
+ * de brique, un bord brique plein de 2 px, sans liseré de branche ni photo : elle se
+ * distingue d'une personne au premier coup d'œil, même en noir et blanc (le texte « Recherche
+ * close » le dit). La ligne directe ne la surligne pas : ce n'est pas un ancêtre. Au niveau
+ * Ensemble, un rectangle brique.
  */
 const COULEUR_FIN_DE_RECHERCHE = 'var(--h-fin-de-recherche)'
+const FOND_FIN_DE_RECHERCHE = `color-mix(in srgb, ${COULEUR_FIN_DE_RECHERCHE} 12%, var(--h-fond))`
+
+/** Le style d'une carte « Recherche close ». */
+function styleDeCarteDeFin(position: string, c: ContexteDeFiche): string {
+  const a = c.alpha
+  if (c.ensemble) return `${position};background:${attenuer(COULEUR_FIN_DE_RECHERCHE, 0.55 * a)}`
+  return `${position};background:${attenuer(FOND_FIN_DE_RECHERCHE, a)};border:2px solid ${attenuer(COULEUR_FIN_DE_RECHERCHE, a)};border-radius:${c.portrait ? 10 : 7}px`
+}
 
 /**
  * Le style d'une boîte, en coordonnées monde, prêt pour `style.cssText` : la boîte
@@ -92,6 +97,7 @@ export function styleDeFiche(f: FicheHistoire, c: ContexteDeFiche): string {
   const n = f.noeud
   const a = c.alpha
   const position = `left:${f.x}px;top:${f.y}px;width:${f.w}px;height:${f.h}px`
+  if (n.carteDeFin) return styleDeCarteDeFin(position, c)
   if (c.ensemble) {
     const fond =
       c.place === 'ascendant'
@@ -101,8 +107,7 @@ export function styleDeFiche(f: FicheHistoire, c: ContexteDeFiche): string {
           : n.enAttente
             ? attenuer(ENSEMBLE_EN_ATTENTE, a)
             : attenuer(couleurBranche(c.branche), 0.7 * a)
-    const filet = c.fin ? `;box-shadow:inset 0 0 0 2px ${attenuer(COULEUR_FIN_DE_RECHERCHE, a)}` : ''
-    return `${position};background:${fond}${filet}`
+    return `${position};background:${fond}`
   }
   const sexe = sexeDe(n)
   const accent = attenuer('var(--h-accent)', a)
@@ -113,9 +118,7 @@ export function styleDeFiche(f: FicheHistoire, c: ContexteDeFiche): string {
         ? `1px dashed ${accent}`
         : n.enAttente
           ? `2px dashed ${accent}`
-          : c.fin
-            ? `2px solid ${attenuer(COULEUR_FIN_DE_RECHERCHE, a)}`
-            : `1px ${n.vivant ? 'dashed' : 'solid'} ${attenuer(`var(--h-${sexe}-bord)`, a)}`
+          : `1px ${n.vivant ? 'dashed' : 'solid'} ${attenuer(`var(--h-${sexe}-bord)`, a)}`
   // Le liseré de branche : à gauche d'une fiche couchée, en haut d'une fiche debout.
   const lisere = `${c.portrait ? 'border-top' : 'border-left'}:4px solid ${attenuer(couleurBranche(c.branche), a)}`
   const fond = n.enAttente ? `color-mix(in srgb, ${COULEUR_EN_ATTENTE} 30%, var(--h-${sexe}))` : `var(--h-${sexe})`

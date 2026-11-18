@@ -14,12 +14,15 @@
  * (`attenuer`) ; une photo estompée reçoit un voile de la couleur du fond par-dessus ;
  * une silhouette, `fill-opacity` — c'est de la peinture, pas une couche de
  * composition par fiche (c'était `opacity: 0.3` et `0.35`, une couche chacune).
+ *
+ * Une carte « Recherche close » (ADR 0023, révision du 18/11/2026) n'a pas de photo : son
+ * titre en brique, son motif dessous, sur deux lignes au plus.
  */
-import { TRACE_DU_MUR } from '@/lib/finDeRecherche'
+import { computed } from 'vue'
 import { attenuer } from './apparence'
-import { ECART_DU_MUR, TAILLE_DU_MUR, type Libelle, type LibelleFoyer } from './libelles'
+import type { Libelle, LibelleCompact, LibelleFoyer, LibellePortrait } from './libelles'
 
-defineProps<{
+const props = defineProps<{
   libelles: Libelle[]
   foyers: LibelleFoyer[]
   /** La ligne directe est demandée : les noms d'ancêtres grossissent. */
@@ -36,6 +39,9 @@ const VOILE = 'color-mix(in srgb, var(--h-fond) 70%, transparent)'
 const couleurTexte = (t: Libelle): string =>
   attenuer(t.directe ? 'var(--hi-direct-texte)' : 'var(--h-texte)', t.estompe ? ALPHA_TEXTE : 1)
 const couleurAttenue = (t: Libelle): string => attenuer('var(--h-attenue)', t.estompe ? ALPHA_TEXTE : 1)
+const couleurBrique = (t: Libelle): string => attenuer('var(--h-fin-de-recherche)', t.estompe ? ALPHA_TEXTE : 1)
+/** Les fiches qui ont un emplacement photo : toutes, sauf les cartes « Recherche close ». */
+const avecPhoto = computed(() => props.libelles.filter((t): t is LibelleCompact | LibellePortrait => t.forme !== 'fin'))
 const cadrePhoto = (t: Libelle): Record<string, string> => ({
   left: `${t.photo.x}px`,
   top: `${t.photo.y}px`,
@@ -46,7 +52,7 @@ const cadrePhoto = (t: Libelle): Record<string, string> => ({
 
 <template>
   <!-- Compact : un rond ; Portrait : un carré aux coins arrondis, le cadre d'une photo. -->
-  <template v-for="t in libelles" :key="`photo-${t.id}`">
+  <template v-for="t in avecPhoto" :key="`photo-${t.id}`">
     <img
       v-if="t.photo.src"
       :src="t.photo.src"
@@ -109,28 +115,17 @@ const cadrePhoto = (t: Libelle): Record<string, string> => ({
         :style="{ color: couleurAttenue(t) }"
       >{{ ligne }}</span>
     </div>
-    <!-- Recherche close (ADR 0023) : le mur, 14 px, dans le coin haut droit de la carte. Le motif se lit au survol de la boîte (`title`) et au clic (volet). -->
-    <svg
-      v-if="t.mur && t.coin"
-      data-mur
-      class="pointer-events-none absolute"
-      viewBox="0 0 24 24"
-      :width="TAILLE_DU_MUR"
-      :height="TAILLE_DU_MUR"
-      fill="none"
-      stroke-width="1.8"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-      :style="{
-        left: `${t.coin.x - ECART_DU_MUR - TAILLE_DU_MUR}px`,
-        top: `${t.coin.y + ECART_DU_MUR}px`,
-        stroke: 'var(--h-fin-de-recherche)',
-        'stroke-opacity': t.estompe ? ALPHA_TEXTE : 1,
-      }"
+    <!-- Recherche close (ADR 0023, révision du 18/11/2026) : la carte à la place du parent introuvable. Le texte en dit plus au survol (`title`) ; un clic ouvre l'enfant. -->
+    <div
+      v-else-if="t.forme === 'fin' && t.titre !== ''"
+      data-carte-de-fin
+      class="pointer-events-none absolute flex origin-top-left flex-col justify-center overflow-hidden leading-tight"
+      :class="t.centre ? 'items-center text-center' : ''"
+      :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined }"
     >
-      <path :d="TRACE_DU_MUR" />
-    </svg>
+      <span class="max-w-full truncate text-[11.5px] font-semibold tracking-[.02em] uppercase" :style="{ color: couleurBrique(t) }">{{ t.titre }}</span>
+      <span class="line-clamp-2 max-w-full text-[11px] italic" :style="{ color: couleurTexte(t) }">{{ t.motif }}</span>
+    </div>
   </template>
 
   <div

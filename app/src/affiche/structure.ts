@@ -6,10 +6,27 @@
  * occupe quelle place (sosa), quel quartier il colore, lequel est un implexe, et comment
  * chaque union de descendant a fini.
  */
+import type { CoteDeRecherche, ResumeFinDeRecherche } from '@/lib/api'
+import { finDuCote, libelleDuMotif } from '@/lib/finDeRecherche'
 import type { DateAffiche } from './dates'
-import type { ArbreAffiche, Personne, Union } from './donnees'
+import { Personne, type ArbreAffiche, type Union } from './donnees'
 import type { Quartier } from './palette'
 import type { Bloc } from './boites'
+
+/** Ce que la case d'une place close écrit en titre — le même que la carte de `/arbre`. */
+export const TITRE_DE_LA_PLACE_CLOSE = 'Recherche close'
+
+/**
+ * Une place close (ADR 0023, révision du 18/11/2026) : la case dessinée à la place d'un parent
+ * introuvable, au sosa qu'il aurait — et qui remplace le petit « mur » qu'on ne voyait pas.
+ */
+export interface PlaceClose extends ResumeFinDeRecherche {
+  /** Le côté clos de l'enfant : la place du père ou celle de la mère. */
+  cote: CoteDeRecherche
+}
+
+/** Le motif d'une place close, en clair : « Registres inexistants avant 1668 ». */
+export const motifDeLaPlace = (fin: PlaceClose): string => libelleDuMotif(fin.reason, fin.beforeYear)
 
 /** Une place dans l'ascendance. Un même ancêtre peut en occuper plusieurs (implexe). */
 export class Anc {
@@ -20,6 +37,11 @@ export class Anc {
   implexe: number | null = null
   /** Une place secondaire d'un implexe : montrée sans ses ascendants. */
   tronque = false
+  /**
+   * Une place close : la case « Recherche close » d'un parent introuvable, et non un ancêtre.
+   * `p` n'y est qu'un gabarit sans nom ni date (`Personne.placeClose()`). `null` partout ailleurs.
+   */
+  fin: PlaceClose | null = null
   // Le placement, posé par l'éventail ou le sablier.
   a1 = 0
   a2 = 0
@@ -57,6 +79,13 @@ const avant = (a: readonly [number, number], b: readonly [number, number]): bool
  * Un ancêtre présent plusieurs fois n'est développé qu'à sa première place (niveau le plus
  * bas, puis plus petit sosa) ; les autres places le montrent sans ses ascendants.
  *
+ * **Les places closes** (ADR 0023, révision du 18/11/2026) : un côté clos faute d'archives —
+ * une fin de recherche, et aucun parent servi de ce côté — reçoit une place à lui, au sosa du
+ * parent introuvable, marquée `fin` : l'éventail, le soleil et le sablier la posent comme un
+ * ancêtre, et l'écrivent « Recherche close » et son motif. Seulement dans la profondeur
+ * dessinée, et jamais sur une place secondaire d'implexe (ses parents sont ceux de la première).
+ * Elle ne compte ni parmi les ancêtres ni dans les générations (`chiffresDeLAscendance()`).
+ *
  * `profondeur` : le nombre de générations d'ascendants dessinées (1 = les parents) ; par
  * défaut, tout ce que l'arbre connaît. L'affiche d'origine n'avait pas ce réglage : la
  * coupe se fait avant tout calcul, les implexes se comptent donc sur ce qui est dessiné.
@@ -86,9 +115,25 @@ export function ascendance(arbre: ArbreAffiche, h: Personne, f: Personne, profon
     }
     if (niveau >= profondeur) return n
     const [pere, mere] = arbre.parents(p.id)
-    if (pere) n.pere = construire(pere, niveau + 1, 2 * sosa, quartier ?? (sosa === 2 ? 'HP' : 'FP'), n)
-    if (mere) n.mere = construire(mere, niveau + 1, 2 * sosa + 1, quartier ?? (sosa === 2 ? 'HM' : 'FM'), n)
+    const quartierPere = quartier ?? (sosa === 2 ? 'HP' : 'FP')
+    const quartierMere = quartier ?? (sosa === 2 ? 'HM' : 'FM')
+    if (pere) n.pere = construire(pere, niveau + 1, 2 * sosa, quartierPere, n)
+    else n.pere = fermer(n, 'pere', quartierPere)
+    if (mere) n.mere = construire(mere, niveau + 1, 2 * sosa + 1, quartierMere, n)
+    else n.mere = fermer(n, 'mere', quartierMere)
     return n
+  }
+  /** La place close d'un côté sans parent servi, s'il est clos ; `null` sinon. */
+  const fermer = (enfant: Anc, cote: CoteDeRecherche, quartier: Quartier): Anc | null => {
+    const fin = finDuCote(enfant.p.finsDeRecherche, cote)
+    if (fin === null) return null
+    // Négatif et propre à chaque côté de chaque personne : aucune fiche n'a cet identifiant.
+    const id = -(2 * Math.abs(enfant.p.id) + (cote === 'pere' ? 2 : 3))
+    const place = new Anc(Personne.placeClose(id, cote === 'pere' ? 'masculin' : 'feminin'), enfant.niveau + 1, 2 * enfant.sosa + (cote === 'pere' ? 0 : 1), quartier)
+    place.enfant = enfant
+    place.fin = { cote, reason: fin.reason, beforeYear: fin.beforeYear ?? null }
+    noeuds.push(place)
+    return place
   }
   const racineH = construire(h, 0, 2, null, null)
   const racineF = construire(f, 0, 3, null, null)
@@ -121,6 +166,18 @@ export function ascendance(arbre: ArbreAffiche, h: Personne, f: Personne, profon
     if (v !== undefined) n.implexe = rangs.get(v)!
   }
   return { racineH, racineF, noeuds }
+}
+
+/** Les chiffres du pied, sur les vrais ancêtres : une place close n'en est pas un. */
+export function chiffresDeLAscendance(noeuds: readonly Anc[]): { ancetres: number; generations: number; implexes: number } {
+  const ancetres = noeuds.filter((n) => n.fin === null)
+  return {
+    // Le couple n'est pas son propre ancêtre.
+    ancetres: new Set(ancetres.map((n) => n.p.id)).size - 2,
+    // Les anneaux dessinés de vrais ancêtres, plus l'enfant fictif du couple (sosa 1).
+    generations: Math.max(0, ...ancetres.map((n) => n.niveau)) + 2,
+    implexes: new Set(ancetres.map((n) => n.implexe).filter((i) => i)).size,
+  }
 }
 
 /* ------------------------------------------------------------------ */

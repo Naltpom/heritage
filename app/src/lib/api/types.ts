@@ -671,6 +671,21 @@ export interface NoeudPersonne extends NoeudCommun {
   finDeRecherchePere?: ResumeFinDeRecherche
   /** Le pendant, du côté de la mère. Mêmes règles. */
   finDeRechercheMere?: ResumeFinDeRecherche
+  /**
+   * **Jamais envoyée par l'API** : posée par le client sur la carte « Recherche close » que
+   * `/arbre` dessine à la place d'un parent introuvable (`arbre2/cartesDeFin.ts`, révision du
+   * 18/11/2026 de l'ADR 0023). Un nœud qui la porte n'est pas une personne : `personId` y vaut
+   * `null`, il ne compte dans aucun effectif, et un clic sur lui choisit l'enfant.
+   */
+  carteDeFin?: CarteDeFinDeRecherche
+}
+
+/** La carte d'un côté clos, à la place du parent introuvable (`NoeudPersonne.carteDeFin`). */
+export interface CarteDeFinDeRecherche extends ResumeFinDeRecherche {
+  /** Le nœud de la personne dont ce côté est clos. */
+  enfant: IdentifiantNoeud
+  /** Le côté clos : la carte occupe la place du père ou celle de la mère. */
+  cote: CoteDeRecherche
 }
 
 /** Voir `NoeudPersonne.parente`. */
