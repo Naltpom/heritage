@@ -1682,6 +1682,12 @@ Lecture, point par point :
   qui demanderait 377 fiches pour griser des nœuds annulerait le bénéfice du canevas.
   `bestQuay` vaut `null` quand la personne n'a aucune citation — ce qui n'est **pas** la
   même chose que `0`, « recopie non vérifiée » (§ 3.7).
+- **`titulaire`** ([ADR 0024](adr/0024-fiche-tenue-par-son-titulaire.md)) vaut `true` quand
+  un compte **actif** est le titulaire de la fiche : elle compte alors « Vérifiée » comme si
+  un acte la tenait, et sort de « Non vérifiés » et de « Sans source ». La clé n'est posée
+  **que lorsqu'elle est vraie** (absente vaut `false`) et **jamais sur un nœud restreint**,
+  comme `bestQuay`. Sur la fiche (§ 5.3) et une ligne du tableau, c'est un booléen
+  toujours présent dans la charge complète.
 - **`w`** et **`h`** viennent du moteur et sont **identiques pour tous les lecteurs** :
   `max(104, max(len(nom) × 6.6, len(ligneDates) × 5.8) + 2 × 14)`, **tronqué** à l'entier —
   `int()` en Python, `(int)` en PHP, troncature vers zéro, **jamais `round()`** — avec
@@ -1756,6 +1762,7 @@ ETag = "sha256(
   || ':' || empreinte_des_demandes_du_lecteur       -- '' s'il n'en a aucune
   || ':' || point_de_vue_du_lecteur                 -- 'p<id>', '' s'il n'est rattaché à personne
   || ':' || empreinte_de_la_mise_en_page            -- l'image elle-même, ci-dessous
+  || ':' || empreinte_des_fiches_titulaires         -- '' s'il n'y en a aucune (ADR 0024)
 )"
 
 empreinte_du_cercle_effectif =
@@ -1763,9 +1770,12 @@ empreinte_du_cercle_effectif =
 
 empreinte_de_la_mise_en_page =
     sha256( ego || les nœuds placés, dans l'ordre servi || les arêtes )
+
+empreinte_des_fiches_titulaires =
+    sha256( implode(',', identifiants_des_fiches_titulaires_triés) )
 ```
 
-**Cinq composantes, et la règle qui les explique tient en une ligne :**
+**Six composantes, et la règle qui les explique tient en une ligne :**
 
 > **L'`ETag` doit distinguer tout ce qui distingue la représentation. Le cercle en fait
 > partie.**
@@ -1808,6 +1818,12 @@ Elle est **dérivée du placement** et non posée comme un numéro de version à
 main : un compteur qu'on oublie d'incrémenter donne ici une page vieille mais plausible,
 avec une suite de tests verte. C'est le même arbitrage qu'au § 2.3, qui a déjà écarté un
 compteur d'invalidation au profit d'une empreinte.
+
+`empreinte_des_fiches_titulaires` (18/11/2026, [ADR 0024](adr/0024-fiche-tenue-par-son-titulaire.md)) :
+la fiche d'un compte actif porte `titulaire: true`. Activer, suspendre ou rattacher ailleurs
+un compte ne touche que `mbr_member` : ni l'arbre, ni le cercle des autres lecteurs, ni la
+mise en page ne bougent. Sans elle, chaque lecteur revalidait, recevait `304`, et gardait la
+fiche « Non vérifiée ». Elle est la même pour tous les lecteurs.
 
 **Conséquence à connaître** : le chemin du `304` lit désormais le placement en cache (§ 9.9)
 en plus de résoudre le cercle. Une revalidation n'est pas gratuite ; c'est le prix des deux
@@ -1913,6 +1929,7 @@ la référence de forme.
   "generation": -4,
   "bestQuay": 2,
   "citationCount": 6,
+  "titulaire": false,
   "forcePrivacy": false,
   "privacyNote": null,
   "version": 8,
@@ -6627,7 +6644,7 @@ Ce document donne les listes exactes, pour que le test soit une recopie :
 |---|---|---|
 | 1 — fiche | `GET /api/arbre/personnes/{id}` | `id`, `displayName`, `sex`, `generation`, `branch`, `vivant`, `visibilite` — **`displayName` vaut `"Personne vivante"`** ; et dans la fiche **visible** d'un proche, ses références (`parents`, `fratrie`, `unions[].conjoint`, `unions[].enfants`) portent le même masque |
 | 1 bis — famille | `GET /api/arbre/familles/{id}` | époux : `personId`, `displayName`, `visibilite` ; enfant : `personId`, `displayName`, `siblingOrder`, `relation` — **`displayName` vaut `"Personne vivante"`** |
-| 2 — graphe | `GET /api/arbre/graphe` (nœud) | `id`, `type`, `personId`, `x`, `y`, `w`, `h`, `displayName`, `etiquetteNom`, `sex`, `generation`, `branch`, `vivant`, `parente`, `pont` (si `parente` vaut `"alliance"`), `visibilite` — **`displayName` et `etiquetteNom` valent `"Personne vivante"`, `w` vaut 215** ; **`etiquetteDates`, `bestQuay`, `citationCount`, `avecImage`, `finDeRecherchePere` et `finDeRechercheMere` absents** |
+| 2 — graphe | `GET /api/arbre/graphe` (nœud) | `id`, `type`, `personId`, `x`, `y`, `w`, `h`, `displayName`, `etiquetteNom`, `sex`, `generation`, `branch`, `vivant`, `parente`, `pont` (si `parente` vaut `"alliance"`), `visibilite` — **`displayName` et `etiquetteNom` valent `"Personne vivante"`, `w` vaut 215** ; **`etiquetteDates`, `bestQuay`, `citationCount`, `avecImage`, `titulaire`, `finDeRecherchePere` et `finDeRechercheMere` absents** |
 | 2 bis — affiche | `GET /api/arbre/familles/{id}/affiche` (personne) | `id`, `visibilite`, `displayName`, `sex`, `vivant` — **`displayName` vaut `"Personne vivante"`** ; ni date, ni `finDeRecherchePere`, ni `finDeRechercheMere` |
 | 3 — recherche | `GET /api/arbre/recherche` | **aucune entrée** — la personne est absente |
 | 4 — chronologie | `GET /api/chronologie` | **aucune barre** — la personne est absente |

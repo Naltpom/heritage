@@ -367,6 +367,42 @@ final class StatistiquesTest extends WebTestCase
         self::assertSame(2, array_sum(array_column($jours, 'verifiees')), 'Marie n’a qu’une citation de qualité 1.');
     }
 
+    /**
+     * ADR 0024 (demande du 18/11/2026) : la fiche d'un compte actif compte « Vérifiée ».
+     * Paul, vivant et sans source, s'est inscrit et son compte a été activé le 5 octobre :
+     * il entre dans la part vérifiée, ce jour-là dans la série, et sort des deux listes du
+     * chantier.
+     */
+    public function testLaFicheDUnCompteActifCompteVerifiee(): void
+    {
+        self::mockTime(new \DateTimeImmutable('2026-10-20 12:00:00', new \DateTimeZone('Europe/Paris')));
+        ReleveEnMemoire::titulaire(self::PAUL, '2026-10-05T09:00:00+02:00');
+
+        $this->connecterUnMembre();
+        $this->requete('GET', '/api/explorer/stats');
+        $arbre = $this->charge()['arbre'];
+
+        self::assertSame(['verifiees' => 2, 'total' => 10], $arbre['verification']['fiches'], 'Jean par son acte, Paul par son compte.');
+        self::assertSame(2, end($arbre['verification']['historique'])['verifiees']);
+
+        $jours = array_column($arbre['parJour'], null, 'jour');
+        self::assertSame(['tr' => ['ajoutees' => 0, 'verifiees' => 1]], $jours['2026-10-05']['branches'], 'Paul devient vérifié le jour où son compte est activé.');
+
+    }
+
+    /** Le pendant, côté chantier : la fiche de Paul n'est plus à sourcer (ADR 0024). */
+    public function testLaFicheDUnCompteActifSortDuChantier(): void
+    {
+        ReleveEnMemoire::titulaire(self::PAUL, '2026-10-05T09:00:00+02:00');
+
+        $this->connecterUnAdministrateur();
+        $this->requete('GET', '/api/administration/stats/chantier');
+        $fiches = $this->charge()['fiches'];
+
+        self::assertSame(7, $fiches['sansSource']['n'], 'Paul n’est plus « sans source » à chercher : il s’est reconnu.');
+        self::assertSame([self::MARIE], array_column($fiches['nonVerifiees']['personnes'], 'id'));
+    }
+
     public function testLaSerieParJourSArreteAUnAn(): void
     {
         self::mockTime(new \DateTimeImmutable('2026-10-20 12:00:00', new \DateTimeZone('Europe/Paris')));

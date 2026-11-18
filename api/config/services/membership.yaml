@@ -80,6 +80,13 @@ services:
     App\Module\Core\Contract\AnnuaireDesMembresInterface:
         alias: App\Module\Membership\Service\AnnuaireDesMembres
 
+    # ── Les fiches tenues par leur titulaire (ADR 0024) ───────────────────────────
+    #
+    # Une fiche dont un compte actif est le titulaire compte « Vérifiée ». `core.yaml`
+    # pointe sur `AucuneFicheTitulaire` ; cet alias-ci l'emporte, comme les autres.
+    App\Module\Core\Contract\FichesTitulairesInterface:
+        alias: App\Module\Membership\Service\FichesTitulairesDesMembres
+
     # ── Les réglages d'administration ──────────────────────────────────────────────
     #
     # `cercle.generations`, `invitation.ttl_jours`, `invitation.tentatives_par_heure`,

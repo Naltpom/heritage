@@ -12,6 +12,7 @@ use App\Module\Tree\Serializer\LecteurDeLArbre;
 use App\Module\Tree\Serializer\PersonneDuLecteur;
 use App\Module\Tree\Serializer\PopulationDeLArbre;
 use App\Module\Tree\Service\TreeFingerprint;
+use App\Tests\Core\Double\FichesTitulairesEnMemoire;
 use App\Tests\Core\Double\ReciprociteEnMemoire;
 use App\Tests\Tree\Double\AnnuaireEnMemoire;
 use App\Tests\Tree\Double\CalqueEnMemoire;
@@ -337,6 +338,7 @@ final class EtagDuGrapheTest extends TestCase
         array $personneParCompte = [],
         ?MiseEnPageEnMemoire $miseEnPage = null,
         ?ReciprociteEnMemoire $reciprocite = null,
+        ?FichesTitulairesEnMemoire $titulaires = null,
     ): EtagDuGraphe {
         return new EtagDuGraphe(
             $this->empreinteFigee(),
@@ -345,6 +347,7 @@ final class EtagDuGrapheTest extends TestCase
             $this->populationFigee(),
             new PersonneDuLecteur(new AnnuaireEnMemoire($personneParCompte)),
             $miseEnPage ?? new MiseEnPageEnMemoire(),
+            $titulaires ?? new FichesTitulairesEnMemoire(),
         );
     }
 
@@ -380,6 +383,32 @@ final class EtagDuGrapheTest extends TestCase
             $avant->pour($lecteur),
             $this->etags(miseEnPage: new MiseEnPageEnMemoire('regles-de-2026-09'))->pour($lecteur),
             'Et la même image doit rendre le même `ETag`, sans quoi plus rien ne revalide.',
+        );
+    }
+
+    /**
+     * ════════════════════════════════════════════════════════════════════════════
+     * **UN COMPTE EST ACTIVÉ, L'ARBRE NON — L'`ETAG` DOIT BOUGER** (ADR 0024).
+     *
+     * La fiche d'un compte actif porte `titulaire: true` et passe « Vérifiée ». Activer le
+     * compte ne touche que `mbr_member` : ni l'arbre, ni le cercle des autres lecteurs, ni
+     * la mise en page. Sans la sixième composante, chacun revalidait, recevait `304`, et
+     * gardait la fiche « Non vérifiée ».
+     * ════════════════════════════════════════════════════════════════════════════
+     */
+    public function testActiverUnCompteChangeLEtagSansToucherALArbre(): void
+    {
+        $lecteur = new LecteurDeLArbre(42, 'Membre', false, Regime::Cercle);
+
+        $avant = $this->etags()->pour($lecteur);
+        $apres = $this->etags(titulaires: new FichesTitulairesEnMemoire([11]))->pour($lecteur);
+
+        self::assertNotSame($avant, $apres, 'Une fiche qui devient titulaire doit changer l’`ETag`.');
+        self::assertNotSame($apres, $this->etags(titulaires: new FichesTitulairesEnMemoire([12]))->pour($lecteur), 'Une autre fiche titulaire, un autre `ETag`.');
+        self::assertSame(
+            $this->etags(titulaires: new FichesTitulairesEnMemoire([11, 12]))->pour($lecteur),
+            $this->etags(titulaires: new FichesTitulairesEnMemoire([12, 11]))->pour($lecteur),
+            'L’ordre dans lequel `Membership` les rend ne compte pas.',
         );
     }
 

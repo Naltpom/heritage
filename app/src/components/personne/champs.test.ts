@@ -413,6 +413,22 @@ describe('regimeDocumentaire — « vérifié » veut dire appuyé sur un acte',
 
     expect(regimeDocumentaire(ficheComplete({ citationCount: 6, bestQuay: 2 }))?.ton).toBe('bon')
   })
+
+  it('la fiche d’un compte actif est vérifiée par son titulaire, sources ou pas (ADR 0024)', () => {
+    const sansSource = regimeDocumentaire(ficheComplete({ citationCount: 0, bestQuay: null, titulaire: true }))
+    expect(sansSource).toEqual({
+      ton: 'bon',
+      texte: 'Vérifié : la personne s’est elle-même rattachée à sa fiche.',
+      court: 'Vérifié',
+    })
+    expect(regimeDocumentaire(ficheComplete({ citationCount: 3, bestQuay: 0, titulaire: true }))?.court).toBe('Vérifié')
+    // Un acte, quand il y en a un, reste la raison dite.
+    expect(regimeDocumentaire(ficheComplete({ citationCount: 6, bestQuay: 2, titulaire: true }))?.texte).toBe(
+      'Vérifié sur un acte ou un registre.',
+    )
+    // `titulaire: false` ne change rien.
+    expect(regimeDocumentaire(ficheComplete({ citationCount: 0, bestQuay: null, titulaire: false }))?.court).toBe('Sans source')
+  })
 })
 
 /* ------------------------------------------------------------------ */

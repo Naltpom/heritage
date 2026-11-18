@@ -217,6 +217,7 @@ final class StatistiquesVisibles
                 $p->bestQuay,
                 $p->citationCount,
                 $p->creeLe,
+                $p->titulaireDepuis,
             );
         }
 

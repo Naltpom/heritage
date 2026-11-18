@@ -13,7 +13,8 @@
  * - **La pastille de parenté** : `parente`, calculée par le serveur relativement
  *   au lecteur. `null` : pas de pastille, plutôt qu'une parenté inventée.
  * - **La pastille documentaire** : `regimeDocumentaire()`. « Vérifié » veut dire
- *   **appuyé sur un acte** (`bestQuay ≥ 2`), jamais « a une source ». Desktop :
+ *   **appuyé sur un acte** (`bestQuay ≥ 2`) ou tenu par son titulaire, un compte
+ *   actif (`titulaire`, ADR 0024) — jamais « a une source ». Desktop :
  *   la phrase entière ; mobile : la forme courte.
  * - **La note de confidentialité** : `noteDeConfidentialite()`, commandée par
  *   `vivant` — jamais par `deceased`, ni par l'absence de dates.

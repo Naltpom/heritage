@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Service;
 
+use App\Module\Core\Contract\AucuneFicheTitulaire;
+use App\Module\Core\Contract\FichesTitulairesInterface;
 use App\Module\Core\ValueObject\UncertainDate;
 use App\Module\Statistiques\Contract\AppuiDuReleve;
 use App\Module\Statistiques\Contract\FaitDuReleve;
@@ -51,13 +53,15 @@ final class VueDeLArbrePourStatistiques implements PortStatistiquesArbre
         private readonly EntityManagerInterface $em,
         private readonly ReglePersonneVivante $regleVivante,
         private readonly ReglagesDeLArbre $reglages,
+        private readonly FichesTitulairesInterface $titulaires = new AucuneFicheTitulaire(),
     ) {
     }
 
     /**
      * Un `COUNT` et un horodatage maximal par table lue, plus le jour et les deux réglages
      * qui changent la lecture (la racine des branches, le seuil « vivant »). Six requêtes
-     * d'agrégat : rien à côté de ce qu'elles évitent.
+     * d'agrégat : rien à côté de ce qu'elles évitent. Et les fiches titulaires d'un compte
+     * actif, qui comptent « Vérifiées » (ADR 0024).
      */
     public function jeton(): string
     {
@@ -85,6 +89,15 @@ final class VueDeLArbrePourStatistiques implements PortStatistiquesArbre
             $morceaux[] = $table.'='.implode('/', array_map(static fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', $ligne ?: []));
         }
 
+        // Les fiches tenues par leur titulaire (ADR 0024) : activer un compte ne touche
+        // aucune table de l'arbre, mais fait passer sa fiche dans la part vérifiée.
+        $titulaires = $this->titulaires->fichesTitulaires();
+        $morceaux[] = 'titulaires='.implode(',', array_map(
+            static fn (int $id, \DateTimeImmutable $depuis): string => $id.'@'.$depuis->getTimestamp(),
+            array_keys($titulaires),
+            $titulaires,
+        ));
+
         return implode('|', $morceaux);
     }
 
@@ -104,6 +117,7 @@ final class VueDeLArbrePourStatistiques implements PortStatistiquesArbre
             ->getResult();
 
         $vivants = $this->regleVivante->pourTous($personnes, $this->reglages->seuilVivantAnnees(), new \DateTimeImmutable());
+        $titulaires = $this->titulaires->fichesTitulaires();
 
         $releve = [];
         foreach ($personnes as $personne) {
@@ -132,6 +146,7 @@ final class VueDeLArbrePourStatistiques implements PortStatistiquesArbre
                 bestQuay: $personne->getBestQuay(),
                 citationCount: $personne->getCitationCount(),
                 creeLe: $personne->getCreatedAt(),
+                titulaireDepuis: $titulaires[$id] ?? null,
             );
         }
 

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Serializer;
 
+use App\Module\Core\Contract\AucuneFicheTitulaire;
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
+use App\Module\Core\Contract\FichesTitulairesInterface;
 use App\Module\Core\Enum\CoteDeRecherche;
 use App\Module\Core\Enum\SubjectKind;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
@@ -75,6 +77,7 @@ final readonly class NormaliseurDePersonne
         private CalqueEnAttenteInterface $calque,
         private AppuiDUneCitation $appui,
         private AdressesDArbresEnLigne $adresses,
+        private FichesTitulairesInterface $titulaires = new AucuneFicheTitulaire(),
     ) {
     }
 
@@ -183,6 +186,10 @@ final readonly class NormaliseurDePersonne
             'generation' => $personne->getGeneration(),
             'bestQuay' => $personne->getBestQuay(),
             'citationCount' => $personne->getCitationCount(),
+            // Un compte actif est le titulaire de cette fiche : elle compte « Vérifiée »
+            // comme si un acte la tenait (ADR 0024). Dans la charge complète seulement,
+            // à côté de `bestQuay` — jamais dans une fiche réduite.
+            'titulaire' => null !== $id && isset($this->titulaires->fichesTitulaires()[$id]),
             'forcePrivacy' => $personne->isForcePrivacy(),
             'privacyNote' => $personne->getPrivacyNote(),
             'version' => $personne->getVersion(),

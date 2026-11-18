@@ -300,7 +300,7 @@ onBeforeUnmount(() => {
             <PanneauBase titre="Part vérifiée">
               <p class="m-0 flex items-baseline gap-2">
                 <span class="whitespace-nowrap text-3xl font-semibold tabular-nums text-ok">{{ pourcent(arbre.verification.fiches.verifiees, arbre.verification.fiches.total) }}</span>
-                <span class="text-sm text-attenue">des fiches appuyées sur un acte ou un registre</span>
+                <span class="text-sm text-attenue">des fiches appuyées sur un acte ou un registre, ou rattachées à leur titulaire</span>
               </p>
               <p class="m-0 mt-1 text-xs text-attenue">
                 {{ nombre(arbre.verification.fiches.verifiees) }} {{ surN(arbre.verification.fiches.total, 'fiche') }} — la même règle que « Vérifié » sur une fiche.
@@ -399,7 +399,7 @@ onBeforeUnmount(() => {
                   <template v-else>Ni ajout ni vérification sur la période.</template>
                 </p>
                 <p class="m-0 mt-2 text-[11px] text-attenue">
-                  Une fiche compte vérifiée le jour où sa première citation d’acte ou de registre a été saisie. Comme pour l’évolution mois par mois, ce qui vient de l’import porte la date de l’import, et une fiche ou une source supprimée disparaît aussi du passé.
+                  Une fiche compte vérifiée le jour où sa première citation d’acte ou de registre a été saisie, ou celui où le compte de son titulaire a été activé. Comme pour l’évolution mois par mois, ce qui vient de l’import porte la date de l’import, et une fiche ou une source supprimée disparaît aussi du passé.
                 </p>
               </template>
             </PanneauBase>
@@ -718,7 +718,7 @@ onBeforeUnmount(() => {
           <ul class="m-0 mt-2 flex flex-col gap-1 pl-5 text-attenue">
             <li>Une date floue (« vers », « avant », « après », « entre ») ou inconnue ne compte pas. Une date exacte compte ; une année seule compte pour les âges et les siècles, pas pour les mois.</li>
             <li>Les personnes vivantes comptent partout : leur âge est calculé jusqu’à aujourd’hui.</li>
-            <li>« Vérifié » veut dire appuyé sur un acte ou un registre — la même règle que sur une fiche.</li>
+            <li>« Vérifié » veut dire appuyé sur un acte ou un registre, ou rattaché à la personne elle-même par son compte — la même règle que sur une fiche.</li>
             <li>Les moyennes comptent toute la famille ; une case qui compterait moins de {{ vue.seuilDeDiscretion }} personnes ne retient que les fiches que vous pouvez ouvrir. Les records, les prénoms et les noms ne portent que sur ces fiches-là.</li>
             <li>Les générations et les branches sont lues depuis la racine de l’arbre.</li>
           </ul>

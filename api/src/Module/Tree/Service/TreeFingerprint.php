@@ -159,14 +159,15 @@ final class TreeFingerprint
     }
 
     /**
-     * L'`ETag` servi au client — **les cinq composantes du § 5.2 du contrat d'API** :
+     * L'`ETag` servi au client — **les six composantes du § 5.2 du contrat d'API** :
      *
      * ```
      * ETag = sha256( empreinte_de_l_arbre
      *        || ':' || empreinte_du_cercle_effectif_du_lecteur
      *        || ':' || empreinte_des_demandes_du_lecteur
      *        || ':' || point_de_vue_du_lecteur
-     *        || ':' || empreinte_de_la_mise_en_page )
+     *        || ':' || empreinte_de_la_mise_en_page
+     *        || ':' || empreinte_des_fiches_titulaires )
      * ```
      *
      * **Les deux paramètres sont obligatoires, et c'est la correction elle-même.** La
@@ -185,6 +186,10 @@ final class TreeFingerprint
      * portaient un défaut, et le défaut rendait l'`ETag` recevable et faux. La leçon vaut
      * pour la sixième composante que quelqu'un ajoutera un jour.
      *
+     * Elle est arrivée le 18/11/2026, sans défaut elle non plus : les fiches tenues par
+     * leur titulaire (ADR 0024). Activer un compte ne touche aucune table `tree_*`, mais
+     * fait passer sa fiche « Vérifiée » dans la charge.
+     *
      * @param string $empreinteDeLaMiseEnPage {@see EmpreinteDeLaMiseEnPage}
      * @param string $pointDeVue              `''` quand le lecteur n'est rattaché à aucune personne
      *
@@ -192,12 +197,15 @@ final class TreeFingerprint
      * {@see \App\Module\Tree\Serializer\EtagDuGraphe}
      * @param string $empreinteDuCercleEffectif {@see \App\Module\Tree\Serializer\CercleDuLecteur::empreinte()}
      * @param string $empreinteDesDemandes      `''` quand le lecteur n'a aucune demande en cours
+     * @param string $empreinteDesTitulaires    les fiches dont un compte actif est le titulaire,
+     *                                          `''` quand il n'y en a aucune
      */
     public function etag(
         string $empreinteDuCercleEffectif,
         string $empreinteDesDemandes,
         string $pointDeVue,
         string $empreinteDeLaMiseEnPage,
+        string $empreinteDesTitulaires,
     ): string {
         return hash('sha256', implode(':', [
             $this->empreinte(),
@@ -205,6 +213,7 @@ final class TreeFingerprint
             $empreinteDesDemandes,
             $pointDeVue,
             $empreinteDeLaMiseEnPage,
+            $empreinteDesTitulaires,
         ]));
     }
 

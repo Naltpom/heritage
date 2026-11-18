@@ -89,7 +89,7 @@ final class ListeBlancheDeSerialisationTest extends ArbreWebTestCase
         foreach ([
             'birth', 'death', 'ligneDates', 'place', 'medias', 'portrait', 'citations',
             'notes', 'faits', 'parents', 'fratrie', 'unions', 'version', 'gedcomXref',
-            'bestQuay', 'citationCount', 'forcePrivacy', 'privacyNote', 'parente',
+            'bestQuay', 'citationCount', 'titulaire', 'forcePrivacy', 'privacyNote', 'parente',
             'enAttente', 'demandesEnAttente', 'givenNames', 'surname', 'marriedName',
             'nickname', 'deceased',
             // ADR 0023 : la fin de recherche suit la règle des notes.

@@ -17,7 +17,8 @@ use App\Module\Statistiques\Contract\PorteeDeLAppui;
  *
  * Exactement celle de la fiche (`regimeDocumentaire`, `components/personne/champs.ts`) et
  * du filtre « Vérifiés » de l'arbre : **`bestQuay ≥ 2`**, une citation au moins qui est un
- * acte ou un registre. La part vérifiée de l'arbre est donc la part des **fiches**
+ * acte ou un registre — **ou un compte actif titulaire de la fiche** (ADR 0024, demande du
+ * 18/11/2026 : la personne s'est connectée et s'est reconnue). La part vérifiée de l'arbre est donc la part des **fiches**
  * vérifiées — c'est le chiffre que l'arbre filtre, et deux chiffres différents sous le
  * même mot se contrediraient à l'écran.
  *
@@ -46,7 +47,8 @@ use App\Module\Statistiques\Contract\PorteeDeLAppui;
  * « Combien de personnes ont été ajoutées ou vérifiées, tous les jours » : la même
  * reconstruction, au jour près. Une fiche est **ajoutée** le jour de sa création ; elle
  * devient **vérifiée** le jour de sa première citation de qualité ≥ 2 — au plus tôt le
- * jour de sa création, une citation ne précédant sa fiche que par un import. Les **mêmes
+ * jour de sa création, une citation ne précédant sa fiche que par un import —, ou le jour
+ * où son titulaire a vu son compte activé, si c'est plus tôt. Les **mêmes
  * limites** que l'évolution par mois : une fiche ou une citation supprimée disparaît de
  * son jour, une qualité relevée après coup compte du jour de la saisie, l'import tombe
  * tout entier le jour de l'import. Les jours sont ceux de la famille (`Europe/Paris`),
@@ -315,8 +317,9 @@ final class ArbreEnChiffres
     }
 
     /**
-     * La date de saisie de la première citation de qualité ≥ 2 de chaque fiche : le moment
-     * où, pour ces reconstructions, elle est devenue « Vérifiée ».
+     * La date de saisie de la première citation de qualité ≥ 2 de chaque fiche, ou celle de
+     * l'activation du compte de son titulaire si elle est antérieure : le moment où, pour
+     * ces reconstructions, elle est devenue « Vérifiée ».
      *
      * @return array<int, \DateTimeImmutable>
      */
@@ -331,6 +334,15 @@ final class ArbreEnChiffres
 
             $deja = $premierActe[$appui->personId] ?? null;
             $premierActe[$appui->personId] = null === $deja || $appui->creeLe < $deja ? $appui->creeLe : $deja;
+        }
+
+        foreach ($population->personnes as $personne) {
+            $depuis = $personne->titulaireDepuis;
+
+            if (null !== $depuis) {
+                $deja = $premierActe[$personne->id] ?? null;
+                $premierActe[$personne->id] = null === $deja || $depuis < $deja ? $depuis : $deja;
+            }
         }
 
         return $premierActe;
@@ -422,10 +434,10 @@ final class ArbreEnChiffres
         return $noms;
     }
 
-    /** La définition unique de « Vérifié » : `bestQuay ≥ 2`. */
+    /** La définition unique de « Vérifié » : `bestQuay ≥ 2`, ou un compte actif titulaire (ADR 0024). */
     public static function estVerifiee(PersonneDuReleve $personne): bool
     {
-        return ($personne->bestQuay ?? -1) >= 2;
+        return ($personne->bestQuay ?? -1) >= 2 || null !== $personne->titulaireDepuis;
     }
 
     private static function renseigne(UncertainDate $date): bool
