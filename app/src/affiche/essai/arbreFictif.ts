@@ -16,9 +16,8 @@
  *   **divorce**, une **union sans mariage** et des **vivants**.
  */
 import type { ArbreDAffiche, BlocDate, FamilleDAffiche, PersonneDAffiche, Sexe } from '@/lib/api'
-import { BRIQUE, LEGENDE_DU_MUR } from '@/lib/finDeRecherche'
 import { ArbreAffiche } from '../donnees'
-import { aUnMur } from '../murs'
+import { FOND_PLACE_CLOSE } from '../palette'
 import type { Scene } from '../scene'
 import { ascendance } from '../structure'
 
@@ -391,9 +390,10 @@ export function coupleSeul(): ArbreDEssai {
 
 /**
  * Un arbre d'essai dont quelques ancêtres sont **en fin de recherche** (ADR 0023) : trois
- * sommets de branche (sans parent) clos, de générations différentes — un mur attendu chacun —,
- * et un ancêtre **avec** ses parents dont les deux côtés sont clos aussi : le parent servi
- * l'emporte, pas de mur. Le couple lui-même n'est jamais touché ; l'arbre d'origine reste intact.
+ * sommets de branche (sans parent) clos, de générations différentes — côté père, côté mère, les
+ * deux côtés : quatre places closes attendues —, et un ancêtre **avec** ses parents dont les deux
+ * côtés sont clos aussi : le parent servi l'emporte, pas de place close. Le couple lui-même
+ * n'est jamais touché ; l'arbre d'origine reste intact.
  */
 export function avecFinsDeRecherche(essai: ArbreDEssai): { essai: ArbreDEssai; sommets: number[]; parentServi: number } {
   const A = new ArbreAffiche(essai.charge)
@@ -422,8 +422,8 @@ export function avecFinsDeRecherche(essai: ArbreDEssai): { essai: ArbreDEssai; s
 /**
  * Les cousins (`arbreDeCousins()`) dont **la femme** a une mère liée et un père clos : la
  * famille de ses parents ne garde que la mère, et son côté père est « père inconnu » (ADR 0023).
- * C'est le couple lui-même qui porte un mur — au premier anneau de l'éventail, et au centre
- * quand les quatre parents y sont dessinés. Les ancêtres, eux, ne sont pas touchés.
+ * La place close est celle du père de la femme (sosa 6), à côté de sa mère — qu'on dessine le
+ * couple ou les quatre parents au premier anneau. Les ancêtres, eux, ne sont pas touchés.
  */
 export function avecLeCoupleEnFinDeRecherche(essai: ArbreDEssai): ArbreDEssai {
   const famille = essai.reperes['fF']!
@@ -435,23 +435,23 @@ export function avecLeCoupleEnFinDeRecherche(essai: ArbreDEssai): ArbreDEssai {
   return { ...essai, charge }
 }
 
-/** Les murs d'une scène : les chemins sans fond, en `BRIQUE` — celui de la légende compris. */
-export function mursDeLaScene(scene: Scene): Extract<Scene['elements'][number], { type: 'chemin' }>[] {
-  return scene.elements.filter((e): e is Extract<typeof e, { type: 'chemin' }> => e.type === 'chemin' && e.fond === 'none' && e.trait === BRIQUE)
+/** Les cases des places closes d'une scène : les secteurs et les rectangles au fond `FOND_PLACE_CLOSE`. */
+export function placesClosesDeLaScene(scene: Scene): Scene['elements'] {
+  return scene.elements.filter((e) => (e.type === 'chemin' || e.type === 'rect') && e.fond === FOND_PLACE_CLOSE)
 }
 
-/** La ligne de légende du mur est-elle écrite dans la scène ? */
-export function legendeDuMurPresente(scene: Scene): boolean {
-  return scene.textes.some((t) => t.type === 'texte' && t.texte.includes(LEGENDE_DU_MUR))
+/** Tout le texte écrit dans la scène, élément par élément (séparés par « | ») — pour y chercher un motif. */
+export function texteDeLaScene(scene: Scene): string {
+  return scene.textes.map((t) => t.texte).join(' | ')
 }
 
 /**
- * Le nombre de murs que l'ascendance du couple doit dessiner (sans celui de la légende), compté
- * sur `aUnMur()` : une **borne** qui suit la fonction testée. Les tests qui la serrent figent
- * aussi un nombre en dur, pour qu'une dérive de `aUnMur()` ne les suive pas.
+ * Le nombre de places closes que l'ascendance du couple pose, compté sur `ascendance()` : une
+ * **borne** qui suit la fonction testée. Les tests qui la serrent figent aussi un nombre en dur,
+ * pour qu'une dérive d'`ascendance()` ne les suive pas.
  */
-export function mursAttendus(essai: ArbreDEssai): number {
+export function placesAttendues(essai: ArbreDEssai): number {
   const A = new ArbreAffiche(essai.charge)
   const { noeuds } = ascendance(A, A.P.get(essai.mari)!, A.P.get(essai.femme)!, Infinity)
-  return noeuds.filter((n) => aUnMur(A, n.p)).length
+  return noeuds.filter((n) => n.fin !== null).length
 }

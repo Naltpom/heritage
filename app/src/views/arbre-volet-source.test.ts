@@ -203,9 +203,20 @@ describe('la fin de recherche (ADR 0023)', () => {
 
     expect(texte).toContain('sommetsDuGraphe(g.noeuds, g.aretes)')
     expect(texte).toContain('const g = grapheCharge.value')
-    expect(texte).toContain('fin: sommets.value.get(f.id)?.close === true')
-    expect(texte).toContain('mur: (f) => sommets.value.get(f.id)?.close === true')
     expect(texte).toContain(':infobulles="infobullesFiches"')
+  })
+
+  it('pose une carte « Recherche close » à la place du parent introuvable, avant tout filtre (révision du 18/11/2026)', async () => {
+    const texte = await source()
+
+    expect(texte).toContain('const graphe = avecCartesDeFinDeRecherche(avecEnAttente.value ? recu : sansDemandesEnAttente(recu))')
+    // Plus de bord brique ni de mur sur la carte de l'enfant.
+    expect(texte).not.toContain('fin: sommets.value.get(f.id)?.close === true')
+    expect(texte).not.toContain('mur: (f) =>')
+    // Un clic sur la carte choisit l'enfant ; le compteur ne la compte pas.
+    expect(corpsDe(texte, 'choisir')).toContain('disposition.value?.parId.get(carte.enfant)')
+    expect(texte).toContain('passent.value.size - cartesDeFinPassantes.value')
+    expect(texte).toContain('{{ effectifAffiche }} fiches sur {{ fichesDeLaDisposition }}')
   })
 
   it('montre le motif au clic, dans le volet (PC) et dans le panneau du téléphone', async () => {

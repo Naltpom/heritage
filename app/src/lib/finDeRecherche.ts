@@ -1,12 +1,13 @@
 /**
  * La **fin de recherche** (ADR 0023) — le contrat partagé des trois écrans qui la
- * montrent : l'encart de la fiche, le sommet d'une branche dans `/arbre`, le mur et sa
- * ligne de légende sur l'affiche.
+ * montrent : l'encart de la fiche (et le volet de `/arbre`), la carte « Recherche close »
+ * posée à la place du parent introuvable dans `/arbre`, la case du même nom sur l'affiche
+ * (révision du 18/11/2026 : elles remplacent le petit mur, qu'on ne voyait pas).
  *
  * Pur : ni DOM, ni appel d'API, ni Vue. Tout ce que deux écrans doivent dire de la même
  * façon est ici, une fois — les motifs et leurs libellés, l'état d'un côté au sommet
  * d'une branche, la place d'un parent (père ou mère), les ops d'une demande, le tracé
- * du mur.
+ * du mur (l'icône de l'encart et du volet).
  *
  * ────────────────────────────────────────────────────────────────────
  * ## Ce qu'il faut savoir avant de s'en servir
@@ -16,7 +17,8 @@
  *   de saisie qui dépose **deux ops dans une demande** (`cotesDuChoix('les-deux')`).
  * - **Un parent connu l'emporte.** Une fin de recherche reste enregistrée quand un
  *   parent est lié ensuite du même côté ; l'arbre et l'affiche montrent alors le parent,
- *   pas le mur (`etatDuSommet()`). C'est la levée — une demande — qui l'efface.
+ *   pas la carte « Recherche close » (`etatDuSommet()`). C'est la levée — une demande — qui
+ *   l'efface.
  * - **Elle passe par le circuit des demandes**, comme un nom ou une date : une
  *   `modification_personne` ordinaire (`corpsDeFinDeRecherche()`), avec ses trois clés
  *   `{reason, beforeYear, body}` et jamais `authorLabel` ni `closedAt`, qui sont en
@@ -146,9 +148,6 @@ export function phraseDeFinDeRecherche(valeur: ResumeFinDeRecherche & { body?: s
   return texte === '' ? motif : `${motif} — ${texte}`
 }
 
-/** La ligne de la légende d'une affiche, à côté du mur. */
-export const LEGENDE_DU_MUR = 'recherche close faute d’archives'
-
 /* ------------------------------------------------------------------ */
 /* La valeur d'un op                                                   */
 /* ------------------------------------------------------------------ */
@@ -255,7 +254,8 @@ export function erreursDeFinDeRecherche(
  * L'état d'un côté d'une personne, au sommet d'une branche :
  *
  * - `connus` — un parent est lié de ce côté : la branche continue ;
- * - `close` — aucun parent, et une fin de recherche : la carte porte le mur ;
+ * - `close` — aucun parent, et une fin de recherche : une carte « Recherche close » prend
+ *   la place du parent (`arbre2/cartesDeFin.ts`, `ascendance()` de l'affiche) ;
  * - `a-chercher` — aucun parent, et rien de dit : pas encore cherché.
  */
 export type EtatDuSommet = 'connus' | 'close' | 'a-chercher'
@@ -300,7 +300,7 @@ export function etatsDuSommet(parents: CotesConnus, fins: FinsDeRecherche): Reco
   }
 }
 
-/** La carte porte-t-elle le mur ? — vrai dès qu'un côté est clos. */
+/** Un côté au moins est-il clos ? */
 export function estEnFinDeRecherche(etats: Record<CoteDeRecherche, EtatDuSommet>): boolean {
   return etats.pere === 'close' || etats.mere === 'close'
 }
@@ -492,10 +492,11 @@ export function corpsDeFinDeRecherche(
 /* ------------------------------------------------------------------ */
 
 /**
- * La couleur du mur et du bord d'une carte close : **brique**. C'est la valeur claire du
- * jeton `--h-fin-de-recherche` (`styles/main.css`) et la couleur imprimée de l'affiche,
- * qui ne suit pas le thème sombre. Un rouge, distinct de l'orange brûlé de `--h-alerte`
- * (divorces, fiches sans source), pour qu'un mur ne se lise pas comme une alerte.
+ * La couleur d'une recherche close — le mur, la carte et la case « Recherche close » :
+ * **brique**. C'est la valeur claire du jeton `--h-fin-de-recherche` (`styles/main.css`) et
+ * la couleur imprimée de l'affiche, qui ne suit pas le thème sombre. Un rouge, distinct de
+ * l'orange brûlé de `--h-alerte` (divorces, fiches sans source), pour qu'une recherche close
+ * ne se lise pas comme une alerte.
  */
 export const BRIQUE = '#9b3426'
 

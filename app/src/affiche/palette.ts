@@ -55,3 +55,11 @@ export function melange(rgb: Rgb, k: number): string {
 export function couleur(rgb: Rgb): string {
   return `#${hex(rgb[0])}${hex(rgb[1])}${hex(rgb[2])}`
 }
+
+/**
+ * Une place close (ADR 0023, révision du 18/11/2026) : le titre « Recherche close » en brique
+ * — `BRIQUE` de `@/lib/finDeRecherche`, la couleur de `/arbre`, imprimée telle quelle —, sur
+ * un fond à peine teinté de brique, qui ne se confond avec aucune des quatre lignées.
+ */
+export const BRIQUE_RVB: Rgb = [0x9b, 0x34, 0x26]
+export const FOND_PLACE_CLOSE = melange(BRIQUE_RVB, 0.13)

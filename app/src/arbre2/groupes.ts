@@ -562,7 +562,8 @@ export function disposerEnGroupes(graphe: Graphe, options: OptionsGroupes = {}):
       cle: bloc.cle,
       libelle: LIBELLES_GROUPE[bloc.cle],
       nom: nomDuQuart(bloc.cle),
-      effectif: ids.length,
+      // Les cartes « Recherche close » (`arbre2/cartesDeFin.ts`) ne sont pas des personnes.
+      effectif: ids.filter((id) => !personnes.get(id)?.carteDeFin).length,
       x: bloc.x0 + MARGE_X,
       y,
       w: bloc.largeur,
@@ -622,7 +623,7 @@ export function disposerEnGroupes(graphe: Graphe, options: OptionsGroupes = {}):
       const x0 = Math.min(...l.map((f) => f.x))
       const x1 = Math.max(...l.map((f) => f.x + f.w))
       const noeud = personnes.get(pont)
-      alliances.push({ pont, nom: noeud ? nomDeFamilleDe(noeud) : '', effectif: l.length, cx: (x0 + x1) / 2, x0, x1 })
+      alliances.push({ pont, nom: noeud ? nomDeFamilleDe(noeud) : '', effectif: l.filter((f) => !f.noeud.carteDeFin).length, cx: (x0 + x1) / 2, x0, x1 })
     }
     alliances.sort((a, b) => a.x0 - b.x0)
   }
@@ -643,7 +644,7 @@ export function disposerEnGroupes(graphe: Graphe, options: OptionsGroupes = {}):
       y: milieuRangee(g),
       libelle: libelleGeneration(g),
       annees: moyenne === null ? null : `vers ${moyenne}`,
-      effectif: rangee.length,
+      effectif: rangee.filter((f) => !f.noeud.carteDeFin).length,
     })
   }
 

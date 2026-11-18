@@ -228,7 +228,8 @@ watch(
 const generationsConnues = computed(() => {
   if (etat.value.etat !== 'pret' || epoux.value === null) return 0
   const A = new ArbreAffiche(etat.value.charge)
-  return Math.max(...ascendance(A, A.P.get(epoux.value.h)!, A.P.get(epoux.value.f)!).noeuds.map((n) => n.niveau))
+  // Les places closes (« Recherche close ») ne sont pas des générations d'ancêtres.
+  return Math.max(...ascendance(A, A.P.get(epoux.value.h)!, A.P.get(epoux.value.f)!).noeuds.filter((n) => n.fin === null).map((n) => n.niveau))
 })
 
 const production = computed<{ affiche: { scene: Scene; chiffres: ChiffresDuPied } } | { erreur: unknown } | null>(() => {

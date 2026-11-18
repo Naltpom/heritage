@@ -70,7 +70,7 @@ export class Personne {
     readonly masquee: boolean,
     naissance: DateAffiche,
     deces: DateAffiche,
-    /** Les côtés clos faute d'archives (ADR 0023) ; `{}` pour une restreinte. Le mur n'est dessiné que sans parent servi (`aUnMur()`). */
+    /** Les côtés clos faute d'archives (ADR 0023) ; `{}` pour une restreinte. La place close n'est posée que sans parent servi (`ascendance()`). */
     readonly finsDeRecherche: FinsDeRecherche = {},
   ) {
     this.naissance = naissance
@@ -101,6 +101,16 @@ export class Personne {
 
   get annee(): number | null {
     return this.naissance.annee
+  }
+
+  /**
+   * La « personne » d'une place close (ADR 0023, révision du 18/11/2026) : la case « Recherche
+   * close » dessinée à la place d'un parent introuvable. Ni nom, ni date, ni fin de recherche :
+   * ce n'est pas une personne, l'affiche la reconnaît à `Anc.fin` (`ascendance()`). Son
+   * identifiant est négatif — aucune fiche n'en a de tel.
+   */
+  static placeClose(id: number, sexe: 'masculin' | 'feminin'): Personne {
+    return new Personne(id, '', '', sexe, true, false, false, DateAffiche.inconnue(), DateAffiche.inconnue())
   }
 }
 

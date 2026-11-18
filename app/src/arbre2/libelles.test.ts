@@ -158,53 +158,49 @@ describe('une proposition en attente se voit (demande du 22/10/2026)', () => {
   })
 })
 
-describe('une recherche close se voit (ADR 0023) : bord brique et mur', () => {
+describe('une recherche close se voit (ADR 0023, révision du 18/11/2026) : une carte à la place du parent', () => {
   const contexte = { portrait: false, branche: 'pp' } as const
+  /** Une carte « Recherche close », bâtie sur la boîte de l'ego (le style ne lit que le nœud et la place). */
+  const carte: FicheHistoire = {
+    ...ego,
+    id: `fin:${ego.id}:pere`,
+    noeud: { ...ego.noeud, id: `fin:${ego.id}:pere`, personId: null, carteDeFin: { enfant: ego.id, cote: 'pere', reason: 'registres_inexistants', beforeYear: 1668 } },
+  }
 
-  it('le bord brique remplace la bordure ordinaire, à tous les niveaux et alphas, sans `opacity`', () => {
+  it('la carte a un fond teinté et un bord brique, à tous les alphas, sans `opacity` ni liseré de branche', () => {
     for (const alpha of [1, ALPHA_HORS_RECHERCHE, ALPHA_HORS_FILTRE])
       for (const portrait of [false, true]) {
-        const css = styleDeFiche(ego, { ...contexte, portrait, ensemble: false, alpha, place: null, fin: true })
+        const css = styleDeFiche(carte, { ...contexte, portrait, ensemble: false, alpha, place: null })
         expect(css).toContain('border:2px solid')
         expect(css).toContain('var(--h-fin-de-recherche)')
         expect(css).not.toMatch(/opacity/)
-        // Sans, la bordure ordinaire du sexe.
-        expect(styleDeFiche(ego, { ...contexte, portrait, ensemble: false, alpha, place: null })).not.toContain('--h-fin-de-recherche')
+        expect(css).not.toContain('--h-branche-')
       }
-    expect(styleDeFiche(ego, { ...contexte, ensemble: false, alpha: 1, place: null, fin: true })).toContain(
-      'border:2px solid var(--h-fin-de-recherche)',
-    )
+    expect(styleDeFiche(carte, { ...contexte, ensemble: false, alpha: 1, place: null })).toContain('border:2px solid var(--h-fin-de-recherche)')
   })
 
-  it('au niveau Ensemble, le rectangle garde sa teinte et prend un filet intérieur brique', () => {
-    const css = styleDeFiche(ego, { ...contexte, ensemble: true, alpha: 1, place: null, fin: true })
-    expect(css).toContain('var(--h-branche-pp)')
-    expect(css).toContain('box-shadow:inset 0 0 0 2px var(--h-fin-de-recherche)')
+  it('au niveau Ensemble, un rectangle brique ; la ligne directe ne la surligne pas', () => {
+    const css = styleDeFiche(carte, { ...contexte, ensemble: true, alpha: 1, place: null })
+    expect(css).toContain('var(--h-fin-de-recherche)')
     expect(css).not.toMatch(/opacity/)
-    expect(styleDeFiche(ego, { ...contexte, ensemble: true, alpha: ALPHA_HORS_FILTRE, place: null, fin: true })).toContain(
-      'color-mix(in srgb, var(--h-fin-de-recherche)',
-    )
-    expect(styleDeFiche(ego, { ...contexte, ensemble: true, alpha: 1, place: null })).not.toContain('box-shadow')
+    expect(styleDeFiche(carte, { ...contexte, ensemble: false, alpha: 1, place: 'ascendant' })).not.toContain('--h-accent')
   })
 
-  it('priorités : en attente > ligne directe > fin de recherche > ordinaire', () => {
-    const proposee: FicheHistoire = { ...ego, id: '#12/p1', noeud: { ...ego.noeud, id: '#12/p1', personId: null, enAttente: true } }
-    const attente = styleDeFiche(proposee, { ...contexte, ensemble: false, alpha: 1, place: null, fin: true })
-    expect(attente).toContain('border:2px dashed var(--h-accent)')
-    expect(attente).not.toContain('--h-fin-de-recherche')
-    const directe = styleDeFiche(ego, { ...contexte, ensemble: false, alpha: 1, place: 'ascendant', fin: true })
-    expect(directe).toContain('border:1px solid var(--h-accent)')
-    expect(directe).not.toContain('--h-fin-de-recherche')
+  it('la carte de l’enfant garde sa bordure ordinaire : plus de bord brique', () => {
+    for (const ensemble of [false, true]) expect(styleDeFiche(ego, { ...contexte, ensemble, alpha: 1, place: null })).not.toContain('--h-fin-de-recherche')
   })
 
-  it('`libellesDesFiches` pose le mur sur la fiche close, et seulement elle', () => {
-    const l = libellesDesFiches({ ...parametres(1), mur: (f) => f.id === ego.id })
-    const murs = l.filter((x) => x.mur)
-    expect(murs.map((x) => x.id)).toEqual([ego.id])
-    // Le mur est calé sur le coin haut droit de la carte à l'écran.
-    const c = surEgo(1)
-    expect(murs[0]!.coin).toEqual({ x: c.tx + (ego.x + ego.w), y: c.ty + ego.y })
-    // Sans prédicat, aucune fiche n'a de mur.
-    expect(libellesDesFiches(parametres(1)).some((x) => x.mur)).toBe(false)
+  it('`libellesDesFiches` écrit la carte : titre et motif, sans photo, sur toute la largeur', () => {
+    const fiches = [...d.fiches, carte]
+    const passent = new Set([...tous, carte.id])
+    const l = libellesDesFiches({ ...parametres(1), fiches, passent })
+    const ecrite = l.find((x) => x.id === carte.id)
+    expect(ecrite).toMatchObject({ forme: 'fin', titre: 'Recherche close', motif: 'Registres inexistants avant 1668', centre: false })
+    expect(ecrite!.photo.d).toBe(0)
+    // Aucune autre fiche ne change de forme.
+    expect(l.filter((x) => x.forme === 'fin').map((x) => x.id)).toEqual([carte.id])
+    // En Portrait, centrée ; au niveau Photos, sans texte.
+    expect(libellesDesFiches({ ...parametres(1), fiches, passent, portrait: true }).find((x) => x.id === carte.id)).toMatchObject({ forme: 'fin', centre: true })
+    expect(libellesDesFiches({ ...parametres(1), fiches, passent, niveau: 1 }).find((x) => x.id === carte.id)).toMatchObject({ forme: 'fin', titre: '', motif: '' })
   })
 })

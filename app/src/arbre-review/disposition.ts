@@ -331,7 +331,8 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
       cle: partie.groupe,
       libelle: LIBELLES_GROUPE[partie.groupe],
       nom: nomDuQuart(partie.groupe),
-      effectif: partie.membres.length,
+      // Les cartes « Recherche close » (`arbre2/cartesDeFin.ts`) ne sont pas des personnes.
+      effectif: partie.membres.filter((i) => !personnes[i]!.carteDeFin).length,
       x: x0 - MARGE_RECTANGLE,
       y,
       w: x1 - x0 + 2 * MARGE_RECTANGLE,
@@ -350,7 +351,7 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
       branche: cle as BrancheDeQuart,
       libelle: LIBELLES_GROUPE[cle],
       nom: nomDuQuart(cle),
-      effectif: membres.length,
+      effectif: membres.filter((f) => !f.noeud.carteDeFin).length,
       cx: tous.reduce((t, f) => t + f.cx, 0) / Math.max(1, tous.length),
       x0: Math.min(...rects.map((r) => r.x)),
       x1: Math.max(...rects.map((r) => r.x + r.w)),
@@ -373,7 +374,7 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
       const x0 = Math.min(...l.map((f) => f.x))
       const x1 = Math.max(...l.map((f) => f.x + f.w))
       const noeud = personnes[s.indexDe.get(pont) ?? -1]
-      alliances.push({ pont, nom: noeud ? nomDeFamilleDe(noeud) : '', effectif: l.length, cx: (x0 + x1) / 2, x0, x1 })
+      alliances.push({ pont, nom: noeud ? nomDeFamilleDe(noeud) : '', effectif: l.filter((f) => !f.noeud.carteDeFin).length, cx: (x0 + x1) / 2, x0, x1 })
     }
     alliances.sort((p, q) => p.x0 - q.x0)
   }
@@ -395,7 +396,7 @@ export function disposerEnRevue(graphe: Graphe, options: OptionsGroupes = {}, re
       y: routage.hautRangee[k]! + routage.hauteurRangee[k]! / 2,
       libelle: libelleGeneration(g),
       annees: moyenne === null ? null : `vers ${moyenne}`,
-      effectif: rangee.length,
+      effectif: rangee.filter((f) => !f.noeud.carteDeFin).length,
     })
   })
 

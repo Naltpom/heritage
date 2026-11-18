@@ -33,13 +33,12 @@
  * cette marge égalise génération par génération, du centre vers l'extérieur.
  */
 import { ajuster, Bloc, type Ligne } from './boites'
+import { BRIQUE } from '@/lib/finDeRecherche'
 import { ligneVie, type StyleDeDate } from './dates'
-import type { Personne } from './donnees'
-import { murDansUnSecteur } from './murs'
-import { ENCRE, ENCRE_DOUCE, melange, PAPIER, TEINTES } from './palette'
+import { ENCRE, ENCRE_DOUCE, FOND_PLACE_CLOSE, melange, PAPIER, TEINTES } from './palette'
 import { Style } from './polices'
 import { f3, secteur, type Scene } from './scene'
-import type { Anc } from './structure'
+import { motifDeLaPlace, TITRE_DE_LA_PLACE_CLOSE, type Anc, type PlaceClose } from './structure'
 
 export class Reglages {
   /** Les réglages de l'affiche d'origine (`eventail.py`) : les tests de fidélité s'y comparent. */
@@ -128,8 +127,20 @@ function styles(corps: number): [Style, Style, Style] {
   return [new Style('SS', corps, ENCRE, 0, 'Reg'), new Style('SS', corps, ENCRE, 0.045, 'Semi'), new Style('SS', corps * 0.86, ENCRE_DOUCE, 0, 'Ital')]
 }
 
+/**
+ * Les lignes d'une place close : « Recherche close » en brique, à la graisse du nom, puis le
+ * motif, au style des dates. Les mêmes en une, deux ou trois lignes : il n'y a pas de prénom.
+ */
+export function lignesDeLaPlaceClose(fin: PlaceClose, st: readonly [Style, Style, Style]): Ligne[] {
+  return [
+    [TITRE_DE_LA_PLACE_CLOSE, new Style('SS', st[1].taille, BRIQUE, 0.045, 'Semi')],
+    [motifDeLaPlace(fin), st[2]],
+  ]
+}
+
 /** Les lignes d'une place. Sur une ligne (`nb = 1`), ce sont celles de deux, mises bout à bout. */
 function lignes(n: Anc, st: [Style, Style, Style], dates: StyleDeDate, nb: 1 | 2 | 3 = 3): Ligne[] {
+  if (n.fin) return lignesDeLaPlaceClose(n.fin, st)
   const p = n.p
   const nom = p.nom + (n.implexe ? ` ◆${n.implexe}` : '') + (p.probable ? ' ?' : '')
   if (nb !== 3) {
@@ -559,6 +570,7 @@ export class Eventail {
   /* ---------------------------------------------------------------- dessin */
 
   fond(n: Anc): string {
+    if (n.fin) return FOND_PLACE_CLOSE
     const [, rgb] = TEINTES[n.quartier ?? (n.sosa === 2 ? 'H' : 'F')]
     if (n.niveau === 0) return melange(rgb, 1.0)
     let k = 0.95 - (0.55 * (n.niveau - 1)) / Math.max(this.nbNiveaux - 2, 1)
@@ -566,11 +578,8 @@ export class Eventail {
     return melange(rgb, k)
   }
 
-  /**
-   * `murs` : dit si une personne porte un mur (`aUnMur()`). Sans lui, aucune icône : la scène est
-   * celle d'avant. Le mur se pose **après** le texte de la place, sans rien déplacer.
-   */
-  dessiner(scene: Scene, cx: number, cy: number, murs?: (p: Personne) => boolean): void {
+  /** Les places closes (`Anc.fin`) se dessinent comme les autres : leur fond et leurs lignes les distinguent. */
+  dessiner(scene: Scene, cx: number, cy: number): void {
     const R = this.R
     // Le disque central.
     scene.chemin(secteur(cx, cy, 0, this.rC, ...this.dessines(90 - R.angle / 2, 90 + R.angle / 2)), melange([222, 205, 168], 1), PAPIER, 0.6)
@@ -581,25 +590,9 @@ export class Eventail {
     }
     for (const n of dessines) {
       const { r1, r2, orientation, coupe } = this.anneaux[n.niveau]!
-      const rTexte = orientation === 'tan' ? this.texteTan(scene, cx, cy, n, r1, r2, coupe) : this.texteRad(scene, cx, cy, n, r1, r2)
-      if (murs?.(n.p)) this.mur(scene, cx, cy, n, r2, rTexte)
+      if (orientation === 'tan') this.texteTan(scene, cx, cy, n, r1, r2, coupe)
+      else this.texteRad(scene, cx, cy, n, r1, r2)
     }
-  }
-
-  /**
-   * Le mur d'une place : sur l'arc extérieur, à l'angle médian dessiné, au-dessus du texte
-   * (`rTexte`). S'il n'y tient pas, il passe au-delà de l'arc ; une place qui n'a qu'un parent
-   * dessiné y laisse libre la moitié de l'autre côté, où le mur se pose alors.
-   */
-  private mur(scene: Scene, cx: number, cy: number, n: Anc, r2: number, rTexte: number): void {
-    const [d1, d2] = this.dessines(n.a1, n.a2)
-    const libre: [number, number] | null = n.pere && !n.mere ? [n.a1, n.pere.a1] : n.mere && !n.pere ? [n.mere.a2, n.a2] : null
-    const [l1, l2] = libre ? this.dessines(...libre) : [d1, d2]
-    murDansUnSecteur(scene, cx, cy, r2, (d1 + d2) / 2, this.k, {
-      rTexte,
-      ouverture: radians(n.a2 - n.a1),
-      aExterieur: (l1 + l2) / 2,
-    })
   }
 
   /** Rend le rayon où s'arrête le texte (le haut du bloc, centré dans l'anneau). */

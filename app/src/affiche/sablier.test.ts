@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ArbreAffiche } from './donnees'
-import { arbreFictif, avecFinsDeRecherche, coupleSeul, legendeDuMurPresente, mursAttendus, mursDeLaScene, type ArbreDEssai } from './essai/arbreFictif'
+import { BRIQUE } from '@/lib/finDeRecherche'
+import { arbreFictif, avecFinsDeRecherche, coupleSeul, placesAttendues, placesClosesDeLaScene, texteDeLaScene, type ArbreDEssai } from './essai/arbreFictif'
 import { installerLesPolicesDuDisque } from './essai/polices'
 import { afficheSablier, type SablierProduit } from './fabriquer'
 import type { ModeDeSablier } from './sablier'
@@ -88,37 +89,34 @@ describe('le sablier, cas limites et vivants', () => {
   })
 })
 
-describe.each(['normal', 'dense'] as const)('le mur du sablier (%s)', (mode) => {
+describe.each(['normal', 'dense'] as const)('les places closes du sablier (%s)', (mode) => {
   const { essai: avec, sommets } = avecFinsDeRecherche(arbreFictif())
   const close = produire(avec, mode)
+  const sans = produire(arbreFictif(), mode)
 
-  it('dessine un mur par sommet clos, et sa ligne de légende', () => {
-    const attendus = mursAttendus(avec)
-    expect(attendus).toBeGreaterThanOrEqual(sommets.length)
-    expect(mursDeLaScene(close.scene)).toHaveLength(attendus + 1)
-    // Le nombre, en dur : les trois sommets clos par `avecFinsDeRecherche()`, plus la légende.
-    expect(attendus).toBe(3)
-    expect(mursDeLaScene(close.scene)).toHaveLength(3 + 1)
-    expect(legendeDuMurPresente(close.scene)).toBe(true)
+  it('dessine une case « Recherche close » par côté clos, au-dessus de l’enfant', () => {
+    const attendues = placesAttendues(avec)
+    expect(attendues).toBeGreaterThanOrEqual(sommets.length)
+    expect(placesClosesDeLaScene(close.scene)).toHaveLength(attendues)
+    // Le nombre, en dur : côté père, côté mère, puis les deux côtés d'un troisième sommet.
+    expect(attendues).toBe(4)
+    const texte = texteDeLaScene(close.scene)
+    expect(texte).toContain('Recherche close')
+    for (const motif of ['Père inconnu', 'Registres inexistants avant 1668', 'Lacune dans les registres']) expect(texte).toContain(motif)
     expect(versSvg(close.scene)).not.toMatch(/NaN|Infinity/)
   })
 
-  it('ne dessine aucun mur ni légende sans fin de recherche', () => {
-    const sans = produire(arbreFictif(), mode)
-    expect(mursDeLaScene(sans.scene)).toHaveLength(0)
-    expect(legendeDuMurPresente(sans.scene)).toBe(false)
+  it('cercle la case de brique, sans mur ni ligne de légende', () => {
+    const cases = placesClosesDeLaScene(close.scene)
+    for (const c of cases) expect(c.type === 'rect' && c.trait).toBe(BRIQUE)
+    expect(texteDeLaScene(close.scene)).not.toContain('faute d’archives')
   })
 
-  it('réserve la ligne du mur sous le dessin : 5,4·kl de plus que sans mur', () => {
-    const sans = produire(arbreFictif(), mode)
-    // La légende du sablier est toujours sous le dessin, à l'échelle `kl` de la page.
-    const kl = Math.max(1, Math.min(1.6, close.scene.largeur / 1100))
-    expect(close.scene.hauteur - sans.scene.hauteur).toBeCloseTo(5.4 * kl, 9)
+  it('ne dessine aucune case close sans fin de recherche', () => {
+    expect(placesClosesDeLaScene(sans.scene)).toHaveLength(0)
   })
 
-  it('ne déplace aucune case : même largeur d’arbre et de page', () => {
-    const sans = produire(arbreFictif(), mode)
-    expect(close.scene.largeur).toBeCloseTo(sans.scene.largeur, 9)
-    expect(close.sablier.droite - close.sablier.gauche).toBeCloseTo(sans.sablier.droite - sans.sablier.gauche, 9)
+  it('ne compte les places closes ni parmi les ancêtres ni dans les générations', () => {
+    expect(close.chiffres).toEqual(sans.chiffres)
   })
 })
