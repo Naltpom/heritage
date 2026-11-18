@@ -123,7 +123,8 @@ const cadrePhoto = (t: Libelle): Record<string, string> => ({
       :class="t.centre ? 'items-center text-center' : ''"
       :style="{ left: `${t.x}px`, top: `${t.y}px`, width: `${t.w}px`, height: `${t.h}px`, transform: t.reduction < 1 ? `scale(${t.reduction})` : undefined }"
     >
-      <span class="max-w-full truncate text-[11.5px] font-semibold tracking-[.02em] uppercase" :style="{ color: couleurBrique(t) }">{{ t.titre }}</span>
+      <!-- Le titre passe sur deux lignes plutôt que d'être coupé : une carte Portrait n'a que 110 px de texte. -->
+      <span class="line-clamp-2 max-w-full text-[11.5px] leading-tight font-semibold uppercase" :style="{ color: couleurBrique(t) }">{{ t.titre }}</span>
       <span class="line-clamp-2 max-w-full text-[11px] italic" :style="{ color: couleurTexte(t) }">{{ t.motif }}</span>
     </div>
   </template>
