@@ -467,6 +467,19 @@ describe('filtres', () => {
     expect(noeudsFiltres(sansQualite, 'vivants')).toEqual(['p7'])
   })
 
+  it('la fiche d’un compte actif est « Vérifiée », et sort de « Sans source » et « Non vérifiés » (ADR 0024)', () => {
+    const avecTitulaires: NoeudPersonneEtendu[] = [
+      ...avecQualite,
+      // Le cas courant : un vivant qui s'est inscrit, aucune source.
+      personne('p8', 8, 0, { vivant: true, bestQuay: null, citationCount: 0, avecImage: false, titulaire: true }),
+      // Des recopies, mais la personne s'est reconnue.
+      personne('p9', 9, -1, { bestQuay: 0, citationCount: 2, avecImage: false, titulaire: true }),
+    ]
+    expect(noeudsFiltres(avecTitulaires, 'verifies').sort()).toEqual(['p1', 'p8', 'p9'])
+    expect(noeudsFiltres(avecTitulaires, 'non-verifies')).toEqual(['p2'])
+    expect(noeudsFiltres(avecTitulaires, 'sans-source').sort()).toEqual(['p3', 'p7'])
+  })
+
   it('distingue une clé absente d’une valeur nulle', () => {
     // `citationCount: 0` est une donnée ; `citationCount` absent est un silence.
     const muet = [personne('p1', 1, 0)]

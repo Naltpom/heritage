@@ -17,7 +17,8 @@ use App\Module\Core\ValueObject\UncertainDate;
  * l'écran (« branches lues depuis la racine de l'arbre »).
  *
  * `bestQuay` et `citationCount` sont les deux colonnes dérivées qui définissent
- * « Vérifié » dans tout le produit : `bestQuay ≥ 2` (acte ou registre).
+ * « Vérifié » dans tout le produit : `bestQuay ≥ 2` (acte ou registre) — ou, depuis le
+ * 18/11/2026, `titulaireDepuis` : un compte actif est le titulaire de la fiche (ADR 0024).
  */
 final readonly class PersonneDuReleve
 {
@@ -38,6 +39,8 @@ final readonly class PersonneDuReleve
         public ?int $bestQuay,
         public int $citationCount,
         public \DateTimeImmutable $creeLe,
+        /** Depuis quand un compte actif est le titulaire de la fiche ; `null` sans compte. */
+        public ?\DateTimeImmutable $titulaireDepuis = null,
     ) {
     }
 }

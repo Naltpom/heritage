@@ -60,6 +60,9 @@ export interface QualiteDocumentaire {
   citationCount?: number
   /** Une image d'archive est jointe à au moins une citation. */
   avecImage?: boolean
+  /** Un compte actif est le titulaire de la fiche (ADR 0024) : elle compte
+   *  « Vérifiée » sans acte. Posé seulement quand c'est vrai — absent vaut `false`. */
+  titulaire?: boolean
 
   /**
    * L'ancien nom de la même chose — **cale de transition, à retirer sous
@@ -464,6 +467,11 @@ export interface DefinitionFiltre {
   test: (noeud: NoeudPersonneEtendu) => boolean
 }
 
+/** « Vérifié » : un acte ou un registre (`QUAY >= 2`), ou un compte actif titulaire. */
+export function estVerifie(n: QualiteDocumentaire): boolean {
+  return (n.bestQuay ?? -1) >= 2 || n.titulaire === true
+}
+
 /**
  * Les cinq filtres du viewer d'origine.
  *
@@ -471,28 +479,32 @@ export interface DefinitionFiltre {
  * non « a une source » : la moitié de l'arbre a des sources qui sont des
  * recopies d'autres arbres, et les confondre rendrait le filtre inutile. C'est
  * la nuance qui a coûté le plus cher dans le travail généalogique d'origine.
+ *
+ * Depuis le 18/11/2026 (ADR 0024), la fiche d'un compte actif l'est aussi : la
+ * personne s'est connectée et s'est reconnue. Elle sort alors de « Non
+ * vérifiés » et de « Sans source » — les trois filtres restent disjoints.
  */
 export const FILTRES: readonly DefinitionFiltre[] = [
   {
     id: 'verifies',
     libelle: 'Vérifiés',
-    description: 'Au moins une information appuyée sur un acte ou un registre',
+    description: 'Au moins une information appuyée sur un acte ou un registre, ou la personne elle-même rattachée à sa fiche',
     requiert: ['bestQuay'],
-    test: (n) => (n.bestQuay ?? -1) >= 2,
+    test: (n) => estVerifie(n),
   },
   {
     id: 'non-verifies',
     libelle: 'Non vérifiés',
     description: 'Des sources, mais aucune qui soit un acte',
     requiert: ['bestQuay', 'citationCount'],
-    test: (n) => (n.bestQuay ?? -1) < 2 && (n.citationCount ?? 0) > 0 && !n.vivant,
+    test: (n) => !estVerifie(n) && (n.citationCount ?? 0) > 0 && !n.vivant,
   },
   {
     id: 'sans-source',
     libelle: 'Sans source',
     description: 'Aucune citation de source',
     requiert: ['citationCount'],
-    test: (n) => (n.citationCount ?? 0) === 0,
+    test: (n) => (n.citationCount ?? 0) === 0 && n.titulaire !== true,
   },
   {
     id: 'avec-image',

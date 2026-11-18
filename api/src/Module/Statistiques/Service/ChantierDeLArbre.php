@@ -61,8 +61,10 @@ final class ChantierDeLArbre
         $listes = [
             'sansDateDeNaissance' => static fn (PersonneDuReleve $p): bool => !$p->naissance->isKnown(),
             'sansParents' => static fn (PersonneDuReleve $p): bool => !$population->aDesParents($p->id),
-            'sansSource' => static fn (PersonneDuReleve $p): bool => 0 === $p->citationCount,
-            'nonVerifiees' => static fn (PersonneDuReleve $p): bool => $p->citationCount > 0 && ($p->bestQuay ?? -1) < 2 && !$p->vivant,
+            // La fiche d'un compte actif est vérifiée par son titulaire (ADR 0024) : elle
+            // n'est plus à sourcer, ni dans l'une ni dans l'autre liste.
+            'sansSource' => static fn (PersonneDuReleve $p): bool => 0 === $p->citationCount && null === $p->titulaireDepuis,
+            'nonVerifiees' => static fn (PersonneDuReleve $p): bool => $p->citationCount > 0 && !ArbreEnChiffres::estVerifiee($p) && !$p->vivant,
         ];
 
         $fiches = [];

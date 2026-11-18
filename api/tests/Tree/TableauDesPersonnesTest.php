@@ -37,7 +37,7 @@ final class TableauDesPersonnesTest extends ArbreWebTestCase
         'personId', 'gedcomXref', 'displayName', 'surname', 'givenNames', 'marriedName', 'nickname',
         'sex', 'vivant', 'generation', 'branch', 'parente',
         'naissance', 'naissanceTri', 'lieuNaissance', 'deces', 'decesTri', 'lieuDeces',
-        'professions', 'parents', 'conjoints', 'enfants', 'citationCount', 'bestQuay',
+        'professions', 'parents', 'conjoints', 'enfants', 'citationCount', 'bestQuay', 'titulaire',
         'createdAt', 'updatedAt',
     ];
 

@@ -282,6 +282,10 @@ export interface FichePersonneComplete {
   generation: number
   bestQuay: number | null
   citationCount: number
+  /** Un compte actif est le titulaire de cette fiche : elle compte « Vérifiée »
+   *  comme si un acte la tenait (ADR 0024). Facultatif pour les charges d'essai
+   *  écrites avant lui ; absent vaut `false`. */
+  titulaire?: boolean
   forcePrivacy: boolean
   privacyNote: string | null
   /** Sert de `baseVersion` au verrou optimiste d'une demande (§ 6.1). */
@@ -695,6 +699,8 @@ export interface LigneDuTableau {
   citationCount: number
   /** Meilleur `QUAY` des citations ; `>= 2` ⇒ appuyé sur un acte. */
   bestQuay: number | null
+  /** Un compte actif est le titulaire de la fiche (ADR 0024) ; absent vaut `false`. */
+  titulaire?: boolean
   createdAt: string
   updatedAt: string
 }

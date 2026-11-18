@@ -409,7 +409,7 @@ final class RoutesDeLArbreTest extends ArbreWebTestCase
         // que la présence laisserait passer exactement la fuite qu'elle est censée garder.
         // Les quatre tombent pour deux raisons distinctes — formatage de dates pour la
         // première, interdiction nommée du § 16.2 pour les trois autres.
-        foreach (['etiquetteDates', 'bestQuay', 'citationCount', 'avecImage'] as $interdit) {
+        foreach (['etiquetteDates', 'bestQuay', 'citationCount', 'avecImage', 'titulaire'] as $interdit) {
             self::assertArrayNotHasKey($interdit, $restreint, \sprintf('`%s` ne doit pas sortir sur un nœud restreint.', $interdit));
         }
 

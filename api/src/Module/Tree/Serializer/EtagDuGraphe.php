@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Module\Tree\Serializer;
 
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
+use App\Module\Core\Contract\FichesTitulairesInterface;
 use App\Module\Tree\Service\EmpreinteDeLaMiseEnPage;
 use App\Module\Tree\Service\TreeFingerprint;
 
@@ -16,7 +17,8 @@ use App\Module\Tree\Service\TreeFingerprint;
  *         || ':' || empreinte_du_cercle_effectif_du_lecteur
  *         || ':' || empreinte_des_demandes_du_lecteur      -- '' s'il n'en a aucune
  *         || ':' || point_de_vue_du_lecteur                -- '' s'il n'est rattaché à personne
- *         || ':' || empreinte_de_la_mise_en_page )"         -- l'image elle-même
+ *         || ':' || empreinte_de_la_mise_en_page            -- l'image elle-même
+ *         || ':' || empreinte_des_fiches_titulaires )"      -- '' s'il n'y en a aucune
  * ```
  *
  * ── La règle, en une ligne ───────────────────────────────────────────────────────
@@ -113,6 +115,14 @@ use App\Module\Tree\Service\TreeFingerprint;
  * Le coût, lui, s'ajoute à celui déjà assumé plus bas : le chemin du `304` lit désormais
  * aussi le placement en cache (§ 9.9). Une entrée de cache et un haché.
  *
+ * ── La sixième composante : les fiches tenues par leur titulaire ─────────────────
+ *
+ * Depuis le 18/11/2026, la fiche d'un compte actif porte `titulaire: true` et compte
+ * « Vérifiée » (ADR 0024). Or activer, suspendre ou rattacher ailleurs un compte ne touche
+ * que `mbr_member` : ni l'arbre, ni le cercle des **autres** lecteurs, ni la mise en page
+ * ne bougent. Sans elle, chacun revalidait, recevait `304`, et gardait la fiche « Non
+ * vérifiée ». La même pour tous les lecteurs : la liste des identifiants, hachée.
+ *
  * ── La composante des demandes reste nécessaire ──────────────────────────────────
  *
  * Déposer un brouillon ne touche aucune table `tree_*`, donc ne change pas l'empreinte —
@@ -150,6 +160,7 @@ final readonly class EtagDuGraphe
         private PopulationDeLArbre $population,
         private PersonneDuLecteur $pointDeVue,
         private EmpreinteDeLaMiseEnPage $miseEnPage,
+        private FichesTitulairesInterface $titulaires,
     ) {
     }
 
@@ -163,7 +174,17 @@ final readonly class EtagDuGraphe
             $this->calque->empreinteDesDemandes($lecteur->pourLeCalque()),
             null === $pointDeVue ? '' : 'p'.$pointDeVue,
             $this->miseEnPage->empreinteDeLaMiseEnPage($pointDeVue),
+            $this->empreinteDesTitulaires(),
         ).'"';
+    }
+
+    /** Les identifiants des fiches titulaires, triés et hachés ; `''` sans aucune. */
+    private function empreinteDesTitulaires(): string
+    {
+        $ids = array_keys($this->titulaires->fichesTitulaires());
+        sort($ids);
+
+        return [] === $ids ? '' : hash('sha256', implode(',', $ids));
     }
 
     /**

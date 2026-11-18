@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Serializer;
 
+use App\Module\Core\Contract\AucuneFicheTitulaire;
+use App\Module\Core\Contract\FichesTitulairesInterface;
 use App\Module\Core\Security\CercleDeVisibiliteInterface;
 use App\Module\Core\ValueObject\ComposantesDeDate;
 use App\Module\Core\ValueObject\UncertainDate;
@@ -47,6 +49,7 @@ final readonly class NormaliseurDuTableau
     public function __construct(
         private NormaliseurDeDate $dates,
         private ParenteDuLecteur $parente,
+        private FichesTitulairesInterface $titulaires = new AucuneFicheTitulaire(),
     ) {
     }
 
@@ -72,6 +75,7 @@ final readonly class NormaliseurDuTableau
         ?array $dansLaPortee = null,
     ): array {
         $parId = [];
+        $titulaires = $this->titulaires->fichesTitulaires();
         foreach ($personnes as $personne) {
             if (null !== $personne->getId()) {
                 $parId[$personne->getId()] = $personne;
@@ -124,6 +128,8 @@ final readonly class NormaliseurDuTableau
                 )),
                 'citationCount' => $personne->getCitationCount(),
                 'bestQuay' => $personne->getBestQuay(),
+                // La colonne « Vérifiée » : un acte, ou un compte actif titulaire (ADR 0024).
+                'titulaire' => isset($titulaires[$id]),
                 'createdAt' => $personne->getCreatedAt()->format(\DATE_ATOM),
                 'updatedAt' => $personne->getUpdatedAt()->format(\DATE_ATOM),
             ];

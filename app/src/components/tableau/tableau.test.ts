@@ -55,6 +55,8 @@ const emeri = ligne({ personId: 45, displayName: 'Émeri Sarriette', sex: 'mascu
 const natron = ligne({ personId: 3, displayName: 'Natron Romarin', sex: 'masculin', vivant: true, generation: 0, naissance: '2012', naissanceTri: '2012-01-01' })
 const lapis = ligne({ personId: 9, displayName: 'Lapis Fenouil', sex: 'masculin', generation: -8 })
 const TOUTES = [marne, emeri, natron, lapis]
+/** Le compte actif de Natron : sa fiche est vérifiée par son titulaire (ADR 0024). */
+const natronInscrit = { ...natron, titulaire: true }
 const AFFICHEES: Colonne[] = COLONNES.filter((c) => COLONNES_PAR_DEFAUT.includes(c.cle))
 
 function par(colonnes: Record<string, string>, recherche = ''): number[] {
@@ -111,6 +113,9 @@ describe('filtrer', () => {
     expect(par({ sexe: 'masculin' })).toEqual([emeri.personId, natron.personId, lapis.personId])
     expect(par({ etat: 'vivant' })).toEqual([natron.personId])
     expect(par({ verifiee: 'oui' })).toEqual([marne.personId])
+    expect(
+      filtrer([marne, emeri, natronInscrit, lapis], { recherche: '', colonnes: { verifiee: 'oui' } }, AFFICHEES).map((l) => l.personId),
+    ).toEqual([marne.personId, natronInscrit.personId])
 
     const avecBranche = [...AFFICHEES, COLONNES.find((c) => c.cle === 'branche')!]
     expect(filtrer(TOUTES, { recherche: '', colonnes: { branche: CHOIX_VIDE } }, avecBranche).map((l) => l.personId)).toEqual([

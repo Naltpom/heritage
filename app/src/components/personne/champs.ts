@@ -409,6 +409,10 @@ export interface RegimeDeFiche {
  * Il rend `null` quand la charge utile ne porte pas de quoi le calculer — une
  * fiche réduite, par exemple, où `bestQuay` et `citationCount` sont **absents**.
  * Là encore : rien à afficher plutôt qu'un jugement fabriqué.
+ *
+ * Depuis le 18/11/2026 (ADR 0024), une fiche dont un compte actif est le
+ * titulaire est « Vérifiée » elle aussi, sources ou pas : la personne s'est
+ * connectée et s'est reconnue. Un acte, quand il y en a un, reste la raison dite.
  */
 export function regimeDocumentaire(fiche: FichePersonne): RegimeDeFiche | null {
   const charge = fiche as unknown as Record<string, unknown>
@@ -417,6 +421,9 @@ export function regimeDocumentaire(fiche: FichePersonne): RegimeDeFiche | null {
   const citations = typeof charge['citationCount'] === 'number' ? charge['citationCount'] : 0
   const meilleur = typeof charge['bestQuay'] === 'number' ? charge['bestQuay'] : -1
 
+  if (meilleur < 2 && charge['titulaire'] === true) {
+    return { ton: 'bon', texte: 'Vérifié : la personne s’est elle-même rattachée à sa fiche.', court: 'Vérifié' }
+  }
   if (citations === 0) {
     return { ton: 'mauvais', texte: 'Aucune source pour ces informations.', court: 'Sans source' }
   }

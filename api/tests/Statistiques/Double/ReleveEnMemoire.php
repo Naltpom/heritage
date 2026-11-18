@@ -100,6 +100,30 @@ final class ReleveEnMemoire implements PortStatistiquesArbre
         ++self::$version;
     }
 
+    /** Un compte actif devient titulaire de la fiche, à cette date (ADR 0024). */
+    public static function titulaire(int $id, string $depuis): void
+    {
+        $p = self::$personnes[$id];
+        self::$personnes[$id] = new PersonneDuReleve(
+            $p->id,
+            $p->displayName,
+            $p->prenoms,
+            $p->nom,
+            $p->sex,
+            $p->naissance,
+            $p->deces,
+            $p->vivant,
+            $p->decede,
+            $p->branch,
+            $p->generation,
+            $p->bestQuay,
+            $p->citationCount,
+            $p->creeLe,
+            new \DateTimeImmutable($depuis),
+        );
+        ++self::$version;
+    }
+
     /** @param list<int> $enfants */
     public static function ajouterFamille(int $id, ?int $mari, ?int $epouse, array $enfants = [], string $mariage = '', ?int $generation = null): void
     {

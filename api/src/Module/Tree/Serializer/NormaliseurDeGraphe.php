@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Module\Tree\Serializer;
 
+use App\Module\Core\Contract\AucuneFicheTitulaire;
 use App\Module\Core\Contract\CalqueEnAttenteInterface;
+use App\Module\Core\Contract\FichesTitulairesInterface;
 use App\Module\Core\Contract\ProjectionEnAttente;
 use App\Module\Core\Enum\Branch;
 use App\Module\Core\Enum\CoteDeRecherche;
@@ -103,6 +105,7 @@ final readonly class NormaliseurDeGraphe
         private MesureDeFiche $mesure = new MesureDeFiche(),
         private EtiquetteDeDateGedcom $etiquettes = new EtiquetteDeDateGedcom(),
         private ChronometreDuGraphe $chrono = new ChronometreDuGraphe(),
+        private FichesTitulairesInterface $titulaires = new AucuneFicheTitulaire(),
     ) {
     }
 
@@ -270,7 +273,7 @@ final readonly class NormaliseurDeGraphe
     /**
      * @param array<string, PersonnePlacable>                                                                                                                                                        $placables
      * @param array<string, NoeudProposePlacable>                                                                                                                                                    $proposes
-     * @param array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, array{divorced: bool, married: bool|null}>} $libelles
+     * @param array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int, titulaire: bool}>, familles: array<int, array{divorced: bool, married: bool|null}>} $libelles
      * @param array<int, array{parente: ParenteDansLArbre, pont: string|null}>                                                                                                                       $parentes
      * @param array<string, string>                                                                                                                                                                  $renommage
      * @param array<int, true>                                                                                                                                                                       $avecImage
@@ -344,7 +347,7 @@ final readonly class NormaliseurDeGraphe
     }
 
     /**
-     * @param array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}|null $libelle
+     * @param array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int, titulaire: bool}|null $libelle
      * @param array{parente: ParenteDansLArbre, pont: string|null}|null                                    $parente   `null` sans point de vue calculé : la personne est alors servie `famille`
      * @param array<int, true>                                                                             $avecImage
      * @param array<int, string>                                                                           $vignettes personne visible → URL de la vignette de son portrait
@@ -466,6 +469,12 @@ final readonly class NormaliseurDeGraphe
         };
         $charge['bestQuay'] = $libelle['bestQuay'] ?? null;
         $charge['citationCount'] = $libelle['citationCount'] ?? 0;
+        // La fiche d'un compte actif compte « Vérifiée » au même titre qu'une fiche tenue
+        // par un acte (ADR 0024). Présent seulement quand c'est vrai, et jamais sur un nœud
+        // restreint : la branche `if (!$visible)` est passée, comme pour `bestQuay`.
+        if ($libelle['titulaire'] ?? false) {
+            $charge['titulaire'] = true;
+        }
         $charge['avecImage'] = isset($avecImage[$personneId]);
 
         // La vignette du portrait actif, pour l'emplacement photo de la fiche. Absente
@@ -684,11 +693,12 @@ final readonly class NormaliseurDeGraphe
      *                                         du lecteur, vides quand il regarde depuis la
      *                                         racine — la colonne suffit alors
      *
-     * @return array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int}>, familles: array<int, array{divorced: bool, married: bool|null}>}
+     * @return array{personnes: array<int, array{displayName: string, branch: string|null, bestQuay: int|null, citationCount: int, titulaire: bool}>, familles: array<int, array{divorced: bool, married: bool|null}>}
      */
     private function libelles(array $branchesVues = []): array
     {
         $personnes = [];
+        $titulaires = $this->titulaires->fichesTitulaires();
 
         $requete = 'SELECT id, display_name, branch, best_quay, citation_count FROM tree_person';
 
@@ -721,6 +731,7 @@ final readonly class NormaliseurDeGraphe
                 // sur 274 nœuds à chaque affichage, et deux définitions du « sourcé ».
                 'bestQuay' => is_numeric($ligne['best_quay']) ? (int) $ligne['best_quay'] : null,
                 'citationCount' => is_numeric($ligne['citation_count']) ? (int) $ligne['citation_count'] : 0,
+                'titulaire' => isset($titulaires[(int) $ligne['id']]),
             ];
         }
 

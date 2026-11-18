@@ -105,9 +105,10 @@ function libelleDe(choix: readonly Choix[], valeur: string | null): string | nul
   return choix.find((c) => c.valeur === valeur)?.libelle ?? valeur
 }
 
-/** « Vérifiée » veut dire *appuyée sur un acte ou un registre* — `QUAY >= 2`, comme sur l'arbre. */
+/** « Vérifiée » veut dire *appuyée sur un acte ou un registre* — `QUAY >= 2` —,
+ *  ou tenue par son titulaire, un compte actif (ADR 0024) : comme sur l'arbre. */
 function verifiee(ligne: LigneDuTableau): string {
-  return ligne.bestQuay !== null && ligne.bestQuay >= 2 ? 'oui' : 'non'
+  return (ligne.bestQuay !== null && ligne.bestQuay >= 2) || ligne.titulaire === true ? 'oui' : 'non'
 }
 
 /** Les colonnes, dans l'ordre du tableau et du CSV. */
